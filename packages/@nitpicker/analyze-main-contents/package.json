@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/analyze-main-contents",
-	"version": "0.4.1",
+	"version": "0.4.2",
 	"description": "Nitpicker plugin for main content detection and extraction",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
@@ -25,8 +25,8 @@
 	},
 	"dependencies": {
 		"@medv/finder": "4.0.2",
-		"@nitpicker/core": "0.4.1",
-		"@nitpicker/types": "0.4.1",
+		"@nitpicker/core": "0.4.2",
+		"@nitpicker/types": "0.4.2",
 		"jsdom": "28.1.0"
 	},
 	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"

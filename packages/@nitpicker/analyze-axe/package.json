@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/analyze-axe",
-	"version": "0.4.1",
+	"version": "0.4.2",
 	"description": "Nitpicker plugin for accessibility analysis using axe-core",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
@@ -24,8 +24,8 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@nitpicker/core": "0.4.1",
-		"@nitpicker/types": "0.4.1",
+		"@nitpicker/core": "0.4.2",
+		"@nitpicker/types": "0.4.2",
 		"axe-core": "4.11.1"
 	},
 	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
