@@ -44,5 +44,6 @@
 		"@types/fs-extra": "11.0.4",
 		"@types/tar": "7.0.87",
 		"@types/unzipper": "0.10.11"
-	}
+	},
+	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
 }

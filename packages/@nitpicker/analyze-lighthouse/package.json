@@ -28,5 +28,6 @@
 		"@nitpicker/types": "0.4.1",
 		"chrome-launcher": "1.2.1",
 		"lighthouse": "13.0.3"
-	}
+	},
+	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
 }

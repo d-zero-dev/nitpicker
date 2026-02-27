@@ -31,5 +31,6 @@
 		"ansi-colors": "4.1.3",
 		"cosmiconfig": "9.0.0",
 		"jsdom": "28.1.0"
-	}
+	},
+	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
 }

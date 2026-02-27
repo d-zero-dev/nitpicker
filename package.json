@@ -9,7 +9,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"cli": "./packages/nitpicker/bin/nitpicker.js",
+		"cli": "./packages/@nitpicker/cli/bin/nitpicker.js",
 		"build": "lerna run build",
 		"dev": "lerna run dev",
 		"test": "vitest run --test-timeout 60000",
@@ -28,7 +28,7 @@
 		"update": "yarn upgrade-interactive"
 	},
 	"workspaces": [
-		"packages/nitpicker",
+		"packages/@nitpicker/cli",
 		"packages/@nitpicker/*",
 		"packages/test-server"
 	],

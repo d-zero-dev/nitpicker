@@ -60,5 +60,6 @@
 		"@types/jsdom": "28.0.0",
 		"@types/turndown": "5.0.6",
 		"glob": "13.0.6"
-	}
+	},
+	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
 }

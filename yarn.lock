@@ -2350,6 +2350,26 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@nitpicker/cli@workspace:packages/@nitpicker/cli":
+  version: 0.0.0-use.local
+  resolution: "@nitpicker/cli@workspace:packages/@nitpicker/cli"
+  dependencies:
+    "@d-zero/dealer": "npm:1.6.3"
+    "@d-zero/readtext": "npm:1.1.19"
+    "@d-zero/roar": "npm:2.0.0"
+    "@d-zero/shared": "npm:0.20.0"
+    "@nitpicker/core": "npm:0.4.1"
+    "@nitpicker/crawler": "npm:0.4.1"
+    "@nitpicker/report-google-sheets": "npm:0.4.1"
+    "@types/debug": "npm:4.1.12"
+    ansi-colors: "npm:4.1.3"
+    debug: "npm:4.4.3"
+    enquirer: "npm:2.4.1"
+  bin:
+    nitpicker: ./bin/nitpicker.js
+  languageName: unknown
+  linkType: soft
+
 "@nitpicker/core@npm:0.4.1, @nitpicker/core@workspace:packages/@nitpicker/core":
   version: 0.0.0-use.local
   resolution: "@nitpicker/core@workspace:packages/@nitpicker/core"
@@ -12422,26 +12442,6 @@ __metadata:
     npm-run-all2: "npm:8.0.4"
     typescript: "npm:5.9.3"
     vitest: "npm:4.0.18"
-  languageName: unknown
-  linkType: soft
-
-"nitpicker@workspace:packages/nitpicker":
-  version: 0.0.0-use.local
-  resolution: "nitpicker@workspace:packages/nitpicker"
-  dependencies:
-    "@d-zero/dealer": "npm:1.6.3"
-    "@d-zero/readtext": "npm:1.1.19"
-    "@d-zero/roar": "npm:2.0.0"
-    "@d-zero/shared": "npm:0.20.0"
-    "@nitpicker/core": "npm:0.4.1"
-    "@nitpicker/crawler": "npm:0.4.1"
-    "@nitpicker/report-google-sheets": "npm:0.4.1"
-    "@types/debug": "npm:4.1.12"
-    ansi-colors: "npm:4.1.3"
-    debug: "npm:4.4.3"
-    enquirer: "npm:2.4.1"
-  bin:
-    nitpicker: ./bin/nitpicker.js
   languageName: unknown
   linkType: soft
 

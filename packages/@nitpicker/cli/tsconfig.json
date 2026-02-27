@@ -1,14 +1,14 @@
 {
-	"extends": "../../tsconfig.json",
+	"extends": "../../../tsconfig.json",
 	"compilerOptions": {
 		"composite": true,
 		"outDir": "./lib",
 		"rootDir": "./src"
 	},
 	"references": [
-		{ "path": "../@nitpicker/core" },
-		{ "path": "../@nitpicker/crawler" },
-		{ "path": "../@nitpicker/report-google-sheets" }
+		{ "path": "../core" },
+		{ "path": "../crawler" },
+		{ "path": "../report-google-sheets" }
 	],
 	"include": ["./src/**/*"],
 	"exclude": ["node_modules", "lib", "./src/**/*.spec.ts"]
