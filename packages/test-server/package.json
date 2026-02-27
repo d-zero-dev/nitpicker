@@ -1,0 +1,19 @@
+{
+	"name": "test-server",
+	"version": "0.4.0",
+	"description": "E2E test server for Nitpicker",
+	"author": "D-ZERO",
+	"license": "Apache-2.0",
+	"private": true,
+	"type": "module",
+	"dependencies": {
+		"@hono/node-server": "1.19.9",
+		"hono": "4.12.2"
+	},
+	"devDependencies": {
+		"@nitpicker/crawler": "0.4.0",
+		"await-event-emitter": "2.0.2",
+		"knex": "3.1.0",
+		"vitest": "4.0.18"
+	}
+}

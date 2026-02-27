@@ -1,0 +1,67 @@
+{
+	"import": ["@d-zero/cspell-config"],
+	"ignorePaths": ["*.sqlite"],
+	"words": [
+		// nitpicker
+		"readtext",
+
+		// HTML
+		"noarchive",
+		"rels", // refers to "relationships"
+		"Hrefs",
+
+		// VS Code extensions
+		"dbaeumer",
+		"esbenp",
+
+		// nitpicker
+		"nitpicker",
+		"googleapis",
+		"gaxios",
+		"enquirer",
+		"jsdom",
+		"cosmiconfig",
+		"nitpickerrc",
+		"textlint",
+		"markuplint",
+		"turndown",
+		"sudachi",
+		"prh",
+		"hojodoushi",
+		"keishikimeishi",
+		"fukushi",
+		"desumasu",
+		"dearu",
+
+		// robots.txt
+		"robotstxt",
+
+		//
+		"untar",
+		"apng",
+		"whatwg",
+		"PHPSESSID",
+
+		// HTTP encoding
+		"sdch",
+		"vcdiff",
+		"xdelta",
+
+		// Japanese text rules (textlint plugin names)
+		"hankaku",
+		"zenkaku",
+		"appearence",
+		"tari",
+
+		// libraries / authors
+		"medv",
+
+		// technical terms
+		"Upserts",
+		"TOCTOU",
+		"qmark",
+		"dedup",
+		"unstarted",
+		"mmm"
+	]
+}

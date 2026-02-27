@@ -1,0 +1,31 @@
+{
+	"name": "@nitpicker/analyze-markuplint",
+	"version": "0.4.0",
+	"description": "Nitpicker plugin for HTML markup validation using markuplint",
+	"author": "D-ZERO",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/d-zero-dev/nitpicker.git",
+		"directory": "packages/@nitpicker/analyze-markuplint"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"type": "module",
+	"exports": {
+		".": {
+			"import": "./lib/index.js",
+			"types": "./lib/index.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "tsc",
+		"clean": "tsc --build --clean"
+	},
+	"dependencies": {
+		"@nitpicker/core": "0.4.0",
+		"@nitpicker/types": "0.4.0",
+		"markuplint": "4.14.1"
+	}
+}

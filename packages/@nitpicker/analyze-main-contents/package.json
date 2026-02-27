@@ -1,0 +1,32 @@
+{
+	"name": "@nitpicker/analyze-main-contents",
+	"version": "0.4.0",
+	"description": "Nitpicker plugin for main content detection and extraction",
+	"author": "D-ZERO",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/d-zero-dev/nitpicker.git",
+		"directory": "packages/@nitpicker/analyze-main-contents"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"type": "module",
+	"exports": {
+		".": {
+			"import": "./lib/index.js",
+			"types": "./lib/index.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "tsc",
+		"clean": "tsc --build --clean"
+	},
+	"dependencies": {
+		"@medv/finder": "4.0.2",
+		"@nitpicker/core": "0.4.0",
+		"@nitpicker/types": "0.4.0",
+		"jsdom": "28.1.0"
+	}
+}

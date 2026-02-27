@@ -1,0 +1,33 @@
+{
+	"name": "@nitpicker/analyze-search",
+	"version": "0.4.0",
+	"description": "Nitpicker plugin for keyword and CSS selector search",
+	"author": "D-ZERO",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/d-zero-dev/nitpicker.git",
+		"directory": "packages/@nitpicker/analyze-search"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"type": "module",
+	"exports": {
+		".": {
+			"import": "./lib/index.js",
+			"types": "./lib/index.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "tsc",
+		"clean": "tsc --build --clean"
+	},
+	"dependencies": {
+		"@d-zero/shared": "0.20.0",
+		"@nitpicker/core": "0.4.0",
+		"@nitpicker/crawler": "0.4.0",
+		"@nitpicker/types": "0.4.0",
+		"jsdom": "28.1.0"
+	}
+}

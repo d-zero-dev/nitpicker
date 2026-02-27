@@ -1,0 +1,64 @@
+{
+	"name": "@nitpicker/analyze-textlint",
+	"version": "0.4.0",
+	"description": "Nitpicker plugin for Japanese text proofreading using textlint",
+	"author": "D-ZERO",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/d-zero-dev/nitpicker.git",
+		"directory": "packages/@nitpicker/analyze-textlint"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"type": "module",
+	"exports": {
+		".": {
+			"import": "./lib/index.js",
+			"types": "./lib/index.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "tsc",
+		"clean": "tsc --build --clean"
+	},
+	"dependencies": {
+		"@nitpicker/core": "0.4.0",
+		"@nitpicker/types": "0.4.0",
+		"@textlint-ja/textlint-rule-no-insert-dropping-sa": "2.0.1",
+		"@textlint-ja/textlint-rule-no-synonyms": "1.3.0",
+		"@textlint/kernel": "15.5.2",
+		"jsdom": "28.1.0",
+		"sudachi-synonyms-dictionary": "17.0.0",
+		"textlint": "15.5.2",
+		"textlint-plugin-html": "1.0.1",
+		"textlint-rule-ja-hiragana-fukushi": "1.3.0",
+		"textlint-rule-ja-hiragana-hojodoushi": "1.1.0",
+		"textlint-rule-ja-hiragana-keishikimeishi": "1.1.0",
+		"textlint-rule-ja-no-abusage": "3.0.0",
+		"textlint-rule-ja-no-mixed-period": "3.0.2",
+		"textlint-rule-ja-unnatural-alphabet": "2.0.1",
+		"textlint-rule-max-appearence-count-of-words": "1.0.1",
+		"textlint-rule-max-ten": "5.0.0",
+		"textlint-rule-no-double-negative-ja": "2.0.1",
+		"textlint-rule-no-doubled-conjunction": "3.0.0",
+		"textlint-rule-no-doubled-conjunctive-particle-ga": "3.0.0",
+		"textlint-rule-no-doubled-joshi": "5.1.1",
+		"textlint-rule-no-dropping-the-ra": "3.0.0",
+		"textlint-rule-no-hankaku-kana": "2.0.1",
+		"textlint-rule-no-mix-dearu-desumasu": "6.0.4",
+		"textlint-rule-no-mixed-zenkaku-and-hankaku-alphabet": "1.0.1",
+		"textlint-rule-no-nfd": "2.0.2",
+		"textlint-rule-prefer-tari-tari": "1.0.3",
+		"textlint-rule-prh": "6.1.0",
+		"textlint-rule-spellcheck-tech-word": "5.0.0",
+		"textlint-rule-web-plus-db": "1.1.5",
+		"turndown": "7.2.2"
+	},
+	"devDependencies": {
+		"@types/jsdom": "28.0.0",
+		"@types/turndown": "5.0.6",
+		"glob": "13.0.6"
+	}
+}
