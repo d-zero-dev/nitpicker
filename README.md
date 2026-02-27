@@ -20,7 +20,7 @@ Web サイト全体のデータを取得するツール。クロール、リン�
 Web サイトをクロールして `.nitpicker` アーカイブファイルを生成する。
 
 ```sh
-$ nitpicker crawl <URL>
+$ npx @nitpicker/cli crawl <URL>
 ```
 
 **作業ディレクトリ** に `example.com-YYYYMMDDHHMMSSmmm.nitpicker` というファイルが作成される。
@@ -28,7 +28,7 @@ $ nitpicker crawl <URL>
 #### 例
 
 ```sh
-$ nitpicker crawl https://example.com
+$ npx @nitpicker/cli crawl https://example.com
 ```
 
 #### オプション
@@ -61,28 +61,28 @@ $ nitpicker crawl https://example.com
 #### 例
 
 ```sh
-$ nitpicker crawl https://example.com --interval 5000
-$ nitpicker crawl https://example.com --parallels 50
-$ nitpicker crawl https://example.com --no-image
-$ nitpicker crawl https://example.com --no-fetch-external
-$ nitpicker crawl https://example.com --no-recursive
-$ nitpicker crawl https://example.com --scope "www.example.com, www3.example.com, https://blog.example.com/blog"
-$ nitpicker crawl https://example.com --exclude "/blog/**/*"
-$ nitpicker crawl https://example.com --exclude-keyword "/Error/i" --exclude-keyword "404"
-$ nitpicker crawl https://example.com --max-excluded-depth 10
-$ nitpicker crawl --list-file ./page-list.txt
-$ nitpicker crawl --list https://example.com/page1 https://example.com/page2 https://example.com/page3
-$ nitpicker crawl --resume ./suspended-logs.stub
-$ cat page-list.txt | xargs nitpicker crawl --list
-$ nitpicker crawl https://example.com --verbose
-$ nitpicker crawl https://example.com --user-agent "MyBot/1.0"
-$ nitpicker crawl https://example.com --ignore-robots
+$ npx @nitpicker/cli crawl https://example.com --interval 5000
+$ npx @nitpicker/cli crawl https://example.com --parallels 50
+$ npx @nitpicker/cli crawl https://example.com --no-image
+$ npx @nitpicker/cli crawl https://example.com --no-fetch-external
+$ npx @nitpicker/cli crawl https://example.com --no-recursive
+$ npx @nitpicker/cli crawl https://example.com --scope "www.example.com, www3.example.com, https://blog.example.com/blog"
+$ npx @nitpicker/cli crawl https://example.com --exclude "/blog/**/*"
+$ npx @nitpicker/cli crawl https://example.com --exclude-keyword "/Error/i" --exclude-keyword "404"
+$ npx @nitpicker/cli crawl https://example.com --max-excluded-depth 10
+$ npx @nitpicker/cli crawl --list-file ./page-list.txt
+$ npx @nitpicker/cli crawl --list https://example.com/page1 https://example.com/page2 https://example.com/page3
+$ npx @nitpicker/cli crawl --resume ./suspended-logs.stub
+$ cat page-list.txt | xargs npx @nitpicker/cli crawl --list
+$ npx @nitpicker/cli crawl https://example.com --verbose
+$ npx @nitpicker/cli crawl https://example.com --user-agent "MyBot/1.0"
+$ npx @nitpicker/cli crawl https://example.com --ignore-robots
 ```
 
 ##### Tips: 認証付き URL
 
 ```sh
-$ nitpicker crawl https://USERNAME:PASSWORD@demo.example.com
+$ npx @nitpicker/cli crawl https://USERNAME:PASSWORD@demo.example.com
 ```
 
 #### 責任あるクローリング
@@ -100,14 +100,14 @@ Nitpicker はデフォルトで以下の責任あるクローリング機能を�
 `.nitpicker` アーカイブファイルに対して analyze プラグインを実行する。axe（アクセシビリティ）、Lighthouse（パフォーマンス）、markuplint（HTML 検証）、textlint（テキスト校正）などのプラグインを実行できる。
 
 ```sh
-$ nitpicker analyze <file>
+$ npx @nitpicker/cli analyze <file>
 ```
 
 #### 例
 
 ```sh
-$ nitpicker analyze example.com-20250101120000000.nitpicker
-$ nitpicker analyze example.com-20250101120000000.nitpicker --all
+$ npx @nitpicker/cli analyze example.com-20250101120000000.nitpicker
+$ npx @nitpicker/cli analyze example.com-20250101120000000.nitpicker --all
 ```
 
 #### オプション
@@ -124,15 +124,15 @@ $ nitpicker analyze example.com-20250101120000000.nitpicker --all
 `.nitpicker` アーカイブファイルから Google Sheets レポートを生成する。Google Sheets の URL と OAuth2 サービスアカウントの認証情報が必要。
 
 ```sh
-$ nitpicker report <file> --sheet <URL>
+$ npx @nitpicker/cli report <file> --sheet <URL>
 ```
 
 #### 例
 
 ```sh
-$ nitpicker report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit"
-$ nitpicker report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --credentials ./my-credentials.json
-$ nitpicker report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --config ./nitpicker.config.json
+$ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit"
+$ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --credentials ./my-credentials.json
+$ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --config ./nitpicker.config.json
 ```
 
 #### オプション

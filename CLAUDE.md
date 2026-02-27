@@ -41,9 +41,9 @@ packages/
 ## CLI コマンド
 
 ```sh
-nitpicker crawl <URL> [options]     # Web サイトをクロールして .nitpicker ファイルを生成
-nitpicker analyze <file> [options]  # .nitpicker ファイルに対して analyze プラグインを実行
-nitpicker report <file> [options]   # .nitpicker ファイルから Google Sheets レポートを生成
+npx @nitpicker/cli crawl <URL> [options]     # Web サイトをクロールして .nitpicker ファイルを生成
+npx @nitpicker/cli analyze <file> [options]  # .nitpicker ファイルに対して analyze プラグインを実行
+npx @nitpicker/cli report <file> [options]   # .nitpicker ファイルから Google Sheets レポートを生成
 ```
 
 ## 主要アーキテクチャ

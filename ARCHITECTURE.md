@@ -145,9 +145,9 @@ crawler/src/
 
 `@d-zero/roar` ベースの統合 CLI。3つのサブコマンドを提供。
 
-- **`nitpicker crawl <URL>`**: Webサイトをクロールして `.nitpicker` ファイルを生成
-- **`nitpicker analyze <file>`**: `.nitpicker` ファイルに対して analyze プラグインを実行
-- **`nitpicker report <file>`**: `.nitpicker` ファイルから Google Sheets レポートを生成
+- **`npx @nitpicker/cli crawl <URL>`**: Webサイトをクロールして `.nitpicker` ファイルを生成
+- **`npx @nitpicker/cli analyze <file>`**: `.nitpicker` ファイルに対して analyze プラグインを実行
+- **`npx @nitpicker/cli report <file>`**: `.nitpicker` ファイルから Google Sheets レポートを生成
 
 ---
 
@@ -361,7 +361,7 @@ updatePage(pageData) の処理:
 
 ```mermaid
 sequenceDiagram
-    participant CLI as nitpicker analyze
+    participant CLI as npx @nitpicker/cli analyze
     participant NP as Nitpicker（@nitpicker/core）
     participant Archive as Archive
     participant Dealer as deal()（@d-zero/dealer）
@@ -414,7 +414,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant CLI as nitpicker report
+    participant CLI as npx @nitpicker/cli report
     participant GS as @nitpicker/report-google-sheets
     participant Archive as Archive
     participant Sheets as Google Sheets API
