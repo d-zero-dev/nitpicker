@@ -9,23 +9,21 @@ Lerna + Yarn Workspaces によるモノレポ。
 ```
 packages/
 ├── @nitpicker/
-│   ├── beholder     # Puppeteer スクレイパー（インプロセス、自己完結型）
+│   ├── cli          # 統合 CLI（crawl / analyze / report コマンド）
 │   ├── crawler      # オーケストレーター + 型定義 + ユーティリティ + アーカイブ
-│   ├── roar         # CLI ヘルパーライブラリ（サブコマンド別フラグ対応）
 │   ├── core         # Nitpicker プラグインシステム
 │   ├── types        # 共有型定義
 │   ├── analyze-*    # 各種 analyze プラグイン
 │   └── report-google-sheets  # Google Sheets レポーター
-├── nitpicker/       # 統合 CLI（crawl / analyze / report コマンド）
 └── test-server/     # E2Eテスト用 Hono サーバー
 ```
 
 ### 依存グラフ
 
 ```
-beholder（自己完結）
+@d-zero/beholder（外部）
       ↑
-      └── crawler ── nitpicker CLI ← roar
+      └── crawler ── @nitpicker/cli ← @d-zero/roar（外部）
                        ↑      ↑
                       core   report-google-sheets
 ```
@@ -143,7 +141,7 @@ crawler/src/
 └── crawler-orchestrator.ts     # CrawlerOrchestrator
 ```
 
-### nitpicker CLI
+### @nitpicker/cli
 
 `@d-zero/roar` ベースの統合 CLI。3つのサブコマンドを提供。
 

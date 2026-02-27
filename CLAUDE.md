@@ -4,40 +4,38 @@
 
 Nitpicker は Web サイト全体のデータを取得するクローラー＋監査ツール。ヘッドレスブラウザで各ページをレンダリングし、メタデータ・リンク構造・ネットワークリソース・HTML スナップショットを `.nitpicker` アーカイブ（tar 形式）に保存する。さらに、保存したアーカイブに対して各種 analyze プラグインを実行し、Google Sheets にレポートを出力できる。
 
-Lerna + Yarn Workspaces のモノレポ構成で、12 の `@nitpicker` パッケージ + 統合 CLI + E2E テストサーバーから成る。
+Lerna + Yarn Workspaces のモノレポ構成で、`@nitpicker` スコープ配下の全パッケージ + E2E テストサーバーから成る。
 
 ## パッケージ構成
 
 ```
 packages/
-├── nitpicker/                      # 統合 CLI (bin: nitpicker)
 ├── @nitpicker/
-│   ├── crawler/                    # クローラーエンジン（オーケストレーター + アーカイブ + ユーティリティ）
-│   ├── beholder/                   # Puppeteer スクレイパー（インプロセス、自己完結型）
-│   ├── core/                       # 監査エンジン（Nitpicker クラス + deal() による並列処理）
-│   ├── types/                      # 監査型定義（Report, ConfigJSON）
-│   ├── roar/                       # CLI フレームワーク（yargs-parser ベース）
-│   ├── analyze-axe/                # アクセシビリティ監査
-│   ├── analyze-lighthouse/         # Lighthouse 監査
-│   ├── analyze-main-contents/      # メインコンテンツ検出
-│   ├── analyze-markuplint/         # マークアップ検証
-│   ├── analyze-search/             # キーワード検索
-│   ├── analyze-textlint/           # テキスト校正
-│   └── report-google-sheets/         # Google Sheets レポーター
-└── test-server/                    # E2E テスト用 Hono サーバー
+│   ├── cli/                       # 統合 CLI (bin: nitpicker)
+│   ├── crawler/                   # クローラーエンジン（オーケストレーター + アーカイブ + ユーティリティ）
+│   ├── core/                      # 監査エンジン（Nitpicker クラス + deal() による並列処理）
+│   ├── types/                     # 監査型定義（Report, ConfigJSON）
+│   ├── analyze-axe/               # アクセシビリティ監査
+│   ├── analyze-lighthouse/        # Lighthouse 監査
+│   ├── analyze-main-contents/     # メインコンテンツ検出
+│   ├── analyze-markuplint/        # マークアップ検証
+│   ├── analyze-search/            # キーワード検索
+│   ├── analyze-textlint/          # テキスト校正
+│   └── report-google-sheets/      # Google Sheets レポーター
+└── test-server/                   # E2E テスト用 Hono サーバー
 ```
 
 ### 依存グラフ
 
 ```
-beholder（自己完結、@d-zero/shared に直接依存）
+@d-zero/beholder（外部）
       ↑
-      └── crawler ── nitpicker CLI ← roar
+      └── crawler ── @nitpicker/cli ← @d-zero/roar（外部）
            ↑              ↑      ↑
            │             core   report-google-sheets
            │              ↑
            │         analyze-* プラグイン
-           └── @d-zero/dealer（並列制御）
+           └── @d-zero/dealer（外部）
 ```
 
 ## CLI コマンド

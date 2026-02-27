@@ -32,9 +32,9 @@ description: Git 操作ルール
 複数パッケージにまたがる変更をコミットする場合、必ず**リーフからルートへ**（依存元を依存先より先に）コミットする。
 
 ```
-beholder（自己完結）
+@d-zero/beholder（外部）
       ↑
-      └── crawler ── nitpicker CLI ← roar
+      └── crawler ── @nitpicker/cli ← @d-zero/roar（外部）
            ↑              ↑      ↑
            │             core   report-google-sheets
            │              ↑
@@ -44,10 +44,10 @@ beholder（自己完結）
 
 | ティア | パッケージ                                                                                                                                       |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0      | `beholder`, `types`, `roar`                                                                                                                      |
+| 0      | `types`                                                                                                                                          |
 | 1      | `crawler`, `core`                                                                                                                                |
 | 2      | `analyze-axe`, `analyze-lighthouse`, `analyze-main-contents`, `analyze-markuplint`, `analyze-search`, `analyze-textlint`, `report-google-sheets` |
-| 3      | `nitpicker`（統合 CLI）                                                                                                                          |
+| 3      | `cli`（統合 CLI）                                                                                                                                |
 | —      | `test-server`（E2E テスト専用、プロダクションコードには非依存）                                                                                  |
 
 - 同一ティア内では順序不問
@@ -68,7 +68,7 @@ beholder（自己完結）
     - `test`
     - `chore`
   - 使用するスコープ:
-    - 各パッケージ名（ネームスペースなし）: `beholder`, `crawler`, `core`, `types`, `roar`, `analyze-axe`, `analyze-lighthouse`, `analyze-main-contents`, `analyze-markuplint`, `analyze-search`, `analyze-textlint`, `report-google-sheets`, `nitpicker`
+    - 各パッケージ名（ネームスペースなし）: `crawler`, `core`, `types`, `analyze-axe`, `analyze-lighthouse`, `analyze-main-contents`, `analyze-markuplint`, `analyze-search`, `analyze-textlint`, `report-google-sheets`, `cli`
     - `repo`
     - `deps`
     - `github`
