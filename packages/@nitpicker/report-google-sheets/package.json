@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/report-google-sheets",
-	"version": "0.4.0",
+	"version": "0.4.1",
 	"description": "Nitpicker reporter that outputs crawl and analysis results to Google Sheets",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
@@ -28,8 +28,8 @@
 		"@d-zero/google-auth": "0.5.6",
 		"@d-zero/google-sheets": "0.6.0",
 		"@d-zero/shared": "0.20.0",
-		"@nitpicker/crawler": "0.4.0",
-		"@nitpicker/types": "0.4.0",
+		"@nitpicker/crawler": "0.4.1",
+		"@nitpicker/types": "0.4.1",
 		"ansi-colors": "4.1.3",
 		"debug": "4.4.3",
 		"enquirer": "2.4.1",
