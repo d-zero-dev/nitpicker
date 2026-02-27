@@ -1,5 +1,5 @@
 {
-	"name": "nitpicker",
+	"name": "@nitpicker/cli",
 	"version": "0.4.1",
 	"description": "Web site crawler, analyzer, and reporter CLI",
 	"author": "D-ZERO",
@@ -19,7 +19,9 @@
 			"types": "./lib/index.d.ts"
 		}
 	},
-	"bin": "./bin/nitpicker.js",
+	"bin": {
+		"nitpicker": "./bin/nitpicker.js"
+	},
 	"scripts": {
 		"build": "tsc",
 		"clean": "tsc --build --clean"
@@ -38,5 +40,6 @@
 	},
 	"devDependencies": {
 		"@types/debug": "4.1.12"
-	}
+	},
+	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
 }
