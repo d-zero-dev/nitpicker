@@ -13,6 +13,7 @@
 		"access": "public"
 	},
 	"files": [
+		"bin",
 		"lib"
 	],
 	"type": "module",
