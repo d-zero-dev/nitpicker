@@ -20,6 +20,14 @@
 		".": {
 			"import": "./lib/index.js",
 			"types": "./lib/index.d.ts"
+		},
+		"./detect-slots-from-html": {
+			"import": "./lib/detect-slots-from-html.js",
+			"types": "./lib/detect-slots-from-html.d.ts"
+		},
+		"./detect-slots-from-jsx": {
+			"import": "./lib/detect-slots-from-jsx.js",
+			"types": "./lib/detect-slots-from-jsx.d.ts"
 		}
 	},
 	"scripts": {
