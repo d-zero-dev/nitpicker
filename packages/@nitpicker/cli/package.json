@@ -12,6 +12,10 @@
 	"publishConfig": {
 		"access": "public"
 	},
+	"files": [
+		"bin",
+		"lib"
+	],
 	"type": "module",
 	"exports": {
 		".": {
