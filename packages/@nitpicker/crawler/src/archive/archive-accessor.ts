@@ -1,5 +1,6 @@
 import type { Database } from './database.js';
 import type {
+	Config,
 	DB_Anchor,
 	DB_Redirect,
 	DB_Referrer,
@@ -64,6 +65,14 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		this.#db.on('error', (e) => {
 			void this.emit('error', e);
 		});
+	}
+
+	/**
+	 * Retrieves the crawl configuration stored in the archive database.
+	 * @returns The parsed {@link Config} object.
+	 */
+	async getConfig(): Promise<Config> {
+		return this.#db.getConfig();
 	}
 
 	/**

@@ -5,6 +5,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { Database } from './database.js';
 import { remove } from './filesystem/index.js';
+import type { Config } from './types.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -48,296 +49,6 @@ describe('Pages', () => {
 
 		expect(pages.length).toBe(1);
 	});
-
-	// Create mock.sqlite for the next test
-	// it.skip('insert 2', async () => {
-	// 	const db = await Database.connect({
-	// 		type: 'sqlite3',
-	// 		workingDir,
-	// 		filename: path.resolve(workingDir, 'mock.sqlite'),
-	// 	});
-
-	// 	await db.updatePage(
-	// 		{
-	// 			url: parseUrl('http://localhost/path/to')!,
-	// 			redirectPaths: ['https://localhost/path/to'],
-	// 			isExternal: false,
-	// 			status: 200,
-	// 			statusText: 'OK',
-	// 			contentLength: 1000,
-	// 			contentType: 'html/text',
-	// 			responseHeaders: {},
-	// 			meta: {
-	// 				title: 'LOCAL_SERVER',
-	// 			},
-	// 			anchorList: [
-	// 				{
-	// 					href: parseUrl('https://localhost/data/1')!,
-	// 					textContent: 'DATA-1',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://localhost/data/2')!,
-	// 					textContent: 'DATA-2',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://localhost/data/3')!,
-	// 					textContent: 'DATA-3',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://localhost/lp')!,
-	// 					textContent: 'Advertisement',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://example.com/abc')!,
-	// 					textContent: 'ABC',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://example.com/xyz')!,
-	// 					textContent: 'XYZ',
-	// 				},
-	// 			],
-	// 			imageList: [],
-	// 			html: '',
-	// 			isSkipped: false,
-	// 		},
-	// 		workingDir,
-	// 		true,
-	// 	);
-
-	// 	await db.updatePage(
-	// 		{
-	// 			url: parseUrl('https://localhost/data/1')!,
-	// 			redirectPaths: ['https://localhost/data/one'],
-	// 			isExternal: false,
-	// 			status: 200,
-	// 			statusText: 'OK',
-	// 			contentLength: 1000,
-	// 			contentType: 'html/text',
-	// 			responseHeaders: {},
-	// 			meta: {
-	// 				title: 'DATA ONE | LOCAL_SERVER',
-	// 			},
-	// 			anchorList: [
-	// 				{
-	// 					href: parseUrl('https://localhost/data/one')!,
-	// 					textContent: 'DATA ONE',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://localhost/data/two')!,
-	// 					textContent: 'DATA TWO',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://localhost/data/three')!,
-	// 					textContent: 'DATA THREE',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://localhost/lp')!,
-	// 					textContent: 'Advertisement',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://example.com/abc')!,
-	// 					textContent: 'ABC',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://example.com/xyz')!,
-	// 					textContent: 'XYZ',
-	// 				},
-	// 			],
-	// 			imageList: [],
-	// 			html: '',
-	// 			isSkipped: false,
-	// 		},
-	// 		workingDir,
-	// 		true,
-	// 	);
-
-	// 	await db.updatePage(
-	// 		{
-	// 			url: parseUrl('https://localhost/data/2')!,
-	// 			redirectPaths: ['https://localhost/data/two'],
-	// 			isExternal: false,
-	// 			status: 200,
-	// 			statusText: 'OK',
-	// 			contentLength: 1000,
-	// 			contentType: 'html/text',
-	// 			responseHeaders: {},
-	// 			meta: {
-	// 				title: 'DATA TWO | LOCAL_SERVER',
-	// 			},
-	// 			anchorList: [
-	// 				{
-	// 					href: parseUrl('https://localhost/data/one')!,
-	// 					textContent: 'DATA ONE',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://localhost/data/two')!,
-	// 					textContent: 'DATA TWO',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://localhost/data/three')!,
-	// 					textContent: 'DATA THREE',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://localhost/lp')!,
-	// 					textContent: 'Advertisement',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://example.com/abc')!,
-	// 					textContent: 'ABC',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://example.com/xyz')!,
-	// 					textContent: 'XYZ',
-	// 				},
-	// 			],
-	// 			imageList: [],
-	// 			html: '',
-	// 			isSkipped: false,
-	// 		},
-	// 		workingDir,
-	// 		true,
-	// 	);
-
-	// 	await db.updatePage(
-	// 		{
-	// 			url: parseUrl('https://localhost/data/3')!,
-	// 			redirectPaths: ['https://localhost/data/three'],
-	// 			isExternal: false,
-	// 			status: 200,
-	// 			statusText: 'OK',
-	// 			contentLength: 1000,
-	// 			contentType: 'html/text',
-	// 			responseHeaders: {},
-	// 			meta: {
-	// 				title: 'DATA THREE | LOCAL_SERVER',
-	// 			},
-	// 			anchorList: [
-	// 				{
-	// 					href: parseUrl('https://localhost/data/one')!,
-	// 					textContent: 'DATA ONE',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://localhost/data/two')!,
-	// 					textContent: 'DATA TWO',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://localhost/data/three')!,
-	// 					textContent: 'DATA THREE',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://localhost/lp')!,
-	// 					textContent: 'Advertisement',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://example.com/abc')!,
-	// 					textContent: 'ABC',
-	// 				},
-	// 				{
-	// 					href: parseUrl('https://example.com/xyz')!,
-	// 					textContent: 'XYZ',
-	// 				},
-	// 			],
-	// 			imageList: [],
-	// 			html: '',
-	// 			isSkipped: false,
-	// 		},
-	// 		workingDir,
-	// 		true,
-	// 	);
-
-	// 	await db.updatePage(
-	// 		{
-	// 			url: parseUrl('https://localhost/lp')!,
-	// 			redirectPaths: [],
-	// 			isExternal: false,
-	// 			status: 200,
-	// 			statusText: 'OK',
-	// 			contentLength: 1000,
-	// 			contentType: 'html/text',
-	// 			responseHeaders: {},
-	// 			meta: {
-	// 				title: '[AD] THE EARTH IS BLUE',
-	// 			},
-	// 			anchorList: [
-	// 				{
-	// 					href: parseUrl('https://ec.localhost/buy?id=0123')!,
-	// 					textContent: 'BUY',
-	// 				},
-	// 			],
-	// 			imageList: [],
-	// 			html: '',
-	// 			isSkipped: false,
-	// 		},
-	// 		workingDir,
-	// 		true,
-	// 	);
-
-	// 	await db.updatePage(
-	// 		{
-	// 			url: parseUrl('https://example.com/abc')!,
-	// 			redirectPaths: [],
-	// 			isExternal: true,
-	// 			status: 200,
-	// 			statusText: 'OK',
-	// 			contentLength: 1000,
-	// 			contentType: 'html/text',
-	// 			responseHeaders: {},
-	// 			meta: {
-	// 				title: 'ABC - example.com',
-	// 			},
-	// 			anchorList: [],
-	// 			imageList: [],
-	// 			html: '',
-	// 			isSkipped: false,
-	// 		},
-	// 		workingDir,
-	// 		true,
-	// 	);
-
-	// 	await db.updatePage(
-	// 		{
-	// 			url: parseUrl('https://example.com/xyz')!,
-	// 			redirectPaths: ['https://example.com/404'],
-	// 			isExternal: true,
-	// 			status: 404,
-	// 			statusText: 'Not Found',
-	// 			contentLength: 1000,
-	// 			contentType: 'html/text',
-	// 			responseHeaders: {},
-	// 			meta: {
-	// 				title: '404 Not Found - example.com',
-	// 			},
-	// 			anchorList: [],
-	// 			imageList: [],
-	// 			html: '',
-	// 			isSkipped: false,
-	// 		},
-	// 		workingDir,
-	// 		true,
-	// 	);
-
-	// 	await db.updatePage(
-	// 		{
-	// 			url: parseUrl('https://ec.localhost/buy?id=0123')!,
-	// 			redirectPaths: ['https://ec.localhost/items/0123/details'],
-	// 			isExternal: true,
-	// 			status: 200,
-	// 			statusText: 'OK',
-	// 			contentLength: 1000,
-	// 			contentType: 'html/text',
-	// 			responseHeaders: {},
-	// 			meta: {
-	// 				title: '[ID-0123] The tool of something | EC',
-	// 			},
-	// 			anchorList: [],
-	// 			imageList: [],
-	// 			html: '',
-	// 			isSkipped: false,
-	// 		},
-	// 		workingDir,
-	// 		true,
-	// 	);
-	// });
 
 	it('get', async () => {
 		const db = await Database.connect({
@@ -465,5 +176,110 @@ describe('Pages', () => {
 		const count = await db.getPageCount();
 
 		expect(count).toEqual(14);
+	});
+});
+
+describe('Config', () => {
+	const configDbPath = path.resolve(workingDir, 'config-test.sqlite');
+
+	afterAll(async () => {
+		await remove(configDbPath);
+	});
+
+	it('setConfig → getConfig ラウンドトリップで全フィールドが一致する', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: configDbPath,
+		});
+
+		const config: Config = {
+			version: '0.4.3',
+			name: 'test-crawl',
+			baseUrl: 'https://example.com',
+			recursive: true,
+			interval: 500,
+			image: true,
+			fetchExternal: false,
+			parallels: 4,
+			scope: ['https://example.com/docs/', 'https://example.com/blog/'],
+			excludes: ['/admin/', '/private/'],
+			excludeKeywords: ['secret', 'draft'],
+			excludeUrls: ['https://example.com/skip'],
+			maxExcludedDepth: 3,
+			retry: 5,
+			fromList: false,
+			disableQueries: true,
+			userAgent: 'NitpickerBot/1.0',
+			ignoreRobots: true,
+		};
+
+		await db.setConfig(config);
+		const retrieved = await db.getConfig();
+
+		// SQLite はブール値を整数 (0/1) で保存する
+		expect(retrieved).toEqual({
+			...config,
+			recursive: 1,
+			image: 1,
+			fetchExternal: 0,
+			fromList: 0,
+			disableQueries: 1,
+			ignoreRobots: 1,
+		});
+	});
+
+	it('Config 型の全キーがスキーマと同期している', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: configDbPath,
+		});
+
+		const retrieved = await db.getConfig();
+
+		const expectedKeys: (keyof Config)[] = [
+			'version',
+			'name',
+			'baseUrl',
+			'recursive',
+			'interval',
+			'image',
+			'fetchExternal',
+			'parallels',
+			'scope',
+			'excludes',
+			'excludeKeywords',
+			'excludeUrls',
+			'maxExcludedDepth',
+			'retry',
+			'fromList',
+			'disableQueries',
+			'userAgent',
+			'ignoreRobots',
+		];
+
+		for (const key of expectedKeys) {
+			expect(retrieved).toHaveProperty(key);
+		}
+	});
+
+	it('JSON フィールドが正しくシリアライズ/デシリアライズされる', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: configDbPath,
+		});
+
+		const retrieved = await db.getConfig();
+
+		expect(Array.isArray(retrieved.scope)).toBe(true);
+		expect(retrieved.scope).toEqual(['https://example.com/docs/', 'https://example.com/blog/']);
+		expect(Array.isArray(retrieved.excludes)).toBe(true);
+		expect(retrieved.excludes).toEqual(['/admin/', '/private/']);
+		expect(Array.isArray(retrieved.excludeKeywords)).toBe(true);
+		expect(retrieved.excludeKeywords).toEqual(['secret', 'draft']);
+		expect(Array.isArray(retrieved.excludeUrls)).toBe(true);
+		expect(retrieved.excludeUrls).toEqual(['https://example.com/skip']);
 	});
 });

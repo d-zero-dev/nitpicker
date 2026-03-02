@@ -103,7 +103,7 @@ export default class Archive extends ArchiveAccessor {
 	 * Retrieves the crawl configuration stored in the archive database.
 	 * @returns The configuration object.
 	 */
-	async getConfig() {
+	override async getConfig() {
 		return this.#db.getConfig();
 	}
 
