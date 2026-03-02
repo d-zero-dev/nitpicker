@@ -174,6 +174,9 @@ async function startCrawl(siteUrl: string[], flags: CrawlFlags) {
 		siteUrl,
 		{
 			...flags,
+			excludes: flags.exclude,
+			excludeKeywords: flags.excludeKeyword,
+			excludeUrls: flags.excludeUrl,
 			scope: flags.scope?.split(',').map((s) => s.trim()),
 			list: isList,
 			recursive: isList ? false : flags.recursive,
@@ -216,6 +219,9 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 		absFilePath,
 		{
 			...flags,
+			excludes: flags.exclude,
+			excludeKeywords: flags.excludeKeyword,
+			excludeUrls: flags.excludeUrl,
 			scope: flags.scope?.split(',').map((s) => s.trim()),
 			list: false,
 		},
