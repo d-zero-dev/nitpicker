@@ -106,6 +106,11 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Ignore robots.txt restrictions (use responsibly)',
 		},
+		output: {
+			type: 'string',
+			shortFlag: 'o',
+			desc: 'Output file path for the .nitpicker archive',
+		},
 		verbose: {
 			type: 'boolean',
 			desc: 'Output verbose log to standard out',
@@ -174,6 +179,7 @@ async function startCrawl(siteUrl: string[], flags: CrawlFlags) {
 		siteUrl,
 		{
 			...flags,
+			filePath: flags.output,
 			scope: flags.scope?.split(',').map((s) => s.trim()),
 			list: isList,
 			recursive: isList ? false : flags.recursive,
@@ -216,6 +222,7 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 		absFilePath,
 		{
 			...flags,
+			filePath: flags.output,
 			scope: flags.scope?.split(',').map((s) => s.trim()),
 			list: false,
 		},

@@ -2,6 +2,8 @@ import type { Config } from './archive/types.js';
 import type { CrawlEvent } from './types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
+import path from 'node:path';
+
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { sortUrl } from '@d-zero/shared/sort-url';
 import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-await-event-emitter';
@@ -11,6 +13,7 @@ import pkg from '../package.json' with { type: 'json' };
 import Archive from './archive/archive.js';
 import { clearDestinationCache, Crawler } from './crawler/index.js';
 import { crawlerLog, log } from './debug.js';
+import { resolveOutputPath } from './resolve-output-path.js';
 import { cleanObject } from './utils/index.js';
 
 /**
@@ -294,9 +297,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			throw new Error('URL is empty');
 		}
 
-		const fileName = `${urlParsed.hostname}-${Archive.timestamp()}`;
 		const cwd = options?.cwd ?? process.cwd();
-		const filePath = Archive.joinPath(cwd, `${fileName}.${Archive.FILE_EXTENSION}`);
+		const fileName = options?.filePath
+			? path.basename(options.filePath, `.${Archive.FILE_EXTENSION}`)
+			: `${urlParsed.hostname}-${Archive.timestamp()}`;
+		const filePath = options?.filePath
+			? resolveOutputPath(options.filePath, cwd)
+			: Archive.joinPath(cwd, `${fileName}.${Archive.FILE_EXTENSION}`);
 		const disableQueries = options?.disableQueries || false;
 		const defaultUserAgent = `Nitpicker/${pkg.version}`;
 		const archive = await Archive.create({ filePath, cwd, disableQueries });
