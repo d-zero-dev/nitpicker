@@ -310,14 +310,11 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			interval: options?.interval || 0,
 			parallels: options?.parallels || 0,
 			scope: options?.scope ?? [],
-			// @ts-expect-error TODO: Fix CLI arguments
-			excludes: normalizeToArray(options?.exclude),
-			// @ts-expect-error TODO: Fix CLI arguments
-			excludeKeywords: normalizeToArray(options?.excludeKeyword),
+			excludes: normalizeToArray(options?.excludes),
+			excludeKeywords: normalizeToArray(options?.excludeKeywords),
 			excludeUrls: [
 				...DEFAULT_EXCLUDED_EXTERNAL_URLS,
-				// @ts-expect-error TODO: Fix CLI arguments
-				...normalizeToArray(options?.excludeUrl),
+				...normalizeToArray(options?.excludeUrls),
 			],
 			maxExcludedDepth: options?.maxExcludedDepth || 10,
 			retry: options?.retry ?? 3,
