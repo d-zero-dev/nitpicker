@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/crawler",
-	"version": "0.4.2",
+	"version": "0.4.3",
 	"description": "Web crawler engine with headless browser rendering and archive storage",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",

@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/analyze-markuplint",
-	"version": "0.4.2",
+	"version": "0.4.3",
 	"description": "Nitpicker plugin for HTML markup validation using markuplint",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
@@ -27,8 +27,8 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@nitpicker/core": "0.4.2",
-		"@nitpicker/types": "0.4.2",
+		"@nitpicker/core": "0.4.3",
+		"@nitpicker/types": "0.4.3",
 		"markuplint": "4.14.1"
 	},
 	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
