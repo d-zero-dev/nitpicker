@@ -36,6 +36,10 @@ export interface ReportParams {
 	readonly configPath: string | null;
 	/** Batch size for `getPagesWithRefs()` pagination (default: 100,000). */
 	readonly limit: number;
+	/** When `true`, generate all sheets without interactive prompt. */
+	readonly all?: boolean;
+	/** When `true`, suppress progress display output. */
+	readonly silent?: boolean;
 }
 
 /**
@@ -67,7 +71,8 @@ export interface ReportParams {
  * ```
  */
 export async function report(params: ReportParams) {
-	const { filePath, sheetUrl, credentialFilePath, configPath, limit } = params;
+	const { filePath, sheetUrl, credentialFilePath, configPath, limit, all, silent } =
+		params;
 	log('Initialization');
 
 	const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'] as const;
@@ -111,98 +116,113 @@ export async function report(params: ReportParams) {
 	];
 	type SheetNames = typeof sheetNames;
 
-	log('Choice creating data');
-	const chosenSheets = await enquirer
-		.prompt<{ sheetName: SheetNames }>([
-			{
-				message: 'What do you report?',
-				name: 'sheetName',
-				type: 'multiselect',
-				choices: sheetNames,
-			},
-		])
-		.catch(() => {
-			// enquirer v2.4.1: Ctrl+C 後に readline を二重 close して
-			// ERR_USE_AFTER_CLOSE が unhandled rejection になるため、
-			// 即座に終了して回避する
-			process.exit(0);
-		});
+	let selectedSheetNames: SheetNames;
 
-	if (!chosenSheets) {
+	if (all) {
+		log('All sheets selected (--all or non-TTY)');
+		selectedSheetNames = sheetNames;
+	} else {
 		log('Choice creating data');
-		archiveLog('Closes file');
-		await archive.close();
-		return;
+		const chosenSheets = await enquirer
+			.prompt<{ sheetName: SheetNames }>([
+				{
+					message: 'What do you report?',
+					name: 'sheetName',
+					type: 'multiselect',
+					choices: sheetNames,
+				},
+			])
+			.catch(() => {
+				// enquirer v2.4.1: Ctrl+C 後に readline を二重 close して
+				// ERR_USE_AFTER_CLOSE が unhandled rejection になるため、
+				// 即座に終了して回避する
+				process.exit(0);
+			});
+
+		if (!chosenSheets) {
+			log('Choice creating data');
+			archiveLog('Closes file');
+			await archive.close();
+			return;
+		}
+
+		selectedSheetNames = chosenSheets.sheetName;
 	}
 
-	log('Chosen sheets: %O', chosenSheets.sheetName);
+	log('Chosen sheets: %O', selectedSheetNames);
 
 	const createSheetList: CreateSheet[] = [];
 
-	if (chosenSheets.sheetName.includes('Page List')) {
+	if (selectedSheetNames.includes('Page List')) {
 		createSheetList.push(createPageList);
 	}
 
-	if (chosenSheets.sheetName.includes('Links')) {
+	if (selectedSheetNames.includes('Links')) {
 		createSheetList.push(createLinks);
 	}
 
-	if (chosenSheets.sheetName.includes('Discrepancies')) {
+	if (selectedSheetNames.includes('Discrepancies')) {
 		createSheetList.push(createDiscrepancies);
 	}
 
-	if (chosenSheets.sheetName.includes('Violations')) {
+	if (selectedSheetNames.includes('Violations')) {
 		createSheetList.push(createViolations);
 	}
 
-	if (chosenSheets.sheetName.includes('Referrers Relational Table')) {
+	if (selectedSheetNames.includes('Referrers Relational Table')) {
 		createSheetList.push(createReferrersRelationalTable);
 	}
 
-	if (chosenSheets.sheetName.includes('Resources Relational Table')) {
+	if (selectedSheetNames.includes('Resources Relational Table')) {
 		createSheetList.push(createResourcesRelationalTable);
 	}
 
-	if (chosenSheets.sheetName.includes('Resources')) {
+	if (selectedSheetNames.includes('Resources')) {
 		createSheetList.push(createResources);
 	}
 
-	if (chosenSheets.sheetName.includes('Images')) {
+	if (selectedSheetNames.includes('Images')) {
 		createSheetList.push(createImageList);
 	}
 
-	// eslint-disable-next-line no-console
-	console.log(`\nGenerating ${createSheetList.length} sheet(s)...\n`);
+	if (!silent) {
+		// eslint-disable-next-line no-console
+		console.log(`\nGenerating ${createSheetList.length} sheet(s)...\n`);
+	}
 
-	const lanes = new Lanes({ verbose: !process.stdout.isTTY, indent: '  ' });
-	log('Lanes created (verbose: %s)', !process.stdout.isTTY);
+	const lanes = silent
+		? null
+		: new Lanes({ verbose: !process.stdout.isTTY, indent: '  ' });
+	log('Lanes created (verbose: %s, silent: %s)', !process.stdout.isTTY, !!silent);
 
 	const RATE_LIMIT_LANE = 10_000;
 	let countdownSeq = 0;
 	let waitingCount = 0;
 
-	sheets.onLog = (message: ErrorHandlerMessage) => {
-		if (message.waiting && message.waitTime) {
-			waitingCount++;
-			const id = `rateLimit_${countdownSeq++}`;
-			const label =
-				message.message === 'TooManyRequestError'
-					? 'Too Many Requests (429)'
-					: message.message === 'UserRateLimitExceededError'
-						? 'Rate Limit Exceeded (403)'
-						: 'Connection Reset';
-			lanes.update(
-				RATE_LIMIT_LANE,
-				c.yellow(`${label}: waiting %countdown(${message.waitTime}, ${id}, s)%s`),
-			);
-		} else {
-			waitingCount--;
-			if (waitingCount <= 0) {
-				waitingCount = 0;
-				lanes.delete(RATE_LIMIT_LANE);
+	if (lanes) {
+		sheets.onLog = (message: ErrorHandlerMessage) => {
+			if (message.waiting && message.waitTime) {
+				waitingCount++;
+				const id = `rateLimit_${countdownSeq++}`;
+				const label =
+					message.message === 'TooManyRequestError'
+						? 'Too Many Requests (429)'
+						: message.message === 'UserRateLimitExceededError'
+							? 'Rate Limit Exceeded (403)'
+							: 'Connection Reset';
+				lanes.update(
+					RATE_LIMIT_LANE,
+					c.yellow(`${label}: waiting %countdown(${message.waitTime}, ${id}, s)%s`),
+				);
+			} else {
+				waitingCount--;
+				if (waitingCount <= 0) {
+					waitingCount = 0;
+					lanes.delete(RATE_LIMIT_LANE);
+				}
 			}
-		}
-	};
+		};
+	}
 
 	log('Reporting starts (limit: %d)', limit);
 	try {
@@ -212,16 +232,18 @@ export async function report(params: ReportParams) {
 			reports,
 			limit,
 			createSheetList,
-			options: { lanes },
+			options: lanes ? { lanes } : undefined,
 		});
 	} finally {
-		lanes.close();
+		lanes?.close();
 	}
 	log('Reporting done');
-	// eslint-disable-next-line no-console
-	console.log('\nReport complete.');
+	if (!silent) {
+		// eslint-disable-next-line no-console
+		console.log('\nReport complete.');
+	}
 
-	if (chosenSheets.sheetName.includes('Summary')) {
+	if (selectedSheetNames.includes('Summary')) {
 		await addToSummary(/*sheets, archive, reports*/);
 	}
 
