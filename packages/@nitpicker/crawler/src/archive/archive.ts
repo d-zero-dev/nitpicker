@@ -296,14 +296,6 @@ export default class Archive extends ArchiveAccessor {
 		return await Archive.#init(filePath, tmpDir);
 	}
 	/**
-	 * Retrieves the crawl configuration stored in the archive database.
-	 * @returns The configuration object.
-	 */
-	override async getConfig() {
-		return this.#db.getConfig();
-	}
-
-	/**
 	 * Resumes an archive from an existing temporary directory
 	 * (e.g., after an interrupted crawl session).
 	 * @param targetPath - The path to the temporary directory to resume from.
@@ -325,7 +317,6 @@ export default class Archive extends ArchiveAccessor {
 			'The specified path is not a directory. Please ensure the path points to a valid directory.',
 		);
 	}
-
 	/**
 	 * Generates a timestamp string in the format `YYYYMMDDHHmmssSSS`
 	 * suitable for use in file names.
@@ -344,7 +335,6 @@ export default class Archive extends ArchiveAccessor {
 		const ms = now.getMilliseconds().toLocaleString('en-US', { minimumIntegerDigits: 3 });
 		return year + month + date + hours + minutes + seconds + ms;
 	}
-
 	/**
 	 * Connects to (or creates) the SQLite database in the given directory.
 	 * @param tmpDir - Directory containing `db.sqlite`
@@ -358,7 +348,6 @@ export default class Archive extends ArchiveAccessor {
 			filename: dbPath,
 		});
 	}
-
 	/**
 	 * Initializes an Archive instance by connecting to the database.
 	 * @param filePath - Output `.nitpicker` file path
@@ -368,6 +357,13 @@ export default class Archive extends ArchiveAccessor {
 		const db = await Archive.#connectDB(tmpDir);
 		const archive = new Archive(filePath, tmpDir, db);
 		return archive;
+	}
+	/**
+	 * Retrieves the crawl configuration stored in the archive database.
+	 * @returns The configuration object.
+	 */
+	override async getConfig() {
+		return this.#db.getConfig();
 	}
 }
 
