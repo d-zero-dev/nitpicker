@@ -6,6 +6,7 @@ import { Lanes } from '@d-zero/dealer';
 import { Nitpicker, readPluginLabels } from '@nitpicker/core';
 import enquirer from 'enquirer';
 
+import { buildPluginOverrides } from '../analyze/build-plugin-overrides.js';
 import { log } from '../analyze/log.js';
 
 const { prompt } = enquirer;
@@ -24,6 +25,23 @@ export const commandDef = {
 		verbose: {
 			type: 'boolean',
 			desc: 'Output logs verbosely',
+		},
+		searchKeywords: {
+			type: 'string',
+			isMultiple: true,
+			desc: 'Keywords for analyze-search plugin (overrides config file)',
+		},
+		searchScope: {
+			type: 'string',
+			desc: 'CSS selector to narrow search scope for analyze-search plugin (overrides config file)',
+		},
+		mainContentSelector: {
+			type: 'string',
+			desc: 'CSS selector for main content detection in analyze-main-contents plugin (overrides config file)',
+		},
+		axeLang: {
+			type: 'string',
+			desc: 'BCP 47 language tag for analyze-axe plugin (overrides config file)',
 		},
 	},
 } as const satisfies CommandDef;
@@ -59,6 +77,11 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 	// eslint-disable-next-line no-console
 	console.log(`  📦 Extracting archive: ${absFilePath}`);
 	const nitpicker = await Nitpicker.open(absFilePath);
+
+	const pluginOverrides = buildPluginOverrides(flags);
+	if (Object.keys(pluginOverrides).length > 0) {
+		nitpicker.setPluginOverrides(pluginOverrides);
+	}
 
 	const config = await nitpicker.getConfig();
 	const plugins = config.analyze || [];

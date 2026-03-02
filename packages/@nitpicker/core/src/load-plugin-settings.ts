@@ -1,4 +1,4 @@
-import type { Config, Plugin } from './types.js';
+import type { Config, Plugin, PluginOverrides } from './types.js';
 import type { ConfigJSON } from '@nitpicker/types';
 
 import { cosmiconfig } from 'cosmiconfig';
@@ -27,6 +27,7 @@ const MODULE_NAME = 'nitpicker';
  * - The config file path is attached to each plugin for relative path resolution
  * @param defaultConfig - Optional partial config to merge as defaults.
  *   Plugin lists are concatenated (defaults first, then discovered plugins).
+ * @param pluginOverrides
  * @returns Fully resolved {@link Config} with the `analyze` plugin list.
  * @example
  * ```ts
@@ -50,24 +51,28 @@ const MODULE_NAME = 'nitpicker';
  * ```
  * @see {@link ./types.ts!Config} for the output type
  * @see {@link ./types.ts!Plugin} for individual plugin entries
+ * @see {@link ./types.ts!PluginOverrides} for CLI override support
  */
 export async function loadPluginSettings(
 	defaultConfig: Partial<Config> = {},
+	pluginOverrides: PluginOverrides = {},
 ): Promise<Config> {
 	const explorer = cosmiconfig(MODULE_NAME);
 	const result = await explorer.search();
 	if (!result) {
 		const defaultPlugins = defaultConfig.analyze || [];
+		const plugins = defaultPlugins.length > 0 ? defaultPlugins : discoverAnalyzePlugins();
 		return {
-			analyze: defaultPlugins.length > 0 ? defaultPlugins : discoverAnalyzePlugins(),
+			analyze: applyPluginOverrides(plugins, pluginOverrides),
 		};
 	}
 	const config = result.config as ConfigJSON;
 	const { isEmpty, filepath } = result;
 	if (!config || isEmpty) {
 		const defaultPlugins = defaultConfig.analyze || [];
+		const plugins = defaultPlugins.length > 0 ? defaultPlugins : discoverAnalyzePlugins();
 		return {
-			analyze: defaultPlugins.length > 0 ? defaultPlugins : discoverAnalyzePlugins(),
+			analyze: applyPluginOverrides(plugins, pluginOverrides),
 		};
 	}
 
@@ -93,7 +98,42 @@ export async function loadPluginSettings(
 
 	const mergedPlugins = [...(defaultConfig.analyze || []), ...analyzePlugins];
 
+	const finalPlugins =
+		mergedPlugins.length > 0 ? mergedPlugins : discoverAnalyzePlugins();
+
 	return {
-		analyze: mergedPlugins.length > 0 ? mergedPlugins : discoverAnalyzePlugins(),
+		analyze: applyPluginOverrides(finalPlugins, pluginOverrides),
 	};
+}
+
+/**
+ * Applies CLI-specified overrides to plugin settings.
+ *
+ * For each plugin in the list, if there is a matching entry in
+ * `overrides`, the override values are shallow-merged into the
+ * plugin's existing settings. CLI values take precedence over
+ * config-file values.
+ * @param plugins - The plugin list to apply overrides to.
+ * @param overrides - CLI-specified plugin setting overrides.
+ * @returns A new plugin array with overrides applied.
+ */
+function applyPluginOverrides(plugins: Plugin[], overrides: PluginOverrides): Plugin[] {
+	const overrideKeys = Object.keys(overrides) as (keyof PluginOverrides)[];
+	if (overrideKeys.length === 0) {
+		return plugins;
+	}
+
+	return plugins.map((plugin) => {
+		const override = overrides[plugin.module as keyof PluginOverrides];
+		if (!override) {
+			return plugin;
+		}
+		return {
+			...plugin,
+			settings: {
+				...(plugin.settings as Record<string, unknown> | undefined),
+				...override,
+			},
+		};
+	});
 }
