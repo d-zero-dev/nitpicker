@@ -762,7 +762,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				t.string('name');
 				t.string('baseUrl');
 				t.boolean('recursive');
-				t.boolean('useSubprocess');
 				t.integer('interval');
 				t.boolean('image');
 				t.boolean('fetchExternal');
@@ -775,6 +774,8 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				t.integer('retry');
 				t.boolean('fromList');
 				t.boolean('disableQueries');
+				t.string('userAgent');
+				t.boolean('ignoreRobots');
 			})
 			.createTable('pages', (t) => {
 				t.increments('id');
