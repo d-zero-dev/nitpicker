@@ -7,10 +7,6 @@ See [Conventional Commits](https://conventionalcommits.org) for commit guideline
 
 **Note:** Version bump only for package @nitpicker/report-google-sheets
 
-
-
-
-
 ## [0.4.1](https://github.com/d-zero-dev/nitpicker/compare/v0.4.0...v0.4.1) (2026-02-27)
 
 **Note:** Version bump only for package @nitpicker/report-google-sheets
