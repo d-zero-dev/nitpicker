@@ -68,14 +68,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
-	 * Retrieves the crawl configuration stored in the archive database.
-	 * @returns The parsed {@link Config} object.
-	 */
-	async getConfig(): Promise<Config> {
-		return this.#db.getConfig();
-	}
-
-	/**
 	 * Retrieves anchor (link) data for a specific page by its database ID.
 	 * @param pageId - The database ID of the page whose anchors to retrieve.
 	 * @returns An array of anchor records found on the page.
@@ -83,6 +75,13 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	async getAnchorsOnPage(pageId: number) {
 		const refs = await this.#db.getAnchorsOnPage(pageId);
 		return refs;
+	}
+	/**
+	 * Retrieves the crawl configuration stored in the archive database.
+	 * @returns The parsed {@link Config} object.
+	 */
+	async getConfig(): Promise<Config> {
+		return this.#db.getConfig();
 	}
 
 	/**

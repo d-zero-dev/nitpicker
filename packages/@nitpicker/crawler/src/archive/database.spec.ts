@@ -1,3 +1,5 @@
+import type { Config } from './types.js';
+
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -5,7 +7,6 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { Database } from './database.js';
 import { remove } from './filesystem/index.js';
-import type { Config } from './types.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -274,7 +275,10 @@ describe('Config', () => {
 		const retrieved = await db.getConfig();
 
 		expect(Array.isArray(retrieved.scope)).toBe(true);
-		expect(retrieved.scope).toEqual(['https://example.com/docs/', 'https://example.com/blog/']);
+		expect(retrieved.scope).toEqual([
+			'https://example.com/docs/',
+			'https://example.com/blog/',
+		]);
 		expect(Array.isArray(retrieved.excludes)).toBe(true);
 		expect(retrieved.excludes).toEqual(['/admin/', '/private/']);
 		expect(Array.isArray(retrieved.excludeKeywords)).toBe(true);

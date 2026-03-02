@@ -100,21 +100,12 @@ export default class Archive extends ArchiveAccessor {
 	}
 
 	/**
-	 * Retrieves the crawl configuration stored in the archive database.
-	 * @returns The configuration object.
-	 */
-	override async getConfig() {
-		return this.#db.getConfig();
-	}
-
-	/**
 	 * Retrieves the current crawling state, including lists of scraped and pending URLs.
 	 * @returns An object with `scraped` and `pending` URL arrays.
 	 */
 	async getCrawlingState() {
 		return this.#db.getCrawlingState();
 	}
-
 	/**
 	 * Retrieves the base URL of the crawl session from the archive database.
 	 * @returns The base URL string.
@@ -122,7 +113,6 @@ export default class Archive extends ArchiveAccessor {
 	async getUrl() {
 		return this.#db.getBaseUrl();
 	}
-
 	/**
 	 * Stores the crawl configuration into the archive database.
 	 * @param config - The configuration object to store.
@@ -131,7 +121,6 @@ export default class Archive extends ArchiveAccessor {
 		dbLog('Set config: %O', config);
 		return this.#db.setConfig(config);
 	}
-
 	/**
 	 * Stores an external page's data in the archive database without saving a snapshot.
 	 * @param pageInfo - The page data to store.
@@ -140,7 +129,6 @@ export default class Archive extends ArchiveAccessor {
 		dbLog('Set external page: %s', pageInfo.url.href);
 		await this.#db.updatePage(pageInfo, null, false);
 	}
-
 	/**
 	 * Stores a crawled page's data in the archive database and optionally saves an HTML snapshot.
 	 * @param pageInfo - The page data to store.
@@ -162,7 +150,6 @@ export default class Archive extends ArchiveAccessor {
 
 		return pageId;
 	}
-
 	/**
 	 * Stores a sub-resource (CSS, JS, image, etc.) in the archive database.
 	 * @param resource - The resource data to store.
@@ -171,7 +158,6 @@ export default class Archive extends ArchiveAccessor {
 		dbLog('Set resource: %s', resource.url.href);
 		await this.#db.insertResource(resource);
 	}
-
 	/**
 	 * Stores the referrer relationship between a resource and the page that references it.
 	 * @param params - An object containing `url` (the page URL) and `src` (the resource URL).
@@ -182,7 +168,6 @@ export default class Archive extends ArchiveAccessor {
 		dbLog("Set resource's referrers: %s on %s", src, url);
 		await this.#db.insertResourceReferrers(src, url);
 	}
-
 	/**
 	 * Marks a page as skipped in the archive database with the given reason.
 	 * @param url - The URL of the page to mark as skipped.
@@ -193,7 +178,6 @@ export default class Archive extends ArchiveAccessor {
 		dbLog('Set skipped page: %s', url);
 		await this.#db.setSkippedPage(url, reason, isExternal);
 	}
-
 	/**
 	 * Assigns natural URL sort order values to all pages in the database
 	 * that do not yet have an `order` field set.
@@ -202,7 +186,6 @@ export default class Archive extends ArchiveAccessor {
 		dbLog("Pages didn't have `order` field. So set URL order.");
 		await this.#db.setUrlOrder();
 	}
-
 	/**
 	 * Writes the archive to disk as a compressed `.nitpicker` file.
 	 *
@@ -234,19 +217,14 @@ export default class Archive extends ArchiveAccessor {
 		await remove(filePathWithoutExt);
 		saveLog('Done: %s', this.#filePath);
 	}
-
 	/** The file extension for Nitpicker archive files (without the leading dot). */
 	static FILE_EXTENSION = 'nitpicker';
-
 	/** The directory name used for storing HTML snapshots within the archive. */
 	static readonly SNAPSHOT_HTML_DIR = 'snapshot-html';
-
 	/** The filename of the SQLite database within the archive. */
 	static readonly SQLITE_DB_FILE_NAME = 'db.sqlite';
-
 	/** The prefix used for temporary working directories during archive operations. */
 	static TMP_DIR_PREFIX = '._nitpicker-';
-
 	/**
 	 * Opens a read-only connection to an existing archive's database.
 	 * Returns an {@link ArchiveAccessor} that provides query methods
@@ -260,7 +238,6 @@ export default class Archive extends ArchiveAccessor {
 		const archive = new ArchiveAccessor(tmpDir, db, namespace);
 		return archive;
 	}
-
 	/**
 	 * Creates a new archive at the specified file path.
 	 * Initializes a temporary working directory and a fresh SQLite database.
@@ -278,7 +255,6 @@ export default class Archive extends ArchiveAccessor {
 		const tmpDir = path.resolve(cwd, Archive.TMP_DIR_PREFIX + fileName);
 		return await Archive.#init(filePath, tmpDir);
 	}
-
 	/**
 	 * Joins path segments into an absolute path.
 	 * @param pathes - The path segments to join.
@@ -287,7 +263,6 @@ export default class Archive extends ArchiveAccessor {
 	static joinPath(...pathes: string[]) {
 		return path.resolve(...pathes);
 	}
-
 	/**
 	 * Opens an existing archive file (`.nitpicker`) by extracting it to a temporary directory.
 	 * @param options - Options including the file path, optional working directory,
@@ -319,6 +294,13 @@ export default class Archive extends ArchiveAccessor {
 		log('Move directory: %s to %s', extractedDir, tmpDir);
 		await rename(extractedDir, tmpDir, true);
 		return await Archive.#init(filePath, tmpDir);
+	}
+	/**
+	 * Retrieves the crawl configuration stored in the archive database.
+	 * @returns The configuration object.
+	 */
+	override async getConfig() {
+		return this.#db.getConfig();
 	}
 
 	/**
