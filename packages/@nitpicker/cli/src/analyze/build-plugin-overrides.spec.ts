@@ -83,4 +83,13 @@ describe('buildPluginOverrides', () => {
 		});
 		expect(result).toEqual({});
 	});
+
+	it('includes empty searchKeywords array as override since empty array is truthy', () => {
+		const result = buildPluginOverrides({
+			searchKeywords: [],
+		});
+		expect(result).toEqual({
+			'@nitpicker/analyze-search': { keywords: [] },
+		});
+	});
 });

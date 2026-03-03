@@ -60,6 +60,13 @@ export interface AnalyzeOptions {
  * configuration file. Each key maps to a known `@nitpicker/analyze-*`
  * plugin module name, and the value is a partial settings object that
  * will be shallow-merged into the plugin's config-file settings.
+ *
+ * ## Adding CLI overrides for a new plugin
+ *
+ * 1. Add a property to this interface with the plugin module name as key
+ * 2. Add corresponding CLI flag(s) to `commandDef.flags` in `@nitpicker/cli/src/commands/analyze.ts`
+ * 3. Add flag-to-override mapping in `@nitpicker/cli/src/analyze/build-plugin-overrides.ts`
+ * 4. Update `README.md` analyze options table
  * @see {@link ./load-plugin-settings.ts!loadPluginSettings} for the merge logic
  */
 export interface PluginOverrides {

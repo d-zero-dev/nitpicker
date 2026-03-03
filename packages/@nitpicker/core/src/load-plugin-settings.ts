@@ -27,7 +27,9 @@ const MODULE_NAME = 'nitpicker';
  * - The config file path is attached to each plugin for relative path resolution
  * @param defaultConfig - Optional partial config to merge as defaults.
  *   Plugin lists are concatenated (defaults first, then discovered plugins).
- * @param pluginOverrides
+ * @param pluginOverrides - CLI-specified plugin setting overrides.
+ *   Values are shallow-merged into the matching plugin's settings,
+ *   with CLI values taking precedence over config-file values.
  * @returns Fully resolved {@link Config} with the `analyze` plugin list.
  * @example
  * ```ts
@@ -113,6 +115,9 @@ export async function loadPluginSettings(
  * `overrides`, the override values are shallow-merged into the
  * plugin's existing settings. CLI values take precedence over
  * config-file values.
+ *
+ * **Limitation**: Merging is shallow (one level). Nested objects in
+ * the override will replace the entire config-file value, not deep-merge.
  * @param plugins - The plugin list to apply overrides to.
  * @param overrides - CLI-specified plugin setting overrides.
  * @returns A new plugin array with overrides applied.
