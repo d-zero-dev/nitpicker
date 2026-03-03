@@ -419,18 +419,23 @@ sequenceDiagram
     participant Archive as Archive
     participant Sheets as Google Sheets API
 
-    CLI->>GS: report(filePath, sheetUrl, credentials, config, limit)
+    CLI->>GS: report(filePath, sheetUrl, credentials, config, limit, all?, silent?)
     GS->>GS: authentication(credentials)（OAuth2）
     GS->>Archive: getArchive(filePath)
     GS->>GS: loadConfig(configPath)
     GS->>Archive: getPluginReports(archive)
-    GS->>GS: enquirer プロンプト（シート選択）
+
+    alt all=true（--all 指定 or 非TTY環境）
+        GS->>GS: 全シートを自動選択
+    else all=false
+        GS->>GS: enquirer プロンプト（シート選択）
+    end
 
     loop 選択されたシートごと
         GS->>Archive: getPagesWithRefs(limit, callback)
         GS->>GS: createSheetData（Page List, Links, Resources 等）
         GS->>Sheets: シートデータをアップロード
-        Note over GS,Sheets: レート制限時は Lanes でカウントダウン表示
+        Note over GS,Sheets: silent=false 時: Lanes で進捗表示 + レート制限カウントダウン
     end
 
     GS->>Archive: archive.close()

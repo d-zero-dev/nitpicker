@@ -148,4 +148,18 @@ describe('report command', () => {
 
 		expect(runReport).not.toHaveBeenCalled();
 	});
+
+	it('returns early when no sheet URL is provided', async () => {
+		await report(['test.nitpicker'], {
+			sheet: undefined as unknown as string,
+			credentials: './credentials.json',
+			config: undefined,
+			limit: 100_000,
+			all: undefined,
+			verbose: undefined,
+			silent: undefined,
+		});
+
+		expect(runReport).not.toHaveBeenCalled();
+	});
 });
