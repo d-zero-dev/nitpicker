@@ -140,6 +140,7 @@ type LogType = 'verbose' | 'normal' | 'silent';
  * @param orchestrator - The initialized CrawlerOrchestrator instance
  * @param config - The resolved archive configuration
  * @param logType - Output verbosity level
+ * @returns A promise from the event assignment pipeline.
  */
 function run(
 	trigger: string,
@@ -170,6 +171,7 @@ function run(
  * and cleans up browser processes. Exits with code 1 if errors occurred.
  * @param siteUrl - One or more root URLs to crawl
  * @param flags - Parsed CLI flags from the `crawl` command
+ * @returns A promise that resolves when crawling, writing, and cleanup are complete.
  */
 async function startCrawl(siteUrl: string[], flags: CrawlFlags) {
 	const errStack: (CrawlerError | Error)[] = [];
@@ -211,6 +213,7 @@ async function startCrawl(siteUrl: string[], flags: CrawlFlags) {
  * and continues crawling from where the previous session left off.
  * @param stubFilePath - Path to the stub file or temporary directory to resume from
  * @param flags - Parsed CLI flags from the `crawl` command
+ * @returns A promise that resolves when crawling, writing, and cleanup are complete.
  */
 async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 	const errStack: (CrawlerError | Error)[] = [];
@@ -255,6 +258,7 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
  * 4. Default mode: Crawls from a single root URL
  * @param args - Positional arguments (typically one or two URLs/file paths)
  * @param flags - Parsed CLI flags from the `crawl` command
+ * @returns A promise that resolves when the dispatched mode completes.
  */
 export async function crawl(args: string[], flags: CrawlFlags) {
 	if (flags.verbose && !flags.silent) {

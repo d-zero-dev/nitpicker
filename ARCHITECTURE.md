@@ -574,10 +574,12 @@ packages/test-server/
 │       ├── exclude.e2e.ts
 │       ├── options.e2e.ts
 │       ├── archive-pipeline.e2e.ts
+│       ├── config-persistence.e2e.ts
 │       ├── error-status.e2e.ts
 │       ├── scope.e2e.ts
 │       ├── parallel-and-interval.e2e.ts
 │       ├── snapshot.e2e.ts
+│       ├── output-path.e2e.ts
 │       └── pagination.e2e.ts
 ```
 
