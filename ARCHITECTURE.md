@@ -371,6 +371,7 @@ sequenceDiagram
     NP->>Archive: Archive.open({ openPluginData: true })
     Archive-->>NP: Archive インスタンス
 
+    CLI->>CLI: selectPlugins()（--all / --plugin / TTY プロンプト / 全選択）
     CLI->>NP: analyze(filter?)
     NP->>NP: loadPluginSettings()（cosmiconfig）
     NP->>NP: importModules(plugins)

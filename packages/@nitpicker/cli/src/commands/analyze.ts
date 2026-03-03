@@ -7,7 +7,9 @@ import { Nitpicker, readPluginLabels } from '@nitpicker/core';
 import enquirer from 'enquirer';
 
 import { log } from '../analyze/log.js';
+import { selectPlugins } from '../analyze/select-plugins.js';
 
+/** Enquirer prompt function for interactive CLI dialogs. */
 const { prompt } = enquirer;
 
 /**
@@ -21,6 +23,11 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Run all analysis plugins',
 		},
+		plugin: {
+			type: 'string',
+			isMultiple: true,
+			desc: 'Specify plugins to run (e.g. --plugin @nitpicker/analyze-axe --plugin @nitpicker/analyze-textlint)',
+		},
 		verbose: {
 			type: 'boolean',
 			desc: 'Output logs verbosely',
@@ -28,21 +35,24 @@ export const commandDef = {
 	},
 } as const satisfies CommandDef;
 
+/** Parsed flag values for the `analyze` CLI command. */
 type AnalyzeFlags = InferFlags<typeof commandDef.flags>;
 
 /**
  * Main entry point for the `analyze` CLI command.
  *
  * Opens a `.nitpicker` archive, loads the configured analyze plugins,
- * presents an interactive multi-select prompt (unless `--all` is specified),
- * runs the selected plugins with per-plugin Lanes progress display, and
- * writes results back to the archive.
+ * presents an interactive multi-select prompt (unless `--all` or `--plugin`
+ * is specified), runs the selected plugins with per-plugin Lanes progress
+ * display, and writes results back to the archive.
  *
  * WHY enquirer prompt: Allows users to selectively run expensive plugins
  * (e.g. Lighthouse) without re-running everything. The `--all` flag
- * bypasses the prompt for CI/automation use cases.
+ * bypasses the prompt for CI/automation use cases. The `--plugin` flag
+ * allows specifying individual plugins without interaction.
  * @param args - Positional arguments; first argument is the `.nitpicker` file path
  * @param flags - Parsed CLI flags from the `analyze` command
+ * @returns Resolves when analysis is complete and results are written back to the archive.
  */
 export async function analyze(args: string[], flags: AnalyzeFlags) {
 	const filePath = args[0];
@@ -62,9 +72,8 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 
 	const config = await nitpicker.getConfig();
 	const plugins = config.analyze || [];
-	const pluginNameList = plugins.map((plugin) => plugin.name);
 
-	if (pluginNameList.length === 0) {
+	if (plugins.length === 0) {
 		// eslint-disable-next-line no-console
 		console.error(
 			'No analyze plugins found. Install @nitpicker/analyze-* packages or configure them in .nitpickerrc.',
@@ -72,23 +81,45 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 		return;
 	}
 
-	let filter: string[] | undefined;
+	const pluginFlags = flags.plugin ?? [];
 
-	if (!flags.all) {
-		const labels = await readPluginLabels(plugins);
-		const choices = plugins.map((plugin) => ({
-			name: plugin.name,
-			message: labels.get(plugin.name) || plugin.name,
-		}));
-		const res = await prompt<{ filter: string[] }>([
-			{
-				message: 'What do you analyze?',
-				name: 'filter',
-				type: 'multiselect',
-				choices,
-			},
-		]);
-		filter = res.filter;
+	const filter = await selectPlugins({
+		all: flags.all ?? false,
+		pluginFlags,
+		plugins,
+		isTTY: !!isTTY,
+		async promptPlugins() {
+			const labels = await readPluginLabels(plugins);
+			const choices = plugins.map((plugin) => ({
+				name: plugin.name,
+				message: labels.get(plugin.name) || plugin.name,
+			}));
+			const res = await prompt<{ filter: string[] }>([
+				{
+					message: 'What do you analyze?',
+					name: 'filter',
+					type: 'multiselect',
+					choices,
+				},
+			]);
+			return res.filter;
+		},
+	});
+
+	// Warn about unknown plugin names specified via --plugin
+	if (pluginFlags.length > 0 && filter) {
+		const matched = new Set(filter);
+		const unknownPlugins = pluginFlags.filter((name) => !matched.has(name));
+		if (unknownPlugins.length > 0) {
+			const availableNames = plugins.map((p) => p.name).join(', ');
+			// eslint-disable-next-line no-console
+			console.error(
+				`Unknown plugin(s): ${unknownPlugins.join(', ')}\nAvailable plugins: ${availableNames}`,
+			);
+		}
+		if (filter.length === 0) {
+			return;
+		}
 	}
 
 	const siteUrl = (await nitpicker.archive.getUrl()) || '<Unknown URL>';
