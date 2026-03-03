@@ -124,7 +124,7 @@ $ npx @nitpicker/cli analyze example.com-20250101120000000.nitpicker --plugin @n
 | `--main-content-selector` | CSS セレクタ    | なし       | 不可     | analyze-main-contents プラグインのメインコンテンツセレクタ（設定ファイルを上書き） |
 | `--axe-lang`              | BCP 47 言語タグ | なし       | 不可     | analyze-axe プラグインの言語設定（設定ファイルを上書き）                           |
 
-`--all` も `--plugin` も指定しない場合、実行するプラグインを選択する対話式マルチセレクトプロンプトが表示される。非 TTY 環境（CI/CD パイプラインなど）ではプロンプトを表示できないため、全プラグインが自動的に実行される。
+`--all` も `--plugin` も指定しない場合、実行するプラグインを選択する対話式マルチセレクトプロンプトが表示される。非 TTY 環境（CI/CD パイプラインなど）ではプロンプトを表示できないため、全プラグインが自動的に実行される。また、非 TTY 環境では `--verbose` が自動的に有効になり、エラー発生時のスタックトレースが CI ログに出力される。
 
 `--search-keywords` などのプラグインオプションフラグは、設定ファイル（`.nitpickerrc` 等）の該当プラグイン設定を上書きする。指定しないフラグは設定ファイルの値がそのまま使用される。
 
@@ -156,7 +156,7 @@ $ npx @nitpicker/cli report <file> --sheet <URL>
 | `--verbose`          | なし         | なし                 | 実行中に詳細ログを標準出力に表示                                |
 | `--silent`           | なし         | なし                 | 実行中のログ出力を抑制                                          |
 
-`--all` を指定しない場合、生成するシートを選択する対話式マルチセレクトプロンプトが表示される（Page List、Links、Resources、Images、Violations、Discrepancies、Summary、Referrers Relational Table、Resources Relational Table）。非TTY環境（CI パイプライン等）では `--all` が自動的に有効になる。
+`--all` を指定しない場合、生成するシートを選択する対話式マルチセレクトプロンプトが表示される（Page List、Links、Resources、Images、Violations、Discrepancies、Summary、Referrers Relational Table、Resources Relational Table）。非TTY環境（CI パイプライン等）では `--all` と `--verbose` が自動的に有効になり、エラー発生時のスタックトレースが CI ログに出力される。
 
 #### 例
 
