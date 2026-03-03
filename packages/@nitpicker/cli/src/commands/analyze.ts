@@ -6,6 +6,7 @@ import { Lanes } from '@d-zero/dealer';
 import { Nitpicker, readPluginLabels } from '@nitpicker/core';
 import enquirer from 'enquirer';
 
+import { buildPluginOverrides } from '../analyze/build-plugin-overrides.js';
 import { log } from '../analyze/log.js';
 import { selectPlugins } from '../analyze/select-plugins.js';
 
@@ -32,6 +33,23 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Output logs verbosely',
 		},
+		searchKeywords: {
+			type: 'string',
+			isMultiple: true,
+			desc: 'Keywords for analyze-search plugin (overrides config file)',
+		},
+		searchScope: {
+			type: 'string',
+			desc: 'CSS selector to narrow search scope for analyze-search plugin (overrides config file)',
+		},
+		mainContentSelector: {
+			type: 'string',
+			desc: 'CSS selector for main content detection in analyze-main-contents plugin (overrides config file)',
+		},
+		axeLang: {
+			type: 'string',
+			desc: 'BCP 47 language tag for analyze-axe plugin (overrides config file)',
+		},
 	},
 } as const satisfies CommandDef;
 
@@ -50,9 +68,10 @@ type AnalyzeFlags = InferFlags<typeof commandDef.flags>;
  * (e.g. Lighthouse) without re-running everything. The `--all` flag
  * bypasses the prompt for CI/automation use cases. The `--plugin` flag
  * allows specifying individual plugins without interaction.
- * @param args - Positional arguments; first argument is the `.nitpicker` file path
- * @param flags - Parsed CLI flags from the `analyze` command
- * @returns Resolves when analysis is complete and results are written back to the archive.
+ * @param args - Positional arguments; first argument is the `.nitpicker` file path.
+ * @param flags - Parsed CLI flags from the `analyze` command.
+ * @returns Resolves when analysis and archive write are complete.
+ *   Returns early without error if no file path is provided or no plugins are found.
  */
 export async function analyze(args: string[], flags: AnalyzeFlags) {
 	const filePath = args[0];
@@ -69,6 +88,11 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 	// eslint-disable-next-line no-console
 	console.log(`  📦 Extracting archive: ${absFilePath}`);
 	const nitpicker = await Nitpicker.open(absFilePath);
+
+	const pluginOverrides = buildPluginOverrides(flags);
+	if (Object.keys(pluginOverrides).length > 0) {
+		nitpicker.setPluginOverrides(pluginOverrides);
+	}
 
 	const config = await nitpicker.getConfig();
 	const plugins = config.analyze || [];

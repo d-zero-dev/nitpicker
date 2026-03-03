@@ -146,7 +146,7 @@ crawler/src/
 `@d-zero/roar` ベースの統合 CLI。3つのサブコマンドを提供。
 
 - **`npx @nitpicker/cli crawl <URL>`**: Webサイトをクロールして `.nitpicker` ファイルを生成
-- **`npx @nitpicker/cli analyze <file>`**: `.nitpicker` ファイルに対して analyze プラグインを実行
+- **`npx @nitpicker/cli analyze <file>`**: `.nitpicker` ファイルに対して analyze プラグインを実行。`--search-keywords`, `--axe-lang` 等のフラグで設定ファイルのプラグイン設定を上書き可能（`buildPluginOverrides()` → `Nitpicker.setPluginOverrides()` 経由）
 - **`npx @nitpicker/cli report <file>`**: `.nitpicker` ファイルから Google Sheets レポートを生成
 
 ---
@@ -364,26 +364,27 @@ sequenceDiagram
     participant CLI as npx @nitpicker/cli analyze
     participant NP as Nitpicker（@nitpicker/core）
     participant Archive as Archive
-    participant Dealer as deal()（@d-zero/dealer）
+    participant Pool as Bounded Promise Pool（limit: 50）
     participant Worker as Worker Thread
 
     CLI->>NP: Nitpicker.open(filePath)
     NP->>Archive: Archive.open({ openPluginData: true })
     Archive-->>NP: Archive インスタンス
 
+    CLI->>NP: setPluginOverrides(overrides)
     CLI->>CLI: selectPlugins()（--all / --plugin / TTY プロンプト / 全選択）
     CLI->>NP: analyze(filter?)
-    NP->>NP: loadPluginSettings()（cosmiconfig）
+    NP->>NP: loadPluginSettings({}, pluginOverrides)（cosmiconfig）
     NP->>NP: importModules(plugins)
     NP->>Archive: getPagesWithRefs(100_000, callback)
 
     loop ページバッチごと
         par eachPage トラック（Worker スレッド）
-            NP->>Dealer: deal(pages, limit: 50)
+            NP->>Pool: bounded Promise pool（limit: 50）
             loop 各ページ
-                Dealer->>Worker: runInWorker(html, url, plugins)
+                Pool->>Worker: runInWorker(html, url, plugins)
                 Note over Worker: JSDOM パース + プラグイン実行
-                Worker-->>Dealer: ReportPages（テーブルデータ + violations）
+                Worker-->>Pool: ReportPages（テーブルデータ + violations）
             end
         and eachUrl トラック（メインスレッド）
             loop 各ページ × 各プラグイン
@@ -402,7 +403,7 @@ sequenceDiagram
 ### 並列処理の設計
 
 - **Worker スレッド**: DOM 重い解析（JSDOM + axe-core, markuplint 等）はワーカースレッドで隔離実行。プラグインのクラッシュがメインプロセスに波及しない
-- **deal() (limit: 50)**: メモリ枯渇防止 + リアルタイム進捗表示のため `Promise.all` ではなく bounded concurrency
+- **Bounded Promise Pool (limit: 50)**: メモリ枯渇防止 + リアルタイム進捗表示のため `Promise.all` ではなく `Promise.race` ベースの bounded concurrency
 - **Cache**: URL 単位で結果をキャッシュ。部分失敗後の再実行時にスキップ可能
 
 > 実装詳細は `@nitpicker/core` の JSDoc を参照（`Nitpicker.analyze()`, `runInWorker()`, `page-analysis-worker.ts`）。

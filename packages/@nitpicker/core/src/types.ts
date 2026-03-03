@@ -53,6 +53,43 @@ export interface AnalyzeOptions {
 }
 
 /**
+ * CLI-specified overrides for individual plugin settings.
+ *
+ * These values are provided via CLI flags (e.g. `--search-keywords`,
+ * `--axe-lang`) and take precedence over settings loaded from the
+ * configuration file. Each key maps to a known `@nitpicker/analyze-*`
+ * plugin module name, and the value is a partial settings object that
+ * will be shallow-merged into the plugin's config-file settings.
+ *
+ * ## Adding CLI overrides for a new plugin
+ *
+ * 1. Add a property to this interface with the plugin module name as key
+ * 2. Add corresponding CLI flag(s) to `commandDef.flags` in `@nitpicker/cli/src/commands/analyze.ts`
+ * 3. Add flag-to-override mapping in `@nitpicker/cli/src/analyze/build-plugin-overrides.ts`
+ * 4. Update `README.md` analyze options table
+ * @see {@link ./load-plugin-settings.ts!loadPluginSettings} for the merge logic
+ */
+export interface PluginOverrides {
+	/** Overrides for `@nitpicker/analyze-search` plugin settings. */
+	'@nitpicker/analyze-search'?: {
+		/** Keywords to search for in page content. */
+		keywords?: string[];
+		/** CSS selector to narrow the search scope. */
+		scope?: string;
+	};
+	/** Overrides for `@nitpicker/analyze-main-contents` plugin settings. */
+	'@nitpicker/analyze-main-contents'?: {
+		/** CSS selector for main content detection. */
+		mainContentSelector?: string;
+	};
+	/** Overrides for `@nitpicker/analyze-axe` plugin settings. */
+	'@nitpicker/analyze-axe'?: {
+		/** BCP 47 language tag for locale. */
+		lang?: string;
+	};
+}
+
+/**
  * Internal configuration model used by {@link ../nitpicker.ts!Nitpicker}.
  *
  * Built by {@link ./load-plugin-settings.ts!loadPluginSettings} from the

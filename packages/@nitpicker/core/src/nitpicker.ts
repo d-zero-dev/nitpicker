@@ -3,6 +3,7 @@ import type {
 	AnalyzeOptions,
 	Config,
 	NitpickerEvent,
+	PluginOverrides,
 	ReportPage,
 	TableData,
 } from './types.js';
@@ -91,6 +92,12 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 	 * `null` until `getConfig()` is first called.
 	 */
 	#config: Config | null = null;
+
+	/**
+	 * CLI-specified plugin setting overrides.
+	 * Passed to `loadPluginSettings()` to merge with config-file settings.
+	 */
+	#pluginOverrides: PluginOverrides = {};
 
 	/** The underlying archive instance. */
 	get archive() {
@@ -379,10 +386,23 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 	 */
 	async getConfig() {
 		if (!this.#config) {
-			this.#config = await loadPluginSettings();
+			this.#config = await loadPluginSettings({}, this.#pluginOverrides);
 		}
 
 		return this.#config;
+	}
+	/**
+	 * Sets CLI-specified plugin overrides that take precedence over
+	 * config-file settings.
+	 *
+	 * Must be called before {@link getConfig} to take effect. If config
+	 * has already been loaded, calling this method clears the cache so
+	 * that the next `getConfig()` call re-loads with the new overrides.
+	 * @param overrides - Plugin setting overrides from CLI flags.
+	 */
+	setPluginOverrides(overrides: PluginOverrides) {
+		this.#pluginOverrides = overrides;
+		this.#config = null;
 	}
 
 	/**
