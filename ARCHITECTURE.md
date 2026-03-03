@@ -586,6 +586,7 @@ packages/test-server/
 │       ├── scope.e2e.ts
 │       ├── parallel-and-interval.e2e.ts
 │       ├── snapshot.e2e.ts
+│       ├── output-path.e2e.ts
 │       └── pagination.e2e.ts
 ```
 
