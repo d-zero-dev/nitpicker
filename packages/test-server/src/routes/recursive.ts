@@ -1,8 +1,8 @@
 import type { Hono } from 'hono';
 
 /**
- *
- * @param app
+ * Registers routes for testing recursive link traversal and external-like host detection.
+ * @param app - The Hono application instance to register routes on.
  */
 export function recursiveRoutes(app: Hono) {
 	app.get('/recursive/', (c) =>

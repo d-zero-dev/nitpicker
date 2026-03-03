@@ -1,8 +1,8 @@
 import type { Hono } from 'hono';
 
 /**
- *
- * @param app
+ * Registers basic routes for the top page and about page.
+ * @param app - The Hono application instance to register routes on.
  */
 export function basicRoutes(app: Hono) {
 	app.get('/', (c) =>

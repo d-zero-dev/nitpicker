@@ -7,16 +7,23 @@ import path from 'node:path';
 
 import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
 
+/**
+ * Result object returned by the E2E crawl helper.
+ */
 export interface CrawlResult {
+	/** Read-only accessor for querying the crawled archive data. */
 	accessor: ArchiveAccessor;
+	/** Path to the temporary directory containing the raw archive (SQLite DB). */
 	tmpDir: string;
+	/** Path to the working directory created for this crawl session. */
 	cwd: string;
 }
 
 /**
- *
- * @param urls
- * @param options
+ * Runs a crawl session against the given URLs and returns an accessor to the archive.
+ * @param urls - One or more URLs to crawl.
+ * @param options - Optional overrides merged into the default crawl configuration.
+ * @returns A {@link CrawlResult} containing the archive accessor and temp paths.
  */
 export async function crawl(
 	urls: string[],
@@ -48,8 +55,8 @@ export async function crawl(
 }
 
 /**
- *
- * @param result
+ * Removes the temporary working directory created by {@link crawl}.
+ * @param result - The crawl result whose working directory should be deleted.
  */
 export async function cleanup(result: CrawlResult) {
 	await fs.rm(result.cwd, { recursive: true, force: true });
