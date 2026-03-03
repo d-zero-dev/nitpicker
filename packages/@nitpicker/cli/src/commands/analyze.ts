@@ -59,8 +59,10 @@ type AnalyzeFlags = InferFlags<typeof commandDef.flags>;
  * WHY enquirer prompt: Allows users to selectively run expensive plugins
  * (e.g. Lighthouse) without re-running everything. The `--all` flag
  * bypasses the prompt for CI/automation use cases.
- * @param args - Positional arguments; first argument is the `.nitpicker` file path
- * @param flags - Parsed CLI flags from the `analyze` command
+ * @param args - Positional arguments; first argument is the `.nitpicker` file path.
+ * @param flags - Parsed CLI flags from the `analyze` command.
+ * @returns Resolves when analysis and archive write are complete.
+ *   Returns early without error if no file path is provided or no plugins are found.
  */
 export async function analyze(args: string[], flags: AnalyzeFlags) {
 	const filePath = args[0];
