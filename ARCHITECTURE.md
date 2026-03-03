@@ -450,7 +450,7 @@ sequenceDiagram
 | Resources                  | ネットワークリソース一覧                         |
 | Images                     | 画像一覧（サイズ・alt・lazy 等）                 |
 | Violations                 | analyze プラグインが検出した違反一覧             |
-| Compares                   | analyze プラグインの比較データ                   |
+| Discrepancies              | analyze プラグインの比較データ                   |
 | Summary                    | サマリー                                         |
 | Referrers Relational Table | ページ → リファラーの関係テーブル                |
 | Resources Relational Table | ページ → リソースの関係テーブル                  |

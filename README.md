@@ -139,7 +139,7 @@ $ npx @nitpicker/cli report <file> --sheet <URL>
 | `--verbose`          | なし         | なし                 | 実行中に詳細ログを標準出力に表示                                |
 | `--silent`           | なし         | なし                 | 実行中のログ出力を抑制                                          |
 
-`--all` を指定しない場合、生成するシートを選択する対話式マルチセレクトプロンプトが表示される（Page List、Links、Resources、Images、Violations、Compares、Summary、Referrers Relational Table、Resources Relational Table）。非TTY環境（CI パイプライン等）では `--all` が自動的に有効になる。
+`--all` を指定しない場合、生成するシートを選択する対話式マルチセレクトプロンプトが表示される（Page List、Links、Resources、Images、Violations、Discrepancies、Summary、Referrers Relational Table、Resources Relational Table）。非TTY環境（CI パイプライン等）では `--all` が自動的に有効になる。
 
 #### 例
 
