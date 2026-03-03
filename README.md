@@ -108,16 +108,19 @@ $ npx @nitpicker/cli analyze <file>
 ```sh
 $ npx @nitpicker/cli analyze example.com-20250101120000000.nitpicker
 $ npx @nitpicker/cli analyze example.com-20250101120000000.nitpicker --all
+$ npx @nitpicker/cli analyze example.com-20250101120000000.nitpicker --plugin @nitpicker/analyze-axe
+$ npx @nitpicker/cli analyze example.com-20250101120000000.nitpicker --plugin @nitpicker/analyze-axe --plugin @nitpicker/analyze-textlint
 ```
 
 #### オプション
 
-| オプション  | 値   | デフォルト | 説明                                                      |
-| ----------- | ---- | ---------- | --------------------------------------------------------- |
-| `--all`     | なし | なし       | 対話プロンプトなしで設定済みの全 analyze プラグインを実行 |
-| `--verbose` | なし | なし       | 分析中に詳細ログを出力                                    |
+| オプション  | 値           | デフォルト | 複数指定 | 説明                                                      |
+| ----------- | ------------ | ---------- | -------- | --------------------------------------------------------- |
+| `--all`     | なし         | なし       | 不可     | 対話プロンプトなしで設定済みの全 analyze プラグインを実行 |
+| `--plugin`  | プラグイン名 | なし       | 可       | 実行するプラグインを指定（`--all` より優先度が低い）      |
+| `--verbose` | なし         | なし       | 不可     | 分析中に詳細ログを出力                                    |
 
-`--all` を指定しない場合、実行するプラグインを選択する対話式マルチセレクトプロンプトが表示される。
+`--all` も `--plugin` も指定しない場合、実行するプラグインを選択する対話式マルチセレクトプロンプトが表示される。非 TTY 環境（CI/CD パイプラインなど）ではプロンプトを表示できないため、全プラグインが自動的に実行される。
 
 ### Report
 

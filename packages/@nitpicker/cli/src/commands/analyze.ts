@@ -69,9 +69,8 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 
 	const config = await nitpicker.getConfig();
 	const plugins = config.analyze || [];
-	const pluginNameList = plugins.map((plugin) => plugin.name);
 
-	if (pluginNameList.length === 0) {
+	if (plugins.length === 0) {
 		// eslint-disable-next-line no-console
 		console.error(
 			'No analyze plugins found. Install @nitpicker/analyze-* packages or configure them in .nitpickerrc.',
@@ -79,9 +78,11 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 		return;
 	}
 
+	const pluginFlags = flags.plugin ?? [];
+
 	const filter = await selectPlugins({
 		all: flags.all ?? false,
-		pluginFlags: flags.plugin ?? [],
+		pluginFlags,
 		plugins,
 		isTTY: !!isTTY,
 		async promptPlugins() {
@@ -101,6 +102,22 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 			return res.filter;
 		},
 	});
+
+	// Warn about unknown plugin names specified via --plugin
+	if (pluginFlags.length > 0 && filter) {
+		const matched = new Set(filter);
+		const unknownPlugins = pluginFlags.filter((name) => !matched.has(name));
+		if (unknownPlugins.length > 0) {
+			const availableNames = plugins.map((p) => p.name).join(', ');
+			// eslint-disable-next-line no-console
+			console.error(
+				`Unknown plugin(s): ${unknownPlugins.join(', ')}\nAvailable plugins: ${availableNames}`,
+			);
+		}
+		if (filter.length === 0) {
+			return;
+		}
+	}
 
 	const siteUrl = (await nitpicker.archive.getUrl()) || '<Unknown URL>';
 
