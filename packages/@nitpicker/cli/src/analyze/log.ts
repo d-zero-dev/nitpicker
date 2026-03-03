@@ -9,8 +9,9 @@ import type { Nitpicker } from '@nitpicker/core';
  * Progress display is handled by Lanes in the calling code.
  * @param nitpicker - The Nitpicker instance to listen on
  * @param startLog - Lines to display at the start (URL + file path summary)
+ * @param verbose - Whether to include stack traces in error output
  */
-export function log(nitpicker: Nitpicker, startLog: string[]): void {
+export function log(nitpicker: Nitpicker, startLog: string[], verbose: boolean): void {
 	for (const line of startLog) {
 		// eslint-disable-next-line no-console
 		console.log(line);
@@ -23,6 +24,10 @@ export function log(nitpicker: Nitpicker, startLog: string[]): void {
 
 	nitpicker.on('error', (err) => {
 		// eslint-disable-next-line no-console
-		console.error(err.message);
+		console.error(`Error: ${err.message}`);
+		if (verbose && err.error?.stack) {
+			// eslint-disable-next-line no-console
+			console.error(err.error.stack);
+		}
 	});
 }
