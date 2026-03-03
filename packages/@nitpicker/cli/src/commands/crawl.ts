@@ -9,6 +9,7 @@ import { CrawlerOrchestrator } from '@nitpicker/crawler';
 import { log, verbosely } from '../crawl/debug.js';
 import { diff } from '../crawl/diff.js';
 import { eventAssignments } from '../crawl/event-assignments.js';
+import { mapFlagsToCrawlConfig } from '../crawl/map-flags-to-crawl-config.js';
 
 /**
  * Command definition for the `crawl` sub-command.
@@ -173,11 +174,7 @@ async function startCrawl(siteUrl: string[], flags: CrawlFlags) {
 	const orchestrator = await CrawlerOrchestrator.crawling(
 		siteUrl,
 		{
-			...flags,
-			excludes: flags.exclude,
-			excludeKeywords: flags.excludeKeyword,
-			excludeUrls: flags.excludeUrl,
-			scope: flags.scope?.split(',').map((s) => s.trim()),
+			...mapFlagsToCrawlConfig(flags),
 			list: isList,
 			recursive: isList ? false : flags.recursive,
 		},
@@ -218,11 +215,7 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 	const orchestrator = await CrawlerOrchestrator.resume(
 		absFilePath,
 		{
-			...flags,
-			excludes: flags.exclude,
-			excludeKeywords: flags.excludeKeyword,
-			excludeUrls: flags.excludeUrl,
-			scope: flags.scope?.split(',').map((s) => s.trim()),
+			...mapFlagsToCrawlConfig(flags),
 			list: false,
 		},
 		(orchestrator, config) => {
