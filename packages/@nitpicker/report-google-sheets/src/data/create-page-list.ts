@@ -46,7 +46,7 @@ const indexRefs = new Map<
  * - Error-like titles and non-success status codes
  *
  * Unused path columns (beyond the deepest URL) are hidden automatically.
- * @param reports
+ * @param reports - Analyze plugin reports to extract per-page data columns from
  */
 export const createPageList: CreateSheet = (reports) => {
 	const reportPageData = reports

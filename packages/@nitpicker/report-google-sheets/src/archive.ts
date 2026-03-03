@@ -3,8 +3,10 @@ import { Archive } from '@nitpicker/crawler';
 import { archiveLog } from './debug.js';
 
 /**
- *
- * @param filePath
+ * Opens a `.nitpicker` archive file and registers process signal handlers
+ * to ensure the archive is closed gracefully on unexpected termination.
+ * @param filePath - Path to the `.nitpicker` archive file
+ * @returns The opened `Archive` instance with plugin data loaded
  */
 export async function getArchive(filePath: string) {
 	archiveLog('Open file: %s', filePath);
