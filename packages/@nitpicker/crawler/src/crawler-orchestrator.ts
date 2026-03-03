@@ -298,12 +298,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		}
 
 		const cwd = options?.cwd ?? process.cwd();
-		const fileName = options?.filePath
-			? path.basename(options.filePath, `.${Archive.FILE_EXTENSION}`)
-			: `${urlParsed.hostname}-${Archive.timestamp()}`;
 		const filePath = options?.filePath
 			? resolveOutputPath(options.filePath, cwd)
-			: Archive.joinPath(cwd, `${fileName}.${Archive.FILE_EXTENSION}`);
+			: Archive.joinPath(
+					cwd,
+					`${urlParsed.hostname}-${Archive.timestamp()}.${Archive.FILE_EXTENSION}`,
+				);
+		const fileName =
+			path.basename(filePath, `.${Archive.FILE_EXTENSION}`) || path.basename(filePath);
 		const disableQueries = options?.disableQueries || false;
 		const defaultUserAgent = `Nitpicker/${pkg.version}`;
 		const archive = await Archive.create({ filePath, cwd, disableQueries });

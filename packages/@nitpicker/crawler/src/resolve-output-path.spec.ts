@@ -56,4 +56,19 @@ describe('resolveOutputPath', () => {
 			resolveOutputPath('nonexistent-subdir/output.nitpicker', testDir),
 		).toThrow('Please create the directory before running the command.');
 	});
+
+	it('handles dotfile-style name that matches the extension', () => {
+		const result = resolveOutputPath('.nitpicker', testDir);
+		expect(result).toBe(path.join(testDir, '.nitpicker'));
+	});
+
+	it('handles name with multiple dots before the extension', () => {
+		const result = resolveOutputPath('my.site.nitpicker', testDir);
+		expect(result).toBe(path.join(testDir, 'my.site.nitpicker'));
+	});
+
+	it('handles absolute path with missing extension', () => {
+		const result = resolveOutputPath(path.join(testDir, 'my-archive'), testDir);
+		expect(result).toBe(path.join(testDir, 'my-archive.nitpicker'));
+	});
 });

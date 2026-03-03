@@ -222,7 +222,6 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 		absFilePath,
 		{
 			...flags,
-			filePath: flags.output,
 			scope: flags.scope?.split(',').map((s) => s.trim()),
 			list: false,
 		},
@@ -275,6 +274,11 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 	}
 
 	if (flags.resume) {
+		if (flags.output) {
+			throw new Error(
+				'--output flag is not supported with --resume. The archive path is determined by the stub file.',
+			);
+		}
 		await resumeCrawl(flags.resume, flags);
 		return;
 	}
