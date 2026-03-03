@@ -558,7 +558,7 @@ packages/test-server/
 │   │   ├── recursive.ts      # /recursive/**
 │   │   ├── redirect.ts       # /redirect/**（301→302→200チェーン）
 │   │   ├── meta.ts           # /meta/**（16メタフィールド）
-│   │   ├── exclude.ts        # /exclude/**（パス・キーワード除外）
+│   │   ├── exclude.ts        # /exclude/**（パス・キーワード・URLプレフィックス除外）
 │   │   ├── options.ts        # /options/**（fetchExternal, disableQueries）
 │   │   ├── error-status.ts   # /error-status/**（4xx/5xxステータス）
 │   │   ├── scope.ts          # /scope/**（スコープ判定）
@@ -574,6 +574,7 @@ packages/test-server/
 │       ├── exclude.e2e.ts
 │       ├── options.e2e.ts
 │       ├── archive-pipeline.e2e.ts
+│       ├── config-persistence.e2e.ts
 │       ├── error-status.e2e.ts
 │       ├── scope.e2e.ts
 │       ├── parallel-and-interval.e2e.ts
@@ -581,7 +582,7 @@ packages/test-server/
 │       └── pagination.e2e.ts
 ```
 
-**テスト実行:** `yarn test:e2e`（`vitest.e2e.config.ts` 使用、`maxWorkers: 1`）
+**テスト実行:** `yarn vitest run --config vitest.e2e.config.ts`（`maxWorkers: 1`）
 
 **テスト用 crawl ヘルパーのデフォルトオプション:**
 

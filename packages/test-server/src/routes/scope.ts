@@ -1,8 +1,8 @@
 import type { Hono } from 'hono';
 
 /**
- *
- * @param app
+ * Registers routes for testing crawl scope filtering across blog, docs, and admin sections.
+ * @param app - The Hono application instance to register routes on.
  */
 export function scopeRoutes(app: Hono) {
 	app.get('/scope/blog/', (c) =>

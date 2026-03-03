@@ -1,8 +1,8 @@
 import type { Hono } from 'hono';
 
 /**
- *
- * @param app
+ * Registers routes for testing crawler options such as query strings, external links, and JSON resources.
+ * @param app - The Hono application instance to register routes on.
  */
 export function optionsRoutes(app: Hono) {
 	app.get('/options/', (c) =>

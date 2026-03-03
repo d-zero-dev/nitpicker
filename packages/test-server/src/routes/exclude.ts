@@ -1,8 +1,8 @@
 import type { Hono } from 'hono';
 
 /**
- *
- * @param app
+ * Registers routes for testing exclude patterns (path glob, keyword, and URL prefix).
+ * @param app - The Hono application instance to register routes on.
  */
 export function excludeRoutes(app: Hono) {
 	app.get('/exclude/', (c) =>
