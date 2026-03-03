@@ -1,8 +1,8 @@
 import type { Hono } from 'hono';
 
 /**
- *
- * @param app
+ * Registers routes for testing HTTP error status codes (404, 403, 500).
+ * @param app - The Hono application instance to register routes on.
  */
 export function errorStatusRoutes(app: Hono) {
 	app.get('/error-status/', (c) =>

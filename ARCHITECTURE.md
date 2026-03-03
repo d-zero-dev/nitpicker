@@ -146,7 +146,7 @@ crawler/src/
 `@d-zero/roar` ベースの統合 CLI。3つのサブコマンドを提供。
 
 - **`npx @nitpicker/cli crawl <URL>`**: Webサイトをクロールして `.nitpicker` ファイルを生成
-- **`npx @nitpicker/cli analyze <file>`**: `.nitpicker` ファイルに対して analyze プラグインを実行
+- **`npx @nitpicker/cli analyze <file>`**: `.nitpicker` ファイルに対して analyze プラグインを実行。`--search-keywords`, `--axe-lang` 等のフラグで設定ファイルのプラグイン設定を上書き可能（`buildPluginOverrides()` → `Nitpicker.setPluginOverrides()` 経由）
 - **`npx @nitpicker/cli report <file>`**: `.nitpicker` ファイルから Google Sheets レポートを生成
 
 ---
@@ -364,25 +364,27 @@ sequenceDiagram
     participant CLI as npx @nitpicker/cli analyze
     participant NP as Nitpicker（@nitpicker/core）
     participant Archive as Archive
-    participant Dealer as deal()（@d-zero/dealer）
+    participant Pool as Bounded Promise Pool（limit: 50）
     participant Worker as Worker Thread
 
     CLI->>NP: Nitpicker.open(filePath)
     NP->>Archive: Archive.open({ openPluginData: true })
     Archive-->>NP: Archive インスタンス
 
+    CLI->>NP: setPluginOverrides(overrides)
+    CLI->>CLI: selectPlugins()（--all / --plugin / TTY プロンプト / 全選択）
     CLI->>NP: analyze(filter?)
-    NP->>NP: loadPluginSettings()（cosmiconfig）
+    NP->>NP: loadPluginSettings({}, pluginOverrides)（cosmiconfig）
     NP->>NP: importModules(plugins)
     NP->>Archive: getPagesWithRefs(100_000, callback)
 
     loop ページバッチごと
         par eachPage トラック（Worker スレッド）
-            NP->>Dealer: deal(pages, limit: 50)
+            NP->>Pool: bounded Promise pool（limit: 50）
             loop 各ページ
-                Dealer->>Worker: runInWorker(html, url, plugins)
+                Pool->>Worker: runInWorker(html, url, plugins)
                 Note over Worker: JSDOM パース + プラグイン実行
-                Worker-->>Dealer: ReportPages（テーブルデータ + violations）
+                Worker-->>Pool: ReportPages（テーブルデータ + violations）
             end
         and eachUrl トラック（メインスレッド）
             loop 各ページ × 各プラグイン
@@ -401,7 +403,7 @@ sequenceDiagram
 ### 並列処理の設計
 
 - **Worker スレッド**: DOM 重い解析（JSDOM + axe-core, markuplint 等）はワーカースレッドで隔離実行。プラグインのクラッシュがメインプロセスに波及しない
-- **deal() (limit: 50)**: メモリ枯渇防止 + リアルタイム進捗表示のため `Promise.all` ではなく bounded concurrency
+- **Bounded Promise Pool (limit: 50)**: メモリ枯渇防止 + リアルタイム進捗表示のため `Promise.all` ではなく `Promise.race` ベースの bounded concurrency
 - **Cache**: URL 単位で結果をキャッシュ。部分失敗後の再実行時にスキップ可能
 
 > 実装詳細は `@nitpicker/core` の JSDoc を参照（`Nitpicker.analyze()`, `runInWorker()`, `page-analysis-worker.ts`）。
@@ -419,18 +421,23 @@ sequenceDiagram
     participant Archive as Archive
     participant Sheets as Google Sheets API
 
-    CLI->>GS: report(filePath, sheetUrl, credentials, config, limit)
+    CLI->>GS: report(filePath, sheetUrl, credentials, config, limit, all?, silent?)
     GS->>GS: authentication(credentials)（OAuth2）
     GS->>Archive: getArchive(filePath)
     GS->>GS: loadConfig(configPath)
     GS->>Archive: getPluginReports(archive)
-    GS->>GS: enquirer プロンプト（シート選択）
+
+    alt all=true（--all 指定 or 非TTY環境）
+        GS->>GS: 全シートを自動選択
+    else all=false
+        GS->>GS: enquirer プロンプト（シート選択）
+    end
 
     loop 選択されたシートごと
         GS->>Archive: getPagesWithRefs(limit, callback)
         GS->>GS: createSheetData（Page List, Links, Resources 等）
         GS->>Sheets: シートデータをアップロード
-        Note over GS,Sheets: レート制限時は Lanes でカウントダウン表示
+        Note over GS,Sheets: silent=false 時: Lanes で進捗表示 + レート制限カウントダウン
     end
 
     GS->>Archive: archive.close()
@@ -445,7 +452,7 @@ sequenceDiagram
 | Resources                  | ネットワークリソース一覧                         |
 | Images                     | 画像一覧（サイズ・alt・lazy 等）                 |
 | Violations                 | analyze プラグインが検出した違反一覧             |
-| Compares                   | analyze プラグインの比較データ                   |
+| Discrepancies              | analyze プラグインの比較データ                   |
 | Summary                    | サマリー                                         |
 | Referrers Relational Table | ページ → リファラーの関係テーブル                |
 | Resources Relational Table | ページ → リソースの関係テーブル                  |
@@ -558,7 +565,7 @@ packages/test-server/
 │   │   ├── recursive.ts      # /recursive/**
 │   │   ├── redirect.ts       # /redirect/**（301→302→200チェーン）
 │   │   ├── meta.ts           # /meta/**（16メタフィールド）
-│   │   ├── exclude.ts        # /exclude/**（パス・キーワード除外）
+│   │   ├── exclude.ts        # /exclude/**（パス・キーワード・URLプレフィックス除外）
 │   │   ├── options.ts        # /options/**（fetchExternal, disableQueries）
 │   │   ├── error-status.ts   # /error-status/**（4xx/5xxステータス）
 │   │   ├── scope.ts          # /scope/**（スコープ判定）
@@ -583,7 +590,7 @@ packages/test-server/
 │       └── pagination.e2e.ts
 ```
 
-**テスト実行:** `yarn test:e2e`（`vitest.e2e.config.ts` 使用、`maxWorkers: 1`）
+**テスト実行:** `yarn vitest run --config vitest.e2e.config.ts`（`maxWorkers: 1`）
 
 **テスト用 crawl ヘルパーのデフォルトオプション:**
 

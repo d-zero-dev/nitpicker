@@ -190,3 +190,168 @@ describe('loadPluginSettings', () => {
 		expect(config.analyze).toHaveLength(1);
 	});
 });
+
+describe('pluginOverrides', () => {
+	it('overrides axe lang setting from CLI', async () => {
+		mockCosmiconfig({
+			config: {
+				plugins: {
+					analyze: {
+						'@nitpicker/analyze-axe': { lang: 'ja' },
+					},
+				},
+			},
+			filepath: '/path/.nitpickerrc.json',
+		});
+		const config = await loadPluginSettings(
+			{},
+			{
+				'@nitpicker/analyze-axe': { lang: 'en' },
+			},
+		);
+		expect(config.analyze[0].settings).toEqual({ lang: 'en' });
+	});
+
+	it('overrides search keywords and scope from CLI', async () => {
+		mockCosmiconfig({
+			config: {
+				plugins: {
+					analyze: {
+						'@nitpicker/analyze-search': { scope: 'body', keywords: ['old'] },
+					},
+				},
+			},
+			filepath: '/path/.nitpickerrc.json',
+		});
+		const config = await loadPluginSettings(
+			{},
+			{
+				'@nitpicker/analyze-search': { keywords: ['new1', 'new2'], scope: 'main' },
+			},
+		);
+		expect(config.analyze[0].settings).toEqual({
+			scope: 'main',
+			keywords: ['new1', 'new2'],
+		});
+	});
+
+	it('overrides main-contents selector from CLI', async () => {
+		mockCosmiconfig({
+			config: {
+				plugins: {
+					analyze: {
+						'@nitpicker/analyze-main-contents': { mainContentSelector: '#old' },
+					},
+				},
+			},
+			filepath: '/path/.nitpickerrc.json',
+		});
+		const config = await loadPluginSettings(
+			{},
+			{
+				'@nitpicker/analyze-main-contents': { mainContentSelector: '#new' },
+			},
+		);
+		expect(config.analyze[0].settings).toEqual({ mainContentSelector: '#new' });
+	});
+
+	it('partially overrides only specified fields, preserving other config values', async () => {
+		mockCosmiconfig({
+			config: {
+				plugins: {
+					analyze: {
+						'@nitpicker/analyze-search': { scope: 'body', keywords: ['original'] },
+					},
+				},
+			},
+			filepath: '/path/.nitpickerrc.json',
+		});
+		const config = await loadPluginSettings(
+			{},
+			{
+				'@nitpicker/analyze-search': { scope: 'main' },
+			},
+		);
+		expect(config.analyze[0].settings).toEqual({
+			scope: 'main',
+			keywords: ['original'],
+		});
+	});
+
+	it('does not modify plugins without matching overrides', async () => {
+		mockCosmiconfig({
+			config: {
+				plugins: {
+					analyze: {
+						'@nitpicker/analyze-axe': { lang: 'ja' },
+						'@nitpicker/analyze-markuplint': true,
+					},
+				},
+			},
+			filepath: '/path/.nitpickerrc.json',
+		});
+		const config = await loadPluginSettings(
+			{},
+			{
+				'@nitpicker/analyze-axe': { lang: 'en' },
+			},
+		);
+		expect(config.analyze[0].settings).toEqual({ lang: 'en' });
+		expect(config.analyze[1].settings).toEqual({});
+	});
+
+	it('applies overrides to discovered plugins when no config file exists', async () => {
+		const discovered = [
+			{
+				name: '@nitpicker/analyze-axe',
+				module: '@nitpicker/analyze-axe',
+				configFilePath: '',
+				settings: {},
+			},
+		];
+		vi.mocked(discoverAnalyzePlugins).mockReturnValue(discovered);
+		mockCosmiconfig(null);
+		const config = await loadPluginSettings(
+			{},
+			{
+				'@nitpicker/analyze-axe': { lang: 'de' },
+			},
+		);
+		expect(config.analyze[0].settings).toEqual({ lang: 'de' });
+	});
+
+	it('applies overrides when config is empty', async () => {
+		const discovered = [
+			{
+				name: '@nitpicker/analyze-search',
+				module: '@nitpicker/analyze-search',
+				configFilePath: '',
+				settings: {},
+			},
+		];
+		vi.mocked(discoverAnalyzePlugins).mockReturnValue(discovered);
+		mockCosmiconfig({ config: null, filepath: '/path/.nitpickerrc.json', isEmpty: true });
+		const config = await loadPluginSettings(
+			{},
+			{
+				'@nitpicker/analyze-search': { keywords: ['test'] },
+			},
+		);
+		expect(config.analyze[0].settings).toEqual({ keywords: ['test'] });
+	});
+
+	it('returns plugins unchanged when overrides are empty', async () => {
+		mockCosmiconfig({
+			config: {
+				plugins: {
+					analyze: {
+						'@nitpicker/analyze-axe': { lang: 'ja' },
+					},
+				},
+			},
+			filepath: '/path/.nitpickerrc.json',
+		});
+		const config = await loadPluginSettings({}, {});
+		expect(config.analyze[0].settings).toEqual({ lang: 'ja' });
+	});
+});

@@ -1,8 +1,8 @@
 import type { Hono } from 'hono';
 
 /**
- *
- * @param app
+ * Registers routes for testing HTML meta tags including OG, Twitter Card, robots, and canonical.
+ * @param app - The Hono application instance to register routes on.
  */
 export function metaRoutes(app: Hono) {
 	app.get('/meta/', (c) =>

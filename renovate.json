@@ -1,0 +1,13 @@
+{
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"extends": ["config:recommended"],
+	"ignoreDeps": [
+		"@d-zero/cspell-config",
+		"@d-zero/eslint-config",
+		"@d-zero/lint-staged-config",
+		"@d-zero/prettier-config",
+		"@d-zero/textlint-config",
+		"@d-zero/tsconfig",
+		"@d-zero/commitlint-config"
+	]
+}

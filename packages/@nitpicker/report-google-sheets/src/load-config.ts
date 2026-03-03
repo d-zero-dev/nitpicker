@@ -4,8 +4,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 /**
- *
- * @param filePath
+ * Loads a nitpicker configuration JSON file from the given path.
+ * Returns an empty object when no path is provided.
+ * @param filePath - Absolute or relative path to the configuration file, or `null` to skip loading
+ * @returns The parsed configuration object
  */
 export async function loadConfig(filePath: string | null) {
 	if (!filePath) {

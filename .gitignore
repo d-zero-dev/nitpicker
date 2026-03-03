@@ -85,6 +85,7 @@ test/fixture/.__*
 # test files
 __*
 !__tests__/
+!__mock__/
 
 # Credentials
 credentials.json
