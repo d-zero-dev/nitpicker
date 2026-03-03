@@ -9,6 +9,7 @@ import enquirer from 'enquirer';
 import { log } from '../analyze/log.js';
 import { selectPlugins } from '../analyze/select-plugins.js';
 
+/** Enquirer prompt function for interactive CLI dialogs. */
 const { prompt } = enquirer;
 
 /**
@@ -34,6 +35,7 @@ export const commandDef = {
 	},
 } as const satisfies CommandDef;
 
+/** Parsed flag values for the `analyze` CLI command. */
 type AnalyzeFlags = InferFlags<typeof commandDef.flags>;
 
 /**
@@ -50,6 +52,7 @@ type AnalyzeFlags = InferFlags<typeof commandDef.flags>;
  * allows specifying individual plugins without interaction.
  * @param args - Positional arguments; first argument is the `.nitpicker` file path
  * @param flags - Parsed CLI flags from the `analyze` command
+ * @returns Resolves when analysis is complete and results are written back to the archive.
  */
 export async function analyze(args: string[], flags: AnalyzeFlags) {
 	const filePath = args[0];

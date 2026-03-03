@@ -6,7 +6,7 @@ import { selectPlugins } from './select-plugins.js';
 
 /**
  * Creates a minimal Plugin stub for testing.
- * @param name
+ * @param name - The plugin name to assign to the stub.
  */
 function createPlugin(name: string): Plugin {
 	return {
