@@ -3,7 +3,8 @@ import type { Hono } from 'hono';
 const MAX_PAGE = 10;
 
 /**
- * @param app
+ * Registers routes for testing path-based pagination with a sequential page chain.
+ * @param app - The Hono application instance to register routes on.
  */
 export function paginationRoutes(app: Hono) {
 	// Index page: /pagination/ → link to /pagination/page/1

@@ -4,8 +4,10 @@ import type { Report } from '@nitpicker/types';
 import { reportLog } from '../debug.js';
 
 /**
- *
- * @param archive
+ * Retrieves analyze plugin reports stored in the archive.
+ * Returns an empty array if no reports are found.
+ * @param archive - The opened archive to read plugin reports from
+ * @returns An array of plugin report data
  */
 export async function getPluginReports(archive: Archive) {
 	const reports: Report[] = [];

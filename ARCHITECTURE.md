@@ -372,6 +372,7 @@ sequenceDiagram
     Archive-->>NP: Archive インスタンス
 
     CLI->>NP: setPluginOverrides(overrides)
+    CLI->>CLI: selectPlugins()（--all / --plugin / TTY プロンプト / 全選択）
     CLI->>NP: analyze(filter?)
     NP->>NP: loadPluginSettings({}, pluginOverrides)（cosmiconfig）
     NP->>NP: importModules(plugins)
@@ -420,18 +421,23 @@ sequenceDiagram
     participant Archive as Archive
     participant Sheets as Google Sheets API
 
-    CLI->>GS: report(filePath, sheetUrl, credentials, config, limit)
+    CLI->>GS: report(filePath, sheetUrl, credentials, config, limit, all?, silent?)
     GS->>GS: authentication(credentials)（OAuth2）
     GS->>Archive: getArchive(filePath)
     GS->>GS: loadConfig(configPath)
     GS->>Archive: getPluginReports(archive)
-    GS->>GS: enquirer プロンプト（シート選択）
+
+    alt all=true（--all 指定 or 非TTY環境）
+        GS->>GS: 全シートを自動選択
+    else all=false
+        GS->>GS: enquirer プロンプト（シート選択）
+    end
 
     loop 選択されたシートごと
         GS->>Archive: getPagesWithRefs(limit, callback)
         GS->>GS: createSheetData（Page List, Links, Resources 等）
         GS->>Sheets: シートデータをアップロード
-        Note over GS,Sheets: レート制限時は Lanes でカウントダウン表示
+        Note over GS,Sheets: silent=false 時: Lanes で進捗表示 + レート制限カウントダウン
     end
 
     GS->>Archive: archive.close()
@@ -446,7 +452,7 @@ sequenceDiagram
 | Resources                  | ネットワークリソース一覧                         |
 | Images                     | 画像一覧（サイズ・alt・lazy 等）                 |
 | Violations                 | analyze プラグインが検出した違反一覧             |
-| Compares                   | analyze プラグインの比較データ                   |
+| Discrepancies              | analyze プラグインの比較データ                   |
 | Summary                    | サマリー                                         |
 | Referrers Relational Table | ページ → リファラーの関係テーブル                |
 | Resources Relational Table | ページ → リソースの関係テーブル                  |
@@ -559,7 +565,7 @@ packages/test-server/
 │   │   ├── recursive.ts      # /recursive/**
 │   │   ├── redirect.ts       # /redirect/**（301→302→200チェーン）
 │   │   ├── meta.ts           # /meta/**（16メタフィールド）
-│   │   ├── exclude.ts        # /exclude/**（パス・キーワード除外）
+│   │   ├── exclude.ts        # /exclude/**（パス・キーワード・URLプレフィックス除外）
 │   │   ├── options.ts        # /options/**（fetchExternal, disableQueries）
 │   │   ├── error-status.ts   # /error-status/**（4xx/5xxステータス）
 │   │   ├── scope.ts          # /scope/**（スコープ判定）
@@ -575,6 +581,7 @@ packages/test-server/
 │       ├── exclude.e2e.ts
 │       ├── options.e2e.ts
 │       ├── archive-pipeline.e2e.ts
+│       ├── config-persistence.e2e.ts
 │       ├── error-status.e2e.ts
 │       ├── scope.e2e.ts
 │       ├── parallel-and-interval.e2e.ts
@@ -582,7 +589,7 @@ packages/test-server/
 │       └── pagination.e2e.ts
 ```
 
-**テスト実行:** `yarn test:e2e`（`vitest.e2e.config.ts` 使用、`maxWorkers: 1`）
+**テスト実行:** `yarn vitest run --config vitest.e2e.config.ts`（`maxWorkers: 1`）
 
 **テスト用 crawl ヘルパーのデフォルトオプション:**
 

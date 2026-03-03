@@ -1,8 +1,8 @@
 import type { Hono } from 'hono';
 
 /**
- *
- * @param app
+ * Registers routes for testing HTTP redirect chains (301 and 302).
+ * @param app - The Hono application instance to register routes on.
  */
 export function redirectRoutes(app: Hono) {
 	app.get('/redirect/', (c) =>

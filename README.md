@@ -108,6 +108,8 @@ $ npx @nitpicker/cli analyze <file>
 ```sh
 $ npx @nitpicker/cli analyze example.com-20250101120000000.nitpicker
 $ npx @nitpicker/cli analyze example.com-20250101120000000.nitpicker --all
+$ npx @nitpicker/cli analyze example.com-20250101120000000.nitpicker --plugin @nitpicker/analyze-axe
+$ npx @nitpicker/cli analyze example.com-20250101120000000.nitpicker --plugin @nitpicker/analyze-axe --plugin @nitpicker/analyze-textlint
 ```
 
 #### オプション
@@ -115,13 +117,14 @@ $ npx @nitpicker/cli analyze example.com-20250101120000000.nitpicker --all
 | オプション                | 値              | デフォルト | 複数指定 | 説明                                                                               |
 | ------------------------- | --------------- | ---------- | -------- | ---------------------------------------------------------------------------------- |
 | `--all`                   | なし            | なし       | 不可     | 対話プロンプトなしで設定済みの全 analyze プラグインを実行                          |
+| `--plugin`                | プラグイン名    | なし       | 可       | 実行するプラグインを指定（`--all` より優先度が低い）                               |
 | `--verbose`               | なし            | なし       | 不可     | 分析中に詳細ログを出力                                                             |
 | `--search-keywords`       | 文字列          | なし       | 可       | analyze-search プラグインの検索キーワード（設定ファイルを上書き）                  |
 | `--search-scope`          | CSS セレクタ    | なし       | 不可     | analyze-search プラグインの検索スコープ（設定ファイルを上書き）                    |
 | `--main-content-selector` | CSS セレクタ    | なし       | 不可     | analyze-main-contents プラグインのメインコンテンツセレクタ（設定ファイルを上書き） |
 | `--axe-lang`              | BCP 47 言語タグ | なし       | 不可     | analyze-axe プラグインの言語設定（設定ファイルを上書き）                           |
 
-`--all` を指定しない場合、実行するプラグインを選択する対話式マルチセレクトプロンプトが表示される。
+`--all` も `--plugin` も指定しない場合、実行するプラグインを選択する対話式マルチセレクトプロンプトが表示される。非 TTY 環境（CI/CD パイプラインなど）ではプロンプトを表示できないため、全プラグインが自動的に実行される。
 
 `--search-keywords` などのプラグインオプションフラグは、設定ファイル（`.nitpickerrc` 等）の該当プラグイン設定を上書きする。指定しないフラグは設定ファイルの値がそのまま使用される。
 
@@ -141,21 +144,25 @@ $ npx @nitpicker/cli analyze site.nitpicker --all --search-scope "main" --main-c
 $ npx @nitpicker/cli report <file> --sheet <URL>
 ```
 
+#### オプション
+
+| オプション           | 値           | デフォルト           | 説明                                                            |
+| -------------------- | ------------ | -------------------- | --------------------------------------------------------------- |
+| `--sheet` `-S`       | URL          | （必須）             | Google Sheets の URL                                            |
+| `--credentials` `-C` | ファイルパス | `./credentials.json` | OAuth2 認証情報ファイルのパス                                   |
+| `--config` `-c`      | ファイルパス | なし                 | nitpicker 設定ファイルのパス                                    |
+| `--limit` `-l`       | 数値         | `100000`             | ページデータ取得のバッチサイズ                                  |
+| `--all`              | なし         | なし                 | 対話プロンプトなしで全シートを生成（非TTY環境では自動的に有効） |
+| `--verbose`          | なし         | なし                 | 実行中に詳細ログを標準出力に表示                                |
+| `--silent`           | なし         | なし                 | 実行中のログ出力を抑制                                          |
+
+`--all` を指定しない場合、生成するシートを選択する対話式マルチセレクトプロンプトが表示される（Page List、Links、Resources、Images、Violations、Discrepancies、Summary、Referrers Relational Table、Resources Relational Table）。非TTY環境（CI パイプライン等）では `--all` が自動的に有効になる。
+
 #### 例
 
 ```sh
 $ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit"
 $ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --credentials ./my-credentials.json
 $ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --config ./nitpicker.config.json
+$ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --all --silent
 ```
-
-#### オプション
-
-| オプション           | 値           | デフォルト           | 説明                           |
-| -------------------- | ------------ | -------------------- | ------------------------------ |
-| `--sheet` `-S`       | URL          | （必須）             | Google Sheets の URL           |
-| `--credentials` `-C` | ファイルパス | `./credentials.json` | OAuth2 認証情報ファイルのパス  |
-| `--config` `-c`      | ファイルパス | なし                 | nitpicker 設定ファイルのパス   |
-| `--limit` `-l`       | 数値         | `100000`             | ページデータ取得のバッチサイズ |
-
-生成するシートを選択する対話式マルチセレクトプロンプトが表示される（Page List、Links、Resources、Images、Violations、Compares、Summary、Referrers Relational Table、Resources Relational Table）。
