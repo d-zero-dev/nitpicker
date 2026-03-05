@@ -131,8 +131,11 @@ export default class Archive extends ArchiveAccessor {
 	}
 	/**
 	 * Stores a crawled page's data in the archive database and optionally saves an HTML snapshot.
+	 * If the snapshot file write fails, the HTML path in the database is cleared to prevent
+	 * referencing a non-existent file, and the error is re-thrown.
 	 * @param pageInfo - The page data to store.
 	 * @returns The database ID of the stored page.
+	 * @throws {Error} Re-throws any error from the snapshot file write after clearing the HTML path.
 	 */
 	async setPage(pageInfo: PageData): Promise<number> {
 		dbLog('Set page: %s', pageInfo.url.href);

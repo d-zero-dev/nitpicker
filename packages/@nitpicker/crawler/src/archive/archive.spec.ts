@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename);
 const workingDir = path.resolve(__dirname, '__mock__');
 
 vi.mock('./filesystem/index.js', async (importOriginal) => {
+	// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 	const original = await importOriginal<typeof import('./filesystem/index.js')>();
 	return {
 		...original,
