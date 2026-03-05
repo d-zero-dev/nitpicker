@@ -150,34 +150,31 @@ describe('page-analysis-worker', () => {
 		expect(result).toBeNull();
 	});
 
-	it('returns null and logs error when eachPage throws', async () => {
-		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+	it('throws error with plugin name when eachPage throws', async () => {
 		mockedImportModules.mockResolvedValue([
 			{
 				eachPage: vi.fn().mockRejectedValue(new Error('plugin crash')),
 			},
 		]);
 
-		const result = await workerFn(
-			{
-				plugin: {
-					name: 'broken-plugin',
-					module: 'broken-plugin',
-					configFilePath: '',
+		await expect(
+			workerFn(
+				{
+					plugin: {
+						name: 'broken-plugin',
+						module: 'broken-plugin',
+						configFilePath: '',
+					},
+					pages: {
+						html: '<html></html>',
+						url: parseUrl('https://example.com/'),
+					},
 				},
-				pages: {
-					html: '<html></html>',
-					url: parseUrl('https://example.com/'),
-				},
-			},
-			new UrlEventBus(),
-			0,
-			1,
-		);
-
-		expect(result).toBeNull();
-		expect(consoleErrorSpy).toHaveBeenCalledWith('[broken-plugin] plugin crash');
-		consoleErrorSpy.mockRestore();
+				new UrlEventBus(),
+				0,
+				1,
+			),
+		).rejects.toThrow('[broken-plugin] plugin crash');
 	});
 
 	it('cleans up JSDOM globals after eachPage completes', async () => {
@@ -221,7 +218,6 @@ describe('page-analysis-worker', () => {
 	});
 
 	it('cleans up JSDOM globals even when eachPage throws', async () => {
-		vi.spyOn(console, 'error').mockImplementation(() => {});
 		mockedImportModules.mockResolvedValue([
 			{
 				eachPage: vi.fn().mockRejectedValue(new Error('crash')),
@@ -243,11 +239,12 @@ describe('page-analysis-worker', () => {
 			new UrlEventBus(),
 			0,
 			1,
-		);
+		).catch(() => {
+			// Expected to throw
+		});
 
 		const g = globalThis as Record<string, unknown>;
 		expect(g['HTMLElement']).toBeUndefined();
-		vi.restoreAllMocks();
 	});
 
 	it('provides a JSDOM window with the correct URL', async () => {

@@ -137,7 +137,11 @@ export function runInWorker<I extends Record<string, unknown>, R>(
 					process.removeListener('uncaughtException', killWorker);
 					process.removeListener('uncaughtExceptionMonitor', killWorker);
 					process.removeListener('unhandledRejection', killWorker);
-					resolve(message.result);
+					if (message.error) {
+						reject(new Error(message.error));
+					} else {
+						resolve(message.result);
+					}
 				}
 			});
 		});

@@ -52,13 +52,29 @@ emitter.on('url', (url) => {
 	});
 });
 
-const result = await runner(data, emitter);
+try {
+	const result = await runner(data, emitter);
 
-if (!parentPort) {
-	throw new Error('Use in worker thread');
+	if (!parentPort) {
+		throw new Error('Use in worker thread');
+	}
+
+	parentPort.postMessage({
+		type: 'finish',
+		result,
+	});
+} catch (error) {
+	if (!parentPort) {
+		throw new Error('Use in worker thread');
+	}
+
+	const message = error instanceof Error ? error.message : String(error);
+	// eslint-disable-next-line no-console
+	console.error(`[worker] Fatal error: ${message}`);
+
+	parentPort.postMessage({
+		type: 'finish',
+		result: null,
+		error: message,
+	});
 }
-
-parentPort.postMessage({
-	type: 'finish',
-	result,
-});

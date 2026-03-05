@@ -235,68 +235,87 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 
 					// Bounded Promise pool (replaces deal())
 					const executing = new Set<Promise<void>>();
+					let pluginPageDataCount = 0;
+					let pluginErrorCount = 0;
 
 					for (const [pageIndex, page] of pages.entries()) {
 						const task = (async () => {
-							const cacheKey = `${plugin.name}:${page.url.href}`;
-							const cached = await cache.load(cacheKey);
-							if (cached) {
-								const { pages: cachedPages, violations } = cached;
-								if (cachedPages) {
-									table.addData(cachedPages);
+							try {
+								const cacheKey = `${plugin.name}:${page.url.href}`;
+								const cached = await cache.load(cacheKey);
+								if (cached) {
+									const { pages: cachedPages, violations } = cached;
+									if (cachedPages) {
+										table.addData(cachedPages);
+										pluginPageDataCount += Object.keys(cachedPages).length;
+									}
+									if (violations) {
+										for (const v of violations) {
+											allViolations.push(v);
+										}
+										pluginViolationCount += violations.length;
+									}
+									done++;
+									updateProgress();
+									return;
 								}
-								if (violations) {
-									allViolations.push(...violations);
-									pluginViolationCount += violations.length;
+
+								const html = await page.getHtml();
+								if (!html) {
+									done++;
+									updateProgress();
+									return;
 								}
-								done++;
-								updateProgress();
-								return;
-							}
 
-							const html = await page.getHtml();
-							if (!html) {
-								done++;
-								updateProgress();
-								return;
-							}
-
-							const report = await runInWorker<
-								PageAnalysisWorkerData,
-								ReportPage<string> | null
-							>({
-								filePath: pageAnalysisWorkerPath,
-								num: pageIndex,
-								total: pages.length,
-								emitter: urlEmitter,
-								initialData: {
-									plugin,
-									pages: {
-										html,
-										url: page.url,
+								const report = await runInWorker<
+									PageAnalysisWorkerData,
+									ReportPage<string> | null
+								>({
+									filePath: pageAnalysisWorkerPath,
+									num: pageIndex,
+									total: pages.length,
+									emitter: urlEmitter,
+									initialData: {
+										plugin,
+										pages: {
+											html,
+											url: page.url,
+										},
 									},
-								},
-							});
+								});
 
-							const tablePages: Record<string, TableData<string>> = {};
+								const tablePages: Record<string, TableData<string>> = {};
 
-							if (report?.page) {
-								tablePages[page.url.href] = report.page;
-								table.addDataToUrl(page.url, report.page);
+								if (report?.page) {
+									tablePages[page.url.href] = report.page;
+									table.addDataToUrl(page.url, report.page);
+									pluginPageDataCount++;
+								}
+
+								await cache.store(cacheKey, {
+									pages: Object.keys(tablePages).length > 0 ? tablePages : undefined,
+									violations: report?.violations,
+								});
+
+								if (report?.violations) {
+									for (const v of report.violations) {
+										allViolations.push(v);
+									}
+									pluginViolationCount += report.violations.length;
+								}
+
+								done++;
+								updateProgress();
+							} catch (error) {
+								pluginErrorCount++;
+								done++;
+								updateProgress();
+								const message = error instanceof Error ? error.message : String(error);
+								await this.emit('error', {
+									message: `[${plugin.name}] Failed to analyze ${page.url.href}: ${message}`,
+									error: error instanceof Error ? error : null,
+								});
 							}
-
-							await cache.store(cacheKey, {
-								pages: Object.keys(tablePages).length > 0 ? tablePages : undefined,
-								violations: report?.violations,
-							});
-
-							if (report?.violations) {
-								allViolations.push(...report.violations);
-								pluginViolationCount += report.violations.length;
-							}
-
-							done++;
-							updateProgress();
 						})();
 						executing.add(task);
 						task.then(
@@ -309,6 +328,16 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 					}
 
 					await Promise.all(executing);
+
+					// Warn when plugin produced no page data at all
+					if (pluginPageDataCount === 0 && pages.length > 0) {
+						const errorDetail =
+							pluginErrorCount > 0 ? ` (${pluginErrorCount} errors occurred)` : '';
+						await this.emit('error', {
+							message: `[${plugin.name}] Produced no data for ${pages.length} pages${errorDetail}. Check plugin configuration and HTML snapshots.`,
+							error: null,
+						});
+					}
 
 					// Mark this plugin as Done
 					const detail =
@@ -343,19 +372,29 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 							continue;
 						}
 
-						const report = await mod.eachUrl({ url, isExternal });
-						if (!report) {
-							continue;
-						}
+						try {
+							const report = await mod.eachUrl({ url, isExternal });
+							if (!report) {
+								continue;
+							}
 
-						const { page: reportPage, violations } = report;
+							const { page: reportPage, violations } = report;
 
-						if (reportPage) {
-							table.addDataToUrl(url, reportPage);
-						}
+							if (reportPage) {
+								table.addDataToUrl(url, reportPage);
+							}
 
-						if (violations) {
-							allViolations.push(...violations);
+							if (violations) {
+								for (const v of violations) {
+									allViolations.push(v);
+								}
+							}
+						} catch (error) {
+							const message = error instanceof Error ? error.message : String(error);
+							await this.emit('error', {
+								message: `[eachUrl] Failed to analyze ${url.href}: ${message}`,
+								error: error instanceof Error ? error : null,
+							});
 						}
 					}
 				}
