@@ -335,6 +335,12 @@ describe('clearHtmlPath', () => {
 });
 
 describe('addOrderField', () => {
+	const addOrderDbPath = path.resolve(workingDir, 'add-order-test.sqlite');
+
+	afterAll(async () => {
+		await remove(addOrderDbPath);
+	});
+
 	it('order カラムが既に存在する場合でもエラーにならない', async () => {
 		const db = await Database.connect({
 			type: 'sqlite3',
@@ -342,8 +348,44 @@ describe('addOrderField', () => {
 			filename: path.resolve(workingDir, 'mock.sqlite'),
 		});
 
-		await expect(db.addOrderField()).resolves.not.toThrow();
-		await expect(db.addOrderField()).resolves.not.toThrow();
+		// 2回連続で呼んでも例外が発生しない
+		await db.addOrderField();
+		await db.addOrderField();
+
+		const pages = await db.getPages();
+		expect(pages[0]).toHaveProperty('order');
+	});
+
+	it('order カラムが存在しない場合に追加される', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: addOrderDbPath,
+		});
+
+		await db.updatePage(
+			{
+				url: parseUrl('http://localhost/order-test')!,
+				redirectPaths: [],
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Order Test' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			null,
+			true,
+		);
+
+		const pages = await db.getPages();
+		expect(pages[0]).toHaveProperty('order');
+		expect(pages[0]!.order).toBeNull();
 	});
 });
 
@@ -354,7 +396,7 @@ describe('getJSON (getConfig 経由)', () => {
 		await remove(invalidJsonDbPath);
 	});
 
-	it('不正な JSON フィールドがある場合フォールバック値を返し警告ログを出力する', async () => {
+	it('不正な JSON フィールドがある場合フォールバック値を返す', async () => {
 		const db = await Database.connect({
 			type: 'sqlite3',
 			workingDir,
@@ -383,15 +425,7 @@ describe('getJSON (getConfig 経由)', () => {
 		};
 
 		await db.setConfig(config);
-
-		// @ts-expect-error -- knex は private だが、テスト目的で不正データを直接書き込む
-		await db['_events'];
-		// 不正な JSON を直接挿入するため raw SQL を使用
-		const knex = await Database.connect({
-			type: 'sqlite3',
-			workingDir,
-			filename: invalidJsonDbPath,
-		});
+		await db.destroy();
 
 		// DB に不正な JSON を直接書き込む
 		const { default: knexLib } = await import('knex');
@@ -401,10 +435,17 @@ describe('getJSON (getConfig 経由)', () => {
 			useNullAsDefault: true,
 		});
 		await rawDb('info').update({ scope: '{invalid json' });
+		await rawDb.destroy();
 
-		const retrieved = await knex.getConfig();
+		const db2 = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: invalidJsonDbPath,
+		});
+
+		const retrieved = await db2.getConfig();
 		expect(retrieved.scope).toEqual([]);
 
-		await rawDb.destroy();
+		await db2.destroy();
 	});
 });

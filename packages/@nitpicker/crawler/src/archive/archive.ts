@@ -146,7 +146,11 @@ export default class Archive extends ArchiveAccessor {
 				await outputText(html, pageInfo.html);
 			} catch (error) {
 				dbLog('Snapshot write failed for page %d, clearing html path: %s', pageId, html);
-				await this.#db.clearHtmlPath(pageId);
+				try {
+					await this.#db.clearHtmlPath(pageId);
+				} catch (clearError) {
+					dbLog('Failed to clear html path for page %d: %s', pageId, clearError);
+				}
 				throw error;
 			}
 		}
