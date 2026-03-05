@@ -191,9 +191,13 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 		process.exit(1);
 	}
 
+	const silent = !!flags.silent;
+
 	// Step 1: Crawl
-	// eslint-disable-next-line no-console
-	console.log('\n📡 [pipeline] Step 1/3: Crawling...');
+	if (!silent) {
+		// eslint-disable-next-line no-console
+		console.log('\n📡 [pipeline] Step 1/3: Crawling...');
+	}
 	const archivePath = await startCrawl([siteUrl], {
 		interval: flags.interval,
 		image: flags.image,
@@ -221,8 +225,10 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 	});
 
 	// Step 2: Analyze
-	// eslint-disable-next-line no-console
-	console.log('\n🔍 [pipeline] Step 2/3: Analyzing...');
+	if (!silent) {
+		// eslint-disable-next-line no-console
+		console.log('\n🔍 [pipeline] Step 2/3: Analyzing...');
+	}
 	await analyze([archivePath], {
 		all: flags.all,
 		plugin: flags.plugin,
@@ -236,8 +242,10 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 
 	// Step 3: Report (only if --sheet is provided)
 	if (flags.sheet) {
-		// eslint-disable-next-line no-console
-		console.log('\n📊 [pipeline] Step 3/3: Reporting...');
+		if (!silent) {
+			// eslint-disable-next-line no-console
+			console.log('\n📊 [pipeline] Step 3/3: Reporting...');
+		}
 		await report([archivePath], {
 			sheet: flags.sheet,
 			credentials: flags.credentials,
@@ -247,11 +255,13 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			verbose: flags.verbose,
 			silent: flags.silent,
 		});
-	} else {
+	} else if (!silent) {
 		// eslint-disable-next-line no-console
 		console.log('\n📊 [pipeline] Step 3/3: Skipped (no --sheet specified)');
 	}
 
-	// eslint-disable-next-line no-console
-	console.log('\n✅ [pipeline] All steps completed.');
+	if (!silent) {
+		// eslint-disable-next-line no-console
+		console.log('\n✅ [pipeline] All steps completed.');
+	}
 }

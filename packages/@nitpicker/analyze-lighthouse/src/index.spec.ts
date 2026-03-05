@@ -120,17 +120,28 @@ describe('analyze-lighthouse plugin', () => {
 		});
 	});
 
-	it('propagates non-Error exceptions without swallowing them', async () => {
+	it('wraps non-Error exceptions into Error and returns error result', async () => {
 		lighthouseMock.mockRejectedValue('unexpected string throw');
 
 		const plugin = pluginFactory({}, '');
 		const url = new URL('https://example.com');
-
-		await expect(
-			plugin.eachPage!({ url, html: '', window: {} as never, num: 0, total: 1 }),
-		).rejects.toBe('unexpected string throw');
+		const result = await plugin.eachPage!({
+			url,
+			html: '',
+			window: {} as never,
+			num: 0,
+			total: 1,
+		});
 
 		expect(killMock).toHaveBeenCalledTimes(1);
+		expect(result).toEqual({
+			page: {
+				performance: { value: 0, note: 'Error' },
+				accessibility: { value: 0, note: 'Error' },
+				'best-practices': { value: 0, note: 'Error' },
+				seo: { value: 0, note: 'Error' },
+			},
+		});
 	});
 
 	it('propagates unexpected errors from report processing without swallowing them', async () => {
