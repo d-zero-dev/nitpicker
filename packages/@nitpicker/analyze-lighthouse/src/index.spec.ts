@@ -149,4 +149,106 @@ describe('analyze-lighthouse plugin', () => {
 
 		expect(killMock).toHaveBeenCalledTimes(1);
 	});
+
+	it('does not call chrome.kill() when chromeLauncher.launch() itself fails', async () => {
+		launchMock.mockRejectedValue(new Error('Chrome not found'));
+
+		const plugin = pluginFactory({}, '');
+		const url = new URL('https://example.com');
+
+		await expect(
+			plugin.eachPage!({ url, html: '', window: {} as never, num: 0, total: 1 }),
+		).rejects.toThrow('Chrome not found');
+
+		expect(killMock).not.toHaveBeenCalled();
+	});
+
+	it('passes options.config to lighthouse as the third argument', async () => {
+		const customConfig = {
+			extends: 'lighthouse:default',
+			settings: { onlyCategories: ['performance'] },
+		};
+		lighthouseMock.mockResolvedValue({
+			lhr: {
+				categories: {
+					performance: {
+						id: 'performance',
+						title: 'Performance',
+						score: 1,
+						auditRefs: [],
+					},
+					accessibility: {
+						id: 'accessibility',
+						title: 'Accessibility',
+						score: 1,
+						auditRefs: [],
+					},
+					'best-practices': {
+						id: 'best-practices',
+						title: 'Best Practices',
+						score: 1,
+						auditRefs: [],
+					},
+					seo: { id: 'seo', title: 'SEO', score: 1, auditRefs: [] },
+				},
+			},
+		});
+
+		const plugin = pluginFactory({ config: customConfig }, '');
+		const url = new URL('https://example.com');
+		await plugin.eachPage!({ url, html: '', window: {} as never, num: 0, total: 1 });
+
+		expect(lighthouseMock).toHaveBeenCalledWith(
+			'https://example.com/',
+			{ port: 9222 },
+			customConfig,
+		);
+	});
+
+	it('returns rounded category scores from the lighthouse report', async () => {
+		lighthouseMock.mockResolvedValue({
+			lhr: {
+				categories: {
+					performance: {
+						id: 'performance',
+						title: 'Performance',
+						score: 0.876,
+						auditRefs: [],
+					},
+					accessibility: {
+						id: 'accessibility',
+						title: 'Accessibility',
+						score: 0.934,
+						auditRefs: [],
+					},
+					'best-practices': {
+						id: 'best-practices',
+						title: 'Best Practices',
+						score: 0.5,
+						auditRefs: [],
+					},
+					seo: { id: 'seo', title: 'SEO', score: 0.123, auditRefs: [] },
+				},
+			},
+		});
+
+		const plugin = pluginFactory({}, '');
+		const url = new URL('https://example.com');
+		const result = await plugin.eachPage!({
+			url,
+			html: '',
+			window: {} as never,
+			num: 0,
+			total: 1,
+		});
+
+		expect(result).toMatchObject({
+			page: {
+				performance: { value: 88 },
+				accessibility: { value: 93 },
+				'best-practices': { value: 50 },
+				seo: { value: 12 },
+			},
+		});
+	});
 });
