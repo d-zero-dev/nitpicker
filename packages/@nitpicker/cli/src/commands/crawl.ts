@@ -184,7 +184,7 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 			...mapFlagsToCrawlConfig(flags),
 			filePath: flags.output,
 			list: isList,
-			recursive: isList ? false : flags.recursive,
+			recursive: isList || flags.single ? false : flags.recursive,
 		},
 		(orchestrator, config) => {
 			run(
