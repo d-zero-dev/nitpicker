@@ -26,6 +26,8 @@ packages/
       └── crawler ── @nitpicker/cli ← @d-zero/roar（外部）
                        ↑      ↑
                       core   report-google-sheets
+                       ↑
+                  analyze-* プラグイン
 ```
 
 ---
