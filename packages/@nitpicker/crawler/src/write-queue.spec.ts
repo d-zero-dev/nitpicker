@@ -95,6 +95,43 @@ describe('WriteQueue', () => {
 		expect(queue.pending).toBe(0);
 	});
 
+	it('accepts enqueue after drain() completes', async () => {
+		const queue = new WriteQueue();
+		const order: string[] = [];
+
+		void queue.enqueue(async () => {
+			await delay(10);
+			order.push('before-drain');
+		});
+
+		await queue.drain();
+		expect(order).toEqual(['before-drain']);
+
+		// Enqueue after drain should still work
+		const result = await queue.enqueue(() => {
+			order.push('after-drain');
+			return Promise.resolve('done');
+		});
+
+		expect(result).toBe('done');
+		expect(order).toEqual(['before-drain', 'after-drain']);
+		expect(queue.pending).toBe(0);
+	});
+
+	it('catches synchronous throw inside operation', async () => {
+		const queue = new WriteQueue();
+
+		await expect(
+			queue.enqueue(() => {
+				throw new Error('sync throw');
+			}),
+		).rejects.toThrow('sync throw');
+
+		// Queue should remain functional after sync throw
+		const result = await queue.enqueue(() => Promise.resolve('recovered'));
+		expect(result).toBe('recovered');
+	});
+
 	it('handles high concurrency without interleaving', async () => {
 		const queue = new WriteQueue();
 		let active = 0;
