@@ -24,11 +24,14 @@ packages/
 @d-zero/beholder（外部）
       ↑
       └── crawler ── @nitpicker/cli ← @d-zero/roar（外部）
-                       ↑      ↑
-                      core   report-google-sheets
-                       ↑
-                  analyze-* プラグイン
+           ↑            ↑  ↑    ↑
+           │           core │  report-google-sheets
+           │            ↑   │
+           │     analyze-* プラグイン
+           └── @d-zero/dealer（外部）
 ```
+
+> **Note**: CLI は analyze プラグインに直接依存する（`npx` 実行時のモジュール解決のため）。新規 analyze プラグイン追加時は `@nitpicker/cli/package.json` の `dependencies` にも追加すること。
 
 ---
 
@@ -146,7 +149,7 @@ crawler/src/
 
 ### @nitpicker/cli
 
-`@d-zero/roar` ベースの統合 CLI。4つのサブコマンドを提供。
+`@d-zero/roar` ベースの統合 CLI。4つのサブコマンドを提供。全 analyze プラグインを `dependencies` に含んでおり、`npx` 実行時に `@nitpicker/core` の動的 `import()` がプラグインモジュールを解決できるようにしている。
 
 - **`npx @nitpicker/cli crawl <URL>`**: Webサイトをクロールして `.nitpicker` ファイルを生成
 - **`npx @nitpicker/cli analyze <file>`**: `.nitpicker` ファイルに対して analyze プラグインを実行。`--search-keywords`, `--axe-lang` 等のフラグで設定ファイルのプラグイン設定を上書き可能（`buildPluginOverrides()` → `Nitpicker.setPluginOverrides()` 経由）
