@@ -3,10 +3,12 @@ import type { CrawlerOrchestrator as OrchestratorType } from '@nitpicker/crawler
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 const mockCrawling = vi.fn();
+const mockResume = vi.fn();
 
 vi.mock('@nitpicker/crawler', () => ({
 	CrawlerOrchestrator: {
 		crawling: mockCrawling,
+		resume: mockResume,
 	},
 }));
 
@@ -14,11 +16,27 @@ vi.mock('../crawl/event-assignments.js', () => ({
 	eventAssignments: vi.fn().mockResolvedValue(),
 }));
 
+const mockVerbosely = vi.fn();
+const mockLog = vi.fn();
+
 vi.mock('../crawl/debug.js', () => ({
-	log: vi.fn(),
-	verbosely: vi.fn(),
+	log: mockLog,
+	verbosely: mockVerbosely,
 }));
 
+const mockDiff = vi.fn().mockResolvedValue();
+
+vi.mock('../crawl/diff.js', () => ({
+	diff: mockDiff,
+}));
+
+const mockReadList = vi.fn().mockResolvedValue(['https://example.com/from-file']);
+
+vi.mock('@d-zero/readtext/list', () => ({
+	readList: mockReadList,
+}));
+
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 type CrawlFlags = Parameters<typeof import('./crawl.js').startCrawl>[1];
 
 /**
@@ -66,12 +84,18 @@ function setupFakeOrchestrator() {
 		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
 		return Promise.resolve(fakeOrchestrator);
 	});
+
+	mockResume.mockImplementation((_path, _opts, cb) => {
+		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
+		return Promise.resolve(fakeOrchestrator);
+	});
+
+	return fakeOrchestrator;
 }
 
 describe('startCrawl', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.resetModules();
 		setupFakeOrchestrator();
 	});
 
@@ -124,6 +148,24 @@ describe('startCrawl', () => {
 			expect.any(Function),
 		);
 	});
+
+	it('--output フラグを filePath として渡す', async () => {
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(['https://example.com'], createFlags({ output: '/custom/output' }));
+
+		expect(mockCrawling).toHaveBeenCalledWith(
+			['https://example.com'],
+			expect.objectContaining({ filePath: '/custom/output' }),
+			expect.any(Function),
+		);
+	});
+
+	it('アーカイブファイルパスを返す', async () => {
+		const { startCrawl } = await import('./crawl.js');
+		const result = await startCrawl(['https://example.com'], createFlags());
+
+		expect(result).toBe('/tmp/test.nitpicker');
+	});
 });
 
 describe('crawl', () => {
@@ -131,7 +173,6 @@ describe('crawl', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.resetModules();
 		setupFakeOrchestrator();
 		consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 	});
@@ -151,11 +192,6 @@ describe('crawl', () => {
 
 	it('--single と --list-file を同時指定した場合、警告を出力する', async () => {
 		const { crawl } = await import('./crawl.js');
-
-		vi.mock('@d-zero/readtext/list', () => ({
-			readList: vi.fn().mockResolvedValue(['https://example.com/a']),
-		}));
-
 		await crawl([], createFlags({ single: true, listFile: '/tmp/list.txt' }));
 
 		expect(consoleWarnSpy).toHaveBeenCalledWith(
@@ -168,5 +204,126 @@ describe('crawl', () => {
 		await crawl(['https://example.com'], createFlags({ single: true }));
 
 		expect(consoleWarnSpy).not.toHaveBeenCalled();
+	});
+
+	it('--diff モードで引数が2つの場合、diff() を呼び出す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['a.nitpicker', 'b.nitpicker'], createFlags({ diff: true }));
+
+		expect(mockDiff).toHaveBeenCalledWith('a.nitpicker', 'b.nitpicker');
+		expect(mockCrawling).not.toHaveBeenCalled();
+	});
+
+	it('--diff モードで引数が不足している場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl([], createFlags({ diff: true }))).rejects.toThrow(
+			'Please provide two file paths to compare',
+		);
+	});
+
+	it('--diff モードで引数が1つの場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl(['a.nitpicker'], createFlags({ diff: true }))).rejects.toThrow(
+			'Please provide two file paths to compare',
+		);
+	});
+
+	it('--resume モードで resumeCrawl を呼び出す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl([], createFlags({ resume: '/tmp/stub' }));
+
+		expect(mockResume).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.any(Object),
+			expect.any(Function),
+		);
+		expect(mockCrawling).not.toHaveBeenCalled();
+	});
+
+	it('--resume と --output を同時指定した場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl([], createFlags({ resume: '/tmp/stub', output: '/tmp/out' })),
+		).rejects.toThrow(
+			'--output flag is not supported with --resume. The archive path is determined by the stub file.',
+		);
+	});
+
+	it('--verbose フラグで verbosely() を呼び出す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['https://example.com'], createFlags({ verbose: true }));
+
+		expect(mockVerbosely).toHaveBeenCalled();
+	});
+
+	it('--verbose が未指定の場合、verbosely() を呼び出さない', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['https://example.com'], createFlags());
+
+		expect(mockVerbosely).not.toHaveBeenCalled();
+	});
+
+	it('--verbose と --silent を同時指定した場合、verbosely() を呼び出さない', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['https://example.com'], createFlags({ verbose: true, silent: true }));
+
+		expect(mockVerbosely).not.toHaveBeenCalled();
+	});
+
+	it('--list-file フラグでファイルからURLリストを読み込んで startCrawl を呼び出す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl([], createFlags({ listFile: '/tmp/urls.txt' }));
+
+		expect(mockReadList).toHaveBeenCalled();
+		expect(mockCrawling).toHaveBeenCalledWith(
+			['https://example.com/from-file'],
+			expect.objectContaining({ list: true }),
+			expect.any(Function),
+		);
+	});
+
+	it('--list と args を両方指定した場合、マージして startCrawl を呼び出す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['https://example.com/arg'],
+			createFlags({ list: ['https://example.com/list'] }),
+		);
+
+		expect(mockCrawling).toHaveBeenCalledWith(
+			['https://example.com/list', 'https://example.com/arg'],
+			expect.any(Object),
+			expect.any(Function),
+		);
+	});
+
+	it('単一 URL 引数で startCrawl を呼び出す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['https://example.com'], createFlags());
+
+		expect(mockCrawling).toHaveBeenCalledWith(
+			['https://example.com'],
+			expect.any(Object),
+			expect.any(Function),
+		);
+	});
+
+	it('引数なし・フラグなしの場合、何も呼び出さずに正常終了する', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl([], createFlags());
+
+		expect(mockCrawling).not.toHaveBeenCalled();
+		expect(mockResume).not.toHaveBeenCalled();
+		expect(mockDiff).not.toHaveBeenCalled();
+	});
+
+	it('常に log() でフラグをログ出力する', async () => {
+		const { crawl } = await import('./crawl.js');
+		const flags = createFlags();
+		await crawl([], flags);
+
+		expect(mockLog).toHaveBeenCalledWith('Options: %O', flags);
 	});
 });
