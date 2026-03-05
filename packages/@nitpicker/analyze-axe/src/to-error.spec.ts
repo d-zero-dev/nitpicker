@@ -45,6 +45,18 @@ describe('toError', () => {
 		expect(result.message).toBe('[object Object]');
 	});
 
+	it('wraps a boolean into a new Error', () => {
+		const result = toError(false);
+		expect(result).toBeInstanceOf(Error);
+		expect(result.message).toBe('false');
+	});
+
+	it('uses custom toString() when wrapping an object', () => {
+		const result = toError({ toString: () => 'custom message' });
+		expect(result).toBeInstanceOf(Error);
+		expect(result.message).toBe('custom message');
+	});
+
 	it('preserves subclass instances of Error', () => {
 		const original = new TypeError('type error');
 		const result = toError(original);
