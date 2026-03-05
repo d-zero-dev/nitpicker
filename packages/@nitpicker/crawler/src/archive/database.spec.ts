@@ -287,3 +287,124 @@ describe('Config', () => {
 		expect(retrieved.excludeUrls).toEqual(['https://example.com/skip']);
 	});
 });
+
+describe('clearHtmlPath', () => {
+	const clearHtmlDbPath = path.resolve(workingDir, 'clear-html-test.sqlite');
+
+	afterAll(async () => {
+		await remove(clearHtmlDbPath);
+	});
+
+	it('スナップショットパスをクリアする', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: clearHtmlDbPath,
+		});
+
+		const { pageId, html } = await db.updatePage(
+			{
+				url: parseUrl('http://localhost/snapshot-test')!,
+				redirectPaths: [],
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Snapshot Test' },
+				anchorList: [],
+				imageList: [],
+				html: '<html></html>',
+				isSkipped: false,
+			},
+			workingDir,
+			true,
+		);
+
+		expect(html).toBeTruthy();
+
+		const beforeClear = await db.getHtmlPathOnPage(pageId);
+		expect(beforeClear).not.toBeNull();
+
+		await db.clearHtmlPath(pageId);
+
+		const afterClear = await db.getHtmlPathOnPage(pageId);
+		expect(afterClear).toBeNull();
+	});
+});
+
+describe('addOrderField', () => {
+	it('order カラムが既に存在する場合でもエラーにならない', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: path.resolve(workingDir, 'mock.sqlite'),
+		});
+
+		await expect(db.addOrderField()).resolves.not.toThrow();
+		await expect(db.addOrderField()).resolves.not.toThrow();
+	});
+});
+
+describe('getJSON (getConfig 経由)', () => {
+	const invalidJsonDbPath = path.resolve(workingDir, 'invalid-json-test.sqlite');
+
+	afterAll(async () => {
+		await remove(invalidJsonDbPath);
+	});
+
+	it('不正な JSON フィールドがある場合フォールバック値を返し警告ログを出力する', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: invalidJsonDbPath,
+		});
+
+		const config: Config = {
+			version: '0.4.3',
+			name: 'test',
+			baseUrl: 'https://example.com',
+			recursive: false,
+			interval: 500,
+			image: false,
+			fetchExternal: false,
+			parallels: 1,
+			scope: [],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		};
+
+		await db.setConfig(config);
+
+		// @ts-expect-error -- knex は private だが、テスト目的で不正データを直接書き込む
+		await db['_events'];
+		// 不正な JSON を直接挿入するため raw SQL を使用
+		const knex = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: invalidJsonDbPath,
+		});
+
+		// DB に不正な JSON を直接書き込む
+		const { default: knexLib } = await import('knex');
+		const rawDb = knexLib({
+			client: 'sqlite3',
+			connection: { filename: invalidJsonDbPath },
+			useNullAsDefault: true,
+		});
+		await rawDb('info').update({ scope: '{invalid json' });
+
+		const retrieved = await knex.getConfig();
+		expect(retrieved.scope).toEqual([]);
+
+		await rawDb.destroy();
+	});
+});

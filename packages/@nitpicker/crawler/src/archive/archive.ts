@@ -141,12 +141,15 @@ export default class Archive extends ArchiveAccessor {
 			this.#snapshotDir,
 			pageInfo.isTarget,
 		);
-		const snapshotTask: Promise<void>[] = [];
 		if (html) {
-			snapshotTask.push(outputText(html, pageInfo.html));
+			try {
+				await outputText(html, pageInfo.html);
+			} catch (error) {
+				dbLog('Snapshot write failed for page %d, clearing html path: %s', pageId, html);
+				await this.#db.clearHtmlPath(pageId);
+				throw error;
+			}
 		}
-
-		await Promise.all(snapshotTask);
 
 		return pageId;
 	}
