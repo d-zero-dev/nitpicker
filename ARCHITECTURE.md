@@ -608,3 +608,38 @@ interval: 0             # 待機なし
 parallels: 1            # 直列実行
 image: false            # 画像取得なし
 ```
+
+---
+
+## 9. 外部依存パッケージ（`@d-zero/*`）
+
+Nitpicker は D-ZERO が公開する以下の外部パッケージに依存している。
+仕様変更やバグ調査時はこれらのパッケージを参照すること。
+
+| パッケージ              | バージョン | 用途                                                                          | 検索キーワード                        |
+| ----------------------- | ---------- | ----------------------------------------------------------------------------- | ------------------------------------- |
+| `@d-zero/beholder`      | 2.0.0      | Puppeteer ベースのスクレイパーエンジン。`ScrapeResult` を返す                 | `"@d-zero/beholder" changelog`        |
+| `@d-zero/dealer`        | 1.6.3      | 並列処理・スケジューリング。`deal()` 関数を提供                               | `"@d-zero/dealer" deal concurrent`    |
+| `@d-zero/shared`        | 0.20.0     | 共有ユーティリティ（サブパスエクスポート形式: `@d-zero/shared/parse-url` 等） | `"@d-zero/shared" subpath exports`    |
+| `@d-zero/roar`          | 2.0.0      | CLI フレームワーク                                                            | `"@d-zero/roar" command`              |
+| `@d-zero/google-auth`   | 0.5.6      | OAuth2 認証（`credentials.json` → `token.json`）                              | `"@d-zero/google-auth" oauth2`        |
+| `@d-zero/google-sheets` | 0.6.0      | Google Sheets API クライアント                                                | `"@d-zero/google-sheets" spreadsheet` |
+| `@d-zero/fs`            | 0.2.2      | ファイルシステムユーティリティ                                                | `"@d-zero/fs"`                        |
+| `@d-zero/readtext`      | 1.1.19     | テキスト読み取りユーティリティ                                                | `"@d-zero/readtext"`                  |
+
+### 利用箇所マップ
+
+```
+@d-zero/beholder   → crawler（Scraper, ScrapeResult）
+@d-zero/dealer     → crawler, core, cli, report-google-sheets（deal() 並列制御）
+@d-zero/shared     → 全パッケージ（parseUrl, delay, isError, detectCompress, detectCDN）
+@d-zero/roar       → cli（CLI コマンド定義）
+@d-zero/google-auth → report-google-sheets（OAuth2 認証）
+@d-zero/google-sheets → report-google-sheets（Sheets API）
+```
+
+### バージョン更新時の注意
+
+- **`@d-zero/beholder`**: `ScrapeResult` の型が変わると crawler 全体に影響
+- **`@d-zero/dealer`**: `deal()` の API が変わると crawler と core の並列処理に影響
+- **`@d-zero/shared`**: サブパスエクスポートの追加・削除に注意。`@d-zero/shared/parse-url` 形式でインポートすること
