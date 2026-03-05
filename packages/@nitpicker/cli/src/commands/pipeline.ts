@@ -17,7 +17,7 @@ export const commandDef = {
 		interval: {
 			type: 'number',
 			shortFlag: 'I',
-			desc: 'An interval time on request when crawles',
+			desc: 'An interval time on request when crawls',
 		},
 		image: {
 			type: 'boolean',

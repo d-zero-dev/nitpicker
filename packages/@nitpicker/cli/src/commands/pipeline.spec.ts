@@ -212,6 +212,42 @@ describe('pipeline command', () => {
 		expect(reportFn).toHaveBeenCalledWith([archivePath], expect.any(Object));
 	});
 
+	it('propagates error when startCrawl rejects', async () => {
+		const crawlError = new Error('Crawl failed');
+		vi.mocked(startCrawlFn).mockRejectedValue(crawlError);
+
+		await expect(pipeline(['https://example.com'], defaultFlags)).rejects.toThrow(
+			'Crawl failed',
+		);
+
+		expect(analyzeFn).not.toHaveBeenCalled();
+		expect(reportFn).not.toHaveBeenCalled();
+	});
+
+	it('propagates error when analyze rejects', async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+		vi.mocked(analyzeFn).mockRejectedValue(new Error('Analyze failed'));
+
+		await expect(pipeline(['https://example.com'], defaultFlags)).rejects.toThrow(
+			'Analyze failed',
+		);
+
+		expect(reportFn).not.toHaveBeenCalled();
+	});
+
+	it('propagates error when report rejects', async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+		vi.mocked(analyzeFn).mockResolvedValue();
+		vi.mocked(reportFn).mockRejectedValue(new Error('Report failed'));
+
+		await expect(
+			pipeline(['https://example.com'], {
+				...defaultFlags,
+				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			}),
+		).rejects.toThrow('Report failed');
+	});
+
 	it('shows completion message after all steps', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
 		vi.mocked(analyzeFn).mockResolvedValue();

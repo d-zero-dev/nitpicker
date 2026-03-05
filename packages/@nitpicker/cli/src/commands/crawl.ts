@@ -174,7 +174,7 @@ function run(
  * @param flags - Parsed CLI flags from the `crawl` command
  * @returns A promise that resolves with the archive file path when crawling, writing, and cleanup are complete.
  */
-export async function startCrawl(siteUrl: string[], flags: CrawlFlags) {
+export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<string> {
 	const errStack: (CrawlerError | Error)[] = [];
 
 	const isList = !!flags.list?.length;
