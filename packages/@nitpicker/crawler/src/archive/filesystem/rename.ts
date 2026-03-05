@@ -36,7 +36,12 @@ export async function rename(oldPath: string, newPath: string, override = false)
 		await fs.rename(oldPath, newPath);
 	} catch (error) {
 		if (isNodeError(error) && (error.code === 'EPERM' || error.code === 'EXDEV')) {
-			await fs.cp(oldPath, newPath, { recursive: true });
+			try {
+				await fs.cp(oldPath, newPath, { recursive: true });
+			} catch (cpError) {
+				await remove(newPath).catch(() => {});
+				throw cpError;
+			}
 			await remove(oldPath);
 		} else {
 			throw error;

@@ -67,6 +67,22 @@ describe('rename', () => {
 		spy.mockRestore();
 	});
 
+	it('falls back to cp+remove when fs.rename throws EPERM with override', async () => {
+		const oldPath = path.join(testDir, 'old.txt');
+		const newPath = path.join(testDir, 'new.txt');
+		writeFileSync(oldPath, 'new data');
+		writeFileSync(newPath, 'old data');
+
+		const eperm = Object.assign(new Error('EPERM'), { code: 'EPERM' });
+		const spy = vi.spyOn(fs, 'rename').mockRejectedValueOnce(eperm);
+
+		await rename(oldPath, newPath, true);
+
+		expect(readFileSync(newPath, 'utf8')).toBe('new data');
+		expect(existsSync(oldPath)).toBe(false);
+		spy.mockRestore();
+	});
+
 	it('falls back to cp+remove when fs.rename throws EXDEV', async () => {
 		const oldDir = path.join(testDir, 'src-dir');
 		const newDir = path.join(testDir, 'dst-dir');
@@ -84,6 +100,23 @@ describe('rename', () => {
 		spy.mockRestore();
 	});
 
+	it('cleans up partial copy and re-throws when fs.cp fails during fallback', async () => {
+		const oldPath = path.join(testDir, 'old.txt');
+		const newPath = path.join(testDir, 'new.txt');
+		writeFileSync(oldPath, 'data');
+
+		const eperm = Object.assign(new Error('EPERM'), { code: 'EPERM' });
+		const renameSpy = vi.spyOn(fs, 'rename').mockRejectedValueOnce(eperm);
+		const cpSpy = vi.spyOn(fs, 'cp').mockRejectedValueOnce(new Error('disk full'));
+
+		await expect(rename(oldPath, newPath)).rejects.toThrow('disk full');
+
+		expect(existsSync(oldPath)).toBe(true);
+		expect(existsSync(newPath)).toBe(false);
+		renameSpy.mockRestore();
+		cpSpy.mockRestore();
+	});
+
 	it('re-throws non-EPERM/EXDEV errors', async () => {
 		const oldPath = path.join(testDir, 'old.txt');
 		const newPath = path.join(testDir, 'new.txt');
@@ -93,6 +126,17 @@ describe('rename', () => {
 		const spy = vi.spyOn(fs, 'rename').mockRejectedValueOnce(eacces);
 
 		await expect(rename(oldPath, newPath)).rejects.toThrow('EACCES');
+		spy.mockRestore();
+	});
+
+	it('re-throws when error is not an Error instance', async () => {
+		const oldPath = path.join(testDir, 'old.txt');
+		const newPath = path.join(testDir, 'new.txt');
+		writeFileSync(oldPath, 'data');
+
+		const spy = vi.spyOn(fs, 'rename').mockRejectedValueOnce('string error');
+
+		await expect(rename(oldPath, newPath)).rejects.toBe('string error');
 		spy.mockRestore();
 	});
 });
