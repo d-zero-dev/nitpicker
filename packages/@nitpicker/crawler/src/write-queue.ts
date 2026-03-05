@@ -14,6 +14,7 @@ export class WriteQueue {
 
 	/**
 	 * The number of operations currently waiting or executing in the queue.
+	 * @returns The current pending operation count.
 	 */
 	get pending() {
 		return this.#pending;
@@ -27,12 +28,14 @@ export class WriteQueue {
 	async drain(): Promise<void> {
 		await this.#chain;
 	}
+
 	/**
 	 * Enqueues an asynchronous operation to run after all previously enqueued
 	 * operations have completed. Operations are guaranteed to execute serially
 	 * in the order they were enqueued.
+	 * @template T The resolved type of the operation's promise.
 	 * @param operation - The async function to execute.
-	 * @returns A promise that resolves when the operation completes, or rejects
+	 * @returns A promise that resolves with the operation's result, or rejects
 	 *          if the operation throws.
 	 */
 	enqueue<T>(operation: () => Promise<T>): Promise<T> {
