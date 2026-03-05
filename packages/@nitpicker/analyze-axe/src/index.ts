@@ -3,6 +3,8 @@ import type { Violation } from '@nitpicker/types';
 
 import { definePlugin } from '@nitpicker/core';
 
+import { toError } from './to-error.js';
+
 /**
  * Plugin options for the axe-core accessibility analysis.
  */
@@ -77,7 +79,7 @@ export default definePlugin(async (options: Options) => {
 						'color-contrast': { enabled: false },
 					},
 				})
-				.catch((error) => new Error(error));
+				.catch((error: unknown) => toError(error));
 
 			const reports: Result[] = [];
 
