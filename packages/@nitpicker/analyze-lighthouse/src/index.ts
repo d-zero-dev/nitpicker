@@ -28,8 +28,8 @@ type Options = {
  *
  * The plugin evaluates the four standard Lighthouse categories:
  * Performance, Accessibility, Best Practices, and SEO.
- * Each category score (0-100) is reported as a separate column, and
- * individual non-passing audits are collected as violations.
+ * Each category score (0-100) is reported as a separate column,
+ * with individual audit titles and descriptions included as notes.
  *
  * When Lighthouse throws (e.g. navigation timeout), the plugin returns
  * zero scores with an "Error" note rather than failing the entire analysis,
