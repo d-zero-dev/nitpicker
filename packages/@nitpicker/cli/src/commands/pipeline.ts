@@ -227,6 +227,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 		all: flags.all,
 		plugin: flags.plugin,
 		verbose: flags.verbose,
+		silent: flags.silent,
 		searchKeywords: flags.searchKeywords,
 		searchScope: flags.searchScope,
 		mainContentSelector: flags.mainContentSelector,

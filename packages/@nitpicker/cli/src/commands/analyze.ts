@@ -52,6 +52,10 @@ export const commandDef = {
 			type: 'string',
 			desc: 'BCP 47 language tag for analyze-axe plugin (overrides config file)',
 		},
+		silent: {
+			type: 'boolean',
+			desc: 'No output log to standard out',
+		},
 	},
 } as const satisfies CommandDef;
 
@@ -90,9 +94,10 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 	}
 
 	const isTTY = process.stdout.isTTY;
-	const verbose = flags.verbose || !isTTY;
+	const silent = !!flags.silent;
+	const verbose = !silent && (flags.verbose || !isTTY);
 
-	if (flags.verbose) {
+	if (flags.verbose && !silent) {
 		verbosely();
 	}
 
@@ -100,8 +105,10 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 		const absFilePath = path.isAbsolute(filePath)
 			? filePath
 			: path.resolve(process.cwd(), filePath);
-		// eslint-disable-next-line no-console
-		console.log(`  📦 Extracting archive: ${absFilePath}`);
+		if (!silent) {
+			// eslint-disable-next-line no-console
+			console.log(`  📦 Extracting archive: ${absFilePath}`);
+		}
 		const nitpicker = await Nitpicker.open(absFilePath);
 
 		const pluginOverrides = buildPluginOverrides(flags);
@@ -161,17 +168,19 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 
 		const siteUrl = (await nitpicker.archive.getUrl()) || '<Unknown URL>';
 
-		log(
-			nitpicker,
-			[`🥢 ${siteUrl} (${filePath})`, `  📤 Read file: ${absFilePath}`],
-			verbose,
-		);
+		if (!silent) {
+			log(
+				nitpicker,
+				[`🥢 ${siteUrl} (${filePath})`, `  📤 Read file: ${absFilePath}`],
+				verbose,
+			);
+		}
 
-		const lanes = new Lanes({ verbose, indent: '  ' });
+		const lanes = silent ? undefined : new Lanes({ verbose, indent: '  ' });
 		try {
 			await nitpicker.analyze(filter, { lanes, verbose });
 		} finally {
-			lanes.close();
+			lanes?.close();
 		}
 
 		await nitpicker.write();

@@ -167,7 +167,32 @@ describe('pipeline command', () => {
 		);
 		expect(analyzeFn).toHaveBeenCalledWith(
 			expect.any(Array),
-			expect.objectContaining({ verbose: true }),
+			expect.objectContaining({ verbose: true, silent: undefined }),
+		);
+	});
+
+	it('passes silent flag to analyze and report', async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+		vi.mocked(analyzeFn).mockResolvedValue();
+		vi.mocked(reportFn).mockResolvedValue();
+
+		await pipeline(['https://example.com'], {
+			...defaultFlags,
+			silent: true,
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+		});
+
+		expect(startCrawlFn).toHaveBeenCalledWith(
+			expect.any(Array),
+			expect.objectContaining({ silent: true }),
+		);
+		expect(analyzeFn).toHaveBeenCalledWith(
+			expect.any(Array),
+			expect.objectContaining({ silent: true }),
+		);
+		expect(reportFn).toHaveBeenCalledWith(
+			expect.any(Array),
+			expect.objectContaining({ silent: true }),
 		);
 	});
 
