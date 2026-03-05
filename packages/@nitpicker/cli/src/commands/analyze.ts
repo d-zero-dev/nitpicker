@@ -77,6 +77,8 @@ type AnalyzeFlags = InferFlags<typeof commandDef.flags>;
  *
  * In non-TTY environments (e.g. CI pipelines), `--verbose` is implied
  * automatically so error details are always available in CI logs.
+ * When `--silent` is set, all log output and Lanes progress display are
+ * suppressed. `--silent` takes precedence over `--verbose`.
  * @param args - Positional arguments; first argument is the `.nitpicker` file path.
  * @param flags - Parsed CLI flags from the `analyze` command.
  * @returns Resolves when analysis and archive write are complete.
