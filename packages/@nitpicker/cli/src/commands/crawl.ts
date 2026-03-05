@@ -332,6 +332,9 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 export class CrawlAggregateError extends Error {
 	/** The individual errors that occurred during crawling. */
 	readonly errors: readonly (CrawlerError | Error)[];
+	/**
+	 * @param errors - The individual errors collected during the crawl session.
+	 */
 	constructor(errors: (CrawlerError | Error)[]) {
 		super(`Crawl completed with ${errors.length} error(s).`);
 		this.errors = errors;

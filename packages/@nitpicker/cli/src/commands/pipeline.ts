@@ -178,7 +178,7 @@ type PipelineFlags = InferFlags<typeof commandDef.flags>;
  * to the analyze step. If `--sheet` is provided, the report step runs
  * last to publish results to Google Sheets.
  *
- * Each step's errors cause `process.exit(1)`, halting the pipeline.
+ * Errors from any step propagate to the caller as exceptions.
  * @param args - Positional arguments; first argument is the root URL to crawl.
  * @param flags - Parsed CLI flags from the `pipeline` command.
  * @returns Resolves when all pipeline steps complete.
