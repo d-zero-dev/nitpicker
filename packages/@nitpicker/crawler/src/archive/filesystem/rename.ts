@@ -26,6 +26,7 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
  * @param oldPath - The current path of the file or directory.
  * @param newPath - The new path for the file or directory.
  * @param override - Whether to overwrite the destination if it already exists. Defaults to `false`.
+ * @returns A promise that resolves when the rename (or fallback copy-then-remove) is complete.
  */
 export async function rename(oldPath: string, newPath: string, override = false) {
 	if (override) {
