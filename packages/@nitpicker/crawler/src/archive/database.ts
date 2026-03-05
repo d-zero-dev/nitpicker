@@ -72,10 +72,15 @@ export class Database extends EventEmitter<DatabaseEvent> {
 
 	/**
 	 * Adds the `order` column to the `pages` table for URL sort ordering.
+	 * If the column already exists, this method does nothing.
 	 * @deprecated Since v0.1.x. The column is now created during table initialization.
-	 * @returns The result of the schema alteration.
+	 * @returns The result of the schema alteration, or void if the column already exists.
 	 */
 	async addOrderField() {
+		const hasColumn = await this.#instance.schema.hasColumn('pages', 'order');
+		if (hasColumn) {
+			return;
+		}
 		return await this.#instance.schema.table('pages', (t) => {
 			t.integer('order').unsigned().nullable().defaultTo(null);
 		});
@@ -89,7 +94,20 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	async checkpoint() {
 		await this.#instance.raw('PRAGMA wal_checkpoint(TRUNCATE)');
 	}
+	/**
+	 * Clears the HTML snapshot path for a page.
+	 * Used to roll back the snapshot reference when the snapshot file write fails.
+	 * @param pageId - The database ID of the page whose HTML path should be cleared.
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async clearHtmlPath(pageId: number) {
+		await this.#instance<DB_Page>('pages').where('id', pageId).update({ html: null });
+	}
 
+	/**
+	 * Destroys the database connection, releasing all pooled resources.
+	 */
 	async destroy() {
 		await this.#instance.destroy();
 	}
@@ -332,7 +350,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	@ErrorEmitter()
 	@retry(retrySetting)
 	async getPagesWithRels(offset: number, limit: number) {
-		await this.addOrderField().catch((error) => error);
+		await this.addOrderField();
 		await this.setUrlOrder();
 		dbLog('Get Pages');
 		const pages = await this.#instance
@@ -1001,6 +1019,8 @@ function redirectTable(includeNull = true) {
 
 /**
  * Safely parses a JSON string, returning a fallback value if parsing fails or the input is not a string.
+ * Logs a warning via {@link dbLog} when invalid JSON is detected, including a truncated preview
+ * of the data and the parse error message.
  * @param data - The data to parse. Only string values are parsed; other types return the fallback.
  * @param fallback - The value to return if parsing fails or the result is falsy.
  * @returns The parsed JSON value, or the fallback.
@@ -1014,8 +1034,12 @@ function getJSON<T>(data: unknown, fallback: T): T {
 			}
 			return fallback;
 		}
-	} catch {
-		// void
+	} catch (error) {
+		dbLog(
+			'Warning: Invalid JSON detected in database field. Using fallback value. Data: %s, Error: %s',
+			String(data).slice(0, 200),
+			error instanceof Error ? error.message : String(error),
+		);
 	}
 
 	return fallback;
