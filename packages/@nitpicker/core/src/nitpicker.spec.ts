@@ -1,4 +1,6 @@
-import type { Config } from './types.js';
+import type { AnalyzePlugin, Config, ReportPage } from './types.js';
+import type { ExURL } from '@d-zero/shared/parse-url';
+import type { Report } from '@nitpicker/types';
 
 import { afterEach, describe, it, expect, vi } from 'vitest';
 
@@ -16,8 +18,57 @@ vi.mock('@nitpicker/crawler', () => ({
 	},
 }));
 
+vi.mock('./worker/run-in-worker.js', () => ({
+	runInWorker: vi.fn(),
+}));
+
+vi.mock('@d-zero/shared/cache', () => {
+	/** Mock Cache class for testing. */
+	class MockCache {
+		/** Clears the cache. */
+		clear() {
+			return Promise.resolve();
+		}
+		/** Loads a cached value. */
+		load() {
+			return Promise.resolve(null);
+		}
+		/** Stores a value. */
+		store() {
+			return Promise.resolve();
+		}
+	}
+	return { Cache: MockCache };
+});
+
+import { importModules } from './import-modules.js';
 import { loadPluginSettings } from './load-plugin-settings.js';
 import { Nitpicker } from './nitpicker.js';
+import { runInWorker } from './worker/run-in-worker.js';
+
+const mockedImportModules = vi.mocked(importModules);
+const mockedRunInWorker = vi.mocked(runInWorker);
+
+/**
+ * Creates a mock URL object compatible with ExURL.
+ * @param href - The URL string.
+ */
+function mockUrl(href: string) {
+	return { href } as ExURL;
+}
+
+/**
+ * Creates a mock page object for getPagesWithRefs callback.
+ * @param url - The URL string.
+ * @param html - The HTML content (null means no snapshot).
+ */
+function createMockPage(url: string, html: string | null = '<html></html>') {
+	return {
+		url: mockUrl(url),
+		isExternal: false,
+		getHtml: vi.fn().mockResolvedValue(html),
+	};
+}
 
 /**
  * Creates a minimal mock Archive for testing Nitpicker methods
@@ -36,6 +87,8 @@ function createMockArchive() {
 
 afterEach(() => {
 	vi.mocked(loadPluginSettings).mockReset();
+	mockedImportModules.mockReset();
+	mockedRunInWorker.mockReset();
 });
 
 describe('setPluginOverrides', () => {
@@ -102,5 +155,208 @@ describe('setPluginOverrides', () => {
 		await nitpicker.getConfig();
 
 		expect(loadPluginSettings).toHaveBeenCalledWith({}, {});
+	});
+});
+
+describe('analyze', () => {
+	/**
+	 * Helper to set up a Nitpicker instance with mocked archive and plugins.
+	 * @param pages - Mock pages to return from getPagesWithRefs.
+	 * @param plugins - Plugin configurations.
+	 * @param mods - Analyze plugin modules.
+	 */
+	function setupAnalyze(
+		pages: ReturnType<typeof createMockPage>[],
+		plugins: Config['analyze'],
+		mods: AnalyzePlugin[],
+	) {
+		const archive = {
+			filePath: '/tmp/test.nitpicker',
+			write: vi.fn().mockResolvedValue(),
+			close: vi.fn().mockResolvedValue(),
+			getUrl: vi.fn().mockResolvedValue('https://example.com'),
+			getPagesWithRefs: vi
+				.fn()
+				.mockImplementation(
+					async (
+						_limit: number,
+						callback: (pages: ReturnType<typeof createMockPage>[]) => Promise<void>,
+					) => {
+						await callback(pages);
+					},
+				),
+			setData: vi.fn().mockResolvedValue(),
+		};
+		const config: Config = { analyze: plugins };
+		vi.mocked(loadPluginSettings).mockResolvedValue(config);
+		mockedImportModules.mockResolvedValue(mods);
+
+		const nitpicker = new Nitpicker(archive as never);
+		return { nitpicker, archive };
+	}
+
+	it('saves report with data when worker returns valid results', async () => {
+		const pages = [createMockPage('https://example.com/')];
+		const plugin = {
+			name: '@nitpicker/analyze-axe',
+			module: '@nitpicker/analyze-axe',
+			configFilePath: '',
+		};
+		const mod: AnalyzePlugin = {
+			headers: { score: 'Score' },
+			eachPage: vi.fn(),
+		};
+
+		const workerResult: ReportPage<string> = {
+			page: { score: { value: 100 } },
+			violations: [{ message: 'test', severity: 'error', url: 'https://example.com/' }],
+		};
+		mockedRunInWorker.mockResolvedValue(workerResult);
+
+		const { nitpicker, archive } = setupAnalyze(pages, [plugin], [mod]);
+		await nitpicker.analyze();
+
+		const reportCall = archive.setData.mock.calls.find(
+			(call: unknown[]) => call[0] === 'analysis/report',
+		);
+		expect(reportCall).toBeDefined();
+		const report = reportCall![1] as Report;
+		expect(Object.keys(report.pageData.data).length).toBeGreaterThan(0);
+		expect(report.violations.length).toBe(1);
+	});
+
+	it('continues processing when a single worker task throws', async () => {
+		const pages = [
+			createMockPage('https://example.com/page1'),
+			createMockPage('https://example.com/page2'),
+		];
+		const plugin = {
+			name: '@nitpicker/analyze-axe',
+			module: '@nitpicker/analyze-axe',
+			configFilePath: '',
+		};
+		const mod: AnalyzePlugin = {
+			headers: { score: 'Score' },
+			eachPage: vi.fn(),
+		};
+
+		// First page throws, second page returns valid result
+		mockedRunInWorker
+			.mockRejectedValueOnce(new Error('Worker crashed'))
+			.mockResolvedValueOnce({
+				page: { score: { value: 50 } },
+				violations: [],
+			});
+
+		const { nitpicker, archive } = setupAnalyze(pages, [plugin], [mod]);
+		// Should not throw
+		await nitpicker.analyze();
+
+		// Report should still be saved with data from the second page
+		const reportCall = archive.setData.mock.calls.find(
+			(call: unknown[]) => call[0] === 'analysis/report',
+		);
+		expect(reportCall).toBeDefined();
+		const report = reportCall![1] as Report;
+		expect(report.pageData.data['https://example.com/page2']).toBeDefined();
+	});
+
+	it('emits error event when a worker task fails', async () => {
+		const pages = [createMockPage('https://example.com/')];
+		const plugin = {
+			name: '@nitpicker/analyze-axe',
+			module: '@nitpicker/analyze-axe',
+			configFilePath: '',
+		};
+		const mod: AnalyzePlugin = {
+			headers: { score: 'Score' },
+			eachPage: vi.fn(),
+		};
+
+		mockedRunInWorker.mockRejectedValue(new Error('Worker OOM'));
+
+		const { nitpicker } = setupAnalyze(pages, [plugin], [mod]);
+		const errorHandler = vi.fn();
+		nitpicker.on('error', errorHandler);
+
+		await nitpicker.analyze();
+
+		expect(errorHandler).toHaveBeenCalledWith(
+			expect.objectContaining({ message: expect.stringContaining('Worker OOM') }),
+		);
+	});
+
+	it('emits warning when all page results are empty', async () => {
+		const pages = [
+			createMockPage('https://example.com/page1'),
+			createMockPage('https://example.com/page2'),
+		];
+		const plugin = {
+			name: '@nitpicker/analyze-axe',
+			module: '@nitpicker/analyze-axe',
+			configFilePath: '',
+		};
+		const mod: AnalyzePlugin = {
+			headers: { score: 'Score' },
+			eachPage: vi.fn(),
+		};
+
+		// All pages return null (no data)
+		mockedRunInWorker.mockResolvedValue(null);
+
+		const { nitpicker, archive } = setupAnalyze(pages, [plugin], [mod]);
+		const errorHandler = vi.fn();
+		nitpicker.on('error', errorHandler);
+
+		await nitpicker.analyze();
+
+		// Report should be saved but with empty data
+		const reportCall = archive.setData.mock.calls.find(
+			(call: unknown[]) => call[0] === 'analysis/report',
+		);
+		expect(reportCall).toBeDefined();
+		const report = reportCall![1] as Report;
+		expect(Object.keys(report.pageData.data).length).toBe(0);
+
+		// Warning should be emitted about empty results
+		expect(errorHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: expect.stringContaining('@nitpicker/analyze-axe'),
+			}),
+		);
+	});
+
+	it('skips pages with no HTML snapshot without error', async () => {
+		const pages = [
+			createMockPage('https://example.com/no-html', null),
+			createMockPage('https://example.com/has-html'),
+		];
+		const plugin = {
+			name: '@nitpicker/analyze-axe',
+			module: '@nitpicker/analyze-axe',
+			configFilePath: '',
+		};
+		const mod: AnalyzePlugin = {
+			headers: { score: 'Score' },
+			eachPage: vi.fn(),
+		};
+
+		mockedRunInWorker.mockResolvedValue({
+			page: { score: { value: 80 } },
+			violations: [],
+		});
+
+		const { nitpicker, archive } = setupAnalyze(pages, [plugin], [mod]);
+		await nitpicker.analyze();
+
+		// runInWorker should only be called once (for the page with HTML)
+		expect(mockedRunInWorker).toHaveBeenCalledTimes(1);
+
+		const reportCall = archive.setData.mock.calls.find(
+			(call: unknown[]) => call[0] === 'analysis/report',
+		);
+		const report = reportCall![1] as Report;
+		expect(report.pageData.data['https://example.com/has-html']).toBeDefined();
+		expect(report.pageData.data['https://example.com/no-html']).toBeUndefined();
 	});
 });
