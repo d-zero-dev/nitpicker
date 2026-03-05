@@ -10,6 +10,9 @@ import { report } from './report.js';
  * that executes the full crawl → analyze → report workflow sequentially.
  * @see {@link pipeline} for the main entry point
  */
+// TODO: フラグ定義が crawl.ts / analyze.ts / report.ts と重複している。
+// @d-zero/roar の CommandDef 型制約により合成が困難なため手動同期が必要。
+// crawl / analyze / report にフラグを追加・変更した際はここも更新すること。
 export const commandDef = {
 	desc: 'Run crawl → analyze → report sequentially',
 	flags: {

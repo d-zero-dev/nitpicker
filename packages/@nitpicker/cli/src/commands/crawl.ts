@@ -282,22 +282,22 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		return;
 	}
 
-	if (flags.resume) {
-		if (flags.output) {
-			throw new Error(
-				'--output flag is not supported with --resume. The archive path is determined by the stub file.',
-			);
-		}
-		await resumeCrawl(flags.resume, flags);
-		return;
-	}
-
 	if (flags.single && (flags.list?.length || flags.listFile)) {
 		// eslint-disable-next-line no-console
 		console.warn('Warning: --single is ignored when --list or --list-file is specified.');
 	}
 
 	try {
+		if (flags.resume) {
+			if (flags.output) {
+				throw new Error(
+					'--output flag is not supported with --resume. The archive path is determined by the stub file.',
+				);
+			}
+			await resumeCrawl(flags.resume, flags);
+			return;
+		}
+
 		if (flags.listFile) {
 			const list = await readList(path.resolve(process.cwd(), flags.listFile));
 			flags.list = list;
