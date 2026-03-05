@@ -29,9 +29,8 @@ describe('Single page scraping', () => {
 	it('非再帰モードで子ページはisTarget=falseで記録される', async () => {
 		const pages = await result.accessor.getPages('page');
 		const aboutPages = pages.filter((p) => p.url.pathname === '/about');
-		if (aboutPages.length > 0) {
-			// titleOnlyモードでスクレイプされた場合、isTarget=falseであること
-			expect(aboutPages[0]!.isTarget).toBe(false);
-		}
+		expect(aboutPages.length).toBeGreaterThan(0);
+		// titleOnlyモードでスクレイプされた場合、isTarget=falseであること
+		expect(aboutPages[0]!.isTarget).toBe(false);
 	});
 });
