@@ -2255,7 +2255,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@nitpicker/analyze-axe@workspace:packages/@nitpicker/analyze-axe":
+"@nitpicker/analyze-axe@npm:0.4.4, @nitpicker/analyze-axe@workspace:packages/@nitpicker/analyze-axe":
   version: 0.0.0-use.local
   resolution: "@nitpicker/analyze-axe@workspace:packages/@nitpicker/analyze-axe"
   dependencies:
@@ -2265,7 +2265,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nitpicker/analyze-lighthouse@workspace:packages/@nitpicker/analyze-lighthouse":
+"@nitpicker/analyze-lighthouse@npm:0.4.4, @nitpicker/analyze-lighthouse@workspace:packages/@nitpicker/analyze-lighthouse":
   version: 0.0.0-use.local
   resolution: "@nitpicker/analyze-lighthouse@workspace:packages/@nitpicker/analyze-lighthouse"
   dependencies:
@@ -2276,7 +2276,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nitpicker/analyze-main-contents@workspace:packages/@nitpicker/analyze-main-contents":
+"@nitpicker/analyze-main-contents@npm:0.4.4, @nitpicker/analyze-main-contents@workspace:packages/@nitpicker/analyze-main-contents":
   version: 0.0.0-use.local
   resolution: "@nitpicker/analyze-main-contents@workspace:packages/@nitpicker/analyze-main-contents"
   dependencies:
@@ -2287,7 +2287,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nitpicker/analyze-markuplint@workspace:packages/@nitpicker/analyze-markuplint":
+"@nitpicker/analyze-markuplint@npm:0.4.4, @nitpicker/analyze-markuplint@workspace:packages/@nitpicker/analyze-markuplint":
   version: 0.0.0-use.local
   resolution: "@nitpicker/analyze-markuplint@workspace:packages/@nitpicker/analyze-markuplint"
   dependencies:
@@ -2297,7 +2297,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nitpicker/analyze-search@workspace:packages/@nitpicker/analyze-search":
+"@nitpicker/analyze-search@npm:0.4.4, @nitpicker/analyze-search@workspace:packages/@nitpicker/analyze-search":
   version: 0.0.0-use.local
   resolution: "@nitpicker/analyze-search@workspace:packages/@nitpicker/analyze-search"
   dependencies:
@@ -2309,7 +2309,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nitpicker/analyze-textlint@workspace:packages/@nitpicker/analyze-textlint":
+"@nitpicker/analyze-textlint@npm:0.4.4, @nitpicker/analyze-textlint@workspace:packages/@nitpicker/analyze-textlint":
   version: 0.0.0-use.local
   resolution: "@nitpicker/analyze-textlint@workspace:packages/@nitpicker/analyze-textlint"
   dependencies:
@@ -2358,6 +2358,12 @@ __metadata:
     "@d-zero/readtext": "npm:1.1.19"
     "@d-zero/roar": "npm:2.0.0"
     "@d-zero/shared": "npm:0.20.0"
+    "@nitpicker/analyze-axe": "npm:0.4.4"
+    "@nitpicker/analyze-lighthouse": "npm:0.4.4"
+    "@nitpicker/analyze-main-contents": "npm:0.4.4"
+    "@nitpicker/analyze-markuplint": "npm:0.4.4"
+    "@nitpicker/analyze-search": "npm:0.4.4"
+    "@nitpicker/analyze-textlint": "npm:0.4.4"
     "@nitpicker/core": "npm:0.4.4"
     "@nitpicker/crawler": "npm:0.4.4"
     "@nitpicker/report-google-sheets": "npm:0.4.4"
