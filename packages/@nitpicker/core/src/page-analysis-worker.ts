@@ -119,9 +119,8 @@ export default async function <T extends string>(
 
 		return report ?? null;
 	} catch (error) {
-		// eslint-disable-next-line no-console
-		console.error(`[${plugin.name}] ${error instanceof Error ? error.message : error}`);
-		return null;
+		const message = error instanceof Error ? error.message : String(error);
+		throw new Error(`[${plugin.name}] ${message}`);
 	} finally {
 		for (const key of domGlobalKeys) {
 			delete g[key];

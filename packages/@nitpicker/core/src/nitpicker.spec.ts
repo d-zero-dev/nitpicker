@@ -281,8 +281,15 @@ describe('analyze', () => {
 
 		await nitpicker.analyze();
 
+		// Two error events: one for the failed task, one for empty results warning
+		expect(errorHandler).toHaveBeenCalledTimes(2);
 		expect(errorHandler).toHaveBeenCalledWith(
 			expect.objectContaining({ message: expect.stringContaining('Worker OOM') }),
+		);
+		expect(errorHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: expect.stringContaining('Produced no data'),
+			}),
 		);
 	});
 
@@ -324,6 +331,119 @@ describe('analyze', () => {
 				message: expect.stringContaining('@nitpicker/analyze-axe'),
 			}),
 		);
+	});
+
+	it('continues when eachUrl plugin throws', async () => {
+		const pages = [
+			createMockPage('https://example.com/page1'),
+			createMockPage('https://example.com/page2'),
+		];
+		const plugin = {
+			name: '@nitpicker/analyze-search',
+			module: '@nitpicker/analyze-search',
+			configFilePath: '',
+		};
+		const mod: AnalyzePlugin = {
+			eachUrl: vi
+				.fn()
+				.mockRejectedValueOnce(new Error('eachUrl crash'))
+				.mockResolvedValueOnce({
+					page: { found: { value: 3 } },
+					violations: [],
+				}),
+		};
+
+		const { nitpicker, archive } = setupAnalyze(pages, [plugin], [mod]);
+		const errorHandler = vi.fn();
+		nitpicker.on('error', errorHandler);
+
+		await nitpicker.analyze();
+
+		expect(errorHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: expect.stringContaining('eachUrl crash'),
+			}),
+		);
+		const reportCall = archive.setData.mock.calls.find(
+			(call: unknown[]) => call[0] === 'analysis/report',
+		);
+		expect(reportCall).toBeDefined();
+	});
+
+	it('preserves results from other plugins when one plugin fails all pages', async () => {
+		const pages = [createMockPage('https://example.com/')];
+		const pluginA = {
+			name: '@nitpicker/analyze-axe',
+			module: '@nitpicker/analyze-axe',
+			configFilePath: '',
+		};
+		const pluginB = {
+			name: '@nitpicker/analyze-markuplint',
+			module: '@nitpicker/analyze-markuplint',
+			configFilePath: '',
+		};
+		const modA: AnalyzePlugin = {
+			headers: { score: 'Score' },
+			eachPage: vi.fn(),
+		};
+		const modB: AnalyzePlugin = {
+			headers: { lint: 'Lint' },
+			eachPage: vi.fn(),
+		};
+
+		mockedRunInWorker
+			.mockRejectedValueOnce(new Error('axe crashed'))
+			.mockResolvedValueOnce({
+				page: { lint: { value: 'ok' } },
+				violations: [],
+			});
+
+		const { nitpicker, archive } = setupAnalyze(pages, [pluginA, pluginB], [modA, modB]);
+		await nitpicker.analyze();
+
+		const reportCall = archive.setData.mock.calls.find(
+			(call: unknown[]) => call[0] === 'analysis/report',
+		);
+		const report = reportCall![1] as Report;
+		expect(report.pageData.data['https://example.com/']).toBeDefined();
+	});
+
+	it('handles getHtml throwing without crashing', async () => {
+		const brokenPage = createMockPage('https://example.com/broken');
+		brokenPage.getHtml = vi.fn().mockRejectedValue(new Error('snapshot read failed'));
+		const goodPage = createMockPage('https://example.com/good');
+
+		const plugin = {
+			name: '@nitpicker/analyze-axe',
+			module: '@nitpicker/analyze-axe',
+			configFilePath: '',
+		};
+		const mod: AnalyzePlugin = {
+			headers: { score: 'Score' },
+			eachPage: vi.fn(),
+		};
+
+		mockedRunInWorker.mockResolvedValue({
+			page: { score: { value: 90 } },
+			violations: [],
+		});
+
+		const { nitpicker, archive } = setupAnalyze([brokenPage, goodPage], [plugin], [mod]);
+		const errorHandler = vi.fn();
+		nitpicker.on('error', errorHandler);
+
+		await nitpicker.analyze();
+
+		expect(errorHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: expect.stringContaining('snapshot read failed'),
+			}),
+		);
+		const reportCall = archive.setData.mock.calls.find(
+			(call: unknown[]) => call[0] === 'analysis/report',
+		);
+		const report = reportCall![1] as Report;
+		expect(report.pageData.data['https://example.com/good']).toBeDefined();
 	});
 
 	it('skips pages with no HTML snapshot without error', async () => {

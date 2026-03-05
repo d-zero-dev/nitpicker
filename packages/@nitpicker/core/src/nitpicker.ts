@@ -250,7 +250,9 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 										pluginPageDataCount += Object.keys(cachedPages).length;
 									}
 									if (violations) {
-										allViolations.push(...violations);
+										for (const v of violations) {
+											allViolations.push(v);
+										}
 										pluginViolationCount += violations.length;
 									}
 									done++;
@@ -296,7 +298,9 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 								});
 
 								if (report?.violations) {
-									allViolations.push(...report.violations);
+									for (const v of report.violations) {
+										allViolations.push(v);
+									}
 									pluginViolationCount += report.violations.length;
 								}
 
@@ -368,19 +372,29 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 							continue;
 						}
 
-						const report = await mod.eachUrl({ url, isExternal });
-						if (!report) {
-							continue;
-						}
+						try {
+							const report = await mod.eachUrl({ url, isExternal });
+							if (!report) {
+								continue;
+							}
 
-						const { page: reportPage, violations } = report;
+							const { page: reportPage, violations } = report;
 
-						if (reportPage) {
-							table.addDataToUrl(url, reportPage);
-						}
+							if (reportPage) {
+								table.addDataToUrl(url, reportPage);
+							}
 
-						if (violations) {
-							allViolations.push(...violations);
+							if (violations) {
+								for (const v of violations) {
+									allViolations.push(v);
+								}
+							}
+						} catch (error) {
+							const message = error instanceof Error ? error.message : String(error);
+							await this.emit('error', {
+								message: `[eachUrl] Failed to analyze ${url.href}: ${message}`,
+								error: error instanceof Error ? error : null,
+							});
 						}
 					}
 				}
