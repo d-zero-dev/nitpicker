@@ -97,16 +97,6 @@ function setupFakeOrchestrator() {
 	return fakeOrchestrator;
 }
 
-/** Sentinel error thrown by the process.exit mock to halt execution. */
-class ExitError extends Error {
-	/** The exit code passed to process.exit(). */
-	readonly code: number;
-	constructor(code: number) {
-		super(`process.exit(${code})`);
-		this.code = code;
-	}
-}
-
 describe('startCrawl', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -181,25 +171,14 @@ describe('startCrawl', () => {
 		expect(result).toBe('/tmp/test.nitpicker');
 	});
 
-	it('イベントエラー発生時に process.exit(1) を呼び出す', async () => {
-		const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
-			throw new ExitError(code as number);
-		});
-		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
+	it('イベントエラー発生時に CrawlAggregateError をスローする', async () => {
 		mockEventAssignments.mockRejectedValueOnce(new Error('scrape failed'));
 
-		const { startCrawl } = await import('./crawl.js');
+		const { startCrawl, CrawlAggregateError } = await import('./crawl.js');
 
 		await expect(startCrawl(['https://example.com'], createFlags())).rejects.toThrow(
-			ExitError,
+			CrawlAggregateError,
 		);
-
-		expect(consoleErrorSpy).toHaveBeenCalledWith('\nCompleted with 1 error(s).');
-		expect(exitSpy).toHaveBeenCalledWith(1);
-
-		exitSpy.mockRestore();
-		consoleErrorSpy.mockRestore();
 	});
 });
 
