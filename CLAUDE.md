@@ -44,6 +44,7 @@ packages/
 npx @nitpicker/cli crawl <URL> [options]     # Web サイトをクロールして .nitpicker ファイルを生成
 npx @nitpicker/cli analyze <file> [options]  # .nitpicker ファイルに対して analyze プラグインを実行
 npx @nitpicker/cli report <file> [options]   # .nitpicker ファイルから Google Sheets レポートを生成
+npx @nitpicker/cli pipeline <URL> [options]  # crawl → analyze → report を直列実行
 ```
 
 ## 主要アーキテクチャ

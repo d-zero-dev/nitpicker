@@ -2,6 +2,7 @@ import { parseCli } from '@d-zero/roar';
 
 import { analyze, commandDef as analyzeDef } from './commands/analyze.js';
 import { crawl, commandDef as crawlDef } from './commands/crawl.js';
+import { pipeline, commandDef as pipelineDef } from './commands/pipeline.js';
 import { report, commandDef as reportDef } from './commands/report.js';
 
 process.title = 'Nitpicker CLI';
@@ -12,6 +13,7 @@ const cli = parseCli({
 		crawl: crawlDef,
 		analyze: analyzeDef,
 		report: reportDef,
+		pipeline: pipelineDef,
 	},
 	onError: () => true,
 });
@@ -27,6 +29,10 @@ switch (cli.command) {
 	}
 	case 'report': {
 		await report(cli.args, cli.flags);
+		break;
+	}
+	case 'pipeline': {
+		await pipeline(cli.args, cli.flags);
 		break;
 	}
 }

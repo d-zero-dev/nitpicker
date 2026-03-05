@@ -112,6 +112,7 @@ describe('analyze command', () => {
 				searchScope: undefined,
 				mainContentSelector: undefined,
 				axeLang: undefined,
+				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
 
@@ -136,6 +137,7 @@ describe('analyze command', () => {
 			searchScope: undefined,
 			mainContentSelector: undefined,
 			axeLang: undefined,
+			silent: undefined,
 		});
 
 		expect(verboselyFn).toHaveBeenCalled();
@@ -155,6 +157,7 @@ describe('analyze command', () => {
 			searchScope: undefined,
 			mainContentSelector: undefined,
 			axeLang: undefined,
+			silent: undefined,
 		});
 
 		expect(verboselyFn).not.toHaveBeenCalled();
@@ -174,6 +177,7 @@ describe('analyze command', () => {
 			searchScope: undefined,
 			mainContentSelector: undefined,
 			axeLang: undefined,
+			silent: undefined,
 		});
 
 		expect(logFn).toHaveBeenCalledWith(mockNitpicker, expect.any(Array), true);
@@ -194,10 +198,55 @@ describe('analyze command', () => {
 			searchScope: undefined,
 			mainContentSelector: undefined,
 			axeLang: undefined,
+			silent: undefined,
 		});
 
 		expect(logFn).toHaveBeenCalledWith(mockNitpicker, expect.any(Array), false);
 		expect(Lanes).toHaveBeenCalledWith(expect.objectContaining({ verbose: false }));
+	});
+
+	it('suppresses log output when --silent is set', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		const mockNitpicker = createMockNitpicker();
+		vi.mocked(Nitpicker.open).mockResolvedValue(mockNitpicker as never);
+		vi.mocked(selectPluginsFn).mockResolvedValue();
+
+		await analyze(['test.nitpicker'], {
+			all: true,
+			plugin: undefined,
+			verbose: undefined,
+			searchKeywords: undefined,
+			searchScope: undefined,
+			mainContentSelector: undefined,
+			axeLang: undefined,
+			silent: true,
+		});
+
+		expect(verboselyFn).not.toHaveBeenCalled();
+		expect(logFn).not.toHaveBeenCalled();
+		expect(Lanes).not.toHaveBeenCalled();
+	});
+
+	it('silent overrides verbose', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		const mockNitpicker = createMockNitpicker();
+		vi.mocked(Nitpicker.open).mockResolvedValue(mockNitpicker as never);
+		vi.mocked(selectPluginsFn).mockResolvedValue();
+
+		await analyze(['test.nitpicker'], {
+			all: true,
+			plugin: undefined,
+			verbose: true,
+			searchKeywords: undefined,
+			searchScope: undefined,
+			mainContentSelector: undefined,
+			axeLang: undefined,
+			silent: true,
+		});
+
+		expect(verboselyFn).not.toHaveBeenCalled();
+		expect(logFn).not.toHaveBeenCalled();
+		expect(Lanes).not.toHaveBeenCalled();
 	});
 
 	it('exits with error when no plugins found', async () => {
@@ -214,6 +263,7 @@ describe('analyze command', () => {
 				searchScope: undefined,
 				mainContentSelector: undefined,
 				axeLang: undefined,
+				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
 
@@ -244,6 +294,7 @@ describe('analyze command', () => {
 				searchScope: undefined,
 				mainContentSelector: undefined,
 				axeLang: undefined,
+				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
 
@@ -271,6 +322,7 @@ describe('analyze command', () => {
 				searchScope: undefined,
 				mainContentSelector: undefined,
 				axeLang: undefined,
+				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
 
@@ -292,6 +344,7 @@ describe('analyze command', () => {
 				searchScope: undefined,
 				mainContentSelector: undefined,
 				axeLang: undefined,
+				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
 
@@ -313,6 +366,7 @@ describe('analyze command', () => {
 			searchScope: undefined,
 			mainContentSelector: undefined,
 			axeLang: undefined,
+			silent: undefined,
 		});
 
 		expect(mockNitpicker.analyze).toHaveBeenCalled();

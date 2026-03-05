@@ -27,7 +27,7 @@ export const commandDef = {
 		interval: {
 			type: 'number',
 			shortFlag: 'I',
-			desc: 'An interval time on request when crawles',
+			desc: 'An interval time on request when crawls',
 		},
 		image: {
 			type: 'boolean',
@@ -172,9 +172,9 @@ function run(
  * and cleans up browser processes. Exits with code 1 if errors occurred.
  * @param siteUrl - One or more root URLs to crawl
  * @param flags - Parsed CLI flags from the `crawl` command
- * @returns A promise that resolves when crawling, writing, and cleanup are complete.
+ * @returns A promise that resolves with the archive file path when crawling, writing, and cleanup are complete.
  */
-async function startCrawl(siteUrl: string[], flags: CrawlFlags) {
+export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<string> {
 	const errStack: (CrawlerError | Error)[] = [];
 
 	const isList = !!flags.list?.length;
@@ -198,12 +198,16 @@ async function startCrawl(siteUrl: string[], flags: CrawlFlags) {
 
 	await orchestrator.write();
 
+	const archivePath = orchestrator.archive.filePath;
+
 	orchestrator.garbageCollect();
 
 	if (errStack.length > 0) {
 		formatCrawlErrors(errStack);
 		process.exit(1);
 	}
+
+	return archivePath;
 }
 
 /**

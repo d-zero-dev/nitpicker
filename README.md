@@ -126,6 +126,7 @@ $ npx @nitpicker/cli analyze example.com-20250101120000000.nitpicker --plugin @n
 | `--search-scope`          | CSS セレクタ    | なし       | 不可     | analyze-search プラグインの検索スコープ（設定ファイルを上書き）                    |
 | `--main-content-selector` | CSS セレクタ    | なし       | 不可     | analyze-main-contents プラグインのメインコンテンツセレクタ（設定ファイルを上書き） |
 | `--axe-lang`              | BCP 47 言語タグ | なし       | 不可     | analyze-axe プラグインの言語設定（設定ファイルを上書き）                           |
+| `--silent`                | なし            | なし       | 不可     | 実行中のログ出力を抑制                                                             |
 
 `--all` も `--plugin` も指定しない場合、実行するプラグインを選択する対話式マルチセレクトプロンプトが表示される。非 TTY 環境（CI/CD パイプラインなど）ではプロンプトを表示できないため、全プラグインが自動的に実行される。また、非 TTY 環境では `--verbose` が自動的に有効になり、エラー発生時のスタックトレースが CI ログに出力される。
 
@@ -168,4 +169,46 @@ $ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "htt
 $ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --credentials ./my-credentials.json
 $ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --config ./nitpicker.config.json
 $ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --all --silent
+```
+
+### Pipeline
+
+crawl → analyze → report の全ワークフローを直列で実行する。1コマンドでクロールから分析・レポートまで完結できる。
+
+```sh
+$ npx @nitpicker/cli pipeline <URL>
+```
+
+`--sheet` を指定した場合のみ report ステップが実行される。指定しない場合は crawl + analyze の 2 ステップのみ実行される。
+
+#### オプション
+
+crawl / analyze / report のオプションをすべて指定可能。各ステップに対応するフラグが自動的にルーティングされる。
+
+| カテゴリ | 主要オプション                                                                   | 説明                                           |
+| -------- | -------------------------------------------------------------------------------- | ---------------------------------------------- |
+| crawl    | `--interval`, `--parallels`, `--no-image`, `--scope`, `--exclude`, `--output` 等 | クロール動作の制御（crawl セクション参照）     |
+| analyze  | `--all`, `--plugin`, `--search-keywords`, `--axe-lang` 等                        | 分析プラグインの制御（analyze セクション参照） |
+| report   | `--sheet`, `--credentials`, `--config`, `--limit`                                | レポート出力の制御（report セクション参照）    |
+| 共通     | `--verbose`, `--silent`                                                          | ログ出力の制御                                 |
+
+> **注意**: `--resume`, `--diff` は crawl 専用モードのため pipeline では使用不可。
+
+#### 例
+
+```sh
+# 基本: crawl + analyze（report なし）
+$ npx @nitpicker/cli pipeline https://example.com --all
+
+# フル: crawl + analyze + report
+$ npx @nitpicker/cli pipeline https://example.com --all --sheet "https://docs.google.com/spreadsheets/d/xxx/edit"
+
+# プラグイン指定 + レポート
+$ npx @nitpicker/cli pipeline https://example.com --plugin @nitpicker/analyze-axe --sheet "https://docs.google.com/spreadsheets/d/xxx/edit"
+
+# CI 向け: 全自動 + ログ抑制
+$ npx @nitpicker/cli pipeline https://example.com --all --silent --sheet "https://docs.google.com/spreadsheets/d/xxx/edit"
+
+# 出力パス指定
+$ npx @nitpicker/cli pipeline https://example.com --all --output ./reports/site
 ```
