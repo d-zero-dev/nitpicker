@@ -73,11 +73,9 @@ describe('analyze-search plugin', () => {
 
 		expect(result).toMatchObject({
 			page: {
-				'keyword:Hello': { value: expect.any(Number) },
+				'keyword:Hello': { value: 1 },
 			},
 		});
-		// @ts-expect-error -- dynamic key access
-		expect(result.page['keyword:Hello'].value).toBeGreaterThan(0);
 	});
 
 	it('returns zero matches for absent keywords', () => {
@@ -167,10 +165,10 @@ describe('analyze-search plugin', () => {
 			total: 1,
 		});
 
-		// Should find matches only within <main>
+		// Should find only the single match within <main>, not the one in <header>
 		expect(result).toMatchObject({
 			page: {
-				'keyword:Hello': { value: expect.any(Number) },
+				'keyword:Hello': { value: 1 },
 			},
 		});
 	});
@@ -226,5 +224,49 @@ describe('analyze-search plugin', () => {
 
 		// Should not throw, invalid selectors are caught
 		expect(result).toEqual({ page: {} });
+	});
+
+	it('finds keywords in element attributes (alt, title)', () => {
+		const window = createWindow(
+			'<html><body><img alt="Hello logo" title="Hello"></body></html>',
+		);
+
+		const plugin = pluginFactory({ keywords: ['Hello'] }, '');
+		const result = plugin.eachPage!({
+			url: new URL('https://example.com'),
+			html: '',
+			window: window as never,
+			num: 0,
+			total: 1,
+		});
+
+		// Should match both alt and title attributes
+		expect(result).toMatchObject({
+			page: {
+				'keyword:Hello': { value: 2 },
+			},
+		});
+	});
+
+	it('skips excluded attributes (href, src, id, class, style, data-*)', () => {
+		const window = createWindow(
+			'<html><body><a href="Hello" id="Hello" class="Hello" data-value="Hello">text</a></body></html>',
+		);
+
+		const plugin = pluginFactory({ keywords: ['Hello'] }, '');
+		const result = plugin.eachPage!({
+			url: new URL('https://example.com'),
+			html: '',
+			window: window as never,
+			num: 0,
+			total: 1,
+		});
+
+		// None of the excluded attributes should be matched
+		expect(result).toMatchObject({
+			page: {
+				'keyword:Hello': { value: 0 },
+			},
+		});
 	});
 });

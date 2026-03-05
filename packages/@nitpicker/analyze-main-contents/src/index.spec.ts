@@ -222,4 +222,74 @@ describe('analyze-main-contents plugin', () => {
 			},
 		});
 	});
+
+	it('detects #content fallback selector', () => {
+		const window = createWindow(
+			'<html><body><div id="content">Fallback content</div></body></html>',
+		);
+
+		const plugin = pluginFactory({}, '');
+		const result = plugin.eachPage!({
+			url: new URL('https://example.com'),
+			html: '',
+			window: window as never,
+			num: 0,
+			total: 1,
+		});
+
+		expect(result).toMatchObject({
+			page: {
+				wordCount: { value: 15 },
+			},
+		});
+	});
+
+	it('detects .main fallback selector', () => {
+		const window = createWindow(
+			'<html><body><div class="main">Class-based main</div></body></html>',
+		);
+
+		const plugin = pluginFactory({}, '');
+		const result = plugin.eachPage!({
+			url: new URL('https://example.com'),
+			html: '',
+			window: window as never,
+			num: 0,
+			total: 1,
+		});
+
+		// "Class-basedmain" = 15 characters (whitespace stripped, hyphen kept)
+		expect(result).toMatchObject({
+			page: {
+				wordCount: { value: 15 },
+			},
+		});
+	});
+
+	it('returns first matching element in DOM order when multiple selectors match', () => {
+		// querySelector with comma-separated selectors returns the first match
+		// in DOM order. Here <main> appears before #content in the DOM.
+		const window = createWindow(`
+			<html><body>
+				<main>Semantic main</main>
+				<div id="content">ID content</div>
+			</body></html>
+		`);
+
+		const plugin = pluginFactory({}, '');
+		const result = plugin.eachPage!({
+			url: new URL('https://example.com'),
+			html: '',
+			window: window as never,
+			num: 0,
+			total: 1,
+		});
+
+		// "Semanticmain" = 12 characters (whitespace stripped)
+		expect(result).toMatchObject({
+			page: {
+				wordCount: { value: 12 },
+			},
+		});
+	});
 });

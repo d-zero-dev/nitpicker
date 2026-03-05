@@ -179,13 +179,12 @@ describe('analyze-axe plugin', () => {
 		expect(result!.violations![0]!.message).toContain('axe crashed');
 	});
 
-	it('configures locale when lang option is provided', async () => {
+	it('falls back silently when locale import fails for unknown lang', async () => {
 		axeRunMock.mockResolvedValue({ violations: [], incomplete: [] });
 
-		// The dynamic import of locale will fail in test, triggering the catch block
-		const plugin = await pluginFactory({ lang: 'ja', config: {} }, '');
+		// Use a nonexistent locale that will trigger the catch fallback
+		const plugin = await pluginFactory({ lang: 'xx-nonexistent', config: {} }, '');
 
-		// Plugin should still work even if locale loading fails
 		const url = new URL('https://example.com');
 		const result = await plugin.eachPage!({
 			url,
@@ -195,7 +194,61 @@ describe('analyze-axe plugin', () => {
 			total: 1,
 		});
 
+		// Locale import failed, so axe.configure should NOT be called
+		expect(axeConfigureMock).not.toHaveBeenCalled();
 		expect(result).toEqual({ violations: [] });
+	});
+
+	it('calls axe.configure with locale when lang resolves successfully', async () => {
+		axeRunMock.mockResolvedValue({ violations: [], incomplete: [] });
+
+		// 'ja' locale exists in axe-core/locales/
+		const plugin = await pluginFactory({ lang: 'ja', config: {} }, '');
+
+		await plugin.eachPage!({
+			url: new URL('https://example.com'),
+			html: '',
+			window: {} as never,
+			num: 0,
+			total: 1,
+		});
+
+		expect(axeConfigureMock).toHaveBeenCalledTimes(1);
+		expect(axeConfigureMock).toHaveBeenCalledWith({
+			locale: expect.objectContaining({ lang: 'ja' }),
+		});
+	});
+
+	it('does not call axe.configure when lang option is omitted', async () => {
+		axeRunMock.mockResolvedValue({ violations: [], incomplete: [] });
+
+		const plugin = await pluginFactory({ config: {} }, '');
+		await plugin.eachPage!({
+			url: new URL('https://example.com'),
+			html: '',
+			window: {} as never,
+			num: 0,
+			total: 1,
+		});
+
+		expect(axeConfigureMock).not.toHaveBeenCalled();
+	});
+
+	it('disables the color-contrast rule in axe.run()', async () => {
+		axeRunMock.mockResolvedValue({ violations: [], incomplete: [] });
+
+		const plugin = await pluginFactory({ config: {} }, '');
+		await plugin.eachPage!({
+			url: new URL('https://example.com'),
+			html: '',
+			window: {} as never,
+			num: 0,
+			total: 1,
+		});
+
+		expect(axeRunMock).toHaveBeenCalledWith({
+			rules: { 'color-contrast': { enabled: false } },
+		});
 	});
 
 	it('uses "error" severity for non-string impact values', async () => {

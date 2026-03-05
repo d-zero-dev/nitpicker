@@ -211,6 +211,7 @@ describe('analyze-textlint plugin', () => {
 	});
 
 	it('merges user rules over default rules', async () => {
+		const { TextlintKernelDescriptor } = await import('@textlint/kernel');
 		lintTextMock.mockResolvedValue({ messages: [] });
 
 		// Disable a default rule and add a custom override
@@ -224,17 +225,28 @@ describe('analyze-textlint plugin', () => {
 			'',
 		);
 
-		const url = new URL('https://example.com/page');
-		const result = await plugin.eachPage!({
-			url,
+		await plugin.eachPage!({
+			url: new URL('https://example.com/page'),
 			html: '<html></html>',
 			window: {} as never,
 			num: 0,
 			total: 1,
 		});
 
-		// Verify the factory accepted the options and ran without error
-		expect(result).toEqual({ violations: [] });
+		// TextlintKernelDescriptor receives the resolved rule descriptors
+		const descriptorCall = vi.mocked(TextlintKernelDescriptor).mock.calls[0]![0];
+		// @ts-expect-error -- mock type mismatch
+		const ruleIds = descriptorCall.rules.map((r: { ruleId: string }) => r.ruleId);
+
+		// 'spellcheck-tech-word' should be excluded (set to false)
+		expect(ruleIds).not.toContain('spellcheck-tech-word');
+
+		// 'max-ten' should be present with overridden options
+		// @ts-expect-error -- mock type mismatch
+		const maxTenRule = descriptorCall.rules.find(
+			(r: { ruleId: string }) => r.ruleId === 'max-ten',
+		);
+		expect(maxTenRule.options).toEqual({ max: 5 });
 	});
 
 	it('reuses linter across multiple eachPage calls (lazy singleton)', async () => {

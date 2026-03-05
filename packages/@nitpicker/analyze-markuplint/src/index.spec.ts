@@ -134,7 +134,7 @@ describe('analyze-markuplint plugin', () => {
 			total: 1,
 		});
 
-		expect(MLEngine.fromCode).toHaveBeenCalledWith('<html></html>', {
+		expect(MLEngine.fromCode).toHaveBeenLastCalledWith('<html></html>', {
 			name: 'https://example.com/dir/index.html',
 			config: {},
 		});
@@ -153,7 +153,7 @@ describe('analyze-markuplint plugin', () => {
 			total: 1,
 		});
 
-		expect(MLEngine.fromCode).toHaveBeenCalledWith('<html></html>', {
+		expect(MLEngine.fromCode).toHaveBeenLastCalledWith('<html></html>', {
 			name: 'https://example.com/page.html',
 			config: {},
 		});
@@ -172,7 +172,7 @@ describe('analyze-markuplint plugin', () => {
 			total: 1,
 		});
 
-		expect(MLEngine.fromCode).toHaveBeenCalledWith('<html></html>', {
+		expect(MLEngine.fromCode).toHaveBeenLastCalledWith('<html></html>', {
 			name: 'https://example.com/about.html',
 			config: {},
 		});
@@ -192,7 +192,7 @@ describe('analyze-markuplint plugin', () => {
 			total: 1,
 		});
 
-		expect(MLEngine.fromCode).toHaveBeenCalledWith('<p>test</p>', {
+		expect(MLEngine.fromCode).toHaveBeenLastCalledWith('<p>test</p>', {
 			name: 'https://example.com/index.html',
 			config: customConfig,
 		});
