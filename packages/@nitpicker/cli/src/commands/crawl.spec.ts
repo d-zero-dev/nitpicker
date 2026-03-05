@@ -1,6 +1,6 @@
 import type { CrawlerOrchestrator as OrchestratorType } from '@nitpicker/crawler';
 
-import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 const mockCrawling = vi.fn();
 
@@ -54,21 +54,25 @@ function createFlags(overrides: Partial<CrawlFlags> = {}): CrawlFlags {
 	} as CrawlFlags;
 }
 
+/** Sets up the fake orchestrator that mockCrawling returns. */
+function setupFakeOrchestrator() {
+	const fakeOrchestrator = {
+		write: vi.fn().mockResolvedValue(),
+		garbageCollect: vi.fn(),
+		archive: { filePath: '/tmp/test.nitpicker' },
+	} as unknown as OrchestratorType;
+
+	mockCrawling.mockImplementation((_urls, _opts, cb) => {
+		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
+		return Promise.resolve(fakeOrchestrator);
+	});
+}
+
 describe('startCrawl', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.resetModules();
-
-		const fakeOrchestrator = {
-			write: vi.fn().mockResolvedValue(),
-			garbageCollect: vi.fn(),
-			archive: { filePath: '/tmp/test.nitpicker' },
-		} as unknown as OrchestratorType;
-
-		mockCrawling.mockImplementation((_urls, _opts, cb) => {
-			cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
-			return Promise.resolve(fakeOrchestrator);
-		});
+		setupFakeOrchestrator();
 	});
 
 	it('--single フラグが true の場合、recursive: false で CrawlerOrchestrator.crawling を呼び出す', async () => {
@@ -119,5 +123,50 @@ describe('startCrawl', () => {
 			expect.objectContaining({ recursive: false, list: true }),
 			expect.any(Function),
 		);
+	});
+});
+
+describe('crawl', () => {
+	let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.resetModules();
+		setupFakeOrchestrator();
+		consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('--single と --list を同時指定した場合、警告を出力する', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl([], createFlags({ single: true, list: ['https://example.com/a'] }));
+
+		expect(consoleWarnSpy).toHaveBeenCalledWith(
+			'Warning: --single is ignored when --list or --list-file is specified.',
+		);
+	});
+
+	it('--single と --list-file を同時指定した場合、警告を出力する', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		vi.mock('@d-zero/readtext/list', () => ({
+			readList: vi.fn().mockResolvedValue(['https://example.com/a']),
+		}));
+
+		await crawl([], createFlags({ single: true, listFile: '/tmp/list.txt' }));
+
+		expect(consoleWarnSpy).toHaveBeenCalledWith(
+			'Warning: --single is ignored when --list or --list-file is specified.',
+		);
+	});
+
+	it('--single のみの場合、警告を出力しない', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['https://example.com'], createFlags({ single: true }));
+
+		expect(consoleWarnSpy).not.toHaveBeenCalled();
 	});
 });

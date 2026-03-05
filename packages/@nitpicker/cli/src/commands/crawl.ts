@@ -184,6 +184,7 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 			...mapFlagsToCrawlConfig(flags),
 			filePath: flags.output,
 			list: isList,
+			// --single（単一ページモード）および --list モードでは再帰クロールを無効化
 			recursive: isList || flags.single ? false : flags.recursive,
 		},
 		(orchestrator, config) => {
@@ -288,6 +289,11 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		}
 		await resumeCrawl(flags.resume, flags);
 		return;
+	}
+
+	if (flags.single && (flags.list?.length || flags.listFile)) {
+		// eslint-disable-next-line no-console
+		console.warn('Warning: --single is ignored when --list or --list-file is specified.');
 	}
 
 	if (flags.listFile) {
