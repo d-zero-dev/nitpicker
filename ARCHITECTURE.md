@@ -143,11 +143,12 @@ crawler/src/
 
 ### @nitpicker/cli
 
-`@d-zero/roar` ベースの統合 CLI。3つのサブコマンドを提供。
+`@d-zero/roar` ベースの統合 CLI。4つのサブコマンドを提供。
 
 - **`npx @nitpicker/cli crawl <URL>`**: Webサイトをクロールして `.nitpicker` ファイルを生成
 - **`npx @nitpicker/cli analyze <file>`**: `.nitpicker` ファイルに対して analyze プラグインを実行。`--search-keywords`, `--axe-lang` 等のフラグで設定ファイルのプラグイン設定を上書き可能（`buildPluginOverrides()` → `Nitpicker.setPluginOverrides()` 経由）
 - **`npx @nitpicker/cli report <file>`**: `.nitpicker` ファイルから Google Sheets レポートを生成
+- **`npx @nitpicker/cli pipeline <URL>`**: crawl → analyze → report を直列実行。`startCrawl()` でアーカイブパスを取得し、そのパスを `analyze()` と `report()` に引き渡す。`--sheet` 指定時のみ report ステップを実行
 
 ---
 
