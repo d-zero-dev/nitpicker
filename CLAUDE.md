@@ -57,8 +57,9 @@ CrawlerOrchestrator.crawling(urls, options)
   → Crawler → deal()（@d-zero/dealer で並列制御）
     → 各 URL: puppeteer.launch() → Scraper.scrapeStart(page, ...)
       → ScrapeResult を戻り値で返却
-    → LinkList.done() + Archive にページデータ保存
+    → LinkList.done() + WriteQueue 経由で Archive にページデータ保存
     → push() で発見した新 URL を動的にキューに追加
+  → crawlEnd 時に WriteQueue.drain() で未完了の書き込みを待機
   → CrawlerOrchestrator.write()（tmpDir を .nitpicker tar に圧縮）
 ```
 

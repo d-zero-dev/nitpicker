@@ -15,6 +15,7 @@ import { clearDestinationCache, Crawler } from './crawler/index.js';
 import { crawlerLog, log } from './debug.js';
 import { resolveOutputPath } from './resolve-output-path.js';
 import { cleanObject } from './utils/index.js';
+import { WriteQueue } from './write-queue.js';
 
 /**
  * Default list of external URL prefixes excluded from crawling.
@@ -186,37 +187,50 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			throw new Error('URL is empty');
 		}
 
+		const writeQueue = new WriteQueue();
+
 		return new Promise<void>((resolve, reject) => {
 			this.#crawler.on('error', (error) => {
 				crawlerLog('On error: %O', error);
-				void this.#archive.addError(error);
+				void writeQueue.enqueue(() => this.#archive.addError(error));
 				void this.emit('error', error);
 			});
 
-			this.#crawler.on('page', async ({ result }) => {
-				await this.#archive.setPage(result).catch((error) => reject(error));
+			this.#crawler.on('page', ({ result }) => {
+				writeQueue
+					.enqueue(() => this.#archive.setPage(result))
+					.catch((error) => reject(error));
 			});
 
 			this.#crawler.on('externalPage', ({ result }) => {
-				this.#archive.setExternalPage(result).catch((error) => reject(error));
+				writeQueue
+					.enqueue(() => this.#archive.setExternalPage(result))
+					.catch((error) => reject(error));
 			});
 
 			this.#crawler.on('skip', ({ url, reason, isExternal }) => {
-				this.#archive
-					.setSkippedPage(url, reason, isExternal)
+				writeQueue
+					.enqueue(() => this.#archive.setSkippedPage(url, reason, isExternal))
 					.catch((error) => reject(error));
 			});
 
 			this.#crawler.on('response', ({ resource }) => {
-				this.#archive.setResources(resource).catch((error) => reject(error));
+				writeQueue
+					.enqueue(() => this.#archive.setResources(resource))
+					.catch((error) => reject(error));
 			});
 
 			this.#crawler.on('responseReferrers', (resource) => {
-				this.#archive.setResourcesReferrers(resource).catch((error) => reject(error));
+				writeQueue
+					.enqueue(() => this.#archive.setResourcesReferrers(resource))
+					.catch((error) => reject(error));
 			});
 
 			this.#crawler.on('crawlEnd', () => {
-				resolve();
+				writeQueue
+					.drain()
+					.then(() => resolve())
+					.catch((error) => reject(error));
 			});
 
 			if (this.#fromList) {

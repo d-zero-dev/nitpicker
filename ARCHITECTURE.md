@@ -138,7 +138,8 @@ crawler/src/
 │   ├── fetch-robots-txt.ts     # robots.txt 取得・パース
 │   ├── robots-checker.ts       # robots.txt 準拠チェッカー（origin 別キャッシュ）
 │   └── ...                     # link-to-page-data, protocol-agnostic-key, net-timeout-error
-└── crawler-orchestrator.ts     # CrawlerOrchestrator
+├── crawler-orchestrator.ts     # CrawlerOrchestrator
+└── write-queue.ts             # Archive 書き込み直列化キュー
 ```
 
 ### @nitpicker/cli
@@ -170,6 +171,8 @@ deal() で選択           → progress(url) → progress セット
 4. `isPage = true` → `completePages` カウント増加
 
 **終了判定:** `deal()` が全アイテムの処理完了で resolve → `crawlEnd` イベント emit
+
+**Archive 書き込みの直列化:** `CrawlerOrchestrator` は複数のイベントハンドラ（`page`, `externalPage`, `skip`, `response`, `responseReferrers`, `error`）から Archive に非同期書き込みを行う。高並列度で SQLite の書き込みロック競合を防ぐため、すべての書き込みは `WriteQueue`（Promise チェーンベースの FIFO キュー）で直列化される。`crawlEnd` 時には `WriteQueue.drain()` で未完了の書き込みを全て待機してからクロール完了とする。
 
 ### アンカー発見後のリンク追加ロジック
 
