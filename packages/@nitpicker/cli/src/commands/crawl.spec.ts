@@ -3,8 +3,6 @@ import type { CrawlerOrchestrator as OrchestratorType } from '@nitpicker/crawler
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 const mockCrawling = vi.fn();
-const mockWrite = vi.fn();
-const mockGarbageCollect = vi.fn();
 
 vi.mock('@nitpicker/crawler', () => ({
 	CrawlerOrchestrator: {
@@ -21,11 +19,13 @@ vi.mock('../crawl/debug.js', () => ({
 	verbosely: vi.fn(),
 }));
 
+type CrawlFlags = Parameters<typeof import('./crawl.js').startCrawl>[1];
+
 /**
  * Minimal flags matching the shape produced by the CLI parser.
- * @param overrides
+ * @param overrides - Flag values to override defaults.
  */
-function createFlags(overrides: Record<string, unknown> = {}) {
+function createFlags(overrides: Partial<CrawlFlags> = {}): CrawlFlags {
 	return {
 		resume: undefined,
 		interval: undefined,
@@ -51,16 +51,17 @@ function createFlags(overrides: Record<string, unknown> = {}) {
 		silent: undefined,
 		diff: undefined,
 		...overrides,
-	};
+	} as CrawlFlags;
 }
 
 describe('startCrawl', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.resetModules();
 
 		const fakeOrchestrator = {
-			write: mockWrite.mockResolvedValue(),
-			garbageCollect: mockGarbageCollect,
+			write: vi.fn().mockResolvedValue(),
+			garbageCollect: vi.fn(),
 			archive: { filePath: '/tmp/test.nitpicker' },
 		} as unknown as OrchestratorType;
 
@@ -72,7 +73,7 @@ describe('startCrawl', () => {
 
 	it('--single フラグが true の場合、recursive: false で CrawlerOrchestrator.crawling を呼び出す', async () => {
 		const { startCrawl } = await import('./crawl.js');
-		await startCrawl(['https://example.com'], createFlags({ single: true }) as never);
+		await startCrawl(['https://example.com'], createFlags({ single: true }));
 
 		expect(mockCrawling).toHaveBeenCalledWith(
 			['https://example.com'],
@@ -83,7 +84,7 @@ describe('startCrawl', () => {
 
 	it('--single フラグが未指定の場合、recursive はフラグの値がそのまま渡される', async () => {
 		const { startCrawl } = await import('./crawl.js');
-		await startCrawl(['https://example.com'], createFlags({ recursive: true }) as never);
+		await startCrawl(['https://example.com'], createFlags({ recursive: true }));
 
 		expect(mockCrawling).toHaveBeenCalledWith(
 			['https://example.com'],
@@ -92,11 +93,25 @@ describe('startCrawl', () => {
 		);
 	});
 
+	it('--single と --recursive が同時指定された場合、--single が優先され recursive: false になる', async () => {
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(
+			['https://example.com'],
+			createFlags({ single: true, recursive: true }),
+		);
+
+		expect(mockCrawling).toHaveBeenCalledWith(
+			['https://example.com'],
+			expect.objectContaining({ recursive: false }),
+			expect.any(Function),
+		);
+	});
+
 	it('--list モードでも recursive: false になる', async () => {
 		const { startCrawl } = await import('./crawl.js');
 		await startCrawl(
 			['https://example.com'],
-			createFlags({ list: ['https://example.com/a'] }) as never,
+			createFlags({ list: ['https://example.com/a'] }),
 		);
 
 		expect(mockCrawling).toHaveBeenCalledWith(
