@@ -1,16 +1,14 @@
-import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { Archive } from '@nitpicker/crawler';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
-const mockGetPages = vi.fn();
-const mockClose = vi.fn().mockResolvedValue();
+const mockGetPagesA = vi.fn();
+const mockCloseA = vi.fn().mockResolvedValue();
+const mockGetPagesB = vi.fn();
+const mockCloseB = vi.fn().mockResolvedValue();
 
 vi.mock('@nitpicker/crawler', () => ({
 	Archive: {
-		open: vi.fn().mockImplementation(() =>
-			Promise.resolve({
-				getPages: mockGetPages,
-				close: mockClose,
-			}),
-		),
+		open: vi.fn(),
 	},
 }));
 
@@ -59,12 +57,27 @@ function createMockPage(
 describe('diff', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.mocked(Archive.open).mockImplementation(({ filePath }) => {
+			if (typeof filePath === 'string' && filePath.includes('b')) {
+				return Promise.resolve({
+					getPages: mockGetPagesB,
+					close: mockCloseB,
+				}) as never;
+			}
+			return Promise.resolve({
+				getPages: mockGetPagesA,
+				close: mockCloseA,
+			}) as never;
+		});
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
 	it('アクティブな内部ページの URL を a.txt と b.txt に書き出す', async () => {
-		mockGetPages
-			.mockResolvedValueOnce([createMockPage('https://example.com/')])
-			.mockResolvedValueOnce([createMockPage('https://example.com/about')]);
+		mockGetPagesA.mockResolvedValueOnce([createMockPage('https://example.com/')]);
+		mockGetPagesB.mockResolvedValueOnce([createMockPage('https://example.com/about')]);
 
 		await diff('archive-a.nitpicker', 'archive-b.nitpicker');
 
@@ -77,12 +90,11 @@ describe('diff', () => {
 	});
 
 	it('外部ページをフィルタリングする', async () => {
-		mockGetPages
-			.mockResolvedValueOnce([
-				createMockPage('https://example.com/', { isExternal: false }),
-				createMockPage('https://external.com/', { isExternal: true }),
-			])
-			.mockResolvedValueOnce([]);
+		mockGetPagesA.mockResolvedValueOnce([
+			createMockPage('https://example.com/', { isExternal: false }),
+			createMockPage('https://external.com/', { isExternal: true }),
+		]);
+		mockGetPagesB.mockResolvedValueOnce([]);
 
 		await diff('a.nitpicker', 'b.nitpicker');
 
@@ -94,12 +106,11 @@ describe('diff', () => {
 	});
 
 	it('isPage() が false のページをフィルタリングする', async () => {
-		mockGetPages
-			.mockResolvedValueOnce([
-				createMockPage('https://example.com/', { isPage: true }),
-				createMockPage('https://example.com/image.png', { isPage: false }),
-			])
-			.mockResolvedValueOnce([]);
+		mockGetPagesA.mockResolvedValueOnce([
+			createMockPage('https://example.com/', { isPage: true }),
+			createMockPage('https://example.com/image.png', { isPage: false }),
+		]);
+		mockGetPagesB.mockResolvedValueOnce([]);
 
 		await diff('a.nitpicker', 'b.nitpicker');
 
@@ -110,13 +121,12 @@ describe('diff', () => {
 	});
 
 	it('ステータス 400 以上のページをフィルタリングする', async () => {
-		mockGetPages
-			.mockResolvedValueOnce([
-				createMockPage('https://example.com/', { status: 200 }),
-				createMockPage('https://example.com/404', { status: 404 }),
-				createMockPage('https://example.com/500', { status: 500 }),
-			])
-			.mockResolvedValueOnce([]);
+		mockGetPagesA.mockResolvedValueOnce([
+			createMockPage('https://example.com/', { status: 200 }),
+			createMockPage('https://example.com/404', { status: 404 }),
+			createMockPage('https://example.com/500', { status: 500 }),
+		]);
+		mockGetPagesB.mockResolvedValueOnce([]);
 
 		await diff('a.nitpicker', 'b.nitpicker');
 
@@ -127,12 +137,11 @@ describe('diff', () => {
 	});
 
 	it('ステータスが null のページをフィルタリングする', async () => {
-		mockGetPages
-			.mockResolvedValueOnce([
-				createMockPage('https://example.com/', { status: 200 }),
-				createMockPage('https://example.com/null', { status: null }),
-			])
-			.mockResolvedValueOnce([]);
+		mockGetPagesA.mockResolvedValueOnce([
+			createMockPage('https://example.com/', { status: 200 }),
+			createMockPage('https://example.com/null', { status: null }),
+		]);
+		mockGetPagesB.mockResolvedValueOnce([]);
 
 		await diff('a.nitpicker', 'b.nitpicker');
 
@@ -143,11 +152,10 @@ describe('diff', () => {
 	});
 
 	it('3xx ステータスのページを含める', async () => {
-		mockGetPages
-			.mockResolvedValueOnce([
-				createMockPage('https://example.com/redirect', { status: 301 }),
-			])
-			.mockResolvedValueOnce([]);
+		mockGetPagesA.mockResolvedValueOnce([
+			createMockPage('https://example.com/redirect', { status: 301 }),
+		]);
+		mockGetPagesB.mockResolvedValueOnce([]);
 
 		await diff('a.nitpicker', 'b.nitpicker');
 
@@ -157,11 +165,41 @@ describe('diff', () => {
 		expect(aContent).toBe('https://example.com/redirect');
 	});
 
-	it('完了後にアーカイブを close する', async () => {
-		mockGetPages.mockResolvedValue([]);
+	it('複数ページをソートして改行区切りで書き出す', async () => {
+		mockGetPagesA.mockResolvedValueOnce([
+			createMockPage('https://example.com/c'),
+			createMockPage('https://example.com/a'),
+			createMockPage('https://example.com/b'),
+		]);
+		mockGetPagesB.mockResolvedValueOnce([]);
 
 		await diff('a.nitpicker', 'b.nitpicker');
 
-		expect(mockClose).toHaveBeenCalledTimes(2);
+		const aContent = mockWriteFile.mock.calls.find(
+			(c: unknown[]) => c[0] === 'a.txt',
+		)?.[1] as string;
+		expect(aContent).toBe(
+			'https://example.com/a\nhttps://example.com/b\nhttps://example.com/c',
+		);
+	});
+
+	it('archiveA と archiveB の両方を close する', async () => {
+		mockGetPagesA.mockResolvedValueOnce([]);
+		mockGetPagesB.mockResolvedValueOnce([]);
+
+		await diff('a.nitpicker', 'b.nitpicker');
+
+		expect(mockCloseA).toHaveBeenCalledTimes(1);
+		expect(mockCloseB).toHaveBeenCalledTimes(1);
+	});
+
+	it('Archive.open にファイルパスを渡す', async () => {
+		mockGetPagesA.mockResolvedValueOnce([]);
+		mockGetPagesB.mockResolvedValueOnce([]);
+
+		await diff('first.nitpicker', 'second-b.nitpicker');
+
+		expect(Archive.open).toHaveBeenCalledWith({ filePath: 'first.nitpicker' });
+		expect(Archive.open).toHaveBeenCalledWith({ filePath: 'second-b.nitpicker' });
 	});
 });

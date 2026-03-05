@@ -1,5 +1,7 @@
 import type { CrawlerOrchestrator as OrchestratorType } from '@nitpicker/crawler';
 
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 const mockCrawling = vi.fn();
@@ -12,8 +14,10 @@ vi.mock('@nitpicker/crawler', () => ({
 	},
 }));
 
+const mockEventAssignments = vi.fn().mockResolvedValue();
+
 vi.mock('../crawl/event-assignments.js', () => ({
-	eventAssignments: vi.fn().mockResolvedValue(),
+	eventAssignments: mockEventAssignments,
 }));
 
 const mockVerbosely = vi.fn();
@@ -93,6 +97,16 @@ function setupFakeOrchestrator() {
 	return fakeOrchestrator;
 }
 
+/** Sentinel error thrown by the process.exit mock to halt execution. */
+class ExitError extends Error {
+	/** The exit code passed to process.exit(). */
+	readonly code: number;
+	constructor(code: number) {
+		super(`process.exit(${code})`);
+		this.code = code;
+	}
+}
+
 describe('startCrawl', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -166,6 +180,27 @@ describe('startCrawl', () => {
 
 		expect(result).toBe('/tmp/test.nitpicker');
 	});
+
+	it('イベントエラー発生時に process.exit(1) を呼び出す', async () => {
+		const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+			throw new ExitError(code as number);
+		});
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		mockEventAssignments.mockRejectedValueOnce(new Error('scrape failed'));
+
+		const { startCrawl } = await import('./crawl.js');
+
+		await expect(startCrawl(['https://example.com'], createFlags())).rejects.toThrow(
+			ExitError,
+		);
+
+		expect(consoleErrorSpy).toHaveBeenCalledWith('\nCompleted with 1 error(s).');
+		expect(exitSpy).toHaveBeenCalledWith(1);
+
+		exitSpy.mockRestore();
+		consoleErrorSpy.mockRestore();
+	});
 });
 
 describe('crawl', () => {
@@ -230,16 +265,27 @@ describe('crawl', () => {
 		);
 	});
 
-	it('--resume モードで resumeCrawl を呼び出す', async () => {
+	it('--resume に絶対パスを指定した場合、そのまま渡す', async () => {
 		const { crawl } = await import('./crawl.js');
-		await crawl([], createFlags({ resume: '/tmp/stub' }));
+		await crawl([], createFlags({ resume: '/absolute/stub' }));
 
 		expect(mockResume).toHaveBeenCalledWith(
-			expect.any(String),
+			'/absolute/stub',
 			expect.any(Object),
 			expect.any(Function),
 		);
 		expect(mockCrawling).not.toHaveBeenCalled();
+	});
+
+	it('--resume に相対パスを指定した場合、resolve して渡す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl([], createFlags({ resume: 'relative/stub' }));
+
+		expect(mockResume).toHaveBeenCalledWith(
+			path.resolve(process.cwd(), 'relative/stub'),
+			expect.any(Object),
+			expect.any(Function),
+		);
 	});
 
 	it('--resume と --output を同時指定した場合、エラーを投げる', async () => {
@@ -277,7 +323,9 @@ describe('crawl', () => {
 		const { crawl } = await import('./crawl.js');
 		await crawl([], createFlags({ listFile: '/tmp/urls.txt' }));
 
-		expect(mockReadList).toHaveBeenCalled();
+		expect(mockReadList).toHaveBeenCalledWith(
+			path.resolve(process.cwd(), '/tmp/urls.txt'),
+		);
 		expect(mockCrawling).toHaveBeenCalledWith(
 			['https://example.com/from-file'],
 			expect.objectContaining({ list: true }),

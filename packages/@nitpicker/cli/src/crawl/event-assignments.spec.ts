@@ -1,6 +1,6 @@
 import type { CrawlerOrchestrator } from '@nitpicker/crawler';
 
-import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { eventAssignments } from './event-assignments.js';
 
@@ -41,6 +41,10 @@ describe('eventAssignments', () => {
 
 	beforeEach(() => {
 		stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
 	it('logType が silent の場合、即座に resolve する', async () => {
