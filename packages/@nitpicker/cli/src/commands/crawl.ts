@@ -169,10 +169,11 @@ function run(
  * Starts a fresh crawl session for the given URLs.
  *
  * Creates a CrawlerOrchestrator, runs the crawl, writes the archive,
- * and cleans up browser processes. Exits with code 1 if errors occurred.
+ * and cleans up browser processes.
  * @param siteUrl - One or more root URLs to crawl
  * @param flags - Parsed CLI flags from the `crawl` command
  * @returns A promise that resolves with the archive file path when crawling, writing, and cleanup are complete.
+ * @throws {CrawlAggregateError} When one or more errors occurred during crawling.
  */
 export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<string> {
 	const errStack: (CrawlerError | Error)[] = [];
@@ -205,7 +206,7 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 
 	if (errStack.length > 0) {
 		formatCrawlErrors(errStack);
-		process.exit(1);
+		throw new CrawlAggregateError(errStack);
 	}
 
 	return archivePath;
@@ -248,7 +249,7 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 
 	if (errStack.length > 0) {
 		formatCrawlErrors(errStack);
-		process.exit(1);
+		throw new CrawlAggregateError(errStack);
 	}
 }
 
@@ -281,39 +282,62 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		return;
 	}
 
-	if (flags.resume) {
-		if (flags.output) {
-			throw new Error(
-				'--output flag is not supported with --resume. The archive path is determined by the stub file.',
-			);
-		}
-		await resumeCrawl(flags.resume, flags);
-		return;
-	}
-
 	if (flags.single && (flags.list?.length || flags.listFile)) {
 		// eslint-disable-next-line no-console
 		console.warn('Warning: --single is ignored when --list or --list-file is specified.');
 	}
 
-	if (flags.listFile) {
-		const list = await readList(path.resolve(process.cwd(), flags.listFile));
-		flags.list = list;
-		await startCrawl(list, flags);
-		return;
+	try {
+		if (flags.resume) {
+			if (flags.output) {
+				throw new Error(
+					'--output flag is not supported with --resume. The archive path is determined by the stub file.',
+				);
+			}
+			await resumeCrawl(flags.resume, flags);
+			return;
+		}
+
+		if (flags.listFile) {
+			const list = await readList(path.resolve(process.cwd(), flags.listFile));
+			flags.list = list;
+			await startCrawl(list, flags);
+			return;
+		}
+
+		if (flags.list && flags.list.length > 0) {
+			const pageList = [...flags.list, ...args];
+			await startCrawl(pageList, flags);
+			return;
+		}
+
+		const siteUrl = args[0];
+
+		if (siteUrl) {
+			await startCrawl([siteUrl], flags);
+			return;
+		}
+	} catch (error) {
+		if (error instanceof CrawlAggregateError) {
+			process.exit(1);
+		}
+		throw error;
 	}
+}
 
-	if (flags.list && flags.list.length > 0) {
-		const pageList = [...flags.list, ...args];
-		await startCrawl(pageList, flags);
-		return;
-	}
-
-	const siteUrl = args[0];
-
-	if (siteUrl) {
-		await startCrawl([siteUrl], flags);
-		return;
+/**
+ * Error thrown when one or more errors occurred during crawling.
+ * Wraps the collected errors so callers can inspect them.
+ */
+export class CrawlAggregateError extends Error {
+	/** The individual errors that occurred during crawling. */
+	readonly errors: readonly (CrawlerError | Error)[];
+	/**
+	 * @param errors - The individual errors collected during the crawl session.
+	 */
+	constructor(errors: (CrawlerError | Error)[]) {
+		super(`Crawl completed with ${errors.length} error(s).`);
+		this.errors = errors;
 	}
 }
 

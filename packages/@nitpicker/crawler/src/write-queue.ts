@@ -30,15 +30,16 @@ export class WriteQueue {
 	}
 
 	/**
-	 * Enqueues an asynchronous operation to run after all previously enqueued
-	 * operations have completed. Operations are guaranteed to execute serially
-	 * in the order they were enqueued.
+	 * Enqueues an operation to run after all previously enqueued operations
+	 * have completed. Operations are guaranteed to execute serially in the
+	 * order they were enqueued. Both async and synchronous (throwing)
+	 * operations are supported.
 	 * @template T The resolved type of the operation's promise.
-	 * @param operation - The async function to execute.
+	 * @param operation - The function to execute. May return a `Promise` or a plain value.
 	 * @returns A promise that resolves with the operation's result, or rejects
 	 *          if the operation throws.
 	 */
-	enqueue<T>(operation: () => Promise<T>): Promise<T> {
+	enqueue<T>(operation: () => Promise<T> | T): Promise<T> {
 		this.#pending++;
 		return new Promise<T>((resolve, reject) => {
 			this.#chain = this.#chain.then(async () => {

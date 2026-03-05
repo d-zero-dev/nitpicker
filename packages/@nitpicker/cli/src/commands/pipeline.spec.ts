@@ -288,6 +288,33 @@ describe('pipeline command', () => {
 		).rejects.toThrow('Report failed');
 	});
 
+	it('suppresses pipeline log output when --silent is set', async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+		vi.mocked(analyzeFn).mockResolvedValue();
+
+		await pipeline(['https://example.com'], {
+			...defaultFlags,
+			silent: true,
+			all: true,
+		});
+
+		expect(consoleLogSpy).not.toHaveBeenCalled();
+	});
+
+	it('suppresses pipeline log output when --silent is set with --sheet', async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+		vi.mocked(analyzeFn).mockResolvedValue();
+		vi.mocked(reportFn).mockResolvedValue();
+
+		await pipeline(['https://example.com'], {
+			...defaultFlags,
+			silent: true,
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+		});
+
+		expect(consoleLogSpy).not.toHaveBeenCalled();
+	});
+
 	it('shows completion message after all steps', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
 		vi.mocked(analyzeFn).mockResolvedValue();

@@ -6,6 +6,8 @@ import * as chromeLauncher from 'chrome-launcher';
 import lighthouse from 'lighthouse';
 import { ReportUtils } from 'lighthouse/report/renderer/report-utils.js';
 
+import { toError } from './to-error.js';
+
 /**
  * Plugin options for the Lighthouse analysis.
  */
@@ -62,12 +64,7 @@ export default definePlugin((options: Options) => {
 
 			try {
 				const result = await lighthouse(url.href, { port: chrome.port }, config).catch(
-					(error: unknown) => {
-						if (error instanceof Error) {
-							return error;
-						}
-						throw error;
-					},
+					(error: unknown) => toError(error),
 				);
 
 				if (!result || result instanceof Error) {

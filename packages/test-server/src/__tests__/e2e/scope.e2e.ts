@@ -25,9 +25,8 @@ describe('Scope restriction', () => {
 		it('scope外のページはisTarget=falseで記録される', async () => {
 			const pages = await result.accessor.getPages('page');
 			const docsPage = pages.find((p) => p.url.pathname === '/scope/docs/');
-			if (docsPage) {
-				expect(docsPage.isTarget).toBe(false);
-			}
+			expect(docsPage).toBeDefined();
+			expect(docsPage!.isTarget).toBe(false);
 		});
 	});
 

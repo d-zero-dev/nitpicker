@@ -132,6 +132,13 @@ describe('WriteQueue', () => {
 		expect(result).toBe('recovered');
 	});
 
+	it('drain() resolves immediately on an empty queue', async () => {
+		const queue = new WriteQueue();
+		expect(queue.pending).toBe(0);
+		await queue.drain();
+		expect(queue.pending).toBe(0);
+	});
+
 	it('handles high concurrency without interleaving', async () => {
 		const queue = new WriteQueue();
 		let active = 0;
