@@ -117,7 +117,7 @@ crawler/src/
 │   ├── object/                 # cleanObject
 │   └── error/                  # DOMEvaluationError, ErrorEmitter
 ├── archive/                    # SQLite アーカイブストレージ
-│   ├── filesystem/             # 1関数1ファイル（14ファイル）+ tar, untar
+│   ├── filesystem/             # 1関数1ファイル（16ファイル）+ tar, untar
 │   └── ...                     # archive, archive-accessor, database, page, resource
 ├── crawler/                    # Crawler エンジン
 │   ├── crawler.ts              # Crawler クラス
@@ -611,31 +611,33 @@ image: false            # 画像取得なし
 
 ---
 
-## 9. 外部依存パッケージ（`@d-zero/*`）
+## 13. 外部依存パッケージ（`@d-zero/*`）
 
 Nitpicker は D-ZERO が公開する以下の外部パッケージに依存している。
-仕様変更やバグ調査時はこれらのパッケージを参照すること。
+仕様変更やバグ調査時はこれらのパッケージを参照すること。バージョンは各パッケージの `package.json` を参照。
 
-| パッケージ              | バージョン | 用途                                                                          | 検索キーワード                        |
-| ----------------------- | ---------- | ----------------------------------------------------------------------------- | ------------------------------------- |
-| `@d-zero/beholder`      | 2.0.0      | Puppeteer ベースのスクレイパーエンジン。`ScrapeResult` を返す                 | `"@d-zero/beholder" changelog`        |
-| `@d-zero/dealer`        | 1.6.3      | 並列処理・スケジューリング。`deal()` 関数を提供                               | `"@d-zero/dealer" deal concurrent`    |
-| `@d-zero/shared`        | 0.20.0     | 共有ユーティリティ（サブパスエクスポート形式: `@d-zero/shared/parse-url` 等） | `"@d-zero/shared" subpath exports`    |
-| `@d-zero/roar`          | 2.0.0      | CLI フレームワーク                                                            | `"@d-zero/roar" command`              |
-| `@d-zero/google-auth`   | 0.5.6      | OAuth2 認証（`credentials.json` → `token.json`）                              | `"@d-zero/google-auth" oauth2`        |
-| `@d-zero/google-sheets` | 0.6.0      | Google Sheets API クライアント                                                | `"@d-zero/google-sheets" spreadsheet` |
-| `@d-zero/fs`            | 0.2.2      | ファイルシステムユーティリティ                                                | `"@d-zero/fs"`                        |
-| `@d-zero/readtext`      | 1.1.19     | テキスト読み取りユーティリティ                                                | `"@d-zero/readtext"`                  |
+| パッケージ              | 用途                                                                          | 検索キーワード                        |
+| ----------------------- | ----------------------------------------------------------------------------- | ------------------------------------- |
+| `@d-zero/beholder`      | Puppeteer ベースのスクレイパーエンジン。`ScrapeResult` を返す                 | `"@d-zero/beholder" changelog`        |
+| `@d-zero/dealer`        | 並列処理・スケジューリング。`deal()` 関数を提供                               | `"@d-zero/dealer" deal concurrent`    |
+| `@d-zero/shared`        | 共有ユーティリティ（サブパスエクスポート形式: `@d-zero/shared/parse-url` 等） | `"@d-zero/shared" subpath exports`    |
+| `@d-zero/roar`          | CLI フレームワーク                                                            | `"@d-zero/roar" command`              |
+| `@d-zero/google-auth`   | OAuth2 認証（`credentials.json` → `token.json`）                              | `"@d-zero/google-auth" oauth2`        |
+| `@d-zero/google-sheets` | Google Sheets API クライアント                                                | `"@d-zero/google-sheets" spreadsheet` |
+| `@d-zero/fs`            | ファイルシステムユーティリティ                                                | `"@d-zero/fs"`                        |
+| `@d-zero/readtext`      | テキスト読み取りユーティリティ                                                | `"@d-zero/readtext"`                  |
 
 ### 利用箇所マップ
 
 ```
-@d-zero/beholder   → crawler（Scraper, ScrapeResult）
-@d-zero/dealer     → crawler, core, cli, report-google-sheets（deal() 並列制御）
-@d-zero/shared     → 全パッケージ（parseUrl, delay, isError, detectCompress, detectCDN）
-@d-zero/roar       → cli（CLI コマンド定義）
-@d-zero/google-auth → report-google-sheets（OAuth2 認証）
-@d-zero/google-sheets → report-google-sheets（Sheets API）
+@d-zero/beholder      → crawler（Scraper, ScrapeResult）
+@d-zero/dealer         → crawler, core, cli, report-google-sheets（deal() 並列制御）
+@d-zero/shared         → 全パッケージ（parseUrl, delay, isError, detectCompress, detectCDN）
+@d-zero/roar           → cli（CLI コマンド定義）
+@d-zero/google-auth    → report-google-sheets（OAuth2 認証）
+@d-zero/google-sheets  → report-google-sheets（Sheets API）
+@d-zero/fs             → crawler（ファイルシステムユーティリティ）
+@d-zero/readtext       → cli（リストファイル読み込み）
 ```
 
 ### バージョン更新時の注意
