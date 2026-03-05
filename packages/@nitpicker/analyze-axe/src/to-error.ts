@@ -7,7 +7,7 @@
  * @param value - The caught value to normalise.
  * @returns An `Error` instance, either the original or a newly created one.
  */
-export function toError(value: unknown): Error {
+export function toError(value?: unknown): Error {
 	if (value instanceof Error) {
 		return value;
 	}

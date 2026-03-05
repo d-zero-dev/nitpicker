@@ -39,6 +39,12 @@ describe('toError', () => {
 		expect(result.message).toBe('undefined');
 	});
 
+	it('wraps a plain object into a new Error', () => {
+		const result = toError({});
+		expect(result).toBeInstanceOf(Error);
+		expect(result.message).toBe('[object Object]');
+	});
+
 	it('preserves subclass instances of Error', () => {
 		const original = new TypeError('type error');
 		const result = toError(original);
