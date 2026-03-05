@@ -83,29 +83,6 @@ $ npx @nitpicker/cli crawl https://example.com --output ./reports/site.nitpicker
 $ npx @nitpicker/cli crawl https://example.com -o custom-name
 ```
 
-## 開発
-
-開発環境のセットアップと詳細な貢献ガイドは [CONTRIBUTING.md](./CONTRIBUTING.md) を参照。
-
-### クイックスタート
-
-```sh
-corepack enable
-yarn install
-yarn build
-yarn test
-```
-
-### コマンド一覧
-
-| コマンド                                        | 説明                       |
-| ----------------------------------------------- | -------------------------- |
-| `yarn build`                                    | 全パッケージをビルド       |
-| `yarn test`                                     | ユニットテスト実行         |
-| `yarn vitest run --config vitest.e2e.config.ts` | E2E テスト実行             |
-| `yarn lint`                                     | lint + 自動修正            |
-| `yarn lint:check`                               | lint チェックのみ（CI 用） |
-
 ##### Tips: 認証付き URL
 
 ```sh
@@ -236,3 +213,26 @@ $ npx @nitpicker/cli pipeline https://example.com --all --silent --sheet "https:
 # 出力パス指定
 $ npx @nitpicker/cli pipeline https://example.com --all --output ./reports/site
 ```
+
+## 開発
+
+開発環境のセットアップと詳細な貢献ガイドは [CONTRIBUTING.md](./CONTRIBUTING.md) を参照。
+
+### クイックスタート
+
+```sh
+corepack enable
+yarn install
+yarn build
+yarn test
+```
+
+### コマンド一覧
+
+| コマンド                                        | 説明                       |
+| ----------------------------------------------- | -------------------------- |
+| `yarn build`                                    | 全パッケージをビルド       |
+| `yarn test`                                     | ユニットテスト実行         |
+| `yarn vitest run --config vitest.e2e.config.ts` | E2E テスト実行             |
+| `yarn lint`                                     | lint + 自動修正            |
+| `yarn lint:check`                               | lint チェックのみ（CI 用） |

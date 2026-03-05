@@ -25,10 +25,10 @@ packages/
       ↑
       └── crawler ── @nitpicker/cli ← @d-zero/roar（外部）
            ↑            ↑  ↑    ↑
-           │           core │  report-google-sheets
-           │            ↑   │
-           │     analyze-* プラグイン
-           └── @d-zero/dealer（外部）
+           │           core │  report-google-sheets ← @d-zero/google-sheets（外部）
+           │            ↑   │         ↑
+           │     analyze-* プラグイン  │
+           └── @d-zero/dealer（外部）──┘
 ```
 
 > **Note**: CLI は analyze プラグインに直接依存する（`npx` 実行時のモジュール解決のため）。新規 analyze プラグイン追加時は `@nitpicker/cli/package.json` の `dependencies` にも追加すること。
