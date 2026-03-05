@@ -36,6 +36,11 @@ describe('analyze-search plugin', () => {
 		expect(plugin.label).toBe('キーワード検索');
 	});
 
+	// TODO: toHeader uses Content.search as the key (e.g. "keyword:bar") but
+	// toArray uses Content.title (e.g. "Bar Label"), so eachPage produces
+	// "keyword:Bar Label" as the result key. This mismatch means Content-object
+	// headers never align with their result values in the report output.
+	// Fix: change toArray to use item.search instead of item.title.
 	it('builds headers from keywords and selectors', () => {
 		const plugin = pluginFactory(
 			{
