@@ -65,6 +65,7 @@ $ npx @nitpicker/cli crawl https://example.com
 $ npx @nitpicker/cli crawl https://example.com --interval 5000
 $ npx @nitpicker/cli crawl https://example.com --parallels 50
 $ npx @nitpicker/cli crawl https://example.com --no-image
+$ npx @nitpicker/cli crawl https://example.com --single
 $ npx @nitpicker/cli crawl https://example.com --no-fetch-external
 $ npx @nitpicker/cli crawl https://example.com --no-recursive
 $ npx @nitpicker/cli crawl https://example.com --scope "www.example.com, www3.example.com, https://blog.example.com/blog"

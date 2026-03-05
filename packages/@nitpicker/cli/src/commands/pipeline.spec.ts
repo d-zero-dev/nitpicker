@@ -237,6 +237,21 @@ describe('pipeline command', () => {
 		expect(reportFn).toHaveBeenCalledWith([archivePath], expect.any(Object));
 	});
 
+	it('passes --single flag to startCrawl', async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+		vi.mocked(analyzeFn).mockResolvedValue();
+
+		await pipeline(['https://example.com'], {
+			...defaultFlags,
+			single: true,
+		});
+
+		expect(startCrawlFn).toHaveBeenCalledWith(
+			['https://example.com'],
+			expect.objectContaining({ single: true }),
+		);
+	});
+
 	it('propagates error when startCrawl rejects', async () => {
 		const crawlError = new Error('Crawl failed');
 		vi.mocked(startCrawlFn).mockRejectedValue(crawlError);
