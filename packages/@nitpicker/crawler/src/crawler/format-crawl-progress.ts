@@ -46,11 +46,12 @@ export function formatCrawlProgress({
 	const internalRemaining = internalTotal - internalDone;
 	const externalRemaining = externalTotal - externalDone;
 	const totalRemaining = internalRemaining + externalRemaining;
+	const pct = allTotal > 0 ? Math.round((allDone / allTotal) * 100) : 0;
 
 	return (
 		c.bold(`Crawling: ${internalDone} done / ${internalTotal} found`) +
 		c.dim(` (+${externalDone}/${externalTotal} ext)`) +
-		c.bold(` [${totalRemaining} remaining]`) +
+		c.bold(` (${pct}%) [${totalRemaining} remaining]`) +
 		c.dim(` [${limit} parallel]`)
 	);
 }

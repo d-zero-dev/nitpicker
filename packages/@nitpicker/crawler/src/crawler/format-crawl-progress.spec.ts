@@ -94,6 +94,30 @@ describe('formatCrawlProgress', () => {
 		expect(result).toContain('120 remaining');
 	});
 
+	it('shows percentage', () => {
+		const result = formatCrawlProgress({
+			done: 50,
+			total: 100,
+			resumeOffset: 0,
+			externalTotal: 0,
+			externalDone: 0,
+			limit: 10,
+		});
+		expect(result).toContain('(50%)');
+	});
+
+	it('shows 0% when total is zero', () => {
+		const result = formatCrawlProgress({
+			done: 0,
+			total: 0,
+			resumeOffset: 0,
+			externalTotal: 0,
+			externalDone: 0,
+			limit: 10,
+		});
+		expect(result).toContain('(0%)');
+	});
+
 	it('produces exact expected format', () => {
 		const result = formatCrawlProgress({
 			done: 50,
@@ -104,7 +128,7 @@ describe('formatCrawlProgress', () => {
 			limit: 10,
 		});
 		expect(result).toBe(
-			'Crawling: 50 done / 100 found (+0/0 ext) [50 remaining] [10 parallel]',
+			'Crawling: 50 done / 100 found (+0/0 ext) (50%) [50 remaining] [10 parallel]',
 		);
 	});
 
