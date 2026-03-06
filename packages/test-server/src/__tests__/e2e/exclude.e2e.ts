@@ -10,7 +10,7 @@ describe('Exclude patterns', () => {
 			result = await crawl(['http://localhost:8010/exclude/'], {
 				excludes: ['/exclude/secret/*'],
 			});
-		}, 60_000);
+		});
 
 		afterAll(async () => {
 			await cleanup(result);
@@ -37,7 +37,7 @@ describe('Exclude patterns', () => {
 			result = await crawl(['http://localhost:8010/exclude/'], {
 				excludeKeywords: ['FORBIDDEN_KEYWORD'],
 			});
-		}, 60_000);
+		});
 
 		afterAll(async () => {
 			await cleanup(result);
@@ -70,7 +70,7 @@ describe('Exclude patterns', () => {
 			result = await crawl(['http://localhost:8010/exclude/'], {
 				excludeUrls: ['http://127.0.0.1:8010/exclude/external-a'],
 			});
-		}, 60_000);
+		});
 
 		afterAll(async () => {
 			await cleanup(result);

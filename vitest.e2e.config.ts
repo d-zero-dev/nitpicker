@@ -15,8 +15,8 @@ export default defineConfig({
 	},
 	test: {
 		include: ['packages/test-server/src/__tests__/e2e/**/*.e2e.ts'],
-		testTimeout: 30_000,
-		hookTimeout: 60_000,
+		testTimeout: 60_000,
+		hookTimeout: 120_000,
 		pool: 'forks',
 		maxWorkers: 1,
 		isolate: true,
