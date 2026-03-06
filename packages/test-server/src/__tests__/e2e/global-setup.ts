@@ -6,7 +6,7 @@ let server: Server;
  *
  */
 export async function setup() {
-	const { startServer } = await import('../../../src/index.js');
+	const { startServer } = await import('../../../src/server.js');
 	server = await startServer(8010);
 	console.log('[global-setup] Test server started on port 8010'); // eslint-disable-line no-console
 }

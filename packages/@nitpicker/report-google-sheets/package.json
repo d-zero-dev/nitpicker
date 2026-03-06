@@ -18,8 +18,8 @@
 	"type": "module",
 	"exports": {
 		".": {
-			"import": "./lib/index.js",
-			"types": "./lib/index.d.ts"
+			"import": "./lib/report-google-sheets.js",
+			"types": "./lib/report-google-sheets.d.ts"
 		}
 	},
 	"scripts": {

@@ -28,12 +28,12 @@ vi.mock('lighthouse/report/renderer/report-utils.js', () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-let pluginFactory: typeof import('./index.js').default;
+let pluginFactory: typeof import('./lighthouse-plugin.js').default;
 
 beforeEach(async () => {
 	vi.clearAllMocks();
 	launchMock.mockResolvedValue({ port: 9222, kill: killMock });
-	const mod = await import('./index.js');
+	const mod = await import('./lighthouse-plugin.js');
 	pluginFactory = mod.default;
 });
 

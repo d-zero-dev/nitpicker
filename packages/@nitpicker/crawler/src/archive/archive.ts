@@ -1,23 +1,22 @@
 import type { Config } from './types.js';
-import type { PageData, CrawlerError, Resource } from '../utils/index.js';
+import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
 import type { ParseURLOptions } from '@d-zero/shared/parse-url';
 
 import path from 'node:path';
 
+import { zip } from '@d-zero/fs/zip';
+
 import { ArchiveAccessor } from './archive-accessor.js';
 import { Database } from './database.js';
 import { dbLog, log, saveLog } from './debug.js';
-import {
-	appendText,
-	exists,
-	isDir,
-	outputText,
-	remove,
-	rename,
-	tar,
-	untar,
-	zip,
-} from './filesystem/index.js';
+import { appendText } from './filesystem/append-text.js';
+import { exists } from './filesystem/exists.js';
+import { isDir } from './filesystem/is-dir.js';
+import { outputText } from './filesystem/output-text.js';
+import { remove } from './filesystem/remove.js';
+import { rename } from './filesystem/rename.js';
+import { tar } from './filesystem/tar.js';
+import { untar } from './filesystem/untar.js';
 
 /**
  * Main archive class for creating, opening, resuming, and writing Nitpicker archive files (`.nitpicker`).

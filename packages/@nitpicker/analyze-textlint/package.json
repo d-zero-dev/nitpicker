@@ -18,8 +18,8 @@
 	"type": "module",
 	"exports": {
 		".": {
-			"import": "./lib/index.js",
-			"types": "./lib/index.d.ts"
+			"import": "./lib/textlint-plugin.js",
+			"types": "./lib/textlint-plugin.d.ts"
 		}
 	},
 	"scripts": {

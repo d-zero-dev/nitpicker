@@ -1,6 +1,6 @@
 import type LinkList from './link-list.js';
 import type { CrawlerOptions } from './types.js';
-import type { AnchorData, Link, PageData } from '../utils/index.js';
+import type { AnchorData, Link, PageData } from '../utils/types/types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
 import { crawlerLog } from '../debug.js';

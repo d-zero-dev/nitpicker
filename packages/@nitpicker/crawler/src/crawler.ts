@@ -6,7 +6,13 @@
  */
 
 // Types + Utils (旧 @nitpicker/types + utils)
-export * from './utils/index.js';
+export * from './utils/types/types.js';
+export { eachSplitted } from './utils/array/each-splitted.js';
+export { DOMEvaluationError } from './utils/error/dom-evaluation-error.js';
+export { ErrorEmitter } from './utils/error/error-emitter.js';
+export type { ErrorEvent } from './utils/error/error-emitter.js';
+export * from './utils/object/clean-object.js';
+export { globalLog as log } from './utils/debug.js';
 
 // Archive
 export { ArchiveAccessor } from './archive/archive-accessor.js';

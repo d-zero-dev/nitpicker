@@ -11,11 +11,11 @@ vi.mock('markuplint', () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-let pluginFactory: typeof import('./index.js').default;
+let pluginFactory: typeof import('./markuplint-plugin.js').default;
 
 beforeEach(async () => {
 	vi.clearAllMocks();
-	const mod = await import('./index.js');
+	const mod = await import('./markuplint-plugin.js');
 	pluginFactory = mod.default;
 });
 

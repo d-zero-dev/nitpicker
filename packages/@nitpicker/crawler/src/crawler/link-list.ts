@@ -1,4 +1,4 @@
-import type { Link, PageData } from '../utils/index.js';
+import type { Link, PageData } from '../utils/types/types.js';
 import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 
 import { isError } from '@d-zero/beholder';

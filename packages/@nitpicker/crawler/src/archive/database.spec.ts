@@ -6,7 +6,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { Database } from './database.js';
-import { remove } from './filesystem/index.js';
+import { remove } from './filesystem/remove.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
