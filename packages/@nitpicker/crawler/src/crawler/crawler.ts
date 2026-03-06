@@ -179,6 +179,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				pid: process.pid,
 				isMainProcess: true,
 				url: url.href,
+				isExternal: false,
 				error: error instanceof Error ? error : new Error(String(error)),
 			});
 			void this.emit('crawlEnd', {});
@@ -220,6 +221,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				pid: process.pid,
 				isMainProcess: true,
 				url: pageList[0]!.href,
+				isExternal: false,
 				error: error instanceof Error ? error : new Error(String(error)),
 			});
 			void this.emit('crawlEnd', {});
@@ -362,6 +364,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					this.#scope,
 					this.#options,
 				);
+				const isExternal = isExternalUrl(url, this.#scope);
 				if (pageResult) {
 					if (pageResult.isExternal) {
 						void this.emit('externalPage', { result: pageResult });
@@ -373,6 +376,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					pid: process.pid,
 					isMainProcess: true,
 					url: url.href,
+					isExternal,
 					error,
 				});
 				break;

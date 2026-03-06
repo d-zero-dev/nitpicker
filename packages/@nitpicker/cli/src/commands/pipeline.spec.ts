@@ -1,13 +1,22 @@
+import type { CrawlerError } from '@nitpicker/crawler';
+
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
+import { ExitCode } from '../exit-code.js';
+
 import { analyze as analyzeFn } from './analyze.js';
-import { startCrawl as startCrawlFn } from './crawl.js';
+import { CrawlAggregateError, startCrawl as startCrawlFn } from './crawl.js';
 import { pipeline } from './pipeline.js';
 import { report as reportFn } from './report.js';
 
-vi.mock('./crawl.js', () => ({
-	startCrawl: vi.fn(),
-}));
+vi.mock('./crawl.js', async () => {
+	// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+	const actual = await vi.importActual<typeof import('./crawl.js')>('./crawl.js');
+	return {
+		startCrawl: vi.fn(),
+		CrawlAggregateError: actual.CrawlAggregateError,
+	};
+});
 
 vi.mock('./analyze.js', () => ({
 	analyze: vi.fn(),
@@ -53,6 +62,7 @@ describe('pipeline command', () => {
 		userAgent: undefined,
 		ignoreRobots: undefined,
 		output: undefined,
+		strict: undefined,
 		all: undefined,
 		plugin: undefined,
 		searchKeywords: undefined,
@@ -322,5 +332,66 @@ describe('pipeline command', () => {
 		await pipeline(['https://example.com'], defaultFlags);
 
 		expect(consoleLogSpy).toHaveBeenCalledWith('\n✅ [pipeline] All steps completed.');
+	});
+
+	it('exits with warning (code 2) when crawl has only external errors', async () => {
+		const externalError: CrawlerError = {
+			pid: 1,
+			isMainProcess: true,
+			url: 'https://external.example.com',
+			isExternal: true,
+			error: new Error('DNS lookup failed'),
+		};
+		vi.mocked(startCrawlFn).mockRejectedValue(new CrawlAggregateError([externalError]));
+
+		await expect(pipeline(['https://example.com'], defaultFlags)).rejects.toThrow(
+			ExitError,
+		);
+		expect(exitSpy).toHaveBeenCalledWith(ExitCode.Warning);
+	});
+
+	it('propagates CrawlAggregateError with internal errors', async () => {
+		const internalError: CrawlerError = {
+			pid: 1,
+			isMainProcess: true,
+			url: 'https://example.com/page',
+			isExternal: false,
+			error: new Error('Internal failure'),
+		};
+		vi.mocked(startCrawlFn).mockRejectedValue(new CrawlAggregateError([internalError]));
+
+		await expect(pipeline(['https://example.com'], defaultFlags)).rejects.toThrow(
+			CrawlAggregateError,
+		);
+	});
+
+	it('exits with fatal (code 1) when --strict and external-only errors', async () => {
+		const externalError: CrawlerError = {
+			pid: 1,
+			isMainProcess: true,
+			url: 'https://external.example.com',
+			isExternal: true,
+			error: new Error('DNS lookup failed'),
+		};
+		vi.mocked(startCrawlFn).mockRejectedValue(new CrawlAggregateError([externalError]));
+
+		await expect(
+			pipeline(['https://example.com'], { ...defaultFlags, strict: true }),
+		).rejects.toThrow(CrawlAggregateError);
+	});
+
+	it('passes --strict flag to startCrawl', async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+		vi.mocked(analyzeFn).mockResolvedValue();
+
+		await pipeline(['https://example.com'], {
+			...defaultFlags,
+			strict: true,
+		});
+
+		expect(startCrawlFn).toHaveBeenCalledWith(
+			['https://example.com'],
+			expect.objectContaining({ strict: true }),
+		);
 	});
 });

@@ -1,8 +1,13 @@
-import type { CrawlerOrchestrator as OrchestratorType } from '@nitpicker/crawler';
+import type {
+	CrawlerOrchestrator as OrchestratorType,
+	CrawlerError,
+} from '@nitpicker/crawler';
 
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+
+import { ExitCode } from '../exit-code.js';
 
 const mockCrawling = vi.fn();
 const mockResume = vi.fn();
@@ -69,6 +74,7 @@ function createFlags(overrides: Partial<CrawlFlags> = {}): CrawlFlags {
 		userAgent: undefined,
 		ignoreRobots: undefined,
 		output: undefined,
+		strict: undefined,
 		verbose: undefined,
 		silent: undefined,
 		diff: undefined,
@@ -352,5 +358,110 @@ describe('crawl', () => {
 		await crawl([], flags);
 
 		expect(mockLog).toHaveBeenCalledWith('Options: %O', flags);
+	});
+});
+
+/** Sentinel error thrown by the process.exit mock to halt execution. */
+class ExitError extends Error {
+	/** The exit code passed to process.exit(). */
+	readonly code: number;
+	constructor(code: number) {
+		super(`process.exit(${code})`);
+		this.code = code;
+	}
+}
+
+/**
+ * Creates a fake CrawlerError for testing.
+ * @param isExternal - Whether the error is from an external URL.
+ */
+function createCrawlerError(isExternal: boolean): CrawlerError {
+	return {
+		pid: 1,
+		isMainProcess: true,
+		url: isExternal ? 'https://external.example.com' : 'https://example.com/page',
+		isExternal,
+		error: new Error('test error'),
+	};
+}
+
+describe('CrawlAggregateError', () => {
+	it('外部エラーのみの場合、hasOnlyExternalErrors が true', async () => {
+		const { CrawlAggregateError } = await import('./crawl.js');
+		const error = new CrawlAggregateError([
+			createCrawlerError(true),
+			createCrawlerError(true),
+		]);
+		expect(error.hasOnlyExternalErrors).toBe(true);
+	});
+
+	it('内部エラーを含む場合、hasOnlyExternalErrors が false', async () => {
+		const { CrawlAggregateError } = await import('./crawl.js');
+		const error = new CrawlAggregateError([
+			createCrawlerError(true),
+			createCrawlerError(false),
+		]);
+		expect(error.hasOnlyExternalErrors).toBe(false);
+	});
+
+	it('内部エラーのみの場合、hasOnlyExternalErrors が false', async () => {
+		const { CrawlAggregateError } = await import('./crawl.js');
+		const error = new CrawlAggregateError([createCrawlerError(false)]);
+		expect(error.hasOnlyExternalErrors).toBe(false);
+	});
+
+	it('plain Error は内部エラーとして扱う', async () => {
+		const { CrawlAggregateError } = await import('./crawl.js');
+		const error = new CrawlAggregateError([new Error('plain error')]);
+		expect(error.hasOnlyExternalErrors).toBe(false);
+	});
+});
+
+describe('crawl exit codes', () => {
+	let exitSpy: ReturnType<typeof vi.spyOn>;
+	beforeEach(() => {
+		vi.clearAllMocks();
+		setupFakeOrchestrator();
+		exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+			throw new ExitError(code as number);
+		});
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('外部エラーのみの場合、exit code 2 で終了する', async () => {
+		mockEventAssignments.mockRejectedValueOnce(createCrawlerError(true));
+
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl(['https://example.com'], createFlags())).rejects.toThrow(
+			ExitError,
+		);
+		expect(exitSpy).toHaveBeenCalledWith(ExitCode.Warning);
+	});
+
+	it('内部エラーを含む場合、exit code 1 で終了する', async () => {
+		mockEventAssignments.mockRejectedValueOnce(createCrawlerError(false));
+
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl(['https://example.com'], createFlags())).rejects.toThrow(
+			ExitError,
+		);
+		expect(exitSpy).toHaveBeenCalledWith(ExitCode.Fatal);
+	});
+
+	it('--strict 指定時、外部エラーのみでも exit code 1 で終了する', async () => {
+		mockEventAssignments.mockRejectedValueOnce(createCrawlerError(true));
+
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(['https://example.com'], createFlags({ strict: true })),
+		).rejects.toThrow(ExitError);
+		expect(exitSpy).toHaveBeenCalledWith(ExitCode.Fatal);
 	});
 });
