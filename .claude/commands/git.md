@@ -27,6 +27,11 @@ description: Git 操作ルール
   - 続行する前にユーザーの確認または新しい指示を待つ
 - OS、アプリケーション設定、またはコンテキストから英語以外の言語が使用されていると判断される場合、コミットコマンド実行の直前に、コミットメッセージの翻訳と説明をその言語で提供すること。
 
+# コミット前コンテンツチェック
+
+- `git commit` を実行する前に、必ず `git diff --staged` をスキャンし、プロジェクト固有の名称、企業名、顧客情報など、リポジトリに含めるべきでない情報がないか確認する。
+- 該当するものがあれば、コミット前にステージングから除外する。
+
 # パッケージのコミット順序（依存元優先）
 
 複数パッケージにまたがる変更をコミットする場合、必ず**リーフからルートへ**（依存元を依存先より先に）コミットする。
@@ -60,18 +65,10 @@ description: Git 操作ルール
 - 英語で記述すること
 - 命令法を使用すること
 - Conventional Commits を使用すること
-  - 使用するタイプ:
-    - `feat`
-    - `fix`
-    - `docs`
-    - `refactor`
-    - `test`
-    - `chore`
+  - 使用するタイプ: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
   - 使用するスコープ:
     - 各パッケージ名（ネームスペースなし）: `crawler`, `core`, `types`, `analyze-axe`, `analyze-lighthouse`, `analyze-main-contents`, `analyze-markuplint`, `analyze-search`, `analyze-textlint`, `report-google-sheets`, `cli`
-    - `repo`
-    - `deps`
-    - `github`
+    - `repo`, `deps`, `github`
 - メッセージ本文の各行は100文字以下
 - 件名は sentence-case, start-case, pascal-case, upper-case にしない
 
