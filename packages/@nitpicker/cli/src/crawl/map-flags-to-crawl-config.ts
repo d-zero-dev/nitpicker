@@ -29,6 +29,9 @@ export function mapFlagsToCrawlConfig(flags: CrawlFlagInput) {
 		excludes: flags.exclude,
 		excludeKeywords: flags.excludeKeyword,
 		excludeUrls: flags.excludeUrl,
-		scope: flags.scope?.split(',').map((s) => s.trim()),
+		scope: flags.scope
+			?.split(',')
+			.map((s) => s.trim())
+			.filter(Boolean),
 	};
 }
