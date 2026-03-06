@@ -333,16 +333,17 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 }
 
 /**
- * Checks whether a collected error originated from an external URL.
+ * Type guard that checks whether a collected error is a {@link CrawlerError}
+ * originating from an external URL.
  *
- * `CrawlerError` objects carry an `isExternal` flag set by the crawler.
+ * `CrawlerError` objects carry both `pid` and `isExternal` fields set by the crawler.
  * Plain `Error` objects (e.g. from event handler rejections) are treated
  * as internal errors.
  * @param error - The error to check
  * @returns `true` if the error is a `CrawlerError` with `isExternal` set to `true`.
  */
 function isCrawlerExternalError(error: CrawlerError | Error): boolean {
-	return 'isExternal' in error && error.isExternal === true;
+	return 'pid' in error && 'isExternal' in error && error.isExternal === true;
 }
 
 /**
@@ -364,10 +365,15 @@ export class CrawlAggregateError extends Error {
 		const internalCount = errors.length - externalCount;
 		const hasOnlyExternal = errors.length > 0 && internalCount === 0;
 
-		const summary = hasOnlyExternal
-			? `Crawl completed with ${externalCount} external error(s).`
-			: `Crawl completed with ${errors.length} error(s).`;
-		super(summary);
+		const parts: string[] = [];
+		if (internalCount > 0) {
+			parts.push(`${internalCount} internal`);
+		}
+		if (externalCount > 0) {
+			parts.push(`${externalCount} external`);
+		}
+		const breakdown = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+		super(`Crawl completed with ${errors.length} error(s)${breakdown}.`);
 
 		this.errors = errors;
 		this.hasOnlyExternalErrors = hasOnlyExternal;

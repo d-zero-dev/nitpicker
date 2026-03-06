@@ -415,6 +415,40 @@ describe('CrawlAggregateError', () => {
 		const error = new CrawlAggregateError([new Error('plain error')]);
 		expect(error.hasOnlyExternalErrors).toBe(false);
 	});
+
+	it('空の配列に対して hasOnlyExternalErrors が false', async () => {
+		const { CrawlAggregateError } = await import('./crawl.js');
+		const error = new CrawlAggregateError([]);
+		expect(error.hasOnlyExternalErrors).toBe(false);
+		expect(error.errors).toHaveLength(0);
+	});
+
+	it('外部エラーのみの場合、message に "external" の内訳を含む', async () => {
+		const { CrawlAggregateError } = await import('./crawl.js');
+		const error = new CrawlAggregateError([
+			createCrawlerError(true),
+			createCrawlerError(true),
+		]);
+		expect(error.message).toBe('Crawl completed with 2 error(s) (2 external).');
+	});
+
+	it('混合エラーの場合、message に内部と外部の内訳を含む', async () => {
+		const { CrawlAggregateError } = await import('./crawl.js');
+		const error = new CrawlAggregateError([
+			createCrawlerError(false),
+			createCrawlerError(true),
+			createCrawlerError(false),
+		]);
+		expect(error.message).toBe(
+			'Crawl completed with 3 error(s) (2 internal, 1 external).',
+		);
+	});
+
+	it('内部エラーのみの場合、message に "internal" の内訳を含む', async () => {
+		const { CrawlAggregateError } = await import('./crawl.js');
+		const error = new CrawlAggregateError([createCrawlerError(false)]);
+		expect(error.message).toBe('Crawl completed with 1 error(s) (1 internal).');
+	});
 });
 
 describe('crawl exit codes', () => {
@@ -430,6 +464,49 @@ describe('crawl exit codes', () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+	});
+
+	it('外部エラーのみの場合、サマリーに "external" を含む', async () => {
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		mockEventAssignments.mockRejectedValueOnce(createCrawlerError(true));
+
+		const { crawl } = await import('./crawl.js');
+
+		try {
+			await crawl(['https://example.com'], createFlags());
+		} catch {
+			// exit mock throws
+		}
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			'\nCompleted with 1 error(s) (1 external).',
+		);
+	});
+
+	it('内部エラーの場合、サマリーに "internal" を含む', async () => {
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		mockEventAssignments.mockRejectedValueOnce(createCrawlerError(false));
+
+		const { crawl } = await import('./crawl.js');
+
+		try {
+			await crawl(['https://example.com'], createFlags());
+		} catch {
+			// exit mock throws
+		}
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			'\nCompleted with 1 error(s) (1 internal).',
+		);
+	});
+
+	it('--resume 経由の外部エラーでも exit code 2 で終了する', async () => {
+		mockEventAssignments.mockRejectedValueOnce(createCrawlerError(true));
+
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl([], createFlags({ resume: '/tmp/stub' }))).rejects.toThrow(
+			ExitError,
+		);
+		expect(exitSpy).toHaveBeenCalledWith(ExitCode.Warning);
 	});
 
 	it('外部エラーのみの場合、exit code 2 で終了する', async () => {

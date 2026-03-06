@@ -97,7 +97,7 @@ describe('pipeline command', () => {
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
 			'Usage: nitpicker pipeline <URL> [options]',
 		);
-		expect(exitSpy).toHaveBeenCalledWith(1);
+		expect(exitSpy).toHaveBeenCalledWith(ExitCode.Fatal);
 	});
 
 	it('runs crawl then analyze without report when --sheet is not provided', async () => {
