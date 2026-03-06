@@ -63,7 +63,7 @@ fix(core): prevent analyze results from being silently empty
 docs: update README with new CLI options
 ```
 
-commitlint がプリコミットフックで検証します。
+`.commitlintrc` で設定されていますが、現在 Git フックには組み込まれていません。CI やレビュー時にコミットメッセージを確認してください。
 
 ## コーディング規約
 
