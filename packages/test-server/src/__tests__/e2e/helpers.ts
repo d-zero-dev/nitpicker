@@ -58,8 +58,6 @@ export async function crawl(
  * Removes the temporary working directory created by {@link crawl}.
  * @param result - The crawl result whose working directory should be deleted.
  */
-export async function cleanup(result: CrawlResult | undefined) {
-	if (result?.cwd) {
-		await fs.rm(result.cwd, { recursive: true, force: true });
-	}
+export async function cleanup(result: CrawlResult) {
+	await fs.rm(result.cwd, { recursive: true, force: true });
 }

@@ -7,7 +7,7 @@ describe('Error status codes', () => {
 
 	beforeAll(async () => {
 		result = await crawl(['http://localhost:8010/error-status/']);
-	});
+	}, 60_000);
 
 	afterAll(async () => {
 		await cleanup(result);

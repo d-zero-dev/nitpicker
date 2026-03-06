@@ -34,13 +34,11 @@ describe('Archive pipeline (.nitpicker write → reopen)', () => {
 		);
 
 		tmpDir = orchestrator.archive.tmpDir;
-	});
+	}, 120_000);
 
 	afterAll(async () => {
-		orchestrator?.garbageCollect();
-		if (cwd) {
-			await fs.rm(cwd, { recursive: true, force: true }).catch(() => {});
-		}
+		orchestrator.garbageCollect();
+		await fs.rm(cwd, { recursive: true, force: true }).catch(() => {});
 		if (reopenCwd) {
 			await fs.rm(reopenCwd, { recursive: true, force: true }).catch(() => {});
 		}

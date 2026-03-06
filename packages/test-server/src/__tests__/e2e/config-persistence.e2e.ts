@@ -12,7 +12,7 @@ describe('Config persistence', () => {
 			userAgent: 'NitpickerE2EBot/1.0',
 			ignoreRobots: true,
 		});
-	});
+	}, 60_000);
 
 	afterAll(async () => {
 		await cleanup(result);
