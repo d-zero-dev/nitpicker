@@ -23,13 +23,13 @@ interface FormatCrawlProgressParams {
  *
  * Shows "done / found (remaining)" format instead of "done/total"
  * to make it clearer that the total is expected to grow during crawling.
- * @param root0
- * @param root0.done
- * @param root0.total
- * @param root0.resumeOffset
- * @param root0.externalTotal
- * @param root0.externalDone
- * @param root0.limit
+ * @param params - The crawl progress parameters.
+ * @param params.done
+ * @param params.total
+ * @param params.resumeOffset
+ * @param params.externalTotal
+ * @param params.externalDone
+ * @param params.limit
  */
 export function formatCrawlProgress({
 	done,

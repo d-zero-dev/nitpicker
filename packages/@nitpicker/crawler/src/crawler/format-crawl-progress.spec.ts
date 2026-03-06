@@ -93,4 +93,34 @@ describe('formatCrawlProgress', () => {
 		// total remaining: 120
 		expect(result).toContain('120 remaining');
 	});
+
+	it('produces exact expected format', () => {
+		const result = formatCrawlProgress({
+			done: 50,
+			total: 100,
+			resumeOffset: 0,
+			externalTotal: 0,
+			externalDone: 0,
+			limit: 10,
+		});
+		expect(result).toBe(
+			'Crawling: 50 done / 100 found (+0/0 ext) [50 remaining] [10 parallel]',
+		);
+	});
+
+	it('combines resumeOffset with external URLs correctly', () => {
+		const result = formatCrawlProgress({
+			done: 40,
+			total: 80,
+			resumeOffset: 20,
+			externalTotal: 10,
+			externalDone: 5,
+			limit: 5,
+		});
+		// allDone=60, allTotal=100, internalDone=55, internalTotal=90
+		// internalRemaining=35, externalRemaining=5, totalRemaining=40
+		expect(result).toContain('55 done / 90 found');
+		expect(result).toContain('+5/10 ext');
+		expect(result).toContain('40 remaining');
+	});
 });
