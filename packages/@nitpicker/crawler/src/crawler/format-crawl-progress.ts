@@ -24,12 +24,13 @@ interface FormatCrawlProgressParams {
  * Shows "done / found (remaining)" format instead of "done/total"
  * to make it clearer that the total is expected to grow during crawling.
  * @param params - The crawl progress parameters.
- * @param params.done
- * @param params.total
- * @param params.resumeOffset
- * @param params.externalTotal
- * @param params.externalDone
- * @param params.limit
+ * @param params.done - Number of URLs completed by the deal queue.
+ * @param params.total - Total number of URLs in the deal queue (including completed).
+ * @param params.resumeOffset - Offset from a previous resumed session.
+ * @param params.externalTotal - Number of external URLs discovered.
+ * @param params.externalDone - Number of external URLs completed.
+ * @param params.limit - Number of parallel workers.
+ * @returns The formatted progress string with ANSI color codes.
  */
 export function formatCrawlProgress({
 	done,
