@@ -22,6 +22,7 @@ import { crawlerLog } from '../debug.js';
 
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
 import { fetchDestination } from './fetch-destination.js';
+import { formatCrawlProgress } from './format-crawl-progress.js';
 import { generatePredictedUrls } from './generate-predicted-urls.js';
 import { handleIgnoreAndSkip } from './handle-ignore-and-skip.js';
 import { handleResourceResponse } from './handle-resource-response.js';
@@ -579,16 +580,14 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				interval: this.#options.interval,
 				verbose: this.#options.verbose || !process.stdout.isTTY,
 				header: (_progress, done, total, limit) => {
-					const allDone = done + resumeOffset;
-					const allTotal = total + resumeOffset;
-					const extTotal = externalUrls.size;
-					const extDone = externalDoneUrls.size;
-					const pct = allTotal > 0 ? Math.round((allDone / allTotal) * 100) : 0;
-					return (
-						c.bold(`Crawling: ${allDone - extDone}/${allTotal - extTotal}`) +
-						c.dim(`(${extDone}/${extTotal})`) +
-						c.bold(` (${pct}%) [${limit} parallel]`)
-					);
+					return formatCrawlProgress({
+						done,
+						total,
+						resumeOffset,
+						externalTotal: externalUrls.size,
+						externalDone: externalDoneUrls.size,
+						limit,
+					});
 				},
 				onPush: (url) => {
 					const key = protocolAgnosticKey(url.withoutHashAndAuth);
