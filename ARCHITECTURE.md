@@ -63,7 +63,7 @@ flowchart TD
     Result --> Save["Archive にページデータ保存"]
 
     Crawling --> Write["CrawlerOrchestrator.write()"]
-    Write --> ArchiveWrite["Archive.write()<br/>tmpDir を .nitpicker ファイルに圧縮（tar）"]
+    Write --> ArchiveWrite["Archive.write()<br/>snapshot を zip 圧縮 → tmpDir を .nitpicker ファイルに tar 圧縮"]
 ```
 
 ---
@@ -185,10 +185,10 @@ deal() で選択           → progress(url) → progress セット
 発見したアンカーについて:
 ├── recursive=true の場合:
 │   ├── isLowerLayer → LinkList.add(url)        # フルスクレイプ
-│   └── isExternal && fetchExternal → add(url, { titleOnly: true })
+│   └── isExternal && fetchExternal → add(url, { metadataOnly: true })
 │
 └── recursive=false の場合:
-    └── add(url, { titleOnly: true })           # HEAD のみ
+    └── add(url, { metadataOnly: true })        # HEAD のみ
 ```
 
 ### deal() コールバック内の処理順序
