@@ -231,4 +231,14 @@ $ npx @nitpicker/cli pipeline https://example.com --all --silent --sheet "https:
 
 # 出力パス指定
 $ npx @nitpicker/cli pipeline https://example.com --all --output ./reports/site
+
+# CI: 外部リンクエラーを無視（exit 2 を許容）
+$ npx @nitpicker/cli pipeline https://example.com --all --silent || [ $? -eq 2 ]
+
+# CI: 外部リンクエラーも失敗にする
+$ npx @nitpicker/cli pipeline https://example.com --all --silent --strict
 ```
+
+#### 終了コード
+
+crawl コマンドと同じ終了コード体系に従う。詳細は [crawl の終了コード](#終了コード) を参照。
