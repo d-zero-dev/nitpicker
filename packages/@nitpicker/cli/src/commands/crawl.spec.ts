@@ -346,6 +346,31 @@ describe('crawl', () => {
 		);
 	});
 
+	it('--list-file に無効な URL が含まれる場合、エラーを投げる', async () => {
+		mockReadList.mockResolvedValueOnce(['https://example.com', 'not-a-url']);
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl([], createFlags({ listFile: '/tmp/urls.txt' }))).rejects.toThrow(
+			'Invalid URL: "not-a-url"',
+		);
+	});
+
+	it('--list に無効な URL が含まれる場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl([], createFlags({ list: ['https://example.com', 'bad-url'] })),
+		).rejects.toThrow('Invalid URL: "bad-url"');
+	});
+
+	it('--list と args に無効な URL が含まれる場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(['invalid'], createFlags({ list: ['https://example.com'] })),
+		).rejects.toThrow('Invalid URL: "invalid"');
+	});
+
 	it('無効な URL 引数の場合、エラーを投げる', async () => {
 		const { crawl } = await import('./crawl.js');
 
