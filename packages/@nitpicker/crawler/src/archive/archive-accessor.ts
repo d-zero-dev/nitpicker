@@ -11,18 +11,15 @@ import type { ParseURLOptions } from '@d-zero/shared/parse-url';
 
 import path from 'node:path';
 
+import { extractZip, unzip } from '@d-zero/fs/zip';
 import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-await-event-emitter';
 
 import { log } from './debug.js';
-import {
-	exists,
-	extractZip,
-	outputJSON,
-	outputText,
-	readJSON,
-	readText,
-	unzip,
-} from './filesystem/index.js';
+import { exists } from './filesystem/exists.js';
+import { outputJSON } from './filesystem/output-json.js';
+import { outputText } from './filesystem/output-text.js';
+import { readJSON } from './filesystem/read-json.js';
+import { readText } from './filesystem/read-text.js';
 import Page from './page.js';
 import Resource from './resource.js';
 import { safePath } from './safe-path.js';

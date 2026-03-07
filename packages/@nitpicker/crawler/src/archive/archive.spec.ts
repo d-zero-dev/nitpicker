@@ -5,15 +5,15 @@ import { afterAll, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 import Archive from './archive.js';
 import { Database } from './database.js';
-import { remove } from './filesystem/index.js';
+import { remove } from './filesystem/remove.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
 const workingDir = path.resolve(__dirname, '__mock__');
 
-vi.mock('./filesystem/index.js', async (importOriginal) => {
+vi.mock('./filesystem/output-text.js', async (importOriginal) => {
 	// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-	const original = await importOriginal<typeof import('./filesystem/index.js')>();
+	const original = await importOriginal<typeof import('./filesystem/output-text.js')>();
 	return {
 		...original,
 		outputText: vi.fn(original.outputText),
@@ -33,7 +33,7 @@ describe('setPage', () => {
 	});
 
 	it('スナップショット書き込み失敗時にDB上のHTMLパスがクリアされエラーが伝搬する', async () => {
-		const fsIndex = await import('./filesystem/index.js');
+		const fsIndex = await import('./filesystem/output-text.js');
 		const mockedOutputText = vi.mocked(fsIndex.outputText);
 		mockedOutputText.mockRejectedValueOnce(new Error('Disk write failure'));
 
@@ -86,7 +86,7 @@ describe('setPage', () => {
 	});
 
 	it('clearHtmlPath失敗時も元のスナップショットエラーが伝搬する', async () => {
-		const fsIndex = await import('./filesystem/index.js');
+		const fsIndex = await import('./filesystem/output-text.js');
 		const mockedOutputText = vi.mocked(fsIndex.outputText);
 		mockedOutputText.mockRejectedValueOnce(new Error('Disk full'));
 

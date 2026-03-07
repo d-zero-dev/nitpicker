@@ -18,8 +18,8 @@
 	"type": "module",
 	"exports": {
 		".": {
-			"import": "./lib/index.js",
-			"types": "./lib/index.d.ts"
+			"import": "./lib/axe-plugin.js",
+			"types": "./lib/axe-plugin.d.ts"
 		}
 	},
 	"scripts": {

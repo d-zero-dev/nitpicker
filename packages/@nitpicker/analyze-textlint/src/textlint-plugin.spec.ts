@@ -48,11 +48,11 @@ vi.mock('@textlint-ja/textlint-rule-no-synonyms', () => ({ default: {} }));
 vi.mock('textlint-plugin-html', () => ({ default: {} }));
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-let pluginFactory: typeof import('./index.js').default;
+let pluginFactory: typeof import('./textlint-plugin.js').default;
 
 beforeEach(async () => {
 	vi.clearAllMocks();
-	const mod = await import('./index.js');
+	const mod = await import('./textlint-plugin.js');
 	pluginFactory = mod.default;
 });
 

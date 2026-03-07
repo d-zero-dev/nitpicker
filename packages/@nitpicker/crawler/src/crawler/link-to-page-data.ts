@@ -1,4 +1,4 @@
-import type { Link, PageData } from '../utils/index.js';
+import type { Link, PageData } from '../utils/types/types.js';
 
 /**
  * Convert a {@link Link} object into a {@link PageData} structure.

@@ -1,4 +1,4 @@
-import type { Resource } from '../utils/index.js';
+import type { Resource } from '../utils/types/types.js';
 
 /**
  * Track a network resource response and determine if it is newly discovered.
