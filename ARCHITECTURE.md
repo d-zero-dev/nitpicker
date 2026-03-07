@@ -112,13 +112,13 @@ scrapeStart → openPage → loadDOMContent → getHTML → waitNetworkIdle
 ```
 crawler/src/
 ├── utils/                      # 型定義 + ユーティリティ
-│   ├── types/                  # ExURL, PageData, ParseURLOptions 等
+│   ├── types/                  # ExURL, PageData, Link, CrawlerError 等
 │   ├── array/                  # eachSplitted
 │   ├── object/                 # cleanObject
 │   └── error/                  # DOMEvaluationError, ErrorEmitter
 ├── archive/                    # SQLite アーカイブストレージ
 │   ├── filesystem/             # 1関数1ファイル（16ファイル）+ tar, untar
-│   └── ...                     # archive, archive-accessor, database, page, resource
+│   └── ...                     # archive, archive-accessor, database, page, resource, safe-path, types
 ├── crawler/                    # Crawler エンジン
 │   ├── crawler.ts              # Crawler クラス
 │   ├── link-list.ts            # URL キュー管理
@@ -143,7 +143,11 @@ crawler/src/
 │   ├── fetch-robots-txt.ts     # robots.txt 取得・パース
 │   ├── robots-checker.ts       # robots.txt 準拠チェッカー（origin 別キャッシュ）
 │   └── ...                     # link-to-page-data, protocol-agnostic-key, net-timeout-error
+├── crawler.ts                  # バレルエクスポート（パッケージ公開 API）
 ├── crawler-orchestrator.ts     # CrawlerOrchestrator
+├── debug.ts                    # デバッグログユーティリティ
+├── resolve-output-path.ts      # 出力パス解決・検証
+├── types.ts                    # CrawlEvent インターフェース
 └── write-queue.ts             # Archive 書き込み直列化キュー
 ```
 
@@ -568,7 +572,7 @@ pathMatch('/about', '/blog/*')           → false
 ```
 packages/test-server/
 ├── src/
-│   ├── index.ts              # createApp(), startServer()
+│   ├── server.ts             # createApp(), startServer()
 │   ├── routes/
 │   │   ├── basic.ts          # /, /about
 │   │   ├── recursive.ts      # /recursive/**
