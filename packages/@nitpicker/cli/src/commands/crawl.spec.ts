@@ -337,6 +337,56 @@ describe('crawl', () => {
 		);
 	});
 
+	it('--list-file で空リストの場合、エラーを投げる', async () => {
+		mockReadList.mockResolvedValueOnce([]);
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl([], createFlags({ listFile: '/tmp/empty.txt' }))).rejects.toThrow(
+			'No URLs found in list file: /tmp/empty.txt',
+		);
+	});
+
+	it('--list-file に無効な URL が含まれる場合、エラーを投げる', async () => {
+		mockReadList.mockResolvedValueOnce(['https://example.com', 'not-a-url']);
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl([], createFlags({ listFile: '/tmp/urls.txt' }))).rejects.toThrow(
+			'Invalid URL: "not-a-url"',
+		);
+	});
+
+	it('--list に無効な URL が含まれる場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl([], createFlags({ list: ['https://example.com', 'bad-url'] })),
+		).rejects.toThrow('Invalid URL: "bad-url"');
+	});
+
+	it('--list と args に無効な URL が含まれる場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(['invalid'], createFlags({ list: ['https://example.com'] })),
+		).rejects.toThrow('Invalid URL: "invalid"');
+	});
+
+	it('無効な URL 引数の場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl(['not-a-url'], createFlags())).rejects.toThrow(
+			'Invalid URL: "not-a-url"',
+		);
+	});
+
+	it('スペースを含む無効な URL 引数の場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl(['foo bar'], createFlags())).rejects.toThrow(
+			'Invalid URL: "foo bar"',
+		);
+	});
+
 	it('引数なし・フラグなしの場合、何も呼び出さずに正常終了する', async () => {
 		const { crawl } = await import('./crawl.js');
 		await crawl([], createFlags());

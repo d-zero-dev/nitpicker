@@ -59,6 +59,8 @@ $ npx @nitpicker/cli crawl https://example.com
 | `--silent`                    | なし                          | なし                  | 不可     | 実行中のログ出力を抑制                       |
 | `--diff`                      | なし                          | なし                  | 不可     | 差分モード                                   |
 
+> **URL の形式**: URL 引数および `--list` / `--list-file` で指定する URL は、プロトコルを含む完全な形式（例: `https://example.com`）である必要があります。`example.com` のようなホスト名のみの指定はエラーになります。
+
 #### 例
 
 ```sh

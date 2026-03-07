@@ -35,6 +35,27 @@ describe('mapFlagsToCrawlConfig', () => {
 		]);
 	});
 
+	it('scope のカンマ区切りで空文字列をフィルタリングする', () => {
+		const result = mapFlagsToCrawlConfig({
+			scope: 'a,,b',
+		});
+		expect(result.scope).toEqual(['a', 'b']);
+	});
+
+	it('scope のカンマ区切りで空白のみの要素をフィルタリングする', () => {
+		const result = mapFlagsToCrawlConfig({
+			scope: 'a, , ,b',
+		});
+		expect(result.scope).toEqual(['a', 'b']);
+	});
+
+	it('scope が全て空文字列の場合、空配列を返す', () => {
+		const result = mapFlagsToCrawlConfig({
+			scope: ',,,',
+		});
+		expect(result.scope).toEqual([]);
+	});
+
 	it('scope が未指定の場合 undefined を返す', () => {
 		const result = mapFlagsToCrawlConfig({});
 		expect(result.scope).toBeUndefined();

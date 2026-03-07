@@ -1,5 +1,6 @@
 import debug from 'debug';
 
+/** Debug logger for the Nitpicker CLI, scoped to the `Nitpicker:CLI` namespace. */
 export const log = debug('Nitpicker').extend('CLI');
 
 /**
