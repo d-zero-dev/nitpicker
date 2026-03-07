@@ -131,6 +131,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				pid: process.pid,
 				isMainProcess: true,
 				url: null,
+				isExternal: false,
 				error: e instanceof Error ? e : new Error(String(e)),
 			});
 		});

@@ -55,6 +55,7 @@ $ npx @nitpicker/cli crawl https://example.com
 | `--user-agent`                | 文字列                        | `Nitpicker/<version>` | 不可     | HTTP リクエストのカスタム User-Agent 文字列  |
 | `--ignore-robots`             | なし                          | なし                  | 不可     | robots.txt の制限を無視する                  |
 | `--output` `-o`               | ファイルパス                  | 自動生成              | 不可     | アーカイブファイルの出力先パス               |
+| `--strict`                    | なし                          | なし                  | 不可     | 外部リンクエラーも致命的エラーとして扱う     |
 | `--verbose`                   | なし                          | なし                  | 不可     | 実行中に詳細ログを標準出力に表示             |
 | `--silent`                    | なし                          | なし                  | 不可     | 実行中のログ出力を抑制                       |
 | `--diff`                      | なし                          | なし                  | 不可     | 差分モード                                   |
@@ -81,6 +82,24 @@ $ npx @nitpicker/cli crawl https://example.com --user-agent "MyBot/1.0"
 $ npx @nitpicker/cli crawl https://example.com --ignore-robots
 $ npx @nitpicker/cli crawl https://example.com --output ./reports/site.nitpicker
 $ npx @nitpicker/cli crawl https://example.com -o custom-name
+```
+
+#### 終了コード
+
+| コード | 意味                   | 説明                                                           |
+| ------ | ---------------------- | -------------------------------------------------------------- |
+| `0`    | 成功                   | エラーなしで完了                                               |
+| `1`    | 致命的エラー           | 引数不足、内部エラー、スコープ内ページのスクレイプ失敗など     |
+| `2`    | 警告（外部エラーのみ） | 外部リンク（DNS 失敗、証明書エラー等）のみでクロール自体は成功 |
+
+CI/CD パイプラインでは、外部リンクの一時的な障害でビルドが失敗しないよう exit code `2` を利用できる。`--strict` を指定すると外部リンクエラーも exit code `1`（致命的）として扱う。
+
+```sh
+# CI: 外部リンクエラーを無視（exit 2 を許容）
+npx @nitpicker/cli crawl https://example.com || [ $? -eq 2 ]
+
+# CI: 外部リンクエラーも失敗にする
+npx @nitpicker/cli crawl https://example.com --strict
 ```
 
 ##### Tips: 認証付き URL
@@ -186,12 +205,12 @@ $ npx @nitpicker/cli pipeline <URL>
 
 crawl / analyze / report のオプションをすべて指定可能。各ステップに対応するフラグが自動的にルーティングされる。
 
-| カテゴリ | 主要オプション                                                                   | 説明                                           |
-| -------- | -------------------------------------------------------------------------------- | ---------------------------------------------- |
-| crawl    | `--interval`, `--parallels`, `--no-image`, `--scope`, `--exclude`, `--output` 等 | クロール動作の制御（crawl セクション参照）     |
-| analyze  | `--all`, `--plugin`, `--search-keywords`, `--axe-lang` 等                        | 分析プラグインの制御（analyze セクション参照） |
-| report   | `--sheet`, `--credentials`, `--config`, `--limit`                                | レポート出力の制御（report セクション参照）    |
-| 共通     | `--verbose`, `--silent`                                                          | ログ出力の制御                                 |
+| カテゴリ | 主要オプション                                                                               | 説明                                           |
+| -------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| crawl    | `--interval`, `--parallels`, `--no-image`, `--scope`, `--exclude`, `--output`, `--strict` 等 | クロール動作の制御（crawl セクション参照）     |
+| analyze  | `--all`, `--plugin`, `--search-keywords`, `--axe-lang` 等                                    | 分析プラグインの制御（analyze セクション参照） |
+| report   | `--sheet`, `--credentials`, `--config`, `--limit`                                            | レポート出力の制御（report セクション参照）    |
+| 共通     | `--verbose`, `--silent`                                                                      | ログ出力の制御                                 |
 
 > **注意**: `--resume`, `--diff` は crawl 専用モードのため pipeline では使用不可。
 
@@ -212,4 +231,14 @@ $ npx @nitpicker/cli pipeline https://example.com --all --silent --sheet "https:
 
 # 出力パス指定
 $ npx @nitpicker/cli pipeline https://example.com --all --output ./reports/site
+
+# CI: 外部リンクエラーを無視（exit 2 を許容）
+$ npx @nitpicker/cli pipeline https://example.com --all --silent || [ $? -eq 2 ]
+
+# CI: 外部リンクエラーも失敗にする
+$ npx @nitpicker/cli pipeline https://example.com --all --silent --strict
 ```
+
+#### 終了コード
+
+crawl コマンドと同じ終了コード体系に従う。詳細は [crawl の終了コード](#終了コード) を参照。

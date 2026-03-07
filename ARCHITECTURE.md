@@ -561,6 +561,30 @@ pathMatch('/about', '/blog/*')           → false
 | page.goto()     | タイムアウト, ERR_NAME_NOT_RESOLVED | `@retryable` でリトライ後 `type='error'` で返却 |
 | DOM 解析        | evaluate 失敗                       | catch でフォールバック値                        |
 
+### CLI 終了コード
+
+`crawl` コマンドと `pipeline` コマンドはエラーの種類に応じて異なる終了コードを返す:
+
+| コード | 定数 (`exit-code.ts`) | 意味                                                             |
+| ------ | --------------------- | ---------------------------------------------------------------- |
+| `0`    | `ExitCode.Success`    | 成功                                                             |
+| `1`    | `ExitCode.Fatal`      | 致命的エラー（引数不足、内部エラー、スコープ内ページのエラー等） |
+| `2`    | `ExitCode.Warning`    | 警告 — 外部リンクエラーのみ発生（クロール自体は成功）            |
+
+### エラー分類フロー
+
+```
+CrawlerError.isExternal
+  ├── true  → 外部エラー（DNS 失敗、証明書エラー等）
+  └── false → 内部エラー（スコープ内ページの失敗）
+
+CrawlAggregateError
+  ├── hasOnlyExternalErrors = true  → exit 2（--strict 時は exit 1）
+  └── hasOnlyExternalErrors = false → exit 1
+```
+
+`--strict` フラグを指定すると、外部リンクエラーのみの場合でも exit 1（致命的）として扱う。CI/CD パイプラインで外部リンクの一時的な障害を許容したい場合は `--strict` を省略する。
+
 ---
 
 ## 12. E2E テスト構成
