@@ -254,6 +254,23 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 }
 
 /**
+ * Validates that all URLs in the list are parseable by the URL constructor.
+ * @param urls - Array of URL strings to validate
+ * @throws {Error} If any URL is invalid
+ */
+function validateUrls(urls: readonly string[]) {
+	for (const url of urls) {
+		try {
+			new URL(url);
+		} catch {
+			throw new Error(
+				`Invalid URL: "${url}". Please provide a valid URL (e.g., https://example.com)`,
+			);
+		}
+	}
+}
+
+/**
  * Main entry point for the `crawl` CLI command.
  *
  * Dispatches to one of four modes based on the flags:
@@ -300,6 +317,10 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 
 		if (flags.listFile) {
 			const list = await readList(path.resolve(process.cwd(), flags.listFile));
+			if (list.length === 0) {
+				throw new Error(`No URLs found in list file: ${flags.listFile}`);
+			}
+			validateUrls(list);
 			flags.list = list;
 			await startCrawl(list, flags);
 			return;
@@ -307,6 +328,7 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 
 		if (flags.list && flags.list.length > 0) {
 			const pageList = [...flags.list, ...args];
+			validateUrls(pageList);
 			await startCrawl(pageList, flags);
 			return;
 		}
@@ -314,6 +336,7 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		const siteUrl = args[0];
 
 		if (siteUrl) {
+			validateUrls([siteUrl]);
 			await startCrawl([siteUrl], flags);
 			return;
 		}
