@@ -63,7 +63,7 @@ flowchart TD
     Result --> Save["Archive にページデータ保存"]
 
     Crawling --> Write["CrawlerOrchestrator.write()"]
-    Write --> ArchiveWrite["Archive.write()<br/>tmpDir を .nitpicker ファイルに圧縮（tar）"]
+    Write --> ArchiveWrite["Archive.write()<br/>snapshot を zip 圧縮 → tmpDir を .nitpicker ファイルに tar 圧縮"]
 ```
 
 ---
@@ -189,10 +189,10 @@ deal() で選択           → progress(url) → progress セット
 発見したアンカーについて:
 ├── recursive=true の場合:
 │   ├── isLowerLayer → LinkList.add(url)        # フルスクレイプ
-│   └── isExternal && fetchExternal → add(url, { titleOnly: true })
+│   └── isExternal && fetchExternal → add(url, { metadataOnly: true })
 │
 └── recursive=false の場合:
-    └── add(url, { titleOnly: true })           # HEAD のみ
+    └── add(url, { metadataOnly: true })        # HEAD のみ
 ```
 
 ### deal() コールバック内の処理順序
@@ -564,6 +564,30 @@ pathMatch('/about', '/blog/*')           → false
 | ブラウザ起動    | Puppeteer 起動失敗                  | `ScrapeResult.type='error'`（shutdown=true）    |
 | page.goto()     | タイムアウト, ERR_NAME_NOT_RESOLVED | `@retryable` でリトライ後 `type='error'` で返却 |
 | DOM 解析        | evaluate 失敗                       | catch でフォールバック値                        |
+
+### CLI 終了コード
+
+`crawl` コマンドと `pipeline` コマンドはエラーの種類に応じて異なる終了コードを返す:
+
+| コード | 定数 (`exit-code.ts`) | 意味                                                             |
+| ------ | --------------------- | ---------------------------------------------------------------- |
+| `0`    | `ExitCode.Success`    | 成功                                                             |
+| `1`    | `ExitCode.Fatal`      | 致命的エラー（引数不足、内部エラー、スコープ内ページのエラー等） |
+| `2`    | `ExitCode.Warning`    | 警告 — 外部リンクエラーのみ発生（クロール自体は成功）            |
+
+### エラー分類フロー
+
+```
+CrawlerError.isExternal
+  ├── true  → 外部エラー（DNS 失敗、証明書エラー等）
+  └── false → 内部エラー（スコープ内ページの失敗）
+
+CrawlAggregateError
+  ├── hasOnlyExternalErrors = true  → exit 2（--strict 時は exit 1）
+  └── hasOnlyExternalErrors = false → exit 1
+```
+
+`--strict` フラグを指定すると、外部リンクエラーのみの場合でも exit 1（致命的）として扱う。CI/CD パイプラインで外部リンクの一時的な障害を許容したい場合は `--strict` を省略する。
 
 ---
 

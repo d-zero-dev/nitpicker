@@ -10,6 +10,7 @@ import { log, verbosely } from '../crawl/debug.js';
 import { diff } from '../crawl/diff.js';
 import { eventAssignments } from '../crawl/event-assignments.js';
 import { mapFlagsToCrawlConfig } from '../crawl/map-flags-to-crawl-config.js';
+import { ExitCode } from '../exit-code.js';
 
 /**
  * Command definition for the `crawl` sub-command.
@@ -111,6 +112,10 @@ export const commandDef = {
 			type: 'string',
 			shortFlag: 'o',
 			desc: 'Output file path for the .nitpicker archive',
+		},
+		strict: {
+			type: 'boolean',
+			desc: 'Treat external link errors as fatal (exit code 1 instead of 2)',
 		},
 		verbose: {
 			type: 'boolean',
@@ -254,6 +259,23 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 }
 
 /**
+ * Validates that all URLs in the list are parseable by the URL constructor.
+ * @param urls - Array of URL strings to validate
+ * @throws {Error} If any URL is invalid
+ */
+function validateUrls(urls: readonly string[]) {
+	for (const url of urls) {
+		try {
+			new URL(url);
+		} catch {
+			throw new Error(
+				`Invalid URL: "${url}". Please provide a valid URL (e.g., https://example.com)`,
+			);
+		}
+	}
+}
+
+/**
  * Main entry point for the `crawl` CLI command.
  *
  * Dispatches to one of four modes based on the flags:
@@ -300,6 +322,10 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 
 		if (flags.listFile) {
 			const list = await readList(path.resolve(process.cwd(), flags.listFile));
+			if (list.length === 0) {
+				throw new Error(`No URLs found in list file: ${flags.listFile}`);
+			}
+			validateUrls(list);
 			flags.list = list;
 			await startCrawl(list, flags);
 			return;
@@ -307,6 +333,7 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 
 		if (flags.list && flags.list.length > 0) {
 			const pageList = [...flags.list, ...args];
+			validateUrls(pageList);
 			await startCrawl(pageList, flags);
 			return;
 		}
@@ -314,15 +341,32 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		const siteUrl = args[0];
 
 		if (siteUrl) {
+			validateUrls([siteUrl]);
 			await startCrawl([siteUrl], flags);
 			return;
 		}
 	} catch (error) {
 		if (error instanceof CrawlAggregateError) {
-			process.exit(1);
+			const exitCode =
+				error.hasOnlyExternalErrors && !flags.strict ? ExitCode.Warning : ExitCode.Fatal;
+			process.exit(exitCode);
 		}
 		throw error;
 	}
+}
+
+/**
+ * Type guard that checks whether a collected error is a {@link CrawlerError}
+ * originating from an external URL.
+ *
+ * `CrawlerError` objects carry both `pid` and `isExternal` fields set by the crawler.
+ * Plain `Error` objects (e.g. from event handler rejections) are treated
+ * as internal errors.
+ * @param error - The error to check
+ * @returns `true` if the error is a `CrawlerError` with `isExternal` set to `true`.
+ */
+function isCrawlerExternalError(error: CrawlerError | Error): boolean {
+	return 'pid' in error && 'isExternal' in error && error.isExternal === true;
 }
 
 /**
@@ -332,12 +376,30 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 export class CrawlAggregateError extends Error {
 	/** The individual errors that occurred during crawling. */
 	readonly errors: readonly (CrawlerError | Error)[];
+
+	/** Whether all errors are from external (out-of-scope) URLs only. */
+	readonly hasOnlyExternalErrors: boolean;
+
 	/**
 	 * @param errors - The individual errors collected during the crawl session.
 	 */
 	constructor(errors: (CrawlerError | Error)[]) {
-		super(`Crawl completed with ${errors.length} error(s).`);
+		const externalCount = errors.filter(isCrawlerExternalError).length;
+		const internalCount = errors.length - externalCount;
+		const hasOnlyExternal = errors.length > 0 && internalCount === 0;
+
+		const parts: string[] = [];
+		if (internalCount > 0) {
+			parts.push(`${internalCount} internal`);
+		}
+		if (externalCount > 0) {
+			parts.push(`${externalCount} external`);
+		}
+		const breakdown = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+		super(`Crawl completed with ${errors.length} error(s)${breakdown}.`);
+
 		this.errors = errors;
+		this.hasOnlyExternalErrors = hasOnlyExternal;
 	}
 }
 
@@ -346,6 +408,17 @@ export class CrawlAggregateError extends Error {
  * @param errStack - Array of errors collected during the crawl session
  */
 function formatCrawlErrors(errStack: (CrawlerError | Error)[]) {
+	const externalCount = errStack.filter(isCrawlerExternalError).length;
+	const internalCount = errStack.length - externalCount;
+
+	const parts: string[] = [];
+	if (internalCount > 0) {
+		parts.push(`${internalCount} internal`);
+	}
+	if (externalCount > 0) {
+		parts.push(`${externalCount} external`);
+	}
+
 	// eslint-disable-next-line no-console
-	console.error(`\nCompleted with ${errStack.length} error(s).`);
+	console.error(`\nCompleted with ${errStack.length} error(s) (${parts.join(', ')}).`);
 }
