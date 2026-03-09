@@ -1,7 +1,10 @@
 import type { CommandDef, InferFlags } from '@d-zero/roar';
 
+import { ExitCode } from '../exit-code.js';
+import { formatCliError } from '../format-cli-error.js';
+
 import { analyze } from './analyze.js';
-import { startCrawl } from './crawl.js';
+import { CrawlAggregateError, startCrawl } from './crawl.js';
 import { report } from './report.js';
 
 /**
@@ -105,6 +108,10 @@ export const commandDef = {
 			shortFlag: 'o',
 			desc: 'Output file path for the .nitpicker archive',
 		},
+		strict: {
+			type: 'boolean',
+			desc: 'Treat external link errors as fatal (exit code 1 instead of 2)',
+		},
 		// analyze flags
 		all: {
 			type: 'boolean',
@@ -178,7 +185,8 @@ type PipelineFlags = InferFlags<typeof commandDef.flags>;
  * to the analyze step. If `--sheet` is provided, the report step runs
  * last to publish results to Google Sheets.
  *
- * Errors from any step propagate to the caller as exceptions.
+ * When the crawl step encounters only external link errors and `--strict`
+ * is not set, the pipeline exits with code 2 (warning).
  * @param args - Positional arguments; first argument is the root URL to crawl.
  * @param flags - Parsed CLI flags from the `pipeline` command.
  * @returns Resolves when all pipeline steps complete.
@@ -191,41 +199,57 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 		console.error('Error: No URL specified.');
 		// eslint-disable-next-line no-console
 		console.error('Usage: nitpicker pipeline <URL> [options]');
-		process.exit(1);
+		process.exit(ExitCode.Fatal);
 	}
 
 	const silent = !!flags.silent;
+	const verbose = !!flags.verbose;
 
 	// Step 1: Crawl
 	if (!silent) {
 		// eslint-disable-next-line no-console
 		console.log('\n📡 [pipeline] Step 1/3: Crawling...');
 	}
-	const archivePath = await startCrawl([siteUrl], {
-		interval: flags.interval,
-		image: flags.image,
-		fetchExternal: flags.fetchExternal,
-		parallels: flags.parallels,
-		recursive: flags.recursive,
-		scope: flags.scope,
-		exclude: flags.exclude,
-		excludeKeyword: flags.excludeKeyword,
-		excludeUrl: flags.excludeUrl,
-		disableQueries: flags.disableQueries,
-		imageFileSizeThreshold: flags.imageFileSizeThreshold,
-		single: flags.single,
-		maxExcludedDepth: flags.maxExcludedDepth,
-		retry: flags.retry,
-		list: flags.list,
-		listFile: flags.listFile,
-		userAgent: flags.userAgent,
-		ignoreRobots: flags.ignoreRobots,
-		output: flags.output,
-		verbose: flags.verbose,
-		silent: flags.silent,
-		resume: undefined,
-		diff: undefined,
-	});
+
+	let archivePath: string;
+	try {
+		archivePath = await startCrawl([siteUrl], {
+			interval: flags.interval,
+			image: flags.image,
+			fetchExternal: flags.fetchExternal,
+			parallels: flags.parallels,
+			recursive: flags.recursive,
+			scope: flags.scope,
+			exclude: flags.exclude,
+			excludeKeyword: flags.excludeKeyword,
+			excludeUrl: flags.excludeUrl,
+			disableQueries: flags.disableQueries,
+			imageFileSizeThreshold: flags.imageFileSizeThreshold,
+			single: flags.single,
+			maxExcludedDepth: flags.maxExcludedDepth,
+			retry: flags.retry,
+			list: flags.list,
+			listFile: flags.listFile,
+			userAgent: flags.userAgent,
+			ignoreRobots: flags.ignoreRobots,
+			output: flags.output,
+			strict: flags.strict,
+			verbose: flags.verbose,
+			silent: flags.silent,
+			resume: undefined,
+			diff: undefined,
+		});
+	} catch (error) {
+		if (
+			error instanceof CrawlAggregateError &&
+			error.hasOnlyExternalErrors &&
+			!flags.strict
+		) {
+			formatCliError(error, verbose);
+			process.exit(ExitCode.Warning);
+		}
+		throw error;
+	}
 
 	// Step 2: Analyze
 	if (!silent) {
