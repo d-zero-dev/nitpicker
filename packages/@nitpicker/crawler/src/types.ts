@@ -1,4 +1,4 @@
-import type { CrawlerError } from './utils/index.js';
+import type { CrawlerError } from './utils/types/types.js';
 
 /**
  * Event map for the `CrawlerOrchestrator` class.

@@ -11,10 +11,11 @@ import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-awa
 import pkg from '../package.json' with { type: 'json' };
 
 import Archive from './archive/archive.js';
-import { clearDestinationCache, Crawler } from './crawler/index.js';
+import { clearDestinationCache } from './crawler/clear-destination-cache.js';
+import Crawler from './crawler/crawler.js';
 import { crawlerLog, log } from './debug.js';
 import { resolveOutputPath } from './resolve-output-path.js';
-import { cleanObject } from './utils/index.js';
+import { cleanObject } from './utils/object/clean-object.js';
 import { WriteQueue } from './write-queue.js';
 
 /**

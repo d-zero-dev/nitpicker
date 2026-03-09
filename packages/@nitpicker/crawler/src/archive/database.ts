@@ -8,7 +8,7 @@ import type {
 	DatabaseEvent,
 	PageFilter,
 } from './types.js';
-import type { PageData, Resource } from '../utils/index.js';
+import type { PageData, Resource } from '../utils/types/types.js';
 import type { RetryDecoratorOptions } from '@d-zero/shared/retry';
 import type { Knex } from 'knex';
 
@@ -20,10 +20,11 @@ import { pathComparator } from '@d-zero/shared/sort/path';
 import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-await-event-emitter';
 import knex from 'knex';
 
-import { ErrorEmitter, eachSplitted } from '../utils/index.js';
+import { eachSplitted } from '../utils/array/each-splitted.js';
+import { ErrorEmitter } from '../utils/error/error-emitter.js';
 
 import { dbLog } from './debug.js';
-import { mkdir } from './filesystem/index.js';
+import { mkdir } from './filesystem/mkdir.js';
 
 const retrySetting: RetryDecoratorOptions = {
 	interval: 300,

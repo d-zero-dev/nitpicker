@@ -18,8 +18,8 @@
 	"type": "module",
 	"exports": {
 		".": {
-			"import": "./lib/index.js",
-			"types": "./lib/index.d.ts"
+			"import": "./lib/main-contents-plugin.js",
+			"types": "./lib/main-contents-plugin.d.ts"
 		}
 	},
 	"scripts": {

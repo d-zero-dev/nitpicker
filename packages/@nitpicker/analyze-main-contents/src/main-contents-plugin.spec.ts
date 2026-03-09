@@ -6,11 +6,11 @@ vi.mock('@medv/finder', () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-let pluginFactory: typeof import('./index.js').default;
+let pluginFactory: typeof import('./main-contents-plugin.js').default;
 
 beforeEach(async () => {
 	vi.clearAllMocks();
-	const mod = await import('./index.js');
+	const mod = await import('./main-contents-plugin.js');
 	pluginFactory = mod.default;
 });
 

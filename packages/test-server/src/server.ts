@@ -14,7 +14,8 @@ import { redirectRoutes } from './routes/redirect.js';
 import { scopeRoutes } from './routes/scope.js';
 
 /**
- *
+ * Creates and configures the Hono application with all E2E test routes.
+ * @returns The configured Hono application instance.
  */
 export function createApp() {
 	const app = new Hono();
@@ -32,8 +33,9 @@ export function createApp() {
 }
 
 /**
- *
- * @param port
+ * Starts the E2E test server on the specified port.
+ * @param port - The port number to listen on.
+ * @returns A promise that resolves with the HTTP server instance once it is listening.
  */
 export function startServer(port = 8010): Promise<Server> {
 	const app = createApp();

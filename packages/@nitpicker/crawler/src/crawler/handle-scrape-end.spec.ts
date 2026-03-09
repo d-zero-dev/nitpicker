@@ -1,5 +1,5 @@
 import type { CrawlerOptions } from './types.js';
-import type { AnchorData, PageData } from '../utils/index.js';
+import type { AnchorData, PageData } from '../utils/types/types.js';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { describe, it, expect, vi } from 'vitest';

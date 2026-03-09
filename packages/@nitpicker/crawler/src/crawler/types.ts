@@ -1,4 +1,4 @@
-import type { PageData, CrawlerError, Resource } from '../utils/index.js';
+import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
 import type { ChangePhaseEvent } from '@d-zero/beholder';
 import type { ParseURLOptions } from '@d-zero/shared/parse-url';
 
