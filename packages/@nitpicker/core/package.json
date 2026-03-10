@@ -27,7 +27,7 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@d-zero/dealer": "1.6.3",
+		"@d-zero/dealer": "1.7.0",
 		"@d-zero/shared": "0.20.0",
 		"@nitpicker/crawler": "0.4.4",
 		"@nitpicker/types": "0.4.4",

@@ -176,13 +176,26 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 		void this.#runDeal(initialUrls, resumeOffset).catch((error) => {
 			crawlerLog('runDeal error: %O', error);
-			void this.emit('error', {
-				pid: process.pid,
-				isMainProcess: true,
-				url: url.href,
-				isExternal: false,
-				error: error instanceof Error ? error : new Error(String(error)),
-			});
+			if (error instanceof AggregateError) {
+				for (const workerError of error.errors) {
+					void this.emit('error', {
+						pid: process.pid,
+						isMainProcess: true,
+						url: url.href,
+						isExternal: false,
+						error:
+							workerError instanceof Error ? workerError : new Error(String(workerError)),
+					});
+				}
+			} else {
+				void this.emit('error', {
+					pid: process.pid,
+					isMainProcess: true,
+					url: url.href,
+					isExternal: false,
+					error: error instanceof Error ? error : new Error(String(error)),
+				});
+			}
 			void this.emit('crawlEnd', {});
 		});
 	}
@@ -218,13 +231,26 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		this.#options.fromList = true;
 		void this.#runDeal(pageList).catch((error) => {
 			crawlerLog('runDeal error: %O', error);
-			void this.emit('error', {
-				pid: process.pid,
-				isMainProcess: true,
-				url: pageList[0]!.href,
-				isExternal: false,
-				error: error instanceof Error ? error : new Error(String(error)),
-			});
+			if (error instanceof AggregateError) {
+				for (const workerError of error.errors) {
+					void this.emit('error', {
+						pid: process.pid,
+						isMainProcess: true,
+						url: pageList[0]!.href,
+						isExternal: false,
+						error:
+							workerError instanceof Error ? workerError : new Error(String(workerError)),
+					});
+				}
+			} else {
+				void this.emit('error', {
+					pid: process.pid,
+					isMainProcess: true,
+					url: pageList[0]!.href,
+					isExternal: false,
+					error: error instanceof Error ? error : new Error(String(error)),
+				});
+			}
 			void this.emit('crawlEnd', {});
 		});
 	}
@@ -572,6 +598,16 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						this.#handleResult(result, url, push, paginationState, concurrency);
 						this.#handleResources(result.resources);
 						log(formatResultSummary(result));
+					} catch (error) {
+						crawlerLog('Worker error for %s: %O', url.href, error);
+						log(c.red('Error'));
+						void this.emit('error', {
+							pid: process.pid,
+							isMainProcess: true,
+							url: url.href,
+							isExternal,
+							error: error instanceof Error ? error : new Error(String(error)),
+						});
 					} finally {
 						if (isExternal) {
 							externalDoneUrls.add(protocolAgnosticKey(url.withoutHashAndAuth));
