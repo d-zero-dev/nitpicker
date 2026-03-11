@@ -162,14 +162,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	}
 
 	/**
-	 * Abort the current crawl and archive operations.
+	 * Abort the current crawl operation.
 	 *
-	 * Delegates to the archive's abort method, which stops all in-progress
-	 * database writes and cleans up temporary resources.
-	 * @returns The result of the archive abort operation.
+	 * Delegates to the crawler's AbortController so that the dealer stops
+	 * launching new workers. Currently running workers will finish, after
+	 * which `deal()` resolves and `crawlEnd` is emitted normally.
 	 */
 	abort() {
-		return this.#archive.abort();
+		this.#crawler.abort();
 	}
 
 	/**

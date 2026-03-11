@@ -217,6 +217,23 @@ URL を deal() で受け取り:
 - スクレイピングはインプロセス（`@d-zero/beholder`）で実行。各 URL ごとにブラウザを起動・終了
 - `push()` で発見した新 URL を動的にキューに追加
 - `onPush` コールバックで `withoutHashAndAuth` による重複排除
+- `signal` オプションで `AbortSignal` を渡し、中断時に新規ワーカーの起動を停止
+
+### クロール中断メカニズム
+
+```
+CLI シグナルハンドラ（SIGINT / SIGHUP 等）
+  → CrawlerOrchestrator.abort()
+    → Crawler.abort()
+      → AbortController.abort()
+        → deal() の signal オプション経由で新規ワーカー起動を停止
+        → 実行中のワーカーは正常完了まで継続
+        → 全ワーカー完了後 deal() が resolve → crawlEnd イベント emit
+```
+
+- `Crawler` は内部に `AbortController` を保持し、`signal` getter で `AbortSignal` を公開
+- `CrawlerOrchestrator` のコンストラクタで `archive` の `error` イベントを監視し、アーカイブエラー発生時にも `Crawler.abort()` を呼び出す
+- CLI の `killed()` ハンドラでは `abort()` 後に `garbageCollect()`（ゾンビ Chromium プロセスの終了）→ `process.exit()` を実行
 
 ### 主要定数
 

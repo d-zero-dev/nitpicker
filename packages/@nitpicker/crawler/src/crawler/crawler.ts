@@ -51,8 +51,8 @@ export type { CrawlerOptions } from './types.js';
  * configurable parallelism up to {@link Crawler.MAX_PROCESS_LENGTH}.
  */
 export default class Crawler extends EventEmitter<CrawlerEventTypes> {
-	/** Flag set by `abort()` to signal in-progress tasks to exit early. */
-	#aborted = false;
+	/** Controller used to cancel the deal-based crawl via its AbortSignal. */
+	readonly #abortController = new AbortController();
 	/** Tracks discovered URLs, their scrape status, and deduplication. */
 	readonly #linkList = new LinkList();
 	/** Merged crawler configuration (user overrides + defaults). */
@@ -68,6 +68,16 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 	/** Maps hostnames to their scope URLs. Defines the crawl boundary for internal/external classification. */
 	readonly #scope = new Map<string /* hostname */, ExURL[]>();
+
+	/**
+	 * The AbortSignal associated with this crawler's AbortController.
+	 *
+	 * Passed to `deal()` so that it stops launching new workers after abort.
+	 * Also available to the orchestrator for forwarding to other subsystems.
+	 */
+	get signal(): AbortSignal {
+		return this.#abortController.signal;
+	}
 
 	/**
 	 * Create a new Crawler instance.
@@ -113,12 +123,13 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	/**
 	 * Abort the current crawl operation.
 	 *
-	 * Sets the aborted flag and immediately emits a `crawlEnd` event.
-	 * In-progress scrape tasks will check the flag and exit early.
+	 * Signals the AbortController so that the dealer stops launching new
+	 * workers. Currently running workers will finish, after which `deal()`
+	 * resolves and `crawlEnd` is emitted by the normal completion path in
+	 * {@link #runDeal}.
 	 */
 	abort() {
-		this.#aborted = true;
-		void this.emit('crawlEnd', {});
+		this.#abortController.abort();
 	}
 
 	/**
@@ -525,7 +536,6 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				this.#linkList.progress(url);
 
 				return async () => {
-					if (this.#aborted) return;
 					const log = createTimedUpdate(update, this.#options.verbose);
 
 					try {
@@ -617,6 +627,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				limit: concurrency,
 				interval: this.#options.interval,
 				verbose: this.#options.verbose || !process.stdout.isTTY,
+				signal: this.#abortController.signal,
 				header: (_progress, done, total, limit) => {
 					return formatCrawlProgress({
 						done,

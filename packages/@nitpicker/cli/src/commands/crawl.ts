@@ -139,9 +139,10 @@ type LogType = 'verbose' | 'normal' | 'silent';
 /**
  * Sets up signal handlers for graceful shutdown and starts event logging.
  *
- * Registers SIGINT/SIGBREAK/SIGHUP/SIGABRT handlers that kill zombie
- * Chromium processes before exiting, then delegates to {@link eventAssignments}
- * for progress output.
+ * Registers SIGINT/SIGBREAK/SIGHUP/SIGABRT handlers that abort the
+ * crawl via {@link CrawlerOrchestrator.abort}, then kill zombie Chromium
+ * processes and exit. The abort signal propagates through the dealer's
+ * AbortSignal mechanism so no new workers are launched.
  * @param trigger - Display label for the crawl (URL or stub file path)
  * @param orchestrator - The initialized CrawlerOrchestrator instance
  * @param config - The resolved archive configuration
@@ -155,6 +156,7 @@ function run(
 	logType: LogType,
 ) {
 	const killed = () => {
+		orchestrator.abort();
 		orchestrator.garbageCollect();
 		process.exit();
 	};
