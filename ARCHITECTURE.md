@@ -32,6 +32,8 @@ packages/
 ```
 
 > **Note**: CLI は analyze プラグインに直接依存する（`npx` 実行時のモジュール解決のため）。新規 analyze プラグイン追加時は `@nitpicker/cli/package.json` の `dependencies` にも追加すること。
+>
+> **Note**: `@d-zero/dealer` は上図では crawler と report-google-sheets への接続のみ表示しているが、cli と core も `Lanes` 型のインポートのために依存している。
 
 ---
 
@@ -142,6 +144,7 @@ crawler/src/
 │   ├── destination-cache.ts    # リクエストキャッシュ
 │   ├── fetch-robots-txt.ts     # robots.txt 取得・パース
 │   ├── robots-checker.ts       # robots.txt 準拠チェッカー（origin 別キャッシュ）
+│   ├── format-crawl-progress.ts # deal() 進捗表示のフォーマッタ
 │   └── ...                     # link-to-page-data, protocol-agnostic-key, net-timeout-error
 ├── crawler.ts                  # バレルエクスポート（パッケージ公開 API）
 ├── crawler-orchestrator.ts     # CrawlerOrchestrator
@@ -326,7 +329,7 @@ scrapeStart(url, page, options)
 ### その他テーブル
 
 - **images**: pageId, src, currentSrc, alt, width/height, naturalWidth/naturalHeight, isLazy, viewportWidth, sourceCode
-- **resources**: url, isExternal, status, contentType, contentLength, compress, cdn, responseHeaders
+- **resources**: url, isExternal, status, statusText, contentType, contentLength, compress, cdn, responseHeaders
 - **resources-referrers**: resourceId → resources.id, pageId → pages.id
 - **info**: 設定情報（単一レコード、`Config` 型のフィールドを JSON で保存）
 
@@ -647,7 +650,7 @@ Nitpicker は D-ZERO が公開する以下の外部パッケージに依存し�
 | パッケージ              | 用途                                                                          | 検索キーワード                        |
 | ----------------------- | ----------------------------------------------------------------------------- | ------------------------------------- |
 | `@d-zero/beholder`      | Puppeteer ベースのスクレイパーエンジン。`ScrapeResult` を返す                 | `"@d-zero/beholder" changelog`        |
-| `@d-zero/dealer`        | 並列処理・スケジューリング。`deal()` 関数を提供                               | `"@d-zero/dealer" deal concurrent`    |
+| `@d-zero/dealer`        | 並列処理・スケジューリング。`deal()` 関数と `Lanes` 進捗表示を提供            | `"@d-zero/dealer" deal concurrent`    |
 | `@d-zero/shared`        | 共有ユーティリティ（サブパスエクスポート形式: `@d-zero/shared/parse-url` 等） | `"@d-zero/shared" subpath exports`    |
 | `@d-zero/roar`          | CLI フレームワーク                                                            | `"@d-zero/roar" command`              |
 | `@d-zero/google-auth`   | OAuth2 認証（`credentials.json` → `token.json`）                              | `"@d-zero/google-auth" oauth2`        |
@@ -659,7 +662,7 @@ Nitpicker は D-ZERO が公開する以下の外部パッケージに依存し�
 
 ```
 @d-zero/beholder      → crawler（Scraper, ScrapeResult）
-@d-zero/dealer         → crawler, core, cli, report-google-sheets（deal() 並列制御）
+@d-zero/dealer         → crawler（deal() 並列制御）, core・cli・report-google-sheets（Lanes 進捗表示）
 @d-zero/shared         → 全パッケージ（parseUrl, delay, isError, detectCompress, detectCDN）
 @d-zero/roar           → cli（CLI コマンド定義）
 @d-zero/google-auth    → report-google-sheets（OAuth2 認証）
@@ -671,5 +674,5 @@ Nitpicker は D-ZERO が公開する以下の外部パッケージに依存し�
 ### バージョン更新時の注意
 
 - **`@d-zero/beholder`**: `ScrapeResult` の型が変わると crawler 全体に影響
-- **`@d-zero/dealer`**: `deal()` の API が変わると crawler と core の並列処理に影響
+- **`@d-zero/dealer`**: `deal()` の API が変わると crawler の並列処理に影響。`Lanes` の型が変わると core・cli・report-google-sheets の進捗表示に影響
 - **`@d-zero/shared`**: サブパスエクスポートの追加・削除に注意。`@d-zero/shared/parse-url` 形式でインポートすること
