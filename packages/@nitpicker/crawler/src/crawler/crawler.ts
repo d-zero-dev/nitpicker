@@ -78,6 +78,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	get signal(): AbortSignal {
 		return this.#abortController.signal;
 	}
+
 	/**
 	 * Create a new Crawler instance.
 	 * @param options - Configuration options for crawling behavior. All fields have
