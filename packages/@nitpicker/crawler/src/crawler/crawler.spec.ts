@@ -210,26 +210,41 @@ describe('Crawler', () => {
 			expect(receivedSignal!.aborted).toBe(true);
 		});
 
-		it('abort() 後に新しいワーカーが起動しない（deal の signal によりキューが停止する）', async () => {
+		it('deal 正常完了時に crawlEnd イベントが emit される', async () => {
 			const { deal } = await import('@d-zero/dealer');
 			const { default: Crawler } = await import('./crawler.js');
 
-			let capturedSignal: AbortSignal | undefined;
-
 			vi.mocked(deal).mockImplementation((_items, _factory, options) => {
-				capturedSignal = options?.signal;
+				// Simulate: abort is called, deal checks signal and resolves normally
+				expect(options?.signal).toBeInstanceOf(AbortSignal);
 				return Promise.resolve();
 			});
 
 			const crawler = new Crawler(defaultOptions);
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
 			crawler.start(parseUrl('https://example.com/')!);
 
 			await vi.waitFor(() => {
-				expect(capturedSignal).toBeDefined();
+				expect(crawlEndEmitted).toBe(true);
 			});
+		});
+
+		it('二重 abort でもエラーにならない', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+
+			vi.mocked(deal).mockResolvedValue();
+
+			const crawler = new Crawler(defaultOptions);
+			crawler.start(parseUrl('https://example.com/')!);
 
 			crawler.abort();
-			expect(capturedSignal!.aborted).toBe(true);
+			expect(() => crawler.abort()).not.toThrow();
+			expect(crawler.signal.aborted).toBe(true);
 		});
 
 		it('signal getter が AbortSignal を返す', async () => {
