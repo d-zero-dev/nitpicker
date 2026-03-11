@@ -176,13 +176,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 		void this.#runDeal(initialUrls, resumeOffset).catch((error) => {
 			crawlerLog('runDeal error: %O', error);
-			void this.emit('error', {
-				pid: process.pid,
-				isMainProcess: true,
-				url: url.href,
-				isExternal: false,
-				error: error instanceof Error ? error : new Error(String(error)),
-			});
+			this.#emitDealErrors(error, url.href);
 			void this.emit('crawlEnd', {});
 		});
 	}
@@ -218,15 +212,33 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		this.#options.fromList = true;
 		void this.#runDeal(pageList).catch((error) => {
 			crawlerLog('runDeal error: %O', error);
+			this.#emitDealErrors(error, pageList[0]!.href);
+			void this.emit('crawlEnd', {});
+		});
+	}
+
+	/**
+	 * Emits error events for a deal-level failure.
+	 *
+	 * When the dealer rejects with an `AggregateError` (e.g. multiple worker
+	 * failures), each inner error is emitted as a separate `error` event.
+	 * For any other error type, a single `error` event is emitted.
+	 * @param error - The error thrown by `#runDeal`.
+	 * @param fallbackUrl - URL string used as the error context (typically the root URL).
+	 */
+	#emitDealErrors(error: unknown, fallbackUrl: string) {
+		const errors =
+			error instanceof AggregateError ? (error.errors as unknown[]) : [error];
+
+		for (const e of errors) {
 			void this.emit('error', {
 				pid: process.pid,
 				isMainProcess: true,
-				url: pageList[0]!.href,
+				url: fallbackUrl,
 				isExternal: false,
-				error: error instanceof Error ? error : new Error(String(error)),
+				error: e instanceof Error ? e : new Error(String(e)),
 			});
-			void this.emit('crawlEnd', {});
-		});
+		}
 	}
 
 	/**
@@ -572,6 +584,28 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						this.#handleResult(result, url, push, paginationState, concurrency);
 						this.#handleResources(result.resources);
 						log(formatResultSummary(result));
+					} catch (error) {
+						crawlerLog('Worker error for %s: %O', url.href, error);
+						log(c.red('Error'));
+						const workerError = error instanceof Error ? error : new Error(String(error));
+						handleScrapeError(
+							{
+								url,
+								error: workerError,
+								shutdown: false,
+								pid: process.pid,
+							},
+							this.#linkList,
+							this.#scope,
+							this.#options,
+						);
+						void this.emit('error', {
+							pid: process.pid,
+							isMainProcess: true,
+							url: url.href,
+							isExternal,
+							error: workerError,
+						});
 					} finally {
 						if (isExternal) {
 							externalDoneUrls.add(protocolAgnosticKey(url.withoutHashAndAuth));

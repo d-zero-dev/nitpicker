@@ -13,7 +13,7 @@ packages/
 ├── @nitpicker/
 │   ├── cli/                       # 統合 CLI (bin: nitpicker)
 │   ├── crawler/                   # クローラーエンジン（オーケストレーター + アーカイブ + ユーティリティ）
-│   ├── core/                      # 監査エンジン（Nitpicker クラス + deal() による並列処理）
+│   ├── core/                      # 監査エンジン（Nitpicker クラス + bounded Promise pool による並列処理）
 │   ├── types/                     # 監査型定義（Report, ConfigJSON）
 │   ├── analyze-axe/               # アクセシビリティ監査
 │   ├── analyze-lighthouse/        # Lighthouse 監査
@@ -71,9 +71,9 @@ CrawlerOrchestrator.crawling(urls, options)
 Nitpicker.analyze(archivePath, plugins)
   → Archive.connect() → ArchiveAccessor
   → getPagesWithRefs() で全ページ取得
-  → deal()（@d-zero/dealer, limit: 50）で並列分析
+  → bounded Promise pool（limit: 50）で並列分析
     → 各 Page: runInWorker() で Worker スレッドでプラグイン実行
-    → deal() が進捗表示を担当（プラグイン内の console.log は不要）
+    → Lanes（@d-zero/dealer）が進捗表示を担当（プラグイン内の console.log は不要）
   → レポートファイル書き出し
 ```
 
@@ -86,10 +86,10 @@ Nitpicker.analyze(archivePath, plugins)
 - `delay` — `@d-zero/shared/delay`
 - `isError` — beholder/is-error.ts に集約、crawler は re-export
 
-### deal() の利用箇所
+### deal() / 並列処理の利用箇所
 
-- **crawler**: URL スクレイピングの並列制御
-- **core（analyze）**: ページ分析の並列処理（limit: 50）
+- **crawler**: `deal()`（@d-zero/dealer）による URL スクレイピングの並列制御
+- **core（analyze）**: 独自の bounded Promise pool（limit: 50）による並列処理。`Lanes`（@d-zero/dealer）で進捗表示
 
 ## テスト
 
