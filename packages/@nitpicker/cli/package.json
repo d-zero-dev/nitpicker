@@ -34,7 +34,7 @@
 		"@d-zero/dealer": "1.7.0",
 		"@d-zero/readtext": "1.1.19",
 		"@d-zero/roar": "2.0.0",
-		"@d-zero/shared": "0.20.0",
+		"@d-zero/shared": "0.20.1",
 		"@nitpicker/analyze-axe": "0.4.4",
 		"@nitpicker/analyze-lighthouse": "0.4.4",
 		"@nitpicker/analyze-main-contents": "0.4.4",
