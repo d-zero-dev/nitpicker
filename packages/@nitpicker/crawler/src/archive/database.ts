@@ -86,7 +86,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			t.integer('order').unsigned().nullable().defaultTo(null);
 		});
 	}
-
 	/**
 	 * Forces a WAL checkpoint, writing all pending WAL data back to the main database file.
 	 * Uses TRUNCATE mode to reset the WAL file to zero bytes after checkpointing.
@@ -105,7 +104,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	async clearHtmlPath(pageId: number) {
 		await this.#instance<DB_Page>('pages').where('id', pageId).update({ html: null });
 	}
-
 	/**
 	 * Destroys the database connection, releasing all pooled resources.
 	 */
@@ -136,7 +134,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			.where('anchors.pageId', pageId);
 		return res;
 	}
-
 	/**
 	 * Retrieves the base URL of the crawl session from the `info` table.
 	 * @returns The base URL string.
@@ -152,7 +149,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		const [{ baseUrl }] = selected;
 		return baseUrl || '';
 	}
-
 	/**
 	 * Retrieves the full crawl configuration from the `info` table.
 	 * Deserializes JSON-encoded fields (`excludes`, `excludeKeywords`, `scope`).
@@ -179,7 +175,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		dbLog('Table `info`: %O => %O', config, opt);
 		return opt;
 	}
-
 	/**
 	 * Retrieves the current crawling state by listing scraped and pending URLs.
 	 * @returns An object with `scraped` (completed URLs) and `pending` (remaining URLs) arrays.
@@ -203,7 +198,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			pending,
 		};
 	}
-
 	/**
 	 * Retrieves the HTML snapshot file path for a specific page.
 	 * @param pageId - The database ID of the page.
@@ -219,6 +213,15 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				.where('id', pageId);
 			return html || null;
 		});
+	}
+	/**
+	 * Returns the underlying Knex query builder instance for direct SQL access.
+	 * This enables advanced queries (GROUP BY, HAVING, JOINs) at the database
+	 * layer for performance with large datasets.
+	 * @returns The Knex instance connected to the SQLite database.
+	 */
+	getKnex(): Knex {
+		return this.#instance;
 	}
 
 	/**

@@ -80,7 +80,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	async getConfig(): Promise<Config> {
 		return this.#db.getConfig();
 	}
-
 	/**
 	 * Reads custom data stored in the archive by name.
 	 * @param name - The base name of the data file (without extension).
@@ -103,7 +102,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		}
 		return await readText(filePath);
 	}
-
 	/**
 	 * Reads the HTML content of a page snapshot from the archive.
 	 * Supports reading from both unzipped directories and zipped snapshot archives.
@@ -145,6 +143,15 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		const html = buffer.toString('utf8') || null;
 		log('Succeeded: Extracts %s from zipped snapshots', name);
 		return html;
+	}
+	/**
+	 * Returns the underlying Knex query builder instance for direct SQL access.
+	 * Enables advanced queries (GROUP BY, HAVING, JOINs) at the database layer
+	 * for performance-critical operations on large datasets.
+	 * @returns The Knex instance connected to the SQLite database.
+	 */
+	getKnex() {
+		return this.#db.getKnex();
 	}
 
 	/**

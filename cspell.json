@@ -63,6 +63,9 @@
 		"qmark",
 		"dedup",
 		"unstarted",
-		"mmm"
+		"mmm",
+
+		// Security headers
+		"HSTS"
 	]
 }
