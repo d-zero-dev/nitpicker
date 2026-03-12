@@ -244,3 +244,49 @@ $ npx @nitpicker/cli pipeline https://example.com --all --silent --strict
 #### 終了コード
 
 crawl コマンドと同じ終了コード体系に従う。詳細は [crawl の終了コード](#終了コード) を参照。
+
+### MCP Server
+
+`.nitpicker` アーカイブファイルを AI アシスタント（Claude 等）から直接クエリするための [Model Context Protocol](https://modelcontextprotocol.io/) サーバー。14 のツールを提供し、サイト構造・メタデータ・リンク・リソース・画像・セキュリティヘッダーなどを対話的に分析できる。
+
+#### セットアップ（Claude Desktop）
+
+`claude_desktop_config.json` に以下を追加:
+
+```json
+{
+	"mcpServers": {
+		"nitpicker": {
+			"command": "npx",
+			"args": ["@nitpicker/mcp-server"]
+		}
+	}
+}
+```
+
+#### 利用可能なツール
+
+| ツール                   | 説明                                                                        |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `open_archive`           | `.nitpicker` ファイルを開く（他のツール使用前に必須）                       |
+| `close_archive`          | アーカイブを閉じてリソースを解放                                            |
+| `get_summary`            | サイト全体の概要（ページ数、ステータス分布、メタデータ充足率）              |
+| `list_pages`             | ページ一覧（ステータス・メタデータ欠損・noindex・URL パターン等で絞り込み） |
+| `get_page_detail`        | 特定ページの全詳細（メタデータ、リンク、リダイレクト、ヘッダー）            |
+| `get_page_html`          | ページの HTML スナップショットを取得                                        |
+| `list_links`             | リンク分析（broken / external / orphaned）                                  |
+| `list_resources`         | サブリソース一覧（CSS, JS, 画像、フォント）                                 |
+| `list_images`            | 画像一覧（alt 欠損、寸法欠損、オーバーサイズ検出）                          |
+| `get_violations`         | 分析プラグインの違反データ（axe, markuplint, textlint, lighthouse）         |
+| `find_duplicates`        | 重複タイトル・説明の検出                                                    |
+| `find_mismatches`        | メタデータ不一致の検出（canonical, og:title, og:description）               |
+| `get_resource_referrers` | 特定リソースを参照しているページの特定                                      |
+| `check_headers`          | セキュリティヘッダーチェック（CSP, X-Frame-Options, HSTS 等）               |
+
+#### 使用例
+
+```
+> .nitpicker ファイルを開いて、404 エラーのページを教えてください
+
+AI: open_archive で読み込み → list_pages で status=404 のページをフィルタ → 結果を表示
+```

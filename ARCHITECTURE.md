@@ -13,6 +13,8 @@ packages/
 │   ├── crawler      # オーケストレーター + 型定義 + ユーティリティ + アーカイブ
 │   ├── core         # Nitpicker プラグインシステム
 │   ├── types        # 共有型定義
+│   ├── query        # アーカイブクエリ API（SQL レベルのフィルタ・集計）
+│   ├── mcp-server   # MCP サーバー（AI アシスタントからのアーカイブクエリ）
 │   ├── analyze-*    # 各種 analyze プラグイン
 │   └── report-google-sheets  # Google Sheets レポーター
 └── test-server/     # E2Eテスト用 Hono サーバー
@@ -24,10 +26,13 @@ packages/
 @d-zero/beholder（外部）
       ↑
       └── crawler ── @nitpicker/cli ← @d-zero/roar（外部）
-           ↑            ↑  ↑    ↑
-           │           core │  report-google-sheets ← @d-zero/google-sheets（外部）
-           │            ↑   │         ↑
-           │     analyze-* プラグイン  │
+           ↑    ↑       ↑  ↑    ↑
+           │    │       core │  report-google-sheets ← @d-zero/google-sheets（外部）
+           │    │        ↑   │         ↑
+           │    │  analyze-* プラグイン │
+           │    └── query              │
+           │         ↑                 │
+           │    mcp-server ← @modelcontextprotocol/sdk
            └── @d-zero/dealer（外部）──┘
 ```
 
@@ -153,6 +158,41 @@ crawler/src/
 ├── types.ts                    # CrawlEvent インターフェース
 └── write-queue.ts             # Archive 書き込み直列化キュー
 ```
+
+### @nitpicker/query
+
+`.nitpicker` アーカイブファイルに対する SQL レベルのクエリ API。大規模データセット（10,000+ ページ、500,000+ レコード）向けに最適化。
+
+**主要クラス・関数:**
+
+- **`ArchiveManager`**: アーカイブのライフサイクル管理（open / get / close / closeAll）
+- **`listPages`**: ページ一覧取得（ステータス・メタデータ欠損・URL パターンなどでフィルタ）
+- **`getSummary`**: サイト全体の統計（ページ数、ステータス分布、メタデータ充足率）
+- **`getPageDetail`**: 単一ページの詳細情報（メタデータ、アウトバウンド/インバウンドリンク、リダイレクト元）
+- **`getPageHtml`**: HTML スナップショット取得（truncation サポート）
+- **`listLinks`**: リンク分析（broken / external / orphaned）
+- **`listResources`**: サブリソース一覧（CSS, JS, 画像、フォント）
+- **`listImages`**: 画像一覧（alt 欠損、寸法欠損、オーバーサイズ検出）
+- **`getViolations`**: 分析プラグインの違反データ取得
+- **`findDuplicates`**: 重複タイトル・説明の検出
+- **`findMismatches`**: メタデータ不一致の検出（canonical, og:title, og:description）
+- **`getResourceReferrers`**: リソースを参照しているページの特定
+- **`checkHeaders`**: セキュリティヘッダーチェック（CSP, X-Frame-Options, X-Content-Type-Options, HSTS）
+
+**依存:** `@nitpicker/crawler`（`Archive`, `ArchiveAccessor` を使用）
+
+### @nitpicker/mcp-server
+
+[Model Context Protocol](https://modelcontextprotocol.io/) サーバー。AI アシスタント（Claude 等）から `.nitpicker` アーカイブを直接クエリするための 14 ツールを提供。
+
+**構成:**
+
+- **`mcp-server.ts`**: `createServer()` で MCP Server インスタンスを構築。低レベル `Server` API を使用（`McpServer` + Zod スキーマの深い型インスタンス化問題を回避）
+- **`tool-definitions.ts`**: 14 ツールの JSON Schema 定義
+
+**バイナリ:** `nitpicker-mcp`（stdio トランスポート）
+
+**依存:** `@modelcontextprotocol/sdk`, `@nitpicker/query`
 
 ### @nitpicker/cli
 

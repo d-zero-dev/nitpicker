@@ -15,6 +15,8 @@ packages/
 │   ├── crawler/                   # クローラーエンジン（オーケストレーター + アーカイブ + ユーティリティ）
 │   ├── core/                      # 監査エンジン（Nitpicker クラス + bounded Promise pool による並列処理）
 │   ├── types/                     # 監査型定義（Report, ConfigJSON）
+│   ├── query/                     # アーカイブクエリ API（SQL レベルのフィルタ・集計）
+│   ├── mcp-server/                # MCP サーバー（AI アシスタント連携、bin: nitpicker-mcp）
 │   ├── analyze-axe/               # アクセシビリティ監査
 │   ├── analyze-lighthouse/        # Lighthouse 監査
 │   ├── analyze-main-contents/     # メインコンテンツ検出
@@ -31,10 +33,13 @@ packages/
 @d-zero/beholder（外部）
       ↑
       └── crawler ── @nitpicker/cli ← @d-zero/roar（外部）
-           ↑            ↑  ↑    ↑
-           │           core │  report-google-sheets
-           │            ↑   │
-           │     analyze-* プラグイン
+           ↑    ↑       ↑  ↑    ↑
+           │    │       core │  report-google-sheets
+           │    │        ↑   │
+           │    │  analyze-* プラグイン
+           │    └── query
+           │         ↑
+           │    mcp-server ← @modelcontextprotocol/sdk（外部）
            └── @d-zero/dealer（外部）
 ```
 

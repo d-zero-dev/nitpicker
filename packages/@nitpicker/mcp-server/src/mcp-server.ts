@@ -23,6 +23,51 @@ import {
 import { toolDefinitions } from './tool-definitions.js';
 
 /**
+ * Validates that a required string argument is present and returns it.
+ * @param args - The arguments object.
+ * @param key - The argument key to validate.
+ * @returns The validated string value.
+ * @throws {Error} If the argument is missing or not a string.
+ */
+function requireString(args: Record<string, unknown>, key: string): string {
+	const value = args[key];
+	if (typeof value !== 'string' || value === '') {
+		throw new Error(`Missing required argument: ${key}`);
+	}
+	return value;
+}
+
+/**
+ * Extracts an optional number argument.
+ * @param args - The arguments object.
+ * @param key - The argument key.
+ * @returns The number value, or undefined if not present.
+ */
+function optionalNumber(args: Record<string, unknown>, key: string): number | undefined {
+	const value = args[key];
+	if (value == null) {
+		return undefined;
+	}
+	return Number(value);
+}
+
+/**
+ * Returns a shallow copy of args with the specified keys removed.
+ * @param args - The arguments object.
+ * @param keys - The keys to exclude.
+ * @returns A new object without the specified keys.
+ */
+function omit(args: Record<string, unknown>, ...keys: string[]): Record<string, unknown> {
+	const result: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(args)) {
+		if (!keys.includes(key)) {
+			result[key] = value;
+		}
+	}
+	return result;
+}
+
+/**
  * Creates and configures the Nitpicker MCP server with all 14 tools registered.
  * Uses the low-level Server API to avoid deep type instantiation issues
  * with McpServer + Zod schemas.
@@ -53,7 +98,8 @@ export function createServer() {
 			try {
 				switch (name) {
 					case 'open_archive': {
-						const { archiveId, archive } = await manager.open(args.filePath as string);
+						const filePath = requireString(args, 'filePath');
+						const { archiveId, archive } = await manager.open(filePath);
 						const config = await archive.getConfig();
 						const knex = manager.get(archiveId).getKnex();
 						const countResult = await knex('pages').count('id as total');
@@ -67,102 +113,97 @@ export function createServer() {
 						});
 					}
 					case 'close_archive': {
-						await manager.close(args.archiveId as string);
+						const archiveId = requireString(args, 'archiveId');
+						await manager.close(archiveId);
 						return textResult('Archive closed successfully.');
 					}
 					case 'get_summary': {
-						const accessor = manager.get(args.archiveId as string);
+						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(await getSummary(accessor));
 					}
 					case 'list_pages': {
-						const { archiveId: aid, ...options } = args;
-						const accessor = manager.get(aid as string);
-						return jsonResult(await listPages(accessor, options));
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(await listPages(accessor, omit(args, 'archiveId')));
 					}
 					case 'get_page_detail': {
-						const accessor = manager.get(args.archiveId as string);
-						const result = await getPageDetail(accessor, args.url as string);
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						const url = requireString(args, 'url');
+						const result = await getPageDetail(accessor, url);
 						if (!result) {
 							return textResult('Page not found.');
 						}
 						return jsonResult(result);
 					}
 					case 'get_page_html': {
-						const accessor = manager.get(args.archiveId as string);
-						const result = await getPageHtml(
-							accessor,
-							args.url as string,
-							(args.maxLength as number | undefined) ?? undefined,
-						);
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						const url = requireString(args, 'url');
+						const maxLength = optionalNumber(args, 'maxLength');
+						const result = await getPageHtml(accessor, url, maxLength);
 						if (!result) {
 							return textResult('HTML snapshot not found.');
 						}
 						const text = result.truncated
-							? `[Truncated to ${(args.maxLength as number) ?? 100_000} chars]\n${result.html}`
+							? `[Truncated to ${maxLength ?? 100_000} chars]\n${result.html}`
 							: result.html;
 						return textResult(text);
 					}
 					case 'list_links': {
-						const { archiveId: aid2, ...linkOpts } = args;
-						const accessor = manager.get(aid2 as string);
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						const type = requireString(args, 'type');
+						const linkOpts = omit(args, 'archiveId');
 						return jsonResult(
-							await listLinks(
-								accessor,
-								linkOpts as { type: 'broken' | 'external' | 'orphaned' },
-							),
+							await listLinks(accessor, {
+								...linkOpts,
+								type: type as 'broken' | 'external' | 'orphaned',
+							}),
 						);
 					}
 					case 'list_resources': {
-						const { archiveId: aid3, ...resOpts } = args;
-						const accessor = manager.get(aid3 as string);
-						return jsonResult(await listResources(accessor, resOpts));
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(await listResources(accessor, omit(args, 'archiveId')));
 					}
 					case 'list_images': {
-						const { archiveId: aid4, ...imgOpts } = args;
-						const accessor = manager.get(aid4 as string);
-						return jsonResult(await listImages(accessor, imgOpts));
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(await listImages(accessor, omit(args, 'archiveId')));
 					}
 					case 'get_violations': {
-						const { archiveId: aid5, ...violOpts } = args;
-						const accessor = manager.get(aid5 as string);
-						return jsonResult(await getViolations(accessor, violOpts));
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(await getViolations(accessor, omit(args, 'archiveId')));
 					}
 					case 'find_duplicates': {
-						const accessor = manager.get(args.archiveId as string);
+						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(
 							await findDuplicates(
 								accessor,
 								(args.field as 'title' | 'description' | undefined) ?? undefined,
-								(args.limit as number | undefined) ?? undefined,
+								optionalNumber(args, 'limit'),
 							),
 						);
 					}
 					case 'find_mismatches': {
-						const accessor = manager.get(args.archiveId as string);
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						const type = requireString(args, 'type');
 						return jsonResult(
 							await findMismatches(
 								accessor,
-								args.type as 'canonical' | 'og:title' | 'og:description',
-								(args.limit as number | undefined) ?? undefined,
-								(args.offset as number | undefined) ?? undefined,
+								type as 'canonical' | 'og:title' | 'og:description',
+								optionalNumber(args, 'limit'),
+								optionalNumber(args, 'offset'),
 							),
 						);
 					}
 					case 'get_resource_referrers': {
-						const accessor = manager.get(args.archiveId as string);
-						const result = await getResourceReferrers(
-							accessor,
-							args.resourceUrl as string,
-						);
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						const resourceUrl = requireString(args, 'resourceUrl');
+						const result = await getResourceReferrers(accessor, resourceUrl);
 						if (!result) {
 							return textResult('Resource not found.');
 						}
 						return jsonResult(result);
 					}
 					case 'check_headers': {
-						const { archiveId: aid6, ...headerOpts } = args;
-						const accessor = manager.get(aid6 as string);
-						return jsonResult(await checkHeaders(accessor, headerOpts));
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(await checkHeaders(accessor, omit(args, 'archiveId')));
 					}
 					default: {
 						return {
