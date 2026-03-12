@@ -166,4 +166,22 @@ describe('ArchiveManager', () => {
 		expect(id2).toBe('archive_2');
 		await manager.closeAll();
 	});
+
+	it('.nitpicker 以外の拡張子はエラーになる', async () => {
+		const manager = new ArchiveManager();
+		await expect(manager.open('/tmp/test.tar')).rejects.toThrow(
+			'Invalid file type. Only .nitpicker archive files are supported.',
+		);
+		await expect(manager.open('/tmp/test.txt')).rejects.toThrow('Invalid file type');
+	});
+
+	it('同時オープン数の上限を超えるとエラーになる', async () => {
+		const manager = new ArchiveManager();
+		// Open 20 archives (MAX_OPEN_ARCHIVES)
+		for (let i = 0; i < 20; i++) {
+			await manager.open(archiveFilePath);
+		}
+		await expect(manager.open(archiveFilePath)).rejects.toThrow('Too many open archives');
+		await manager.closeAll();
+	});
 });

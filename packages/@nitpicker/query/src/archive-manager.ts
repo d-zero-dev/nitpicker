@@ -5,6 +5,9 @@ import path from 'node:path';
 
 import { Archive } from '@nitpicker/crawler';
 
+/** Maximum number of concurrently opened archives to prevent resource exhaustion. */
+const MAX_OPEN_ARCHIVES = 20;
+
 /**
  * Internal entry for a managed archive.
  */
@@ -49,9 +52,10 @@ export class ArchiveManager {
 		this.#archives.delete(archiveId);
 		try {
 			await entry.close();
-		} catch {
+		} catch (error) {
 			// Archive.close() writes if file doesn't exist, then removes tmpDir.
 			// If tmpDir was already removed or DB destroyed, clean up manually.
+			console.warn('Failed to close archive cleanly, forcing cleanup:', error);
 			rmSync(entry.tmpDir, { recursive: true, force: true });
 		}
 	}
@@ -91,8 +95,18 @@ export class ArchiveManager {
 	 * database connection is established.
 	 * @param filePath - The path to the .nitpicker archive file.
 	 * @returns An object containing the generated archive ID and the accessor.
+	 * @throws {Error} If the file does not have a .nitpicker extension.
+	 * @throws {Error} If the maximum number of open archives is reached.
 	 */
 	async open(filePath: string) {
+		if (!filePath.endsWith('.nitpicker')) {
+			throw new Error('Invalid file type. Only .nitpicker archive files are supported.');
+		}
+		if (this.#archives.size >= MAX_OPEN_ARCHIVES) {
+			throw new Error(
+				`Too many open archives (max: ${MAX_OPEN_ARCHIVES}). Close unused archives first.`,
+			);
+		}
 		const resolvedPath = path.resolve(filePath);
 		const archive = await Archive.open({
 			filePath: resolvedPath,

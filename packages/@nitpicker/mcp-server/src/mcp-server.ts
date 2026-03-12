@@ -291,12 +291,32 @@ function textResult(text: string) {
 }
 
 /**
+ * Sanitizes an error message by removing absolute file paths
+ * to avoid leaking internal directory structures.
+ * @param message - The raw error message.
+ * @returns The sanitized message.
+ */
+function sanitizeErrorMessage(message: string): string {
+	return message.replaceAll(/\/[^\s'",)]+/g, (match) => {
+		if (match.startsWith('/tmp') || match.startsWith('/var')) {
+			return '<temp-path>';
+		}
+		if (match.includes('/home/') || match.includes('/root/') || match.includes('/usr/')) {
+			return '<path>';
+		}
+		return match;
+	});
+}
+
+/**
  * Formats an error as an MCP tool error result.
+ * Error messages are sanitized to avoid leaking internal paths.
  * @param error - The error to format.
- * @returns MCP tool error result with the error message.
+ * @returns MCP tool error result with the sanitized error message.
  */
 function errorResult(error: unknown) {
-	const message = error instanceof Error ? error.message : String(error);
+	const rawMessage = error instanceof Error ? error.message : String(error);
+	const message = sanitizeErrorMessage(rawMessage);
 	return {
 		content: [{ type: 'text' as const, text: `Error: ${message}` }],
 		isError: true,

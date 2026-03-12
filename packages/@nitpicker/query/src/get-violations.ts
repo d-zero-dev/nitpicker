@@ -44,7 +44,11 @@ export async function getViolations(
 		);
 	} catch (error) {
 		// analysis/violations not found — analyze has not been run yet
-		if (error instanceof Error && error.message.includes('ENOENT')) {
+		if (
+			error instanceof Error &&
+			'code' in error &&
+			(error as NodeJS.ErrnoException).code === 'ENOENT'
+		) {
 			return { items: [], total: 0 };
 		}
 		throw error;
