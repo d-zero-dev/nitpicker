@@ -6,7 +6,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  */
 interface ViolationEntry {
 	/** The page URL. */
-	pageUrl: string;
+	url: string;
 	/** The validator that produced this violation. */
 	validator: string;
 	/** The severity level. */
@@ -15,15 +15,15 @@ interface ViolationEntry {
 	rule: string;
 	/** The violation message. */
 	message: string;
-	/** The line number in the source. */
-	line: number | null;
-	/** The column number in the source. */
-	col: number | null;
+	/** The source code snippet or element selector. */
+	code: string;
 }
 
 /**
  * Retrieves analysis violations stored in the archive.
- * Reads violation data from the archive's custom data storage (JSON files).
+ * Reads the `analysis/violations` data file written by `@nitpicker/core`
+ * during the analyze phase. This is a single flat array of all violations
+ * across all validators and pages.
  * Supports filtering by validator, severity, and rule.
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
@@ -36,80 +36,64 @@ export async function getViolations(
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 
-	// Analysis results are stored as JSON files in the archive under plugin namespaces.
-	// We scan for known validator data files.
-	const validators = ['axe', 'markuplint', 'textlint', 'lighthouse'];
-	const allViolations: ViolationEntry[] = [];
-
-	for (const validator of validators) {
-		if (options.validator && options.validator !== validator) {
-			continue;
+	let rawViolations: ArchiveViolation[];
+	try {
+		rawViolations = await accessor.getData<ArchiveViolation[]>(
+			'analysis/violations',
+			'json',
+		);
+	} catch (error) {
+		// analysis/violations not found — analyze has not been run yet
+		if (error instanceof Error && error.message.includes('ENOENT')) {
+			return { items: [], total: 0 };
 		}
-
-		try {
-			const knex = accessor.getKnex();
-			const pages = await knex('pages')
-				.select('id', 'url')
-				.where({ scraped: 1, isExternal: 0, contentType: 'text/html' })
-				.whereNull('redirectDestId');
-
-			for (const page of pages) {
-				try {
-					const data = await accessor.getData<ViolationData[]>(`${page.id}`, 'json');
-					if (!Array.isArray(data)) {
-						continue;
-					}
-					for (const item of data) {
-						const entry: ViolationEntry = {
-							pageUrl: page.url,
-							validator,
-							severity: item.severity ?? 'warning',
-							rule: item.rule ?? item.ruleId ?? '',
-							message: item.message ?? '',
-							line: item.line ?? null,
-							col: item.col ?? item.column ?? null,
-						};
-
-						if (options.severity && entry.severity !== options.severity) {
-							continue;
-						}
-						if (options.rule && entry.rule !== options.rule) {
-							continue;
-						}
-
-						allViolations.push(entry);
-					}
-				} catch {
-					// Data file not found for this page/validator combination
-				}
-			}
-		} catch {
-			// Validator data not available
-		}
+		throw error;
 	}
 
-	const total = allViolations.length;
-	const items = allViolations.slice(offset, offset + limit);
+	if (!Array.isArray(rawViolations)) {
+		return { items: [], total: 0 };
+	}
+
+	let filtered = rawViolations;
+
+	if (options.validator) {
+		filtered = filtered.filter((v) => v.validator === options.validator);
+	}
+	if (options.severity) {
+		filtered = filtered.filter((v) => v.severity === options.severity);
+	}
+	if (options.rule) {
+		filtered = filtered.filter((v) => v.rule === options.rule);
+	}
+
+	const total = filtered.length;
+	const items: ViolationEntry[] = filtered.slice(offset, offset + limit).map((v) => ({
+		url: v.url,
+		validator: v.validator,
+		severity: v.severity,
+		rule: v.rule,
+		message: v.message,
+		code: v.code ?? '',
+	}));
 
 	return { items, total };
 }
 
 /**
- * Raw violation data structure as stored by analysis plugins.
+ * Violation data structure as stored by `@nitpicker/core` in `analysis/violations`.
+ * Mirrors the `Violation` interface from `@nitpicker/types`.
  */
-interface ViolationData {
+interface ArchiveViolation {
+	/** Name of the validator. */
+	validator: string;
 	/** Severity level. */
-	severity?: string;
+	severity: string;
 	/** Rule identifier. */
-	rule?: string;
-	/** Alternative rule identifier used by some validators. */
-	ruleId?: string;
-	/** Violation message. */
-	message?: string;
-	/** Line number in source. */
-	line?: number;
-	/** Column number in source. */
-	col?: number;
-	/** Alternative column field used by some validators. */
-	column?: number;
+	rule: string;
+	/** Source code snippet or selector. */
+	code?: string;
+	/** Human-readable description. */
+	message: string;
+	/** Page URL. */
+	url: string;
 }

@@ -134,4 +134,38 @@ describe('listPages', () => {
 		expect(result.limit).toBe(1);
 		expect(result.offset).toBe(1);
 	});
+
+	it('statusMin でフィルタする', async () => {
+		const result = await listPages(archive, { statusMin: 400 });
+		expect(result.total).toBe(1);
+		expect(result.items[0]?.url).toBe('https://example.com/contact');
+	});
+
+	it('statusMax でフィルタする', async () => {
+		const result = await listPages(archive, { statusMax: 200 });
+		expect(result.total).toBe(2);
+	});
+
+	it('missingDescription でフィルタする', async () => {
+		const result = await listPages(archive, { missingDescription: true });
+		expect(result.total).toBe(2);
+	});
+
+	it('urlPattern でフィルタする', async () => {
+		const result = await listPages(archive, { urlPattern: '%about%' });
+		expect(result.total).toBe(1);
+		expect(result.items[0]?.url).toBe('https://example.com/about');
+	});
+
+	it('sortBy と sortOrder が機能する', async () => {
+		const result = await listPages(archive, { sortBy: 'status', sortOrder: 'desc' });
+		expect(result.items[0]?.status).toBe(404);
+		expect(result.items.at(-1)?.status).toBe(200);
+	});
+
+	it('directory でフィルタする', async () => {
+		const result = await listPages(archive, { directory: 'example.com' });
+		// Root URL (https://example.com) doesn't contain 'example.com/' so only subpages match
+		expect(result.total).toBe(2);
+	});
 });

@@ -1,8 +1,21 @@
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { Archive } from '@nitpicker/crawler';
+
+/**
+ * Internal entry for a managed archive.
+ */
+interface ArchiveEntry {
+	/** Close callback to release resources (delegates to Archive.close). */
+	close: () => Promise<void>;
+	/** The read-only accessor for querying the archive. */
+	accessor: ArchiveAccessor;
+	/** The temporary directory path used for extraction. */
+	tmpDir: string;
+}
 
 /**
  * Manages the lifecycle of opened .nitpicker archive files.
@@ -11,42 +24,43 @@ import { Archive } from '@nitpicker/crawler';
  * methods to open, retrieve, and close archive connections.
  * Each archive is extracted to a temporary directory and
  * connected via a read-only {@link ArchiveAccessor}.
+ *
+ * **Cleanup:** Calling {@link close} removes the temporary directory
+ * and destroys the database connection. Always close archives when done.
  */
 export class ArchiveManager {
-	/** Map of archive IDs to their accessor and metadata. */
-	readonly #archives = new Map<
-		string,
-		{
-			/** The read-only accessor for querying the archive. */
-			accessor: ArchiveAccessor;
-			/** The temporary directory path used for extraction. */
-			tmpDir: string;
-		}
-	>();
+	/** Map of archive IDs to their managed entry. */
+	readonly #archives = new Map<string, ArchiveEntry>();
 
 	/** Counter for generating unique archive IDs. */
 	#nextId = 1;
 
 	/**
-	 * Closes an opened archive and releases its resources.
+	 * Closes an opened archive, destroys the database connection,
+	 * and removes the temporary directory.
 	 * @param archiveId - The archive ID to close.
 	 * @throws {Error} If no archive with the given ID is found.
 	 */
-	close(archiveId: string) {
+	async close(archiveId: string) {
 		const entry = this.#archives.get(archiveId);
 		if (!entry) {
 			throw new Error(`Archive not found: ${archiveId}.`);
 		}
 		this.#archives.delete(archiveId);
+		try {
+			await entry.close();
+		} catch {
+			// Archive.close() writes if file doesn't exist, then removes tmpDir.
+			// If tmpDir was already removed or DB destroyed, clean up manually.
+			rmSync(entry.tmpDir, { recursive: true, force: true });
+		}
 	}
 	/**
 	 * Closes all opened archives and releases all resources.
 	 */
-	closeAll() {
+	async closeAll() {
 		const ids = [...this.#archives.keys()];
-		for (const id of ids) {
-			this.close(id);
-		}
+		await Promise.all(ids.map((id) => this.close(id)));
 	}
 	/**
 	 * Retrieves the accessor for an opened archive by its ID.
@@ -85,8 +99,9 @@ export class ArchiveManager {
 			openPluginData: true,
 		});
 		const archiveId = `archive_${this.#nextId++}`;
-		const accessor = archive as ArchiveAccessor;
+		const accessor: ArchiveAccessor = archive;
 		this.#archives.set(archiveId, {
+			close: () => archive.close(),
 			accessor,
 			tmpDir: archive.tmpDir,
 		});

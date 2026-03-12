@@ -31,7 +31,8 @@ export async function checkHeaders(
 	const countResult = (await baseQuery.clone().count('id as total')) as {
 		total: number;
 	}[];
-	const totalCount = countResult[0]!.total;
+	// SQL count() always returns exactly one row
+	const totalCount = countResult[0]?.total ?? 0;
 
 	const rows = await baseQuery
 		.clone()
@@ -48,8 +49,8 @@ export async function checkHeaders(
 			if (row.responseHeaders) {
 				headers = JSON.parse(row.responseHeaders);
 			}
-		} catch {
-			// ignore parse errors
+		} catch (error) {
+			console.warn(`Failed to parse responseHeaders for ${row.url}:`, error);
 		}
 
 		const lowerHeaders = Object.fromEntries(

@@ -97,7 +97,8 @@ export async function listPages(
 
 	return {
 		items,
-		total: Number(countResult[0]!.total),
+		// SQL count() always returns exactly one row
+		total: Number(countResult[0]?.total ?? 0),
 		offset,
 		limit,
 	};

@@ -24,8 +24,8 @@ export async function getPageDetail(
 		if (page.responseHeaders) {
 			responseHeaders = JSON.parse(page.responseHeaders);
 		}
-	} catch {
-		// ignore parse errors
+	} catch (error) {
+		console.warn(`Failed to parse responseHeaders for ${url}:`, error);
 	}
 
 	const outboundRows = await knex('anchors')

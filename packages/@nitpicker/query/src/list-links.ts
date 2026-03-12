@@ -48,7 +48,8 @@ export async function listLinks(
 		.clone()
 		.clearSelect()
 		.count('anchors.id as total')) as { total: number }[];
-	const total = countResult[0]!.total;
+	// SQL count() always returns exactly one row
+	const total = countResult[0]?.total ?? 0;
 
 	const rows = await baseQuery.clone().limit(limit).offset(offset);
 
@@ -99,7 +100,8 @@ async function listOrphanedPages(
 		})
 		.whereNull('pages.redirectDestId')) as { total: number }[];
 
-	const total = countResult[0]!.total;
+	// SQL count() always returns exactly one row
+	const total = countResult[0]?.total ?? 0;
 
 	const rows = await knex('pages')
 		.select('pages.url', 'pages.status', 'pages.title')

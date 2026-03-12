@@ -214,20 +214,20 @@ describe('listLinks', () => {
 
 	it('broken リンクを検出する', async () => {
 		const result = await listLinks(archive, { type: 'broken' });
-		expect(result.items.length).toBeGreaterThanOrEqual(1);
-		const broken = result.items.find(
-			(item) => 'destUrl' in item && item.destUrl === 'https://example.com/broken',
-		);
-		expect(broken).toBeDefined();
+		expect(result.items.length).toBe(1);
+		const broken = result.items[0];
+		expect(broken).toMatchObject({
+			destUrl: 'https://example.com/broken',
+			sourceUrl: 'https://example.com',
+			status: 404,
+		});
 	});
 
 	it('external リンクを検出する', async () => {
 		const result = await listLinks(archive, { type: 'external' });
-		expect(result.items.length).toBeGreaterThanOrEqual(1);
+		expect(result.items.length).toBe(1);
 		const ext = result.items.find(
-			(item) =>
-				'destUrl' in item &&
-				(item as { destUrl: string }).destUrl.includes('external.com'),
+			(item) => 'destUrl' in item && item.destUrl.includes('external.com'),
 		);
 		expect(ext).toBeDefined();
 	});
@@ -235,6 +235,14 @@ describe('listLinks', () => {
 	it('orphaned ページを検出する', async () => {
 		const result = await listLinks(archive, { type: 'orphaned' });
 		// Home page has no inbound links from other pages, so it should be orphaned
-		expect(result.items).toBeDefined();
+		expect(result.items.length).toBe(1);
+		expect(result.items[0]).toMatchObject({
+			url: 'https://example.com',
+		});
+	});
+
+	it('ページネーションが機能する', async () => {
+		const result = await listLinks(archive, { type: 'broken', limit: 1, offset: 0 });
+		expect(result.items).toHaveLength(1);
 	});
 });

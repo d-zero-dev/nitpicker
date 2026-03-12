@@ -45,7 +45,8 @@ export async function listImages(
 		.clone()
 		.clearSelect()
 		.count('images.id as total')) as { total: number }[];
-	const total = countResult[0]!.total;
+	// SQL count() always returns exactly one row
+	const total = countResult[0]?.total ?? 0;
 
 	const rows = await baseQuery
 		.clone()

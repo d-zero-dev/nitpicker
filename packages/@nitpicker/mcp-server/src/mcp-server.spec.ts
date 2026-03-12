@@ -5,6 +5,7 @@ import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createServer } from './mcp-server.js';
+import { toolDefinitions } from './tool-definitions.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -13,6 +14,11 @@ const workingDir = path.resolve(__dirname, '__test_fixtures_mcp_server__');
 /**
  * Sends a CallToolRequest to the MCP server and returns the result.
  * Uses the low-level Server API's request handler directly.
+ *
+ * NOTE: This function accesses the internal `_requestHandlers` map of the
+ * MCP SDK's `Server` class. This is an implementation detail of the SDK
+ * and may change across SDK versions. If tests break after an SDK upgrade,
+ * check whether `_requestHandlers` still exists and has the same shape.
  * @param server - The MCP server instance.
  * @param toolName - The name of the tool to call.
  * @param args - The tool arguments.
@@ -42,6 +48,11 @@ async function callTool(
 
 /**
  * Sends a ListToolsRequest to the MCP server.
+ *
+ * NOTE: This function accesses the internal `_requestHandlers` map of the
+ * MCP SDK's `Server` class. This is an implementation detail of the SDK
+ * and may change across SDK versions. If tests break after an SDK upgrade,
+ * check whether `_requestHandlers` still exists and has the same shape.
  * @param server - The MCP server instance.
  * @returns The list of tools.
  */
@@ -219,6 +230,11 @@ describe('createServer', () => {
 		expect(names).toContain('get_summary');
 	});
 
+	it('toolDefinitions の数と ListTools の数が一致する', async () => {
+		const result = await listTools(server);
+		expect(toolDefinitions.length).toBe(result.tools.length);
+	});
+
 	it('open_archive でアーカイブを開ける', async () => {
 		const result = await callTool(server, 'open_archive', {
 			filePath: archiveFilePath,
@@ -227,7 +243,7 @@ describe('createServer', () => {
 		const data = JSON.parse(result.content[0]!.text);
 		expect(data.archiveId).toBeDefined();
 		expect(data.baseUrl).toBe('https://example.com');
-		expect(data.totalPages).toBeGreaterThanOrEqual(2);
+		expect(data.totalPages).toBe(2);
 		archiveId = data.archiveId;
 	});
 
@@ -235,7 +251,7 @@ describe('createServer', () => {
 		const result = await callTool(server, 'get_summary', { archiveId });
 		expect(result.isError).toBeUndefined();
 		const data = JSON.parse(result.content[0]!.text);
-		expect(data.totalPages).toBeGreaterThanOrEqual(2);
+		expect(data.totalPages).toBe(2);
 		expect(data.baseUrl).toBe('https://example.com');
 	});
 
@@ -243,7 +259,7 @@ describe('createServer', () => {
 		const result = await callTool(server, 'list_pages', { archiveId });
 		expect(result.isError).toBeUndefined();
 		const data = JSON.parse(result.content[0]!.text);
-		expect(data.items.length).toBeGreaterThanOrEqual(2);
+		expect(data.items.length).toBe(2);
 	});
 
 	it('get_page_detail でページ詳細を取得する', async () => {
@@ -256,7 +272,9 @@ describe('createServer', () => {
 		expect(data.url).toBe('https://example.com');
 		expect(data.title).toBe('Home');
 		expect(data.outboundLinks).toBeDefined();
+		expect(data.outboundLinks.length).toBe(1);
 		expect(data.inboundLinks).toBeDefined();
+		expect(data.inboundLinks.length).toBe(0);
 	});
 
 	it('get_page_detail で存在しないページは "Page not found." を返す', async () => {
@@ -283,21 +301,23 @@ describe('createServer', () => {
 		});
 		expect(result.isError).toBeUndefined();
 		const data = JSON.parse(result.content[0]!.text);
-		expect(data.items).toBeDefined();
+		expect(Array.isArray(data.items)).toBe(true);
 	});
 
 	it('list_resources でリソースをリストする', async () => {
 		const result = await callTool(server, 'list_resources', { archiveId });
 		expect(result.isError).toBeUndefined();
 		const data = JSON.parse(result.content[0]!.text);
-		expect(data.items).toBeDefined();
+		expect(Array.isArray(data.items)).toBe(true);
+		expect(data.items.length).toBe(1);
 	});
 
 	it('list_images で画像をリストする', async () => {
 		const result = await callTool(server, 'list_images', { archiveId });
 		expect(result.isError).toBeUndefined();
 		const data = JSON.parse(result.content[0]!.text);
-		expect(data.items).toBeDefined();
+		expect(Array.isArray(data.items)).toBe(true);
+		expect(data.items.length).toBe(1);
 	});
 
 	it('find_duplicates で重複タイトルを検出する', async () => {
@@ -342,6 +362,34 @@ describe('createServer', () => {
 		const result = await callTool(server, 'open_archive', {});
 		expect(result.isError).toBe(true);
 		expect(result.content[0]!.text).toContain('Missing required argument');
+	});
+
+	it('不正な link type でエラーを返す', async () => {
+		const result = await callTool(server, 'list_links', {
+			archiveId,
+			type: 'invalid',
+		});
+		expect(result.isError).toBe(true);
+		expect(result.content[0]!.text).toContain('Invalid link type');
+	});
+
+	it('不正な mismatch type でエラーを返す', async () => {
+		const result = await callTool(server, 'find_mismatches', {
+			archiveId,
+			type: 'invalid',
+		});
+		expect(result.isError).toBe(true);
+		expect(result.content[0]!.text).toContain('Invalid mismatch type');
+	});
+
+	it('不正な数値引数でエラーを返す', async () => {
+		const result = await callTool(server, 'get_page_html', {
+			archiveId,
+			url: 'https://example.com',
+			maxLength: 'abc',
+		});
+		expect(result.isError).toBe(true);
+		expect(result.content[0]!.text).toContain('Invalid number');
 	});
 
 	it('close_archive でアーカイブを閉じる', async () => {

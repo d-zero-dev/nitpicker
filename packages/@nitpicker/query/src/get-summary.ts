@@ -42,8 +42,9 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		count: Number(row.count),
 	}));
 
-	const totalNum = Number(totalResult[0]!.total);
-	const internalNum = Number(internalResult[0]!.internalCount);
+	// SQL count() always returns exactly one row
+	const totalNum = Number(totalResult[0]?.total ?? 0);
+	const internalNum = Number(internalResult[0]?.internalCount ?? 0);
 
 	let metadataFulfillment = {
 		title: 0,
@@ -79,7 +80,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 			.where({ scraped: 1, isExternal: 0 })
 			.whereNull('redirectDestId')) as Record<string, number>[];
 
-		const meta = metaRows[0]!;
+		const meta = metaRows[0] ?? ({} as Record<string, number>);
 		metadataFulfillment = {
 			title: Number(meta.hasTitle) / internalNum,
 			description: Number(meta.hasDescription) / internalNum,
@@ -94,7 +95,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		baseUrl,
 		totalPages: totalNum,
 		internalPages: internalNum,
-		externalPages: Number(externalResult[0]!.externalCount),
+		externalPages: Number(externalResult[0]?.externalCount ?? 0),
 		statusDistribution,
 		metadataFulfillment,
 	};

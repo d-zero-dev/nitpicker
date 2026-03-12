@@ -38,17 +38,52 @@ function requireString(args: Record<string, unknown>, key: string): string {
 }
 
 /**
- * Extracts an optional number argument.
+ * Extracts an optional number argument with validation.
  * @param args - The arguments object.
  * @param key - The argument key.
  * @returns The number value, or undefined if not present.
+ * @throws {Error} If the value is present but not a valid number.
  */
 function optionalNumber(args: Record<string, unknown>, key: string): number | undefined {
 	const value = args[key];
 	if (value == null) {
 		return undefined;
 	}
-	return Number(value);
+	const num = Number(value);
+	if (Number.isNaN(num)) {
+		throw new TypeError(`Invalid number for argument: ${key}`);
+	}
+	return num;
+}
+
+/** Valid link analysis types. */
+const VALID_LINK_TYPES = ['broken', 'external', 'orphaned'] as const;
+
+/** Valid mismatch types. */
+const VALID_MISMATCH_TYPES = ['canonical', 'og:title', 'og:description'] as const;
+
+/** Valid duplicate check fields. */
+const VALID_DUPLICATE_FIELDS = ['title', 'description'] as const;
+
+/**
+ * Validates that a string argument is one of the allowed values.
+ * @param value - The string value to validate.
+ * @param allowed - The list of allowed values.
+ * @param label - A label for the argument (used in error messages).
+ * @returns The validated value cast to the correct type.
+ * @throws {Error} If the value is not in the allowed list.
+ */
+function validateEnum<T extends string>(
+	value: string,
+	allowed: readonly T[],
+	label: string,
+): T {
+	if (!(allowed as readonly string[]).includes(value)) {
+		throw new Error(
+			`Invalid ${label}: "${value}". Must be one of: ${allowed.join(', ')}`,
+		);
+	}
+	return value as T;
 }
 
 /**
@@ -68,7 +103,7 @@ function omit(args: Record<string, unknown>, ...keys: string[]): Record<string, 
 }
 
 /**
- * Creates and configures the Nitpicker MCP server with all 14 tools registered.
+ * Creates and configures the Nitpicker MCP server with all tools registered.
  * Uses the low-level Server API to avoid deep type instantiation issues
  * with McpServer + Zod schemas.
  * @returns The configured Server instance.
@@ -99,17 +134,12 @@ export function createServer() {
 				switch (name) {
 					case 'open_archive': {
 						const filePath = requireString(args, 'filePath');
-						const { archiveId, archive } = await manager.open(filePath);
-						const config = await archive.getConfig();
-						const knex = manager.get(archiveId).getKnex();
-						const countResult = await knex('pages').count('id as total');
-						const total = Number(
-							(countResult[0] as Record<string, unknown>)?.['total'] ?? 0,
-						);
+						const { archiveId, accessor } = await manager.open(filePath);
+						const summary = await getSummary(accessor);
 						return jsonResult({
 							archiveId,
-							baseUrl: config.baseUrl,
-							totalPages: total,
+							baseUrl: summary.baseUrl,
+							totalPages: summary.totalPages,
 						});
 					}
 					case 'close_archive': {
@@ -149,12 +179,16 @@ export function createServer() {
 					}
 					case 'list_links': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						const type = requireString(args, 'type');
+						const type = validateEnum(
+							requireString(args, 'type'),
+							VALID_LINK_TYPES,
+							'link type',
+						);
 						const linkOpts = omit(args, 'archiveId');
 						return jsonResult(
 							await listLinks(accessor, {
 								...linkOpts,
-								type: type as 'broken' | 'external' | 'orphaned',
+								type,
 							}),
 						);
 					}
@@ -172,21 +206,24 @@ export function createServer() {
 					}
 					case 'find_duplicates': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
+						const field = args.field
+							? validateEnum(String(args.field), VALID_DUPLICATE_FIELDS, 'field')
+							: undefined;
 						return jsonResult(
-							await findDuplicates(
-								accessor,
-								(args.field as 'title' | 'description' | undefined) ?? undefined,
-								optionalNumber(args, 'limit'),
-							),
+							await findDuplicates(accessor, field, optionalNumber(args, 'limit')),
 						);
 					}
 					case 'find_mismatches': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						const type = requireString(args, 'type');
+						const type = validateEnum(
+							requireString(args, 'type'),
+							VALID_MISMATCH_TYPES,
+							'mismatch type',
+						);
 						return jsonResult(
 							await findMismatches(
 								accessor,
-								type as 'canonical' | 'og:title' | 'og:description',
+								type,
 								optionalNumber(args, 'limit'),
 								optionalNumber(args, 'offset'),
 							),

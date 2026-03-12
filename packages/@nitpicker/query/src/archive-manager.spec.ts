@@ -1,0 +1,170 @@
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import path from 'node:path';
+
+import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
+import { Archive } from '@nitpicker/crawler';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { ArchiveManager } from './archive-manager.js';
+
+const __filename = new URL(import.meta.url).pathname;
+const __dirname = path.dirname(__filename);
+const workingDir = path.resolve(__dirname, '__test_fixtures_archive_manager__');
+
+describe('ArchiveManager', () => {
+	const archiveFilePath = path.resolve(workingDir, 'manager-test.nitpicker');
+
+	beforeAll(async () => {
+		mkdirSync(workingDir, { recursive: true });
+
+		const archive = await Archive.create({
+			filePath: archiveFilePath,
+			cwd: workingDir,
+		});
+
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.4.4',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			scope: [],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html><head><title>Test</title></head></html>',
+			meta: {
+				lang: 'ja',
+				title: 'Test',
+				description: null,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': null,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		await archive.write();
+		await archive.close();
+	});
+
+	afterAll(() => {
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('open でアーカイブを開ける', async () => {
+		const manager = new ArchiveManager();
+		const { archiveId, accessor } = await manager.open(archiveFilePath);
+		expect(archiveId).toMatch(/^archive_\d+$/);
+		expect(accessor).toBeDefined();
+		const config = await accessor.getConfig();
+		expect(config.baseUrl).toBe('https://example.com');
+		await manager.closeAll();
+	});
+
+	it('get で開いたアーカイブを取得できる', async () => {
+		const manager = new ArchiveManager();
+		const { archiveId } = await manager.open(archiveFilePath);
+		const accessor = manager.get(archiveId);
+		expect(accessor).toBeDefined();
+		await manager.closeAll();
+	});
+
+	it('has で存在確認できる', async () => {
+		const manager = new ArchiveManager();
+		const { archiveId } = await manager.open(archiveFilePath);
+		expect(manager.has(archiveId)).toBe(true);
+		expect(manager.has('nonexistent')).toBe(false);
+		await manager.closeAll();
+	});
+
+	it('get で存在しない ID はエラーになる', () => {
+		const manager = new ArchiveManager();
+		expect(() => manager.get('nonexistent')).toThrow('Archive not found: nonexistent');
+	});
+
+	it('close でアーカイブを閉じる', async () => {
+		const manager = new ArchiveManager();
+		const { archiveId } = await manager.open(archiveFilePath);
+		expect(manager.has(archiveId)).toBe(true);
+		await manager.close(archiveId);
+		expect(manager.has(archiveId)).toBe(false);
+	});
+
+	it('close で存在しない ID はエラーになる', async () => {
+		const manager = new ArchiveManager();
+		await expect(manager.close('nonexistent')).rejects.toThrow(
+			'Archive not found: nonexistent',
+		);
+	});
+
+	it('closeAll で全アーカイブを閉じる', async () => {
+		const manager = new ArchiveManager();
+		const { archiveId: id1 } = await manager.open(archiveFilePath);
+		const { archiveId: id2 } = await manager.open(archiveFilePath);
+		expect(manager.has(id1)).toBe(true);
+		expect(manager.has(id2)).toBe(true);
+		await manager.closeAll();
+		expect(manager.has(id1)).toBe(false);
+		expect(manager.has(id2)).toBe(false);
+	});
+
+	it('close 後に get するとエラーになる', async () => {
+		const manager = new ArchiveManager();
+		const { archiveId } = await manager.open(archiveFilePath);
+		await manager.close(archiveId);
+		expect(() => manager.get(archiveId)).toThrow('Archive not found');
+	});
+
+	it('close で tmpDir がクリーンアップされる', async () => {
+		const manager = new ArchiveManager();
+		const { archiveId, archive } = await manager.open(archiveFilePath);
+		const tmpDir = archive.tmpDir;
+		expect(existsSync(tmpDir)).toBe(true);
+		await manager.close(archiveId);
+		expect(existsSync(tmpDir)).toBe(false);
+	});
+
+	it('連続した ID が生成される', async () => {
+		const manager = new ArchiveManager();
+		const { archiveId: id1 } = await manager.open(archiveFilePath);
+		const { archiveId: id2 } = await manager.open(archiveFilePath);
+		const num1 = Number(id1.replace('archive_', ''));
+		const num2 = Number(id2.replace('archive_', ''));
+		expect(num2).toBe(num1 + 1);
+		await manager.closeAll();
+	});
+});
