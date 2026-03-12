@@ -162,9 +162,8 @@ describe('ArchiveManager', () => {
 		const manager = new ArchiveManager();
 		const { archiveId: id1 } = await manager.open(archiveFilePath);
 		const { archiveId: id2 } = await manager.open(archiveFilePath);
-		const num1 = Number(id1.replace('archive_', ''));
-		const num2 = Number(id2.replace('archive_', ''));
-		expect(num2).toBe(num1 + 1);
+		expect(id1).toBe('archive_1');
+		expect(id2).toBe('archive_2');
 		await manager.closeAll();
 	});
 });

@@ -29,11 +29,12 @@ export async function listImages(
 		});
 	}
 	if (options.oversizedThreshold != null) {
+		const threshold = options.oversizedThreshold;
 		baseQuery.where((qb) => {
-			qb.where('images.naturalWidth', '>', options.oversizedThreshold!).orWhere(
+			qb.where('images.naturalWidth', '>', threshold).orWhere(
 				'images.naturalHeight',
 				'>',
-				options.oversizedThreshold!,
+				threshold,
 			);
 		});
 	}

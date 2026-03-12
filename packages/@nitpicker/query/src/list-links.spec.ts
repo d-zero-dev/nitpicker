@@ -226,10 +226,11 @@ describe('listLinks', () => {
 	it('external リンクを検出する', async () => {
 		const result = await listLinks(archive, { type: 'external' });
 		expect(result.items.length).toBe(1);
-		const ext = result.items.find(
-			(item) => 'destUrl' in item && item.destUrl.includes('external.com'),
-		);
-		expect(ext).toBeDefined();
+		expect(result.items[0]).toMatchObject({
+			destUrl: 'https://external.com',
+			sourceUrl: 'https://example.com',
+			isExternal: true,
+		});
 	});
 
 	it('orphaned ページを検出する', async () => {
