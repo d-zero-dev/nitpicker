@@ -6,7 +6,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * Inspects Content-Security-Policy, X-Frame-Options, X-Content-Type-Options,
  * and Strict-Transport-Security headers.
  * @param accessor - The archive accessor to query.
- * @param options - Pagination options.
+ * @param options - Filter and pagination options.
  * @param options.limit - Maximum number of results. Defaults to 100.
  * @param options.offset - Number of results to skip. Defaults to 0.
  * @param options.missingOnly - When true, only returns pages missing at least one security header.

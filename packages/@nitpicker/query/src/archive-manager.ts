@@ -124,8 +124,10 @@ export class ArchiveManager {
 	 * extraction and database connection are reused — no redundant untar is
 	 * performed. A new archive ID is issued that shares the underlying entry.
 	 * @param filePath - The path to the .nitpicker archive file.
-	 * @returns An object containing the generated archive ID and the accessor.
+	 * @returns An object containing the generated archive ID, the accessor, and
+	 *   (only on the first open for a given file) the underlying Archive instance.
 	 * @throws {Error} If the file does not have a .nitpicker extension.
+	 * @throws {Error} If the file is not found or not readable.
 	 * @throws {Error} If the maximum number of open archives is reached.
 	 */
 	async open(filePath: string) {

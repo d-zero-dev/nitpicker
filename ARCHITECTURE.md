@@ -165,7 +165,7 @@ crawler/src/
 
 **主要クラス・関数:**
 
-- **`ArchiveManager`**: アーカイブのライフサイクル管理（open / get / close / closeAll）
+- **`ArchiveManager`**: アーカイブのライフサイクル管理（open / get / close / closeAll）。同一ファイルの重複オープンは参照カウントで管理し、untar を再実行しない
 - **`listPages`**: ページ一覧取得（ステータス・メタデータ欠損・URL パターンなどでフィルタ）
 - **`getSummary`**: サイト全体の統計（ページ数、ステータス分布、メタデータ充足率）
 - **`getPageDetail`**: 単一ページの詳細情報（メタデータ、アウトバウンド/インバウンドリンク、リダイレクト元）
