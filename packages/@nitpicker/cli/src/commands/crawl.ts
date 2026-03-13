@@ -143,13 +143,16 @@ type LogType = 'verbose' | 'normal' | 'silent';
  * crawl via {@link CrawlerOrchestrator.abort}, then kill zombie Chromium
  * processes and exit. The abort signal propagates through the dealer's
  * AbortSignal mechanism so no new workers are launched.
+ *
+ * Signal handlers are automatically removed in a `finally` block when
+ * the event assignment pipeline completes or throws.
  * @param trigger - Display label for the crawl (URL or stub file path)
  * @param orchestrator - The initialized CrawlerOrchestrator instance
  * @param config - The resolved archive configuration
  * @param logType - Output verbosity level
- * @returns A promise from the event assignment pipeline.
+ * @returns A promise that resolves when the event assignment pipeline completes.
  */
-function run(
+async function run(
 	trigger: string,
 	orchestrator: CrawlerOrchestrator,
 	config: Config,
@@ -160,16 +163,22 @@ function run(
 		orchestrator.garbageCollect();
 		process.exit();
 	};
-	process.on('SIGINT', killed);
-	process.on('SIGBREAK', killed);
-	process.on('SIGHUP', killed);
-	process.on('SIGABRT', killed);
+	const signals: NodeJS.Signals[] = ['SIGINT', 'SIGBREAK', 'SIGHUP', 'SIGABRT'];
+	for (const signal of signals) {
+		process.on(signal, killed);
+	}
 
 	const head = [
 		`🐳 ${trigger} (New scraping)`,
 		...Object.entries(config).map(([key, value]) => `  ${key}: ${value}`),
 	];
-	return eventAssignments(orchestrator, head, logType);
+	try {
+		return await eventAssignments(orchestrator, head, logType);
+	} finally {
+		for (const signal of signals) {
+			process.removeListener(signal, killed);
+		}
+	}
 }
 
 /**
