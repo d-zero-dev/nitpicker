@@ -1,6 +1,6 @@
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
-import { rmSync } from 'node:fs';
+import { accessSync, constants, realpathSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { Archive } from '@nitpicker/crawler';
@@ -108,8 +108,17 @@ export class ArchiveManager {
 			);
 		}
 		const resolvedPath = path.resolve(filePath);
+		try {
+			accessSync(resolvedPath, constants.R_OK);
+		} catch {
+			throw new Error('Archive file not found or not readable.');
+		}
+		const realPath = realpathSync(resolvedPath);
+		if (!realPath.endsWith('.nitpicker')) {
+			throw new Error('Invalid file type. Only .nitpicker archive files are supported.');
+		}
 		const archive = await Archive.open({
-			filePath: resolvedPath,
+			filePath: realPath,
 			openPluginData: true,
 		});
 		const archiveId = `archive_${this.#nextId++}`;

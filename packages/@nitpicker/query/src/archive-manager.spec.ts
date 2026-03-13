@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -173,6 +173,29 @@ describe('ArchiveManager', () => {
 			'Invalid file type. Only .nitpicker archive files are supported.',
 		);
 		await expect(manager.open('/tmp/test.txt')).rejects.toThrow('Invalid file type');
+	});
+
+	it('存在しないファイルはエラーになる', async () => {
+		const manager = new ArchiveManager();
+		await expect(manager.open('/tmp/nonexistent.nitpicker')).rejects.toThrow(
+			'Archive file not found or not readable.',
+		);
+	});
+
+	it('シンボリックリンク経由で非 .nitpicker ファイルを指す場合はエラーになる', async () => {
+		const manager = new ArchiveManager();
+		const targetFile = path.resolve(workingDir, 'fake-target.txt');
+		const symlinkFile = path.resolve(workingDir, 'link.nitpicker');
+		const { writeFileSync } = await import('node:fs');
+		writeFileSync(targetFile, 'not an archive');
+		try {
+			symlinkSync(targetFile, symlinkFile);
+		} catch {
+			// symlink may already exist from previous run
+		}
+		await expect(manager.open(symlinkFile)).rejects.toThrow('Invalid file type');
+		rmSync(symlinkFile, { force: true });
+		rmSync(targetFile, { force: true });
 	});
 
 	it('同時オープン数の上限を超えるとエラーになる', async () => {

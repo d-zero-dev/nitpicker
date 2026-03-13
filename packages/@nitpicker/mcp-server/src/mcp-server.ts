@@ -297,15 +297,7 @@ function textResult(text: string) {
  * @returns The sanitized message.
  */
 function sanitizeErrorMessage(message: string): string {
-	return message.replaceAll(/\/[^\s'",)]+/g, (match) => {
-		if (match.startsWith('/tmp') || match.startsWith('/var')) {
-			return '<temp-path>';
-		}
-		if (match.includes('/home/') || match.includes('/root/') || match.includes('/usr/')) {
-			return '<path>';
-		}
-		return match;
-	});
+	return message.replaceAll(/(?:\/[^\s'",)]+){2,}/g, '<path>');
 }
 
 /**
