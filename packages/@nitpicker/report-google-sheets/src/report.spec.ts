@@ -16,7 +16,8 @@ vi.mock('@d-zero/google-sheets', () => ({
 
 vi.mock('./archive.js', () => ({
 	getArchive: vi.fn().mockResolvedValue({
-		close: vi.fn(),
+		archive: { close: vi.fn() },
+		removeSignalHandlers: vi.fn(),
 	}),
 }));
 

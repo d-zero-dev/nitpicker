@@ -83,7 +83,7 @@ export async function report(params: ReportParams) {
 	log('Authentication succeeded');
 
 	log('Opening archive: %s', filePath);
-	const archive = await getArchive(filePath);
+	const { archive, removeSignalHandlers } = await getArchive(filePath);
 	log('Archive opened');
 
 	log('Loading config');
@@ -142,6 +142,7 @@ export async function report(params: ReportParams) {
 		if (!chosenSheets) {
 			log('Choice creating data');
 			archiveLog('Closes file');
+			removeSignalHandlers();
 			await archive.close();
 			return;
 		}
@@ -248,6 +249,7 @@ export async function report(params: ReportParams) {
 	}
 
 	archiveLog('Closes file');
+	removeSignalHandlers();
 	await archive.close();
 	log('Done');
 }

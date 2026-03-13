@@ -149,7 +149,7 @@ type LogType = 'verbose' | 'normal' | 'silent';
  * @param logType - Output verbosity level
  * @returns A promise from the event assignment pipeline.
  */
-function run(
+async function run(
 	trigger: string,
 	orchestrator: CrawlerOrchestrator,
 	config: Config,
@@ -160,16 +160,22 @@ function run(
 		orchestrator.garbageCollect();
 		process.exit();
 	};
-	process.on('SIGINT', killed);
-	process.on('SIGBREAK', killed);
-	process.on('SIGHUP', killed);
-	process.on('SIGABRT', killed);
+	const signals: NodeJS.Signals[] = ['SIGINT', 'SIGBREAK', 'SIGHUP', 'SIGABRT'];
+	for (const signal of signals) {
+		process.on(signal, killed);
+	}
 
 	const head = [
 		`🐳 ${trigger} (New scraping)`,
 		...Object.entries(config).map(([key, value]) => `  ${key}: ${value}`),
 	];
-	return eventAssignments(orchestrator, head, logType);
+	try {
+		return await eventAssignments(orchestrator, head, logType);
+	} finally {
+		for (const signal of signals) {
+			process.removeListener(signal, killed);
+		}
+	}
 }
 
 /**
