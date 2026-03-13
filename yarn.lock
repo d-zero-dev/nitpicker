@@ -2385,7 +2385,7 @@ __metadata:
     "@nitpicker/analyze-textlint": "npm:0.5.0"
     "@nitpicker/core": "npm:0.5.0"
     "@nitpicker/crawler": "npm:0.5.0"
-    "@nitpicker/report-google-sheets": "npm:0.5.0"
+    "@nitpicker/report-google-sheets": "npm:0.5.1"
     "@types/debug": "npm:4.1.12"
     ansi-colors: "npm:4.1.3"
     debug: "npm:4.4.3"
@@ -2453,7 +2453,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nitpicker/report-google-sheets@npm:0.5.0, @nitpicker/report-google-sheets@workspace:packages/@nitpicker/report-google-sheets":
+"@nitpicker/report-google-sheets@npm:0.5.1, @nitpicker/report-google-sheets@workspace:packages/@nitpicker/report-google-sheets":
   version: 0.0.0-use.local
   resolution: "@nitpicker/report-google-sheets@workspace:packages/@nitpicker/report-google-sheets"
   dependencies:
