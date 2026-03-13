@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.5.0](https://github.com/d-zero-dev/nitpicker/compare/v0.4.4...v0.5.0) (2026-03-13)
+
+### Bug Fixes
+
+- **analyze-lighthouse:** Chrome プロセスがエラー時にリークする問題を修正 ([6ac3271](https://github.com/d-zero-dev/nitpicker/commit/6ac3271a9f645ba99551fb8b039724ac909f910f)), closes [#8](https://github.com/d-zero-dev/nitpicker/issues/8)
+- index.ts 禁止ルール違反を解消 ([b5d3cda](https://github.com/d-zero-dev/nitpicker/commit/b5d3cdab633c16fa73cedc4cc92ab18609312940)), closes [#15](https://github.com/d-zero-dev/nitpicker/issues/15)
+- QAレビュー指摘事項の一括修正 ([e461a09](https://github.com/d-zero-dev/nitpicker/commit/e461a0991359ddc151a22fbd310b67417c0f693d))
+
 ## [0.4.4](https://github.com/d-zero-dev/nitpicker/compare/v0.4.3...v0.4.4) (2026-03-02)
 
 **Note:** Version bump only for package @nitpicker/analyze-lighthouse
