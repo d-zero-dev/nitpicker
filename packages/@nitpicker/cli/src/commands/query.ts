@@ -176,7 +176,11 @@ export async function query(args: string[], flags: QueryFlags) {
 			// eslint-disable-next-line no-console
 			console.log(output);
 		} finally {
-			await manager.close(archiveId);
+			try {
+				await manager.close(archiveId);
+			} catch {
+				// close failure should not mask the original error
+			}
 		}
 	} catch (error) {
 		formatCliError(error, false);

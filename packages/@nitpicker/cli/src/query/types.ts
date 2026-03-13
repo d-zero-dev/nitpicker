@@ -18,7 +18,7 @@ export type QuerySubCommand =
 /**
  * List of all valid query sub-command names.
  */
-export const VALID_SUB_COMMANDS: readonly QuerySubCommand[] = [
+export const VALID_SUB_COMMANDS = [
 	'summary',
 	'pages',
 	'page-detail',
@@ -31,4 +31,4 @@ export const VALID_SUB_COMMANDS: readonly QuerySubCommand[] = [
 	'mismatches',
 	'headers',
 	'resource-referrers',
-];
+] as const satisfies readonly QuerySubCommand[];

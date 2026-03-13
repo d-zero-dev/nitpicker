@@ -1,61 +1,9 @@
 import type { QuerySubCommand } from './types.js';
+import type { commandDef } from '../commands/query.js';
+import type { InferFlags } from '@d-zero/roar';
 
-/**
- * Flat CLI flags passed to the query command.
- * All fields are optional since they come from parsed CLI arguments.
- */
-interface QueryFlags {
-	/** Maximum number of results to return. */
-	limit?: number;
-	/** Number of results to skip. */
-	offset?: number;
-	/** Target URL for page-detail, html, or resource-referrers queries. */
-	url?: string;
-	/** Filter by exact HTTP status code. */
-	status?: number;
-	/** Filter by minimum HTTP status code (inclusive). */
-	statusMin?: number;
-	/** Filter by maximum HTTP status code (inclusive). */
-	statusMax?: number;
-	/** Filter by external (true) or internal (false). */
-	isExternal?: boolean;
-	/** Filter to pages missing title. */
-	missingTitle?: boolean;
-	/** Filter to pages missing description. */
-	missingDescription?: boolean;
-	/** Filter to pages with noindex. */
-	noindex?: boolean;
-	/** URL pattern to filter (SQL LIKE pattern). */
-	urlPattern?: string;
-	/** Directory path prefix to filter by. */
-	directory?: string;
-	/** Field to sort by (url, status, title). */
-	sortBy?: string;
-	/** Sort direction (asc, desc). */
-	sortOrder?: string;
-	/** Filter type for links or mismatches sub-commands. */
-	type?: string;
-	/** Filter by content type prefix. */
-	contentType?: string;
-	/** Filter to images missing alt attribute. */
-	missingAlt?: boolean;
-	/** Filter to images missing width/height. */
-	missingDimensions?: boolean;
-	/** Filter to images exceeding this dimension threshold. */
-	oversizedThreshold?: number;
-	/** Filter by validator name. */
-	validator?: string;
-	/** Filter by severity level. */
-	severity?: string;
-	/** Filter by rule ID. */
-	rule?: string;
-	/** Field to check for duplicates (title, description). */
-	field?: string;
-	/** Only show pages missing security headers. */
-	missingOnly?: boolean;
-	/** Maximum HTML length to return. */
-	maxLength?: number;
-}
+/** Parsed flag values for the query CLI command. */
+type QueryFlags = InferFlags<typeof commandDef.flags>;
 
 /**
  * Builds the options object for a specific query function from flat CLI flags.

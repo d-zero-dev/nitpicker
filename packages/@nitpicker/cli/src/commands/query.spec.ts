@@ -88,10 +88,32 @@ describe('query command', () => {
 	it('outputs JSON result to stdout on success', async () => {
 		await query(['test.nitpicker', 'summary'], { pretty: undefined } as never);
 
-		expect(dispatchQueryFn).toHaveBeenCalled();
+		expect(dispatchQueryFn).toHaveBeenCalledWith(
+			expect.anything(),
+			'summary',
+			expect.objectContaining({ pretty: undefined }),
+		);
 		expect(consoleLogSpy).toHaveBeenCalledWith(
 			JSON.stringify({ baseUrl: 'https://example.com', totalPages: 5 }),
 		);
+	});
+
+	it('exits with error when ArchiveManager.open fails', async () => {
+		const { ArchiveManager } = await import('@nitpicker/query');
+		vi.mocked(ArchiveManager).mockImplementationOnce(function (this: {
+			open: ReturnType<typeof vi.fn>;
+			close: ReturnType<typeof vi.fn>;
+		}) {
+			this.open = vi.fn().mockRejectedValue(new Error('Failed to open archive'));
+			this.close = vi.fn().mockResolvedValue();
+		} as never);
+
+		await expect(
+			query(['test.nitpicker', 'summary'], { pretty: undefined } as never),
+		).rejects.toThrow(ExitError);
+
+		expect(formatCliErrorFn).toHaveBeenCalledWith(expect.any(Error), false);
+		expect(exitSpy).toHaveBeenCalledWith(1);
 	});
 
 	it('pretty-prints when --pretty is set', async () => {
