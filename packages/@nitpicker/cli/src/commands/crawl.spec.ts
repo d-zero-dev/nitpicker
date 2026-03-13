@@ -177,6 +177,27 @@ describe('startCrawl', () => {
 		expect(result).toBe('/tmp/test.nitpicker');
 	});
 
+	it('完了後にシグナルリスナーが蓄積しない', async () => {
+		const { startCrawl } = await import('./crawl.js');
+		const before = process.listenerCount('SIGINT');
+
+		await startCrawl(['https://example.com'], createFlags());
+		await startCrawl(['https://example.com'], createFlags());
+		await startCrawl(['https://example.com'], createFlags());
+
+		expect(process.listenerCount('SIGINT')).toBe(before);
+	});
+
+	it('eventAssignments がエラーでもシグナルリスナーが解除される', async () => {
+		mockEventAssignments.mockRejectedValueOnce(new Error('scrape failed'));
+		const { startCrawl } = await import('./crawl.js');
+		const before = process.listenerCount('SIGINT');
+
+		await startCrawl(['https://example.com'], createFlags()).catch(() => {});
+
+		expect(process.listenerCount('SIGINT')).toBe(before);
+	});
+
 	it('イベントエラー発生時に CrawlAggregateError をスローする', async () => {
 		mockEventAssignments.mockRejectedValueOnce(new Error('scrape failed'));
 
