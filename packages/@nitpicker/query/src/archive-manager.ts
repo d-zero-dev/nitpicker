@@ -81,7 +81,9 @@ export class ArchiveManager {
 	 */
 	async closeAll() {
 		const ids = [...this.#idToPath.keys()];
-		await Promise.all(ids.map((id) => this.close(id)));
+		for (const id of ids) {
+			await this.close(id);
+		}
 	}
 
 	/**

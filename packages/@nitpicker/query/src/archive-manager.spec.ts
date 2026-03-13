@@ -151,8 +151,9 @@ describe('ArchiveManager', () => {
 
 	it('close で tmpDir がクリーンアップされる', async () => {
 		const manager = new ArchiveManager();
-		const { archive } = await manager.open(archiveFilePath);
-		const tmpDir = archive!.tmpDir;
+		const result = await manager.open(archiveFilePath);
+		expect(result.archive).toBeDefined();
+		const tmpDir = result.archive!.tmpDir;
 		expect(existsSync(tmpDir)).toBe(true);
 		await manager.closeAll();
 		expect(existsSync(tmpDir)).toBe(false);
@@ -179,11 +180,14 @@ describe('ArchiveManager', () => {
 
 	it('参照カウント: 片方を close しても他方は使える', async () => {
 		const manager = new ArchiveManager();
-		const { archiveId: id1 } = await manager.open(archiveFilePath);
+		const first = await manager.open(archiveFilePath);
+		expect(first.archive).toBeDefined();
+		const tmpDir = first.archive!.tmpDir;
 		const { archiveId: id2 } = await manager.open(archiveFilePath);
-		await manager.close(id1);
-		expect(manager.has(id1)).toBe(false);
+		await manager.close(first.archiveId);
+		expect(manager.has(first.archiveId)).toBe(false);
 		expect(manager.has(id2)).toBe(true);
+		expect(existsSync(tmpDir)).toBe(true);
 		const accessor = manager.get(id2);
 		const config = await accessor.getConfig();
 		expect(config.baseUrl).toBe('https://example.com');
@@ -193,6 +197,7 @@ describe('ArchiveManager', () => {
 	it('参照カウント: 全参照を close すると tmpDir がクリーンアップされる', async () => {
 		const manager = new ArchiveManager();
 		const first = await manager.open(archiveFilePath);
+		expect(first.archive).toBeDefined();
 		const tmpDir = first.archive!.tmpDir;
 		await manager.open(archiveFilePath);
 		expect(existsSync(tmpDir)).toBe(true);
@@ -220,17 +225,17 @@ describe('ArchiveManager', () => {
 		const targetFile = path.resolve(workingDir, 'fake-target.txt');
 		const symlinkFile = path.resolve(workingDir, 'link.nitpicker');
 		writeFileSync(targetFile, 'not an archive');
-		try {
-			symlinkSync(targetFile, symlinkFile);
-		} catch {
-			// symlink may already exist from previous run
-		}
-		await expect(manager.open(symlinkFile)).rejects.toThrow('Invalid file type');
 		rmSync(symlinkFile, { force: true });
-		rmSync(targetFile, { force: true });
+		symlinkSync(targetFile, symlinkFile);
+		try {
+			await expect(manager.open(symlinkFile)).rejects.toThrow('Invalid file type');
+		} finally {
+			rmSync(symlinkFile, { force: true });
+			rmSync(targetFile, { force: true });
+		}
 	});
 
-	it('同時オープン数の上限はユニークファイル数で判定される', async () => {
+	it('同じファイルの再オープンはユニークファイル数の上限にカウントされない', async () => {
 		const manager = new ArchiveManager();
 		// Same file opened multiple times shares a single entry
 		for (let i = 0; i < 25; i++) {
