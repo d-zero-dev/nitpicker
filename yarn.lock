@@ -2385,6 +2385,7 @@ __metadata:
     "@nitpicker/analyze-textlint": "npm:0.4.4"
     "@nitpicker/core": "npm:0.4.4"
     "@nitpicker/crawler": "npm:0.4.4"
+    "@nitpicker/query": "npm:0.4.4"
     "@nitpicker/report-google-sheets": "npm:0.4.4"
     "@types/debug": "npm:4.1.12"
     ansi-colors: "npm:4.1.3"
