@@ -9,15 +9,18 @@ import { Archive } from '@nitpicker/crawler';
 const MAX_OPEN_ARCHIVES = 20;
 
 /**
- * Internal entry for a managed archive.
+ * Internal entry for a managed archive, shared across multiple IDs
+ * that reference the same underlying file.
  */
-interface ArchiveEntry {
+interface SharedArchiveEntry {
 	/** Close callback to release resources (delegates to Archive.close). */
 	close: () => Promise<void>;
 	/** The read-only accessor for querying the archive. */
 	accessor: ArchiveAccessor;
 	/** The temporary directory path used for extraction. */
 	tmpDir: string;
+	/** Number of archive IDs currently referencing this entry. */
+	refCount: number;
 }
 
 /**
@@ -28,44 +31,59 @@ interface ArchiveEntry {
  * Each archive is extracted to a temporary directory and
  * connected via a read-only {@link ArchiveAccessor}.
  *
- * **Cleanup:** Calling {@link close} removes the temporary directory
- * and destroys the database connection. Always close archives when done.
+ * When the same file is opened multiple times, the existing extraction
+ * is reused via reference counting — no redundant untar is performed.
+ *
+ * **Cleanup:** Calling {@link close} decrements the reference count.
+ * The temporary directory and database connection are released only
+ * when all references to the same file are closed.
  */
 export class ArchiveManager {
-	/** Map of archive IDs to their managed entry. */
-	readonly #archives = new Map<string, ArchiveEntry>();
+	/** Map of archive IDs to the resolved file path they reference. */
+	readonly #idToPath = new Map<string, string>();
 
 	/** Counter for generating unique archive IDs. */
 	#nextId = 1;
+	/** Map of resolved file paths to their shared archive entry. */
+	readonly #pathToEntry = new Map<string, SharedArchiveEntry>();
 
 	/**
-	 * Closes an opened archive, destroys the database connection,
-	 * and removes the temporary directory.
+	 * Closes an opened archive reference. The underlying resources are
+	 * released only when all references to the same file are closed.
 	 * @param archiveId - The archive ID to close.
 	 * @throws {Error} If no archive with the given ID is found.
 	 */
 	async close(archiveId: string) {
-		const entry = this.#archives.get(archiveId);
-		if (!entry) {
+		const realPath = this.#idToPath.get(archiveId);
+		if (!realPath) {
 			throw new Error(`Archive not found: ${archiveId}.`);
 		}
-		this.#archives.delete(archiveId);
-		try {
-			await entry.close();
-		} catch (error) {
-			// Archive.close() writes if file doesn't exist, then removes tmpDir.
-			// If tmpDir was already removed or DB destroyed, clean up manually.
-			console.warn('Failed to close archive cleanly, forcing cleanup:', error);
-			rmSync(entry.tmpDir, { recursive: true, force: true });
+		this.#idToPath.delete(archiveId);
+
+		const entry = this.#pathToEntry.get(realPath);
+		if (!entry) {
+			return;
+		}
+		entry.refCount--;
+		if (entry.refCount <= 0) {
+			this.#pathToEntry.delete(realPath);
+			try {
+				await entry.close();
+			} catch (error) {
+				console.warn('Failed to close archive cleanly, forcing cleanup:', error);
+				rmSync(entry.tmpDir, { recursive: true, force: true });
+			}
 		}
 	}
+
 	/**
 	 * Closes all opened archives and releases all resources.
 	 */
 	async closeAll() {
-		const ids = [...this.#archives.keys()];
+		const ids = [...this.#idToPath.keys()];
 		await Promise.all(ids.map((id) => this.close(id)));
 	}
+
 	/**
 	 * Retrieves the accessor for an opened archive by its ID.
 	 * @param archiveId - The archive ID returned by {@link open}.
@@ -73,7 +91,13 @@ export class ArchiveManager {
 	 * @throws {Error} If no archive with the given ID is found.
 	 */
 	get(archiveId: string): ArchiveAccessor {
-		const entry = this.#archives.get(archiveId);
+		const realPath = this.#idToPath.get(archiveId);
+		if (!realPath) {
+			throw new Error(
+				`Archive not found: ${archiveId}. Use open_archive to load a .nitpicker file first.`,
+			);
+		}
+		const entry = this.#pathToEntry.get(realPath);
 		if (!entry) {
 			throw new Error(
 				`Archive not found: ${archiveId}. Use open_archive to load a .nitpicker file first.`,
@@ -81,18 +105,22 @@ export class ArchiveManager {
 		}
 		return entry.accessor;
 	}
+
 	/**
 	 * Checks whether an archive with the given ID is currently open.
 	 * @param archiveId - The archive ID to check.
 	 * @returns `true` if the archive is open, `false` otherwise.
 	 */
 	has(archiveId: string): boolean {
-		return this.#archives.has(archiveId);
+		return this.#idToPath.has(archiveId);
 	}
+
 	/**
 	 * Opens a .nitpicker archive file and returns an accessor for querying it.
-	 * The archive is extracted to a temporary directory and a read-only
-	 * database connection is established.
+	 *
+	 * If the same file (by resolved real path) is already open, the existing
+	 * extraction and database connection are reused — no redundant untar is
+	 * performed. A new archive ID is issued that shares the underlying entry.
 	 * @param filePath - The path to the .nitpicker archive file.
 	 * @returns An object containing the generated archive ID and the accessor.
 	 * @throws {Error} If the file does not have a .nitpicker extension.
@@ -102,7 +130,7 @@ export class ArchiveManager {
 		if (!filePath.endsWith('.nitpicker')) {
 			throw new Error('Invalid file type. Only .nitpicker archive files are supported.');
 		}
-		if (this.#archives.size >= MAX_OPEN_ARCHIVES) {
+		if (this.#pathToEntry.size >= MAX_OPEN_ARCHIVES) {
 			throw new Error(
 				`Too many open archives (max: ${MAX_OPEN_ARCHIVES}). Close unused archives first.`,
 			);
@@ -117,17 +145,28 @@ export class ArchiveManager {
 		if (!realPath.endsWith('.nitpicker')) {
 			throw new Error('Invalid file type. Only .nitpicker archive files are supported.');
 		}
+
+		const archiveId = `archive_${this.#nextId++}`;
+
+		const existing = this.#pathToEntry.get(realPath);
+		if (existing) {
+			existing.refCount++;
+			this.#idToPath.set(archiveId, realPath);
+			return { archiveId, accessor: existing.accessor };
+		}
+
 		const archive = await Archive.open({
 			filePath: realPath,
 			openPluginData: true,
 		});
-		const archiveId = `archive_${this.#nextId++}`;
 		const accessor: ArchiveAccessor = archive;
-		this.#archives.set(archiveId, {
+		this.#pathToEntry.set(realPath, {
 			close: () => archive.close(),
 			accessor,
 			tmpDir: archive.tmpDir,
+			refCount: 1,
 		});
+		this.#idToPath.set(archiveId, realPath);
 		return { archiveId, accessor, archive };
 	}
 }

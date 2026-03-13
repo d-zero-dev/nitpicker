@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -151,10 +151,10 @@ describe('ArchiveManager', () => {
 
 	it('close で tmpDir がクリーンアップされる', async () => {
 		const manager = new ArchiveManager();
-		const { archiveId, archive } = await manager.open(archiveFilePath);
-		const tmpDir = archive.tmpDir;
+		const { archive } = await manager.open(archiveFilePath);
+		const tmpDir = archive!.tmpDir;
 		expect(existsSync(tmpDir)).toBe(true);
-		await manager.close(archiveId);
+		await manager.closeAll();
 		expect(existsSync(tmpDir)).toBe(false);
 	});
 
@@ -165,6 +165,39 @@ describe('ArchiveManager', () => {
 		expect(id1).toBe('archive_1');
 		expect(id2).toBe('archive_2');
 		await manager.closeAll();
+	});
+
+	it('同じファイルを2回開くと同じ accessor を再利用する', async () => {
+		const manager = new ArchiveManager();
+		const first = await manager.open(archiveFilePath);
+		const second = await manager.open(archiveFilePath);
+		expect(first.archiveId).not.toBe(second.archiveId);
+		expect(first.accessor).toBe(second.accessor);
+		expect(second.archive).toBeUndefined();
+		await manager.closeAll();
+	});
+
+	it('参照カウント: 片方を close しても他方は使える', async () => {
+		const manager = new ArchiveManager();
+		const { archiveId: id1 } = await manager.open(archiveFilePath);
+		const { archiveId: id2 } = await manager.open(archiveFilePath);
+		await manager.close(id1);
+		expect(manager.has(id1)).toBe(false);
+		expect(manager.has(id2)).toBe(true);
+		const accessor = manager.get(id2);
+		const config = await accessor.getConfig();
+		expect(config.baseUrl).toBe('https://example.com');
+		await manager.close(id2);
+	});
+
+	it('参照カウント: 全参照を close すると tmpDir がクリーンアップされる', async () => {
+		const manager = new ArchiveManager();
+		const first = await manager.open(archiveFilePath);
+		const tmpDir = first.archive!.tmpDir;
+		await manager.open(archiveFilePath);
+		expect(existsSync(tmpDir)).toBe(true);
+		await manager.closeAll();
+		expect(existsSync(tmpDir)).toBe(false);
 	});
 
 	it('.nitpicker 以外の拡張子はエラーになる', async () => {
@@ -186,7 +219,6 @@ describe('ArchiveManager', () => {
 		const manager = new ArchiveManager();
 		const targetFile = path.resolve(workingDir, 'fake-target.txt');
 		const symlinkFile = path.resolve(workingDir, 'link.nitpicker');
-		const { writeFileSync } = await import('node:fs');
 		writeFileSync(targetFile, 'not an archive');
 		try {
 			symlinkSync(targetFile, symlinkFile);
@@ -198,13 +230,14 @@ describe('ArchiveManager', () => {
 		rmSync(targetFile, { force: true });
 	});
 
-	it('同時オープン数の上限を超えるとエラーになる', async () => {
+	it('同時オープン数の上限はユニークファイル数で判定される', async () => {
 		const manager = new ArchiveManager();
-		// Open 20 archives (MAX_OPEN_ARCHIVES)
-		for (let i = 0; i < 20; i++) {
+		// Same file opened multiple times shares a single entry
+		for (let i = 0; i < 25; i++) {
 			await manager.open(archiveFilePath);
 		}
-		await expect(manager.open(archiveFilePath)).rejects.toThrow('Too many open archives');
+		// Only 1 unique file is open, so the limit (20 unique files) is not reached
+		expect(manager.has('archive_1')).toBe(true);
 		await manager.closeAll();
 	});
 });
