@@ -1,0 +1,38 @@
+{
+	"name": "@nitpicker/mcp-server",
+	"version": "0.4.4",
+	"description": "MCP server for querying .nitpicker archive files via AI assistants",
+	"author": "D-ZERO",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/d-zero-dev/nitpicker.git",
+		"directory": "packages/@nitpicker/mcp-server"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"files": [
+		"bin",
+		"lib"
+	],
+	"type": "module",
+	"exports": {
+		".": {
+			"import": "./lib/mcp-server.js",
+			"types": "./lib/mcp-server.d.ts"
+		}
+	},
+	"bin": {
+		"nitpicker-mcp": "./bin/nitpicker-mcp.js"
+	},
+	"scripts": {
+		"build": "tsc",
+		"clean": "tsc --build --clean"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "1.12.1",
+		"@nitpicker/query": "0.4.4"
+	},
+	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
+}

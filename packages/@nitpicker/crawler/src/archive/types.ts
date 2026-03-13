@@ -201,6 +201,36 @@ export interface DB_Referrer {
 }
 
 /**
+ * Raw database row representing an image element found on a page in the `images` table.
+ */
+export interface DB_Image {
+	/** Auto-incremented primary key. */
+	id: number;
+	/** Foreign key to the page that contains this image. */
+	pageId: number;
+	/** The `src` attribute value of the image element. */
+	src: string | null;
+	/** The actual loaded source URL of the image (after srcset/picture resolution). */
+	currentSrc: string | null;
+	/** The `alt` attribute value, or null if not present. */
+	alt: string | null;
+	/** The rendered width of the image in CSS pixels. */
+	width: number;
+	/** The rendered height of the image in CSS pixels. */
+	height: number;
+	/** The intrinsic width of the image in pixels. */
+	naturalWidth: number;
+	/** The intrinsic height of the image in pixels. */
+	naturalHeight: number;
+	/** Whether the image uses lazy loading. */
+	isLazy: number | null;
+	/** The viewport width at the time of capture. */
+	viewportWidth: number;
+	/** The raw HTML source code of the image element. */
+	sourceCode: string | null;
+}
+
+/**
  * Raw database row representing a sub-resource (CSS, JS, image, etc.) in the `resources` table.
  */
 export interface DB_Resource {
