@@ -86,6 +86,16 @@ describe('dispatchQuery', () => {
 		);
 	});
 
+	it('dispatches html sub-command with maxLength', async () => {
+		const { getPageHtml } = await import('@nitpicker/query');
+		const result = await dispatchQuery(mockAccessor, 'html', {
+			url: 'https://example.com',
+			maxLength: 5000,
+		} as never);
+		expect(result).toEqual({ html: '<html></html>', truncated: false });
+		expect(getPageHtml).toHaveBeenCalledWith(mockAccessor, 'https://example.com', 5000);
+	});
+
 	it('throws when html returns null', async () => {
 		const { getPageHtml } = await import('@nitpicker/query');
 		vi.mocked(getPageHtml).mockResolvedValueOnce(null);
@@ -175,6 +185,18 @@ describe('dispatchQuery', () => {
 		const result = await dispatchQuery(mockAccessor, 'headers', emptyFlags);
 		expect(result).toEqual({ items: [], total: 0, offset: 0, limit: 100 });
 		expect(checkHeaders).toHaveBeenCalledWith(mockAccessor, expect.any(Object));
+	});
+
+	it('dispatches headers sub-command with missingOnly', async () => {
+		const { checkHeaders } = await import('@nitpicker/query');
+		await dispatchQuery(mockAccessor, 'headers', {
+			missingOnly: true,
+			limit: 25,
+		} as never);
+		expect(checkHeaders).toHaveBeenCalledWith(
+			mockAccessor,
+			expect.objectContaining({ missingOnly: true, limit: 25 }),
+		);
 	});
 
 	it('dispatches resource-referrers sub-command', async () => {

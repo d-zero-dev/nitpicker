@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { formatCliError as formatCliErrorFn } from '../format-cli-error.js';
@@ -114,6 +116,24 @@ describe('query command', () => {
 
 		expect(formatCliErrorFn).toHaveBeenCalledWith(expect.any(Error), false);
 		expect(exitSpy).toHaveBeenCalledWith(1);
+	});
+
+	it('resolves relative file path via process.cwd()', async () => {
+		const { ArchiveManager } = await import('@nitpicker/query');
+		await query(['relative/test.nitpicker', 'summary'], { pretty: undefined } as never);
+
+		const managerInstance = vi.mocked(ArchiveManager).mock.results[0]?.value;
+		expect(managerInstance.open).toHaveBeenCalledWith(
+			path.resolve(process.cwd(), 'relative/test.nitpicker'),
+		);
+	});
+
+	it('uses absolute file path as-is', async () => {
+		const { ArchiveManager } = await import('@nitpicker/query');
+		await query(['/absolute/test.nitpicker', 'summary'], { pretty: undefined } as never);
+
+		const managerInstance = vi.mocked(ArchiveManager).mock.results[0]?.value;
+		expect(managerInstance.open).toHaveBeenCalledWith('/absolute/test.nitpicker');
 	});
 
 	it('pretty-prints when --pretty is set', async () => {

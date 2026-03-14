@@ -113,5 +113,9 @@ export async function dispatchQuery(
 			}
 			return result;
 		}
+		default: {
+			const _exhaustive: never = subCommand;
+			throw new Error(`Unknown sub-command: ${String(_exhaustive)}`);
+		}
 	}
 }

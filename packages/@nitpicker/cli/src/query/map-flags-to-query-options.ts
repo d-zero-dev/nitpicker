@@ -147,5 +147,9 @@ export function mapFlagsToQueryOptions(
 			}
 			return { url: flags.url };
 		}
+		default: {
+			const _exhaustive: never = subCommand;
+			throw new Error(`Unknown sub-command: ${String(_exhaustive)}`);
+		}
 	}
 }
