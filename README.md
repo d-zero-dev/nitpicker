@@ -245,6 +245,101 @@ $ npx @nitpicker/cli pipeline https://example.com --all --silent --strict
 
 crawl コマンドと同じ終了コード体系に従う。詳細は [crawl の終了コード](#終了コード) を参照。
 
+### Query
+
+`.nitpicker` アーカイブファイルに対してクエリを実行し、結果を JSON で出力する。MCP サーバーと同等のクエリ機能を CLI から利用できる。
+
+```sh
+$ npx @nitpicker/cli query <file> <sub-command> [options]
+```
+
+#### サブコマンド
+
+| サブコマンド         | 説明                                                           | 必須オプション |
+| -------------------- | -------------------------------------------------------------- | -------------- |
+| `summary`            | サイト全体の概要（ページ数、ステータス分布、メタデータ充足率） | なし           |
+| `pages`              | ページ一覧（ステータス・メタデータ欠損・noindex 等で絞り込み） | なし           |
+| `page-detail`        | 特定ページの全詳細（メタデータ、リンク、リダイレクト）         | `--url`        |
+| `html`               | ページの HTML スナップショットを取得                           | `--url`        |
+| `links`              | リンク分析（broken / external / orphaned）                     | `--type`       |
+| `resources`          | サブリソース一覧（CSS, JS, 画像、フォント）                    | なし           |
+| `images`             | 画像一覧（alt 欠損、寸法欠損、オーバーサイズ検出）             | なし           |
+| `violations`         | 分析プラグインの違反データ                                     | なし           |
+| `duplicates`         | 重複タイトル・説明の検出                                       | なし           |
+| `mismatches`         | メタデータ不一致の検出                                         | `--type`       |
+| `headers`            | セキュリティヘッダーチェック                                   | なし           |
+| `resource-referrers` | 特定リソースを参照しているページの特定                         | `--url`        |
+
+#### オプション
+
+| オプション             | 値     | デフォルト | 説明                                                                                                |
+| ---------------------- | ------ | ---------- | --------------------------------------------------------------------------------------------------- |
+| `--limit` `-l`         | 数値   | なし       | 最大結果数                                                                                          |
+| `--offset` `-o`        | 数値   | なし       | スキップする結果数                                                                                  |
+| `--url`                | URL    | なし       | 対象 URL（`page-detail`, `html`, `resource-referrers` で必須）                                      |
+| `--status`             | 数値   | なし       | HTTP ステータスコードで絞り込み                                                                     |
+| `--statusMin`          | 数値   | なし       | 最小 HTTP ステータスコード（以上）                                                                  |
+| `--statusMax`          | 数値   | なし       | 最大 HTTP ステータスコード（以下）                                                                  |
+| `--isExternal`         | なし   | なし       | 外部ページのみ表示                                                                                  |
+| `--missingTitle`       | なし   | なし       | title 欠損ページのみ表示                                                                            |
+| `--missingDescription` | なし   | なし       | description 欠損ページのみ表示                                                                      |
+| `--noindex`            | なし   | なし       | noindex ページのみ表示                                                                              |
+| `--urlPattern`         | 文字列 | なし       | URL パターンで絞り込み（SQL LIKE パターン）                                                         |
+| `--directory`          | 文字列 | なし       | ディレクトリパスプレフィックスで絞り込み                                                            |
+| `--sortBy`             | 文字列 | なし       | ソートフィールド（`url`, `status`, `title`）                                                        |
+| `--sortOrder`          | 文字列 | なし       | ソート方向（`asc`, `desc`）                                                                         |
+| `--type`               | 文字列 | なし       | `links`: `broken`, `external`, `orphaned` / `mismatches`: `canonical`, `og:title`, `og:description` |
+| `--contentType`        | 文字列 | なし       | Content-Type プレフィックスで絞り込み（例: `text/css`）                                             |
+| `--missingAlt`         | なし   | なし       | alt 属性欠損の画像のみ表示                                                                          |
+| `--missingDimensions`  | なし   | なし       | 寸法欠損の画像のみ表示                                                                              |
+| `--oversizedThreshold` | 数値   | なし       | 指定寸法を超える画像のみ表示                                                                        |
+| `--validator`          | 文字列 | なし       | バリデータ名で絞り込み（例: `axe`, `markuplint`）                                                   |
+| `--severity`           | 文字列 | なし       | 重要度で絞り込み                                                                                    |
+| `--rule`               | 文字列 | なし       | ルール ID で絞り込み                                                                                |
+| `--field`              | 文字列 | `title`    | 重複チェック対象フィールド（`title`, `description`）                                                |
+| `--missingOnly`        | なし   | なし       | セキュリティヘッダー欠損ページのみ表示                                                              |
+| `--maxLength`          | 数値   | なし       | 返却する HTML の最大長                                                                              |
+| `--pretty`             | なし   | なし       | JSON 出力を整形表示                                                                                 |
+
+> **`--type` フラグの使い分け**: `links` サブコマンドでは `broken`, `external`, `orphaned` のいずれか、`mismatches` サブコマンドでは `canonical`, `og:title`, `og:description` のいずれかを指定する。
+
+#### 例
+
+```sh
+# サイト概要を取得
+$ npx @nitpicker/cli query site.nitpicker summary
+
+# ページ一覧（ステータスコード 404 で絞り込み）
+$ npx @nitpicker/cli query site.nitpicker pages --status 404
+
+# 特定ページの詳細
+$ npx @nitpicker/cli query site.nitpicker page-detail --url "https://example.com/about"
+
+# HTML スナップショット取得（最大 10000 文字）
+$ npx @nitpicker/cli query site.nitpicker html --url "https://example.com" --maxLength 10000
+
+# リンク切れ一覧
+$ npx @nitpicker/cli query site.nitpicker links --type broken
+
+# alt 欠損画像の一覧
+$ npx @nitpicker/cli query site.nitpicker images --missingAlt
+
+# アクセシビリティ違反の一覧
+$ npx @nitpicker/cli query site.nitpicker violations --validator axe
+
+# 重複タイトルの検出
+$ npx @nitpicker/cli query site.nitpicker duplicates --field title
+
+# canonical 不一致の検出
+$ npx @nitpicker/cli query site.nitpicker mismatches --type canonical
+
+# セキュリティヘッダー欠損ページ
+$ npx @nitpicker/cli query site.nitpicker headers --missingOnly
+
+# 整形出力
+$ npx @nitpicker/cli query site.nitpicker summary --pretty
+```
+
 ### MCP Server
 
 `.nitpicker` アーカイブファイルを AI アシスタント（Claude 等）から直接クエリするための [Model Context Protocol](https://modelcontextprotocol.io/) サーバー。14 のツールを提供し、サイト構造・メタデータ・リンク・リソース・画像・セキュリティヘッダーなどを対話的に分析できる。
