@@ -617,6 +617,19 @@ pathMatch('/blog/2020/01', '/blog/**/*') → true
 pathMatch('/about', '/blog/*')           → false
 ```
 
+### normalizeToArray（カンマ区切り正規化）
+
+`--exclude` 等の CLI フラグはカンマ区切りで複数パターンを指定可能。
+`normalizeToArray()` がブレース展開（`{html,php}`）内のカンマを保持しつつ、トップレベルのカンマで分割する。
+
+```
+normalizeToArray('/blog/**/*,/facility/**/*')
+  → ['/blog/**/*', '/facility/**/*']
+
+normalizeToArray('/blog/*.{html,php},/admin/*')
+  → ['/blog/*.{html,php}', '/admin/*']
+```
+
 ---
 
 ## 11. エラーハンドリング

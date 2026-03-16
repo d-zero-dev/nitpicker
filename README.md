@@ -33,32 +33,32 @@ $ npx @nitpicker/cli crawl https://example.com
 
 #### オプション
 
-| オプション                    | 値                            | デフォルト            | 複数指定 | 説明                                         |
-| ----------------------------- | ----------------------------- | --------------------- | -------- | -------------------------------------------- |
-| `--interval` `-I`             | 数値                          | なし                  | 不可     | クロール時のリクエスト間隔（ミリ秒）         |
-| `--parallels` `-P`            | 数値                          | なし                  | 不可     | 並列スクレイピングプロセス数                 |
-| `--no-image`                  | なし                          | なし                  | 不可     | 画像を取得しない                             |
-| `--image-file-size-threshold` | 数値                          | なし                  | 不可     | 画像ファイルサイズの閾値（バイト）           |
-| `--single`                    | なし                          | なし                  | 不可     | 単一ページモード（リンク探索なし）           |
-| `--no-fetch-external`         | なし                          | なし                  | 不可     | 外部リンクを取得しない                       |
-| `--no-recursive`              | なし                          | なし                  | 不可     | 再帰クロールを無効化                         |
-| `--scope`                     | ホスト名/URL（カンマ区切り）  | なし                  | 不可     | クロールスコープに追加するホスト名・URL      |
-| `--exclude`                   | URL パス（glob パターン）     | なし                  | 可       | 指定パスに一致するページを除外               |
-| `--exclude-keyword`           | 文字列または正規表現          | なし                  | 可       | 指定キーワードを含むページを除外             |
-| `--exclude-url`               | URL プレフィックス            | なし                  | 可       | 指定プレフィックスで始まる URL を除外        |
-| `--disable-queries` `-Q`      | なし                          | なし                  | 不可     | URL のクエリ文字列を無効化                   |
-| `--max-excluded-depth`        | 数値                          | なし                  | 不可     | 指定した深さを超えるクロールをスキップ       |
-| `--retry`                     | 数値                          | `3`                   | 不可     | スクレイプ失敗時の URL ごとのリトライ回数    |
-| `--list`                      | URL                           | なし                  | 可       | 指定リストのページのみクロール               |
-| `--list-file`                 | ファイルパス                  | なし                  | 不可     | リストファイルに記載されたページのみクロール |
-| `--resume` `-R`               | ファイルパス（stub ファイル） | なし                  | 不可     | 保存された状態からクロールを再開             |
-| `--user-agent`                | 文字列                        | `Nitpicker/<version>` | 不可     | HTTP リクエストのカスタム User-Agent 文字列  |
-| `--ignore-robots`             | なし                          | なし                  | 不可     | robots.txt の制限を無視する                  |
-| `--output` `-o`               | ファイルパス                  | 自動生成              | 不可     | アーカイブファイルの出力先パス               |
-| `--strict`                    | なし                          | なし                  | 不可     | 外部リンクエラーも致命的エラーとして扱う     |
-| `--verbose`                   | なし                          | なし                  | 不可     | 実行中に詳細ログを標準出力に表示             |
-| `--silent`                    | なし                          | なし                  | 不可     | 実行中のログ出力を抑制                       |
-| `--diff`                      | なし                          | なし                  | 不可     | 差分モード                                   |
+| オプション                    | 値                                      | デフォルト            | 複数指定 | 説明                                         |
+| ----------------------------- | --------------------------------------- | --------------------- | -------- | -------------------------------------------- |
+| `--interval` `-I`             | 数値                                    | なし                  | 不可     | クロール時のリクエスト間隔（ミリ秒）         |
+| `--parallels` `-P`            | 数値                                    | なし                  | 不可     | 並列スクレイピングプロセス数                 |
+| `--no-image`                  | なし                                    | なし                  | 不可     | 画像を取得しない                             |
+| `--image-file-size-threshold` | 数値                                    | なし                  | 不可     | 画像ファイルサイズの閾値（バイト）           |
+| `--single`                    | なし                                    | なし                  | 不可     | 単一ページモード（リンク探索なし）           |
+| `--no-fetch-external`         | なし                                    | なし                  | 不可     | 外部リンクを取得しない                       |
+| `--no-recursive`              | なし                                    | なし                  | 不可     | 再帰クロールを無効化                         |
+| `--scope`                     | ホスト名/URL（カンマ区切り）            | なし                  | 不可     | クロールスコープに追加するホスト名・URL      |
+| `--exclude`                   | URL パス（glob パターン、カンマ区切り） | なし                  | 可       | 指定パスに一致するページを除外               |
+| `--exclude-keyword`           | 文字列または正規表現                    | なし                  | 可       | 指定キーワードを含むページを除外             |
+| `--exclude-url`               | URL プレフィックス                      | なし                  | 可       | 指定プレフィックスで始まる URL を除外        |
+| `--disable-queries` `-Q`      | なし                                    | なし                  | 不可     | URL のクエリ文字列を無効化                   |
+| `--max-excluded-depth`        | 数値                                    | なし                  | 不可     | 指定した深さを超えるクロールをスキップ       |
+| `--retry`                     | 数値                                    | `3`                   | 不可     | スクレイプ失敗時の URL ごとのリトライ回数    |
+| `--list`                      | URL                                     | なし                  | 可       | 指定リストのページのみクロール               |
+| `--list-file`                 | ファイルパス                            | なし                  | 不可     | リストファイルに記載されたページのみクロール |
+| `--resume` `-R`               | ファイルパス（stub ファイル）           | なし                  | 不可     | 保存された状態からクロールを再開             |
+| `--user-agent`                | 文字列                                  | `Nitpicker/<version>` | 不可     | HTTP リクエストのカスタム User-Agent 文字列  |
+| `--ignore-robots`             | なし                                    | なし                  | 不可     | robots.txt の制限を無視する                  |
+| `--output` `-o`               | ファイルパス                            | 自動生成              | 不可     | アーカイブファイルの出力先パス               |
+| `--strict`                    | なし                                    | なし                  | 不可     | 外部リンクエラーも致命的エラーとして扱う     |
+| `--verbose`                   | なし                                    | なし                  | 不可     | 実行中に詳細ログを標準出力に表示             |
+| `--silent`                    | なし                                    | なし                  | 不可     | 実行中のログ出力を抑制                       |
+| `--diff`                      | なし                                    | なし                  | 不可     | 差分モード                                   |
 
 > **URL の形式**: URL 引数および `--list` / `--list-file` で指定する URL は、プロトコルを含む完全な形式（例: `https://example.com`）である必要があります。`example.com` のようなホスト名のみの指定はエラーになります。
 
@@ -73,6 +73,7 @@ $ npx @nitpicker/cli crawl https://example.com --no-fetch-external
 $ npx @nitpicker/cli crawl https://example.com --no-recursive
 $ npx @nitpicker/cli crawl https://example.com --scope "www.example.com, www3.example.com, https://blog.example.com/blog"
 $ npx @nitpicker/cli crawl https://example.com --exclude "/blog/**/*"
+$ npx @nitpicker/cli crawl https://example.com --exclude "/blog/**/*,/facility/**/*"
 $ npx @nitpicker/cli crawl https://example.com --exclude-keyword "/Error/i" --exclude-keyword "404"
 $ npx @nitpicker/cli crawl https://example.com --max-excluded-depth 10
 $ npx @nitpicker/cli crawl --list-file ./page-list.txt
