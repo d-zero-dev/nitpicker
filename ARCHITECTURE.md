@@ -196,12 +196,13 @@ crawler/src/
 
 ### @nitpicker/cli
 
-`@d-zero/roar` ベースの統合 CLI。4つのサブコマンドを提供。全 analyze プラグインを `dependencies` に含んでおり、`npx` 実行時に `@nitpicker/core` の動的 `import()` がプラグインモジュールを解決できるようにしている。
+`@d-zero/roar` ベースの統合 CLI。5つのサブコマンドを提供。全 analyze プラグインを `dependencies` に含んでおり、`npx` 実行時に `@nitpicker/core` の動的 `import()` がプラグインモジュールを解決できるようにしている。
 
 - **`npx @nitpicker/cli crawl <URL>`**: Webサイトをクロールして `.nitpicker` ファイルを生成
 - **`npx @nitpicker/cli analyze <file>`**: `.nitpicker` ファイルに対して analyze プラグインを実行。`--search-keywords`, `--axe-lang` 等のフラグで設定ファイルのプラグイン設定を上書き可能（`buildPluginOverrides()` → `Nitpicker.setPluginOverrides()` 経由）
 - **`npx @nitpicker/cli report <file>`**: `.nitpicker` ファイルから Google Sheets レポートを生成
 - **`npx @nitpicker/cli pipeline <URL>`**: crawl → analyze → report を直列実行。`startCrawl()` でアーカイブパスを取得し、そのパスを `analyze()` と `report()` に引き渡す。`--sheet` 指定時のみ report ステップを実行
+- **`npx @nitpicker/cli query <file> <sub-command>`**: `.nitpicker` ファイルに対してクエリを実行し、結果を JSON で出力。`@nitpicker/query` の全関数を CLI から利用可能。12 のサブコマンド（`summary`, `pages`, `page-detail`, `html`, `links`, `resources`, `images`, `violations`, `duplicates`, `mismatches`, `headers`, `resource-referrers`）を提供
 
 ---
 

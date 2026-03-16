@@ -3,6 +3,7 @@ import { parseCli } from '@d-zero/roar';
 import { analyze, commandDef as analyzeDef } from './commands/analyze.js';
 import { crawl, commandDef as crawlDef } from './commands/crawl.js';
 import { pipeline, commandDef as pipelineDef } from './commands/pipeline.js';
+import { query, commandDef as queryDef } from './commands/query.js';
 import { report, commandDef as reportDef } from './commands/report.js';
 import { ExitCode } from './exit-code.js';
 import { formatCliError } from './format-cli-error.js';
@@ -16,6 +17,7 @@ const cli = parseCli({
 		analyze: analyzeDef,
 		report: reportDef,
 		pipeline: pipelineDef,
+		query: queryDef,
 	},
 	onError: () => true,
 });
@@ -36,6 +38,10 @@ try {
 		}
 		case 'pipeline': {
 			await pipeline(cli.args, cli.flags);
+			break;
+		}
+		case 'query': {
+			await query(cli.args, cli.flags);
 			break;
 		}
 	}
