@@ -828,7 +828,7 @@ function formatPhaseLog(e: ChangePhaseEvent): string | null {
 			return 'HEAD request%dots%';
 		}
 		case 'openPage': {
-			return e.message;
+			return `Opening page%dots% ${e.message}`;
 		}
 		case 'loadDOMContent': {
 			return c.dim('DOM loaded');
