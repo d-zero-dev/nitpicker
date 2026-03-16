@@ -581,7 +581,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						const isPredicted = this.#linkList.isPredicted(url.withoutHashAndAuth);
 
 						log('Scraping%dots%');
-						const result = await this.#scrapePage(url, log, metadataOnly);
+						const result = await this.#scrapePage(url, log, metadataOnly, _index);
 
 						// Discard predicted URLs that failed (404, error, etc.)
 						if (isPredicted && shouldDiscardPredicted(result)) {
@@ -665,12 +665,14 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @param url - Target URL to scrape
 	 * @param update - Callback for progress messages
 	 * @param metadataOnly - When true, only extract title metadata without full browser scraping
+	 * @param laneIndex - The dealer lane index, used to create unique countdown IDs
 	 * @returns The scrape result
 	 */
 	async #scrapePage(
 		url: ExURL,
 		update: (log: string) => void,
 		metadataOnly: boolean,
+		laneIndex: number,
 	): Promise<ScrapeResult> {
 		const isExternal = isExternalUrl(url, this.#scope);
 
@@ -683,7 +685,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		update('HEAD request%dots%');
 		let headCheckResult: PageData;
 		try {
-			headCheckResult = await this.#sendHeadRequest(url, isExternal, update);
+			headCheckResult = await this.#sendHeadRequest(url, isExternal, update, laneIndex);
 		} catch (error) {
 			// Server unreachable — skip browser launch entirely
 			update(c.red('Unreachable'));
@@ -760,12 +762,14 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @param url - Target URL to check
 	 * @param isExternal - Whether the URL is external to the crawl scope
 	 * @param update - Callback for progress messages shown in the dealer display
+	 * @param laneIndex - The dealer lane index, used to create unique countdown IDs
 	 * @returns Lightweight page data from the HEAD response
 	 */
 	async #sendHeadRequest(
 		url: ExURL,
 		isExternal: boolean,
 		update: (msg: string) => void,
+		laneIndex: number,
 	): Promise<PageData> {
 		return retryCall(
 			() => fetchDestination({ url, isExternal, userAgent: this.#options.userAgent }),
@@ -774,7 +778,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				label: 'HEAD request',
 				onWait: (determinedInterval, retryCount, label, error) => {
 					update(
-						`${label}: ${error.message} — %countdown(${determinedInterval},fetchHead_${retryCount},s)%s (retry #${retryCount + 1})`,
+						`${label}: ${error.message} — %countdown(${determinedInterval},fetchHead_${laneIndex}_${retryCount},s)%s (retry #${retryCount + 1})`,
 					);
 				},
 				onGiveUp: (retryCount, error, label) => {
