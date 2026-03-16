@@ -555,10 +555,13 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}
 		const [{ id: resourceId }] = selected;
 		const pageId = await this.#getIdByUrl(pageUrl);
-		await this.#instance('resources-referrers').insert({
-			resourceId,
-			pageId,
-		});
+		await this.#instance('resources-referrers')
+			.insert({
+				resourceId,
+				pageId,
+			})
+			.onConflict(['resourceId', 'pageId'])
+			.ignore();
 	}
 
 	/**
