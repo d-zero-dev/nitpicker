@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/analyze-search",
-	"version": "0.5.0",
+	"version": "0.6.0",
 	"description": "Nitpicker plugin for keyword and CSS selector search",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
@@ -28,9 +28,9 @@
 	},
 	"dependencies": {
 		"@d-zero/shared": "0.20.1",
-		"@nitpicker/core": "0.5.0",
-		"@nitpicker/crawler": "0.5.0",
-		"@nitpicker/types": "0.5.0",
+		"@nitpicker/core": "0.6.0",
+		"@nitpicker/crawler": "0.6.0",
+		"@nitpicker/types": "0.6.0",
 		"jsdom": "28.1.0"
 	},
 	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
