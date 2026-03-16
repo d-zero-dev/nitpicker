@@ -14,6 +14,7 @@ import Archive from './archive/archive.js';
 import { clearDestinationCache } from './crawler/clear-destination-cache.js';
 import Crawler from './crawler/crawler.js';
 import { crawlerLog, log } from './debug.js';
+import { normalizeToArray } from './normalize-to-array.js';
 import { resolveOutputPath } from './resolve-output-path.js';
 import { cleanObject } from './utils/object/clean-object.js';
 import { WriteQueue } from './write-queue.js';
@@ -410,14 +411,4 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		await orchestrator.crawling([url]);
 		return orchestrator;
 	}
-}
-
-/**
- * Normalize an optional parameter that may be a single value, an array,
- * null, or undefined into a guaranteed array.
- * @param param - The parameter to normalize.
- * @returns An array containing the parameter value(s), or an empty array if absent.
- */
-function normalizeToArray<T>(param: T | T[] | null | undefined) {
-	return Array.isArray(param) ? param : param ? [param] : [];
 }

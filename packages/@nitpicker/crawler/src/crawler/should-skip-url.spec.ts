@@ -3,6 +3,8 @@ import type { ParseURLOptions } from '@d-zero/shared/parse-url';
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { describe, it, expect } from 'vitest';
 
+import { normalizeToArray } from '../normalize-to-array.js';
+
 import { shouldSkipUrl } from './should-skip-url.js';
 
 const defaultOptions: ParseURLOptions = {};
@@ -73,5 +75,32 @@ describe('shouldSkipUrl', () => {
 				options: defaultOptions,
 			}),
 		).toBe(true);
+	});
+
+	it('カンマ区切りで渡された複数パターンのそれぞれにマッチする', () => {
+		const excludes = normalizeToArray('/blog/**/*,/facility/**/*');
+		const blogUrl = parseUrl('https://example.com/blog/archives/128923')!;
+		const facilityUrl = parseUrl('https://example.com/facility/room/1')!;
+		const otherUrl = parseUrl('https://example.com/about')!;
+
+		expect(
+			shouldSkipUrl({ url: blogUrl, excludes, excludeUrls: [], options: defaultOptions }),
+		).toBe(true);
+		expect(
+			shouldSkipUrl({
+				url: facilityUrl,
+				excludes,
+				excludeUrls: [],
+				options: defaultOptions,
+			}),
+		).toBe(true);
+		expect(
+			shouldSkipUrl({
+				url: otherUrl,
+				excludes,
+				excludeUrls: [],
+				options: defaultOptions,
+			}),
+		).toBe(false);
 	});
 });
