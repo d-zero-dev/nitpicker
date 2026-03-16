@@ -83,171 +83,172 @@ export async function report(params: ReportParams) {
 	log('Authentication succeeded');
 
 	log('Opening archive: %s', filePath);
-	const archive = await getArchive(filePath);
+	const { archive, removeSignalHandlers } = await getArchive(filePath);
 	log('Archive opened');
 
-	log('Loading config');
-	const config = await loadConfig(configPath);
-	log('Config loaded');
+	try {
+		log('Loading config');
+		const config = await loadConfig(configPath);
+		log('Config loaded');
 
-	const plugins = config.plugins?.analyze
-		? Object.keys(config.plugins.analyze)
-		: undefined;
-	log('Loaded plugins: %O', plugins);
+		const plugins = config.plugins?.analyze
+			? Object.keys(config.plugins.analyze)
+			: undefined;
+		log('Loaded plugins: %O', plugins);
 
-	log('Loading plugin reports');
-	const reports = await getPluginReports(archive /*plugins*/);
-	log('Plugin reports loaded: %d', reports.length);
+		log('Loading plugin reports');
+		const reports = await getPluginReports(archive /*plugins*/);
+		log('Plugin reports loaded: %d', reports.length);
 
-	const sheets = new Sheets(sheetUrl, auth);
+		const sheets = new Sheets(sheetUrl, auth);
 
-	log('Reporting starts');
+		log('Reporting starts');
 
-	const sheetNames = [
-		'Page List' as const,
-		'Links' as const,
-		'Resources' as const,
-		'Images' as const,
-		'Violations' as const,
-		'Discrepancies' as const,
-		'Summary' as const,
-		'Referrers Relational Table' as const,
-		'Resources Relational Table' as const,
-	];
-	type SheetNames = typeof sheetNames;
+		const sheetNames = [
+			'Page List' as const,
+			'Links' as const,
+			'Resources' as const,
+			'Images' as const,
+			'Violations' as const,
+			'Discrepancies' as const,
+			'Summary' as const,
+			'Referrers Relational Table' as const,
+			'Resources Relational Table' as const,
+		];
+		type SheetNames = typeof sheetNames;
 
-	let selectedSheetNames: SheetNames;
+		let selectedSheetNames: SheetNames;
 
-	if (all) {
-		log('All sheets selected (--all or non-TTY)');
-		selectedSheetNames = sheetNames;
-	} else {
-		log('Choice creating data');
-		const chosenSheets = await enquirer
-			.prompt<{ sheetName: SheetNames }>([
-				{
-					message: 'What do you report?',
-					name: 'sheetName',
-					type: 'multiselect',
-					choices: sheetNames,
-				},
-			])
-			.catch(() => {
-				// enquirer v2.4.1: Ctrl+C 後に readline を二重 close して
-				// ERR_USE_AFTER_CLOSE が unhandled rejection になるため、
-				// 即座に終了して回避する
-				process.exit(0);
-			});
-
-		if (!chosenSheets) {
+		if (all) {
+			log('All sheets selected (--all or non-TTY)');
+			selectedSheetNames = sheetNames;
+		} else {
 			log('Choice creating data');
-			archiveLog('Closes file');
-			await archive.close();
-			return;
+			const chosenSheets = await enquirer
+				.prompt<{ sheetName: SheetNames }>([
+					{
+						message: 'What do you report?',
+						name: 'sheetName',
+						type: 'multiselect',
+						choices: sheetNames,
+					},
+				])
+				.catch(() => {
+					// enquirer v2.4.1: Ctrl+C 後に readline を二重 close して
+					// ERR_USE_AFTER_CLOSE が unhandled rejection になるため、
+					// 即座に終了して回避する
+					process.exit(0);
+				});
+
+			if (!chosenSheets) {
+				log('Choice creating data');
+				return;
+			}
+
+			selectedSheetNames = chosenSheets.sheetName;
 		}
 
-		selectedSheetNames = chosenSheets.sheetName;
-	}
+		log('Chosen sheets: %O', selectedSheetNames);
 
-	log('Chosen sheets: %O', selectedSheetNames);
+		const createSheetList: CreateSheet[] = [];
 
-	const createSheetList: CreateSheet[] = [];
+		if (selectedSheetNames.includes('Page List')) {
+			createSheetList.push(createPageList);
+		}
 
-	if (selectedSheetNames.includes('Page List')) {
-		createSheetList.push(createPageList);
-	}
+		if (selectedSheetNames.includes('Links')) {
+			createSheetList.push(createLinks);
+		}
 
-	if (selectedSheetNames.includes('Links')) {
-		createSheetList.push(createLinks);
-	}
+		if (selectedSheetNames.includes('Discrepancies')) {
+			createSheetList.push(createDiscrepancies);
+		}
 
-	if (selectedSheetNames.includes('Discrepancies')) {
-		createSheetList.push(createDiscrepancies);
-	}
+		if (selectedSheetNames.includes('Violations')) {
+			createSheetList.push(createViolations);
+		}
 
-	if (selectedSheetNames.includes('Violations')) {
-		createSheetList.push(createViolations);
-	}
+		if (selectedSheetNames.includes('Referrers Relational Table')) {
+			createSheetList.push(createReferrersRelationalTable);
+		}
 
-	if (selectedSheetNames.includes('Referrers Relational Table')) {
-		createSheetList.push(createReferrersRelationalTable);
-	}
+		if (selectedSheetNames.includes('Resources Relational Table')) {
+			createSheetList.push(createResourcesRelationalTable);
+		}
 
-	if (selectedSheetNames.includes('Resources Relational Table')) {
-		createSheetList.push(createResourcesRelationalTable);
-	}
+		if (selectedSheetNames.includes('Resources')) {
+			createSheetList.push(createResources);
+		}
 
-	if (selectedSheetNames.includes('Resources')) {
-		createSheetList.push(createResources);
-	}
+		if (selectedSheetNames.includes('Images')) {
+			createSheetList.push(createImageList);
+		}
 
-	if (selectedSheetNames.includes('Images')) {
-		createSheetList.push(createImageList);
-	}
+		if (!silent) {
+			// eslint-disable-next-line no-console
+			console.log(`\nGenerating ${createSheetList.length} sheet(s)...\n`);
+		}
 
-	if (!silent) {
-		// eslint-disable-next-line no-console
-		console.log(`\nGenerating ${createSheetList.length} sheet(s)...\n`);
-	}
+		const lanes = silent
+			? null
+			: new Lanes({ verbose: !process.stdout.isTTY, indent: '  ' });
+		log('Lanes created (verbose: %s, silent: %s)', !process.stdout.isTTY, !!silent);
 
-	const lanes = silent
-		? null
-		: new Lanes({ verbose: !process.stdout.isTTY, indent: '  ' });
-	log('Lanes created (verbose: %s, silent: %s)', !process.stdout.isTTY, !!silent);
+		const RATE_LIMIT_LANE = 10_000;
+		let countdownSeq = 0;
+		let waitingCount = 0;
 
-	const RATE_LIMIT_LANE = 10_000;
-	let countdownSeq = 0;
-	let waitingCount = 0;
-
-	if (lanes) {
-		sheets.onLog = (message: ErrorHandlerMessage) => {
-			if (message.waiting && message.waitTime) {
-				waitingCount++;
-				const id = `rateLimit_${countdownSeq++}`;
-				const label =
-					message.message === 'TooManyRequestError'
-						? 'Too Many Requests (429)'
-						: message.message === 'UserRateLimitExceededError'
-							? 'Rate Limit Exceeded (403)'
-							: 'Connection Reset';
-				lanes.update(
-					RATE_LIMIT_LANE,
-					c.yellow(`${label}: waiting %countdown(${message.waitTime}, ${id}, s)%s`),
-				);
-			} else {
-				waitingCount--;
-				if (waitingCount <= 0) {
-					waitingCount = 0;
-					lanes.delete(RATE_LIMIT_LANE);
+		if (lanes) {
+			sheets.onLog = (message: ErrorHandlerMessage) => {
+				if (message.waiting && message.waitTime) {
+					waitingCount++;
+					const id = `rateLimit_${countdownSeq++}`;
+					const label =
+						message.message === 'TooManyRequestError'
+							? 'Too Many Requests (429)'
+							: message.message === 'UserRateLimitExceededError'
+								? 'Rate Limit Exceeded (403)'
+								: 'Connection Reset';
+					lanes.update(
+						RATE_LIMIT_LANE,
+						c.yellow(`${label}: waiting %countdown(${message.waitTime}, ${id}, s)%s`),
+					);
+				} else {
+					waitingCount--;
+					if (waitingCount <= 0) {
+						waitingCount = 0;
+						lanes.delete(RATE_LIMIT_LANE);
+					}
 				}
-			}
-		};
-	}
+			};
+		}
 
-	log('Reporting starts (limit: %d)', limit);
-	try {
-		await createSheets({
-			sheets,
-			archive,
-			reports,
-			limit,
-			createSheetList,
-			options: lanes ? { lanes } : undefined,
-		});
+		log('Reporting starts (limit: %d)', limit);
+		try {
+			await createSheets({
+				sheets,
+				archive,
+				reports,
+				limit,
+				createSheetList,
+				options: lanes ? { lanes } : undefined,
+			});
+		} finally {
+			lanes?.close();
+		}
+		log('Reporting done');
+		if (!silent) {
+			// eslint-disable-next-line no-console
+			console.log('\nReport complete.');
+		}
+
+		if (selectedSheetNames.includes('Summary')) {
+			await addToSummary(/*sheets, archive, reports*/);
+		}
 	} finally {
-		lanes?.close();
+		archiveLog('Closes file');
+		removeSignalHandlers();
+		await archive.close();
+		log('Done');
 	}
-	log('Reporting done');
-	if (!silent) {
-		// eslint-disable-next-line no-console
-		console.log('\nReport complete.');
-	}
-
-	if (selectedSheetNames.includes('Summary')) {
-		await addToSummary(/*sheets, archive, reports*/);
-	}
-
-	archiveLog('Closes file');
-	await archive.close();
-	log('Done');
 }

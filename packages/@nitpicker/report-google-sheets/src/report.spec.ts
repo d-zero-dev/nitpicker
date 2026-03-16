@@ -14,9 +14,15 @@ vi.mock('@d-zero/google-sheets', () => ({
 	},
 }));
 
+const { mockArchiveClose, mockRemoveSignalHandlers } = vi.hoisted(() => ({
+	mockArchiveClose: vi.fn(),
+	mockRemoveSignalHandlers: vi.fn(),
+}));
+
 vi.mock('./archive.js', () => ({
 	getArchive: vi.fn().mockResolvedValue({
-		close: vi.fn(),
+		archive: { close: mockArchiveClose },
+		removeSignalHandlers: mockRemoveSignalHandlers,
 	}),
 }));
 
@@ -85,6 +91,23 @@ describe('report', () => {
 		await report({ ...baseParams, all: true, silent: false });
 
 		expect(lanesSpy).toHaveBeenCalled();
+	});
+
+	it('正常完了時に removeSignalHandlers と archive.close を呼び出す', async () => {
+		await report({ ...baseParams, all: true });
+
+		expect(mockRemoveSignalHandlers).toHaveBeenCalledTimes(1);
+		expect(mockArchiveClose).toHaveBeenCalledTimes(1);
+	});
+
+	it('createSheets が例外をスローしても removeSignalHandlers と archive.close を呼び出す', async () => {
+		const { createSheets } = await import('./sheets/create-sheets.js');
+		vi.mocked(createSheets).mockRejectedValueOnce(new Error('sheets error'));
+
+		await expect(report({ ...baseParams, all: true })).rejects.toThrow('sheets error');
+
+		expect(mockRemoveSignalHandlers).toHaveBeenCalledTimes(1);
+		expect(mockArchiveClose).toHaveBeenCalledTimes(1);
 	});
 
 	it('passes all 9 sheets to createSheets when all=true', async () => {

@@ -497,7 +497,8 @@ sequenceDiagram
 
     CLI->>GS: report(filePath, sheetUrl, credentials, config, limit, all?, silent?)
     GS->>GS: authentication(credentials)（OAuth2）
-    GS->>Archive: getArchive(filePath)
+    GS->>Archive: getArchive(filePath) → { archive, removeSignalHandlers }
+    Note over GS: try/finally で cleanup を保証
     GS->>GS: loadConfig(configPath)
     GS->>Archive: getPluginReports(archive)
 
@@ -514,6 +515,7 @@ sequenceDiagram
         Note over GS,Sheets: silent=false 時: Lanes で進捗表示 + レート制限カウントダウン
     end
 
+    GS->>GS: removeSignalHandlers()
     GS->>Archive: archive.close()
 ```
 
