@@ -446,6 +446,15 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			update('Creating page%dots%');
 			const page = await browser.newPage();
 			await page.setUserAgent(this.#options.userAgent);
+			// Defence-in-depth: beholder sets Authorization via setExtraHTTPHeaders,
+			// but page.authenticate() handles Chromium-level HTTP auth challenges
+			// (401 + WWW-Authenticate) that setExtraHTTPHeaders cannot cover.
+			if (url.username && url.password) {
+				await page.authenticate({
+					username: url.username,
+					password: url.password,
+				});
+			}
 			const scraper = new Scraper();
 
 			scraper.on('changePhase', (e) => {

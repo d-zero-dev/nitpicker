@@ -28,12 +28,32 @@ describe('findBestMatchingScope', () => {
 		expect(result).toBeNull();
 	});
 
-	it('does not match root scope without trailing slash against subpath', () => {
-		// Root URL https://example.com has paths [''], while /page has paths ['page']
-		// isPathMatch(['page'], ['']) fails because 'page' !== ''
+	it('matches root scope against subpath', () => {
+		// Root scope (paths: ['']) should match all subpaths under the same hostname
 		const url = parseUrl('https://example.com/page')!;
 		const scopes = [parseUrl('https://example.com')!];
 		const result = findBestMatchingScope(url, scopes);
-		expect(result).toBeNull();
+		expect(result).not.toBeNull();
+		expect(result!.hostname).toBe('example.com');
+	});
+
+	it('matches root scope with trailing slash against subpath', () => {
+		const url = parseUrl('https://example.com/blog/post')!;
+		const scopes = [parseUrl('https://example.com/')!];
+		const result = findBestMatchingScope(url, scopes);
+		expect(result).not.toBeNull();
+		expect(result!.hostname).toBe('example.com');
+	});
+
+	it('prefers deeper scope over root scope', () => {
+		const url = parseUrl('https://example.com/blog/post/1')!;
+		const scopes = [
+			parseUrl('https://user:pass@example.com')!,
+			parseUrl('https://admin:secret@example.com/blog/post')!,
+		];
+		const result = findBestMatchingScope(url, scopes);
+		expect(result).not.toBeNull();
+		expect(result!.pathname).toBe('/blog/post');
+		expect(result!.username).toBe('admin');
 	});
 });

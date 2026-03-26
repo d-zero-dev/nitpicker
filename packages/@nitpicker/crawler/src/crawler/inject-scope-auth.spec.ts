@@ -25,6 +25,22 @@ describe('injectScopeAuth', () => {
 		expect(url.password).toBe('pass');
 	});
 
+	it('injects auth from root scope URL into subpage', () => {
+		const url = parseUrl('https://example.com/english/')!;
+		const scope = createScope([['example.com', ['https://user:pass@example.com']]]);
+		injectScopeAuth(url, scope);
+		expect(url.username).toBe('user');
+		expect(url.password).toBe('pass');
+	});
+
+	it('injects auth from root scope URL with trailing slash into deep subpage', () => {
+		const url = parseUrl('https://example.com/blog/post/1')!;
+		const scope = createScope([['example.com', ['https://user:pass@example.com/']]]);
+		injectScopeAuth(url, scope);
+		expect(url.username).toBe('user');
+		expect(url.password).toBe('pass');
+	});
+
 	it('does not inject auth when hostname does not match', () => {
 		const url = parseUrl('https://other.com/page')!;
 		const scope = createScope([['example.com', ['https://user:pass@example.com/']]]);
