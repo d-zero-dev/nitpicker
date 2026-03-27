@@ -1,10 +1,72 @@
-import type { Cell, Sheet } from '@d-zero/google-sheets';
+import type { Cell, ErrorHandlerMessage } from '@d-zero/google-sheets';
 import type { Page, ArchiveResource as Resource } from '@nitpicker/crawler';
 import type { Report } from '@nitpicker/types';
 import type { sheets_v4 } from 'googleapis';
 
 /** A value that may be synchronous or wrapped in a Promise. */
 export type Promiseable<T> = Promise<T> | T;
+
+/**
+ * Tab-level sink used by `createSheets`: row append, headers, and
+ * formatting hooks. Satisfied by `Sheet` from `@d-zero/google-sheets`
+ * and by the in-memory buffer implementation for TSV export.
+ */
+export interface ReportSheetTab {
+	/**
+	 * Sets the first-row header labels for this tab.
+	 * @param headers - Column titles in display order.
+	 */
+	setHeaders(headers: string[]): Promise<void>;
+	/**
+	 * Appends cell rows below existing data.
+	 * @param data - Rows of cells to append.
+	 * @param next - Same semantics as `Sheet.addRowData`.
+	 */
+	addRowData(data: Cell[][], next?: boolean): Promise<void>;
+	/**
+	 * Resolves a header label to a 1-based column index (Google Sheets convention).
+	 * @param name - Header string from the first row.
+	 */
+	getColNumByHeaderName(name: string): number;
+	/**
+	 * Freezes rows/columns at the given grid position (no-op for buffer export).
+	 * @param col - Leftmost visible column index (1-based).
+	 * @param row - Topmost visible row index (1-based).
+	 */
+	frozen(col: number, row: number): Promise<void>;
+	/**
+	 * Applies conditional formatting (no-op for buffer export).
+	 * @param targetCols - 1-based column indices.
+	 * @param rule - Sheets API rule payload.
+	 */
+	conditionalFormat(
+		targetCols: number[],
+		rule: sheets_v4.Schema$ConditionalFormatRule,
+	): Promise<void>;
+	/**
+	 * Hides a column by 1-based index (no-op for buffer export).
+	 * @param colNum - Column number.
+	 */
+	hideCol(colNum: number): Promise<void>;
+	/**
+	 * Refreshes header cell styling (no-op for buffer export).
+	 */
+	overwriteHeaderFormat(): Promise<void>;
+}
+
+/**
+ * Spreadsheet sink for `createSheets`: creates or reopens tabs by title.
+ * Satisfied by `Sheets` from `@d-zero/google-sheets` and the in-memory buffer used for TSV export.
+ */
+export interface ReportSpreadsheet {
+	/** Optional rate-limit / error logging (Google client only). */
+	onLog?: (message: ErrorHandlerMessage) => void;
+	/**
+	 * Returns the tab handle for the given title, creating backing storage if needed.
+	 * @param title - Sheet display name (tab title).
+	 */
+	create(title: string): Promise<ReportSheetTab>;
+}
 
 /** A single header cell value (plain string). */
 export type HeaderCell = string;
@@ -100,7 +162,7 @@ export interface CreateSheetSetting {
 	 * Post-data formatting hook. Called after all rows have been sent.
 	 * Typically used for freezing rows/columns, conditional formatting,
 	 * and hiding unused columns.
-	 * @param sheet - The Google Sheets API wrapper for this tab.
+	 * @param sheet - Tab sink (Google API or in-memory buffer).
 	 */
-	updateSheet?: (sheet: Sheet) => Promiseable<void>;
+	updateSheet?: (sheet: ReportSheetTab) => Promiseable<void>;
 }

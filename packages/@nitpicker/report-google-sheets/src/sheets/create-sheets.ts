@@ -1,6 +1,6 @@
-import type { CreateSheet } from './types.js';
+import type { CreateSheet, ReportSheetTab, ReportSpreadsheet } from './types.js';
 import type { Lanes } from '@d-zero/dealer';
-import type { Sheet, Sheets, Cell } from '@d-zero/google-sheets';
+import type { Cell } from '@d-zero/google-sheets';
 import type { Archive, Page } from '@nitpicker/crawler';
 import type { Report } from '@nitpicker/types';
 
@@ -23,7 +23,7 @@ const SEND_CHUNK_SIZE = 2500;
  *   Phase 2/3 のヘッダー加重平均に送信進捗を反映させるために使用する。
  */
 async function sendRowsInChunks(
-	sheet: Sheet,
+	sheet: ReportSheetTab,
 	rows: Cell[][],
 	name: string,
 	lanes: Lanes | undefined,
@@ -54,8 +54,8 @@ async function sendRowsInChunks(
  * Parameters for {@link createSheets}.
  */
 export interface CreateSheetsParams {
-	/** Google Sheets API ラッパー */
-	readonly sheets: Sheets;
+	/** Google Sheets クライアントまたはメモリバッファなどのシートシンク */
+	readonly sheets: ReportSpreadsheet;
 	/** クロール結果のアーカイブ */
 	readonly archive: Archive;
 	/** 監査プラグインのレポート配列 */

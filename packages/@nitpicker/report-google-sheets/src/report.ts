@@ -1,25 +1,17 @@
-import type { CreateSheet } from './sheets/types.js';
 import type { ErrorHandlerMessage } from '@d-zero/google-sheets';
 
 import { Lanes } from '@d-zero/dealer';
 import { authentication } from '@d-zero/google-auth';
 import { Sheets } from '@d-zero/google-sheets';
 import c from 'ansi-colors';
-import enquirer from 'enquirer';
 
 import { getArchive } from './archive.js';
+import { buildCreateSheetListFromChoices } from './build-create-sheet-list.js';
 import { addToSummary } from './data/add-to-summary.js';
-import { createDiscrepancies } from './data/create-discrepancies.js';
-import { createImageList } from './data/create-image-list.js';
-import { createLinks } from './data/create-links.js';
-import { createPageList } from './data/create-page-list.js';
-import { createReferrersRelationalTable } from './data/create-referrers-relational-table.js';
-import { createResourcesRelationalTable } from './data/create-resources-relational-table.js';
-import { createResources } from './data/create-resources.js';
-import { createViolations } from './data/create-violations.js';
 import { archiveLog, log } from './debug.js';
 import { loadConfig } from './load-config.js';
 import { getPluginReports } from './reports/get-plugin-reports.js';
+import { selectReportSheetChoices } from './select-report-sheet-choices.js';
 import { createSheets } from './sheets/create-sheets.js';
 
 /**
@@ -104,85 +96,21 @@ export async function report(params: ReportParams) {
 
 		log('Reporting starts');
 
-		const sheetNames = [
-			'Page List' as const,
-			'Links' as const,
-			'Resources' as const,
-			'Images' as const,
-			'Violations' as const,
-			'Discrepancies' as const,
-			'Summary' as const,
-			'Referrers Relational Table' as const,
-			'Resources Relational Table' as const,
-		];
-		type SheetNames = typeof sheetNames;
-
-		let selectedSheetNames: SheetNames;
-
 		if (all) {
 			log('All sheets selected (--all or non-TTY)');
-			selectedSheetNames = sheetNames;
 		} else {
 			log('Choice creating data');
-			const chosenSheets = await enquirer
-				.prompt<{ sheetName: SheetNames }>([
-					{
-						message: 'What do you report?',
-						name: 'sheetName',
-						type: 'multiselect',
-						choices: sheetNames,
-					},
-				])
-				.catch(() => {
-					// enquirer v2.4.1: Ctrl+C 後に readline を二重 close して
-					// ERR_USE_AFTER_CLOSE が unhandled rejection になるため、
-					// 即座に終了して回避する
-					process.exit(0);
-				});
+		}
 
-			if (!chosenSheets) {
-				log('Choice creating data');
-				return;
-			}
-
-			selectedSheetNames = chosenSheets.sheetName;
+		const selectedSheetNames = await selectReportSheetChoices(!!all);
+		if (selectedSheetNames == null) {
+			log('Choice creating data');
+			return;
 		}
 
 		log('Chosen sheets: %O', selectedSheetNames);
 
-		const createSheetList: CreateSheet[] = [];
-
-		if (selectedSheetNames.includes('Page List')) {
-			createSheetList.push(createPageList);
-		}
-
-		if (selectedSheetNames.includes('Links')) {
-			createSheetList.push(createLinks);
-		}
-
-		if (selectedSheetNames.includes('Discrepancies')) {
-			createSheetList.push(createDiscrepancies);
-		}
-
-		if (selectedSheetNames.includes('Violations')) {
-			createSheetList.push(createViolations);
-		}
-
-		if (selectedSheetNames.includes('Referrers Relational Table')) {
-			createSheetList.push(createReferrersRelationalTable);
-		}
-
-		if (selectedSheetNames.includes('Resources Relational Table')) {
-			createSheetList.push(createResourcesRelationalTable);
-		}
-
-		if (selectedSheetNames.includes('Resources')) {
-			createSheetList.push(createResources);
-		}
-
-		if (selectedSheetNames.includes('Images')) {
-			createSheetList.push(createImageList);
-		}
+		const createSheetList = buildCreateSheetListFromChoices(selectedSheetNames);
 
 		if (!silent) {
 			// eslint-disable-next-line no-console
