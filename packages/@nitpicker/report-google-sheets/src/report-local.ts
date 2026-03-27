@@ -71,6 +71,19 @@ export async function reportLocal(params: ReportLocalParams) {
 
 		const createSheetList = buildCreateSheetListFromChoices(selectedSheetNames);
 
+		if (createSheetList.length === 0) {
+			if (!silent) {
+				// eslint-disable-next-line no-console
+				console.error(
+					c.yellow(
+						'No data sheets match your selection. "Summary" has no table export; pick at least one other sheet.',
+					),
+				);
+			}
+			log('createSheetList empty for selection');
+			return;
+		}
+
 		if (!silent) {
 			// eslint-disable-next-line no-console
 			console.log(`\nGenerating ${createSheetList.length} sheet(s)...\n`);

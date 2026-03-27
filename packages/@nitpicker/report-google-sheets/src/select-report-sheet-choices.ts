@@ -17,10 +17,16 @@ export async function selectReportSheetChoices(
 	const chosenSheets = await enquirer
 		.prompt<{ sheetName: string[] }>([
 			{
-				message: 'What do you report?',
+				message: 'What do you report? (space to toggle, enter to confirm)',
 				name: 'sheetName',
 				type: 'multiselect',
 				choices: [...REPORT_SHEET_CHOICES],
+				validate(value: unknown) {
+					if (!Array.isArray(value) || value.length === 0) {
+						return 'Select at least one sheet';
+					}
+					return true;
+				},
 			},
 		])
 		.catch(() => {
@@ -31,5 +37,10 @@ export async function selectReportSheetChoices(
 		return null;
 	}
 
-	return chosenSheets.sheetName;
+	const names = chosenSheets.sheetName;
+	if (!Array.isArray(names)) {
+		return null;
+	}
+
+	return names;
 }
