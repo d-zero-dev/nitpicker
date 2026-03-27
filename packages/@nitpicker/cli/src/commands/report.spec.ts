@@ -1,4 +1,7 @@
-import { report as runReport } from '@nitpicker/report-google-sheets';
+import {
+	report as runReport,
+	reportLocal as runReportLocal,
+} from '@nitpicker/report-google-sheets';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { formatCliError as formatCliErrorFn } from '../format-cli-error.js';
@@ -8,6 +11,7 @@ import { report } from './report.js';
 
 vi.mock('@nitpicker/report-google-sheets', () => ({
 	report: vi.fn(),
+	reportLocal: vi.fn(),
 }));
 
 vi.mock('../report/debug.js', () => ({
@@ -27,6 +31,19 @@ class ExitError extends Error {
 		this.code = code;
 	}
 }
+
+/** Default-shaped flags for Google Sheets mode (matches InferFlags after optional flags). */
+const googleReportFlags = {
+	local: undefined as boolean | undefined,
+	outputDir: undefined as string | undefined,
+	sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+	credentials: undefined as string | undefined,
+	config: undefined as string | undefined,
+	limit: 100_000,
+	all: undefined as boolean | undefined,
+	verbose: undefined as boolean | undefined,
+	silent: undefined as boolean | undefined,
+};
 
 describe('report command', () => {
 	let originalIsTTY: boolean | undefined;
@@ -54,13 +71,9 @@ describe('report command', () => {
 		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
 
 		await report(['test.nitpicker'], {
-			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			...googleReportFlags,
 			credentials: './credentials.json',
-			config: undefined,
-			limit: 100_000,
 			all: true,
-			verbose: undefined,
-			silent: undefined,
 		});
 
 		expect(runReport).toHaveBeenCalledWith(
@@ -75,13 +88,8 @@ describe('report command', () => {
 		Object.defineProperty(process.stdout, 'isTTY', { value: undefined, writable: true });
 
 		await report(['test.nitpicker'], {
-			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			...googleReportFlags,
 			credentials: './credentials.json',
-			config: undefined,
-			limit: 100_000,
-			all: undefined,
-			verbose: undefined,
-			silent: undefined,
 		});
 
 		expect(runReport).toHaveBeenCalledWith(
@@ -96,13 +104,8 @@ describe('report command', () => {
 		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
 
 		await report(['test.nitpicker'], {
-			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			...googleReportFlags,
 			credentials: './credentials.json',
-			config: undefined,
-			limit: 100_000,
-			all: undefined,
-			verbose: undefined,
-			silent: undefined,
 		});
 
 		expect(runReport).toHaveBeenCalledWith(
@@ -117,12 +120,8 @@ describe('report command', () => {
 		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
 
 		await report(['test.nitpicker'], {
-			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			...googleReportFlags,
 			credentials: './credentials.json',
-			config: undefined,
-			limit: 100_000,
-			all: undefined,
-			verbose: undefined,
 			silent: true,
 		});
 
@@ -138,13 +137,9 @@ describe('report command', () => {
 		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
 
 		await report(['test.nitpicker'], {
-			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			...googleReportFlags,
 			credentials: './credentials.json',
-			config: undefined,
-			limit: 100_000,
-			all: undefined,
 			verbose: true,
-			silent: undefined,
 		});
 
 		expect(verboselyFn).toHaveBeenCalled();
@@ -155,11 +150,8 @@ describe('report command', () => {
 		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
 
 		await report(['test.nitpicker'], {
-			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			...googleReportFlags,
 			credentials: './credentials.json',
-			config: undefined,
-			limit: 100_000,
-			all: undefined,
 			verbose: true,
 			silent: true,
 		});
@@ -171,13 +163,8 @@ describe('report command', () => {
 	it('exits with error when no file path is provided', async () => {
 		await expect(
 			report([], {
-				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+				...googleReportFlags,
 				credentials: './credentials.json',
-				config: undefined,
-				limit: 100_000,
-				all: undefined,
-				verbose: undefined,
-				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
 
@@ -192,18 +179,14 @@ describe('report command', () => {
 	it('exits with error when no sheet URL is provided', async () => {
 		await expect(
 			report(['test.nitpicker'], {
+				...googleReportFlags,
 				sheet: undefined as unknown as string,
 				credentials: './credentials.json',
-				config: undefined,
-				limit: 100_000,
-				all: undefined,
-				verbose: undefined,
-				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
 
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'Error: No Google Sheets URL specified. Use --sheet <url>.',
+			'Error: No Google Sheets URL specified. Use --sheet <url> or --local for TSV.',
 		);
 		expect(exitSpy).toHaveBeenCalledWith(1);
 		expect(runReport).not.toHaveBeenCalled();
@@ -216,13 +199,8 @@ describe('report command', () => {
 
 		await expect(
 			report(['test.nitpicker'], {
-				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+				...googleReportFlags,
 				credentials: './credentials.json',
-				config: undefined,
-				limit: 100_000,
-				all: undefined,
-				verbose: undefined,
-				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
 
@@ -237,13 +215,9 @@ describe('report command', () => {
 
 		await expect(
 			report(['test.nitpicker'], {
-				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+				...googleReportFlags,
 				credentials: './credentials.json',
-				config: undefined,
-				limit: 100_000,
-				all: undefined,
 				verbose: true,
-				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
 
@@ -258,13 +232,8 @@ describe('report command', () => {
 
 		await expect(
 			report(['test.nitpicker'], {
-				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+				...googleReportFlags,
 				credentials: './credentials.json',
-				config: undefined,
-				limit: 100_000,
-				all: undefined,
-				verbose: undefined,
-				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
 
@@ -279,11 +248,8 @@ describe('report command', () => {
 
 		await expect(
 			report(['test.nitpicker'], {
-				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+				...googleReportFlags,
 				credentials: './credentials.json',
-				config: undefined,
-				limit: 100_000,
-				all: undefined,
 				verbose: true,
 				silent: true,
 			}),
@@ -292,5 +258,73 @@ describe('report command', () => {
 		// --silent suppresses debug output but not error stack traces
 		expect(formatCliErrorFn).toHaveBeenCalledWith(error, true);
 		expect(exitSpy).toHaveBeenCalledWith(1);
+	});
+
+	it('calls reportLocal with default output dir when --local is set', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+
+		await report(['/tmp/site.nitpicker'], {
+			...googleReportFlags,
+			sheet: undefined as unknown as string,
+			local: true,
+		});
+
+		expect(runReportLocal).toHaveBeenCalledWith(
+			expect.objectContaining({
+				filePath: '/tmp/site.nitpicker',
+				outputDir: expect.stringMatching(/site-report$/),
+				all: false,
+			}),
+		);
+		expect(runReport).not.toHaveBeenCalled();
+		expect(exitSpy).not.toHaveBeenCalled();
+	});
+
+	it('passes custom --output-dir to reportLocal', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+
+		await report(['test.nitpicker'], {
+			...googleReportFlags,
+			sheet: undefined as unknown as string,
+			local: true,
+			outputDir: '/tmp/out',
+		});
+
+		expect(runReportLocal).toHaveBeenCalledWith(
+			expect.objectContaining({
+				outputDir: '/tmp/out',
+			}),
+		);
+	});
+
+	it('exits when --local is combined with --sheet', async () => {
+		await expect(
+			report(['test.nitpicker'], {
+				...googleReportFlags,
+				local: true,
+				credentials: undefined,
+			}),
+		).rejects.toThrow(ExitError);
+
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			expect.stringContaining('--sheet cannot be used with --local'),
+		);
+		expect(runReportLocal).not.toHaveBeenCalled();
+	});
+
+	it('exits when --local is combined with --credentials', async () => {
+		await expect(
+			report(['test.nitpicker'], {
+				...googleReportFlags,
+				sheet: undefined as unknown as string,
+				local: true,
+				credentials: './credentials.json',
+			}),
+		).rejects.toThrow(ExitError);
+
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			expect.stringContaining('--credentials cannot be used with --local'),
+		);
+		expect(runReportLocal).not.toHaveBeenCalled();
 	});
 });

@@ -274,6 +274,8 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			console.log('\n📊 [pipeline] Step 3/3: Reporting...');
 		}
 		await report([archivePath], {
+			local: undefined,
+			outputDir: undefined,
 			sheet: flags.sheet,
 			credentials: flags.credentials,
 			config: flags.config,

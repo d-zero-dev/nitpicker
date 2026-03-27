@@ -1,28 +1,50 @@
 import type { CommandDef, InferFlags } from '@d-zero/roar';
 
-import { report as runReport } from '@nitpicker/report-google-sheets';
+import path from 'node:path';
+
+import {
+	report as runReport,
+	reportLocal as runReportLocal,
+} from '@nitpicker/report-google-sheets';
 
 import { formatCliError } from '../format-cli-error.js';
 import { verbosely } from '../report/debug.js';
+
+/**
+ * Default directory for TSV output: `<archive-stem>-report` under the current working directory.
+ * @param nitpickerFilePath - Path to the `.nitpicker` archive.
+ * @returns Absolute path to the output folder.
+ */
+function defaultLocalReportOutputDir(nitpickerFilePath: string): string {
+	const stem = path.basename(nitpickerFilePath, path.extname(nitpickerFilePath));
+	return path.resolve(process.cwd(), `${stem}-report`);
+}
 
 /**
  * Command definition for the `report` sub-command.
  * @see {@link report} for the main entry point
  */
 export const commandDef = {
-	desc: 'Generate a Google Sheets report',
+	desc: 'Generate a Google Sheets report or local TSV files',
 	flags: {
+		local: {
+			type: 'boolean',
+			desc: 'Write report sheets as TSV files under --output-dir (no Google Sheets)',
+		},
+		outputDir: {
+			shortFlag: 'o',
+			type: 'string',
+			desc: 'Output directory for TSV files (with --local; default: <file-stem>-report)',
+		},
 		sheet: {
 			shortFlag: 'S',
 			type: 'string',
-			isRequired: true,
-			desc: 'Google Sheets URL',
+			desc: 'Google Sheets URL (required unless --local)',
 		},
 		credentials: {
 			shortFlag: 'C',
 			type: 'string',
-			default: './credentials.json',
-			desc: 'Path to credentials file (keep this file secure and out of version control)',
+			desc: 'Path to credentials file (Google Sheets mode only; default: ./credentials.json)',
 		},
 		config: {
 			shortFlag: 'c',
@@ -56,9 +78,8 @@ type ReportFlags = InferFlags<typeof commandDef.flags>;
 /**
  * Main entry point for the `report` CLI command.
  *
- * Reads a `.nitpicker` archive and generates a Google Sheets report
- * by delegating to `@nitpicker/report-google-sheets`. Requires a Google
- * Sheets URL and a service account credentials file.
+ * Reads a `.nitpicker` archive and either generates a Google Sheets report
+ * or writes TSV files locally when `--local` is set.
  *
  * When `--all` is specified, all sheets are generated without an interactive
  * prompt. In non-TTY environments (e.g. CI pipelines), `--all` and `--verbose`
@@ -84,15 +105,32 @@ export async function report(args: string[], flags: ReportFlags) {
 		process.exit(1);
 	}
 
+	const isLocal = !!flags.local;
 	const sheetUrl = flags.sheet;
 
-	if (!sheetUrl) {
+	if (isLocal) {
+		if (sheetUrl) {
+			// eslint-disable-next-line no-console
+			console.error(
+				'Error: --sheet cannot be used with --local. Omit --sheet when writing TSV files.',
+			);
+			process.exit(1);
+		}
+		if (flags.credentials !== undefined) {
+			// eslint-disable-next-line no-console
+			console.error(
+				'Error: --credentials cannot be used with --local. Omit --credentials for TSV export.',
+			);
+			process.exit(1);
+		}
+	} else if (!sheetUrl) {
 		// eslint-disable-next-line no-console
-		console.error('Error: No Google Sheets URL specified. Use --sheet <url>.');
+		console.error(
+			'Error: No Google Sheets URL specified. Use --sheet <url> or --local for TSV.',
+		);
 		process.exit(1);
 	}
 
-	const credentialFilePath = flags.credentials;
 	const configFilePath = flags.config || null;
 	const limit = flags.limit;
 	const isTTY = process.stdout.isTTY;
@@ -100,15 +138,28 @@ export async function report(args: string[], flags: ReportFlags) {
 	const verbose = !!flags.verbose || !isTTY;
 
 	try {
-		await runReport({
-			filePath,
-			sheetUrl,
-			credentialFilePath,
-			configPath: configFilePath,
-			limit,
-			all,
-			silent: flags.silent ?? false,
-		});
+		if (isLocal) {
+			const outputDir = flags.outputDir ?? defaultLocalReportOutputDir(filePath);
+			await runReportLocal({
+				filePath,
+				outputDir,
+				configPath: configFilePath,
+				limit,
+				all,
+				silent: flags.silent ?? false,
+			});
+		} else {
+			const credentialFilePath = flags.credentials ?? './credentials.json';
+			await runReport({
+				filePath,
+				sheetUrl: sheetUrl!,
+				credentialFilePath,
+				configPath: configFilePath,
+				limit,
+				all,
+				silent: flags.silent ?? false,
+			});
+		}
 	} catch (error) {
 		formatCliError(error, verbose);
 		process.exit(1);
