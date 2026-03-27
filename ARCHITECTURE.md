@@ -403,6 +403,8 @@ updatePage(pageData) の処理:
 
   # destUrl のページをINSERT/UPDATE（スクレイプ結果を保存）
   # redirectPaths の各URL に redirectDestId = destPageId を設定
+  #   ただし redirect === destUrl（自己リダイレクト）はスキップ
+  #   → Basic認証チャレンジ等で同一URLへ302される場合の対策
 ```
 
 ### getPages() vs getPagesWithRefs()
