@@ -313,9 +313,10 @@ scrapeStart(url, page, options)
   │     ├── waitForNavigation('networkidle0', 5s)
   │     ├── getAnchorList(): <a>, <area> から href 抽出
   │     ├── getMeta(): メタ情報抽出
-  │     └── #fetchImages()（オプション）:
+  │     └── #fetchImages()（オプション、@retryable fallback:[]）:
   │           └── デバイスプリセットごとにループ（desktop-compact, mobile-small）:
-  │                 ├── beforePageScan(): viewport 変更 + スクロール
+  │                 ├── try-catch で各プリセットを独立実行（部分結果を許容）
+  │                 ├── beforePageScan(): viewport 変更 + リロード + スクロール
   │                 ├── waitForFunction(): lazy 画像ロード完了待ち
   │                 └── getImageList(): 画像データ取得
   └── keywordCheck(): 除外キーワードチェック
@@ -636,12 +637,13 @@ normalizeToArray('/blog/*.{html,php},/admin/*')
 
 ## 11. エラーハンドリング
 
-| フェーズ        | エラー                              | 処理                                            |
-| --------------- | ----------------------------------- | ----------------------------------------------- |
-| HEAD リクエスト | タイムアウト(10s), ECONNREFUSED 等  | `ScrapeResult.type='error'`（shutdown=false）   |
-| ブラウザ起動    | Puppeteer 起動失敗                  | `ScrapeResult.type='error'`（shutdown=true）    |
-| page.goto()     | タイムアウト, ERR_NAME_NOT_RESOLVED | `@retryable` でリトライ後 `type='error'` で返却 |
-| DOM 解析        | evaluate 失敗                       | catch でフォールバック値                        |
+| フェーズ        | エラー                              | 処理                                                                         |
+| --------------- | ----------------------------------- | ---------------------------------------------------------------------------- |
+| HEAD リクエスト | タイムアウト(10s), ECONNREFUSED 等  | `ScrapeResult.type='error'`（shutdown=false）                                |
+| ブラウザ起動    | Puppeteer 起動失敗                  | `ScrapeResult.type='error'`（shutdown=true）                                 |
+| page.goto()     | タイムアウト, ERR_NAME_NOT_RESOLVED | `@retryable` でリトライ後 `type='error'` で返却                              |
+| 画像抽出        | context 破壊, タイムアウト          | デバイスプリセット単位で try-catch、部分結果を返却。全失敗時は `fallback:[]` |
+| DOM 解析        | evaluate 失敗                       | catch でフォールバック値                                                     |
 
 ### CLI 終了コード
 
@@ -684,7 +686,8 @@ packages/test-server/
 │   │   ├── options.ts        # /options/**（fetchExternal, disableQueries）
 │   │   ├── error-status.ts   # /error-status/**（4xx/5xxステータス）
 │   │   ├── scope.ts          # /scope/**（スコープ判定）
-│   │   └── pagination.ts     # /pagination/**（ページネーション検出）
+│   │   ├── pagination.ts     # /pagination/**（ページネーション検出）
+│   │   └── scroll-jack.ts   # /scroll-jack/**（viewport依存リダイレクト）
 │   └── __tests__/e2e/
 │       ├── global-setup.ts   # Hono サーバー起動/停止（port 8010）
 │       ├── helpers.ts        # crawl(), cleanup() ヘルパー
@@ -702,7 +705,8 @@ packages/test-server/
 │       ├── parallel-and-interval.e2e.ts
 │       ├── snapshot.e2e.ts
 │       ├── output-path.e2e.ts
-│       └── pagination.e2e.ts
+│       ├── pagination.e2e.ts
+│       └── scroll-jack.e2e.ts
 ```
 
 **テスト実行:** `yarn vitest run --config vitest.e2e.config.ts`（`maxWorkers: 1`）

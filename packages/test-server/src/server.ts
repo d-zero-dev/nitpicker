@@ -12,6 +12,7 @@ import { paginationRoutes } from './routes/pagination.js';
 import { recursiveRoutes } from './routes/recursive.js';
 import { redirectRoutes } from './routes/redirect.js';
 import { scopeRoutes } from './routes/scope.js';
+import { scrollJackRoutes } from './routes/scroll-jack.js';
 
 /**
  * Creates and configures the Hono application with all E2E test routes.
@@ -29,6 +30,7 @@ export function createApp() {
 	errorStatusRoutes(app);
 	scopeRoutes(app);
 	paginationRoutes(app);
+	scrollJackRoutes(app);
 	return app;
 }
 
