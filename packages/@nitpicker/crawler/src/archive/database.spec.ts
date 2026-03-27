@@ -288,6 +288,158 @@ describe('Config', () => {
 	});
 });
 
+describe('self-redirect', () => {
+	const selfRedirectDbPath = path.resolve(workingDir, 'self-redirect-test.sqlite');
+
+	afterAll(async () => {
+		await remove(selfRedirectDbPath);
+	});
+
+	it('自己リダイレクト（元URL=先URL）は redirectDestId を設定しない', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: selfRedirectDbPath,
+		});
+
+		// redirectPaths の最後が最終行き先。元URLと同じURLへのリダイレクト。
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/page')!,
+				redirectPaths: ['https://example.com/page'],
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Self Redirect Page' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			null,
+			true,
+		);
+
+		const pages = await db.getPages();
+		const page = pages.find((p) => p.url === 'https://example.com/page');
+		expect(page).toBeDefined();
+		expect(page!.redirectDestId).toBeNull();
+	});
+
+	it('A→B→A の循環リダイレクトでは中間の B のみ redirectDestId が設定される', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: selfRedirectDbPath,
+		});
+
+		// follow-redirects が返す redirectPaths: [B, A]
+		// updatePage 内で destUrl=A(pop), redirectPaths=[A(unshift), B]
+		// A===A → skip, B!==A → set
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/circular')!,
+				redirectPaths: ['https://example.com/mid', 'https://example.com/circular'],
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Circular Redirect' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			null,
+			true,
+		);
+
+		const pages = await db.getPages();
+		const pageA = pages.find((p) => p.url === 'https://example.com/circular');
+		const pageB = pages.find((p) => p.url === 'https://example.com/mid');
+		expect(pageA).toBeDefined();
+		expect(pageB).toBeDefined();
+		expect(pageA!.redirectDestId).toBeNull();
+		expect(pageB!.redirectDestId).toBe(pageA!.id);
+	});
+
+	it('通常のリダイレクト（A→B）は redirectDestId が正しく設定される', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: selfRedirectDbPath,
+		});
+
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/old-page')!,
+				redirectPaths: ['https://example.com/new-page'],
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Normal Redirect' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			null,
+			true,
+		);
+
+		const pages = await db.getPages();
+		const oldPage = pages.find((p) => p.url === 'https://example.com/old-page');
+		const newPage = pages.find((p) => p.url === 'https://example.com/new-page');
+		expect(oldPage).toBeDefined();
+		expect(newPage).toBeDefined();
+		expect(oldPage!.redirectDestId).toBe(newPage!.id);
+	});
+
+	it('末尾スラッシュの有無が異なるリダイレクトは自己リダイレクトとみなさない', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: selfRedirectDbPath,
+		});
+
+		// /trailing → /trailing/ は異なる URL なので通常のリダイレクトとして扱う
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/trailing')!,
+				redirectPaths: ['https://example.com/trailing/'],
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Trailing Slash Redirect' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			null,
+			true,
+		);
+
+		const pages = await db.getPages();
+		const srcPage = pages.find((p) => p.url === 'https://example.com/trailing');
+		const destPage = pages.find((p) => p.url === 'https://example.com/trailing/');
+		expect(srcPage).toBeDefined();
+		expect(destPage).toBeDefined();
+		expect(srcPage!.redirectDestId).toBe(destPage!.id);
+	});
+});
+
 describe('clearHtmlPath', () => {
 	const clearHtmlDbPath = path.resolve(workingDir, 'clear-html-test.sqlite');
 

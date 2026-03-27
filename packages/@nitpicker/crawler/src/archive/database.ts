@@ -641,6 +641,11 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	/**
 	 * Inserts or updates a crawled page in the database, including its redirect chain,
 	 * anchors, and images. Optionally creates an HTML snapshot file path entry.
+	 *
+	 * Self-redirects (where the source URL equals the destination URL after normalization)
+	 * are skipped to avoid marking a page as redirected to itself — a situation caused by
+	 * authentication challenges (e.g. Basic Auth 302) that would otherwise exclude the page
+	 * from reports via the `whereNull('redirectDestId')` filter.
 	 * @param page - The page data to store.
 	 * @param snapshotDir - The directory for saving HTML snapshots, or null to skip snapshots.
 	 * @param isTarget - Whether this page is a crawl target.
@@ -679,7 +684,12 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				trx,
 			);
 
+			const destUrlNormalized = destUrlObject.withoutHashAndAuth;
 			for (const redirect of redirectPaths) {
+				if (redirect === destUrlNormalized) {
+					dbLog('Skip self-redirect: %s', redirect);
+					continue;
+				}
 				dbLog('Set redirected url: %s -> %s', redirect, destUrl);
 				const redirectId = await this.#getIdByUrl(redirect, undefined, trx);
 				await trx<DB_Page>('pages')
