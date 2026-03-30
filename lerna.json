@@ -1,5 +1,5 @@
 {
-	"lerna": "8.1.2",
+	"lerna": "9.0.4",
 	"version": "0.6.2",
 	"npmClient": "yarn",
 	"packages": ["packages/@nitpicker/*", "packages/@nitpicker/cli", "packages/test-server"]

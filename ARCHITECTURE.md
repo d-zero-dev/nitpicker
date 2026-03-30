@@ -125,7 +125,7 @@ crawler/src/
 │   └── error/                  # DOMEvaluationError, ErrorEmitter
 ├── archive/                    # SQLite アーカイブストレージ
 │   ├── filesystem/             # 1関数1ファイル（16ファイル）+ tar, untar
-│   └── ...                     # archive, archive-accessor, database, page, resource, safe-path, types
+│   └── ...                     # archive, archive-accessor, database, init-schema, limited-page-ids, redirect-table, get-json, page, resource, safe-path, types
 ├── crawler/                    # Crawler エンジン
 │   ├── crawler.ts              # Crawler クラス
 │   ├── link-list.ts            # URL キュー管理
