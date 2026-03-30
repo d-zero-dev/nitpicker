@@ -2,8 +2,7 @@ import type { Result } from './types.js';
 import type { Violation } from '@nitpicker/types';
 
 import { definePlugin } from '@nitpicker/core';
-
-import { toError } from './to-error.js';
+import { toError } from '@nitpicker/types/to-error';
 
 /**
  * Plugin options for the axe-core accessibility analysis.

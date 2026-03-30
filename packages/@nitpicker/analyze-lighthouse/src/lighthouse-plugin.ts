@@ -2,11 +2,10 @@ import type { LHReport } from './types.js';
 import type { Config } from 'lighthouse';
 
 import { definePlugin } from '@nitpicker/core';
+import { toError } from '@nitpicker/types/to-error';
 import * as chromeLauncher from 'chrome-launcher';
 import lighthouse from 'lighthouse';
 import { ReportUtils } from 'lighthouse/report/renderer/report-utils.js';
-
-import { toError } from './to-error.js';
 
 /**
  * Plugin options for the Lighthouse analysis.

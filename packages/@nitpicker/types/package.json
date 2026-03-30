@@ -20,6 +20,10 @@
 		".": {
 			"import": "./lib/types.js",
 			"types": "./lib/types.d.ts"
+		},
+		"./to-error": {
+			"import": "./lib/to-error.js",
+			"types": "./lib/to-error.d.ts"
 		}
 	},
 	"scripts": {
