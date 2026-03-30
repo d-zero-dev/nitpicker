@@ -305,3 +305,35 @@ export interface DB_Resource {
 	/** JSON-serialized HTTP response headers, or null if not available. */
 	responseHeaders: string | null;
 }
+
+/**
+ * Base options shared by all database connection configurations.
+ */
+type AbsDatabaseOption = {
+	/** The working directory for the database (used for resolving relative paths). */
+	workingDir: string;
+};
+
+/**
+ * Union type for all supported database connection options.
+ */
+export type DatabaseOption = DatabaseSqlite3Option | DatabaseMySqlOption;
+
+/**
+ * Connection options for a SQLite3 database.
+ */
+type DatabaseSqlite3Option = AbsDatabaseOption & {
+	/** The database type identifier. */
+	type: 'sqlite3';
+	/** The absolute file path to the SQLite database file. */
+	filename: string;
+};
+
+/**
+ * Connection options for a MySQL database.
+ * Note: MySQL support is not yet implemented.
+ */
+type DatabaseMySqlOption = AbsDatabaseOption & {
+	/** The database type identifier. */
+	type: 'mysql';
+};

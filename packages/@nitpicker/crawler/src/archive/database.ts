@@ -1,5 +1,6 @@
 import type {
 	Config,
+	DatabaseOption,
 	DB_Anchor,
 	DB_Page,
 	DB_Redirect,
@@ -23,8 +24,11 @@ import knex from 'knex';
 import { eachSplitted } from '../utils/array/each-splitted.js';
 import { ErrorEmitter } from '../utils/error/error-emitter.js';
 
+import { limitedPageIds, redirectTable } from './common-queries.js';
 import { dbLog } from './debug.js';
 import { mkdir } from './filesystem/mkdir.js';
+import { getJSON } from './get-json.js';
+import { initSchema } from './init-schema.js';
 
 const retrySetting: RetryDecoratorOptions = {
 	interval: 300,
@@ -777,127 +781,10 @@ export class Database extends EventEmitter<DatabaseEvent> {
 
 	/**
 	 * Initializes the database schema if tables do not exist.
-	 * Enables WAL journal mode and foreign keys, then creates all tables
-	 * (`info`, `pages`, `anchors`, `images`, `resources`, `resources-referrers`).
+	 * Delegates to {@link initSchema} for the actual table creation.
 	 */
 	async #init() {
-		const isExists = await this.#instance.schema.hasTable('info');
-		if (isExists) {
-			return;
-		}
-
-		// Enable WAL mode and foreign keys for better performance and data integrity
-		await this.#instance.raw('PRAGMA journal_mode = WAL');
-		await this.#instance.raw('PRAGMA foreign_keys = ON');
-
-		await this.#instance.schema
-			.createTable('info', (t) => {
-				t.increments('id');
-				t.string('version');
-				t.string('name');
-				t.string('baseUrl');
-				t.boolean('recursive');
-				t.integer('interval');
-				t.boolean('image');
-				t.boolean('fetchExternal');
-				t.integer('parallels');
-				t.json('scope');
-				t.json('excludes');
-				t.json('excludeKeywords');
-				t.json('excludeUrls');
-				t.integer('maxExcludedDepth');
-				t.integer('retry');
-				t.boolean('fromList');
-				t.boolean('disableQueries');
-				t.string('userAgent');
-				t.boolean('ignoreRobots');
-			})
-			.createTable('pages', (t) => {
-				t.increments('id');
-				t.string('url', 8190).notNullable().unique();
-				t.integer('redirectDestId').unsigned().references('pages.id').defaultTo(null);
-				t.boolean('scraped').notNullable();
-				t.boolean('isTarget').notNullable();
-				t.boolean('isExternal');
-				t.integer('status');
-				t.string('statusText');
-				t.string('contentType').nullable();
-				t.integer('contentLength').unsigned().nullable();
-				t.json('responseHeaders').nullable();
-				t.string('lang');
-				t.string('title');
-				t.string('description');
-				t.string('keywords');
-				t.boolean('noindex');
-				t.boolean('nofollow');
-				t.boolean('noarchive');
-				t.string('canonical');
-				t.string('alternate');
-				t.string('og_type');
-				t.string('og_title');
-				t.string('og_site_name');
-				t.string('og_description');
-				t.string('og_url');
-				t.string('og_image');
-				t.string('twitter_card');
-				t.string('html');
-				t.boolean('isSkipped');
-				t.string('skipReason');
-				t.integer('order').unsigned().nullable();
-
-				t.index('isExternal');
-				t.index('contentType');
-				t.index('scraped');
-				t.index('redirectDestId');
-				t.index('order');
-			})
-			.createTable('anchors', (t) => {
-				t.increments('id');
-				t.integer('pageId').notNullable().unsigned().references('pages.id');
-				t.integer('hrefId').notNullable().unsigned().references('pages.id');
-				t.string('hash');
-				t.string('textContent').nullable();
-
-				t.index('pageId');
-				t.index('hrefId');
-			})
-			.createTable('images', (t) => {
-				t.increments('id');
-				t.integer('pageId').notNullable().unsigned().references('pages.id');
-				t.string('src', 8190);
-				t.string('currentSrc', 8190);
-				t.string('alt');
-				t.float('width').unsigned().notNullable();
-				t.float('height').unsigned().notNullable();
-				t.integer('naturalWidth').unsigned().notNullable();
-				t.integer('naturalHeight').unsigned().notNullable();
-				t.boolean('isLazy');
-				t.integer('viewportWidth').unsigned().notNullable();
-				t.string('sourceCode');
-
-				t.index('pageId');
-			})
-			.createTable('resources', (t) => {
-				t.increments('id');
-				t.string('url', 8190).notNullable().unique();
-				t.boolean('isExternal');
-				t.integer('status');
-				t.string('statusText');
-				t.string('contentType').nullable();
-				t.integer('contentLength').unsigned().nullable();
-				t.string('compress').nullable();
-				t.string('cdn').nullable();
-				t.json('responseHeaders').nullable();
-			})
-			.createTable('resources-referrers', (t) => {
-				t.increments('id');
-				t.integer('resourceId').notNullable().unsigned().references('resources.id');
-				t.integer('pageId').notNullable().unsigned().references('pages.id');
-
-				t.unique(['resourceId', 'pageId']);
-				t.index('resourceId');
-				t.index('pageId');
-			});
+		await initSchema(this.#instance);
 	}
 
 	/**
@@ -979,124 +866,3 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return db;
 	}
 }
-
-// ----- ----- ----- ----- -----
-//
-// Common Queries
-//
-// ----- ----- ----- ----- -----
-
-/**
- * Returns a Knex subquery builder that selects page IDs with pagination,
- * ordered by the `order` column (nulls last), excluding redirected pages.
- * @param limit - The maximum number of page IDs to return.
- * @param offset - The number of page IDs to skip before returning results.
- */
-function limitedPageIds(limit: number, offset: number) {
-	return async (qb: Knex.QueryBuilder<Record<string, unknown>, unknown>) => {
-		await qb
-			.select('id')
-			.from<DB_Page>('pages')
-			.orderByRaw('`order` ASC NULLS LAST')
-			.whereNull('redirectDestId')
-			.limit(limit)
-			.offset(offset);
-	};
-}
-
-/**
- * Returns a Knex subquery builder that joins pages with their redirect destinations.
- * When `includeNull` is true, also includes pages without redirects (self-referencing).
- * @param includeNull - Whether to include non-redirected pages in the result. Defaults to `true`.
- */
-function redirectTable(includeNull = true) {
-	return async (qb: Knex.QueryBuilder<Record<string, unknown>, unknown>) => {
-		const list = qb
-			.select('A.id as fromId', 'A.url as from', 'B.url as to', 'B.id as toId')
-			.from('pages as A')
-			.join('pages as B', (j) => {
-				j.on('A.redirectDestId', '=', 'B.id').andOnNotNull('A.redirectDestId');
-			});
-		if (includeNull) {
-			await list.union(async (qb) => {
-				await qb
-					.select('A.id as fromId', 'A.url as from', 'A.url as to', 'A.id as toId')
-					.from('pages as A')
-					.whereNull('A.redirectDestId');
-			});
-		}
-	};
-}
-
-// ----- ----- ----- ----- -----
-//
-// Utils
-//
-// ----- ----- ----- ----- -----
-
-/**
- * Safely parses a JSON string, returning a fallback value if parsing fails or the input is not a string.
- * Logs a warning via {@link dbLog} when invalid JSON is detected, including a truncated preview
- * of the data and the parse error message.
- * @template T The expected type of the parsed JSON value and the fallback.
- * @param data - The data to parse. Only string values are parsed; other types return the fallback.
- * @param fallback - The value to return if parsing fails or the result is falsy.
- * @returns The parsed JSON value, or the fallback.
- */
-function getJSON<T>(data: unknown, fallback: T): T {
-	try {
-		if (typeof data === 'string') {
-			const result = JSON.parse(data);
-			if (result) {
-				return result;
-			}
-			return fallback;
-		}
-	} catch (error) {
-		dbLog(
-			'Warning: Invalid JSON detected in database field. Using fallback value. Data: %s, Error: %s',
-			String(data).slice(0, 200),
-			error instanceof Error ? error.message : String(error),
-		);
-	}
-
-	return fallback;
-}
-
-// ----- ----- ----- ----- -----
-//
-// Types
-//
-// ----- ----- ----- ----- -----
-
-/**
- * Base options shared by all database connection configurations.
- */
-type AbsDatabaseOption = {
-	/** The working directory for the database (used for resolving relative paths). */
-	workingDir: string;
-};
-
-/**
- * Union type for all supported database connection options.
- */
-type DatabaseOption = DatabaseSqlite3Option | DatabaseMySqlOption;
-
-/**
- * Connection options for a SQLite3 database.
- */
-type DatabaseSqlite3Option = AbsDatabaseOption & {
-	/** The database type identifier. */
-	type: 'sqlite3';
-	/** The absolute file path to the SQLite database file. */
-	filename: string;
-};
-
-/**
- * Connection options for a MySQL database.
- * Note: MySQL support is not yet implemented.
- */
-type DatabaseMySqlOption = AbsDatabaseOption & {
-	/** The database type identifier. */
-	type: 'mysql';
-};
