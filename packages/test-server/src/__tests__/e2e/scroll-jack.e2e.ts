@@ -24,22 +24,18 @@ describe('Scroll-jack page (viewport-dependent redirect)', () => {
 		expect(page!.title).toBe('Scroll Jack Page');
 	});
 
-	it('モバイルビューポートでコンテキスト破壊が起きてもクラッシュしない', async () => {
+	it('ビューポート依存リダイレクトのあるページで画像が取得される', async () => {
 		const pages = await result.accessor.getPages('internal-page');
 		const page = pages.find((p) => p.url.pathname === '/scroll-jack/');
 		expect(page).toBeDefined();
 
-		// 画像取得は best-effort。モバイルビューポートで失敗しても
-		// クラッシュせずにクロール全体が正常終了することを検証。
 		const knex = result.accessor.getKnex();
 		const images = await knex('images')
 			.join('pages', 'images.pageId', 'pages.id')
 			.where('pages.url', page!.url.href)
 			.select('images.*');
 
-		// desktop-compact (1280px) は成功するため画像が取得される。
-		// mobile-small (320px) はリダイレクトで失敗する可能性があるがクラッシュしない。
-		// 少なくともデスクトップ分の画像が存在することを検証。
+		// クロールが正常完了し、少なくともデスクトップ分の画像が取得される。
 		expect(images.length).toBeGreaterThanOrEqual(1);
 
 		const desktopImages = images.filter(
