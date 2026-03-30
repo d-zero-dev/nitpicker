@@ -201,7 +201,8 @@ describe('startCrawl', () => {
 	it('イベントエラー発生時に CrawlAggregateError をスローする', async () => {
 		mockEventAssignments.mockRejectedValueOnce(new Error('scrape failed'));
 
-		const { startCrawl, CrawlAggregateError } = await import('./crawl.js');
+		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
+		const { startCrawl } = await import('./crawl.js');
 
 		await expect(startCrawl(['https://example.com'], createFlags())).rejects.toThrow(
 			CrawlAggregateError,
@@ -458,7 +459,7 @@ function createCrawlerError(isExternal: boolean): CrawlerError {
 
 describe('CrawlAggregateError', () => {
 	it('外部エラーのみの場合、hasOnlyExternalErrors が true', async () => {
-		const { CrawlAggregateError } = await import('./crawl.js');
+		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
 		const error = new CrawlAggregateError([
 			createCrawlerError(true),
 			createCrawlerError(true),
@@ -467,7 +468,7 @@ describe('CrawlAggregateError', () => {
 	});
 
 	it('内部エラーを含む場合、hasOnlyExternalErrors が false', async () => {
-		const { CrawlAggregateError } = await import('./crawl.js');
+		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
 		const error = new CrawlAggregateError([
 			createCrawlerError(true),
 			createCrawlerError(false),
@@ -476,26 +477,26 @@ describe('CrawlAggregateError', () => {
 	});
 
 	it('内部エラーのみの場合、hasOnlyExternalErrors が false', async () => {
-		const { CrawlAggregateError } = await import('./crawl.js');
+		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
 		const error = new CrawlAggregateError([createCrawlerError(false)]);
 		expect(error.hasOnlyExternalErrors).toBe(false);
 	});
 
 	it('plain Error は内部エラーとして扱う', async () => {
-		const { CrawlAggregateError } = await import('./crawl.js');
+		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
 		const error = new CrawlAggregateError([new Error('plain error')]);
 		expect(error.hasOnlyExternalErrors).toBe(false);
 	});
 
 	it('空の配列に対して hasOnlyExternalErrors が false', async () => {
-		const { CrawlAggregateError } = await import('./crawl.js');
+		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
 		const error = new CrawlAggregateError([]);
 		expect(error.hasOnlyExternalErrors).toBe(false);
 		expect(error.errors).toHaveLength(0);
 	});
 
 	it('外部エラーのみの場合、message に "external" の内訳を含む', async () => {
-		const { CrawlAggregateError } = await import('./crawl.js');
+		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
 		const error = new CrawlAggregateError([
 			createCrawlerError(true),
 			createCrawlerError(true),
@@ -504,7 +505,7 @@ describe('CrawlAggregateError', () => {
 	});
 
 	it('混合エラーの場合、message に内部と外部の内訳を含む', async () => {
-		const { CrawlAggregateError } = await import('./crawl.js');
+		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
 		const error = new CrawlAggregateError([
 			createCrawlerError(false),
 			createCrawlerError(true),
@@ -516,7 +517,7 @@ describe('CrawlAggregateError', () => {
 	});
 
 	it('内部エラーのみの場合、message に "internal" の内訳を含む', async () => {
-		const { CrawlAggregateError } = await import('./crawl.js');
+		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
 		const error = new CrawlAggregateError([createCrawlerError(false)]);
 		expect(error.message).toBe('Crawl completed with 1 error(s) (1 internal).');
 	});
@@ -549,7 +550,7 @@ describe('crawl exit codes', () => {
 			// exit mock throws
 		}
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'\nCompleted with 1 error(s) (1 external).',
+			'\nCrawl completed with 1 error(s) (1 external).',
 		);
 	});
 
@@ -565,7 +566,7 @@ describe('crawl exit codes', () => {
 			// exit mock throws
 		}
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'\nCompleted with 1 error(s) (1 internal).',
+			'\nCrawl completed with 1 error(s) (1 internal).',
 		);
 	});
 

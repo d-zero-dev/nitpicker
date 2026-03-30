@@ -4,7 +4,8 @@ import { ExitCode } from '../exit-code.js';
 import { formatCliError } from '../format-cli-error.js';
 
 import { analyze } from './analyze.js';
-import { CrawlAggregateError, startCrawl } from './crawl.js';
+import { CrawlAggregateError } from './crawl-aggregate-error.js';
+import { startCrawl } from './crawl.js';
 import { report } from './report.js';
 
 /**

@@ -5,7 +5,7 @@ import { paginateQuery } from './paginate-query.js';
 
 describe('paginateQuery', () => {
 	/**
-	 *
+	 * Creates an in-memory SQLite database with a test table.
 	 */
 	async function setupDb() {
 		const db = knex({
@@ -44,6 +44,8 @@ describe('paginateQuery', () => {
 		expect(result.total).toBe(3);
 		expect(result.offset).toBe(0);
 		expect(result.limit).toBe(2);
+
+		await db.destroy();
 	});
 
 	it('applies offset correctly', async () => {
@@ -67,6 +69,8 @@ describe('paginateQuery', () => {
 		expect(result.items[0].name).toBe('b');
 		expect(result.total).toBe(3);
 		expect(result.offset).toBe(1);
+
+		await db.destroy();
 	});
 
 	it('returns empty items for zero results', async () => {
@@ -83,6 +87,8 @@ describe('paginateQuery', () => {
 
 		expect(result.items).toHaveLength(0);
 		expect(result.total).toBe(0);
+
+		await db.destroy();
 	});
 
 	it('returns empty items when offset exceeds total', async () => {
@@ -100,6 +106,8 @@ describe('paginateQuery', () => {
 
 		expect(result.items).toHaveLength(0);
 		expect(result.total).toBe(1);
+
+		await db.destroy();
 	});
 
 	it('works with filtered base query', async () => {
@@ -124,6 +132,8 @@ describe('paginateQuery', () => {
 		expect(result.items).toHaveLength(2);
 		expect(result.total).toBe(2);
 		expect(result.items[0].name).toBe('b');
+
+		await db.destroy();
 	});
 
 	it('maps rows using mapRow function', async () => {
@@ -143,5 +153,7 @@ describe('paginateQuery', () => {
 		});
 
 		expect(result.items[0]).toEqual({ label: 'test', doubled: 84 });
+
+		await db.destroy();
 	});
 });

@@ -12,8 +12,6 @@ import { eventAssignments } from '../crawl/event-assignments.js';
 import { mapFlagsToCrawlConfig } from '../crawl/map-flags-to-crawl-config.js';
 import { ExitCode } from '../exit-code.js';
 
-export { CrawlAggregateError } from './crawl-aggregate-error.js';
-
 import { CrawlAggregateError } from './crawl-aggregate-error.js';
 
 /**
@@ -225,8 +223,10 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 	orchestrator.garbageCollect();
 
 	if (errStack.length > 0) {
-		formatCrawlErrors(errStack);
-		throw new CrawlAggregateError(errStack);
+		const error = new CrawlAggregateError(errStack);
+		// eslint-disable-next-line no-console
+		console.error(`\n${error.message}`);
+		throw error;
 	}
 
 	return archivePath;
@@ -268,8 +268,10 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 	orchestrator.garbageCollect();
 
 	if (errStack.length > 0) {
-		formatCrawlErrors(errStack);
-		throw new CrawlAggregateError(errStack);
+		const error = new CrawlAggregateError(errStack);
+		// eslint-disable-next-line no-console
+		console.error(`\n${error.message}`);
+		throw error;
 	}
 }
 
@@ -368,26 +370,4 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		}
 		throw error;
 	}
-}
-
-/**
- * Prints a summary of errors that occurred during crawling to stderr.
- * @param errStack - Array of errors collected during the crawl session
- */
-function formatCrawlErrors(errStack: (CrawlerError | Error)[]) {
-	const externalCount = errStack.filter(
-		(e): e is CrawlerError => 'pid' in e && 'isExternal' in e && e.isExternal === true,
-	).length;
-	const internalCount = errStack.length - externalCount;
-
-	const parts: string[] = [];
-	if (internalCount > 0) {
-		parts.push(`${internalCount} internal`);
-	}
-	if (externalCount > 0) {
-		parts.push(`${externalCount} external`);
-	}
-
-	// eslint-disable-next-line no-console
-	console.error(`\nCompleted with ${errStack.length} error(s) (${parts.join(', ')}).`);
 }

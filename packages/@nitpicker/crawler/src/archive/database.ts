@@ -24,11 +24,12 @@ import knex from 'knex';
 import { eachSplitted } from '../utils/array/each-splitted.js';
 import { ErrorEmitter } from '../utils/error/error-emitter.js';
 
-import { limitedPageIds, redirectTable } from './common-queries.js';
 import { dbLog } from './debug.js';
 import { mkdir } from './filesystem/mkdir.js';
 import { getJSON } from './get-json.js';
 import { initSchema } from './init-schema.js';
+import { limitedPageIds } from './limited-page-ids.js';
+import { redirectTable } from './redirect-table.js';
 
 const retrySetting: RetryDecoratorOptions = {
 	interval: 300,

@@ -5,16 +5,14 @@ import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { ExitCode } from '../exit-code.js';
 
 import { analyze as analyzeFn } from './analyze.js';
-import { CrawlAggregateError, startCrawl as startCrawlFn } from './crawl.js';
+import { CrawlAggregateError } from './crawl-aggregate-error.js';
+import { startCrawl as startCrawlFn } from './crawl.js';
 import { pipeline } from './pipeline.js';
 import { report as reportFn } from './report.js';
 
-vi.mock('./crawl.js', async () => {
-	// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-	const actual = await vi.importActual<typeof import('./crawl.js')>('./crawl.js');
+vi.mock('./crawl.js', () => {
 	return {
 		startCrawl: vi.fn(),
-		CrawlAggregateError: actual.CrawlAggregateError,
 	};
 });
 

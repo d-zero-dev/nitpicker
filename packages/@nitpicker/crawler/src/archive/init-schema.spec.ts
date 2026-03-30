@@ -25,6 +25,8 @@ describe('initSchema', () => {
 			const exists = await db.schema.hasTable(table);
 			expect(exists, `table "${table}" should exist`).toBe(true);
 		}
+
+		await db.destroy();
 	});
 
 	it('is idempotent (does not error on second call)', async () => {
@@ -39,6 +41,8 @@ describe('initSchema', () => {
 
 		const exists = await db.schema.hasTable('pages');
 		expect(exists).toBe(true);
+
+		await db.destroy();
 	});
 
 	it('creates pages table with expected columns', async () => {
@@ -62,6 +66,8 @@ describe('initSchema', () => {
 		expect(columnNames).toContain('contentType');
 		expect(columnNames).toContain('html');
 		expect(columnNames).toContain('order');
+
+		await db.destroy();
 	});
 
 	it('creates resources table with expected columns', async () => {
@@ -81,5 +87,39 @@ describe('initSchema', () => {
 		expect(columnNames).toContain('contentType');
 		expect(columnNames).toContain('compress');
 		expect(columnNames).toContain('cdn');
+
+		await db.destroy();
+	});
+
+	it('sets PRAGMA journal_mode to WAL (falls back to memory for in-memory DB)', async () => {
+		const db = knex({
+			client: 'sqlite3',
+			connection: { filename: ':memory:' },
+			useNullAsDefault: true,
+		});
+
+		await initSchema(db);
+
+		// In-memory SQLite does not support WAL; it returns "memory" instead.
+		// On file-based SQLite, this would be "wal".
+		const result = await db.raw('PRAGMA journal_mode');
+		expect(['wal', 'memory']).toContain(result[0].journal_mode);
+
+		await db.destroy();
+	});
+
+	it('enables foreign keys', async () => {
+		const db = knex({
+			client: 'sqlite3',
+			connection: { filename: ':memory:' },
+			useNullAsDefault: true,
+		});
+
+		await initSchema(db);
+
+		const result = await db.raw('PRAGMA foreign_keys');
+		expect(result[0].foreign_keys).toBe(1);
+
+		await db.destroy();
 	});
 });
