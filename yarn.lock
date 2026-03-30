@@ -798,15 +798,15 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/beholder@npm:2.0.0":
-  version: 2.0.0
-  resolution: "@d-zero/beholder@npm:2.0.0"
+"@d-zero/beholder@npm:2.1.1":
+  version: 2.1.1
+  resolution: "@d-zero/beholder@npm:2.1.1"
   dependencies:
-    "@d-zero/puppeteer-page-scan": "npm:4.4.5"
-    "@d-zero/shared": "npm:0.20.1"
+    "@d-zero/puppeteer-page-scan": "npm:4.4.7"
+    "@d-zero/shared": "npm:0.21.1"
     debug: "npm:4.4.3"
     puppeteer: "npm:24.37.5"
-  checksum: 10c0/eca6e57b5f89a88537344010d1c10daebd6476ecad33ff1ef69ea595104d95a6c6de8b6c98806ea9477928730234ab14d936347d73db86b4717537984057dfec
+  checksum: 10c0/b86592605b9f8d4c9a3c6524ab823246cdd13bd2f6a1b360e9ecc39c4611a0a283aca60c64805a4376ff97e45f5acd4c49aac17575ba20ce3a70275b0e2b00fe
   languageName: node
   linkType: hard
 
@@ -912,26 +912,26 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-page-scan@npm:4.4.5":
-  version: 4.4.5
-  resolution: "@d-zero/puppeteer-page-scan@npm:4.4.5"
+"@d-zero/puppeteer-page-scan@npm:4.4.7":
+  version: 4.4.7
+  resolution: "@d-zero/puppeteer-page-scan@npm:4.4.7"
   dependencies:
     "@d-zero/puppeteer-general-actions": "npm:1.2.2"
-    "@d-zero/puppeteer-scroll": "npm:3.1.13"
+    "@d-zero/puppeteer-scroll": "npm:3.1.15"
   peerDependencies:
     puppeteer: 24.37.5
-  checksum: 10c0/74d2f2edc2c201272d6206a45d038f4f67388cb6f4675c498d7f7197369aa54331e943162b1c1485cf6dc230ebaad8fef11c584fd8b3fe3cc43c535d5429957a
+  checksum: 10c0/4541ccae073a2562af5a3c9f2b36e8754df61f832d02b464c7ac24070aa0bb184dc60e8983a876bd5a467575156857a4f4552d6697465cbe42d1a3df64973cd6
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-scroll@npm:3.1.13":
-  version: 3.1.13
-  resolution: "@d-zero/puppeteer-scroll@npm:3.1.13"
+"@d-zero/puppeteer-scroll@npm:3.1.15":
+  version: 3.1.15
+  resolution: "@d-zero/puppeteer-scroll@npm:3.1.15"
   dependencies:
-    "@d-zero/shared": "npm:0.20.1"
+    "@d-zero/shared": "npm:0.21.1"
   peerDependencies:
     puppeteer: 24.37.5
-  checksum: 10c0/ae7b5c8afed54490a37b06ecf6a8e2ca22925c1a1726b4ce87c3f264e40c7c0a65068988fe0cbe54485c0238013d63d5fe60b989efddaca3729e77a13b02912b
+  checksum: 10c0/49852c282fb31a8c7c498145469222c5b71dcac990275074cffb33eec73d72462d02b31465e18456e9e01daeb76ced1e418f77b2da28b91f7f8073e3c8d3f690
   languageName: node
   linkType: hard
 
@@ -978,6 +978,21 @@ __metadata:
     micromatch: "npm:4.0.8"
     sanitize-filename: "npm:1.6.3"
   checksum: 10c0/b4cfd509188b2e23f6d1c28baf18eafae2febefca4f5d3302ecee7972e9a412038757d7c4d8115b8879f1a9adc09e5aadf7df65dcc77aca5153cd0ef4deb0e14
+  languageName: node
+  linkType: hard
+
+"@d-zero/shared@npm:0.21.1":
+  version: 0.21.1
+  resolution: "@d-zero/shared@npm:0.21.1"
+  dependencies:
+    "@holiday-jp/holiday_jp": "npm:2.5.1"
+    await-event-emitter: "npm:2.0.2"
+    dayjs: "npm:1.11.19"
+    escape-string-regexp: "npm:5.0.0"
+    front-matter: "npm:4.0.2"
+    micromatch: "npm:4.0.8"
+    sanitize-filename: "npm:1.6.3"
+  checksum: 10c0/6535b99fcf39efc348425d02c812f49b18d9359af9a24606b810d1cd428f7c687826d93e87650d3dd38d1f15160fad45f490849c0a5ef7d616634b3ee704466d
   languageName: node
   linkType: hard
 
@@ -2414,7 +2429,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/crawler@workspace:packages/@nitpicker/crawler"
   dependencies:
-    "@d-zero/beholder": "npm:2.0.0"
+    "@d-zero/beholder": "npm:2.1.1"
     "@d-zero/dealer": "npm:1.7.0"
     "@d-zero/fs": "npm:0.2.2"
     "@d-zero/shared": "npm:0.20.1"
