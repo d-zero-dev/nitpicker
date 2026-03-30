@@ -3,12 +3,12 @@ import type { Knex } from 'knex';
 import knex from 'knex';
 import { describe, it, expect } from 'vitest';
 
-import { initSchema } from './init-schema.js';
 import { redirectTable } from './redirect-table.js';
 
 describe('redirectTable', () => {
 	/**
-	 * Creates an in-memory SQLite database with the archive schema.
+	 * Creates an in-memory SQLite database with a minimal pages table
+	 * (without WAL mode to avoid abort errors on destroy).
 	 */
 	async function setupDb() {
 		const db = knex({
@@ -16,7 +16,15 @@ describe('redirectTable', () => {
 			connection: { filename: ':memory:' },
 			useNullAsDefault: true,
 		});
-		await initSchema(db);
+		await db.schema.createTable('pages', (t) => {
+			t.increments('id');
+			t.string('url', 8190).notNullable().unique();
+			t.integer('redirectDestId').unsigned().references('pages.id').defaultTo(null);
+			t.boolean('scraped').notNullable();
+			t.boolean('isTarget').notNullable();
+			t.boolean('isExternal');
+			t.integer('order').unsigned().nullable();
+		});
 		return db;
 	}
 
@@ -54,7 +62,8 @@ describe('redirectTable', () => {
 		expect(result[0].from).toBe('https://example.com/page');
 		expect(result[0].to).toBe('https://example.com/page');
 
-		await db.destroy();
+		// In-memory DB is automatically cleaned up by GC.
+		// Explicit destroy() causes "aborted" errors due to Knex pool internals.
 	});
 
 	it('excludes non-redirected pages when includeNull is false', async () => {
@@ -65,7 +74,8 @@ describe('redirectTable', () => {
 		const result = await db.with('rt', redirectTable(false)).select('*').from('rt');
 		expect(result).toHaveLength(0);
 
-		await db.destroy();
+		// In-memory DB is automatically cleaned up by GC.
+		// Explicit destroy() causes "aborted" errors due to Knex pool internals.
 	});
 
 	it('maps redirect source to destination', async () => {
@@ -82,7 +92,8 @@ describe('redirectTable', () => {
 		expect(result[0].from).toBe('https://example.com/src');
 		expect(result[0].to).toBe('https://example.com/dest');
 
-		await db.destroy();
+		// In-memory DB is automatically cleaned up by GC.
+		// Explicit destroy() causes "aborted" errors due to Knex pool internals.
 	});
 
 	it('returns empty result for empty table', async () => {
@@ -91,6 +102,7 @@ describe('redirectTable', () => {
 		const result = await db.with('rt', redirectTable(true)).select('*').from('rt');
 		expect(result).toHaveLength(0);
 
-		await db.destroy();
+		// In-memory DB is automatically cleaned up by GC.
+		// Explicit destroy() causes "aborted" errors due to Knex pool internals.
 	});
 });
