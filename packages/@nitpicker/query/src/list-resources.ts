@@ -5,6 +5,8 @@ import type {
 } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { paginateQuery } from './paginate-query.js';
+
 /**
  * Lists sub-resources (CSS, JS, images, fonts, etc.) from the archive
  * with optional filtering by content type and origin.
@@ -29,29 +31,8 @@ export async function listResources(
 		baseQuery.where('isExternal', options.isExternal ? 1 : 0);
 	}
 
-	const countResult = (await baseQuery.clone().count('id as total')) as {
-		total: number;
-	}[];
-	// SQL count() always returns exactly one row
-	const total = countResult[0]?.total ?? 0;
-
-	const rows = await baseQuery
-		.clone()
-		.select(
-			'url',
-			'status',
-			'contentType',
-			'contentLength',
-			'isExternal',
-			'compress',
-			'cdn',
-		)
-		.orderBy('url')
-		.limit(limit)
-		.offset(offset);
-
-	const items: ResourceEntry[] = rows.map(
-		(row: {
+	return paginateQuery<
+		{
 			url: string;
 			status: number | null;
 			contentType: string | null;
@@ -59,7 +40,26 @@ export async function listResources(
 			isExternal: 0 | 1;
 			compress: string | 0;
 			cdn: string | 0;
-		}) => ({
+		},
+		ResourceEntry
+	>({
+		baseQuery,
+		countColumn: 'id',
+		applySelect: (q) =>
+			q
+				.select(
+					'url',
+					'status',
+					'contentType',
+					'contentLength',
+					'isExternal',
+					'compress',
+					'cdn',
+				)
+				.orderBy('url'),
+		limit,
+		offset,
+		mapRow: (row) => ({
 			url: row.url,
 			status: row.status,
 			contentType: row.contentType,
@@ -68,12 +68,5 @@ export async function listResources(
 			compress: row.compress === 0 ? null : row.compress,
 			cdn: row.cdn === 0 ? null : row.cdn,
 		}),
-	);
-
-	return {
-		items,
-		total: Number(total),
-		offset,
-		limit,
-	};
+	});
 }

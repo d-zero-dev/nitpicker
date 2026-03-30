@@ -1,6 +1,8 @@
 import type { ImageEntry, ListImagesOptions, PaginatedImageList } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { paginateQuery } from './paginate-query.js';
+
 /**
  * Lists images from the archive with filtering for common quality issues:
  * missing alt text, missing dimensions, oversized images, and lazy-loading gaps.
@@ -42,31 +44,8 @@ export async function listImages(
 		baseQuery.where('images.src', 'like', options.urlPattern);
 	}
 
-	const countResult = (await baseQuery
-		.clone()
-		.clearSelect()
-		.count('images.id as total')) as { total: number }[];
-	// SQL count() always returns exactly one row
-	const total = countResult[0]?.total ?? 0;
-
-	const rows = await baseQuery
-		.clone()
-		.select(
-			'pages.url as pageUrl',
-			'images.src',
-			'images.alt',
-			'images.width',
-			'images.height',
-			'images.naturalWidth',
-			'images.naturalHeight',
-			'images.isLazy',
-		)
-		.orderBy('pages.url')
-		.limit(limit)
-		.offset(offset);
-
-	const items: ImageEntry[] = rows.map(
-		(row: {
+	return paginateQuery<
+		{
 			pageUrl: string;
 			src: string | null;
 			alt: string | null;
@@ -75,7 +54,27 @@ export async function listImages(
 			naturalWidth: number;
 			naturalHeight: number;
 			isLazy: number | null;
-		}) => ({
+		},
+		ImageEntry
+	>({
+		baseQuery,
+		countColumn: 'images.id',
+		applySelect: (q) =>
+			q
+				.select(
+					'pages.url as pageUrl',
+					'images.src',
+					'images.alt',
+					'images.width',
+					'images.height',
+					'images.naturalWidth',
+					'images.naturalHeight',
+					'images.isLazy',
+				)
+				.orderBy('pages.url'),
+		limit,
+		offset,
+		mapRow: (row) => ({
 			pageUrl: row.pageUrl,
 			src: row.src,
 			alt: row.alt,
@@ -85,12 +84,5 @@ export async function listImages(
 			naturalHeight: row.naturalHeight,
 			isLazy: !!row.isLazy,
 		}),
-	);
-
-	return {
-		items,
-		total: Number(total),
-		offset,
-		limit,
-	};
+	});
 }

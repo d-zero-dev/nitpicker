@@ -1,6 +1,8 @@
 import type { ListPagesOptions, PageListItem, PaginatedPageList } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { paginateQuery } from './paginate-query.js';
+
 /**
  * Lists pages from the archive with filtering, sorting, and pagination.
  * Applies filters at the SQL level for performance with large datasets.
@@ -53,53 +55,48 @@ export async function listPages(
 		baseQuery.where('url', 'like', `%${dir}%`);
 	}
 
-	const countResult = (await baseQuery.clone().count('id as total')) as {
-		total: number;
-	}[];
-
 	const sortBy = options.sortBy ?? 'url';
 	const sortOrder = options.sortOrder ?? 'asc';
-	const rows = (await baseQuery
-		.clone()
-		.select(
-			'url',
-			'title',
-			'status',
-			'contentType',
-			'isExternal',
-			'description',
-			'og_title',
-			'noindex',
-		)
-		.orderBy(sortBy, sortOrder)
-		.limit(limit)
-		.offset(offset)) as {
-		url: string;
-		title: string | null;
-		status: number | null;
-		contentType: string | null;
-		isExternal: 0 | 1;
-		description: string | null;
-		og_title: string | null;
-		noindex: number | null;
-	}[];
 
-	const items: PageListItem[] = rows.map((row) => ({
-		url: row.url,
-		title: row.title,
-		status: row.status,
-		contentType: row.contentType,
-		isExternal: !!row.isExternal,
-		hasDescription: row.description != null && row.description !== '',
-		hasOgTitle: row.og_title != null && row.og_title !== '',
-		noindex: !!row.noindex,
-	}));
-
-	return {
-		items,
-		// SQL count() always returns exactly one row
-		total: Number(countResult[0]?.total ?? 0),
-		offset,
+	return paginateQuery<
+		{
+			url: string;
+			title: string | null;
+			status: number | null;
+			contentType: string | null;
+			isExternal: 0 | 1;
+			description: string | null;
+			og_title: string | null;
+			noindex: number | null;
+		},
+		PageListItem
+	>({
+		baseQuery,
+		countColumn: 'id',
+		applySelect: (q) =>
+			q
+				.select(
+					'url',
+					'title',
+					'status',
+					'contentType',
+					'isExternal',
+					'description',
+					'og_title',
+					'noindex',
+				)
+				.orderBy(sortBy, sortOrder),
 		limit,
-	};
+		offset,
+		mapRow: (row) => ({
+			url: row.url,
+			title: row.title,
+			status: row.status,
+			contentType: row.contentType,
+			isExternal: !!row.isExternal,
+			hasDescription: row.description != null && row.description !== '',
+			hasOgTitle: row.og_title != null && row.og_title !== '',
+			noindex: !!row.noindex,
+		}),
+	});
 }
