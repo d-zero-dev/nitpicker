@@ -61,7 +61,10 @@ export const createImageList: CreateSheet = () => {
 					createCellData({ value: img.height }, defaultCellFormat),
 					// createCellData({ value: img.naturalWidth }, defaultCellFormat),
 					// createCellData({ value: img.naturalHeight }, defaultCellFormat),
-					createCellData({ value: img.loading === 'lazy' }, defaultCellFormat),
+					createCellData(
+						{ value: img.getAttribute('loading') === 'lazy' },
+						defaultCellFormat,
+					),
 					createCellData({ value: img.outerHTML }, defaultCellFormat),
 				];
 

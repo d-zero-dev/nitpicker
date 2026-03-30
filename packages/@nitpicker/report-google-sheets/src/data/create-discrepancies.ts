@@ -55,6 +55,7 @@ export const createDiscrepancies: CreateSheet = (reports) => {
 				}
 				for (const discrepancy of report.discrepancies) {
 					data.push([
+						createCellData({ value: report.name }, defaultCellFormat),
 						createCellData(
 							{ value: discrepancy.leftSourceUrl, note: discrepancy.leftSourceUrlNote },
 							defaultCellFormat,

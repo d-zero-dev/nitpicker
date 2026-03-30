@@ -11,16 +11,6 @@ import { nonNullFilter } from '../utils/non-null-filter.js';
 
 const log = pLog.extend('PageList');
 
-const indexTitles = new Map<string, string>();
-
-const indexRefs = new Map<
-	string,
-	{
-		basename: string | null;
-		referrers: Referrer[];
-	}[]
->();
-
 /**
  * Creates the "Page List" sheet configuration -- the primary sitemap-style report.
  *
@@ -49,6 +39,15 @@ const indexRefs = new Map<
  * @param reports - Analyze plugin reports to extract per-page data columns from
  */
 export const createPageList: CreateSheet = (reports) => {
+	const indexTitles = new Map<string, string>();
+
+	const indexRefs = new Map<
+		string,
+		{
+			basename: string | null;
+			referrers: Referrer[];
+		}[]
+	>();
 	const reportPageData = reports
 		.map((r) => (r.pageData ? { name: r.name, pageData: r.pageData } : null))
 		.filter(nonNullFilter);
