@@ -231,6 +231,56 @@ export interface DB_Image {
 }
 
 /**
+ * Represents a page that links to another page (an incoming link).
+ */
+export interface Referrer {
+	/** The URL of the referring page. */
+	url: string;
+	/** The URL through which the referral passes (may differ due to redirects). */
+	through: string;
+	/** The page ID corresponding to the through URL. */
+	throughId: number;
+	/** The URL fragment (hash) of the referring link, or null if not present. */
+	hash: string | null;
+	/** The text content of the referring anchor element. */
+	textContent: string;
+}
+
+/**
+ * Represents an outgoing link (anchor element) found on a page.
+ */
+export interface Anchor {
+	/** The resolved destination URL of the anchor. */
+	url: string;
+	/** The original href attribute value of the anchor element. */
+	href: string;
+	/** Whether the anchor points to an external domain. */
+	isExternal: boolean;
+	/** The title attribute of the anchor element, or null if not present. */
+	title: string | null;
+	/** The HTTP status code of the linked page, or null if not yet fetched. */
+	status: number | null;
+	/** The HTTP status text of the linked page, or null if not yet fetched. */
+	statusText: string | null;
+	/** The content type of the linked page, or null if not yet fetched. */
+	contentType: string | null;
+	/** The URL fragment (hash) portion of the link, or null if not present. */
+	hash: string | null;
+	/** The text content of the anchor element, or null if empty. */
+	textContent: string | null;
+}
+
+/**
+ * Represents a page that redirects to this page.
+ */
+export interface Redirect {
+	/** The URL of the redirect source page. */
+	url: string;
+	/** The database ID of the redirect source page. */
+	pageId: number;
+}
+
+/**
  * Raw database row representing a sub-resource (CSS, JS, image, etc.) in the `resources` table.
  */
 export interface DB_Resource {

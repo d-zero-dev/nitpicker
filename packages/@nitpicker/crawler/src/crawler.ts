@@ -16,7 +16,7 @@ export { globalLog as log } from './utils/debug.js';
 
 // Archive
 export { ArchiveAccessor } from './archive/archive-accessor.js';
-export type { Redirect, Referrer, Anchor, StaticPageData } from './archive/page.js';
+export type { StaticPageData } from './archive/page.js';
 export { default as Page } from './archive/page.js';
 export { default as ArchiveResource } from './archive/resource.js';
 export * from './archive/types.js';

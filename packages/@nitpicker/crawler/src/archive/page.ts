@@ -1,5 +1,13 @@
 import type { ArchiveAccessor } from './archive-accessor.js';
-import type { DB_Anchor, DB_Page, DB_Redirect, DB_Referrer } from './types.js';
+import type {
+	Anchor,
+	Redirect,
+	Referrer,
+	DB_Anchor,
+	DB_Page,
+	DB_Redirect,
+	DB_Referrer,
+} from './types.js';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 
@@ -368,53 +376,3 @@ type PromiseType<T> = T extends PromiseLike<infer U> ? U : T;
  * The static (serialized) representation of a Page, as returned by {@link Page.toJSON}.
  */
 export type StaticPageData = PromiseType<ReturnType<Page['toJSON']>>;
-
-/**
- * Represents a page that links to another page (an incoming link).
- */
-export interface Referrer {
-	/** The URL of the referring page. */
-	url: string;
-	/** The URL through which the referral passes (may differ due to redirects). */
-	through: string;
-	/** The page ID corresponding to the through URL. */
-	throughId: number;
-	/** The URL fragment (hash) of the referring link, or null if not present. */
-	hash: string | null;
-	/** The text content of the referring anchor element. */
-	textContent: string;
-}
-
-/**
- * Represents an outgoing link (anchor element) found on a page.
- */
-export interface Anchor {
-	/** The resolved destination URL of the anchor. */
-	url: string;
-	/** The original href attribute value of the anchor element. */
-	href: string;
-	/** Whether the anchor points to an external domain. */
-	isExternal: boolean;
-	/** The title attribute of the anchor element, or null if not present. */
-	title: string | null;
-	/** The HTTP status code of the linked page, or null if not yet fetched. */
-	status: number | null;
-	/** The HTTP status text of the linked page, or null if not yet fetched. */
-	statusText: string | null;
-	/** The content type of the linked page, or null if not yet fetched. */
-	contentType: string | null;
-	/** The URL fragment (hash) portion of the link, or null if not present. */
-	hash: string | null;
-	/** The text content of the anchor element, or null if empty. */
-	textContent: string | null;
-}
-
-/**
- * Represents a page that redirects to this page.
- */
-export interface Redirect {
-	/** The URL of the redirect source page. */
-	url: string;
-	/** The database ID of the redirect source page. */
-	pageId: number;
-}
