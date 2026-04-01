@@ -81,6 +81,7 @@ test/fixture/.__*
 *.zip
 *.stub
 ._nitpicker-*
+._*
 
 # test files
 __*
