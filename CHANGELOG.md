@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.6.4](https://github.com/d-zero-dev/nitpicker/compare/v0.6.3...v0.6.4) (2026-04-01)
+
+### Bug Fixes
+
+- **report-google-sheets:** add ServerError label to onLog countdown display ([752cec8](https://github.com/d-zero-dev/nitpicker/commit/752cec880f5af78f73111ddb52d4b583821cb4f9))
+- **report-google-sheets:** fix 3 bugs in data sheet generators and add unit tests ([bf2c08d](https://github.com/d-zero-dev/nitpicker/commit/bf2c08d746eba85bcb746fc11ec25703d5222118)), closes [#14](https://github.com/d-zero-dev/nitpicker/issues/14)
+
 ## [0.6.3](https://github.com/d-zero-dev/nitpicker/compare/v0.6.2...v0.6.3) (2026-03-30)
 
 ### Bug Fixes

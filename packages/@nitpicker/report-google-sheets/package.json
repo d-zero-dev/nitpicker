@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/report-google-sheets",
-	"version": "0.6.3",
+	"version": "0.6.4",
 	"description": "Nitpicker reporter that outputs crawl and analysis results to Google Sheets",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",

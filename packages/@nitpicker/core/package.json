@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/core",
-	"version": "0.6.3",
+	"version": "0.6.4",
 	"description": "Plugin-based page analysis engine for Nitpicker",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
