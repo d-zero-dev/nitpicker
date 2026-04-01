@@ -208,7 +208,9 @@ export async function report(params: ReportParams) {
 							? 'Too Many Requests (429)'
 							: message.message === 'UserRateLimitExceededError'
 								? 'Rate Limit Exceeded (403)'
-								: 'Connection Reset';
+								: message.message === 'ServerError'
+									? `Server Error (${message.code ?? '5xx'})`
+									: 'Connection Reset';
 					lanes.update(
 						RATE_LIMIT_LANE,
 						c.yellow(`${label}: waiting %countdown(${message.waitTime}, ${id}, s)%s`),
