@@ -50,6 +50,11 @@ type Options = {
 export default definePlugin((options: Options) => {
 	return {
 		label: 'Lighthouse: パフォーマンス監査',
+		// Each page launches its own headless Chrome via chrome-launcher, which
+		// commonly needs 300–500MB resident memory. Keep concurrency low so a
+		// machine running this plugin does not get hammered at the start of a
+		// large analyze run.
+		concurrency: 2,
 		headers: {
 			performance: 'Performance',
 			accessibility: 'Accessibility',

@@ -38,6 +38,11 @@ beforeEach(async () => {
 });
 
 describe('analyze-lighthouse plugin', () => {
+	it('declares concurrency: 2 so the WorkerPool throttles concurrent Chrome launches', () => {
+		const plugin = pluginFactory({}, '');
+		expect(plugin.concurrency).toBe(2);
+	});
+
 	it('calls chrome.kill() after lighthouse succeeds', async () => {
 		lighthouseMock.mockResolvedValue({
 			lhr: {
