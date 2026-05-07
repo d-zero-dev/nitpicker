@@ -87,9 +87,13 @@ docs: update README with new CLI options
 
 ### analyze プラグイン
 
-- `console.log` を使わない（`deal()` が進捗表示を担当）
+- `console.log` を使わない（`Lanes` が進捗表示を担当）
 - `definePlugin()` でプラグインを定義
 - `eachPage` / `eachUrl` コールバックでページ単位の分析を実装
+- **`concurrency` の宣言**: プラグインが返すオブジェクトに `concurrency: number` を含めると、`Nitpicker` が生成する専用 `WorkerPool` のサイズに使われる。省略時は `os.cpus().length`
+  - **重いプラグイン（Chrome 起動・大規模パース等）は小さく**: 例 `analyze-lighthouse` は `concurrency: 2`。Chrome 1 プロセス ≒ 300〜500MB あるため CPU コア数並列だと簡単に数十 GB 消費する
+  - **軽量な DOM 解析のみは省略可**: JSDOM 単体なら CPU コア数並列でほぼ問題ない。`analyze-main-contents` 等は宣言不要
+  - **判断基準**: 1 ページ処理時のメモリ消費 × 並列度 が 1〜2GB を超える見込みなら明示的に下げる
 
 ## 互換性ポリシー
 

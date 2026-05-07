@@ -441,8 +441,8 @@ sequenceDiagram
     participant CLI as npx @nitpicker/cli analyze
     participant NP as Nitpicker（@nitpicker/core）
     participant Archive as Archive
-    participant Pool as Bounded Promise Pool（limit: 50）
-    participant Worker as Worker Thread
+    participant Pool as WorkerPool（プラグインごと）
+    participant Worker as 長寿命 Worker Thread
 
     CLI->>NP: Nitpicker.open(filePath)
     NP->>Archive: Archive.open({ openPluginData: true })
@@ -456,12 +456,16 @@ sequenceDiagram
     NP->>Archive: getPagesWithRefs(100_000, callback)
 
     loop ページバッチごと
-        par eachPage トラック（Worker スレッド）
-            NP->>Pool: bounded Promise pool（limit: 50）
-            loop 各ページ
-                Pool->>Worker: runInWorker(html, url, plugins)
-                Note over Worker: JSDOM パース + プラグイン実行
-                Worker-->>Pool: ReportPages（テーブルデータ + violations）
+        par eachPage トラック（プラグインごとに専用プール）
+            loop 各プラグイン（順次）
+                NP->>Pool: new WorkerPool({ size: plugin.concurrency ?? cpus().length })
+                Note over Pool,Worker: N 個の Worker をプール起動時に 1 回だけ spawn
+                loop 各ページ（プールがキュー管理）
+                    Pool->>Worker: postMessage({ type: 'task', taskId, data })
+                    Note over Worker: JSDOM パース + プラグイン実行
+                    Worker-->>Pool: postMessage({ type: 'result', taskId, ... })
+                end
+                NP->>Pool: pool.terminate() → 全 Worker shutdown
             end
         and eachUrl トラック（メインスレッド）
             loop 各ページ × 各プラグイン
@@ -479,11 +483,14 @@ sequenceDiagram
 
 ### 並列処理の設計
 
-- **Worker スレッド**: DOM 重い解析（JSDOM + axe-core, markuplint 等）はワーカースレッドで隔離実行。プラグインのクラッシュがメインプロセスに波及しない
-- **Bounded Promise Pool (limit: 50)**: メモリ枯渇防止 + リアルタイム進捗表示のため `Promise.all` ではなく `Promise.race` ベースの bounded concurrency
+- **Worker プール per プラグイン**: プラグインごとに `WorkerPool` を 1 つ生成し、N 個の長寿命 Worker をプール起動時にまとめて spawn。各 Worker はメッセージループでタスクを次々受け取り、プラグイン実行が終わるまで再利用される。プラグイン切替時にプールを破棄して次プラグイン用に作り直す
+- **プラグインごとの並列度宣言**: `AnalyzePlugin.concurrency` で並列度を宣言できる（省略時は `os.cpus().length`）。Chrome 起動など重いプラグインは小さく設定（例: `analyze-lighthouse` は 2）
+- **HTML 蓄積防止**: メインスレッドの IIFE 並列度を `concurrency × 2` で bound し、ロードした HTML 文字列がプール待ちで積み上がらないようにする
 - **Cache**: URL 単位で結果をキャッシュ。部分失敗後の再実行時にスキップ可能
 
-> 実装詳細は `@nitpicker/core` の JSDoc を参照（`Nitpicker.analyze()`, `runInWorker()`, `page-analysis-worker.ts`）。
+> **設計判断の経緯**: 旧実装は 1 ページにつき 1 Worker を spawn する固定 50 並列の bounded Promise pool だった。750 ページ規模で同時 50 Worker boot による「boot wave」が繰り返し発生し、ピークメモリが 20GB 級まで膨らむ事故が発生したため、長寿命プールに置き換えた。詳細は `@nitpicker/core/src/worker/worker-pool.ts` の JSDoc を参照。
+
+> 実装詳細は `@nitpicker/core` の JSDoc を参照（`Nitpicker.analyze()`, `WorkerPool`, `worker.ts`, `page-analysis-worker.ts`）。
 
 ---
 

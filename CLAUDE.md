@@ -13,7 +13,7 @@ packages/
 ├── @nitpicker/
 │   ├── cli/                       # 統合 CLI (bin: nitpicker)
 │   ├── crawler/                   # クローラーエンジン（オーケストレーター + アーカイブ + ユーティリティ）
-│   ├── core/                      # 監査エンジン（Nitpicker クラス + bounded Promise pool による並列処理）
+│   ├── core/                      # 監査エンジン（Nitpicker クラス + プラグインごとの WorkerPool による並列処理）
 │   ├── types/                     # 監査型定義（Report, ConfigJSON）
 │   ├── query/                     # アーカイブクエリ API（SQL レベルのフィルタ・集計）
 │   ├── mcp-server/                # MCP サーバー（AI アシスタント連携、bin: nitpicker-mcp）
@@ -77,9 +77,12 @@ CrawlerOrchestrator.crawling(urls, options)
 Nitpicker.analyze(archivePath, plugins)
   → Archive.connect() → ArchiveAccessor
   → getPagesWithRefs() で全ページ取得
-  → bounded Promise pool（limit: 50）で並列分析
-    → 各 Page: runInWorker() で Worker スレッドでプラグイン実行
+  → プラグインを順次処理。プラグインごとに専用 WorkerPool を生成
+    → new WorkerPool({ size: plugin.concurrency ?? os.cpus().length })
+    → 長寿命 Worker N 個をプール起動時にまとめて spawn
+    → 各ページ: pool.run() でタスクをキュー投入 → 空き Worker が処理
     → Lanes（@d-zero/dealer）が進捗表示を担当（プラグイン内の console.log は不要）
+    → プラグイン終了時に pool.terminate()
   → レポートファイル書き出し
 ```
 
@@ -95,7 +98,7 @@ Nitpicker.analyze(archivePath, plugins)
 ### deal() / 並列処理の利用箇所
 
 - **crawler**: `deal()`（@d-zero/dealer）による URL スクレイピングの並列制御
-- **core（analyze）**: 独自の bounded Promise pool（limit: 50）による並列処理。`Lanes`（@d-zero/dealer）で進捗表示
+- **core（analyze）**: プラグインごとの `WorkerPool`（長寿命 Worker N 個 / プラグイン）。並列度はプラグインの `concurrency` 宣言、未指定時は `os.cpus().length`。`Lanes`（@d-zero/dealer）で進捗表示
 
 ## テスト
 
@@ -164,7 +167,7 @@ yarn lint                                          # lint + cspell
 
 - `import { describe, it, expect } from 'vitest'` を明示的に記述（Vitest 4 の要件）
 - `@d-zero/shared` はサブパスエクスポート（`@d-zero/shared/delay` 形式）
-- analyze プラグインでは `console.log` を使わない（deal() が進捗表示を担当）
+- analyze プラグインでは `console.log` を使わない（`Lanes` が進捗表示を担当）
 - **JSDoc 必須**: すべての関数、クラス、クラスメンバー変数、クラスメンバー関数（private 含む）、interface、interface プロパティ、type、type オブジェクトリテラルプロパティ、関数型、トップレベル定数に JSDoc を記述する
 - **interface 優先**: `type` はユニオン型・交差型・マップ型など `type` でしか定義できない場合のみ使用する
 - **公開 API はオブジェクトコンテキスト**: パラメータ3つ以上の関数は名前付きオブジェクトにまとめる
