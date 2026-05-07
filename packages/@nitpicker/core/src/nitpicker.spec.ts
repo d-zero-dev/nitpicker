@@ -18,8 +18,49 @@ vi.mock('@nitpicker/crawler', () => ({
 	},
 }));
 
-vi.mock('./worker/run-in-worker.js', () => ({
-	runInWorker: vi.fn(),
+/**
+ * Spy mock for `WorkerPool`. Every constructor call appends an entry to
+ * `poolInstances` so tests can assert how many pools were created, what size
+ * each was given, and whether `terminate()` was invoked.
+ */
+const mockedRunInWorker = vi.fn();
+const poolInstances: Array<{
+	size: number;
+	terminated: boolean;
+	runs: unknown[];
+}> = [];
+
+vi.mock('./worker/worker-pool.js', () => ({
+	/** Mock WorkerPool wrapping `mockedRunInWorker` for assertions. */
+	WorkerPool: class {
+		/** Index into `poolInstances` for this pool, used to record activity. */
+		readonly #idx: number;
+
+		/**
+		 * Records the constructor call so tests can verify per-plugin pool sizing.
+		 * @param opts - Pool options. Only `size` is captured.
+		 * @param opts.size
+		 */
+		constructor(opts: { size: number }) {
+			this.#idx = poolInstances.length;
+			poolInstances.push({ size: opts.size, terminated: false, runs: [] });
+		}
+
+		/**
+		 * Records the dispatched task and forwards to the shared `mockedRunInWorker`.
+		 * @param params - Task payload from the orchestrator.
+		 */
+		run(params: unknown) {
+			poolInstances[this.#idx]!.runs.push(params);
+			return mockedRunInWorker(params);
+		}
+
+		/** Marks the pool as terminated for assertions. */
+		terminate() {
+			poolInstances[this.#idx]!.terminated = true;
+			return Promise.resolve();
+		}
+	},
 }));
 
 vi.mock('@d-zero/shared/cache', () => {
@@ -44,10 +85,8 @@ vi.mock('@d-zero/shared/cache', () => {
 import { importModules } from './import-modules.js';
 import { loadPluginSettings } from './load-plugin-settings.js';
 import { Nitpicker } from './nitpicker.js';
-import { runInWorker } from './worker/run-in-worker.js';
 
 const mockedImportModules = vi.mocked(importModules);
-const mockedRunInWorker = vi.mocked(runInWorker);
 
 /**
  * Creates a mock URL object compatible with ExURL.
@@ -89,6 +128,7 @@ afterEach(() => {
 	vi.mocked(loadPluginSettings).mockReset();
 	mockedImportModules.mockReset();
 	mockedRunInWorker.mockReset();
+	poolInstances.length = 0;
 });
 
 describe('setPluginOverrides', () => {
@@ -469,7 +509,7 @@ describe('analyze', () => {
 		const { nitpicker, archive } = setupAnalyze(pages, [plugin], [mod]);
 		await nitpicker.analyze();
 
-		// runInWorker should only be called once (for the page with HTML)
+		// pool.run should only be called once (for the page with HTML)
 		expect(mockedRunInWorker).toHaveBeenCalledTimes(1);
 
 		const reportCall = archive.setData.mock.calls.find(
@@ -478,5 +518,85 @@ describe('analyze', () => {
 		const report = reportCall![1] as Report;
 		expect(report.pageData.data['https://example.com/has-html']).toBeDefined();
 		expect(report.pageData.data['https://example.com/no-html']).toBeUndefined();
+	});
+
+	it('creates one pool per plugin sized by the plugin concurrency value', async () => {
+		const pages = [createMockPage('https://example.com/')];
+		const pluginA = {
+			name: '@nitpicker/analyze-axe',
+			module: '@nitpicker/analyze-axe',
+			configFilePath: '',
+		};
+		const pluginB = {
+			name: '@nitpicker/analyze-lighthouse',
+			module: '@nitpicker/analyze-lighthouse',
+			configFilePath: '',
+		};
+		const modA: AnalyzePlugin = {
+			headers: { score: 'Score' },
+			eachPage: vi.fn(),
+		};
+		const modB: AnalyzePlugin = {
+			concurrency: 2,
+			headers: { perf: 'Performance' },
+			eachPage: vi.fn(),
+		};
+		mockedRunInWorker.mockResolvedValue(null);
+
+		const { nitpicker } = setupAnalyze(pages, [pluginA, pluginB], [modA, modB]);
+		await nitpicker.analyze();
+
+		expect(poolInstances).toHaveLength(2);
+		expect(poolInstances[1]!.size).toBe(2);
+		expect(poolInstances[0]!.size).toBeGreaterThanOrEqual(1);
+	});
+
+	it('falls back to a positive default size when the plugin omits concurrency', async () => {
+		const pages = [createMockPage('https://example.com/')];
+		const plugin = {
+			name: '@nitpicker/analyze-axe',
+			module: '@nitpicker/analyze-axe',
+			configFilePath: '',
+		};
+		const mod: AnalyzePlugin = {
+			headers: { score: 'Score' },
+			eachPage: vi.fn(),
+		};
+		mockedRunInWorker.mockResolvedValue(null);
+
+		const { nitpicker } = setupAnalyze(pages, [plugin], [mod]);
+		await nitpicker.analyze();
+
+		expect(poolInstances).toHaveLength(1);
+		expect(poolInstances[0]!.size).toBeGreaterThanOrEqual(1);
+	});
+
+	it('terminates each plugin pool even when worker tasks fail', async () => {
+		const pages = [createMockPage('https://example.com/')];
+		const pluginA = {
+			name: '@nitpicker/analyze-axe',
+			module: '@nitpicker/analyze-axe',
+			configFilePath: '',
+		};
+		const pluginB = {
+			name: '@nitpicker/analyze-markuplint',
+			module: '@nitpicker/analyze-markuplint',
+			configFilePath: '',
+		};
+		const modA: AnalyzePlugin = {
+			headers: { score: 'Score' },
+			eachPage: vi.fn(),
+		};
+		const modB: AnalyzePlugin = {
+			headers: { lint: 'Lint' },
+			eachPage: vi.fn(),
+		};
+		mockedRunInWorker.mockRejectedValue(new Error('worker boom'));
+
+		const { nitpicker } = setupAnalyze(pages, [pluginA, pluginB], [modA, modB]);
+		await nitpicker.analyze();
+
+		expect(poolInstances).toHaveLength(2);
+		expect(poolInstances.every((p) => p.terminated)).toBe(true);
 	});
 });

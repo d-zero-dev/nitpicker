@@ -21,7 +21,7 @@ import { importModules } from './import-modules.js';
 import { loadPluginSettings } from './load-plugin-settings.js';
 import { Table } from './table.js';
 import { UrlEventBus } from './url-event-bus.js';
-import { runInWorker } from './worker/run-in-worker.js';
+import { WorkerPool } from './worker/worker-pool.js';
 
 export { definePlugin } from './hooks/define-plugin.js';
 
@@ -29,14 +29,24 @@ const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
 
 /**
- * Resolved path to the compiled Worker entry point.
- * This file is loaded by `runInWorker()` in a `new Worker(...)` call.
+ * Resolved path to the compiled per-page analysis module.
+ * Each task posted to the pool carries this path so the worker can
+ * dynamically import it (cached after first import).
  * @see {@link ./page-analysis-worker.ts} for the source
  */
 const pageAnalysisWorkerPath = path.resolve(__dirname, 'page-analysis-worker.js');
 
-/** Maximum number of concurrent Worker threads per plugin. */
-const CONCURRENCY_LIMIT = 50;
+/**
+ * Resolved path to the compiled long-lived worker thread script.
+ * Used as the `workerPath` when constructing {@link WorkerPool} instances.
+ */
+const workerPath = path.resolve(__dirname, 'worker/worker.js');
+
+/**
+ * Default concurrency used when a plugin does not declare its own value.
+ * Tracks the number of CPU cores so that worker pools scale with the host.
+ */
+const DEFAULT_CONCURRENCY = Math.max(1, os.cpus().length);
 
 /**
  * Core orchestrator for running analyze plugins against a `.nitpicker` archive.
@@ -48,15 +58,17 @@ const CONCURRENCY_LIMIT = 50;
  *
  * ## Architecture decisions
  *
- * - **Worker threads for `eachPage`**: DOM-heavy analysis (JSDOM + axe-core,
- *   markuplint, etc.) runs in isolated Worker threads so that a crashing plugin
- *   cannot take down the main process and memory from JSDOM windows is reclaimed
- *   when the Worker exits. See {@link ./worker/run-in-worker.ts!runInWorker}.
+ * - **Worker pool per plugin**: Each plugin gets its own long-lived
+ *   {@link ./worker/worker-pool.ts!WorkerPool}, sized by either the plugin's
+ *   declared `concurrency` or {@link DEFAULT_CONCURRENCY} (CPU core count).
+ *   Workers are spawned once and reused across every page, so the V8 isolate
+ *   / JSDOM module / plugin module boot cost is paid only `concurrency`
+ *   times per plugin instead of once per page.
  *
- * - **Plugin-outer, page-inner loop**: Plugins are processed sequentially,
- *   and for each plugin, pages are processed in parallel (limit: 50) using
- *   a bounded Promise pool. This enables per-plugin progress tracking via
- *   {@link https://www.npmjs.com/package/@d-zero/dealer | Lanes}.
+ * - **Plugin-outer, page-inner loop**: Plugins are processed sequentially.
+ *   For each plugin, pages are submitted to that plugin's pool, which queues
+ *   them and dispatches to idle workers. This enables per-plugin progress
+ *   tracking via {@link https://www.npmjs.com/package/@d-zero/dealer | Lanes}.
  *
  * - **Cache layer**: Results are cached per `pluginName:url` using
  *   `@d-zero/shared/cache` so that re-running analysis after a partial failure
@@ -117,16 +129,17 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 	 * Runs all configured analyze plugins (or a filtered subset) against
 	 * every page in the archive.
 	 *
-	 * Plugins are processed **sequentially** (one at a time), while pages
-	 * within each plugin are processed in **parallel** (bounded to
-	 * {@link CONCURRENCY_LIMIT}). This architecture enables per-plugin
-	 * progress tracking via Lanes.
+	 * Plugins are processed **sequentially** (one at a time). For each plugin,
+	 * pages are processed in **parallel** through a dedicated long-lived
+	 * {@link ./worker/worker-pool.ts!WorkerPool} sized either by the plugin's
+	 * declared concurrency or by {@link DEFAULT_CONCURRENCY}. This architecture
+	 * enables per-plugin progress tracking via Lanes.
 	 *
 	 * The analysis proceeds in two phases:
 	 *
-	 * 1. **`eachPage` phase** - For each plugin with `eachPage`, spawns
-	 *    Worker threads via a bounded Promise pool to analyze all pages.
-	 *    Progress is displayed via Lanes if provided in options.
+	 * 1. **`eachPage` phase** - For each plugin with `eachPage`, dispatches
+	 *    page analysis tasks to the plugin's worker pool. Progress is
+	 *    displayed via Lanes if provided in options.
 	 *
 	 * 2. **`eachUrl` phase** - For all plugins with `eachUrl`, runs
 	 *    sequentially in the main thread. These are lightweight checks
@@ -211,7 +224,7 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 				const urlEmitter = new UrlEventBus();
 
 				// Phase 1: eachPage plugins (sequentially, pages in parallel)
-				for (const [pluginSeqIndex, { plugin }] of eachPagePlugins.entries()) {
+				for (const [pluginSeqIndex, { plugin, modIndex }] of eachPagePlugins.entries()) {
 					const laneId = pluginLaneIds.get(plugin.name)!;
 					const label = pluginLabels.get(plugin.name) ?? plugin.name;
 					let done = 0;
@@ -233,101 +246,118 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 
 					updateProgress();
 
-					// Bounded Promise pool (replaces deal())
-					const executing = new Set<Promise<void>>();
+					const pluginConcurrency = Math.max(
+						1,
+						analyzeMods[modIndex]?.concurrency ?? DEFAULT_CONCURRENCY,
+					);
+					const pool = new WorkerPool({
+						size: pluginConcurrency,
+						workerPath,
+					});
 					let pluginPageDataCount = 0;
 					let pluginErrorCount = 0;
 
-					for (const [pageIndex, page] of pages.entries()) {
-						const task = (async () => {
-							try {
-								const cacheKey = `${plugin.name}:${page.url.href}`;
-								const cached = await cache.load(cacheKey);
-								if (cached) {
-									const { pages: cachedPages, violations } = cached;
-									if (cachedPages) {
-										table.addData(cachedPages);
-										pluginPageDataCount += Object.keys(cachedPages).length;
+					try {
+						// Bound the number of in-flight IIFEs so HTML strings loaded
+						// via page.getHtml() do not pile up on the main thread while
+						// they wait for a worker. A small buffer above pool size keeps
+						// the pool continuously fed without staging too much HTML.
+						const inFlight = new Set<Promise<void>>();
+						const highWater = pluginConcurrency * 2;
+
+						for (const [pageIndex, page] of pages.entries()) {
+							const task = (async () => {
+								try {
+									const cacheKey = `${plugin.name}:${page.url.href}`;
+									const cached = await cache.load(cacheKey);
+									if (cached) {
+										const { pages: cachedPages, violations } = cached;
+										if (cachedPages) {
+											table.addData(cachedPages);
+											pluginPageDataCount += Object.keys(cachedPages).length;
+										}
+										if (violations) {
+											for (const v of violations) {
+												allViolations.push(v);
+											}
+											pluginViolationCount += violations.length;
+										}
+										done++;
+										updateProgress();
+										return;
 									}
-									if (violations) {
-										for (const v of violations) {
+
+									const html = await page.getHtml();
+									if (!html) {
+										done++;
+										updateProgress();
+										return;
+									}
+
+									const report = await pool.run<
+										PageAnalysisWorkerData,
+										ReportPage<string> | null
+									>({
+										filePath: pageAnalysisWorkerPath,
+										num: pageIndex,
+										total: pages.length,
+										emitter: urlEmitter,
+										initialData: {
+											plugin,
+											pages: {
+												html,
+												url: page.url,
+											},
+										},
+									});
+
+									const tablePages: Record<string, TableData<string>> = {};
+
+									if (report?.page) {
+										tablePages[page.url.href] = report.page;
+										table.addDataToUrl(page.url, report.page);
+										pluginPageDataCount++;
+									}
+
+									await cache.store(cacheKey, {
+										pages: Object.keys(tablePages).length > 0 ? tablePages : undefined,
+										violations: report?.violations,
+									});
+
+									if (report?.violations) {
+										for (const v of report.violations) {
 											allViolations.push(v);
 										}
-										pluginViolationCount += violations.length;
+										pluginViolationCount += report.violations.length;
 									}
+
 									done++;
 									updateProgress();
-									return;
-								}
-
-								const html = await page.getHtml();
-								if (!html) {
+								} catch (error) {
+									pluginErrorCount++;
 									done++;
 									updateProgress();
-									return;
+									const message = error instanceof Error ? error.message : String(error);
+									await this.emit('error', {
+										message: `[${plugin.name}] Failed to analyze ${page.url.href}: ${message}`,
+										error: error instanceof Error ? error : null,
+									});
 								}
-
-								const report = await runInWorker<
-									PageAnalysisWorkerData,
-									ReportPage<string> | null
-								>({
-									filePath: pageAnalysisWorkerPath,
-									num: pageIndex,
-									total: pages.length,
-									emitter: urlEmitter,
-									initialData: {
-										plugin,
-										pages: {
-											html,
-											url: page.url,
-										},
-									},
-								});
-
-								const tablePages: Record<string, TableData<string>> = {};
-
-								if (report?.page) {
-									tablePages[page.url.href] = report.page;
-									table.addDataToUrl(page.url, report.page);
-									pluginPageDataCount++;
-								}
-
-								await cache.store(cacheKey, {
-									pages: Object.keys(tablePages).length > 0 ? tablePages : undefined,
-									violations: report?.violations,
-								});
-
-								if (report?.violations) {
-									for (const v of report.violations) {
-										allViolations.push(v);
-									}
-									pluginViolationCount += report.violations.length;
-								}
-
-								done++;
-								updateProgress();
-							} catch (error) {
-								pluginErrorCount++;
-								done++;
-								updateProgress();
-								const message = error instanceof Error ? error.message : String(error);
-								await this.emit('error', {
-									message: `[${plugin.name}] Failed to analyze ${page.url.href}: ${message}`,
-									error: error instanceof Error ? error : null,
-								});
+							})();
+							inFlight.add(task);
+							task.then(
+								() => inFlight.delete(task),
+								() => inFlight.delete(task),
+							);
+							if (inFlight.size >= highWater) {
+								await Promise.race(inFlight);
 							}
-						})();
-						executing.add(task);
-						task.then(
-							() => executing.delete(task),
-							() => executing.delete(task),
-						);
-						if (executing.size >= CONCURRENCY_LIMIT) {
-							await Promise.race(executing);
 						}
-					}
 
-					await Promise.all(executing);
+						await Promise.all(inFlight);
+					} finally {
+						await pool.terminate();
+					}
 
 					// Warn when plugin produced no page data at all
 					if (pluginPageDataCount === 0 && pages.length > 0) {

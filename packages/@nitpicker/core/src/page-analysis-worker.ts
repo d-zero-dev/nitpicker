@@ -2,17 +2,18 @@
  * Worker thread module for per-page single-plugin execution.
  *
  * This is the default export loaded by {@link ./worker/runner.ts!runner}
- * when analyzing a single page with a single plugin. It:
+ * for each task dispatched by the {@link ./worker/worker-pool.ts!WorkerPool}. It:
  *
  * 1. Dynamically imports the configured plugin via {@link importModules}
+ *    (cached after the first task on the same worker)
  * 2. If the plugin implements `eachPage`:
  *    - Creates a JSDOM instance from the raw HTML
  *    - Calls the plugin's `eachPage` hook with the DOM window
  *    - Closes the JSDOM window to free memory
  * 3. Returns the plugin result as {@link ReportPage} or `null`
  *
- * Each Worker invocation handles exactly one plugin, so the calling code
- * can track per-plugin progress independently.
+ * One invocation processes exactly one plugin × one page, even though
+ * the worker hosting this module handles many tasks over its lifetime.
  * @module
  */
 
@@ -45,10 +46,11 @@ const PROTECTED_GLOBALS = new Set([
 
 /**
  * Initial data payload for the page analysis worker.
- * Passed via `workerData` and consumed by the default export.
+ * Wrapped inside the `task` message dispatched by the {@link ./worker/worker-pool.ts!WorkerPool}
+ * and consumed by this module's default export.
  *
  * Uses `type` instead of `interface` because this type must satisfy the
- * `Record<string, unknown>` constraint required by the Worker data serialization.
+ * `Record<string, unknown>` constraint required by the Worker message serialization.
  */
 export type PageAnalysisWorkerData = {
 	/** Single analyze plugin to execute against the page. */

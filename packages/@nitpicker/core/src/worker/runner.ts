@@ -13,8 +13,8 @@ import type { UrlEventBus } from '../url-event-bus.js';
  * The `filePath` field is deleted from `data` before passing it to the
  * module function, so the module only receives its own domain-specific data.
  *
- * This function is called both from the Worker thread ({@link ./worker.ts})
- * and as a direct fallback when `useWorker` is `false` in {@link ./run-in-worker.ts}.
+ * This function is called from the Worker thread ({@link ./worker.ts}) for
+ * every task delivered by the {@link ./worker-pool.ts!WorkerPool}.
  * @template I - Shape of the caller's initial data (minus the worker infrastructure fields).
  * @template R - Return type of the plugin module's default export.
  * @param data - Combined worker data containing the module path and plugin-specific payload.

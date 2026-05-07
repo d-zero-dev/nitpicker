@@ -130,6 +130,18 @@ export interface AnalyzePlugin<T extends string = string> {
 	label?: string;
 
 	/**
+	 * Maximum number of pages this plugin processes in parallel.
+	 *
+	 * Each plugin is allocated its own {@link ../worker/worker-pool.ts!WorkerPool}
+	 * sized to this value. Heavy plugins (e.g. Lighthouse, which spawns a
+	 * full Chrome instance per page) should set a small number; lightweight
+	 * DOM-only plugins can leave it unset.
+	 *
+	 * When omitted, the orchestrator falls back to `os.cpus().length`.
+	 */
+	concurrency?: number;
+
+	/**
 	 * Column header definitions contributed by this plugin.
 	 * Keys are column identifiers (`T`), values are human-readable labels
 	 * shown in the report header row.
@@ -202,7 +214,7 @@ export interface ReportPage<T extends string> {
  * ran `eachPage` for a single page.
  * @template T - Column key union.
  * @see {@link ./page-analysis-worker.ts} for the Worker entry point that produces this
- * @see {@link ./worker/run-in-worker.ts!runInWorker} for the main-thread consumer
+ * @see {@link ./worker/worker-pool.ts!WorkerPool} for the main-thread consumer
  */
 export interface ReportPages<T extends string> {
 	/** Per-URL table data from all plugins. */

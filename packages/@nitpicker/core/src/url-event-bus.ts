@@ -22,12 +22,13 @@ export interface UrlEventBusEvent {
  *   UrlEventBus. The Worker thread entry point ({@link ./worker/worker.ts})
  *   listens for these and forwards them to the main thread via `parentPort.postMessage`.
  *
- * - **In the main thread**: {@link ./worker/run-in-worker.ts!runInWorker} creates its own
- *   UrlEventBus and re-emits `'url'` messages received from the Worker.
+ * - **In the main thread**: {@link ./worker/worker-pool.ts!WorkerPool} routes
+ *   `'url'` messages received from workers to the per-task UrlEventBus
+ *   supplied by the caller.
  *
- * This indirection allows the same plugin code to work both in Worker threads
- * and in direct execution mode (when `useWorker` is `false`).
- * @see {@link ./worker/worker.ts} for Worker-side forwarding
- * @see {@link ./worker/run-in-worker.ts!runInWorker} for main-thread re-emission
+ * This indirection lets plugin code work the same way regardless of which
+ * worker in the pool is currently processing a given page.
+ * @see {@link ./worker/worker.ts} for worker-side forwarding
+ * @see {@link ./worker/worker-pool.ts!WorkerPool} for main-thread routing
  */
 export class UrlEventBus extends EventEmitter<UrlEventBusEvent> {}

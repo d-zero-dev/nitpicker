@@ -1,28 +1,34 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Module-level mocks must be set up before importing the module under test.
-// worker.ts executes code at module scope, so each test uses vi.resetModules()
-// and dynamic import() to get a fresh execution.
+// worker.ts subscribes to parentPort.on('message') at module scope, so each
+// test uses vi.resetModules() and dynamic import() to get a fresh execution.
 
 const mockPostMessage = vi.fn();
-let mockWorkerData: Record<string, unknown> = {};
-let mockParentPort: { postMessage: typeof mockPostMessage } | null = {
+let messageHandler: ((message: unknown) => void) | null = null;
+
+/** Records a 'message' handler so tests can drive the worker by simulating messages. */
+const mockOn = vi.fn((event: string, handler: (message: unknown) => void) => {
+	if (event === 'message') {
+		messageHandler = handler;
+	}
+});
+
+let mockParentPort: { postMessage: typeof mockPostMessage; on: typeof mockOn } | null = {
 	postMessage: mockPostMessage,
+	on: mockOn,
 };
 
 vi.mock('node:worker_threads', () => ({
 	get parentPort() {
 		return mockParentPort;
 	},
-	get workerData() {
-		return mockWorkerData;
-	},
 }));
 
-const mockRunnerResult = vi.fn();
+const mockRunner = vi.fn();
 
 vi.mock('./runner.js', () => ({
-	runner: mockRunnerResult,
+	runner: mockRunner,
 }));
 
 const { MockUrlEventBus } = vi.hoisted(() => {
@@ -41,55 +47,73 @@ describe('worker', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		mockPostMessage.mockClear();
-		mockRunnerResult.mockReset();
-		mockParentPort = { postMessage: mockPostMessage };
-		mockWorkerData = { filePath: '/test/module.js', num: 1, total: 5, key: 'value' };
+		mockOn.mockClear();
+		mockRunner.mockReset();
+		messageHandler = null;
+		mockParentPort = { postMessage: mockPostMessage, on: mockOn };
 	});
 
-	it('posts finish message with result on successful runner execution', async () => {
-		mockRunnerResult.mockResolvedValue({ score: 100 });
+	it('processes a task message and posts a result', async () => {
+		mockRunner.mockResolvedValue({ score: 100 });
 
 		await import('./worker.js');
 
-		// Wait for async execution to complete
+		expect(messageHandler).not.toBeNull();
+		messageHandler!({
+			type: 'task',
+			taskId: 7,
+			data: { filePath: '/m.js', num: 0, total: 1 },
+		});
+
 		await vi.waitFor(() => {
 			expect(mockPostMessage).toHaveBeenCalledWith({
-				type: 'finish',
+				type: 'result',
+				taskId: 7,
 				result: { score: 100 },
 			});
 		});
 	});
 
-	it('posts finish message with error on runner failure', async () => {
-		mockRunnerResult.mockRejectedValue(new Error('Plugin crashed'));
+	it('reports runner failure as an error result without crashing the worker', async () => {
+		mockRunner.mockRejectedValue(new Error('Plugin crashed'));
 
 		await import('./worker.js');
 
+		messageHandler!({
+			type: 'task',
+			taskId: 1,
+			data: { filePath: '/m.js', num: 0, total: 1 },
+		});
+
 		await vi.waitFor(() => {
 			expect(mockPostMessage).toHaveBeenCalledWith({
-				type: 'finish',
+				type: 'result',
+				taskId: 1,
 				result: null,
 				error: 'Plugin crashed',
 			});
 		});
 	});
 
-	it('posts finish message with stringified error for non-Error throws', async () => {
-		mockRunnerResult.mockRejectedValue('string error');
+	it('stringifies non-Error throws', async () => {
+		mockRunner.mockRejectedValue('string error');
 
 		await import('./worker.js');
 
+		messageHandler!({ type: 'task', taskId: 2, data: {} });
+
 		await vi.waitFor(() => {
 			expect(mockPostMessage).toHaveBeenCalledWith({
-				type: 'finish',
+				type: 'result',
+				taskId: 2,
 				result: null,
 				error: 'string error',
 			});
 		});
 	});
 
-	it('forwards url events from emitter to parentPort', async () => {
-		mockRunnerResult.mockImplementation(
+	it('forwards url events tagged with the active taskId', async () => {
+		mockRunner.mockImplementation(
 			(_data: unknown, emitter: { emit: (event: string, url: string) => void }) => {
 				emitter.emit('url', 'https://discovered.example.com/');
 				return Promise.resolve(null);
@@ -98,25 +122,33 @@ describe('worker', () => {
 
 		await import('./worker.js');
 
+		messageHandler!({ type: 'task', taskId: 42, data: {} });
+
 		await vi.waitFor(() => {
 			expect(mockPostMessage).toHaveBeenCalledWith({
 				type: 'url',
+				taskId: 42,
 				url: 'https://discovered.example.com/',
 			});
 		});
 	});
 
-	it('passes workerData to runner', async () => {
-		mockWorkerData = { filePath: '/path/to/mod.js', num: 3, total: 8, extra: 'data' };
-		mockRunnerResult.mockResolvedValue(null);
+	it('passes task data through to runner', async () => {
+		mockRunner.mockResolvedValue(null);
 
 		await import('./worker.js');
 
-		await vi.waitFor(() => {
-			expect(mockRunnerResult).toHaveBeenCalledOnce();
+		messageHandler!({
+			type: 'task',
+			taskId: 5,
+			data: { filePath: '/path/to/mod.js', num: 3, total: 8, extra: 'data' },
 		});
 
-		const [data] = mockRunnerResult.mock.calls[0];
+		await vi.waitFor(() => {
+			expect(mockRunner).toHaveBeenCalledOnce();
+		});
+
+		const [data] = mockRunner.mock.calls[0];
 		expect(data).toEqual({
 			filePath: '/path/to/mod.js',
 			num: 3,
@@ -125,25 +157,38 @@ describe('worker', () => {
 		});
 	});
 
-	it('throws when parentPort is null during url emit', async () => {
-		mockParentPort = null;
-		mockRunnerResult.mockImplementation(
-			(_data: unknown, emitter: { emit: (event: string, url: string) => void }) => {
-				emitter.emit('url', 'https://example.com/');
-				return Promise.resolve(null);
-			},
-		);
+	it('exits the process on shutdown message after a microtask flush', async () => {
+		const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+			// no-op: test asserts via the spy rather than throwing here
+		}) as never);
 
-		await expect(import('./worker.js')).rejects.toThrow('Use in worker thread');
+		await import('./worker.js');
+
+		messageHandler!({ type: 'shutdown' });
+		// process.exit is deferred via setImmediate so any in-flight postMessage
+		// from the previous task can flush before the worker exits.
+		expect(exitSpy).not.toHaveBeenCalled();
+		await new Promise((resolve) => setImmediate(resolve));
+		expect(exitSpy).toHaveBeenCalledWith(0);
+
+		exitSpy.mockRestore();
 	});
 
-	it('throws when parentPort is null after successful runner execution', async () => {
-		mockRunnerResult.mockResolvedValue({ result: 'ok' });
-		mockParentPort = null;
+	it('ignores malformed messages without crashing', async () => {
+		mockRunner.mockResolvedValue(null);
 
-		// runner succeeds → try block hits `if (!parentPort) throw`
-		// → catch block also hits `if (!parentPort) throw`
-		// → unhandled rejection from module top-level await
+		await import('./worker.js');
+
+		messageHandler!(null);
+		messageHandler!('not an object');
+		messageHandler!({ type: 'unknown' });
+
+		expect(mockRunner).not.toHaveBeenCalled();
+		expect(mockPostMessage).not.toHaveBeenCalled();
+	});
+
+	it('throws at module load when parentPort is null', async () => {
+		mockParentPort = null;
 		await expect(import('./worker.js')).rejects.toThrow('Use in worker thread');
 	});
 });
