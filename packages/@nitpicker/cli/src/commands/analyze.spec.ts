@@ -374,4 +374,27 @@ describe('analyze command', () => {
 		expect(mockNitpicker.archive.close).toHaveBeenCalled();
 		expect(exitSpy).not.toHaveBeenCalled();
 	});
+
+	it('write() が失敗しても archive.close() が呼ばれる', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		const mockNitpicker = createMockNitpicker();
+		mockNitpicker.write.mockRejectedValueOnce(new Error('write failed'));
+		vi.mocked(Nitpicker.open).mockResolvedValue(mockNitpicker as never);
+		vi.mocked(selectPluginsFn).mockResolvedValue();
+
+		await expect(
+			analyze(['test.nitpicker'], {
+				all: true,
+				plugin: undefined,
+				verbose: undefined,
+				searchKeywords: undefined,
+				searchScope: undefined,
+				mainContentSelector: undefined,
+				axeLang: undefined,
+				silent: undefined,
+			}),
+		).rejects.toThrow(ExitError);
+
+		expect(mockNitpicker.archive.close).toHaveBeenCalledOnce();
+	});
 });

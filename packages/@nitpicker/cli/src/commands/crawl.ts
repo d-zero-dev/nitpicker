@@ -216,11 +216,14 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 		},
 	);
 
-	await orchestrator.write();
+	try {
+		await orchestrator.write();
+	} finally {
+		await orchestrator.archive.close();
+		orchestrator.garbageCollect();
+	}
 
 	const archivePath = orchestrator.archive.filePath;
-
-	orchestrator.garbageCollect();
 
 	if (errStack.length > 0) {
 		const error = new CrawlAggregateError(errStack);
@@ -263,9 +266,12 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 		},
 	);
 
-	await orchestrator.write();
-
-	orchestrator.garbageCollect();
+	try {
+		await orchestrator.write();
+	} finally {
+		await orchestrator.archive.close();
+		orchestrator.garbageCollect();
+	}
 
 	if (errStack.length > 0) {
 		const error = new CrawlAggregateError(errStack);

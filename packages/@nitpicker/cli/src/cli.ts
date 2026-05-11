@@ -49,3 +49,9 @@ try {
 	formatCliError(error, true);
 	process.exit(ExitCode.Fatal);
 }
+
+// Defensive: force exit after work completes. External dependencies (notably
+// `@d-zero/beholder`'s DOM evaluation timeouts) leak unref'd-but-still-active
+// timers via `Promise.race(..., setTimeout(..., 10_000))`, which can keep the
+// event loop alive for up to 10 seconds after the CLI's work is done.
+process.exit(process.exitCode ?? ExitCode.Success);
