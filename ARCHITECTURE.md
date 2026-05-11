@@ -276,6 +276,16 @@ CLI シグナルハンドラ（SIGINT / SIGHUP 等）
 - `CrawlerOrchestrator` のコンストラクタで `archive` の `error` イベントを監視し、アーカイブエラー発生時にも `Crawler.abort()` を呼び出す
 - CLI の `killed()` ハンドラでは `abort()` 後に `garbageCollect()`（ゾンビ Chromium プロセスの終了）→ `process.exit()` を実行
 
+### CLI プロセス終了とリソース解放
+
+`commands/crawl.ts` の `startCrawl` / `resumeCrawl` では `try { write } finally { close + garbageCollect }` 構造で SQLite コネクションプール（Knex の `acquireTimeoutMillis: 600_000`）を `archive.close()` → `db.destroy()` で確実に解放する。これをサボると `.nitpicker` ファイルは生成されるがプロセスが終了しない（pool 内部の reaper timer が event loop を握る）。
+
+さらに `cli.ts` 末尾で `process.exit(process.exitCode ?? ExitCode.Success)` を明示的に呼ぶ。理由は外部依存の timer leak で、特に `@d-zero/beholder` の `dom-evaluation.js#getProp` が `Promise.race(_getProp, setTimeout(fallback, 10_000))` の負け側 timer を clear しないため、`getMeta` 1 回あたり最大 ~13 個の 10 秒 timer が積み上がり、自然終了を 10 秒以上ブロックする。
+
+自リポ内の同型パターンは `crawler/fetch-destination.ts` の HEAD タイムアウトのみ。ここは cancellable な `setTimeout`/`clearTimeout` に書き直し済み（`Promise.race` + `delay()` を使わないこと）。
+
+検証は `packages/test-server/src/__tests__/e2e/cli-process-exit.e2e.ts` が CLI を spawn して 60 秒以内に exit するかを継続的に保証する。
+
 ### 主要定数
 
 | 定数                 | 値  | 説明               |
@@ -706,6 +716,7 @@ packages/test-server/
 │       ├── exclude.e2e.ts
 │       ├── options.e2e.ts
 │       ├── archive-pipeline.e2e.ts
+│       ├── cli-process-exit.e2e.ts  # CLI を spawn してプロセス終了を保証
 │       ├── config-persistence.e2e.ts
 │       ├── error-status.e2e.ts
 │       ├── scope.e2e.ts
