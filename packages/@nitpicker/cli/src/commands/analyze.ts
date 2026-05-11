@@ -113,80 +113,83 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 		}
 		const nitpicker = await Nitpicker.open(absFilePath);
 
-		const pluginOverrides = buildPluginOverrides(flags);
-		if (Object.keys(pluginOverrides).length > 0) {
-			nitpicker.setPluginOverrides(pluginOverrides);
-		}
+		try {
+			const pluginOverrides = buildPluginOverrides(flags);
+			if (Object.keys(pluginOverrides).length > 0) {
+				nitpicker.setPluginOverrides(pluginOverrides);
+			}
 
-		const config = await nitpicker.getConfig();
-		const plugins = config.analyze || [];
+			const config = await nitpicker.getConfig();
+			const plugins = config.analyze || [];
 
-		if (plugins.length === 0) {
-			throw new Error(
-				'No analyze plugins found. Install @nitpicker/analyze-* packages or configure them in .nitpickerrc.',
-			);
-		}
-
-		const pluginFlags = flags.plugin ?? [];
-
-		const filter = await selectPlugins({
-			all: flags.all ?? false,
-			pluginFlags,
-			plugins,
-			isTTY: !!isTTY,
-			async promptPlugins() {
-				const labels = await readPluginLabels(plugins);
-				const choices = plugins.map((plugin) => ({
-					name: plugin.name,
-					message: labels.get(plugin.name) || plugin.name,
-				}));
-				const res = await prompt<{ filter: string[] }>([
-					{
-						message: 'What do you analyze?',
-						name: 'filter',
-						type: 'multiselect',
-						choices,
-					},
-				]);
-				return res.filter;
-			},
-		});
-
-		// Warn about unknown plugin names specified via --plugin
-		if (pluginFlags.length > 0 && filter) {
-			const matched = new Set(filter);
-			const unknownPlugins = pluginFlags.filter((name) => !matched.has(name));
-			if (unknownPlugins.length > 0) {
-				const availableNames = plugins.map((p) => p.name).join(', ');
-				// eslint-disable-next-line no-console
-				console.error(
-					`Unknown plugin(s): ${unknownPlugins.join(', ')}\nAvailable plugins: ${availableNames}`,
+			if (plugins.length === 0) {
+				throw new Error(
+					'No analyze plugins found. Install @nitpicker/analyze-* packages or configure them in .nitpickerrc.',
 				);
 			}
-			if (filter.length === 0) {
-				throw new Error('No valid plugins to run.');
+
+			const pluginFlags = flags.plugin ?? [];
+
+			const filter = await selectPlugins({
+				all: flags.all ?? false,
+				pluginFlags,
+				plugins,
+				isTTY: !!isTTY,
+				async promptPlugins() {
+					const labels = await readPluginLabels(plugins);
+					const choices = plugins.map((plugin) => ({
+						name: plugin.name,
+						message: labels.get(plugin.name) || plugin.name,
+					}));
+					const res = await prompt<{ filter: string[] }>([
+						{
+							message: 'What do you analyze?',
+							name: 'filter',
+							type: 'multiselect',
+							choices,
+						},
+					]);
+					return res.filter;
+				},
+			});
+
+			// Warn about unknown plugin names specified via --plugin
+			if (pluginFlags.length > 0 && filter) {
+				const matched = new Set(filter);
+				const unknownPlugins = pluginFlags.filter((name) => !matched.has(name));
+				if (unknownPlugins.length > 0) {
+					const availableNames = plugins.map((p) => p.name).join(', ');
+					// eslint-disable-next-line no-console
+					console.error(
+						`Unknown plugin(s): ${unknownPlugins.join(', ')}\nAvailable plugins: ${availableNames}`,
+					);
+				}
+				if (filter.length === 0) {
+					throw new Error('No valid plugins to run.');
+				}
 			}
-		}
 
-		const siteUrl = (await nitpicker.archive.getUrl()) || '<Unknown URL>';
+			const siteUrl = (await nitpicker.archive.getUrl()) || '<Unknown URL>';
 
-		if (!silent) {
-			log(
-				nitpicker,
-				[`🥢 ${siteUrl} (${filePath})`, `  📤 Read file: ${absFilePath}`],
-				verbose,
-			);
-		}
+			if (!silent) {
+				log(
+					nitpicker,
+					[`🥢 ${siteUrl} (${filePath})`, `  📤 Read file: ${absFilePath}`],
+					verbose,
+				);
+			}
 
-		const lanes = silent ? undefined : new Lanes({ verbose, indent: '  ' });
-		try {
-			await nitpicker.analyze(filter, { lanes, verbose });
+			const lanes = silent ? undefined : new Lanes({ verbose, indent: '  ' });
+			try {
+				await nitpicker.analyze(filter, { lanes, verbose });
+			} finally {
+				lanes?.close();
+			}
+
+			await nitpicker.write();
 		} finally {
-			lanes?.close();
+			await nitpicker.archive.close();
 		}
-
-		await nitpicker.write();
-		await nitpicker.archive.close();
 	} catch (error) {
 		formatCliError(error, verbose);
 		process.exit(1);

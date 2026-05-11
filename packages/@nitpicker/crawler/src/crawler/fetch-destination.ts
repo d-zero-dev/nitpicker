@@ -62,15 +62,20 @@ export async function fetchDestination(
 
 	const effectiveMethod = titleBytesLimit == null ? method : 'GET';
 
+	// Race the fetch against a 10-second timeout. The losing timer is cleared
+	// explicitly so it never keeps the event loop alive after the race settles
+	// (a plain `delay()` in `Promise.race` would leak the timer until it fires).
+	let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 	const result = await Promise.race([
 		_fetchHead(url, isExternal, effectiveMethod, titleBytesLimit, userAgent).catch(
 			(error: unknown) => (error instanceof Error ? error : new Error(String(error))),
 		),
-		(async () => {
-			await delay(10 * 1000);
-			return new NetTimeoutError(url.href);
-		})(),
-	]);
+		new Promise<NetTimeoutError>((resolve) => {
+			timeoutHandle = setTimeout(() => resolve(new NetTimeoutError(url.href)), 10 * 1000);
+		}),
+	]).finally(() => {
+		if (timeoutHandle) clearTimeout(timeoutHandle);
+	});
 
 	destinationCache.set(cacheKey, result);
 	if (result instanceof Error) {

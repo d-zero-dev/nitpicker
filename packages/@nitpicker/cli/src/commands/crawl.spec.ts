@@ -87,7 +87,7 @@ function setupFakeOrchestrator() {
 	const fakeOrchestrator = {
 		write: vi.fn().mockResolvedValue(),
 		garbageCollect: vi.fn(),
-		archive: { filePath: '/tmp/test.nitpicker' },
+		archive: { filePath: '/tmp/test.nitpicker', close: vi.fn().mockResolvedValue() },
 	} as unknown as OrchestratorType;
 
 	mockCrawling.mockImplementation((_urls, _opts, cb) => {
@@ -208,6 +208,49 @@ describe('startCrawl', () => {
 			CrawlAggregateError,
 		);
 	});
+
+	it('完了後に archive.close() を呼ぶ', async () => {
+		const fake = setupFakeOrchestrator();
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(['https://example.com'], createFlags());
+
+		expect(fake.archive.close).toHaveBeenCalledOnce();
+	});
+
+	it('write → close → garbageCollect の順で呼び出される', async () => {
+		const fake = setupFakeOrchestrator();
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(['https://example.com'], createFlags());
+
+		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
+		const closeMock = fake.archive.close as unknown as ReturnType<typeof vi.fn>;
+		const gcMock = fake.garbageCollect as unknown as ReturnType<typeof vi.fn>;
+
+		const writeOrder = writeMock.mock.invocationCallOrder[0];
+		const closeOrder = closeMock.mock.invocationCallOrder[0];
+		const gcOrder = gcMock.mock.invocationCallOrder[0];
+
+		expect(writeOrder).toBeDefined();
+		expect(closeOrder).toBeDefined();
+		expect(gcOrder).toBeDefined();
+		expect(writeOrder!).toBeLessThan(closeOrder!);
+		expect(closeOrder!).toBeLessThan(gcOrder!);
+	});
+
+	it('write() が失敗しても archive.close() と garbageCollect() が呼ばれる', async () => {
+		const fake = setupFakeOrchestrator();
+		(fake.write as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+			new Error('write failed'),
+		);
+		const { startCrawl } = await import('./crawl.js');
+
+		await expect(startCrawl(['https://example.com'], createFlags())).rejects.toThrow(
+			'write failed',
+		);
+
+		expect(fake.archive.close).toHaveBeenCalledOnce();
+		expect(fake.garbageCollect).toHaveBeenCalledOnce();
+	});
 });
 
 describe('crawl', () => {
@@ -303,6 +346,29 @@ describe('crawl', () => {
 		).rejects.toThrow(
 			'--output flag is not supported with --resume. The archive path is determined by the stub file.',
 		);
+	});
+
+	it('--resume 経由でも完了後に archive.close() を呼ぶ', async () => {
+		const fake = setupFakeOrchestrator();
+		const { crawl } = await import('./crawl.js');
+		await crawl([], createFlags({ resume: '/absolute/stub' }));
+
+		expect(fake.archive.close).toHaveBeenCalledOnce();
+	});
+
+	it('--resume 経由で write() が失敗しても archive.close() が呼ばれる', async () => {
+		const fake = setupFakeOrchestrator();
+		(fake.write as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+			new Error('write failed'),
+		);
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl([], createFlags({ resume: '/absolute/stub' }))).rejects.toThrow(
+			'write failed',
+		);
+
+		expect(fake.archive.close).toHaveBeenCalledOnce();
+		expect(fake.garbageCollect).toHaveBeenCalledOnce();
 	});
 
 	it('--verbose フラグで verbosely() を呼び出す', async () => {
