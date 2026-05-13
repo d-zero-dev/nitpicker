@@ -53,7 +53,10 @@ npx @nitpicker/cli analyze <file> [options]             # .nitpicker ファイ�
 npx @nitpicker/cli report <file> [options]              # .nitpicker ファイルから Google Sheets レポートを生成
 npx @nitpicker/cli pipeline <URL> [options]             # crawl → analyze → report を直列実行
 npx @nitpicker/cli query <file> <sub-command> [options] # .nitpicker ファイルに対してクエリを実行し JSON 出力
+npx @nitpicker/cli -v | --version                       # `@nitpicker/cli` のバージョンを出力して exit 0
 ```
+
+> **Note**: `-v` / `--version` は `argv[0]` の位置でのみ判定する。`crawl -v` のようにサブコマンドの後ろに置いた場合はそのコマンドのフラグとして解釈される（`@d-zero/roar` の仕様）。
 
 ## 主要アーキテクチャ
 

@@ -15,6 +15,15 @@ Web サイト全体のデータを取得するツール。クロール、リン�
 
 ## 使い方
 
+### バージョン確認
+
+```sh
+$ npx @nitpicker/cli -v
+$ npx @nitpicker/cli --version
+```
+
+`@nitpicker/cli` パッケージのバージョンを出力して終了する（exit code 0）。バグレポートや CI ログにバージョンを残す際に使用する。
+
 ### Crawl
 
 Web サイトをクロールして `.nitpicker` アーカイブファイルを生成する。
