@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.7.0](https://github.com/d-zero-dev/nitpicker/compare/v0.6.5-alpha.0...v0.7.0) (2026-05-13)
+
+### Bug Fixes
+
+- **cli:** ensure archive close and explicit exit after work completes ([6b736b2](https://github.com/d-zero-dev/nitpicker/commit/6b736b2edf7117956aac094c00ce364a19f5fc38))
+
+### Features
+
+- **cli:** add -v / --version flag for version output ([ad9eef4](https://github.com/d-zero-dev/nitpicker/commit/ad9eef44e95083332e8ae5da5d411ad40f70631b))
+
 ## [0.6.5-alpha.0](https://github.com/d-zero-dev/nitpicker/compare/v0.6.4...v0.6.5-alpha.0) (2026-04-08)
 
 **Note:** Version bump only for package @nitpicker/cli

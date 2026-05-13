@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.7.0](https://github.com/d-zero-dev/nitpicker/compare/v0.6.5-alpha.0...v0.7.0) (2026-05-13)
+
+### Bug Fixes
+
+- **cli:** ensure archive close and explicit exit after work completes ([6b736b2](https://github.com/d-zero-dev/nitpicker/commit/6b736b2edf7117956aac094c00ce364a19f5fc38))
+- **crawler:** cancel HEAD request timeout to prevent timer leak ([10f1b7a](https://github.com/d-zero-dev/nitpicker/commit/10f1b7a370943f953aaf7b9c7dec8153864134de))
+- **github:** add dist-tag detection to publish workflow ([a4cf524](https://github.com/d-zero-dev/nitpicker/commit/a4cf5249a4382b6242bffd18dc9e8b4f2404fc43))
+
+### Features
+
+- **analyze-lighthouse:** cap pool concurrency to 2 to throttle chrome launches ([86943e2](https://github.com/d-zero-dev/nitpicker/commit/86943e2a29aecd28e2e47dfe8ce1dcad26acdfd8))
+- **cli:** add -v / --version flag for version output ([ad9eef4](https://github.com/d-zero-dev/nitpicker/commit/ad9eef44e95083332e8ae5da5d411ad40f70631b))
+- **repo:** add 7-day cooldown period for npm package releases ([cf49097](https://github.com/d-zero-dev/nitpicker/commit/cf49097d1d7453b7f2b80c4a6c1eb515075f05c0))
+
 ## [0.6.5-alpha.0](https://github.com/d-zero-dev/nitpicker/compare/v0.6.4...v0.6.5-alpha.0) (2026-04-08)
 
 **Note:** Version bump only for package nitpicker-monorepo

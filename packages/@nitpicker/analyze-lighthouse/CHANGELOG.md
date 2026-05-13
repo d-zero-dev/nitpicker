@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.7.0](https://github.com/d-zero-dev/nitpicker/compare/v0.6.5-alpha.0...v0.7.0) (2026-05-13)
+
+### Features
+
+- **analyze-lighthouse:** cap pool concurrency to 2 to throttle chrome launches ([86943e2](https://github.com/d-zero-dev/nitpicker/commit/86943e2a29aecd28e2e47dfe8ce1dcad26acdfd8))
+
 ## [0.6.5-alpha.0](https://github.com/d-zero-dev/nitpicker/compare/v0.6.4...v0.6.5-alpha.0) (2026-04-08)
 
 **Note:** Version bump only for package @nitpicker/analyze-lighthouse
