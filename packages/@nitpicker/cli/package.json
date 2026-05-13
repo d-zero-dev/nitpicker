@@ -33,7 +33,7 @@
 	"dependencies": {
 		"@d-zero/dealer": "1.7.0",
 		"@d-zero/readtext": "1.1.19",
-		"@d-zero/roar": "2.0.0",
+		"@d-zero/roar": "2.1.0",
 		"@d-zero/shared": "0.20.1",
 		"@nitpicker/analyze-axe": "0.6.5-alpha.0",
 		"@nitpicker/analyze-lighthouse": "0.6.5-alpha.0",

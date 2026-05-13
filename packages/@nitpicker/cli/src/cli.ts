@@ -1,5 +1,7 @@
 import { parseCli } from '@d-zero/roar';
 
+import pkg from '../package.json' with { type: 'json' };
+
 import { analyze, commandDef as analyzeDef } from './commands/analyze.js';
 import { crawl, commandDef as crawlDef } from './commands/crawl.js';
 import { pipeline, commandDef as pipelineDef } from './commands/pipeline.js';
@@ -12,6 +14,7 @@ process.title = 'Nitpicker CLI';
 
 const cli = parseCli({
 	name: 'nitpicker',
+	version: pkg.version,
 	commands: {
 		crawl: crawlDef,
 		analyze: analyzeDef,
