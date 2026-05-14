@@ -236,11 +236,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					.catch((error) => reject(error));
 			});
 
-			if (this.#fromList) {
-				this.#crawler.startMultiple(list);
-			} else {
-				this.#crawler.start(root);
-			}
+			this.#crawler.start(list, { recursive: !this.#fromList });
 		});
 	}
 

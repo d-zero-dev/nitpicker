@@ -161,22 +161,44 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	}
 
 	/**
-	 * Start crawling from a single root URL.
+	 * Start crawling from one or more root URLs.
 	 *
-	 * Adds the root URL to the scope (if not already present) and the link list,
-	 * then begins the deal-based concurrent crawl. Discovered child pages are
-	 * automatically added to the queue when recursive mode is enabled.
-	 * @param url - The root URL to begin crawling from.
+	 * Each URL is registered as a scope entry (if not already present) and added
+	 * to the link list. When `opts.recursive` is `false`, recursion is disabled
+	 * and the crawler behaves like the former `startMultiple` (list mode);
+	 * otherwise discovered child pages within the scope are followed.
+	 *
+	 * When resume state is present, the resumed pending URLs are merged with the
+	 * newly-provided roots; the dealer's `seen` set deduplicates by
+	 * protocol-agnostic key so a URL appearing in both sources is processed once.
+	 * @param urls - The list of root URLs to begin crawling from. Must be non-empty.
+	 * @param opts - Optional overrides; currently only `recursive` is honoured.
+	 * @param opts.recursive - When `false`, disables recursive discovery and forces list-mode.
+	 *   Defaults to the constructor option's `recursive` value.
+	 * @throws {Error} If the URL list is empty.
 	 */
-	start(url: ExURL) {
-		const existing = this.#scope.get(url.hostname) || [];
-		if (!existing.some((u) => u.href === url.href)) {
-			this.#scope.set(url.hostname, [...existing, url]);
+	start(urls: ExURL[], opts?: { recursive?: boolean }) {
+		const root = urls[0];
+		if (!root) {
+			throw new Error('urls is empty');
 		}
-		this.#linkList.add(url);
+
+		for (const url of urls) {
+			const existing = this.#scope.get(url.hostname) || [];
+			if (!existing.some((u) => u.href === url.href)) {
+				this.#scope.set(url.hostname, [...existing, url]);
+			}
+			this.#linkList.add(url);
+		}
+
+		const recursive = opts?.recursive ?? this.#options.recursive;
+		if (!recursive) {
+			this.#options.recursive = false;
+			this.#options.fromList = true;
+		}
 
 		const isResuming = this.#resumedScraped.length > 0;
-		const initialUrls = isResuming ? this.#resumedPending : [url];
+		const initialUrls = isResuming ? [...this.#resumedPending, ...urls] : urls;
 		const resumeOffset = this.#resumedScraped.length;
 
 		if (initialUrls.length === 0) {
@@ -187,43 +209,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 		void this.#runDeal(initialUrls, resumeOffset).catch((error) => {
 			crawlerLog('runDeal error: %O', error);
-			this.#emitDealErrors(error, url.href);
-			void this.emit('crawlEnd', {});
-		});
-	}
-
-	/**
-	 * Start crawling a pre-defined list of URLs in non-recursive mode.
-	 *
-	 * Each URL in the list is added to the scope and the link list. Recursive
-	 * crawling is disabled; only the provided URLs will be scraped.
-	 * @param pageList - The list of URLs to crawl. Must contain at least one URL.
-	 * @throws {Error} If the page list is empty.
-	 */
-	startMultiple(pageList: ExURL[]) {
-		if (!pageList[0]) {
-			throw new Error('pageList is empty');
-		}
-
-		const scopeMap = new Map<string, Set<string>>();
-		for (const pageUrl of pageList) {
-			const existing = this.#scope.get(pageUrl.hostname) || [];
-			const existingHrefs =
-				scopeMap.get(pageUrl.hostname) || new Set(existing.map((u) => u.href));
-
-			if (!existingHrefs.has(pageUrl.href)) {
-				this.#scope.set(pageUrl.hostname, [...existing, pageUrl]);
-				existingHrefs.add(pageUrl.href);
-			}
-
-			scopeMap.set(pageUrl.hostname, existingHrefs);
-			this.#linkList.add(pageUrl);
-		}
-		this.#options.recursive = false;
-		this.#options.fromList = true;
-		void this.#runDeal(pageList).catch((error) => {
-			crawlerLog('runDeal error: %O', error);
-			this.#emitDealErrors(error, pageList[0]!.href);
+			this.#emitDealErrors(error, root.href);
 			void this.emit('crawlEnd', {});
 		});
 	}
