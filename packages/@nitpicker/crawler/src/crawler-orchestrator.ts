@@ -322,17 +322,24 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		const disableQueries = options?.disableQueries || false;
 		const defaultUserAgent = `Nitpicker/${pkg.version}`;
 		const archive = await Archive.create({ filePath, cwd, disableQueries });
+
+		// Multi-root: every positional URL is both a starting point and a scope
+		// entry. The user's explicit --scope flag is merged into the same set so
+		// callers can still widen the crawl beyond the roots when they need to.
+		const rootHrefs = list.map((u) => u.withoutHash);
+		const mergedScope = [...new Set([...rootHrefs, ...normalizeToArray(options?.scope)])];
+
 		await archive.setConfig({
 			version: pkg.version,
 			name: fileName,
-			baseUrl: urlParsed.withoutHash,
-			roots: [urlParsed.withoutHash],
+			baseUrl: rootHrefs[0]!,
+			roots: rootHrefs,
 			recursive: options?.recursive ?? true,
 			fetchExternal: options?.fetchExternal ?? true,
 			image: options?.image ?? true,
 			interval: options?.interval || 0,
 			parallels: options?.parallels || 0,
-			scope: options?.scope ?? [],
+			scope: mergedScope,
 			excludes: normalizeToArray(options?.excludes),
 			excludeKeywords: normalizeToArray(options?.excludeKeywords),
 			excludeUrls: [
@@ -346,7 +353,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			userAgent: options?.userAgent || defaultUserAgent,
 			ignoreRobots: options?.ignoreRobots ?? false,
 		});
-		const orchestrator = new CrawlerOrchestrator(archive, options);
+		const orchestrator = new CrawlerOrchestrator(archive, {
+			...options,
+			scope: mergedScope,
+		});
 		const config = await archive.getConfig();
 		if (initializedCallback) {
 			await initializedCallback(orchestrator, config);
