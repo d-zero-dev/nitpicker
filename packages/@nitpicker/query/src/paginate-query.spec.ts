@@ -1,18 +1,43 @@
-import knex from 'knex';
-import { describe, it, expect } from 'vitest';
+import path from 'node:path';
+
+import { Archive } from '@nitpicker/crawler';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { paginateQuery } from './paginate-query.js';
 
+const __filename = new URL(import.meta.url).pathname;
+const __dirname = path.dirname(__filename);
+const workingDir = path.resolve(__dirname, '__test_fixtures_paginate_query__');
+const archiveFilePath = path.resolve(workingDir, 'paginate-query-test.nitpicker');
+
 describe('paginateQuery', () => {
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+	});
+
+	afterEach(async () => {
+		const db = archive.getKnex();
+		await db.schema.dropTableIfExists('items');
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
 	/**
-	 * Creates an in-memory SQLite database with a test table.
+	 * Sets up a fresh `items` table on the shared archive's Knex instance.
+	 * Each test gets an isolated table because `afterEach` drops it.
 	 */
 	async function setupDb() {
-		const db = knex({
-			client: 'sqlite3',
-			connection: { filename: ':memory:' },
-			useNullAsDefault: true,
-		});
+		const db = archive.getKnex();
 		await db.schema.createTable('items', (t) => {
 			t.increments('id');
 			t.string('name');
@@ -44,8 +69,6 @@ describe('paginateQuery', () => {
 		expect(result.total).toBe(3);
 		expect(result.offset).toBe(0);
 		expect(result.limit).toBe(2);
-
-		await db.destroy();
 	});
 
 	it('applies offset correctly', async () => {
@@ -69,8 +92,6 @@ describe('paginateQuery', () => {
 		expect(result.items[0].name).toBe('b');
 		expect(result.total).toBe(3);
 		expect(result.offset).toBe(1);
-
-		await db.destroy();
 	});
 
 	it('returns empty items for zero results', async () => {
@@ -87,8 +108,6 @@ describe('paginateQuery', () => {
 
 		expect(result.items).toHaveLength(0);
 		expect(result.total).toBe(0);
-
-		await db.destroy();
 	});
 
 	it('returns empty items when offset exceeds total', async () => {
@@ -106,8 +125,6 @@ describe('paginateQuery', () => {
 
 		expect(result.items).toHaveLength(0);
 		expect(result.total).toBe(1);
-
-		await db.destroy();
 	});
 
 	it('works with filtered base query', async () => {
@@ -132,8 +149,6 @@ describe('paginateQuery', () => {
 		expect(result.items).toHaveLength(2);
 		expect(result.total).toBe(2);
 		expect(result.items[0].name).toBe('b');
-
-		await db.destroy();
 	});
 
 	it('maps rows using mapRow function', async () => {
@@ -153,7 +168,5 @@ describe('paginateQuery', () => {
 		});
 
 		expect(result.items[0]).toEqual({ label: 'test', doubled: 84 });
-
-		await db.destroy();
 	});
 });

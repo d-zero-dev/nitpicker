@@ -28,6 +28,7 @@ import { dbLog } from './debug.js';
 import { mkdir } from './filesystem/mkdir.js';
 import { getJSON } from './get-json.js';
 import { initSchema } from './init-schema.js';
+import { LibsqlDialect } from './libsql-dialect.js';
 import { limitedPageIds } from './limited-page-ids.js';
 import { redirectTable } from './redirect-table.js';
 
@@ -59,7 +60,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		switch (options.type) {
 			case 'sqlite3': {
 				this.#instance = knex({
-					client: options.type,
+					client: LibsqlDialect,
 					connection: {
 						filename: options.filename,
 					},

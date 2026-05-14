@@ -7,6 +7,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { Database } from './database.js';
 import { remove } from './filesystem/remove.js';
+import { LibsqlDialect } from './libsql-dialect.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -582,7 +583,7 @@ describe('getJSON (getConfig 経由)', () => {
 		// DB に不正な JSON を直接書き込む
 		const { default: knexLib } = await import('knex');
 		const rawDb = knexLib({
-			client: 'sqlite3',
+			client: LibsqlDialect,
 			connection: { filename: invalidJsonDbPath },
 			useNullAsDefault: true,
 		});
