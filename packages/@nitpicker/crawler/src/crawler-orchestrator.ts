@@ -330,6 +330,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			version: pkg.version,
 			name: fileName,
 			baseUrl: urlParsed.withoutHash,
+			roots: [urlParsed.withoutHash],
 			recursive: options?.recursive ?? true,
 			fetchExternal: options?.fetchExternal ?? true,
 			image: options?.image ?? true,

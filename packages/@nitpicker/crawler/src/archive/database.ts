@@ -10,6 +10,7 @@ import type {
 	PageFilter,
 } from './types.js';
 import type { PageData, Resource } from '../utils/types/types.js';
+import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 import type { RetryDecoratorOptions } from '@d-zero/shared/retry';
 import type { Knex } from 'knex';
 
@@ -21,6 +22,7 @@ import { pathComparator } from '@d-zero/shared/sort/path';
 import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-await-event-emitter';
 import knex from 'knex';
 
+import { findScopeEntry } from '../crawler/find-scope-entry.js';
 import { eachSplitted } from '../utils/array/each-splitted.js';
 import { ErrorEmitter } from '../utils/error/error-emitter.js';
 
@@ -30,6 +32,7 @@ import { getJSON } from './get-json.js';
 import { initSchema } from './init-schema.js';
 import { LibsqlDialect } from './libsql-dialect.js';
 import { limitedPageIds } from './limited-page-ids.js';
+import { migrateInfoRoots } from './migrate-info-roots.js';
 import { redirectTable } from './redirect-table.js';
 
 const retrySetting: RetryDecoratorOptions = {
@@ -168,12 +171,14 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		if (!config) {
 			throw new Error('No config');
 		}
+		const roots = getJSON<string[]>(config.roots, []);
 		const opt: Config = {
 			...config,
 			excludes: getJSON<string[]>(config.excludes, []),
 			excludeKeywords: getJSON<string[]>(config.excludeKeywords, []),
 			excludeUrls: getJSON<string[]>(config.excludeUrls, []),
 			scope: getJSON<string[]>(config.scope, []),
+			roots: roots.length > 0 ? roots : config.baseUrl ? [config.baseUrl] : [],
 			retry: config.retry ?? 3,
 		};
 		// @ts-expect-error
@@ -571,8 +576,80 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
+	 * Promote previously-external pages whose URL falls under any of the new scope
+	 * entries back to a "needs scraping" state so that the next crawl picks them up
+	 * as full internal pages.
+	 *
+	 * For each matching page:
+	 * - clears the scrape metadata (status, headers, snapshot path, etc.),
+	 * - flips `isExternal` to `0` and `scraped` to `0`,
+	 * - removes stale `anchors`, `images`, and `resources-referrers` rows so that
+	 *   the re-scrape can re-insert fresh ones without duplicates.
+	 *
+	 * The page row itself is kept (id is preserved) so existing referrers via
+	 * `anchors.hrefId` remain valid. SELECT and UPDATE/DELETE statements are
+	 * chunked to stay below SQLite's `SQLITE_LIMIT_VARIABLE_NUMBER`.
+	 * @param scopes - The hostname-indexed scope map after the new roots are merged.
+	 * @param options - URL parsing options forwarded to {@link findScopeEntry}.
+	 * @returns The URLs of the pages that were promoted.
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async repromoteExternalPages(
+		scopes: ReadonlyMap<string, readonly ExURL[]>,
+		options?: ParseURLOptions,
+	): Promise<string[]> {
+		if (scopes.size === 0) {
+			return [];
+		}
+		const candidates = await this.#instance
+			.select('id', 'url')
+			.from<DB_Page>('pages')
+			.where('isExternal', 1);
+
+		const promotedIds: number[] = [];
+		const promotedUrls: string[] = [];
+		for (const row of candidates) {
+			const parsed = parseUrl(row.url, options);
+			if (!parsed) {
+				continue;
+			}
+			if (findScopeEntry(parsed, scopes, options) === null) {
+				continue;
+			}
+			promotedIds.push(row.id);
+			promotedUrls.push(row.url);
+		}
+		if (promotedIds.length === 0) {
+			return [];
+		}
+
+		const chunkSize = 500;
+		for (let i = 0; i < promotedIds.length; i += chunkSize) {
+			const chunk = promotedIds.slice(i, i + chunkSize);
+			await this.#instance<DB_Page>('pages').whereIn('id', chunk).update({
+				scraped: 0,
+				isExternal: 0,
+				isSkipped: 0,
+				skipReason: null,
+				html: null,
+				status: null,
+				statusText: null,
+				contentType: null,
+				contentLength: null,
+				responseHeaders: '{}',
+				redirectDestId: null,
+			});
+			await this.#instance('anchors').whereIn('pageId', chunk).delete();
+			await this.#instance('images').whereIn('pageId', chunk).delete();
+			await this.#instance('resources-referrers').whereIn('pageId', chunk).delete();
+		}
+		dbLog('Repromoted %d external pages back to pending', promotedUrls.length);
+		return promotedUrls;
+	}
+	/**
 	 * Stores the crawl configuration in the `info` table.
-	 * Serializes array fields (`excludes`, `excludeKeywords`, `scope`) as JSON strings.
+	 * Serializes array fields (`roots`, `excludes`, `excludeKeywords`, `excludeUrls`, `scope`) as JSON strings.
 	 * @param config - The {@link Config} object to store.
 	 */
 	@ErrorEmitter()
@@ -580,6 +657,8 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	async setConfig(config: Config) {
 		return this.#instance.from<Config>('info').insert({
 			...config,
+			// @ts-expect-error
+			roots: JSON.stringify(config.roots),
 			// @ts-expect-error
 			excludes: JSON.stringify(config.excludes),
 			// @ts-expect-error
@@ -611,7 +690,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				skipReason: reason,
 			});
 	}
-
 	/**
 	 * Assigns natural URL sort order values to all internal pages.
 	 * Pages are sorted using {@link pathComparator} and assigned sequential order numbers.
@@ -642,6 +720,39 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				[...bindings, ...ids],
 			);
 		}
+	}
+	/**
+	 * Update the single row in the `info` table with a partial config patch.
+	 *
+	 * Used by the append flow to extend `roots` / `scope` (and any other tweakable
+	 * field) without replacing the entire row. JSON-array fields are serialized on
+	 * the fly; primitive fields are written verbatim. Unspecified fields stay as-is.
+	 * @param patch - Partial {@link Config} fields to overwrite. `undefined` values are skipped.
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async updateConfig(patch: Partial<Config>): Promise<void> {
+		const payload: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(patch)) {
+			if (value === undefined) {
+				continue;
+			}
+			if (
+				key === 'roots' ||
+				key === 'scope' ||
+				key === 'excludes' ||
+				key === 'excludeKeywords' ||
+				key === 'excludeUrls'
+			) {
+				payload[key] = JSON.stringify(value);
+				continue;
+			}
+			payload[key] = value;
+		}
+		if (Object.keys(payload).length === 0) {
+			return;
+		}
+		await this.#instance.from<Config>('info').update(payload);
 	}
 
 	/**
@@ -782,11 +893,15 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
-	 * Initializes the database schema if tables do not exist.
-	 * Delegates to {@link initSchema} for the actual table creation.
+	 * Initializes the database schema if tables do not exist, then runs lightweight
+	 * migrations that bring older archives up to the current schema.
+	 *
+	 * Migrations are idempotent and run on every {@link Database.connect}, so the
+	 * same DB can be opened safely from both writer and reader code paths.
 	 */
 	async #init() {
 		await initSchema(this.#instance);
+		await migrateInfoRoots(this.#instance);
 	}
 
 	/**

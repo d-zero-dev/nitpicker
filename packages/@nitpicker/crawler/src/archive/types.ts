@@ -13,8 +13,10 @@ export interface DatabaseEvent {
  * Represents all crawling options that were used for the crawl session.
  */
 export interface Config extends Required<Pick<ParseURLOptions, 'disableQueries'>> {
-	/** The starting URL for the crawl. */
+	/** The starting URL for the crawl. Kept for backwards-compatible summaries; equals `roots[0]` for multi-root archives. */
 	baseUrl: string;
+	/** The user-provided root URLs that seeded the crawl. Always non-empty; for single-root archives this is `[baseUrl]`. */
+	roots: string[];
 	/** Maximum directory depth for excluded paths. */
 	maxExcludedDepth: number;
 	/** URL patterns defining the crawl scope. */

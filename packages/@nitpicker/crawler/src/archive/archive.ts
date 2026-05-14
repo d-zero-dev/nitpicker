@@ -1,12 +1,13 @@
 import type { Config } from './types.js';
 import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
-import type { ParseURLOptions } from '@d-zero/shared/parse-url';
+import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 
 import path from 'node:path';
 
 import { zip } from '@d-zero/fs/zip';
 
 import { ArchiveAccessor } from './archive-accessor.js';
+import { acquireArchiveLock } from './archive-lock.js';
 import { Database } from './database.js';
 import { dbLog, log, saveLog } from './debug.js';
 import { appendText } from './filesystem/append-text.js';
@@ -33,6 +34,8 @@ export default class Archive extends ArchiveAccessor {
 	#db: Database;
 	/** Absolute path to the output `.nitpicker` archive file. */
 	#filePath: string;
+	/** Lock release function held while the writer owns the archive. */
+	#releaseLock: () => Promise<void>;
 	/** Absolute path to the HTML snapshot directory within the temporary working directory. */
 	#snapshotDir: string;
 	/** Absolute path to the temporary working directory containing the SQLite DB and snapshots. */
@@ -46,12 +49,18 @@ export default class Archive extends ArchiveAccessor {
 	}
 
 	// eslint-disable-next-line no-restricted-syntax
-	private constructor(filePath: string, tmpDir: string, db: Database) {
+	private constructor(
+		filePath: string,
+		tmpDir: string,
+		db: Database,
+		releaseLock: () => Promise<void>,
+	) {
 		super(tmpDir, db, '');
 		this.#filePath = filePath;
 		this.#tmpDir = tmpDir;
 		this.#snapshotDir = path.resolve(this.#tmpDir, Archive.SNAPSHOT_HTML_DIR);
 		this.#db = db;
+		this.#releaseLock = releaseLock;
 		log('create instance: %O', {
 			filePath,
 			tmpDir,
@@ -87,14 +96,18 @@ export default class Archive extends ArchiveAccessor {
 	 */
 	async close() {
 		log('Closing');
-		if (!exists(this.#filePath)) {
-			log("Save the file because it doesn't exist");
-			await this.write();
-		} else if (exists(this.#tmpDir)) {
-			log('Remove temporary dir');
-			await remove(this.#tmpDir);
+		try {
+			if (!exists(this.#filePath)) {
+				log("Save the file because it doesn't exist");
+				await this.write();
+			} else if (exists(this.#tmpDir)) {
+				log('Remove temporary dir');
+				await remove(this.#tmpDir);
+			}
+			await this.#db.destroy();
+		} finally {
+			await this.#releaseLock();
 		}
-		await this.#db.destroy();
 		log('Closing done');
 	}
 
@@ -111,6 +124,21 @@ export default class Archive extends ArchiveAccessor {
 	 */
 	async getUrl() {
 		return this.#db.getBaseUrl();
+	}
+	/**
+	 * Promote previously-external pages that now fall under the (possibly extended)
+	 * scope back to a pending state so that the crawler re-scrapes them as fully
+	 * internal pages on the next pass.
+	 * @param scopes - Hostname-indexed scope map representing the new scope.
+	 * @param options - URL parsing options forwarded to the scope-entry lookup.
+	 * @returns The URLs that were repromoted.
+	 */
+	async repromoteExternalPages(
+		scopes: ReadonlyMap<string, readonly ExURL[]>,
+		options?: ParseURLOptions,
+	) {
+		dbLog('Repromote external pages with %d hostnames in scope', scopes.size);
+		return this.#db.repromoteExternalPages(scopes, options);
 	}
 	/**
 	 * Stores the crawl configuration into the archive database.
@@ -196,6 +224,16 @@ export default class Archive extends ArchiveAccessor {
 		await this.#db.setUrlOrder();
 	}
 	/**
+	 * Updates a subset of fields on the archive's `info` row. Used by the append
+	 * flow to extend `roots` / `scope` without rewriting the entire config.
+	 * @param patch - Partial {@link Config} fields to overwrite. `undefined` values are ignored.
+	 */
+	async updateConfig(patch: Partial<Config>) {
+		dbLog('Update config: %O', patch);
+		await this.#db.updateConfig(patch);
+	}
+
+	/**
 	 * Writes the archive to disk as a compressed `.nitpicker` file.
 	 *
 	 * This method compresses the HTML snapshot directory into a zip file,
@@ -262,7 +300,13 @@ export default class Archive extends ArchiveAccessor {
 		});
 		const fileName = path.basename(filePath, path.extname(filePath));
 		const tmpDir = path.resolve(cwd, Archive.TMP_DIR_PREFIX + fileName);
-		return await Archive.#init(filePath, tmpDir);
+		const releaseLock = await acquireArchiveLock(tmpDir);
+		try {
+			return await Archive.#init(filePath, tmpDir, releaseLock);
+		} catch (error) {
+			await releaseLock();
+			throw error;
+		}
 	}
 	/**
 	 * Joins path segments into an absolute path.
@@ -288,21 +332,27 @@ export default class Archive extends ArchiveAccessor {
 		});
 		const fileName = path.basename(filePath, path.extname(filePath));
 		const tmpDir = path.resolve(cwd, Archive.TMP_DIR_PREFIX + fileName);
-		const openFiles: string[] = [];
-		if (!openPluginData) {
-			const relDdPath = path.join(fileName, Archive.SQLITE_DB_FILE_NAME);
-			const relSnapshotPath = path.join(fileName, Archive.SNAPSHOT_HTML_DIR + '.zip');
-			openFiles.push(relDdPath, relSnapshotPath);
+		const releaseLock = await acquireArchiveLock(tmpDir);
+		try {
+			const openFiles: string[] = [];
+			if (!openPluginData) {
+				const relDdPath = path.join(fileName, Archive.SQLITE_DB_FILE_NAME);
+				const relSnapshotPath = path.join(fileName, Archive.SNAPSHOT_HTML_DIR + '.zip');
+				openFiles.push(relDdPath, relSnapshotPath);
+			}
+			log('Unzip file: %s (%O)', filePath, openFiles);
+			await untar(filePath, {
+				cwd,
+				fileList: openFiles.length > 0 ? openFiles : undefined,
+			});
+			const extractedDir = path.resolve(cwd, fileName);
+			log('Move directory: %s to %s', extractedDir, tmpDir);
+			await rename(extractedDir, tmpDir, true);
+			return await Archive.#init(filePath, tmpDir, releaseLock);
+		} catch (error) {
+			await releaseLock();
+			throw error;
 		}
-		log('Unzip file: %s (%O)', filePath, openFiles);
-		await untar(filePath, {
-			cwd,
-			fileList: openFiles.length > 0 ? openFiles : undefined,
-		});
-		const extractedDir = path.resolve(cwd, fileName);
-		log('Move directory: %s to %s', extractedDir, tmpDir);
-		await rename(extractedDir, tmpDir, true);
-		return await Archive.#init(filePath, tmpDir);
 	}
 	/**
 	 * Resumes an archive from an existing temporary directory
@@ -315,12 +365,18 @@ export default class Archive extends ArchiveAccessor {
 		log('Resume: %s', targetPath);
 		if (await isDir(targetPath)) {
 			const tmpDir = targetPath;
-			const db = await Archive.#connectDB(tmpDir);
-			const name =
-				(await db.getName()) ||
-				path.basename(targetPath).replace(Archive.TMP_DIR_PREFIX, '');
-			const filePath = path.resolve(process.cwd(), name + '.' + Archive.FILE_EXTENSION);
-			return await Archive.#init(filePath, tmpDir);
+			const releaseLock = await acquireArchiveLock(tmpDir);
+			try {
+				const db = await Archive.#connectDB(tmpDir);
+				const name =
+					(await db.getName()) ||
+					path.basename(targetPath).replace(Archive.TMP_DIR_PREFIX, '');
+				const filePath = path.resolve(process.cwd(), name + '.' + Archive.FILE_EXTENSION);
+				return new Archive(filePath, tmpDir, db, releaseLock);
+			} catch (error) {
+				await releaseLock();
+				throw error;
+			}
 		}
 		throw new Error(
 			'The specified path is not a directory. Please ensure the path points to a valid directory.',
@@ -359,12 +415,17 @@ export default class Archive extends ArchiveAccessor {
 	}
 	/**
 	 * Initializes an Archive instance by connecting to the database.
+	 *
+	 * The advisory lock must already be acquired by the caller; this helper just
+	 * threads the release function through to the resulting `Archive` so that
+	 * {@link Archive.close} can drop the lock when work is done.
 	 * @param filePath - Output `.nitpicker` file path
 	 * @param tmpDir - Temporary working directory path
+	 * @param releaseLock - Function returned by {@link acquireArchiveLock}.
 	 */
-	static async #init(filePath: string, tmpDir: string) {
+	static async #init(filePath: string, tmpDir: string, releaseLock: () => Promise<void>) {
 		const db = await Archive.#connectDB(tmpDir);
-		const archive = new Archive(filePath, tmpDir, db);
+		const archive = new Archive(filePath, tmpDir, db, releaseLock);
 		return archive;
 	}
 	/**

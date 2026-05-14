@@ -22,6 +22,7 @@ export async function initSchema(instance: Knex) {
 			t.string('version');
 			t.string('name');
 			t.string('baseUrl');
+			t.json('roots');
 			t.boolean('recursive');
 			t.integer('interval');
 			t.boolean('image');

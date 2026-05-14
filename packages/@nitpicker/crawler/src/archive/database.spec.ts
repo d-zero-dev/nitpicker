@@ -199,6 +199,7 @@ describe('Config', () => {
 			version: '0.4.3',
 			name: 'test-crawl',
 			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
 			recursive: true,
 			interval: 500,
 			image: true,
@@ -244,6 +245,7 @@ describe('Config', () => {
 			'version',
 			'name',
 			'baseUrl',
+			'roots',
 			'recursive',
 			'interval',
 			'image',
@@ -286,6 +288,141 @@ describe('Config', () => {
 		expect(retrieved.excludeKeywords).toEqual(['secret', 'draft']);
 		expect(Array.isArray(retrieved.excludeUrls)).toBe(true);
 		expect(retrieved.excludeUrls).toEqual(['https://example.com/skip']);
+	});
+
+	it('updateConfig overwrites only the specified fields and serialises JSON arrays', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: configDbPath,
+		});
+
+		// roots と scope を別の値で上書き、他は触らない
+		await db.updateConfig({
+			roots: ['https://example.com/', 'https://example.com/blog/'],
+			scope: ['https://example.com/'],
+		});
+
+		const after = await db.getConfig();
+		expect(after.roots).toEqual(['https://example.com/', 'https://example.com/blog/']);
+		expect(after.scope).toEqual(['https://example.com/']);
+		// 他のフィールドは変わっていない
+		expect(after.baseUrl).toBe('https://example.com');
+		expect(after.name).toBe('test-crawl');
+		expect(after.parallels).toBe(4);
+		expect(after.userAgent).toBe('NitpickerBot/1.0');
+	});
+
+	it('updateConfig with an empty patch is a no-op', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: configDbPath,
+		});
+
+		const before = await db.getConfig();
+		await db.updateConfig({});
+		const after = await db.getConfig();
+		expect(after).toEqual(before);
+	});
+});
+
+describe('repromoteExternalPages', () => {
+	const repromoteDbPath = path.resolve(workingDir, 'repromote-test.sqlite');
+
+	afterAll(async () => {
+		await remove(repromoteDbPath);
+	});
+
+	it('demotes-back hostname-matching external pages whose path is inside the new scope', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: repromoteDbPath,
+		});
+
+		// 外部として保存された 2 ページ: /blog/ 下と、scope 外の /marketing/about
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/blog/post-1')!,
+				redirectPaths: [],
+				isExternal: true,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Blog 1' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			null,
+			false,
+		);
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/marketing/about')!,
+				redirectPaths: [],
+				isExternal: true,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Marketing' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			null,
+			false,
+		);
+
+		const scope = new Map([['example.com', [parseUrl('https://example.com/blog/')!]]]);
+		const promoted = await db.repromoteExternalPages(scope);
+
+		expect(promoted).toEqual(['https://example.com/blog/post-1']);
+
+		// repromote は contentType を null にクリアするため、filter なしで全件取得して確認
+		const all = await db.getPages();
+		const blog = all.find((p) => p.url === 'https://example.com/blog/post-1')!;
+		const marketing = all.find((p) => p.url === 'https://example.com/marketing/about')!;
+
+		// repromote 対象は scraped=0 に戻り isExternal=0 に、scrape メタデータもクリアされる
+		expect(blog.scraped).toBe(0);
+		expect(blog.isExternal).toBe(0);
+		expect(blog.contentType).toBeNull();
+		expect(blog.status).toBeNull();
+		expect(blog.html).toBeNull();
+		// scope 外の同一ホスト external は影響なし
+		expect(marketing.isExternal).toBe(1);
+		expect(marketing.contentType).toBe('text/html');
+	});
+
+	it('does not touch any page when no external row is inside the new scope', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: repromoteDbPath,
+		});
+
+		const scope = new Map([['other.com', [parseUrl('https://other.com/')!]]]);
+		const promoted = await db.repromoteExternalPages(scope);
+		expect(promoted).toEqual([]);
+	});
+
+	it('returns an empty list when the scope map has no entries', async () => {
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: repromoteDbPath,
+		});
+
+		const promoted = await db.repromoteExternalPages(new Map());
+		expect(promoted).toEqual([]);
 	});
 });
 
