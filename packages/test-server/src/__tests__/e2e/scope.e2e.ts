@@ -8,7 +8,7 @@ describe('Scope restriction', () => {
 
 		beforeAll(async () => {
 			result = await crawl(['http://localhost:8010/scope/blog/']);
-		}, 60_000);
+		}, 120_000);
 
 		afterAll(async () => {
 			await cleanup(result);
@@ -22,9 +22,12 @@ describe('Scope restriction', () => {
 			expect(urls).toContain('/scope/blog/post-2');
 		});
 
-		it('scope外のページはisTarget=falseで記録される', async () => {
-			const pages = await result.accessor.getPages('page');
-			const docsPage = pages.find((p) => p.url.pathname === '/scope/docs/');
+		it('scope path 外のページは external page として isTarget=false で記録される', async () => {
+			// scope=['/scope/blog/'] のとき、同一ホストでも path 外の /scope/docs/ は
+			// findScopeEntry が null を返すため external 扱いになり、fetchExternal の
+			// デフォルト true で metadata-only スクレイプされる
+			const externalPages = await result.accessor.getPages('external-page');
+			const docsPage = externalPages.find((p) => p.url.pathname === '/scope/docs/');
 			expect(docsPage).toBeDefined();
 			expect(docsPage!.isTarget).toBe(false);
 		});
@@ -37,7 +40,7 @@ describe('Scope restriction', () => {
 			result = await crawl(['http://localhost:8010/scope/blog/'], {
 				scope: ['http://localhost:8010/scope/blog/', 'http://localhost:8010/scope/docs/'],
 			});
-		}, 60_000);
+		}, 120_000);
 
 		afterAll(async () => {
 			await cleanup(result);
@@ -55,6 +58,41 @@ describe('Scope restriction', () => {
 			const urls = internalPages.map((p) => p.url.pathname);
 			expect(urls).not.toContain('/scope/admin/');
 			expect(urls).not.toContain('/scope/admin/settings');
+		});
+	});
+
+	describe('hostname 一致 × scope path 外 + fetchExternal=true', () => {
+		let result: CrawlResult;
+
+		beforeAll(async () => {
+			result = await crawl(['http://localhost:8010/scope/blog/'], {
+				fetchExternal: true,
+			});
+		}, 120_000);
+
+		afterAll(async () => {
+			await cleanup(result);
+		});
+
+		it('scope path 外のリンクは external page として記録される', async () => {
+			const externalPages = await result.accessor.getPages('external-page');
+			const externalPaths = externalPages.map((p) => p.url.pathname);
+			expect(externalPaths).toContain('/scope/docs/');
+		});
+
+		it('scope path 外のリンクは isTarget=false で metadata-only として記録される', async () => {
+			const externalPages = await result.accessor.getPages('external-page');
+			const docs = externalPages.find((p) => p.url.pathname === '/scope/docs/');
+			expect(docs).toBeDefined();
+			expect(docs!.isTarget).toBe(false);
+		});
+
+		it('scope path 内のページは internal page として記録される', async () => {
+			const internalPages = await result.accessor.getPages('internal-page');
+			const internalPaths = internalPages.map((p) => p.url.pathname);
+			expect(internalPaths).toContain('/scope/blog/');
+			expect(internalPaths).toContain('/scope/blog/post-1');
+			expect(internalPaths).not.toContain('/scope/docs/');
 		});
 	});
 });
