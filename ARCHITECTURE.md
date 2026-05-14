@@ -107,7 +107,7 @@ scrapeStart → openPage → loadDOMContent → getHTML → waitNetworkIdle
 
 **主要クラス:**
 
-- **`CrawlerOrchestrator`**: エントリポイント。`CrawlerOrchestrator.crawling()`, `CrawlerOrchestrator.resume()`
+- **`CrawlerOrchestrator`**: エントリポイント。`CrawlerOrchestrator.crawling()`（複数 URL で multi-root）, `CrawlerOrchestrator.resume()`（中断再開）, `CrawlerOrchestrator.append()`（既存アーカイブへの追加クロール）
 - **`Crawler`**: リンク管理・スクレイプスケジューリング
 - **`LinkList`**: URL キュー管理（pending → progress → done）
 - **`Archive`**: アーカイブの作成・再開・書き出し
