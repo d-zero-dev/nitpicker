@@ -17,6 +17,8 @@ export interface CrawlResult {
 	tmpDir: string;
 	/** Path to the working directory created for this crawl session. */
 	cwd: string;
+	/** Absolute path to the resulting `.nitpicker` archive file. */
+	filePath: string;
 }
 
 /**
@@ -49,9 +51,10 @@ export async function crawl(
 	);
 
 	const tmpDir = orchestrator.archive.tmpDir;
+	const filePath = orchestrator.archive.filePath;
 	const accessor = await Archive.connect(tmpDir);
 
-	return { accessor, tmpDir, cwd };
+	return { accessor, tmpDir, cwd, filePath };
 }
 
 /**
