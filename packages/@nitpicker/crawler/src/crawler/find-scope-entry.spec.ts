@@ -115,4 +115,35 @@ describe('findScopeEntry', () => {
 		const scope = buildScope(['https://example.com/blog/']);
 		expect(findScopeEntry(url, scope, defaultOptions)).toBeNull();
 	});
+
+	it('does not match same-hostname URLs whose port differs', () => {
+		// 開発サイトでは localhost:3000 と localhost:8080 が別サービスなので、
+		// scope は port まで含めて区別する必要がある (auth 漏れ防止)
+		const url = parseUrl('http://localhost:8080/api/users')!;
+		const scope = buildScope(['http://localhost:3000/']);
+		expect(findScopeEntry(url, scope, defaultOptions)).toBeNull();
+	});
+
+	it('matches when port is explicitly the protocol default on one side and omitted on the other', () => {
+		// WHATWG URL は default port を空文字に正規化するため、
+		// `https://example.com/` と `https://example.com:443/` は同一視される
+		const url = parseUrl('https://example.com:443/blog/post')!;
+		const scope = buildScope(['https://example.com/blog/']);
+		expect(findScopeEntry(url, scope, defaultOptions)).not.toBeNull();
+	});
+
+	it('isolates scope entries that share a hostname but use different ports', () => {
+		const dev = parseUrl('http://localhost:3000/api')!;
+		const staging = parseUrl('http://localhost:8080/api')!;
+		const scope = buildScope([
+			'http://user1:pass1@localhost:3000/',
+			'http://user2:pass2@localhost:8080/',
+		]);
+		const devMatch = findScopeEntry(dev, scope, defaultOptions);
+		const stagingMatch = findScopeEntry(staging, scope, defaultOptions);
+		expect(devMatch).not.toBeNull();
+		expect(devMatch!.username).toBe('user1');
+		expect(stagingMatch).not.toBeNull();
+		expect(stagingMatch!.username).toBe('user2');
+	});
 });
