@@ -27,6 +27,11 @@ export const commandDef = {
 			shortFlag: 'R',
 			desc: 'Resume crawling from a stub file',
 		},
+		append: {
+			type: 'string',
+			shortFlag: 'A',
+			desc: 'Append crawl: open the given archive and add positional URLs as new recursive roots',
+		},
 		interval: {
 			type: 'number',
 			shortFlag: 'I',
@@ -282,6 +287,54 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 }
 
 /**
+ * Append a fresh crawl to an existing `.nitpicker` archive.
+ *
+ * Opens the archive, registers the positional URLs as additional recursive
+ * roots, re-scrapes any previously-external pages whose URL now falls under
+ * the expanded scope, and writes the result back to the same file. A
+ * `<archive>.bak` is taken before any DB mutation; on success it is removed,
+ * on failure it is restored.
+ * @param archivePath - Path to the existing `.nitpicker` archive.
+ * @param newUrls - Positional URLs to append as new roots. Must be non-empty.
+ * @param flags - Parsed CLI flags from the `crawl` command.
+ */
+async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlFlags) {
+	validateUrls(newUrls);
+	const errStack: (CrawlerError | Error)[] = [];
+
+	const orchestrator = await CrawlerOrchestrator.append(
+		archivePath,
+		newUrls,
+		{
+			...mapFlagsToCrawlConfig(flags),
+			list: false,
+		},
+		(orchestrator, config) => {
+			run(
+				`${archivePath} (append: ${newUrls.join(', ')})`,
+				orchestrator,
+				config,
+				flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
+			).catch((error) => errStack.push(error));
+		},
+	);
+
+	try {
+		await orchestrator.write();
+	} finally {
+		await orchestrator.archive.close();
+		orchestrator.garbageCollect();
+	}
+
+	if (errStack.length > 0) {
+		const error = new CrawlAggregateError(errStack);
+		// eslint-disable-next-line no-console
+		console.error(`\n${error.message}`);
+		throw error;
+	}
+}
+
+/**
  * Validates that all URLs in the list are parseable by the URL constructor.
  * @param urls - Array of URL strings to validate
  * @throws {Error} If any URL is invalid
@@ -318,6 +371,9 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 	log('Options: %O', flags);
 
 	if (flags.diff) {
+		if (flags.append) {
+			throw new Error('--diff cannot be combined with --append.');
+		}
 		if (args.length !== 2) {
 			throw new Error('--diff takes exactly two file paths to compare');
 		}
@@ -343,7 +399,34 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 					'--output flag is not supported with --resume. The archive path is determined by the stub file.',
 				);
 			}
+			if (flags.append) {
+				throw new Error(
+					'--resume and --append cannot be used together. Pick the existing-archive mode that fits your task.',
+				);
+			}
 			await resumeCrawl(flags.resume, flags);
+			return;
+		}
+
+		if (flags.append) {
+			if (flags.output) {
+				throw new Error(
+					'--output flag is not supported with --append. The archive path is the file being appended.',
+				);
+			}
+			if (flags.listFile) {
+				throw new Error('--append cannot be combined with --list-file.');
+			}
+			if (hasListFlag) {
+				throw new Error('--append cannot be combined with --list.');
+			}
+			if (flags.single) {
+				throw new Error('--append cannot be combined with --single.');
+			}
+			if (args.length === 0) {
+				throw new Error('--append requires at least one URL to append.');
+			}
+			await appendCrawl(flags.append, args, flags);
 			return;
 		}
 
