@@ -318,18 +318,22 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 	log('Options: %O', flags);
 
 	if (flags.diff) {
-		const a = args[0];
-		const b = args[1];
-		if (!a || !b) {
-			throw new Error('Please provide two file paths to compare');
+		if (args.length !== 2) {
+			throw new Error('--diff takes exactly two file paths to compare');
 		}
-		await diff(a, b);
+		await diff(args[0]!, args[1]!);
 		return;
 	}
 
-	if (flags.single && (flags.list?.length || flags.listFile)) {
+	const hasListFlag = !!flags.list && flags.list.length > 0;
+
+	if (flags.single && (hasListFlag || flags.listFile)) {
 		// eslint-disable-next-line no-console
 		console.warn('Warning: --single is ignored when --list or --list-file is specified.');
+	}
+
+	if (flags.single && args.length > 1) {
+		throw new Error('--single cannot be combined with multiple positional URLs');
 	}
 
 	try {
@@ -354,18 +358,16 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 			return;
 		}
 
-		if (flags.list && flags.list.length > 0) {
+		if (hasListFlag) {
 			const pageList = [...flags.list, ...args];
 			validateUrls(pageList);
 			await startCrawl(pageList, flags);
 			return;
 		}
 
-		const siteUrl = args[0];
-
-		if (siteUrl) {
-			validateUrls([siteUrl]);
-			await startCrawl([siteUrl], flags);
+		if (args.length > 0) {
+			validateUrls(args);
+			await startCrawl(args, flags);
 			return;
 		}
 	} catch (error) {

@@ -303,7 +303,7 @@ describe('crawl', () => {
 		const { crawl } = await import('./crawl.js');
 
 		await expect(crawl([], createFlags({ diff: true }))).rejects.toThrow(
-			'Please provide two file paths to compare',
+			'--diff takes exactly two file paths to compare',
 		);
 	});
 
@@ -311,8 +311,52 @@ describe('crawl', () => {
 		const { crawl } = await import('./crawl.js');
 
 		await expect(crawl(['a.nitpicker'], createFlags({ diff: true }))).rejects.toThrow(
-			'Please provide two file paths to compare',
+			'--diff takes exactly two file paths to compare',
 		);
+	});
+
+	it('--diff モードで引数が3つ以上の場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(['a.nitpicker', 'b.nitpicker', 'c.nitpicker'], createFlags({ diff: true })),
+		).rejects.toThrow('--diff takes exactly two file paths to compare');
+	});
+
+	it('位置引数が複数ある場合、全 URL を含む配列で startCrawl を呼び出す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['https://example.com/a', 'https://example.com/b', 'https://example.com/c'],
+			createFlags(),
+		);
+
+		expect(mockCrawling).toHaveBeenCalledOnce();
+		const [urlsArg] = mockCrawling.mock.calls[0]!;
+		expect(urlsArg).toEqual([
+			'https://example.com/a',
+			'https://example.com/b',
+			'https://example.com/c',
+		]);
+	});
+
+	it('位置引数が単一の場合、その URL 1 つを含む配列で startCrawl を呼び出す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['https://example.com'], createFlags());
+
+		expect(mockCrawling).toHaveBeenCalledOnce();
+		const [urlsArg] = mockCrawling.mock.calls[0]!;
+		expect(urlsArg).toEqual(['https://example.com']);
+	});
+
+	it('--single と位置引数複数の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['https://example.com/a', 'https://example.com/b'],
+				createFlags({ single: true }),
+			),
+		).rejects.toThrow('--single cannot be combined with multiple positional URLs');
 	});
 
 	it('--resume に絶対パスを指定した場合、そのまま渡す', async () => {
