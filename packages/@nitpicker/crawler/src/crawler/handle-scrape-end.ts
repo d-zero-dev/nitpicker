@@ -5,9 +5,8 @@ import type { ExURL } from '@d-zero/shared/parse-url';
 
 import { crawlerLog } from '../debug.js';
 
+import { findScopeEntry } from './find-scope-entry.js';
 import { injectScopeAuth } from './inject-scope-auth.js';
-import { isExternalUrl } from './is-external-url.js';
-import { isInAnyLowerLayer } from './is-in-any-lower-layer.js';
 
 /**
  * Process the result of a successful page scrape.
@@ -58,12 +57,14 @@ export function handleScrapeEnd(
  * Process anchor elements extracted from a scraped page and enqueue new URLs.
  *
  * For each anchor:
- * 1. Determines if it is external (outside the crawl scope)
- * 2. Injects authentication credentials from matching scope URLs
- * 3. Reconstructs the `withoutHash` URL with injected auth
- * 4. In recursive mode: enqueues internal lower-layer URLs for full scraping,
- *    and external URLs for metadata-only scraping (if `fetchExternal` is enabled)
- * 5. In non-recursive mode: enqueues all URLs for metadata-only scraping
+ * 1. Resolves the matching scope entry via a single {@link findScopeEntry} call.
+ *    If `null`, the anchor is external; otherwise it is internal under the
+ *    deepest matching scope.
+ * 2. For internal anchors without credentials, inherits auth from the matched
+ *    scope and rebuilds `withoutHash` with the injected auth.
+ * 3. In recursive mode: enqueues internal anchors for full scraping, and
+ *    external anchors for metadata-only scraping (when `fetchExternal` is on).
+ * 4. In non-recursive mode: enqueues every anchor for metadata-only scraping.
  * @param anchors - The list of anchor data extracted from the page.
  * @param scope - Map of hostnames to their scope URLs.
  * @param options - Crawler configuration options.
@@ -77,11 +78,12 @@ function processAnchors(
 	addUrl: (url: ExURL, opts?: { metadataOnly?: true }) => void,
 ): void {
 	for (const anchor of anchors) {
-		const isExternal = isExternalUrl(anchor.href, scope);
+		const matchedScope = findScopeEntry(anchor.href, scope, options);
+		const isExternal = matchedScope === null;
 		anchor.isExternal = isExternal;
 
-		if (!isExternal && (!anchor.href.username || !anchor.href.password)) {
-			injectScopeAuth(anchor.href, scope);
+		if (matchedScope && (!anchor.href.username || !anchor.href.password)) {
+			injectScopeAuth(anchor.href, matchedScope);
 
 			const auth =
 				anchor.href.username && anchor.href.password
@@ -101,10 +103,9 @@ function processAnchors(
 		}
 
 		if (options.recursive) {
-			const scopes = scope.get(anchor.href.hostname);
-			if (scopes && isInAnyLowerLayer(anchor.href, scopes, options)) {
+			if (matchedScope) {
 				addUrl(anchor.href);
-			} else if (isExternal && options.fetchExternal) {
+			} else if (options.fetchExternal) {
 				addUrl(anchor.href, { metadataOnly: true });
 			}
 			continue;

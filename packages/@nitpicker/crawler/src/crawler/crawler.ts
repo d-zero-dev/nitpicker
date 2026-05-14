@@ -22,6 +22,7 @@ import { crawlerLog } from '../debug.js';
 
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
 import { fetchDestination } from './fetch-destination.js';
+import { findScopeEntry } from './find-scope-entry.js';
 import { formatCrawlProgress } from './format-crawl-progress.js';
 import { generatePredictedUrls } from './generate-predicted-urls.js';
 import { handleIgnoreAndSkip } from './handle-ignore-and-skip.js';
@@ -29,7 +30,6 @@ import { handleResourceResponse } from './handle-resource-response.js';
 import { handleScrapeEnd } from './handle-scrape-end.js';
 import { handleScrapeError } from './handle-scrape-error.js';
 import { injectScopeAuth } from './inject-scope-auth.js';
-import { isExternalUrl } from './is-external-url.js';
 import LinkList from './link-list.js';
 import { linkToPageData } from './link-to-page-data.js';
 import { protocolAgnosticKey } from './protocol-agnostic-key.js';
@@ -312,7 +312,10 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						if (!paginationState || !concurrency) return;
 
 						// metadataOnly / external: update tracking but skip pattern detection
-						if (opts?.metadataOnly || isExternalUrl(newUrl, this.#scope)) {
+						if (
+							opts?.metadataOnly ||
+							findScopeEntry(newUrl, this.#scope, this.#options) === null
+						) {
 							paginationState.lastPushedUrl = newUrl.withoutHashAndAuth;
 							paginationState.lastPushedWasPredicted = false;
 							return;
@@ -368,7 +371,8 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				void this.emit('skip', {
 					url: result.ignored.url.href,
 					reason: JSON.stringify(result.ignored),
-					isExternal: isExternalUrl(result.ignored.url, this.#scope),
+					isExternal:
+						findScopeEntry(result.ignored.url, this.#scope, this.#options) === null,
 				});
 				break;
 			}
@@ -388,7 +392,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					this.#scope,
 					this.#options,
 				);
-				const isExternal = isExternalUrl(url, this.#scope);
+				const isExternal = findScopeEntry(url, this.#scope, this.#options) === null;
 				if (pageResult) {
 					if (pageResult.isExternal) {
 						void this.emit('externalPage', { result: pageResult });
@@ -519,7 +523,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 		// 初期 URL を分類（onPush を通らないため）
 		for (const url of initialUrls) {
-			if (isExternalUrl(url, this.#scope)) {
+			if (findScopeEntry(url, this.#scope, this.#options) === null) {
 				externalUrls.add(protocolAgnosticKey(url.withoutHashAndAuth));
 			}
 		}
@@ -537,10 +541,13 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		await deal(
 			initialUrls,
 			(url, update, _index, setLineHeader, push) => {
-				const isExternal = isExternalUrl(url, this.#scope);
+				const matchedScope = findScopeEntry(url, this.#scope, this.#options);
+				const isExternal = matchedScope === null;
 				const urlText = isExternal ? c.dim(url.href) : c.cyan(url.href);
 				setLineHeader(`%braille% ${urlText}: `);
-				injectScopeAuth(url, this.#scope);
+				if (matchedScope) {
+					injectScopeAuth(url, matchedScope);
+				}
 				this.#linkList.add(url);
 				this.#linkList.progress(url);
 
@@ -651,7 +658,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					const key = protocolAgnosticKey(url.withoutHashAndAuth);
 					if (seen.has(key)) return false;
 					seen.add(key);
-					if (isExternalUrl(url, this.#scope)) {
+					if (findScopeEntry(url, this.#scope, this.#options) === null) {
 						externalUrls.add(key);
 					}
 					return true;
@@ -683,7 +690,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		metadataOnly: boolean,
 		laneIndex: number,
 	): Promise<ScrapeResult> {
-		const isExternal = isExternalUrl(url, this.#scope);
+		const isExternal = findScopeEntry(url, this.#scope, this.#options) === null;
 
 		// Non-HTTP protocols (mailto:, tel:, etc.) — let the scraper handle early return
 		if (!url.isHTTP) {
