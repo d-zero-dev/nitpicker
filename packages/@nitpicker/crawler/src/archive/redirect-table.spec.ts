@@ -3,6 +3,7 @@ import type { Knex } from 'knex';
 import knex from 'knex';
 import { describe, it, expect } from 'vitest';
 
+import { LibsqlDialect } from './libsql-dialect.js';
 import { redirectTable } from './redirect-table.js';
 
 describe('redirectTable', () => {
@@ -12,7 +13,7 @@ describe('redirectTable', () => {
 	 */
 	async function setupDb() {
 		const db = knex({
-			client: 'sqlite3',
+			client: LibsqlDialect,
 			connection: { filename: ':memory:' },
 			useNullAsDefault: true,
 		});

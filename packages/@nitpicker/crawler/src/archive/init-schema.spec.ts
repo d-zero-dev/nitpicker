@@ -2,11 +2,12 @@ import knex from 'knex';
 import { describe, it, expect } from 'vitest';
 
 import { initSchema } from './init-schema.js';
+import { LibsqlDialect } from './libsql-dialect.js';
 
 describe('initSchema', () => {
 	it('creates all required tables', async () => {
 		const db = knex({
-			client: 'sqlite3',
+			client: LibsqlDialect,
 			connection: { filename: ':memory:' },
 			useNullAsDefault: true,
 		});
@@ -31,7 +32,7 @@ describe('initSchema', () => {
 
 	it('is idempotent (does not error on second call)', async () => {
 		const db = knex({
-			client: 'sqlite3',
+			client: LibsqlDialect,
 			connection: { filename: ':memory:' },
 			useNullAsDefault: true,
 		});
@@ -47,7 +48,7 @@ describe('initSchema', () => {
 
 	it('creates pages table with expected columns', async () => {
 		const db = knex({
-			client: 'sqlite3',
+			client: LibsqlDialect,
 			connection: { filename: ':memory:' },
 			useNullAsDefault: true,
 		});
@@ -72,7 +73,7 @@ describe('initSchema', () => {
 
 	it('creates resources table with expected columns', async () => {
 		const db = knex({
-			client: 'sqlite3',
+			client: LibsqlDialect,
 			connection: { filename: ':memory:' },
 			useNullAsDefault: true,
 		});
@@ -93,7 +94,7 @@ describe('initSchema', () => {
 
 	it('sets PRAGMA journal_mode to WAL (falls back to memory for in-memory DB)', async () => {
 		const db = knex({
-			client: 'sqlite3',
+			client: LibsqlDialect,
 			connection: { filename: ':memory:' },
 			useNullAsDefault: true,
 		});
@@ -110,7 +111,7 @@ describe('initSchema', () => {
 
 	it('enables foreign keys', async () => {
 		const db = knex({
-			client: 'sqlite3',
+			client: LibsqlDialect,
 			connection: { filename: ':memory:' },
 			useNullAsDefault: true,
 		});
