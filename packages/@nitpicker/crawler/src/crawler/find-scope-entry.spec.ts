@@ -89,4 +89,30 @@ describe('findScopeEntry', () => {
 		expect(findScopeEntry(blog, scope, defaultOptions)).not.toBeNull();
 		expect(findScopeEntry(other, scope, defaultOptions)).toBeNull();
 	});
+
+	it('returns the scope itself when URL equals scope.href exactly', () => {
+		const url = parseUrl('https://example.com/blog/')!;
+		const scope = buildScope(['https://example.com/blog/']);
+		const matched = findScopeEntry(url, scope, defaultOptions);
+		expect(matched).not.toBeNull();
+		expect(matched!.pathname).toBe('/blog/');
+	});
+
+	it('matches a URL with a hash fragment against a scope without one', () => {
+		const url = parseUrl('https://example.com/blog/post#section')!;
+		const scope = buildScope(['https://example.com/blog/']);
+		expect(findScopeEntry(url, scope, defaultOptions)).not.toBeNull();
+	});
+
+	it('matches a URL with a query string against a scope without one', () => {
+		const url = parseUrl('https://example.com/blog/post?page=2')!;
+		const scope = buildScope(['https://example.com/blog/']);
+		expect(findScopeEntry(url, scope, defaultOptions)).not.toBeNull();
+	});
+
+	it('does not match a URL whose hostname differs even when the path matches', () => {
+		const url = parseUrl('https://other.com/blog/post')!;
+		const scope = buildScope(['https://example.com/blog/']);
+		expect(findScopeEntry(url, scope, defaultOptions)).toBeNull();
+	});
 });
