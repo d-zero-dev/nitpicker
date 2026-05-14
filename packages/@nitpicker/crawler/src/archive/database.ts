@@ -41,6 +41,45 @@ const retrySetting: RetryDecoratorOptions = {
 };
 
 /**
+ * Columns of the `info` table that `updateConfig` is allowed to write. Any key
+ * outside this set is silently dropped so a wider runtime config object can be
+ * splatted without hitting "no such column" at the SQL layer.
+ */
+const INFO_COLUMN_ALLOWLIST: ReadonlySet<string> = new Set<keyof Config>([
+	'version',
+	'name',
+	'baseUrl',
+	'roots',
+	'recursive',
+	'interval',
+	'image',
+	'fetchExternal',
+	'parallels',
+	'scope',
+	'excludes',
+	'excludeKeywords',
+	'excludeUrls',
+	'maxExcludedDepth',
+	'retry',
+	'fromList',
+	'disableQueries',
+	'userAgent',
+	'ignoreRobots',
+]);
+
+/**
+ * Subset of {@link INFO_COLUMN_ALLOWLIST} that is stored as a JSON-encoded
+ * string and therefore needs `JSON.stringify` on write.
+ */
+const INFO_JSON_COLUMNS: ReadonlySet<string> = new Set<keyof Config>([
+	'roots',
+	'scope',
+	'excludes',
+	'excludeKeywords',
+	'excludeUrls',
+]);
+
+/**
  * Low-level database abstraction layer for the archive's SQLite database.
  *
  * Manages the `pages`, `anchors`, `images`, `resources`, and `resources-referrers`
@@ -727,6 +766,11 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * Used by the append flow to extend `roots` / `scope` (and any other tweakable
 	 * field) without replacing the entire row. JSON-array fields are serialized on
 	 * the fly; primitive fields are written verbatim. Unspecified fields stay as-is.
+	 *
+	 * Unknown keys (anything outside the allow-list of `info`-table columns) are
+	 * silently dropped instead of being passed to SQL, so callers that splat a
+	 * wider runtime config (e.g. `CrawlConfig` with `cwd` / `executablePath`)
+	 * cannot accidentally trigger a "no such column" SQL error.
 	 * @param patch - Partial {@link Config} fields to overwrite. `undefined` values are skipped.
 	 */
 	@ErrorEmitter()
@@ -737,13 +781,10 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			if (value === undefined) {
 				continue;
 			}
-			if (
-				key === 'roots' ||
-				key === 'scope' ||
-				key === 'excludes' ||
-				key === 'excludeKeywords' ||
-				key === 'excludeUrls'
-			) {
+			if (!INFO_COLUMN_ALLOWLIST.has(key)) {
+				continue;
+			}
+			if (INFO_JSON_COLUMNS.has(key)) {
 				payload[key] = JSON.stringify(value);
 				continue;
 			}

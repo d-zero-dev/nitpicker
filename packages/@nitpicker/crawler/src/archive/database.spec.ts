@@ -414,6 +414,137 @@ describe('repromoteExternalPages', () => {
 		expect(promoted).toEqual([]);
 	});
 
+	it('repromote 対象 page に紐付く anchors / images / resources-referrers を削除する', async () => {
+		const cleanDbPath = path.resolve(workingDir, 'repromote-cleanup.sqlite');
+		const { rmSync } = await import('node:fs');
+		rmSync(cleanDbPath, { force: true });
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename: cleanDbPath,
+		});
+
+		// 2 ページを external として保存 (1 つは scope に該当, 1 つは外)
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/blog/post-1')!,
+				redirectPaths: [],
+				isExternal: true,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Blog' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			null,
+			false,
+		);
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/marketing/about')!,
+				redirectPaths: [],
+				isExternal: true,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Marketing' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			null,
+			false,
+		);
+
+		// repromote 対象 (blog) と非対象 (marketing) の page id を取得
+		const allBefore = await db.getPages();
+		const blogId = allBefore.find((p) => p.url === 'https://example.com/blog/post-1')!.id;
+		const marketingId = allBefore.find(
+			(p) => p.url === 'https://example.com/marketing/about',
+		)!.id;
+
+		// 関連テーブルに直接 INSERT して repromote 対象 page と非対象 page の両方に
+		// anchors / images / resources-referrers の行があることを保証する
+		const knex = db.getKnex();
+		await knex('anchors').insert([
+			{ pageId: blogId, hrefId: marketingId, hash: null, textContent: 'to marketing' },
+			{ pageId: marketingId, hrefId: blogId, hash: null, textContent: 'to blog' },
+		]);
+		await knex('images').insert([
+			{
+				pageId: blogId,
+				src: 'https://example.com/blog/img.png',
+				currentSrc: null,
+				alt: null,
+				width: 100,
+				height: 100,
+				naturalWidth: 100,
+				naturalHeight: 100,
+				isLazy: 0,
+				viewportWidth: 1024,
+				sourceCode: null,
+			},
+			{
+				pageId: marketingId,
+				src: 'https://example.com/marketing/img.png',
+				currentSrc: null,
+				alt: null,
+				width: 100,
+				height: 100,
+				naturalWidth: 100,
+				naturalHeight: 100,
+				isLazy: 0,
+				viewportWidth: 1024,
+				sourceCode: null,
+			},
+		]);
+		const [resourceId] = await knex('resources')
+			.insert({ url: 'https://cdn.example.com/x.css', isExternal: 1 })
+			.returning('id');
+		const rid = Number(
+			typeof resourceId === 'object' ? (resourceId as { id: number }).id : resourceId,
+		);
+		await knex('resources-referrers').insert([
+			{ resourceId: rid, pageId: blogId },
+			{ resourceId: rid, pageId: marketingId },
+		]);
+
+		// scope: /blog/ 下のみ
+		const scope = new Map([['example.com', [parseUrl('https://example.com/blog/')!]]]);
+		const promoted = await db.repromoteExternalPages(scope);
+		expect(promoted).toEqual(['https://example.com/blog/post-1']);
+
+		// repromote 対象 (blog) の関連行は全削除
+		const anchorsForBlog = await knex('anchors').where('pageId', blogId);
+		expect(anchorsForBlog).toEqual([]);
+		const imagesForBlog = await knex('images').where('pageId', blogId);
+		expect(imagesForBlog).toEqual([]);
+		const referrersForBlog = await knex('resources-referrers').where('pageId', blogId);
+		expect(referrersForBlog).toEqual([]);
+
+		// 非対象 (marketing) の関連行はそのまま残る
+		const anchorsForMarketing = await knex('anchors').where('pageId', marketingId);
+		expect(anchorsForMarketing).toHaveLength(1);
+		const imagesForMarketing = await knex('images').where('pageId', marketingId);
+		expect(imagesForMarketing).toHaveLength(1);
+		const referrersForMarketing = await knex('resources-referrers').where(
+			'pageId',
+			marketingId,
+		);
+		expect(referrersForMarketing).toHaveLength(1);
+
+		await db.destroy();
+		rmSync(cleanDbPath, { force: true });
+	});
+
 	it('returns an empty list when the scope map has no entries', async () => {
 		const db = await Database.connect({
 			type: 'sqlite3',

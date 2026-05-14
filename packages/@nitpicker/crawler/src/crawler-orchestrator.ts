@@ -378,18 +378,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	}
 
 	/**
-	 * Resume a previously interrupted crawl from an existing archive file.
-	 *
-	 * Restores the crawl state (pending URLs, scraped URLs, and resources)
-	 * from the archive, merges any option overrides, and continues crawling
-	 * from where it left off.
-	 * @param stubPath - Path to the existing archive file to resume from.
-	 * @param options - Optional configuration overrides to apply on top of the archived config.
-	 * @param initializedCallback - Optional callback invoked after initialization but before crawling resumes.
-	 * @returns A promise that resolves to the CrawlerOrchestrator instance after crawling completes.
-	 * @throws {Error} If the archived URL is invalid.
-	 */
-	/**
 	 * Append a fresh crawl to an existing `.nitpicker` archive.
 	 *
 	 * The given `newUrls` become additional recursive roots: their `withoutHash`
@@ -457,16 +445,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		await copyFile(absFilePath, backupPath);
 
 		try {
-			// updateConfig hits the `info` table directly, so only persist fields
-			// that map to actual columns (CrawlConfig's runtime extras like cwd /
-			// executablePath / filePath would otherwise produce SQL errors).
-			await archive.updateConfig({
-				roots: mergedRoots,
-				scope: mergedScope,
-				fromList: false,
-				recursive: true,
-				baseUrl: mergedRoots[0]!,
-			});
+			// updateConfig now ignores keys outside the info-column allowlist, so
+			// it is safe to splat the full merged config (CrawlConfig extras like
+			// `cwd` are silently dropped instead of producing SQL errors).
+			await archive.updateConfig(mergedConfig);
 
 			const scopeMap = new Map<string, ExURL[]>();
 			for (const raw of mergedScope) {
@@ -494,15 +476,36 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			await orchestrator.crawling(newParsed);
 			clearDestinationCache();
 			await archive.setUrlOrder();
-			await unlinkFile(backupPath).catch(() => {});
+			await ignoreEnoent(unlinkFile(backupPath));
 			return orchestrator;
 		} catch (error) {
-			await copyFile(backupPath, absFilePath).catch(() => {});
-			await unlinkFile(backupPath).catch(() => {});
+			try {
+				await copyFile(backupPath, absFilePath);
+				await ignoreEnoent(unlinkFile(backupPath));
+			} catch (restoreError) {
+				// Restore itself failed — surface both so the operator knows the
+				// .bak still exists and the original archive may be corrupt.
+				throw new AggregateError(
+					[error, restoreError],
+					`append failed AND restore from backup failed. Original archive backup is left at: ${backupPath}`,
+				);
+			}
 			throw error;
 		}
 	}
 
+	/**
+	 * Resume a previously interrupted crawl from an existing archive file.
+	 *
+	 * Restores the crawl state (pending URLs, scraped URLs, and resources)
+	 * from the archive, merges any option overrides, and continues crawling
+	 * from where it left off.
+	 * @param stubPath - Path to the existing archive file to resume from.
+	 * @param options - Optional configuration overrides to apply on top of the archived config.
+	 * @param initializedCallback - Optional callback invoked after initialization but before crawling resumes.
+	 * @returns A promise that resolves to the CrawlerOrchestrator instance after crawling completes.
+	 * @throws {Error} If the archived URL is invalid.
+	 */
 	static async resume(
 		stubPath: string,
 		options?: Partial<CrawlConfig>,
@@ -532,5 +535,21 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		log('Config %O', config);
 		await orchestrator.crawling([url]);
 		return orchestrator;
+	}
+}
+
+/**
+ * Await a filesystem promise but silently swallow only `ENOENT` errors. Any
+ * other failure (permissions, disk full, etc.) propagates so the caller can
+ * react instead of guessing whether the operation worked.
+ * @param promise - Filesystem operation to await.
+ */
+async function ignoreEnoent(promise: Promise<unknown>): Promise<void> {
+	try {
+		await promise;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+			throw error;
+		}
 	}
 }

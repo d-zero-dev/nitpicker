@@ -4,6 +4,7 @@ import path from 'node:path';
 import knex from 'knex';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { Database } from './database.js';
 import { LibsqlDialect } from './libsql-dialect.js';
 import { migrateInfoRoots } from './migrate-info-roots.js';
 
@@ -100,5 +101,72 @@ describe('migrateInfoRoots', () => {
 		await expect(migrateInfoRoots(instance)).resolves.toBeUndefined();
 
 		await instance.destroy();
+	});
+
+	it('Database.connect で legacy archive を開くと migration が自動実行され getConfig().roots に baseUrl が seed される', async () => {
+		// 1) legacy schema (roots 列無し) の archive を直接作る
+		const filename = path.resolve(workingDir, 'migrate-via-connect.sqlite');
+		await fs.rm(filename, { force: true });
+		const legacy = knex({
+			client: LibsqlDialect as never,
+			connection: { filename },
+			useNullAsDefault: true,
+		});
+		await legacy.schema.createTable('info', (t) => {
+			t.increments('id');
+			t.string('version');
+			t.string('name');
+			t.string('baseUrl');
+			t.boolean('recursive');
+			t.integer('interval');
+			t.boolean('image');
+			t.boolean('fetchExternal');
+			t.integer('parallels');
+			t.json('scope');
+			t.json('excludes');
+			t.json('excludeKeywords');
+			t.json('excludeUrls');
+			t.integer('maxExcludedDepth');
+			t.integer('retry');
+			t.boolean('fromList');
+			t.boolean('disableQueries');
+			t.string('userAgent');
+			t.boolean('ignoreRobots');
+		});
+		await legacy('info').insert({
+			version: '0.5.0',
+			name: 'legacy',
+			baseUrl: 'https://legacy.example.com',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			scope: '[]',
+			excludes: '[]',
+			excludeKeywords: '[]',
+			excludeUrls: '[]',
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'legacy',
+			ignoreRobots: false,
+		});
+		await legacy.destroy();
+
+		// 2) Database.connect 経由で開く → #init() が migrateInfoRoots を呼ぶ
+		const db = await Database.connect({
+			type: 'sqlite3',
+			workingDir,
+			filename,
+		});
+		const config = await db.getConfig();
+
+		// 3) roots カラムは追加され、baseUrl で seed されている
+		expect(config.roots).toEqual(['https://legacy.example.com']);
+
+		await db.destroy();
+		await fs.rm(filename, { force: true });
 	});
 });

@@ -97,12 +97,19 @@ async function tryAcquire(lockPath: string): Promise<void> {
 }
 
 /**
- * Remove the lock directory. Errors are ignored so a `finally`-style call site
- * is safe even when the directory was already cleaned up externally.
+ * Remove the lock directory. `ENOENT` is swallowed so `finally`-style callers
+ * tolerate an externally-cleaned lock, but any other failure (permissions,
+ * disk full, etc.) is propagated so the caller can react.
  * @param lockPath - The absolute lock directory path.
  */
 async function releaseLock(lockPath: string): Promise<void> {
-	await fs.rm(lockPath, { recursive: true, force: true }).catch(() => {});
+	try {
+		await fs.rm(lockPath, { recursive: true, force: true });
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+			throw error;
+		}
+	}
 }
 
 /**
