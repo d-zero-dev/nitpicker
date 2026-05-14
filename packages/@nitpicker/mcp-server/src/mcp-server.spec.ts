@@ -87,6 +87,7 @@ describe('createServer', () => {
 
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
 			name: 'test',
 			version: '0.4.4',
 			recursive: true,
@@ -243,6 +244,7 @@ describe('createServer', () => {
 		const data = JSON.parse(result.content[0]!.text);
 		expect(data.archiveId).toBeDefined();
 		expect(data.baseUrl).toBe('https://example.com');
+		expect(data.roots).toEqual(['https://example.com']);
 		expect(data.totalPages).toBe(2);
 		archiveId = data.archiveId;
 	});
@@ -253,6 +255,7 @@ describe('createServer', () => {
 		const data = JSON.parse(result.content[0]!.text);
 		expect(data.totalPages).toBe(2);
 		expect(data.baseUrl).toBe('https://example.com');
+		expect(data.roots).toEqual(['https://example.com']);
 	});
 
 	it('list_pages で全ページをリストする', async () => {
