@@ -12,8 +12,10 @@ export interface OpenArchiveOptions {
 export interface OpenArchiveResult {
 	/** The identifier used to reference this archive in subsequent queries. */
 	archiveId: string;
-	/** The base URL of the crawled site stored in the archive. */
+	/** The base URL of the crawled site stored in the archive. Equals `roots[0]` for multi-root archives. */
 	baseUrl: string;
+	/** All user-provided root URLs. Single-root archives report `[baseUrl]`. */
+	roots: string[];
 	/** Total number of pages stored in the archive. */
 	totalPages: number;
 }
@@ -22,8 +24,10 @@ export interface OpenArchiveResult {
  * Site-wide summary statistics for a crawled archive.
  */
 export interface SummaryResult {
-	/** The base URL of the crawled site. */
+	/** The base URL of the crawled site. Equals `roots[0]` for multi-root archives. */
 	baseUrl: string;
+	/** All user-provided root URLs. Single-root archives report `[baseUrl]`. */
+	roots: string[];
 	/** Total number of pages in the archive. */
 	totalPages: number;
 	/** Total number of internal pages. */
