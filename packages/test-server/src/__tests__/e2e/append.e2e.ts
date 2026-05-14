@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Run a baseline crawl that creates a `.nitpicker` archive on disk, then close
@@ -109,6 +109,54 @@ describe('Append crawl', () => {
 			.catch(() => false);
 		expect(exists).toBe(false);
 	});
+});
+
+describe('Append crawl: restore from .bak on failure', () => {
+	let filePath: string;
+	let cwd: string;
+	let originalArchiveBytes: Buffer;
+
+	beforeAll(async () => {
+		const baseline = await crawlAndPersist(['http://localhost:8010/scope/blog/']);
+		filePath = baseline.filePath;
+		cwd = baseline.cwd;
+		originalArchiveBytes = await fs.readFile(filePath);
+	}, 120_000);
+
+	beforeEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	afterAll(async () => {
+		vi.restoreAllMocks();
+		await fs.rm(cwd, { recursive: true, force: true });
+	});
+
+	it('mid-flight error restores the archive from .bak and removes the backup', async () => {
+		// Make repromote throw so append fails after the .bak has been created
+		// and after updateConfig has mutated the in-tmpDir SQLite.
+		const spy = vi
+			.spyOn(Archive.prototype, 'repromoteExternalPages')
+			.mockRejectedValueOnce(new Error('forced-repromote-failure'));
+
+		await expect(
+			CrawlerOrchestrator.append(filePath, ['http://localhost:8010/scope/docs/'], {
+				cwd,
+			}),
+		).rejects.toThrow(/forced-repromote-failure/);
+		expect(spy).toHaveBeenCalledOnce();
+
+		// .bak is gone (restore succeeded → backup deleted in the same catch).
+		const bakExists = await fs
+			.stat(filePath + '.bak')
+			.then(() => true)
+			.catch(() => false);
+		expect(bakExists).toBe(false);
+
+		// The archive bytes equal the pre-append snapshot — nothing leaked.
+		const after = await fs.readFile(filePath);
+		expect(after.equals(originalArchiveBytes)).toBe(true);
+	}, 120_000);
 });
 
 describe('Append crawl: list-mode rejection', () => {
