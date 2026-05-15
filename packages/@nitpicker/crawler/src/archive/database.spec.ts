@@ -310,6 +310,64 @@ describe('Config', () => {
 		const after = await db.getConfig();
 		expect(after).toEqual(before);
 	});
+
+	it('setConfig silently drops keys outside the info-column allowlist', async () => {
+		const dropDbPath = path.resolve(workingDir, 'set-config-drop.sqlite');
+		const { rmSync } = await import('node:fs');
+		rmSync(dropDbPath, { force: true });
+		const db = await Database.connect({
+			workingDir,
+			filename: dropDbPath,
+		});
+
+		// `cwd` is a CrawlConfig-only runtime field with no matching info column.
+		// Splatting a wider object must not throw "no such column: cwd".
+		const wider = {
+			version: '0.4.3',
+			name: 'allowlist-drop',
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			recursive: true,
+			interval: 0,
+			image: false,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 0,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'x',
+			ignoreRobots: false,
+			cwd: '/tmp/should-not-leak',
+		};
+		await expect(db.setConfig(wider as never)).resolves.not.toThrow();
+		const retrieved = await db.getConfig();
+		expect(retrieved).not.toHaveProperty('cwd');
+		expect(retrieved.name).toBe('allowlist-drop');
+
+		await db.destroy();
+		rmSync(dropDbPath, { force: true });
+	});
+
+	it('updateConfig silently drops keys outside the info-column allowlist', async () => {
+		const db = await Database.connect({
+			workingDir,
+			filename: configDbPath,
+		});
+
+		const before = await db.getConfig();
+		// Same hazard as the setConfig allowlist test: a CrawlConfig spread can
+		// reach updateConfig with extras like `cwd` and must not throw.
+		await expect(
+			db.updateConfig({ cwd: '/tmp/should-not-leak' } as never),
+		).resolves.not.toThrow();
+		const after = await db.getConfig();
+		expect(after).toEqual(before);
+		expect(after).not.toHaveProperty('cwd');
+	});
 });
 
 describe('repromoteExternalPages', () => {
@@ -535,6 +593,56 @@ describe('repromoteExternalPages', () => {
 
 		const promoted = await db.repromoteExternalPages(new Map());
 		expect(promoted).toEqual([]);
+	});
+
+	it('repromotes every match when the candidate set straddles the 500-row chunk boundary', async () => {
+		// Verifies the implementation chunks SELECT / UPDATE / DELETE in
+		// fixed-size batches (chunkSize=500). 501 candidates → 2 chunks.
+		const chunkDbPath = path.resolve(workingDir, 'repromote-chunk.sqlite');
+		const { rmSync } = await import('node:fs');
+		rmSync(chunkDbPath, { force: true });
+		const db = await Database.connect({
+			workingDir,
+			filename: chunkDbPath,
+		});
+
+		const total = 501;
+		for (let i = 0; i < total; i++) {
+			await db.updatePage(
+				{
+					url: parseUrl(`https://example.com/blog/post-${i}`)!,
+					redirectPaths: [],
+					isExternal: true,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 1,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: `t-${i}` },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				null,
+				false,
+			);
+		}
+
+		const scope = new Map([['example.com', [parseUrl('https://example.com/blog/')!]]]);
+		const promoted = await db.repromoteExternalPages(scope);
+
+		expect(promoted).toHaveLength(total);
+
+		const remainingExternal = await db
+			.getKnex()
+			.from('pages')
+			.where('isExternal', 1)
+			.count<{ c: number }[]>({ c: '*' });
+		expect(Number(remainingExternal[0]!.c)).toBe(0);
+
+		await db.destroy();
+		rmSync(chunkDbPath, { force: true });
 	});
 });
 

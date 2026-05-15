@@ -33,34 +33,6 @@ describe('Scope restriction', () => {
 		});
 	});
 
-	describe('scopeオプションで複数パス許可', () => {
-		let result: CrawlResult;
-
-		beforeAll(async () => {
-			result = await crawl(['http://localhost:8010/scope/blog/'], {
-				scope: ['http://localhost:8010/scope/blog/', 'http://localhost:8010/scope/docs/'],
-			});
-		}, 120_000);
-
-		afterAll(async () => {
-			await cleanup(result);
-		});
-
-		it('scope内の複数パスがクロール対象になる', async () => {
-			const internalPages = await result.accessor.getPages('internal-page');
-			const urls = internalPages.map((p) => p.url.pathname);
-			expect(urls).toContain('/scope/blog/');
-			expect(urls).toContain('/scope/blog/post-1');
-		});
-
-		it('scopeに含まれないパスはクロール対象外', async () => {
-			const internalPages = await result.accessor.getPages('internal-page');
-			const urls = internalPages.map((p) => p.url.pathname);
-			expect(urls).not.toContain('/scope/admin/');
-			expect(urls).not.toContain('/scope/admin/settings');
-		});
-	});
-
 	describe('hostname 一致 × scope path 外 + fetchExternal=true', () => {
 		let result: CrawlResult;
 

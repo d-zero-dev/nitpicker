@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { acquireArchiveLock, ArchiveLockError } from './archive-lock.js';
 
@@ -90,5 +90,40 @@ describe('acquireArchiveLock', () => {
 		await fs.rm(`${tmpDir}.lock`, { recursive: true, force: true });
 
 		await expect(release()).resolves.toBeUndefined();
+	});
+
+	it('surfaces ArchiveLockError when the post-stale-cleanup mkdir loses a race', async () => {
+		// Plant a stale lock so the first mkdir hits EEXIST and the code
+		// enters the stale-recovery path. Then mock the second mkdir to also
+		// reject with EEXIST as if another process won the race.
+		const tmpDir = makeTmpDir('race');
+		const lockPath = `${tmpDir}.lock`;
+		await fs.mkdir(lockPath, { recursive: true });
+		await fs.writeFile(path.join(lockPath, 'pid.txt'), '9999999', 'utf8');
+
+		// `acquireArchiveLock` calls mkdir twice on the stale-recovery path:
+		// the first call is the real one (returns EEXIST because we planted
+		// the directory). After `fs.rm` it tries again; mock only that 2nd
+		// invocation.
+		const originalMkdir = fs.mkdir.bind(fs);
+		const racingPid = '12345';
+		let callIndex = 0;
+		vi.spyOn(fs, 'mkdir').mockImplementation(async (target, options) => {
+			callIndex += 1;
+			if (callIndex === 2 && target === lockPath) {
+				// Re-plant the lock so readHolderPid surfaces a believable owner.
+				await originalMkdir(lockPath, { recursive: true });
+				await fs.writeFile(path.join(lockPath, 'pid.txt'), racingPid, 'utf8');
+				const error = new Error('EEXIST') as NodeJS.ErrnoException;
+				error.code = 'EEXIST';
+				throw error;
+			}
+			return originalMkdir(target, options);
+		});
+
+		await expect(acquireArchiveLock(tmpDir)).rejects.toBeInstanceOf(ArchiveLockError);
+		vi.restoreAllMocks();
+		// Clean up the re-planted lock so afterEach can wipe the base dir.
+		await fs.rm(lockPath, { recursive: true, force: true });
 	});
 });
