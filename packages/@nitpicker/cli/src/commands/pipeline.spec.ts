@@ -111,6 +111,9 @@ describe('pipeline command', () => {
 				retry: 3,
 				resume: undefined,
 				diff: undefined,
+				// pipeline can never trigger append mode — it always passes an
+				// empty array so the dispatcher's `hasAppendFlag` stays false.
+				append: [],
 			}),
 		);
 		expect(analyzeFn).toHaveBeenCalledWith(

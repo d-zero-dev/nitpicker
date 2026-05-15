@@ -41,6 +41,7 @@ afterEach(async () => {
 		'migrate-null.sqlite',
 		'migrate-idempotent.sqlite',
 		'migrate-empty.sqlite',
+		'migrate-mixed.sqlite',
 	]) {
 		await fs.rm(path.resolve(workingDir, name), { force: true });
 	}
@@ -72,6 +73,7 @@ describe('migrateInfoRoots', () => {
 
 		const [row] = await instance.select('roots').from('info');
 		expect(JSON.parse(row.roots as string)).toEqual([]);
+		expect(await instance.schema.hasColumn('info', 'scope')).toBe(false);
 
 		await instance.destroy();
 	});
@@ -81,11 +83,48 @@ describe('migrateInfoRoots', () => {
 		await instance('info').insert({ baseUrl: 'https://example.com/' });
 
 		await migrateInfoRoots(instance);
-		// 2 度目: column が既にあるので ALTER も UPDATE も走らない
+		// 1 回目で scope は drop され roots が seed される
+		expect(await instance.schema.hasColumn('info', 'scope')).toBe(false);
+		expect(await instance.schema.hasColumn('info', 'roots')).toBe(true);
+
+		// 2 度目: hasRoots && !hasScope の早期 return で何も走らない
 		await migrateInfoRoots(instance);
+		expect(await instance.schema.hasColumn('info', 'scope')).toBe(false);
 
 		const [row] = await instance.select('roots').from('info');
 		expect(JSON.parse(row.roots as string)).toEqual(['https://example.com/']);
+
+		await instance.destroy();
+	});
+
+	it('drops scope on archives that already have roots (partial-migration recovery)', async () => {
+		// 過去の migration が roots 追加だけで止まった archive、または手動で
+		// roots だけ生やした archive を想定。両カラムが同時に存在する状態。
+		const filename = path.resolve(workingDir, 'migrate-mixed.sqlite');
+		await fs.rm(filename, { force: true });
+		const instance = knex({
+			client: LibsqlDialect as never,
+			connection: { filename },
+			useNullAsDefault: true,
+		});
+		await instance.schema.createTable('info', (t) => {
+			t.increments('id');
+			t.string('baseUrl');
+			t.json('scope');
+			t.json('roots');
+		});
+		await instance('info').insert({
+			baseUrl: 'https://example.com',
+			scope: '[]',
+			roots: JSON.stringify(['https://example.com']),
+		});
+
+		await migrateInfoRoots(instance);
+
+		expect(await instance.schema.hasColumn('info', 'scope')).toBe(false);
+		expect(await instance.schema.hasColumn('info', 'roots')).toBe(true);
+		const [row] = await instance.select('roots').from('info');
+		expect(JSON.parse(row.roots as string)).toEqual(['https://example.com']);
 
 		await instance.destroy();
 	});
@@ -166,6 +205,10 @@ describe('migrateInfoRoots', () => {
 
 		// 3) roots カラムは追加され、baseUrl で seed されている
 		expect(config.roots).toEqual(['https://legacy.example.com']);
+
+		// 4) scope カラムは drop されている
+		const knexInstance = db.getKnex();
+		expect(await knexInstance.schema.hasColumn('info', 'scope')).toBe(false);
 
 		await db.destroy();
 		await fs.rm(filename, { force: true });
