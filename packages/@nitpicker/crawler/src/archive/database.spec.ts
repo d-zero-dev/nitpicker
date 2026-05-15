@@ -205,7 +205,6 @@ describe('Config', () => {
 			image: true,
 			fetchExternal: false,
 			parallels: 4,
-			scope: ['https://example.com/docs/', 'https://example.com/blog/'],
 			excludes: ['/admin/', '/private/'],
 			excludeKeywords: ['secret', 'draft'],
 			excludeUrls: ['https://example.com/skip'],
@@ -251,7 +250,6 @@ describe('Config', () => {
 			'image',
 			'fetchExternal',
 			'parallels',
-			'scope',
 			'excludes',
 			'excludeKeywords',
 			'excludeUrls',
@@ -277,11 +275,8 @@ describe('Config', () => {
 
 		const retrieved = await db.getConfig();
 
-		expect(Array.isArray(retrieved.scope)).toBe(true);
-		expect(retrieved.scope).toEqual([
-			'https://example.com/docs/',
-			'https://example.com/blog/',
-		]);
+		expect(Array.isArray(retrieved.roots)).toBe(true);
+		expect(retrieved.roots).toEqual(['https://example.com']);
 		expect(Array.isArray(retrieved.excludes)).toBe(true);
 		expect(retrieved.excludes).toEqual(['/admin/', '/private/']);
 		expect(Array.isArray(retrieved.excludeKeywords)).toBe(true);
@@ -297,15 +292,13 @@ describe('Config', () => {
 			filename: configDbPath,
 		});
 
-		// roots と scope を別の値で上書き、他は触らない
+		// roots だけ上書き、他は触らない
 		await db.updateConfig({
 			roots: ['https://example.com/', 'https://example.com/blog/'],
-			scope: ['https://example.com/'],
 		});
 
 		const after = await db.getConfig();
 		expect(after.roots).toEqual(['https://example.com/', 'https://example.com/blog/']);
-		expect(after.scope).toEqual(['https://example.com/']);
 		// 他のフィールドは変わっていない
 		expect(after.baseUrl).toBe('https://example.com');
 		expect(after.name).toBe('test-crawl');
@@ -828,12 +821,12 @@ describe('getJSON (getConfig 経由)', () => {
 			version: '0.4.3',
 			name: 'test',
 			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
 			recursive: false,
 			interval: 500,
 			image: false,
 			fetchExternal: false,
 			parallels: 1,
-			scope: [],
 			excludes: [],
 			excludeKeywords: [],
 			excludeUrls: [],
@@ -855,7 +848,7 @@ describe('getJSON (getConfig 経由)', () => {
 			connection: { filename: invalidJsonDbPath },
 			useNullAsDefault: true,
 		});
-		await rawDb('info').update({ scope: '{invalid json' });
+		await rawDb('info').update({ excludes: '{invalid json' });
 		await rawDb.destroy();
 
 		const db2 = await Database.connect({
@@ -865,7 +858,7 @@ describe('getJSON (getConfig 経由)', () => {
 		});
 
 		const retrieved = await db2.getConfig();
-		expect(retrieved.scope).toEqual([]);
+		expect(retrieved.excludes).toEqual([]);
 
 		await db2.destroy();
 	});

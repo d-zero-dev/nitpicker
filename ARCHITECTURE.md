@@ -406,7 +406,7 @@ scrapeStart(url, page, options)
 - **images**: pageId, src, currentSrc, alt, width/height, naturalWidth/naturalHeight, isLazy, viewportWidth, sourceCode
 - **resources**: url, isExternal, status, statusText, contentType, contentLength, compress, cdn, responseHeaders
 - **resources-referrers**: resourceId → resources.id, pageId → pages.id
-- **info**: 設定情報（単一レコード、`Config` 型のフィールドを JSON で保存）。`baseUrl`（先頭起点 URL、`roots[0]` と同値）と `roots`（位置引数で渡された全起点 URL の JSON 配列）を含む
+- **info**: 設定情報（単一レコード、`Config` 型のフィールドを JSON で保存）。`baseUrl`（先頭起点 URL、`roots[0]` と同値）と `roots`（位置引数で渡された全起点 URL の JSON 配列）を含む。スコープエントリは `roots` 1 本で表現する（独立した `scope` カラムは無い）
 
 ### リダイレクトの保存
 
@@ -630,7 +630,7 @@ isLowerLayer('/meta/robots-noindex', '/meta/')     → true  (meta が一致)
 
 ### Multi-root crawl
 
-`CrawlerOrchestrator.crawling(urls, options)` に位置引数 URL を複数渡すと、それぞれが「再帰クロールの起点」かつ「スコープエントリ」として扱われる。`info.roots` に元の位置引数リストがそのまま記録され、`info.scope` は `roots` と `options.scope` の和集合が記録される。`Crawler` 構築時にも同じマージ済み scope が渡されるため、メモリ上の scope map と DB に保存される scope は常に同期する。
+`CrawlerOrchestrator.crawling(urls, options)` に位置引数 URL を複数渡すと、それぞれが「再帰クロールの起点」かつ「スコープエントリ」として扱われる。`info.roots` に元の位置引数リストがそのまま記録され、同じ配列が `Crawler` 構築時にも渡されるため、メモリ上の scope map と DB に保存される roots は常に同期する。スコープと起点は別概念ではなく、`info.roots` 1 本で表現される。
 
 ### Append crawl
 
@@ -642,8 +642,7 @@ archived = archive.getConfig()
 archived.fromList === true → エラー（list-mode archive は append 不可）
 copyFile(archivePath, archivePath + '.bak')     # 失敗時の復元用バックアップ
 mergedRoots = unique(archived.roots, newUrls.withoutHash)
-mergedScope = unique(archived.scope, newUrls.withoutHash, options.scope)
-archive.updateConfig({ roots, scope, fromList:false, recursive:true, baseUrl:roots[0] })
+archive.updateConfig({ roots, fromList:false, recursive:true, baseUrl:roots[0] })
 archive.repromoteExternalPages(scopeMap)        # 旧 external のうち新 scope 下層を pending に戻す
 crawler.resume(pending, scraped, resources)     # 既存状態を crawler に流す
 orchestrator.crawling(newParsed)                # 新 root + repromote 対象を再クロール

@@ -15,7 +15,7 @@ const defaultOptions: CrawlerOptions = {
 	captureImages: false,
 	executablePath: null,
 	fetchExternal: false,
-	scope: ['https://example.com/'],
+	roots: ['https://example.com/'],
 	excludes: [],
 	excludeKeywords: [],
 	excludeUrls: [],
@@ -148,7 +148,7 @@ describe('handleScrapeEnd', () => {
 				result,
 				linkList as never,
 				scope,
-				{ ...defaultOptions, scope: ['https://example.com/blog/'] },
+				{ ...defaultOptions, roots: ['https://example.com/blog/'] },
 				addUrl,
 			);
 
@@ -176,7 +176,7 @@ describe('handleScrapeEnd', () => {
 				result,
 				linkList as never,
 				scope,
-				{ ...defaultOptions, scope: ['https://example.com/blog/'], fetchExternal: true },
+				{ ...defaultOptions, roots: ['https://example.com/blog/'], fetchExternal: true },
 				addUrl,
 			);
 
@@ -202,7 +202,7 @@ describe('handleScrapeEnd', () => {
 				result,
 				linkList as never,
 				scope,
-				{ ...defaultOptions, scope: ['https://example.com/blog/'], fetchExternal: false },
+				{ ...defaultOptions, roots: ['https://example.com/blog/'], fetchExternal: false },
 				addUrl,
 			);
 
@@ -223,7 +223,7 @@ describe('handleScrapeEnd', () => {
 				result,
 				linkList as never,
 				scope,
-				{ ...defaultOptions, scope: ['https://user:pass@example.com/blog/'] },
+				{ ...defaultOptions, roots: ['https://user:pass@example.com/blog/'] },
 				addUrl,
 			);
 
@@ -247,7 +247,7 @@ describe('handleScrapeEnd', () => {
 				scope,
 				{
 					...defaultOptions,
-					scope: ['https://user:pass@example.com/blog/'],
+					roots: ['https://user:pass@example.com/blog/'],
 					fetchExternal: true,
 				},
 				addUrl,
@@ -276,7 +276,7 @@ describe('handleScrapeEnd', () => {
 				result,
 				linkList as never,
 				scope,
-				{ ...defaultOptions, scope: ['https://example.com/blog/'], recursive: false },
+				{ ...defaultOptions, roots: ['https://example.com/blog/'], recursive: false },
 				addUrl,
 			);
 

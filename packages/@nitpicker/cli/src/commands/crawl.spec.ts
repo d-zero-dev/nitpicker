@@ -63,7 +63,6 @@ function createFlags(overrides: Partial<CrawlFlags> = {}): CrawlFlags {
 		fetchExternal: true,
 		parallels: undefined,
 		recursive: true,
-		scope: undefined,
 		exclude: undefined,
 		excludeKeyword: undefined,
 		excludeUrl: undefined,

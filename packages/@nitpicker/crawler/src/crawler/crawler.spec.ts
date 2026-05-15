@@ -39,7 +39,7 @@ const defaultOptions = {
 	interval: 0,
 	parallels: 1,
 	recursive: true,
-	scope: ['https://example.com/'],
+	roots: ['https://example.com/'],
 	excludes: [],
 	excludeKeywords: [],
 	excludeUrls: [],

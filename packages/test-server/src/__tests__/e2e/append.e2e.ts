@@ -92,16 +92,6 @@ describe('Append crawl', () => {
 		]);
 	});
 
-	it('info.scope merges the new root into the existing scope set', async () => {
-		const config = await accessor.getConfig();
-		expect(config.scope).toEqual(
-			expect.arrayContaining([
-				'http://localhost:8010/scope/blog/',
-				'http://localhost:8010/scope/docs/',
-			]),
-		);
-	});
-
 	it('removes the .bak backup file once the append succeeds', async () => {
 		const exists = await fs
 			.stat(filePath + '.bak')

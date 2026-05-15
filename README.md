@@ -55,7 +55,6 @@ $ npx @nitpicker/cli crawl --append existing.nitpicker https://sample-b.com/
 | `--single`                    | なし                                    | なし                  | 不可     | 単一ページモード（リンク探索なし）                                                                                                                                                      |
 | `--no-fetch-external`         | なし                                    | なし                  | 不可     | 外部リンクを取得しない                                                                                                                                                                  |
 | `--no-recursive`              | なし                                    | なし                  | 不可     | 再帰クロールを無効化                                                                                                                                                                    |
-| `--scope`                     | URL（カンマ区切り）                     | なし                  | 不可     | 位置引数の起点 URL に追加でスコープエントリを加える。スコープは `(hostname, port, path)` で判定するため、`localhost:3000` と `localhost:8080` は別 scope として隔離される               |
 | `--exclude`                   | URL パス（glob パターン、カンマ区切り） | なし                  | 可       | 指定パスに一致するページを除外                                                                                                                                                          |
 | `--exclude-keyword`           | 文字列または正規表現                    | なし                  | 可       | 指定キーワードを含むページを除外                                                                                                                                                        |
 | `--exclude-url`               | URL プレフィックス                      | なし                  | 可       | 指定プレフィックスで始まる URL を除外                                                                                                                                                   |
@@ -85,7 +84,6 @@ $ npx @nitpicker/cli crawl https://example.com --no-image
 $ npx @nitpicker/cli crawl https://example.com --single
 $ npx @nitpicker/cli crawl https://example.com --no-fetch-external
 $ npx @nitpicker/cli crawl https://example.com --no-recursive
-$ npx @nitpicker/cli crawl https://example.com --scope "www.example.com, www3.example.com, https://blog.example.com/blog"
 $ npx @nitpicker/cli crawl https://example.com --exclude "/blog/**/*"
 $ npx @nitpicker/cli crawl https://example.com --exclude "/blog/**/*,/facility/**/*"
 $ npx @nitpicker/cli crawl https://example.com --exclude-keyword "/Error/i" --exclude-keyword "404"
@@ -147,7 +145,7 @@ $ npx @nitpicker/cli crawl --append ./existing.nitpicker https://sample-b.com/
 
 挙動:
 
-- 位置引数の URL は新しい再帰起点として `info.roots` / `info.scope` に追加される
+- 位置引数の URL は新しい再帰起点として `info.roots` に追加される
 - 既存アーカイブで `external` として保存されていたページのうち、拡張後のスコープに該当するものは `internal` として再スクレイプされる
 - クロール開始前に `<file>.bak` バックアップを作成。クロール失敗時は `.bak` から自動復元、成功時は `.bak` を削除
 - `--list` / `--list-file` で作成された list-mode archive への append は拒否される
@@ -258,12 +256,12 @@ $ npx @nitpicker/cli pipeline <URL>
 
 crawl / analyze / report のオプションをすべて指定可能。各ステップに対応するフラグが自動的にルーティングされる。
 
-| カテゴリ | 主要オプション                                                                               | 説明                                           |
-| -------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| crawl    | `--interval`, `--parallels`, `--no-image`, `--scope`, `--exclude`, `--output`, `--strict` 等 | クロール動作の制御（crawl セクション参照）     |
-| analyze  | `--all`, `--plugin`, `--search-keywords`, `--axe-lang` 等                                    | 分析プラグインの制御（analyze セクション参照） |
-| report   | `--sheet`, `--credentials`, `--config`, `--limit`                                            | レポート出力の制御（report セクション参照）    |
-| 共通     | `--verbose`, `--silent`                                                                      | ログ出力の制御                                 |
+| カテゴリ | 主要オプション                                                                    | 説明                                           |
+| -------- | --------------------------------------------------------------------------------- | ---------------------------------------------- |
+| crawl    | `--interval`, `--parallels`, `--no-image`, `--exclude`, `--output`, `--strict` 等 | クロール動作の制御（crawl セクション参照）     |
+| analyze  | `--all`, `--plugin`, `--search-keywords`, `--axe-lang` 等                         | 分析プラグインの制御（analyze セクション参照） |
+| report   | `--sheet`, `--credentials`, `--config`, `--limit`                                 | レポート出力の制御（report セクション参照）    |
+| 共通     | `--verbose`, `--silent`                                                           | ログ出力の制御                                 |
 
 > **注意**: `--resume`, `--append`, `--diff` は crawl 専用モードのため pipeline では使用不可。
 

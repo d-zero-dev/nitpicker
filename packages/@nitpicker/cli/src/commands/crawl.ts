@@ -57,10 +57,6 @@ export const commandDef = {
 			default: true,
 			desc: 'Recursive crawling (use --no-recursive to disable)',
 		},
-		scope: {
-			type: 'string',
-			desc: 'Set hosts and URLs as scope',
-		},
 		exclude: {
 			type: 'string',
 			isMultiple: true,

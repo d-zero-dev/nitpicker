@@ -46,10 +46,6 @@ export const commandDef = {
 			default: true,
 			desc: 'Recursive crawling (use --no-recursive to disable)',
 		},
-		scope: {
-			type: 'string',
-			desc: 'Set hosts and URLs as scope',
-		},
 		exclude: {
 			type: 'string',
 			isMultiple: true,
@@ -220,7 +216,6 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			fetchExternal: flags.fetchExternal,
 			parallels: flags.parallels,
 			recursive: flags.recursive,
-			scope: flags.scope,
 			exclude: flags.exclude,
 			excludeKeyword: flags.excludeKeyword,
 			excludeUrl: flags.excludeUrl,

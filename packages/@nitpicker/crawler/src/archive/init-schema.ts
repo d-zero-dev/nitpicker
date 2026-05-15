@@ -28,7 +28,6 @@ export async function initSchema(instance: Knex) {
 			t.boolean('image');
 			t.boolean('fetchExternal');
 			t.integer('parallels');
-			t.json('scope');
 			t.json('excludes');
 			t.json('excludeKeywords');
 			t.json('excludeUrls');

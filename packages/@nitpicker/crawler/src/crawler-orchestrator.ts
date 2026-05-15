@@ -147,7 +147,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			executablePath: options?.executablePath || null,
 			fetchExternal: options?.fetchExternal ?? true,
 			recursive: options?.recursive ?? true,
-			scope: options?.scope ?? [],
+			roots: options?.roots ?? [],
 			excludes: normalizeToArray(options?.excludes),
 			excludeKeywords: normalizeToArray(options?.excludeKeywords),
 			excludeUrls: [
@@ -324,11 +324,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		const defaultUserAgent = `Nitpicker/${pkg.version}`;
 		const archive = await Archive.create({ filePath, cwd, disableQueries });
 
-		// Multi-root: every positional URL is both a starting point and a scope
-		// entry. The user's explicit --scope flag is merged into the same set so
-		// callers can still widen the crawl beyond the roots when they need to.
+		// Each positional URL is both a starting point and a scope entry.
 		const rootHrefs = list.map((u) => u.withoutHash);
-		const mergedScope = [...new Set([...rootHrefs, ...normalizeToArray(options?.scope)])];
 
 		await archive.setConfig({
 			version: pkg.version,
@@ -340,7 +337,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			image: options?.image ?? true,
 			interval: options?.interval || 0,
 			parallels: options?.parallels || 0,
-			scope: mergedScope,
 			excludes: normalizeToArray(options?.excludes),
 			excludeKeywords: normalizeToArray(options?.excludeKeywords),
 			excludeUrls: [
@@ -356,7 +352,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		});
 		const orchestrator = new CrawlerOrchestrator(archive, {
 			...options,
-			scope: mergedScope,
+			roots: rootHrefs,
 		});
 		const config = await archive.getConfig();
 		if (initializedCallback) {
@@ -427,15 +423,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		}
 		const newRoots = newParsed.map((u) => u.withoutHash);
 		const mergedRoots = [...new Set([...archived.roots, ...newRoots])];
-		const userScope = normalizeToArray(options?.scope);
-		const mergedScope = [
-			...new Set([...(archived.scope ?? []), ...newRoots, ...userScope]),
-		];
 		const mergedConfig: Config = {
 			...archived,
 			...cleanObject(options),
 			roots: mergedRoots,
-			scope: mergedScope,
 			fromList: false,
 			recursive: true,
 			baseUrl: mergedRoots[0]!,
@@ -451,7 +442,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			await archive.updateConfig(mergedConfig);
 
 			const scopeMap = new Map<string, ExURL[]>();
-			for (const raw of mergedScope) {
+			for (const raw of mergedRoots) {
 				const parsed = parseUrl(raw, archived);
 				if (!parsed) continue;
 				const existing = scopeMap.get(parsed.hostname) ?? [];
@@ -461,7 +452,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 			const orchestrator = new CrawlerOrchestrator(archive, {
 				...mergedConfig,
-				scope: mergedScope,
+				roots: mergedRoots,
 			});
 			const { scraped, pending } = await archive.getCrawlingState();
 			const resources = await archive.getResourceUrlList();
@@ -472,7 +463,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			log('Start appending');
 			log('Archive %s', absFilePath);
 			log('New roots %O', newRoots);
-			log('Merged scope %O', mergedScope);
+			log('Merged roots %O', mergedRoots);
 			await orchestrator.crawling(newParsed);
 			clearDestinationCache();
 			await archive.setUrlOrder();

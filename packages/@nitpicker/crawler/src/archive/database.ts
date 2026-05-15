@@ -55,7 +55,6 @@ const INFO_COLUMN_ALLOWLIST: ReadonlySet<string> = new Set<keyof Config>([
 	'image',
 	'fetchExternal',
 	'parallels',
-	'scope',
 	'excludes',
 	'excludeKeywords',
 	'excludeUrls',
@@ -73,7 +72,6 @@ const INFO_COLUMN_ALLOWLIST: ReadonlySet<string> = new Set<keyof Config>([
  */
 const INFO_JSON_COLUMNS: ReadonlySet<string> = new Set<keyof Config>([
 	'roots',
-	'scope',
 	'excludes',
 	'excludeKeywords',
 	'excludeUrls',
@@ -199,7 +197,11 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 	/**
 	 * Retrieves the full crawl configuration from the `info` table.
-	 * Deserializes JSON-encoded fields (`excludes`, `excludeKeywords`, `scope`).
+	 * Deserializes JSON-encoded fields (`roots`, `excludes`, `excludeKeywords`, `excludeUrls`).
+	 *
+	 * Legacy archives whose `info.scope` column still exists are tolerated: that
+	 * column is silently ignored on read and dropped on the next write because
+	 * the column allowlist no longer mentions it.
 	 * @returns The parsed {@link Config} object.
 	 * @throws {Error} If no configuration is found in the database.
 	 */
@@ -216,10 +218,13 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			excludes: getJSON<string[]>(config.excludes, []),
 			excludeKeywords: getJSON<string[]>(config.excludeKeywords, []),
 			excludeUrls: getJSON<string[]>(config.excludeUrls, []),
-			scope: getJSON<string[]>(config.scope, []),
 			roots: roots.length > 0 ? roots : config.baseUrl ? [config.baseUrl] : [],
 			retry: config.retry ?? 3,
 		};
+		// Legacy `scope` column may still be present on old archives — strip it
+		// so consumers can rely on the current Config shape.
+		// @ts-expect-error — column may exist on old rows but is no longer typed
+		delete opt.scope;
 		// @ts-expect-error
 		delete opt.id;
 		dbLog('Table `info`: %O => %O', config, opt);
@@ -688,25 +693,23 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 	/**
 	 * Stores the crawl configuration in the `info` table.
-	 * Serializes array fields (`roots`, `excludes`, `excludeKeywords`, `excludeUrls`, `scope`) as JSON strings.
+	 * Only fields in {@link INFO_COLUMN_ALLOWLIST} are forwarded — any extra
+	 * runtime-only field on the input is silently dropped so callers can splat
+	 * a wider config object without producing SQL errors. JSON-array fields
+	 * are serialized via `JSON.stringify`.
 	 * @param config - The {@link Config} object to store.
 	 */
 	@ErrorEmitter()
 	@retry(retrySetting)
 	async setConfig(config: Config) {
-		return this.#instance.from<Config>('info').insert({
-			...config,
-			// @ts-expect-error
-			roots: JSON.stringify(config.roots),
-			// @ts-expect-error
-			excludes: JSON.stringify(config.excludes),
-			// @ts-expect-error
-			excludeKeywords: JSON.stringify(config.excludeKeywords),
-			// @ts-expect-error
-			excludeUrls: JSON.stringify(config.excludeUrls),
-			// @ts-expect-error
-			scope: JSON.stringify(config.scope),
-		});
+		const payload: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(config)) {
+			if (!INFO_COLUMN_ALLOWLIST.has(key)) {
+				continue;
+			}
+			payload[key] = INFO_JSON_COLUMNS.has(key) ? JSON.stringify(value) : value;
+		}
+		return this.#instance.from<Config>('info').insert(payload);
 	}
 
 	/**
@@ -763,7 +766,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	/**
 	 * Update the single row in the `info` table with a partial config patch.
 	 *
-	 * Used by the append flow to extend `roots` / `scope` (and any other tweakable
+	 * Used by the append flow to extend `roots` (and any other tweakable
 	 * field) without replacing the entire row. JSON-array fields are serialized on
 	 * the fly; primitive fields are written verbatim. Unspecified fields stay as-is.
 	 *

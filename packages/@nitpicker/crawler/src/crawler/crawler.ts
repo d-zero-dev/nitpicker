@@ -94,7 +94,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			captureImages: options?.captureImages ?? true,
 			executablePath: options?.executablePath ?? null,
 			fetchExternal: options?.fetchExternal ?? true,
-			scope: options?.scope ?? [],
+			roots: options?.roots ?? [],
 			excludes: options?.excludes || [],
 			excludeKeywords: options?.excludeKeywords || [],
 			excludeUrls: options?.excludeUrls || [],
@@ -111,7 +111,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			!this.#options.ignoreRobots,
 		);
 
-		for (const urlStr of this.#options.scope) {
+		for (const urlStr of this.#options.roots) {
 			const url = parseUrl(urlStr, this.#options);
 			if (url) {
 				const existing = this.#scope.get(url.hostname) || [];

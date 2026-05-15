@@ -33,7 +33,6 @@ describe('getSummary', () => {
 			image: true,
 			fetchExternal: false,
 			parallels: 1,
-			scope: [],
 			excludes: [],
 			excludeKeywords: [],
 			excludeUrls: [],

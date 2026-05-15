@@ -12,8 +12,6 @@ export interface CrawlFlagInput {
 	readonly excludeKeyword?: string[];
 	/** Exclude external URL prefix. Maps to `excludeUrls` in CrawlConfig. */
 	readonly excludeUrl?: string[];
-	/** Comma-separated scope hosts/URLs. Parsed into a string array in CrawlConfig. */
-	readonly scope?: string;
 	/** An interval time on request when crawling. */
 	readonly interval?: number;
 	/** Whether to collect image data during crawling. */
