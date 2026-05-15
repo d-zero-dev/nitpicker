@@ -434,3 +434,33 @@ $ npx @nitpicker/cli query site.nitpicker summary --pretty
 
 AI: open_archive で読み込み → list_pages で status=404 のページをフィルタ → 結果を表示
 ```
+
+## トラブルシューティング
+
+`crawl` / `--append` / `--resume` の運用で遭遇しがちなエラーと対処法。
+
+### `Archive is being used by another process (PID xxx): <path>.lock`
+
+別プロセスが同じ archive を開いているときに発生する。`.lock` ディレクトリの `pid.txt` が保持する PID を `ps -p <PID>` で確認し、稼働中ならそのプロセスの終了を待つ。
+
+PID 既に終了していれば次回 open 時に自動で stale 検出されて回復する。それでも残るときは安全を確認したうえで `rm -rf <path>.lock` で手動削除可能。
+
+検索キーワード: `nitpicker lock file` / `ArchiveLockError`
+
+### `Cannot append to a list-mode archive`
+
+`--list` / `--list-file` で作成された archive（`info.fromList=true`）に対して `--append` を実行したときに発生する。list-mode archive はメタデータのみのページを含み再帰クロールの土台にならないため、append 経路は閉じている。新規 archive を作るか、フルクロールで作り直すこと。
+
+検索キーワード: `nitpicker append fromList` / `list-mode archive`
+
+### `<archive>.bak` が残っている
+
+`--append` は実行前にバックアップを作り、成功時に削除、失敗時に原本を `.bak` から復元してから削除する。それでも残っている場合は、append 中の crash 後の復元自体が失敗した状態（`AggregateError` でログに残るはず）。手動で `mv <archive>.bak <archive>` で原本を復元できる。
+
+検索キーワード: `nitpicker .bak file` / `AggregateError append`
+
+### `[migrate] info.roots column added (seeded with baseUrl)`（stderr に 1 行）
+
+旧版（`info.roots` 列を持たない）の archive を初めて開いたときに 1 度だけ出力される **正常通知**。エラーではない。`baseUrl` を起点に `info.roots = [baseUrl]` で seed されて、以降は新スキーマとして扱われる。
+
+検索キーワード: `nitpicker info.roots migration`
