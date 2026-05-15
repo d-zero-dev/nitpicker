@@ -30,7 +30,8 @@ export const commandDef = {
 		append: {
 			type: 'string',
 			shortFlag: 'A',
-			desc: 'Append crawl: open the given archive and add positional URLs as new recursive roots',
+			isMultiple: true,
+			desc: 'Append crawl: register the URL as a new recursive root for the positional archive (repeat for multiple URLs)',
 		},
 		interval: {
 			type: 'number',
@@ -285,13 +286,14 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 /**
  * Append a fresh crawl to an existing `.nitpicker` archive.
  *
- * Opens the archive, registers the positional URLs as additional recursive
- * roots, re-scrapes any previously-external pages whose URL now falls under
- * the expanded scope, and writes the result back to the same file. A
- * `<archive>.bak` is taken before any DB mutation; on success it is removed,
- * on failure it is restored.
+ * Opens the archive identified by the positional argument, registers the
+ * `--append` URLs as additional recursive roots, re-scrapes any
+ * previously-external pages whose URL now falls under the expanded scope,
+ * and writes the result back to the same file. A `<archive>.bak` is taken
+ * before any DB mutation; on success it is removed, on failure it is
+ * restored.
  * @param archivePath - Path to the existing `.nitpicker` archive.
- * @param newUrls - Positional URLs to append as new roots. Must be non-empty.
+ * @param newUrls - URLs from one or more `--append` flags. Must be non-empty.
  * @param flags - Parsed CLI flags from the `crawl` command.
  */
 async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlFlags) {
@@ -366,8 +368,10 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 
 	log('Options: %O', flags);
 
+	const hasAppendFlag = !!flags.append && flags.append.length > 0;
+
 	if (flags.diff) {
-		if (flags.append) {
+		if (hasAppendFlag) {
 			throw new Error('--diff cannot be combined with --append.');
 		}
 		if (args.length !== 2) {
@@ -395,7 +399,7 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 					'--output flag is not supported with --resume. The archive path is determined by the stub file.',
 				);
 			}
-			if (flags.append) {
+			if (hasAppendFlag) {
 				throw new Error(
 					'--resume and --append cannot be used together. Pick the existing-archive mode that fits your task.',
 				);
@@ -404,10 +408,10 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 			return;
 		}
 
-		if (flags.append) {
+		if (hasAppendFlag) {
 			if (flags.output) {
 				throw new Error(
-					'--output flag is not supported with --append. The archive path is the file being appended.',
+					'--output flag is not supported with --append. The archive path is the positional argument being appended.',
 				);
 			}
 			if (flags.listFile) {
@@ -420,9 +424,16 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 				throw new Error('--append cannot be combined with --single.');
 			}
 			if (args.length === 0) {
-				throw new Error('--append requires at least one URL to append.');
+				throw new Error(
+					'--append requires the archive path as the positional argument (usage: crawl <archive> --append <URL>).',
+				);
 			}
-			await appendCrawl(flags.append, args, flags);
+			if (args.length > 1) {
+				throw new Error(
+					'--append takes exactly one positional argument (the archive path). Extra positionals were given — did you mean to repeat --append for each URL?',
+				);
+			}
+			await appendCrawl(args[0]!, flags.append, flags);
 			return;
 		}
 

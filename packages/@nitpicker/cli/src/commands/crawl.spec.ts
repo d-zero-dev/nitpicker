@@ -366,11 +366,11 @@ describe('crawl', () => {
 		).rejects.toThrow('--single cannot be combined with multiple positional URLs');
 	});
 
-	it('--append <file> <url> で CrawlerOrchestrator.append が呼ばれる', async () => {
+	it('crawl <archive> --append <URL> で CrawlerOrchestrator.append が呼ばれる', async () => {
 		const { crawl } = await import('./crawl.js');
 		await crawl(
-			['https://sample-b.com/'],
-			createFlags({ append: '/tmp/existing.nitpicker' }),
+			['/tmp/existing.nitpicker'],
+			createFlags({ append: ['https://sample-b.com/'] }),
 		);
 
 		expect(mockAppend).toHaveBeenCalledOnce();
@@ -380,19 +380,41 @@ describe('crawl', () => {
 		expect(mockCrawling).not.toHaveBeenCalled();
 	});
 
-	it('--append に位置引数を渡さないとエラー', async () => {
+	it('--append を複数回指定すると複数 URL が渡される', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['/tmp/existing.nitpicker'],
+			createFlags({ append: ['https://a.com/', 'https://b.com/'] }),
+		);
+
+		expect(mockAppend).toHaveBeenCalledOnce();
+		const [, urls] = mockAppend.mock.calls[0]!;
+		expect(urls).toEqual(['https://a.com/', 'https://b.com/']);
+	});
+
+	it('--append を指定したのに位置引数が無いとエラー', async () => {
 		const { crawl } = await import('./crawl.js');
 		await expect(
-			crawl([], createFlags({ append: '/tmp/existing.nitpicker' })),
-		).rejects.toThrow('--append requires at least one URL to append');
+			crawl([], createFlags({ append: ['https://sample-b.com/'] })),
+		).rejects.toThrow(/--append requires the archive path/);
+	});
+
+	it('--append を指定したのに位置引数が複数あるとエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker', '/tmp/b.nitpicker'],
+				createFlags({ append: ['https://sample-b.com/'] }),
+			),
+		).rejects.toThrow(/--append takes exactly one positional argument/);
 	});
 
 	it('--append と --resume の同時指定はエラー', async () => {
 		const { crawl } = await import('./crawl.js');
 		await expect(
 			crawl(
-				['https://sample-b.com/'],
-				createFlags({ append: '/tmp/a.nitpicker', resume: '/tmp/stub' }),
+				['/tmp/a.nitpicker'],
+				createFlags({ append: ['https://sample-b.com/'], resume: '/tmp/stub' }),
 			),
 		).rejects.toThrow('--resume and --append cannot be used together');
 	});
@@ -402,7 +424,7 @@ describe('crawl', () => {
 		await expect(
 			crawl(
 				['a.nitpicker', 'b.nitpicker'],
-				createFlags({ append: '/tmp/a.nitpicker', diff: true }),
+				createFlags({ append: ['https://sample-b.com/'], diff: true }),
 			),
 		).rejects.toThrow('--diff cannot be combined with --append');
 	});
@@ -411,8 +433,11 @@ describe('crawl', () => {
 		const { crawl } = await import('./crawl.js');
 		await expect(
 			crawl(
-				['https://sample-b.com/'],
-				createFlags({ append: '/tmp/a.nitpicker', output: '/tmp/out.nitpicker' }),
+				['/tmp/a.nitpicker'],
+				createFlags({
+					append: ['https://sample-b.com/'],
+					output: '/tmp/out.nitpicker',
+				}),
 			),
 		).rejects.toThrow('--output flag is not supported with --append');
 	});
@@ -421,9 +446,9 @@ describe('crawl', () => {
 		const { crawl } = await import('./crawl.js');
 		await expect(
 			crawl(
-				['https://sample-b.com/'],
+				['/tmp/a.nitpicker'],
 				createFlags({
-					append: '/tmp/a.nitpicker',
+					append: ['https://sample-b.com/'],
 					list: ['https://sample-b.com/blog/'],
 				}),
 			),
@@ -434,8 +459,8 @@ describe('crawl', () => {
 		const { crawl } = await import('./crawl.js');
 		await expect(
 			crawl(
-				['https://sample-b.com/'],
-				createFlags({ append: '/tmp/a.nitpicker', single: true }),
+				['/tmp/a.nitpicker'],
+				createFlags({ append: ['https://sample-b.com/'], single: true }),
 			),
 		).rejects.toThrow('--append cannot be combined with --single');
 	});
@@ -443,8 +468,8 @@ describe('crawl', () => {
 	it('--append × list が空配列 ([]) なら通る', async () => {
 		const { crawl } = await import('./crawl.js');
 		await crawl(
-			['https://sample-b.com/'],
-			createFlags({ append: '/tmp/a.nitpicker', list: [] }),
+			['/tmp/a.nitpicker'],
+			createFlags({ append: ['https://sample-b.com/'], list: [] }),
 		);
 		expect(mockAppend).toHaveBeenCalledOnce();
 	});
