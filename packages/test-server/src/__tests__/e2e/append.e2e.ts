@@ -179,11 +179,24 @@ describe('Append crawl: restore from .bak on failure', () => {
 			},
 		);
 
-		await expect(
-			CrawlerOrchestrator.append(filePath, ['http://localhost:8010/scope/docs/'], {
-				cwd,
-			}),
-		).rejects.toThrow(AggregateError);
+		const thrown = await CrawlerOrchestrator.append(
+			filePath,
+			['http://localhost:8010/scope/docs/'],
+			{ cwd },
+		).then(
+			() => {
+				throw new Error('append unexpectedly resolved');
+			},
+			(error: unknown) => error,
+		);
+
+		expect(thrown).toBeInstanceOf(AggregateError);
+		const aggregate = thrown as AggregateError;
+		expect(aggregate.errors).toHaveLength(2);
+		expect((aggregate.errors[0] as Error).message).toBe('forced-repromote-failure');
+		expect((aggregate.errors[1] as NodeJS.ErrnoException).code).toBe('ENOENT');
+		expect(aggregate.message).toContain('append failed AND restore from backup failed');
+		expect(aggregate.message).toContain(filePath + '.bak');
 
 		// The original archive bytes are still intact even though restore
 		// could not run — copyFile failing before the catch's overwrite means

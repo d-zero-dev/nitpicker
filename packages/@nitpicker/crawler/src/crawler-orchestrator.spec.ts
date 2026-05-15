@@ -68,4 +68,58 @@ describe('CrawlerOrchestrator.append', () => {
 		);
 		expect(closeSpy).toHaveBeenCalledOnce();
 	});
+
+	it('resolves a relative archive path against cwd before opening', async () => {
+		// A user-supplied `./existing.nitpicker` must be resolved to
+		// `<cwd>/existing.nitpicker` before Archive.open sees it; the path
+		// is also what the catch path would feed to copyFile, so getting the
+		// resolution wrong corrupts both the lock and the .bak naming.
+		const closeSpy = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			getConfig: vi.fn(() => Promise.reject(new Error('stop-here'))),
+			close: closeSpy,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		const openSpy = vi
+			.spyOn(archiveModule.default, 'open')
+			.mockResolvedValueOnce(fakeArchive);
+
+		await expect(
+			CrawlerOrchestrator.append('./existing.nitpicker', ['https://example.com/'], {
+				cwd: '/tmp/test-cwd',
+			}),
+		).rejects.toThrow('stop-here');
+
+		expect(openSpy).toHaveBeenCalledOnce();
+		const openArg = openSpy.mock.calls[0]![0] as { filePath: string; cwd: string };
+		expect(openArg.filePath).toBe('/tmp/test-cwd/existing.nitpicker');
+		expect(openArg.cwd).toBe('/tmp/test-cwd');
+	});
+
+	it('passes an absolute archive path through unchanged', async () => {
+		const closeSpy = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			getConfig: vi.fn(() => Promise.reject(new Error('stop-here'))),
+			close: closeSpy,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		const openSpy = vi
+			.spyOn(archiveModule.default, 'open')
+			.mockResolvedValueOnce(fakeArchive);
+
+		await expect(
+			CrawlerOrchestrator.append(
+				'/abs/path/existing.nitpicker',
+				['https://example.com/'],
+				{
+					cwd: '/tmp/test-cwd',
+				},
+			),
+		).rejects.toThrow('stop-here');
+
+		const openArg = openSpy.mock.calls[0]![0] as { filePath: string };
+		expect(openArg.filePath).toBe('/abs/path/existing.nitpicker');
+	});
 });

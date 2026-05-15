@@ -1,5 +1,5 @@
 import { parseCli } from '@d-zero/roar';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { commandDef } from './crawl.js';
 
@@ -23,11 +23,6 @@ function runParse(argv: string[]) {
 		process.argv = original;
 	}
 }
-
-afterEach(() => {
-	// runParse already restores process.argv; this is a safety net for tests
-	// that bail before the finally.
-});
 
 describe('crawl CLI flag parsing (parseCli integration)', () => {
 	it('aggregates repeated --append into a string array', () => {
