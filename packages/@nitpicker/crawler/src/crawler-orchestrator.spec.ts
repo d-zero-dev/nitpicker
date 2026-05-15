@@ -63,7 +63,9 @@ describe('CrawlerOrchestrator.append', () => {
 			CrawlerOrchestrator.append('/tmp/anything.nitpicker', ['https://example.com/'], {
 				cwd: '/tmp',
 			}),
-		).rejects.toThrow(/list-mode archive/);
+		).rejects.toThrow(
+			'Cannot append to a list-mode archive: this archive was created with --list/--list-file and contains metadata-only pages. Create a fresh archive instead.',
+		);
 		expect(closeSpy).toHaveBeenCalledOnce();
 	});
 });

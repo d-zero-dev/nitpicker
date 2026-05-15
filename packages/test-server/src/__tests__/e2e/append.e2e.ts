@@ -161,6 +161,36 @@ describe('Append crawl: restore from .bak on failure', () => {
 		// belongs to the failed append.
 		expect(orphans).toEqual([]);
 	}, 120_000);
+
+	it('surfaces AggregateError when restore from .bak also fails', async () => {
+		// Two-stage failure: repromote rejects (triggers the restore path),
+		// AND the `.bak` is gone by the time the restore runs (so the
+		// in-catch `copyFile(backup → original)` raises ENOENT). The factory
+		// must surface an AggregateError carrying both errors so the operator
+		// knows the original archive may be corrupt.
+		//
+		// The mock deletes the .bak just before throwing — same effect as a
+		// concurrent rm or a disappearing FS without having to mock the
+		// statically-imported `copyFile`.
+		vi.spyOn(Archive.prototype, 'repromoteExternalPages').mockImplementationOnce(
+			async () => {
+				await fs.rm(filePath + '.bak', { force: true });
+				throw new Error('forced-repromote-failure');
+			},
+		);
+
+		await expect(
+			CrawlerOrchestrator.append(filePath, ['http://localhost:8010/scope/docs/'], {
+				cwd,
+			}),
+		).rejects.toThrow(AggregateError);
+
+		// The original archive bytes are still intact even though restore
+		// could not run — copyFile failing before the catch's overwrite means
+		// the file was never touched after the initial open.
+		const after = await fs.readFile(filePath);
+		expect(after.equals(originalArchiveBytes)).toBe(true);
+	}, 120_000);
 });
 
 describe('Append crawl: list-mode rejection', () => {
@@ -191,6 +221,8 @@ describe('Append crawl: list-mode rejection', () => {
 			CrawlerOrchestrator.append(filePath, ['http://localhost:8010/scope/docs/'], {
 				cwd,
 			}),
-		).rejects.toThrow(/list-mode archive/);
+		).rejects.toThrow(
+			'Cannot append to a list-mode archive: this archive was created with --list/--list-file and contains metadata-only pages. Create a fresh archive instead.',
+		);
 	}, 120_000);
 });

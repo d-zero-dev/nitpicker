@@ -23,6 +23,7 @@ export async function migrateInfoRoots(instance: Knex): Promise<void> {
 	if (hasRoots && !hasScope) {
 		return;
 	}
+	const changes: string[] = [];
 	if (!hasRoots) {
 		await instance.schema.table('info', (t) => {
 			t.json('roots');
@@ -31,12 +32,14 @@ export async function migrateInfoRoots(instance: Knex): Promise<void> {
 			`UPDATE info SET roots = json_array(baseUrl) WHERE roots IS NULL AND baseUrl IS NOT NULL`,
 		);
 		await instance.raw(`UPDATE info SET roots = '[]' WHERE roots IS NULL`);
+		changes.push('roots seeded');
 	}
 	if (hasScope) {
 		await instance.schema.table('info', (t) => {
 			t.dropColumn('scope');
 		});
+		changes.push('scope dropped');
 	}
 	// eslint-disable-next-line no-console
-	console.error('[migrate] info table upgraded (roots seeded, scope dropped)');
+	console.error(`[migrate] info table upgraded (${changes.join(', ')})`);
 }

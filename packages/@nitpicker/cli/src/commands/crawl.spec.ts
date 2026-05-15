@@ -396,7 +396,9 @@ describe('crawl', () => {
 		const { crawl } = await import('./crawl.js');
 		await expect(
 			crawl([], createFlags({ append: ['https://sample-b.com/'] })),
-		).rejects.toThrow(/--append requires the archive path/);
+		).rejects.toThrow(
+			'--append requires the archive path as the positional argument (usage: crawl <archive> --append <URL>).',
+		);
 	});
 
 	it('--append を指定したのに位置引数が複数あるとエラー', async () => {
@@ -406,7 +408,9 @@ describe('crawl', () => {
 				['/tmp/a.nitpicker', '/tmp/b.nitpicker'],
 				createFlags({ append: ['https://sample-b.com/'] }),
 			),
-		).rejects.toThrow(/--append takes exactly one positional argument/);
+		).rejects.toThrow(
+			'--append takes exactly one positional argument (the archive path). Extra positionals were given — did you mean to repeat --append for each URL?',
+		);
 	});
 
 	it('--append と --resume の同時指定はエラー', async () => {
