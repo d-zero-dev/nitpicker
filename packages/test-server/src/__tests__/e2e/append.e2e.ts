@@ -146,6 +146,20 @@ describe('Append crawl: restore from .bak on failure', () => {
 		// The archive bytes equal the pre-append snapshot — nothing leaked.
 		const after = await fs.readFile(filePath);
 		expect(after.equals(originalArchiveBytes)).toBe(true);
+
+		// The archive lock must have been released on the failure path —
+		// otherwise the next consumer cannot open the file.
+		const reopened = await Archive.open({ filePath, cwd });
+		await reopened.close();
+
+		// And the orphan tmpDir / .lock from the failed append should be gone.
+		const cwdEntries = await fs.readdir(cwd);
+		const orphans = cwdEntries.filter(
+			(name) => name.startsWith('._nitpicker-') || name.endsWith('.lock'),
+		);
+		// The reopen above creates+cleans its own tmpDir, so anything left
+		// belongs to the failed append.
+		expect(orphans).toEqual([]);
 	}, 120_000);
 });
 

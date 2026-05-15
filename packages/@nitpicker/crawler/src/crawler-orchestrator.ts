@@ -377,8 +377,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * Append a fresh crawl to an existing `.nitpicker` archive.
 	 *
 	 * The given `newUrls` become additional recursive roots: their `withoutHash`
-	 * form is merged into `info.roots` / `info.scope` and the crawler picks them
-	 * up as starting URLs. Previously-external pages whose URL now falls under
+	 * form is merged into `info.roots` and the crawler picks them up as
+	 * starting URLs. Previously-external pages whose URL now falls under
 	 * the expanded scope are demoted back to "needs scraping" so the next pass
 	 * re-fetches them as full internal pages. A `<archive>.bak` is created
 	 * before the crawl and removed on success; if the crawl throws, the backup
@@ -408,79 +408,87 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			: path.resolve(cwd, archivePath);
 
 		const archive = await Archive.open({ filePath: absFilePath, cwd });
-		const archived = await archive.getConfig();
-		if (archived.fromList) {
-			await archive.close();
-			throw new Error(
-				'Cannot append to a list-mode archive: this archive was created with --list/--list-file and contains metadata-only pages. Create a fresh archive instead.',
-			);
-		}
-
-		const newParsed = sortUrl(newUrls, archived);
-		if (newParsed.length === 0) {
-			await archive.close();
-			throw new Error('append: no parseable URLs provided');
-		}
-		const newRoots = newParsed.map((u) => u.withoutHash);
-		const mergedRoots = [...new Set([...archived.roots, ...newRoots])];
-		const mergedConfig: Config = {
-			...archived,
-			...cleanObject(options),
-			roots: mergedRoots,
-			fromList: false,
-			recursive: true,
-			baseUrl: mergedRoots[0]!,
-		};
-
-		const backupPath = absFilePath + '.bak';
-		await copyFile(absFilePath, backupPath);
-
+		// Any throw between here and the successful return must release the
+		// archive lock and clean up tmpDir; the caller's `close()` only runs on
+		// the happy path. Errors from `close()` itself are intentionally
+		// best-effort: the original error is what matters.
 		try {
-			// updateConfig now ignores keys outside the info-column allowlist, so
-			// it is safe to splat the full merged config (CrawlConfig extras like
-			// `cwd` are silently dropped instead of producing SQL errors).
-			await archive.updateConfig(mergedConfig);
-
-			const scopeMap = new Map<string, ExURL[]>();
-			for (const raw of mergedRoots) {
-				const parsed = parseUrl(raw, archived);
-				if (!parsed) continue;
-				const existing = scopeMap.get(parsed.hostname) ?? [];
-				scopeMap.set(parsed.hostname, [...existing, parsed]);
-			}
-			await archive.repromoteExternalPages(scopeMap, archived);
-
-			const orchestrator = new CrawlerOrchestrator(archive, {
-				...mergedConfig,
-				roots: mergedRoots,
-			});
-			const { scraped, pending } = await archive.getCrawlingState();
-			const resources = await archive.getResourceUrlList();
-			orchestrator.#crawler.resume(pending, scraped, resources);
-			if (initializedCallback) {
-				await initializedCallback(orchestrator, mergedConfig);
-			}
-			log('Start appending');
-			log('Archive %s', absFilePath);
-			log('New roots %O', newRoots);
-			log('Merged roots %O', mergedRoots);
-			await orchestrator.crawling(newParsed);
-			clearDestinationCache();
-			await archive.setUrlOrder();
-			await ignoreEnoent(unlinkFile(backupPath));
-			return orchestrator;
-		} catch (error) {
-			try {
-				await copyFile(backupPath, absFilePath);
-				await ignoreEnoent(unlinkFile(backupPath));
-			} catch (restoreError) {
-				// Restore itself failed — surface both so the operator knows the
-				// .bak still exists and the original archive may be corrupt.
-				throw new AggregateError(
-					[error, restoreError],
-					`append failed AND restore from backup failed. Original archive backup is left at: ${backupPath}`,
+			const archived = await archive.getConfig();
+			if (archived.fromList) {
+				throw new Error(
+					'Cannot append to a list-mode archive: this archive was created with --list/--list-file and contains metadata-only pages. Create a fresh archive instead.',
 				);
 			}
+
+			const newParsed = sortUrl(newUrls, archived);
+			if (newParsed.length === 0) {
+				throw new Error('append: no parseable URLs provided');
+			}
+			const newRoots = newParsed.map((u) => u.withoutHash);
+			const mergedRoots = [...new Set([...archived.roots, ...newRoots])];
+			const mergedConfig: Config = {
+				...archived,
+				...cleanObject(options),
+				roots: mergedRoots,
+				fromList: false,
+				recursive: true,
+				baseUrl: mergedRoots[0]!,
+			};
+
+			const backupPath = absFilePath + '.bak';
+			await copyFile(absFilePath, backupPath);
+
+			try {
+				// updateConfig now ignores keys outside the info-column allowlist, so
+				// it is safe to splat the full merged config (CrawlConfig extras like
+				// `cwd` are silently dropped instead of producing SQL errors).
+				await archive.updateConfig(mergedConfig);
+
+				const scopeMap = new Map<string, ExURL[]>();
+				for (const raw of mergedRoots) {
+					const parsed = parseUrl(raw, archived);
+					if (!parsed) continue;
+					const existing = scopeMap.get(parsed.hostname) ?? [];
+					scopeMap.set(parsed.hostname, [...existing, parsed]);
+				}
+				await archive.repromoteExternalPages(scopeMap, archived);
+
+				const orchestrator = new CrawlerOrchestrator(archive, {
+					...mergedConfig,
+					roots: mergedRoots,
+				});
+				const { scraped, pending } = await archive.getCrawlingState();
+				const resources = await archive.getResourceUrlList();
+				orchestrator.#crawler.resume(pending, scraped, resources);
+				if (initializedCallback) {
+					await initializedCallback(orchestrator, mergedConfig);
+				}
+				log('Start appending');
+				log('Archive %s', absFilePath);
+				log('New roots %O', newRoots);
+				log('Merged roots %O', mergedRoots);
+				await orchestrator.crawling(newParsed);
+				clearDestinationCache();
+				await archive.setUrlOrder();
+				await ignoreEnoent(unlinkFile(backupPath));
+				return orchestrator;
+			} catch (error) {
+				try {
+					await copyFile(backupPath, absFilePath);
+					await ignoreEnoent(unlinkFile(backupPath));
+				} catch (restoreError) {
+					// Restore itself failed — surface both so the operator knows
+					// the .bak still exists and the original archive may be
+					// corrupt. The outer `catch` still releases the lock.
+					throw new AggregateError(
+						[error, restoreError],
+						`append failed AND restore from backup failed. Original archive backup is left at: ${backupPath}`,
+					);
+				}
+				throw error;
+			}
+		} catch (error) {
+			await archive.close().catch(() => {});
 			throw error;
 		}
 	}
