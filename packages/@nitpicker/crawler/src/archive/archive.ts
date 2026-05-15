@@ -408,7 +408,6 @@ export default class Archive extends ArchiveAccessor {
 		const dbPath = path.resolve(tmpDir, Archive.SQLITE_DB_FILE_NAME);
 		dbLog('connects database: %s', dbPath);
 		return await Database.connect({
-			type: 'sqlite3',
 			workingDir: tmpDir,
 			filename: dbPath,
 		});

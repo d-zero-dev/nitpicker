@@ -20,7 +20,6 @@ afterAll(async () => {
 describe('Pages', () => {
 	it('insert', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: path.resolve(workingDir, 'tmp.sqlite'),
 		});
@@ -54,7 +53,6 @@ describe('Pages', () => {
 
 	it('get', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: path.resolve(workingDir, 'mock.sqlite'),
 		});
@@ -170,7 +168,6 @@ describe('Pages', () => {
 
 	it('getPageCount', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: path.resolve(workingDir, 'mock.sqlite'),
 		});
@@ -190,7 +187,6 @@ describe('Config', () => {
 
 	it('setConfig → getConfig ラウンドトリップで全フィールドが一致する', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: configDbPath,
 		});
@@ -233,7 +229,6 @@ describe('Config', () => {
 
 	it('Config 型の全キーがスキーマと同期している', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: configDbPath,
 		});
@@ -268,7 +263,6 @@ describe('Config', () => {
 
 	it('JSON フィールドが正しくシリアライズ/デシリアライズされる', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: configDbPath,
 		});
@@ -287,7 +281,6 @@ describe('Config', () => {
 
 	it('updateConfig overwrites only the specified fields and serialises JSON arrays', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: configDbPath,
 		});
@@ -308,7 +301,6 @@ describe('Config', () => {
 
 	it('updateConfig with an empty patch is a no-op', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: configDbPath,
 		});
@@ -329,7 +321,6 @@ describe('repromoteExternalPages', () => {
 
 	it('demotes-back hostname-matching external pages whose path is inside the new scope', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: repromoteDbPath,
 		});
@@ -397,7 +388,6 @@ describe('repromoteExternalPages', () => {
 
 	it('does not touch any page when no external row is inside the new scope', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: repromoteDbPath,
 		});
@@ -412,7 +402,6 @@ describe('repromoteExternalPages', () => {
 		const { rmSync } = await import('node:fs');
 		rmSync(cleanDbPath, { force: true });
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: cleanDbPath,
 		});
@@ -540,7 +529,6 @@ describe('repromoteExternalPages', () => {
 
 	it('returns an empty list when the scope map has no entries', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: repromoteDbPath,
 		});
@@ -559,7 +547,6 @@ describe('self-redirect', () => {
 
 	it('自己リダイレクト（元URL=先URL）は redirectDestId を設定しない', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: selfRedirectDbPath,
 		});
@@ -593,7 +580,6 @@ describe('self-redirect', () => {
 
 	it('A→B→A の循環リダイレクトでは中間の B のみ redirectDestId が設定される', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: selfRedirectDbPath,
 		});
@@ -632,7 +618,6 @@ describe('self-redirect', () => {
 
 	it('通常のリダイレクト（A→B）は redirectDestId が正しく設定される', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: selfRedirectDbPath,
 		});
@@ -667,7 +652,6 @@ describe('self-redirect', () => {
 
 	it('末尾スラッシュの有無が異なるリダイレクトは自己リダイレクトとみなさない', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: selfRedirectDbPath,
 		});
@@ -711,7 +695,6 @@ describe('clearHtmlPath', () => {
 
 	it('スナップショットパスをクリアする', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: clearHtmlDbPath,
 		});
@@ -757,7 +740,6 @@ describe('addOrderField', () => {
 
 	it('order カラムが既に存在する場合でもエラーにならない', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: path.resolve(workingDir, 'mock.sqlite'),
 		});
@@ -772,7 +754,6 @@ describe('addOrderField', () => {
 
 	it('order カラムが存在しない場合に追加される', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: addOrderDbPath,
 		});
@@ -812,7 +793,6 @@ describe('getJSON (getConfig 経由)', () => {
 
 	it('不正な JSON フィールドがある場合フォールバック値を返す', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: invalidJsonDbPath,
 		});
@@ -852,7 +832,6 @@ describe('getJSON (getConfig 経由)', () => {
 		await rawDb.destroy();
 
 		const db2 = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: invalidJsonDbPath,
 		});

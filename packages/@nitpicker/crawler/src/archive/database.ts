@@ -97,24 +97,16 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	private constructor(options: DatabaseOption) {
 		super();
 		this.#workingDir = options.workingDir;
-		switch (options.type) {
-			case 'sqlite3': {
-				this.#instance = knex({
-					client: LibsqlDialect,
-					connection: {
-						filename: options.filename,
-					},
-					useNullAsDefault: true,
-					pool: {
-						acquireTimeoutMillis: 600_000,
-					},
-				});
-				break;
-			}
-			case 'mysql': {
-				throw new Error("Don't support MySQL yet.");
-			}
-		}
+		this.#instance = knex({
+			client: LibsqlDialect,
+			connection: {
+				filename: options.filename,
+			},
+			useNullAsDefault: true,
+			pool: {
+				acquireTimeoutMillis: 600_000,
+			},
+		});
 	}
 
 	/**
@@ -1012,16 +1004,11 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * Creates and initializes a new Database instance.
 	 * Creates the parent directory for the database file if needed,
 	 * establishes the connection, and initializes tables if they do not exist.
-	 * @param options - The database connection options specifying the type and file path.
+	 * @param options - Database connection options (working directory + SQLite file path).
 	 * @returns A fully initialized Database instance.
 	 */
 	static async connect(options: DatabaseOption) {
-		switch (options.type) {
-			case 'sqlite3': {
-				mkdir(options.filename);
-				break;
-			}
-		}
+		mkdir(options.filename);
 		const db = new Database(options);
 		await db.#init();
 		return db;

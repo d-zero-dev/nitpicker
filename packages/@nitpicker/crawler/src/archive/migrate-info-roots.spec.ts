@@ -157,7 +157,6 @@ describe('migrateInfoRoots', () => {
 
 		// 2) Database.connect 経由で開く → #init() が migrateInfoRoots を呼ぶ
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename,
 		});
