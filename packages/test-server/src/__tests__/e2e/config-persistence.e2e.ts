@@ -30,7 +30,7 @@ describe('Config persistence', () => {
 
 	it('配列型フィールドがデシリアライズされる', async () => {
 		const config = await result.accessor.getConfig();
-		expect(Array.isArray(config.scope)).toBe(true);
+		expect(Array.isArray(config.roots)).toBe(true);
 		expect(Array.isArray(config.excludes)).toBe(true);
 		expect(Array.isArray(config.excludeKeywords)).toBe(true);
 		expect(Array.isArray(config.excludeUrls)).toBe(true);
@@ -48,7 +48,7 @@ describe('Config persistence', () => {
 			'image',
 			'fetchExternal',
 			'parallels',
-			'scope',
+			'roots',
 			'excludes',
 			'excludeKeywords',
 			'excludeUrls',
