@@ -439,9 +439,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			await copyFile(absFilePath, backupPath);
 
 			try {
-				// updateConfig now ignores keys outside the info-column allowlist, so
-				// it is safe to splat the full merged config (CrawlConfig extras like
-				// `cwd` are silently dropped instead of producing SQL errors).
 				await archive.updateConfig(mergedConfig);
 
 				const scopeMap = new Map<string, ExURL[]>();

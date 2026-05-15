@@ -464,8 +464,8 @@ PID 既に終了していれば次回 open 時に自動で stale 検出されて
 
 検索キーワード: `nitpicker .bak file` / `AggregateError append`
 
-### `[migrate] info.roots column added (seeded with baseUrl)`（stderr に 1 行）
+### `[migrate] info table upgraded (roots seeded, scope dropped)`（stderr に 1 行）
 
-旧版（`info.roots` 列を持たない）の archive を初めて開いたときに 1 度だけ出力される **正常通知**。エラーではない。`baseUrl` を起点に `info.roots = [baseUrl]` で seed されて、以降は新スキーマとして扱われる。
+旧版スキーマの archive を初めて開いたときに出力される **正常通知**。エラーではない。`info.roots` が追加されて `baseUrl` で seed され、不要になった `info.scope` カラムは削除される。
 
-検索キーワード: `nitpicker info.roots migration`
+検索キーワード: `nitpicker info table migration` / `nitpicker info.roots`

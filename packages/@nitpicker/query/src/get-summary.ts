@@ -13,9 +13,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 
 	const config = await accessor.getConfig();
 	const baseUrl = config.baseUrl;
-	// Legacy archives may report an empty roots array; fall back to [baseUrl]
-	// so consumers can rely on `roots` being a non-empty list.
-	const roots = config.roots.length > 0 ? config.roots : [baseUrl];
+	const roots = config.roots;
 
 	const totalResult = (await knex('pages')
 		.count('id as total')

@@ -47,7 +47,7 @@ afterEach(async () => {
 });
 
 describe('migrateInfoRoots', () => {
-	it('adds the roots column and seeds it from baseUrl on legacy archives', async () => {
+	it('adds roots, seeds it from baseUrl, and drops the obsolete scope column', async () => {
 		const { instance } = await buildLegacyInfo('migrate-test.sqlite');
 		await instance('info').insert({ baseUrl: 'https://example.com/blog/' });
 
@@ -55,6 +55,8 @@ describe('migrateInfoRoots', () => {
 
 		const hasRoots = await instance.schema.hasColumn('info', 'roots');
 		expect(hasRoots).toBe(true);
+		const hasScope = await instance.schema.hasColumn('info', 'scope');
+		expect(hasScope).toBe(false);
 
 		const [row] = await instance.select('roots').from('info');
 		expect(JSON.parse(row.roots as string)).toEqual(['https://example.com/blog/']);

@@ -41,9 +41,10 @@ const retrySetting: RetryDecoratorOptions = {
 };
 
 /**
- * Columns of the `info` table that `updateConfig` is allowed to write. Any key
- * outside this set is silently dropped so a wider runtime config object can be
- * splatted without hitting "no such column" at the SQL layer.
+ * Columns of the `info` table that `setConfig` / `updateConfig` are allowed to
+ * write. Any key outside this set is silently dropped so callers can splat a
+ * wider runtime config (with extras like `cwd`) without hitting "no such
+ * column" at the SQL layer.
  */
 const INFO_COLUMN_ALLOWLIST: ReadonlySet<string> = new Set<keyof Config>([
 	'version',
@@ -190,10 +191,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	/**
 	 * Retrieves the full crawl configuration from the `info` table.
 	 * Deserializes JSON-encoded fields (`roots`, `excludes`, `excludeKeywords`, `excludeUrls`).
-	 *
-	 * Legacy archives whose `info.scope` column still exists are tolerated: that
-	 * column is silently ignored on read and dropped on the next write because
-	 * the column allowlist no longer mentions it.
 	 * @returns The parsed {@link Config} object.
 	 * @throws {Error} If no configuration is found in the database.
 	 */
@@ -204,20 +201,15 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		if (!config) {
 			throw new Error('No config');
 		}
-		const roots = getJSON<string[]>(config.roots, []);
 		const opt: Config = {
 			...config,
 			excludes: getJSON<string[]>(config.excludes, []),
 			excludeKeywords: getJSON<string[]>(config.excludeKeywords, []),
 			excludeUrls: getJSON<string[]>(config.excludeUrls, []),
-			roots: roots.length > 0 ? roots : config.baseUrl ? [config.baseUrl] : [],
+			roots: getJSON<string[]>(config.roots, []),
 			retry: config.retry ?? 3,
 		};
-		// Legacy `scope` column may still be present on old archives — strip it
-		// so consumers can rely on the current Config shape.
-		// @ts-expect-error — column may exist on old rows but is no longer typed
-		delete opt.scope;
-		// @ts-expect-error
+		// @ts-expect-error — `id` is the primary key, not part of the public Config shape
 		delete opt.id;
 		dbLog('Table `info`: %O => %O', config, opt);
 		return opt;

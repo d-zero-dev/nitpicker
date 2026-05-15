@@ -1,16 +1,16 @@
 import type { Knex } from 'knex';
 
 /**
- * Add the `info.roots` JSON column to legacy archives that predate the
- * multi-root feature, seeding it with `[baseUrl]` so that downstream code can
- * always read a populated array.
+ * Bring an archive's `info` table to the current shape: add `roots` (seeded
+ * from `baseUrl`) and drop the obsolete `scope` column.
  *
  * Idempotent: calling this multiple times on an up-to-date schema is a no-op.
- * Tolerates archives where `baseUrl` is NULL — those receive an empty `roots`
- * array rather than throwing.
+ * Archives where `baseUrl` is NULL receive an empty `roots` array rather than
+ * throwing.
  *
- * When the migration actually runs (i.e. the column was missing), a single
- * notice is written to stderr so the user knows the file was upgraded.
+ * When the migration actually runs (i.e. either column transition was
+ * performed), a single notice is written to stderr so the user knows the
+ * file was upgraded.
  * @param instance - The Knex query builder instance connected to the database.
  */
 export async function migrateInfoRoots(instance: Knex): Promise<void> {
@@ -19,16 +19,24 @@ export async function migrateInfoRoots(instance: Knex): Promise<void> {
 		return;
 	}
 	const hasRoots = await instance.schema.hasColumn('info', 'roots');
-	if (hasRoots) {
+	const hasScope = await instance.schema.hasColumn('info', 'scope');
+	if (hasRoots && !hasScope) {
 		return;
 	}
-	await instance.schema.table('info', (t) => {
-		t.json('roots');
-	});
-	await instance.raw(
-		`UPDATE info SET roots = json_array(baseUrl) WHERE roots IS NULL AND baseUrl IS NOT NULL`,
-	);
-	await instance.raw(`UPDATE info SET roots = '[]' WHERE roots IS NULL`);
+	if (!hasRoots) {
+		await instance.schema.table('info', (t) => {
+			t.json('roots');
+		});
+		await instance.raw(
+			`UPDATE info SET roots = json_array(baseUrl) WHERE roots IS NULL AND baseUrl IS NOT NULL`,
+		);
+		await instance.raw(`UPDATE info SET roots = '[]' WHERE roots IS NULL`);
+	}
+	if (hasScope) {
+		await instance.schema.table('info', (t) => {
+			t.dropColumn('scope');
+		});
+	}
 	// eslint-disable-next-line no-console
-	console.error('[migrate] info.roots column added (seeded with baseUrl)');
+	console.error('[migrate] info table upgraded (roots seeded, scope dropped)');
 }

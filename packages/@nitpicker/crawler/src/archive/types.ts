@@ -15,7 +15,7 @@ export interface DatabaseEvent {
 export interface Config extends Required<Pick<ParseURLOptions, 'disableQueries'>> {
 	/** The starting URL for the crawl. Stored as a denormalised mirror of `roots[0]` so summary consumers can read a single URL without parsing the array. */
 	baseUrl: string;
-	/** The user-provided root URLs that seeded the crawl. Always non-empty. Each root is also a scope entry — there is no separate "scope" list. */
+	/** The user-provided root URLs that seeded the crawl. Each root is both a recursive starting point and a scope entry. Always non-empty. */
 	roots: string[];
 	/** Maximum directory depth for excluded paths. */
 	maxExcludedDepth: number;

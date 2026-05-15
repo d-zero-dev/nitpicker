@@ -126,7 +126,7 @@ crawler/src/
 ├── archive/                    # SQLite アーカイブストレージ
 │   ├── filesystem/             # 1関数1ファイル（16ファイル）+ tar, untar
 │   ├── archive-lock.ts         # tmpDir 単位の advisory lock（mkdir + pid.txt + stale 検出）
-│   ├── migrate-info-roots.ts   # legacy archive に info.roots カラムを追加する冪等 migration
+│   ├── migrate-info-roots.ts   # info テーブルを現行スキーマに揃える冪等 migration（roots 追加・scope 削除）
 │   ├── libsql-dialect.ts       # better-sqlite3 dialect の libsql 上書き
 │   └── ...                     # archive, archive-accessor, database, init-schema, limited-page-ids, redirect-table, get-json, page, resource, safe-path, types
 ├── crawler/                    # Crawler エンジン
@@ -667,9 +667,9 @@ unlink(archivePath + '.bak')                    # 成功 → .bak 削除
 - ロックが存在 + `pid.txt` の PID が `process.kill(pid, 0)` で生存 → `ArchiveLockError` を投げる
 - ロックが存在 + PID が死んでいる（stale lock）→ ロックを削除して 1 回だけ再取得を試みる
 
-### info.roots migration
+### info テーブル migration
 
-`migrate-info-roots.ts` は `Database.connect` 直後に毎回呼ばれる冪等な migration。`info` テーブルに `roots` カラムが無ければ追加し、`UPDATE info SET roots = json_array(baseUrl)` で既存の `baseUrl` を seed する。`baseUrl` が NULL の archive は `roots = []` で初期化される。初回 migration 実行時のみ stderr に 1 行 `[migrate] info.roots column added (seeded with baseUrl)` を出力する。
+`migrate-info-roots.ts` は `Database.connect` 直後に毎回呼ばれる冪等な migration。`info` テーブルが現行スキーマでない場合、(1) `roots` カラムを追加して `UPDATE info SET roots = json_array(baseUrl)` で seed し、(2) 不要になった `scope` カラムを `ALTER TABLE info DROP COLUMN scope` で削除する。`baseUrl` が NULL の場合は `roots = []` で初期化。実行時のみ stderr に 1 行 `[migrate] info table upgraded (roots seeded, scope dropped)` を出力する。
 
 ### parseUrl の特殊処理
 
