@@ -13,6 +13,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 
 	const config = await accessor.getConfig();
 	const baseUrl = config.baseUrl;
+	const roots = config.roots;
 
 	const totalResult = (await knex('pages')
 		.count('id as total')
@@ -93,6 +94,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 
 	return {
 		baseUrl,
+		roots,
 		totalPages: totalNum,
 		internalPages: internalNum,
 		externalPages: Number(externalResult[0]?.externalCount ?? 0),

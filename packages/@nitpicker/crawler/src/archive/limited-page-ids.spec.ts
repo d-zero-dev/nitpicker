@@ -4,6 +4,7 @@ import knex from 'knex';
 import { describe, it, expect } from 'vitest';
 
 import { initSchema } from './init-schema.js';
+import { LibsqlDialect } from './libsql-dialect.js';
 import { limitedPageIds } from './limited-page-ids.js';
 
 describe('limitedPageIds', () => {
@@ -12,7 +13,7 @@ describe('limitedPageIds', () => {
 	 */
 	async function setupDb() {
 		const db = knex({
-			client: 'sqlite3',
+			client: LibsqlDialect,
 			connection: { filename: ':memory:' },
 			useNullAsDefault: true,
 		});

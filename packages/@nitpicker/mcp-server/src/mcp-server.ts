@@ -139,6 +139,7 @@ export function createServer() {
 						return jsonResult({
 							archiveId,
 							baseUrl: summary.baseUrl,
+							roots: summary.roots,
 							totalPages: summary.totalPages,
 						});
 					}

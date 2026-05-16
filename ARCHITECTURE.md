@@ -107,7 +107,7 @@ scrapeStart → openPage → loadDOMContent → getHTML → waitNetworkIdle
 
 **主要クラス:**
 
-- **`CrawlerOrchestrator`**: エントリポイント。`CrawlerOrchestrator.crawling()`, `CrawlerOrchestrator.resume()`
+- **`CrawlerOrchestrator`**: エントリポイント。`CrawlerOrchestrator.crawling()`（複数 URL で multi-root）, `CrawlerOrchestrator.resume()`（中断再開）, `CrawlerOrchestrator.append()`（既存アーカイブへの追加クロール）
 - **`Crawler`**: リンク管理・スクレイプスケジューリング
 - **`LinkList`**: URL キュー管理（pending → progress → done）
 - **`Archive`**: アーカイブの作成・再開・書き出し
@@ -125,16 +125,18 @@ crawler/src/
 │   └── error/                  # DOMEvaluationError, ErrorEmitter
 ├── archive/                    # SQLite アーカイブストレージ
 │   ├── filesystem/             # 1関数1ファイル（16ファイル）+ tar, untar
+│   ├── archive-lock.ts         # tmpDir 単位の advisory lock（mkdir + pid.txt + stale 検出）
+│   ├── migrate-info-roots.ts   # info テーブルを現行スキーマに揃える冪等 migration（roots 追加・scope 削除）
+│   ├── libsql-dialect.ts       # better-sqlite3 dialect の libsql 上書き
 │   └── ...                     # archive, archive-accessor, database, init-schema, limited-page-ids, redirect-table, get-json, page, resource, safe-path, types
 ├── crawler/                    # Crawler エンジン
 │   ├── crawler.ts              # Crawler クラス
 │   ├── link-list.ts            # URL キュー管理
 │   ├── types.ts                # CrawlerOptions, CrawlerEventTypes, PaginationPattern
 │   ├── should-skip-url.ts      # URL 除外判定
-│   ├── is-external-url.ts      # 外部 URL 判定
-│   ├── inject-scope-auth.ts    # スコープ認証注入
-│   ├── find-best-matching-scope.ts  # スコープマッチング
-│   ├── is-in-any-lower-layer.ts     # 下位レイヤー判定
+│   ├── find-scope-entry.ts     # スコープ判定の単一エントリポイント（hostname+port+path で最深一致を返す or null）
+│   ├── is-external-url.ts      # 外部 URL 判定（findScopeEntry の薄ラッパ）
+│   ├── inject-scope-auth.ts    # スコープ認証注入（matchedScope を直接受け取る）
 │   ├── handle-scrape-end.ts    # スクレイプ成功ハンドラ
 │   ├── handle-ignore-and-skip.ts    # スキップハンドラ
 │   ├── handle-resource-response.ts  # リソースレスポンスハンドラ
@@ -218,8 +220,8 @@ deal() で選択           → progress(url) → progress セット
 
 **`LinkList.done()` の処理:**
 
-1. `isExternal` 判定: `!scope.has(url.hostname)`
-2. `isLowerLayer` 判定: スコープ URL とのパス配列先頭一致
+1. `isExternal` 判定: `findScopeEntry(url, scope, options) === null`。スコープエントリは `(hostname, port, path)` のトリプルで、いずれかのスコープエントリの下層に入れば internal、入らなければ external
+2. `isLowerLayer` 判定: 同じスコープエントリ群に対する path 配列先頭一致
 3. `isPage` 判定: `!isExternal && isLowerLayer && isHTTP && hasResponse && isHTML && !isError`
 4. `isPage = true` → `completePages` カウント増加
 
@@ -230,13 +232,17 @@ deal() で選択           → progress(url) → progress セット
 ### アンカー発見後のリンク追加ロジック
 
 ```
-発見したアンカーについて:
-├── recursive=true の場合:
-│   ├── isLowerLayer → LinkList.add(url)        # フルスクレイプ
-│   └── isExternal && fetchExternal → add(url, { metadataOnly: true })
+発見したアンカーについて、findScopeEntry() を 1 回だけ評価し、matchedScope を再利用する:
+├── matchedScope !== null（スコープエントリの下層）:
+│   ├── matchedScope の auth を anchor.href に注入（既に auth がない場合のみ）
+│   └── recursive=true → LinkList.add(url)                    # フルスクレイプ
+│       recursive=false → add(url, { metadataOnly: true })
 │
-└── recursive=false の場合:
-    └── add(url, { metadataOnly: true })        # HEAD のみ
+└── matchedScope === null（外部 URL）:
+    ├── recursive=true:
+    │   └── fetchExternal=true → add(url, { metadataOnly: true })
+    │       fetchExternal=false → 何もしない
+    └── recursive=false → add(url, { metadataOnly: true })
 ```
 
 ### deal() コールバック内の処理順序
@@ -400,7 +406,7 @@ scrapeStart(url, page, options)
 - **images**: pageId, src, currentSrc, alt, width/height, naturalWidth/naturalHeight, isLazy, viewportWidth, sourceCode
 - **resources**: url, isExternal, status, statusText, contentType, contentLength, compress, cdn, responseHeaders
 - **resources-referrers**: resourceId → resources.id, pageId → pages.id
-- **info**: 設定情報（単一レコード、`Config` 型のフィールドを JSON で保存）
+- **info**: 設定情報（単一レコード、`Config` 型のフィールドを JSON で保存）。`baseUrl`（先頭起点 URL、`roots[0]` と同値）と `roots`（位置引数で渡された全起点 URL の JSON 配列）を含む。スコープエントリは `roots` 1 本で表現する（独立した `scope` カラムは無い）
 
 ### リダイレクトの保存
 
@@ -595,9 +601,18 @@ flowchart TD
 
 > 実装詳細は `crawler/utils/url/` 配下の各関数の JSDoc を参照。
 
-### isLowerLayer（スコープ判定）
+### findScopeEntry（スコープ判定の単一エントリポイント）
 
-`isLowerLayer(target, base)` はパス配列の**先頭一致**で判定する。
+スコープエントリは `(hostname, port, path)` のトリプル。`findScopeEntry(url, scope, options)` は対象 URL が含まれる **最深一致のスコープエントリ** を返し、どのエントリにも入らなければ `null` を返す。
+
+判定条件:
+
+1. `scope.get(url.hostname)` で同一ホスト名のエントリ群を取り出す（hostname 不一致なら即 null）
+2. 各エントリについて `entry.port !== url.port` で **ポート一致**を要求（`localhost:3000` と `localhost:8080` は別 scope。WHATWG URL のデフォルトポート正規化で `:80`/`:443` は空文字に折り畳まれるため、明示・省略は同一視される）
+3. `isLowerLayer(url.href, entry.href, options)` で path 階層先頭一致
+4. 全ての条件を満たすエントリの中から `entry.depth` が最も深いものを返す
+
+ドメインスコープとサブディレクトリスコープは別概念ではない。`https://example.com/`（path=`/`）は「ホスト全体」を意味する特殊ケース、`https://example.com/blog/` は「`/blog/` 配下のみ」を意味する一般ケース。両者を `Map<hostname, ExURL[]>` で同列に保持する。
 
 ```
 paths = URL の pathname を "/" で split した文字列配列
@@ -612,6 +627,49 @@ isLowerLayer('/meta/robots-noindex', '/meta/')     → true  (meta が一致)
 ```
 
 > **重要:** 再帰クロールで子ページを発見するには、開始 URL をディレクトリパス（末尾 `/`）にする必要がある。ファイルパス（例: `/meta/full`）を開始 URL にすると、同階層の他ページは `isLowerLayer=false` となりスクレイプされない。
+
+### Multi-root crawl
+
+`CrawlerOrchestrator.crawling(urls, options)` に位置引数 URL を複数渡すと、それぞれが「再帰クロールの起点」かつ「スコープエントリ」として扱われる。`info.roots` に元の位置引数リストがそのまま記録され、同じ配列が `Crawler` 構築時にも渡されるため、メモリ上の scope map と DB に保存される roots は常に同期する。スコープと起点は別概念ではなく、`info.roots` 1 本で表現される。
+
+### Append crawl
+
+`CrawlerOrchestrator.append(archivePath, newUrls, options, cb)` は既存 `.nitpicker` を開き、`newUrls` を追加の起点として再帰クロールを継続する。フロー:
+
+```
+Archive.open(archivePath)                       # tar 展開 + advisory lock 取得
+archived = archive.getConfig()
+archived.fromList === true → エラー（list-mode archive は append 不可）
+copyFile(archivePath, archivePath + '.bak')     # 失敗時の復元用バックアップ
+mergedRoots = unique(archived.roots, newUrls.withoutHash)
+archive.updateConfig({ roots, fromList:false, recursive:true, baseUrl:roots[0] })
+archive.repromoteExternalPages(scopeMap)        # 旧 external のうち新 scope 下層を pending に戻す
+crawler.resume(pending, scraped, resources)     # 既存状態を crawler に流す
+orchestrator.crawling(newParsed)                # 新 root + repromote 対象を再クロール
+archive.setUrlOrder()
+unlink(archivePath + '.bak')                    # 成功 → .bak 削除
+
+例外時:
+  copyFile(archivePath + '.bak', archivePath)   # 原本を復元
+  unlink(archivePath + '.bak')
+  restore 自体が失敗した場合は AggregateError([appendError, restoreError]) を投げ、
+  .bak を残してオペレータが手動復旧できる状態にする
+```
+
+`repromoteExternalPages` は対象 page の `pages` 行を `scraped=0, isExternal=0, contentType=null, status=null, html=null, redirectDestId=null` などにクリアし、関連する `anchors` / `images` / `resources-referrers` 行を chunk (500件単位) で DELETE する。page id は維持されるため、他ページの `anchors.hrefId` 参照は壊れない。
+
+### Archive lock（advisory）
+
+`Archive.create` / `Archive.open` / `Archive.resume` は冒頭で `fs.mkdir(<tmpDir>.lock, { recursive: false })` の atomic 性を使って tmpDir 単位のロックを取得し、その中に `pid.txt`（プロセス ID）を書き込む。`Archive.close()` / `Archive.write()` の finally でロックを解放する。`Archive.connect`（read-only アクセサ）はロックを取らない。
+
+別プロセスが同じ archive を開こうとした場合:
+
+- ロックが存在 + `pid.txt` の PID が `process.kill(pid, 0)` で生存 → `ArchiveLockError` を投げる
+- ロックが存在 + PID が死んでいる（stale lock）→ ロックを削除して 1 回だけ再取得を試みる
+
+### info テーブル migration
+
+`migrate-info-roots.ts` は `Database.connect` 直後に毎回呼ばれる冪等な migration。`info` テーブルが現行スキーマでない場合、(1) `roots` カラムを追加して `UPDATE info SET roots = json_array(baseUrl)` で seed し、(2) 不要になった `scope` カラムを `ALTER TABLE info DROP COLUMN scope` で削除する。`baseUrl` が NULL の場合は `roots = []` で初期化。実行時のみ stderr に 1 行 `[migrate] info table upgraded (roots seeded, scope dropped)` を出力する。
 
 ### parseUrl の特殊処理
 

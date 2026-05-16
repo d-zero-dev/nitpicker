@@ -10,6 +10,7 @@ import type {
 	PageFilter,
 } from './types.js';
 import type { PageData, Resource } from '../utils/types/types.js';
+import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 import type { RetryDecoratorOptions } from '@d-zero/shared/retry';
 import type { Knex } from 'knex';
 
@@ -21,6 +22,7 @@ import { pathComparator } from '@d-zero/shared/sort/path';
 import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-await-event-emitter';
 import knex from 'knex';
 
+import { findScopeEntry } from '../crawler/find-scope-entry.js';
 import { eachSplitted } from '../utils/array/each-splitted.js';
 import { ErrorEmitter } from '../utils/error/error-emitter.js';
 
@@ -28,13 +30,53 @@ import { dbLog } from './debug.js';
 import { mkdir } from './filesystem/mkdir.js';
 import { getJSON } from './get-json.js';
 import { initSchema } from './init-schema.js';
+import { LibsqlDialect } from './libsql-dialect.js';
 import { limitedPageIds } from './limited-page-ids.js';
+import { migrateInfoRoots } from './migrate-info-roots.js';
 import { redirectTable } from './redirect-table.js';
 
 const retrySetting: RetryDecoratorOptions = {
 	interval: 300,
 	retries: 3,
 };
+
+/**
+ * Columns of the `info` table that `setConfig` / `updateConfig` are allowed to
+ * write. Any key outside this set is silently dropped so callers can splat a
+ * wider runtime config (with extras like `cwd`) without hitting "no such
+ * column" at the SQL layer.
+ */
+const INFO_COLUMN_ALLOWLIST: ReadonlySet<string> = new Set<keyof Config>([
+	'version',
+	'name',
+	'baseUrl',
+	'roots',
+	'recursive',
+	'interval',
+	'image',
+	'fetchExternal',
+	'parallels',
+	'excludes',
+	'excludeKeywords',
+	'excludeUrls',
+	'maxExcludedDepth',
+	'retry',
+	'fromList',
+	'disableQueries',
+	'userAgent',
+	'ignoreRobots',
+]);
+
+/**
+ * Subset of {@link INFO_COLUMN_ALLOWLIST} that is stored as a JSON-encoded
+ * string and therefore needs `JSON.stringify` on write.
+ */
+const INFO_JSON_COLUMNS: ReadonlySet<string> = new Set<keyof Config>([
+	'roots',
+	'excludes',
+	'excludeKeywords',
+	'excludeUrls',
+]);
 
 /**
  * Low-level database abstraction layer for the archive's SQLite database.
@@ -56,24 +98,16 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	private constructor(options: DatabaseOption) {
 		super();
 		this.#workingDir = options.workingDir;
-		switch (options.type) {
-			case 'sqlite3': {
-				this.#instance = knex({
-					client: options.type,
-					connection: {
-						filename: options.filename,
-					},
-					useNullAsDefault: true,
-					pool: {
-						acquireTimeoutMillis: 600_000,
-					},
-				});
-				break;
-			}
-			case 'mysql': {
-				throw new Error("Don't support MySQL yet.");
-			}
-		}
+		this.#instance = knex({
+			client: LibsqlDialect,
+			connection: {
+				filename: options.filename,
+			},
+			useNullAsDefault: true,
+			pool: {
+				acquireTimeoutMillis: 600_000,
+			},
+		});
 	}
 
 	/**
@@ -156,7 +190,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 	/**
 	 * Retrieves the full crawl configuration from the `info` table.
-	 * Deserializes JSON-encoded fields (`excludes`, `excludeKeywords`, `scope`).
+	 * Deserializes JSON-encoded fields (`roots`, `excludes`, `excludeKeywords`, `excludeUrls`).
 	 * @returns The parsed {@link Config} object.
 	 * @throws {Error} If no configuration is found in the database.
 	 */
@@ -172,10 +206,10 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			excludes: getJSON<string[]>(config.excludes, []),
 			excludeKeywords: getJSON<string[]>(config.excludeKeywords, []),
 			excludeUrls: getJSON<string[]>(config.excludeUrls, []),
-			scope: getJSON<string[]>(config.scope, []),
+			roots: getJSON<string[]>(config.roots, []),
 			retry: config.retry ?? 3,
 		};
-		// @ts-expect-error
+		// @ts-expect-error — `id` is the primary key, not part of the public Config shape
 		delete opt.id;
 		dbLog('Table `info`: %O => %O', config, opt);
 		return opt;
@@ -570,24 +604,96 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
+	 * Promote previously-external pages whose URL falls under any of the new scope
+	 * entries back to a "needs scraping" state so that the next crawl picks them up
+	 * as full internal pages.
+	 *
+	 * For each matching page:
+	 * - clears the scrape metadata (status, headers, snapshot path, etc.),
+	 * - flips `isExternal` to `0` and `scraped` to `0`,
+	 * - removes stale `anchors`, `images`, and `resources-referrers` rows so that
+	 *   the re-scrape can re-insert fresh ones without duplicates.
+	 *
+	 * The page row itself is kept (id is preserved) so existing referrers via
+	 * `anchors.hrefId` remain valid. SELECT and UPDATE/DELETE statements are
+	 * chunked to stay below SQLite's `SQLITE_LIMIT_VARIABLE_NUMBER`.
+	 * @param scopes - The hostname-indexed scope map after the new roots are merged.
+	 * @param options - URL parsing options forwarded to {@link findScopeEntry}.
+	 * @returns The URLs of the pages that were promoted.
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async repromoteExternalPages(
+		scopes: ReadonlyMap<string, readonly ExURL[]>,
+		options?: ParseURLOptions,
+	): Promise<string[]> {
+		if (scopes.size === 0) {
+			return [];
+		}
+		const candidates = await this.#instance
+			.select('id', 'url')
+			.from<DB_Page>('pages')
+			.where('isExternal', 1);
+
+		const promotedIds: number[] = [];
+		const promotedUrls: string[] = [];
+		for (const row of candidates) {
+			const parsed = parseUrl(row.url, options);
+			if (!parsed) {
+				continue;
+			}
+			if (findScopeEntry(parsed, scopes, options) === null) {
+				continue;
+			}
+			promotedIds.push(row.id);
+			promotedUrls.push(row.url);
+		}
+		if (promotedIds.length === 0) {
+			return [];
+		}
+
+		const chunkSize = 500;
+		for (let i = 0; i < promotedIds.length; i += chunkSize) {
+			const chunk = promotedIds.slice(i, i + chunkSize);
+			await this.#instance<DB_Page>('pages').whereIn('id', chunk).update({
+				scraped: 0,
+				isExternal: 0,
+				isSkipped: 0,
+				skipReason: null,
+				html: null,
+				status: null,
+				statusText: null,
+				contentType: null,
+				contentLength: null,
+				responseHeaders: '{}',
+				redirectDestId: null,
+			});
+			await this.#instance('anchors').whereIn('pageId', chunk).delete();
+			await this.#instance('images').whereIn('pageId', chunk).delete();
+			await this.#instance('resources-referrers').whereIn('pageId', chunk).delete();
+		}
+		dbLog('Repromoted %d external pages back to pending', promotedUrls.length);
+		return promotedUrls;
+	}
+	/**
 	 * Stores the crawl configuration in the `info` table.
-	 * Serializes array fields (`excludes`, `excludeKeywords`, `scope`) as JSON strings.
+	 * Only fields in {@link INFO_COLUMN_ALLOWLIST} are forwarded — any extra
+	 * runtime-only field on the input is silently dropped so callers can splat
+	 * a wider config object without producing SQL errors. JSON-array fields
+	 * are serialized via `JSON.stringify`.
 	 * @param config - The {@link Config} object to store.
 	 */
 	@ErrorEmitter()
 	@retry(retrySetting)
 	async setConfig(config: Config) {
-		return this.#instance.from<Config>('info').insert({
-			...config,
-			// @ts-expect-error
-			excludes: JSON.stringify(config.excludes),
-			// @ts-expect-error
-			excludeKeywords: JSON.stringify(config.excludeKeywords),
-			// @ts-expect-error
-			excludeUrls: JSON.stringify(config.excludeUrls),
-			// @ts-expect-error
-			scope: JSON.stringify(config.scope),
-		});
+		const payload: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(config)) {
+			if (!INFO_COLUMN_ALLOWLIST.has(key)) {
+				continue;
+			}
+			payload[key] = INFO_JSON_COLUMNS.has(key) ? JSON.stringify(value) : value;
+		}
+		return this.#instance.from<Config>('info').insert(payload);
 	}
 
 	/**
@@ -610,7 +716,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				skipReason: reason,
 			});
 	}
-
 	/**
 	 * Assigns natural URL sort order values to all internal pages.
 	 * Pages are sorted using {@link pathComparator} and assigned sequential order numbers.
@@ -641,6 +746,41 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				[...bindings, ...ids],
 			);
 		}
+	}
+	/**
+	 * Update the single row in the `info` table with a partial config patch.
+	 *
+	 * Used by the append flow to extend `roots` (and any other tweakable
+	 * field) without replacing the entire row. JSON-array fields are serialized on
+	 * the fly; primitive fields are written verbatim. Unspecified fields stay as-is.
+	 *
+	 * Unknown keys (anything outside the allow-list of `info`-table columns) are
+	 * silently dropped instead of being passed to SQL, so callers that splat a
+	 * wider runtime config (e.g. `CrawlConfig` with `cwd` / `executablePath`)
+	 * cannot accidentally trigger a "no such column" SQL error.
+	 * @param patch - Partial {@link Config} fields to overwrite. `undefined` values are skipped.
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async updateConfig(patch: Partial<Config>): Promise<void> {
+		const payload: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(patch)) {
+			if (value === undefined) {
+				continue;
+			}
+			if (!INFO_COLUMN_ALLOWLIST.has(key)) {
+				continue;
+			}
+			if (INFO_JSON_COLUMNS.has(key)) {
+				payload[key] = JSON.stringify(value);
+				continue;
+			}
+			payload[key] = value;
+		}
+		if (Object.keys(payload).length === 0) {
+			return;
+		}
+		await this.#instance.from<Config>('info').update(payload);
 	}
 
 	/**
@@ -781,11 +921,15 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
-	 * Initializes the database schema if tables do not exist.
-	 * Delegates to {@link initSchema} for the actual table creation.
+	 * Initializes the database schema if tables do not exist, then runs lightweight
+	 * migrations that bring older archives up to the current schema.
+	 *
+	 * Migrations are idempotent and run on every {@link Database.connect}, so the
+	 * same DB can be opened safely from both writer and reader code paths.
 	 */
 	async #init() {
 		await initSchema(this.#instance);
+		await migrateInfoRoots(this.#instance);
 	}
 
 	/**
@@ -852,16 +996,11 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * Creates and initializes a new Database instance.
 	 * Creates the parent directory for the database file if needed,
 	 * establishes the connection, and initializes tables if they do not exist.
-	 * @param options - The database connection options specifying the type and file path.
+	 * @param options - Database connection options (working directory + SQLite file path).
 	 * @returns A fully initialized Database instance.
 	 */
 	static async connect(options: DatabaseOption) {
-		switch (options.type) {
-			case 'sqlite3': {
-				mkdir(options.filename);
-				break;
-			}
-		}
+		mkdir(options.filename);
 		const db = new Database(options);
 		await db.#init();
 		return db;

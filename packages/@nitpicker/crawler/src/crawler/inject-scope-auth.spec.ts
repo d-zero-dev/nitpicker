@@ -1,52 +1,31 @@
-import type { ExURL } from '@d-zero/shared/parse-url';
-
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { describe, it, expect } from 'vitest';
 
 import { injectScopeAuth } from './inject-scope-auth.js';
 
-/**
- * Create a scope map from hostname-URL pairs for testing.
- * @param entries - Array of [hostname, urls] tuples.
- * @returns A map from hostname to parsed ExURL arrays.
- */
-function createScope(entries: [string, string[]][]): Map<string, ExURL[]> {
-	return new Map(
-		entries.map(([h, urls]) => [h, urls.map((u) => parseUrl(u)!).filter(Boolean)]),
-	);
-}
-
 describe('injectScopeAuth', () => {
-	it('injects auth from matching scope URL', () => {
+	it('copies username and password from the matched scope', () => {
 		const url = parseUrl('https://example.com/blog/post')!;
-		const scope = createScope([['example.com', ['https://user:pass@example.com/blog']]]);
-		injectScopeAuth(url, scope);
+		const matched = parseUrl('https://user:pass@example.com/blog')!;
+		injectScopeAuth(url, matched);
 		expect(url.username).toBe('user');
 		expect(url.password).toBe('pass');
 	});
 
-	it('injects auth from root scope URL into subpage', () => {
-		const url = parseUrl('https://example.com/english/')!;
-		const scope = createScope([['example.com', ['https://user:pass@example.com']]]);
-		injectScopeAuth(url, scope);
-		expect(url.username).toBe('user');
-		expect(url.password).toBe('pass');
-	});
-
-	it('injects auth from root scope URL with trailing slash into deep subpage', () => {
-		const url = parseUrl('https://example.com/blog/post/1')!;
-		const scope = createScope([['example.com', ['https://user:pass@example.com/']]]);
-		injectScopeAuth(url, scope);
-		expect(url.username).toBe('user');
-		expect(url.password).toBe('pass');
-	});
-
-	it('does not inject auth when hostname does not match', () => {
-		const url = parseUrl('https://other.com/page')!;
-		const scope = createScope([['example.com', ['https://user:pass@example.com/']]]);
-		injectScopeAuth(url, scope);
-		// username/password are null for URLs parsed without auth
+	it('leaves credentials untouched when the matched scope has no auth', () => {
+		const url = parseUrl('https://example.com/blog/post')!;
+		const matched = parseUrl('https://example.com/blog/')!;
+		injectScopeAuth(url, matched);
 		expect(url.username).toBeNull();
 		expect(url.password).toBeNull();
+	});
+
+	it('mutates the url in place', () => {
+		const url = parseUrl('https://example.com/page')!;
+		const matched = parseUrl('https://admin:secret@example.com/')!;
+		const ret = injectScopeAuth(url, matched);
+		expect(ret).toBeUndefined();
+		expect(url.username).toBe('admin');
+		expect(url.password).toBe('secret');
 	});
 });

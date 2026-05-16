@@ -32,7 +32,7 @@ describe('findMismatches', () => {
 			image: true,
 			fetchExternal: false,
 			parallels: 1,
-			scope: [],
+			roots: ['https://example.com'],
 			excludes: [],
 			excludeKeywords: [],
 			excludeUrls: [],

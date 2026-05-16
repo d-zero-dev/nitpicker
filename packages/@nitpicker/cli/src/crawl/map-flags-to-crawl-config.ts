@@ -4,8 +4,7 @@ import type { CrawlFlagInput } from './types.js';
  * Maps CLI flag names to CrawlConfig property names.
  *
  * Transforms singular CLI flag names (`exclude`, `excludeKeyword`, `excludeUrl`)
- * to their plural CrawlConfig counterparts (`excludes`, `excludeKeywords`, `excludeUrls`),
- * and parses the comma-separated `scope` string into an array.
+ * to their plural CrawlConfig counterparts (`excludes`, `excludeKeywords`, `excludeUrls`).
  *
  * CLI-only flags (`resume`, `silent`, `diff`, `single`, `listFile`, `list`)
  * are excluded from the output by explicitly mapping only CrawlConfig-compatible properties.
@@ -29,9 +28,5 @@ export function mapFlagsToCrawlConfig(flags: CrawlFlagInput) {
 		excludes: flags.exclude,
 		excludeKeywords: flags.excludeKeyword,
 		excludeUrls: flags.excludeUrl,
-		scope: flags.scope
-			?.split(',')
-			.map((s) => s.trim())
-			.filter(Boolean),
 	};
 }

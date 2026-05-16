@@ -11,11 +11,13 @@ import { ExitCode } from '../exit-code.js';
 
 const mockCrawling = vi.fn();
 const mockResume = vi.fn();
+const mockAppend = vi.fn();
 
 vi.mock('@nitpicker/crawler', () => ({
 	CrawlerOrchestrator: {
 		crawling: mockCrawling,
 		resume: mockResume,
+		append: mockAppend,
 	},
 }));
 
@@ -55,12 +57,12 @@ type CrawlFlags = Parameters<typeof import('./crawl.js').startCrawl>[1];
 function createFlags(overrides: Partial<CrawlFlags> = {}): CrawlFlags {
 	return {
 		resume: undefined,
+		append: undefined,
 		interval: undefined,
 		image: true,
 		fetchExternal: true,
 		parallels: undefined,
 		recursive: true,
-		scope: undefined,
 		exclude: undefined,
 		excludeKeyword: undefined,
 		excludeUrl: undefined,
@@ -96,6 +98,11 @@ function setupFakeOrchestrator() {
 	});
 
 	mockResume.mockImplementation((_path, _opts, cb) => {
+		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
+		return Promise.resolve(fakeOrchestrator);
+	});
+
+	mockAppend.mockImplementation((_path, _urls, _opts, cb) => {
 		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
 		return Promise.resolve(fakeOrchestrator);
 	});
@@ -303,7 +310,7 @@ describe('crawl', () => {
 		const { crawl } = await import('./crawl.js');
 
 		await expect(crawl([], createFlags({ diff: true }))).rejects.toThrow(
-			'Please provide two file paths to compare',
+			'--diff takes exactly two file paths to compare',
 		);
 	});
 
@@ -311,8 +318,164 @@ describe('crawl', () => {
 		const { crawl } = await import('./crawl.js');
 
 		await expect(crawl(['a.nitpicker'], createFlags({ diff: true }))).rejects.toThrow(
-			'Please provide two file paths to compare',
+			'--diff takes exactly two file paths to compare',
 		);
+	});
+
+	it('--diff モードで引数が3つ以上の場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(['a.nitpicker', 'b.nitpicker', 'c.nitpicker'], createFlags({ diff: true })),
+		).rejects.toThrow('--diff takes exactly two file paths to compare');
+	});
+
+	it('位置引数が複数ある場合、全 URL を含む配列で startCrawl を呼び出す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['https://example.com/a', 'https://example.com/b', 'https://example.com/c'],
+			createFlags(),
+		);
+
+		expect(mockCrawling).toHaveBeenCalledOnce();
+		const [urlsArg] = mockCrawling.mock.calls[0]!;
+		expect(urlsArg).toEqual([
+			'https://example.com/a',
+			'https://example.com/b',
+			'https://example.com/c',
+		]);
+	});
+
+	it('位置引数が単一の場合、その URL 1 つを含む配列で startCrawl を呼び出す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['https://example.com'], createFlags());
+
+		expect(mockCrawling).toHaveBeenCalledOnce();
+		const [urlsArg] = mockCrawling.mock.calls[0]!;
+		expect(urlsArg).toEqual(['https://example.com']);
+	});
+
+	it('--single と位置引数複数の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['https://example.com/a', 'https://example.com/b'],
+				createFlags({ single: true }),
+			),
+		).rejects.toThrow('--single cannot be combined with multiple positional URLs');
+	});
+
+	it('crawl <archive> --append <URL> で CrawlerOrchestrator.append が呼ばれる', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['/tmp/existing.nitpicker'],
+			createFlags({ append: ['https://sample-b.com/'] }),
+		);
+
+		expect(mockAppend).toHaveBeenCalledOnce();
+		const [archivePath, urls] = mockAppend.mock.calls[0]!;
+		expect(archivePath).toBe('/tmp/existing.nitpicker');
+		expect(urls).toEqual(['https://sample-b.com/']);
+		expect(mockCrawling).not.toHaveBeenCalled();
+	});
+
+	it('--append を複数回指定すると複数 URL が渡される', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['/tmp/existing.nitpicker'],
+			createFlags({ append: ['https://a.com/', 'https://b.com/'] }),
+		);
+
+		expect(mockAppend).toHaveBeenCalledOnce();
+		const [, urls] = mockAppend.mock.calls[0]!;
+		expect(urls).toEqual(['https://a.com/', 'https://b.com/']);
+	});
+
+	it('--append を指定したのに位置引数が無いとエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl([], createFlags({ append: ['https://sample-b.com/'] })),
+		).rejects.toThrow(
+			'--append requires the archive path as the positional argument (usage: crawl <archive> --append <URL>).',
+		);
+	});
+
+	it('--append を指定したのに位置引数が複数あるとエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker', '/tmp/b.nitpicker'],
+				createFlags({ append: ['https://sample-b.com/'] }),
+			),
+		).rejects.toThrow(
+			'--append takes exactly one positional argument (the archive path). Extra positionals were given — append URLs must follow `--append`, not the archive.',
+		);
+	});
+
+	it('--append と --resume の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker'],
+				createFlags({ append: ['https://sample-b.com/'], resume: '/tmp/stub' }),
+			),
+		).rejects.toThrow('--resume and --append cannot be used together');
+	});
+
+	it('--append と --diff の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(
+				['a.nitpicker', 'b.nitpicker'],
+				createFlags({ append: ['https://sample-b.com/'], diff: true }),
+			),
+		).rejects.toThrow('--diff cannot be combined with --append');
+	});
+
+	it('--append と --output の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker'],
+				createFlags({
+					append: ['https://sample-b.com/'],
+					output: '/tmp/out.nitpicker',
+				}),
+			),
+		).rejects.toThrow('--output flag is not supported with --append');
+	});
+
+	it('--append と --list の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker'],
+				createFlags({
+					append: ['https://sample-b.com/'],
+					list: ['https://sample-b.com/blog/'],
+				}),
+			),
+		).rejects.toThrow('--append cannot be combined with --list');
+	});
+
+	it('--append と --single の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker'],
+				createFlags({ append: ['https://sample-b.com/'], single: true }),
+			),
+		).rejects.toThrow('--append cannot be combined with --single');
+	});
+
+	it('--append × list が空配列 ([]) なら通る', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['/tmp/a.nitpicker'],
+			createFlags({ append: ['https://sample-b.com/'], list: [] }),
+		);
+		expect(mockAppend).toHaveBeenCalledOnce();
 	});
 
 	it('--resume に絶対パスを指定した場合、そのまま渡す', async () => {

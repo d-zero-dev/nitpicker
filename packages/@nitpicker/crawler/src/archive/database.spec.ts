@@ -7,6 +7,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { Database } from './database.js';
 import { remove } from './filesystem/remove.js';
+import { LibsqlDialect } from './libsql-dialect.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -19,7 +20,6 @@ afterAll(async () => {
 describe('Pages', () => {
 	it('insert', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: path.resolve(workingDir, 'tmp.sqlite'),
 		});
@@ -53,7 +53,6 @@ describe('Pages', () => {
 
 	it('get', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: path.resolve(workingDir, 'mock.sqlite'),
 		});
@@ -169,7 +168,6 @@ describe('Pages', () => {
 
 	it('getPageCount', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: path.resolve(workingDir, 'mock.sqlite'),
 		});
@@ -189,7 +187,6 @@ describe('Config', () => {
 
 	it('setConfig → getConfig ラウンドトリップで全フィールドが一致する', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: configDbPath,
 		});
@@ -198,12 +195,12 @@ describe('Config', () => {
 			version: '0.4.3',
 			name: 'test-crawl',
 			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
 			recursive: true,
 			interval: 500,
 			image: true,
 			fetchExternal: false,
 			parallels: 4,
-			scope: ['https://example.com/docs/', 'https://example.com/blog/'],
 			excludes: ['/admin/', '/private/'],
 			excludeKeywords: ['secret', 'draft'],
 			excludeUrls: ['https://example.com/skip'],
@@ -232,7 +229,6 @@ describe('Config', () => {
 
 	it('Config 型の全キーがスキーマと同期している', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: configDbPath,
 		});
@@ -243,12 +239,12 @@ describe('Config', () => {
 			'version',
 			'name',
 			'baseUrl',
+			'roots',
 			'recursive',
 			'interval',
 			'image',
 			'fetchExternal',
 			'parallels',
-			'scope',
 			'excludes',
 			'excludeKeywords',
 			'excludeUrls',
@@ -267,24 +263,386 @@ describe('Config', () => {
 
 	it('JSON フィールドが正しくシリアライズ/デシリアライズされる', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: configDbPath,
 		});
 
 		const retrieved = await db.getConfig();
 
-		expect(Array.isArray(retrieved.scope)).toBe(true);
-		expect(retrieved.scope).toEqual([
-			'https://example.com/docs/',
-			'https://example.com/blog/',
-		]);
+		expect(Array.isArray(retrieved.roots)).toBe(true);
+		expect(retrieved.roots).toEqual(['https://example.com']);
 		expect(Array.isArray(retrieved.excludes)).toBe(true);
 		expect(retrieved.excludes).toEqual(['/admin/', '/private/']);
 		expect(Array.isArray(retrieved.excludeKeywords)).toBe(true);
 		expect(retrieved.excludeKeywords).toEqual(['secret', 'draft']);
 		expect(Array.isArray(retrieved.excludeUrls)).toBe(true);
 		expect(retrieved.excludeUrls).toEqual(['https://example.com/skip']);
+	});
+
+	it('updateConfig overwrites only the specified fields and serialises JSON arrays', async () => {
+		const db = await Database.connect({
+			workingDir,
+			filename: configDbPath,
+		});
+
+		// roots だけ上書き、他は触らない
+		await db.updateConfig({
+			roots: ['https://example.com/', 'https://example.com/blog/'],
+		});
+
+		const after = await db.getConfig();
+		expect(after.roots).toEqual(['https://example.com/', 'https://example.com/blog/']);
+		// 他のフィールドは変わっていない
+		expect(after.baseUrl).toBe('https://example.com');
+		expect(after.name).toBe('test-crawl');
+		expect(after.parallels).toBe(4);
+		expect(after.userAgent).toBe('NitpickerBot/1.0');
+	});
+
+	it('updateConfig with an empty patch is a no-op', async () => {
+		const db = await Database.connect({
+			workingDir,
+			filename: configDbPath,
+		});
+
+		const before = await db.getConfig();
+		await db.updateConfig({});
+		const after = await db.getConfig();
+		expect(after).toEqual(before);
+	});
+
+	it('setConfig silently drops keys outside the info-column allowlist', async () => {
+		const dropDbPath = path.resolve(workingDir, 'set-config-drop.sqlite');
+		const { rmSync } = await import('node:fs');
+		rmSync(dropDbPath, { force: true });
+		const db = await Database.connect({
+			workingDir,
+			filename: dropDbPath,
+		});
+
+		// `cwd` is a CrawlConfig-only runtime field with no matching info column.
+		// Splatting a wider object must not throw "no such column: cwd".
+		const wider = {
+			version: '0.4.3',
+			name: 'allowlist-drop',
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			recursive: true,
+			interval: 0,
+			image: false,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 0,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'x',
+			ignoreRobots: false,
+			cwd: '/tmp/should-not-leak',
+		};
+		await expect(db.setConfig(wider as never)).resolves.not.toThrow();
+		const retrieved = await db.getConfig();
+		expect(retrieved).not.toHaveProperty('cwd');
+		expect(retrieved.name).toBe('allowlist-drop');
+
+		await db.destroy();
+		rmSync(dropDbPath, { force: true });
+	});
+
+	it('updateConfig silently drops keys outside the info-column allowlist', async () => {
+		const db = await Database.connect({
+			workingDir,
+			filename: configDbPath,
+		});
+
+		const before = await db.getConfig();
+		// Same hazard as the setConfig allowlist test: a CrawlConfig spread can
+		// reach updateConfig with extras like `cwd` and must not throw.
+		await expect(
+			db.updateConfig({ cwd: '/tmp/should-not-leak' } as never),
+		).resolves.not.toThrow();
+		const after = await db.getConfig();
+		expect(after).toEqual(before);
+		expect(after).not.toHaveProperty('cwd');
+	});
+});
+
+describe('repromoteExternalPages', () => {
+	const repromoteDbPath = path.resolve(workingDir, 'repromote-test.sqlite');
+
+	afterAll(async () => {
+		await remove(repromoteDbPath);
+	});
+
+	it('demotes-back hostname-matching external pages whose path is inside the new scope', async () => {
+		const db = await Database.connect({
+			workingDir,
+			filename: repromoteDbPath,
+		});
+
+		// 外部として保存された 2 ページ: /blog/ 下と、scope 外の /marketing/about
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/blog/post-1')!,
+				redirectPaths: [],
+				isExternal: true,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Blog 1' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			null,
+			false,
+		);
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/marketing/about')!,
+				redirectPaths: [],
+				isExternal: true,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Marketing' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			null,
+			false,
+		);
+
+		const scope = new Map([['example.com', [parseUrl('https://example.com/blog/')!]]]);
+		const promoted = await db.repromoteExternalPages(scope);
+
+		expect(promoted).toEqual(['https://example.com/blog/post-1']);
+
+		// repromote は contentType を null にクリアするため、filter なしで全件取得して確認
+		const all = await db.getPages();
+		const blog = all.find((p) => p.url === 'https://example.com/blog/post-1')!;
+		const marketing = all.find((p) => p.url === 'https://example.com/marketing/about')!;
+
+		// repromote 対象は scraped=0 に戻り isExternal=0 に、scrape メタデータもクリアされる
+		expect(blog.scraped).toBe(0);
+		expect(blog.isExternal).toBe(0);
+		expect(blog.contentType).toBeNull();
+		expect(blog.status).toBeNull();
+		expect(blog.html).toBeNull();
+		// scope 外の同一ホスト external は影響なし
+		expect(marketing.isExternal).toBe(1);
+		expect(marketing.contentType).toBe('text/html');
+	});
+
+	it('does not touch any page when no external row is inside the new scope', async () => {
+		const db = await Database.connect({
+			workingDir,
+			filename: repromoteDbPath,
+		});
+
+		const scope = new Map([['other.com', [parseUrl('https://other.com/')!]]]);
+		const promoted = await db.repromoteExternalPages(scope);
+		expect(promoted).toEqual([]);
+	});
+
+	it('repromote 対象 page に紐付く anchors / images / resources-referrers を削除する', async () => {
+		const cleanDbPath = path.resolve(workingDir, 'repromote-cleanup.sqlite');
+		const { rmSync } = await import('node:fs');
+		rmSync(cleanDbPath, { force: true });
+		const db = await Database.connect({
+			workingDir,
+			filename: cleanDbPath,
+		});
+
+		// 2 ページを external として保存 (1 つは scope に該当, 1 つは外)
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/blog/post-1')!,
+				redirectPaths: [],
+				isExternal: true,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Blog' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			null,
+			false,
+		);
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/marketing/about')!,
+				redirectPaths: [],
+				isExternal: true,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Marketing' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			null,
+			false,
+		);
+
+		// repromote 対象 (blog) と非対象 (marketing) の page id を取得
+		const allBefore = await db.getPages();
+		const blogId = allBefore.find((p) => p.url === 'https://example.com/blog/post-1')!.id;
+		const marketingId = allBefore.find(
+			(p) => p.url === 'https://example.com/marketing/about',
+		)!.id;
+
+		// 関連テーブルに直接 INSERT して repromote 対象 page と非対象 page の両方に
+		// anchors / images / resources-referrers の行があることを保証する
+		const knex = db.getKnex();
+		await knex('anchors').insert([
+			{ pageId: blogId, hrefId: marketingId, hash: null, textContent: 'to marketing' },
+			{ pageId: marketingId, hrefId: blogId, hash: null, textContent: 'to blog' },
+		]);
+		await knex('images').insert([
+			{
+				pageId: blogId,
+				src: 'https://example.com/blog/img.png',
+				currentSrc: null,
+				alt: null,
+				width: 100,
+				height: 100,
+				naturalWidth: 100,
+				naturalHeight: 100,
+				isLazy: 0,
+				viewportWidth: 1024,
+				sourceCode: null,
+			},
+			{
+				pageId: marketingId,
+				src: 'https://example.com/marketing/img.png',
+				currentSrc: null,
+				alt: null,
+				width: 100,
+				height: 100,
+				naturalWidth: 100,
+				naturalHeight: 100,
+				isLazy: 0,
+				viewportWidth: 1024,
+				sourceCode: null,
+			},
+		]);
+		const [resourceId] = await knex('resources')
+			.insert({ url: 'https://cdn.example.com/x.css', isExternal: 1 })
+			.returning('id');
+		const rid = Number(
+			typeof resourceId === 'object' ? (resourceId as { id: number }).id : resourceId,
+		);
+		await knex('resources-referrers').insert([
+			{ resourceId: rid, pageId: blogId },
+			{ resourceId: rid, pageId: marketingId },
+		]);
+
+		// scope: /blog/ 下のみ
+		const scope = new Map([['example.com', [parseUrl('https://example.com/blog/')!]]]);
+		const promoted = await db.repromoteExternalPages(scope);
+		expect(promoted).toEqual(['https://example.com/blog/post-1']);
+
+		// repromote 対象 (blog) の関連行は全削除
+		const anchorsForBlog = await knex('anchors').where('pageId', blogId);
+		expect(anchorsForBlog).toEqual([]);
+		const imagesForBlog = await knex('images').where('pageId', blogId);
+		expect(imagesForBlog).toEqual([]);
+		const referrersForBlog = await knex('resources-referrers').where('pageId', blogId);
+		expect(referrersForBlog).toEqual([]);
+
+		// 非対象 (marketing) の関連行はそのまま残る
+		const anchorsForMarketing = await knex('anchors').where('pageId', marketingId);
+		expect(anchorsForMarketing).toHaveLength(1);
+		const imagesForMarketing = await knex('images').where('pageId', marketingId);
+		expect(imagesForMarketing).toHaveLength(1);
+		const referrersForMarketing = await knex('resources-referrers').where(
+			'pageId',
+			marketingId,
+		);
+		expect(referrersForMarketing).toHaveLength(1);
+
+		await db.destroy();
+		rmSync(cleanDbPath, { force: true });
+	});
+
+	it('returns an empty list when the scope map has no entries', async () => {
+		const db = await Database.connect({
+			workingDir,
+			filename: repromoteDbPath,
+		});
+
+		const promoted = await db.repromoteExternalPages(new Map());
+		expect(promoted).toEqual([]);
+	});
+
+	it('repromotes every match when the candidate set straddles the 500-row chunk boundary', async () => {
+		// Verifies the implementation chunks SELECT / UPDATE / DELETE in
+		// fixed-size batches (chunkSize=500). 501 candidates → 2 chunks.
+		const chunkDbPath = path.resolve(workingDir, 'repromote-chunk.sqlite');
+		const { rmSync } = await import('node:fs');
+		rmSync(chunkDbPath, { force: true });
+		const db = await Database.connect({
+			workingDir,
+			filename: chunkDbPath,
+		});
+
+		const total = 501;
+		for (let i = 0; i < total; i++) {
+			await db.updatePage(
+				{
+					url: parseUrl(`https://example.com/blog/post-${i}`)!,
+					redirectPaths: [],
+					isExternal: true,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 1,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: `t-${i}` },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				null,
+				false,
+			);
+		}
+
+		const scope = new Map([['example.com', [parseUrl('https://example.com/blog/')!]]]);
+		const promoted = await db.repromoteExternalPages(scope);
+
+		expect(promoted).toHaveLength(total);
+
+		const remainingExternal = await db
+			.getKnex()
+			.from('pages')
+			.where('isExternal', 1)
+			.count<{ c: number }[]>({ c: '*' });
+		expect(Number(remainingExternal[0]!.c)).toBe(0);
+
+		await db.destroy();
+		rmSync(chunkDbPath, { force: true });
 	});
 });
 
@@ -297,7 +655,6 @@ describe('self-redirect', () => {
 
 	it('自己リダイレクト（元URL=先URL）は redirectDestId を設定しない', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: selfRedirectDbPath,
 		});
@@ -331,7 +688,6 @@ describe('self-redirect', () => {
 
 	it('A→B→A の循環リダイレクトでは中間の B のみ redirectDestId が設定される', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: selfRedirectDbPath,
 		});
@@ -370,7 +726,6 @@ describe('self-redirect', () => {
 
 	it('通常のリダイレクト（A→B）は redirectDestId が正しく設定される', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: selfRedirectDbPath,
 		});
@@ -405,7 +760,6 @@ describe('self-redirect', () => {
 
 	it('末尾スラッシュの有無が異なるリダイレクトは自己リダイレクトとみなさない', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: selfRedirectDbPath,
 		});
@@ -449,7 +803,6 @@ describe('clearHtmlPath', () => {
 
 	it('スナップショットパスをクリアする', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: clearHtmlDbPath,
 		});
@@ -495,7 +848,6 @@ describe('addOrderField', () => {
 
 	it('order カラムが既に存在する場合でもエラーにならない', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: path.resolve(workingDir, 'mock.sqlite'),
 		});
@@ -510,7 +862,6 @@ describe('addOrderField', () => {
 
 	it('order カラムが存在しない場合に追加される', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: addOrderDbPath,
 		});
@@ -550,7 +901,6 @@ describe('getJSON (getConfig 経由)', () => {
 
 	it('不正な JSON フィールドがある場合フォールバック値を返す', async () => {
 		const db = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: invalidJsonDbPath,
 		});
@@ -559,12 +909,12 @@ describe('getJSON (getConfig 経由)', () => {
 			version: '0.4.3',
 			name: 'test',
 			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
 			recursive: false,
 			interval: 500,
 			image: false,
 			fetchExternal: false,
 			parallels: 1,
-			scope: [],
 			excludes: [],
 			excludeKeywords: [],
 			excludeUrls: [],
@@ -582,21 +932,20 @@ describe('getJSON (getConfig 経由)', () => {
 		// DB に不正な JSON を直接書き込む
 		const { default: knexLib } = await import('knex');
 		const rawDb = knexLib({
-			client: 'sqlite3',
+			client: LibsqlDialect,
 			connection: { filename: invalidJsonDbPath },
 			useNullAsDefault: true,
 		});
-		await rawDb('info').update({ scope: '{invalid json' });
+		await rawDb('info').update({ excludes: '{invalid json' });
 		await rawDb.destroy();
 
 		const db2 = await Database.connect({
-			type: 'sqlite3',
 			workingDir,
 			filename: invalidJsonDbPath,
 		});
 
 		const retrieved = await db2.getConfig();
-		expect(retrieved.scope).toEqual([]);
+		expect(retrieved.excludes).toEqual([]);
 
 		await db2.destroy();
 	});
