@@ -352,5 +352,49 @@ describe('Crawler', () => {
 			expect(hrefs).toContain('https://example.com/pending-1');
 			expect(hrefs).toContain('https://example.com/new-root');
 		});
+
+		it('deduplicates a URL that is in both resumedPending and the new roots', async () => {
+			// Repro of the append-mode bug: a previously-external page that
+			// gets repromoted into pending and is ALSO supplied as a new
+			// root must reach the dealer exactly once, otherwise two
+			// parallel slots scrape the same URL in parallel.
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+			vi.mocked(deal).mockResolvedValue();
+
+			const crawler = new Crawler(defaultOptions);
+			const shared = 'https://example.com/section/';
+			crawler.resume([shared], ['https://example.com/root/'], []);
+			crawler.start([parseUrl(shared)!], { recursive: true });
+
+			await vi.waitFor(() => {
+				expect(deal).toHaveBeenCalled();
+			});
+			const initialUrls = vi.mocked(deal).mock.calls[0]![0] as ExURL[];
+			const occurrences = initialUrls.filter((u) => u.href === shared);
+			expect(occurrences).toHaveLength(1);
+		});
+
+		it('deduplicates duplicate roots within a single start() call', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+			vi.mocked(deal).mockResolvedValue();
+
+			const crawler = new Crawler(defaultOptions);
+			crawler.start(
+				[
+					parseUrl('https://example.com/blog/')!,
+					parseUrl('https://example.com/blog/')!,
+					parseUrl('https://example.com/news/')!,
+				],
+				{ recursive: true },
+			);
+
+			await vi.waitFor(() => {
+				expect(deal).toHaveBeenCalled();
+			});
+			const initialUrls = vi.mocked(deal).mock.calls[0]![0] as ExURL[];
+			expect(initialUrls.map((u) => u.pathname)).toEqual(['/blog/', '/news/']);
+		});
 	});
 });

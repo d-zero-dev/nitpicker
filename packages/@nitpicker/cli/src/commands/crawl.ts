@@ -430,7 +430,7 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 			}
 			if (args.length > 1) {
 				throw new Error(
-					'--append takes exactly one positional argument (the archive path). Extra positionals were given — did you mean to repeat --append for each URL?',
+					'--append takes exactly one positional argument (the archive path). Extra positionals were given — append URLs must follow `--append`, not the archive.',
 				);
 			}
 			await appendCrawl(args[0]!, flags.append, flags);

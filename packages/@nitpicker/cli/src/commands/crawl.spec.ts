@@ -409,7 +409,7 @@ describe('crawl', () => {
 				createFlags({ append: ['https://sample-b.com/'] }),
 			),
 		).rejects.toThrow(
-			'--append takes exactly one positional argument (the archive path). Extra positionals were given — did you mean to repeat --append for each URL?',
+			'--append takes exactly one positional argument (the archive path). Extra positionals were given — append URLs must follow `--append`, not the archive.',
 		);
 	});
 

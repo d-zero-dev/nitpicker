@@ -169,8 +169,10 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * otherwise discovered child pages within the scope are followed.
 	 *
 	 * When resume state is present, the resumed pending URLs are merged with the
-	 * newly-provided roots; the dealer's `seen` set deduplicates by
-	 * protocol-agnostic key so a URL appearing in both sources is processed once.
+	 * newly-provided roots. The merge is deduplicated by protocol-agnostic key
+	 * before reaching the dealer so a URL that exists in both sources — which
+	 * is common in append-mode when a new root coincides with a repromoted
+	 * previously-external page — does not race on two parallel slots.
 	 * @param urls - The list of root URLs to begin crawling from. Must be non-empty.
 	 * @param opts - Optional overrides; currently only `recursive` is honoured.
 	 * @param opts.recursive - When `false`, disables recursive discovery and forces list-mode.
@@ -198,7 +200,19 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		}
 
 		const isResuming = this.#resumedScraped.length > 0;
-		const initialUrls = isResuming ? [...this.#resumedPending, ...urls] : urls;
+		// Dedupe by the same protocol-agnostic key the dealer uses internally.
+		// Append-mode in particular can put the same URL into both
+		// `#resumedPending` (via `repromoteExternalPages`) and `urls` (the
+		// new root); without this dedupe both copies would grab a parallel
+		// slot and race on the same URL.
+		const seenInitial = new Set<string>();
+		const initialUrls: ExURL[] = [];
+		for (const url of isResuming ? [...this.#resumedPending, ...urls] : urls) {
+			const key = protocolAgnosticKey(url.withoutHashAndAuth);
+			if (seenInitial.has(key)) continue;
+			seenInitial.add(key);
+			initialUrls.push(url);
+		}
 		const resumeOffset = this.#resumedScraped.length;
 
 		if (initialUrls.length === 0) {

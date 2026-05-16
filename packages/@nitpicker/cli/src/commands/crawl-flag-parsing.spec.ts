@@ -66,4 +66,29 @@ describe('crawl CLI flag parsing (parseCli integration)', () => {
 		const result = runParse(['https://example.com/']);
 		expect(result.flags.append).toBeUndefined();
 	});
+
+	it('greedily consumes consecutive values after a single --append until the next flag', () => {
+		// roar's `isMultiple` is greedy — it absorbs every non-flag token after
+		// `--append` up to the next `--flag`. The archive stays the lone
+		// positional; the interval value still binds correctly to its flag.
+		const result = runParse([
+			'./existing.nitpicker',
+			'--append',
+			'https://example.com/a/',
+			'https://example.com/b/',
+			'https://example.com/c/',
+			'https://example.com/d/',
+			'--interval',
+			'5000',
+		]);
+
+		expect(result.args).toEqual(['./existing.nitpicker']);
+		expect(result.flags.append).toEqual([
+			'https://example.com/a/',
+			'https://example.com/b/',
+			'https://example.com/c/',
+			'https://example.com/d/',
+		]);
+		expect(result.flags.interval).toBe(5000);
+	});
 });

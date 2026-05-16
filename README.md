@@ -138,13 +138,18 @@ $ npx @nitpicker/cli crawl https://www.example.com/ https://blog.example.com/
 
 ##### `--append`: 既存アーカイブへの追加クロール
 
-既存の `.nitpicker` を位置引数で渡し、`--append` で追加する起点 URL を指定する。`--append` は繰り返し指定で複数 URL を渡せる。
+既存の `.nitpicker` を位置引数で渡し、`--append` で追加する起点 URL を指定する。`--append` は次の `--flag` まで連続する URL を貪欲に吸い上げるので、複数 URL は単一の `--append` の後ろにスペース区切りで並べてもよいし、`--append` を繰り返してもよい。
 
 ```sh
 # 単一 URL を追加
 $ npx @nitpicker/cli crawl ./existing.nitpicker --append https://sample-b.com/
 
-# 複数 URL を追加
+# 複数 URL を追加（貪欲形 — 次の --flag まで全部 --append の値になる）
+$ npx @nitpicker/cli crawl ./existing.nitpicker \
+    --append https://a.com/ https://b.com/ https://c.com/ \
+    --interval 5000
+
+# 複数 URL を追加（繰り返し形）
 $ npx @nitpicker/cli crawl ./existing.nitpicker --append https://a.com/ --append https://b.com/
 ```
 
