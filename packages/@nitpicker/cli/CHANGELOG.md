@@ -3,6 +3,28 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.8.0](https://github.com/d-zero-dev/nitpicker/compare/v0.7.0...v0.8.0) (2026-05-16)
+
+### Bug Fixes
+
+- **crawler:** dedupe initial URLs so append-mode does not race on a URL in both resume pending and the new roots ([06aeda7](https://github.com/d-zero-dev/nitpicker/commit/06aeda7924dd57fcbeeed8e61fb41900acc14a46))
+
+- feat(cli)!: flip --append to take URLs and use the positional as the archive ([01ee205](https://github.com/d-zero-dev/nitpicker/commit/01ee205406a4443b6a42b7a0714504f8ccffa8be))
+
+### Features
+
+- **cli:** accept multiple positional URLs and tighten flag exclusions ([33fd443](https://github.com/d-zero-dev/nitpicker/commit/33fd44364cfaa264b8a7eec17ddfcd56d4c0c81d))
+- **cli:** add --append flag for incremental crawl on an existing archive ([9c0e02e](https://github.com/d-zero-dev/nitpicker/commit/9c0e02e605caa82fea9a3af8b39f8515e9e84fbd))
+
+### BREAKING CHANGES
+
+- the CLI invocation order for append is reversed. Old
+  `crawl --append archive.nitpicker https://x/` becomes
+  `crawl archive.nitpicker --append https://x/`. The internal
+  `CrawlerOrchestrator.append(archivePath, newUrls, ...)` JS API is unchanged.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
 # [0.7.0](https://github.com/d-zero-dev/nitpicker/compare/v0.6.5-alpha.0...v0.7.0) (2026-05-13)
 
 ### Bug Fixes

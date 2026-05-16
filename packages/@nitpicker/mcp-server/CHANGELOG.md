@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.8.0](https://github.com/d-zero-dev/nitpicker/compare/v0.7.0...v0.8.0) (2026-05-16)
+
+### Features
+
+- **mcp-server:** include roots in open_archive response ([a58c942](https://github.com/d-zero-dev/nitpicker/commit/a58c942004565a584a690c87d265db85670c27b5))
+
 # [0.7.0](https://github.com/d-zero-dev/nitpicker/compare/v0.6.5-alpha.0...v0.7.0) (2026-05-13)
 
 **Note:** Version bump only for package @nitpicker/mcp-server

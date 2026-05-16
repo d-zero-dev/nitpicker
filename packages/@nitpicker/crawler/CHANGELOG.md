@@ -3,6 +3,52 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.8.0](https://github.com/d-zero-dev/nitpicker/compare/v0.7.0...v0.8.0) (2026-05-16)
+
+### Bug Fixes
+
+- **crawler:** dedupe initial URLs so append-mode does not race on a URL in both resume pending and the new roots ([06aeda7](https://github.com/d-zero-dev/nitpicker/commit/06aeda7924dd57fcbeeed8e61fb41900acc14a46))
+- **crawler:** make scope match port-aware ([691e876](https://github.com/d-zero-dev/nitpicker/commit/691e87621e20ebf1194d14a231e53a4551675641))
+- **crawler:** release archive lock on every CrawlerOrchestrator.append error path ([d8878d6](https://github.com/d-zero-dev/nitpicker/commit/d8878d68a26506601d17ad236516fd39d639f74d))
+- **crawler:** stop swallowing append restore failures and tighten updateConfig safety ([b9405f1](https://github.com/d-zero-dev/nitpicker/commit/b9405f1a5fa9e340923424d09d319d199fec6b3a))
+
+- feat(crawler)!: merge positional roots into info.scope and crawler scope map ([1166b50](https://github.com/d-zero-dev/nitpicker/commit/1166b50a2cd293a8c6a3d42d45a435fc6d379dda))
+- refactor(crawler)!: unify Crawler.start and startMultiple into a single multi-root API ([cb700df](https://github.com/d-zero-dev/nitpicker/commit/cb700df977376b81a100cb9ce5dfefeda7846a2b))
+- feat(crawler)!: add info.roots column, advisory archive lock, and repromote/updateConfig DB ops ([4545614](https://github.com/d-zero-dev/nitpicker/commit/4545614386f2e5cf1f54ee15e711435c98468d9c))
+- refactor(crawler)!: consolidate scope-entry lookup into findScopeEntry ([b2c9766](https://github.com/d-zero-dev/nitpicker/commit/b2c9766cb43078624f93ae0ded2ba7deb432b313))
+
+### Features
+
+- **crawler:** add CrawlerOrchestrator.append for incremental scope expansion ([2a7fdbb](https://github.com/d-zero-dev/nitpicker/commit/2a7fdbbb2d70209d301ab62a1201ac2007243e94))
+
+### BREAKING CHANGES
+
+- `info.scope` now contains the positional root URLs in
+  addition to whatever was passed via `options.scope`. Callers that round-trip
+  `info.scope` and expect it to be the literal `--scope` value will see the
+  roots prepended.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
+- `Crawler.start` signature changes from `(url)` to
+  `(urls[], opts?)`. `Crawler.startMultiple` is removed; pass
+  `{ recursive: false }` to the unified `start` for list-mode behaviour.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
+- `Config` now requires `roots: string[]`. `Database.connect` /
+  `Archive.create` / `Archive.open` / `Archive.resume` run migrations on every
+  call, so a `.nitpicker` opened by this version writes back the new column.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
+- `isExternalUrl` adds an optional `options` parameter for
+  ParseURLOptions, and `injectScopeAuth` now takes `(url, matchedScope)` instead
+  of `(url, scopeMap)`. `findBestMatchingScope` and `isInAnyLowerLayer` are
+  removed; call sites should use `findScopeEntry` instead.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
 # [0.7.0](https://github.com/d-zero-dev/nitpicker/compare/v0.6.5-alpha.0...v0.7.0) (2026-05-13)
 
 ### Bug Fixes
