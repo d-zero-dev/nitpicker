@@ -27,6 +27,12 @@ export const commandDef = {
 			shortFlag: 'R',
 			desc: 'Resume crawling from a stub file',
 		},
+		append: {
+			type: 'string',
+			shortFlag: 'A',
+			isMultiple: true,
+			desc: 'Append crawl: register the URL as a new recursive root for the positional archive (repeat for multiple URLs)',
+		},
 		interval: {
 			type: 'number',
 			shortFlag: 'I',
@@ -51,10 +57,6 @@ export const commandDef = {
 			type: 'boolean',
 			default: true,
 			desc: 'Recursive crawling (use --no-recursive to disable)',
-		},
-		scope: {
-			type: 'string',
-			desc: 'Set hosts and URLs as scope',
 		},
 		exclude: {
 			type: 'string',
@@ -282,6 +284,55 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 }
 
 /**
+ * Append a fresh crawl to an existing `.nitpicker` archive.
+ *
+ * Opens the archive identified by the positional argument, registers the
+ * `--append` URLs as additional recursive roots, re-scrapes any
+ * previously-external pages whose URL now falls under the expanded scope,
+ * and writes the result back to the same file. A `<archive>.bak` is taken
+ * before any DB mutation; on success it is removed, on failure it is
+ * restored.
+ * @param archivePath - Path to the existing `.nitpicker` archive.
+ * @param newUrls - URLs from one or more `--append` flags. Must be non-empty.
+ * @param flags - Parsed CLI flags from the `crawl` command.
+ */
+async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlFlags) {
+	validateUrls(newUrls);
+	const errStack: (CrawlerError | Error)[] = [];
+
+	const orchestrator = await CrawlerOrchestrator.append(
+		archivePath,
+		newUrls,
+		{
+			...mapFlagsToCrawlConfig(flags),
+			list: false,
+		},
+		(orchestrator, config) => {
+			run(
+				`${archivePath} (append: ${newUrls.join(', ')})`,
+				orchestrator,
+				config,
+				flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
+			).catch((error) => errStack.push(error));
+		},
+	);
+
+	try {
+		await orchestrator.write();
+	} finally {
+		await orchestrator.archive.close();
+		orchestrator.garbageCollect();
+	}
+
+	if (errStack.length > 0) {
+		const error = new CrawlAggregateError(errStack);
+		// eslint-disable-next-line no-console
+		console.error(`\n${error.message}`);
+		throw error;
+	}
+}
+
+/**
  * Validates that all URLs in the list are parseable by the URL constructor.
  * @param urls - Array of URL strings to validate
  * @throws {Error} If any URL is invalid
@@ -317,19 +368,28 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 
 	log('Options: %O', flags);
 
+	const hasAppendFlag = !!flags.append && flags.append.length > 0;
+
 	if (flags.diff) {
-		const a = args[0];
-		const b = args[1];
-		if (!a || !b) {
-			throw new Error('Please provide two file paths to compare');
+		if (hasAppendFlag) {
+			throw new Error('--diff cannot be combined with --append.');
 		}
-		await diff(a, b);
+		if (args.length !== 2) {
+			throw new Error('--diff takes exactly two file paths to compare');
+		}
+		await diff(args[0]!, args[1]!);
 		return;
 	}
 
-	if (flags.single && (flags.list?.length || flags.listFile)) {
+	const hasListFlag = !!flags.list && flags.list.length > 0;
+
+	if (flags.single && (hasListFlag || flags.listFile)) {
 		// eslint-disable-next-line no-console
 		console.warn('Warning: --single is ignored when --list or --list-file is specified.');
+	}
+
+	if (flags.single && args.length > 1) {
+		throw new Error('--single cannot be combined with multiple positional URLs');
 	}
 
 	try {
@@ -339,7 +399,41 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 					'--output flag is not supported with --resume. The archive path is determined by the stub file.',
 				);
 			}
+			if (hasAppendFlag) {
+				throw new Error(
+					'--resume and --append cannot be used together. Pick the existing-archive mode that fits your task.',
+				);
+			}
 			await resumeCrawl(flags.resume, flags);
+			return;
+		}
+
+		if (hasAppendFlag) {
+			if (flags.output) {
+				throw new Error(
+					'--output flag is not supported with --append. The archive path is the positional argument being appended.',
+				);
+			}
+			if (flags.listFile) {
+				throw new Error('--append cannot be combined with --list-file.');
+			}
+			if (hasListFlag) {
+				throw new Error('--append cannot be combined with --list.');
+			}
+			if (flags.single) {
+				throw new Error('--append cannot be combined with --single.');
+			}
+			if (args.length === 0) {
+				throw new Error(
+					'--append requires the archive path as the positional argument (usage: crawl <archive> --append <URL>).',
+				);
+			}
+			if (args.length > 1) {
+				throw new Error(
+					'--append takes exactly one positional argument (the archive path). Extra positionals were given — append URLs must follow `--append`, not the archive.',
+				);
+			}
+			await appendCrawl(args[0]!, flags.append, flags);
 			return;
 		}
 
@@ -354,18 +448,16 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 			return;
 		}
 
-		if (flags.list && flags.list.length > 0) {
+		if (hasListFlag) {
 			const pageList = [...flags.list, ...args];
 			validateUrls(pageList);
 			await startCrawl(pageList, flags);
 			return;
 		}
 
-		const siteUrl = args[0];
-
-		if (siteUrl) {
-			validateUrls([siteUrl]);
-			await startCrawl([siteUrl], flags);
+		if (args.length > 0) {
+			validateUrls(args);
+			await startCrawl(args, flags);
 			return;
 		}
 	} catch (error) {

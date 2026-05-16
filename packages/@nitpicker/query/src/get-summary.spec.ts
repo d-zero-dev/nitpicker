@@ -25,6 +25,7 @@ describe('getSummary', () => {
 
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
+			roots: ['https://example.com', 'https://example.com/blog/'],
 			name: 'test',
 			version: '0.4.4',
 			recursive: true,
@@ -32,7 +33,6 @@ describe('getSummary', () => {
 			image: true,
 			fetchExternal: false,
 			parallels: 1,
-			scope: [],
 			excludes: [],
 			excludeKeywords: [],
 			excludeUrls: [],
@@ -159,6 +159,7 @@ describe('getSummary', () => {
 		const result = await getSummary(archive);
 
 		expect(result.baseUrl).toBe('https://example.com');
+		expect(result.roots).toEqual(['https://example.com', 'https://example.com/blog/']);
 		expect(result.totalPages).toBe(3);
 		expect(result.internalPages).toBe(3);
 		expect(result.externalPages).toBe(0);

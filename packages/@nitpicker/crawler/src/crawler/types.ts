@@ -34,8 +34,8 @@ export interface CrawlerOptions extends Required<
 	/** Whether to fetch and scrape external (out-of-scope) pages. */
 	fetchExternal: boolean;
 
-	/** List of scope URL strings that define the crawl boundary. */
-	scope: string[];
+	/** Root URL strings that define the crawl boundary. Each root is also a scope entry (a `(hostname, port, path)` triple) — out-of-bound URLs are classified as external. */
+	roots: string[];
 
 	/** Glob patterns for URLs to exclude from crawling. */
 	excludes: string[];

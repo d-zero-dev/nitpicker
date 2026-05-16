@@ -24,43 +24,6 @@ describe('mapFlagsToCrawlConfig', () => {
 		expect(result.excludeUrls).toEqual(['https://example.com/skip']);
 	});
 
-	it('scope をカンマ区切りで配列に変換する', () => {
-		const result = mapFlagsToCrawlConfig({
-			scope: 'www.example.com, blog.example.com , api.example.com',
-		});
-		expect(result.scope).toEqual([
-			'www.example.com',
-			'blog.example.com',
-			'api.example.com',
-		]);
-	});
-
-	it('scope のカンマ区切りで空文字列をフィルタリングする', () => {
-		const result = mapFlagsToCrawlConfig({
-			scope: 'a,,b',
-		});
-		expect(result.scope).toEqual(['a', 'b']);
-	});
-
-	it('scope のカンマ区切りで空白のみの要素をフィルタリングする', () => {
-		const result = mapFlagsToCrawlConfig({
-			scope: 'a, , ,b',
-		});
-		expect(result.scope).toEqual(['a', 'b']);
-	});
-
-	it('scope が全て空文字列の場合、空配列を返す', () => {
-		const result = mapFlagsToCrawlConfig({
-			scope: ',,,',
-		});
-		expect(result.scope).toEqual([]);
-	});
-
-	it('scope が未指定の場合 undefined を返す', () => {
-		const result = mapFlagsToCrawlConfig({});
-		expect(result.scope).toBeUndefined();
-	});
-
 	it('CrawlConfig に直接対応するフラグをそのまま渡す', () => {
 		const result = mapFlagsToCrawlConfig({
 			interval: 500,

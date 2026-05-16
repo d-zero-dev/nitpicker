@@ -67,7 +67,6 @@ describe('setPage', () => {
 			// HTMLパスがクリアされていることをDB経由で検証
 			const dbPath = path.resolve(tmpDirPattern, Archive.SQLITE_DB_FILE_NAME);
 			const db = await Database.connect({
-				type: 'sqlite3',
 				workingDir: tmpDirPattern,
 				filename: dbPath,
 			});

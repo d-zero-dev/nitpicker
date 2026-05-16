@@ -1,27 +1,22 @@
 import type { ExURL } from '@d-zero/shared/parse-url';
 
-import { findBestMatchingScope } from './find-best-matching-scope.js';
-
 /**
- * Inject authentication credentials from a matching scope URL into the target URL.
+ * Copy `username` / `password` from a matched scope URL into the target URL.
  *
- * Finds the best-matching scope URL (deepest path match) for the given URL's
- * hostname and copies its `username` and `password` properties. This mutates
- * the `url` parameter in place.
- * @param url - The parsed URL to receive authentication credentials (mutated in place).
- * @param scope - Map of hostnames to their scope URLs.
+ * The matched scope is supplied by the caller (typically the result of a single
+ * {@link findScopeEntry} call). This avoids the previous implementation's
+ * redundant hostname lookup and re-search.
+ *
+ * Mutates the `url` parameter in place. Only non-empty credentials overwrite
+ * existing values.
+ * @param url - The parsed URL to receive credentials (mutated in place).
+ * @param matchedScope - The scope URL whose credentials should be inherited.
  */
-export function injectScopeAuth(
-	url: ExURL,
-	scope: ReadonlyMap<string, readonly ExURL[]>,
-): void {
-	const scopes = scope.get(url.hostname);
-	if (!scopes) {
-		return;
-	}
-	const matchedScope = findBestMatchingScope(url, scopes);
-	if (matchedScope) {
+export function injectScopeAuth(url: ExURL, matchedScope: ExURL): void {
+	if (matchedScope.username) {
 		url.username = matchedScope.username;
+	}
+	if (matchedScope.password) {
 		url.password = matchedScope.password;
 	}
 }

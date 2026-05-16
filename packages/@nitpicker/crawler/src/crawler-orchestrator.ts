@@ -2,6 +2,7 @@ import type { Config } from './archive/types.js';
 import type { CrawlEvent } from './types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
+import { copyFile, unlink as unlinkFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -146,7 +147,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			executablePath: options?.executablePath || null,
 			fetchExternal: options?.fetchExternal ?? true,
 			recursive: options?.recursive ?? true,
-			scope: options?.scope ?? [],
+			roots: options?.roots ?? [],
 			excludes: normalizeToArray(options?.excludes),
 			excludeKeywords: normalizeToArray(options?.excludeKeywords),
 			excludeUrls: [
@@ -236,11 +237,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					.catch((error) => reject(error));
 			});
 
-			if (this.#fromList) {
-				this.#crawler.startMultiple(list);
-			} else {
-				this.#crawler.start(root);
-			}
+			this.#crawler.start(list, { recursive: !this.#fromList });
 		});
 	}
 
@@ -326,16 +323,20 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		const disableQueries = options?.disableQueries || false;
 		const defaultUserAgent = `Nitpicker/${pkg.version}`;
 		const archive = await Archive.create({ filePath, cwd, disableQueries });
+
+		// Each positional URL is both a starting point and a scope entry.
+		const rootHrefs = list.map((u) => u.withoutHash);
+
 		await archive.setConfig({
 			version: pkg.version,
 			name: fileName,
-			baseUrl: urlParsed.withoutHash,
+			baseUrl: rootHrefs[0]!,
+			roots: rootHrefs,
 			recursive: options?.recursive ?? true,
 			fetchExternal: options?.fetchExternal ?? true,
 			image: options?.image ?? true,
 			interval: options?.interval || 0,
 			parallels: options?.parallels || 0,
-			scope: options?.scope ?? [],
 			excludes: normalizeToArray(options?.excludes),
 			excludeKeywords: normalizeToArray(options?.excludeKeywords),
 			excludeUrls: [
@@ -349,7 +350,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			userAgent: options?.userAgent || defaultUserAgent,
 			ignoreRobots: options?.ignoreRobots ?? false,
 		});
-		const orchestrator = new CrawlerOrchestrator(archive, options);
+		const orchestrator = new CrawlerOrchestrator(archive, {
+			...options,
+			roots: rootHrefs,
+		});
 		const config = await archive.getConfig();
 		if (initializedCallback) {
 			await initializedCallback(orchestrator, config);
@@ -367,6 +371,123 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		await archive.setUrlOrder();
 		log('Sorting done');
 		return orchestrator;
+	}
+
+	/**
+	 * Append a fresh crawl to an existing `.nitpicker` archive.
+	 *
+	 * The given `newUrls` become additional recursive roots: their `withoutHash`
+	 * form is merged into `info.roots` and the crawler picks them up as
+	 * starting URLs. Previously-external pages whose URL now falls under
+	 * the expanded scope are demoted back to "needs scraping" so the next pass
+	 * re-fetches them as full internal pages. A `<archive>.bak` is created
+	 * before the crawl and removed on success; if the crawl throws, the backup
+	 * is restored to keep the original archive intact.
+	 *
+	 * List-mode archives (`info.fromList === true`) are rejected because their
+	 * pages are all metadata-only and cannot host a recursive append.
+	 * @param archivePath - Absolute or relative path to the existing `.nitpicker`.
+	 * @param newUrls - New root URLs to add and crawl.
+	 * @param options - Optional config overrides applied on top of the archived config.
+	 * @param initializedCallback - Optional callback invoked after initialization but before crawling resumes.
+	 * @returns The orchestrator instance after the append crawl completes.
+	 * @throws {Error} When `newUrls` is empty, the archive is in list mode, or it cannot be parsed.
+	 */
+	static async append(
+		archivePath: string,
+		newUrls: string[],
+		options?: Partial<CrawlConfig>,
+		initializedCallback?: CrawlInitializedCallback,
+	) {
+		if (newUrls.length === 0) {
+			throw new Error('append: newUrls is empty');
+		}
+		const cwd = options?.cwd ?? process.cwd();
+		const absFilePath = path.isAbsolute(archivePath)
+			? archivePath
+			: path.resolve(cwd, archivePath);
+
+		const archive = await Archive.open({ filePath: absFilePath, cwd });
+		// Any throw between here and the successful return must release the
+		// archive lock and clean up tmpDir; the caller's `close()` only runs on
+		// the happy path. Errors from `close()` itself are intentionally
+		// best-effort: the original error is what matters.
+		try {
+			const archived = await archive.getConfig();
+			if (archived.fromList) {
+				throw new Error(
+					'Cannot append to a list-mode archive: this archive was created with --list/--list-file and contains metadata-only pages. Create a fresh archive instead.',
+				);
+			}
+
+			const newParsed = sortUrl(newUrls, archived);
+			if (newParsed.length === 0) {
+				throw new Error('append: no parseable URLs provided');
+			}
+			const newRoots = newParsed.map((u) => u.withoutHash);
+			const mergedRoots = [...new Set([...archived.roots, ...newRoots])];
+			const mergedConfig: Config = {
+				...archived,
+				...cleanObject(options),
+				roots: mergedRoots,
+				fromList: false,
+				recursive: true,
+				baseUrl: mergedRoots[0]!,
+			};
+
+			const backupPath = absFilePath + '.bak';
+			await copyFile(absFilePath, backupPath);
+
+			try {
+				await archive.updateConfig(mergedConfig);
+
+				const scopeMap = new Map<string, ExURL[]>();
+				for (const raw of mergedRoots) {
+					const parsed = parseUrl(raw, archived);
+					if (!parsed) continue;
+					const existing = scopeMap.get(parsed.hostname) ?? [];
+					scopeMap.set(parsed.hostname, [...existing, parsed]);
+				}
+				await archive.repromoteExternalPages(scopeMap, archived);
+
+				const orchestrator = new CrawlerOrchestrator(archive, {
+					...mergedConfig,
+					roots: mergedRoots,
+				});
+				const { scraped, pending } = await archive.getCrawlingState();
+				const resources = await archive.getResourceUrlList();
+				orchestrator.#crawler.resume(pending, scraped, resources);
+				if (initializedCallback) {
+					await initializedCallback(orchestrator, mergedConfig);
+				}
+				log('Start appending');
+				log('Archive %s', absFilePath);
+				log('New roots %O', newRoots);
+				log('Merged roots %O', mergedRoots);
+				await orchestrator.crawling(newParsed);
+				clearDestinationCache();
+				await archive.setUrlOrder();
+				await ignoreEnoent(unlinkFile(backupPath));
+				return orchestrator;
+			} catch (error) {
+				try {
+					await copyFile(backupPath, absFilePath);
+					await ignoreEnoent(unlinkFile(backupPath));
+				} catch (restoreError) {
+					// Restore itself failed — surface both so the operator knows
+					// the .bak still exists and the original archive may be
+					// corrupt. The outer `catch` still releases the lock.
+					throw new AggregateError(
+						[error, restoreError],
+						`append failed AND restore from backup failed. Original archive backup is left at: ${backupPath}`,
+					);
+				}
+				throw error;
+			}
+		} catch (error) {
+			await archive.close().catch(() => {});
+			throw error;
+		}
 	}
 
 	/**
@@ -410,5 +531,21 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		log('Config %O', config);
 		await orchestrator.crawling([url]);
 		return orchestrator;
+	}
+}
+
+/**
+ * Await a filesystem promise but silently swallow only `ENOENT` errors. Any
+ * other failure (permissions, disk full, etc.) propagates so the caller can
+ * react instead of guessing whether the operation worked.
+ * @param promise - Filesystem operation to await.
+ */
+async function ignoreEnoent(promise: Promise<unknown>): Promise<void> {
+	try {
+		await promise;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+			throw error;
+		}
 	}
 }

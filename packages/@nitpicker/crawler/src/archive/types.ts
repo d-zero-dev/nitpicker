@@ -13,12 +13,12 @@ export interface DatabaseEvent {
  * Represents all crawling options that were used for the crawl session.
  */
 export interface Config extends Required<Pick<ParseURLOptions, 'disableQueries'>> {
-	/** The starting URL for the crawl. */
+	/** The starting URL for the crawl. Stored as a denormalised mirror of `roots[0]` so summary consumers can read a single URL without parsing the array. */
 	baseUrl: string;
+	/** The user-provided root URLs that seeded the crawl. Each root is both a recursive starting point and a scope entry. Always non-empty. */
+	roots: string[];
 	/** Maximum directory depth for excluded paths. */
 	maxExcludedDepth: number;
-	/** URL patterns defining the crawl scope. */
-	scope: string[];
 	/** Keywords used to exclude pages from crawling. */
 	excludeKeywords: string[];
 	/** URL patterns to exclude from crawling. */
@@ -307,33 +307,11 @@ export interface DB_Resource {
 }
 
 /**
- * Base options shared by all database connection configurations.
+ * Connection options for the archive's libsql-backed database.
  */
-type AbsDatabaseOption = {
+export interface DatabaseOption {
 	/** The working directory for the database (used for resolving relative paths). */
 	workingDir: string;
-};
-
-/**
- * Union type for all supported database connection options.
- */
-export type DatabaseOption = DatabaseSqlite3Option | DatabaseMySqlOption;
-
-/**
- * Connection options for a SQLite3 database.
- */
-type DatabaseSqlite3Option = AbsDatabaseOption & {
-	/** The database type identifier. */
-	type: 'sqlite3';
 	/** The absolute file path to the SQLite database file. */
 	filename: string;
-};
-
-/**
- * Connection options for a MySQL database.
- * Note: MySQL support is not yet implemented.
- */
-type DatabaseMySqlOption = AbsDatabaseOption & {
-	/** The database type identifier. */
-	type: 'mysql';
-};
+}

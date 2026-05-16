@@ -78,6 +78,7 @@ test/fixture/.__*
 # Nitpicker file
 .__tmp__
 *.nitpicker
+*.nitpicker.bak
 *.zip
 *.stub
 ._nitpicker-*

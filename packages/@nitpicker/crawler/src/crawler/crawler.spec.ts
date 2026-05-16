@@ -39,7 +39,7 @@ const defaultOptions = {
 	interval: 0,
 	parallels: 1,
 	recursive: true,
-	scope: ['https://example.com/'],
+	roots: ['https://example.com/'],
 	excludes: [],
 	excludeKeywords: [],
 	excludeUrls: [],
@@ -70,7 +70,7 @@ describe('Crawler', () => {
 			});
 
 			const url = parseUrl('https://example.com/')!;
-			crawler.start(url);
+			crawler.start([url]);
 
 			// deal() rejection triggers async .catch — wait for microtask queue
 			await vi.waitFor(() => {
@@ -98,7 +98,7 @@ describe('Crawler', () => {
 				errors.push(e);
 			});
 
-			crawler.start(parseUrl('https://example.com/')!);
+			crawler.start([parseUrl('https://example.com/')!]);
 
 			await vi.waitFor(() => {
 				expect(errors).toHaveLength(2);
@@ -122,7 +122,7 @@ describe('Crawler', () => {
 				errors.push(e);
 			});
 
-			crawler.start(parseUrl('https://example.com/')!);
+			crawler.start([parseUrl('https://example.com/')!]);
 
 			await vi.waitFor(() => {
 				expect(errors).toHaveLength(1);
@@ -143,7 +143,7 @@ describe('Crawler', () => {
 				crawlEndEmitted = true;
 			});
 
-			crawler.start(parseUrl('https://example.com/')!);
+			crawler.start([parseUrl('https://example.com/')!]);
 
 			await vi.waitFor(() => {
 				expect(crawlEndEmitted).toBe(true);
@@ -173,7 +173,7 @@ describe('Crawler', () => {
 				parseUrl('https://example.com/page1')!,
 				parseUrl('https://example.com/page2')!,
 			];
-			crawler.startMultiple(urls);
+			crawler.start(urls, { recursive: false });
 
 			await vi.waitFor(() => {
 				expect(errors).toHaveLength(3);
@@ -199,7 +199,7 @@ describe('Crawler', () => {
 			});
 
 			const crawler = new Crawler(defaultOptions);
-			crawler.start(parseUrl('https://example.com/')!);
+			crawler.start([parseUrl('https://example.com/')!]);
 
 			await vi.waitFor(() => {
 				expect(receivedSignal).toBeDefined();
@@ -226,7 +226,7 @@ describe('Crawler', () => {
 				crawlEndEmitted = true;
 			});
 
-			crawler.start(parseUrl('https://example.com/')!);
+			crawler.start([parseUrl('https://example.com/')!]);
 
 			await vi.waitFor(() => {
 				expect(crawlEndEmitted).toBe(true);
@@ -240,7 +240,7 @@ describe('Crawler', () => {
 			vi.mocked(deal).mockResolvedValue();
 
 			const crawler = new Crawler(defaultOptions);
-			crawler.start(parseUrl('https://example.com/')!);
+			crawler.start([parseUrl('https://example.com/')!]);
 
 			crawler.abort();
 			expect(() => crawler.abort()).not.toThrow();
@@ -293,7 +293,7 @@ describe('Crawler', () => {
 				crawlEndEmitted = true;
 			});
 
-			crawler.start(parseUrl('https://example.com/')!);
+			crawler.start([parseUrl('https://example.com/')!]);
 
 			await vi.waitFor(() => {
 				expect(crawlEndEmitted).toBe(true);
@@ -302,6 +302,99 @@ describe('Crawler', () => {
 			expect(errors).toHaveLength(1);
 			expect(errors[0]!.error.message).toBe('unexpected crash');
 			expect(errors[0]!.url).toBe('https://example.com');
+		});
+	});
+
+	describe('start() with the unified signature', () => {
+		it('throws when given an empty url list', async () => {
+			const { default: Crawler } = await import('./crawler.js');
+			const crawler = new Crawler(defaultOptions);
+			expect(() => crawler.start([])).toThrow('urls is empty');
+		});
+
+		it('passes every supplied root as an initial url to deal()', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+			vi.mocked(deal).mockResolvedValue();
+
+			const crawler = new Crawler(defaultOptions);
+			const urls = [
+				parseUrl('https://example.com/blog/')!,
+				parseUrl('https://example.com/news/')!,
+			];
+			crawler.start(urls, { recursive: true });
+
+			await vi.waitFor(() => {
+				expect(deal).toHaveBeenCalled();
+			});
+			const initialUrls = vi.mocked(deal).mock.calls[0]![0] as ExURL[];
+			expect(initialUrls.map((u) => u.pathname)).toEqual(['/blog/', '/news/']);
+		});
+
+		it('merges resumed pending URLs with newly-supplied roots when resuming', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+			vi.mocked(deal).mockResolvedValue();
+
+			const crawler = new Crawler(defaultOptions);
+			crawler.resume(
+				['https://example.com/pending-1'],
+				['https://example.com/scraped-1'],
+				[],
+			);
+			crawler.start([parseUrl('https://example.com/new-root')!], { recursive: true });
+
+			await vi.waitFor(() => {
+				expect(deal).toHaveBeenCalled();
+			});
+			const initialUrls = vi.mocked(deal).mock.calls[0]![0] as ExURL[];
+			const hrefs = initialUrls.map((u) => u.href);
+			expect(hrefs).toContain('https://example.com/pending-1');
+			expect(hrefs).toContain('https://example.com/new-root');
+		});
+
+		it('deduplicates a URL that is in both resumedPending and the new roots', async () => {
+			// Repro of the append-mode bug: a previously-external page that
+			// gets repromoted into pending and is ALSO supplied as a new
+			// root must reach the dealer exactly once, otherwise two
+			// parallel slots scrape the same URL in parallel.
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+			vi.mocked(deal).mockResolvedValue();
+
+			const crawler = new Crawler(defaultOptions);
+			const shared = 'https://example.com/section/';
+			crawler.resume([shared], ['https://example.com/root/'], []);
+			crawler.start([parseUrl(shared)!], { recursive: true });
+
+			await vi.waitFor(() => {
+				expect(deal).toHaveBeenCalled();
+			});
+			const initialUrls = vi.mocked(deal).mock.calls[0]![0] as ExURL[];
+			const occurrences = initialUrls.filter((u) => u.href === shared);
+			expect(occurrences).toHaveLength(1);
+		});
+
+		it('deduplicates duplicate roots within a single start() call', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+			vi.mocked(deal).mockResolvedValue();
+
+			const crawler = new Crawler(defaultOptions);
+			crawler.start(
+				[
+					parseUrl('https://example.com/blog/')!,
+					parseUrl('https://example.com/blog/')!,
+					parseUrl('https://example.com/news/')!,
+				],
+				{ recursive: true },
+			);
+
+			await vi.waitFor(() => {
+				expect(deal).toHaveBeenCalled();
+			});
+			const initialUrls = vi.mocked(deal).mock.calls[0]![0] as ExURL[];
+			expect(initialUrls.map((u) => u.pathname)).toEqual(['/blog/', '/news/']);
 		});
 	});
 });

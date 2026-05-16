@@ -22,12 +22,12 @@ export async function initSchema(instance: Knex) {
 			t.string('version');
 			t.string('name');
 			t.string('baseUrl');
+			t.json('roots');
 			t.boolean('recursive');
 			t.integer('interval');
 			t.boolean('image');
 			t.boolean('fetchExternal');
 			t.integer('parallels');
-			t.json('scope');
 			t.json('excludes');
 			t.json('excludeKeywords');
 			t.json('excludeUrls');

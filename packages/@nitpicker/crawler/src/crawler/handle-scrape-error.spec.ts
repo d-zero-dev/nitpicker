@@ -14,7 +14,7 @@ const defaultOptions: CrawlerOptions = {
 	captureImages: false,
 	executablePath: null,
 	fetchExternal: false,
-	scope: ['https://example.com/'],
+	roots: ['https://example.com/'],
 	excludes: [],
 	excludeKeywords: [],
 	excludeUrls: [],

@@ -22,6 +22,7 @@ import { crawlerLog } from '../debug.js';
 
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
 import { fetchDestination } from './fetch-destination.js';
+import { findScopeEntry } from './find-scope-entry.js';
 import { formatCrawlProgress } from './format-crawl-progress.js';
 import { generatePredictedUrls } from './generate-predicted-urls.js';
 import { handleIgnoreAndSkip } from './handle-ignore-and-skip.js';
@@ -29,7 +30,6 @@ import { handleResourceResponse } from './handle-resource-response.js';
 import { handleScrapeEnd } from './handle-scrape-end.js';
 import { handleScrapeError } from './handle-scrape-error.js';
 import { injectScopeAuth } from './inject-scope-auth.js';
-import { isExternalUrl } from './is-external-url.js';
 import LinkList from './link-list.js';
 import { linkToPageData } from './link-to-page-data.js';
 import { protocolAgnosticKey } from './protocol-agnostic-key.js';
@@ -94,7 +94,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			captureImages: options?.captureImages ?? true,
 			executablePath: options?.executablePath ?? null,
 			fetchExternal: options?.fetchExternal ?? true,
-			scope: options?.scope ?? [],
+			roots: options?.roots ?? [],
 			excludes: options?.excludes || [],
 			excludeKeywords: options?.excludeKeywords || [],
 			excludeUrls: options?.excludeUrls || [],
@@ -111,7 +111,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			!this.#options.ignoreRobots,
 		);
 
-		for (const urlStr of this.#options.scope) {
+		for (const urlStr of this.#options.roots) {
 			const url = parseUrl(urlStr, this.#options);
 			if (url) {
 				const existing = this.#scope.get(url.hostname) || [];
@@ -161,22 +161,58 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	}
 
 	/**
-	 * Start crawling from a single root URL.
+	 * Start crawling from one or more root URLs.
 	 *
-	 * Adds the root URL to the scope (if not already present) and the link list,
-	 * then begins the deal-based concurrent crawl. Discovered child pages are
-	 * automatically added to the queue when recursive mode is enabled.
-	 * @param url - The root URL to begin crawling from.
+	 * Each URL is registered as a scope entry (if not already present) and added
+	 * to the link list. When `opts.recursive` is `false`, recursion is disabled
+	 * and the crawler behaves like the former `startMultiple` (list mode);
+	 * otherwise discovered child pages within the scope are followed.
+	 *
+	 * When resume state is present, the resumed pending URLs are merged with the
+	 * newly-provided roots. The merge is deduplicated by protocol-agnostic key
+	 * before reaching the dealer so a URL that exists in both sources — which
+	 * is common in append-mode when a new root coincides with a repromoted
+	 * previously-external page — does not race on two parallel slots.
+	 * @param urls - The list of root URLs to begin crawling from. Must be non-empty.
+	 * @param opts - Optional overrides; currently only `recursive` is honoured.
+	 * @param opts.recursive - When `false`, disables recursive discovery and forces list-mode.
+	 *   Defaults to the constructor option's `recursive` value.
+	 * @throws {Error} If the URL list is empty.
 	 */
-	start(url: ExURL) {
-		const existing = this.#scope.get(url.hostname) || [];
-		if (!existing.some((u) => u.href === url.href)) {
-			this.#scope.set(url.hostname, [...existing, url]);
+	start(urls: ExURL[], opts?: { recursive?: boolean }) {
+		const root = urls[0];
+		if (!root) {
+			throw new Error('urls is empty');
 		}
-		this.#linkList.add(url);
+
+		for (const url of urls) {
+			const existing = this.#scope.get(url.hostname) || [];
+			if (!existing.some((u) => u.href === url.href)) {
+				this.#scope.set(url.hostname, [...existing, url]);
+			}
+			this.#linkList.add(url);
+		}
+
+		const recursive = opts?.recursive ?? this.#options.recursive;
+		if (!recursive) {
+			this.#options.recursive = false;
+			this.#options.fromList = true;
+		}
 
 		const isResuming = this.#resumedScraped.length > 0;
-		const initialUrls = isResuming ? this.#resumedPending : [url];
+		// Dedupe by the same protocol-agnostic key the dealer uses internally.
+		// Append-mode in particular can put the same URL into both
+		// `#resumedPending` (via `repromoteExternalPages`) and `urls` (the
+		// new root); without this dedupe both copies would grab a parallel
+		// slot and race on the same URL.
+		const seenInitial = new Set<string>();
+		const initialUrls: ExURL[] = [];
+		for (const url of isResuming ? [...this.#resumedPending, ...urls] : urls) {
+			const key = protocolAgnosticKey(url.withoutHashAndAuth);
+			if (seenInitial.has(key)) continue;
+			seenInitial.add(key);
+			initialUrls.push(url);
+		}
 		const resumeOffset = this.#resumedScraped.length;
 
 		if (initialUrls.length === 0) {
@@ -187,43 +223,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 		void this.#runDeal(initialUrls, resumeOffset).catch((error) => {
 			crawlerLog('runDeal error: %O', error);
-			this.#emitDealErrors(error, url.href);
-			void this.emit('crawlEnd', {});
-		});
-	}
-
-	/**
-	 * Start crawling a pre-defined list of URLs in non-recursive mode.
-	 *
-	 * Each URL in the list is added to the scope and the link list. Recursive
-	 * crawling is disabled; only the provided URLs will be scraped.
-	 * @param pageList - The list of URLs to crawl. Must contain at least one URL.
-	 * @throws {Error} If the page list is empty.
-	 */
-	startMultiple(pageList: ExURL[]) {
-		if (!pageList[0]) {
-			throw new Error('pageList is empty');
-		}
-
-		const scopeMap = new Map<string, Set<string>>();
-		for (const pageUrl of pageList) {
-			const existing = this.#scope.get(pageUrl.hostname) || [];
-			const existingHrefs =
-				scopeMap.get(pageUrl.hostname) || new Set(existing.map((u) => u.href));
-
-			if (!existingHrefs.has(pageUrl.href)) {
-				this.#scope.set(pageUrl.hostname, [...existing, pageUrl]);
-				existingHrefs.add(pageUrl.href);
-			}
-
-			scopeMap.set(pageUrl.hostname, existingHrefs);
-			this.#linkList.add(pageUrl);
-		}
-		this.#options.recursive = false;
-		this.#options.fromList = true;
-		void this.#runDeal(pageList).catch((error) => {
-			crawlerLog('runDeal error: %O', error);
-			this.#emitDealErrors(error, pageList[0]!.href);
+			this.#emitDealErrors(error, root.href);
 			void this.emit('crawlEnd', {});
 		});
 	}
@@ -312,7 +312,10 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						if (!paginationState || !concurrency) return;
 
 						// metadataOnly / external: update tracking but skip pattern detection
-						if (opts?.metadataOnly || isExternalUrl(newUrl, this.#scope)) {
+						if (
+							opts?.metadataOnly ||
+							findScopeEntry(newUrl, this.#scope, this.#options) === null
+						) {
 							paginationState.lastPushedUrl = newUrl.withoutHashAndAuth;
 							paginationState.lastPushedWasPredicted = false;
 							return;
@@ -368,7 +371,8 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				void this.emit('skip', {
 					url: result.ignored.url.href,
 					reason: JSON.stringify(result.ignored),
-					isExternal: isExternalUrl(result.ignored.url, this.#scope),
+					isExternal:
+						findScopeEntry(result.ignored.url, this.#scope, this.#options) === null,
 				});
 				break;
 			}
@@ -388,7 +392,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					this.#scope,
 					this.#options,
 				);
-				const isExternal = isExternalUrl(url, this.#scope);
+				const isExternal = findScopeEntry(url, this.#scope, this.#options) === null;
 				if (pageResult) {
 					if (pageResult.isExternal) {
 						void this.emit('externalPage', { result: pageResult });
@@ -519,7 +523,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 		// 初期 URL を分類（onPush を通らないため）
 		for (const url of initialUrls) {
-			if (isExternalUrl(url, this.#scope)) {
+			if (findScopeEntry(url, this.#scope, this.#options) === null) {
 				externalUrls.add(protocolAgnosticKey(url.withoutHashAndAuth));
 			}
 		}
@@ -537,10 +541,13 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		await deal(
 			initialUrls,
 			(url, update, _index, setLineHeader, push) => {
-				const isExternal = isExternalUrl(url, this.#scope);
+				const matchedScope = findScopeEntry(url, this.#scope, this.#options);
+				const isExternal = matchedScope === null;
 				const urlText = isExternal ? c.dim(url.href) : c.cyan(url.href);
 				setLineHeader(`%braille% ${urlText}: `);
-				injectScopeAuth(url, this.#scope);
+				if (matchedScope) {
+					injectScopeAuth(url, matchedScope);
+				}
 				this.#linkList.add(url);
 				this.#linkList.progress(url);
 
@@ -651,7 +658,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					const key = protocolAgnosticKey(url.withoutHashAndAuth);
 					if (seen.has(key)) return false;
 					seen.add(key);
-					if (isExternalUrl(url, this.#scope)) {
+					if (findScopeEntry(url, this.#scope, this.#options) === null) {
 						externalUrls.add(key);
 					}
 					return true;
@@ -683,7 +690,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		metadataOnly: boolean,
 		laneIndex: number,
 	): Promise<ScrapeResult> {
-		const isExternal = isExternalUrl(url, this.#scope);
+		const isExternal = findScopeEntry(url, this.#scope, this.#options) === null;
 
 		// Non-HTTP protocols (mailto:, tel:, etc.) — let the scraper handle early return
 		if (!url.isHTTP) {
