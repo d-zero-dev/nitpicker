@@ -95,6 +95,15 @@ docs: update README with new CLI options
   - **軽量な DOM 解析のみは省略可**: JSDOM 単体なら CPU コア数並列でほぼ問題ない。`analyze-main-contents` 等は宣言不要
   - **判断基準**: 1 ページ処理時のメモリ消費 × 並列度 が 1〜2GB を超える見込みなら明示的に下げる
 
+### Google Sheets レポートシート
+
+`packages/@nitpicker/report-google-sheets/src/data/create-*.ts` に新規シートを追加する場合:
+
+- **デフォルトは streaming**: `CreateSheetSetting.bufferRows` を未指定（または `false`）にすると、`createSheets()` は行をシートあたり 2500 行ずつインクリメンタルに送信する。ピークメモリが抑えられるためこちらを基本とする
+- **遅延セルを使うなら `bufferRows: true`**: `createCellData(() => ({...}))` で thunk を渡すセル（例: Page List の「Internal Referrers」）は、`provide()` 呼び出し時の共有状態に依存する。streaming で早期送信すると thunk がまだ揃っていない状態で評価されてしまうため、`bufferRows: true` を明示してバッチ単位で蓄積する
+- **テストでガード**: 各 `create-*.spec.ts` には `bufferRows` の値と「`eachPage`／`eachResource` が返すセルが `Cell.prototype.provide` に揃っているか」を検証するアサーションがある。新規シート追加時は同じパターンで spec を追加し、将来の遅延セル混入や `bufferRows` 誤フリップを spec で弾けるようにすること
+- 詳細は `ARCHITECTURE.md` の Report 章を参照
+
 ## 互換性ポリシー
 
 - **マイナーバージョン（0.x.y → 0.x.z）**: 後方互換性を維持する。既存の公開 API、CLI オプション、アーカイブフォーマットを壊さない

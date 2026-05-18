@@ -236,12 +236,14 @@ $ npx @nitpicker/cli report <file> --sheet <URL>
 | `--sheet` `-S`       | URL          | （必須）             | Google Sheets の URL                                            |
 | `--credentials` `-C` | ファイルパス | `./credentials.json` | OAuth2 認証情報ファイルのパス                                   |
 | `--config` `-c`      | ファイルパス | なし                 | nitpicker 設定ファイルのパス                                    |
-| `--limit` `-l`       | 数値         | `100000`             | ページデータ取得のバッチサイズ                                  |
+| `--limit` `-l`       | 数値         | `100000`             | アーカイブからページを取得する 1 バッチあたりのページ数         |
 | `--all`              | なし         | なし                 | 対話プロンプトなしで全シートを生成（非TTY環境では自動的に有効） |
 | `--verbose`          | なし         | なし                 | 実行中に詳細ログを標準出力に表示                                |
 | `--silent`           | なし         | なし                 | 実行中のログ出力を抑制                                          |
 
 `--all` を指定しない場合、生成するシートを選択する対話式マルチセレクトプロンプトが表示される（Page List、Links、Resources、Images、Violations、Discrepancies、Summary、Referrers Relational Table、Resources Relational Table）。非TTY環境（CI パイプライン等）では `--all` と `--verbose` が自動的に有効になり、エラー発生時のスタックトレースが CI ログに出力される。
+
+`--limit` はアーカイブからメモリへ一度に読み込むページ数を制御する値で、Google Sheets API への 1 リクエストあたりの行数とは別物。各シートの行送信はパッケージ内部の固定チャンク（`SEND_CHUNK_SIZE` = 2500 行）で行われる。Page List 以外のシートはストリーミング送信され、ピークメモリは「`--limit` 件のページオブジェクト + シートあたり最大 2500 行のセル」程度に抑えられる。Page List は遅延セルを含むため、バッチ単位で全行を保持してから送信する（詳細は `ARCHITECTURE.md` の Report 章を参照）。
 
 #### 例
 

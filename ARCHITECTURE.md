@@ -559,7 +559,35 @@ sequenceDiagram
 | Referrers Relational Table | ページ → リファラーの関係テーブル                |
 | Resources Relational Table | ページ → リソースの関係テーブル                  |
 
-> 実装詳細は `@nitpicker/report-google-sheets` の JSDoc を参照（`report()`, `createSheets()`, 各 `create-*.ts`）。
+### 行送信戦略（streaming vs buffered）
+
+`createSheets()` は Phase 2（eachPage）と Phase 3（eachResource）で
+ページ／リソースを反復しながら行を生成する。行は次の 2 つのいずれかで
+送信される:
+
+- **streaming**（デフォルト）: 行が生成される都度バッファに積み、
+  チャンクサイズ（`SEND_CHUNK_SIZE` = 2500）に達した時点で
+  `sheet.addRowData()` に逐次フラッシュする。ピークメモリは
+  シートあたり最大 2500 行分に抑えられる。
+- **buffered**: 当該バッチの全行を蓄積してから一括送信する。`CreateSheetSetting.bufferRows` を
+  `true` にしたシートのみ。
+
+Page List は `bufferRows: true` を明示している。これは `createPageList()` の
+「Internal Referrers」列が遅延セル（`createCellData(() => ...)`）であり、
+`provide()` が呼ばれた時点での `parentRefs`／`indexRefs` を参照するため。
+バッチ内のインデックスページが順次 `parentRefs` を mutate するので、
+行をストリーミングで早期送信すると thunk がまだ揃っていない状態で
+評価され、参照元数が静かに壊れる。
+
+streaming／buffered の選択は実装時の責務 — 新規 createX.ts を追加する場合、
+遅延セルを使うなら `bufferRows: true` を指定し、そうでなければ未指定
+（=streaming）のままにすること。
+`packages/@nitpicker/report-google-sheets/src/data/*.spec.ts` には
+各シートが期待通りの戦略を選んでいるかを検証するアサーション
+（`bufferRows` の値と、`eachPage`／`eachResource` が返すセルが
+`Cell.prototype.provide` に揃っているか）が含まれる。
+
+> 実装詳細は `@nitpicker/report-google-sheets` の JSDoc を参照（`report()`, `createSheets()`, `createRowStreamer()`, 各 `create-*.ts`）。
 
 ---
 
