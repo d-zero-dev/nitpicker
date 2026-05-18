@@ -1,6 +1,7 @@
 import type { Page } from '@nitpicker/crawler';
 import type { Report } from '@nitpicker/types';
 
+import { Cell } from '@d-zero/google-sheets';
 import { describe, it, expect, vi } from 'vitest';
 
 import { createDiscrepancies } from './create-discrepancies.js';
@@ -63,6 +64,34 @@ describe('createDiscrepancies', () => {
 	it('returns sheet config with name "Discrepancies"', () => {
 		const sheet = createDiscrepancies([]);
 		expect(sheet.name).toBe('Discrepancies');
+	});
+
+	it('does not opt into bufferRows so rows stream out incrementally', () => {
+		// No lazy cells — streaming keeps peak memory bounded.
+		const sheet = createDiscrepancies([]);
+		expect(sheet.bufferRows).toBeFalsy();
+	});
+
+	it('returns only eager cells from eachPage (streaming requires no lazy thunks)', async () => {
+		// See create-links.spec.ts for the rationale.
+		const page = createMockPage({
+			getAnchors: vi.fn().mockResolvedValue([
+				{
+					textContent: 'About',
+					title: 'About Page',
+					url: 'https://example.com/about',
+				},
+			]),
+		});
+		const sheet = createDiscrepancies([]);
+		const rows = await sheet.eachPage!(page, 1, 1, null);
+		expect(rows).toBeTruthy();
+		expect(rows!.length).toBeGreaterThan(0);
+		for (const row of rows!) {
+			for (const cell of row) {
+				expect(cell.provide).toBe(Cell.prototype.provide);
+			}
+		}
 	});
 
 	it('returns correct headers', () => {

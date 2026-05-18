@@ -1,6 +1,7 @@
 import type { Sheet } from '@d-zero/google-sheets';
 import type { Page } from '@nitpicker/crawler';
 
+import { Cell } from '@d-zero/google-sheets';
 import { describe, it, expect, vi } from 'vitest';
 
 import { createLinks } from './create-links.js';
@@ -65,6 +66,32 @@ describe('createLinks', () => {
 	it('returns sheet config with name "Links"', () => {
 		const sheet = createLinks([]);
 		expect(sheet.name).toBe('Links');
+	});
+
+	it('does not opt into bufferRows so rows stream out incrementally', () => {
+		// Links has no lazy cells, so it is safe (and necessary, for memory)
+		// to flush rows in chunks while iterating rather than holding the
+		// full batch. Flipping this to true would re-introduce the OOM that
+		// streaming was added to fix — guard against that here.
+		const sheet = createLinks([]);
+		expect(sheet.bufferRows).toBeFalsy();
+	});
+
+	it('returns only eager cells from eachPage (streaming requires no lazy thunks)', async () => {
+		// LazyCell overrides provide(); any cell whose provide() is not the
+		// base Cell.prototype.provide is a thunk that depends on shared
+		// state mutated across the batch. Streaming evaluates provide() at
+		// flush time — well before sibling pages have run — so a stray
+		// LazyCell here would corrupt cell data. PageList opts into
+		// bufferRows precisely because it does carry lazy cells.
+		const sheet = createLinks([]);
+		const rows = await sheet.eachPage!(createMockPage(), 1, 1, null);
+		expect(rows).toBeTruthy();
+		for (const row of rows!) {
+			for (const cell of row) {
+				expect(cell.provide).toBe(Cell.prototype.provide);
+			}
+		}
 	});
 
 	it('returns correct headers', () => {

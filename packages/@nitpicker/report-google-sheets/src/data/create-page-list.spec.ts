@@ -2,6 +2,7 @@ import type { Sheet } from '@d-zero/google-sheets';
 import type { Page } from '@nitpicker/crawler';
 import type { Report } from '@nitpicker/types';
 
+import { Cell } from '@d-zero/google-sheets';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 /**
@@ -103,6 +104,30 @@ describe('createPageList', () => {
 	it('returns sheet config with name "Page List"', () => {
 		const sheet = createPageList([]);
 		expect(sheet.name).toBe('Page List');
+	});
+
+	it('opts into bufferRows because the "Internal Referrers" cell is a lazy thunk', () => {
+		// The lazy thunk at create-page-list.ts:238-256 reads parentRefs/refers
+		// at provide() time. Sibling index pages mutate that shared state as the
+		// batch iterates, so the row must be held until the batch completes.
+		// Streaming mid-iteration would evaluate the thunk before later pages
+		// had updated the refs, corrupting the "Internal Referrers" count.
+		const sheet = createPageList([]);
+		expect(sheet.bufferRows).toBe(true);
+	});
+
+	it('emits at least one lazy cell from eachPage, justifying bufferRows: true', async () => {
+		// The inverse of the eager-cell check in the streaming sheet specs:
+		// PageList legitimately needs bufferRows because at least one of its
+		// cells is a LazyCell (provide() is overridden, so it does not match
+		// Cell.prototype.provide). If a future refactor eliminates all lazy
+		// cells here, bufferRows can be flipped to false for the memory win.
+		const sheet = createPageList([]);
+		const rows = await sheet.eachPage!(createMockPage(), 1, 1, null);
+		expect(rows).toBeTruthy();
+		const allCells = rows!.flat();
+		const hasLazyCell = allCells.some((cell) => cell.provide !== Cell.prototype.provide);
+		expect(hasLazyCell).toBe(true);
 	});
 
 	it('returns correct base headers (37 columns)', () => {

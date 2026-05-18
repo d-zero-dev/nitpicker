@@ -56,6 +56,12 @@ export const createPageList: CreateSheet = (reports) => {
 
 	return {
 		name: 'Page List',
+		// The "Internal Referrers" cell uses createCellData(() => ...), a lazy
+		// thunk that reads `parentRefs`/`indexRefs` at provide() time. Sibling
+		// index pages mutate that shared state as the batch iterates, so we
+		// must hold rows until the batch completes — flushing mid-iteration
+		// would evaluate the thunk before later pages had updated the refs.
+		bufferRows: true,
 		createHeaders() {
 			const headers = [
 				'Title',

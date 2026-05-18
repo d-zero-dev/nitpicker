@@ -1,5 +1,6 @@
 import type { ArchiveResource as Resource } from '@nitpicker/crawler';
 
+import { Cell } from '@d-zero/google-sheets';
 import { describe, it, expect, vi } from 'vitest';
 
 import { createResources } from './create-resources.js';
@@ -55,6 +56,28 @@ describe('createResources', () => {
 	it('returns sheet config with name "Resources"', () => {
 		const sheet = createResources([]);
 		expect(sheet.name).toBe('Resources');
+	});
+
+	it('does not opt into bufferRows so rows stream out incrementally', () => {
+		// Resources sheets never use lazy cells; eachResource is streamed in
+		// Phase 3 regardless of bufferRows, but assert anyway as a guard.
+		const sheet = createResources([]);
+		expect(sheet.bufferRows).toBeFalsy();
+	});
+
+	it('returns only eager cells from eachResource (streaming requires no lazy thunks)', async () => {
+		// Phase 3 always streams. A lazy cell here would corrupt output the
+		// same way it would in Phase 2 streaming — guard against it.
+		const resource = createMockResource();
+		const sheet = createResources([]);
+		const rows = await sheet.eachResource!(resource);
+		expect(rows).toBeTruthy();
+		expect(rows!.length).toBeGreaterThan(0);
+		for (const row of rows!) {
+			for (const cell of row) {
+				expect(cell.provide).toBe(Cell.prototype.provide);
+			}
+		}
 	});
 
 	it('returns correct headers', () => {

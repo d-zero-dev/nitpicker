@@ -53,6 +53,18 @@ export type CreateSheet = (reports: Report[]) => Promiseable<CreateSheetSetting>
 export interface CreateSheetSetting {
 	/** Display name of the sheet tab in Google Sheets. */
 	name: string;
+	/**
+	 * When `true`, accumulate all `eachPage` rows for a batch before sending.
+	 * Required when `eachPage` produces lazy cells (`createCellData(() => ...)`)
+	 * whose values depend on side effects accumulated by sibling pages within
+	 * the same batch — flushing mid-iteration would evaluate the thunks before
+	 * later pages had a chance to update the shared state.
+	 *
+	 * Default `false`: rows stream out as they are generated, capping peak
+	 * memory at `SEND_CHUNK_SIZE` per setting instead of full-batch worth of
+	 * `Cell[][]`. Use `true` only when streaming would corrupt cell data.
+	 */
+	bufferRows?: boolean;
 	/** Returns the header row cell values. */
 	createHeaders: () => Promiseable<HeaderCell[]>;
 	/**

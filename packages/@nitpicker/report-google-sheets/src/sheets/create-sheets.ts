@@ -9,11 +9,16 @@ import c from 'ansi-colors';
 import { sheetLog } from '../debug.js';
 import { hasPropFilter } from '../utils/has-prop-filter.js';
 
+import { createRowStreamer } from './create-row-streamer.js';
+
 const SEND_CHUNK_SIZE = 2500;
 
 /**
  * 行データを Google Sheets に送信する。行数が {@link SEND_CHUNK_SIZE} を超える場合は
  * チャンク分割して逐次送信する。
+ *
+ * 全行が手元にある「バッファ済み」用途（PageList の最終送信、Phase 4 の addRows）
+ * 向けのヘルパー。ストリーミング送信は `createRowStreamer` を使うこと。
  * @param sheet
  * @param rows
  * @param name
@@ -100,16 +105,16 @@ export interface CreateSheetsParams {
  * 解決策として、各シートの進捗を 0.0〜1.0 の fraction で管理し、
  * 全シートの平均値をヘッダーに表示する:
  *
- * - **生成フェーズ**: `(pageNum / max) * 0.5` → 0%〜50%
- * - **送信フェーズ**: `0.5 + (sentRows / totalRows) * 0.5` → 50%〜100%
- *   (`sendRowsInChunks` の `onProgress` コールバック経由)
+ * - **streaming シート（Links / Referrers RT 等）**: 生成と送信が交互に
+ *   進むため `pageNum / max` を直接 fraction として使う
+ * - **buffered シート（PageList）**: 全行を保持してから送るので 2 段階管理。
+ *   生成フェーズ `(pageNum / max) * 0.5` → 0%〜50%、
+ *   送信フェーズ `0.5 + (sentRows / totalRows) * 0.5` → 50%〜100%
  * - **完了**: 1.0 (100%)
  *
- * 生成と送信を 50:50 で重み付けしている理由:
- * - 生成だけで 0〜100% にすると、全シートが生成完了（100%）になっても
- *   送信が残っている状態で「100%」と表示されてしまう
- * - 送信（特に大量行のチャンク送信）は Google API の
- *   レート制限により生成と同程度の時間がかかるため、等配分が妥当
+ * Streaming/buffered の切り替えは `CreateSheetSetting.bufferRows` フラグで行う。
+ * デフォルトは streaming。PageList は lazy cell（`createCellData(() => ...)`）
+ * が batch 内の全ページ完了に依存するため `bufferRows: true` で opt-in する。
  *
  * ### レーン: フェーズ遷移に応じた状態表示
  *
@@ -369,42 +374,85 @@ export async function createSheets(params: CreateSheetsParams) {
 						await Promise.all(
 							eachPageRoutineList.map(async (setting) => {
 								const id = getSheetId(setting.name);
-								let num = 1;
-								const rows: Cell[][] = [];
 								const name = setting.name;
-								let prevPage: Page | null = null;
-								for (const page of pages) {
-									const pageNum = offset + num;
-									lanes?.update(id, `${name}: Generating row ${pageNum}/${max}%dots%`);
-									sheetProgress.set(name, (pageNum / max) * 0.5);
-									updatePhase2Header();
-									const data = await setting.eachPage(page, pageNum, max, prevPage);
-									prevPage = page;
-									if (!data) {
-										num++;
-										continue;
-									}
-									for (const row of data) {
-										rows.push(row);
-									}
-									num++;
-								}
-								sheetLog(
-									'[%s] Sending %d rows (offset=%d/%d)',
-									name,
-									rows.length,
-									offset,
-									max,
-								);
 								const sheet = await sheets.create(name);
-								await sendRowsInChunks(sheet, rows, name, lanes, id, (fraction) => {
-									sheetProgress.set(name, 0.5 + fraction * 0.5);
+								const bufferRows = setting.bufferRows === true;
+
+								if (bufferRows) {
+									// Buffered path: hold all rows for the batch, then send.
+									// Required for settings whose cells are lazy thunks that
+									// depend on side effects accumulated across sibling pages.
+									let num = 1;
+									const rows: Cell[][] = [];
+									let prevPage: Page | null = null;
+									for (const page of pages) {
+										const pageNum = offset + num;
+										lanes?.update(id, `${name}: Generating row ${pageNum}/${max}%dots%`);
+										sheetProgress.set(name, (pageNum / max) * 0.5);
+										updatePhase2Header();
+										const data = await setting.eachPage(page, pageNum, max, prevPage);
+										prevPage = page;
+										if (!data) {
+											num++;
+											continue;
+										}
+										for (const row of data) {
+											rows.push(row);
+										}
+										num++;
+									}
+									sheetLog(
+										'[%s] Sending %d rows (offset=%d/%d, buffered)',
+										name,
+										rows.length,
+										offset,
+										max,
+									);
+									await sendRowsInChunks(sheet, rows, name, lanes, id, (fraction) => {
+										sheetProgress.set(name, 0.5 + fraction * 0.5);
+										updatePhase2Header();
+									});
+									sheetLog(
+										'[%s] Send complete (offset=%d, %d rows)',
+										name,
+										offset,
+										rows.length,
+									);
+									sheetProgress.set(name, 1);
 									updatePhase2Header();
-								});
-								sheetLog('[%s] Send complete (offset=%d)', name, offset);
-								sheetProgress.set(name, 1);
-								updatePhase2Header();
-								markDone(name, `${rows.length} rows`);
+									markDone(name, `${rows.length} rows`);
+								} else {
+									// Streaming path: flush rows incrementally as they are
+									// produced so peak memory stays at SEND_CHUNK_SIZE.
+									const streamer = createRowStreamer(sheet, name, lanes, id);
+									let num = 1;
+									let prevPage: Page | null = null;
+									for (const page of pages) {
+										const pageNum = offset + num;
+										lanes?.update(
+											id,
+											`${name}: Processing ${pageNum}/${max} (sent ${streamer.sent})%dots%`,
+										);
+										sheetProgress.set(name, pageNum / max);
+										updatePhase2Header();
+										const data = await setting.eachPage(page, pageNum, max, prevPage);
+										prevPage = page;
+										if (data) {
+											await streamer.push(data);
+										}
+										num++;
+									}
+									await streamer.flush();
+									sheetLog(
+										'[%s] Send complete (offset=%d, %d rows, streamed)',
+										name,
+										offset,
+										streamer.sent,
+									);
+									sheetProgress.set(name, 1);
+									updatePhase2Header();
+									markDone(name, `${streamer.sent} rows`);
+								}
 							}),
 						);
 					}
@@ -440,31 +488,33 @@ export async function createSheets(params: CreateSheetsParams) {
 				await Promise.all(
 					eachResourceRoutineList.map(async (setting) => {
 						const id = getSheetId(setting.name);
-						const sheet = await sheets.create(setting.name);
-						const rows: Cell[][] = [];
+						const name = setting.name;
+						const sheet = await sheets.create(name);
+						// Resources sheets never use lazy cells, so always stream.
+						const streamer = createRowStreamer(sheet, name, lanes, id);
 						let i = 0;
 						for (const resource of resources) {
 							i++;
 							lanes?.update(
 								id,
-								`${setting.name}: Processing ${i}/${resources.length}%dots%`,
+								`${name}: Processing ${i}/${resources.length} (sent ${streamer.sent})%dots%`,
 							);
-							resourceProgress.set(setting.name, (i / resources.length) * 0.5);
+							resourceProgress.set(name, i / resources.length);
 							updatePhase3Header();
 							const resourceData = await setting.eachResource(resource);
 							if (resourceData) {
-								rows.push(...resourceData);
+								await streamer.push(resourceData);
 							}
 						}
-						sheetLog('[%s] Sending %d resource rows', setting.name, rows.length);
-						await sendRowsInChunks(sheet, rows, setting.name, lanes, id, (fraction) => {
-							resourceProgress.set(setting.name, 0.5 + fraction * 0.5);
-							updatePhase3Header();
-						});
-						sheetLog('[%s] Resource send complete', setting.name);
-						resourceProgress.set(setting.name, 1);
+						await streamer.flush();
+						sheetLog(
+							'[%s] Resource send complete (%d rows, streamed)',
+							name,
+							streamer.sent,
+						);
+						resourceProgress.set(name, 1);
 						updatePhase3Header();
-						markDone(setting.name, `${rows.length} rows`);
+						markDone(name, `${streamer.sent} rows`);
 					}),
 				);
 				sheetLog('Phase 3 complete');

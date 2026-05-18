@@ -1,6 +1,7 @@
 import type { Sheet } from '@d-zero/google-sheets';
 import type { ArchiveResource as Resource } from '@nitpicker/crawler';
 
+import { Cell } from '@d-zero/google-sheets';
 import { describe, it, expect, vi } from 'vitest';
 
 import { createResourcesRelationalTable } from './create-resources-relational-table.js';
@@ -46,6 +47,29 @@ describe('createResourcesRelationalTable', () => {
 	it('returns sheet config with name "Resources Relational Table"', () => {
 		const sheet = createResourcesRelationalTable([]);
 		expect(sheet.name).toBe('Resources Relational Table');
+	});
+
+	it('does not opt into bufferRows so rows stream out incrementally', () => {
+		// No lazy cells — streaming keeps peak memory bounded when each page
+		// emits multiple resource-rows.
+		const sheet = createResourcesRelationalTable([]);
+		expect(sheet.bufferRows).toBeFalsy();
+	});
+
+	it('returns only eager cells from eachResource (streaming requires no lazy thunks)', async () => {
+		// See create-links.spec.ts for the rationale.
+		const resource = createMockResource({
+			getReferrers: vi.fn().mockResolvedValue(['https://example.com/page1']),
+		});
+		const sheet = createResourcesRelationalTable([]);
+		const rows = await sheet.eachResource!(resource);
+		expect(rows).toBeTruthy();
+		expect(rows!.length).toBeGreaterThan(0);
+		for (const row of rows!) {
+			for (const cell of row) {
+				expect(cell.provide).toBe(Cell.prototype.provide);
+			}
+		}
 	});
 
 	it('returns correct headers', () => {

@@ -1,5 +1,6 @@
 import type { Page } from '@nitpicker/crawler';
 
+import { Cell } from '@d-zero/google-sheets';
 import { describe, it, expect, vi } from 'vitest';
 
 import { createImageList } from './create-image-list.js';
@@ -52,6 +53,33 @@ describe('createImageList', () => {
 	it('returns sheet config with name "Images"', () => {
 		const sheet = createImageList([]);
 		expect(sheet.name).toBe('Images');
+	});
+
+	it('does not opt into bufferRows so rows stream out incrementally', () => {
+		// No lazy cells — streaming keeps peak memory bounded when each page
+		// emits multiple image rows.
+		const sheet = createImageList([]);
+		expect(sheet.bufferRows).toBeFalsy();
+	});
+
+	it('returns only eager cells from eachPage (streaming requires no lazy thunks)', async () => {
+		// See create-links.spec.ts for the rationale.
+		const page = createMockPage({
+			getHtml: vi
+				.fn()
+				.mockResolvedValue(
+					'<html><body><img src="/a.png" alt="A" width="100" height="50"></body></html>',
+				),
+		});
+		const sheet = createImageList([]);
+		const rows = await sheet.eachPage!(page, 1, 1, null);
+		expect(rows).toBeTruthy();
+		expect(rows!.length).toBeGreaterThan(0);
+		for (const row of rows!) {
+			for (const cell of row) {
+				expect(cell.provide).toBe(Cell.prototype.provide);
+			}
+		}
 	});
 
 	it('returns correct headers', () => {

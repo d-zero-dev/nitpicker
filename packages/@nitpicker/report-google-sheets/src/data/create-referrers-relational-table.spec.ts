@@ -1,6 +1,7 @@
 import type { Sheet } from '@d-zero/google-sheets';
 import type { Page } from '@nitpicker/crawler';
 
+import { Cell } from '@d-zero/google-sheets';
 import { describe, it, expect, vi } from 'vitest';
 
 import { createReferrersRelationalTable } from './create-referrers-relational-table.js';
@@ -64,6 +65,38 @@ describe('createReferrersRelationalTable', () => {
 	it('returns sheet config with name "Referrers Relational Table"', () => {
 		const sheet = createReferrersRelationalTable([]);
 		expect(sheet.name).toBe('Referrers Relational Table');
+	});
+
+	it('does not opt into bufferRows so rows stream out incrementally', () => {
+		// No lazy cells — streaming is required to keep peak memory bounded
+		// when a page yields many referrer rows.
+		const sheet = createReferrersRelationalTable([]);
+		expect(sheet.bufferRows).toBeFalsy();
+	});
+
+	it('returns only eager cells from eachPage (streaming requires no lazy thunks)', async () => {
+		// See create-links.spec.ts for the rationale. Same defense-in-depth
+		// check: streaming flushes provide() before sibling pages have run,
+		// so a LazyCell here would corrupt the output silently.
+		const sheet = createReferrersRelationalTable([]);
+		const page = createMockPage({
+			getReferrers: vi.fn().mockResolvedValue([
+				{
+					textContent: 'link text',
+					url: 'https://example.com/from',
+					hash: '',
+					through: 'https://example.com/',
+				},
+			]),
+		});
+		const rows = await sheet.eachPage!(page, 1, 1, null);
+		expect(rows).toBeTruthy();
+		expect(rows!.length).toBeGreaterThan(0);
+		for (const row of rows!) {
+			for (const cell of row) {
+				expect(cell.provide).toBe(Cell.prototype.provide);
+			}
+		}
 	});
 
 	it('returns correct headers', () => {
