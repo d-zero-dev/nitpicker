@@ -201,7 +201,7 @@ describe('createSheets pipeline', () => {
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
 		const createTestResources = () => {
-			const setting = createResources(emptyReports);
+			const setting = createResources()(emptyReports);
 			return { ...setting, name: sheetName };
 		};
 
@@ -230,5 +230,51 @@ describe('createSheets pipeline', () => {
 			'Content Length',
 			'Referrers',
 		]);
+	});
+
+	it('Resources シート (dedupe mode) に Count 列を含むヘッダーが出力される', async () => {
+		const sheetName = testSheetName('resources-dedupe');
+		const sheets = new Sheets(SPREADSHEET_URL, auth);
+
+		const createTestResources = () => {
+			const setting = createResources({ dedupe: true })(emptyReports);
+			return { ...setting, name: sheetName };
+		};
+
+		await createSheets({
+			sheets,
+			archive: crawlResult.archive,
+			reports: emptyReports,
+			limit: 100,
+			createSheetList: [createTestResources],
+		});
+
+		const sheet = await sheets.create(sheetName);
+		createdSheetIds.push(sheet.id);
+
+		const headerValues = await readSheetValues(
+			auth,
+			SPREADSHEET_ID,
+			`'${sheetName}'!A1:G1`,
+		);
+		expect(headerValues[0]).toEqual([
+			'URL',
+			'Status Code',
+			'Status Text',
+			'Content Type',
+			'Content Length',
+			'Referrers',
+			'Count',
+		]);
+
+		// Body must have at least 1 data row (the e2e test server publishes
+		// several sub-resources). All URLs should appear canonicalized — they
+		// must not contain any '=' since query values are stripped.
+		const body = await readSheetValues(auth, SPREADSHEET_ID, `'${sheetName}'!A2:G500`);
+		expect(body.length).toBeGreaterThan(0);
+		for (const row of body) {
+			const url = String(row[0] ?? '');
+			expect(url).not.toMatch(/\?[^&=]*=/);
+		}
 	});
 });

@@ -371,6 +371,148 @@ describe('createSheets', () => {
 		expect(record.appendRowBatches[0]![0]![0]).toBe(cellA);
 	});
 
+	it('eachResource is called with each resource exactly once in order', async () => {
+		const calls: ArchiveResource[] = [];
+		const setting: CreateSheetSetting = {
+			name: 'EachResourceContract',
+			createHeaders: () => ['c'],
+			eachResource: (resource) => {
+				calls.push(resource);
+				return [[fakeCell()]];
+			},
+		};
+		const { sheets } = createFakeSheets();
+		const fakeResources = Array.from(
+			{ length: 3 },
+			(_, i) => ({ index: i }) as unknown as ArchiveResource,
+		);
+		const archive = createFakeArchive([], fakeResources);
+
+		await createSheets({
+			sheets,
+			archive,
+			reports: [],
+			limit: 100_000,
+			createSheetList: [() => setting],
+		});
+
+		expect(calls).toEqual(fakeResources);
+	});
+
+	it('finalizeResources runs exactly once after the eachResource loop and its rows are appended', async () => {
+		const order: string[] = [];
+		const finalRow = [fakeCell(), fakeCell()];
+		const setting: CreateSheetSetting = {
+			name: 'FinalizeRuns',
+			createHeaders: () => ['c'],
+			eachResource: () => {
+				order.push('each');
+				return null;
+			},
+			finalizeResources: () => {
+				order.push('finalize');
+				return [finalRow];
+			},
+		};
+		const { sheets, records } = createFakeSheets();
+		const fakeResources = Array.from(
+			{ length: 3 },
+			(_, i) => ({ index: i }) as unknown as ArchiveResource,
+		);
+		const archive = createFakeArchive([], fakeResources);
+
+		await createSheets({
+			sheets,
+			archive,
+			reports: [],
+			limit: 100_000,
+			createSheetList: [() => setting],
+		});
+
+		expect(order).toEqual(['each', 'each', 'each', 'finalize']);
+		const record = records.get('FinalizeRuns')!;
+		expect(record.appendRowBatches).toHaveLength(1);
+		expect(record.appendRowBatches[0]).toEqual([finalRow]);
+		expect(record.flushCount).toBe(1);
+	});
+
+	it('finalizeResources returning [] does not trigger an extra appendRow', async () => {
+		const setting: CreateSheetSetting = {
+			name: 'FinalizeEmpty',
+			createHeaders: () => ['c'],
+			eachResource: () => null,
+			finalizeResources: () => [],
+		};
+		const { sheets, records } = createFakeSheets();
+		const archive = createFakeArchive([], [{ index: 0 } as unknown as ArchiveResource]);
+
+		await createSheets({
+			sheets,
+			archive,
+			reports: [],
+			limit: 100_000,
+			createSheetList: [() => setting],
+		});
+
+		const record = records.get('FinalizeEmpty')!;
+		expect(record.appendRowBatches).toHaveLength(0);
+		expect(record.flushCount).toBe(1);
+	});
+
+	it('finalizeResources returning null does not trigger an extra appendRow', async () => {
+		const setting: CreateSheetSetting = {
+			name: 'FinalizeNull',
+			createHeaders: () => ['c'],
+			eachResource: () => null,
+			finalizeResources: () => null,
+		};
+		const { sheets, records } = createFakeSheets();
+		const archive = createFakeArchive([], [{ index: 0 } as unknown as ArchiveResource]);
+
+		await createSheets({
+			sheets,
+			archive,
+			reports: [],
+			limit: 100_000,
+			createSheetList: [() => setting],
+		});
+
+		const record = records.get('FinalizeNull')!;
+		expect(record.appendRowBatches).toHaveLength(0);
+		expect(record.flushCount).toBe(1);
+	});
+
+	it('finalizeResources still runs (and emits []) when getResources() returns empty', async () => {
+		// Without resources, eachResource is never called, but finalizeResources
+		// should still fire so accumulators can flush. Today's createResources
+		// dedupe path returns [] in that case; this test pins that contract.
+		let finalized = 0;
+		const setting: CreateSheetSetting = {
+			name: 'FinalizeEmptyArchive',
+			createHeaders: () => ['c'],
+			eachResource: () => null,
+			finalizeResources: () => {
+				finalized++;
+				return [];
+			},
+		};
+		const { sheets, records } = createFakeSheets();
+		const archive = createFakeArchive([], []);
+
+		await createSheets({
+			sheets,
+			archive,
+			reports: [],
+			limit: 100_000,
+			createSheetList: [() => setting],
+		});
+
+		expect(finalized).toBe(1);
+		const record = records.get('FinalizeEmptyArchive')!;
+		expect(record.appendRowBatches).toHaveLength(0);
+		expect(record.flushCount).toBe(1);
+	});
+
 	it('relies on Sheets.create caching so the same sheet instance is reused across phases', async () => {
 		// Phase 1 creates each sheet, then Phase 2/3/4 call sheets.create()
 		// again to retrieve it. Without caching, appendRow's per-sheet buffer

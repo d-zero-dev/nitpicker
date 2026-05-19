@@ -3,7 +3,13 @@ import type { ArchiveResource as Resource } from '@nitpicker/crawler';
 import { Cell } from '@d-zero/google-sheets';
 import { describe, it, expect, vi } from 'vitest';
 
-import { createResources } from './create-resources.js';
+import {
+	createResources,
+	dedupeKey,
+	formatContentLength,
+	joinReferrersForNote,
+	NOTE_MAX_LENGTH,
+} from './create-resources.js';
 
 /**
  * Creates a mock ArchiveResource object with sensible defaults for testing.
@@ -52,18 +58,20 @@ function cellNote(cell: { provide: (n?: number) => { note?: string } }) {
 	return cell.provide().note;
 }
 
-describe('createResources', () => {
+describe('createResources (raw mode)', () => {
 	it('returns sheet config with name "Resources"', () => {
-		const sheet = createResources([]);
+		const sheet = createResources()([]);
 		expect(sheet.name).toBe('Resources');
 	});
 
+	it('does not register a finalizeResources hook', () => {
+		const sheet = createResources()([]);
+		expect(sheet.finalizeResources).toBeUndefined();
+	});
+
 	it('uses only eager cells from eachResource so appendRow can stream', async () => {
-		// A lazy cell here would force appendRow() into buffered mode for the
-		// entire resource batch, defeating the streaming throughput. Phase 3
-		// has no lazy-cell users today; this guard keeps it that way.
 		const resource = createMockResource();
-		const sheet = createResources([]);
+		const sheet = createResources()([]);
 		const rows = await sheet.eachResource!(resource);
 		expect(rows).toBeTruthy();
 		expect(rows!.length).toBeGreaterThan(0);
@@ -75,7 +83,7 @@ describe('createResources', () => {
 	});
 
 	it('returns correct headers', () => {
-		const sheet = createResources([]);
+		const sheet = createResources()([]);
 		const headers = sheet.createHeaders();
 		expect(headers).toEqual([
 			'URL',
@@ -98,7 +106,7 @@ describe('createResources', () => {
 				]),
 		});
 
-		const sheet = createResources([]);
+		const sheet = createResources()([]);
 		const rows = await sheet.eachResource!(resource);
 
 		expect(rows).toHaveLength(1);
@@ -117,7 +125,7 @@ describe('createResources', () => {
 
 	it('shows "0 pages" when resource has no referrers', async () => {
 		const resource = createMockResource();
-		const sheet = createResources([]);
+		const sheet = createResources()([]);
 		const rows = await sheet.eachResource!(resource);
 
 		expect(rows).toHaveLength(1);
@@ -133,10 +141,9 @@ describe('createResources', () => {
 			contentLength: null,
 		});
 
-		const sheet = createResources([]);
+		const sheet = createResources()([]);
 		const rows = await sheet.eachResource!(resource);
 
-		// null values become empty strings in Cell
 		expect(cellValue(rows![0][1])).toBe('');
 		expect(cellValue(rows![0][2])).toBe('');
 		expect(cellValue(rows![0][3])).toBe('');
@@ -147,10 +154,431 @@ describe('createResources', () => {
 		const resource = createMockResource({
 			getReferrers: vi.fn().mockResolvedValue(['https://example.com/']),
 		});
-		const sheet = createResources([]);
+		const sheet = createResources()([]);
 		const rows = await sheet.eachResource!(resource);
 
 		expect(rows).toHaveLength(1);
 		expect(Array.isArray(rows![0])).toBe(true);
+	});
+});
+
+describe('createResources (dedupe mode) — basic shape', () => {
+	it('headers include a trailing Count column', () => {
+		const sheet = createResources({ dedupe: true })([]);
+		const headers = sheet.createHeaders();
+		expect(headers).toEqual([
+			'URL',
+			'Status Code',
+			'Status Text',
+			'Content Type',
+			'Content Length',
+			'Referrers',
+			'Count',
+		]);
+	});
+
+	it('eachResource always returns null in dedupe mode (rows are emitted by finalizeResources)', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		const r = createMockResource();
+		expect(await sheet.eachResource!(r)).toBeNull();
+	});
+
+	it('finalizeResources is registered in dedupe mode', () => {
+		const sheet = createResources({ dedupe: true })([]);
+		expect(typeof sheet.finalizeResources).toBe('function');
+	});
+
+	it('finalizeResources returns [] when no resources were accumulated', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		const rows = await sheet.finalizeResources!();
+		expect(rows).toEqual([]);
+	});
+});
+
+describe('createResources (dedupe mode) — aggregation', () => {
+	it('collapses raw resources that share a canonical URL into one row', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		const r1 = createMockResource({
+			url: 'https://x.com/track?id=1&t=now',
+			getReferrers: vi.fn().mockResolvedValue(['https://x.com/page-a']),
+		});
+		const r2 = createMockResource({
+			url: 'https://x.com/track?t=later&id=2',
+			getReferrers: vi.fn().mockResolvedValue(['https://x.com/page-b']),
+		});
+		const r3 = createMockResource({
+			url: 'https://x.com/track?id=3&t=now',
+			getReferrers: vi.fn().mockResolvedValue(['https://x.com/page-c']),
+		});
+
+		await sheet.eachResource!(r1);
+		await sheet.eachResource!(r2);
+		await sheet.eachResource!(r3);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(rows![0]).toHaveLength(7);
+		expect(cellValue(rows![0][0])).toBe('https://x.com/track?id&t');
+		expect(cellValue(rows![0][6])).toBe(3);
+		expect(cellValue(rows![0][5])).toBe('3 pages');
+		expect(cellNote(rows![0][5])).toBe(
+			'https://x.com/page-a\nhttps://x.com/page-b\nhttps://x.com/page-c',
+		);
+	});
+
+	it('emits a single row even for a single resource', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		const r = createMockResource({
+			getReferrers: vi.fn().mockResolvedValue(['https://x.com/a']),
+		});
+		await sheet.eachResource!(r);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][6])).toBe(1);
+	});
+
+	it('separates rows when status differs for the same canonical URL', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(
+			createMockResource({
+				url: 'https://x.com/p?a=1',
+				status: 200,
+				contentType: 'image/gif',
+				getReferrers: vi.fn().mockResolvedValue(['https://x.com/a']),
+			}),
+		);
+		await sheet.eachResource!(
+			createMockResource({
+				url: 'https://x.com/p?a=2',
+				status: 404,
+				contentType: 'image/gif',
+				getReferrers: vi.fn().mockResolvedValue(['https://x.com/b']),
+			}),
+		);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(2);
+		const statuses = rows!.map((row) => cellValue(row[1])).toSorted();
+		expect(statuses).toEqual([200, 404]);
+		for (const row of rows!) {
+			expect(cellValue(row[6])).toBe(1);
+		}
+	});
+
+	it('separates rows when contentType differs for the same canonical URL and status', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(
+			createMockResource({
+				url: 'https://x.com/p?a=1',
+				contentType: 'image/gif',
+			}),
+		);
+		await sheet.eachResource!(
+			createMockResource({
+				url: 'https://x.com/p?a=2',
+				contentType: 'image/png',
+			}),
+		);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(2);
+		const types = rows!.map((row) => cellValue(row[3])).toSorted();
+		expect(types).toEqual(['image/gif', 'image/png']);
+	});
+
+	it('preserves path-embedded tracking IDs when canonicalizing', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(
+			createMockResource({
+				url: 'https://googleads.g.doubleclick.net/pagead/viewthroughconversion/10840516367/?auid=A&capi=1',
+			}),
+		);
+		await sheet.eachResource!(
+			createMockResource({
+				url: 'https://googleads.g.doubleclick.net/pagead/viewthroughconversion/10840516367/?capi=2&auid=B',
+			}),
+		);
+		await sheet.eachResource!(
+			createMockResource({
+				url: 'https://googleads.g.doubleclick.net/pagead/viewthroughconversion/9999999/?auid=C',
+			}),
+		);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(2);
+		const urls = rows!.map((row) => cellValue(row[0])).toSorted();
+		expect(urls).toEqual([
+			'https://googleads.g.doubleclick.net/pagead/viewthroughconversion/10840516367/?auid&capi',
+			'https://googleads.g.doubleclick.net/pagead/viewthroughconversion/9999999/?auid',
+		]);
+	});
+
+	it('unions referrer URLs across all raw resources in a group', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(
+			createMockResource({
+				url: 'https://x.com/p?a=1',
+				getReferrers: vi
+					.fn()
+					.mockResolvedValue(['https://x.com/page-a', 'https://x.com/page-b']),
+			}),
+		);
+		await sheet.eachResource!(
+			createMockResource({
+				url: 'https://x.com/p?a=2',
+				getReferrers: vi
+					.fn()
+					.mockResolvedValue(['https://x.com/page-b', 'https://x.com/page-c']),
+			}),
+		);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][5])).toBe('3 pages');
+		const note = cellNote(rows![0][5]);
+		expect(note?.split('\n').toSorted()).toEqual([
+			'https://x.com/page-a',
+			'https://x.com/page-b',
+			'https://x.com/page-c',
+		]);
+	});
+
+	it('clears internal state after finalizeResources so a second invocation returns []', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(createMockResource());
+		const first = await sheet.finalizeResources!();
+		expect(first).toHaveLength(1);
+		const second = await sheet.finalizeResources!();
+		expect(second).toEqual([]);
+	});
+});
+
+describe('createResources (dedupe mode) — Content Length range', () => {
+	it('renders content length as min-max when sizes vary within a group', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=1', contentLength: 100 }),
+		);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=2', contentLength: 500 }),
+		);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][4])).toBe('100-500');
+	});
+
+	it('renders content length as a single number when sizes match within a group', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=1', contentLength: 250 }),
+		);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=2', contentLength: 250 }),
+		);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][4])).toBe(250);
+	});
+
+	it('leaves Content Length empty when every resource in the group reports null', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=1', contentLength: null }),
+		);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=2', contentLength: null }),
+		);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][4])).toBe('');
+	});
+
+	it('absorbs a later non-null contentLength after a leading null in the same group', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=1', contentLength: null }),
+		);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=2', contentLength: 800 }),
+		);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][4])).toBe(800);
+	});
+
+	it('expands an existing range when a smaller or larger non-null contentLength arrives', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=1', contentLength: 500 }),
+		);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=2', contentLength: 100 }),
+		);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=3', contentLength: 900 }),
+		);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][4])).toBe('100-900');
+	});
+});
+
+describe('createResources (dedupe mode) — statusText merge', () => {
+	it('fills statusText from a later non-null resource when the first one was null', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=1', statusText: null }),
+		);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=2', statusText: 'OK' }),
+		);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][2])).toBe('OK');
+	});
+
+	it('does not overwrite a non-null statusText with a later null', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=1', statusText: 'OK' }),
+		);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/p?a=2', statusText: null }),
+		);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][2])).toBe('OK');
+	});
+});
+
+describe('dedupeKey', () => {
+	it('distinguishes status=null from status=0', () => {
+		expect(dedupeKey('https://x.com/', null, 'text/html')).not.toBe(
+			dedupeKey('https://x.com/', 0, 'text/html'),
+		);
+	});
+
+	it('distinguishes contentType=null from contentType=""', () => {
+		expect(dedupeKey('https://x.com/', 200, null)).not.toBe(
+			dedupeKey('https://x.com/', 200, ''),
+		);
+	});
+
+	it('produces identical keys for identical inputs', () => {
+		expect(dedupeKey('https://x.com/p?a&b', 200, 'image/gif')).toBe(
+			dedupeKey('https://x.com/p?a&b', 200, 'image/gif'),
+		);
+	});
+
+	it('does not let one field bleed into another (no concat collision)', () => {
+		// canonical='ab', contentType='cd' vs canonical='abcd', contentType=''
+		// — without the U+0001 delimiter these would collide.
+		expect(dedupeKey('ab', 200, 'cd')).not.toBe(dedupeKey('abcd', 200, ''));
+	});
+});
+
+describe('joinReferrersForNote', () => {
+	it('returns an empty string for an empty Set', () => {
+		expect(joinReferrersForNote(new Set())).toBe('');
+	});
+
+	it('joins all URLs with newlines when they fit under the cap', () => {
+		const set = new Set(['https://a.example/', 'https://b.example/']);
+		expect(joinReferrersForNote(set, 100)).toBe('https://a.example/\nhttps://b.example/');
+	});
+
+	it('truncates with "... and N more" when the URL list exceeds the cap', () => {
+		const set = new Set(['aaaa', 'bbbb', 'cccc', 'dddd', 'eeee']);
+		// "aaaa" (4) + "\nbbbb" (5) = 9 used. Adding "\ncccc" would push to 14 (>12).
+		expect(joinReferrersForNote(set, 12)).toBe('aaaa\nbbbb\n... and 3 more');
+	});
+
+	it('reports "... and N more" with N counting every URL that did not fit', () => {
+		const set = new Set(['aaa', 'bbb', 'ccc']);
+		// "aaa" (3) used. Adding "\nbbb" would push to 7 (>4).
+		// remaining = 3 - 2 + 1 = 2 (bbb and ccc).
+		expect(joinReferrersForNote(set, 4)).toBe('aaa\n... and 2 more');
+	});
+
+	it('handles the case where the very first URL already exceeds the cap', () => {
+		const set = new Set(['toolong']);
+		expect(joinReferrersForNote(set, 3)).toBe('... and 1 more');
+	});
+
+	it('uses NOTE_MAX_LENGTH by default', () => {
+		// Build a set whose total length comfortably fits within the default cap.
+		const set = new Set(['x', 'y', 'z']);
+		expect(joinReferrersForNote(set)).toBe('x\ny\nz');
+		expect(NOTE_MAX_LENGTH).toBeGreaterThan(1000);
+	});
+});
+
+describe('formatContentLength', () => {
+	it('returns null when contentLengthMin is null', () => {
+		expect(
+			formatContentLength({
+				canonical: 'x',
+				status: 200,
+				statusText: null,
+				contentType: null,
+				contentLengthMin: null,
+				contentLengthMax: null,
+				count: 1,
+				referrers: new Set(),
+			}),
+		).toBeNull();
+	});
+
+	it('returns the single number when min and max match', () => {
+		expect(
+			formatContentLength({
+				canonical: 'x',
+				status: 200,
+				statusText: null,
+				contentType: null,
+				contentLengthMin: 500,
+				contentLengthMax: 500,
+				count: 1,
+				referrers: new Set(),
+			}),
+		).toBe(500);
+	});
+
+	it('returns "min-max" when min and max differ', () => {
+		expect(
+			formatContentLength({
+				canonical: 'x',
+				status: 200,
+				statusText: null,
+				contentType: null,
+				contentLengthMin: 100,
+				contentLengthMax: 900,
+				count: 1,
+				referrers: new Set(),
+			}),
+		).toBe('100-900');
+	});
+
+	it('treats min=0 distinct from null (returns 0)', () => {
+		expect(
+			formatContentLength({
+				canonical: 'x',
+				status: 200,
+				statusText: null,
+				contentType: null,
+				contentLengthMin: 0,
+				contentLengthMax: 0,
+				count: 1,
+				referrers: new Set(),
+			}),
+		).toBe(0);
 	});
 });

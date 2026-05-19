@@ -40,6 +40,16 @@ export interface ReportParams {
 	readonly all?: boolean;
 	/** When `true`, suppress progress display output. */
 	readonly silent?: boolean;
+	/**
+	 * When `true`, the Resources sheet collapses rows that share the same
+	 * canonical URL (query *values* stripped, query *keys* sorted) into
+	 * one row per `(canonical URL, status, contentType)` combination,
+	 * with an added `Count` column. Useful for archives where tracking
+	 * pixels generate millions of per-request unique URLs that would
+	 * otherwise exceed Google Sheets' 10M-cell document limit. Defaults
+	 * to `false` (raw mode).
+	 */
+	readonly dedupeResources?: boolean;
 }
 
 /**
@@ -71,8 +81,16 @@ export interface ReportParams {
  * ```
  */
 export async function report(params: ReportParams) {
-	const { filePath, sheetUrl, credentialFilePath, configPath, limit, all, silent } =
-		params;
+	const {
+		filePath,
+		sheetUrl,
+		credentialFilePath,
+		configPath,
+		limit,
+		all,
+		silent,
+		dedupeResources,
+	} = params;
 	log('Initialization');
 
 	const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'] as const;
@@ -177,7 +195,7 @@ export async function report(params: ReportParams) {
 		}
 
 		if (selectedSheetNames.includes('Resources')) {
-			createSheetList.push(createResources);
+			createSheetList.push(createResources({ dedupe: dedupeResources }));
 		}
 
 		if (selectedSheetNames.includes('Images')) {

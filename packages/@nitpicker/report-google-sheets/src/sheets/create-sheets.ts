@@ -403,6 +403,23 @@ export async function createSheets(params: CreateSheetsParams) {
 								await sheet.appendRow(...resourceData);
 							}
 						}
+						if (setting.finalizeResources) {
+							lanes?.update(id, `${name}: Finalizing aggregated rows%dots%`);
+							sheetLog('[%s] finalizeResources start', name);
+							const finalRows = await setting.finalizeResources();
+							if (finalRows && finalRows.length > 0) {
+								lanes?.update(
+									id,
+									`${name}: Sending ${finalRows.length} aggregated rows%dots%`,
+								);
+								await sheet.appendRow(...finalRows);
+								sheetLog(
+									'[%s] finalizeResources emitted %d rows',
+									name,
+									finalRows.length,
+								);
+							}
+						}
 						await sheet.flush();
 						sheetLog('[%s] Resource send complete (%d rows)', name, sheet.sentCount);
 						resourceProgress.set(name, 1);

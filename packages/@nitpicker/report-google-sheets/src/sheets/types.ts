@@ -86,10 +86,27 @@ export interface CreateSheetSetting {
 	) => Promiseable<Cell[][] | null | void>;
 	/**
 	 * Generates row data for a single network resource.
+	 *
+	 * To accumulate state across all resources and emit aggregated rows
+	 * once at the end, use {@link CreateSheetSetting.finalizeResources}
+	 * instead of trying to detect the final iteration here.
 	 * @param resource - The resource record from the archive.
 	 * @returns Row data, `null`/`void` to skip.
 	 */
 	eachResource?: (resource: Resource) => Promiseable<Cell[][] | null | void>;
+	/**
+	 * Phase 3 terminator hook called exactly once after the entire
+	 * `eachResource` loop completes (before the final
+	 * `sheet.flush()`). Use for factories that accumulate state during
+	 * `eachResource` and want to emit aggregated rows in one batch —
+	 * e.g. dedupe-by-canonical-URL aggregation.
+	 *
+	 * Decoupled from `eachResource` so the contract does not depend on
+	 * the Phase 3 implementation (sequential vs. parallel iteration,
+	 * exact `num/total` semantics, etc.).
+	 * @returns Row data to append, `null`/`void` to emit nothing.
+	 */
+	finalizeResources?: () => Promiseable<Cell[][] | null | void>;
 	/**
 	 * Generates additional rows from plugin report data.
 	 * Called once after the factory, not per-page. Runs in parallel
