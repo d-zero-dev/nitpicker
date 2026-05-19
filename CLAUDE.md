@@ -94,6 +94,34 @@ Nitpicker.analyze(archivePath, plugins)
   → レポートファイル書き出し
 ```
 
+### データフロー（report）
+
+```
+report({ filePath, sheetUrl, dedupeResources, ... })
+  → Archive.connect() → ArchiveAccessor
+  → loadConfig() → analyze プラグインから生成された Report[] を読み込み
+  → 対話プロンプト（または --all）で出力するシートを選択
+  → createSheets() を 5 フェーズで実行
+    Phase 1: シート作成 + ヘッダー設定（全シート並列）
+    Phase 2: getPagesWithRefs() でページ反復
+             → preEachPage で状態蓄積 → eachPage で行生成
+             → sheet.appendRow(...) でストリーミング送信
+    Phase 3: getResources() でリソース反復
+             → eachResource で行生成 → sheet.appendRow(...)
+             → finalizeResources hook（任意）を per-resource ループ完了後に 1 度呼び、
+                集約行を一括 emit（dedupe Resources シートが利用）
+    Phase 4: addRows でプラグインデータ送信（Phase 2/3 と並列実行）
+    Phase 5: updateSheet でフォーマット適用（凍結行・条件付き書式・列非表示）
+```
+
+> **`--dedupe-resources`**: Resources シートを **canonical URL**（クエリ値を捨て、キーを sort + unique）で集約する。`finalizeResources` hook を使って Phase 3 終端で集約行を一括 emit。広告/解析タグ（Google Ads conversion, Facebook Pixel, Yahoo, Bing UET, LINE Tag 等）で per-request unique なクエリ付き URL が爆発するサイトで、Google Sheets 1 ドキュメント **10,000,000 セル上限**を回避するために使う。実例: 1.6M raw → 63K 行（96% 削減）。実装は `packages/@nitpicker/report-google-sheets/src/data/create-resources.ts`、canonical 化規則は `utils/canonicalize-url.ts`。
+
+> **新規シート実装時の Hook 選択**:
+>
+> - **per-page / per-resource で逐次行を返す** → `eachPage` / `eachResource` をそのまま使う（自然な実装）
+> - **per-resource を反復しつつ集約して 1 回だけ大量に emit したい** → `eachResource` 内で Map に蓄積、`finalizeResources` で flush（dedupe 集約モードの基本パターン）。**`eachResource` 内で「最後の resource か」を判定して emit する書き方は脆いので禁止**（Phase 3 が将来並列化されると壊れる）
+> - **プラグインデータなど反復不要・単発で送りたい** → `addRows`（Phase 2/3 と並列実行される）
+
 ### @d-zero/shared 統合
 
 以下の機能は `@d-zero/shared` から提供されており、独自実装は不要:
@@ -107,6 +135,7 @@ Nitpicker.analyze(archivePath, plugins)
 
 - **crawler**: `deal()`（@d-zero/dealer）による URL スクレイピングの並列制御
 - **core（analyze）**: プラグインごとの `WorkerPool`（長寿命 Worker N 個 / プラグイン）。並列度はプラグインの `concurrency` 宣言、未指定時は `os.cpus().length`。`Lanes`（@d-zero/dealer）で進捗表示
+- **report-google-sheets**: Phase 1 / 4 / 5 は `Promise.all` で全シート並列。Phase 2 / 3 は per-resource ループは逐次（dedupe 集約と `appendRow` の順序保証のため）、ただしシート間は並列。`Lanes` でフェーズ進捗とシート別状況を表示
 
 ## テスト
 
@@ -183,6 +212,7 @@ yarn lint                                          # lint + cspell
 - **exports で公開 API を厳選**: package.json の `exports` フィールドにサブパスを明示的に定義し、公開 API を限定する。モノレポ内パッケージ間でも exports 経由でのみアクセスする
 - **`Promise.race` の負け側 timer は必ずキャンセル**: タイムアウト実装で `Promise.race([work, delay(N)])` を書く場合、勝者が決まった後も負け側の `setTimeout` は発火するまで event loop を握り続け、CLI プロセス終了をブロックする。`setTimeout`/`clearTimeout` を直接使い、`.finally()` で確実に clear すること（`delay()` は signal を取らないので race には使わない）。実例: `packages/@nitpicker/crawler/src/crawler/fetch-destination.ts`
 - **CLI 末尾は明示的に `process.exit`**: `packages/@nitpicker/cli/src/cli.ts` の末尾で `process.exit(process.exitCode ?? ExitCode.Success)` を呼ぶ。外部依存（特に `@d-zero/beholder` の `dom-evaluation.js#getProp`）に同じ「`Promise.race` + `setTimeout` の負け側 timer 残留」パターンがあり、自然終了をブロックするため。await 済み work 完了後の defensive measure であり、内部の cleanup は順番に await した上で呼ぶこと
+- **集約系シートは `finalizeResources` を使う**: Phase 3 で per-resource ループを反復しつつ集約結果を 1 度だけ送信したい場合（dedupe Resources のような実装）、`eachResource` で `num`/`total` を見て「最後だから emit」する設計は禁止。`CreateSheetSetting.finalizeResources` hook を使い、accumulate と emit を分離すること。Phase 3 の実装詳細（逐次 / 並列、num/total の意味）から切り離されるため、将来 Phase 3 が並列化されても集約ロジックが壊れない。実例: `packages/@nitpicker/report-google-sheets/src/data/create-resources.ts` の dedupe モード
 
 ## AI 操作プロトコル
 

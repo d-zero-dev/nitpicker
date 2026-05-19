@@ -238,12 +238,39 @@ $ npx @nitpicker/cli report <file> --sheet <URL>
 | `--config` `-c`      | ファイルパス | なし                 | nitpicker 設定ファイルのパス                                    |
 | `--limit` `-l`       | 数値         | `100000`             | アーカイブからページを取得する 1 バッチあたりのページ数         |
 | `--all`              | なし         | なし                 | 対話プロンプトなしで全シートを生成（非TTY環境では自動的に有効） |
+| `--dedupe-resources` | なし         | なし                 | Resources シートを canonical URL で集約（後述）                 |
 | `--verbose`          | なし         | なし                 | 実行中に詳細ログを標準出力に表示                                |
 | `--silent`           | なし         | なし                 | 実行中のログ出力を抑制                                          |
 
 `--all` を指定しない場合、生成するシートを選択する対話式マルチセレクトプロンプトが表示される（Page List、Links、Resources、Images、Violations、Discrepancies、Summary、Referrers Relational Table、Resources Relational Table）。非TTY環境（CI パイプライン等）では `--all` と `--verbose` が自動的に有効になり、エラー発生時のスタックトレースが CI ログに出力される。
 
 `--limit` はアーカイブからメモリへ一度に読み込むページ数を制御する値で、Google Sheets API への 1 リクエストあたりの行数とは別物。各シートの行送信は `@d-zero/google-sheets` の `Sheet.appendRow` が内部で 2500 行ごとに自動 flush するため、呼び出し元側のメモリ滞留はチャンクサイズ分に抑えられる。Page List のような遅延セルを含むシートは、library が自動的にバッチ末尾の `flush()` まで送信を保留する（詳細は `ARCHITECTURE.md` の Report 章を参照）。
+
+##### `--dedupe-resources`: Resources シートの集約
+
+Google Sheets には 1 ドキュメントあたり **10,000,000 セル** という上限がある。広告/解析タグ（Google Ads conversion, Facebook Pixel, Yahoo, Bing UET, LINE Tag 等）はページごとに per-request unique なクエリパラメータ付き URL を生成するため、`Resources` テーブルに数百万件のレコードが積まれることがあり、6 列 × 数百万行ですぐ上限に達する。
+
+`--dedupe-resources` を指定すると、Resources シートを **canonical URL** で集約して出力する。
+
+- **canonical 化規則**: パスはそのまま、クエリは値を捨てキーのみ sort & unique。フラグメントは元から除去済み
+  - 例: `?auid=XYZ&capi=1&crd=ABC` → `?auid&capi&crd`
+- **集約キー**: `(canonical URL, status, contentType)` の組
+- **追加列**: 末尾に `Count`（その canonical group に集約された raw レコード数）
+- **Content Length 列**: グループ内で値が異なれば `100-500` のような min-max 表示
+- **Referrers 列**: グループ内の全 referrer URL を union（重複排除）してセル note に列挙
+- **path 内の ID は保持**: `/pagead/viewthroughconversion/10840516367/` のような conversion ID はそのまま残るので、クライアントへの「Google Ads 入っていますか / どの conversion ID 使っていますか」の質問にこの 1 シートで答えられる
+
+実例: 1,600,724 件の raw resource が 63,385 件まで集約（**96% 削減**、Google Sheets 上の 9.6M セルが 380K セルになる）。
+
+##### 使い分けの目安
+
+- **デフォルト（指定なし、raw mode）**: 通常はこちらで十分。raw URL を 1 件ずつそのまま出力するため、特定のリクエスト URL を完全に追跡したい場合に有用。Resources 件数が数万件以下のサイトはほぼ常にこのモードで問題ない。
+- **`--dedupe-resources` 指定（dedupe mode）**: 以下のいずれかに該当するときに検討する。
+  - report 実行時に `Error: This document is too large to continue editing.` が出る
+  - 事前に Resources 件数を見積もって 100,000 件を超えると分かっている（広告/解析タグ多数 + ページ数大、写真ライブラリのような per-image unique URL を大量に生成するサイト等）
+  - クライアントへの監査レポート用途で「どんなトラッキングが入っているか」を一覧化したい（per-request の細かい値より、ホスト+パス+クエリキー構成での集約のほうが読みやすい）
+
+> **メモリ目安**: 集約用 Map と referrer 集合をメモリ上に保持するため、巨大アーカイブ（百万件超）では 500MB〜1GB 程度のヒープを消費する。デフォルトの Node ヒープ（8GB）で問題なく動くが、CI など制限が厳しい環境では `NODE_OPTIONS=--max-old-space-size=4096` 程度を見込んでおくと安全。
 
 #### 例
 
@@ -252,6 +279,9 @@ $ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "htt
 $ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --credentials ./my-credentials.json
 $ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --config ./nitpicker.config.json
 $ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --all --silent
+
+# Resources が大量にあるサイト（広告/解析タグ多数等）で canonical 集約
+$ npx @nitpicker/cli report example.com-20250101120000000.nitpicker --sheet "https://docs.google.com/spreadsheets/d/xxx/edit" --dedupe-resources
 ```
 
 ### Pipeline
@@ -272,7 +302,7 @@ crawl / analyze / report のオプションをすべて指定可能。各ステ�
 | -------- | --------------------------------------------------------------------------------- | ---------------------------------------------- |
 | crawl    | `--interval`, `--parallels`, `--no-image`, `--exclude`, `--output`, `--strict` 等 | クロール動作の制御（crawl セクション参照）     |
 | analyze  | `--all`, `--plugin`, `--search-keywords`, `--axe-lang` 等                         | 分析プラグインの制御（analyze セクション参照） |
-| report   | `--sheet`, `--credentials`, `--config`, `--limit`                                 | レポート出力の制御（report セクション参照）    |
+| report   | `--sheet`, `--credentials`, `--config`, `--limit`, `--dedupe-resources`           | レポート出力の制御（report セクション参照）    |
 | 共通     | `--verbose`, `--silent`                                                           | ログ出力の制御                                 |
 
 > **注意**: `--resume`, `--append`, `--diff` は crawl 専用モードのため pipeline では使用不可。

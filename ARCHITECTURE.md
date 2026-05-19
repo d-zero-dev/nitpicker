@@ -573,6 +573,14 @@ sequenceDiagram
 送信する。バッチ終端で `sheet.flush()` を呼んで残余を排出する。Phase 4
 （addRows）も同じ `appendRow + flush` で送信する。
 
+Phase 3 には逐次ループ終端の `finalizeResources` フックも用意されている。
+`eachResource` 内で状態を蓄積したい factory（典型的には Resources シートの
+dedupe 集約モード）が、ループ完了後にまとめて行を emit するために使う。
+hook が登録されていれば `createSheets()` は Phase 3 の per-resource ループ
+完了後・`sheet.flush()` 直前に 1 度だけ呼び、返ってきた行を `appendRow` で
+送信する。Phase 3 の実装詳細（逐次 / 並列、`num` / `total` 等）に依存しない
+ので、`eachResource` の呼ばれ方が将来変わっても集約ロジックは壊れない。
+
 ストリーミング・チャンク化のロジックは `@d-zero/google-sheets` の `Sheet`
 クラスに集約されている。`appendRow()` は内部バッファに行を積み、2500 行
 ごとに自動的に `addRowData()` を呼んでフラッシュする。これにより、巨大な

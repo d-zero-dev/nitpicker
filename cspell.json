@@ -66,6 +66,11 @@
 		"mmm",
 
 		// Security headers
-		"HSTS"
+		"HSTS",
+
+		// Tracking pixel / ads URL conventions (used in docs and dedupe examples)
+		"pagead",
+		"auid",
+		"capi"
 	]
 }
