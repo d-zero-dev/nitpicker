@@ -67,17 +67,10 @@ describe('createReferrersRelationalTable', () => {
 		expect(sheet.name).toBe('Referrers Relational Table');
 	});
 
-	it('does not opt into bufferRows so rows stream out incrementally', () => {
-		// No lazy cells — streaming is required to keep peak memory bounded
-		// when a page yields many referrer rows.
-		const sheet = createReferrersRelationalTable([]);
-		expect(sheet.bufferRows).toBeFalsy();
-	});
-
-	it('returns only eager cells from eachPage (streaming requires no lazy thunks)', async () => {
+	it('uses only eager cells from eachPage so appendRow can stream', async () => {
 		// See create-links.spec.ts for the rationale. Same defense-in-depth
-		// check: streaming flushes provide() before sibling pages have run,
-		// so a LazyCell here would corrupt the output silently.
+		// check: any LazyCell here would force appendRow() into buffered mode,
+		// defeating the streaming throughput we get from this sheet.
 		const sheet = createReferrersRelationalTable([]);
 		const page = createMockPage({
 			getReferrers: vi.fn().mockResolvedValue([

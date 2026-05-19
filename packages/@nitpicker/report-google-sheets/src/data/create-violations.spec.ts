@@ -10,14 +10,6 @@ describe('createViolations', () => {
 		expect(sheet.name).toBe('Violations');
 	});
 
-	it('does not opt into bufferRows so rows stream out incrementally', () => {
-		// Violations uses addRows (Phase 4) rather than eachPage, so the
-		// streaming distinction does not apply, but assert anyway as a
-		// guard against accidental bufferRows: true.
-		const sheet = createViolations([]);
-		expect(sheet.bufferRows).toBeFalsy();
-	});
-
 	it('returns correct headers', () => {
 		const sheet = createViolations([]);
 		const headers = sheet.createHeaders();

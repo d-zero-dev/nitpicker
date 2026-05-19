@@ -66,13 +66,7 @@ describe('createDiscrepancies', () => {
 		expect(sheet.name).toBe('Discrepancies');
 	});
 
-	it('does not opt into bufferRows so rows stream out incrementally', () => {
-		// No lazy cells — streaming keeps peak memory bounded.
-		const sheet = createDiscrepancies([]);
-		expect(sheet.bufferRows).toBeFalsy();
-	});
-
-	it('returns only eager cells from eachPage (streaming requires no lazy thunks)', async () => {
+	it('uses only eager cells from eachPage so appendRow can stream', async () => {
 		// See create-links.spec.ts for the rationale.
 		const page = createMockPage({
 			getAnchors: vi.fn().mockResolvedValue([

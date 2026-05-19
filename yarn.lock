@@ -868,28 +868,28 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/google-auth@npm:0.7.0":
-  version: 0.7.0
-  resolution: "@d-zero/google-auth@npm:0.7.0"
+"@d-zero/google-auth@npm:0.7.1":
+  version: 0.7.1
+  resolution: "@d-zero/google-auth@npm:0.7.1"
   dependencies:
     ansi-colors: "npm:4.1.3"
     debug: "npm:4.4.3"
     google-auth-library: "npm:^10.2.0"
     googleapis: "npm:171.4.0"
-  checksum: 10c0/865b1f87d8515b6cf351676a8c842f2b89b720667abf650d351485dc41c382821e31402ff3351663a7c9e7751cb532dd0051ff882b2f3953595a42fff4d9d9be
+  checksum: 10c0/446126323f20beee12142cdd2a39713841ed6bd454d9c82f74c9918f9ffbc2dd83079ee9a64790960f77939d5201944fbdea773e9c2b49e71cb5fd9d823048ad
   languageName: node
   linkType: hard
 
-"@d-zero/google-sheets@npm:0.7.1":
-  version: 0.7.1
-  resolution: "@d-zero/google-sheets@npm:0.7.1"
+"@d-zero/google-sheets@npm:0.8.0":
+  version: 0.8.0
+  resolution: "@d-zero/google-sheets@npm:0.8.0"
   dependencies:
-    "@d-zero/google-auth": "npm:0.7.0"
-    "@d-zero/shared": "npm:0.21.2"
+    "@d-zero/google-auth": "npm:0.7.1"
+    "@d-zero/shared": "npm:0.21.3"
     debug: "npm:4.4.3"
     gaxios: "npm:7.1.3"
     googleapis: "npm:171.4.0"
-  checksum: 10c0/23c82a7ad17e25942dd3556d129efcc58571668826f01cf83756b055a08657d717e1e92fd3f77cd6c061a6dbde2cc95e1572093ac5f24feda67920add7106640
+  checksum: 10c0/c44931810e262223b8ebe1c3dbd2b27e53d3806cd9827dbc5775150aa7af740fedadbd46387ffc08d193dc632f1f0347c34bd11c07431c8592eae2db3a6803e4
   languageName: node
   linkType: hard
 
@@ -993,9 +993,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/shared@npm:0.21.2":
-  version: 0.21.2
-  resolution: "@d-zero/shared@npm:0.21.2"
+"@d-zero/shared@npm:0.21.3":
+  version: 0.21.3
+  resolution: "@d-zero/shared@npm:0.21.3"
   dependencies:
     "@holiday-jp/holiday_jp": "npm:2.5.1"
     await-event-emitter: "npm:2.0.2"
@@ -1004,7 +1004,7 @@ __metadata:
     front-matter: "npm:4.0.2"
     micromatch: "npm:4.0.8"
     sanitize-filename: "npm:1.6.3"
-  checksum: 10c0/79a4aa20014315d1dceeb3f4fed08fec01c443ac83d6fa67dd4d1c8c3809b25fa1add0062ccb6cb6bda984042d023bcca3e67b802439fe87901bce5fc2dd14bd
+  checksum: 10c0/98635545ae3e9cefb786868f97bd6b6fa71f201550773eb73ff5511bbaec1e4b86fb0231251464404a404d97558bc4401c92307e035783684d78cac6a8adab4e
   languageName: node
   linkType: hard
 
@@ -2550,7 +2550,7 @@ __metadata:
   dependencies:
     "@d-zero/dealer": "npm:1.7.0"
     "@d-zero/google-auth": "npm:0.5.6"
-    "@d-zero/google-sheets": "npm:0.7.1"
+    "@d-zero/google-sheets": "npm:0.8.0"
     "@d-zero/shared": "npm:0.20.1"
     "@nitpicker/crawler": "npm:0.8.0"
     "@nitpicker/types": "npm:0.8.0"

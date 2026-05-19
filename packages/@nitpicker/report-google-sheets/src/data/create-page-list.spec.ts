@@ -106,22 +106,16 @@ describe('createPageList', () => {
 		expect(sheet.name).toBe('Page List');
 	});
 
-	it('opts into bufferRows because the "Internal Referrers" cell is a lazy thunk', () => {
-		// The lazy thunk at create-page-list.ts:238-256 reads parentRefs/refers
-		// at provide() time. Sibling index pages mutate that shared state as the
-		// batch iterates, so the row must be held until the batch completes.
-		// Streaming mid-iteration would evaluate the thunk before later pages
-		// had updated the refs, corrupting the "Internal Referrers" count.
-		const sheet = createPageList([]);
-		expect(sheet.bufferRows).toBe(true);
-	});
-
-	it('emits at least one lazy cell from eachPage, justifying bufferRows: true', async () => {
-		// The inverse of the eager-cell check in the streaming sheet specs:
-		// PageList legitimately needs bufferRows because at least one of its
-		// cells is a LazyCell (provide() is overridden, so it does not match
-		// Cell.prototype.provide). If a future refactor eliminates all lazy
-		// cells here, bufferRows can be flipped to false for the memory win.
+	it('emits at least one lazy cell from eachPage so appendRow auto-buffers the batch', async () => {
+		// The "Internal Referrers" cell at create-page-list.ts:238-256 reads
+		// parentRefs/refers at provide() time. Sibling index pages mutate that
+		// shared state as the batch iterates, so the row must not be sent
+		// until the batch completes — `@d-zero/google-sheets`' appendRow()
+		// detects the LazyCell (cell.provide !== Cell.prototype.provide) and
+		// suspends auto-flush until flush() is invoked at batch end.
+		// If a future refactor removes all lazy cells here, this test fails
+		// loudly so the maintainer can confirm PageList can switch to plain
+		// streaming for the memory win.
 		const sheet = createPageList([]);
 		const rows = await sheet.eachPage!(createMockPage(), 1, 1, null);
 		expect(rows).toBeTruthy();

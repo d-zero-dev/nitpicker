@@ -68,22 +68,12 @@ describe('createLinks', () => {
 		expect(sheet.name).toBe('Links');
 	});
 
-	it('does not opt into bufferRows so rows stream out incrementally', () => {
-		// Links has no lazy cells, so it is safe (and necessary, for memory)
-		// to flush rows in chunks while iterating rather than holding the
-		// full batch. Flipping this to true would re-introduce the OOM that
-		// streaming was added to fix — guard against that here.
-		const sheet = createLinks([]);
-		expect(sheet.bufferRows).toBeFalsy();
-	});
-
-	it('returns only eager cells from eachPage (streaming requires no lazy thunks)', async () => {
-		// LazyCell overrides provide(); any cell whose provide() is not the
-		// base Cell.prototype.provide is a thunk that depends on shared
-		// state mutated across the batch. Streaming evaluates provide() at
-		// flush time — well before sibling pages have run — so a stray
-		// LazyCell here would corrupt cell data. PageList opts into
-		// bufferRows precisely because it does carry lazy cells.
+	it('uses only eager cells from eachPage so appendRow can stream', async () => {
+		// LazyCell overrides provide(); any cell whose provide() differs from
+		// Cell.prototype.provide is a thunk depending on shared mutable state.
+		// `@d-zero/google-sheets`' appendRow() auto-buffers when it detects a
+		// lazy row, which would degrade Links into batched sends. Asserting
+		// that Links has no lazy cells keeps the streaming fast path active.
 		const sheet = createLinks([]);
 		const rows = await sheet.eachPage!(createMockPage(), 1, 1, null);
 		expect(rows).toBeTruthy();

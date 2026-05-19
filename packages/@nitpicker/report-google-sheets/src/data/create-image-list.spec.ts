@@ -55,14 +55,7 @@ describe('createImageList', () => {
 		expect(sheet.name).toBe('Images');
 	});
 
-	it('does not opt into bufferRows so rows stream out incrementally', () => {
-		// No lazy cells — streaming keeps peak memory bounded when each page
-		// emits multiple image rows.
-		const sheet = createImageList([]);
-		expect(sheet.bufferRows).toBeFalsy();
-	});
-
-	it('returns only eager cells from eachPage (streaming requires no lazy thunks)', async () => {
+	it('uses only eager cells from eachPage so appendRow can stream', async () => {
 		// See create-links.spec.ts for the rationale.
 		const page = createMockPage({
 			getHtml: vi

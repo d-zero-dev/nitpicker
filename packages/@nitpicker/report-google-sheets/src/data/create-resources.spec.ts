@@ -58,16 +58,10 @@ describe('createResources', () => {
 		expect(sheet.name).toBe('Resources');
 	});
 
-	it('does not opt into bufferRows so rows stream out incrementally', () => {
-		// Resources sheets never use lazy cells; eachResource is streamed in
-		// Phase 3 regardless of bufferRows, but assert anyway as a guard.
-		const sheet = createResources([]);
-		expect(sheet.bufferRows).toBeFalsy();
-	});
-
-	it('returns only eager cells from eachResource (streaming requires no lazy thunks)', async () => {
-		// Phase 3 always streams. A lazy cell here would corrupt output the
-		// same way it would in Phase 2 streaming — guard against it.
+	it('uses only eager cells from eachResource so appendRow can stream', async () => {
+		// A lazy cell here would force appendRow() into buffered mode for the
+		// entire resource batch, defeating the streaming throughput. Phase 3
+		// has no lazy-cell users today; this guard keeps it that way.
 		const resource = createMockResource();
 		const sheet = createResources([]);
 		const rows = await sheet.eachResource!(resource);

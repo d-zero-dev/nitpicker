@@ -36,6 +36,27 @@ const log = pLog.extend('PageList');
  * - Error-like titles and non-success status codes
  *
  * Unused path columns (beyond the deepest URL) are hidden automatically.
+ *
+ * ## Lazy thunk in "Internal Referrers"
+ *
+ * The "Internal Referrers" column is emitted via `createCellData(() => ...)`
+ * — a thunk that reads `parentRefs` / `indexRefs` at `provide()` time. The
+ * thunk is deliberately deferred because sibling index pages mutate the
+ * shared maps as the batch iterates, so the final referrer count is only
+ * accurate after every page has been processed.
+ *
+ * `@d-zero/google-sheets` detects this lazy cell (via the
+ * `Cell.prototype.provide` identity check) and switches the sheet's
+ * `appendRow()` into buffered mode automatically. The buffered rows are
+ * sent on the explicit `sheet.flush()` call at batch end, by which time
+ * the maps are fully populated.
+ *
+ * If a future refactor removes the thunk pattern from this column, the
+ * sheet can be sent as a pure stream — no per-sheet configuration change
+ * is needed since the library auto-detects. The corresponding spec
+ * (`create-page-list.spec.ts`) asserts the presence of at least one lazy
+ * cell so the maintainer who removes the thunk will see the test fail and
+ * be prompted to reconsider whether the change is intentional.
  * @param reports - Analyze plugin reports to extract per-page data columns from
  */
 export const createPageList: CreateSheet = (reports) => {
@@ -56,12 +77,6 @@ export const createPageList: CreateSheet = (reports) => {
 
 	return {
 		name: 'Page List',
-		// The "Internal Referrers" cell uses createCellData(() => ...), a lazy
-		// thunk that reads `parentRefs`/`indexRefs` at provide() time. Sibling
-		// index pages mutate that shared state as the batch iterates, so we
-		// must hold rows until the batch completes — flushing mid-iteration
-		// would evaluate the thunk before later pages had updated the refs.
-		bufferRows: true,
 		createHeaders() {
 			const headers = [
 				'Title',

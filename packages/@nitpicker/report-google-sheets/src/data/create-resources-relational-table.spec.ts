@@ -49,14 +49,7 @@ describe('createResourcesRelationalTable', () => {
 		expect(sheet.name).toBe('Resources Relational Table');
 	});
 
-	it('does not opt into bufferRows so rows stream out incrementally', () => {
-		// No lazy cells — streaming keeps peak memory bounded when each page
-		// emits multiple resource-rows.
-		const sheet = createResourcesRelationalTable([]);
-		expect(sheet.bufferRows).toBeFalsy();
-	});
-
-	it('returns only eager cells from eachResource (streaming requires no lazy thunks)', async () => {
+	it('uses only eager cells from eachResource so appendRow can stream', async () => {
 		// See create-links.spec.ts for the rationale.
 		const resource = createMockResource({
 			getReferrers: vi.fn().mockResolvedValue(['https://example.com/page1']),

@@ -7,33 +7,58 @@ import { describe, it, expect, vi } from 'vitest';
 import { createSheets } from './create-sheets.js';
 
 /**
- * Constructs a minimal Cell stub. The streamer/sender treat cells as
- * opaque payloads, so the value doesn't matter for these tests.
+ * Records of one sheet's interactions with `appendRow` / `flush`.
+ *
+ * `appendRowBatches` captures each `appendRow(...rows)` call as an array of
+ * the rows passed in (the caller's argv after the rest spread). `flushCount`
+ * tracks the number of `flush()` invocations. Both let tests assert that
+ * `createSheets()` is delegating the streaming responsibility to the Sheet
+ * API rather than buffering rows in its own code path.
+ */
+interface SheetRecord {
+	appendRowBatches: Cell[][][];
+	flushCount: number;
+}
+
+/**
+ * Constructs a minimal Cell stub. The Sheet stub treats cells as opaque
+ * payloads, so any object exposing `provide()` is sufficient.
  */
 function fakeCell(): Cell {
 	return { provide: () => ({}) } as unknown as Cell;
 }
 
 /**
- * Builds a fake Sheets object whose `create()` returns a fresh per-name
- * Sheet stub, and records every `addRowData` call on each sheet so tests
- * can assert on the chunking pattern.
+ * Builds a fake Sheets object whose `create()` returns a per-name cached
+ * Sheet stub (matching the real `Sheets.create()` caching contract so the
+ * second call for the same name returns the same instance). Each stub
+ * records its `appendRow` argv lists and `flush` invocation count.
  */
 function createFakeSheets() {
-	const sheetCalls = new Map<string, Cell[][][]>();
+	const records = new Map<string, SheetRecord>();
+	const sheetCache = new Map<string, Sheet>();
 	const sheets = {
 		create: vi.fn((name: string): Promise<Sheet> => {
-			let calls = sheetCalls.get(name);
-			if (!calls) {
-				calls = [];
-				sheetCalls.set(name, calls);
+			const cached = sheetCache.get(name);
+			if (cached) {
+				return Promise.resolve(cached);
 			}
-			const recordedCalls = calls;
+			const record: SheetRecord = { appendRowBatches: [], flushCount: 0 };
+			records.set(name, record);
+			let sentCount = 0;
 			const sheet = {
-				addRowData: vi.fn((data: Cell[][]) => {
-					recordedCalls.push([...data]);
+				appendRow: vi.fn((...rows: Cell[][]) => {
+					record.appendRowBatches.push(rows);
+					sentCount += rows.length;
 					return Promise.resolve();
 				}),
+				flush: vi.fn(() => {
+					record.flushCount++;
+					return Promise.resolve();
+				}),
+				get sentCount() {
+					return sentCount;
+				},
 				setHeaders: vi.fn(() => Promise.resolve()),
 				frozen: vi.fn(() => Promise.resolve()),
 				conditionalFormat: vi.fn(() => Promise.resolve()),
@@ -41,17 +66,18 @@ function createFakeSheets() {
 				overwriteHeaderFormat: vi.fn(() => Promise.resolve()),
 				getColNumByHeaderName: vi.fn(() => 0),
 			} as unknown as Sheet;
+			sheetCache.set(name, sheet);
 			return Promise.resolve(sheet);
 		}),
 	} as unknown as Sheets;
-	return { sheets, sheetCalls };
+	return { sheets, records };
 }
 
 /**
  * Builds a fake Archive whose `getPagesWithRefs` yields the given pages
  * in a single batch and whose `getResources` yields the given resources.
  * @param pages - Pages to deliver to the callback.
- * @param resources - Resources to return from getResources().
+ * @param resources - Resources to return from `getResources()`.
  */
 function createFakeArchive(pages: Page[], resources: ArchiveResource[] = []): Archive {
 	return {
@@ -70,9 +96,9 @@ function createFakeArchive(pages: Page[], resources: ArchiveResource[] = []): Ar
 }
 
 /**
- * Builds an array of `count` fake Page objects. Tests only need the
- * objects to be distinct references; their internal shape is irrelevant
- * because the eachPage handlers in these tests don't read any fields.
+ * Builds an array of `count` fake Page objects. Tests only need distinct
+ * references; the page shape is irrelevant since the `eachPage` handlers
+ * in these tests don't read any fields.
  * @param count - Number of pages to construct.
  */
 function fakePages(count: number): Page[] {
@@ -80,138 +106,110 @@ function fakePages(count: number): Page[] {
 }
 
 describe('createSheets', () => {
-	it('streams rows incrementally for settings without bufferRows (memory fix path)', async () => {
-		// Streaming setting emits 1 row per page. With 3000 pages and
-		// SEND_CHUNK_SIZE=2500, the streamer must flush once at 2500 rows
-		// (mid-iteration) and once again at flush() with the remaining 500.
+	it('delegates Phase 2 row sending to sheet.appendRow + sheet.flush', async () => {
+		// Each eachPage emission must reach sheet.appendRow exactly once with
+		// the spread row data, and flush() must be invoked once at end of
+		// the batch. This pins down the contract that streaming/chunking is
+		// the Sheet API's responsibility, not createSheets'.
 		const setting: CreateSheetSetting = {
-			name: 'StreamingSheet',
-			createHeaders: () => ['col'],
-			eachPage: () => [[fakeCell()]],
-		};
-		const create: CreateSheet = () => setting;
-		const { sheets, sheetCalls } = createFakeSheets();
-		const archive = createFakeArchive(fakePages(3000));
-
-		await createSheets({
-			sheets,
-			archive,
-			reports: [],
-			limit: 100_000,
-			createSheetList: [create],
-		});
-
-		const calls = sheetCalls.get('StreamingSheet');
-		// 1 streamed chunk (2500) + 1 flush (500). setHeaders is mocked
-		// independently here, so it doesn't reach addRowData.
-		expect(calls).toBeDefined();
-		expect(calls!.map((c) => c.length)).toEqual([2500, 500]);
-	});
-
-	it('buffers all rows until end of batch for settings with bufferRows: true', async () => {
-		// Buffered setting emits 1 row per page across 3000 pages. The
-		// existing sendRowsInChunks() splits at SEND_CHUNK_SIZE, but the
-		// key difference vs streaming is that NO addRowData call happens
-		// until the final page is processed: all 3000 rows accumulate first.
-		const eachPageCalls: number[] = [];
-		const addRowDataOrder: { phase: 'eachPage' | 'send'; pageOrSize: number }[] = [];
-		const setting: CreateSheetSetting = {
-			name: 'BufferedSheet',
-			bufferRows: true,
-			createHeaders: () => ['col'],
-			eachPage: (_page, num) => {
-				eachPageCalls.push(num);
-				addRowDataOrder.push({ phase: 'eachPage', pageOrSize: num });
-				return [[fakeCell()]];
-			},
-		};
-		const create: CreateSheet = () => setting;
-
-		// Replace the fake sheet's addRowData so we can interleave its
-		// invocation order with eachPage calls. Streaming would invoke
-		// addRowData mid-iteration; buffering would only invoke it after
-		// all eachPage calls have completed.
-		const sheets = {
-			create: vi.fn((name: string): Promise<Sheet> => {
-				const sheet = {
-					addRowData: vi.fn((data: Cell[][]) => {
-						if (name === 'BufferedSheet') {
-							addRowDataOrder.push({ phase: 'send', pageOrSize: data.length });
-						}
-						return Promise.resolve();
-					}),
-					setHeaders: vi.fn(() => Promise.resolve()),
-				} as unknown as Sheet;
-				return Promise.resolve(sheet);
-			}),
-		} as unknown as Sheets;
-		const archive = createFakeArchive(fakePages(3000));
-
-		await createSheets({
-			sheets,
-			archive,
-			reports: [],
-			limit: 100_000,
-			createSheetList: [create],
-		});
-
-		expect(eachPageCalls).toHaveLength(3000);
-		// All eachPage entries appear before any 'send' entry — proves buffering.
-		const firstSendIndex = addRowDataOrder.findIndex((e) => e.phase === 'send');
-		const lastEachPageIndex = addRowDataOrder.findLastIndex(
-			(e) => e.phase === 'eachPage',
-		);
-		expect(firstSendIndex).toBeGreaterThan(lastEachPageIndex);
-		// The buffered send is then chunked into 2500 + 500 by sendRowsInChunks.
-		const sends = addRowDataOrder.filter((e) => e.phase === 'send');
-		expect(sends.map((s) => s.pageOrSize)).toEqual([2500, 500]);
-	});
-
-	it('handles streaming and buffered settings together in one batch', async () => {
-		// Both settings iterate the same pages array via Promise.all.
-		// Streaming flushes mid-iteration; buffered flushes at the end.
-		// Neither should interfere with the other.
-		const streaming: CreateSheetSetting = {
 			name: 'Streamed',
-			createHeaders: () => ['c'],
+			createHeaders: () => ['col'],
 			eachPage: () => [[fakeCell()]],
 		};
-		const buffered: CreateSheetSetting = {
-			name: 'Buffered',
-			bufferRows: true,
-			createHeaders: () => ['c'],
-			eachPage: () => [[fakeCell()]],
-		};
-		const { sheets, sheetCalls } = createFakeSheets();
-		const archive = createFakeArchive(fakePages(2600));
+		const create: CreateSheet = () => setting;
+		const { sheets, records } = createFakeSheets();
+		const archive = createFakeArchive(fakePages(3));
 
 		await createSheets({
 			sheets,
 			archive,
 			reports: [],
 			limit: 100_000,
-			createSheetList: [() => streaming, () => buffered],
+			createSheetList: [create],
 		});
 
-		// Streaming: 1 mid-flush (2500) + 1 final flush (100).
-		const streamedCalls = sheetCalls.get('Streamed')!;
-		expect(streamedCalls.map((c) => c.length)).toEqual([2500, 100]);
-		// Buffered: 2 chunks (2500 + 100), but both chunks land after
-		// iteration completes (verified by the dedicated test).
-		const bufferedCalls = sheetCalls.get('Buffered')!;
-		expect(bufferedCalls.map((c) => c.length)).toEqual([2500, 100]);
+		const record = records.get('Streamed')!;
+		// 3 eachPage emissions, each calling appendRow with 1 row.
+		expect(record.appendRowBatches).toHaveLength(3);
+		for (const batch of record.appendRowBatches) {
+			expect(batch).toHaveLength(1);
+		}
+		expect(record.flushCount).toBe(1);
 	});
 
-	it('streams eachResource rows in Phase 3', async () => {
-		// Phase 3 has no buffered path — all eachResource settings stream.
+	it('skips appendRow when eachPage returns null but still flushes at batch end', async () => {
+		// A skip-by-null page must not consume an appendRow call. The end-of-
+		// batch flush still fires so any earlier rows make it to the sheet.
+		// Explicit per-call return values keep the test fixture free of
+		// conditional logic (no ternaries / no modulo) — each invocation's
+		// outcome is visible at a glance.
+		const eachPage = vi
+			.fn()
+			.mockReturnValueOnce([[fakeCell()]])
+			.mockReturnValueOnce(null)
+			.mockReturnValueOnce([[fakeCell()]])
+			.mockReturnValueOnce(null)
+			.mockReturnValueOnce([[fakeCell()]]);
+		const setting: CreateSheetSetting = {
+			name: 'SkipsHalf',
+			createHeaders: () => ['col'],
+			eachPage,
+		};
+		const { sheets, records } = createFakeSheets();
+		const archive = createFakeArchive(fakePages(5));
+
+		await createSheets({
+			sheets,
+			archive,
+			reports: [],
+			limit: 100_000,
+			createSheetList: [() => setting],
+		});
+
+		const record = records.get('SkipsHalf')!;
+		// 3 of the 5 pages emit rows; the other 2 return null and are skipped.
+		expect(record.appendRowBatches).toHaveLength(3);
+		expect(record.flushCount).toBe(1);
+	});
+
+	it('forwards multi-row eachPage output through a single appendRow call', async () => {
+		// eachPage can return multiple rows for a single page (e.g. Referrers
+		// Relational Table emits one row per referrer). The spread must reach
+		// appendRow as a single variadic call containing all rows.
+		const setting: CreateSheetSetting = {
+			name: 'MultiRow',
+			createHeaders: () => ['col'],
+			eachPage: () => [[fakeCell()], [fakeCell()], [fakeCell()]],
+		};
+		const { sheets, records } = createFakeSheets();
+		const archive = createFakeArchive(fakePages(2));
+
+		await createSheets({
+			sheets,
+			archive,
+			reports: [],
+			limit: 100_000,
+			createSheetList: [() => setting],
+		});
+
+		const record = records.get('MultiRow')!;
+		// 2 pages × 3 rows each = 2 appendRow calls, each with 3 rows.
+		expect(record.appendRowBatches).toHaveLength(2);
+		expect(record.appendRowBatches[0]).toHaveLength(3);
+		expect(record.appendRowBatches[1]).toHaveLength(3);
+		expect(record.flushCount).toBe(1);
+	});
+
+	it('streams Phase 3 resources through appendRow + flush', async () => {
+		// Same contract as Phase 2 but for eachResource iteration.
 		const setting: CreateSheetSetting = {
 			name: 'ResourceSheet',
 			createHeaders: () => ['c'],
 			eachResource: () => [[fakeCell()]],
 		};
-		const { sheets, sheetCalls } = createFakeSheets();
+		const { sheets, records } = createFakeSheets();
 		const fakeResources = Array.from(
-			{ length: 5000 },
+			{ length: 4 },
 			(_, i) => ({ index: i }) as unknown as ArchiveResource,
 		);
 		const archive = createFakeArchive([], fakeResources);
@@ -224,22 +222,21 @@ describe('createSheets', () => {
 			createSheetList: [() => setting],
 		});
 
-		const calls = sheetCalls.get('ResourceSheet')!;
-		// 2 mid-flush chunks (2500 + 2500). 5000 / 2500 = 2 with no remainder
-		// so the final flush() is a no-op.
-		expect(calls.map((c) => c.length)).toEqual([2500, 2500]);
+		const record = records.get('ResourceSheet')!;
+		expect(record.appendRowBatches).toHaveLength(4);
+		expect(record.flushCount).toBe(1);
 	});
 
-	it('does not call addRowData for resources when getResources() returns empty', async () => {
-		// Phase 3 entered with no resources: streamer.push is never called,
-		// streamer.flush() is a no-op, so addRowData is only called for the
-		// setHeaders row at sheet creation.
+	it('skips appendRow entirely when getResources() returns empty (but does not crash)', async () => {
+		// Phase 3 with no resources: the eachResource loop body never runs,
+		// so appendRow is never called. flush() still fires as a uniform
+		// end-of-phase signal (no-op on an empty buffer per @d-zero/google-sheets).
 		const setting: CreateSheetSetting = {
 			name: 'EmptyResource',
 			createHeaders: () => ['c'],
 			eachResource: () => [[fakeCell()]],
 		};
-		const { sheets, sheetCalls } = createFakeSheets();
+		const { sheets, records } = createFakeSheets();
 		const archive = createFakeArchive([], []);
 
 		await createSheets({
@@ -250,27 +247,57 @@ describe('createSheets', () => {
 			createSheetList: [() => setting],
 		});
 
-		const calls = sheetCalls.get('EmptyResource');
-		// addRowData is never called: setHeaders is mocked separately and
-		// the streamer's push/flush never run. The bucket exists (because
-		// sheets.create() was invoked) but holds no recorded calls.
-		expect(calls).toEqual([]);
+		const record = records.get('EmptyResource')!;
+		expect(record.appendRowBatches).toHaveLength(0);
+		expect(record.flushCount).toBe(1);
 	});
 
-	it('skips pages whose eachPage returns null without growing the buffer', async () => {
-		// Streaming path with a setting that returns null for half the pages.
-		// Buffer should only grow by 1 per non-null page.
-		let pageNum = 0;
-		const setting: CreateSheetSetting = {
-			name: 'SkipsHalf',
+	it('runs preEachPage hooks before eachPage hooks within the same batch', async () => {
+		// Settings with preEachPage are state-accumulators (e.g. building
+		// index maps that eachPage thunks read later). They must run to
+		// completion across all pages before any eachPage hook starts.
+		const calls: string[] = [];
+		const preSetting: CreateSheetSetting = {
+			name: 'Pre',
 			createHeaders: () => ['c'],
-			eachPage: () => {
-				pageNum++;
-				return pageNum % 2 === 0 ? null : [[fakeCell()]];
+			preEachPage: () => {
+				calls.push('pre');
 			},
 		};
-		const { sheets, sheetCalls } = createFakeSheets();
-		const archive = createFakeArchive(fakePages(5001));
+		const eachSetting: CreateSheetSetting = {
+			name: 'Each',
+			createHeaders: () => ['c'],
+			eachPage: () => {
+				calls.push('each');
+				return [[fakeCell()]];
+			},
+		};
+		const { sheets } = createFakeSheets();
+		const archive = createFakeArchive(fakePages(2));
+
+		await createSheets({
+			sheets,
+			archive,
+			reports: [],
+			limit: 100_000,
+			createSheetList: [() => preSetting, () => eachSetting],
+		});
+
+		// preEachPage runs for both pages first, then eachPage runs for both.
+		expect(calls).toEqual(['pre', 'pre', 'each', 'each']);
+	});
+
+	it('sends Phase 4 addRows data via appendRow + flush', async () => {
+		// addRows produces a full Cell[][] up front (no iteration). It must
+		// still funnel through appendRow + flush so the sheet's chunking
+		// machinery applies uniformly across all phases.
+		const setting: CreateSheetSetting = {
+			name: 'Plugin',
+			createHeaders: () => ['c'],
+			addRows: () => [[fakeCell()], [fakeCell()], [fakeCell()]],
+		};
+		const { sheets, records } = createFakeSheets();
+		const archive = createFakeArchive([]);
 
 		await createSheets({
 			sheets,
@@ -280,22 +307,82 @@ describe('createSheets', () => {
 			createSheetList: [() => setting],
 		});
 
-		const calls = sheetCalls.get('SkipsHalf')!;
-		// 5001 pages, every other one skipped → 2501 emitted rows.
-		// 1 mid-flush (2500) + 1 final flush (1).
-		expect(calls.map((c) => c.length)).toEqual([2500, 1]);
+		const record = records.get('Plugin')!;
+		// addRows produced 3 rows in one go; appendRow receives all 3 via spread.
+		expect(record.appendRowBatches).toHaveLength(1);
+		expect(record.appendRowBatches[0]).toHaveLength(3);
+		expect(record.flushCount).toBe(1);
 	});
 
-	it('still calls addRowData via sendRowsInChunks for buffered settings even when row count is below SEND_CHUNK_SIZE', async () => {
-		// Buffered path with a small row count: single addRowData for all rows.
+	it('passes Cell instances from eachPage through to appendRow without cloning', async () => {
+		// Lazy detection in @d-zero/google-sheets relies on cell.provide
+		// identity (cell.provide !== Cell.prototype.provide). createSheets()
+		// must not clone, map, or wrap cells on the way to appendRow, or the
+		// LazyCell signature on PageList's "Internal Referrers" column would
+		// be lost and the auto-buffer would never trigger.
+		const cellA = fakeCell();
+		const cellB = fakeCell();
 		const setting: CreateSheetSetting = {
-			name: 'SmallBuffered',
-			bufferRows: true,
+			name: 'Identity',
+			createHeaders: () => ['col'],
+			eachPage: () => [[cellA, cellB]],
+		};
+		const { sheets, records } = createFakeSheets();
+		const archive = createFakeArchive(fakePages(1));
+
+		await createSheets({
+			sheets,
+			archive,
+			reports: [],
+			limit: 100_000,
+			createSheetList: [() => setting],
+		});
+
+		const record = records.get('Identity')!;
+		const row = record.appendRowBatches[0]![0]!;
+		// Reference identity, not deep equality — the same Cell instances
+		// must reach the sheet so the lazy detection's prototype check works.
+		expect(row[0]).toBe(cellA);
+		expect(row[1]).toBe(cellB);
+	});
+
+	it('passes Cell instances from eachResource through to appendRow without cloning', async () => {
+		// Same invariant as Phase 2, but for Phase 3 (eachResource). Phase 3
+		// does not currently emit lazy cells, but the same identity contract
+		// must hold so a future lazy resource cell would be auto-buffered.
+		const cellA = fakeCell();
+		const setting: CreateSheetSetting = {
+			name: 'IdentityResource',
+			createHeaders: () => ['col'],
+			eachResource: () => [[cellA]],
+		};
+		const { sheets, records } = createFakeSheets();
+		const archive = createFakeArchive([], [{ index: 0 } as unknown as ArchiveResource]);
+
+		await createSheets({
+			sheets,
+			archive,
+			reports: [],
+			limit: 100_000,
+			createSheetList: [() => setting],
+		});
+
+		const record = records.get('IdentityResource')!;
+		expect(record.appendRowBatches[0]![0]![0]).toBe(cellA);
+	});
+
+	it('relies on Sheets.create caching so the same sheet instance is reused across phases', async () => {
+		// Phase 1 creates each sheet, then Phase 2/3/4 call sheets.create()
+		// again to retrieve it. Without caching, appendRow's per-sheet buffer
+		// and sentCount would be lost between phases. This test makes the
+		// dependency visible: if a future refactor stops caching, this fails.
+		const setting: CreateSheetSetting = {
+			name: 'Shared',
 			createHeaders: () => ['c'],
 			eachPage: () => [[fakeCell()]],
 		};
-		const { sheets, sheetCalls } = createFakeSheets();
-		const archive = createFakeArchive(fakePages(100));
+		const { sheets } = createFakeSheets();
+		const archive = createFakeArchive(fakePages(1));
 
 		await createSheets({
 			sheets,
@@ -305,9 +392,20 @@ describe('createSheets', () => {
 			createSheetList: [() => setting],
 		});
 
-		const calls = sheetCalls.get('SmallBuffered')!;
-		// 1 send-all (100 rows). sendRowsInChunks emits a single addRowData
-		// when the row count is at or below SEND_CHUNK_SIZE.
-		expect(calls.map((c) => c.length)).toEqual([100]);
+		const createMock = sheets.create as ReturnType<typeof vi.fn>;
+		const callsForShared = createMock.mock.calls.filter(([name]) => name === 'Shared');
+		// Phase 1 + Phase 2 = at least 2 calls. Each call must resolve to
+		// the same Sheet instance for the buffering to make sense.
+		expect(callsForShared.length).toBeGreaterThanOrEqual(2);
+		const sheetInstances = await Promise.all(
+			createMock.mock.results
+				.filter((_, i) => createMock.mock.calls[i]![0] === 'Shared')
+				.map((r) => r.value),
+		);
+		// All resolved sheets for the same name must be the same instance.
+		const first = sheetInstances[0];
+		for (const instance of sheetInstances) {
+			expect(instance).toBe(first);
+		}
 	});
 });
