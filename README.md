@@ -243,7 +243,7 @@ $ npx @nitpicker/cli report <file> --sheet <URL>
 
 `--all` を指定しない場合、生成するシートを選択する対話式マルチセレクトプロンプトが表示される（Page List、Links、Resources、Images、Violations、Discrepancies、Summary、Referrers Relational Table、Resources Relational Table）。非TTY環境（CI パイプライン等）では `--all` と `--verbose` が自動的に有効になり、エラー発生時のスタックトレースが CI ログに出力される。
 
-`--limit` はアーカイブからメモリへ一度に読み込むページ数を制御する値で、Google Sheets API への 1 リクエストあたりの行数とは別物。各シートの行送信はパッケージ内部の固定チャンク（`SEND_CHUNK_SIZE` = 2500 行）で行われる。Page List 以外のシートはストリーミング送信され、ピークメモリは「`--limit` 件のページオブジェクト + シートあたり最大 2500 行のセル」程度に抑えられる。Page List は遅延セルを含むため、バッチ単位で全行を保持してから送信する（詳細は `ARCHITECTURE.md` の Report 章を参照）。
+`--limit` はアーカイブからメモリへ一度に読み込むページ数を制御する値で、Google Sheets API への 1 リクエストあたりの行数とは別物。各シートの行送信は `@d-zero/google-sheets` の `Sheet.appendRow` が内部で 2500 行ごとに自動 flush するため、呼び出し元側のメモリ滞留はチャンクサイズ分に抑えられる。Page List のような遅延セルを含むシートは、library が自動的にバッチ末尾の `flush()` まで送信を保留する（詳細は `ARCHITECTURE.md` の Report 章を参照）。
 
 #### 例
 

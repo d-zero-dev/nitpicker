@@ -519,7 +519,8 @@ sequenceDiagram
     participant CLI as npx @nitpicker/cli report
     participant GS as @nitpicker/report-google-sheets
     participant Archive as Archive
-    participant Sheets as Google Sheets API
+    participant Sheet as @d-zero/google-sheets Sheet
+    participant API as Google Sheets API
 
     CLI->>GS: report(filePath, sheetUrl, credentials, config, limit, all?, silent?)
     GS->>GS: authentication(credentials)（OAuth2）
@@ -534,12 +535,18 @@ sequenceDiagram
         GS->>GS: enquirer プロンプト（シート選択）
     end
 
-    loop 選択されたシートごと
-        GS->>Archive: getPagesWithRefs(limit, callback)
-        GS->>GS: createSheetData（Page List, Links, Resources 等）
-        GS->>Sheets: シートデータをアップロード
-        Note over GS,Sheets: silent=false 時: Lanes で進捗表示 + レート制限カウントダウン
+    GS->>Archive: getPagesWithRefs(limit, callback)
+    loop ページ／リソース反復（Phase 2 / 3）
+        GS->>GS: eachPage / eachResource で行を生成
+        GS->>Sheet: appendRow(...rows)
+        Note over Sheet: バッファに積む。2500 行に達したら<br/>自動 flush（lazy セル検出時は保留）
+        opt buffer >= 2500 かつ lazy なし
+            Sheet->>API: batchUpdate(updateCells)
+        end
     end
+    GS->>Sheet: flush()
+    Sheet->>API: 残余 batchUpdate(updateCells)
+    Note over GS,API: silent=false 時: Lanes で進捗表示 + レート制限カウントダウン
 
     GS->>GS: removeSignalHandlers()
     GS->>Archive: archive.close()
@@ -559,35 +566,37 @@ sequenceDiagram
 | Referrers Relational Table | ページ → リファラーの関係テーブル                |
 | Resources Relational Table | ページ → リソースの関係テーブル                  |
 
-### 行送信戦略（streaming vs buffered）
+### 行送信戦略
 
-`createSheets()` は Phase 2（eachPage）と Phase 3（eachResource）で
-ページ／リソースを反復しながら行を生成する。行は次の 2 つのいずれかで
-送信される:
+`createSheets()` は Phase 2（eachPage）と Phase 3（eachResource）でページ／
+リソースを反復しながら行を生成し、`sheet.appendRow(...rows)` でストリーミング
+送信する。バッチ終端で `sheet.flush()` を呼んで残余を排出する。Phase 4
+（addRows）も同じ `appendRow + flush` で送信する。
 
-- **streaming**（デフォルト）: 行が生成される都度バッファに積み、
-  チャンクサイズ（`SEND_CHUNK_SIZE` = 2500）に達した時点で
-  `sheet.addRowData()` に逐次フラッシュする。ピークメモリは
-  シートあたり最大 2500 行分に抑えられる。
-- **buffered**: 当該バッチの全行を蓄積してから一括送信する。`CreateSheetSetting.bufferRows` を
-  `true` にしたシートのみ。
+ストリーミング・チャンク化のロジックは `@d-zero/google-sheets` の `Sheet`
+クラスに集約されている。`appendRow()` は内部バッファに行を積み、2500 行
+ごとに自動的に `addRowData()` を呼んでフラッシュする。これにより、巨大な
+レポートでも呼び出し元側のメモリ滞留はチャンクサイズ分に抑えられる。
 
-Page List は `bufferRows: true` を明示している。これは `createPageList()` の
-「Internal Referrers」列が遅延セル（`createCellData(() => ...)`）であり、
-`provide()` が呼ばれた時点での `parentRefs`／`indexRefs` を参照するため。
-バッチ内のインデックスページが順次 `parentRefs` を mutate するので、
-行をストリーミングで早期送信すると thunk がまだ揃っていない状態で
-評価され、参照元数が静かに壊れる。
+#### 遅延セルの自動検出
 
-streaming／buffered の選択は実装時の責務 — 新規 createX.ts を追加する場合、
-遅延セルを使うなら `bufferRows: true` を指定し、そうでなければ未指定
-（=streaming）のままにすること。
-`packages/@nitpicker/report-google-sheets/src/data/*.spec.ts` には
-各シートが期待通りの戦略を選んでいるかを検証するアサーション
-（`bufferRows` の値と、`eachPage`／`eachResource` が返すセルが
-`Cell.prototype.provide` に揃っているか）が含まれる。
+`createCellData(() => ...)` で生成された遅延セル（thunk）は `provide()`
+評価時の共有状態を参照するため、評価タイミングが重要になる。`appendRow()`
+は受け取った行が遅延セルを含むことを検出すると、自動 flush を停止して
+明示的な `flush()` 呼び出しまでバッファ全件を保留する（FIFO 順保証）。
 
-> 実装詳細は `@nitpicker/report-google-sheets` の JSDoc を参照（`report()`, `createSheets()`, `createRowStreamer()`, 各 `create-*.ts`）。
+Page List の「Internal Referrers」列がこの仕組みに乗っており、バッチ内の
+インデックスページが順次 `parentRefs` を mutate していくため、`appendRow`
+は遅延セルを検出した時点でバッファリングモードに切り替わる。バッチ終端の
+`flush()` で初めて thunk が評価されるので、参照元数が正しく計算される。
+
+新規 `createX.ts` の実装者は通常この仕組みを意識する必要はない。各
+`create-*.spec.ts` には「`eachPage`/`eachResource` が返すセルが
+`Cell.prototype.provide` に揃っているか」のアサーションがあり、誤って
+遅延セルを混入させると spec が落ちる。Page List の spec は逆向きで、
+少なくとも 1 つの遅延セルが含まれることをアサートしている。
+
+> 実装詳細は `@nitpicker/report-google-sheets` と `@d-zero/google-sheets` の JSDoc を参照（`report()`, `createSheets()`, `Sheet.appendRow`, `Sheet.flush`, 各 `create-*.ts`）。
 
 ---
 

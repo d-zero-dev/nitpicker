@@ -99,9 +99,9 @@ docs: update README with new CLI options
 
 `packages/@nitpicker/report-google-sheets/src/data/create-*.ts` に新規シートを追加する場合:
 
-- **デフォルトは streaming**: `CreateSheetSetting.bufferRows` を未指定（または `false`）にすると、`createSheets()` は行をシートあたり 2500 行ずつインクリメンタルに送信する。ピークメモリが抑えられるためこちらを基本とする
-- **遅延セルを使うなら `bufferRows: true`**: `createCellData(() => ({...}))` で thunk を渡すセル（例: Page List の「Internal Referrers」）は、`provide()` 呼び出し時の共有状態に依存する。streaming で早期送信すると thunk がまだ揃っていない状態で評価されてしまうため、`bufferRows: true` を明示してバッチ単位で蓄積する
-- **テストでガード**: 各 `create-*.spec.ts` には `bufferRows` の値と「`eachPage`／`eachResource` が返すセルが `Cell.prototype.provide` に揃っているか」を検証するアサーションがある。新規シート追加時は同じパターンで spec を追加し、将来の遅延セル混入や `bufferRows` 誤フリップを spec で弾けるようにすること
+- **行送信は library 任せ**: `createSheets()` は `sheet.appendRow(...data)` で行を都度送る。チャンク化（2500 行ごとの自動 flush）と遅延セル検出は `@d-zero/google-sheets` の `Sheet` が内部で処理するため、新規シート側で意識する必要はない
+- **遅延セル (`createCellData(() => ...)`) は使ってよい**: `appendRow()` は遅延セルを含む行を検出すると自動的に buffered モードに切り替わり、明示的な `flush()` まで送信を保留する。Page List の「Internal Referrers」列がこの仕組みに乗っている
+- **テストでガード**: 各 `create-*.spec.ts` には「`eachPage`／`eachResource` が返すセルが `Cell.prototype.provide` に揃っているか（=eager のみ）」を検証するアサーションがある。streaming 経路の高速性を維持するため、遅延セルを使う必要のないシートでは引き続き eager のみで実装すること。Page List 側の spec は逆向きで、少なくとも 1 つの遅延セルが含まれることをアサートしている
 - 詳細は `ARCHITECTURE.md` の Report 章を参照
 
 ## 互換性ポリシー
