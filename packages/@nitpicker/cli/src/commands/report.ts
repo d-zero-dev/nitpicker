@@ -39,6 +39,10 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Generate all sheets without interactive prompt',
 		},
+		dedupeResources: {
+			type: 'boolean',
+			desc: 'Collapse the Resources sheet by canonical URL (query values stripped) and add a Count column. Useful for archives dominated by per-request unique tracking-pixel URLs.',
+		},
 		verbose: {
 			type: 'boolean',
 			desc: 'Output verbose log to standard out',
@@ -108,6 +112,7 @@ export async function report(args: string[], flags: ReportFlags) {
 			limit,
 			all,
 			silent: flags.silent ?? false,
+			dedupeResources: flags.dedupeResources ?? false,
 		});
 	} catch (error) {
 		formatCliError(error, verbose);

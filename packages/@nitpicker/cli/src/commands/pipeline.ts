@@ -159,6 +159,10 @@ export const commandDef = {
 			default: 100_000,
 			desc: 'Limit number of rows',
 		},
+		dedupeResources: {
+			type: 'boolean',
+			desc: 'Collapse the Resources sheet by canonical URL (query values stripped) and add a Count column. Useful for archives dominated by per-request unique tracking-pixel URLs.',
+		},
 		// shared flags
 		verbose: {
 			type: 'boolean',
@@ -276,6 +280,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			config: flags.config,
 			limit: flags.limit,
 			all: flags.all,
+			dedupeResources: flags.dedupeResources,
 			verbose: flags.verbose,
 			silent: flags.silent,
 		});
