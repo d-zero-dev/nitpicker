@@ -5,6 +5,7 @@ import { reportLog } from '../debug.js';
 import { createCellData } from '../sheets/create-cell-data.js';
 import { defaultCellFormat } from '../sheets/default-cell-format.js';
 import { canonicalizeUrl, extractQueryPairs } from '../utils/canonicalize-url.js';
+import { naturalCompare } from '../utils/sort-resources-by-url.js';
 
 /**
  * Options for the {@link createResources} factory.
@@ -104,15 +105,29 @@ export interface DedupeEntry {
 }
 
 /**
+ * Field separator and `null` marker used in {@link dedupeKey}. Both
+ * are non-printable ASCII control characters that cannot appear in
+ * an HTTP status code, `Content-Type`, or any URL we pull out of the
+ * archive — so they are safe to use as in-band sentinels.
+ */
+const DEDUPE_KEY_SEP = String.fromCodePoint(1);
+const DEDUPE_KEY_NULL = String.fromCodePoint(2);
+
+/**
  * Builds the Map key for a dedupe entry.
  *
- * Uses {@link JSON.stringify} so that each field is serialized with a
- * type-faithful representation: `null` becomes `null`, the empty
- * string becomes `""`, numbers become bare digits, and arbitrary
- * URLs / content types are quoted. This makes the resulting key
- * collision-free for every combination of inputs the dedupe path
- * accepts — notably keeping `contentType=null` distinct from
- * `contentType=""` and `status=null` distinct from `status=0`.
+ * Concatenates `status`, `contentType`, and `canonical` with a
+ * non-printable separator. A dedicated `null` marker keeps `null`
+ * distinct from `''` for `contentType`, and from `0` for `status`,
+ * so e.g. `(canonical, 200, null)` and `(canonical, 200, '')` land
+ * in different aggregation buckets.
+ *
+ * String concatenation is used instead of {@link JSON.stringify}
+ * because this function is called once per raw resource — on a
+ * million-resource archive `JSON.stringify` allocated roughly a
+ * million transient `SeqString`s, dominating Phase 3 wall-clock
+ * time. Plain concatenation is several times faster and produces
+ * the same collision-free key.
  * @param canonical - The canonicalized URL.
  * @param status - HTTP status code (nullable).
  * @param contentType - HTTP content type (nullable).
@@ -122,7 +137,9 @@ export function dedupeKey(
 	status: number | null,
 	contentType: string | null,
 ): string {
-	return JSON.stringify([status, contentType, canonical]);
+	const statusPart = status === null ? DEDUPE_KEY_NULL : String(status);
+	const contentTypePart = contentType === null ? DEDUPE_KEY_NULL : contentType;
+	return statusPart + DEDUPE_KEY_SEP + contentTypePart + DEDUPE_KEY_SEP + canonical;
 }
 
 /**
@@ -346,6 +363,12 @@ export function createResources(options?: CreateResourcesOptions): CreateSheet {
 
 		const setting: CreateSheetSetting = {
 			name: 'Resources',
+			// Sorting the 1M+ raw resource list before aggregation is
+			// wasted work: the 63K-row aggregated output is orders of
+			// magnitude smaller, and we sort it inside finalizeResources
+			// instead. This single flag flip turns a multi-minute sort
+			// into a sub-second one on million-resource archives.
+			skipSortResources: true,
 			createHeaders: () => [...DEDUPE_HEADERS],
 			async eachResource(resource) {
 				const canonical = canonicalizeUrl(resource.url);
@@ -383,7 +406,14 @@ export function createResources(options?: CreateResourcesOptions): CreateSheet {
 			},
 			finalizeResources() {
 				reportLog(`Dedupe complete: ${entries.size} canonical group(s) accumulated`);
-				const rows = [...entries.values()].map(dedupeEntryToRow);
+				// Sort the aggregated entries by canonical URL in natural
+				// order. This is N=tens-of-thousands rather than the
+				// millions in `entries`, so the cost is negligible
+				// compared to sorting the raw list up front.
+				const sortedEntries = [...entries.values()].toSorted((a, b) =>
+					naturalCompare(a.canonical, b.canonical),
+				);
+				const rows = sortedEntries.map(dedupeEntryToRow);
 				entries.clear();
 				return rows;
 			},

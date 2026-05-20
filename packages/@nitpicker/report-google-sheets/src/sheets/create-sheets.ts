@@ -367,13 +367,19 @@ export async function createSheets(params: CreateSheetsParams) {
 				dimInactiveSheets(3);
 				const rawResources = await archive.getResources();
 				sheetLog('Resources loaded: %d', rawResources.length);
-				// Resources は DB の挿入順（= スクレイピング順）で返るため
-				// URL の自然順に並び替えてから出力する。raw / dedupe 両モードに
-				// 同じ並び順が適用される。Phase 3 開始ヘッダで sort 中である
-				// ことを表示し、1.6M 件規模での体感的な「固まり」を回避する。
-				updatePhaseHeader('Sorting resources by URL');
-				const resources = sortResourcesByUrl(rawResources);
-				sheetLog('Resources sorted by natural URL order');
+				// Resources は DB の挿入順で返るため、出力前に URL の自然順に
+				// 並び替える。ただし `skipSortResources: true` を宣言した setting
+				// は自分で集約してから sort する責任を持つ（dedupe mode のような
+				// 「1M 件を sort してから 63K に集約」は無駄なので、集約後に
+				// 小さな集合だけ sort する）。少なくとも 1 つの setting が
+				// sort を必要とするなら、ループ前に 1 度だけ実行して共有する。
+				const needsSort = eachResourceRoutineList.some((s) => !s.skipSortResources);
+				let sortedResources: typeof rawResources | null = null;
+				if (needsSort) {
+					updatePhaseHeader('Sorting resources by URL');
+					sortedResources = sortResourcesByUrl(rawResources);
+					sheetLog('Resources sorted by natural URL order');
+				}
 				const resourceProgress = new Map<string, number>();
 				for (const setting of eachResourceRoutineList) {
 					resourceProgress.set(setting.name, 0);
@@ -397,6 +403,10 @@ export async function createSheets(params: CreateSheetsParams) {
 						const id = getSheetId(setting.name);
 						const name = setting.name;
 						const sheet = await sheets.create(name);
+						const resources =
+							setting.skipSortResources || !sortedResources
+								? rawResources
+								: sortedResources;
 						let i = 0;
 						for (const resource of resources) {
 							i++;

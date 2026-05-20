@@ -95,6 +95,18 @@ export interface CreateSheetSetting {
 	 */
 	eachResource?: (resource: Resource) => Promiseable<Cell[][] | null | void>;
 	/**
+	 * When `true`, the Phase 3 dispatcher does **not** sort the
+	 * resources array before calling `eachResource`; the setting takes
+	 * full responsibility for ordering its own output (typically by
+	 * sorting the aggregated rows inside `finalizeResources`).
+	 *
+	 * Useful for dedupe-style settings where sorting the raw 1M+
+	 * resource list up front is wasted work — the aggregated output
+	 * is orders of magnitude smaller, so sorting *after* aggregation
+	 * is far cheaper. Defaults to `false` (sorted insertion order).
+	 */
+	skipSortResources?: boolean;
+	/**
 	 * Phase 3 terminator hook called exactly once after the entire
 	 * `eachResource` loop completes (before the final
 	 * `sheet.flush()`). Use for factories that accumulate state during
