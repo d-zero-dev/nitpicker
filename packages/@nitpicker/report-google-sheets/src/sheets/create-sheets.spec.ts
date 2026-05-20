@@ -382,10 +382,12 @@ describe('createSheets', () => {
 			},
 		};
 		const { sheets } = createFakeSheets();
-		const fakeResources = Array.from(
-			{ length: 3 },
-			(_, i) => ({ index: i }) as unknown as ArchiveResource,
-		);
+		// Already in URL-natural-sort order: image-1 < image-2 < image-10 (numeric).
+		const fakeResources = [
+			{ url: 'https://x.example/image-1.jpg' },
+			{ url: 'https://x.example/image-2.jpg' },
+			{ url: 'https://x.example/image-10.jpg' },
+		] as unknown as ArchiveResource[];
 		const archive = createFakeArchive([], fakeResources);
 
 		await createSheets({
@@ -397,6 +399,42 @@ describe('createSheets', () => {
 		});
 
 		expect(calls).toEqual(fakeResources);
+	});
+
+	it('Phase 3 sorts resources in URL-natural order before iterating eachResource', async () => {
+		// Insert order from the archive is shuffled (image-10 first, then image-1,
+		// then image-2). Phase 3 must reorder them to natural numeric order before
+		// eachResource sees them.
+		const calls: string[] = [];
+		const setting: CreateSheetSetting = {
+			name: 'NaturalSortContract',
+			createHeaders: () => ['c'],
+			eachResource: (resource) => {
+				calls.push(resource.url);
+				return [[fakeCell()]];
+			},
+		};
+		const { sheets } = createFakeSheets();
+		const fakeResources = [
+			{ url: 'https://x.example/image-10.jpg' },
+			{ url: 'https://x.example/image-1.jpg' },
+			{ url: 'https://x.example/image-2.jpg' },
+		] as unknown as ArchiveResource[];
+		const archive = createFakeArchive([], fakeResources);
+
+		await createSheets({
+			sheets,
+			archive,
+			reports: [],
+			limit: 100_000,
+			createSheetList: [() => setting],
+		});
+
+		expect(calls).toEqual([
+			'https://x.example/image-1.jpg',
+			'https://x.example/image-2.jpg',
+			'https://x.example/image-10.jpg',
+		]);
 	});
 
 	it('finalizeResources runs exactly once after the eachResource loop and its rows are appended', async () => {

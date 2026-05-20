@@ -8,6 +8,7 @@ import c from 'ansi-colors';
 
 import { sheetLog } from '../debug.js';
 import { hasPropFilter } from '../utils/has-prop-filter.js';
+import { sortResourcesByUrl } from '../utils/sort-resources-by-url.js';
 
 /**
  * Parameters for {@link createSheets}.
@@ -364,8 +365,15 @@ export async function createSheets(params: CreateSheetsParams) {
 				sheetLog('Phase 3: Starting resource processing');
 				setPhaseHeader();
 				dimInactiveSheets(3);
-				const resources = await archive.getResources();
-				sheetLog('Resources loaded: %d', resources.length);
+				const rawResources = await archive.getResources();
+				sheetLog('Resources loaded: %d', rawResources.length);
+				// Resources は DB の挿入順（= スクレイピング順）で返るため
+				// URL の自然順に並び替えてから出力する。raw / dedupe 両モードに
+				// 同じ並び順が適用される。Phase 3 開始ヘッダで sort 中である
+				// ことを表示し、1.6M 件規模での体感的な「固まり」を回避する。
+				updatePhaseHeader('Sorting resources by URL');
+				const resources = sortResourcesByUrl(rawResources);
+				sheetLog('Resources sorted by natural URL order');
 				const resourceProgress = new Map<string, number>();
 				for (const setting of eachResourceRoutineList) {
 					resourceProgress.set(setting.name, 0);
