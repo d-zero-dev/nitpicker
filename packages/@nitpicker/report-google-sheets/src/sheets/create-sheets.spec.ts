@@ -210,7 +210,8 @@ describe('createSheets', () => {
 		const { sheets, records } = createFakeSheets();
 		const fakeResources = Array.from(
 			{ length: 4 },
-			(_, i) => ({ index: i }) as unknown as ArchiveResource,
+			(_, i) =>
+				({ url: `https://x.example/r-${i}`, index: i }) as unknown as ArchiveResource,
 		);
 		const archive = createFakeArchive([], fakeResources);
 
@@ -357,7 +358,10 @@ describe('createSheets', () => {
 			eachResource: () => [[cellA]],
 		};
 		const { sheets, records } = createFakeSheets();
-		const archive = createFakeArchive([], [{ index: 0 } as unknown as ArchiveResource]);
+		const archive = createFakeArchive(
+			[],
+			[{ url: 'https://x.example/r-0', index: 0 } as unknown as ArchiveResource],
+		);
 
 		await createSheets({
 			sheets,
@@ -455,7 +459,8 @@ describe('createSheets', () => {
 		const { sheets, records } = createFakeSheets();
 		const fakeResources = Array.from(
 			{ length: 3 },
-			(_, i) => ({ index: i }) as unknown as ArchiveResource,
+			(_, i) =>
+				({ url: `https://x.example/r-${i}`, index: i }) as unknown as ArchiveResource,
 		);
 		const archive = createFakeArchive([], fakeResources);
 
@@ -482,7 +487,10 @@ describe('createSheets', () => {
 			finalizeResources: () => [],
 		};
 		const { sheets, records } = createFakeSheets();
-		const archive = createFakeArchive([], [{ index: 0 } as unknown as ArchiveResource]);
+		const archive = createFakeArchive(
+			[],
+			[{ url: 'https://x.example/r-0', index: 0 } as unknown as ArchiveResource],
+		);
 
 		await createSheets({
 			sheets,
@@ -505,7 +513,10 @@ describe('createSheets', () => {
 			finalizeResources: () => null,
 		};
 		const { sheets, records } = createFakeSheets();
-		const archive = createFakeArchive([], [{ index: 0 } as unknown as ArchiveResource]);
+		const archive = createFakeArchive(
+			[],
+			[{ url: 'https://x.example/r-0', index: 0 } as unknown as ArchiveResource],
+		);
 
 		await createSheets({
 			sheets,
