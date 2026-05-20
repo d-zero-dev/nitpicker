@@ -133,6 +133,13 @@ function compareLeft(a: string, ai: number, b: string, bi: number): number {
  * times during a 1M+ element sort without inflating the V8 heap with
  * derived `SeqString` allocations.
  *
+ * **Benchmark reference (Node 24, M-class CPU):** 100K-entry sort
+ * completes in ~650 ms with median heap delta ratio
+ * `heapDelta(100K) / heapDelta(10K) ≈ 5–15×`. If either measurement
+ * jumps by an order of magnitude (multi-second elapsed, ratio > 100),
+ * suspect a regression that reintroduced per-compare string
+ * allocation or `Intl.Collator` dispatch.
+ *
  * **UTF-16 semantics:** index moves one code unit per step. ASCII
  * URLs (the only kind the archive currently stores) are entirely
  * BMP, so this is equivalent to per-character iteration. URLs that

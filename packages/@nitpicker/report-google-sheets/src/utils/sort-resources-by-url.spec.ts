@@ -190,6 +190,28 @@ describe('naturalCompare — Pool strnatcmp parity', () => {
 		expect(naturalCompare('001', '01')).toBeLessThan(0); // compare_left: 0==0, 0<1
 	});
 
+	it('handles zero-only numeric runs of differing length', () => {
+		// compare_left fires (both start with '0'). Walks until one
+		// run exhausts; the side that ran out of digits first is
+		// smaller. So "0" < "00" < "000".
+		expect(naturalCompare('0', '00')).toBeLessThan(0);
+		expect(naturalCompare('00', '0')).toBeGreaterThan(0);
+		expect(naturalCompare('00', '000')).toBeLessThan(0);
+		expect(naturalCompare('000', '00')).toBeGreaterThan(0);
+		// Equal zero-only runs of the same length compare equal.
+		expect(naturalCompare('000', '000')).toBe(0);
+	});
+
+	it('handles an empty string compared to a pure numeric run', () => {
+		// "" vs "0": no digit on the left, so the leading whitespace
+		// / digit-dispatch paths fall through to the NUL check on
+		// the left and a digit on the right. End-of-string side is
+		// smaller.
+		expect(naturalCompare('', '0')).toBeLessThan(0);
+		expect(naturalCompare('0', '')).toBeGreaterThan(0);
+		expect(naturalCompare('', '123')).toBeLessThan(0);
+	});
+
 	it('treats trailing content past one side as the larger string ("abc" < "abcd")', () => {
 		expect(naturalCompare('abc', 'abcd')).toBeLessThan(0);
 		expect(naturalCompare('abcd', 'abc')).toBeGreaterThan(0);
@@ -282,7 +304,15 @@ describe('naturalCompare — fuzz against Pool strnatcmp.c oracle', () => {
 				break;
 			}
 		}
-		expect(mismatched).toBeNull();
+		expect(
+			mismatched,
+			mismatched
+				? `Pool oracle mismatch at seed ${mismatched.seed}: ` +
+						`naturalCompare(${JSON.stringify(mismatched.a)}, ` +
+						`${JSON.stringify(mismatched.b)}) ` +
+						`returned ${mismatched.got} but oracle returned ${mismatched.want}`
+				: undefined,
+		).toBeNull();
 	});
 
 	it('agrees with the Pool oracle on numeric-heavy inputs', () => {
@@ -318,7 +348,15 @@ describe('naturalCompare — fuzz against Pool strnatcmp.c oracle', () => {
 				break;
 			}
 		}
-		expect(mismatched).toBeNull();
+		expect(
+			mismatched,
+			mismatched
+				? `Pool oracle mismatch at seed ${mismatched.seed}: ` +
+						`naturalCompare(${JSON.stringify(mismatched.a)}, ` +
+						`${JSON.stringify(mismatched.b)}) ` +
+						`returned ${mismatched.got} but oracle returned ${mismatched.want}`
+				: undefined,
+		).toBeNull();
 	});
 
 	it('agrees with the Pool oracle on known-tricky inputs', () => {
