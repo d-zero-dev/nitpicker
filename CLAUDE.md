@@ -107,6 +107,7 @@ report({ filePath, sheetUrl, dedupeResources, ... })
              → preEachPage で状態蓄積 → eachPage で行生成
              → sheet.appendRow(...) でストリーミング送信
     Phase 3: getResources() でリソース反復
+             → Phase 3 入り口で URL の自然順（Pool strnatcmp 移植の on-the-fly 比較、sortResourcesByUrl）にソート
              → eachResource で行生成 → sheet.appendRow(...)
              → finalizeResources hook（任意）を per-resource ループ完了後に 1 度呼び、
                 集約行を一括 emit（dedupe Resources シートが利用）
@@ -116,11 +117,23 @@ report({ filePath, sheetUrl, dedupeResources, ... })
 
 > **`--dedupe-resources`**: Resources シートを **canonical URL**（クエリ値を捨て、キーを sort + unique）で集約する。`finalizeResources` hook を使って Phase 3 終端で集約行を一括 emit。広告/解析タグ（Google Ads conversion, Facebook Pixel, Yahoo, Bing UET, LINE Tag 等）で per-request unique なクエリ付き URL が爆発するサイトで、Google Sheets 1 ドキュメント **10,000,000 セル上限**を回避するために使う。実例: 1.6M raw → 63K 行（96% 削減）。実装は `packages/@nitpicker/report-google-sheets/src/data/create-resources.ts`、canonical 化規則は `utils/canonicalize-url.ts`。
 
+> **dedupe モードの追加列**: raw 6 列（URL / Status Code / Status Text / Content Type / Content Length / Referrers）に加え、末尾に **Count**（その canonical group に集約された raw レコード数）と **Query Pattern**（各クエリキーの観測ユニーク値数を `key=N` 形式で並べる、例: `auid=27, capi=1, crd=25`）が付く。Query Pattern はキーごとに最大 `MAX_PARAM_VALUE_SAMPLES`（=100）まで sample set に保持し、cap 後の観測は `overflowedCount` で数える。`overflowedCount > 0` の時のみ `key=100+` を付け、100 ジャストでは `key=100` のまま（cap=hit と overflow=発生を区別する）。値そのものは記録しない（プライバシー / メモリ）。実装は `formatQueryPattern` / `recordParamValue`。
+
 > **新規シート実装時の Hook 選択**:
 >
 > - **per-page / per-resource で逐次行を返す** → `eachPage` / `eachResource` をそのまま使う（自然な実装）
 > - **per-resource を反復しつつ集約して 1 回だけ大量に emit したい** → `eachResource` 内で Map に蓄積、`finalizeResources` で flush（dedupe 集約モードの基本パターン）。**`eachResource` 内で「最後の resource か」を判定して emit する書き方は脆いので禁止**（Phase 3 が将来並列化されると壊れる）
 > - **プラグインデータなど反復不要・単発で送りたい** → `addRows`（Phase 2/3 と並列実行される）
+
+> **Resources の出力順**: Phase 3 入り口で `sortResourcesByUrl()`（`utils/sort-resources-by-url.ts`）により URL の自然順にソートされる。実装は **Martin Pool `strnatcmp.c` の JS 移植版**（Stuart Cheshire 1996 由来）で、`charCodeAt` ベースの on-the-fly 比較。Pool の `compare_left` / `compare_right` の 2 path 分岐をそのまま踏襲（数値ランのどちらかが `'0'` で始まれば fractional 解釈で左から即決、それ以外は length-first で bias 同点解消）。**派生文字列を一切生成しない**ためメモリ追加は O(1) per compare、O(N) の auxiliary（TimSort buffer）のみ。`image-2.jpg < image-10.jpg` の数値順、ASCII 大文字小文字は同値扱い、stable sort 保証。raw / dedupe 両モードで同じ並び順になる。
+>
+> **以下の sort 実装は採用してはならない**:
+>
+> - `Intl.Collator.compare` の per-compare 呼び出し: 1 比較あたり ICU の重みテーブル lookup が走り、N log N で累積して数分単位のブロックになる。長時間ブロック中に Google Sheets API への HTTPS keep-alive が server 側 timeout で切られ、後続 send が `EPIPE` になる。
+> - 固定幅ゼロパディングで sort key を事前生成する Schwartzian: 1.6M 件 × URL 平均長 × 数値部 padding で key 配列だけで数百 MB のヒープを要し、`getResources()` の 1〜1.5 GB と合わせて Node デフォルトヒープ 4 GB を突破する。
+> - 比較関数内で `toLowerCase()` / `replaceAll()` 等の派生文字列を作る: V8 は 1 比較ごとに新規 SeqString を allocate するため、N log N 回の allocation が GC を圧迫する。
+>
+> sort 実装は **派生文字列を 1 つも作らない** ことが鉄則。`charCodeAt` / `codePointAt` の比較のみで完結させる。
 
 ### @d-zero/shared 統合
 
@@ -213,6 +226,7 @@ yarn lint                                          # lint + cspell
 - **`Promise.race` の負け側 timer は必ずキャンセル**: タイムアウト実装で `Promise.race([work, delay(N)])` を書く場合、勝者が決まった後も負け側の `setTimeout` は発火するまで event loop を握り続け、CLI プロセス終了をブロックする。`setTimeout`/`clearTimeout` を直接使い、`.finally()` で確実に clear すること（`delay()` は signal を取らないので race には使わない）。実例: `packages/@nitpicker/crawler/src/crawler/fetch-destination.ts`
 - **CLI 末尾は明示的に `process.exit`**: `packages/@nitpicker/cli/src/cli.ts` の末尾で `process.exit(process.exitCode ?? ExitCode.Success)` を呼ぶ。外部依存（特に `@d-zero/beholder` の `dom-evaluation.js#getProp`）に同じ「`Promise.race` + `setTimeout` の負け側 timer 残留」パターンがあり、自然終了をブロックするため。await 済み work 完了後の defensive measure であり、内部の cleanup は順番に await した上で呼ぶこと
 - **集約系シートは `finalizeResources` を使う**: Phase 3 で per-resource ループを反復しつつ集約結果を 1 度だけ送信したい場合（dedupe Resources のような実装）、`eachResource` で `num`/`total` を見て「最後だから emit」する設計は禁止。`CreateSheetSetting.finalizeResources` hook を使い、accumulate と emit を分離すること。Phase 3 の実装詳細（逐次 / 並列、num/total の意味）から切り離されるため、将来 Phase 3 が並列化されても集約ロジックが壊れない。実例: `packages/@nitpicker/report-google-sheets/src/data/create-resources.ts` の dedupe モード
+- **巨大集合のユニーク値カウントは「sample set + overflowedCount」パターン**: トラッカー URL の per-request unique 値のように、1 グループ内で数十万件のユニーク値が出る可能性がある場合は、`Set<string>` を上限 N（例 `MAX_PARAM_VALUE_SAMPLES = 100`）で打ち切り、cap 到達後の観測は別カウンタ `overflowedCount` に増やす。出力時に `overflowedCount > 0` の時のみ `+` 等の overflow マークを付与し、cap ジャスト（=N unique、overflow なし）は **マークなし** で表示する。これにより「cap に達した」と「実際に観測を落とした」を区別でき、ユーザーに `N` ジャストの精度を返せる。実例: `ParamValueTracker` / `formatQueryPattern`
 
 ## AI 操作プロトコル
 

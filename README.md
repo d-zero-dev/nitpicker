@@ -246,6 +246,8 @@ $ npx @nitpicker/cli report <file> --sheet <URL>
 
 `--limit` はアーカイブからメモリへ一度に読み込むページ数を制御する値で、Google Sheets API への 1 リクエストあたりの行数とは別物。各シートの行送信は `@d-zero/google-sheets` の `Sheet.appendRow` が内部で 2500 行ごとに自動 flush するため、呼び出し元側のメモリ滞留はチャンクサイズ分に抑えられる。Page List のような遅延セルを含むシートは、library が自動的にバッチ末尾の `flush()` まで送信を保留する（詳細は `ARCHITECTURE.md` の Report 章を参照）。
 
+Resources シートは出力時に URL の自然順（`image-2.jpg` が `image-10.jpg` より先に出る並び順、大文字小文字は同一視）でソートされる。raw / dedupe 両モードに同じ並び順が適用されるので、複数回 report しても同じ URL が同じ場所に出る。実装は Martin Pool の `strnatcmp` の JS 移植で、文字コードを直接比較する on-the-fly 方式（派生文字列を生成しないため大規模アーカイブでもメモリを浪費しない）。
+
 ##### `--dedupe-resources`: Resources シートの集約
 
 Google Sheets には 1 ドキュメントあたり **10,000,000 セル** という上限がある。広告/解析タグ（Google Ads conversion, Facebook Pixel, Yahoo, Bing UET, LINE Tag 等）はページごとに per-request unique なクエリパラメータ付き URL を生成するため、`Resources` テーブルに数百万件のレコードが積まれることがあり、6 列 × 数百万行ですぐ上限に達する。
@@ -255,10 +257,11 @@ Google Sheets には 1 ドキュメントあたり **10,000,000 セル** とい�
 - **canonical 化規則**: パスはそのまま、クエリは値を捨てキーのみ sort & unique。フラグメントは元から除去済み
   - 例: `?auid=XYZ&capi=1&crd=ABC` → `?auid&capi&crd`
 - **集約キー**: `(canonical URL, status, contentType)` の組
-- **追加列**: 末尾に `Count`（その canonical group に集約された raw レコード数）
+- **追加列**: 末尾に `Count`（その canonical group に集約された raw レコード数）と `Query Pattern`（各クエリキーのユニーク値数）
 - **Content Length 列**: グループ内で値が異なれば `100-500` のような min-max 表示
 - **Referrers 列**: グループ内の全 referrer URL を union（重複排除）してセル note に列挙
 - **path 内の ID は保持**: `/pagead/viewthroughconversion/10840516367/` のような conversion ID はそのまま残るので、クライアントへの「Google Ads 入っていますか / どの conversion ID 使っていますか」の質問にこの 1 シートで答えられる
+- **Query Pattern 列**: 各クエリキーに対して観測されたユニーク値数を `key=N` 形式で列挙。例: `auid=27, capi=1, crd=25, dt=2`。`N=1` は実質定数（例: `capi=1` は全件同じ値）、`N>1` は per-request 変動キー（例: `auid=27` は 27 個の session ID が観測された）。サンプル上限 100 を超えた場合のみ `key=100+` 表示（100 ジャストの場合は `key=100` で `+` は付かない）。値そのものは記録しない（プライバシー / メモリ配慮）
 
 実例: 1,600,724 件の raw resource が 63,385 件まで集約（**96% 削減**、Google Sheets 上の 9.6M セルが 380K セルになる）。
 
@@ -270,7 +273,11 @@ Google Sheets には 1 ドキュメントあたり **10,000,000 セル** とい�
   - 事前に Resources 件数を見積もって 100,000 件を超えると分かっている（広告/解析タグ多数 + ページ数大、写真ライブラリのような per-image unique URL を大量に生成するサイト等）
   - クライアントへの監査レポート用途で「どんなトラッキングが入っているか」を一覧化したい（per-request の細かい値より、ホスト+パス+クエリキー構成での集約のほうが読みやすい）
 
-> **メモリ目安**: 集約用 Map と referrer 集合をメモリ上に保持するため、巨大アーカイブ（百万件超）では 500MB〜1GB 程度のヒープを消費する。デフォルトの Node ヒープ（8GB）で問題なく動くが、CI など制限が厳しい環境では `NODE_OPTIONS=--max-old-space-size=4096` 程度を見込んでおくと安全。
+> **メモリ目安**: 1.6M リソース級のアーカイブでは `getResources()` の結果配列だけで約 1〜1.5 GB を消費する。Sort 自体は派生文字列を生成しない on-the-fly 比較（Pool 移植版）なので追加メモリは O(1) per compare、auxiliary 約 13 MB のみ。dedupe モードでは集約用 Map と referrer 集合がさらに数百 MB を要する。Node デフォルトヒープ（4 GB）で 1.6M 級は厳しいので、巨大アーカイブには `NODE_OPTIONS=--max-old-space-size=8192` を指定すること。10 万件規模なら 1〜2 GB で収まりデフォルトで動く。
+>
+> ```sh
+> NODE_OPTIONS=--max-old-space-size=8192 npx nitpicker report ./archive.nitpicker -S ... --dedupe-resources
+> ```
 
 #### 例
 

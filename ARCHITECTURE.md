@@ -558,7 +558,7 @@ sequenceDiagram
 | -------------------------- | ------------------------------------------------ |
 | Page List                  | 全ページのメタデータ一覧                         |
 | Links                      | 全ページの HTTP ステータス・リンク情報・備考一覧 |
-| Resources                  | ネットワークリソース一覧                         |
+| Resources                  | ネットワークリソース一覧（raw / dedupe 切替可）  |
 | Images                     | 画像一覧（サイズ・alt・lazy 等）                 |
 | Violations                 | analyze プラグインが検出した違反一覧             |
 | Discrepancies              | analyze プラグインの比較データ                   |
@@ -580,6 +580,42 @@ hook が登録されていれば `createSheets()` は Phase 3 の per-resource �
 完了後・`sheet.flush()` 直前に 1 度だけ呼び、返ってきた行を `appendRow` で
 送信する。Phase 3 の実装詳細（逐次 / 並列、`num` / `total` 等）に依存しない
 ので、`eachResource` の呼ばれ方が将来変わっても集約ロジックは壊れない。
+
+Resources シートは `--dedupe-resources` で **raw / dedupe** の 2 モードを
+切り替えられる。raw モードは 6 列（URL / Status Code / Status Text /
+Content Type / Content Length / Referrers）で 1 raw resource = 1 行。
+dedupe モードは `(canonical URL, status, contentType)` で集約し、末尾に
+**Count**（その canonical group の raw レコード数）と **Query Pattern**
+（クエリキーごとのユニーク値数を `key=N` で並べる、例 `auid=27, capi=1`）
+を加えた 8 列構成。Query Pattern は per-key の sample set（上限
+`MAX_PARAM_VALUE_SAMPLES = 100`）と `overflowedCount` の 2 値で値の分布を
+要約する：cap ジャスト（100 unique、overflow なし）は `key=100`、cap 後に
+追加観測が来た場合は `key=100+`。値そのものは保存しない（プライバシーと
+メモリの両方の観点で）。実装は `data/create-resources.ts`。
+
+Phase 3 入り口では `getResources()` の結果を `sortResourcesByUrl()` で
+URL の自然順に並び替える。実装は Martin Pool `strnatcmp.c`（Stuart
+Cheshire, 1996 由来）の JS 移植で、`Array.prototype.toSorted` に
+on-the-fly 比較関数を渡す。比較は Pool 由来の 2 path 構造を踏襲し、
+両側に数値ランがある時に **どちらかが `'0'` で始まる場合は
+compare_left（fractional 解釈、左から digit-by-digit で即決）**、
+**そうでなければ compare_right（length-first、bias で同点解消）**
+を呼び分ける。それ以外の文字は ASCII whitespace を skip し、ASCII
+大文字を小文字に fold した UTF-16 code unit 比較を行う。派生文字列
+を一切生成せず、`charCodeAt` と整数演算のみで完結するため、追加
+メモリは O(1) per compare、V8 TimSort の auxiliary（N ポインタ分、
+1.6M で約 13 MB）のみが上乗せされる。Lanes header に
+`Sorting resources by URL` を一時表示する。実装は
+`utils/sort-resources-by-url.ts` に集約されており、Pool 互換性
+（Pool ドキュメントのリファレンスシーケンスと `compare_left` /
+`compare_right` の path 分岐）、stable sort、ASCII case-insensitive
+挙動、surrogate pair 含む URL の決定的比較、100K 件 sort の heap
+増分 100 MB 未満であることは単体テストで固定。
+
+参照: Martin Pool, "Natural Order String Comparison",
+[sourcefrog.net/projects/natsort/](https://sourcefrog.net/projects/natsort/)。
+オリジナル C ソース:
+[github.com/sourcefrog/natsort/blob/master/strnatcmp.c](https://github.com/sourcefrog/natsort/blob/master/strnatcmp.c)。
 
 ストリーミング・チャンク化のロジックは `@d-zero/google-sheets` の `Sheet`
 クラスに集約されている。`appendRow()` は内部バッファに行を積み、2500 行

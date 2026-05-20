@@ -71,6 +71,12 @@
 		// Tracking pixel / ads URL conventions (used in docs and dedupe examples)
 		"pagead",
 		"auid",
-		"capi"
+		"capi",
+
+		// Natural-sort algorithm reference (Martin Pool)
+		"strnatcmp",
+		"isdigit",
+		"isspace",
+		"tolower"
 	]
 }
