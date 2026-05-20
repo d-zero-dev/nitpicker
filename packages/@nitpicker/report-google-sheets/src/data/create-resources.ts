@@ -4,7 +4,7 @@ import type { ArchiveResource as Resource } from '@nitpicker/crawler';
 import { reportLog } from '../debug.js';
 import { createCellData } from '../sheets/create-cell-data.js';
 import { defaultCellFormat } from '../sheets/default-cell-format.js';
-import { canonicalizeUrl } from '../utils/canonicalize-url.js';
+import { canonicalizeUrl, extractQueryPairs } from '../utils/canonicalize-url.js';
 
 /**
  * Options for the {@link createResources} factory.
@@ -42,6 +42,7 @@ const DEDUPE_HEADERS = [
 	'Content Length',
 	'Referrers',
 	'Count',
+	'Query Pattern',
 ] as const;
 
 /**
@@ -50,6 +51,32 @@ const DEDUPE_HEADERS = [
  * truncate well below that to leave room for the "and N more" suffix.
  */
 export const NOTE_MAX_LENGTH = 49_000;
+
+/**
+ * Maximum number of unique values to keep per query parameter key in
+ * dedupe mode. The Query Pattern cell only shows unique counts, but
+ * we keep a small sample for cell notes and to avoid unbounded memory
+ * growth on trackers that send a unique-per-request value
+ * (e.g. session IDs).
+ */
+export const MAX_PARAM_VALUE_SAMPLES = 100;
+
+/**
+ * Per-key tracker for query parameter values inside a dedupe entry.
+ * `values` is capped at {@link MAX_PARAM_VALUE_SAMPLES}; once the cap
+ * is reached, further observations increment `overflowedCount`
+ * instead of growing the set. {@link formatQueryPattern} uses
+ * `overflowedCount > 0` as the precise condition for appending `+`
+ * to the cell — so `key=100` means "exactly 100 sampled, no
+ * observation was lost", and `key=100+` means "the sample set lost
+ * at least one observation after the cap".
+ */
+export interface ParamValueTracker {
+	/** Sampled unique values (bounded by {@link MAX_PARAM_VALUE_SAMPLES}). */
+	readonly values: Set<string>;
+	/** Observations that arrived after the sample set was full and therefore could not enter the set. */
+	overflowedCount: number;
+}
 
 /**
  * In-memory aggregation entry for dedupe mode. One per
@@ -72,6 +99,8 @@ export interface DedupeEntry {
 	count: number;
 	/** Union of referrer page URLs across all raw resources in this entry. */
 	readonly referrers: Set<string>;
+	/** Per-query-key value trackers; absent for resources without a query string. */
+	readonly paramValues: Map<string, ParamValueTracker>;
 }
 
 /**
@@ -131,6 +160,66 @@ export function joinReferrersForNote(
 }
 
 /**
+ * Records a single `(key, value)` pair from a raw resource URL into
+ * the entry's per-key value tracker. New keys allocate a tracker; the
+ * value Set stops growing past {@link MAX_PARAM_VALUE_SAMPLES}, after
+ * which subsequent observations increment `overflowedCount` so
+ * {@link formatQueryPattern} can detect lost resolution and append `+`.
+ * @param entry - The dedupe entry to merge into.
+ * @param key - The query parameter key.
+ * @param value - The raw value substring (already extracted, not decoded).
+ */
+function recordParamValue(entry: DedupeEntry, key: string, value: string): void {
+	let tracker = entry.paramValues.get(key);
+	if (!tracker) {
+		tracker = { values: new Set<string>(), overflowedCount: 0 };
+		entry.paramValues.set(key, tracker);
+	}
+	if (tracker.values.size < MAX_PARAM_VALUE_SAMPLES) {
+		tracker.values.add(value);
+	} else {
+		tracker.overflowedCount++;
+	}
+}
+
+/**
+ * Formats the Query Pattern cell for a dedupe entry. Each tracked key
+ * gets a `key=N` token where `N` is the number of distinct values
+ * sampled. `+` is appended only when {@link ParamValueTracker.overflowedCount}
+ * is non-zero — i.e. when at least one observation arrived after the
+ * sample set was already full. Duplicate observations that arrive
+ * while the sample set still has capacity do NOT trigger `+`.
+ *
+ * This gives precise semantics:
+ *
+ * - `key=1` — exactly one distinct value, seen any number of times
+ * - `key=99` — 99 distinct values, sample set still had room
+ * - `key=100` — exactly 100 distinct values, no observation lost
+ * - `key=100+` — sample set was capped and at least one further
+ *   observation could not be recorded (real cardinality unknown but
+ *   at least 100)
+ *
+ * Keys are sorted alphabetically to match the canonical URL.
+ *
+ * Returns `null` for entries without any query parameters so the cell
+ * appears empty in Google Sheets.
+ * @param entry - The dedupe entry to format.
+ */
+export function formatQueryPattern(entry: DedupeEntry): string | null {
+	if (entry.paramValues.size === 0) {
+		return null;
+	}
+	const keys = [...entry.paramValues.keys()].toSorted();
+	const parts: string[] = [];
+	for (const key of keys) {
+		const tracker = entry.paramValues.get(key)!;
+		const overflowed = tracker.overflowedCount > 0;
+		parts.push(`${key}=${tracker.values.size}${overflowed ? '+' : ''}`);
+	}
+	return parts.join(', ');
+}
+
+/**
  * Formats the Content Length cell value. Returns a single number when
  * every raw resource in the group reported the same size, a `min-max`
  * string when the size varies, or `null` when nothing was recorded.
@@ -165,6 +254,7 @@ function dedupeEntryToRow(entry: DedupeEntry) {
 			defaultCellFormat,
 		),
 		createCellData({ value: entry.count }, defaultCellFormat),
+		createCellData({ value: formatQueryPattern(entry) }, defaultCellFormat),
 	];
 }
 
@@ -273,10 +363,15 @@ export function createResources(options?: CreateResourcesOptions): CreateSheet {
 						contentLengthMax: resource.contentLength,
 						count: 0,
 						referrers: new Set<string>(),
+						paramValues: new Map<string, ParamValueTracker>(),
 					};
 					entries.set(key, entry);
 				}
 				entry.count++;
+
+				for (const { key: paramKey, value } of extractQueryPairs(resource.url)) {
+					recordParamValue(entry, paramKey, value);
+				}
 
 				reportLog(`Read: Resource referrers (Search: ${resource.url})`);
 				const referrers = await resource.getReferrers();

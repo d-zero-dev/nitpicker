@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { canonicalizeUrl } from './canonicalize-url.js';
+import { canonicalizeUrl, extractQueryPairs } from './canonicalize-url.js';
 
 describe('canonicalizeUrl', () => {
 	it('URL に query string がなければそのまま返す', () => {
@@ -77,5 +77,56 @@ describe('canonicalizeUrl', () => {
 		expect(
 			canonicalizeUrl('blob:https://example.com/0011095c-e2eb-41d6-b5cf-14d89129c9a0'),
 		).toBe('blob:https://example.com/0011095c-e2eb-41d6-b5cf-14d89129c9a0');
+	});
+});
+
+describe('extractQueryPairs', () => {
+	it('query string がない URL は空配列を返す', () => {
+		expect(extractQueryPairs('https://example.com/path')).toEqual([]);
+	});
+
+	it('? のみで値がない場合も空配列を返す', () => {
+		expect(extractQueryPairs('https://example.com/path?')).toEqual([]);
+	});
+
+	it('key と value を source order で返す', () => {
+		expect(extractQueryPairs('https://example.com/p?a=1&b=2')).toEqual([
+			{ key: 'a', value: '1' },
+			{ key: 'b', value: '2' },
+		]);
+	});
+
+	it('同じ key が複数あれば全件残す (sort も dedupe もしない)', () => {
+		expect(extractQueryPairs('https://example.com/p?a=1&a=2&a=3')).toEqual([
+			{ key: 'a', value: '1' },
+			{ key: 'a', value: '2' },
+			{ key: 'a', value: '3' },
+		]);
+	});
+
+	it('= を含まない key は value="" として扱う', () => {
+		expect(extractQueryPairs('https://example.com/p?a&b=2')).toEqual([
+			{ key: 'a', value: '' },
+			{ key: 'b', value: '2' },
+		]);
+	});
+
+	it('値が空の pair も key と value="" を返す', () => {
+		expect(extractQueryPairs('https://example.com/p?a=&b=2')).toEqual([
+			{ key: 'a', value: '' },
+			{ key: 'b', value: '2' },
+		]);
+	});
+
+	it('key が空の pair はスキップする', () => {
+		expect(extractQueryPairs('https://example.com/p?=val&a=1')).toEqual([
+			{ key: 'a', value: '1' },
+		]);
+	});
+
+	it('値に = が含まれていても最初の = で分割する', () => {
+		expect(extractQueryPairs('https://example.com/p?token=abc=def=ghi')).toEqual([
+			{ key: 'token', value: 'abc=def=ghi' },
+		]);
 	});
 });

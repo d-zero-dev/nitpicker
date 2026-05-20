@@ -7,8 +7,11 @@ import {
 	createResources,
 	dedupeKey,
 	formatContentLength,
+	formatQueryPattern,
 	joinReferrersForNote,
+	MAX_PARAM_VALUE_SAMPLES,
 	NOTE_MAX_LENGTH,
+	type DedupeEntry,
 } from './create-resources.js';
 
 /**
@@ -163,7 +166,7 @@ describe('createResources (raw mode)', () => {
 });
 
 describe('createResources (dedupe mode) — basic shape', () => {
-	it('headers include a trailing Count column', () => {
+	it('headers include trailing Count and Query Pattern columns', () => {
 		const sheet = createResources({ dedupe: true })([]);
 		const headers = sheet.createHeaders();
 		expect(headers).toEqual([
@@ -174,6 +177,7 @@ describe('createResources (dedupe mode) — basic shape', () => {
 			'Content Length',
 			'Referrers',
 			'Count',
+			'Query Pattern',
 		]);
 	});
 
@@ -217,13 +221,14 @@ describe('createResources (dedupe mode) — aggregation', () => {
 		const rows = await sheet.finalizeResources!();
 
 		expect(rows).toHaveLength(1);
-		expect(rows![0]).toHaveLength(7);
+		expect(rows![0]).toHaveLength(8);
 		expect(cellValue(rows![0][0])).toBe('https://x.com/track?id&t');
 		expect(cellValue(rows![0][6])).toBe(3);
 		expect(cellValue(rows![0][5])).toBe('3 pages');
 		expect(cellNote(rows![0][5])).toBe(
 			'https://x.com/page-a\nhttps://x.com/page-b\nhttps://x.com/page-c',
 		);
+		expect(cellValue(rows![0][7])).toBe('id=3, t=2');
 	});
 
 	it('emits a single row even for a single resource', async () => {
@@ -521,64 +526,214 @@ describe('joinReferrersForNote', () => {
 	});
 });
 
+/**
+ * Builds a minimal {@link DedupeEntry} for use in pure-function tests.
+ * Callers can override any field; the defaults represent a finished
+ * "single successful HTTP request" without query parameters.
+ * @param overrides - Fields to override on the default entry.
+ */
+function makeEntry(overrides: Partial<DedupeEntry> = {}): DedupeEntry {
+	return {
+		canonical: 'https://x.example/',
+		status: 200,
+		statusText: 'OK',
+		contentType: 'text/plain',
+		contentLengthMin: 0,
+		contentLengthMax: 0,
+		count: 1,
+		referrers: new Set(),
+		paramValues: new Map(),
+		...overrides,
+	};
+}
+
 describe('formatContentLength', () => {
 	it('returns null when contentLengthMin is null', () => {
 		expect(
-			formatContentLength({
-				canonical: 'x',
-				status: 200,
-				statusText: null,
-				contentType: null,
-				contentLengthMin: null,
-				contentLengthMax: null,
-				count: 1,
-				referrers: new Set(),
-			}),
+			formatContentLength(makeEntry({ contentLengthMin: null, contentLengthMax: null })),
 		).toBeNull();
 	});
 
 	it('returns the single number when min and max match', () => {
 		expect(
-			formatContentLength({
-				canonical: 'x',
-				status: 200,
-				statusText: null,
-				contentType: null,
-				contentLengthMin: 500,
-				contentLengthMax: 500,
-				count: 1,
-				referrers: new Set(),
-			}),
+			formatContentLength(makeEntry({ contentLengthMin: 500, contentLengthMax: 500 })),
 		).toBe(500);
 	});
 
 	it('returns "min-max" when min and max differ', () => {
 		expect(
-			formatContentLength({
-				canonical: 'x',
-				status: 200,
-				statusText: null,
-				contentType: null,
-				contentLengthMin: 100,
-				contentLengthMax: 900,
-				count: 1,
-				referrers: new Set(),
-			}),
+			formatContentLength(makeEntry({ contentLengthMin: 100, contentLengthMax: 900 })),
 		).toBe('100-900');
 	});
 
 	it('treats min=0 distinct from null (returns 0)', () => {
 		expect(
-			formatContentLength({
-				canonical: 'x',
-				status: 200,
-				statusText: null,
-				contentType: null,
-				contentLengthMin: 0,
-				contentLengthMax: 0,
-				count: 1,
-				referrers: new Set(),
-			}),
+			formatContentLength(makeEntry({ contentLengthMin: 0, contentLengthMax: 0 })),
 		).toBe(0);
+	});
+});
+
+describe('formatQueryPattern', () => {
+	it('returns null when no query parameters were recorded', () => {
+		expect(formatQueryPattern(makeEntry({ paramValues: new Map() }))).toBeNull();
+	});
+
+	it('renders each key as "key=N" using the unique value count', () => {
+		const paramValues = new Map([
+			['a', { values: new Set(['1', '2', '3']), overflowedCount: 0 }],
+			['b', { values: new Set(['only']), overflowedCount: 0 }],
+		]);
+		expect(formatQueryPattern(makeEntry({ paramValues }))).toBe('a=3, b=1');
+	});
+
+	it('sorts keys alphabetically so the output matches the canonical URL order', () => {
+		const paramValues = new Map([
+			['z', { values: new Set(['x']), overflowedCount: 0 }],
+			['a', { values: new Set(['y']), overflowedCount: 0 }],
+			['m', { values: new Set(['w']), overflowedCount: 0 }],
+		]);
+		expect(formatQueryPattern(makeEntry({ paramValues }))).toBe('a=1, m=1, z=1');
+	});
+
+	it('does not append "+" at sample-set capacity when no observation overflowed', () => {
+		const exactlyFullValues = new Set<string>();
+		for (let i = 0; i < MAX_PARAM_VALUE_SAMPLES; i++) {
+			exactlyFullValues.add(`v${i}`);
+		}
+		const paramValues = new Map([
+			['exact', { values: exactlyFullValues, overflowedCount: 0 }],
+		]);
+		expect(formatQueryPattern(makeEntry({ paramValues }))).toBe(
+			`exact=${MAX_PARAM_VALUE_SAMPLES}`,
+		);
+	});
+
+	it('appends "+" once at least one observation is rejected by the full sample set', () => {
+		const cappedValues = new Set<string>();
+		for (let i = 0; i < MAX_PARAM_VALUE_SAMPLES; i++) {
+			cappedValues.add(`v${i}`);
+		}
+		const paramValues = new Map([
+			['overflow', { values: cappedValues, overflowedCount: 1 }],
+		]);
+		expect(formatQueryPattern(makeEntry({ paramValues }))).toBe(
+			`overflow=${MAX_PARAM_VALUE_SAMPLES}+`,
+		);
+	});
+
+	it('does NOT append "+" when duplicates were observed but the sample set still had capacity', () => {
+		// Duplicate observation while there is still room in the set
+		// must not be counted as overflow. The set silently absorbs the
+		// duplicate; overflowedCount stays 0.
+		const paramValues = new Map([
+			['repeat', { values: new Set(['only']), overflowedCount: 0 }],
+		]);
+		expect(formatQueryPattern(makeEntry({ paramValues }))).toBe('repeat=1');
+	});
+});
+
+describe('createResources (dedupe mode) — Query Pattern', () => {
+	it('Query Pattern セルは query string がない resource では空になる', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(createMockResource({ url: 'https://x.com/static.css' }));
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][7])).toBe('');
+	});
+
+	it('単一値しか観測されないキーは "key=1" として表示', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/track?id=1&v=2' }),
+		);
+		await sheet.eachResource!(
+			createMockResource({ url: 'https://x.com/track?id=1&v=2' }),
+		);
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][7])).toBe('id=1, v=1');
+	});
+
+	it('複数値が観測されたキーは "key=N" としてユニーク値数を表示', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		await sheet.eachResource!(createMockResource({ url: 'https://x.com/t?id=1' }));
+		await sheet.eachResource!(createMockResource({ url: 'https://x.com/t?id=2' }));
+		await sheet.eachResource!(createMockResource({ url: 'https://x.com/t?id=3' }));
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][7])).toBe('id=3');
+	});
+
+	it('exactly MAX_PARAM_VALUE_SAMPLES distinct values: no "+" (cap reached but nothing lost)', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		for (let i = 0; i < MAX_PARAM_VALUE_SAMPLES; i++) {
+			await sheet.eachResource!(
+				createMockResource({ url: `https://x.com/t?id=value-${i}` }),
+			);
+		}
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][7])).toBe(`id=${MAX_PARAM_VALUE_SAMPLES}`);
+	});
+
+	it('exactly MAX_PARAM_VALUE_SAMPLES + 1 distinct values: "+" appended (first overflow)', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		for (let i = 0; i < MAX_PARAM_VALUE_SAMPLES + 1; i++) {
+			await sheet.eachResource!(
+				createMockResource({ url: `https://x.com/t?id=value-${i}` }),
+			);
+		}
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][7])).toBe(`id=${MAX_PARAM_VALUE_SAMPLES}+`);
+	});
+
+	it('large overshoot still shows "key=MAX+"', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		for (let i = 0; i < MAX_PARAM_VALUE_SAMPLES + 50; i++) {
+			await sheet.eachResource!(
+				createMockResource({ url: `https://x.com/t?id=value-${i}` }),
+			);
+		}
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][7])).toBe(`id=${MAX_PARAM_VALUE_SAMPLES}+`);
+	});
+
+	it('a duplicate value observed AFTER the cap still appends "+" (sample set lost resolution)', async () => {
+		const sheet = createResources({ dedupe: true })([]);
+		// Fill the sample set with distinct values
+		for (let i = 0; i < MAX_PARAM_VALUE_SAMPLES; i++) {
+			await sheet.eachResource!(
+				createMockResource({ url: `https://x.com/t?id=value-${i}` }),
+			);
+		}
+		// Now observe a duplicate of value-0 — the sample set has no
+		// room, so this counts as an overflow even though the value is
+		// already present.
+		await sheet.eachResource!(createMockResource({ url: 'https://x.com/t?id=value-0' }));
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][7])).toBe(`id=${MAX_PARAM_VALUE_SAMPLES}+`);
+	});
+
+	it('duplicates observed BEFORE the cap do not trigger "+"', async () => {
+		// Sample set has plenty of room. Observing the same value 50
+		// times must keep the unique count at 1 and overflowedCount at 0.
+		const sheet = createResources({ dedupe: true })([]);
+		for (let i = 0; i < 50; i++) {
+			await sheet.eachResource!(createMockResource({ url: 'https://x.com/t?id=same' }));
+		}
+		const rows = await sheet.finalizeResources!();
+
+		expect(rows).toHaveLength(1);
+		expect(cellValue(rows![0][7])).toBe('id=1');
 	});
 });
