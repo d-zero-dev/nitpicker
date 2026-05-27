@@ -622,6 +622,36 @@ compare_left（fractional 解釈、左から digit-by-digit で即決）**、
 ごとに自動的に `addRowData()` を呼んでフラッシュする。これにより、巨大な
 レポートでも呼び出し元側のメモリ滞留はチャンクサイズ分に抑えられる。
 
+#### 進捗表示（onProgress 購読）
+
+`finalizeResources` で集約された結果（dedupe Resources で典型的に
+63K 行クラス）を `appendRow(...finalRows)` に一括で渡すと、内部の
+chunk flush が逐次進む間、呼び出し元から見ると単一の `await` が
+ブロックしているように見えるため、Lanes の進捗が止まったように
+映る。`Sheet` は chunk flush ごとに `onProgress(sent, remaining)`
+を発火するので、`createSheets()` はこれを購読して
+`Sending ${sent}/${total} aggregated rows` を Lanes に反映する。
+購読の設定とリセットは `sheets/run-finalize-resources.ts` に切り
+出されており、`appendRow` が throw した場合でも `finally` で
+`sheet.onProgress = undefined` がクリアされるため、ハンドラが
+別シートの lane に漏れ込むことはない。
+
+**手動検証手順**: 5 万行以上の resources を持つ archive を用意し、
+`npx @nitpicker/cli report <archive>.nitpicker --dedupe-resources --sheet <url>`
+を実行する。Phase 3 で `Resources: Sending N/M aggregated rows` の
+`N` が `0` → 中間値 → `M` と刻々と更新されることを目視確認する
+（chunk サイズ 2500 行刻みで遷移する）。
+
+**既知の制約 (V8 引数制限)**: 集約後の `finalRows` は `appendRow(...finalRows)`
+にスプレッドで渡されるため、配列長が V8 の関数引数上限（実用上 6.5 万件付近）
+を超えると `RangeError: Maximum call stack size exceeded` で破綻する。1.6M
+raw resources → 63K 集約までは実機で動作確認済みだが、将来サイト規模が
+さらに大きくなり aggregate 後でも 6 万件を超えそうな場合は、`appendRow` を
+chunk 単位で複数回呼ぶ実装（例: 1 万件ずつループ）に切り替える必要がある。
+`Sheet.appendRow` の内部 2500 行バッファは呼び出し回数に依存しないので、
+外側で分割しても順序保証と総送信回数は変わらない。テスト側 (`run-finalize-
+resources.spec.ts`) では V8 制限を避けるため 100 件で挙動を固定している。
+
 #### 遅延セルの自動検出
 
 `createCellData(() => ...)` で生成された遅延セル（thunk）は `provide()`
