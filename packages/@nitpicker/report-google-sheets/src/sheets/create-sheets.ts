@@ -10,6 +10,8 @@ import { sheetLog } from '../debug.js';
 import { hasPropFilter } from '../utils/has-prop-filter.js';
 import { sortResourcesByUrl } from '../utils/sort-resources-by-url.js';
 
+import { runFinalizeResources } from './run-finalize-resources.js';
+
 /**
  * Parameters for {@link createSheets}.
  */
@@ -421,23 +423,13 @@ export async function createSheets(params: CreateSheetsParams) {
 								await sheet.appendRow(...resourceData);
 							}
 						}
-						if (setting.finalizeResources) {
-							lanes?.update(id, `${name}: Finalizing aggregated rows%dots%`);
-							sheetLog('[%s] finalizeResources start', name);
-							const finalRows = await setting.finalizeResources();
-							if (finalRows && finalRows.length > 0) {
-								lanes?.update(
-									id,
-									`${name}: Sending ${finalRows.length} aggregated rows%dots%`,
-								);
-								await sheet.appendRow(...finalRows);
-								sheetLog(
-									'[%s] finalizeResources emitted %d rows',
-									name,
-									finalRows.length,
-								);
-							}
-						}
+						await runFinalizeResources({
+							setting,
+							sheet,
+							lanes,
+							laneId: id,
+							sheetName: name,
+						});
 						await sheet.flush();
 						sheetLog('[%s] Resource send complete (%d rows)', name, sheet.sentCount);
 						resourceProgress.set(name, 1);
