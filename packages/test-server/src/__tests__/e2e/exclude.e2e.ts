@@ -51,6 +51,12 @@ describe('Exclude patterns', () => {
 			expect(pageB).toBeDefined();
 			expect(pageB!.isTarget).toBe(false);
 			expect(pageB!.isSkipped).toBe(true);
+			// スキップ理由にマッチしたキーワードが記録される（他の skip 要因と区別できる）。
+			expect(pageB!.skipReason).toContain('FORBIDDEN_KEYWORD');
+
+			// フルスクレイプ済みページ（internal-page）には現れない（negative pin）。
+			const fullPages = await result.accessor.getPages('internal-page');
+			expect(fullPages.some((p) => p.url.pathname === '/exclude/page-b')).toBe(false);
 		});
 
 		it('キーワードマッチしないページは正常にスクレイプされる', async () => {

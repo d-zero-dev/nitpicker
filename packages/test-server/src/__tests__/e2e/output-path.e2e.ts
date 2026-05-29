@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { CrawlerOrchestrator } from '@nitpicker/crawler';
+import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 describe('Output path (filePath option)', () => {
@@ -50,11 +50,21 @@ describe('Output path (filePath option)', () => {
 		expect(stat.size).toBeGreaterThan(0);
 	});
 
-	it('config.name にファイル名が反映される', async () => {
-		// write() は tmpDir をリネーム後に削除して .nitpicker に集約するため、
-		// tmpDir への再接続は空 DB になる。既存の開いた接続から config を読む。
-		const config = await orchestrator.archive.getConfig();
-		expect(config.name).toBe('custom-output');
+	it('書き出した .nitpicker を開き直して config と pages を読み戻せる', async () => {
+		// 永続化の往復検証: 生成された .nitpicker を Archive.open で展開し直し、
+		// config.name とページ数を確認する（in-memory ではなくファイルの中身を検証）。
+		const openCwd = path.join(os.tmpdir(), `nitpicker-e2e-open-${crypto.randomUUID()}`);
+		await fs.mkdir(openCwd, { recursive: true });
+		const opened = await Archive.open({ filePath: outputPath, cwd: openCwd });
+		try {
+			const config = await opened.getConfig();
+			expect(config.name).toBe('custom-output');
+			const pages = await opened.getPages('page');
+			expect(pages.length).toBeGreaterThan(0);
+		} finally {
+			await opened.close();
+			await fs.rm(openCwd, { recursive: true, force: true }).catch(() => {});
+		}
 	});
 
 	it('自動生成のファイルが作成されていない', async () => {
@@ -108,8 +118,19 @@ describe('Output path without extension', () => {
 	});
 
 	it('config.name に拡張子なしのファイル名が反映される', async () => {
-		// write() で tmpDir は消費されるため、既存の開いた接続から config を読む。
-		const config = await orchestrator.archive.getConfig();
-		expect(config.name).toBe('my-report');
+		// 拡張子なし指定でも my-report.nitpicker が生成される。開き直して config を検証する。
+		const openCwd = path.join(os.tmpdir(), `nitpicker-e2e-open-${crypto.randomUUID()}`);
+		await fs.mkdir(openCwd, { recursive: true });
+		const opened = await Archive.open({
+			filePath: path.join(cwd, 'my-report.nitpicker'),
+			cwd: openCwd,
+		});
+		try {
+			const config = await opened.getConfig();
+			expect(config.name).toBe('my-report');
+		} finally {
+			await opened.close();
+			await fs.rm(openCwd, { recursive: true, force: true }).catch(() => {});
+		}
 	});
 });
