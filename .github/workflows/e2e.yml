@@ -33,11 +33,16 @@ jobs:
         with:
           node-version: 24
           cache: yarn
+      # Skip Puppeteer's postinstall browser download. Under Yarn 4 it finishes in
+      # ~1s creating an empty browser folder without the binary, which then makes the
+      # explicit install below think Chrome is present and refuse to re-download.
       - run: yarn install --immutable
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
       - run: yarn build
-      # Puppeteer's postinstall does not reliably download Chrome under Yarn 4
-      # (it finishes in ~1s without fetching the binary), so install the pinned
-      # browser explicitly into the cache that puppeteer-core resolves at runtime.
+      # Install the pinned browser explicitly into the cache that puppeteer-core
+      # resolves at runtime (~/.cache/puppeteer). With the postinstall skipped above,
+      # this performs a clean, complete download.
       - name: Install Chrome for Puppeteer
         run: yarn workspace @nitpicker/crawler exec puppeteer browsers install chrome
       # ubuntu-latest (24.04) restricts unprivileged user namespaces via AppArmor,
