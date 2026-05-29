@@ -35,6 +35,11 @@ jobs:
           cache: yarn
       - run: yarn install --immutable
       - run: yarn build
+      # Puppeteer's postinstall does not reliably download Chrome under Yarn 4
+      # (it finishes in ~1s without fetching the binary), so install the pinned
+      # browser explicitly into the cache that puppeteer-core resolves at runtime.
+      - name: Install Chrome for Puppeteer
+        run: yarn workspace @nitpicker/crawler exec puppeteer browsers install chrome
       # ubuntu-latest (24.04) restricts unprivileged user namespaces via AppArmor,
       # which breaks Chromium's sandbox. Relax the restriction so the sandbox can
       # still start — this keeps the sandbox enabled rather than passing --no-sandbox.
