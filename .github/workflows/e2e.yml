@@ -41,15 +41,17 @@ jobs:
           cache: yarn
       - run: yarn install --immutable
       - run: yarn build
-      # Puppeteer's Yarn 4 postinstall leaves an empty browser folder without the
-      # binary, which blocks a re-install. Wipe the cache, install the pinned Chrome
-      # explicitly into PUPPETEER_CACHE_DIR, then assert the binary actually exists
-      # so a silent no-op download fails the job here instead of mid-test.
+      # Install the pinned Chrome explicitly into PUPPETEER_CACHE_DIR and assert the
+      # binary exists, so a silent no-op download fails here instead of mid-test.
+      # Verbose + dual-dir listing to diagnose where the binary actually lands.
       - name: Install Chrome for Puppeteer
         run: |
+          set -x
           rm -rf "$PUPPETEER_CACHE_DIR"
           yarn workspace @nitpicker/crawler exec puppeteer browsers install chrome
-          find "$PUPPETEER_CACHE_DIR" -maxdepth 4 -type f -name chrome
+          ls -la "$PUPPETEER_CACHE_DIR" || true
+          ls -la "$HOME/.cache/puppeteer" || true
+          find "$PUPPETEER_CACHE_DIR" "$HOME/.cache/puppeteer" -maxdepth 4 -type f -name chrome 2>/dev/null || true
           test -n "$(find "$PUPPETEER_CACHE_DIR" -type f -name chrome)"
       # ubuntu-latest (24.04) restricts unprivileged user namespaces via AppArmor,
       # which breaks Chromium's sandbox. Relax the restriction so the sandbox can
