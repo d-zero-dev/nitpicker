@@ -17,15 +17,18 @@ describe('Crawler options', () => {
 		});
 
 		it('外部リンクがフェッチされずにDBに記録される', async () => {
-			const pages = await result.accessor.getPages('external-page');
+			// fetchExternal: false の外部リンクはフェッチされないため contentType を持たず、
+			// external-no-page カテゴリにスタブとして記録される。
+			const pages = await result.accessor.getPages('external-no-page');
 			const externalPage = pages.find((p) => p.url.hostname === '127.0.0.1');
 			expect(externalPage).toBeDefined();
-			// fetchExternal: false の場合、外部ページはフルスクレイプされない
-			expect(
-				externalPage!.status === null ||
-					externalPage!.status === 0 ||
-					externalPage!.title === '',
-			).toBe(true);
+			// 未フェッチスタブ: status は null（未フェッチの契約）、title は空文字。
+			expect(externalPage!.status).toBeNull();
+			expect(externalPage!.title).toBe('');
+
+			// フルスクレイプ済み外部ページ（external-page）には現れない（negative pin）。
+			const fetched = await result.accessor.getPages('external-page');
+			expect(fetched.some((p) => p.url.hostname === '127.0.0.1')).toBe(false);
 		});
 
 		it('内部ページは通常通りスクレイプされる', async () => {

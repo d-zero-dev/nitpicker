@@ -77,6 +77,10 @@
 		"strnatcmp",
 		"isdigit",
 		"isspace",
-		"tolower"
+		"tolower",
+
+		// CI / GitHub Actions (Chromium sandbox on ubuntu runners)
+		"apparmor",
+		"userns"
 	]
 }

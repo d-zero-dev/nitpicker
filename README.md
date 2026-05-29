@@ -1,5 +1,8 @@
 # Nitpicker
 
+[![CI](https://github.com/d-zero-dev/nitpicker/actions/workflows/ci.yml/badge.svg)](https://github.com/d-zero-dev/nitpicker/actions/workflows/ci.yml)
+[![E2E](https://github.com/d-zero-dev/nitpicker/actions/workflows/e2e.yml/badge.svg)](https://github.com/d-zero-dev/nitpicker/actions/workflows/e2e.yml)
+
 Web サイト全体のデータを取得するツール。クロール、リンクのメタデータ取得、ネットワークリソースの記録、各ページのレンダリング後 HTML スナップショット生成が可能。
 
 ## 概要
