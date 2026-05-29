@@ -1,0 +1,43 @@
+name: E2E
+
+# Full E2E suite (~15 min locally, serial maxWorkers:1, Puppeteer-driven).
+# It is too heavy to block every PR, so it runs:
+#   - nightly via cron (catch regressions on the default branch)
+#   - on demand via workflow_dispatch
+#   - on PRs that touch the crawler / CLI / test-server (path filter)
+on:
+  schedule:
+    - cron: '0 18 * * *' # 03:00 JST, nightly
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'packages/@nitpicker/crawler/**'
+      - 'packages/@nitpicker/cli/**'
+      - 'packages/test-server/**'
+      - 'vitest.e2e.config.ts'
+      - '.github/workflows/e2e.yml'
+
+# A new push to the same ref supersedes any in-flight run.
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - run: corepack enable
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: yarn
+      - run: yarn install --immutable
+      - run: yarn build
+      # ubuntu-latest (24.04) restricts unprivileged user namespaces via AppArmor,
+      # which breaks Chromium's sandbox. Relax the restriction so the sandbox can
+      # still start — this keeps the sandbox enabled rather than passing --no-sandbox.
+      - name: Allow Chromium sandbox (unprivileged userns)
+        run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+      - run: yarn vitest run --config vitest.e2e.config.ts
