@@ -26,6 +26,12 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Pin one cache dir shared by the explicit install below and the puppeteer
+      # runtime in the tests. Without this they can resolve different default dirs
+      # (@puppeteer/browsers CLI vs the puppeteer package), so the browser installs
+      # to one place and the crawl looks in another → "Could not find Chrome".
+      PUPPETEER_CACHE_DIR: ${{ github.workspace }}/.puppeteer-cache
     steps:
       - uses: actions/checkout@v6
       - run: corepack enable
@@ -33,18 +39,18 @@ jobs:
         with:
           node-version: 24
           cache: yarn
-      # Skip Puppeteer's postinstall browser download. Under Yarn 4 it finishes in
-      # ~1s creating an empty browser folder without the binary, which then makes the
-      # explicit install below think Chrome is present and refuse to re-download.
       - run: yarn install --immutable
-        env:
-          PUPPETEER_SKIP_DOWNLOAD: 'true'
       - run: yarn build
-      # Install the pinned browser explicitly into the cache that puppeteer-core
-      # resolves at runtime (~/.cache/puppeteer). With the postinstall skipped above,
-      # this performs a clean, complete download.
+      # Puppeteer's Yarn 4 postinstall leaves an empty browser folder without the
+      # binary, which blocks a re-install. Wipe the cache, install the pinned Chrome
+      # explicitly into PUPPETEER_CACHE_DIR, then assert the binary actually exists
+      # so a silent no-op download fails the job here instead of mid-test.
       - name: Install Chrome for Puppeteer
-        run: yarn workspace @nitpicker/crawler exec puppeteer browsers install chrome
+        run: |
+          rm -rf "$PUPPETEER_CACHE_DIR"
+          yarn workspace @nitpicker/crawler exec puppeteer browsers install chrome
+          find "$PUPPETEER_CACHE_DIR" -maxdepth 4 -type f -name chrome
+          test -n "$(find "$PUPPETEER_CACHE_DIR" -type f -name chrome)"
       # ubuntu-latest (24.04) restricts unprivileged user namespaces via AppArmor,
       # which breaks Chromium's sandbox. Relax the restriction so the sandbox can
       # still start — this keeps the sandbox enabled rather than passing --no-sandbox.
