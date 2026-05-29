@@ -3,6 +3,21 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.9.0](https://github.com/d-zero-dev/nitpicker/compare/v0.8.0...v0.9.0) (2026-05-29)
+
+### Features
+
+- **report-google-sheets:** add canonical-URL dedupe mode for the Resources sheet ([877f887](https://github.com/d-zero-dev/nitpicker/commit/877f887234ddf3eb8abe191ceb3be08e7d61be89))
+- **report-google-sheets:** add Query Pattern column with precise overflow detection ([ea4b6fa](https://github.com/d-zero-dev/nitpicker/commit/ea4b6fa84cbea5f9855531e803f9b162f17d0caa))
+- **report-google-sheets:** sort Resources by natural URL order before output ([62c4787](https://github.com/d-zero-dev/nitpicker/commit/62c4787d8c807addbbc3fa055f52b2a2fdca53c2))
+- **report-google-sheets:** stream Phase 2/3 row sends so large reports do not OOM ([5e90c13](https://github.com/d-zero-dev/nitpicker/commit/5e90c13138f0e02d7fedf20369a7f82424ef05b6))
+- **report-google-sheets:** subscribe to Sheet.onProgress in Phase 3 finalize ([c1a09cf](https://github.com/d-zero-dev/nitpicker/commit/c1a09cfdfa6769d40b94955887105ac9a41122d5))
+
+### Performance Improvements
+
+- **report-google-sheets:** port Martin Pool's strnatcmp for the Resources sort ([2079e6e](https://github.com/d-zero-dev/nitpicker/commit/2079e6ec46d4941e43096370015d2ddab02b5060))
+- **report-google-sheets:** sort dedupe output after aggregation, not before ([3e8802e](https://github.com/d-zero-dev/nitpicker/commit/3e8802edcc4d586f186aecf978c7167dd6e10dfe))
+
 # [0.8.0](https://github.com/d-zero-dev/nitpicker/compare/v0.7.0...v0.8.0) (2026-05-16)
 
 **Note:** Version bump only for package @nitpicker/report-google-sheets
