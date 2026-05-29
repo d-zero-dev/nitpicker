@@ -27,7 +27,9 @@ describe('Single page scraping', () => {
 	});
 
 	it('非再帰モードで子ページはisTarget=falseで記録される', async () => {
-		const pages = await result.accessor.getPages('page');
+		// 子ページは title-only モードで text/html ページとして記録されるが isTarget=false。
+		// 'page' フィルタは isTarget=1 のみを返すため internal-page で引く。
+		const pages = await result.accessor.getPages('internal-page');
 		const aboutPages = pages.filter((p) => p.url.pathname === '/about');
 		expect(aboutPages.length).toBeGreaterThan(0);
 		// titleOnlyモードでスクレイプされた場合、isTarget=falseであること

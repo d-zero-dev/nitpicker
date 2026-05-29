@@ -44,10 +44,13 @@ describe('Exclude patterns', () => {
 		});
 
 		it('キーワードマッチしたページがスキップされる', async () => {
-			const pages = await result.accessor.getPages('internal-page');
+			// キーワードマッチしたページはフルスクレイプされず、contentType を持たない
+			// スキップ済みスタブとして記録される（→ internal-no-page カテゴリ）。
+			const pages = await result.accessor.getPages('internal-no-page');
 			const pageB = pages.find((p) => p.url.pathname === '/exclude/page-b');
 			expect(pageB).toBeDefined();
 			expect(pageB!.isTarget).toBe(false);
+			expect(pageB!.isSkipped).toBe(true);
 		});
 
 		it('キーワードマッチしないページは正常にスクレイプされる', async () => {

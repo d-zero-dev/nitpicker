@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
+import { CrawlerOrchestrator } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 describe('Output path (filePath option)', () => {
@@ -51,8 +51,9 @@ describe('Output path (filePath option)', () => {
 	});
 
 	it('config.name にファイル名が反映される', async () => {
-		const accessor = await Archive.connect(orchestrator.archive.tmpDir);
-		const config = await accessor.getConfig();
+		// write() は tmpDir をリネーム後に削除して .nitpicker に集約するため、
+		// tmpDir への再接続は空 DB になる。既存の開いた接続から config を読む。
+		const config = await orchestrator.archive.getConfig();
 		expect(config.name).toBe('custom-output');
 	});
 
@@ -107,8 +108,8 @@ describe('Output path without extension', () => {
 	});
 
 	it('config.name に拡張子なしのファイル名が反映される', async () => {
-		const accessor = await Archive.connect(orchestrator.archive.tmpDir);
-		const config = await accessor.getConfig();
+		// write() で tmpDir は消費されるため、既存の開いた接続から config を読む。
+		const config = await orchestrator.archive.getConfig();
 		expect(config.name).toBe('my-report');
 	});
 });
