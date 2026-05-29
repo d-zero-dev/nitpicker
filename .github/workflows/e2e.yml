@@ -26,12 +26,6 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      # Pin one cache dir shared by the explicit install below and the puppeteer
-      # runtime in the tests. Without this they can resolve different default dirs
-      # (@puppeteer/browsers CLI vs the puppeteer package), so the browser installs
-      # to one place and the crawl looks in another → "Could not find Chrome".
-      PUPPETEER_CACHE_DIR: ${{ github.workspace }}/.puppeteer-cache
     steps:
       - uses: actions/checkout@v6
       - run: corepack enable
@@ -39,20 +33,19 @@ jobs:
         with:
           node-version: 24
           cache: yarn
+      # Puppeteer's browser download is a silent no-op on this runner (it creates an
+      # empty cache folder without the binary), so skip it and drive the Chrome that
+      # ubuntu-latest ships pre-installed via PUPPETEER_EXECUTABLE_PATH instead.
       - run: yarn install --immutable
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
       - run: yarn build
-      # Install the pinned Chrome explicitly into PUPPETEER_CACHE_DIR and assert the
-      # binary exists, so a silent no-op download fails here instead of mid-test.
-      # Verbose + dual-dir listing to diagnose where the binary actually lands.
-      - name: Install Chrome for Puppeteer
+      - name: Use the runner's pre-installed Chrome
         run: |
-          set -x
-          rm -rf "$PUPPETEER_CACHE_DIR"
-          yarn workspace @nitpicker/crawler exec puppeteer browsers install chrome
-          ls -la "$PUPPETEER_CACHE_DIR" || true
-          ls -la "$HOME/.cache/puppeteer" || true
-          find "$PUPPETEER_CACHE_DIR" "$HOME/.cache/puppeteer" -maxdepth 4 -type f -name chrome 2>/dev/null || true
-          test -n "$(find "$PUPPETEER_CACHE_DIR" -type f -name chrome)"
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium-browser || command -v chromium)"
+          test -n "$CHROME"
+          "$CHROME" --version
+          echo "PUPPETEER_EXECUTABLE_PATH=$CHROME" >> "$GITHUB_ENV"
       # ubuntu-latest (24.04) restricts unprivileged user namespaces via AppArmor,
       # which breaks Chromium's sandbox. Relax the restriction so the sandbox can
       # still start — this keeps the sandbox enabled rather than passing --no-sandbox.
