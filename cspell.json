@@ -81,6 +81,14 @@
 
 		// CI / GitHub Actions (Chromium sandbox on ubuntu runners)
 		"apparmor",
-		"userns"
+		"userns",
+
+		// Viewer frontend stack
+		"tanstack",
+		"srcdoc",
+		"hono",
+		"rollup",
+		"favicon",
+		"clientside"
 	]
 }

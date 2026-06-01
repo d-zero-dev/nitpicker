@@ -23,6 +23,10 @@ export default [
 		...dz.configs.commonjs,
 	},
 	{
-		ignores: ['**/dist/**/*'],
+		files: ['packages/@nitpicker/viewer/web/**/*.{ts,tsx,js,jsx}'],
+		...dz.configs.frontend.at(-1),
+	},
+	{
+		ignores: ['**/dist/**/*', '**/lib/**/*'],
 	},
 ];
