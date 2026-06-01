@@ -441,6 +441,51 @@ $ npx @nitpicker/cli query site.nitpicker headers --missingOnly
 $ npx @nitpicker/cli query site.nitpicker summary --pretty
 ```
 
+### Viewer
+
+`.nitpicker` アーカイブをローカルブラウザで対話的に閲覧する Web ビューア。Hono バックエンド（`@nitpicker/query` を再利用）+ React SPA（Vite ビルド）で構成され、サマリー・ページ一覧（10 万ページ規模に耐える仮想スクロール）・ページ詳細（メタデータ + リンク + HTML スナップショットプレビュー）・リソース / 画像 / リンク / violations などを表示する。アーカイブを 1 つ開いたままサーバが常駐し、`Ctrl-C` で停止する。
+
+```sh
+$ npx @nitpicker/cli viewer <file> [options]
+```
+
+#### オプション
+
+| オプション    | 値     | デフォルト  | 説明                                         |
+| ------------- | ------ | ----------- | -------------------------------------------- |
+| `--port` `-p` | 数値   | `4324`      | リッスンポート（使用中なら空きポートに退避） |
+| `--host`      | 文字列 | `localhost` | バインドするホスト名                         |
+| `--no-open`   | なし   | （開く）    | ブラウザの自動オープンを無効化               |
+
+#### 例
+
+```sh
+# ビューアを起動してブラウザを開く
+$ npx @nitpicker/cli viewer site.nitpicker
+
+# ポート指定・ブラウザを開かない
+$ npx @nitpicker/cli viewer site.nitpicker --port 9000 --no-open
+```
+
+> **仮想スクロール**: ページ一覧などの大規模テーブルは、サーバ側ページネーション（`limit`/`offset`）+ TanStack Query の infinite query + TanStack Virtual による行の仮想化で、クライアントに全件を載せずに 10 万行規模を一定メモリで表示する。
+
+> **HTML スナップショット**: ページ詳細のプレビューは `<iframe sandbox>`（`allow-same-origin`/`allow-scripts` なし）でレンダリングするためローカルでも安全。ソース表示にも切り替えられる。
+
+#### アクセシビリティ
+
+ビューアは WCAG 2.1 AA を満たすことを目標に実装されている。主な保証:
+
+- **キーボード操作**: スキップリンク（最初の Tab で本文へジャンプ）、列リサイザーは矢印キーで幅変更（Shift で大ステップ）、全コントロールにフォーカスリング。
+- **スクリーンリーダー**: 仮想テーブルは flexbox レイアウトでもネイティブ table セマンティクスを失わないよう、明示的な ARIA ロール（`table`/`row`/`columnheader`/`cell`）+ `aria-rowcount`/`aria-colcount`/`aria-rowindex`/`aria-colindex` を付与。フィルタ/ソートの input・select はすべてアクセシブルネームを持ち、行数表示はライブリージョン（`aria-live="polite"`）。ネットワークグラフ（canvas）は `role="img"` + 説明ラベルで、同じデータは「ページリンク」表からアクセシブルに参照できる。
+- **視覚**: ダーク/ライト両テーマでリンク等のコントラストが AA（4.5:1）以上。`prefers-reduced-motion` 指定時はローディング/スケルトンのアニメーションを停止。
+
+検証方法（回帰防止）:
+
+- **自動 E2E**: `yarn workspace @nitpicker/viewer test:e2e`（Playwright）に a11y 専用テスト群を同梱。スキップリンク・テーブルロール・コントロール名・矢印キーリサイズ・ライブリージョン・グラフ代替テキストを検証する。
+- **手動監査**: Chrome DevTools / Lighthouse の Accessibility カテゴリ（全ルートで 100 を確認済み）。`axe-core` ベースなので CI への組み込みも可能。
+
+> **保守メモ**: `web/components/virtual-table.tsx` の CSS は table 要素を `display: flex/block` でレイアウトしており、これがネイティブの table セマンティクスをアクセシビリティツリーから剥がす。**ロール属性を削除すると画面読み上げで「ただのテキストの羅列」に退行する**ため、ARIA ロールは必須。理由は同ファイルのコメントに記載。
+
 ### MCP Server
 
 `.nitpicker` アーカイブファイルを AI アシスタント（Claude 等）から直接クエリするための [Model Context Protocol](https://modelcontextprotocol.io/) サーバー。14 のツールを提供し、サイト構造・メタデータ・リンク・リソース・画像・セキュリティヘッダーなどを対話的に分析できる。

@@ -16,7 +16,8 @@ packages/
 │   ├── query        # アーカイブクエリ API（SQL レベルのフィルタ・集計）
 │   ├── mcp-server   # MCP サーバー（AI アシスタントからのアーカイブクエリ）
 │   ├── analyze-*    # 各種 analyze プラグイン
-│   └── report-google-sheets  # Google Sheets レポーター
+│   ├── report-google-sheets  # Google Sheets レポーター
+│   └── viewer       # ローカルブラウザビューア（Hono API + React SPA）
 └── test-server/     # E2Eテスト用 Hono サーバー
 ```
 
@@ -33,6 +34,7 @@ packages/
            │    └── query              │
            │         ↑                 │
            │    mcp-server ← @modelcontextprotocol/sdk
+           │    viewer ← @hono/node-server + react + @tanstack/*（外部）
            └── @d-zero/dealer（外部）──┘
 ```
 
@@ -196,15 +198,48 @@ crawler/src/
 
 **依存:** `@modelcontextprotocol/sdk`, `@nitpicker/query`
 
+### @nitpicker/viewer
+
+`.nitpicker` アーカイブをローカルブラウザで閲覧する Web ビューア。`mcp-server` の HTTP/REST 版に相当し、`@nitpicker/query` の関数群をそのまま再利用する。
+
+**構成（単一パッケージ、backend + frontend 同居）:**
+
+- **backend（`src/` → `tsc` → `lib/`）**: Hono アプリ。`start-viewer.ts`（サーバ起動 + ブラウザオープン + SIGINT graceful shutdown）、`create-app.ts`（全ルート登録 + `serveStatic` + エラーハンドラ）、`archive-context.ts`（`ArchiveManager` で 1 アーカイブを常駐保持）、`routes/register-*-route.ts`（query 関数 1:1 の 12 ルート）
+- **frontend（`web/` → `vite build` → `lib/public/`）**: React 19 SPA。`@tanstack/react-query`（infinite query）+ `@tanstack/react-table` + `@tanstack/react-virtual` による仮想スクロール、BrowserRouter（History API、未マッチ GET は Hono が index.html を返す SPA フォールバック）ルーティング、`@nitpicker/query` の型を DTO として再利用。ダーク/ライトテーマ切替（`data-theme` + localStorage、`web/theme/`）、i18n（en/ja、`web/i18n/` の自前辞書 + Context）、列リサイズ（マウス + 矢印キー）、ローディングスケルトン + `aria-busy` + グローバル進捗バー、画像サムネイルプレビュー、Mismatches の赤緑文字差分（`web/utils/diff-text.ts`）を備える。アクセシビリティ（WCAG 2.1 AA）対応として、仮想テーブルへの明示的 ARIA グリッドロール、スキップリンク（`web/components/skip-link.tsx`）、フォームコントロールのアクセシブルネーム、ライブリージョン、`prefers-reduced-motion`、AA コントラストを実装（README「アクセシビリティ」節 + 下記「設計注意」参照）
+
+**データフロー:**
+
+```
+nitpicker viewer <file>
+  → startViewer() → createArchiveContext()（ArchiveManager.open で 1 アーカイブ常駐）
+  → createApp()（Hono: REST ルート + lib/public 静的配信）
+  → serve()（@hono/node-server）+ openBrowser()
+  → ブラウザ: SPA が /api/* を fetch → query 関数の結果を表示
+  → SIGINT/SIGTERM: manager.closeAll() → server.close() → resolve（CLI が exit）
+```
+
+**REST API（アーカイブは起動時固定なので archiveId 不要）:** `GET /api/summary`, `/api/pages`, `/api/pages/detail?url=`, `/api/pages/html?url=`, `/api/links?type=`, `/api/resources`, `/api/resources/referrers?resourceUrl=`, `/api/images`, `/api/violations`, `/api/duplicates`, `/api/mismatches`, `/api/headers`, `/api/graph`（内部ページのリンクグラフ、`getLinkGraph`）, `/api/page-links`（全ページの status/referrers/headers 一覧、google-sheets「Links」シート相当、`listPageLinks`）, `/api/info`（開いているアーカイブの絶対パス、フッター表示用）。クエリパラメータ → query options 変換は `query-params/to-number.ts` / `to-boolean.ts`、エラーは `sanitize-error-message.ts` で絶対パスを伏せて JSON 返却（mcp-server と同方針）。
+
+**バイナリ:** なし（CLI の `viewer` サブコマンド経由で起動）
+
+**依存:** `@nitpicker/query`, `hono`, `@hono/node-server`, `react`, `react-dom`, `@tanstack/react-query`, `@tanstack/react-table`, `@tanstack/react-virtual`, `react-router`
+
+> **設計注意（CLI 常駐コマンド）:** 他の 5 コマンドはバッチ型（実行→完了→`cli.ts` 末尾の `process.exit`）だが、`viewer` だけは常駐サーバ。`startViewer` は SIGINT/SIGTERM を受けるまで resolve せず、`process.exit` に到達しない。将来 `cli.ts` を変更する際は、この例外を壊さないこと（viewer のシャットダウン経路で `ArchiveManager.closeAll()` を必ず通すこと）。
+
+> **設計注意（ポート探索は serve と同じ host を probe する）:** `findFreePort(preferred, host)` は **`serve()` がバインドするのと同じ `host` で空きを確認しなければならない**。`localhost` は `::1`（IPv6）に解決される一方、host 未指定の bind は `0.0.0.0`/`::` を使うため、別インターフェースを probe すると「空き」と誤判定し、フォールバックが効かず banner 表示後に `EADDRINUSE` でクラッシュする。`start-viewer.ts` は必ず `host` を渡すこと。回帰テストは `find-free-port.spec.ts`（`net.createServer` をスパイし `listen` への host 転送を検証）。
+
+> **設計注意（仮想テーブルの ARIA ロールは必須）:** `web/components/virtual-table.tsx` は CSS で table 要素を `display: flex/block` にレイアウトしており、これがネイティブ table セマンティクスをアクセシビリティツリーから剥がす。明示的な ARIA ロール（`table`/`rowgroup`/`row`/`columnheader`/`cell`）+ `aria-row/colcount`/`index` で復元しているため、**これらを削除すると画面読み上げが「無構造なテキストの羅列」に退行する**。列ヘッダーのアクセシブルネームはリサイザーのラベル混入を避けるため `to-accessible-header-label.ts` で固定。E2E（`e2e/viewer.spec.ts` の「アクセシビリティ」群）が回帰を検知する。
+
 ### @nitpicker/cli
 
-`@d-zero/roar` ベースの統合 CLI。5つのサブコマンドを提供。全 analyze プラグインを `dependencies` に含んでおり、`npx` 実行時に `@nitpicker/core` の動的 `import()` がプラグインモジュールを解決できるようにしている。
+`@d-zero/roar` ベースの統合 CLI。6つのサブコマンドを提供。全 analyze プラグインを `dependencies` に含んでおり、`npx` 実行時に `@nitpicker/core` の動的 `import()` がプラグインモジュールを解決できるようにしている。
 
 - **`npx @nitpicker/cli crawl <URL>`**: Webサイトをクロールして `.nitpicker` ファイルを生成
 - **`npx @nitpicker/cli analyze <file>`**: `.nitpicker` ファイルに対して analyze プラグインを実行。`--search-keywords`, `--axe-lang` 等のフラグで設定ファイルのプラグイン設定を上書き可能（`buildPluginOverrides()` → `Nitpicker.setPluginOverrides()` 経由）
 - **`npx @nitpicker/cli report <file>`**: `.nitpicker` ファイルから Google Sheets レポートを生成
 - **`npx @nitpicker/cli pipeline <URL>`**: crawl → analyze → report を直列実行。`startCrawl()` でアーカイブパスを取得し、そのパスを `analyze()` と `report()` に引き渡す。`--sheet` 指定時のみ report ステップを実行
 - **`npx @nitpicker/cli query <file> <sub-command>`**: `.nitpicker` ファイルに対してクエリを実行し、結果を JSON で出力。`@nitpicker/query` の全関数を CLI から利用可能。12 のサブコマンド（`summary`, `pages`, `page-detail`, `html`, `links`, `resources`, `images`, `violations`, `duplicates`, `mismatches`, `headers`, `resource-referrers`）を提供
+- **`npx @nitpicker/cli viewer <file>`**: `.nitpicker` ファイルをローカルブラウザで閲覧する Web ビューアを起動（`@nitpicker/viewer`）。常駐サーバなので `Ctrl-C` まで動き続ける（詳細は `@nitpicker/viewer` セクション）
 
 ---
 
@@ -897,6 +932,8 @@ packages/test-server/
 ```
 
 **テスト実行:** `yarn vitest run --config vitest.e2e.config.ts`（`maxWorkers: 1`）
+
+> **viewer の E2E は別系統（Playwright）:** 上記は crawler 中心の Vitest E2E。`@nitpicker/viewer` の E2E は **Playwright** で、`packages/@nitpicker/viewer/e2e/`（`generate-fixture.mjs` で fixture 生成 → 実 CLI で viewer 起動 → ブラウザ検証、a11y テスト群を含む）にある。実行は `yarn workspace @nitpicker/viewer test:e2e`。Playwright spec は `test.describe` 等が Vitest と非互換なため、ルート `vitest.config.ts` の `exclude` で `**/@nitpicker/viewer/e2e/**` を除外している（これを外すと `yarn test` が「Playwright Test did not expect test.describe()」で落ちる）。
 
 **テスト用 crawl ヘルパーのデフォルトオプション:**
 

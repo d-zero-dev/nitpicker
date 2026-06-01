@@ -23,7 +23,8 @@ packages/
 │   ├── analyze-markuplint/        # マークアップ検証
 │   ├── analyze-search/            # キーワード検索
 │   ├── analyze-textlint/          # テキスト校正
-│   └── report-google-sheets/      # Google Sheets レポーター
+│   ├── report-google-sheets/      # Google Sheets レポーター
+│   └── viewer/                    # ローカルブラウザビューア（Hono API + React SPA、CLI: nitpicker viewer）
 └── test-server/                   # E2E テスト用 Hono サーバー
 ```
 
@@ -38,12 +39,15 @@ packages/
            │    │        ↑   │
            │    │  analyze-* プラグイン
            │    └── query
-           │         ↑
-           │    mcp-server ← @modelcontextprotocol/sdk（外部）
+           │         ↑   ↑
+           │         │   mcp-server ← @modelcontextprotocol/sdk（外部）
+           │         └── viewer ← @hono/node-server + react + @tanstack/*（外部）
            └── @d-zero/dealer（外部）
 ```
 
 > **Note**: CLI は analyze プラグインに直接依存する（`npx` 実行時のモジュール解決のため）。新規 analyze プラグイン追加時は `@nitpicker/cli/package.json` の `dependencies` にも追加すること。
+
+> **Note**: `viewer` は Hono バックエンド（`@nitpicker/query` を再利用）+ React SPA（Vite ビルド）の単一パッケージ。CLI に `viewer` サブコマンドとして統合され、`@nitpicker/cli/package.json` の `dependencies` に含まれる。他コマンドがバッチ型（実行→完了→`process.exit`）なのに対し、viewer だけは常駐サーバなので `cli.ts` 末尾の `process.exit` を回避する例外扱いになる（`startViewer` は SIGINT/SIGTERM まで resolve しない）。ビルドは `tsc`（backend）+ `vite build`（frontend）の 2 段。
 
 ## CLI コマンド
 
@@ -54,6 +58,7 @@ npx @nitpicker/cli analyze <file> [options]             # .nitpicker ファイ�
 npx @nitpicker/cli report <file> [options]              # .nitpicker ファイルから Google Sheets レポートを生成
 npx @nitpicker/cli pipeline <URL> [options]             # crawl → analyze → report を直列実行
 npx @nitpicker/cli query <file> <sub-command> [options] # .nitpicker ファイルに対してクエリを実行し JSON 出力
+npx @nitpicker/cli viewer <file> [options]              # ローカルブラウザビューアを起動（サーバ常駐、Ctrl-C で停止、ブラウザ自動オープン）
 npx @nitpicker/cli -v | --version                       # `@nitpicker/cli` のバージョンを出力して exit 0
 ```
 
@@ -155,6 +160,7 @@ report({ filePath, sheetUrl, dedupeResources, ... })
 ```sh
 yarn test                                          # ユニットテスト
 yarn vitest run --config vitest.e2e.config.ts      # E2E テスト（maxWorkers: 1）
+yarn workspace @nitpicker/viewer test:e2e          # Viewer の Playwright E2E（fixture 生成 → 実 CLI 起動 → ブラウザ検証）
 yarn build                                         # 全パッケージビルド
 yarn lint                                          # lint + cspell
 ```
