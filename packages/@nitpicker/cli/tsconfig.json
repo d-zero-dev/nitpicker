@@ -10,7 +10,8 @@
 		{ "path": "../core" },
 		{ "path": "../crawler" },
 		{ "path": "../query" },
-		{ "path": "../report-google-sheets" }
+		{ "path": "../report-google-sheets" },
+		{ "path": "../viewer" }
 	],
 	"include": ["./src/**/*"],
 	"exclude": ["node_modules", "lib", "./src/**/*.spec.ts"]
