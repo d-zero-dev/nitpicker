@@ -83,11 +83,11 @@ describe('Resource', () => {
 		const mockArchive = createMockArchive({
 			getReferrersOfResource: vi
 				.fn()
-				.mockResolvedValue(['https://a.com/', 'https://b.com/']),
+				.mockResolvedValue(['https://a.example.com/', 'https://b.example.com/']),
 		});
 		const resource = new Resource(mockArchive as never, createRawResource({ id: 42 }));
 		const referrers = await resource.getReferrers();
-		expect(referrers).toEqual(['https://a.com/', 'https://b.com/']);
+		expect(referrers).toEqual(['https://a.example.com/', 'https://b.example.com/']);
 		expect(mockArchive.getReferrersOfResource).toHaveBeenCalledWith(42);
 	});
 

@@ -370,13 +370,13 @@ describe('crawl', () => {
 		const { crawl } = await import('./crawl.js');
 		await crawl(
 			['/tmp/existing.nitpicker'],
-			createFlags({ append: ['https://sample-b.com/'] }),
+			createFlags({ append: ['https://sample-b.example.com/'] }),
 		);
 
 		expect(mockAppend).toHaveBeenCalledOnce();
 		const [archivePath, urls] = mockAppend.mock.calls[0]!;
 		expect(archivePath).toBe('/tmp/existing.nitpicker');
-		expect(urls).toEqual(['https://sample-b.com/']);
+		expect(urls).toEqual(['https://sample-b.example.com/']);
 		expect(mockCrawling).not.toHaveBeenCalled();
 	});
 
@@ -384,18 +384,18 @@ describe('crawl', () => {
 		const { crawl } = await import('./crawl.js');
 		await crawl(
 			['/tmp/existing.nitpicker'],
-			createFlags({ append: ['https://a.com/', 'https://b.com/'] }),
+			createFlags({ append: ['https://a.example.com/', 'https://b.example.com/'] }),
 		);
 
 		expect(mockAppend).toHaveBeenCalledOnce();
 		const [, urls] = mockAppend.mock.calls[0]!;
-		expect(urls).toEqual(['https://a.com/', 'https://b.com/']);
+		expect(urls).toEqual(['https://a.example.com/', 'https://b.example.com/']);
 	});
 
 	it('--append を指定したのに位置引数が無いとエラー', async () => {
 		const { crawl } = await import('./crawl.js');
 		await expect(
-			crawl([], createFlags({ append: ['https://sample-b.com/'] })),
+			crawl([], createFlags({ append: ['https://sample-b.example.com/'] })),
 		).rejects.toThrow(
 			'--append requires the archive path as the positional argument (usage: crawl <archive> --append <URL>).',
 		);
@@ -406,7 +406,7 @@ describe('crawl', () => {
 		await expect(
 			crawl(
 				['/tmp/a.nitpicker', '/tmp/b.nitpicker'],
-				createFlags({ append: ['https://sample-b.com/'] }),
+				createFlags({ append: ['https://sample-b.example.com/'] }),
 			),
 		).rejects.toThrow(
 			'--append takes exactly one positional argument (the archive path). Extra positionals were given — append URLs must follow `--append`, not the archive.',
@@ -418,7 +418,7 @@ describe('crawl', () => {
 		await expect(
 			crawl(
 				['/tmp/a.nitpicker'],
-				createFlags({ append: ['https://sample-b.com/'], resume: '/tmp/stub' }),
+				createFlags({ append: ['https://sample-b.example.com/'], resume: '/tmp/stub' }),
 			),
 		).rejects.toThrow('--resume and --append cannot be used together');
 	});
@@ -428,7 +428,7 @@ describe('crawl', () => {
 		await expect(
 			crawl(
 				['a.nitpicker', 'b.nitpicker'],
-				createFlags({ append: ['https://sample-b.com/'], diff: true }),
+				createFlags({ append: ['https://sample-b.example.com/'], diff: true }),
 			),
 		).rejects.toThrow('--diff cannot be combined with --append');
 	});
@@ -439,7 +439,7 @@ describe('crawl', () => {
 			crawl(
 				['/tmp/a.nitpicker'],
 				createFlags({
-					append: ['https://sample-b.com/'],
+					append: ['https://sample-b.example.com/'],
 					output: '/tmp/out.nitpicker',
 				}),
 			),
@@ -452,8 +452,8 @@ describe('crawl', () => {
 			crawl(
 				['/tmp/a.nitpicker'],
 				createFlags({
-					append: ['https://sample-b.com/'],
-					list: ['https://sample-b.com/blog/'],
+					append: ['https://sample-b.example.com/'],
+					list: ['https://sample-b.example.com/blog/'],
 				}),
 			),
 		).rejects.toThrow('--append cannot be combined with --list');
@@ -464,7 +464,7 @@ describe('crawl', () => {
 		await expect(
 			crawl(
 				['/tmp/a.nitpicker'],
-				createFlags({ append: ['https://sample-b.com/'], single: true }),
+				createFlags({ append: ['https://sample-b.example.com/'], single: true }),
 			),
 		).rejects.toThrow('--append cannot be combined with --single');
 	});
@@ -473,7 +473,7 @@ describe('crawl', () => {
 		const { crawl } = await import('./crawl.js');
 		await crawl(
 			['/tmp/a.nitpicker'],
-			createFlags({ append: ['https://sample-b.com/'], list: [] }),
+			createFlags({ append: ['https://sample-b.example.com/'], list: [] }),
 		);
 		expect(mockAppend).toHaveBeenCalledOnce();
 	});

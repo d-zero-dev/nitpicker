@@ -262,7 +262,7 @@ describe('handleScrapeEnd', () => {
 				anchorList: [
 					makeAnchor('https://example.com/blog/post'),
 					makeAnchor('https://example.com/about'),
-					makeAnchor('https://other.com/foo'),
+					makeAnchor('https://other.example.com/foo'),
 				],
 			});
 			const linkList = {

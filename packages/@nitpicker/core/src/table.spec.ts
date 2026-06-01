@@ -52,12 +52,12 @@ describe('Table', () => {
 	it('addData stores batch data', () => {
 		const table = new Table<'col'>();
 		table.addData({
-			'https://a.com/': { col: { value: 'A' } },
-			'https://b.com/': { col: { value: 'B' } },
+			'https://a.example.com/': { col: { value: 'A' } },
+			'https://b.example.com/': { col: { value: 'B' } },
 		});
 		const json = table.toJSON();
 		expect(Object.keys(json.data)).toHaveLength(2);
-		expect(json.data['https://a.com/']).toEqual({ col: { value: 'A' } });
+		expect(json.data['https://a.example.com/']).toEqual({ col: { value: 'A' } });
 	});
 
 	it('getData returns data as a plain object', () => {
@@ -77,7 +77,7 @@ describe('Table', () => {
 
 	it('getDataByUrl returns undefined for unknown URL', () => {
 		const table = new Table<'col'>();
-		const url = { href: 'https://unknown.com/' } as { href: string };
+		const url = { href: 'https://unknown.example.com/' } as { href: string };
 		expect(table.getDataByUrl(url)).toBeUndefined();
 	});
 });

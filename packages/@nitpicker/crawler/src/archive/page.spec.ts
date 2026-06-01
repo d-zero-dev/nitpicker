@@ -221,10 +221,12 @@ describe('Page', () => {
 	describe('redirectFrom', () => {
 		it('maps rawRedirects to Redirect[]', () => {
 			const redirects: DB_Redirect[] = [
-				{ pageId: 1, from: 'https://old.com/', fromId: 10 },
+				{ pageId: 1, from: 'https://old.example.com/', fromId: 10 },
 			];
 			const page = new Page(createMockArchive() as never, createRawPage(), redirects);
-			expect(page.redirectFrom).toEqual([{ url: 'https://old.com/', pageId: 10 }]);
+			expect(page.redirectFrom).toEqual([
+				{ url: 'https://old.example.com/', pageId: 10 },
+			]);
 		});
 
 		it('returns empty array when no redirects', () => {
