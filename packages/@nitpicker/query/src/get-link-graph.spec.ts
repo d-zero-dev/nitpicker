@@ -86,7 +86,7 @@ describe('getLinkGraph', () => {
 					textContent: 'Contact',
 				},
 				{
-					href: parseUrl('https://external.com/')!,
+					href: parseUrl('https://example.net/')!,
 					isExternal: true,
 					title: null,
 					textContent: 'External',

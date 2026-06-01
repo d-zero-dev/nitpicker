@@ -189,7 +189,7 @@ describe('LinkList', () => {
 
 		it('sets isExternal=true when hostname not in scope', () => {
 			const list = new LinkList();
-			const url = createUrl('https://external.com/page');
+			const url = createUrl('https://example.net/page');
 			const scope = createScope([['example.com', ['https://example.com/']]]);
 			list.add(url);
 			const link = list.done(url, scope, { page: createPageData() }, defaultOptions);
