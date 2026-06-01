@@ -1,0 +1,35 @@
+import type { PaginatedResourceList } from '@nitpicker/query';
+
+import { useInfiniteQuery } from '@tanstack/react-query';
+
+import { apiGet } from './api-client.js';
+import { getNextOffset } from './get-next-offset.js';
+import { PAGE_SIZE } from './page-size.js';
+
+/** Filter state for the resources view. */
+export interface ResourcesFilter {
+	/** Filter by content-type prefix. */
+	contentType?: string;
+	/** Filter by external/internal. */
+	isExternal?: boolean;
+}
+
+/**
+ * Infinite-scrolling resource list.
+ * @param filter - The active filter state.
+ * @returns The TanStack infinite-query result.
+ */
+export function useResourcesInfinite(filter: ResourcesFilter) {
+	return useInfiniteQuery({
+		queryKey: ['resources', filter],
+		initialPageParam: 0,
+		queryFn: ({ pageParam }) =>
+			apiGet<PaginatedResourceList>('/api/resources', {
+				...filter,
+				limit: PAGE_SIZE,
+				offset: pageParam,
+			}),
+		getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+			getNextOffset(lastPage, lastPageParam),
+	});
+}

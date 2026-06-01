@@ -1,0 +1,58 @@
+{
+	"name": "@nitpicker/viewer",
+	"version": "0.9.0",
+	"description": "Local browser viewer for .nitpicker archive files",
+	"author": "D-ZERO",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/d-zero-dev/nitpicker.git",
+		"directory": "packages/@nitpicker/viewer"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"files": [
+		"lib"
+	],
+	"type": "module",
+	"exports": {
+		".": {
+			"import": "./lib/start-viewer.js",
+			"types": "./lib/start-viewer.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "tsc && vite build",
+		"clean": "tsc --build --clean",
+		"test:e2e": "node ./e2e/generate-fixture.mjs && playwright test"
+	},
+	"dependencies": {
+		"@hono/node-server": "2.0.3",
+		"@nitpicker/query": "0.9.0",
+		"@tanstack/react-query": "5.100.11",
+		"@tanstack/react-table": "8.21.3",
+		"@tanstack/react-virtual": "3.13.25",
+		"graphology": "0.26.0",
+		"graphology-layout-forceatlas2": "0.10.1",
+		"hono": "4.12.22",
+		"react": "19.2.6",
+		"react-dom": "19.2.6",
+		"react-router": "7.15.1",
+		"sigma": "3.0.3"
+	},
+	"devDependencies": {
+		"@d-zero/shared": "0.20.1",
+		"@nitpicker/crawler": "0.9.0",
+		"@playwright/test": "1.60.0",
+		"@testing-library/dom": "10.4.1",
+		"@testing-library/jest-dom": "6.9.1",
+		"@testing-library/react": "16.3.2",
+		"@types/react": "19.2.15",
+		"@types/react-dom": "19.2.3",
+		"@vitejs/plugin-react": "6.0.2",
+		"graphology-types": "0.24.8",
+		"jsdom": "29.1.1",
+		"vite": "8.0.14"
+	}
+}
