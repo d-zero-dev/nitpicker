@@ -530,6 +530,30 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
+	 * Retrieves a single sub-resource from the `resources` table by its URL.
+	 *
+	 * Accepts multiple URL candidates because the stored key is the resource's
+	 * `href` while callers may only know the hash-stripped form; the first match
+	 * wins.
+	 *
+	 * Deliberately NOT decorated with `@ErrorEmitter`: the only caller (the
+	 * crawler's resource-reuse hook) has a full fallback (the HEAD pre-flight),
+	 * so a read failure here must not surface as a database `error` event —
+	 * the orchestrator aborts the whole crawl on that event, which is the
+	 * correct reaction to write failures but not to a recoverable read.
+	 * @param urls - URL candidates to match against the `url` column.
+	 * @returns The raw {@link DB_Resource} row, or `null` if none match.
+	 */
+	@retry(retrySetting)
+	async getResourceByUrl(urls: readonly string[]): Promise<DB_Resource | null> {
+		const res = await this.#instance
+			.select('*')
+			.from<DB_Resource>('resources')
+			.whereIn('url', [...urls])
+			.first();
+		return res ?? null;
+	}
+	/**
 	 * Retrieves all sub-resources from the `resources` table.
 	 * @returns An array of raw {@link DB_Resource} rows.
 	 */

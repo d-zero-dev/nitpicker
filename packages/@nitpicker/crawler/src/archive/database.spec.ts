@@ -950,3 +950,51 @@ describe('getJSON (getConfig 経由)', () => {
 		await db2.destroy();
 	});
 });
+
+describe('getResourceByUrl', () => {
+	const resourceDbPath = path.resolve(workingDir, 'get-resource-by-url-test.sqlite');
+
+	afterAll(async () => {
+		await remove(resourceDbPath);
+	});
+
+	it('挿入したリソースをURLで取得できる・未登録URLは null', async () => {
+		const db = await Database.connect({
+			workingDir,
+			filename: resourceDbPath,
+		});
+
+		await db.insertResource({
+			url: parseUrl('https://example.com/image.jpg')!,
+			isExternal: false,
+			isError: false,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'image/jpeg',
+			contentLength: 1234,
+			compress: false,
+			cdn: false,
+			headers: { 'content-type': 'image/jpeg' },
+		});
+
+		const hit = await db.getResourceByUrl(['https://example.com/image.jpg']);
+		expect(hit).not.toBeNull();
+		expect(hit?.status).toBe(200);
+		expect(hit?.statusText).toBe('OK');
+		expect(hit?.contentType).toBe('image/jpeg');
+		expect(hit?.contentLength).toBe(1234);
+		expect(hit?.responseHeaders).toBe(JSON.stringify({ 'content-type': 'image/jpeg' }));
+
+		// 複数候補のうちいずれかが一致すればヒットする
+		const hitByCandidates = await db.getResourceByUrl([
+			'https://example.com/no-such.jpg',
+			'https://example.com/image.jpg',
+		]);
+		expect(hitByCandidates?.url).toBe('https://example.com/image.jpg');
+
+		const miss = await db.getResourceByUrl(['https://example.com/no-such.jpg']);
+		expect(miss).toBeNull();
+
+		await db.destroy();
+	});
+});

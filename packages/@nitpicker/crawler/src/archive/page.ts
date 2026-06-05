@@ -11,6 +11,8 @@ import type {
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 
+import { parseResponseHeaders } from '../utils/object/parse-response-headers.js';
+
 /**
  * Represents a crawled page stored in the archive.
  *
@@ -177,11 +179,10 @@ export default class Page {
 	 * Returns an empty object if headers cannot be parsed.
 	 */
 	get responseHeaders(): Record<string, string> {
-		try {
-			return JSON.parse(this.#raw.responseHeaders);
-		} catch {
-			return {};
-		}
+		return (parseResponseHeaders(this.#raw.responseHeaders) ?? {}) as Record<
+			string,
+			string
+		>;
 	}
 
 	/**

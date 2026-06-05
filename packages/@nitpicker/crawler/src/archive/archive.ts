@@ -119,6 +119,14 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.getCrawlingState();
 	}
 	/**
+	 * Retrieves a single recorded sub-resource by its URL.
+	 * @param urls - URL candidates to match against the stored resource URL.
+	 * @returns The raw resource row, or `null` if none match.
+	 */
+	async getResourceByUrl(urls: readonly string[]) {
+		return this.#db.getResourceByUrl(urls);
+	}
+	/**
 	 * Retrieves the base URL of the crawl session from the archive database.
 	 * @returns The base URL string.
 	 */
