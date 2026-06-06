@@ -49,11 +49,15 @@ describe('analyze-main-contents plugin', () => {
 			total: 1,
 		});
 
+		// `page` ラッパーは必須: これが無いと worker が結果を破棄し、
+		// main の無いページがレポートから消えてしまう（リグレッション防止）
 		expect(result).toEqual({
-			wordCount: { value: 0 },
-			headings: { value: 0 },
-			images: { value: 0 },
-			table: { value: 0 },
+			page: {
+				wordCount: { value: 0 },
+				headings: { value: 0 },
+				images: { value: 0 },
+				table: { value: 0 },
+			},
 		});
 	});
 

@@ -93,18 +93,23 @@ export default definePlugin((options: Options) => {
 			const $main = document.querySelector(selectors.join(','));
 
 			if (!$main) {
+				// Main content not found: still report the page with zero counts.
+				// The `page` wrapper is required — without it the worker discards
+				// the result and the page silently disappears from the report.
 				return {
-					wordCount: {
-						value: result.wordCount,
-					},
-					headings: {
-						value: result.headings.length,
-					},
-					images: {
-						value: result.images.length,
-					},
-					table: {
-						value: result.tables.length,
+					page: {
+						wordCount: {
+							value: result.wordCount,
+						},
+						headings: {
+							value: result.headings.length,
+						},
+						images: {
+							value: result.images.length,
+						},
+						table: {
+							value: result.tables.length,
+						},
 					},
 				};
 			}
