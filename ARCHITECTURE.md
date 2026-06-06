@@ -111,7 +111,7 @@ scrapeStart → openPage → loadDOMContent → getHTML → waitNetworkIdle
 - **`Crawler`**: リンク管理・スクレイプスケジューリング
 - **`LinkList`**: URL キュー管理（pending → progress → done）
 - **`Archive`**: アーカイブの作成・再開・書き出し
-- **`ArchiveAccessor`**: 読み取り専用アクセサ（`getPages`, `getPagesWithRefs` など）
+- **`ArchiveAccessor`**: 読み取り専用アクセサ（`getPages`, `getPagesWithRefs` など）。HTML スナップショットの読み取り（`getHtmlOfPage`）は `snapshot-html.zip` を物理展開せず、central directory を 1 度だけ読んでキャッシュし、エントリ単位でストリーミング取得する（zip はランダムアクセス可能なため O(該当エントリ) で済む。全展開方式は単一ページ取得で zip 全体の inflate + 書き戻し I/O を払い、ディスクにも展開ディレクトリが残るため採用しない）
 - **`Page`**: ページデータラッパー
 
 **内部モジュール構造:**
@@ -252,10 +252,47 @@ URL を deal() で受け取り:
 1. robots.txt チェック → 拒否なら skip イベント emit + return
 2. shouldSkipUrl（excludes / excludeUrls）→ マッチなら skip
 3. fetchExternal チェック → 外部 URL で無効なら externalPage emit + return
-4. HEAD プリフライト → 到達不能なら error
-5. metadataOnly / 非 HTML → ブラウザなしで結果返却
-6. HTML → Puppeteer 起動（User-Agent 設定済み）→ スクレイプ
+4. キャプチャ済みリソースの再利用チェック → ヒットすればフェッチなしで結果返却
+5. HEAD プリフライト → 到達不能なら error
+6. metadataOnly / 非 HTML → ブラウザなしで結果返却
+7. HTML → Puppeteer 起動（User-Agent 設定済み）→ スクレイプ
 ```
+
+### キャプチャ済みリソースの再利用（resource-to-page-data.ts）
+
+ページレンダリング中にサブリソース（`<img src>` 等）として既にキャプチャ済みの URL が
+直リンク（`<a href>`）としてキューに積まれた場合、HEAD プリフライトを省略して
+resources テーブルの記録（status / contentType / contentLength / responseHeaders）から
+PageData を合成する。
+
+```
+#scrapePage(url)
+  ├── #resources Set（メモリ）で一次フィルタ — ミス時のコストはゼロ
+  ├── ヒット時のみ lookupResource()（orchestrator がコンストラクタで注入するコールバック）
+  │     ├── まず SQLite を直接点引き（hit ならブロックなしで即返却）
+  │     └── miss の場合のみ WriteQueue.enqueue 経由で再読
+  │         （未 flush の resource insert の後ろに直列化され hit/miss が決定的になる。
+  │          直列化待ちは miss パスに限定されるため dealer レーンをブロックしない）
+  ├── status 2xx かつ contentType 非 HTML → PageData 合成して即返却
+  └── それ以外（行なし / 非 2xx / HTML / null / lookup 失敗）→ HEAD プリフライトにフォールバック
+```
+
+- **2xx 限定の理由**: Puppeteer はリダイレクトの各ホップごとに response イベントを発火する
+  ため、リダイレクトする URL は必ず 3xx 行として記録される。非 2xx をフォールバックさせる
+  ことで、リダイレクト元 URL は従来どおり HEAD（follow-redirects）が完全な `redirectPaths`
+  を取得し、再利用時の `redirectPaths: []` は常に正確な値になる
+- **非 HTML 限定の理由**: HTML はアンカー抽出のため Puppeteer レンダリングが必須。
+  MIME タイプ比較は `isHtmlContentType()`（大文字小文字非依存）で行う —
+  Puppeteer 由来の値はサーバーの大文字小文字をそのまま保持するため
+- **lookup 失敗は HEAD にフォールバック**: `getResourceByUrl` は意図的に `@ErrorEmitter` を
+  付けない（DB `error` イベント → orchestrator の abort listener はクロール全体を中断するため）。
+  crawler 側フックも try/catch で握り、読み取り失敗は「最適化なし」と同じ挙動に縮退する
+- **注入はコンストラクタ DI**: `CrawlerOptions.lookupResource` として `new Crawler()` 時に
+  渡す（セッターの呼び順依存を排除）。`null` なら最適化は無効
+- 検証: `packages/test-server/src/__tests__/e2e/resource-reuse.e2e.ts`（画像エンドポイントへの
+  リクエスト回数・メソッドを test-server 側で記録して検証）と
+  `crawler.spec.ts` の `resource reuse via the lookupResource option`（ネットワーク不使用・
+  lookup 失敗時フォールバックのユニットテスト）
 
 ### dealer 統合
 
