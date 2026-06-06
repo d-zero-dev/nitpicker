@@ -11,7 +11,7 @@ import type { ParseURLOptions } from '@d-zero/shared/parse-url';
 
 import path from 'node:path';
 
-import { extractZip, unzip } from '@d-zero/fs/zip';
+import { extractZip } from '@d-zero/fs/zip';
 import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-await-event-emitter';
 
 import { log } from './debug.js';
@@ -25,6 +25,12 @@ import Resource from './resource.js';
 import { safePath } from './safe-path.js';
 
 /**
+ * A single file entry within a snapshot zip's central directory,
+ * inferred from the return type of `extractZip`.
+ */
+type ZipEntry = Awaited<ReturnType<typeof extractZip>>['files'][number];
+
+/**
  * Provides read-only access to an archive's database and stored data files.
  *
  * This class is the base for the `Archive` class and is also returned
@@ -36,6 +42,12 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	#db: Database;
 	/** Namespace prefix for custom data storage (e.g. `"analysis/plugin-name"`). `null` disables `setData`. */
 	#namespace: string | null = null;
+	/**
+	 * Cached central-directory lookups of snapshot zip files, keyed by zip file path.
+	 * Each value maps an entry file name (e.g. `"123.html"`) to its zip entry,
+	 * enabling O(1) random access without physically extracting the zip.
+	 */
+	#snapshotZipFiles = new Map<string, Promise<Map<string, ZipEntry>>>();
 	/** Absolute path to the temporary working directory containing the database and files. */
 	#tmpDir: string;
 
@@ -104,24 +116,27 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	}
 	/**
 	 * Reads the HTML content of a page snapshot from the archive.
-	 * Supports reading from both unzipped directories and zipped snapshot archives.
+	 *
+	 * Reads from the raw snapshot directory when the file exists there
+	 * (e.g. during an active crawl before `write()`), and otherwise streams
+	 * the single entry out of the zipped snapshot archive via its central
+	 * directory — the zip is never physically extracted to disk.
+	 * The parsed central directory is cached per zip file, so repeated calls
+	 * cost only one entry inflation each.
+	 * An empty snapshot file yields an empty string, while a missing snapshot
+	 * yields null — both code paths preserve that distinction.
 	 * @param filePath - The relative file path to the HTML snapshot, or null.
-	 * @param openZipped - Whether to attempt unzipping the snapshot archive. Defaults to `true`.
 	 * @returns The HTML content as a string, or null if the snapshot is not found or filePath is null.
 	 */
-	async getHtmlOfPage(filePath: string | null, openZipped = true) {
+	async getHtmlOfPage(filePath: string | null) {
 		if (!filePath) {
 			return null;
 		}
 		const snapshotDir = safePath(this.#tmpDir, path.dirname(filePath));
 		const name = path.basename(filePath);
 
-		if (openZipped) {
-			await unzip(`${snapshotDir}.zip`, snapshotDir);
-		}
-
 		if (exists(snapshotDir)) {
-			log('Load %s directly because snapshot dir is unzipped', name);
+			log('Load %s directly because snapshot dir exists', name);
 			const html = await readText(path.resolve(snapshotDir, name)).catch(
 				(error) => error,
 			);
@@ -129,21 +144,27 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 				log('Loaded: %s ...', html.split('\n')[0]);
 				return html;
 			}
-			log('Failed Loading: %O', html);
+			log('Not found %s in snapshot dir, falls back to zipped snapshots', name);
+		}
+
+		const opening = this.#openSnapshotZip(`${snapshotDir}.zip`);
+		if (!opening) {
+			log('Failed: Not found zipped snapshots %s.zip', snapshotDir);
 			return null;
 		}
 		log('Extracts %s from zipped snapshots', name);
-		const zipDir = await extractZip(`${snapshotDir}.zip`);
-		const file = zipDir.files.find((f) => f.type === 'File' && f.path === name);
+		const files = await opening;
+		const file = files.get(name);
 		if (!file) {
 			log('Failed: Not found %s from zipped snapshots', name);
 			return null;
 		}
 		const buffer = await file.buffer();
-		const html = buffer.toString('utf8') || null;
+		const html = buffer.toString('utf8');
 		log('Succeeded: Extracts %s from zipped snapshots', name);
 		return html;
 	}
+
 	/**
 	 * Returns the underlying Knex query builder instance for direct SQL access.
 	 * Enables advanced queries (GROUP BY, HAVING, JOINs) at the database layer
@@ -153,7 +174,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	getKnex() {
 		return this.#db.getKnex();
 	}
-
 	/**
 	 * Retrieves all pages from the archive, optionally filtered by type.
 	 * Eagerly loads redirect relationships (`redirectFrom`) but does NOT load
@@ -181,7 +201,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 
 		return pages.map((page) => new Page(this, page, redirectMap.get(page.id) || []));
 	}
-
 	/**
 	 * Retrieves pages with their related data (redirects, anchors, referrers) in batches.
 	 * Processes pages in chunks of `limit` size, calling the callback for each batch.
@@ -214,7 +233,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 			times++;
 		}
 	}
-
 	/**
 	 * Retrieves pages that link to the specified page (incoming links).
 	 * @param pageId - The database ID of the target page.
@@ -224,7 +242,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		const refs = await this.#db.getReferrersOfPage(pageId);
 		return refs;
 	}
-
 	/**
 	 * Retrieves page URLs that reference the specified resource.
 	 * @param pageId - The database ID of the resource.
@@ -234,7 +251,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		const refs = await this.#db.getReferrersOfResource(pageId);
 		return refs;
 	}
-
 	/**
 	 * Retrieves all sub-resources (CSS, JS, images, etc.) stored in the archive.
 	 * @returns An array of {@link Resource} instances.
@@ -243,7 +259,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		const resources = await this.#db.getResources();
 		return resources.map((r) => new Resource(this, r));
 	}
-
 	/**
 	 * Retrieves a flat list of all resource URLs stored in the archive.
 	 * @returns An array of resource URL strings.
@@ -251,7 +266,15 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	async getResourceUrlList() {
 		return this.#db.getResourceUrlList();
 	}
-
+	/**
+	 * Clears the cached snapshot zip central directories.
+	 * Called when the underlying zip file is about to be rewritten or the
+	 * working directory is moved (e.g. by `Archive.write()`), so later reads
+	 * do not hit a dangling cache entry.
+	 */
+	invalidateSnapshotZipCache() {
+		this.#snapshotZipFiles.clear();
+	}
 	/**
 	 * Stores custom data in the archive under the configured namespace.
 	 * Requires a namespace to be set on this accessor; throws if namespace is null.
@@ -273,14 +296,12 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		}
 		return path.relative(this.#tmpDir, filePath);
 	}
-
 	/**
 	 * Returns the total number of internal pages in the archive.
 	 */
 	async #getPageCount() {
 		return this.#db.getPageCount();
 	}
-
 	/**
 	 * Loads a batch of pages with their related data (redirects, anchors, referrers).
 	 * When `withRefs` is false, loads only pages without relationships for better performance.
@@ -345,5 +366,35 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		}
 		log('Create Page Data: Done');
 		return pPages;
+	}
+
+	/**
+	 * Opens a snapshot zip's central directory once and caches a name-to-entry
+	 * lookup map keyed by the zip file path. Subsequent calls for the same zip
+	 * reuse the cached map — skipping even the existence check — so each page
+	 * read costs only a single entry inflation instead of re-parsing the
+	 * central directory.
+	 * Failed opens are evicted from the cache so transient errors do not stick.
+	 * @param zipFilePath - The absolute path to the snapshot zip file.
+	 * @returns A promise of a map of entry file names to their zip entries,
+	 *   or null when the zip file does not exist.
+	 */
+	#openSnapshotZip(zipFilePath: string) {
+		const cached = this.#snapshotZipFiles.get(zipFilePath);
+		if (cached) {
+			return cached;
+		}
+		if (!exists(zipFilePath)) {
+			return null;
+		}
+		const opening = extractZip(zipFilePath).then(
+			(dir) =>
+				new Map(dir.files.filter((f) => f.type === 'File').map((f) => [f.path, f])),
+		);
+		opening.catch(() => {
+			this.#snapshotZipFiles.delete(zipFilePath);
+		});
+		this.#snapshotZipFiles.set(zipFilePath, opening);
+		return opening;
 	}
 }
