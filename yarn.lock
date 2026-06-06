@@ -15530,7 +15530,10 @@ __metadata:
   resolution: "test-server@workspace:packages/test-server"
   dependencies:
     "@hono/node-server": "npm:1.19.9"
+    "@nitpicker/analyze-main-contents": "npm:0.9.0"
+    "@nitpicker/core": "npm:0.9.0"
     "@nitpicker/crawler": "npm:0.9.0"
+    "@nitpicker/types": "npm:0.9.0"
     await-event-emitter: "npm:2.0.2"
     hono: "npm:4.12.2"
     knex: "npm:3.1.0"

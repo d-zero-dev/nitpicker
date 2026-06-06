@@ -11,6 +11,7 @@ import { optionsRoutes } from './routes/options.js';
 import { paginationRoutes } from './routes/pagination.js';
 import { recursiveRoutes } from './routes/recursive.js';
 import { redirectRoutes } from './routes/redirect.js';
+import { resourceReuseRoutes } from './routes/resource-reuse.js';
 import { scopeRoutes } from './routes/scope.js';
 import { scrollJackRoutes } from './routes/scroll-jack.js';
 
@@ -31,6 +32,7 @@ export function createApp() {
 	scopeRoutes(app);
 	paginationRoutes(app);
 	scrollJackRoutes(app);
+	resourceReuseRoutes(app);
 	return app;
 }
 

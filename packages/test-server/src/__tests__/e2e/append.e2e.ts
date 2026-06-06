@@ -92,6 +92,18 @@ describe('Append crawl', () => {
 		]);
 	});
 
+	it('appended pages keep their HTML snapshots after write() (zip merge)', async () => {
+		const internalPages = await accessor.getPages('internal-page');
+		// 追記クロールで取得されたページのスナップショットが write() で失われていない
+		const docsPage = internalPages.find((p) => p.url.pathname === '/scope/docs/');
+		expect(docsPage).toBeDefined();
+		await expect(docsPage!.getHtml()).resolves.toBeTruthy();
+		// 既存（1回目クロール）のスナップショットも維持されている
+		const blogPage = internalPages.find((p) => p.url.pathname === '/scope/blog/');
+		expect(blogPage).toBeDefined();
+		await expect(blogPage!.getHtml()).resolves.toBeTruthy();
+	});
+
 	it('removes the .bak backup file once the append succeeds', async () => {
 		const exists = await fs
 			.stat(filePath + '.bak')
