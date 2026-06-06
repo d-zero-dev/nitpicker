@@ -20,6 +20,31 @@ vi.mock('./filesystem/output-text.js', async (importOriginal) => {
 	};
 });
 
+/**
+ * Builds minimal page data for `Archive.setPage` in tests.
+ * @param pathname - The URL pathname of the page.
+ * @param html - The HTML snapshot content of the page.
+ * @returns Page data accepted by `Archive.setPage`.
+ */
+function makePageData(pathname: string, html: string) {
+	return {
+		url: parseUrl(`http://localhost${pathname}`)!,
+		redirectPaths: [] as string[],
+		isExternal: false,
+		status: 200,
+		statusText: 'OK',
+		contentLength: html.length,
+		contentType: 'text/html',
+		responseHeaders: {},
+		meta: { title: 'Test Page' },
+		anchorList: [] as never[],
+		imageList: [] as never[],
+		html,
+		isSkipped: false,
+		isTarget: true,
+	};
+}
+
 describe('setPage', () => {
 	const tmpDirPattern = path.resolve(
 		workingDir,
@@ -122,6 +147,96 @@ describe('setPage', () => {
 			clearSpy.mockRestore();
 			mockedOutputText.mockRestore();
 			await archive.close();
+		}
+	});
+});
+
+describe('write: スナップショットzipキャッシュの無効化', () => {
+	const tmpDirPattern = path.resolve(
+		workingDir,
+		Archive.TMP_DIR_PREFIX + 'cache-invalidate-test',
+	);
+	const archiveFilePath = path.resolve(workingDir, 'cache-invalidate-test.nitpicker');
+
+	afterAll(async () => {
+		await remove(tmpDirPattern).catch(() => {});
+		await remove(archiveFilePath).catch(() => {});
+	});
+
+	it('write() 後の getHtmlOfPage は dangling キャッシュ参照で throw せず null を返す', async () => {
+		const html = '<html><body>cached page</body></html>';
+		const archive = await Archive.create({
+			filePath: archiveFilePath,
+			cwd: workingDir,
+		});
+		const pageId = await archive.setPage(makePageData('/cached', html));
+
+		// zip 経由の読み取りで central directory キャッシュを充填する
+		const snapshotDir = path.resolve(archive.tmpDir, Archive.SNAPSHOT_HTML_DIR);
+		const { zip } = await import('@d-zero/fs/zip');
+		await zip(`${snapshotDir}.zip`, snapshotDir);
+		await remove(snapshotDir);
+		const filePath = `${Archive.SNAPSHOT_HTML_DIR}/${pageId}.html`;
+		await expect(archive.getHtmlOfPage(filePath)).resolves.toBe(html);
+
+		// write() で tmpDir がリネーム・削除され、キャッシュ先の zip パスは消滅する
+		await archive.write();
+
+		// キャッシュが無効化されていれば ENOENT を投げず null になる
+		await expect(archive.getHtmlOfPage(filePath)).resolves.toBeNull();
+
+		await archive.close();
+	});
+});
+
+describe('write: append 時のスナップショットマージ', () => {
+	const tmpDirPattern = path.resolve(
+		workingDir,
+		Archive.TMP_DIR_PREFIX + 'append-merge-test',
+	);
+	const archiveFilePath = path.resolve(workingDir, 'append-merge-test.nitpicker');
+
+	afterAll(async () => {
+		await remove(tmpDirPattern).catch(() => {});
+		await remove(archiveFilePath).catch(() => {});
+	});
+
+	it('既存zipと追記スナップショットがマージされ、両方のHTMLが読める', async () => {
+		const html1 = '<html><body>original page</body></html>';
+		const html2 = '<html><body>appended page</body></html>';
+
+		// 1回目: 通常の crawl → write 相当
+		const first = await Archive.create({
+			filePath: archiveFilePath,
+			cwd: workingDir,
+		});
+		const pageId1 = await first.setPage(makePageData('/original', html1));
+		await first.write();
+		await first.close();
+
+		// 2回目: append 相当（既存アーカイブを開き、新規ページを追加して write）
+		const second = await Archive.open({
+			filePath: archiveFilePath,
+			cwd: workingDir,
+		});
+		const pageId2 = await second.setPage(makePageData('/appended', html2));
+		await second.write();
+		await second.close();
+
+		// 再オープンして両方のスナップショットが残っていることを検証
+		const reopened = await Archive.open({
+			filePath: archiveFilePath,
+			cwd: workingDir,
+		});
+		try {
+			await expect(
+				reopened.getHtmlOfPage(`${Archive.SNAPSHOT_HTML_DIR}/${pageId1}.html`),
+			).resolves.toBe(html1);
+			await expect(
+				reopened.getHtmlOfPage(`${Archive.SNAPSHOT_HTML_DIR}/${pageId2}.html`),
+			).resolves.toBe(html2);
+		} finally {
+			await reopened.close();
 		}
 	});
 });
