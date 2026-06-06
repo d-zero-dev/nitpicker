@@ -216,7 +216,9 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		return new Promise<void>((resolve, reject) => {
 			this.#crawler.on('error', (error) => {
 				crawlerLog('On error: %O', error);
-				void writeQueue.enqueue(() => this.#archive.addError(error));
+				writeQueue
+					.enqueue(() => this.#archive.addError(error))
+					.catch((writeError) => reject(writeError));
 				void this.emit('error', error);
 			});
 
