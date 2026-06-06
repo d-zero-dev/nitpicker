@@ -10,6 +10,13 @@ describe('isHtmlContentType', () => {
 		},
 	);
 
+	it.each(['text/html ', ' text/html', '\ttext/html\t'])(
+		'returns true for %j with surrounding whitespace',
+		(contentType) => {
+			expect(isHtmlContentType(contentType)).toBe(true);
+		},
+	);
+
 	it.each(['image/png', 'application/json', 'text/plain', 'text/htm', ''])(
 		'returns false for non-HTML media type %s',
 		(contentType) => {

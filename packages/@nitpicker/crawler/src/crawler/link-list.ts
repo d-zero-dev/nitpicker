@@ -5,6 +5,7 @@ import { isError } from '@d-zero/beholder';
 import { isLowerLayer } from '@d-zero/shared/is-lower-layer';
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 
+import { isHtmlContentType } from './is-html-content-type.js';
 import { protocolAgnosticKey } from './protocol-agnostic-key.js';
 
 /**
@@ -267,7 +268,7 @@ function isPage(link: Link) {
 		return false;
 	}
 
-	if (link.dest.contentType === 'text/html') {
+	if (isHtmlContentType(link.dest.contentType)) {
 		return true;
 	}
 
