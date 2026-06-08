@@ -1,11 +1,91 @@
 import type Archive from './archive/archive.js';
+import type { CrawlerError } from './utils/types/types.js';
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import { CrawlerOrchestrator } from './crawler-orchestrator.js';
 
+vi.mock('./crawler/crawler.js', () => {
+	/**
+	 * A minimal Crawler stand-in: records event handlers and, on `start()`,
+	 * emits a single `error` event followed by `crawlEnd`. This lets tests
+	 * drive the orchestrator's event-to-archive wiring without a browser.
+	 */
+	class FakeCrawler {
+		/** Registered event handlers keyed by event name. */
+		handlers = new Map<string, (payload: never) => void>();
+
+		/** No-op abort to satisfy the orchestrator's interface. */
+		abort() {}
+
+		/**
+		 * Returns an empty undead-PID list.
+		 * @returns An empty array.
+		 */
+		getUndeadPid() {
+			return [];
+		}
+
+		/**
+		 * Records an event handler.
+		 * @param event - The event name.
+		 * @param handler - The handler function.
+		 */
+		on(event: string, handler: (payload: never) => void) {
+			this.handlers.set(event, handler);
+		}
+
+		/** Emits `error` and then `crawlEnd`, simulating a crawl with one error. */
+		start() {
+			const error: CrawlerError = {
+				pid: process.pid,
+				isMainProcess: true,
+				url: 'https://example.com/',
+				isExternal: false,
+				error: new Error('scrape-failure'),
+			};
+			this.handlers.get('error')?.(error as never);
+			this.handlers.get('crawlEnd')?.(undefined as never);
+		}
+	}
+	return { default: FakeCrawler };
+});
+
 afterEach(() => {
 	vi.restoreAllMocks();
+});
+
+describe('CrawlerOrchestrator.crawling: error イベントの書き込み失敗', () => {
+	it('archive.addError が reject すると crawling() 全体が reject する（unhandledRejection にならない）', async () => {
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.reject(new Error('db-write-failure'))),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-adderror-test.nitpicker',
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		await expect(
+			CrawlerOrchestrator.crawling(
+				['https://example.com/'],
+				{
+					cwd: '/tmp',
+					filePath: '/tmp/orchestrator-adderror-test.nitpicker',
+				},
+				(orchestrator) => {
+					// 'error' イベント自体は通知される（リスナー未登録での throw を防ぐ）
+					orchestrator.on('error', () => {});
+				},
+			),
+		).rejects.toThrow('db-write-failure');
+
+		expect(fakeArchive.addError).toHaveBeenCalledOnce();
+	});
 });
 
 describe('CrawlerOrchestrator.append', () => {

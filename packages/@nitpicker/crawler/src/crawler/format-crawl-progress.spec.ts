@@ -23,7 +23,7 @@ describe('formatCrawlProgress', () => {
 			externalDone: 0,
 			limit: 10,
 		});
-		expect(result).toContain('50 done / 100 found');
+		expect(result).toContain('50 done / 100 found URLs');
 		expect(result).toContain('50 remaining');
 	});
 
@@ -36,7 +36,7 @@ describe('formatCrawlProgress', () => {
 			externalDone: 10,
 			limit: 5,
 		});
-		expect(result).toContain('50 done / 100 found');
+		expect(result).toContain('50 done / 100 found URLs');
 		expect(result).toContain('+10/20 ext');
 		expect(result).toContain('60 remaining');
 	});
@@ -50,7 +50,7 @@ describe('formatCrawlProgress', () => {
 			externalDone: 0,
 			limit: 10,
 		});
-		expect(result).toContain('130 done / 150 found');
+		expect(result).toContain('130 done / 150 found URLs');
 		expect(result).toContain('20 remaining');
 	});
 
@@ -75,7 +75,7 @@ describe('formatCrawlProgress', () => {
 			externalDone: 0,
 			limit: 10,
 		});
-		expect(result).toContain('0 done / 0 found');
+		expect(result).toContain('0 done / 0 found URLs');
 		expect(result).toContain('0 remaining');
 	});
 
@@ -128,7 +128,7 @@ describe('formatCrawlProgress', () => {
 			limit: 10,
 		});
 		expect(result).toBe(
-			'Crawling: 50 done / 100 found (+0/0 ext) (50%) [50 remaining] [10 parallel]',
+			'Crawling: 50 done / 100 found URLs (+0/0 ext) (50%) [50 remaining] [10 parallel]',
 		);
 	});
 
@@ -143,8 +143,24 @@ describe('formatCrawlProgress', () => {
 		});
 		// allDone=60, allTotal=100, internalDone=55, internalTotal=90
 		// internalRemaining=35, externalRemaining=5, totalRemaining=40
-		expect(result).toContain('55 done / 90 found');
+		expect(result).toContain('55 done / 90 found URLs');
 		expect(result).toContain('+5/10 ext');
 		expect(result).toContain('40 remaining');
+	});
+
+	it('formats counts with thousands separators', () => {
+		const result = formatCrawlProgress({
+			done: 12_345,
+			total: 1_234_567,
+			resumeOffset: 0,
+			externalTotal: 2345,
+			externalDone: 1234,
+			limit: 10,
+		});
+		// internalDone=12345-1234=11111, internalTotal=1234567-2345=1232222
+		// totalRemaining=1234567-12345=1222222
+		expect(result).toContain('11,111 done / 1,232,222 found URLs');
+		expect(result).toContain('+1,234/2,345 ext');
+		expect(result).toContain('1,222,222 remaining');
 	});
 });

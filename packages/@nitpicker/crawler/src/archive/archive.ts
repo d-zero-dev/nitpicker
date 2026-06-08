@@ -12,6 +12,7 @@ import { Database } from './database.js';
 import { dbLog, log, saveLog } from './debug.js';
 import { appendText } from './filesystem/append-text.js';
 import { exists } from './filesystem/exists.js';
+import { extractMissingZipEntries } from './filesystem/extract-missing-zip-entries.js';
 import { isDir } from './filesystem/is-dir.js';
 import { outputText } from './filesystem/output-text.js';
 import { remove } from './filesystem/remove.js';
@@ -117,6 +118,14 @@ export default class Archive extends ArchiveAccessor {
 	 */
 	async getCrawlingState() {
 		return this.#db.getCrawlingState();
+	}
+	/**
+	 * Retrieves a single recorded sub-resource by its URL.
+	 * @param urls - URL candidates to match against the stored resource URL.
+	 * @returns The raw resource row, or `null` if none match.
+	 */
+	async getResourceByUrl(urls: readonly string[]) {
+		return this.#db.getResourceByUrl(urls);
 	}
 	/**
 	 * Retrieves the base URL of the crawl session from the archive database.
@@ -242,12 +251,22 @@ export default class Archive extends ArchiveAccessor {
 	 */
 	async write() {
 		saveLog('Starts: %s', this.#filePath);
+		// The cached snapshot zip central directories become dangling once the
+		// zip is rewritten or tmpDir is renamed below.
+		this.invalidateSnapshotZipCache();
 		const snapshotZip = `${this.#snapshotDir}.zip`;
 		if (exists(this.#snapshotDir)) {
-			if (!exists(snapshotZip)) {
-				saveLog('Zips snapshot dir: %s', this.#snapshotDir);
-				await zip(snapshotZip, this.#snapshotDir);
+			if (exists(snapshotZip)) {
+				// Append flow: the dir holds only the snapshots written during this
+				// session while the zip holds the pre-existing ones. Merge the zip's
+				// entries into the dir (existing files win) and re-zip, so appended
+				// snapshots are not lost.
+				saveLog('Merges zipped snapshots into snapshot dir: %s', this.#snapshotDir);
+				await extractMissingZipEntries(snapshotZip, this.#snapshotDir);
+				await remove(snapshotZip);
 			}
+			saveLog('Zips snapshot dir: %s', this.#snapshotDir);
+			await zip(snapshotZip, this.#snapshotDir);
 			saveLog('Remove snapshot dir: %s', this.#snapshotDir);
 			await remove(this.#snapshotDir);
 		}

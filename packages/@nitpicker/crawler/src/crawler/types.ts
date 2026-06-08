@@ -60,6 +60,47 @@ export interface CrawlerOptions extends Required<
 
 	/** Whether to ignore robots.txt restrictions. */
 	ignoreRobots: boolean;
+
+	/**
+	 * Lookup for previously captured sub-resources, or `null` to disable the
+	 * resource-reuse optimization. See {@link ResourceLookup}.
+	 */
+	lookupResource: ResourceLookup | null;
+}
+
+/**
+ * Looks up a previously captured sub-resource by URL.
+ *
+ * Injected by the orchestrator so that the crawler can reuse network data
+ * recorded during page rendering instead of issuing a redundant HEAD
+ * pre-flight request. Implementations must serialize the read against any
+ * pending resource writes (e.g., via the orchestrator's WriteQueue).
+ * @param urls - URL candidates to match (e.g., with and without auth credentials).
+ * @returns The recorded resource data, or `null` when no row matches.
+ */
+export type ResourceLookup = (
+	urls: readonly string[],
+) => Promise<ResourceLookupResult | null>;
+
+/**
+ * Minimal sub-resource data needed to synthesize {@link PageData}
+ * without performing a network fetch.
+ */
+export interface ResourceLookupResult {
+	/** HTTP status code of the recorded response, or `null` if unknown. */
+	status: number | null;
+
+	/** HTTP status text of the recorded response, or `null` if unknown. */
+	statusText: string | null;
+
+	/** The Content-Type header value (media type only), or `null` if unknown. */
+	contentType: string | null;
+
+	/** The Content-Length header value in bytes, or `null` if unknown. */
+	contentLength: number | null;
+
+	/** Raw HTTP response headers, or `null` if unavailable. */
+	responseHeaders: Record<string, string | string[] | undefined> | null;
 }
 
 /**

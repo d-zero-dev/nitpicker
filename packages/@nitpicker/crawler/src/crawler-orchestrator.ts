@@ -17,6 +17,7 @@ import Crawler from './crawler/crawler.js';
 import { crawlerLog, log } from './debug.js';
 import { normalizeToArray } from './normalize-to-array.js';
 import { resolveOutputPath } from './resolve-output-path.js';
+import { resourceRowToLookupResult } from './resource-row-to-lookup-result.js';
 import { cleanObject } from './utils/object/clean-object.js';
 import { WriteQueue } from './write-queue.js';
 
@@ -114,6 +115,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	readonly #crawler: Crawler;
 	/** Whether the crawl was started from a pre-defined URL list (non-recursive mode). */
 	readonly #fromList: boolean;
+	/** Serializes archive writes from crawler event handlers (FIFO). */
+	readonly #writeQueue = new WriteQueue();
 
 	/**
 	 * The underlying archive instance used for storing crawl results.
@@ -160,6 +163,23 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			verbose: options?.verbose ?? false,
 			userAgent: options?.userAgent || defaultUserAgent,
 			ignoreRobots: options?.ignoreRobots ?? false,
+			// Let the crawler reuse sub-resource data captured during page
+			// rendering instead of issuing a redundant HEAD pre-flight.
+			lookupResource: async (urls) => {
+				// Fast path: read directly — the row is usually flushed long
+				// before the queued URL is dequeued, and a direct read does not
+				// block behind pending writes.
+				const direct = await this.#archive.getResourceByUrl(urls);
+				if (direct) {
+					return resourceRowToLookupResult(direct);
+				}
+				// A miss may be an insert still queued — re-read serialized
+				// behind the write queue so hit/miss is deterministic.
+				const row = await this.#writeQueue.enqueue(() =>
+					this.#archive.getResourceByUrl(urls),
+				);
+				return row ? resourceRowToLookupResult(row) : null;
+			},
 		});
 	}
 
@@ -191,12 +211,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			throw new Error('URL is empty');
 		}
 
-		const writeQueue = new WriteQueue();
+		const writeQueue = this.#writeQueue;
 
 		return new Promise<void>((resolve, reject) => {
 			this.#crawler.on('error', (error) => {
 				crawlerLog('On error: %O', error);
-				void writeQueue.enqueue(() => this.#archive.addError(error));
+				writeQueue
+					.enqueue(() => this.#archive.addError(error))
+					.catch((writeError) => reject(writeError));
 				void this.emit('error', error);
 			});
 

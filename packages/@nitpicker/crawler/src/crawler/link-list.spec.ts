@@ -226,6 +226,27 @@ describe('LinkList', () => {
 			expect(list.completePages).toBe(1);
 		});
 
+		it('大文字を含む text/HTML も completePages にカウントされる', () => {
+			// HTML 判定は isHtmlContentType に統一されているため、
+			// サーバーの Content-Type が大文字でもページとして数えられる
+			const list = new LinkList();
+			const url = createUrl('https://example.com/blog/post');
+			const scope = createScope([['example.com', ['https://example.com/']]]);
+			list.add(url);
+			list.done(
+				url,
+				scope,
+				{
+					page: createPageData({
+						status: 200,
+						contentType: 'text/HTML',
+					}),
+				},
+				defaultOptions,
+			);
+			expect(list.completePages).toBe(1);
+		});
+
 		it('does not count error pages as completePages', () => {
 			const list = new LinkList();
 			const url = createUrl('https://example.com/page');

@@ -1,4 +1,4 @@
-import type { CrawlerEventTypes, CrawlerOptions } from './types.js';
+import type { CrawlerEventTypes, CrawlerOptions, ResourceLookupResult } from './types.js';
 import type {
 	ChangePhaseEvent,
 	PageData,
@@ -30,9 +30,11 @@ import { handleResourceResponse } from './handle-resource-response.js';
 import { handleScrapeEnd } from './handle-scrape-end.js';
 import { handleScrapeError } from './handle-scrape-error.js';
 import { injectScopeAuth } from './inject-scope-auth.js';
+import { isHtmlContentType } from './is-html-content-type.js';
 import LinkList from './link-list.js';
 import { linkToPageData } from './link-to-page-data.js';
 import { protocolAgnosticKey } from './protocol-agnostic-key.js';
+import { resourceToPageData } from './resource-to-page-data.js';
 import { RobotsChecker } from './robots-checker.js';
 import { shouldDiscardPredicted } from './should-discard-predicted.js';
 import { shouldSkipUrl } from './should-skip-url.js';
@@ -104,6 +106,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			verbose: options?.verbose ?? false,
 			userAgent: options?.userAgent || `Nitpicker/${pkg.version}`,
 			ignoreRobots: options?.ignoreRobots ?? false,
+			lookupResource: options?.lookupResource ?? null,
 		};
 
 		this.#robotsChecker = new RobotsChecker(
@@ -697,6 +700,43 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			return this.#launchBrowserAndScrape(url, update, isExternal, metadataOnly);
 		}
 
+		// Reuse captured resource data — when this URL was already observed as a
+		// sub-resource during page rendering, its response data is recorded and
+		// the HEAD pre-flight is redundant. Only 2xx non-HTML rows are eligible
+		// (see resourceToPageData); anything else falls through to the pre-flight.
+		// Both URL variants are checked because scope-auth injection adds
+		// credentials to queued URLs while browser-captured resource URLs have none.
+		// The result is deliberately NOT written to destinationCache: a queued URL
+		// is processed at most once (the dealer dedupes by protocol-agnostic key),
+		// so a URL that takes this path never reaches fetchDestination again.
+		const lookupResource = this.#options.lookupResource;
+		if (
+			lookupResource &&
+			(this.#resources.has(url.withoutHash) ||
+				this.#resources.has(url.withoutHashAndAuth))
+		) {
+			update('Checking captured resource%dots%');
+			let resource: ResourceLookupResult | null = null;
+			try {
+				resource = await lookupResource([url.withoutHash, url.withoutHashAndAuth]);
+			} catch (error) {
+				// A lookup failure must never be worse than not having the
+				// optimization — fall back to the HEAD pre-flight below.
+				crawlerLog('Resource lookup failed for %s, falling back: %O', url.href, error);
+			}
+			const pageData = resource
+				? resourceToPageData({ url, isExternal, resource })
+				: null;
+			if (pageData) {
+				crawlerLog('Reused captured resource for %s', url.href);
+				return {
+					type: 'success',
+					pageData: metadataOnly ? { ...pageData, isTarget: false } : pageData,
+					resources: [],
+				};
+			}
+		}
+
 		// Pre-flight: lightweight HEAD request to check server availability
 		update('HEAD request%dots%');
 		let headCheckResult: PageData;
@@ -721,7 +761,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		if (metadataOnly) {
 			if (
 				headCheckResult.contentType === null ||
-				headCheckResult.contentType === 'text/html'
+				isHtmlContentType(headCheckResult.contentType)
 			) {
 				update('Fetching title%dots%');
 				try {
@@ -751,7 +791,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		// Non-HTML content — skip browser
 		if (
 			headCheckResult.contentType !== null &&
-			headCheckResult.contentType !== 'text/html'
+			!isHtmlContentType(headCheckResult.contentType)
 		) {
 			return {
 				type: 'success',

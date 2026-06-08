@@ -33,6 +33,27 @@ vi.mock('./robots-checker.js', () => {
 });
 
 /**
+ * Configure the mocked deal() to synchronously drive every queued URL
+ * through the crawler's worker callback, mirroring the dealer contract.
+ */
+async function driveDeal() {
+	const { deal } = await import('@d-zero/dealer');
+	vi.mocked(deal).mockImplementation(async (items, factory) => {
+		for (const [index, item] of (items as unknown[]).entries()) {
+			const noop = () => {};
+			const noopAsync = async () => {};
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- deal factory signature is complex; cast is intentional in test
+			const workFn = (factory as Function)(item, noop, index, noop, noopAsync) as
+				| (() => Promise<void>)
+				| undefined;
+			if (workFn) {
+				await workFn();
+			}
+		}
+	});
+}
+
+/**
  * Default crawler options for testing.
  */
 const defaultOptions = {
@@ -257,25 +278,12 @@ describe('Crawler', () => {
 
 	describe('worker-level error handling', () => {
 		it('ワーカー内の例外が error イベントとして emit され処理が継続する', async () => {
-			const { deal } = await import('@d-zero/dealer');
 			const { default: Crawler } = await import('./crawler.js');
 
 			const workerError = new Error('unexpected crash');
 
 			// Simulate deal: call setup function, then invoke the returned work function
-			vi.mocked(deal).mockImplementation(async (items, factory) => {
-				for (const [index, item] of (items as unknown[]).entries()) {
-					const noop = () => {};
-					const noopAsync = async () => {};
-					// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- deal factory signature is complex; cast is intentional in test
-					const workFn = (factory as Function)(item, noop, index, noop, noopAsync) as
-						| (() => Promise<void>)
-						| undefined;
-					if (workFn) {
-						await workFn();
-					}
-				}
-			});
+			await driveDeal();
 
 			// Mock fetchDestination to throw — triggers the worker catch block
 			const fetchDestMod = await import('./fetch-destination.js');
@@ -302,6 +310,97 @@ describe('Crawler', () => {
 			expect(errors).toHaveLength(1);
 			expect(errors[0]!.error.message).toBe('unexpected crash');
 			expect(errors[0]!.url).toBe('https://example.com');
+		});
+	});
+
+	describe('resource reuse via the lookupResource option', () => {
+		it('キャプチャ済みリソースが再利用され、ネットワークフェッチが一切発生しない', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			// Any network access fails the test: reuse must satisfy the URL alone
+			const fetchDestMod = await import('./fetch-destination.js');
+			const fetchSpy = vi
+				.spyOn(fetchDestMod, 'fetchDestination')
+				.mockRejectedValue(new Error('network must not be touched'));
+
+			const crawler = new Crawler({
+				...defaultOptions,
+				lookupResource: () =>
+					Promise.resolve({
+						status: 200,
+						statusText: 'OK',
+						contentType: 'image/png',
+						contentLength: 1234,
+						responseHeaders: { 'content-type': 'image/png' },
+					}),
+			});
+			// Seed the known-resources set the same way a resumed session does
+			crawler.resume([], [], ['https://example.com/img.png']);
+
+			const pages: CrawlerEventTypes['page'][] = [];
+			crawler.on('page', (p) => {
+				pages.push(p);
+			});
+
+			crawler.start([parseUrl('https://example.com/img.png')!]);
+
+			await vi.waitFor(() => {
+				expect(pages).toHaveLength(1);
+			});
+			expect(pages[0]!.result.status).toBe(200);
+			expect(pages[0]!.result.statusText).toBe('OK');
+			expect(pages[0]!.result.contentType).toBe('image/png');
+			expect(pages[0]!.result.contentLength).toBe(1234);
+			expect(fetchSpy).not.toHaveBeenCalled();
+		});
+
+		it('lookup が失敗してもクロールは止まらず HEAD プリフライトにフォールバックする', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const url = parseUrl('https://example.com/img.png')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			const fetchSpy = vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url,
+				redirectPaths: [],
+				isTarget: true,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'image/png',
+				contentLength: 1234,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			});
+
+			const crawler = new Crawler({
+				...defaultOptions,
+				lookupResource: () => Promise.reject(new Error('db read failed')),
+			});
+			crawler.resume([], [], ['https://example.com/img.png']);
+
+			const pages: CrawlerEventTypes['page'][] = [];
+			const errors: CrawlerEventTypes['error'][] = [];
+			crawler.on('page', (p) => {
+				pages.push(p);
+			});
+			crawler.on('error', (e) => {
+				errors.push(e);
+			});
+
+			crawler.start([url]);
+
+			await vi.waitFor(() => {
+				expect(pages).toHaveLength(1);
+			});
+			expect(errors).toHaveLength(0);
+			expect(fetchSpy).toHaveBeenCalledTimes(1);
+			expect(pages[0]!.result.status).toBe(200);
 		});
 	});
 

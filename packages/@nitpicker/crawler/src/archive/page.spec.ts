@@ -166,6 +166,20 @@ describe('Page', () => {
 			);
 			expect(page.responseHeaders).toEqual({});
 		});
+
+		it('多値ヘッダー（set-cookie 等）の string[] 値はそのまま保持される', () => {
+			// 型が Record<string, string | string[] | undefined> であることの実体保証:
+			// 配列値が文字列化されたり欠落したりしない
+			const page = new Page(
+				createMockArchive() as never,
+				createRawPage({
+					responseHeaders: '{"set-cookie":["a=1; Path=/","b=2; Path=/"]}',
+				}),
+			);
+			expect(page.responseHeaders).toEqual({
+				'set-cookie': ['a=1; Path=/', 'b=2; Path=/'],
+			});
+		});
 	});
 
 	describe('isPage / isInternalPage', () => {

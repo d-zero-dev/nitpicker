@@ -1,6 +1,11 @@
 import c from 'ansi-colors';
 
 /**
+ * Number formatter for thousands-separated count display (e.g. `1,234,567`).
+ */
+const countFormat = new Intl.NumberFormat('en-US');
+
+/**
  * Parameters for formatting crawl progress display.
  */
 interface FormatCrawlProgressParams {
@@ -21,8 +26,10 @@ interface FormatCrawlProgressParams {
 /**
  * Formats the crawl progress header for the deal() progress display.
  *
- * Shows "done / found (remaining)" format instead of "done/total"
- * to make it clearer that the total is expected to grow during crawling.
+ * Shows "done / found URLs (remaining)" format instead of "done/total"
+ * to make it clearer that the total is expected to grow during crawling
+ * and that the counts are processed URLs, not resulting pages.
+ * Counts are formatted with thousands separators (e.g. `1,234,567`).
  * @param params - The crawl progress parameters.
  * @param params.done - Number of URLs completed by the deal queue.
  * @param params.total - Total number of URLs in the deal queue (including completed).
@@ -50,9 +57,13 @@ export function formatCrawlProgress({
 	const pct = allTotal > 0 ? Math.round((allDone / allTotal) * 100) : 0;
 
 	return (
-		c.bold(`Crawling: ${internalDone} done / ${internalTotal} found`) +
-		c.dim(` (+${externalDone}/${externalTotal} ext)`) +
-		c.bold(` (${pct}%) [${totalRemaining} remaining]`) +
+		c.bold(
+			`Crawling: ${countFormat.format(internalDone)} done / ${countFormat.format(internalTotal)} found URLs`,
+		) +
+		c.dim(
+			` (+${countFormat.format(externalDone)}/${countFormat.format(externalTotal)} ext)`,
+		) +
+		c.bold(` (${pct}%) [${countFormat.format(totalRemaining)} remaining]`) +
 		c.dim(` [${limit} parallel]`)
 	);
 }

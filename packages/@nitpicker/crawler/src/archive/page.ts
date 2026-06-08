@@ -11,6 +11,9 @@ import type {
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 
+import { isHtmlContentType } from '../crawler/is-html-content-type.js';
+import { parseResponseHeaders } from '../utils/object/parse-response-headers.js';
+
 /**
  * Represents a crawled page stored in the archive.
  *
@@ -174,14 +177,11 @@ export default class Page {
 
 	/**
 	 * The parsed HTTP response headers as a key-value record.
-	 * Returns an empty object if headers cannot be parsed.
+	 * Header values may be arrays for multi-value headers (e.g. `set-cookie`).
+	 * Returns an empty object if headers are absent or cannot be parsed.
 	 */
-	get responseHeaders(): Record<string, string> {
-		try {
-			return JSON.parse(this.#raw.responseHeaders);
-		} catch {
-			return {};
-		}
+	get responseHeaders(): Record<string, string | string[] | undefined> {
+		return parseResponseHeaders(this.#raw.responseHeaders) ?? {};
 	}
 
 	/**
@@ -321,8 +321,7 @@ export default class Page {
 	 * @returns `true` if the content type is `text/html`, `false` otherwise.
 	 */
 	isPage() {
-		const type = this.contentType || '';
-		return type.toLowerCase().trim() === 'text/html';
+		return isHtmlContentType(this.contentType);
 	}
 
 	/**
