@@ -819,13 +819,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/dealer@npm:1.7.0":
-  version: 1.7.0
-  resolution: "@d-zero/dealer@npm:1.7.0"
+"@d-zero/dealer@npm:1.9.0":
+  version: 1.9.0
+  resolution: "@d-zero/dealer@npm:1.9.0"
   dependencies:
-    "@d-zero/shared": "npm:0.20.1"
+    "@d-zero/shared": "npm:0.22.0"
     ansi-colors: "npm:4.1.3"
-  checksum: 10c0/ac74b090f31272c0b22f563989ef00cb857331e7de19bc6d193a8ebc573fdaacfc82689c8e95bcaea59cad44ae2ab7a063c4db48210c534c597ccc41e86a39d6
+  checksum: 10c0/70418ef52bd13280a9a03347776bdd27d046ea5249fff7fcef008e95cbca4f3167a8b9ea851ab174571f2885ee2e01dcc858c1bf7d633618be2d51ff793c8b0c
   languageName: node
   linkType: hard
 
@@ -2463,7 +2463,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/cli@workspace:packages/@nitpicker/cli"
   dependencies:
-    "@d-zero/dealer": "npm:1.7.0"
+    "@d-zero/dealer": "npm:1.9.0"
     "@d-zero/readtext": "npm:1.1.19"
     "@d-zero/roar": "npm:2.1.0"
     "@d-zero/shared": "npm:0.20.1"
@@ -2490,7 +2490,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/core@workspace:packages/@nitpicker/core"
   dependencies:
-    "@d-zero/dealer": "npm:1.7.0"
+    "@d-zero/dealer": "npm:1.9.0"
     "@d-zero/shared": "npm:0.20.1"
     "@nitpicker/crawler": "npm:0.9.0"
     "@nitpicker/types": "npm:0.9.0"
@@ -2505,7 +2505,7 @@ __metadata:
   resolution: "@nitpicker/crawler@workspace:packages/@nitpicker/crawler"
   dependencies:
     "@d-zero/beholder": "npm:2.1.2"
-    "@d-zero/dealer": "npm:1.7.0"
+    "@d-zero/dealer": "npm:1.9.0"
     "@d-zero/fs": "npm:0.2.2"
     "@d-zero/shared": "npm:0.20.1"
     "@types/debug": "npm:4.1.12"
@@ -2548,7 +2548,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/report-google-sheets@workspace:packages/@nitpicker/report-google-sheets"
   dependencies:
-    "@d-zero/dealer": "npm:1.7.0"
+    "@d-zero/dealer": "npm:1.9.0"
     "@d-zero/google-auth": "npm:0.5.6"
     "@d-zero/google-sheets": "npm:0.9.0"
     "@d-zero/shared": "npm:0.20.1"
