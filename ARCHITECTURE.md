@@ -300,7 +300,7 @@ PageData を合成する。
 
 - `@d-zero/dealer` の `deal()` がスケジューリングと並列制御を担当
 - `interval` オプションでリクエスト間の待機時間を設定可能
-- スクレイピングはインプロセス（`@d-zero/beholder`）で実行。各 URL ごとにブラウザを起動・終了
+- スクレイピングはインプロセス（`@d-zero/beholder`）で実行。各 URL ごとにブラウザを起動・終了（クローズのハング対策は下記「ブラウザクローズの安全策」参照）
 - 発見した新 URL を動的にキューに追加する際、HTML らしい URL は `unshift()` でキュー先頭へ優先投入し、それ以外（画像・PDF・CSS/JS 等）は `push()` で末尾へ追加する。これにより HTML ページのクロールがアセット/ドキュメント取得より先に進む。バッチ（予測ページネーション等）は `partitionUrlsByHtml()`（`crawler/partition-urls-by-html.ts`）で HTML 群と非 HTML 群に分割し、HTML 群を 1 回の `unshift(...html)` で投入することで昇順を維持する（1 件ずつ unshift すると逆順になるため）
 - HTML 判定は HEAD/GET 前の URL のみで行うため、実 `Content-Type` ではなく `isLikelyHtmlUrl()`（`crawler/is-likely-html-url.ts`）の拡張子ヒューリスティックを使う: 拡張子なし・ディレクトリ型 URL（`/`, `/about/`）と末尾ドット URL、`.html`/`.htm`/`.php`/`.aspx`/`.jsp`/`.ashx` 等を HTML 扱い、非 HTTP（`mailto:` 等）と `.jpg`/`.pdf`/`.css`/`.js` 等を非 HTML 扱い。**誤判定しても fetch 順が変わるだけで網羅性・正確性には影響しない**
 - `onPush` コールバックで `withoutHashAndAuth` による重複排除（`push()` / `unshift()` どちらも通る）
@@ -324,7 +324,31 @@ CLI シグナルハンドラ（SIGINT / SIGHUP 等）
 
 - `Crawler` は内部に `AbortController` を保持し、`signal` getter で `AbortSignal` を公開
 - `CrawlerOrchestrator` のコンストラクタで `archive` の `error` イベントを監視し、アーカイブエラー発生時にも `Crawler.abort()` を呼び出す
-- CLI の `killed()` ハンドラでは `abort()` 後に `garbageCollect()`（ゾンビ Chromium プロセスの終了）→ `process.exit()` を実行
+- CLI の `killed()` ハンドラでは `abort()` 後に `garbageCollect()` → `process.exit()` を実行。**ただし `Crawler.getUndeadPid()` は現アーキテクチャでは常に空配列を返すため `garbageCollect()` 自体は no-op**。Chromium プロセスの強制終了は per-URL の `closeBrowserSafely()`（下記「ブラウザクローズの安全策」）で完結している
+
+### ブラウザクローズの安全策（close-browser-safely.ts）
+
+各 URL のスクレイプ後、`Crawler.#launchBrowserAndScrape` の `finally` で `handleBrowserClose(browser, url.href, crawlerLog)` を呼び、内部で `closeBrowserSafely(browser)` がグレースフル close を 30 秒タイムアウトで実行する。
+
+```
+closeBrowserSafely(browser, timeoutMs = 30_000)
+  ├── browser.process() を upfront capture（close 成功後は null になるため）
+  ├── Promise.race([
+  │     browser.close().then(()=>false).catch(()=>false),
+  │     new Promise(resolve => setTimeout(resolve(true), timeoutMs))
+  │   ]).finally(clearTimeout)        // 負け側 timer を必ず clear
+  └── timedOut かつ未 kill なら childProcess.kill('SIGKILL')
+```
+
+**なぜ必要か:** viewport 切替（desktop-compact → mobile-small）でページ側の execution context が破壊されると、Chromium のセッションが detached 状態になり、`browser.close()` が CDP ハンドシェイクの応答を待ち続けて永久に settle しないケースがある。タイムアウトを設けず単に `await browser.close().catch(() => {})` だと、deal() ワーカーが完了せずクロール全体がハングする（症状: `📷 mobile-small: skipped — Attempted to use detached Frame` ログの後、CLI が終了しない）。
+
+**SIGKILL の限界:** SIGKILL は Chromium 親プロセスのみに送られ、renderer/network/zygote の子プロセスツリーには伝播しない。puppeteer は `detached: false` で spawn するため process group kill は使えない（負の PID kill は Node プロセス自身も巻き込む）。子は broken IPC を検知してサブ秒で self-exit するため、短時間の orphan 残留は許容している。
+
+**観測性:** タイムアウト発火時は `crawlerLog('Force-killed wedged Chromium browser for %s ...')` を出す。`DEBUG=Nitpicker:Crawler` で頻発を検知可能。`closeBrowserSafely` 自体が throw した場合（`browser.process()` が予期せず throw 等）も `handleBrowserClose` が握りつぶしてログするため、finally から例外が伝播することはない。
+
+> **更新手順（タイムアウト値の変更）**: 30 秒という値は重いページや低速環境での余裕を取った設定。変更する場合は `close-browser-safely.ts` の `DEFAULT_CLOSE_TIMEOUT_MS` を編集し、`close-browser-safely.spec.ts` の「defaults to a 30-second timeout」テストを併せて更新。Promise.race の負け側 timer は **必ず `clearTimeout` で clear** すること（`fetch-destination.ts` と同じ規律。詳細は下記「CLI プロセス終了とリソース解放」）。
+>
+> **検証**: `close-browser-safely.spec.ts`（10 ケース: 正常 / hang / reject / null process / 既 killed / デフォルト timeout / 遅延 rejection / timeoutMs=0 / kill が false / 冪等性）と `handle-browser-close.spec.ts`（4 ケース: ログ無し / 強制 kill ログ / closeBrowserSafely throw / 二重故障 finally-safety）。puppeteer Browser 型との整合性は `close-browser-safely.spec.ts` 冒頭の compile-time assertion で担保。
 
 ### CLI プロセス終了とリソース解放
 
@@ -332,7 +356,12 @@ CLI シグナルハンドラ（SIGINT / SIGHUP 等）
 
 さらに `cli.ts` 末尾で `process.exit(process.exitCode ?? ExitCode.Success)` を明示的に呼ぶ。理由は外部依存の timer leak で、特に `@d-zero/beholder` の `dom-evaluation.js#getProp` が `Promise.race(_getProp, setTimeout(fallback, 10_000))` の負け側 timer を clear しないため、`getMeta` 1 回あたり最大 ~13 個の 10 秒 timer が積み上がり、自然終了を 10 秒以上ブロックする。
 
-自リポ内の同型パターンは `crawler/fetch-destination.ts` の HEAD タイムアウトのみ。ここは cancellable な `setTimeout`/`clearTimeout` に書き直し済み（`Promise.race` + `delay()` を使わないこと）。
+自リポ内の同型パターン（`Promise.race` + cancellable `setTimeout`/`clearTimeout`）は 2 箇所:
+
+1. **`crawler/fetch-destination.ts`**: HEAD/GET の 10 秒タイムアウト
+2. **`crawler/close-browser-safely.ts`**: ブラウザクローズの 30 秒タイムアウト（上記「ブラウザクローズの安全策」参照）
+
+どちらも `.finally()` で `clearTimeout` を呼び、`delay()` を race に使わない（`delay()` は signal を取らないため負け側 timer が clear できない）。
 
 検証は `packages/test-server/src/__tests__/e2e/cli-process-exit.e2e.ts` が CLI を spawn して 60 秒以内に exit するかを継続的に保証する。
 
