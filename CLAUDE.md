@@ -74,7 +74,7 @@ CrawlerOrchestrator.crawling(urls, options)
     → 各 URL: puppeteer.launch() → Scraper.scrapeStart(page, ...)
       → ScrapeResult を戻り値で返却
     → LinkList.done() + WriteQueue 経由で Archive にページデータ保存
-    → push() で発見した新 URL を動的にキューに追加
+    → 発見した新 URL を動的にキューに追加（HTML らしい URL は unshift で先頭へ優先、それ以外は push で末尾へ。判定は URL の拡張子ヒューリスティック isLikelyHtmlUrl）
   → crawlEnd 時に WriteQueue.drain() で未完了の書き込みを待機
   → CrawlerOrchestrator.write()（tmpDir を .nitpicker tar に圧縮）
 ```

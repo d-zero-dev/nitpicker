@@ -57,7 +57,7 @@ flowchart TD
 
     Deal --> RobotsCheck["robots.txt チェック（RobotsChecker）"]
     RobotsCheck --> Checks["除外チェック / fetchExternal チェック"]
-    Deal --> Push["push() で発見した URL を動的にキューに追加"]
+    Deal --> Push["発見した URL を動的にキューに追加<br/>（HTML らしい URL は unshift で先頭へ優先 / それ以外は push で末尾へ）"]
 
     Deal --> Beholder["Scraper（@d-zero/beholder）<br/>インプロセス実行"]
     Beholder --> Head["HEAD リクエスト（User-Agent 付き）"]
@@ -136,6 +136,8 @@ crawler/src/
 │   ├── should-skip-url.ts      # URL 除外判定
 │   ├── find-scope-entry.ts     # スコープ判定の単一エントリポイント（hostname+port+path で最深一致を返す or null）
 │   ├── is-external-url.ts      # 外部 URL 判定（findScopeEntry の薄ラッパ）
+│   ├── is-likely-html-url.ts   # URL 拡張子から HTML らしさを判定（キュー優先度用、HEAD 前）
+│   ├── partition-urls-by-html.ts    # URL 群を HTML / 非 HTML に分割（unshift / push 振り分け）
 │   ├── inject-scope-auth.ts    # スコープ認証注入（matchedScope を直接受け取る）
 │   ├── handle-scrape-end.ts    # スクレイプ成功ハンドラ
 │   ├── handle-ignore-and-skip.ts    # スキップハンドラ
@@ -299,9 +301,14 @@ PageData を合成する。
 - `@d-zero/dealer` の `deal()` がスケジューリングと並列制御を担当
 - `interval` オプションでリクエスト間の待機時間を設定可能
 - スクレイピングはインプロセス（`@d-zero/beholder`）で実行。各 URL ごとにブラウザを起動・終了
-- `push()` で発見した新 URL を動的にキューに追加
-- `onPush` コールバックで `withoutHashAndAuth` による重複排除
+- 発見した新 URL を動的にキューに追加する際、HTML らしい URL は `unshift()` でキュー先頭へ優先投入し、それ以外（画像・PDF・CSS/JS 等）は `push()` で末尾へ追加する。これにより HTML ページのクロールがアセット/ドキュメント取得より先に進む。バッチ（予測ページネーション等）は `partitionUrlsByHtml()`（`crawler/partition-urls-by-html.ts`）で HTML 群と非 HTML 群に分割し、HTML 群を 1 回の `unshift(...html)` で投入することで昇順を維持する（1 件ずつ unshift すると逆順になるため）
+- HTML 判定は HEAD/GET 前の URL のみで行うため、実 `Content-Type` ではなく `isLikelyHtmlUrl()`（`crawler/is-likely-html-url.ts`）の拡張子ヒューリスティックを使う: 拡張子なし・ディレクトリ型 URL（`/`, `/about/`）と末尾ドット URL、`.html`/`.htm`/`.php`/`.aspx`/`.jsp`/`.ashx` 等を HTML 扱い、非 HTTP（`mailto:` 等）と `.jpg`/`.pdf`/`.css`/`.js` 等を非 HTML 扱い。**誤判定しても fetch 順が変わるだけで網羅性・正確性には影響しない**
+- `onPush` コールバックで `withoutHashAndAuth` による重複排除（`push()` / `unshift()` どちらも通る）
 - `signal` オプションで `AbortSignal` を渡し、中断時に新規ワーカーの起動を停止
+
+> **更新手順（HTML 優先判定の拡張）**: HTML を返す拡張子が取りこぼされている場合は `crawler/is-likely-html-url.ts` の `HTML_EXTENSIONS` セット（ドット付きキー）に追記し、cspell が未知語を弾く拡張子は `cspell.json` の「HTML page file extensions」ブロックにも追加する。判定ロジックの単体テストは `is-likely-html-url.spec.ts`、優先投入の配線テストは `crawler.spec.ts` の「discovered-URL queue prioritisation」、分割の単体テストは `partition-urls-by-html.spec.ts`。
+>
+> **`unshift` API の所在**: キュー先頭への優先投入は `@d-zero/dealer` の `deal()` setup コールバック第 6 引数 `unshift` に依存する（**1.9.0 で追加**）。優先制御の挙動を変える場合は dealer 側（`d-zero-dev/tools` の `packages/@d-zero/dealer`、`Dealer.unshift` / `deal.js`）を参照すること。
 
 ### クロール中断メカニズム
 
@@ -977,5 +984,5 @@ Nitpicker は D-ZERO が公開する以下の外部パッケージに依存し�
 ### バージョン更新時の注意
 
 - **`@d-zero/beholder`**: `ScrapeResult` の型が変わると crawler 全体に影響
-- **`@d-zero/dealer`**: `deal()` の API が変わると crawler の並列処理に影響。`Lanes` の型が変わると core・cli・report-google-sheets の進捗表示に影響
+- **`@d-zero/dealer`**: `deal()` の API が変わると crawler の並列処理に影響。`Lanes` の型が変わると core・cli・report-google-sheets の進捗表示に影響。**crawler は 1.9.0 で追加された `deal()` setup コールバックの第 6 引数 `unshift`（キュー先頭への優先投入）に依存するため、1.9.0 未満へのダウングレード不可**。ソースは `d-zero-dev/tools` の `packages/@d-zero/dealer`
 - **`@d-zero/shared`**: サブパスエクスポートの追加・削除に注意。`@d-zero/shared/parse-url` 形式でインポートすること

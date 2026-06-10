@@ -33,6 +33,7 @@ import { injectScopeAuth } from './inject-scope-auth.js';
 import { isHtmlContentType } from './is-html-content-type.js';
 import LinkList from './link-list.js';
 import { linkToPageData } from './link-to-page-data.js';
+import { partitionUrlsByHtml } from './partition-urls-by-html.js';
 import { protocolAgnosticKey } from './protocol-agnostic-key.js';
 import { resourceToPageData } from './resource-to-page-data.js';
 import { RobotsChecker } from './robots-checker.js';
@@ -286,7 +287,9 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * - `error`: Creates a fallback PageData, marks as done, and emits `error`.
 	 * @param result - The scrape result from beholder
 	 * @param url - The URL that was scraped
-	 * @param push - Dealer's push callback to enqueue newly discovered URLs
+	 * @param enqueue - Callback to enqueue newly discovered URLs into the dealer
+	 *   queue, prioritising likely-HTML URLs to the front (see {@link partitionUrlsByHtml}).
+	 *   Accepts a batch so a group of URLs (e.g. predicted pagination) keeps its order.
 	 * @param paginationState - Mutable state for predicted pagination cascade prevention
 	 * @param paginationState.lastPushedUrl
 	 * @param paginationState.lastPushedWasPredicted
@@ -295,7 +298,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	#handleResult(
 		result: ScrapeResult,
 		url: ExURL,
-		push: (...items: ExURL[]) => Promise<void>,
+		enqueue: (...urls: ExURL[]) => Promise<void>,
 		paginationState?: { lastPushedUrl: string | null; lastPushedWasPredicted: boolean },
 		concurrency?: number,
 	) {
@@ -309,7 +312,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					this.#options,
 					(newUrl, opts) => {
 						this.#linkList.add(newUrl, opts);
-						void push(newUrl);
+						void enqueue(newUrl);
 
 						// Predicted pagination detection
 						if (!paginationState || !concurrency) return;
@@ -339,13 +342,17 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 									newUrl.withoutHashAndAuth,
 									concurrency,
 								);
+								const specUrls: ExURL[] = [];
 								for (const specUrlStr of urls) {
 									const specUrl = parseUrl(specUrlStr, this.#options);
 									if (specUrl) {
 										this.#linkList.add(specUrl, { predicted: true });
-										void push(specUrl);
+										specUrls.push(specUrl);
 									}
 								}
+								// Enqueue as one batch so ascending page order is kept
+								// at the front of the queue (see enqueue in #runDeal).
+								if (specUrls.length > 0) void enqueue(...specUrls);
 								paginationState.lastPushedUrl = newUrl.withoutHashAndAuth;
 								paginationState.lastPushedWasPredicted = true;
 								return;
@@ -543,7 +550,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 		await deal(
 			initialUrls,
-			(url, update, _index, setLineHeader, push) => {
+			(url, update, _index, setLineHeader, push, unshift) => {
 				const matchedScope = findScopeEntry(url, this.#scope, this.#options);
 				const isExternal = matchedScope === null;
 				const urlText = isExternal ? c.dim(url.href) : c.cyan(url.href);
@@ -553,6 +560,20 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				}
 				this.#linkList.add(url);
 				this.#linkList.progress(url);
+
+				// Likely-HTML URLs jump to the front of the queue (unshift) so page
+				// crawling advances ahead of asset/document fetches; everything else
+				// is appended (push). partitionUrlsByHtml splits the batch by the
+				// URL-only heuristic. Variadic so a batch (e.g. predicted pagination)
+				// keeps its order: a single unshift(...html) preserves ascending order
+				// at the front, whereas unshifting one-by-one would reverse it.
+				const enqueue = (...newUrls: ExURL[]): Promise<void> => {
+					const [html, other] = partitionUrlsByHtml(newUrls);
+					const ops: Promise<void>[] = [];
+					if (html.length > 0) ops.push(unshift(...html));
+					if (other.length > 0) ops.push(push(...other));
+					return Promise.all(ops).then(() => {});
+				};
 
 				return async () => {
 					const log = createTimedUpdate(update, this.#options.verbose);
@@ -610,7 +631,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						}
 
 						log('Saving results%dots%');
-						this.#handleResult(result, url, push, paginationState, concurrency);
+						this.#handleResult(result, url, enqueue, paginationState, concurrency);
 						this.#handleResources(result.resources);
 						log(formatResultSummary(result));
 					} catch (error) {
