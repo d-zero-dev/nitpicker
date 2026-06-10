@@ -81,6 +81,16 @@
 
 		// CI / GitHub Actions (Chromium sandbox on ubuntu runners)
 		"apparmor",
-		"userns"
+		"userns",
+
+		// HTML page file extensions (isLikelyHtmlUrl heuristic)
+		"xhtml",
+		"shtml",
+		"phtml",
+		"mhtml",
+		"jspx",
+		"ashx",
+		"jsf",
+		"htaccess"
 	]
 }
