@@ -1,4 +1,5 @@
 import type { CrawlerEventTypes } from './types.js';
+import type { ExURL } from '@d-zero/shared/parse-url';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -35,15 +36,24 @@ vi.mock('./robots-checker.js', () => {
 /**
  * Configure the mocked deal() to synchronously drive every queued URL
  * through the crawler's worker callback, mirroring the dealer contract.
+ *
+ * The `push` / `unshift` queue callbacks handed to the factory are shared spies
+ * (one pair per crawl, as the real dealer binds them to a single queue) so tests
+ * can assert how newly-discovered URLs are routed (HTML → front, asset → tail).
+ * URLs added via the spies are not re-fed into the loop — the mock only drives
+ * the initial `items`, which is sufficient to observe the routing decision.
+ * @returns The shared `push` and `unshift` spies passed to the worker factory.
  */
 async function driveDeal() {
+	const push = vi.fn(async () => {});
+	const unshift = vi.fn(async () => {});
 	const { deal } = await import('@d-zero/dealer');
 	vi.mocked(deal).mockImplementation(async (items, factory) => {
 		for (const [index, item] of (items as unknown[]).entries()) {
 			const noop = () => {};
-			const noopAsync = async () => {};
+			// factory signature: (process, update, index, setLineHeader, push, unshift)
 			// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- deal factory signature is complex; cast is intentional in test
-			const workFn = (factory as Function)(item, noop, index, noop, noopAsync) as
+			const workFn = (factory as Function)(item, noop, index, noop, push, unshift) as
 				| (() => Promise<void>)
 				| undefined;
 			if (workFn) {
@@ -51,6 +61,7 @@ async function driveDeal() {
 			}
 		}
 	});
+	return { push, unshift };
 }
 
 /**
@@ -401,6 +412,108 @@ describe('Crawler', () => {
 			expect(errors).toHaveLength(0);
 			expect(fetchSpy).toHaveBeenCalledTimes(1);
 			expect(pages[0]!.result.status).toBe(200);
+		});
+	});
+
+	describe('discovered-URL queue prioritisation', () => {
+		/**
+		 * Build a minimal non-HTML scrape result whose anchorList is returned by
+		 * the HEAD pre-flight. A non-HTML content type makes #scrapePage skip the
+		 * browser and return the pre-flight result verbatim, so the supplied
+		 * anchors flow into handleScrapeEnd → enqueue without launching Puppeteer.
+		 * @param anchors - Anchors to expose on the scraped page.
+		 * @returns A PageData-shaped object for fetchDestination to resolve with.
+		 */
+		function nonHtmlResultWithAnchors(anchors: { href: ExURL; textContent: string }[]) {
+			return {
+				url: parseUrl('https://example.com/feed.xml')!,
+				redirectPaths: [],
+				isTarget: false,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'application/xml',
+				contentLength: 0,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: anchors,
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			};
+		}
+
+		it('HTML らしい発見 URL は unshift、アセット URL は push に振り分けられる', async () => {
+			const { push, unshift } = await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const htmlAnchor = parseUrl('https://example.com/about')!;
+			const assetAnchor = parseUrl('https://example.com/doc.pdf')!;
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue(
+				nonHtmlResultWithAnchors([
+					{ href: htmlAnchor, textContent: 'About' },
+					{ href: assetAnchor, textContent: 'PDF' },
+				]) as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>,
+			);
+
+			const crawler = new Crawler(defaultOptions);
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			crawler.start([parseUrl('https://example.com/feed.xml')!]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			expect(unshift).toHaveBeenCalledTimes(1);
+			expect(unshift).toHaveBeenCalledWith(htmlAnchor);
+			expect(push).toHaveBeenCalledTimes(1);
+			expect(push).toHaveBeenCalledWith(assetAnchor);
+		});
+
+		it('予測ページネーション URL は1回の unshift で昇順のままバッチ投入される', async () => {
+			const { unshift } = await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			// Two consecutive numeric anchors trigger pagination prediction.
+			const page2 = parseUrl('https://example.com/page/2')!;
+			const page3 = parseUrl('https://example.com/page/3')!;
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue(
+				nonHtmlResultWithAnchors([
+					{ href: page2, textContent: 'Page 2' },
+					{ href: page3, textContent: 'Page 3' },
+				]) as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>,
+			);
+
+			// parallels: 3 → three predicted URLs (page/4, page/5, page/6).
+			const crawler = new Crawler({ ...defaultOptions, parallels: 3 });
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			crawler.start([parseUrl('https://example.com/feed.xml')!]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			// The predicted batch must arrive as ONE unshift call (not three reversed
+			// individual calls), preserving ascending page order at the queue front.
+			const batchCall = unshift.mock.calls.find((args) => args.length === 3);
+			expect(batchCall).toBeDefined();
+			expect((batchCall as unknown as ExURL[]).map((u) => u.withoutHashAndAuth)).toEqual([
+				'https://example.com/page/4',
+				'https://example.com/page/5',
+				'https://example.com/page/6',
+			]);
 		});
 	});
 
