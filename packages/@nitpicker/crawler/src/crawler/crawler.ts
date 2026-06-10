@@ -25,6 +25,7 @@ import { fetchDestination } from './fetch-destination.js';
 import { findScopeEntry } from './find-scope-entry.js';
 import { formatCrawlProgress } from './format-crawl-progress.js';
 import { generatePredictedUrls } from './generate-predicted-urls.js';
+import { handleBrowserClose } from './handle-browser-close.js';
 import { handleIgnoreAndSkip } from './handle-ignore-and-skip.js';
 import { handleResourceResponse } from './handle-resource-response.js';
 import { handleScrapeEnd } from './handle-scrape-end.js';
@@ -503,7 +504,11 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				},
 			};
 		} finally {
-			await browser.close().catch(() => {});
+			// handleBrowserClose force-kills the underlying Chromium when a
+			// graceful close() hangs (e.g. the session died mid-scrape) and
+			// guarantees the finally never throws, so the try-block's return
+			// value or caught error is never masked.
+			await handleBrowserClose(browser, url.href, crawlerLog);
 		}
 	}
 	/**
