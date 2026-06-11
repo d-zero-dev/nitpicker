@@ -7,6 +7,7 @@
  */
 
 export { ArchiveManager } from './archive-manager.js';
+export type { OpenResult } from './archive-manager.js';
 export { checkHeaders } from './check-headers.js';
 export { findDuplicates } from './find-duplicates.js';
 export { findMismatches } from './find-mismatches.js';

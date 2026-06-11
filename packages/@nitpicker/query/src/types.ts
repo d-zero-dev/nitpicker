@@ -1,4 +1,15 @@
 /**
+ * The opened-archive kind reported by {@link ArchiveManager}.
+ *
+ * - `'archive'` — a finished `.nitpicker` tar file on disk, opened by
+ *   extracting it into a fresh tmpDir.
+ * - `'stub'` — an in-progress (or interrupted) crawl's tmpDir, opened in
+ *   place for read-only inspection. No extraction, no lock acquisition,
+ *   no write-back on close.
+ */
+export type ArchiveMode = 'archive' | 'stub';
+
+/**
  * Options for opening a .nitpicker archive file.
  */
 export interface OpenArchiveOptions {
