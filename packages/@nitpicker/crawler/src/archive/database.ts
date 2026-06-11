@@ -14,6 +14,7 @@ import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 import type { RetryDecoratorOptions } from '@d-zero/shared/retry';
 import type { Knex } from 'knex';
 
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -924,10 +925,16 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * Initializes the database schema if tables do not exist, then runs lightweight
 	 * migrations that bring older archives up to the current schema.
 	 *
-	 * Migrations are idempotent and run on every {@link Database.connect}, so the
-	 * same DB can be opened safely from both writer and reader code paths.
+	 * Migrations are idempotent and run on every writer-side {@link Database.connect};
+	 * in read-only mode they are SKIPPED so the same DB can be opened safely
+	 * by a viewer attached to a live (or interrupted) crawl without rewriting
+	 * the user's tmpDir.
+	 * @param readOnly - When true, skip schema init + migrations.
 	 */
-	async #init() {
+	async #init(readOnly: boolean) {
+		if (readOnly) {
+			return;
+		}
 		await initSchema(this.#instance);
 		await migrateInfoRoots(this.#instance);
 	}
@@ -994,15 +1001,39 @@ export class Database extends EventEmitter<DatabaseEvent> {
 
 	/**
 	 * Creates and initializes a new Database instance.
-	 * Creates the parent directory for the database file if needed,
-	 * establishes the connection, and initializes tables if they do not exist.
-	 * @param options - Database connection options (working directory + SQLite file path).
+	 *
+	 * **Writer mode (default)**: creates the parent directory for the
+	 * database file if needed, establishes the connection, and initializes
+	 * the schema + migrations.
+	 *
+	 * **Read-only mode** (`options.readOnly`): refuses to resurrect a
+	 * missing parent directory or db file — throws if either is absent at
+	 * the time of the call. Skips schema init and migrations entirely so
+	 * the user's tmpDir is never modified. Required by viewer / MCP
+	 * stub-mode opens, where a TOCTOU window between classification and
+	 * `connect()` could otherwise leave behind a phantom empty tmpDir.
+	 * @param options - Database connection options.
 	 * @returns A fully initialized Database instance.
+	 * @throws {Error} In read-only mode, if the parent directory or db
+	 *   file does not exist when `connect()` runs.
 	 */
 	static async connect(options: DatabaseOption) {
-		mkdir(options.filename);
+		if (options.readOnly) {
+			if (!existsSync(path.dirname(options.filename))) {
+				throw new Error(
+					`Cannot open archive read-only: parent directory disappeared (${path.dirname(options.filename)}). The source may have been removed by another process.`,
+				);
+			}
+			if (!existsSync(options.filename)) {
+				throw new Error(
+					`Cannot open archive read-only: database file missing (${options.filename}). The source may have been removed by another process.`,
+				);
+			}
+		} else {
+			mkdir(options.filename);
+		}
 		const db = new Database(options);
-		await db.#init();
+		await db.#init(options.readOnly ?? false);
 		return db;
 	}
 }

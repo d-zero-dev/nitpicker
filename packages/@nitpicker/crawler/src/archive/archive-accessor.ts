@@ -31,13 +31,46 @@ import { safePath } from './safe-path.js';
  * by `Archive.connect` for read-only access to an existing archive.
  * It supports querying pages, anchors, referrers, resources, and custom data.
  */
+/**
+ * Default timeout for {@link ArchiveAccessor.close}'s `db.destroy()` step.
+ *
+ * `knex.destroy()` will otherwise wait the full `acquireTimeoutMillis`
+ * (10 minutes in this repo) for in-flight queries to drain. For a viewer
+ * shut down by Ctrl-C while the live crawler holds a long write lock that
+ * is an unacceptable user experience, so we bound the wait and treat the
+ * accessor as closed after the timeout regardless.
+ */
+const DEFAULT_CLOSE_TIMEOUT_MS = 5000;
+
 export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
+	/**
+	 * Promise tracking an in-progress (or completed) close. `null` means the
+	 * accessor is open and idle; a settled promise means we are closed (the
+	 * accessor stays "closed" even if `db.destroy()` rejected, because there
+	 * is nothing safe to retry — see {@link close}).
+	 */
+	#closeOnce: Promise<void> | null = null;
 	/** The SQLite database instance for querying archived data. */
 	#db: Database;
 	/** Namespace prefix for custom data storage (e.g. `"analysis/plugin-name"`). `null` disables `setData`. */
 	#namespace: string | null = null;
+	/**
+	 * Whether this accessor must avoid every filesystem mutation on
+	 * `#tmpDir`. Set by {@link Archive.connect} for stub-mode (live crawl)
+	 * opens so helpers like {@link getHtmlOfPage} skip the unzip-into-dir
+	 * code path that would race the crawler.
+	 */
+	#readOnly: boolean;
 	/** Absolute path to the temporary working directory containing the database and files. */
 	#tmpDir: string;
+
+	/**
+	 * Whether this accessor was opened in read-only mode (no filesystem
+	 * mutation on `tmpDir`).
+	 */
+	get readOnly(): boolean {
+		return this.#readOnly;
+	}
 
 	/**
 	 * The absolute path to the temporary working directory used by this accessor.
@@ -52,16 +85,65 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	 * @param db - The Database instance for querying the SQLite database.
 	 * @param namespace - An optional namespace for scoping custom data storage.
 	 *                    When null, `setData` is not available.
+	 * @param options - Construction options.
+	 * @param options.readOnly - When `true`, helpers must not mutate the
+	 *   filesystem under `tmpDir` (used for live-crawl / stub-mode opens
+	 *   where any write would race the crawler).
 	 */
-	constructor(tmpDir: string, db: Database, namespace: string | null = null) {
+	constructor(
+		tmpDir: string,
+		db: Database,
+		namespace: string | null = null,
+		options: { readOnly?: boolean } = {},
+	) {
 		super();
 		this.#tmpDir = tmpDir;
 		this.#db = db;
 		this.#namespace = namespace;
+		this.#readOnly = options.readOnly ?? false;
 
 		this.#db.on('error', (e) => {
 			void this.emit('error', e);
 		});
+	}
+
+	/**
+	 * Closes the underlying database connection.
+	 *
+	 * This is the **read-only** close path: it releases the SQLite handle and
+	 * does nothing else. The temporary working directory is left untouched and
+	 * no `.nitpicker` archive is produced. This makes it safe to call from
+	 * read-only consumers (e.g. the viewer attached to an in-progress crawl's
+	 * tmpDir), where touching the filesystem would race with — or destroy —
+	 * the live crawler's working state.
+	 *
+	 * Subclasses that own the archive's lifecycle (notably {@link Archive})
+	 * override this to add write/cleanup steps.
+	 *
+	 * **Idempotent and concurrent-safe**: the first invocation captures the
+	 * close promise; later invocations (from the same caller, a shutdown
+	 * signal handler, or a parallel manager teardown) await the same
+	 * promise and resolve together. If `db.destroy()` rejects, the
+	 * rejection propagates to *all* awaiters and the accessor stays
+	 * latched closed — a hung knex pool is not safe to "retry close".
+	 *
+	 * **Bounded**: when the optional `timeoutMs` (default {@link
+	 * DEFAULT_CLOSE_TIMEOUT_MS}) elapses before `db.destroy()` settles, the
+	 * call resolves with a warning. This prevents a viewer shutdown from
+	 * being held for the underlying pool's 10-minute `acquireTimeoutMillis`
+	 * when the live crawler holds the SQLite write lock.
+	 * @param options - Close options.
+	 * @param options.timeoutMs - Milliseconds to wait for `db.destroy()`
+	 *   before giving up. Use `Infinity` to wait indefinitely (only
+	 *   advisable in tests and batch jobs that own the DB exclusively).
+	 */
+	async close(options: { timeoutMs?: number } = {}): Promise<void> {
+		if (this.#closeOnce) {
+			return this.#closeOnce;
+		}
+		const timeoutMs = options.timeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS;
+		this.#closeOnce = this.#runClose(timeoutMs);
+		return this.#closeOnce;
 	}
 
 	/**
@@ -104,45 +186,80 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	}
 	/**
 	 * Reads the HTML content of a page snapshot from the archive.
-	 * Supports reading from both unzipped directories and zipped snapshot archives.
+	 *
+	 * Resolution policy (in order, with read-only safety):
+	 *
+	 * 1. **Loose `snapshot-html/<file>`** — read directly from the unzipped
+	 *    directory when it exists AND the requested file is present. Hit by
+	 *    the viewer attached to a live crawl's tmpDir (snapshots not yet
+	 *    zipped) and by an archive that has already been unzipped earlier.
+	 * 2. **Single-entry zip read** — when the loose directory is missing the
+	 *    requested file but `snapshot-html.zip` exists, extract just that
+	 *    one entry without expanding the zip onto disk. This is also the
+	 *    only path used when this accessor is read-only (e.g. stub-mode
+	 *    opens), so the user's live tmpDir is never mutated.
+	 * 3. **Eager unzip into the directory** — writer-mode only fallback when
+	 *    the directory is absent but the zip is present. Future calls then
+	 *    hit path 1 without re-decompressing.
+	 *
+	 * Falling back from "loose dir doesn't have it" to the zip recovers the
+	 * edge case where an interrupted `Archive.write()` produced a partial
+	 * loose directory alongside a complete zip; the previous order would
+	 * return `null` for files only in the zip.
 	 * @param filePath - The relative file path to the HTML snapshot, or null.
-	 * @param openZipped - Whether to attempt unzipping the snapshot archive. Defaults to `true`.
-	 * @returns The HTML content as a string, or null if the snapshot is not found or filePath is null.
+	 * @param openZipped - Whether to expand the snapshot zip onto disk when
+	 *   the loose directory is absent. Defaults to `true` for writer-mode
+	 *   accessors and is **forced to false** when the accessor is
+	 *   read-only (stub mode) — see {@link ArchiveAccessor#readOnly}.
+	 * @returns The HTML content as a string, or null if the snapshot is
+	 *   not found or filePath is null.
 	 */
 	async getHtmlOfPage(filePath: string | null, openZipped = true) {
 		if (!filePath) {
 			return null;
 		}
 		const snapshotDir = safePath(this.#tmpDir, path.dirname(filePath));
+		const snapshotZip = `${snapshotDir}.zip`;
 		const name = path.basename(filePath);
+		// Read-only accessors must NEVER materialise the loose directory:
+		// doing so writes into a tmpDir that the live crawler owns.
+		const allowUnzip = openZipped && !this.#readOnly;
 
-		if (openZipped) {
-			await unzip(`${snapshotDir}.zip`, snapshotDir);
-		}
-
+		// Path 1: loose dir hit.
 		if (exists(snapshotDir)) {
-			log('Load %s directly because snapshot dir is unzipped', name);
-			const html = await readText(path.resolve(snapshotDir, name)).catch(
-				(error) => error,
-			);
-			if (typeof html === 'string') {
-				log('Loaded: %s ...', html.split('\n')[0]);
+			const html = await this.#readSnapshotFile(snapshotDir, name);
+			if (html !== null) {
+				log('Loaded %s from loose snapshot dir', name);
 				return html;
 			}
-			log('Failed Loading: %O', html);
-			return null;
+			log('%s not found in loose snapshot dir — falling back to zip', name);
 		}
-		log('Extracts %s from zipped snapshots', name);
-		const zipDir = await extractZip(`${snapshotDir}.zip`);
-		const file = zipDir.files.find((f) => f.type === 'File' && f.path === name);
-		if (!file) {
-			log('Failed: Not found %s from zipped snapshots', name);
-			return null;
+
+		// Path 2: pull a single entry from the zip without expanding.
+		// This is the safe fallback when the file is missing from a partial
+		// loose dir (interrupted write), and the only fallback in read-only
+		// mode.
+		if (exists(snapshotZip)) {
+			const html = await readSingleEntryFromZip(snapshotZip, name);
+			if (html !== null) {
+				log('Loaded %s from snapshot zip (single-entry read)', name);
+				return html;
+			}
+			// Writer-mode eager unzip — only if single-entry read didn't find
+			// the file. This is mostly defensive; in practice an interrupted
+			// archive's loose dir and zip should agree on which files exist.
+			if (allowUnzip && !exists(snapshotDir)) {
+				log('Expanding snapshot zip in writer-mode: %s', snapshotZip);
+				await unzip(snapshotZip, snapshotDir);
+				const html2 = await this.#readSnapshotFile(snapshotDir, name);
+				if (html2 !== null) {
+					return html2;
+				}
+			}
 		}
-		const buffer = await file.buffer();
-		const html = buffer.toString('utf8') || null;
-		log('Succeeded: Extracts %s from zipped snapshots', name);
-		return html;
+
+		log('Snapshot for %s not found in either dir or zip', name);
+		return null;
 	}
 	/**
 	 * Returns the underlying Knex query builder instance for direct SQL access.
@@ -153,7 +270,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	getKnex() {
 		return this.#db.getKnex();
 	}
-
 	/**
 	 * Retrieves all pages from the archive, optionally filtered by type.
 	 * Eagerly loads redirect relationships (`redirectFrom`) but does NOT load
@@ -181,7 +297,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 
 		return pages.map((page) => new Page(this, page, redirectMap.get(page.id) || []));
 	}
-
 	/**
 	 * Retrieves pages with their related data (redirects, anchors, referrers) in batches.
 	 * Processes pages in chunks of `limit` size, calling the callback for each batch.
@@ -214,6 +329,48 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 			times++;
 		}
 	}
+	/**
+	 * Actual close worker — invoked exactly once per accessor via
+	 * {@link close}'s shared promise. Races `db.destroy()` against the
+	 * caller-supplied timeout; on timeout we log and resolve so the
+	 * consumer (typically a process shutting down) is not blocked, even
+	 * though the underlying knex pool may still be draining in the
+	 * background.
+	 * @param timeoutMs - Maximum time to wait for `db.destroy()`.
+	 */
+	async #runClose(timeoutMs: number): Promise<void> {
+		if (!Number.isFinite(timeoutMs)) {
+			await this.#db.destroy();
+			return;
+		}
+		let timer: NodeJS.Timeout | null = null;
+		const timeout = new Promise<'timeout'>((resolve) => {
+			timer = setTimeout(() => resolve('timeout'), timeoutMs);
+		});
+		// Track destroy() so we can attach an error-suppressing handler if we
+		// give up waiting — otherwise a late rejection becomes an unhandled
+		// promise rejection on the process.
+		const destroy = this.#db.destroy().then(() => 'done' as const);
+		try {
+			const result = await Promise.race([destroy, timeout]);
+			if (result === 'timeout') {
+				log(
+					'ArchiveAccessor.close: db.destroy() did not settle within %dms — giving up',
+					timeoutMs,
+				);
+				destroy.catch((error) => {
+					log(
+						'ArchiveAccessor.close: late db.destroy() rejection (post-timeout): %O',
+						error,
+					);
+				});
+			}
+		} finally {
+			if (timer) {
+				clearTimeout(timer);
+			}
+		}
+	}
 
 	/**
 	 * Retrieves pages that link to the specified page (incoming links).
@@ -224,7 +381,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		const refs = await this.#db.getReferrersOfPage(pageId);
 		return refs;
 	}
-
 	/**
 	 * Retrieves page URLs that reference the specified resource.
 	 * @param pageId - The database ID of the resource.
@@ -234,7 +390,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		const refs = await this.#db.getReferrersOfResource(pageId);
 		return refs;
 	}
-
 	/**
 	 * Retrieves all sub-resources (CSS, JS, images, etc.) stored in the archive.
 	 * @returns An array of {@link Resource} instances.
@@ -243,7 +398,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		const resources = await this.#db.getResources();
 		return resources.map((r) => new Resource(this, r));
 	}
-
 	/**
 	 * Retrieves a flat list of all resource URLs stored in the archive.
 	 * @returns An array of resource URL strings.
@@ -251,7 +405,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	async getResourceUrlList() {
 		return this.#db.getResourceUrlList();
 	}
-
 	/**
 	 * Stores custom data in the archive under the configured namespace.
 	 * Requires a namespace to be set on this accessor; throws if namespace is null.
@@ -273,12 +426,21 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		}
 		return path.relative(this.#tmpDir, filePath);
 	}
-
 	/**
 	 * Returns the total number of internal pages in the archive.
 	 */
 	async #getPageCount() {
 		return this.#db.getPageCount();
+	}
+	/**
+	 * Reads one HTML file out of the loose snapshot directory. Returns the
+	 * file contents on success, `null` if the file is absent or unreadable.
+	 * @param snapshotDir - The loose `snapshot-html/` directory.
+	 * @param name - The file name to read (basename only).
+	 */
+	async #readSnapshotFile(snapshotDir: string, name: string): Promise<string | null> {
+		const html = await readText(path.resolve(snapshotDir, name)).catch((error) => error);
+		return typeof html === 'string' ? html : null;
 	}
 
 	/**
@@ -346,4 +508,29 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		log('Create Page Data: Done');
 		return pPages;
 	}
+}
+
+/**
+ * Decompresses a single named entry from a snapshot zip without expanding
+ * the archive onto disk.
+ *
+ * The read-only path through {@link ArchiveAccessor.getHtmlOfPage} uses
+ * this so a stub-mode viewer never materialises a `snapshot-html/`
+ * directory inside the user's live tmpDir.
+ * @param zipPath - Absolute path to the snapshot zip file.
+ * @param entryName - Basename (no slashes) of the entry to read.
+ * @returns The entry contents as a UTF-8 string, or `null` when the zip
+ *   has no such entry.
+ */
+async function readSingleEntryFromZip(
+	zipPath: string,
+	entryName: string,
+): Promise<string | null> {
+	const zipDir = await extractZip(zipPath);
+	const file = zipDir.files.find((f) => f.type === 'File' && f.path === entryName);
+	if (!file) {
+		return null;
+	}
+	const buffer = await file.buffer();
+	return buffer.toString('utf8') || null;
 }

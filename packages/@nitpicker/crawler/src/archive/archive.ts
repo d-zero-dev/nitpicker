@@ -30,6 +30,14 @@ import { untar } from './filesystem/untar.js';
  * The constructor is private.
  */
 export default class Archive extends ArchiveAccessor {
+	/**
+	 * Promise tracking an in-progress {@link Archive.close} (or
+	 * {@link Archive.releaseHandle}). Acts as the override's idempotency
+	 * guard so a second call — e.g. from a signal handler racing the
+	 * primary teardown — does not re-enter the destructive prologue
+	 * (write/remove) on a half-mutated state.
+	 */
+	#closeOnce: Promise<void> | null = null;
 	/** The SQLite database instance for reading and writing crawl data. */
 	#db: Database;
 	/** Absolute path to the output `.nitpicker` archive file. */
@@ -46,6 +54,20 @@ export default class Archive extends ArchiveAccessor {
 	 */
 	get filePath() {
 		return this.#filePath;
+	}
+
+	/**
+	 * The intermediate directory `Archive.write()` produces by renaming
+	 * `tmpDir` before tarring (`{cwd}/{archiveName}`). Exposed so the
+	 * manager can include it in its cleanup-on-failure path: if `tar()`
+	 * fails after the rename, this directory is orphaned and would
+	 * otherwise be invisible to a `rmSync(tmpDir)` recovery.
+	 */
+	get renamedDir(): string {
+		return path.resolve(
+			path.dirname(this.#filePath),
+			path.basename(this.#filePath, path.extname(this.#filePath)),
+		);
 	}
 
 	// eslint-disable-next-line no-restricted-syntax
@@ -90,28 +112,6 @@ export default class Archive extends ArchiveAccessor {
 	}
 
 	/**
-	 * Closes the archive. If the archive file does not yet exist on disk,
-	 * it writes the archive first. If the temporary directory still exists,
-	 * it is removed.
-	 */
-	async close() {
-		log('Closing');
-		try {
-			if (!exists(this.#filePath)) {
-				log("Save the file because it doesn't exist");
-				await this.write();
-			} else if (exists(this.#tmpDir)) {
-				log('Remove temporary dir');
-				await remove(this.#tmpDir);
-			}
-			await this.#db.destroy();
-		} finally {
-			await this.#releaseLock();
-		}
-		log('Closing done');
-	}
-
-	/**
 	 * Retrieves the current crawling state, including lists of scraped and pending URLs.
 	 * @returns An object with `scraped` and `pending` URL arrays.
 	 */
@@ -124,6 +124,24 @@ export default class Archive extends ArchiveAccessor {
 	 */
 	async getUrl() {
 		return this.#db.getBaseUrl();
+	}
+	/**
+	 * Releases the SQLite handle and the advisory lock **without** writing
+	 * the archive or removing `tmpDir`.
+	 *
+	 * Use this when you need to detach from a freshly-created `Archive`
+	 * without finalising it — fixtures producing a stub state for tests,
+	 * tooling that wants to leave the tmpDir alive for `crawl --resume`,
+	 * or any non-orchestrator caller that owns the lifecycle externally.
+	 * Shares the same idempotency guard as {@link close}, so the two paths
+	 * are mutually exclusive (the first one called wins).
+	 */
+	async releaseHandle(): Promise<void> {
+		if (this.#closeOnce) {
+			return this.#closeOnce;
+		}
+		this.#closeOnce = this.#runReleaseHandle();
+		return this.#closeOnce;
 	}
 	/**
 	 * Promote previously-external pages that now fall under the (possibly extended)
@@ -206,6 +224,35 @@ export default class Archive extends ArchiveAccessor {
 		await this.#db.insertResourceReferrers(src, url);
 	}
 	/**
+	 * Closes the archive. If the archive file does not yet exist on disk,
+	 * it writes the archive first. If the temporary directory still exists,
+	 * it is removed. The database connection is then closed via
+	 * {@link ArchiveAccessor.close} (the base class owns the SQLite handle),
+	 * and finally the archive's advisory lock is released.
+	 *
+	 * **Idempotent**: the first invocation captures the close promise;
+	 * subsequent invocations (signal handlers, parallel teardowns, retried
+	 * orchestrator paths) await the same promise instead of re-entering
+	 * the destructive prologue on a half-mutated state. If the first
+	 * close fails (e.g. ENOSPC during tar), the rejection propagates to
+	 * all awaiters and the archive stays latched closed — there is no
+	 * safe way to retry `write()` once `tmpDir` has been renamed.
+	 *
+	 * **Read-only consumers must not reach this override.** Anything that
+	 * obtains an archive view via {@link Archive.connect} receives an
+	 * {@link ArchiveAccessor} (not an `Archive`), so `close()` resolves to
+	 * the safe base implementation — no `write()`, no `remove()`, no lock
+	 * release — leaving the tmpDir intact for the live crawler.
+	 */
+	override async close(): Promise<void> {
+		if (this.#closeOnce) {
+			return this.#closeOnce;
+		}
+		this.#closeOnce = this.#runFullClose();
+		return this.#closeOnce;
+	}
+
+	/**
 	 * Marks a page as skipped in the archive database with the given reason.
 	 * @param url - The URL of the page to mark as skipped.
 	 * @param reason - The reason the page was skipped.
@@ -215,6 +262,42 @@ export default class Archive extends ArchiveAccessor {
 		dbLog('Set skipped page: %s', url);
 		await this.#db.setSkippedPage(url, reason, isExternal);
 	}
+	/**
+	 * Worker for {@link close}. Performs the destructive prologue
+	 * (write or remove), drops the DB handle via the base class, then
+	 * releases the lock in a `finally` so the lock never leaks even on
+	 * partial failure.
+	 */
+	async #runFullClose(): Promise<void> {
+		log('Closing');
+		try {
+			if (!exists(this.#filePath)) {
+				log("Save the file because it doesn't exist");
+				await this.write();
+			} else if (exists(this.#tmpDir)) {
+				log('Remove temporary dir');
+				await remove(this.#tmpDir);
+			}
+			await super.close();
+		} finally {
+			await this.#releaseLock();
+		}
+		log('Closing done');
+	}
+
+	/**
+	 * Worker for {@link releaseHandle}. Drops the SQLite handle and the
+	 * advisory lock with no filesystem mutation.
+	 */
+	async #runReleaseHandle(): Promise<void> {
+		log('Releasing handle (no write, no remove)');
+		try {
+			await super.close();
+		} finally {
+			await this.#releaseLock();
+		}
+	}
+
 	/**
 	 * Assigns natural URL sort order values to all pages in the database
 	 * that do not yet have an `order` field set.
@@ -274,15 +357,24 @@ export default class Archive extends ArchiveAccessor {
 	static TMP_DIR_PREFIX = '._nitpicker-';
 	/**
 	 * Opens a read-only connection to an existing archive's database.
+	 *
 	 * Returns an {@link ArchiveAccessor} that provides query methods
-	 * without the ability to modify or write the archive.
+	 * without the ability to modify or write the archive. The DB is opened
+	 * in **read-only mode**: no schema migrations run, and the connection
+	 * refuses to resurrect a missing parent directory or db file (so a
+	 * TOCTOU window between source classification and this call cannot
+	 * silently produce an empty phantom tmpDir).
+	 *
+	 * The returned accessor is also marked read-only so consumer-facing
+	 * helpers (e.g. {@link ArchiveAccessor.getHtmlOfPage}) avoid any
+	 * filesystem mutation on the user's tmpDir.
 	 * @param tmpDir - The path to the temporary directory containing the database.
 	 * @param namespace - An optional namespace for scoping data access within the archive.
 	 * @returns An ArchiveAccessor instance for querying the archive data.
 	 */
 	static async connect(tmpDir: string, namespace: string | null = null) {
-		const db = await Archive.#connectDB(tmpDir);
-		const archive = new ArchiveAccessor(tmpDir, db, namespace);
+		const db = await Archive.#connectDB(tmpDir, { readOnly: true });
+		const archive = new ArchiveAccessor(tmpDir, db, namespace, { readOnly: true });
 		return archive;
 	}
 	/**
@@ -403,13 +495,19 @@ export default class Archive extends ArchiveAccessor {
 	/**
 	 * Connects to (or creates) the SQLite database in the given directory.
 	 * @param tmpDir - Directory containing `db.sqlite`
+	 * @param options - Optional connection flags forwarded to
+	 *   {@link Database.connect}. Used by {@link Archive.connect} to pass
+	 *   `readOnly: true` so no migrations run and a missing tmpDir is not
+	 *   resurrected.
+	 * @param options.readOnly
 	 */
-	static async #connectDB(tmpDir: string) {
+	static async #connectDB(tmpDir: string, options?: { readOnly?: boolean }) {
 		const dbPath = path.resolve(tmpDir, Archive.SQLITE_DB_FILE_NAME);
-		dbLog('connects database: %s', dbPath);
+		dbLog('connects database: %s (readOnly=%s)', dbPath, options?.readOnly ?? false);
 		return await Database.connect({
 			workingDir: tmpDir,
 			filename: dbPath,
+			readOnly: options?.readOnly,
 		});
 	}
 	/**
