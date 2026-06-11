@@ -100,9 +100,15 @@ export async function closeBrowserSafely(
 		// Mark the Node ChildProcess as killed so Node's reaping logic treats
 		// it correctly; then walk the OS process tree.
 		childProcess.kill('SIGKILL');
-		if (typeof childProcess.pid === 'number') {
+		// Capture pid once: ChildProcess.pid is technically `number | undefined`
+		// (undefined before spawn settles), and reading it twice across the
+		// `await` below would force the second read to re-widen back to
+		// `number | undefined` regardless of the typeof guard. Snapshotting
+		// makes the type and the runtime value match.
+		const pid = childProcess.pid;
+		if (typeof pid === 'number') {
 			const killTree = deps.killTree ?? killProcessTree;
-			await killTree(childProcess.pid, 'SIGKILL');
+			await killTree(pid, 'SIGKILL');
 		}
 	}
 

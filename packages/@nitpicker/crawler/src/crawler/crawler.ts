@@ -21,6 +21,7 @@ import pkg from '../../package.json' with { type: 'json' };
 import { crawlerLog } from '../debug.js';
 
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
+import { drainPhaseErrors } from './drain-phase-errors.js';
 import { fetchDestination } from './fetch-destination.js';
 import { findScopeEntry } from './find-scope-entry.js';
 import { formatCrawlProgress } from './format-crawl-progress.js';
@@ -245,26 +246,15 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	}
 
 	/**
-	 * Drains the {@link Crawler.#pendingPhaseErrors} buffer for a URL and emits
-	 * one `pageError` event per buffered failure.
-	 *
-	 * Safe to call multiple times for the same URL: the buffer is removed on
-	 * the first call so subsequent invocations are no-ops.
+	 * Thin instance-bound adapter over {@link drainPhaseErrors}. Flushes
+	 * `#pendingPhaseErrors` for `url` as `pageError` events. Idempotent.
 	 * @param url - URL whose buffered errors should be flushed.
 	 * @param isExternal - Whether the URL is external to the crawl scope.
 	 */
 	#drainPhaseErrors(url: ExURL, isExternal: boolean): void {
-		const errors = this.#pendingPhaseErrors.get(url.href);
-		if (!errors || errors.length === 0) return;
-		this.#pendingPhaseErrors.delete(url.href);
-		for (const err of errors) {
-			void this.emit('pageError', {
-				url: url.href,
-				phase: err.phase,
-				message: err.message,
-				isExternal,
-			});
-		}
+		drainPhaseErrors(this.#pendingPhaseErrors, url.href, isExternal, (payload) => {
+			void this.emit('pageError', payload);
+		});
 	}
 	/**
 	 * Emits error events for a deal-level failure.
@@ -718,9 +708,20 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						if (isExternal) {
 							externalDoneUrls.add(protocolAgnosticKey(url.withoutHashAndAuth));
 						}
-						// Defensive: clear any leftover entries (e.g. predicted
-						// URLs that were discarded before #drainPhaseErrors ran)
-						// so the buffer cannot leak across crawls.
+						// Defensive: clear any leftover entries so the buffer cannot
+						// leak across crawls. If entries still exist here, neither
+						// the success nor the catch path drained them — typically
+						// because a predicted URL was discarded before reaching the
+						// drain point. Log the drop so production runs that hit
+						// this case are observable via DEBUG=Nitpicker:Crawler.
+						const remaining = this.#pendingPhaseErrors.get(url.href);
+						if (remaining && remaining.length > 0) {
+							crawlerLog(
+								'Dropped %d phase error(s) for %s (no archive entry created)',
+								remaining.length,
+								url.href,
+							);
+						}
 						this.#pendingPhaseErrors.delete(url.href);
 					}
 				};
