@@ -143,6 +143,17 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.getResourceByUrl(urls);
 	}
 	/**
+	 * Counts the number of pages already scraped as crawl targets in the archive.
+	 *
+	 * Lets the crawler initialize its session-progress counter on resume so the
+	 * displayed HTML-page count accounts for previously-rendered pages.
+	 * @returns The count of pages with `isTarget = 1` and `scraped = 1`.
+	 */
+	async getScrapedHtmlPageCount() {
+		return this.#db.getScrapedHtmlPageCount();
+	}
+
+	/**
 	 * Retrieves the base URL of the crawl session from the archive database.
 	 * @returns The base URL string.
 	 */

@@ -609,4 +609,71 @@ describe('Crawler', () => {
 			expect(initialUrls.map((u) => u.pathname)).toEqual(['/blog/', '/news/']);
 		});
 	});
+
+	describe('pagesScrapedOffset propagation', () => {
+		it('resume() の第 4 引数 pagesScrapedOffset が deal() の header 初期表示に反映される', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+			vi.mocked(deal).mockResolvedValue();
+
+			const crawler = new Crawler(defaultOptions);
+			// 前回セッションで 42 件の HTML ページが scrape 済み、という想定
+			crawler.resume(
+				['https://example.com/pending'],
+				['https://example.com/already-done'],
+				[],
+				42,
+			);
+			crawler.start([parseUrl('https://example.com/new-root')!], { recursive: true });
+
+			await vi.waitFor(() => {
+				expect(deal).toHaveBeenCalled();
+			});
+
+			// deal の 3 番目の引数（options）から header callback を取り出して、
+			// 現セッション 0 件処理時点の表示を再現する
+			const dealOptions = vi.mocked(deal).mock.calls[0]![2] as
+				| {
+						header?: (
+							progress: unknown,
+							done: number,
+							total: number,
+							limit: number,
+						) => string;
+				  }
+				| undefined;
+			expect(dealOptions?.header).toBeDefined();
+			const header = dealOptions!.header!(null, 0, 0, 1);
+			// resumeOffset=1 (already-done), pagesScrapedOffset=42 がそれぞれ反映される
+			expect(header).toContain('1(42) done');
+		});
+
+		it('resume() の第 4 引数を省略すると pagesScrapedOffset は 0 のままになる', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+			vi.mocked(deal).mockResolvedValue();
+
+			const crawler = new Crawler(defaultOptions);
+			// 第 4 引数省略（既存テスト互換性）
+			crawler.resume(['https://example.com/pending'], ['https://example.com/done'], []);
+			crawler.start([parseUrl('https://example.com/new-root')!], { recursive: true });
+
+			await vi.waitFor(() => {
+				expect(deal).toHaveBeenCalled();
+			});
+
+			const dealOptions = vi.mocked(deal).mock.calls[0]![2] as
+				| {
+						header?: (
+							progress: unknown,
+							done: number,
+							total: number,
+							limit: number,
+						) => string;
+				  }
+				| undefined;
+			const header = dealOptions!.header!(null, 0, 0, 1);
+			expect(header).toContain('1(0) done');
+		});
+	});
 });

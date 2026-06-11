@@ -263,7 +263,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	getKnex(): Knex {
 		return this.#instance;
 	}
-
 	/**
 	 * Retrieves the crawl session name from the `info` table.
 	 * @returns The name string.
@@ -279,7 +278,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		const [{ name }] = selected;
 		return name;
 	}
-
 	/**
 	 * Counts the total number of pages in the database.
 	 * @returns The total page count.
@@ -297,7 +295,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		dbLog('Number of pages: %d', count);
 		return count;
 	}
-
 	/**
 	 * Retrieves pages from the database with optional filtering, pagination via offset and limit.
 	 * @param filter - An optional {@link PageFilter} to narrow results by content type and origin.
@@ -383,7 +380,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}
 		return q.limit(limit).offset(offset);
 	}
-
 	/**
 	 * Retrieves pages along with their related redirect, anchor, and referrer data.
 	 * Results are ordered by the natural URL sort order. Only non-redirected pages are returned.
@@ -482,7 +478,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			referrers,
 		};
 	}
-
 	/**
 	 * Retrieves redirect sources for the given page IDs in bulk.
 	 * @param pageIds - The database IDs of the destination pages.
@@ -512,7 +507,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			.where('anchors.hrefId', pageId);
 		return res;
 	}
-
 	/**
 	 * Retrieves the page URLs that reference a specific resource.
 	 * @param id - The database ID of the resource.
@@ -529,7 +523,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			.where('resources.id', id);
 		return res.map((r) => r.url);
 	}
-
 	/**
 	 * Retrieves a single sub-resource from the `resources` table by its URL.
 	 *
@@ -563,7 +556,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	async getResources() {
 		return this.#instance.select('*').from<DB_Resource>('resources');
 	}
-
 	/**
 	 * Retrieves a flat list of all resource URLs from the `resources` table.
 	 * @returns An array of resource URL strings.
@@ -573,6 +565,24 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	async getResourceUrlList() {
 		const res = await this.#instance.select('url').from<DB_Resource>('resources');
 		return res.map((r) => r.url);
+	}
+	/**
+	 * Counts pages that were scraped as crawl targets (full HTML render).
+	 *
+	 * Used by the crawler to seed its `pagesScraped` counter on resume so the
+	 * progress display reflects all browser-rendered HTML pages across sessions,
+	 * not just the current one.
+	 * @returns The number of rows in `pages` with `isTarget = 1` and `scraped = 1`.
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async getScrapedHtmlPageCount() {
+		const [row] = await this.#instance
+			.from<DB_Page>('pages')
+			.where('isTarget', 1)
+			.andWhere('scraped', 1)
+			.count<{ count: number }[]>('* as count');
+		return row ? Number(row.count) : 0;
 	}
 
 	/**

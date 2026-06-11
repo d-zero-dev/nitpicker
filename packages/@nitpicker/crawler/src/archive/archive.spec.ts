@@ -241,6 +241,37 @@ describe('write: append 時のスナップショットマージ', () => {
 	});
 });
 
+describe('getScrapedHtmlPageCount', () => {
+	const archiveFilePath = path.resolve(workingDir, 'html-page-count-test.nitpicker');
+	const tmpDirPattern = path.resolve(
+		workingDir,
+		Archive.TMP_DIR_PREFIX + 'html-page-count-test',
+	);
+
+	afterAll(async () => {
+		await remove(tmpDirPattern).catch(() => {});
+		await remove(archiveFilePath).catch(() => {});
+	});
+
+	it('Database.getScrapedHtmlPageCount に passthrough して同じ件数を返す', async () => {
+		const archive = await Archive.create({
+			filePath: archiveFilePath,
+			cwd: workingDir,
+		});
+
+		try {
+			// HTML ページ 1 件挿入
+			await archive.setPage(makePageData('/html-page', '<html></html>'));
+
+			const count = await archive.getScrapedHtmlPageCount();
+
+			expect(count).toBe(1);
+		} finally {
+			await archive.close();
+		}
+	});
+});
+
 describe('addPageError', () => {
 	const archiveFilePath = path.resolve(workingDir, 'add-page-error-test.nitpicker');
 	const tmpDirPattern = path.resolve(

@@ -484,7 +484,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				});
 				const { scraped, pending } = await archive.getCrawlingState();
 				const resources = await archive.getResourceUrlList();
-				orchestrator.#crawler.resume(pending, scraped, resources);
+				const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
+				orchestrator.#crawler.resume(pending, scraped, resources, pagesScrapedOffset);
 				if (initializedCallback) {
 					await initializedCallback(orchestrator, mergedConfig);
 				}
@@ -549,7 +550,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		}
 		const { scraped, pending } = await archive.getCrawlingState();
 		const resources = await archive.getResourceUrlList();
-		orchestrator.#crawler.resume(pending, scraped, resources);
+		const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
+		orchestrator.#crawler.resume(pending, scraped, resources, pagesScrapedOffset);
 		if (initializedCallback) {
 			await initializedCallback(orchestrator, config);
 		}

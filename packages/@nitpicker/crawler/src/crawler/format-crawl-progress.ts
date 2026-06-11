@@ -19,6 +19,11 @@ interface FormatCrawlProgressParams {
 	readonly externalTotal: number;
 	/** Number of external URLs completed */
 	readonly externalDone: number;
+	/**
+	 * Number of HTML pages actually rendered by the browser in the current session.
+	 * Excludes HEAD-only resources, title-only metadata fetches, and skipped URLs.
+	 */
+	readonly pagesScraped: number;
 	/** Number of parallel workers */
 	readonly limit: number;
 }
@@ -26,9 +31,10 @@ interface FormatCrawlProgressParams {
 /**
  * Formats the crawl progress header for the deal() progress display.
  *
- * Shows "done / found URLs (remaining)" format instead of "done/total"
- * to make it clearer that the total is expected to grow during crawling
- * and that the counts are processed URLs, not resulting pages.
+ * Shows "done(pages) / found URLs (remaining)" format instead of "done/total"
+ * to make it clearer that the total is expected to grow during crawling,
+ * that the counts are processed URLs (not resulting pages), and how many of
+ * those URLs were actually rendered by the browser as HTML pages.
  * Counts are formatted with thousands separators (e.g. `1,234,567`).
  * @param params - The crawl progress parameters.
  * @param params.done - Number of URLs completed by the deal queue.
@@ -36,6 +42,7 @@ interface FormatCrawlProgressParams {
  * @param params.resumeOffset - Offset from a previous resumed session.
  * @param params.externalTotal - Number of external URLs discovered.
  * @param params.externalDone - Number of external URLs completed.
+ * @param params.pagesScraped - Number of HTML pages rendered by the browser in this session.
  * @param params.limit - Number of parallel workers.
  * @returns The formatted progress string with ANSI color codes.
  */
@@ -45,6 +52,7 @@ export function formatCrawlProgress({
 	resumeOffset,
 	externalTotal,
 	externalDone,
+	pagesScraped,
 	limit,
 }: FormatCrawlProgressParams): string {
 	const allDone = done + resumeOffset;
@@ -58,7 +66,7 @@ export function formatCrawlProgress({
 
 	return (
 		c.bold(
-			`Crawling: ${countFormat.format(internalDone)} done / ${countFormat.format(internalTotal)} found URLs`,
+			`Crawling: ${countFormat.format(internalDone)}(${countFormat.format(pagesScraped)}) done / ${countFormat.format(internalTotal)} found URLs`,
 		) +
 		c.dim(
 			` (+${countFormat.format(externalDone)}/${countFormat.format(externalTotal)} ext)`,

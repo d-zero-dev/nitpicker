@@ -176,6 +176,75 @@ describe('Pages', () => {
 
 		expect(count).toEqual(14);
 	});
+
+	it('getScrapedHtmlPageCount は isTarget=1 かつ scraped=1 のページのみカウントする', async () => {
+		const dbPath = path.resolve(workingDir, 'html-count-test.sqlite');
+		const db = await Database.connect({
+			workingDir,
+			filename: dbPath,
+		});
+
+		try {
+			// scraped=1, isTarget=1 — count される
+			await db.updatePage(
+				{
+					url: parseUrl('http://localhost/page-a')!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 1000,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'A' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				workingDir,
+				true,
+			);
+			// scraped=1, isTarget=0 — count されない（非HTMLリソース）
+			await db.updatePage(
+				{
+					url: parseUrl('http://localhost/asset.png')!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 500,
+					contentType: 'image/png',
+					responseHeaders: {},
+					meta: { title: '' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				workingDir,
+				false,
+			);
+			// scraped=0, isTarget=1 — count されない（pending な target ページ）。
+			// `andWhere('scraped', 1)` が誤って `orWhere` になっていると 2 になる。
+			// updatePage は scraped=1 で挿入するので、生 knex で直接挿入する。
+			await db
+				.getKnex()
+				.from('pages')
+				.insert({ url: 'http://localhost/pending-target', scraped: 0, isTarget: 1 });
+			// scraped=0, isTarget=0 — count されない（pending な非target、初期状態）
+			await db
+				.getKnex()
+				.from('pages')
+				.insert({ url: 'http://localhost/pending-asset', scraped: 0, isTarget: 0 });
+
+			const count = await db.getScrapedHtmlPageCount();
+
+			expect(count).toBe(1);
+		} finally {
+			await remove(dbPath);
+		}
+	});
 });
 
 describe('Config', () => {

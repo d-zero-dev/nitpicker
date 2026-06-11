@@ -77,10 +77,13 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	>();
 	/** Set of resource URLs (without hash) already captured, for deduplication. */
 	readonly #resources = new Set<string>();
+	/** Number of HTML pages (isTarget=1) scraped in previous sessions, used to seed the progress counter on resume. */
+	#resumedPagesScraped = 0;
 	/** URLs restored from a previous session that still need to be scraped. */
 	#resumedPending: ExURL[] = [];
 	/** URLs already scraped in a previous session, used to populate the `seen` set in {@link #runDeal}. */
 	#resumedScraped: string[] = [];
+
 	/** Checker for robots.txt compliance. */
 	readonly #robotsChecker: RobotsChecker;
 
@@ -170,10 +173,19 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @param pending - URLs that were pending (not yet scraped) in the previous session.
 	 * @param scraped - URLs that were already scraped in the previous session.
 	 * @param resources - Resource URLs that were already captured in the previous session.
+	 * @param pagesScrapedOffset - Number of HTML pages already rendered in previous
+	 *   sessions, used to seed the session-spanning progress counter. Defaults to 0
+	 *   for callers that don't need cross-session accuracy in the progress display.
 	 */
-	resume(pending: string[], scraped: string[], resources: string[]) {
+	resume(
+		pending: string[],
+		scraped: string[],
+		resources: string[],
+		pagesScrapedOffset = 0,
+	) {
 		this.#resumedPending = this.#linkList.resume(pending, scraped, this.#options);
 		this.#resumedScraped = scraped;
+		this.#resumedPagesScraped = pagesScrapedOffset;
 		for (const resource of resources) {
 			this.#resources.add(resource);
 		}
@@ -233,6 +245,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			initialUrls.push(url);
 		}
 		const resumeOffset = this.#resumedScraped.length;
+		const pagesScrapedOffset = this.#resumedPagesScraped;
 
 		if (initialUrls.length === 0) {
 			crawlerLog('Crawl End (nothing to resume)');
@@ -240,7 +253,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			return;
 		}
 
-		void this.#runDeal(initialUrls, resumeOffset).catch((error) => {
+		void this.#runDeal(initialUrls, resumeOffset, pagesScrapedOffset).catch((error) => {
 			crawlerLog('runDeal error: %O', error);
 			this.#emitDealErrors(error, root.href);
 			void this.emit('crawlEnd', {});
@@ -559,8 +572,11 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @param initialUrls - Starting URLs to seed the deal queue
 	 * @param resumeOffset - Number of URLs already scraped in a previous session,
 	 *   added to the progress counter for accurate display
+	 * @param pagesScrapedOffset - Number of HTML pages already rendered in previous
+	 *   sessions, used to seed the per-session HTML-pages counter so the display
+	 *   remains accurate across resumes
 	 */
-	async #runDeal(initialUrls: ExURL[], resumeOffset = 0) {
+	async #runDeal(initialUrls: ExURL[], resumeOffset = 0, pagesScrapedOffset = 0) {
 		const seen = new Set<string>(
 			initialUrls.map((u) => protocolAgnosticKey(u.withoutHashAndAuth)),
 		);
@@ -573,6 +589,11 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		// external URL の追跡（target は deal の total/done から導出）
 		const externalUrls = new Set<string>();
 		const externalDoneUrls = new Set<string>();
+
+		// HTML ページとしてブラウザでレンダリングし、かつアーカイブに保存されたページ数。
+		// HEAD のみ・title 取得のみ・skip・ブラウザ起動失敗・predicted-discard は含まない。
+		// 過去セッションぶんは pagesScrapedOffset として init される。
+		let pagesScraped = pagesScrapedOffset;
 
 		// 初期 URL を分類（onPush を通らないため）
 		for (const url of initialUrls) {
@@ -621,6 +642,14 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				return async () => {
 					const log = createTimedUpdate(update, this.#options.verbose);
 
+					// `#scrapePage` 内のブラウザ HTML レンダーが成功したかをマークするフラグ。
+					// 成功時のみ #scrapePage 側で true に設定される。
+					// discard 判定後にこのフラグを見てカウントするので、launch 失敗や predicted-discard は除外される。
+					let renderedInBrowser = false;
+					const markBrowserScrape = () => {
+						renderedInBrowser = true;
+					};
+
 					try {
 						const robotsAllowed = await this.#robotsChecker.isAllowed(url);
 						if (!robotsAllowed) {
@@ -664,13 +693,27 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						const isPredicted = this.#linkList.isPredicted(url.withoutHashAndAuth);
 
 						log('Scraping%dots%');
-						const result = await this.#scrapePage(url, log, metadataOnly, _index);
+						const result = await this.#scrapePage(
+							url,
+							log,
+							metadataOnly,
+							_index,
+							markBrowserScrape,
+						);
 
 						// Discard predicted URLs that failed (404, error, etc.)
 						if (isPredicted && shouldDiscardPredicted(result)) {
 							handleIgnoreAndSkip(url, this.#linkList, this.#scope, this.#options);
 							log(c.dim('Predicted (discarded)'));
 							return;
+						}
+
+						// Count only after discard check: rendered HTML pages that
+						// will be persisted to the archive. Launch failures bypass
+						// this point via the catch block; discarded predicted URLs
+						// return above without reaching here.
+						if (renderedInBrowser) {
+							pagesScraped++;
 						}
 
 						log('Saving results%dots%');
@@ -733,6 +776,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						resumeOffset,
 						externalTotal: externalUrls.size,
 						externalDone: externalDoneUrls.size,
+						pagesScraped,
 						limit,
 					});
 				},
@@ -764,6 +808,13 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @param update - Callback for progress messages
 	 * @param metadataOnly - When true, only extract title metadata without full browser scraping
 	 * @param laneIndex - The dealer lane index, used to create unique countdown IDs
+	 * @param markBrowserScrape - Called once **after** the browser successfully
+	 *   renders an HTML page (i.e. `#launchBrowserAndScrape` resolved with
+	 *   `type: 'success'`). Not called for HEAD-only, title-only, captured-resource
+	 *   reuse, non-HTML responses, non-HTTP protocols (mailto:, tel:), browser
+	 *   launch throws (e.g. invalid executablePath), or scraper-returned
+	 *   `type: 'error'` results. The caller is responsible for further filtering
+	 *   (e.g. predicted-discard).
 	 * @returns The scrape result
 	 */
 	async #scrapePage(
@@ -771,6 +822,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		update: (log: string) => void,
 		metadataOnly: boolean,
 		laneIndex: number,
+		markBrowserScrape: () => void,
 	): Promise<ScrapeResult> {
 		const isExternal = findScopeEntry(url, this.#scope, this.#options) === null;
 
@@ -879,14 +931,24 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			};
 		}
 
-		// HTML or unknown content type — launch browser with preflight result
-		return this.#launchBrowserAndScrape(
+		// HTML or unknown content type — launch browser with preflight result.
+		// markBrowserScrape() fires only when the result is `success`.
+		// `#launchBrowserAndScrape` catches internal errors and returns
+		// `{ type: 'error', ... }` instead of throwing (see its catch block),
+		// so awaiting alone does NOT prove the page was rendered. The explicit
+		// success check excludes navigation failures, scraper exceptions, and
+		// shutdown-class errors from the pages-rendered count.
+		const browserResult = await this.#launchBrowserAndScrape(
 			url,
 			update,
 			isExternal,
 			metadataOnly,
 			headCheckResult,
 		);
+		if (browserResult.type === 'success') {
+			markBrowserScrape();
+		}
+		return browserResult;
 	}
 	/**
 	 * Performs a pre-flight HTTP HEAD request with retry logic.
