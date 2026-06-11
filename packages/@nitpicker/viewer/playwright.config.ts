@@ -19,6 +19,11 @@ const PORT = 4325;
  */
 export default defineConfig({
 	testDir: './e2e',
+	// The stub-mode suite has its own webServer (a different fixture and port)
+	// and is wired up via `playwright.stub.config.ts` / `test:e2e:stub`. Keep
+	// it out of this run so archive-mode and stub-mode stay independently
+	// scheduled in CI.
+	testIgnore: /viewer-stub\.spec\.ts$/,
 	fullyParallel: false,
 	workers: 1,
 	retries: 0,

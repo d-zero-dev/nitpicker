@@ -9,7 +9,16 @@ import type { Locale } from '../types.js';
 export const translations: Record<Locale, Record<string, unknown>> = {
 	en: {
 		app: { title: 'Nitpicker Viewer' },
-		footer: { archive: 'Archive' },
+		footer: {
+			archive: 'Archive',
+			source: 'Source',
+			liveCrawlBadge: 'Live crawl in progress (PID {pid})',
+			liveCrawlBadgeTitle:
+				'A crawler process is currently writing this directory. The view is a snapshot taken when the viewer started; the underlying data is still moving.',
+			interruptedCrawlBadge: 'Interrupted crawl stub',
+			interruptedCrawlBadgeTitle:
+				'This is a stub directory left behind by a stopped crawl. Read-only — you can resume the crawl with `nitpicker crawl --resume`.',
+		},
 		nav: {
 			summary: 'Summary',
 			pages: 'Pages',
@@ -193,7 +202,16 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 	},
 	ja: {
 		app: { title: 'Nitpicker Viewer' },
-		footer: { archive: 'アーカイブ' },
+		footer: {
+			archive: 'アーカイブ',
+			source: 'ソース',
+			liveCrawlBadge: 'クロール実行中 (PID {pid})',
+			liveCrawlBadgeTitle:
+				'クロールプロセスがこのディレクトリに書き込み中です。表示は viewer 起動時点のスナップショットで、実データは更新され続けています。',
+			interruptedCrawlBadge: '中断クロールのスタブ',
+			interruptedCrawlBadgeTitle:
+				'停止されたクロールのスタブディレクトリです。読み取り専用 — `nitpicker crawl --resume` で再開できます。',
+		},
 		nav: {
 			summary: 'サマリー',
 			pages: 'ページ',

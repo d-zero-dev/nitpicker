@@ -4,8 +4,16 @@ import { apiGet } from './api-client.js';
 
 /** Metadata about the opened archive. */
 interface ArchiveInfo {
-	/** Absolute path of the `.nitpicker` archive being viewed. */
+	/** Absolute path of the opened source being viewed. */
 	filePath: string;
+	/** Whether the source is a finished archive file or a live crawl stub directory. */
+	mode: 'archive' | 'stub';
+	/**
+	 * PID of a crawler currently writing the stub, as detected at viewer
+	 * startup. `null` for archive sources, and for stub sources where the
+	 * crawler had already exited (interrupted crawl).
+	 */
+	crawlerPid: number | null;
 }
 
 /**

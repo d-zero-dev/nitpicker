@@ -1,10 +1,11 @@
-import type { ArchiveManager } from '@nitpicker/query';
+import type { ArchiveLockHolder } from '@nitpicker/crawler';
+import type { ArchiveManager, ArchiveMode } from '@nitpicker/query';
 
 /**
  * Options for launching the Viewer server.
  */
 export interface ViewerOptions {
-	/** Absolute or relative path to the `.nitpicker` archive to view. */
+	/** Absolute or relative path to a `.nitpicker` archive **or** a crawl stub directory to view. */
 	filePath: string;
 	/** Preferred port to listen on. Falls back to a free port if taken. Defaults to 4324. */
 	port?: number;
@@ -28,6 +29,15 @@ export interface ArchiveContext {
 	archiveId: string;
 	/** The resolved path of the opened archive (for display). */
 	filePath: string;
+	/** Whether the source is a finished `.nitpicker` file or a live crawl stub. */
+	mode: ArchiveMode;
+	/**
+	 * Snapshot of the crawler-side lock at viewer startup, when the source
+	 * was a stub directory. `null` for archive-file sources and for stub
+	 * sources with no detectable crawler. The footer uses this to
+	 * distinguish "Live crawl" from "Interrupted crawl stub".
+	 */
+	crawlerLockHolder: ArchiveLockHolder | null;
 }
 
 /**

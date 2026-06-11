@@ -87,6 +87,8 @@ describe('createApp', () => {
 			manager: { get: () => archive } as unknown as ArchiveManager,
 			archiveId: 'test',
 			filePath: archiveFilePath,
+			mode: 'archive',
+			crawlerLockHolder: null,
 		};
 		app = createApp({ context, publicDir: workingDir });
 	});
@@ -160,11 +162,18 @@ describe('createApp', () => {
 		expect(res.status).toBe(200);
 	});
 
-	it('GET /api/info はアーカイブの絶対パスを返す', async () => {
+	it('GET /api/info はアーカイブの絶対パス・mode・crawlerPid を返す', async () => {
 		const res = await app.request('/api/info');
 		expect(res.status).toBe(200);
-		const body = (await res.json()) as { filePath: string };
+		const body = (await res.json()) as {
+			filePath: string;
+			mode: 'archive' | 'stub';
+			crawlerPid: number | null;
+		};
 		expect(body.filePath).toBe(archiveFilePath);
+		expect(body.mode).toBe('archive');
+		// Archive mode never has a live crawler attached.
+		expect(body.crawlerPid).toBeNull();
 	});
 
 	it('GET /api/page-links は全ページ一覧を返す', async () => {
@@ -173,5 +182,67 @@ describe('createApp', () => {
 		const body = (await res.json()) as { items: unknown[]; total: number };
 		expect(Array.isArray(body.items)).toBe(true);
 		expect(body.total).toBeGreaterThanOrEqual(2);
+	});
+});
+
+/**
+ * Stub-mode + live crawler attached at viewer startup.
+ *
+ * The footer renders distinct badges for "Live crawl in progress" vs
+ * "Interrupted crawl stub" based on the `crawlerPid` field in
+ * `/api/info`. The e2e suite covers the interrupted path (no lock); this
+ * spec covers the live path, asserting at the API contract level (the
+ * frontend simply mirrors what the API reports).
+ */
+describe('createApp /api/info — stub mode with a live crawler', () => {
+	it('crawlerLockHolder.alive=true なら /api/info は crawlerPid を返す', async () => {
+		const fakeArchive = {} as unknown as Archive;
+		const context: ArchiveContext = {
+			manager: { get: () => fakeArchive } as unknown as ArchiveManager,
+			archiveId: 'live-stub',
+			filePath: '/tmp/._nitpicker-live',
+			mode: 'stub',
+			crawlerLockHolder: {
+				lockPath: '/tmp/._nitpicker-live.lock',
+				pid: 12_345,
+				alive: true,
+			},
+		};
+		const app = createApp({ context, publicDir: workingDir });
+		const res = await app.request('/api/info');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			filePath: string;
+			mode: 'archive' | 'stub';
+			crawlerPid: number | null;
+		};
+		expect(body.mode).toBe('stub');
+		expect(body.crawlerPid).toBe(12_345);
+	});
+
+	it('crawlerLockHolder.alive=false なら crawlerPid は null（PID リサイクル防御）', async () => {
+		// Even though the lock holder PID is recorded, `alive=false` means
+		// the process is dead (the OS may have already recycled the PID).
+		// Surfacing a dead PID would mislead the user — the API drops it.
+		const fakeArchive = {} as unknown as Archive;
+		const context: ArchiveContext = {
+			manager: { get: () => fakeArchive } as unknown as ArchiveManager,
+			archiveId: 'dead-stub',
+			filePath: '/tmp/._nitpicker-dead',
+			mode: 'stub',
+			crawlerLockHolder: {
+				lockPath: '/tmp/._nitpicker-dead.lock',
+				pid: 99_999,
+				alive: false,
+			},
+		};
+		const app = createApp({ context, publicDir: workingDir });
+		const res = await app.request('/api/info');
+		const body = (await res.json()) as {
+			mode: 'archive' | 'stub';
+			crawlerPid: number | null;
+		};
+		expect(body.mode).toBe('stub');
+		expect(body.crawlerPid).toBeNull();
 	});
 });

@@ -25,7 +25,8 @@
 	"scripts": {
 		"build": "tsc && vite build",
 		"clean": "tsc --build --clean",
-		"test:e2e": "node ./e2e/generate-fixture.mjs && playwright test"
+		"test:e2e": "node ./e2e/generate-fixture.mjs && playwright test",
+		"test:e2e:stub": "node ./e2e/generate-stub-fixture.mjs && playwright test --config playwright.stub.config.ts"
 	},
 	"dependencies": {
 		"@hono/node-server": "2.0.3",
