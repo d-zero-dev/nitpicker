@@ -12,7 +12,7 @@ import { formatCliError } from '../format-cli-error.js';
  * @see {@link viewer} for the main entry point
  */
 export const commandDef = {
-	desc: 'Launch a local browser viewer for a .nitpicker archive',
+	desc: 'Launch a local browser viewer for a .nitpicker archive or a crawl stub directory',
 	flags: {
 		port: {
 			type: 'number',
@@ -50,9 +50,11 @@ export async function viewer(args: string[], flags: ViewerFlags) {
 	const filePath = args[0];
 	if (!filePath) {
 		// eslint-disable-next-line no-console
-		console.error('Error: No .nitpicker file specified.');
+		console.error(
+			'Error: No source specified. Pass a .nitpicker file or a crawl stub directory.',
+		);
 		// eslint-disable-next-line no-console
-		console.error('Usage: nitpicker viewer <file> [options]');
+		console.error('Usage: nitpicker viewer <file-or-stub-dir> [options]');
 		process.exit(ExitCode.Fatal);
 	}
 
