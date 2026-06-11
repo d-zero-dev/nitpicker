@@ -9,13 +9,14 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'open_archive',
 		description:
-			'Load a .nitpicker archive file for querying. Returns an archiveId to use with other tools. Always call this first before using any other tools.',
+			'Load a Nitpicker archive source for querying. Accepts either a finished `.nitpicker` archive file OR a crawl stub directory (an `._nitpicker-*` working directory left behind when a crawl is interrupted). Returns an archiveId, the detected `mode` (`"archive"` or `"stub"`), and `crawlerPid` (the PID of a crawler currently writing the stub, or `null` for finished archives and interrupted-but-no-longer-running crawls). When `mode === "stub"`, treat the data as a point-in-time snapshot: any counts/violations may shift if the user resumes the crawl. Always call this first before using any other tools.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
 				filePath: {
 					type: 'string',
-					description: 'Absolute or relative path to the .nitpicker archive file',
+					description:
+						'Absolute or relative path to a `.nitpicker` archive file OR a crawl stub directory (containing `db.sqlite`).',
 				},
 			},
 			required: ['filePath'],

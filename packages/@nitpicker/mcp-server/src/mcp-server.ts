@@ -109,7 +109,17 @@ function omit(args: Record<string, unknown>, ...keys: string[]): Record<string, 
  * @returns The configured Server instance.
  */
 export function createServer() {
-	const manager = new ArchiveManager();
+	// Route ArchiveManager warnings to stderr explicitly via process.stderr.write
+	// instead of `console.warn`, but more importantly: do NOT let them leak into
+	// `process.stdout`, which is reserved for JSON-RPC framing on MCP stdio.
+	// `console.warn` already writes to stderr on Node, but going through onWarn
+	// gives us a single chokepoint to silence/redirect (e.g. when an MCP host
+	// surfaces stderr to the user as red error banners).
+	const manager = new ArchiveManager({
+		onWarn: (message) => {
+			process.stderr.write(`${message}\n`);
+		},
+	});
 	const server = new Server(
 		{ name: 'nitpicker', version: '0.4.4' },
 		{ capabilities: { tools: {} } },
@@ -134,13 +144,21 @@ export function createServer() {
 				switch (name) {
 					case 'open_archive': {
 						const filePath = requireString(args, 'filePath');
-						const { archiveId, accessor } = await manager.open(filePath);
+						const { archiveId, accessor, mode, crawlerLockHolder } =
+							await manager.open(filePath);
 						const summary = await getSummary(accessor);
 						return jsonResult({
 							archiveId,
 							baseUrl: summary.baseUrl,
 							roots: summary.roots,
 							totalPages: summary.totalPages,
+							// Surface the source kind so an LLM caller knows whether
+							// the data is finalised or a moving snapshot.
+							mode,
+							// PID of a crawler currently writing the stub (when
+							// detectable). `null` for finished archives and
+							// interrupted-but-no-longer-running crawls.
+							crawlerPid: crawlerLockHolder?.alive ? crawlerLockHolder.pid : null,
 						});
 					}
 					case 'close_archive': {
