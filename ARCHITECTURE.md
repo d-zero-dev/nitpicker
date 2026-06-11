@@ -112,8 +112,9 @@ scrapeStart → openPage → loadDOMContent → getHTML → waitNetworkIdle
 - **`CrawlerOrchestrator`**: エントリポイント。`CrawlerOrchestrator.crawling()`（複数 URL で multi-root）, `CrawlerOrchestrator.resume()`（中断再開）, `CrawlerOrchestrator.append()`（既存アーカイブへの追加クロール）
 - **`Crawler`**: リンク管理・スクレイプスケジューリング
 - **`LinkList`**: URL キュー管理（pending → progress → done）
-- **`Archive`**: アーカイブの作成・再開・書き出し
-- **`ArchiveAccessor`**: 読み取り専用アクセサ（`getPages`, `getPagesWithRefs` など）
+- **`Archive`**: アーカイブの作成・再開・書き出し。`Archive.close()` は冪等（`#closeOnce` で破壊的プロローグも含めて1回だけ実行）、`Archive.releaseHandle()` は writer の DB ハンドルと lock だけを解放し tmpDir / `.nitpicker` には触れない代替 exit。`Archive.connect(tmpDir)` は **read-only モード**でアクセサを返し、`Database.connect({readOnly: true})` 経由で `initSchema` / `migrateInfoRoots` を **走らせない**（user の tmpDir を絶対に変更しない）。読み取り専用アクセサは `getHtmlOfPage` で zip を tmpDir 内に展開せず single-entry 抽出に切り替える
+- **`ArchiveAccessor`**: 読み取り専用アクセサ（`getPages`, `getPagesWithRefs` など）。`close()` は冪等 + 5 秒の `db.destroy()` timeout 付き（viewer Ctrl-C が live crawler の write lock で 10 分ハングするのを防ぐ）
+- **`peekArchiveLockHolder(tmpDir)`**: `<tmpDir>.lock/pid.txt` を probe する read-only ヘルパ（lock を取りに行かない）。viewer footer の "Live crawl in progress" / "Interrupted crawl stub" バッジ判定に使用。crawler 側 `archive-lock.ts` と同じ alive 判定ロジックを共有
 - **`Page`**: ページデータラッパー
 
 **内部モジュール構造:**
@@ -128,7 +129,8 @@ crawler/src/
 ├── archive/                    # SQLite アーカイブストレージ
 │   ├── filesystem/             # 1関数1ファイル（16ファイル）+ tar, untar
 │   ├── archive-lock.ts         # tmpDir 単位の advisory lock（mkdir + pid.txt + stale 検出）
-│   ├── migrate-info-roots.ts   # info テーブルを現行スキーマに揃える冪等 migration（roots 追加・scope 削除）
+│   ├── peek-archive-lock.ts    # lock を取らずに pid.txt を probe する read-only ヘルパ（viewer / MCP 用）
+│   ├── migrate-info-roots.ts   # info テーブルを現行スキーマに揃える冪等 migration（writer-only — Database.connect({readOnly:true}) では走らない）
 │   ├── libsql-dialect.ts       # better-sqlite3 dialect の libsql 上書き
 │   └── ...                     # archive, archive-accessor, database, init-schema, limited-page-ids, redirect-table, get-json, page, resource, safe-path, types
 ├── crawler/                    # Crawler エンジン
@@ -169,7 +171,7 @@ crawler/src/
 
 **主要クラス・関数:**
 
-- **`ArchiveManager`**: アーカイブのライフサイクル管理（open / get / close / closeAll）。同一ファイルの重複オープンは参照カウントで管理し、untar を再実行しない
+- **`ArchiveManager`**: アーカイブのライフサイクル管理（open / get / close / closeAll）。同一ファイルの重複オープンは参照カウントで管理し、untar を再実行しない。`open()` は `.nitpicker` ファイルだけでなく **stub ディレクトリ** (`<dir>/db.sqlite` を含むディレクトリ)も受け付け、ファイル/ディレクトリは `fs.statSync` で自動判定。stub オープンは `Archive.connect` 経由の read-only モードで lock を取らず、close 時には DB ハンドルだけ解放（tmpDir は user の crawl 状態として残す）。close と open は `entry.closing` Promise を介して serialise されるため、teardown 中の同一パスへの concurrent open は close 完了まで待ってから新規 open に進む（ArchiveLockError 競合を防ぐ）。`new ArchiveManager({onWarn})` で警告 sink を差し替え可能（既定は `console.warn`、MCP server は `process.stderr.write` 専用 sink を渡して JSON-RPC stdio framing を守る）。`open()` の戻り値には `mode: 'archive' | 'stub'` と `crawlerLockHolder: ArchiveLockHolder | null`（live PID 検出用、viewer footer が消費）を含む
 - **`listPages`**: ページ一覧取得（ステータス・メタデータ欠損・URL パターンなどでフィルタ）
 - **`getSummary`**: サイト全体の統計（ページ数、ステータス分布、メタデータ充足率）
 - **`getPageDetail`**: 単一ページの詳細情報（メタデータ、アウトバウンド/インバウンドリンク、リダイレクト元）

@@ -58,13 +58,15 @@ npx @nitpicker/cli analyze <file> [options]             # .nitpicker ファイ�
 npx @nitpicker/cli report <file> [options]              # .nitpicker ファイルから Google Sheets レポートを生成
 npx @nitpicker/cli pipeline <URL> [options]             # crawl → analyze → report を直列実行
 npx @nitpicker/cli query <file> <sub-command> [options] # .nitpicker ファイルに対してクエリを実行し JSON 出力
-npx @nitpicker/cli viewer <file> [options]              # ローカルブラウザビューアを起動（サーバ常駐、Ctrl-C で停止、ブラウザ自動オープン）
+npx @nitpicker/cli viewer <file-or-stub-dir> [options]  # ローカルブラウザビューアを起動（.nitpicker ファイル / stub tmpDir の両方を受け付ける、Ctrl-C で停止）
 npx @nitpicker/cli -v | --version                       # `@nitpicker/cli` のバージョンを出力して exit 0
 ```
 
 > **Multi-root クロール**: 位置引数で複数 URL を渡すと、それぞれが「再帰クロールの起点」かつ「scope エントリ」として扱われ、1 つの `.nitpicker` に集約される。例: `crawl https://www.example.com/blog/ https://www.example.com/news/` → 両配下が internal として記録される。`(hostname, port, path)` トリプルで scope 一致を判定するため、`localhost:3000` と `localhost:8080` は別 scope として分離される（auth が混入しない）。
 
 > **`--append <URL>`**: 位置引数で指定された既存 `.nitpicker` を開き、`--append` の URL を新しい起点として追加クロールする（`--append` は繰り返し指定で複数 URL 可）。新スコープに該当する旧 external ページは internal として再スクレイプされる。失敗時は `<archive>.bak` から自動復元、成功時は `.bak` 削除。`--resume` / `--diff` / `--output` / `--list` / `--list-file` / `--single` との同時指定は不可。
+
+> **Stub mode viewer**: `viewer` は `.nitpicker` ファイルだけでなく、`crawl` を強制停止した時に残る `._nitpicker-*` ディレクトリ（"stub"）も直接受け付ける。`crawl --resume` と同じ mental model で同じパスを渡せる。stub オープンは `Archive.connect(tmpDir)` 経由の **read-only** 接続で、`Database.connect({readOnly: true})` により `initSchema` / `migrateInfoRoots` は **走らない**（user の tmpDir を絶対に書き換えない）。`getHtmlOfPage` も読み取り専用なら zip を tmpDir 内に展開しない（single-entry 抽出）。close 時には `db.destroy()` だけが呼ばれ、tar 化も tmpDir 削除も発生しないため、その後の `crawl --resume` が安全に走る。viewer footer は `/api/info.crawlerPid` に応じて "Live crawl in progress (PID xxx)" / "Interrupted crawl stub" のバッジを出し分ける（`peekArchiveLockHolder` で `<tmpDir>.lock/pid.txt` を probe）。`Archive.releaseHandle()` は writer の DB ハンドルと lock を解放するが tmpDir は残す書き戻し無しの exit hatch — fixture スクリプトと一部テストが使う。
 
 > **Note**: `-v` / `--version` は `argv[0]` の位置でのみ判定する。`crawl -v` のようにサブコマンドの後ろに置いた場合はそのコマンドのフラグとして解釈される（`@d-zero/roar` の仕様）。
 

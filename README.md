@@ -443,10 +443,10 @@ $ npx @nitpicker/cli query site.nitpicker summary --pretty
 
 ### Viewer
 
-`.nitpicker` アーカイブをローカルブラウザで対話的に閲覧する Web ビューア。Hono バックエンド（`@nitpicker/query` を再利用）+ React SPA（Vite ビルド）で構成され、サマリー・ページ一覧（10 万ページ規模に耐える仮想スクロール）・ページ詳細（メタデータ + リンク + HTML スナップショットプレビュー）・リソース / 画像 / リンク / violations などを表示する。アーカイブを 1 つ開いたままサーバが常駐し、`Ctrl-C` で停止する。
+`.nitpicker` アーカイブ、または `crawl` を強制停止した際に残る **stub ディレクトリ**（`._nitpicker-*`）をローカルブラウザで対話的に閲覧する Web ビューア。Hono バックエンド（`@nitpicker/query` を再利用）+ React SPA（Vite ビルド）で構成され、サマリー・ページ一覧（10 万ページ規模に耐える仮想スクロール）・ページ詳細（メタデータ + リンク + HTML スナップショットプレビュー）・リソース / 画像 / リンク / violations などを表示する。アーカイブを 1 つ開いたままサーバが常駐し、`Ctrl-C` で停止する。
 
 ```sh
-$ npx @nitpicker/cli viewer <file> [options]
+$ npx @nitpicker/cli viewer <file-or-stub-dir> [options]
 ```
 
 #### オプション
@@ -465,7 +465,12 @@ $ npx @nitpicker/cli viewer site.nitpicker
 
 # ポート指定・ブラウザを開かない
 $ npx @nitpicker/cli viewer site.nitpicker --port 9000 --no-open
+
+# crawl を Ctrl-C で止めたあと、残った stub ディレクトリをそのまま開く
+$ npx @nitpicker/cli viewer ._nitpicker-site
 ```
+
+> **Stub ディレクトリのビューア**: `crawl` を `Ctrl-C` 等で停止すると `._nitpicker-*` ディレクトリが残る。`crawl --resume <stub>` で再開できるのと同じパスを `viewer <stub>` に渡せば、その時点までに集めたデータを read-only で閲覧できる。viewer は **read-only オープン**（`Archive.connect`）に固定されるため、`.nitpicker` ファイルへの tar 化も tmpDir の削除も `info` テーブルのマイグレーションも一切走らず、その後 `crawl --resume` を安全に続行できる。クロールが現在進行中の場合は footer に "Live crawl in progress (PID xxx)" バッジが、停止済みの場合は "Interrupted crawl stub" バッジが表示される（`<tmpDir>.lock/pid.txt` を probe して判定）。
 
 > **仮想スクロール**: ページ一覧などの大規模テーブルは、サーバ側ページネーション（`limit`/`offset`）+ TanStack Query の infinite query + TanStack Virtual による行の仮想化で、クライアントに全件を載せずに 10 万行規模を一定メモリで表示する。
 
@@ -507,22 +512,22 @@ $ npx @nitpicker/cli viewer site.nitpicker --port 9000 --no-open
 
 #### 利用可能なツール
 
-| ツール                   | 説明                                                                        |
-| ------------------------ | --------------------------------------------------------------------------- |
-| `open_archive`           | `.nitpicker` ファイルを開く（他のツール使用前に必須）                       |
-| `close_archive`          | アーカイブを閉じてリソースを解放                                            |
-| `get_summary`            | サイト全体の概要（ページ数、ステータス分布、メタデータ充足率）              |
-| `list_pages`             | ページ一覧（ステータス・メタデータ欠損・noindex・URL パターン等で絞り込み） |
-| `get_page_detail`        | 特定ページの全詳細（メタデータ、リンク、リダイレクト、ヘッダー）            |
-| `get_page_html`          | ページの HTML スナップショットを取得                                        |
-| `list_links`             | リンク分析（broken / external / orphaned）                                  |
-| `list_resources`         | サブリソース一覧（CSS, JS, 画像、フォント）                                 |
-| `list_images`            | 画像一覧（alt 欠損、寸法欠損、オーバーサイズ検出）                          |
-| `get_violations`         | 分析プラグインの違反データ（axe, markuplint, textlint, lighthouse）         |
-| `find_duplicates`        | 重複タイトル・説明の検出                                                    |
-| `find_mismatches`        | メタデータ不一致の検出（canonical, og:title, og:description）               |
-| `get_resource_referrers` | 特定リソースを参照しているページの特定                                      |
-| `check_headers`          | セキュリティヘッダーチェック（CSP, X-Frame-Options, HSTS 等）               |
+| ツール                   | 説明                                                                             |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `open_archive`           | `.nitpicker` ファイル **または** stub directory を開く（他のツール使用前に必須） |
+| `close_archive`          | アーカイブを閉じてリソースを解放                                                 |
+| `get_summary`            | サイト全体の概要（ページ数、ステータス分布、メタデータ充足率）                   |
+| `list_pages`             | ページ一覧（ステータス・メタデータ欠損・noindex・URL パターン等で絞り込み）      |
+| `get_page_detail`        | 特定ページの全詳細（メタデータ、リンク、リダイレクト、ヘッダー）                 |
+| `get_page_html`          | ページの HTML スナップショットを取得                                             |
+| `list_links`             | リンク分析（broken / external / orphaned）                                       |
+| `list_resources`         | サブリソース一覧（CSS, JS, 画像、フォント）                                      |
+| `list_images`            | 画像一覧（alt 欠損、寸法欠損、オーバーサイズ検出）                               |
+| `get_violations`         | 分析プラグインの違反データ（axe, markuplint, textlint, lighthouse）              |
+| `find_duplicates`        | 重複タイトル・説明の検出                                                         |
+| `find_mismatches`        | メタデータ不一致の検出（canonical, og:title, og:description）                    |
+| `get_resource_referrers` | 特定リソースを参照しているページの特定                                           |
+| `check_headers`          | セキュリティヘッダーチェック（CSP, X-Frame-Options, HSTS 等）                    |
 
 #### 使用例
 
@@ -531,6 +536,23 @@ $ npx @nitpicker/cli viewer site.nitpicker --port 9000 --no-open
 
 AI: open_archive で読み込み → list_pages で status=404 のページをフィルタ → 結果を表示
 ```
+
+#### `open_archive` のレスポンス契約
+
+`open_archive` は以下の形を返す（LLM が data の鮮度を判定できるよう **`mode` と `crawlerPid` を常に同梱**）:
+
+| フィールド   | 型                    | 説明                                                                                                                 |
+| ------------ | --------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `archiveId`  | `string`              | 以降のツール呼び出しで使う識別子                                                                                     |
+| `baseUrl`    | `string`              | クロール対象のベース URL                                                                                             |
+| `roots`      | `string[]`            | multi-root クロールの全 root URL                                                                                     |
+| `totalPages` | `number`              | 全ページ数                                                                                                           |
+| `mode`       | `"archive" \| "stub"` | `"archive"` = 完成した `.nitpicker` ファイル / `"stub"` = クロール中断後の作業ディレクトリ（データはまだ変化しうる） |
+| `crawlerPid` | `number \| null`      | stub かつ live crawler が検出された場合に PID を返す。`null` なら interrupted stub または finished archive           |
+
+> **重要（AI/LLM 側の判断材料）**: `mode === "stub"` の場合、`list_pages` や `get_summary` の結果は **point-in-time snapshot**。`crawlerPid !== null` なら crawl が現在進行中で数字は刻々と変わる可能性がある。ユーザーへの返答ではこの点を明示すること。
+
+検索キーワード: `nitpicker MCP open_archive mode` / `nitpicker MCP stub`
 
 ## トラブルシューティング
 
@@ -560,4 +582,28 @@ PID 既に終了していれば次回 open 時に自動で stale 検出されて
 
 旧版スキーマの archive を初めて開いたときに出力される **正常通知**。エラーではない。括弧内は実際に行われた変換のリスト（`roots seeded`、`scope dropped`、両方の場合はカンマ区切り）。`info.roots` カラム追加と `info.scope` カラム削除の冪等 migration。
 
+> **Note**: この通知は **writer モードでのみ** 出力される。`viewer` / `mcp-server` から `.nitpicker` ファイルや stub directory を開いた場合は `Archive.connect({readOnly: true})` 経路に固定されるため、migration は走らず、この行は出力されない（user の tmpDir を絶対に書き換えない設計）。古いスキーマを永続的に更新したい場合は `crawl --resume <stub>` を 1 回走らせると正規化される。
+
 検索キーワード: `nitpicker info table migration` / `nitpicker info.roots`
+
+### `[nitpicker] Crawler appears to be running on this stub (PID xxx)`（stderr に 1 行）
+
+`viewer <stub-dir>` / MCP `open_archive <stub-dir>` を実行した時点で `<tmpDir>.lock` が **生きているプロセス** に保持されていた場合の **正常通知**。viewer footer の "Live crawl in progress" バッジと連動する。read-only オープン（`Archive.connect`）なので WAL モードの SQLite に対する concurrent read は安全。`peekArchiveLockHolder` は lock を取りに行かず PID を probe するだけなので、crawler の進行を妨げない。
+
+> **既知の制約**: PID liveness の判定は viewer 起動時の **one-shot snapshot**。起動後に crawler が終了したり、新規に開始しても footer のバッジは更新されない。状態を再評価したい場合は viewer を再起動する。
+
+検索キーワード: `nitpicker stub crawler running` / `peekArchiveLockHolder`
+
+### Viewer 起動中に crawl が完了 → footer / API が古い tmpDir を指したまま
+
+viewer が stub directory を開いている間に同じ archive で `crawl --resume <stub>` を走らせ、それが完了すると、crawler は `tmpDir` を `.nitpicker` tar に変換して tmpDir を削除する。viewer 側はその瞬間に SQLite ハンドルが宙吊りになり、後続クエリが I/O エラーを返すようになる。
+
+**対処**: viewer を `Ctrl-C` で停止 → 生成された `.nitpicker` ファイルを viewer で開き直す。viewer 側は **stub の状態を変更しない**ことを保証するだけで、stub が外部から消えるケースまではフォローしない設計判断（finding を参照: 検索キーワード `nitpicker viewer tmpDir lifecycle`）。
+
+検索キーワード: `nitpicker viewer stale handle` / `nitpicker crawl finalize while viewing`
+
+### `Path "..." looks like a .nitpicker archive file but resolves to a directory`
+
+`.nitpicker` 拡張子の symlink が directory を指している場合のエラー。viewer / MCP は **入力パスの拡張子で user intent を判定** するため、`current.nitpicker -> ._nitpicker-foo/` のような構成は意図的に拒否される（archive を期待しているのに stub が返るのは plugin data の欠落を生むため）。対処: symlink を貼り直すか、stub directory を直接指定する。
+
+検索キーワード: `nitpicker symlink stub classification` / `classifySource`
