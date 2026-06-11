@@ -1,6 +1,6 @@
-import type { ChildProcess } from 'node:child_process';
+import type { ChildProcess, SpawnOptions } from 'node:child_process';
 
-import { spawn } from 'node:child_process';
+import { spawn as nodeSpawn } from 'node:child_process';
 
 /**
  * Sends a signal to a single process.
@@ -20,16 +20,16 @@ export interface ProcessKiller {
 }
 
 /**
- * Spawner signature accepted by {@link KillProcessTreeDeps}. Matches Node's
- * `child_process.spawn` in the only shape this module uses: command name,
- * arguments, and an options object with `stdio`. Declared structurally so
- * tests can pass a `vi.fn()` returning a tiny EventEmitter without dragging
- * in the full Node typings.
+ * Spawner signature accepted by `KillProcessTreeDeps`. Pins
+ * `child_process.spawn` to the `(command, args, options)` overload — the
+ * bare import is a union of many overloads (including `(command, options)`)
+ * that does not narrow to this shape without a wrapper. Tests can pass a
+ * `vi.fn()` returning a tiny EventEmitter cast to `ChildProcess`.
  */
 export type Spawner = (
 	command: string,
 	args: readonly string[],
-	options: { stdio: 'ignore' | readonly ('ignore' | 'pipe')[] },
+	options: SpawnOptions,
 ) => ChildProcess;
 
 /**
@@ -111,16 +111,17 @@ export async function killProcessTree(
 	const platform = deps.platform ?? process.platform;
 	const log = deps.log ?? noopLog;
 
+	const spawner = deps.spawn ?? defaultSpawner;
+
 	if (platform === 'win32') {
 		const runTreeKill =
-			deps.runTreeKill ?? ((pid) => runWindowsTaskkill(pid, deps.spawn ?? spawn, log));
+			deps.runTreeKill ?? ((pid) => runWindowsTaskkill(pid, spawner, log));
 		await runTreeKill(rootPid);
 		return;
 	}
 
 	const listDescendants =
-		deps.listDescendants ??
-		((pid) => listPosixDescendants(pid, deps.spawn ?? spawn, log));
+		deps.listDescendants ?? ((pid) => listPosixDescendants(pid, spawner, log));
 	const killer = deps.killer ?? makePosixDefaultKiller(log);
 
 	const descendants = await listDescendants(rootPid);
@@ -132,8 +133,21 @@ export async function killProcessTree(
 	killer.kill(rootPid, signal);
 }
 
-/** No-op {@link KillProcessTreeLogger} used when the caller does not supply one. */
+/** No-op `KillProcessTreeLogger` used when the caller does not supply one. */
 const noopLog: KillProcessTreeLogger = () => {};
+
+/**
+ * Default {@link Spawner}: a thin wrapper around `node:child_process.spawn`
+ * that pins the call signature to `(command, args, options)`. The bare
+ * `spawn` import has many overloads — including `(command, options)` — so it
+ * is not assignable to our narrower `Spawner` shape; wrapping it removes the
+ * variance without changing runtime behaviour.
+ * @param command
+ * @param args
+ * @param options
+ */
+const defaultSpawner: Spawner = (command, args, options) =>
+	nodeSpawn(command, args, options);
 
 /**
  * Builds the default POSIX killer: `process.kill` with ESRCH/EPERM swallowed
