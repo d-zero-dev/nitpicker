@@ -344,11 +344,11 @@ closeBrowserSafely(browser, timeoutMs = 30_000)
 
 **子プロセスツリーの kill:** Chromium は親プロセスから renderer / network / zygote / GPU などの子プロセスを fork するため、親プロセスのみへの SIGKILL では子が orphan として残ることがある（puppeteer は `detached: false` で spawn するため process group kill 不可。負の PID kill は Node 自身を巻き込む）。`closeBrowserSafely` は `childProcess.kill('SIGKILL')` で Node 側のハンドルを kill した直後に `killProcessTree(pid, 'SIGKILL')`（`crawler/kill-process-tree.ts`）を呼び、POSIX では `ps -A -o pid=,ppid=` を spawn して PPID マップを構築 → BFS で全子孫を列挙 → 葉から順に signal、Windows では `taskkill /T /F /PID <pid>` を spawn して OS レベルで再帰 kill する。`ps`/`taskkill` の呼び出し失敗・ESRCH（既に消滅した PID）は best-effort としてすべて握りつぶし、関数は必ず resolve する。
 
-**観測性:** タイムアウト発火時は `crawlerLog('Force-killed wedged Chromium browser for %s ...')` を出す。`DEBUG=Nitpicker:Crawler` で頻発を検知可能。`closeBrowserSafely` 自体が throw した場合（`browser.process()` が予期せず throw 等）も `handleBrowserClose` が握りつぶしてログするため、finally から例外が伝播することはない。
+**観測性:** タイムアウト発火時は `crawlerLog('Force-killed wedged Chromium browser for %s ...')` を出す。さらに `killProcessTree` 内の best-effort 失敗（`process.kill` の ESRCH/EPERM / `ps` 起動失敗・非 0 exit / `taskkill` 起動失敗・非 0 exit）も DI された logger 経由でログされる。`closeBrowserSafely` は `crawlerLog` を渡すので **`DEBUG=Nitpicker:Crawler` を有効にすると本番の tree-kill 失敗が観測可能**。`closeBrowserSafely` 自体が throw した場合（`browser.process()` が予期せず throw 等）も `handleBrowserClose` が握りつぶしてログするため、finally から例外が伝播することはない。
 
 > **更新手順（タイムアウト値の変更）**: 30 秒という値は重いページや低速環境での余裕を取った設定。変更する場合は `close-browser-safely.ts` の `DEFAULT_CLOSE_TIMEOUT_MS` を編集し、`close-browser-safely.spec.ts` の「defaults to a 30-second timeout」テストを併せて更新。Promise.race の負け側 timer は **必ず `clearTimeout` で clear** すること（`fetch-destination.ts` と同じ規律。詳細は下記「CLI プロセス終了とリソース解放」）。
 >
-> **検証**: `close-browser-safely.spec.ts`（13 ケース: 正常 / hang / reject / null process / 既 killed / デフォルト timeout / 遅延 rejection / timeoutMs=0 / kill が false / 冪等性 / tree-kill / pid 無し / close 成功時の no-op）と `handle-browser-close.spec.ts`（4 ケース）、`kill-process-tree.spec.ts`（8 ケース: POSIX BFS 順 / signal 透過 / 列挙 0 件 / killer throw 伝播 / Windows 委譲 / runTreeKill 失敗 / プラットフォーム既定）。puppeteer Browser 型との整合性は `close-browser-safely.spec.ts` 冒頭の compile-time assertion で担保。
+> **検証**: `close-browser-safely.spec.ts`（13 ケース: 正常 / hang / reject / null process / 既 killed / デフォルト timeout / 遅延 rejection / timeoutMs=0 / kill が false / 冪等性 / tree-kill / pid 無し / close 成功時の no-op）、`handle-browser-close.spec.ts`（4 ケース）、`kill-process-tree.spec.ts`（**15 ケース**: POSIX BFS 順 / signal 透過 / 列挙 0 件 / killer throw 伝播 / Windows 委譲 / runTreeKill 失敗 / プラットフォーム既定 / **Spawner 注入で Windows taskkill 引数検証 / POSIX ps 引数検証 / 4 つの失敗パス（ps 起動失敗 / ps 非 0 exit / taskkill 起動失敗 / taskkill 非 0 exit）の log 検証 / process.kill ESRCH の log 検証**）。puppeteer Browser 型との整合性は `close-browser-safely.spec.ts` 冒頭の compile-time assertion で担保。
 
 ### 部分失敗の archive 記録（page_errors）
 
@@ -364,18 +364,24 @@ page_errors:
   INDEX (pageId)
 ```
 
-イベントフロー:
+イベントフロー（関連ファイルは `crawler/` 配下に集約）:
 
 ```
 beholder.Scraper#fetchImages catch
   → emit changePhase { name: 'retryExhausted', message, url: null, ... }
-Crawler の scraper.on('changePhase')
+
+createChangePhaseHandler  (create-change-phase-handler.ts)
   → forward as 'changePhase' event
   → name === 'retryExhausted' なら #pendingPhaseErrors Map に url.href キーで buffer
+
 Crawler #runDeal の worker
   → scrapePage 完了 → #handleResult が 'page' / 'externalPage' を emit
-  → #drainPhaseErrors(url, isExternal) で buffer を flush し 'pageError' を emit
-  → 失敗 path（catch）でも同様に drain、最後に finally で Map から delete（leak 防止）
+  → drainPhaseErrors  (drain-phase-errors.ts) で buffer を flush し 'pageError' を emit
+  → 失敗 path（catch）でも同様に drain
+  → 最後に logUndrainedPhaseErrors  (log-undrained-phase-errors.ts) で
+     finally の取りこぼし（predicted-discard 等）を `DEBUG=Nitpicker:Crawler`
+     にログしつつ Map から delete（leak 防止）
+
 CrawlerOrchestrator
   → on('pageError') で writeQueue 経由で archive.addPageError(url, phase, message, isExternal)
   → 'page' が先に enqueue されているため WriteQueue 上で setPage → insertPageError の順序保証
@@ -383,11 +389,21 @@ CrawlerOrchestrator
 
 `Database.#getIdByUrl` は URL から pages.id を upsert で解決するため、`insertPageError` は setPage より先に走っても FK が満たされ、エラーがロストすることはない。
 
+**関連ヘルパー**（純粋関数として extract、各々独立して単体テスト可能）:
+
+| ファイル                         | 役割                                                                                        |
+| -------------------------------- | ------------------------------------------------------------------------------------------- |
+| `create-change-phase-handler.ts` | scraper.on('changePhase') 用の listener factory。emit/update/formatLog/buffer/urlHref を DI |
+| `drain-phase-errors.ts`          | buffer の per-URL flush。emit + delete を idempotent に実行                                 |
+| `log-undrained-phase-errors.ts`  | finally で残った buffer エントリをログして削除（predicted-discard 等の取りこぼし観測）      |
+
 **既存 archive の自動マイグレーション:** `Database.#init` で `migratePageErrors`（`archive/migrate-page-errors.ts`）を呼び、`page_errors` テーブルが無ければ作成する（idempotent）。`pages` テーブルすら無い空 archive は `initSchema` 経路に任せる。マイグレーションが実走した場合のみ stderr に `[migrate] page_errors table created` を出す。
 
-> **更新手順（新しい phase を記録する）**: `retryExhausted` 以外の phase（例: `setViewport`、`getImages` など）を保存対象に増やす場合は、`crawler/crawler.ts` の `scraper.on('changePhase')` 内の判定（`if (e.name === 'retryExhausted')`）を拡張する。phase 名は文字列のまま `page_errors.phase` 列に入るので、新しい phase 種別をクエリで区別する場合は値を decide してから入れること。
+**downstream の未実装**: 本 PR の射程は `page_errors` への記録まで。`query` / `report-google-sheets` / `mcp-server` から表示する仕組みは未実装で、現状は `sqlite3 file.nitpicker 'SELECT * FROM page_errors'` で直接見るしかない。次の PR で expose 予定。
+
+> **更新手順（新しい phase を記録する）**: `retryExhausted` 以外の phase（例: `setViewport`、`getImages` など）を保存対象に増やす場合は、`crawler/create-change-phase-handler.ts` の `if (event.name === 'retryExhausted')` 判定を拡張する。phase 名は文字列のまま `page_errors.phase` 列に入るので、新しい phase 種別をクエリで区別する場合は値を decide してから入れること。
 >
-> **検証**: `migrate-page-errors.spec.ts`（3 ケース: 作成 / 冪等性 / 空 archive スキップ）、`database.spec.ts > insertPageError`（3 ケース: 事前未保存 URL / 複数行追加 / external フラグ）、`archive.spec.ts > addPageError`（separate Database 接続で row 検証）、`crawler-orchestrator.spec.ts > pageError ハンドラ`（archive.addPageError の呼び出し + 失敗時の reject 伝播）。
+> **検証**: `migrate-page-errors.spec.ts`（3 ケース: 作成 / 冪等性 / 空 archive スキップ）、`database.spec.ts > insertPageError`（3 ケース）、`archive.spec.ts > addPageError`（separate Database 接続で row 検証）、`crawler-orchestrator.spec.ts > pageError ハンドラ`（archive.addPageError の呼び出し + 失敗時の reject 伝播）、`drain-phase-errors.spec.ts`（6 ケース）、`create-change-phase-handler.spec.ts`（9 ケース）、`log-undrained-phase-errors.spec.ts`（5 ケース）。**worker → drain wiring の直接 e2e テストは puppeteer mock コストの兼ね合いで意図的に省略**（`Crawler.#drainPhaseErrors` の JSDoc に known gap として明記）。
 
 ### CLI プロセス終了とリソース解放
 
