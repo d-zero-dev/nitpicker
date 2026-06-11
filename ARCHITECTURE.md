@@ -296,6 +296,43 @@ PageData を合成する。
   `crawler.spec.ts` の `resource reuse via the lookupResource option`（ネットワーク不使用・
   lookup 失敗時フォールバックのユニットテスト）
 
+### 進捗表示フォーマット（format-crawl-progress.ts）
+
+`deal()` の `header` コールバックでクロール中に表示される 1 行サマリ。`Crawler.#runDeal` が `formatCrawlProgress({ done, total, resumeOffset, externalTotal, externalDone, pagesScraped, limit })` を返す。
+
+**完成形の例:**
+
+```
+Crawling: 130(85) done / 250 found URLs (+12/20 ext) (56%) [108 remaining] [10 parallel]
+```
+
+**各フィールドの意味:**
+
+| 表記                  | 意味                                                                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `Crawling: X(Y) done` | `X` = internal の処理済 URL 数（HEAD のみ・skip 含む通算）。`Y` = `X` のうち **ブラウザで HTML をレンダーしてアーカイブに保存**した件数 |
+| `/ Z found URLs`      | `Z` = internal で発見済の総 URL 数（クロール進行中も増える）                                                                            |
+| `(+a/b ext)`          | external URL の進捗。`a` = 完了、`b` = 発見済                                                                                           |
+| `(N%)`                | `(allDone) / (allTotal)` のパーセント。total=0 のときは 0%                                                                              |
+| `[R remaining]`       | internal 残り + external 残り                                                                                                           |
+| `[L parallel]`        | 並列ワーカー数（`--parallels` または `MAX_PROCESS_LENGTH`）                                                                             |
+
+**`Y` が `X` より小さい状態は正常:**
+
+- `X` は CSS / image / フォントなど HEAD だけで完了する非HTMLリソースも含む通算カウント
+- `Y` は `#scrapePage` で `#launchBrowserAndScrape` が `type: 'success'` で resolve した件のみ加算（**predicted-discard・launch エラー・scraper 内部 error result は除外**）
+- 非HTMLリソースが多いサイトでは `Y` は `X` より大幅に小さくなる
+
+**`--resume` / `--append` 時の挙動:**
+
+- `X`（internalDone）と `Z`（internalTotal）には `resumeOffset = #resumedScraped.length` が加算される
+- `Y`（pagesScraped）には `Archive.getScrapedHtmlPageCount()` の戻り値（`pages` テーブルの `isTarget=1 AND scraped=1` 件数）が初期値として加算される
+- そのため通算値で表示され、resume 跨ぎでも `Y` と `X` の意味的整合が保たれる
+
+> **更新手順（フォーマット変更）**: 表示文字列を変える場合は `format-crawl-progress.ts` の return 文を編集し、`format-crawl-progress.spec.ts` の「完成形のフォーマット文字列を 1 文字ズレなく組み立てる」テスト（`expect(result).toBe(...)` のリテラル）を併せて更新する。`pagesScraped` のセマンティクスを変える場合（例: launch エラーを含める）は `crawler.ts:#scrapePage` の `markBrowserScrape()` 呼び出し位置と worker 側の `renderedInBrowser` 判定の両方を編集し、`should-discard-predicted.spec.ts` と新規 worker レベルテストの追加を検討する。
+>
+> **検索キーワード**: 進捗行が想定外の値を表示する場合は `formatCrawlProgress` / `pagesScraped` / `getScrapedHtmlPageCount` でコードを grep し、`DEBUG=Nitpicker:Crawler` を有効化すると `#scrapePage` の各分岐がログに出る。
+
 ### dealer 統合
 
 - `@d-zero/dealer` の `deal()` がスケジューリングと並列制御を担当
