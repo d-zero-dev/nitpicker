@@ -1,3 +1,5 @@
+import { crawlerLog } from '../debug.js';
+
 import { killProcessTree } from './kill-process-tree.js';
 
 /**
@@ -107,7 +109,8 @@ export async function closeBrowserSafely(
 		// makes the type and the runtime value match.
 		const pid = childProcess.pid;
 		if (typeof pid === 'number') {
-			const killTree = deps.killTree ?? killProcessTree;
+			const killTree =
+				deps.killTree ?? ((p, sig) => killProcessTree(p, sig, { log: crawlerLog }));
 			await killTree(pid, 'SIGKILL');
 		}
 	}

@@ -1,3 +1,5 @@
+import type { ChildProcess } from 'node:child_process';
+
 import { spawn } from 'node:child_process';
 
 /**
@@ -16,6 +18,34 @@ export interface ProcessKiller {
 	 */
 	kill(pid: number, signal: NodeJS.Signals | number): void;
 }
+
+/**
+ * Spawner signature accepted by {@link KillProcessTreeDeps}. Matches Node's
+ * `child_process.spawn` in the only shape this module uses: command name,
+ * arguments, and an options object with `stdio`. Declared structurally so
+ * tests can pass a `vi.fn()` returning a tiny EventEmitter without dragging
+ * in the full Node typings.
+ */
+export type Spawner = (
+	command: string,
+	args: readonly string[],
+	options: { stdio: 'ignore' | readonly ('ignore' | 'pipe')[] },
+) => ChildProcess;
+
+/**
+ * Debug logger compatible with the `debug` package's printf-style API.
+ *
+ * Called only when a best-effort kill path fails (ESRCH, ENOENT for `ps` or
+ * `taskkill`, non-zero exit code). Production callers should pass the
+ * crawler-namespaced logger so failures show up under
+ * `DEBUG=Nitpicker:Crawler`.
+ */
+export type KillProcessTreeLogger = (
+	/** printf-style format string. */
+	formatter: string,
+	/** Arguments interpolated into the format string. */
+	...args: readonly unknown[]
+) => void;
 
 /**
  * Dependency overrides for {@link killProcessTree}.
@@ -39,6 +69,18 @@ export interface KillProcessTreeDeps {
 	runTreeKill?: (rootPid: number) => Promise<void>;
 	/** Override for `process.platform` so cross-platform paths can be tested. */
 	platform?: NodeJS.Platform;
+	/**
+	 * `child_process.spawn` substitute used when `runTreeKill` is not
+	 * supplied (i.e. the default Windows path). Lets tests assert the exact
+	 * command + args without mocking the global module.
+	 */
+	spawn?: Spawner;
+	/**
+	 * Receives a single line per best-effort failure path (ENOENT,
+	 * non-zero exit, etc.). Defaults to a no-op so production callers stay
+	 * silent unless they opt in.
+	 */
+	log?: KillProcessTreeLogger;
 }
 
 /**
@@ -67,15 +109,19 @@ export async function killProcessTree(
 	deps: KillProcessTreeDeps = {},
 ): Promise<void> {
 	const platform = deps.platform ?? process.platform;
+	const log = deps.log ?? noopLog;
 
 	if (platform === 'win32') {
-		const runTreeKill = deps.runTreeKill ?? runWindowsTaskkill;
+		const runTreeKill =
+			deps.runTreeKill ?? ((pid) => runWindowsTaskkill(pid, deps.spawn ?? spawn, log));
 		await runTreeKill(rootPid);
 		return;
 	}
 
-	const listDescendants = deps.listDescendants ?? listPosixDescendants;
-	const killer = deps.killer ?? POSIX_DEFAULT_KILLER;
+	const listDescendants =
+		deps.listDescendants ??
+		((pid) => listPosixDescendants(pid, deps.spawn ?? spawn, log));
+	const killer = deps.killer ?? makePosixDefaultKiller(log);
 
 	const descendants = await listDescendants(rootPid);
 	// BFS produces parents before children; reverse so leaves die first and
@@ -86,21 +132,28 @@ export async function killProcessTree(
 	killer.kill(rootPid, signal);
 }
 
+/** No-op {@link KillProcessTreeLogger} used when the caller does not supply one. */
+const noopLog: KillProcessTreeLogger = () => {};
+
 /**
- * Default POSIX killer: `process.kill` with ESRCH/EPERM swallowed.
- *
- * Lives at module scope so it is shared across calls instead of being
- * re-allocated for every {@link killProcessTree} invocation.
+ * Builds the default POSIX killer: `process.kill` with ESRCH/EPERM swallowed
+ * and logged via `log` so production callers can observe how often the tree
+ * walk hits already-dead PIDs.
+ * @param log - Receives one line per swallowed error.
+ * @returns A {@link ProcessKiller}.
  */
-const POSIX_DEFAULT_KILLER: ProcessKiller = {
-	kill(pid, signal) {
-		try {
-			process.kill(pid, signal);
-		} catch {
-			// Already dead (ESRCH) or denied (EPERM) — best-effort.
-		}
-	},
-};
+function makePosixDefaultKiller(log: KillProcessTreeLogger): ProcessKiller {
+	return {
+		kill(pid, signal) {
+			try {
+				process.kill(pid, signal);
+			} catch (error) {
+				// Already dead (ESRCH) or denied (EPERM) — best-effort.
+				log('process.kill(%d, %s) failed: %O', pid, String(signal), error);
+			}
+		},
+	};
+}
 
 /**
  * Walks the process table on POSIX and returns every descendant of
@@ -113,10 +166,16 @@ const POSIX_DEFAULT_KILLER: ProcessKiller = {
  * Failure to invoke `ps` (missing binary, permission denied, non-zero exit)
  * returns an empty array so the caller can still kill the root.
  * @param rootPid - The PID whose descendants to list.
+ * @param spawner
+ * @param log
  * @returns A promise resolving to descendant PIDs.
  */
-async function listPosixDescendants(rootPid: number): Promise<readonly number[]> {
-	const parentToChildren = await readPosixProcessMap();
+async function listPosixDescendants(
+	rootPid: number,
+	spawner: Spawner,
+	log: KillProcessTreeLogger,
+): Promise<readonly number[]> {
+	const parentToChildren = await readPosixProcessMap(spawner, log);
 	const descendants: number[] = [];
 	const queue: number[] = [rootPid];
 	while (queue.length > 0) {
@@ -135,21 +194,33 @@ async function listPosixDescendants(rootPid: number): Promise<readonly number[]>
  * Reads the full POSIX process table by spawning `ps` and parsing its output.
  *
  * Format requested: `pid=,ppid=` (no headers). Each line is `<pid> <ppid>`.
+ * @param spawner - Substitute for `child_process.spawn`.
+ * @param log - Receives a single line if `ps` cannot be invoked or exits non-zero.
  * @returns A promise resolving to a parent-PID-to-children map. Empty on
  *   any invocation failure.
  */
-async function readPosixProcessMap(): Promise<ReadonlyMap<number, readonly number[]>> {
+async function readPosixProcessMap(
+	spawner: Spawner,
+	log: KillProcessTreeLogger,
+): Promise<ReadonlyMap<number, readonly number[]>> {
 	return new Promise((resolve) => {
-		const proc = spawn('ps', ['-A', '-o', 'pid=,ppid='], {
+		const proc = spawner('ps', ['-A', '-o', 'pid=,ppid='], {
 			stdio: ['ignore', 'pipe', 'ignore'],
 		});
 		let output = '';
-		proc.stdout.on('data', (chunk: Buffer) => {
+		proc.stdout?.on('data', (chunk: Buffer) => {
 			output += chunk.toString('utf8');
 		});
-		proc.on('error', () => resolve(new Map()));
+		proc.on('error', (error) => {
+			log('ps invocation failed: %O', error);
+			resolve(new Map());
+		});
 		proc.on('close', (code) => {
 			if (code !== 0) {
+				log(
+					'ps exited with non-zero code %s — skipping descendant tree-kill',
+					String(code),
+				);
 				resolve(new Map());
 				return;
 			}
@@ -176,15 +247,29 @@ async function readPosixProcessMap(): Promise<ReadonlyMap<number, readonly numbe
  *
  * The `/T` flag walks descendants; `/F` forces termination. Any failure
  * (ENOENT for taskkill, non-zero exit because the PID is already gone) is
- * swallowed.
+ * logged via `log` and swallowed so the caller's cleanup always resolves.
  * @param rootPid - The PID at the root of the tree.
+ * @param spawner - Substitute for `child_process.spawn`.
+ * @param log - Receives a single line per failure.
  */
-async function runWindowsTaskkill(rootPid: number): Promise<void> {
+async function runWindowsTaskkill(
+	rootPid: number,
+	spawner: Spawner,
+	log: KillProcessTreeLogger,
+): Promise<void> {
 	return new Promise<void>((resolve) => {
-		const proc = spawn('taskkill', ['/T', '/F', '/PID', String(rootPid)], {
+		const proc = spawner('taskkill', ['/T', '/F', '/PID', String(rootPid)], {
 			stdio: 'ignore',
 		});
-		proc.on('error', () => resolve());
-		proc.on('close', () => resolve());
+		proc.on('error', (error) => {
+			log('taskkill invocation failed: %O', error);
+			resolve();
+		});
+		proc.on('close', (code) => {
+			if (code !== 0) {
+				log('taskkill exited with non-zero code %s for PID %d', String(code), rootPid);
+			}
+			resolve();
+		});
 	});
 }

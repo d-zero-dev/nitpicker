@@ -20,6 +20,7 @@ import c from 'ansi-colors';
 import pkg from '../../package.json' with { type: 'json' };
 import { crawlerLog } from '../debug.js';
 
+import { createChangePhaseHandler } from './create-change-phase-handler.js';
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
 import { drainPhaseErrors } from './drain-phase-errors.js';
 import { fetchDestination } from './fetch-destination.js';
@@ -35,6 +36,7 @@ import { injectScopeAuth } from './inject-scope-auth.js';
 import { isHtmlContentType } from './is-html-content-type.js';
 import LinkList from './link-list.js';
 import { linkToPageData } from './link-to-page-data.js';
+import { logUndrainedPhaseErrors } from './log-undrained-phase-errors.js';
 import { partitionUrlsByHtml } from './partition-urls-by-html.js';
 import { protocolAgnosticKey } from './protocol-agnostic-key.js';
 import { resourceToPageData } from './resource-to-page-data.js';
@@ -248,6 +250,15 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	/**
 	 * Thin instance-bound adapter over {@link drainPhaseErrors}. Flushes
 	 * `#pendingPhaseErrors` for `url` as `pageError` events. Idempotent.
+	 *
+	 * **Test gap (known)**: this adapter is invoked from the worker body in
+	 * {@link Crawler.#runDeal} at three call sites — after `#handleResult`,
+	 * inside the worker's `catch`, and via `logUndrainedPhaseErrors` in
+	 * `finally`. The drain logic itself is unit-tested in
+	 * `drain-phase-errors.spec.ts`; the wiring (whether the worker actually
+	 * calls it on each path) is verified by code review only, because
+	 * driving the worker requires a Puppeteer + beholder mock stack whose
+	 * cost outweighs the regression it would catch.
 	 * @param url - URL whose buffered errors should be flushed.
 	 * @param isExternal - Whether the URL is external to the crawl scope.
 	 */
@@ -496,24 +507,16 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			}
 			const scraper = new Scraper();
 
-			scraper.on('changePhase', (e) => {
-				const msg = formatPhaseLog(e);
-				if (msg) {
-					update(msg);
-				}
-				void this.emit('changePhase', e);
-
-				// retryExhausted fires when beholder's @retryable gives up on a
-				// secondary scrape step (e.g. a viewport switch detaching the
-				// frame in #fetchImages). The page itself still completes, so
-				// we buffer the failure and emit it as a pageError after the
-				// page event has been emitted.
-				if (e.name === 'retryExhausted') {
-					const list = this.#pendingPhaseErrors.get(url.href) ?? [];
-					list.push({ phase: e.name, message: e.message });
-					this.#pendingPhaseErrors.set(url.href, list);
-				}
-			});
+			scraper.on(
+				'changePhase',
+				createChangePhaseHandler({
+					emit: (event) => void this.emit('changePhase', event),
+					update,
+					formatLog: formatPhaseLog,
+					buffer: this.#pendingPhaseErrors,
+					urlHref: url.href,
+				}),
+			);
 
 			const result = await scraper.scrapeStart(page, url, {
 				isExternal,
@@ -708,21 +711,13 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						if (isExternal) {
 							externalDoneUrls.add(protocolAgnosticKey(url.withoutHashAndAuth));
 						}
-						// Defensive: clear any leftover entries so the buffer cannot
-						// leak across crawls. If entries still exist here, neither
-						// the success nor the catch path drained them — typically
-						// because a predicted URL was discarded before reaching the
-						// drain point. Log the drop so production runs that hit
-						// this case are observable via DEBUG=Nitpicker:Crawler.
-						const remaining = this.#pendingPhaseErrors.get(url.href);
-						if (remaining && remaining.length > 0) {
-							crawlerLog(
-								'Dropped %d phase error(s) for %s (no archive entry created)',
-								remaining.length,
-								url.href,
-							);
-						}
-						this.#pendingPhaseErrors.delete(url.href);
+						// Phase errors still in the buffer here were not drained
+						// by the success or catch paths — typically because a
+						// predicted URL was discarded before reaching the drain
+						// point. The helper logs the drop (observable via
+						// DEBUG=Nitpicker:Crawler) and removes the entry so the
+						// Map cannot leak across crawls.
+						logUndrainedPhaseErrors(this.#pendingPhaseErrors, url.href, crawlerLog);
 					}
 				};
 			},

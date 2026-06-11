@@ -1,4 +1,7 @@
-import type { ProcessKiller } from './kill-process-tree.js';
+import type { ProcessKiller, Spawner } from './kill-process-tree.js';
+import type { ChildProcess } from 'node:child_process';
+
+import { EventEmitter } from 'node:events';
 
 import { describe, expect, it, vi } from 'vitest';
 
@@ -11,6 +14,46 @@ import { killProcessTree } from './kill-process-tree.js';
  */
 function createMockKiller(): ProcessKiller & { kill: ReturnType<typeof vi.fn> } {
 	return { kill: vi.fn() };
+}
+
+/**
+ * Minimal {@link ChildProcess} stand-in for tests: an EventEmitter plus a
+ * piped stdout that the caller can write to via `pushStdout`. The real
+ * ChildProcess type is structurally a superset of this for the methods our
+ * implementation actually touches (`on`, `stdout.on('data')`).
+ */
+interface FakeChild {
+	/** Emits the `close` event with the supplied exit code. */
+	close(code: number | null): void;
+	/** Emits the `error` event with the supplied Error. */
+	emitError(error: Error): void;
+	/** Pushes a chunk of bytes to the fake stdout. */
+	pushStdout(chunk: string | Buffer): void;
+	/** Cast helper to satisfy the {@link Spawner} return type. */
+	asChildProcess(): ChildProcess;
+}
+
+/**
+ * Creates a {@link FakeChild} suitable for handing back from a fake {@link Spawner}.
+ */
+function createFakeChild(): FakeChild {
+	const child = new EventEmitter() as EventEmitter & { stdout: EventEmitter };
+	const stdout = new EventEmitter();
+	(child as unknown as { stdout: EventEmitter }).stdout = stdout;
+	return {
+		close(code) {
+			child.emit('close', code);
+		},
+		emitError(error) {
+			child.emit('error', error);
+		},
+		pushStdout(chunk) {
+			stdout.emit('data', Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+		},
+		asChildProcess() {
+			return child as unknown as ChildProcess;
+		},
+	};
 }
 
 describe('killProcessTree (POSIX)', () => {
@@ -144,5 +187,157 @@ describe('killProcessTree (default deps integration)', () => {
 		// On every supported platform the function must resolve without throwing,
 		// because both default killers swallow ENOENT/ESRCH.
 		await expect(killProcessTree(999_999_999)).resolves.toBeUndefined();
+	});
+});
+
+describe('killProcessTree default runWindowsTaskkill (via Spawner injection)', () => {
+	it('spawns taskkill /T /F /PID <pid> with stdio ignored', async () => {
+		const child = createFakeChild();
+		const spawner = vi.fn<Spawner>(() => child.asChildProcess());
+
+		const promise = killProcessTree(7777, 'SIGKILL', {
+			platform: 'win32',
+			spawn: spawner,
+		});
+		// Resolve the spawn (taskkill exits 0).
+		child.close(0);
+		await promise;
+
+		expect(spawner).toHaveBeenCalledExactlyOnceWith(
+			'taskkill',
+			['/T', '/F', '/PID', '7777'],
+			{ stdio: 'ignore' },
+		);
+	});
+
+	it('logs and resolves when taskkill cannot be spawned (ENOENT)', async () => {
+		const child = createFakeChild();
+		const spawner = vi.fn<Spawner>(() => child.asChildProcess());
+		const log = vi.fn();
+
+		const promise = killProcessTree(7777, 'SIGKILL', {
+			platform: 'win32',
+			spawn: spawner,
+			log,
+		});
+		child.emitError(new Error('spawn taskkill ENOENT'));
+		await promise;
+
+		expect(log).toHaveBeenCalledOnce();
+		expect(log.mock.calls[0]![0]).toMatch(/taskkill invocation failed/);
+	});
+
+	it('logs and resolves when taskkill exits non-zero (e.g. PID already gone)', async () => {
+		const child = createFakeChild();
+		const spawner = vi.fn<Spawner>(() => child.asChildProcess());
+		const log = vi.fn();
+
+		const promise = killProcessTree(7777, 'SIGKILL', {
+			platform: 'win32',
+			spawn: spawner,
+			log,
+		});
+		child.close(128);
+		await promise;
+
+		expect(log).toHaveBeenCalledOnce();
+		expect(log.mock.calls[0]![0]).toMatch(/taskkill exited with non-zero/);
+	});
+});
+
+describe('killProcessTree default POSIX ps enumeration (via Spawner injection)', () => {
+	it('spawns ps -A -o pid=,ppid= and BFS-walks the parsed output', async () => {
+		const child = createFakeChild();
+		const spawner = vi.fn<Spawner>(() => child.asChildProcess());
+		const killer = createMockKiller();
+
+		const promise = killProcessTree(100, 'SIGKILL', {
+			platform: 'linux',
+			spawn: spawner,
+			killer,
+		});
+		// Process table: 200 is child of 100, 300 is grandchild via 200.
+		// Plus an unrelated 400 with ppid=999 (should NOT be killed).
+		child.pushStdout('100 1\n200 100\n300 200\n400 999\n');
+		child.close(0);
+		await promise;
+
+		expect(spawner).toHaveBeenCalledExactlyOnceWith('ps', ['-A', '-o', 'pid=,ppid='], {
+			stdio: ['ignore', 'pipe', 'ignore'],
+		});
+		// Leaves first: 300, 200, then root 100. 400 untouched.
+		expect(killer.kill.mock.calls).toStrictEqual([
+			[300, 'SIGKILL'],
+			[200, 'SIGKILL'],
+			[100, 'SIGKILL'],
+		]);
+	});
+
+	it('logs and falls back to killing only the root when ps cannot be spawned', async () => {
+		const child = createFakeChild();
+		const spawner = vi.fn<Spawner>(() => child.asChildProcess());
+		const killer = createMockKiller();
+		const log = vi.fn();
+
+		const promise = killProcessTree(100, 'SIGKILL', {
+			platform: 'linux',
+			spawn: spawner,
+			killer,
+			log,
+		});
+		child.emitError(new Error('spawn ps ENOENT'));
+		await promise;
+
+		expect(killer.kill).toHaveBeenCalledExactlyOnceWith(100, 'SIGKILL');
+		expect(log).toHaveBeenCalledOnce();
+		expect(log.mock.calls[0]![0]).toMatch(/ps invocation failed/);
+	});
+
+	it('logs and falls back to killing only the root when ps exits non-zero', async () => {
+		const child = createFakeChild();
+		const spawner = vi.fn<Spawner>(() => child.asChildProcess());
+		const killer = createMockKiller();
+		const log = vi.fn();
+
+		const promise = killProcessTree(100, 'SIGKILL', {
+			platform: 'linux',
+			spawn: spawner,
+			killer,
+			log,
+		});
+		child.pushStdout('garbage that does not parse\n');
+		child.close(1);
+		await promise;
+
+		expect(killer.kill).toHaveBeenCalledExactlyOnceWith(100, 'SIGKILL');
+		expect(log).toHaveBeenCalledOnce();
+		expect(log.mock.calls[0]![0]).toMatch(/ps exited with non-zero/);
+	});
+});
+
+describe('killProcessTree default POSIX killer logging', () => {
+	it('logs each swallowed process.kill error (ESRCH/EPERM)', async () => {
+		// Cannot stub process.kill cleanly without affecting Node internals,
+		// so the integration smoke approach: target an obviously dead PID.
+		// The default killer swallows the resulting ESRCH and logs it.
+		const log = vi.fn();
+		const child = createFakeChild();
+		const spawner = vi.fn<Spawner>(() => child.asChildProcess());
+
+		const promise = killProcessTree(999_999_998, 'SIGKILL', {
+			platform: 'linux',
+			spawn: spawner,
+			log,
+		});
+		// Empty process table → no descendants → killer attempts only the root.
+		child.close(0);
+		await promise;
+
+		expect(log).toHaveBeenCalled();
+		// log uses debug-style printf placeholders; assert format + the
+		// interpolated PID argument separately.
+		const lastCall = log.mock.calls.at(-1)!;
+		expect(lastCall[0]).toMatch(/process\.kill\(%d, %s\) failed/);
+		expect(lastCall[1]).toBe(999_999_998);
 	});
 });
