@@ -61,6 +61,17 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	readonly #linkList = new LinkList();
 	/** Merged crawler configuration (user overrides + defaults). */
 	readonly #options: CrawlerOptions;
+	/**
+	 * Phase errors observed during {@link Crawler.#launchBrowserAndScrape},
+	 * buffered per URL href so they can be emitted as `pageError` events
+	 * AFTER the corresponding `page` / `externalPage` event. This ordering
+	 * lets the orchestrator's WriteQueue serialise `setPage` before
+	 * `insertPageError`, so the FK resolution via URL always finds the row.
+	 */
+	readonly #pendingPhaseErrors = new Map<
+		string /* url.href */,
+		{ phase: string; message: string }[]
+	>();
 	/** Set of resource URLs (without hash) already captured, for deduplication. */
 	readonly #resources = new Set<string>();
 	/** URLs restored from a previous session that still need to be scraped. */
@@ -233,6 +244,28 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		});
 	}
 
+	/**
+	 * Drains the {@link Crawler.#pendingPhaseErrors} buffer for a URL and emits
+	 * one `pageError` event per buffered failure.
+	 *
+	 * Safe to call multiple times for the same URL: the buffer is removed on
+	 * the first call so subsequent invocations are no-ops.
+	 * @param url - URL whose buffered errors should be flushed.
+	 * @param isExternal - Whether the URL is external to the crawl scope.
+	 */
+	#drainPhaseErrors(url: ExURL, isExternal: boolean): void {
+		const errors = this.#pendingPhaseErrors.get(url.href);
+		if (!errors || errors.length === 0) return;
+		this.#pendingPhaseErrors.delete(url.href);
+		for (const err of errors) {
+			void this.emit('pageError', {
+				url: url.href,
+				phase: err.phase,
+				message: err.message,
+				isExternal,
+			});
+		}
+	}
 	/**
 	 * Emits error events for a deal-level failure.
 	 *
@@ -422,6 +455,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			}
 		}
 	}
+
 	/**
 	 * Launches a fresh Puppeteer browser, runs the beholder scraper, and cleans up.
 	 *
@@ -478,6 +512,17 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					update(msg);
 				}
 				void this.emit('changePhase', e);
+
+				// retryExhausted fires when beholder's @retryable gives up on a
+				// secondary scrape step (e.g. a viewport switch detaching the
+				// frame in #fetchImages). The page itself still completes, so
+				// we buffer the failure and emit it as a pageError after the
+				// page event has been emitted.
+				if (e.name === 'retryExhausted') {
+					const list = this.#pendingPhaseErrors.get(url.href) ?? [];
+					list.push({ phase: e.name, message: e.message });
+					this.#pendingPhaseErrors.set(url.href, list);
+				}
 			});
 
 			const result = await scraper.scrapeStart(page, url, {
@@ -639,6 +684,11 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						this.#handleResult(result, url, enqueue, paginationState, concurrency);
 						this.#handleResources(result.resources);
 						log(formatResultSummary(result));
+
+						// Phase errors must be emitted AFTER 'page' / 'externalPage'
+						// so the orchestrator's WriteQueue sees `setPage` before
+						// `insertPageError` and the URL→pageId resolution succeeds.
+						this.#drainPhaseErrors(url, isExternal);
 					} catch (error) {
 						crawlerLog('Worker error for %s: %O', url.href, error);
 						log(c.red('Error'));
@@ -661,10 +711,17 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 							isExternal,
 							error: workerError,
 						});
+						// Hard-error path: persist whatever phase errors we have
+						// already buffered so they are not lost.
+						this.#drainPhaseErrors(url, isExternal);
 					} finally {
 						if (isExternal) {
 							externalDoneUrls.add(protocolAgnosticKey(url.withoutHashAndAuth));
 						}
+						// Defensive: clear any leftover entries (e.g. predicted
+						// URLs that were discarded before #drainPhaseErrors ran)
+						// so the buffer cannot leak across crawls.
+						this.#pendingPhaseErrors.delete(url.href);
 					}
 				};
 			},

@@ -91,6 +91,21 @@ export default class Archive extends ArchiveAccessor {
 	}
 
 	/**
+	 * Records a partial scrape failure against the page identified by `url`.
+	 *
+	 * The corresponding `pages` row is created on demand (or matched if it
+	 * already exists), so the call works even if the page's normal data has
+	 * not been written yet.
+	 * @param url - URL of the affected page.
+	 * @param phase - Scrape phase name (typically `'retryExhausted'`).
+	 * @param message - Human-readable failure message.
+	 * @param isExternal - Whether the URL is external. Defaults to `false`.
+	 */
+	async addPageError(url: string, phase: string, message: string, isExternal = false) {
+		dbLog('Add page error: %s [%s]', url, phase);
+		await this.#db.insertPageError(url, phase, message, isExternal);
+	}
+	/**
 	 * Closes the archive. If the archive file does not yet exist on disk,
 	 * it writes the archive first. If the temporary directory still exists,
 	 * it is removed.
@@ -224,6 +239,7 @@ export default class Archive extends ArchiveAccessor {
 		dbLog('Set skipped page: %s', url);
 		await this.#db.setSkippedPage(url, reason, isExternal);
 	}
+
 	/**
 	 * Assigns natural URL sort order values to all pages in the database
 	 * that do not yet have an `order` field set.

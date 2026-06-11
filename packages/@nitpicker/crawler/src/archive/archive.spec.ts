@@ -240,3 +240,52 @@ describe('write: append 時のスナップショットマージ', () => {
 		}
 	});
 });
+
+describe('addPageError', () => {
+	const archiveFilePath = path.resolve(workingDir, 'add-page-error-test.nitpicker');
+	const tmpDirPattern = path.resolve(
+		workingDir,
+		Archive.TMP_DIR_PREFIX + 'add-page-error-test',
+	);
+
+	afterAll(async () => {
+		await remove(tmpDirPattern).catch(() => {});
+		await remove(archiveFilePath).catch(() => {});
+	});
+
+	it('persists a page_errors row even before setPage runs', async () => {
+		const archive = await Archive.create({
+			filePath: archiveFilePath,
+			cwd: workingDir,
+		});
+		try {
+			await archive.addPageError(
+				'http://localhost/viewport-failure',
+				'retryExhausted',
+				'📷 mobile-small: skipped — Attempted to use detached Frame',
+			);
+
+			// Verify via a separate Database connection to the working tmp dir
+			// (mirrors the setPage tests above — Archive does not expose its
+			// internal Database publicly).
+			const dbPath = path.resolve(tmpDirPattern, Archive.SQLITE_DB_FILE_NAME);
+			const db = await Database.connect({
+				workingDir: tmpDirPattern,
+				filename: dbPath,
+			});
+			try {
+				const rows = await db.getKnex().from('page_errors').select('phase', 'message');
+				expect(rows).toEqual([
+					{
+						phase: 'retryExhausted',
+						message: '📷 mobile-small: skipped — Attempted to use detached Frame',
+					},
+				]);
+			} finally {
+				await db.destroy();
+			}
+		} finally {
+			await archive.close();
+		}
+	});
+});

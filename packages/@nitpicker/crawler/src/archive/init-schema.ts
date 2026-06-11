@@ -123,5 +123,20 @@ export async function initSchema(instance: Knex) {
 			t.unique(['resourceId', 'pageId']);
 			t.index('resourceId');
 			t.index('pageId');
+		})
+		.createTable('page_errors', (t) => {
+			// Records partial scrape failures (e.g. a viewport switch that
+			// detaches the frame and trips beholder's @retryable into the
+			// `retryExhausted` phase). A page can have zero or more rows here
+			// in addition to its normal `pages` entry — the page itself is
+			// considered successfully scraped, but image capture or another
+			// secondary step failed for at least one device preset.
+			t.increments('id');
+			t.integer('pageId').notNullable().unsigned().references('pages.id');
+			t.string('phase').notNullable();
+			t.text('message').notNullable();
+			t.integer('createdAt').notNullable();
+
+			t.index('pageId');
 		});
 }

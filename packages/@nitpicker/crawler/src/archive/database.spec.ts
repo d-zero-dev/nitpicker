@@ -951,6 +951,82 @@ describe('getJSON (getConfig 経由)', () => {
 	});
 });
 
+describe('insertPageError', () => {
+	const dbPath = path.resolve(workingDir, 'page-errors-test.sqlite');
+
+	afterAll(async () => {
+		await remove(dbPath);
+	});
+
+	it('records a page_errors row keyed to the page even if the page is not scraped yet', async () => {
+		const db = await Database.connect({
+			workingDir,
+			filename: dbPath,
+		});
+
+		// The orchestrator may write the page error BEFORE setPage runs;
+		// insertPageError must therefore upsert the page row on demand.
+		await db.insertPageError(
+			'https://example.com/wedged-viewport',
+			'retryExhausted',
+			'📷 mobile-small: skipped — Attempted to use detached Frame',
+		);
+
+		const knex = db.getKnex();
+		const rows = await knex('page_errors').select('phase', 'message');
+		expect(rows).toEqual([
+			{
+				phase: 'retryExhausted',
+				message: '📷 mobile-small: skipped — Attempted to use detached Frame',
+			},
+		]);
+
+		const pages = await knex('pages').select('url', 'scraped');
+		expect(pages).toEqual([{ url: 'https://example.com/wedged-viewport', scraped: 0 }]);
+	});
+
+	it('appends a second row when the same URL fails for another phase', async () => {
+		const db = await Database.connect({
+			workingDir,
+			filename: dbPath,
+		});
+
+		await db.insertPageError(
+			'https://example.com/wedged-viewport',
+			'retryExhausted',
+			'📷 desktop-compact: skipped — Session closed',
+		);
+
+		const knex = db.getKnex();
+		const rows = await knex('page_errors').select('phase', 'message').orderBy('id');
+		expect(rows).toHaveLength(2);
+		expect(rows[1]).toEqual({
+			phase: 'retryExhausted',
+			message: '📷 desktop-compact: skipped — Session closed',
+		});
+	});
+
+	it('flags the page row as external when isExternal is true', async () => {
+		const db = await Database.connect({
+			workingDir,
+			filename: dbPath,
+		});
+
+		await db.insertPageError(
+			'https://external.example.com/oops',
+			'retryExhausted',
+			'oops',
+			true,
+		);
+
+		const knex = db.getKnex();
+		const [row] = await knex('pages')
+			.where('url', 'https://external.example.com/oops')
+			.select('isExternal');
+		expect(row.isExternal).toBe(1);
+	});
+});
+
 describe('getResourceByUrl', () => {
 	const resourceDbPath = path.resolve(workingDir, 'get-resource-by-url-test.sqlite');
 

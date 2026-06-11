@@ -184,4 +184,27 @@ export interface CrawlerEventTypes {
 	 * (e.g., scrapeStart, headRequest, openPage, success).
 	 */
 	changePhase: ChangePhaseEvent;
+
+	/**
+	 * Emitted when a secondary scrape step fails for a URL but the page itself
+	 * is otherwise scraped successfully (e.g. a viewport switch in
+	 * `#fetchImages` detaches the frame and `@retryable` gives up). The
+	 * orchestrator persists these as `page_errors` rows so the failure is
+	 * visible in the archive instead of being lost to stdout logs.
+	 *
+	 * For ordering, this event is always emitted AFTER `page` / `externalPage`
+	 * for the same URL, so the orchestrator's WriteQueue serialises the
+	 * `pages` upsert before the `page_errors` insert and the FK resolution
+	 * via URL succeeds.
+	 */
+	pageError: {
+		/** URL of the affected page. */
+		url: string;
+		/** Scrape phase name (typically `'retryExhausted'`). */
+		phase: string;
+		/** Human-readable failure message. */
+		message: string;
+		/** Whether the URL is external to the crawl scope. */
+		isExternal: boolean;
+	};
 }
