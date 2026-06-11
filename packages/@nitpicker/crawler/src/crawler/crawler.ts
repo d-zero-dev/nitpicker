@@ -20,7 +20,9 @@ import c from 'ansi-colors';
 import pkg from '../../package.json' with { type: 'json' };
 import { crawlerLog } from '../debug.js';
 
+import { createChangePhaseHandler } from './create-change-phase-handler.js';
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
+import { drainPhaseErrors } from './drain-phase-errors.js';
 import { fetchDestination } from './fetch-destination.js';
 import { findScopeEntry } from './find-scope-entry.js';
 import { formatCrawlProgress } from './format-crawl-progress.js';
@@ -34,6 +36,7 @@ import { injectScopeAuth } from './inject-scope-auth.js';
 import { isHtmlContentType } from './is-html-content-type.js';
 import LinkList from './link-list.js';
 import { linkToPageData } from './link-to-page-data.js';
+import { logUndrainedPhaseErrors } from './log-undrained-phase-errors.js';
 import { partitionUrlsByHtml } from './partition-urls-by-html.js';
 import { protocolAgnosticKey } from './protocol-agnostic-key.js';
 import { resourceToPageData } from './resource-to-page-data.js';
@@ -61,6 +64,17 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	readonly #linkList = new LinkList();
 	/** Merged crawler configuration (user overrides + defaults). */
 	readonly #options: CrawlerOptions;
+	/**
+	 * Phase errors observed during {@link Crawler.#launchBrowserAndScrape},
+	 * buffered per URL href so they can be emitted as `pageError` events
+	 * AFTER the corresponding `page` / `externalPage` event. This ordering
+	 * lets the orchestrator's WriteQueue serialise `setPage` before
+	 * `insertPageError`, so the FK resolution via URL always finds the row.
+	 */
+	readonly #pendingPhaseErrors = new Map<
+		string /* url.href */,
+		{ phase: string; message: string }[]
+	>();
 	/** Set of resource URLs (without hash) already captured, for deduplication. */
 	readonly #resources = new Set<string>();
 	/** URLs restored from a previous session that still need to be scraped. */
@@ -233,6 +247,26 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		});
 	}
 
+	/**
+	 * Thin instance-bound adapter over {@link drainPhaseErrors}. Flushes
+	 * `#pendingPhaseErrors` for `url` as `pageError` events. Idempotent.
+	 *
+	 * **Test gap (known)**: this adapter is invoked from the worker body in
+	 * {@link Crawler.#runDeal} at three call sites — after `#handleResult`,
+	 * inside the worker's `catch`, and via `logUndrainedPhaseErrors` in
+	 * `finally`. The drain logic itself is unit-tested in
+	 * `drain-phase-errors.spec.ts`; the wiring (whether the worker actually
+	 * calls it on each path) is verified by code review only, because
+	 * driving the worker requires a Puppeteer + beholder mock stack whose
+	 * cost outweighs the regression it would catch.
+	 * @param url - URL whose buffered errors should be flushed.
+	 * @param isExternal - Whether the URL is external to the crawl scope.
+	 */
+	#drainPhaseErrors(url: ExURL, isExternal: boolean): void {
+		drainPhaseErrors(this.#pendingPhaseErrors, url.href, isExternal, (payload) => {
+			void this.emit('pageError', payload);
+		});
+	}
 	/**
 	 * Emits error events for a deal-level failure.
 	 *
@@ -422,6 +456,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			}
 		}
 	}
+
 	/**
 	 * Launches a fresh Puppeteer browser, runs the beholder scraper, and cleans up.
 	 *
@@ -472,13 +507,16 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			}
 			const scraper = new Scraper();
 
-			scraper.on('changePhase', (e) => {
-				const msg = formatPhaseLog(e);
-				if (msg) {
-					update(msg);
-				}
-				void this.emit('changePhase', e);
-			});
+			scraper.on(
+				'changePhase',
+				createChangePhaseHandler({
+					emit: (event) => void this.emit('changePhase', event),
+					update,
+					formatLog: formatPhaseLog,
+					buffer: this.#pendingPhaseErrors,
+					urlHref: url.href,
+				}),
+			);
 
 			const result = await scraper.scrapeStart(page, url, {
 				isExternal,
@@ -639,6 +677,11 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						this.#handleResult(result, url, enqueue, paginationState, concurrency);
 						this.#handleResources(result.resources);
 						log(formatResultSummary(result));
+
+						// Phase errors must be emitted AFTER 'page' / 'externalPage'
+						// so the orchestrator's WriteQueue sees `setPage` before
+						// `insertPageError` and the URL→pageId resolution succeeds.
+						this.#drainPhaseErrors(url, isExternal);
 					} catch (error) {
 						crawlerLog('Worker error for %s: %O', url.href, error);
 						log(c.red('Error'));
@@ -661,10 +704,20 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 							isExternal,
 							error: workerError,
 						});
+						// Hard-error path: persist whatever phase errors we have
+						// already buffered so they are not lost.
+						this.#drainPhaseErrors(url, isExternal);
 					} finally {
 						if (isExternal) {
 							externalDoneUrls.add(protocolAgnosticKey(url.withoutHashAndAuth));
 						}
+						// Phase errors still in the buffer here were not drained
+						// by the success or catch paths — typically because a
+						// predicted URL was discarded before reaching the drain
+						// point. The helper logs the drop (observable via
+						// DEBUG=Nitpicker:Crawler) and removes the entry so the
+						// Map cannot leak across crawls.
+						logUndrainedPhaseErrors(this.#pendingPhaseErrors, url.href, crawlerLog);
 					}
 				};
 			},

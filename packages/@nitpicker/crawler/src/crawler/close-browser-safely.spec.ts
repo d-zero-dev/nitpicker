@@ -225,4 +225,72 @@ describe('closeBrowserSafely', () => {
 		expect(kill).not.toHaveBeenCalled();
 		expect(vi.getTimerCount()).toBe(0);
 	});
+
+	it('tree-kills the Chromium process tree on timeout when pid is available', async () => {
+		vi.useFakeTimers();
+		const kill = vi.fn<(signal?: NodeJS.Signals | number) => boolean>(() => true);
+		const killTree = vi.fn<
+			(pid: number, signal: NodeJS.Signals | number) => Promise<void>
+		>(async () => {});
+		const browser = createBrowserStub(() => new Promise<void>(() => {}), {
+			pid: 12_345,
+			kill,
+			killed: false,
+		});
+
+		const promise = closeBrowserSafely(browser, 30_000, { killTree });
+		await vi.advanceTimersByTimeAsync(30_000);
+		const timedOut = await promise;
+
+		expect(timedOut).toBe(true);
+		// The parent is SIGKILL'd via Node's ChildProcess.kill so Node reaps it
+		// correctly, and the whole tree is also walked via killProcessTree.
+		expect(kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+		expect(killTree).toHaveBeenCalledExactlyOnceWith(12_345, 'SIGKILL');
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it('skips tree-kill when the child process has no pid (connected, not launched)', async () => {
+		vi.useFakeTimers();
+		const kill = vi.fn<(signal?: NodeJS.Signals | number) => boolean>(() => true);
+		const killTree = vi.fn<
+			(pid: number, signal: NodeJS.Signals | number) => Promise<void>
+		>(async () => {});
+		// `pid` may be undefined immediately after spawn or when puppeteer.connect()
+		// was used instead of launch(). The OS-level tree-kill needs a PID, so we
+		// fall back to the single-process SIGKILL only.
+		const browser = createBrowserStub(() => new Promise<void>(() => {}), {
+			kill,
+			killed: false,
+		});
+
+		const promise = closeBrowserSafely(browser, 30_000, { killTree });
+		await vi.advanceTimersByTimeAsync(30_000);
+		const timedOut = await promise;
+
+		expect(timedOut).toBe(true);
+		expect(kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+		expect(killTree).not.toHaveBeenCalled();
+	});
+
+	it('does not tree-kill when close completes within the timeout', async () => {
+		vi.useFakeTimers();
+		const kill = vi.fn<(signal?: NodeJS.Signals | number) => boolean>(() => true);
+		const killTree = vi.fn<
+			(pid: number, signal: NodeJS.Signals | number) => Promise<void>
+		>(async () => {});
+		const browser = createBrowserStub(async () => {}, {
+			pid: 12_345,
+			kill,
+			killed: false,
+		});
+
+		const promise = closeBrowserSafely(browser, 30_000, { killTree });
+		await vi.advanceTimersByTimeAsync(0);
+		const timedOut = await promise;
+
+		expect(timedOut).toBe(false);
+		expect(kill).not.toHaveBeenCalled();
+		expect(killTree).not.toHaveBeenCalled();
+	});
 });

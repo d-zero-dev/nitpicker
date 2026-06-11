@@ -37,6 +37,11 @@ vi.mock('./crawler/crawler.js', () => {
 
 		/** Emits `error` and then `crawlEnd`, simulating a crawl with one error. */
 		start() {
+			const driver = fakeCrawlerDriver;
+			if (driver) {
+				driver(this);
+				return;
+			}
 			const error: CrawlerError = {
 				pid: process.pid,
 				isMainProcess: true,
@@ -51,8 +56,19 @@ vi.mock('./crawler/crawler.js', () => {
 	return { default: FakeCrawler };
 });
 
+/**
+ * Optional per-test override of the FakeCrawler's `start()` behaviour. When
+ * set, the FakeCrawler delegates to this function instead of running its
+ * default error-then-crawlEnd emission. Tests should reset it to `null` in
+ * `afterEach` to avoid leaking state.
+ */
+let fakeCrawlerDriver:
+	| ((handlers: { handlers: Map<string, (payload: never) => void> }) => void)
+	| null = null;
+
 afterEach(() => {
 	vi.restoreAllMocks();
+	fakeCrawlerDriver = null;
 });
 
 describe('CrawlerOrchestrator.crawling: error イベントの書き込み失敗', () => {
@@ -85,6 +101,78 @@ describe('CrawlerOrchestrator.crawling: error イベントの書き込み失敗'
 		).rejects.toThrow('db-write-failure');
 
 		expect(fakeArchive.addError).toHaveBeenCalledOnce();
+	});
+});
+
+describe('CrawlerOrchestrator.crawling: pageError ハンドラ', () => {
+	it('pageError イベントが archive.addPageError 経由で書き込まれる', async () => {
+		const addPageError = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			addPageError,
+			filePath: '/tmp/orchestrator-pageerror-test.nitpicker',
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('pageError')?.({
+				url: 'https://example.com/page',
+				phase: 'retryExhausted',
+				message: '📷 mobile-small: skipped — Attempted to use detached Frame',
+				isExternal: false,
+			} as never);
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-pageerror-test.nitpicker',
+		});
+
+		expect(addPageError).toHaveBeenCalledExactlyOnceWith(
+			'https://example.com/page',
+			'retryExhausted',
+			'📷 mobile-small: skipped — Attempted to use detached Frame',
+			false,
+		);
+	});
+
+	it('archive.addPageError が reject すると crawling() 全体が reject する', async () => {
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			addPageError: vi.fn(() => Promise.reject(new Error('db-page-error-failure'))),
+			filePath: '/tmp/orchestrator-pageerror-reject-test.nitpicker',
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('pageError')?.({
+				url: 'https://example.com/page',
+				phase: 'retryExhausted',
+				message: 'oops',
+				isExternal: false,
+			} as never);
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await expect(
+			CrawlerOrchestrator.crawling(['https://example.com/'], {
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-pageerror-reject-test.nitpicker',
+			}),
+		).rejects.toThrow('db-page-error-failure');
 	});
 });
 

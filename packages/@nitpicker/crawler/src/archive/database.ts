@@ -33,6 +33,7 @@ import { initSchema } from './init-schema.js';
 import { LibsqlDialect } from './libsql-dialect.js';
 import { limitedPageIds } from './limited-page-ids.js';
 import { migrateInfoRoots } from './migrate-info-roots.js';
+import { migratePageErrors } from './migrate-page-errors.js';
 import { redirectTable } from './redirect-table.js';
 
 const retrySetting: RetryDecoratorOptions = {
@@ -575,6 +576,33 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
+	 * Records a partial scrape failure against the page identified by `url`.
+	 *
+	 * The page row is resolved (or inserted as a stub) via
+	 * {@link Database.#getIdByUrl} so the error can be recorded even before
+	 * `setPage` has run — useful when the failure fires during scraping
+	 * (e.g. mid-`scrapeStart`) and the orchestrator enqueues this write
+	 * before the success write for the same URL.
+	 *
+	 * A single page can have multiple `page_errors` rows (e.g. both
+	 * `desktop-compact` and `mobile-small` viewports failing).
+	 * @param url - URL of the page being scraped.
+	 * @param phase - Scrape phase name (typically `'retryExhausted'`).
+	 * @param message - Human-readable failure message.
+	 * @param isExternal - Whether the URL is external. Defaults to `false`.
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async insertPageError(url: string, phase: string, message: string, isExternal = false) {
+		const pageId = await this.#getIdByUrl(url, isExternal ? 1 : 0);
+		await this.#instance('page_errors').insert({
+			pageId,
+			phase,
+			message,
+			createdAt: Date.now(),
+		});
+	}
+	/**
 	 * Inserts a sub-resource into the `resources` table.
 	 * Ignores duplicate URLs (uses `ON CONFLICT IGNORE`).
 	 * @param resource - The resource data to insert.
@@ -740,6 +768,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				skipReason: reason,
 			});
 	}
+
 	/**
 	 * Assigns natural URL sort order values to all internal pages.
 	 * Pages are sorted using {@link pathComparator} and assigned sequential order numbers.
@@ -954,6 +983,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	async #init() {
 		await initSchema(this.#instance);
 		await migrateInfoRoots(this.#instance);
+		await migratePageErrors(this.#instance);
 	}
 
 	/**

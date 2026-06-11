@@ -240,6 +240,12 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					.catch((error) => reject(error));
 			});
 
+			this.#crawler.on('pageError', ({ url, phase, message, isExternal }) => {
+				writeQueue
+					.enqueue(() => this.#archive.addPageError(url, phase, message, isExternal))
+					.catch((error) => reject(error));
+			});
+
 			this.#crawler.on('response', ({ resource }) => {
 				writeQueue
 					.enqueue(() => this.#archive.setResources(resource))
