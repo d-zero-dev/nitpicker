@@ -25,6 +25,7 @@ import knex from 'knex';
 
 import { findScopeEntry } from '../crawler/find-scope-entry.js';
 import { isHtmlContentType } from '../crawler/is-html-content-type.js';
+import { normalizeContentType } from '../crawler/normalize-content-type.js';
 import { eachSplitted } from '../utils/array/each-splitted.js';
 import { ErrorEmitter } from '../utils/error/error-emitter.js';
 
@@ -1136,7 +1137,12 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				isExternal: page.isExternal,
 				status: page.status,
 				statusText: page.statusText,
-				contentType: page.contentType,
+				// Canonicalize so the stored value matches the exact-string page-ness
+				// predicate (`WHERE contentType = 'text/html'`) used by the read layer
+				// and the case-insensitive `isHtmlContentType` used in code. Responses
+				// are recorded verbatim upstream, so `Text/HTML` / `text/html ` can
+				// otherwise be stored and silently misclassified.
+				contentType: normalizeContentType(page.contentType),
 				contentLength: page.contentLength,
 				responseHeaders: JSON.stringify(page.responseHeaders),
 				lang: page.meta.lang,

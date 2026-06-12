@@ -385,6 +385,50 @@ describe('snapshot 付与: 非HTML / 空html にスナップショットを作�
 	});
 });
 
+describe('content-type の正規化（#72）', () => {
+	it('contentType は小文字化・trim して保存され、ページとして分類される', async () => {
+		const dbPath = path.resolve(workingDir, 'content-type-normalize.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const url = 'http://localhost/cased';
+		try {
+			// サーバが `Content-Type: Text/HTML ` のような非正規形を返しても、保存時に
+			// 正規化されるので、完全一致の page フィルタ（contentType='text/html'）が拾える。
+			await db.updatePage(
+				{
+					url: parseUrl(url)!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'Text/HTML ',
+					responseHeaders: {},
+					meta: { title: 'Cased' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				workingDir,
+				true,
+			);
+
+			const [row] = await db
+				.getKnex()
+				.from('pages')
+				.select('contentType')
+				.where('url', url);
+			expect(row.contentType).toBe('text/html');
+
+			const pages = await db.getPages('page');
+			expect(pages.some((p) => p.url === url)).toBe(true);
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+});
+
 describe('re-scrape: 同一ページの再 updatePage', () => {
 	const rescrapeDbPath = path.resolve(workingDir, 'rescrape-dup.sqlite');
 
