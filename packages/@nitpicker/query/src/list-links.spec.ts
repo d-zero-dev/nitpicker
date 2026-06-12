@@ -88,7 +88,7 @@ describe('listLinks', () => {
 					textContent: 'Broken link',
 				},
 				{
-					href: parseUrl('https://external.com/')!,
+					href: parseUrl('https://example.net/')!,
 					isExternal: true,
 					title: null,
 					textContent: 'External',
@@ -170,7 +170,7 @@ describe('listLinks', () => {
 
 		// External page
 		await archive.setPage({
-			url: parseUrl('https://external.com/')!,
+			url: parseUrl('https://example.net/')!,
 			redirectPaths: [],
 			isExternal: true,
 			isTarget: false,
@@ -227,7 +227,7 @@ describe('listLinks', () => {
 		const result = await listLinks(archive, { type: 'external' });
 		expect(result.items.length).toBe(1);
 		expect(result.items[0]).toMatchObject({
-			destUrl: 'https://external.com',
+			destUrl: 'https://example.net',
 			sourceUrl: 'https://example.com',
 			isExternal: true,
 		});

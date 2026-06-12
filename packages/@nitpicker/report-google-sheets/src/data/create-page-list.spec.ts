@@ -309,16 +309,16 @@ describe('createPageList', () => {
 					status: 500,
 					statusText: 'Server Error',
 					textContent: 'err',
-					href: 'http://ext.com',
-					url: 'http://ext.com',
+					href: 'http://ext.example.com',
+					url: 'http://ext.example.com',
 				},
 				{
 					isExternal: true,
 					status: 200,
 					statusText: 'OK',
 					textContent: 'ok',
-					href: 'http://ext.com/ok',
-					url: 'http://ext.com/ok',
+					href: 'http://ext.example.com/ok',
+					url: 'http://ext.example.com/ok',
 				},
 			]),
 		});
@@ -791,7 +791,7 @@ describe('createPageList', () => {
 				pageData: {
 					headers: { score: 'Score' },
 					data: {
-						'https://other.com/': { score: { value: 50 } },
+						'https://other.example.com/': { score: { value: 50 } },
 					},
 				},
 			},

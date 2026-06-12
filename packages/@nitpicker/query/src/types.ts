@@ -1,4 +1,15 @@
 /**
+ * The opened-archive kind reported by {@link ArchiveManager}.
+ *
+ * - `'archive'` — a finished `.nitpicker` tar file on disk, opened by
+ *   extracting it into a fresh tmpDir.
+ * - `'stub'` — an in-progress (or interrupted) crawl's tmpDir, opened in
+ *   place for read-only inspection. No extraction, no lock acquisition,
+ *   no write-back on close.
+ */
+export type ArchiveMode = 'archive' | 'stub';
+
+/**
  * Options for opening a .nitpicker archive file.
  */
 export interface OpenArchiveOptions {
@@ -120,6 +131,34 @@ export interface PageListItem {
 	hasOgTitle: boolean;
 	/** Whether noindex is set. */
 	noindex: boolean;
+	/** Meta description. */
+	description: string | null;
+	/** Meta keywords. */
+	keywords: string | null;
+	/** Language attribute. */
+	lang: string | null;
+	/** Whether nofollow is set. */
+	nofollow: boolean;
+	/** Whether noarchive is set. */
+	noarchive: boolean;
+	/** Canonical URL. */
+	canonical: string | null;
+	/** Alternate URL. */
+	alternate: string | null;
+	/** OG type. */
+	ogType: string | null;
+	/** OG title. */
+	ogTitle: string | null;
+	/** OG site name. */
+	ogSiteName: string | null;
+	/** OG description. */
+	ogDescription: string | null;
+	/** OG URL. */
+	ogUrl: string | null;
+	/** OG image URL. */
+	ogImage: string | null;
+	/** Twitter card type. */
+	twitterCard: string | null;
 }
 
 /**
@@ -290,12 +329,16 @@ export interface ResourceEntry {
 	url: string;
 	/** HTTP status code. */
 	status: number | null;
+	/** HTTP status text. */
+	statusText: string | null;
 	/** Content type. */
 	contentType: string | null;
 	/** Content length in bytes. */
 	contentLength: number | null;
 	/** Whether the resource is external. */
 	isExternal: boolean;
+	/** Number of pages referencing this resource. */
+	referrerCount: number;
 	/** Compression type (e.g., "gzip", "br"). */
 	compress: string | null;
 	/** CDN provider. */
@@ -442,4 +485,104 @@ export interface PaginatedHeaderCheckList {
 	offset: number;
 	/** Current limit. */
 	limit: number;
+}
+
+/**
+ * A node in the internal-page link graph (one internal HTML page).
+ */
+export interface GraphNode {
+	/** The page URL (also the node identifier). */
+	url: string;
+	/** HTTP status code. */
+	status: number | null;
+	/** Number of incoming internal links (used for node sizing). */
+	inDegree: number;
+}
+
+/**
+ * A directed edge in the link graph (a link from one internal page to another).
+ */
+export interface GraphEdge {
+	/** Source page URL. */
+	source: string;
+	/** Destination page URL. */
+	target: string;
+}
+
+/**
+ * The internal-page link graph: nodes (internal HTML pages) and the directed
+ * edges between them. External pages, non-HTML pages, redirects, and
+ * self-links are excluded.
+ */
+export interface LinkGraph {
+	/** The internal HTML page nodes (capped to the top in-degree nodes when `limit` is set). */
+	nodes: GraphNode[];
+	/** Distinct directed links between the included nodes. */
+	edges: GraphEdge[];
+	/** Whether nodes were truncated to `limit` (more internal pages exist than returned). */
+	truncated: boolean;
+}
+
+/**
+ * Options for `getLinkGraph`.
+ */
+export interface GetLinkGraphOptions {
+	/**
+	 * Maximum number of nodes to return, keeping the highest in-degree pages.
+	 * Omit for all internal pages.
+	 */
+	limit?: number;
+}
+
+/**
+ * A page-level network entry — one row per page — mirroring the
+ * google-sheets "Links" sheet: status, redirects, referrer count, and headers.
+ */
+export interface PageLinkEntry {
+	/** The page URL. */
+	url: string;
+	/** The page title. */
+	title: string | null;
+	/** HTTP status code. */
+	status: number | null;
+	/** HTTP status text. */
+	statusText: string | null;
+	/** Content type. */
+	contentType: string | null;
+	/** Number of pages that redirect to this page. */
+	redirectFromCount: number;
+	/** Number of pages linking to this page (incoming links). */
+	referrerCount: number;
+	/** Whether the page has stored response headers. */
+	hasResponseHeaders: boolean;
+	/** Skip reason if the page was skipped during crawling. */
+	skipReason: string | null;
+}
+
+/**
+ * Paginated result for the page-level link/network list.
+ */
+export interface PaginatedPageLinkList {
+	/** Page link entries. */
+	items: PageLinkEntry[];
+	/** Total matching pages. */
+	total: number;
+	/** Current offset. */
+	offset: number;
+	/** Current limit. */
+	limit: number;
+}
+
+/**
+ * Filter and pagination options for {@link PageLinkEntry} listing.
+ */
+export interface ListPageLinksOptions {
+	/** Filter by external (true) or internal (false). */
+	isExternal?: boolean;
+	/** URL pattern to search (SQL LIKE pattern). */
+	urlPattern?: string;
+	/** Maximum number of results. */
+	limit?: number;
+	/** Number of results to skip. */
+	offset?: number;
 }

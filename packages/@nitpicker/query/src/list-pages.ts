@@ -6,6 +6,11 @@ import { paginateQuery } from './paginate-query.js';
 /**
  * Lists pages from the archive with filtering, sorting, and pagination.
  * Applies filters at the SQL level for performance with large datasets.
+ *
+ * Returns the per-page metadata mirrored from the google-sheets "Page List"
+ * sheet (title, language, description, keywords, robots flags, canonical,
+ * OGP, Twitter card). Per-page link/referrer counts are intentionally omitted
+ * here (they require anchor aggregation); see `listPageLinks` for those.
  * @param accessor - The archive accessor to query.
  * @param options - Filter, sort, and pagination options.
  * @returns A paginated list of page entries with metadata.
@@ -66,8 +71,20 @@ export async function listPages(
 			contentType: string | null;
 			isExternal: 0 | 1;
 			description: string | null;
-			og_title: string | null;
+			keywords: string | null;
+			lang: string | null;
 			noindex: number | null;
+			nofollow: number | null;
+			noarchive: number | null;
+			canonical: string | null;
+			alternate: string | null;
+			og_type: string | null;
+			og_title: string | null;
+			og_site_name: string | null;
+			og_description: string | null;
+			og_url: string | null;
+			og_image: string | null;
+			twitter_card: string | null;
 		},
 		PageListItem
 	>({
@@ -82,8 +99,20 @@ export async function listPages(
 					'contentType',
 					'isExternal',
 					'description',
-					'og_title',
+					'keywords',
+					'lang',
 					'noindex',
+					'nofollow',
+					'noarchive',
+					'canonical',
+					'alternate',
+					'og_type',
+					'og_title',
+					'og_site_name',
+					'og_description',
+					'og_url',
+					'og_image',
+					'twitter_card',
 				)
 				.orderBy(sortBy, sortOrder),
 		limit,
@@ -97,6 +126,20 @@ export async function listPages(
 			hasDescription: row.description != null && row.description !== '',
 			hasOgTitle: row.og_title != null && row.og_title !== '',
 			noindex: !!row.noindex,
+			description: row.description,
+			keywords: row.keywords,
+			lang: row.lang,
+			nofollow: !!row.nofollow,
+			noarchive: !!row.noarchive,
+			canonical: row.canonical,
+			alternate: row.alternate,
+			ogType: row.og_type,
+			ogTitle: row.og_title,
+			ogSiteName: row.og_site_name,
+			ogDescription: row.og_description,
+			ogUrl: row.og_url,
+			ogImage: row.og_image,
+			twitterCard: row.twitter_card,
 		}),
 	});
 }

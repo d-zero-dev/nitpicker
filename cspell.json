@@ -91,6 +91,14 @@
 		"jspx",
 		"ashx",
 		"jsf",
-		"htaccess"
+		"htaccess",
+
+		// Viewer frontend stack
+		"tanstack",
+		"srcdoc",
+		"hono",
+		"rollup",
+		"favicon",
+		"clientside"
 	]
 }

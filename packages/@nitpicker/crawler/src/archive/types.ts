@@ -314,4 +314,15 @@ export interface DatabaseOption {
 	workingDir: string;
 	/** The absolute file path to the SQLite database file. */
 	filename: string;
+	/**
+	 * When `true`, open the database for read-only inspection:
+	 *
+	 * - Skip schema migrations (no `ALTER TABLE` / `UPDATE` on the user's file).
+	 * - Refuse to mkdir/create the parent dir or the db file — fail loudly if
+	 *   either is missing instead of resurrecting them.
+	 *
+	 * Used by the viewer / MCP server when attaching to an in-progress crawl's
+	 * tmpDir, where any write would race the live crawler.
+	 */
+	readOnly?: boolean;
 }

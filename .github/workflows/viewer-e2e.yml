@@ -1,0 +1,44 @@
+name: Viewer E2E
+
+# Playwright-driven browser E2E for the viewer SPA (real CLI server + built SPA).
+# Heavy (browser download + a resident server), so it does not block every PR:
+#   - nightly via cron (catch regressions on the default branch)
+#   - on demand via workflow_dispatch
+#   - on PRs that touch the viewer / query / CLI (path filter)
+on:
+  schedule:
+    - cron: '30 18 * * *' # 03:30 JST, nightly (offset from the main E2E)
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'packages/@nitpicker/viewer/**'
+      - 'packages/@nitpicker/query/**'
+      - 'packages/@nitpicker/cli/**'
+      - '.github/workflows/viewer-e2e.yml'
+
+# A new push to the same ref supersedes any in-flight run.
+concurrency:
+  group: viewer-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  viewer-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - run: corepack enable
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: yarn
+      # The viewer E2E builds its fixture via Archive directly (no Puppeteer),
+      # so skip Puppeteer's browser download during install.
+      - run: yarn install --immutable
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+      - run: yarn build
+      - name: Install Playwright Chromium
+        run: yarn workspace @nitpicker/viewer exec playwright install --with-deps chromium
+      - run: yarn workspace @nitpicker/viewer test:e2e
+      - run: yarn workspace @nitpicker/viewer test:e2e:stub

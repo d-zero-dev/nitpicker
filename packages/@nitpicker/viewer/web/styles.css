@@ -1,0 +1,667 @@
+:root {
+	--bg: #0f1419;
+	--bg-elev: #1a212b;
+	--border: #2a3441;
+	--text: #d6dde6;
+	--text-dim: #8b97a6;
+	--text-on-accent: #fff;
+	--accent: #4aa3ff;
+	--danger: #ff6b6b;
+	--success: #4ade80;
+	--warn: #fc6;
+	--skeleton: #2a3441;
+	--badge-warn-fg: #f59e0b;
+	--badge-warn-bg: color-mix(in srgb, #f59e0b 20%, transparent);
+	--badge-interrupted-bg: color-mix(in srgb, var(--text-dim) 18%, transparent);
+
+	/* Font-size scale. The `@d-zero/stylelint-config` allowed-list rejects raw
+	   px values for `font-size`, so all sizes flow through these tokens. */
+	--font-size-xs: 11px;
+	--font-size-sm: 12px;
+	--font-size-base: 13px;
+	--font-size-md: 14px;
+	--font-size-lg: 15px;
+	--font-size-xl: 16px;
+	--font-size-2xl: 20px;
+	--font-size-3xl: 24px;
+
+	/* z-index scale. Raw integer z-index values are linted against; reach for
+	   one of these slots when stacking. */
+	--z-table-header: 1;
+	--z-skip-link: 100;
+	font-family:
+		system-ui,
+		-apple-system,
+		Segoe UI,
+		sans-serif;
+	font-size: var(--font-size-md);
+	color: var(--text);
+}
+
+:root[data-theme='light'] {
+	--bg: #f6f8fa;
+	--bg-elev: #fff;
+	--border: #d6dce2;
+	--text: #1a212b;
+	--text-dim: #5a6573;
+
+	/* #0969da clears WCAG AA (4.5:1) as link text on --bg; #1f6feb was ~4.2:1. */
+	--accent: #0969da;
+	--danger: #d1242f;
+	--success: #1a7f37;
+	--warn: #9a6700;
+	--skeleton: #e6eaef;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	color: var(--text);
+	background: var(--bg);
+}
+
+a {
+	color: var(--accent);
+}
+
+/* Shell + top bar */
+.app-shell {
+	display: block flex;
+	flex-direction: column;
+	block-size: 100dvh;
+	overflow: hidden;
+}
+
+.top-bar {
+	position: relative;
+	display: block flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: space-between;
+	block-size: 44px;
+	padding-block: 0;
+	padding-inline: 16px;
+	background: var(--bg-elev);
+	border-block-end: 1px solid var(--border);
+}
+
+.top-bar-title {
+	font-weight: bold;
+	color: var(--accent);
+}
+
+.top-bar-actions {
+	display: block flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.top-bar-progress {
+	position: absolute;
+	inset-block-end: 0;
+	inset-inline-start: 0;
+	inline-size: 100%;
+	block-size: 2px;
+	overflow: hidden;
+	background: linear-gradient(90deg, transparent, var(--accent), transparent);
+	background-repeat: no-repeat;
+
+	/* stylelint-disable-next-line @d-zero/declaration-value-type-disallowed-list -- background-size requires a percentage for the looping gradient mask; the value is part of the animation choreography, not arbitrary styling. */
+	background-size: 50% 100%;
+	animation: progress-slide 1000ms linear infinite;
+}
+
+.footer {
+	flex-shrink: 0;
+	padding-block: 6px;
+	padding-inline: 16px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+	white-space: nowrap;
+	background: var(--bg-elev);
+	border-block-start: 1px solid var(--border);
+}
+
+.footer-path {
+	color: var(--text);
+}
+
+.footer-stub-badge {
+	display: inline flow-root;
+	padding-block: 1px;
+	padding-inline: 8px;
+	margin-inline-start: 10px;
+	font-size: var(--font-size-xs);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	cursor: help;
+	border-radius: 999px;
+}
+
+.footer-stub-badge--live {
+	color: var(--badge-warn-fg);
+	background: var(--badge-warn-bg);
+}
+
+.footer-stub-badge--interrupted {
+	color: var(--text-dim);
+	background: var(--badge-interrupted-bg);
+}
+
+@keyframes progress-slide {
+	0% {
+		/* stylelint-disable-next-line @d-zero/declaration-value-type-disallowed-list -- keyframe waypoint for the looping progress bar mask; this is the animation's start state. */
+		background-position: -50% 0;
+	}
+
+	100% {
+		/* stylelint-disable-next-line @d-zero/declaration-value-type-disallowed-list -- keyframe waypoint for the looping progress bar mask; this is the animation's end state. */
+		background-position: 150% 0;
+	}
+}
+
+.icon-button {
+	inline-size: 30px;
+	block-size: 28px;
+	font-size: var(--font-size-md);
+	line-height: 1;
+	color: var(--text);
+	cursor: pointer;
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: 5px;
+}
+
+.icon-button:hover {
+	border-color: var(--accent);
+}
+
+.lang-select {
+	padding-block: 3px;
+	padding-inline: 6px;
+	font-size: var(--font-size-sm);
+	color: var(--text);
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 5px;
+}
+
+/* Layout */
+.layout {
+	display: block flex;
+	flex: 1 1 0%;
+	min-block-size: 0;
+}
+
+.sidebar {
+	display: block flex;
+	flex-shrink: 0;
+	flex-direction: column;
+	gap: 2px;
+	inline-size: 180px;
+	padding-block: 12px;
+	padding-inline: 0;
+	overflow: auto;
+	background: var(--bg-elev);
+	border-inline-end: 1px solid var(--border);
+}
+
+.sidebar-brand {
+	padding-block: 8px 16px;
+	padding-inline: 16px;
+	font-size: var(--font-size-xl);
+	font-weight: bold;
+	color: var(--accent);
+}
+
+.nav-link {
+	display: block flow;
+	padding-block: 8px;
+	padding-inline: 16px;
+	color: var(--text-dim);
+	text-decoration: none;
+}
+
+.nav-link:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.nav-link-active {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+	border-inline-start: 2px solid var(--accent);
+}
+
+.content {
+	display: block flex;
+	flex: 1 1 0%;
+	flex-direction: column;
+	min-inline-size: 0;
+	padding-block: 18px;
+	padding-inline: 22px;
+	overflow: auto;
+}
+
+/* View shell: list/graph views use flex:1 so their table/canvas fills the
+   remaining height (replacing fragile `calc(100vh - …)` magic values). Plain
+   content views (summary, detail) omit this class and scroll within .content. */
+.view {
+	display: block flex;
+	flex: 1 1 0%;
+	flex-direction: column;
+	min-block-size: 0;
+}
+
+h1 {
+	margin-block: 0 4px;
+	margin-inline: 0;
+	font-size: var(--font-size-2xl);
+}
+
+h2 {
+	margin-block: 18px 8px;
+	margin-inline: 0;
+	font-size: var(--font-size-lg);
+}
+
+/* View header + description */
+.view-header {
+	margin-block-end: 12px;
+}
+
+.view-description {
+	/* stylelint-disable-next-line unit-disallowed-list -- `ch` is intentional: this caps the description at ~70 characters, the recommended readable measure (WCAG 1.4.8). */
+	max-inline-size: 70ch;
+	margin: 0;
+	font-size: var(--font-size-base);
+	color: var(--text-dim);
+}
+
+/* Filters */
+.filter-bar {
+	display: block flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	margin-block-end: 12px;
+}
+
+.filter-bar input,
+.filter-bar select {
+	padding-block: 5px;
+	padding-inline: 8px;
+	font-size: var(--font-size-base);
+	color: var(--text);
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
+.filter-bar label {
+	display: block flex;
+	gap: 4px;
+	align-items: center;
+	font-size: var(--font-size-base);
+	color: var(--text-dim);
+}
+
+/* Virtual table */
+.vt {
+	display: block flex;
+	flex: 1 1 0%;
+	flex-direction: column;
+	min-block-size: 0;
+}
+
+.vt-meta {
+	margin-block-end: 6px;
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+}
+
+.vt-scroll {
+	flex: 1 1 0%;
+	overflow: auto;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+
+.vt-table {
+	inline-size: max-content;
+	min-inline-size: 100%;
+	border-collapse: collapse;
+}
+
+.vt-table thead {
+	position: sticky;
+	inset-block-start: 0;
+	z-index: var(--z-table-header);
+	background: var(--bg-elev);
+}
+
+.vt-table thead tr {
+	display: block flex;
+}
+
+.vt-table th {
+	position: relative;
+	flex-shrink: 0;
+	padding-block: 8px;
+	padding-inline: 10px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--font-size-sm);
+	font-weight: 600;
+	color: var(--text-dim);
+	text-align: start;
+	white-space: nowrap;
+	border-block-end: 1px solid var(--border);
+}
+
+.vt-resizer {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-end: 0;
+	inline-size: 5px;
+	block-size: 100%;
+	touch-action: none;
+	cursor: col-resize;
+	user-select: none;
+}
+
+.vt-resizer:hover,
+.vt-resizer:focus-visible,
+.vt-resizer.is-resizing {
+	background: var(--accent);
+}
+
+.vt-resizer:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+.vt-table tbody {
+	position: relative;
+	display: block flow;
+	inline-size: 100%;
+}
+
+.vt-row {
+	position: absolute;
+	display: block flex;
+	inline-size: 100%;
+	border-block-end: 1px solid var(--border);
+}
+
+.vt-skeleton-row {
+	position: relative;
+	transform: none;
+}
+
+.vt-row td {
+	flex-shrink: 0;
+	padding-block: 7px;
+	padding-inline: 10px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--font-size-base);
+	white-space: nowrap;
+}
+
+.vt-skeleton {
+	display: block flow;
+
+	/* stylelint-disable-next-line @d-zero/declaration-value-type-disallowed-list -- intentional 80% width for a skeleton bar inside a flex row; px would re-flow with column resizing. */
+	inline-size: 80%;
+	block-size: 12px;
+	background: var(--skeleton);
+	border-radius: 3px;
+	animation: skeleton-pulse 1200ms ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+
+	50% {
+		opacity: 0.45;
+	}
+}
+
+.img-preview {
+	inline-size: 40px;
+	block-size: 40px;
+	vertical-align: middle;
+	object-fit: contain;
+	background: var(--skeleton);
+	border-radius: 3px;
+}
+
+/* Summary cards */
+.cards {
+	display: block flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-block-end: 20px;
+}
+
+.card {
+	min-inline-size: 140px;
+	padding-block: 14px;
+	padding-inline: 18px;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+}
+
+.card-label {
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+}
+
+.card-value {
+	margin-block-start: 4px;
+	font-size: var(--font-size-3xl);
+	font-weight: bold;
+}
+
+.bars {
+	display: block flex;
+	flex-direction: column;
+	gap: 6px;
+	max-inline-size: 460px;
+}
+
+.bar-row {
+	display: block flex;
+	gap: 8px;
+	align-items: center;
+	font-size: var(--font-size-base);
+}
+
+.bar-track {
+	flex: 1 1 0%;
+	block-size: 8px;
+	overflow: hidden;
+	background: var(--border);
+	border-radius: 4px;
+}
+
+.bar-fill {
+	block-size: 100%;
+	background: var(--accent);
+}
+
+/* Detail */
+.detail-grid {
+	display: block grid;
+	grid-template-columns: max-content 1fr;
+	gap: 4px 16px;
+	margin-block-end: 20px;
+	font-size: var(--font-size-base);
+}
+
+.detail-grid dt {
+	color: var(--text-dim);
+}
+
+.detail-grid dd {
+	margin: 0;
+	word-break: break-all;
+}
+
+/* HTML preview */
+.html-preview {
+	overflow: hidden;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+
+.hp-toolbar {
+	display: block flex;
+	gap: 4px;
+	align-items: center;
+	padding: 6px;
+	background: var(--bg-elev);
+	border-block-end: 1px solid var(--border);
+}
+
+.hp-tab {
+	padding-block: 4px;
+	padding-inline: 10px;
+	color: var(--text-dim);
+	cursor: pointer;
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
+.hp-tab-active {
+	color: var(--text);
+	border-color: var(--accent);
+}
+
+.hp-truncated {
+	margin-inline-start: auto;
+	font-size: var(--font-size-sm);
+	color: var(--warn);
+}
+
+.hp-frame {
+	inline-size: 100%;
+	block-size: 480px;
+	background: var(--text-on-accent);
+	border: 0;
+}
+
+.hp-source {
+	max-block-size: 480px;
+	padding: 12px;
+	margin: 0;
+	overflow: auto;
+	font-size: var(--font-size-sm);
+	word-break: break-all;
+	white-space: pre-wrap;
+}
+
+/* Diff (mismatches) */
+.diff {
+	word-break: break-all;
+	white-space: pre-wrap;
+}
+
+.diff-removed {
+	color: var(--danger);
+	background: color-mix(in srgb, var(--danger) 26%, transparent);
+	border-radius: 2px;
+}
+
+.diff-added {
+	color: var(--success);
+	background: color-mix(in srgb, var(--success) 26%, transparent);
+	border-radius: 2px;
+}
+
+/* States + misc */
+.state {
+	padding-block: 20px;
+	padding-inline: 0;
+	color: var(--text-dim);
+}
+
+.state-error {
+	color: var(--danger);
+}
+
+.link-button {
+	padding: 0;
+	font: inherit;
+	color: var(--accent);
+	text-align: start;
+	cursor: pointer;
+	background: none;
+	border: 0;
+}
+
+/* Network graph */
+.graph-meta {
+	margin-block-end: 6px;
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+}
+
+.graph-canvas {
+	flex: 1 1 0%;
+	min-block-size: 320px;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+
+/* Skip link: visually hidden until focused, then pinned to the top-left. */
+.skip-link {
+	position: absolute;
+	inset-block-start: -48px;
+	inset-inline-start: 8px;
+	z-index: var(--z-skip-link);
+	padding-block: 8px;
+	padding-inline: 12px;
+	color: var(--text-on-accent);
+	text-decoration: none;
+	background: var(--accent);
+	border-start-start-radius: 0;
+	border-start-end-radius: 0;
+	border-end-start-radius: 6px;
+	border-end-end-radius: 6px;
+	transition: top 150ms ease;
+}
+
+.skip-link:focus {
+	inset-block-start: 0;
+}
+
+/*
+ * Respect the user's reduced-motion preference: disable the looping progress
+ * and skeleton animations and flatten the skip-link slide-in (WCAG 2.3.3).
+ * Targets the specific motion sources by class so we avoid the `*` +
+ * `!important` hammer the lint config disallows.
+ */
+@media (prefers-reduced-motion: reduce) {
+	.top-bar-progress,
+	.vt-skeleton {
+		animation: none;
+	}
+
+	.skip-link {
+		transition: none;
+	}
+}

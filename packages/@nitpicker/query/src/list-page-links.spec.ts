@@ -1,0 +1,140 @@
+import path from 'node:path';
+
+import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
+import { Archive } from '@nitpicker/crawler';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { listPageLinks } from './list-page-links.js';
+
+const dirname = path.dirname(new URL(import.meta.url).pathname);
+const workingDir = path.resolve(dirname, '__test_fixtures_page_links__');
+
+/** Default page metadata for fixture pages. */
+const META = {
+	lang: 'ja',
+	title: null,
+	description: null,
+	keywords: null,
+	noindex: false,
+	nofollow: false,
+	noarchive: false,
+	canonical: null,
+	alternate: null,
+	'og:type': null,
+	'og:title': null,
+	'og:site_name': null,
+	'og:description': null,
+	'og:url': null,
+	'og:image': null,
+	'twitter:card': null,
+};
+
+describe('listPageLinks', () => {
+	let archive: InstanceType<typeof Archive>;
+	const archiveFilePath = path.resolve(workingDir, 'page-links-test.nitpicker');
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.4.4',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// Home (with response headers) links to About.
+		await archive.setPage({
+			url: parseUrl('https://example.com/')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: { 'content-type': 'text/html' },
+			html: '<html></html>',
+			meta: { ...META, title: 'Home' },
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/about')!,
+					isExternal: false,
+					title: null,
+					textContent: 'About',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// About (no response headers) links back to Home.
+		await archive.setPage({
+			url: parseUrl('https://example.com/about')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: 'About' },
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Home',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('全ページを1行ずつ返す', async () => {
+		const result = await listPageLinks(archive);
+		expect(result.total).toBeGreaterThanOrEqual(2);
+		expect(result.items.length).toBeGreaterThanOrEqual(2);
+	});
+
+	it('被リンク数 (referrerCount) を計算する', async () => {
+		const result = await listPageLinks(archive);
+		const about = result.items.find((i) => i.url === 'https://example.com/about');
+		expect(about?.referrerCount).toBe(1);
+	});
+
+	it('レスポンスヘッダの有無を返す', async () => {
+		const result = await listPageLinks(archive);
+		const home = result.items.find((i) => i.url === 'https://example.com');
+		const about = result.items.find((i) => i.url === 'https://example.com/about');
+		expect(home?.hasResponseHeaders).toBe(true);
+		expect(about?.hasResponseHeaders).toBe(false);
+	});
+});

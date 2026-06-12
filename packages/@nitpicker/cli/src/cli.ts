@@ -7,6 +7,7 @@ import { crawl, commandDef as crawlDef } from './commands/crawl.js';
 import { pipeline, commandDef as pipelineDef } from './commands/pipeline.js';
 import { query, commandDef as queryDef } from './commands/query.js';
 import { report, commandDef as reportDef } from './commands/report.js';
+import { viewer, commandDef as viewerDef } from './commands/viewer.js';
 import { ExitCode } from './exit-code.js';
 import { formatCliError } from './format-cli-error.js';
 
@@ -21,6 +22,7 @@ const cli = parseCli({
 		report: reportDef,
 		pipeline: pipelineDef,
 		query: queryDef,
+		viewer: viewerDef,
 	},
 	onError: () => true,
 });
@@ -45,6 +47,10 @@ try {
 		}
 		case 'query': {
 			await query(cli.args, cli.flags);
+			break;
+		}
+		case 'viewer': {
+			await viewer(cli.args, cli.flags);
 			break;
 		}
 	}

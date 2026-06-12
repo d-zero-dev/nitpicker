@@ -31,7 +31,7 @@ describe('isExternalUrl', () => {
 	});
 
 	it('returns true when the hostname is not in scope', () => {
-		const url = parseUrl('https://other.com/page')!;
+		const url = parseUrl('https://other.example.com/page')!;
 		const scope = buildScope(['https://example.com/']);
 		expect(isExternalUrl(url, scope, defaultOptions)).toBe(true);
 	});

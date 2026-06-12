@@ -25,7 +25,7 @@ function buildScope(urls: string[]): Map<string, ExURL[]> {
 
 describe('findScopeEntry', () => {
 	it('returns null when no scope entry shares the hostname', () => {
-		const url = parseUrl('https://other.com/page')!;
+		const url = parseUrl('https://other.example.com/page')!;
 		const scope = buildScope(['https://example.com/']);
 		expect(findScopeEntry(url, scope, defaultOptions)).toBeNull();
 	});
@@ -111,7 +111,7 @@ describe('findScopeEntry', () => {
 	});
 
 	it('does not match a URL whose hostname differs even when the path matches', () => {
-		const url = parseUrl('https://other.com/blog/post')!;
+		const url = parseUrl('https://other.example.com/blog/post')!;
 		const scope = buildScope(['https://example.com/blog/']);
 		expect(findScopeEntry(url, scope, defaultOptions)).toBeNull();
 	});

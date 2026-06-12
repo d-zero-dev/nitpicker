@@ -69,8 +69,10 @@ describe('dispatchQuery', () => {
 		vi.mocked(getPageDetail).mockResolvedValueOnce(null);
 
 		await expect(
-			dispatchQuery(mockAccessor, 'page-detail', { url: 'https://missing.com' } as never),
-		).rejects.toThrow('Page not found: https://missing.com');
+			dispatchQuery(mockAccessor, 'page-detail', {
+				url: 'https://missing.example.com',
+			} as never),
+		).rejects.toThrow('Page not found: https://missing.example.com');
 	});
 
 	it('dispatches html sub-command', async () => {
@@ -101,8 +103,10 @@ describe('dispatchQuery', () => {
 		vi.mocked(getPageHtml).mockResolvedValueOnce(null);
 
 		await expect(
-			dispatchQuery(mockAccessor, 'html', { url: 'https://missing.com' } as never),
-		).rejects.toThrow('Page HTML not found: https://missing.com');
+			dispatchQuery(mockAccessor, 'html', {
+				url: 'https://missing.example.com',
+			} as never),
+		).rejects.toThrow('Page HTML not found: https://missing.example.com');
 	});
 
 	it('dispatches links sub-command', async () => {
@@ -221,8 +225,8 @@ describe('dispatchQuery', () => {
 
 		await expect(
 			dispatchQuery(mockAccessor, 'resource-referrers', {
-				url: 'https://missing.com/style.css',
+				url: 'https://missing.example.com/style.css',
 			} as never),
-		).rejects.toThrow('Resource not found: https://missing.com/style.css');
+		).rejects.toThrow('Resource not found: https://missing.example.com/style.css');
 	});
 });

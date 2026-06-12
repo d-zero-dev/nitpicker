@@ -1,0 +1,125 @@
+import { Link, useSearchParams } from 'react-router';
+
+import { usePageDetail } from '../api/use-page-detail.js';
+import { usePageHtml } from '../api/use-page-html.js';
+import { HtmlPreview } from '../components/html-preview.js';
+import { ViewHeader } from '../components/view-header.js';
+import { useI18n } from '../i18n/use-i18n.js';
+
+/**
+ * Full detail for a single page: metadata, inbound/outbound links, redirects,
+ * and the stored HTML snapshot. The target URL comes from the `url` query param.
+ * @returns The page detail view element.
+ */
+export function PageDetailView() {
+	const [params] = useSearchParams();
+	const { t } = useI18n();
+	const url = params.get('url') ?? '';
+	const { data, isLoading, error } = usePageDetail(url);
+	const html = usePageHtml(url);
+
+	if (!url) {
+		return <div className="state">{t('views.pageDetail.noPage')}</div>;
+	}
+	if (isLoading) {
+		return <div className="state">{t('common.loading')}</div>;
+	}
+	if (error) {
+		return <div className="state state-error">{error.message}</div>;
+	}
+	if (!data) {
+		return null;
+	}
+
+	return (
+		<div>
+			<ViewHeader
+				titleKey="views.pageDetail.title"
+				descriptionKey="views.pageDetail.description"
+			/>
+			<Link to="/pages">
+				{t('common.back')} {t('nav.pages')}
+			</Link>
+			<dl className="detail-grid">
+				<dt>URL</dt>
+				<dd>{data.url}</dd>
+				<dt>{t('views.pageDetail.status')}</dt>
+				<dd>
+					{data.status ?? '—'} {data.statusText ?? ''}
+				</dd>
+				<dt>{t('views.pageDetail.contentType')}</dt>
+				<dd>{data.contentType ?? '—'}</dd>
+				<dt>{t('views.pageDetail.title2')}</dt>
+				<dd>{data.title ?? '—'}</dd>
+				<dt>{t('views.pageDetail.descriptionField')}</dt>
+				<dd>{data.description ?? '—'}</dd>
+				<dt>{t('views.pageDetail.canonical')}</dt>
+				<dd>{data.canonical ?? '—'}</dd>
+				<dt>{t('views.pageDetail.robots')}</dt>
+				<dd>
+					{[
+						data.noindex && 'noindex',
+						data.nofollow && 'nofollow',
+						data.noarchive && 'noarchive',
+					]
+						.filter(Boolean)
+						.join(', ') || '—'}
+				</dd>
+				<dt>{t('views.pageDetail.ogTitle')}</dt>
+				<dd>{data.ogTitle ?? '—'}</dd>
+				<dt>{t('views.pageDetail.ogImage')}</dt>
+				<dd>{data.ogImage ?? '—'}</dd>
+			</dl>
+
+			<h2>
+				{t('views.pageDetail.outbound')} ({data.outboundLinks.length})
+			</h2>
+			<ul>
+				{data.outboundLinks.slice(0, 200).map((link, index) => (
+					<li key={`${link.url}-${index}`}>
+						<Link to={`/pages/detail?url=${encodeURIComponent(link.url)}`}>
+							{link.url}
+						</Link>{' '}
+						{link.status != null && <span className="state">[{link.status}]</span>}
+					</li>
+				))}
+			</ul>
+
+			<h2>
+				{t('views.pageDetail.inbound')} ({data.inboundLinks.length})
+			</h2>
+			<ul>
+				{data.inboundLinks.slice(0, 200).map((link, index) => (
+					<li key={`${link.url}-${index}`}>
+						<Link to={`/pages/detail?url=${encodeURIComponent(link.url)}`}>
+							{link.url}
+						</Link>
+					</li>
+				))}
+			</ul>
+
+			{data.redirectFrom.length > 0 && (
+				<>
+					<h2>
+						{t('views.pageDetail.redirectedFrom')} ({data.redirectFrom.length})
+					</h2>
+					<ul>
+						{data.redirectFrom.map((from) => (
+							<li key={from}>{from}</li>
+						))}
+					</ul>
+				</>
+			)}
+
+			<h2>{t('views.pageDetail.htmlSnapshot')}</h2>
+			{html.isLoading && (
+				<div className="state">{t('views.pageDetail.loadingSnapshot')}</div>
+			)}
+			{html.data ? (
+				<HtmlPreview html={html.data.html} truncated={html.data.truncated} />
+			) : (
+				!html.isLoading && <div className="state">{t('views.pageDetail.noSnapshot')}</div>
+			)}
+		</div>
+	);
+}

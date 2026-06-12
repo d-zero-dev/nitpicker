@@ -1,0 +1,5 @@
+.fixture.nitpicker
+.fixture-tmp/
+.fixture-stub-cwd/
+/test-results/
+/playwright-report/

@@ -92,7 +92,7 @@ describe('diff', () => {
 	it('外部ページをフィルタリングする', async () => {
 		mockGetPagesA.mockResolvedValueOnce([
 			createMockPage('https://example.com/', { isExternal: false }),
-			createMockPage('https://external.com/', { isExternal: true }),
+			createMockPage('https://example.net/', { isExternal: true }),
 		]);
 		mockGetPagesB.mockResolvedValueOnce([]);
 
@@ -102,7 +102,7 @@ describe('diff', () => {
 			(c: unknown[]) => c[0] === 'a.txt',
 		)?.[1] as string;
 		expect(aContent).toBe('https://example.com/');
-		expect(aContent).not.toContain('external.com');
+		expect(aContent).not.toContain('example.net');
 	});
 
 	it('isPage() が false のページをフィルタリングする', async () => {

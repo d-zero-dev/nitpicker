@@ -519,7 +519,9 @@ describe('repromoteExternalPages', () => {
 			filename: repromoteDbPath,
 		});
 
-		const scope = new Map([['other.com', [parseUrl('https://other.com/')!]]]);
+		const scope = new Map([
+			['other.example.com', [parseUrl('https://other.example.com/')!]],
+		]);
 		const promoted = await db.repromoteExternalPages(scope);
 		expect(promoted).toEqual([]);
 	});

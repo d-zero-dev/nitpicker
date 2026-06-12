@@ -235,7 +235,7 @@ describe('createServer', () => {
 		expect(toolDefinitions.length).toBe(result.tools.length);
 	});
 
-	it('open_archive でアーカイブを開ける', async () => {
+	it('open_archive でアーカイブを開ける（mode=archive, crawlerPid=null も返す）', async () => {
 		const result = await callTool(server, 'open_archive', {
 			filePath: archiveFilePath,
 		});
@@ -245,6 +245,9 @@ describe('createServer', () => {
 		expect(data.baseUrl).toBe('https://example.com');
 		expect(data.roots).toEqual(['https://example.com']);
 		expect(data.totalPages).toBe(2);
+		// New fields contracted with LLM callers: source kind and crawler liveness.
+		expect(data.mode).toBe('archive');
+		expect(data.crawlerPid).toBeNull();
 		archiveId = data.archiveId;
 	});
 
@@ -403,5 +406,67 @@ describe('createServer', () => {
 	it('閉じた後にクエリするとエラーになる', async () => {
 		const result = await callTool(server, 'get_summary', { archiveId });
 		expect(result.isError).toBe(true);
+	});
+});
+
+describe('createServer stub-mode support', () => {
+	const stubServerWorkingDir = path.resolve(workingDir, '__mcp_stub_fixture__');
+	const stubFilePath = path.resolve(stubServerWorkingDir, 'mcp-stub.nitpicker');
+	let stubTmpDir = '';
+	let server: ReturnType<typeof createServer>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(stubServerWorkingDir, { recursive: true });
+		const archive = await Archive.create({
+			filePath: stubFilePath,
+			cwd: stubServerWorkingDir,
+		});
+		stubTmpDir = archive.tmpDir;
+		await archive.setConfig({
+			baseUrl: 'https://stub.example.com',
+			roots: ['https://stub.example.com'],
+			name: 'mcp-stub',
+			version: '0.4.4',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'mcp-stub',
+			ignoreRobots: false,
+		});
+		// Release handle without finalizing so the tmpDir remains as a
+		// stub fixture an LLM caller might point `open_archive` at.
+		await archive.releaseHandle();
+		server = createServer();
+	});
+
+	afterAll(async () => {
+		const { rmSync } = await import('node:fs');
+		rmSync(stubServerWorkingDir, { recursive: true, force: true });
+	});
+
+	it('open_archive にディレクトリパスを渡すと mode=stub と crawlerPid=null を返す（LLM 向け契約）', async () => {
+		const result = await callTool(server, 'open_archive', {
+			filePath: stubTmpDir,
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.archiveId).toBeDefined();
+		expect(data.baseUrl).toBe('https://stub.example.com');
+		expect(data.mode).toBe('stub');
+		// No live crawler attached to the fixture stub → null PID, so the
+		// LLM caller can correctly distinguish "live crawl in progress"
+		// (data is moving) from "interrupted crawl stub" (read-only fixture).
+		expect(data.crawlerPid).toBeNull();
+		await callTool(server, 'close_archive', { archiveId: data.archiveId });
 	});
 });

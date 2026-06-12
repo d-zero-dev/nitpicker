@@ -16,7 +16,8 @@ packages/
 │   ├── query        # アーカイブクエリ API（SQL レベルのフィルタ・集計）
 │   ├── mcp-server   # MCP サーバー（AI アシスタントからのアーカイブクエリ）
 │   ├── analyze-*    # 各種 analyze プラグイン
-│   └── report-google-sheets  # Google Sheets レポーター
+│   ├── report-google-sheets  # Google Sheets レポーター
+│   └── viewer       # ローカルブラウザビューア（Hono API + React SPA）
 └── test-server/     # E2Eテスト用 Hono サーバー
 ```
 
@@ -33,6 +34,7 @@ packages/
            │    └── query              │
            │         ↑                 │
            │    mcp-server ← @modelcontextprotocol/sdk
+           │    viewer ← @hono/node-server + react + @tanstack/*（外部）
            └── @d-zero/dealer（外部）──┘
 ```
 
@@ -110,8 +112,9 @@ scrapeStart → openPage → loadDOMContent → getHTML → waitNetworkIdle
 - **`CrawlerOrchestrator`**: エントリポイント。`CrawlerOrchestrator.crawling()`（複数 URL で multi-root）, `CrawlerOrchestrator.resume()`（中断再開）, `CrawlerOrchestrator.append()`（既存アーカイブへの追加クロール）
 - **`Crawler`**: リンク管理・スクレイプスケジューリング
 - **`LinkList`**: URL キュー管理（pending → progress → done）
-- **`Archive`**: アーカイブの作成・再開・書き出し
-- **`ArchiveAccessor`**: 読み取り専用アクセサ（`getPages`, `getPagesWithRefs` など）。HTML スナップショットの読み取り（`getHtmlOfPage`）は `snapshot-html.zip` を物理展開せず、central directory を 1 度だけ読んでキャッシュし、エントリ単位でストリーミング取得する（zip はランダムアクセス可能なため O(該当エントリ) で済む。全展開方式は単一ページ取得で zip 全体の inflate + 書き戻し I/O を払い、ディスクにも展開ディレクトリが残るため採用しない）
+- **`Archive`**: アーカイブの作成・再開・書き出し。`Archive.close()` は冪等（`#closeOnce` で破壊的プロローグも含めて1回だけ実行）、`Archive.releaseHandle()` は writer の DB ハンドルと lock だけを解放し tmpDir / `.nitpicker` には触れない代替 exit。`Archive.connect(tmpDir)` は **read-only モード**でアクセサを返し、`Database.connect({readOnly: true})` 経由で `initSchema` / `migrateInfoRoots` を **走らせない**（user の tmpDir を絶対に変更しない）。読み取り専用アクセサは `getHtmlOfPage` で zip を tmpDir 内に展開せず single-entry 抽出に切り替える
+- **`ArchiveAccessor`**: 読み取り専用アクセサ（`getPages`, `getPagesWithRefs` など）。HTML スナップショットの読み取り（`getHtmlOfPage`）は `snapshot-html.zip` を物理展開せず、central directory を 1 度だけ読んでキャッシュし、エントリ単位でストリーミング取得する（zip はランダムアクセス可能なため O(該当エントリ) で済む。全展開方式は単一ページ取得で zip 全体の inflate + 書き戻し I/O を払い、ディスクにも展開ディレクトリが残るため採用しない）。`close()` は冪等 + 5 秒の `db.destroy()` timeout 付き（viewer Ctrl-C が live crawler の write lock で 10 分ハングするのを防ぐ）
+- **`peekArchiveLockHolder(tmpDir)`**: `<tmpDir>.lock/pid.txt` を probe する read-only ヘルパ（lock を取りに行かない）。viewer footer の "Live crawl in progress" / "Interrupted crawl stub" バッジ判定に使用。crawler 側 `archive-lock.ts` と同じ alive 判定ロジックを共有
 - **`Page`**: ページデータラッパー
 
 **内部モジュール構造:**
@@ -126,7 +129,8 @@ crawler/src/
 ├── archive/                    # SQLite アーカイブストレージ
 │   ├── filesystem/             # 1関数1ファイル（16ファイル）+ tar, untar
 │   ├── archive-lock.ts         # tmpDir 単位の advisory lock（mkdir + pid.txt + stale 検出）
-│   ├── migrate-info-roots.ts   # info テーブルを現行スキーマに揃える冪等 migration（roots 追加・scope 削除）
+│   ├── peek-archive-lock.ts    # lock を取らずに pid.txt を probe する read-only ヘルパ（viewer / MCP 用）
+│   ├── migrate-info-roots.ts   # info テーブルを現行スキーマに揃える冪等 migration（writer-only — Database.connect({readOnly:true}) では走らない）
 │   ├── libsql-dialect.ts       # better-sqlite3 dialect の libsql 上書き
 │   └── ...                     # archive, archive-accessor, database, init-schema, limited-page-ids, redirect-table, get-json, page, resource, safe-path, types
 ├── crawler/                    # Crawler エンジン
@@ -169,7 +173,7 @@ crawler/src/
 
 **主要クラス・関数:**
 
-- **`ArchiveManager`**: アーカイブのライフサイクル管理（open / get / close / closeAll）。同一ファイルの重複オープンは参照カウントで管理し、untar を再実行しない
+- **`ArchiveManager`**: アーカイブのライフサイクル管理（open / get / close / closeAll）。同一ファイルの重複オープンは参照カウントで管理し、untar を再実行しない。`open()` は `.nitpicker` ファイルだけでなく **stub ディレクトリ** (`<dir>/db.sqlite` を含むディレクトリ)も受け付け、ファイル/ディレクトリは `fs.statSync` で自動判定。stub オープンは `Archive.connect` 経由の read-only モードで lock を取らず、close 時には DB ハンドルだけ解放（tmpDir は user の crawl 状態として残す）。close と open は `entry.closing` Promise を介して serialise されるため、teardown 中の同一パスへの concurrent open は close 完了まで待ってから新規 open に進む（ArchiveLockError 競合を防ぐ）。`new ArchiveManager({onWarn})` で警告 sink を差し替え可能（既定は `console.warn`、MCP server は `process.stderr.write` 専用 sink を渡して JSON-RPC stdio framing を守る）。`open()` の戻り値には `mode: 'archive' | 'stub'` と `crawlerLockHolder: ArchiveLockHolder | null`（live PID 検出用、viewer footer が消費）を含む
 - **`listPages`**: ページ一覧取得（ステータス・メタデータ欠損・URL パターンなどでフィルタ）
 - **`getSummary`**: サイト全体の統計（ページ数、ステータス分布、メタデータ充足率）
 - **`getPageDetail`**: 単一ページの詳細情報（メタデータ、アウトバウンド/インバウンドリンク、リダイレクト元）
@@ -198,15 +202,48 @@ crawler/src/
 
 **依存:** `@modelcontextprotocol/sdk`, `@nitpicker/query`
 
+### @nitpicker/viewer
+
+`.nitpicker` アーカイブをローカルブラウザで閲覧する Web ビューア。`mcp-server` の HTTP/REST 版に相当し、`@nitpicker/query` の関数群をそのまま再利用する。
+
+**構成（単一パッケージ、backend + frontend 同居）:**
+
+- **backend（`src/` → `tsc` → `lib/`）**: Hono アプリ。`start-viewer.ts`（サーバ起動 + ブラウザオープン + SIGINT graceful shutdown）、`create-app.ts`（全ルート登録 + `serveStatic` + エラーハンドラ）、`archive-context.ts`（`ArchiveManager` で 1 アーカイブを常駐保持）、`routes/register-*-route.ts`（query 関数 1:1 の 12 ルート）
+- **frontend（`web/` → `vite build` → `lib/public/`）**: React 19 SPA。`@tanstack/react-query`（infinite query）+ `@tanstack/react-table` + `@tanstack/react-virtual` による仮想スクロール、BrowserRouter（History API、未マッチ GET は Hono が index.html を返す SPA フォールバック）ルーティング、`@nitpicker/query` の型を DTO として再利用。ダーク/ライトテーマ切替（`data-theme` + localStorage、`web/theme/`）、i18n（en/ja、`web/i18n/` の自前辞書 + Context）、列リサイズ（マウス + 矢印キー）、ローディングスケルトン + `aria-busy` + グローバル進捗バー、画像サムネイルプレビュー、Mismatches の赤緑文字差分（`web/utils/diff-text.ts`）を備える。アクセシビリティ（WCAG 2.1 AA）対応として、仮想テーブルへの明示的 ARIA グリッドロール、スキップリンク（`web/components/skip-link.tsx`）、フォームコントロールのアクセシブルネーム、ライブリージョン、`prefers-reduced-motion`、AA コントラストを実装（README「アクセシビリティ」節 + 下記「設計注意」参照）
+
+**データフロー:**
+
+```
+nitpicker viewer <file>
+  → startViewer() → createArchiveContext()（ArchiveManager.open で 1 アーカイブ常駐）
+  → createApp()（Hono: REST ルート + lib/public 静的配信）
+  → serve()（@hono/node-server）+ openBrowser()
+  → ブラウザ: SPA が /api/* を fetch → query 関数の結果を表示
+  → SIGINT/SIGTERM: manager.closeAll() → server.close() → resolve（CLI が exit）
+```
+
+**REST API（アーカイブは起動時固定なので archiveId 不要）:** `GET /api/summary`, `/api/pages`, `/api/pages/detail?url=`, `/api/pages/html?url=`, `/api/links?type=`, `/api/resources`, `/api/resources/referrers?resourceUrl=`, `/api/images`, `/api/violations`, `/api/duplicates`, `/api/mismatches`, `/api/headers`, `/api/graph`（内部ページのリンクグラフ、`getLinkGraph`）, `/api/page-links`（全ページの status/referrers/headers 一覧、google-sheets「Links」シート相当、`listPageLinks`）, `/api/info`（開いているアーカイブの絶対パス、フッター表示用）。クエリパラメータ → query options 変換は `query-params/to-number.ts` / `to-boolean.ts`、エラーは `sanitize-error-message.ts` で絶対パスを伏せて JSON 返却（mcp-server と同方針）。
+
+**バイナリ:** なし（CLI の `viewer` サブコマンド経由で起動）
+
+**依存:** `@nitpicker/query`, `hono`, `@hono/node-server`, `react`, `react-dom`, `@tanstack/react-query`, `@tanstack/react-table`, `@tanstack/react-virtual`, `react-router`
+
+> **設計注意（CLI 常駐コマンド）:** 他の 5 コマンドはバッチ型（実行→完了→`cli.ts` 末尾の `process.exit`）だが、`viewer` だけは常駐サーバ。`startViewer` は SIGINT/SIGTERM を受けるまで resolve せず、`process.exit` に到達しない。将来 `cli.ts` を変更する際は、この例外を壊さないこと（viewer のシャットダウン経路で `ArchiveManager.closeAll()` を必ず通すこと）。
+
+> **設計注意（ポート探索は serve と同じ host を probe する）:** `findFreePort(preferred, host)` は **`serve()` がバインドするのと同じ `host` で空きを確認しなければならない**。`localhost` は `::1`（IPv6）に解決される一方、host 未指定の bind は `0.0.0.0`/`::` を使うため、別インターフェースを probe すると「空き」と誤判定し、フォールバックが効かず banner 表示後に `EADDRINUSE` でクラッシュする。`start-viewer.ts` は必ず `host` を渡すこと。回帰テストは `find-free-port.spec.ts`（`net.createServer` をスパイし `listen` への host 転送を検証）。
+
+> **設計注意（仮想テーブルの ARIA ロールは必須）:** `web/components/virtual-table.tsx` は CSS で table 要素を `display: flex/block` にレイアウトしており、これがネイティブ table セマンティクスをアクセシビリティツリーから剥がす。明示的な ARIA ロール（`table`/`rowgroup`/`row`/`columnheader`/`cell`）+ `aria-row/colcount`/`index` で復元しているため、**これらを削除すると画面読み上げが「無構造なテキストの羅列」に退行する**。列ヘッダーのアクセシブルネームはリサイザーのラベル混入を避けるため `to-accessible-header-label.ts` で固定。E2E（`e2e/viewer.spec.ts` の「アクセシビリティ」群）が回帰を検知する。
+
 ### @nitpicker/cli
 
-`@d-zero/roar` ベースの統合 CLI。5つのサブコマンドを提供。全 analyze プラグインを `dependencies` に含んでおり、`npx` 実行時に `@nitpicker/core` の動的 `import()` がプラグインモジュールを解決できるようにしている。
+`@d-zero/roar` ベースの統合 CLI。6つのサブコマンドを提供。全 analyze プラグインを `dependencies` に含んでおり、`npx` 実行時に `@nitpicker/core` の動的 `import()` がプラグインモジュールを解決できるようにしている。
 
 - **`npx @nitpicker/cli crawl <URL>`**: Webサイトをクロールして `.nitpicker` ファイルを生成
 - **`npx @nitpicker/cli analyze <file>`**: `.nitpicker` ファイルに対して analyze プラグインを実行。`--search-keywords`, `--axe-lang` 等のフラグで設定ファイルのプラグイン設定を上書き可能（`buildPluginOverrides()` → `Nitpicker.setPluginOverrides()` 経由）
 - **`npx @nitpicker/cli report <file>`**: `.nitpicker` ファイルから Google Sheets レポートを生成
 - **`npx @nitpicker/cli pipeline <URL>`**: crawl → analyze → report を直列実行。`startCrawl()` でアーカイブパスを取得し、そのパスを `analyze()` と `report()` に引き渡す。`--sheet` 指定時のみ report ステップを実行
 - **`npx @nitpicker/cli query <file> <sub-command>`**: `.nitpicker` ファイルに対してクエリを実行し、結果を JSON で出力。`@nitpicker/query` の全関数を CLI から利用可能。12 のサブコマンド（`summary`, `pages`, `page-detail`, `html`, `links`, `resources`, `images`, `violations`, `duplicates`, `mismatches`, `headers`, `resource-referrers`）を提供
+- **`npx @nitpicker/cli viewer <file>`**: `.nitpicker` ファイルをローカルブラウザで閲覧する Web ビューアを起動（`@nitpicker/viewer`）。常駐サーバなので `Ctrl-C` まで動き続ける（詳細は `@nitpicker/viewer` セクション）
 
 ---
 
@@ -1062,6 +1099,8 @@ packages/test-server/
 ```
 
 **テスト実行:** `yarn vitest run --config vitest.e2e.config.ts`（`maxWorkers: 1`）
+
+> **viewer の E2E は別系統（Playwright）:** 上記は crawler 中心の Vitest E2E。`@nitpicker/viewer` の E2E は **Playwright** で、`packages/@nitpicker/viewer/e2e/`（`generate-fixture.mjs` で fixture 生成 → 実 CLI で viewer 起動 → ブラウザ検証、a11y テスト群を含む）にある。実行は `yarn workspace @nitpicker/viewer test:e2e`。Playwright spec は `test.describe` 等が Vitest と非互換なため、ルート `vitest.config.ts` の `exclude` で `**/@nitpicker/viewer/e2e/**` を除外している（これを外すと `yarn test` が「Playwright Test did not expect test.describe()」で落ちる）。
 
 **テスト用 crawl ヘルパーのデフォルトオプション:**
 
