@@ -432,7 +432,9 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 
 		try {
 			await db.updatePage(full, workingDir, true);
-			// 2 回目はタイムアウト等で空（劣化スクレイプ）。
+			// 2 回目は空。劣化スクレイプ（タイムアウト/部分描画）と「正当にリンクを
+			// 全て失った」ケースは区別できないため、保守的に据え置く（後者では次の
+			// 非空スクレイプまで stale が残るのが受容済みの trade-off）。
 			await db.updatePage({ ...full, anchorList: [], imageList: [] }, workingDir, true);
 
 			const knex = db.getKnex();
@@ -490,11 +492,18 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 
 			const knex = db.getKnex();
 			const [oldPage] = await knex.from('pages').select('id').where('url', oldUrl);
+			const [staleTarget] = await knex
+				.from('pages')
+				.select('id')
+				.where('url', 'http://localhost/stale-x');
 			const [before] = await knex
 				.from('anchors')
 				.where('pageId', oldPage.id)
 				.count({ c: '*' });
 			expect(Number(before.c)).toBe(1);
+			// 症状側の確認: この時点では /old-content は /stale-x の正当な被リンク元。
+			const refsBefore = await db.getReferrersOfPage(staleTarget.id);
+			expect(refsBefore.map((r) => r.url)).toContain(oldUrl);
 
 			// 2) 後に /old-content が /new-dest へ 301 化（redirectPaths に出現）。
 			await db.updatePage(
@@ -529,6 +538,10 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 				.where('pageId', oldPage.id)
 				.count({ c: '*' });
 			expect(Number(after.c)).toBe(0);
+			// 症状側の回帰: /stale-x の被リンクから幽霊 /old-content が消えていること
+			// （referrer 読み取りは redirect 元を除外しないため、根本クリアが必須）。
+			const refsAfter = await db.getReferrersOfPage(staleTarget.id);
+			expect(refsAfter.map((r) => r.url)).not.toContain(oldUrl);
 		} finally {
 			await db.destroy();
 			await remove(dbPath);

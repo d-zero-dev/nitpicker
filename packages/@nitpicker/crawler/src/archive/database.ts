@@ -936,9 +936,12 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			// The delete is paired with — and guarded by — a non-empty new list:
 			// a degraded re-scrape (navigation timeout / partial render) can return
 			// an empty `anchorList` for a page that previously had links, and
-			// wiping the prior good data in that case would be destructive. When
-			// the new list is empty we keep what we already had rather than
-			// replacing it with nothing.
+			// wiping the prior good data in that case would be destructive. We
+			// cannot tell a transient empty result apart from a page that has
+			// legitimately lost all its links, so we err on the side of keeping
+			// what we already had. The accepted trade-off is that a page which
+			// genuinely dropped to zero links keeps its stale rows until the next
+			// non-empty re-scrape replaces them.
 			//
 			// (A DB-level unique constraint + `onConflict` would also prevent
 			// duplication, but multiple distinct anchors can share the same
