@@ -69,12 +69,18 @@ describe('Resource reuse', () => {
 		expect(redirected.map((r) => r.method)).toEqual(['GET', 'HEAD']);
 	});
 
-	it('リダイレクト画像の pages 行はリダイレクト追跡済みの最終ステータスを持つ', async () => {
+	it('リダイレクトするサブリソースは source→dest の辺として記録され、最終URLが 200 を持つ', async () => {
 		const pages = await result.accessor.getPages();
-		const page = pages.find((p) => p.url.pathname === '/resource-reuse/redirected.png');
-		expect(page).toBeDefined();
-		expect(page!.status).toBe(200);
-		expect(page!.contentType).toBe('image/png');
+		// HEAD プリフライト（trackRedirects）が redirected.png → actual.png を解決し、
+		// 最終到達先 actual.png が 200 / image/png として記録される。
+		const actual = pages.find((p) => p.url.pathname === '/resource-reuse/actual.png');
+		expect(actual).toBeDefined();
+		expect(actual!.status).toBe(200);
+		expect(actual!.contentType).toBe('image/png');
+		// redirected.png は最終 URL を上書きせず、リダイレクト元として記録される。
+		expect(
+			actual!.redirectFrom.some((r) => r.url.includes('/resource-reuse/redirected.png')),
+		).toBe(true);
 	});
 
 	it('external サブリソース（127.0.0.1）への直リンクも再利用され HEAD が飛ばない', () => {

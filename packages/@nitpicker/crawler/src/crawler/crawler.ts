@@ -1,4 +1,9 @@
-import type { CrawlerEventTypes, CrawlerOptions, ResourceLookupResult } from './types.js';
+import type {
+	CrawlerEventTypes,
+	CrawlerOptions,
+	ResourceLookupResult,
+	ScrapeOutcome,
+} from './types.js';
 import type {
 	ChangePhaseEvent,
 	PageData,
@@ -39,6 +44,7 @@ import { linkToPageData } from './link-to-page-data.js';
 import { logUndrainedPhaseErrors } from './log-undrained-phase-errors.js';
 import { partitionUrlsByHtml } from './partition-urls-by-html.js';
 import { protocolAgnosticKey } from './protocol-agnostic-key.js';
+import { redirectDestKey } from './redirect-dest-key.js';
 import { resourceToPageData } from './resource-to-page-data.js';
 import { RobotsChecker } from './robots-checker.js';
 import { shouldDiscardPredicted } from './should-discard-predicted.js';
@@ -83,12 +89,17 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	#resumedPending: ExURL[] = [];
 	/** URLs already scraped in a previous session, used to populate the `seen` set in {@link #runDeal}. */
 	#resumedScraped: string[] = [];
-
 	/** Checker for robots.txt compliance. */
 	readonly #robotsChecker: RobotsChecker;
-
 	/** Maps hostnames to their scope URLs. Defines the crawl boundary for internal/external classification. */
 	readonly #scope = new Map<string /* hostname */, ExURL[]>();
+	/**
+	 * Protocol-agnostic keys of redirect destinations already rendered (and stored)
+	 * during this crawl. When many URLs redirect to one destination, only the first
+	 * renders it; the rest record the redirect edge and skip the browser (#73).
+	 * Keyed by {@link redirectDestKey}. Reset at the start of {@link #runDeal}.
+	 */
+	readonly #scrapedDestinations = new Set<string>();
 
 	/**
 	 * The AbortSignal associated with this crawler's AbortController.
@@ -586,6 +597,9 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			seen.add(protocolAgnosticKey(url));
 		}
 
+		// Redirect-destination dedup is per-crawl; clear any state from a prior run.
+		this.#scrapedDestinations.clear();
+
 		// external URL の追跡（target は deal の total/done から導出）
 		const externalUrls = new Set<string>();
 		const externalDoneUrls = new Set<string>();
@@ -700,6 +714,30 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 							_index,
 							markBrowserScrape,
 						);
+
+						// Redirect convergence (#73): the destination was already
+						// rendered during this crawl, so only the redirect edge is
+						// recorded and the browser was never launched. Mark the URL
+						// done and emit `redirect` (routed to `Archive.setRedirect`,
+						// which writes the edge without touching the destination's
+						// content). This URL does not count toward pagesScraped.
+						if (result.type === 'redirect-edge') {
+							// Note: a predicted (speculative) URL that reaches here genuinely
+							// redirects (the server returned 3xx), so it is a real URL — we
+							// record its edge rather than discard it. This matches the render
+							// path, where the first predicted source to a destination renders
+							// it and is recorded as a redirect source the same way; only 404 /
+							// error predicted URLs are dropped (by `shouldDiscardPredicted`).
+							this.#linkList.done(
+								url,
+								this.#scope,
+								{ page: result.pageData },
+								this.#options,
+							);
+							void this.emit('redirect', { result: result.pageData });
+							log(c.dim('Redirect (dest already scraped)'));
+							return;
+						}
 
 						// Discard predicted URLs that failed (404, error, etc.)
 						if (isPredicted && shouldDiscardPredicted(result)) {
@@ -823,7 +861,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		metadataOnly: boolean,
 		laneIndex: number,
 		markBrowserScrape: () => void,
-	): Promise<ScrapeResult> {
+	): Promise<ScrapeOutcome> {
 		const isExternal = findScopeEntry(url, this.#scope, this.#options) === null;
 
 		// Non-HTTP protocols (mailto:, tel:, etc.) — let the scraper handle early return
@@ -888,6 +926,29 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			};
 		}
 
+		// Redirect convergence (#73): `finalKey` is the destination this URL lands
+		// on after following its redirect chain (or the URL itself when it does not
+		// redirect). When that destination has already been rendered and stored
+		// during this crawl, do NOT process this URL further — record the redirect
+		// edge only and skip everything below, regardless of content type. This is
+		// the root fix for the many-to-one redirect duplication (#70): every source
+		// URL that 301s to one destination otherwise re-renders/re-stores it. The
+		// check sits ABOVE the metadata-only and non-HTML branches on purpose — both
+		// route their HEAD/title result through `updatePage`, which would funnel a
+		// content-less result into `#insertPage` and overwrite the already-rendered
+		// destination's title / meta / isExternal. The edge-only path leaves the
+		// destination row intact.
+		//
+		// `finalKey` is also claimed for destinations reached directly (no redirect;
+		// see the claim after a successful render below), so a destination that is
+		// both linked directly and arrived at via a redirect is rendered by whichever
+		// path wins the race, not both.
+		const finalKey = redirectDestKey(url, headCheckResult.redirectPaths);
+		if (this.#scrapedDestinations.has(finalKey)) {
+			crawlerLog('Redirect dest already rendered, edge only: %s', url.href);
+			return { type: 'redirect-edge', pageData: headCheckResult };
+		}
+
 		// Title-only mode — extract <title> via partial GET for HTML, skip browser
 		if (metadataOnly) {
 			if (
@@ -947,6 +1008,27 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		);
 		if (browserResult.type === 'success') {
 			markBrowserScrape();
+			// Claim the destination that was ACTUALLY rendered, keyed off the
+			// browser's own redirect resolution rather than the HEAD pre-flight's
+			// guess (`finalKey`). The browser is authoritative for what got stored;
+			// if HEAD and the browser disagree on the final URL (method-conditional
+			// / JS / meta-refresh redirects), keying the claim off the HEAD guess
+			// would route a sibling source to an edge pointing at a never-rendered
+			// phantom row. By claiming the rendered URL, a divergent sibling simply
+			// re-renders (dedup misses) instead — correct, just less optimal. In the
+			// common case HEAD and the browser agree, so the keys are identical.
+			//
+			// Claimed only after a successful render, so a failed render leaves the
+			// destination unclaimed and a later source retries it. Concurrent
+			// in-flight sources to the same destination (bounded by the concurrency
+			// limit) may still each render before any claim lands; the storage-layer
+			// replace in `updatePage` (#70) keeps the resulting anchors / images
+			// correct (sub-resources may briefly duplicate, far below the pre-#73
+			// once-per-source blow-up).
+			const renderedKey = browserResult.pageData
+				? redirectDestKey(url, browserResult.pageData.redirectPaths)
+				: finalKey;
+			this.#scrapedDestinations.add(renderedKey);
 		}
 		return browserResult;
 	}

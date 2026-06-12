@@ -107,12 +107,19 @@ async function _fetchHead(
 ) {
 	return new Promise<PageData>((resolve, reject) => {
 		const hostHeader = url.port ? `${url.hostname}:${url.port}` : url.hostname;
-		const request: RequestOptions = {
+		// `trackRedirects` makes follow-redirects populate `res.redirects` with the
+		// chain of followed URLs. Without it that array stays empty and the
+		// pre-flight cannot tell where a URL lands — required for the redirect
+		// chain in `redirectPaths` and for the #73 convergence dedup, which decides
+		// whether a redirect destination was already rendered *before* launching
+		// the browser.
+		const request: RequestOptions & { trackRedirects: boolean } = {
 			protocol: url.protocol,
 			hostname: url.hostname,
 			port: url.port || undefined,
 			path: url.pathname,
 			method,
+			trackRedirects: true,
 			headers: {
 				host: hostHeader,
 				...(userAgent ? { 'User-Agent': userAgent } : {}),
@@ -141,7 +148,17 @@ async function _fetchHead(
 			let settled = false;
 
 			const buildPageData = (title: string): PageData => {
-				const redirectPaths = res.redirects.map((r) => r.url);
+				// `res.redirects` (populated by trackRedirects) ALWAYS starts with the
+				// originally requested URL, then each followed hop. We drop that first
+				// entry so `redirectPaths` keeps its established contract: empty when the
+				// URL did not redirect, and `[...intermediate, finalDest]` when it did
+				// (the original URL is NOT included — callers like `resolveRedirectChain`
+				// and `updatePage` re-add it). Keeping the original here would (a) make
+				// `redirectPaths` non-empty for every page, so a direct page looks like a
+				// self-redirect, and (b) leak the query-stripped request-target (the HEAD
+				// request uses `url.pathname`), collapsing query-distinguished pages.
+				// Redirect *targets* come from Location headers and keep their query.
+				const redirectPaths = res.redirects.map((r) => r.url).slice(1);
 				const _contentLength = Number.parseInt(res.headers['content-length'] || '');
 				const contentLength = Number.isFinite(_contentLength) ? _contentLength : null;
 				return {

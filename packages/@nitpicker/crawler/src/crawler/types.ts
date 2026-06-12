@@ -1,6 +1,25 @@
 import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
-import type { ChangePhaseEvent } from '@d-zero/beholder';
+import type { ChangePhaseEvent, ScrapeResult } from '@d-zero/beholder';
 import type { ParseURLOptions } from '@d-zero/shared/parse-url';
+
+/**
+ * Result of resolving a URL that redirects to a destination already rendered
+ * during this crawl (#73). The crawler records the redirect edge only and skips
+ * launching the browser, so the destination is never re-rendered.
+ */
+export interface RedirectEdgeResult {
+	/** Discriminant marking this as a redirect-edge-only outcome. */
+	type: 'redirect-edge';
+	/** HEAD-resolved page data carrying the redirect chain (source → destination). */
+	pageData: PageData;
+}
+
+/**
+ * The outcome of {@link Crawler.#scrapePage}: either a normal scrape result from
+ * the browser/HEAD pipeline, or a {@link RedirectEdgeResult} when the URL's
+ * redirect destination was already rendered and only the edge needs recording.
+ */
+export type ScrapeOutcome = ScrapeResult | RedirectEdgeResult;
 
 /**
  * Configuration options that control crawler behavior.
@@ -206,5 +225,17 @@ export interface CrawlerEventTypes {
 		message: string;
 		/** Whether the URL is external to the crawl scope. */
 		isExternal: boolean;
+	};
+
+	/**
+	 * Emitted when a URL redirects to a destination that has already been
+	 * rendered during this crawl, so only the redirect edge is recorded and the
+	 * destination is not re-rendered (#73). The orchestrator persists this via
+	 * `Archive.setRedirect`, which writes the edge without overwriting the
+	 * destination's content.
+	 */
+	redirect: {
+		/** HEAD-resolved page data carrying the redirect chain (source → destination). */
+		result: PageData;
 	};
 }

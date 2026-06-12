@@ -36,6 +36,7 @@ import { limitedPageIds } from './limited-page-ids.js';
 import { migrateInfoRoots } from './migrate-info-roots.js';
 import { migratePageErrors } from './migrate-page-errors.js';
 import { redirectTable } from './redirect-table.js';
+import { resolveRedirectChain } from './resolve-redirect-chain.js';
 
 const retrySetting: RetryDecoratorOptions = {
 	interval: 300,
@@ -667,6 +668,67 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
+	 * Records a redirect edge (source → destination) **without** re-storing the
+	 * destination's content.
+	 *
+	 * The crawler renders a many-to-one redirect destination exactly once. For
+	 * every subsequent source URL that redirects to that already-rendered
+	 * destination, it calls this instead of {@link updatePage} (#73). Routing a
+	 * content-less HEAD result through `updatePage` would funnel it into
+	 * `#insertPage` and overwrite the destination's good title / meta with empty
+	 * values, so the dedicated edge-only path is required.
+	 *
+	 * The destination row is resolved (created on demand if a concurrent in-flight
+	 * render has not committed it yet) so the edge always points at a valid id;
+	 * the single render fills in the destination's content under that same id.
+	 * The destination's existing anchors / images are never touched here.
+	 * @param page - HEAD-resolved page data carrying the redirect chain. Its
+	 *   `anchorList` / `imageList` are ignored (a redirect source owns no content).
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async recordRedirect(page: PageData): Promise<void> {
+		const { destUrl, sources } = resolveRedirectChain(
+			page.url.withoutHashAndAuth,
+			page.redirectPaths,
+		);
+
+		// No redirect chain (the URL is itself the already-rendered destination,
+		// reached both directly and via a redirect) → there is no edge to write.
+		// Returning here avoids opening a transaction and, crucially, avoids
+		// `#getIdByUrl` inserting a content-less placeholder row for a destination
+		// that may not have been written yet.
+		if (sources.length === 0) {
+			return;
+		}
+
+		const destUrlObject = parseUrl(destUrl);
+
+		if (!destUrlObject) {
+			// A malformed redirect target should not abort the whole crawl (this
+			// runs inside the WriteQueue, whose rejection aborts the run). Recording
+			// a single redirect edge is best-effort, so skip it and move on. Unlike
+			// `updatePage`, there is no page content at stake here.
+			dbLog('recordRedirect: skip malformed destination URL: %s', destUrl);
+			return;
+		}
+
+		await this.#instance.transaction(async (trx) => {
+			const destId = await this.#getIdByUrl(
+				destUrlObject.withoutHashAndAuth,
+				undefined,
+				trx,
+			);
+			await this.#linkRedirectSources(
+				trx,
+				sources,
+				destId,
+				destUrlObject.withoutHashAndAuth,
+				page.isExternal,
+			);
+		});
+	}
+	/**
 	 * Promote previously-external pages whose URL falls under any of the new scope
 	 * entries back to a "needs scraping" state so that the next crawl picks them up
 	 * as full internal pages.
@@ -876,12 +938,10 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		html?: string | undefined;
 		pageId: number;
 	}> {
-		let destUrl = page.url.withoutHashAndAuth;
-		const redirectPaths = [...page.redirectPaths];
-		if (redirectPaths.length > 0) {
-			destUrl = redirectPaths.pop()!;
-			redirectPaths.unshift(page.url.withoutHashAndAuth);
-		}
+		const { destUrl, sources } = resolveRedirectChain(
+			page.url.withoutHashAndAuth,
+			page.redirectPaths,
+		);
 
 		const destUrlObject = parseUrl(destUrl);
 
@@ -899,29 +959,13 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				trx,
 			);
 
-			const destUrlNormalized = destUrlObject.withoutHashAndAuth;
-			for (const redirect of redirectPaths) {
-				if (redirect === destUrlNormalized) {
-					dbLog('Skip self-redirect: %s', redirect);
-					continue;
-				}
-				dbLog('Set redirected url: %s -> %s', redirect, destUrl);
-				const redirectId = await this.#getIdByUrl(redirect, undefined, trx);
-				await trx<DB_Page>('pages')
-					.where('id', redirectId)
-					.update({
-						scraped: 1,
-						redirectDestId: pageId,
-						isExternal: page.isExternal ? 1 : 0,
-					});
-				// A page that used to be scraped as content can later turn into a
-				// redirect source. It owns no content anymore, so drop any anchors /
-				// images it captured in its former life — otherwise they linger and
-				// leak into referrer / incoming-link reads (which do not filter out
-				// redirect sources).
-				await trx('anchors').where('pageId', redirectId).delete();
-				await trx('images').where('pageId', redirectId).delete();
-			}
+			await this.#linkRedirectSources(
+				trx,
+				sources,
+				pageId,
+				destUrlObject.withoutHashAndAuth,
+				page.isExternal,
+			);
 			let snapshot: { html?: string; pageId: number } = { pageId };
 			if (isTarget && snapshotDir) {
 				snapshot = await this.#updateSnapshotPath(pageId, snapshotDir, trx);
@@ -1019,7 +1063,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}
 		return insertedId;
 	}
-
 	/**
 	 * Initializes the database schema if tables do not exist, then runs lightweight
 	 * migrations that bring older archives up to the current schema.
@@ -1038,7 +1081,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		await migrateInfoRoots(this.#instance);
 		await migratePageErrors(this.#instance);
 	}
-
 	/**
 	 * Upserts page data into the `pages` table (inserts if new, updates if existing).
 	 * @param page
@@ -1078,6 +1120,53 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				isSkipped: page.isSkipped,
 			});
 		return pageId;
+	}
+	/**
+	 * Points each redirect-source URL at the destination page, marking it scraped
+	 * and clearing any content it owned in a former life.
+	 *
+	 * Shared by {@link updatePage} (which also renders and stores the destination)
+	 * and {@link recordRedirect} (which only records the edge for a destination
+	 * rendered elsewhere). Self-redirects (source equal to the destination) are
+	 * skipped so a page is never marked as redirecting to itself — that would
+	 * exclude it from reports via the `whereNull('redirectDestId')` filter.
+	 * @param trx - The active transaction.
+	 * @param sources - Redirect-source URLs (normalised): the original URL plus
+	 *   any intermediate hops. Empty when the page was not redirected.
+	 * @param destId - Database id of the redirect destination page.
+	 * @param destUrlNormalized - Normalised destination URL, used to detect and
+	 *   skip self-redirects.
+	 * @param isExternal - Whether the sources are external to the crawl scope.
+	 */
+	async #linkRedirectSources(
+		trx: Knex.Transaction,
+		sources: readonly string[],
+		destId: number,
+		destUrlNormalized: string,
+		isExternal: boolean,
+	): Promise<void> {
+		for (const redirect of sources) {
+			if (redirect === destUrlNormalized) {
+				dbLog('Skip self-redirect: %s', redirect);
+				continue;
+			}
+			dbLog('Set redirected url: %s -> id:%d', redirect, destId);
+			const redirectId = await this.#getIdByUrl(redirect, undefined, trx);
+			await trx<DB_Page>('pages')
+				.where('id', redirectId)
+				.update({
+					scraped: 1,
+					redirectDestId: destId,
+					isExternal: isExternal ? 1 : 0,
+				});
+			// A page that used to be scraped as content can later turn into a
+			// redirect source. It owns no content anymore, so drop any anchors /
+			// images it captured in its former life — otherwise they linger and
+			// leak into referrer / incoming-link reads (which do not filter out
+			// redirect sources).
+			await trx('anchors').where('pageId', redirectId).delete();
+			await trx('images').where('pageId', redirectId).delete();
+		}
 	}
 
 	/**

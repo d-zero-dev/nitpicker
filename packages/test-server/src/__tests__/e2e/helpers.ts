@@ -25,11 +25,15 @@ export interface CrawlResult {
  * Runs a crawl session against the given URLs and returns an accessor to the archive.
  * @param urls - One or more URLs to crawl.
  * @param options - Optional overrides merged into the default crawl configuration.
+ * @param tap - Optional callback receiving the orchestrator before crawling
+ *   begins, so a test can subscribe to events (e.g. `redirect`) emitted during
+ *   the crawl. The default error logger is always attached regardless.
  * @returns A {@link CrawlResult} containing the archive accessor and temp paths.
  */
 export async function crawl(
 	urls: string[],
 	options?: Record<string, unknown>,
+	tap?: (orchestrator: CrawlerOrchestrator) => void,
 ): Promise<CrawlResult> {
 	const cwd = path.join(os.tmpdir(), `nitpicker-e2e-${crypto.randomUUID()}`);
 	await fs.mkdir(cwd, { recursive: true });
@@ -47,6 +51,7 @@ export async function crawl(
 			q.on('error', (e) => {
 				console.error('[nitpicker:e2e] error:', e); // eslint-disable-line no-console
 			});
+			tap?.(q);
 		},
 	);
 

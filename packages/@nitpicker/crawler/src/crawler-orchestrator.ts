@@ -246,6 +246,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					.catch((error) => reject(error));
 			});
 
+			this.#crawler.on('redirect', ({ result }) => {
+				writeQueue
+					.enqueue(() => this.#archive.setRedirect(result))
+					.catch((error) => reject(error));
+				void this.emit('redirect', { result });
+			});
+
 			this.#crawler.on('response', ({ resource }) => {
 				writeQueue
 					.enqueue(() => this.#archive.setResources(resource))

@@ -241,6 +241,19 @@ export default class Archive extends ArchiveAccessor {
 		return pageId;
 	}
 	/**
+	 * Records a redirect edge without re-storing the destination's content.
+	 *
+	 * The crawler calls this (instead of {@link setPage}) when a URL redirects to
+	 * a destination that has already been rendered (#73): only the source →
+	 * destination edge is written, leaving the destination's stored title / meta /
+	 * anchors / images untouched.
+	 * @param pageInfo - The HEAD-resolved page data carrying the redirect chain.
+	 */
+	async setRedirect(pageInfo: PageData) {
+		dbLog('Set redirect: %s', pageInfo.url.href);
+		await this.#db.recordRedirect(pageInfo);
+	}
+	/**
 	 * Stores a sub-resource (CSS, JS, image, etc.) in the archive database.
 	 * @param resource - The resource data to store.
 	 */
