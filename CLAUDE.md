@@ -78,9 +78,10 @@ npx @nitpicker/cli -v | --version                       # `@nitpicker/cli` の�
 CrawlerOrchestrator.crawling(urls, options)
   → Archive.create()（SQLite DB を tmpDir に作成）
   → Crawler → deal()（@d-zero/dealer で並列制御）
-    → 各 URL: puppeteer.launch() → Scraper.scrapeStart(page, ...)
+    → 各 URL: HEAD プリフライト（fetchDestination, trackRedirects で最終到達先を解決）→ puppeteer.launch() → Scraper.scrapeStart(page, ...)
       → ScrapeResult を戻り値で返却
-    → LinkList.done() + WriteQueue 経由で Archive にページデータ保存
+      → リダイレクト先が既に描画済み（#scrapedDestinations にキャッシュ）なら描画せず redirect-edge を返す（#73 多対一リダイレクトの再レンダリング抑止）
+    → LinkList.done() + WriteQueue 経由で Archive にページデータ保存（redirect-edge は setRedirect で辺だけ記録）
     → 発見した新 URL を動的にキューに追加（HTML らしい URL は unshift で先頭へ優先、それ以外は push で末尾へ。判定は URL の拡張子ヒューリスティック isLikelyHtmlUrl）
   → crawlEnd 時に WriteQueue.drain() で未完了の書き込みを待機
   → CrawlerOrchestrator.write()（tmpDir を .nitpicker tar に圧縮）

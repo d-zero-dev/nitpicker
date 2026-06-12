@@ -640,9 +640,46 @@ updatePage(pageData) の処理:
 
 **なぜ tuple 重複削除 / `UNIQUE` 制約を使わないか**: `(pageId, hrefId, hash, textContent)` は一意ではない。同じリンクが header と footer の両方にある等、1 ページ内に同一 tuple が正当に複数存在しうる。行単位では「正当な重複」と「再保存による冗長コピー」を区別できないため、行の dedup は不可。スクレイプ 1 回分を丸ごと置き換えることで、正当な重複を保ったまま冗長コピーを防ぐ。
 
-**既知の制約**: 本修正より前にクロールされたアーカイブは、リダイレクト先ページの anchors / images が「リダイレクト元の数 + 1」倍に膨らんでいることがある（`pages` テーブルは重複しない。発リンク数・被リンク数の**表示**にのみ影響）。in-place の行削除では直せない（正当な重複まで消えるため）。再クロールで解消する。「宛先を毎回再レンダリングしない」根本対応は別途検討。
+**既知の制約**: 本修正より前にクロールされたアーカイブは、リダイレクト先ページの anchors / images が「リダイレクト元の数 + 1」倍に膨らんでいることがある（`pages` テーブルは重複しない。発リンク数・被リンク数の**表示**にのみ影響）。in-place の行削除では直せない（正当な重複まで消えるため）。再クロールで解消する。
 
-> 関連: GitHub issue #70（置き換え修正・実装）/ #73（クローラ層の根本対応・無駄な再レンダリング削減）
+> 関連: GitHub issue #70（置き換え修正・storage 層の対症療法）/ #73（クローラ層の根本対応・下記）
+
+### リダイレクト先の再レンダリング抑止（#73）
+
+上記の置き換えは storage 層の対症療法。根本原因は **クローラがリダイレクト元 URL ごとに宛先 D をフルレンダリングしていた**こと（多対一集約で D が「元 URL 数 + 1」回描画される）。#73 でこれを抑止する。
+
+**フロー:**
+
+1. **HEAD プリフライトで最終到達先を解決する**。`fetch-destination.ts` の HEAD リクエストに `trackRedirects: true` を渡し、follow-redirects が `res.redirects` を埋めるようにした。これで puppeteer を起動する**前**に最終到達先 D が分かる。
+2. **`#scrapePage`（`crawler.ts`）が描画の前に判定する**。最終到達先のキー（`redirectDestKey` = `protocolAgnosticKey`(末尾ホップ or リダイレクト無しなら URL 自身)）が `Crawler#scrapedDestinations` に既にあれば、ブラウザを起動せず `type: 'redirect-edge'` を返す。この CHECK は **metadata-only / 非 HTML ブランチより上**に置く（後述）。
+3. worker が `redirect` イベントを発火 → orchestrator が `Archive.setRedirect`（= `Database.recordRedirect`）でリダイレクト辺だけを記録（宛先の本文は触らない）。
+
+**`redirectPaths` の契約（最重要・破壊厳禁）:**
+
+`redirectPaths` は「リダイレクト無し＝空配列／リダイレクト有り＝`[...中間ホップ, 最終D]`（**元 URL は含めない**）」という契約。HEAD 経路（`fetch-destination.ts`）と browser 経路（`@d-zero/beholder` のスクレイプ結果）の **両方が同じ形状**を返す前提で `resolveRedirectChain` / `updatePage` / `redirectDestKey` が動く。
+
+- follow-redirects の `trackRedirects` は `res.redirects` の **先頭に必ず元の要求 URL** を積む（[follow-redirects README](https://github.com/follow-redirects/follow-redirects#trackredirects) 参照）。さらに HEAD は `path: url.pathname` で送るため、その先頭要素は **クエリが落ちている**。そのまま使うと (a) リダイレクト無しのページまで `redirectPaths` が非空になり自己リダイレクト扱い、(b) `?id=1` と `?id=2` のようなクエリ違いの別ページが `redirectDestKey` で同一視され **2 件目が描画されず消える**。
+- そこで `fetch-destination.ts` は **`res.redirects.map(r => r.url).slice(1)`** で先頭（クエリ落ちの元 URL）を捨て、上記契約に戻す。リダイレクト**先**は Location ヘッダ由来なのでクエリは保持される。
+- **この `slice(1)` を外す／変えると、クエリ別ページ消失バグが即再発する。** ガード: `test-server` の `/query-distinct/` E2E（`?kind=alpha` と `?kind=beta` が両方記録されること）。検索キーワード: 「follow-redirects trackRedirects redirects[0]」「redirectPaths slice」。
+
+**CHECK を metadata-only / 非 HTML ブランチより上に置く理由（#73 #2）:**
+
+metadata-only（title のみ）と非 HTML は `headCheckResult` を `updatePage` に流す。`updatePage` は宛先行を `#insertPage` で UPDATE するため、もし CHECK がこれらの下にあると、**既に描画済みの D を、リダイレクト元の薄い HEAD/title 結果（`isExternal` / `isTarget` / 空 meta）で上書き**してしまう（例: サイト内ページへ 301 する外部リンク）。CHECK を上に置けば edge-only に振り分けられ、D は無傷。ガード: `/clobber/` E2E。
+
+**claim は「実際に描画した宛先」で行う（#73 #5）:**
+
+`#scrapedDestinations.add(...)` のキーは HEAD の推測ではなく **browser の描画結果の `redirectPaths`** から算出する（`renderedKey`）。HEAD と GET で最終到達先が食い違う場合（method 条件付き / JS / meta-refresh リダイレクト）に、HEAD 推測キーで claim すると、後続ソースが **一度も描画されない幽霊行**への辺になってしまうため。claim は描画成功後のみ。
+
+- **既知の制約**: HEAD と GET が食い違う稀なケースでは重複排除が**空振り**して再描画するだけ（データは正しい）。幽霊行は作らない。ガード: `/diverge/` E2E。
+- **並行**: 同一 D への in-flight ソース（並列度が上限）は両方描画しうる。anchors/images は #70 の置き換えで正しく収束。sub-resource は一時的に重複しうるが、#73 前の「ソース数ぶん描画」より遥かに少ない。
+
+**辺記録は本文を壊さない:**
+
+`recordRedirect` は `updatePage` と `#linkRedirectSources` / `resolveRedirectChain` を共有するが、`#insertPage`（宛先行の本文 UPDATE）を**通さない**。空チェーン（sources 空＝実際にはリダイレクトしていない）と解析不能な宛先 URL は、辺もスタブ行も作らず早期 return する（後者は throw すると WriteQueue 経由でクロール全体が abort するため）。ガード: `database.spec.ts` の `recordRedirect` 群。
+
+> 直接リンクとリダイレクトの両方で到達される宛先も同じキーで claim されるため、どちらの経路で先に到達しても D は 1 回だけ描画される。
+>
+> **予測ページネーション**: 投機的に生成された URL がリダイレクトした場合は実在 URL（サーバが 3xx 応答）なので辺を記録する（描画経路と同じ扱い。404/エラーの投機 URL だけ `shouldDiscardPredicted` で破棄）。
 
 ### getPages() vs getPagesWithRefs()
 
