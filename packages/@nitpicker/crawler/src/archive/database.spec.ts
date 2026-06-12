@@ -547,6 +547,119 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			await remove(dbPath);
 		}
 	});
+
+	it('ページ内に正当な同一リンク（ヘッダー/フッター重複）がある場合、再スクレイプでも件数を保持する', async () => {
+		// 実アーカイブの「重複」の大半は、全ページのヘッダー/フッターに同じリンクが
+		// 並ぶ正当なページ内重複。delete-then-insert は anchorList をそのまま入れ直す
+		// ので、この正当な重複を潰さず（tuple-dedup しない）、かつ再スクレイプで増やさない。
+		const dbPath = path.resolve(workingDir, 'rescrape-intrapage-dup.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const pageUrl = 'http://localhost/intra-dup-source';
+		/**
+		 * Builds page data where the same link appears twice (header + footer).
+		 * @returns Page data accepted by `Database.updatePage`.
+		 */
+		const makeData = () => ({
+			url: parseUrl(pageUrl)!,
+			redirectPaths: [] as string[],
+			isExternal: false,
+			status: 200,
+			statusText: 'OK',
+			contentLength: 100,
+			contentType: 'text/html',
+			responseHeaders: {},
+			meta: { title: 'Intra-page dup' },
+			anchorList: [
+				{
+					href: parseUrl('http://localhost/ir')!,
+					textContent: '株主・投資家',
+					isExternal: false,
+				},
+				// ヘッダーとフッターで同一の href + textContent（正当な重複）。
+				{
+					href: parseUrl('http://localhost/ir')!,
+					textContent: '株主・投資家',
+					isExternal: false,
+				},
+				{
+					href: parseUrl('http://localhost/other')!,
+					textContent: 'その他',
+					isExternal: false,
+				},
+			],
+			imageList: [],
+			html: '<html></html>',
+			isSkipped: false,
+		});
+
+		try {
+			await db.updatePage(makeData(), workingDir, true);
+			await db.updatePage(makeData(), workingDir, true);
+
+			const knex = db.getKnex();
+			const [page] = await knex.from('pages').select('id').where('url', pageUrl);
+			const [row] = await knex.from('anchors').where('pageId', page.id).count({ c: '*' });
+
+			// 正当なページ内重複(2) + 別リンク(1) = 3 を保持。
+			// tuple-dedup なら 2 に減り、accumulation バグなら 6 に増える。
+			expect(Number(row.c)).toBe(3);
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
+	it('複数の異なる URL が同じ宛先にリダイレクトしても宛先アンカーは1セットに収束する（#70 の実機構）', async () => {
+		// 実アーカイブの真の重複バグ: N 個の旧 URL が同じ宛先 D に 301 し、クローラが
+		// ソースごとに D を取得して D のアンカーを N 回保存していた。delete-then-insert
+		// で D のアンカーは常に最新 1 セットに収束する。
+		const dbPath = path.resolve(workingDir, 'rescrape-redirect-converge.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const dest = 'http://localhost/archive-index';
+		/**
+		 * Builds page data for a source URL that 301-redirects to the shared dest.
+		 * @param sourceUrl - The redirecting source URL.
+		 * @returns Page data accepted by `Database.updatePage`.
+		 */
+		const makeData = (sourceUrl: string) => ({
+			url: parseUrl(sourceUrl)!,
+			redirectPaths: [dest],
+			isExternal: false,
+			status: 200,
+			statusText: 'OK',
+			contentLength: 100,
+			contentType: 'text/html',
+			responseHeaders: {},
+			meta: { title: 'Archive index' },
+			anchorList: [
+				{ href: parseUrl('http://localhost/x')!, textContent: 'X', isExternal: false },
+				{ href: parseUrl('http://localhost/y')!, textContent: 'Y', isExternal: false },
+			],
+			imageList: [],
+			html: '<html></html>',
+			isSkipped: false,
+		});
+
+		try {
+			// 3 個の異なる旧 URL がすべて D にリダイレクト。
+			await db.updatePage(makeData('http://localhost/old-1'), workingDir, true);
+			await db.updatePage(makeData('http://localhost/old-2'), workingDir, true);
+			await db.updatePage(makeData('http://localhost/old-3'), workingDir, true);
+
+			const knex = db.getKnex();
+			const [destPage] = await knex.from('pages').select('id').where('url', dest);
+			const [row] = await knex
+				.from('anchors')
+				.where('pageId', destPage.id)
+				.count({ c: '*' });
+
+			// 3 回集約しても D のアンカーは 1 セット(2)。修正前は 6 に膨張していた。
+			expect(Number(row.c)).toBe(2);
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
 });
 
 describe('Config', () => {
