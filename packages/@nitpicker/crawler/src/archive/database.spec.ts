@@ -32,7 +32,7 @@ describe('Pages', () => {
 				status: 200,
 				statusText: 'OK',
 				contentLength: 1000,
-				contentType: 'html/text',
+				contentType: 'text/html',
 				responseHeaders: {},
 				meta: {
 					title: 'LOCAL_SERVER',
@@ -177,7 +177,7 @@ describe('Pages', () => {
 		expect(count).toEqual(14);
 	});
 
-	it('getScrapedHtmlPageCount は isTarget=1 かつ scraped=1 のページのみカウントする', async () => {
+	it('getScrapedHtmlPageCount は isTarget=1 かつ scraped=1 かつ text/html のページのみカウントする', async () => {
 		const dbPath = path.resolve(workingDir, 'html-count-test.sqlite');
 		const db = await Database.connect({
 			workingDir,
@@ -237,11 +237,149 @@ describe('Pages', () => {
 				.getKnex()
 				.from('pages')
 				.insert({ url: 'http://localhost/pending-asset', scraped: 0, isTarget: 0 });
+			// scraped=1, isTarget=1, だが非HTML（HEAD で捕まえた in-scope な PDF は
+			// isTarget=1 のまま）。isTarget は in-scope の意味なので、ページ数は
+			// content-type で保証する。content-type ガードが無いと 2 になる。
+			await db.getKnex().from('pages').insert({
+				url: 'http://localhost/doc.pdf',
+				scraped: 1,
+				isTarget: 1,
+				contentType: 'application/pdf',
+			});
 
 			const count = await db.getScrapedHtmlPageCount();
 
 			expect(count).toBe(1);
 		} finally {
+			await remove(dbPath);
+		}
+	});
+});
+
+describe('snapshot 付与: 非HTML / 空html にスナップショットを作らない（#72）', () => {
+	/**
+	 * Builds page data for the snapshot-gating tests.
+	 * @param url - The page URL.
+	 * @param contentType - The response content type.
+	 * @param html - The rendered HTML string (empty for non-HTML / degraded scrapes).
+	 * @returns Page data accepted by `Database.updatePage`.
+	 */
+	const makePage = (url: string, contentType: string, html: string) => ({
+		url: parseUrl(url)!,
+		redirectPaths: [] as string[],
+		isExternal: false,
+		status: 200,
+		statusText: 'OK',
+		contentLength: 100,
+		contentType,
+		responseHeaders: {},
+		meta: { title: '' },
+		anchorList: [],
+		imageList: [],
+		html,
+		isSkipped: false,
+	});
+
+	it('非HTML（application/pdf, html 空）は isTarget でも pages.html が null', async () => {
+		const dbPath = path.resolve(workingDir, 'snapshot-pdf.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const url = 'http://localhost/doc.pdf';
+		try {
+			// PDF は internal なので isTarget=true だが、本文 HTML が無いので
+			// スナップショットを作ってはならない（0 バイトファイル量産バグ #72）。
+			await db.updatePage(makePage(url, 'application/pdf', ''), workingDir, true);
+			const [page] = await db.getKnex().from('pages').select('html').where('url', url);
+			expect(page.html).toBeNull();
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
+	it('HTML（text/html, html 非空）は pages.html にスナップショットパスが設定される', async () => {
+		const dbPath = path.resolve(workingDir, 'snapshot-html.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const url = 'http://localhost/page';
+		try {
+			await db.updatePage(makePage(url, 'text/html', '<html></html>'), workingDir, true);
+			const [page] = await db.getKnex().from('pages').select('html').where('url', url);
+			expect(page.html).not.toBeNull();
+			expect(page.html).toContain('.html');
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
+	it('劣化スクレイプ（text/html だが html 空）は pages.html が null', async () => {
+		const dbPath = path.resolve(workingDir, 'snapshot-degraded.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const url = 'http://localhost/degraded';
+		try {
+			await db.updatePage(makePage(url, 'text/html', ''), workingDir, true);
+			const [page] = await db.getKnex().from('pages').select('html').where('url', url);
+			expect(page.html).toBeNull();
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
+	it('snapshot は isTarget ではなく html の有無で決まる（isTarget=false でも html があれば付与）', async () => {
+		// #72 のゲートは isTarget を条件から外し、html 本文の有無だけで判定する。
+		// 実運用では html 非空のページは必ず isTarget=true だが、この不変条件は
+		// crawler 側に分散しているため、ここで「ゲートが isTarget に依存しない」ことを
+		// 明示的に固定する（誰かが isTarget を条件に戻したらこのテストが落ちる）。
+		const dbPath = path.resolve(workingDir, 'snapshot-non-target.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const url = 'http://localhost/non-target-html';
+		try {
+			await db.updatePage(makePage(url, 'text/html', '<html></html>'), workingDir, false);
+			const [page] = await db.getKnex().from('pages').select('html').where('url', url);
+			expect(page.html).not.toBeNull();
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
+	it('HTML→非HTML へ再スクレイプされたら古い pages.html（stale パス）をクリアする', async () => {
+		const dbPath = path.resolve(workingDir, 'snapshot-flip.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const url = 'http://localhost/flips';
+		try {
+			// 1) 最初は HTML としてスクレイプ → スナップショットパスが付く。
+			await db.updatePage(makePage(url, 'text/html', '<html></html>'), workingDir, true);
+			const [before] = await db.getKnex().from('pages').select('html').where('url', url);
+			expect(before.html).not.toBeNull();
+
+			// 2) 同 URL が PDF に差し替わって再スクレイプ（html 空・content-type 非HTML）。
+			// pages.html が古い HTML パスのまま残ると contentType と矛盾するのでクリアする。
+			await db.updatePage(makePage(url, 'application/pdf', ''), workingDir, true);
+			const [after] = await db.getKnex().from('pages').select('html').where('url', url);
+			expect(after.html).toBeNull();
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
+	it('HTML→劣化（text/html だが html 空）の再スクレイプでは直前のスナップショットを保持する', async () => {
+		const dbPath = path.resolve(workingDir, 'snapshot-degraded-keep.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const url = 'http://localhost/degrades';
+		try {
+			await db.updatePage(makePage(url, 'text/html', '<html></html>'), workingDir, true);
+			const [before] = await db.getKnex().from('pages').select('html').where('url', url);
+			expect(before.html).not.toBeNull();
+
+			// 劣化スクレイプ（content-type は text/html のまま、html だけ空）は
+			// 一時的な失敗と区別できないため、直前の良いスナップショットを据え置く。
+			await db.updatePage(makePage(url, 'text/html', ''), workingDir, true);
+			const [after] = await db.getKnex().from('pages').select('html').where('url', url);
+			expect(after.html).toBe(before.html);
+		} finally {
+			await db.destroy();
 			await remove(dbPath);
 		}
 	});
