@@ -512,6 +512,16 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		return opening;
 	}
 	/**
+	 * Reads one HTML file out of the loose snapshot directory. Returns the
+	 * file contents on success, `null` if the file is absent or unreadable.
+	 * @param snapshotDir - The loose `snapshot-html/` directory.
+	 * @param name - The file name to read (basename only).
+	 */
+	async #readSnapshotFile(snapshotDir: string, name: string): Promise<string | null> {
+		const html = await readText(path.resolve(snapshotDir, name)).catch((error) => error);
+		return typeof html === 'string' ? html : null;
+	}
+	/**
 	 * Actual close worker — invoked exactly once per accessor via
 	 * {@link close}'s shared promise. Races `db.destroy()` against the
 	 * caller-supplied timeout; on timeout we log and resolve so the
@@ -552,16 +562,5 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 				clearTimeout(timer);
 			}
 		}
-	}
-
-	/**
-	 * Reads one HTML file out of the loose snapshot directory. Returns the
-	 * file contents on success, `null` if the file is absent or unreadable.
-	 * @param snapshotDir - The loose `snapshot-html/` directory.
-	 * @param name - The file name to read (basename only).
-	 */
-	async #readSnapshotFile(snapshotDir: string, name: string): Promise<string | null> {
-		const html = await readText(path.resolve(snapshotDir, name)).catch((error) => error);
-		return typeof html === 'string' ? html : null;
 	}
 }

@@ -366,35 +366,6 @@ export default class Archive extends ArchiveAccessor {
 	static readonly SNAPSHOT_HTML_DIR = 'snapshot-html';
 	/** The filename of the SQLite database within the archive. */
 	static readonly SQLITE_DB_FILE_NAME = 'db.sqlite';
-	/**
-	 * Closes the archive. If the archive file does not yet exist on disk,
-	 * it writes the archive first. If the temporary directory still exists,
-	 * it is removed. The database connection is then closed via
-	 * {@link ArchiveAccessor.close} (the base class owns the SQLite handle),
-	 * and finally the archive's advisory lock is released.
-	 *
-	 * **Idempotent**: the first invocation captures the close promise;
-	 * subsequent invocations (signal handlers, parallel teardowns, retried
-	 * orchestrator paths) await the same promise instead of re-entering
-	 * the destructive prologue on a half-mutated state. If the first
-	 * close fails (e.g. ENOSPC during tar), the rejection propagates to
-	 * all awaiters and the archive stays latched closed — there is no
-	 * safe way to retry `write()` once `tmpDir` has been renamed.
-	 *
-	 * **Read-only consumers must not reach this override.** Anything that
-	 * obtains an archive view via {@link Archive.connect} receives an
-	 * {@link ArchiveAccessor} (not an `Archive`), so `close()` resolves to
-	 * the safe base implementation — no `write()`, no `remove()`, no lock
-	 * release — leaving the tmpDir intact for the live crawler.
-	 */
-	override async close(): Promise<void> {
-		if (this.#closeOnce) {
-			return this.#closeOnce;
-		}
-		this.#closeOnce = this.#runFullClose();
-		return this.#closeOnce;
-	}
-
 	/** The prefix used for temporary working directories during archive operations. */
 	static TMP_DIR_PREFIX = '._nitpicker-';
 	/**
@@ -567,6 +538,35 @@ export default class Archive extends ArchiveAccessor {
 		const archive = new Archive(filePath, tmpDir, db, releaseLock);
 		return archive;
 	}
+	/**
+	 * Closes the archive. If the archive file does not yet exist on disk,
+	 * it writes the archive first. If the temporary directory still exists,
+	 * it is removed. The database connection is then closed via
+	 * {@link ArchiveAccessor.close} (the base class owns the SQLite handle),
+	 * and finally the archive's advisory lock is released.
+	 *
+	 * **Idempotent**: the first invocation captures the close promise;
+	 * subsequent invocations (signal handlers, parallel teardowns, retried
+	 * orchestrator paths) await the same promise instead of re-entering
+	 * the destructive prologue on a half-mutated state. If the first
+	 * close fails (e.g. ENOSPC during tar), the rejection propagates to
+	 * all awaiters and the archive stays latched closed — there is no
+	 * safe way to retry `write()` once `tmpDir` has been renamed.
+	 *
+	 * **Read-only consumers must not reach this override.** Anything that
+	 * obtains an archive view via {@link Archive.connect} receives an
+	 * {@link ArchiveAccessor} (not an `Archive`), so `close()` resolves to
+	 * the safe base implementation — no `write()`, no `remove()`, no lock
+	 * release — leaving the tmpDir intact for the live crawler.
+	 */
+	override async close(): Promise<void> {
+		if (this.#closeOnce) {
+			return this.#closeOnce;
+		}
+		this.#closeOnce = this.#runFullClose();
+		return this.#closeOnce;
+	}
+
 	/**
 	 * Retrieves the crawl configuration stored in the archive database.
 	 * @returns The configuration object.

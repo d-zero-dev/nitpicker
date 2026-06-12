@@ -150,6 +150,46 @@ describe('setPage', () => {
 			await archive.close();
 		}
 	});
+
+	it('同一ページを 2 回 setPage しても発リンクが重複しない（実呼び出し元での re-scrape dedup）', async () => {
+		// Integration boundary: the de-dup logic lives in Database.updatePage, but
+		// the production caller is Archive.setPage (which also writes snapshots).
+		// This proves the wrapper does not bypass the replace-on-re-scrape contract.
+		const filePath = path.resolve(workingDir, 'setpage-rescrape-test.nitpicker');
+		const archive = await Archive.create({ filePath, cwd: workingDir });
+		const pageData = {
+			url: parseUrl('http://localhost/setpage-rescrape')!,
+			redirectPaths: [] as string[],
+			isExternal: false,
+			status: 200,
+			statusText: 'OK',
+			contentLength: 100,
+			contentType: 'text/html',
+			responseHeaders: {},
+			meta: { title: 'Re-scrape via setPage' },
+			anchorList: [
+				{ href: parseUrl('http://localhost/a')!, textContent: 'A', isExternal: false },
+				{ href: parseUrl('http://localhost/b')!, textContent: 'B', isExternal: false },
+			],
+			imageList: [] as never[],
+			html: '<html></html>',
+			isSkipped: false,
+			isTarget: true,
+		};
+
+		try {
+			const pageId = await archive.setPage(pageData);
+			// 同一ページを再スクレイプ。
+			await archive.setPage(pageData);
+
+			const anchors = await archive.getAnchorsOnPage(pageId);
+			expect(anchors).toHaveLength(2);
+		} finally {
+			// close() は .nitpicker を書き出して tmpDir を消す。生成物も後始末する。
+			await archive.close();
+			await remove(filePath).catch(() => {});
+		}
+	});
 });
 
 describe('write: スナップショットzipキャッシュの無効化', () => {

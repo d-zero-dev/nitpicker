@@ -39,6 +39,7 @@ jobs:
       - run: yarn test
 
   lint:
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -48,4 +49,12 @@ jobs:
           node-version: 24
           cache: yarn
       - run: yarn install --immutable
+      # Type-aware lint rules (e.g. @typescript-eslint/no-unnecessary-type-assertion)
+      # resolve cross-package types from each package's built lib/*.d.ts. Without the
+      # build artifact, `@nitpicker/*` types collapse to `any` and the rules misfire,
+      # so the lint job must consume the build output just like the test job does.
+      - uses: actions/download-artifact@v6
+        with:
+          name: build-output
+          path: packages/
       - run: yarn lint:check
