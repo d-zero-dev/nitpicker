@@ -247,6 +247,89 @@ describe('Pages', () => {
 	});
 });
 
+describe('re-scrape: 同一ページの再 updatePage', () => {
+	const rescrapeDbPath = path.resolve(workingDir, 'rescrape-dup.sqlite');
+
+	afterAll(async () => {
+		await remove(rescrapeDbPath);
+	});
+
+	it('2 回 updatePage しても anchors / images は最後の 1 セットだけ残る（重複INSERTしない）', async () => {
+		const db = await Database.connect({
+			workingDir,
+			filename: rescrapeDbPath,
+		});
+
+		const pageUrl = 'http://localhost/rescrape-source';
+		/**
+		 * Builds page data with two anchors and one image for the re-scrape page.
+		 * @returns Page data accepted by `Database.updatePage`.
+		 */
+		const makeData = () => ({
+			url: parseUrl(pageUrl)!,
+			redirectPaths: [] as string[],
+			isExternal: false,
+			status: 200,
+			statusText: 'OK',
+			contentLength: 100,
+			contentType: 'text/html',
+			responseHeaders: {},
+			meta: { title: 'Re-scrape source' },
+			anchorList: [
+				{
+					href: parseUrl('http://localhost/target-a')!,
+					textContent: 'A',
+					isExternal: false,
+				},
+				{
+					href: parseUrl('http://localhost/target-b')!,
+					textContent: 'B',
+					isExternal: false,
+				},
+			],
+			imageList: [
+				{
+					src: 'http://localhost/img.png',
+					currentSrc: 'http://localhost/img.png',
+					alt: 'img',
+					width: 10,
+					height: 10,
+					naturalWidth: 10,
+					naturalHeight: 10,
+					isLazy: false,
+					viewportWidth: 1200,
+					sourceCode: '<img src="img.png">',
+				},
+			],
+			html: '<html></html>',
+			isSkipped: false,
+		});
+
+		try {
+			// 1 回目（初回スクレイプ）と 2 回目（再スクレイプ — 同一 URL）。
+			await db.updatePage(makeData(), workingDir, true);
+			await db.updatePage(makeData(), workingDir, true);
+
+			const knex = db.getKnex();
+			const [page] = await knex.from('pages').select('id').where('url', pageUrl);
+			const [anchorRow] = await knex
+				.from('anchors')
+				.where('pageId', page.id)
+				.count({ c: '*' });
+			const [imageRow] = await knex
+				.from('images')
+				.where('pageId', page.id)
+				.count({ c: '*' });
+
+			// 再スクレイプは「置き換え」なので、2 セット積み増さず 1 セットだけが残る。
+			expect(Number(anchorRow.c)).toBe(2);
+			expect(Number(imageRow.c)).toBe(1);
+		} finally {
+			await db.destroy();
+		}
+	});
+});
+
 describe('Config', () => {
 	const configDbPath = path.resolve(workingDir, 'config-test.sqlite');
 

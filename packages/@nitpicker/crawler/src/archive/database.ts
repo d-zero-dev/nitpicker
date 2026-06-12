@@ -913,6 +913,13 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			if (isTarget && snapshotDir) {
 				snapshot = await this.#updateSnapshotPath(pageId, snapshotDir, trx);
 			}
+			// Re-scrape semantics: the same URL can be scraped more than once
+			// (e.g. `crawl --resume`, re-visits). The `anchors` / `images` tables
+			// have no uniqueness constraint, so a plain insert would accumulate a
+			// full duplicate set on every re-scrape. Clear the page's existing rows
+			// first so the data is replaced, not appended.
+			await trx('anchors').where('pageId', pageId).delete();
+			await trx('images').where('pageId', pageId).delete();
 			const anchors = await Promise.all(
 				page.anchorList.map(async (anchor) => {
 					const hrefId = await this.#getIdByUrl(
