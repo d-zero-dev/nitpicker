@@ -137,7 +137,7 @@ export function VirtualTable<T>(props: VirtualTableProps<T>) {
 					role="table"
 					aria-rowcount={total + 1}
 					aria-colcount={leafColumns.length}>
-					<thead role="rowgroup">
+					<thead>
 						{table.getHeaderGroups().map((headerGroup) => (
 							<tr key={headerGroup.id} role="row" aria-rowindex={1}>
 								{headerGroup.headers.map((header, columnIndex) => {
@@ -157,6 +157,14 @@ export function VirtualTable<T>(props: VirtualTableProps<T>) {
 											style={{ width: header.getSize() }}>
 											{flexRender(header.column.columnDef.header, header.getContext())}
 											{header.column.getCanResize() && (
+												// The resizer is intentionally a focusable, keyboard-operable
+												// `<div role="separator">`: ARIA only recognises `separator`
+												// as "noninteractive", but the WAI Authoring Practices
+												// patterns for resizable table headers (and the existing
+												// viewer E2E "矢印キーで列幅を変更" coverage) require it to
+												// take focus and react to pointer + arrow keys. Disable the
+												// jsx-a11y rules that read this as a misuse.
+												/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- focusable resizer needs pointer/touch/keyboard handlers; see block comment above. */
 												<div
 													className={`vt-resizer${
 														header.column.getIsResizing() ? ' is-resizing' : ''
@@ -167,6 +175,7 @@ export function VirtualTable<T>(props: VirtualTableProps<T>) {
 													aria-valuemin={header.column.columnDef.minSize ?? 60}
 													aria-valuemax={MAX_COLUMN_WIDTH}
 													aria-valuenow={Math.round(header.getSize())}
+													// eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- see block comment above: focusable resizer is intentional.
 													tabIndex={0}
 													onMouseDown={header.getResizeHandler()}
 													onTouchStart={header.getResizeHandler()}
@@ -198,7 +207,6 @@ export function VirtualTable<T>(props: VirtualTableProps<T>) {
 						))}
 					</thead>
 					<tbody
-						role="rowgroup"
 						style={{
 							height: showSkeleton ? undefined : `${virtualizer.getTotalSize()}px`,
 						}}>
@@ -210,7 +218,7 @@ export function VirtualTable<T>(props: VirtualTableProps<T>) {
 										role="row"
 										aria-hidden={true}>
 										{leafColumns.map((column) => (
-											<td key={column.id} role="cell" style={{ width: column.getSize() }}>
+											<td key={column.id} style={{ width: column.getSize() }}>
 												<span className="vt-skeleton" />
 											</td>
 										))}
@@ -231,7 +239,6 @@ export function VirtualTable<T>(props: VirtualTableProps<T>) {
 											{row.getVisibleCells().map((cell, columnIndex) => (
 												<td
 													key={cell.id}
-													role="cell"
 													aria-colindex={columnIndex + 1}
 													style={{ width: cell.column.getSize() }}>
 													{flexRender(cell.column.columnDef.cell, cell.getContext())}

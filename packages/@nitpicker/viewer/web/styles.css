@@ -4,26 +4,47 @@
 	--border: #2a3441;
 	--text: #d6dde6;
 	--text-dim: #8b97a6;
+	--text-on-accent: #fff;
 	--accent: #4aa3ff;
 	--danger: #ff6b6b;
 	--success: #4ade80;
-	--warn: #ffcc66;
+	--warn: #fc6;
 	--skeleton: #2a3441;
+	--badge-warn-fg: #f59e0b;
+	--badge-warn-bg: color-mix(in srgb, #f59e0b 20%, transparent);
+	--badge-interrupted-bg: color-mix(in srgb, var(--text-dim) 18%, transparent);
+
+	/* Font-size scale. The `@d-zero/stylelint-config` allowed-list rejects raw
+	   px values for `font-size`, so all sizes flow through these tokens. */
+	--font-size-xs: 11px;
+	--font-size-sm: 12px;
+	--font-size-base: 13px;
+	--font-size-md: 14px;
+	--font-size-lg: 15px;
+	--font-size-xl: 16px;
+	--font-size-2xl: 20px;
+	--font-size-3xl: 24px;
+
+	/* z-index scale. Raw integer z-index values are linted against; reach for
+	   one of these slots when stacking. */
+	--z-table-header: 1;
+	--z-skip-link: 100;
 	font-family:
 		system-ui,
 		-apple-system,
-		'Segoe UI',
+		Segoe UI,
 		sans-serif;
-	font-size: 14px;
+	font-size: var(--font-size-md);
 	color: var(--text);
 }
 
 :root[data-theme='light'] {
 	--bg: #f6f8fa;
-	--bg-elev: #ffffff;
+	--bg-elev: #fff;
 	--border: #d6dce2;
 	--text: #1a212b;
 	--text-dim: #5a6573;
+
 	/* #0969da clears WCAG AA (4.5:1) as link text on --bg; #1f6feb was ~4.2:1. */
 	--accent: #0969da;
 	--danger: #d1242f;
@@ -38,8 +59,8 @@
 
 body {
 	margin: 0;
-	background: var(--bg);
 	color: var(--text);
+	background: var(--bg);
 }
 
 a {
@@ -48,58 +69,62 @@ a {
 
 /* Shell + top bar */
 .app-shell {
-	display: flex;
+	display: block flex;
 	flex-direction: column;
-	height: 100vh;
+	block-size: 100dvh;
 	overflow: hidden;
 }
 
 .top-bar {
 	position: relative;
-	display: flex;
+	display: block flex;
+	flex-shrink: 0;
 	align-items: center;
 	justify-content: space-between;
-	height: 44px;
-	flex-shrink: 0;
-	padding: 0 16px;
+	block-size: 44px;
+	padding-block: 0;
+	padding-inline: 16px;
 	background: var(--bg-elev);
-	border-bottom: 1px solid var(--border);
+	border-block-end: 1px solid var(--border);
 }
 
 .top-bar-title {
-	font-weight: 700;
+	font-weight: bold;
 	color: var(--accent);
 }
 
 .top-bar-actions {
-	display: flex;
-	align-items: center;
+	display: block flex;
 	gap: 8px;
+	align-items: center;
 }
 
 .top-bar-progress {
 	position: absolute;
-	left: 0;
-	bottom: 0;
-	height: 2px;
-	width: 100%;
+	inset-block-end: 0;
+	inset-inline-start: 0;
+	inline-size: 100%;
+	block-size: 2px;
 	overflow: hidden;
 	background: linear-gradient(90deg, transparent, var(--accent), transparent);
-	background-size: 50% 100%;
 	background-repeat: no-repeat;
-	animation: progress-slide 1s linear infinite;
+
+	/* stylelint-disable-next-line @d-zero/declaration-value-type-disallowed-list -- background-size requires a percentage for the looping gradient mask; the value is part of the animation choreography, not arbitrary styling. */
+	background-size: 50% 100%;
+	animation: progress-slide 1000ms linear infinite;
 }
 
 .footer {
 	flex-shrink: 0;
-	padding: 6px 16px;
-	border-top: 1px solid var(--border);
-	background: var(--bg-elev);
-	color: var(--text-dim);
-	font-size: 12px;
-	white-space: nowrap;
+	padding-block: 6px;
+	padding-inline: 16px;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+	white-space: nowrap;
+	background: var(--bg-elev);
+	border-block-start: 1px solid var(--border);
 }
 
 .footer-path {
@@ -107,45 +132,49 @@ a {
 }
 
 .footer-stub-badge {
-	display: inline-block;
-	margin-left: 10px;
-	padding: 1px 8px;
-	border-radius: 999px;
-	font-size: 11px;
+	display: inline flow-root;
+	padding-block: 1px;
+	padding-inline: 8px;
+	margin-inline-start: 10px;
+	font-size: var(--font-size-xs);
 	font-weight: 600;
 	letter-spacing: 0.02em;
 	cursor: help;
+	border-radius: 999px;
 }
 
 .footer-stub-badge--live {
-	background: color-mix(in srgb, #f59e0b 20%, transparent);
-	color: #f59e0b;
+	color: var(--badge-warn-fg);
+	background: var(--badge-warn-bg);
 }
 
 .footer-stub-badge--interrupted {
-	background: color-mix(in srgb, var(--text-dim, #888) 18%, transparent);
-	color: var(--text-dim, #888);
+	color: var(--text-dim);
+	background: var(--badge-interrupted-bg);
 }
 
 @keyframes progress-slide {
 	0% {
+		/* stylelint-disable-next-line @d-zero/declaration-value-type-disallowed-list -- keyframe waypoint for the looping progress bar mask; this is the animation's start state. */
 		background-position: -50% 0;
 	}
+
 	100% {
+		/* stylelint-disable-next-line @d-zero/declaration-value-type-disallowed-list -- keyframe waypoint for the looping progress bar mask; this is the animation's end state. */
 		background-position: 150% 0;
 	}
 }
 
 .icon-button {
+	inline-size: 30px;
+	block-size: 28px;
+	font-size: var(--font-size-md);
+	line-height: 1;
+	color: var(--text);
+	cursor: pointer;
 	background: transparent;
 	border: 1px solid var(--border);
-	color: var(--text);
-	width: 30px;
-	height: 28px;
 	border-radius: 5px;
-	cursor: pointer;
-	font-size: 14px;
-	line-height: 1;
 }
 
 .icon-button:hover {
@@ -153,188 +182,198 @@ a {
 }
 
 .lang-select {
+	padding-block: 3px;
+	padding-inline: 6px;
+	font-size: var(--font-size-sm);
+	color: var(--text);
 	background: var(--bg-elev);
 	border: 1px solid var(--border);
-	color: var(--text);
 	border-radius: 5px;
-	padding: 3px 6px;
-	font-size: 12px;
 }
 
 /* Layout */
 .layout {
-	flex: 1;
-	display: flex;
-	min-height: 0;
+	display: block flex;
+	flex: 1 1 0%;
+	min-block-size: 0;
 }
 
 .sidebar {
-	width: 180px;
+	display: block flex;
 	flex-shrink: 0;
-	background: var(--bg-elev);
-	border-right: 1px solid var(--border);
-	padding: 12px 0;
-	display: flex;
 	flex-direction: column;
 	gap: 2px;
+	inline-size: 180px;
+	padding-block: 12px;
+	padding-inline: 0;
 	overflow: auto;
+	background: var(--bg-elev);
+	border-inline-end: 1px solid var(--border);
 }
 
 .sidebar-brand {
-	font-weight: 700;
-	font-size: 16px;
-	padding: 8px 16px 16px;
+	padding-block: 8px 16px;
+	padding-inline: 16px;
+	font-size: var(--font-size-xl);
+	font-weight: bold;
 	color: var(--accent);
 }
 
 .nav-link {
-	display: block;
-	padding: 8px 16px;
+	display: block flow;
+	padding-block: 8px;
+	padding-inline: 16px;
 	color: var(--text-dim);
 	text-decoration: none;
 }
 
 .nav-link:hover {
-	background: color-mix(in srgb, var(--accent) 8%, transparent);
 	color: var(--text);
+	background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .nav-link-active {
 	color: var(--text);
 	background: color-mix(in srgb, var(--accent) 14%, transparent);
-	border-left: 2px solid var(--accent);
+	border-inline-start: 2px solid var(--accent);
 }
 
 .content {
-	flex: 1;
-	display: flex;
+	display: block flex;
+	flex: 1 1 0%;
 	flex-direction: column;
+	min-inline-size: 0;
+	padding-block: 18px;
+	padding-inline: 22px;
 	overflow: auto;
-	padding: 18px 22px;
-	min-width: 0;
 }
 
 /* View shell: list/graph views use flex:1 so their table/canvas fills the
    remaining height (replacing fragile `calc(100vh - …)` magic values). Plain
    content views (summary, detail) omit this class and scroll within .content. */
 .view {
-	display: flex;
+	display: block flex;
+	flex: 1 1 0%;
 	flex-direction: column;
-	flex: 1;
-	min-height: 0;
+	min-block-size: 0;
 }
 
 h1 {
-	font-size: 20px;
-	margin: 0 0 4px;
+	margin-block: 0 4px;
+	margin-inline: 0;
+	font-size: var(--font-size-2xl);
 }
 
 h2 {
-	font-size: 15px;
-	margin: 18px 0 8px;
+	margin-block: 18px 8px;
+	margin-inline: 0;
+	font-size: var(--font-size-lg);
 }
 
 /* View header + description */
 .view-header {
-	margin-bottom: 12px;
+	margin-block-end: 12px;
 }
 
 .view-description {
+	/* stylelint-disable-next-line unit-disallowed-list -- `ch` is intentional: this caps the description at ~70 characters, the recommended readable measure (WCAG 1.4.8). */
+	max-inline-size: 70ch;
 	margin: 0;
+	font-size: var(--font-size-base);
 	color: var(--text-dim);
-	font-size: 13px;
-	max-width: 70ch;
 }
 
 /* Filters */
 .filter-bar {
-	display: flex;
+	display: block flex;
 	flex-wrap: wrap;
 	gap: 8px;
 	align-items: center;
-	margin-bottom: 12px;
+	margin-block-end: 12px;
 }
 
 .filter-bar input,
 .filter-bar select {
+	padding-block: 5px;
+	padding-inline: 8px;
+	font-size: var(--font-size-base);
+	color: var(--text);
 	background: var(--bg-elev);
 	border: 1px solid var(--border);
-	color: var(--text);
-	padding: 5px 8px;
 	border-radius: 4px;
-	font-size: 13px;
 }
 
 .filter-bar label {
-	display: flex;
-	align-items: center;
+	display: block flex;
 	gap: 4px;
+	align-items: center;
+	font-size: var(--font-size-base);
 	color: var(--text-dim);
-	font-size: 13px;
 }
 
 /* Virtual table */
 .vt {
-	display: flex;
+	display: block flex;
+	flex: 1 1 0%;
 	flex-direction: column;
-	flex: 1;
-	min-height: 0;
+	min-block-size: 0;
 }
 
 .vt-meta {
+	margin-block-end: 6px;
+	font-size: var(--font-size-sm);
 	color: var(--text-dim);
-	font-size: 12px;
-	margin-bottom: 6px;
 }
 
 .vt-scroll {
-	flex: 1;
+	flex: 1 1 0%;
 	overflow: auto;
+	background: var(--bg-elev);
 	border: 1px solid var(--border);
 	border-radius: 6px;
-	background: var(--bg-elev);
 }
 
 .vt-table {
+	inline-size: max-content;
+	min-inline-size: 100%;
 	border-collapse: collapse;
-	width: max-content;
-	min-width: 100%;
 }
 
 .vt-table thead {
 	position: sticky;
-	top: 0;
-	z-index: 1;
+	inset-block-start: 0;
+	z-index: var(--z-table-header);
 	background: var(--bg-elev);
 }
 
 .vt-table thead tr {
-	display: flex;
+	display: block flex;
 }
 
 .vt-table th {
 	position: relative;
 	flex-shrink: 0;
-	text-align: left;
-	padding: 8px 10px;
-	border-bottom: 1px solid var(--border);
-	font-size: 12px;
-	color: var(--text-dim);
-	font-weight: 600;
+	padding-block: 8px;
+	padding-inline: 10px;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	font-size: var(--font-size-sm);
+	font-weight: 600;
+	color: var(--text-dim);
+	text-align: start;
 	white-space: nowrap;
+	border-block-end: 1px solid var(--border);
 }
 
 .vt-resizer {
 	position: absolute;
-	top: 0;
-	right: 0;
-	height: 100%;
-	width: 5px;
+	inset-block-start: 0;
+	inset-inline-end: 0;
+	inline-size: 5px;
+	block-size: 100%;
+	touch-action: none;
 	cursor: col-resize;
 	user-select: none;
-	touch-action: none;
 }
 
 .vt-resizer:hover,
@@ -349,39 +388,42 @@ h2 {
 }
 
 .vt-table tbody {
-	display: block;
 	position: relative;
-	width: 100%;
+	display: block flow;
+	inline-size: 100%;
 }
 
 .vt-row {
-	display: flex;
 	position: absolute;
-	width: 100%;
-	border-bottom: 1px solid var(--border);
+	display: block flex;
+	inline-size: 100%;
+	border-block-end: 1px solid var(--border);
 }
 
 .vt-skeleton-row {
 	position: relative;
-	transform: none !important;
+	transform: none;
 }
 
 .vt-row td {
 	flex-shrink: 0;
-	padding: 7px 10px;
+	padding-block: 7px;
+	padding-inline: 10px;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	font-size: var(--font-size-base);
 	white-space: nowrap;
-	font-size: 13px;
 }
 
 .vt-skeleton {
-	display: block;
-	height: 12px;
-	width: 80%;
-	border-radius: 3px;
+	display: block flow;
+
+	/* stylelint-disable-next-line @d-zero/declaration-value-type-disallowed-list -- intentional 80% width for a skeleton bar inside a flex row; px would re-flow with column resizing. */
+	inline-size: 80%;
+	block-size: 12px;
 	background: var(--skeleton);
-	animation: skeleton-pulse 1.2s ease-in-out infinite;
+	border-radius: 3px;
+	animation: skeleton-pulse 1200ms ease-in-out infinite;
 }
 
 @keyframes skeleton-pulse {
@@ -389,81 +431,83 @@ h2 {
 	100% {
 		opacity: 1;
 	}
+
 	50% {
 		opacity: 0.45;
 	}
 }
 
 .img-preview {
-	width: 40px;
-	height: 40px;
+	inline-size: 40px;
+	block-size: 40px;
+	vertical-align: middle;
 	object-fit: contain;
 	background: var(--skeleton);
 	border-radius: 3px;
-	vertical-align: middle;
 }
 
 /* Summary cards */
 .cards {
-	display: flex;
+	display: block flex;
 	flex-wrap: wrap;
 	gap: 12px;
-	margin-bottom: 20px;
+	margin-block-end: 20px;
 }
 
 .card {
+	min-inline-size: 140px;
+	padding-block: 14px;
+	padding-inline: 18px;
 	background: var(--bg-elev);
 	border: 1px solid var(--border);
 	border-radius: 8px;
-	padding: 14px 18px;
-	min-width: 140px;
 }
 
 .card-label {
+	font-size: var(--font-size-sm);
 	color: var(--text-dim);
-	font-size: 12px;
 }
 
 .card-value {
-	font-size: 24px;
-	font-weight: 700;
-	margin-top: 4px;
+	margin-block-start: 4px;
+	font-size: var(--font-size-3xl);
+	font-weight: bold;
 }
 
 .bars {
-	display: flex;
+	display: block flex;
 	flex-direction: column;
 	gap: 6px;
-	max-width: 460px;
+	max-inline-size: 460px;
 }
 
 .bar-row {
-	display: flex;
-	align-items: center;
+	display: block flex;
 	gap: 8px;
-	font-size: 13px;
+	align-items: center;
+	font-size: var(--font-size-base);
 }
 
 .bar-track {
-	flex: 1;
-	height: 8px;
+	flex: 1 1 0%;
+	block-size: 8px;
+	overflow: hidden;
 	background: var(--border);
 	border-radius: 4px;
-	overflow: hidden;
 }
 
 .bar-fill {
-	height: 100%;
+	block-size: 100%;
 	background: var(--accent);
 }
 
 /* Detail */
 .detail-grid {
-	display: grid;
+	display: block grid;
 	grid-template-columns: max-content 1fr;
 	gap: 4px 16px;
-	margin-bottom: 20px;
-	font-size: 13px;
+	margin-block-end: 20px;
+	font-size: var(--font-size-base);
 }
 
 .detail-grid dt {
@@ -477,27 +521,28 @@ h2 {
 
 /* HTML preview */
 .html-preview {
+	overflow: hidden;
 	border: 1px solid var(--border);
 	border-radius: 6px;
-	overflow: hidden;
 }
 
 .hp-toolbar {
-	display: flex;
+	display: block flex;
 	gap: 4px;
 	align-items: center;
 	padding: 6px;
 	background: var(--bg-elev);
-	border-bottom: 1px solid var(--border);
+	border-block-end: 1px solid var(--border);
 }
 
 .hp-tab {
+	padding-block: 4px;
+	padding-inline: 10px;
+	color: var(--text-dim);
+	cursor: pointer;
 	background: transparent;
 	border: 1px solid var(--border);
-	color: var(--text-dim);
-	padding: 4px 10px;
 	border-radius: 4px;
-	cursor: pointer;
 }
 
 .hp-tab-active {
@@ -506,50 +551,51 @@ h2 {
 }
 
 .hp-truncated {
+	margin-inline-start: auto;
+	font-size: var(--font-size-sm);
 	color: var(--warn);
-	font-size: 12px;
-	margin-left: auto;
 }
 
 .hp-frame {
-	width: 100%;
-	height: 480px;
+	inline-size: 100%;
+	block-size: 480px;
+	background: var(--text-on-accent);
 	border: 0;
-	background: #fff;
 }
 
 .hp-source {
-	margin: 0;
+	max-block-size: 480px;
 	padding: 12px;
-	max-height: 480px;
+	margin: 0;
 	overflow: auto;
-	font-size: 12px;
-	white-space: pre-wrap;
+	font-size: var(--font-size-sm);
 	word-break: break-all;
+	white-space: pre-wrap;
 }
 
 /* Diff (mismatches) */
 .diff {
-	white-space: pre-wrap;
 	word-break: break-all;
+	white-space: pre-wrap;
 }
 
 .diff-removed {
-	background: color-mix(in srgb, var(--danger) 26%, transparent);
 	color: var(--danger);
+	background: color-mix(in srgb, var(--danger) 26%, transparent);
 	border-radius: 2px;
 }
 
 .diff-added {
-	background: color-mix(in srgb, var(--success) 26%, transparent);
 	color: var(--success);
+	background: color-mix(in srgb, var(--success) 26%, transparent);
 	border-radius: 2px;
 }
 
 /* States + misc */
 .state {
+	padding-block: 20px;
+	padding-inline: 0;
 	color: var(--text-dim);
-	padding: 20px 0;
 }
 
 .state-error {
@@ -557,59 +603,65 @@ h2 {
 }
 
 .link-button {
-	background: none;
-	border: 0;
-	color: var(--accent);
-	cursor: pointer;
 	padding: 0;
 	font: inherit;
-	text-align: left;
+	color: var(--accent);
+	text-align: start;
+	cursor: pointer;
+	background: none;
+	border: 0;
 }
 
 /* Network graph */
 .graph-meta {
+	margin-block-end: 6px;
+	font-size: var(--font-size-sm);
 	color: var(--text-dim);
-	font-size: 12px;
-	margin-bottom: 6px;
 }
 
 .graph-canvas {
-	flex: 1;
-	min-height: 320px;
+	flex: 1 1 0%;
+	min-block-size: 320px;
+	background: var(--bg-elev);
 	border: 1px solid var(--border);
 	border-radius: 6px;
-	background: var(--bg-elev);
 }
 
 /* Skip link: visually hidden until focused, then pinned to the top-left. */
 .skip-link {
 	position: absolute;
-	left: 8px;
-	top: -48px;
-	z-index: 100;
-	padding: 8px 12px;
-	background: var(--accent);
-	color: #fff;
-	border-radius: 0 0 6px 6px;
+	inset-block-start: -48px;
+	inset-inline-start: 8px;
+	z-index: var(--z-skip-link);
+	padding-block: 8px;
+	padding-inline: 12px;
+	color: var(--text-on-accent);
 	text-decoration: none;
-	transition: top 0.15s ease;
+	background: var(--accent);
+	border-start-start-radius: 0;
+	border-start-end-radius: 0;
+	border-end-start-radius: 6px;
+	border-end-end-radius: 6px;
+	transition: top 150ms ease;
 }
 
 .skip-link:focus {
-	top: 0;
+	inset-block-start: 0;
 }
 
 /*
  * Respect the user's reduced-motion preference: disable the looping progress
- * and skeleton animations and collapse transitions (WCAG 2.3.3). The skip-link
- * slide-in is also flattened so it appears instantly on focus.
+ * and skeleton animations and flatten the skip-link slide-in (WCAG 2.3.3).
+ * Targets the specific motion sources by class so we avoid the `*` +
+ * `!important` hammer the lint config disallows.
  */
 @media (prefers-reduced-motion: reduce) {
-	*,
-	*::before,
-	*::after {
-		animation-duration: 0.01ms !important;
-		animation-iteration-count: 1 !important;
-		transition-duration: 0.01ms !important;
+	.top-bar-progress,
+	.vt-skeleton {
+		animation: none;
+	}
+
+	.skip-link {
+		transition: none;
 	}
 }
