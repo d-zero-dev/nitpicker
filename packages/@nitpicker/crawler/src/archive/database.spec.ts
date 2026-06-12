@@ -662,6 +662,223 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 	});
 });
 
+describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）', () => {
+	/**
+	 * Builds content page data for a directly-scraped destination page.
+	 * @param url - The destination URL.
+	 * @param title - The page title to store.
+	 * @returns Page data accepted by `Database.updatePage`.
+	 */
+	const makeDest = (url: string, title: string) => ({
+		url: parseUrl(url)!,
+		redirectPaths: [] as string[],
+		isExternal: false,
+		status: 200,
+		statusText: 'OK',
+		contentLength: 100,
+		contentType: 'text/html',
+		responseHeaders: {},
+		meta: { title },
+		anchorList: [
+			{ href: parseUrl('http://localhost/x')!, textContent: 'X', isExternal: false },
+			{ href: parseUrl('http://localhost/y')!, textContent: 'Y', isExternal: false },
+		],
+		imageList: [],
+		html: '<html></html>',
+		isSkipped: false,
+	});
+
+	/**
+	 * Builds HEAD-only page data for a source URL that redirects to a destination.
+	 * Carries no real content (empty meta / anchors), mirroring a HEAD pre-flight.
+	 * @param sourceUrl - The redirecting source URL.
+	 * @param destUrl - The redirect destination URL.
+	 * @returns Page data accepted by `Database.recordRedirect`.
+	 */
+	const makeSource = (sourceUrl: string, destUrl: string) => ({
+		url: parseUrl(sourceUrl)!,
+		redirectPaths: [destUrl],
+		isExternal: false,
+		status: 200,
+		statusText: 'OK',
+		contentLength: 0,
+		contentType: 'text/html',
+		responseHeaders: {},
+		meta: {},
+		anchorList: [],
+		imageList: [],
+		html: '',
+		isSkipped: false,
+	});
+
+	it('宛先のタイトル・アンカーを上書きせず、元URLに redirectDestId を立てる', async () => {
+		const dbPath = path.resolve(workingDir, 'record-redirect-keep.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const dest = 'http://localhost/canonical';
+		const source = 'http://localhost/legacy';
+
+		try {
+			// 1) 宛先を一度フルにレンダリングして保存（タイトル + アンカー2件）。
+			await db.updatePage(makeDest(dest, 'Canonical Page'), workingDir, true);
+
+			// 2) 既知の宛先に対するリダイレクト元を辺だけ記録（再レンダリングしない）。
+			await db.recordRedirect(makeSource(source, dest));
+
+			const knex = db.getKnex();
+			const [destPage] = await knex
+				.from('pages')
+				.select('id', 'title')
+				.where('url', dest);
+			const [sourcePage] = await knex
+				.from('pages')
+				.select('id', 'scraped', 'redirectDestId')
+				.where('url', source);
+			const [anchorCount] = await knex
+				.from('anchors')
+				.where('pageId', destPage.id)
+				.count({ c: '*' });
+
+			// 宛先の本文は HEAD の空データで潰されず、そのまま残る。
+			expect(destPage.title).toBe('Canonical Page');
+			expect(Number(anchorCount.c)).toBe(2);
+			// 元URLは scraped 済みかつ宛先を指すリダイレクト辺になる。
+			expect(Number(sourcePage.scraped)).toBe(1);
+			expect(sourcePage.redirectDestId).toBe(destPage.id);
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
+	it('自己リダイレクト（元URL===宛先）は辺を立てない', async () => {
+		const dbPath = path.resolve(workingDir, 'record-redirect-self.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const url = 'http://localhost/self';
+
+		try {
+			await db.updatePage(makeDest(url, 'Self'), workingDir, true);
+			// redirectPaths が自分自身のみ → sources も自己参照になり、スキップされる。
+			await db.recordRedirect(makeSource(url, url));
+
+			const knex = db.getKnex();
+			const [page] = await knex.from('pages').select('redirectDestId').where('url', url);
+			expect(page.redirectDestId).toBeNull();
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
+	it('多段リダイレクトでは中間ホップも宛先を指す辺になる', async () => {
+		const dbPath = path.resolve(workingDir, 'record-redirect-chain.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const dest = 'http://localhost/final';
+
+		try {
+			await db.updatePage(makeDest(dest, 'Final'), workingDir, true);
+			// start -> middle -> final。start と middle の両方が final を指す。
+			await db.recordRedirect({
+				...makeSource('http://localhost/start', dest),
+				redirectPaths: ['http://localhost/middle', dest],
+			});
+
+			const knex = db.getKnex();
+			const [destPage] = await knex.from('pages').select('id').where('url', dest);
+			const [start] = await knex
+				.from('pages')
+				.select('redirectDestId')
+				.where('url', 'http://localhost/start');
+			const [middle] = await knex
+				.from('pages')
+				.select('redirectDestId')
+				.where('url', 'http://localhost/middle');
+
+			expect(start.redirectDestId).toBe(destPage.id);
+			expect(middle.redirectDestId).toBe(destPage.id);
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
+	it('元URLが過去にコンテンツを持っていた場合、その旧アンカーを消去する', async () => {
+		const dbPath = path.resolve(workingDir, 'record-redirect-clear.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const dest = 'http://localhost/dest-page';
+		const source = 'http://localhost/was-content';
+
+		try {
+			await db.updatePage(makeDest(dest, 'Dest'), workingDir, true);
+			// 元URLが以前コンテンツページだった（アンカーを持つ）。
+			await db.updatePage(makeDest(source, 'Was content'), workingDir, true);
+
+			const knex = db.getKnex();
+			const [sourcePage] = await knex.from('pages').select('id').where('url', source);
+			const [before] = await knex
+				.from('anchors')
+				.where('pageId', sourcePage.id)
+				.count({ c: '*' });
+			expect(Number(before.c)).toBe(2);
+
+			// 後にリダイレクト元化 → 旧アンカーはクリーンアップされる。
+			await db.recordRedirect(makeSource(source, dest));
+
+			const [after] = await knex
+				.from('anchors')
+				.where('pageId', sourcePage.id)
+				.count({ c: '*' });
+			expect(Number(after.c)).toBe(0);
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
+	it('リダイレクトチェーンが空なら辺もスタブ行も作らない', async () => {
+		const dbPath = path.resolve(workingDir, 'record-redirect-empty.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+
+		try {
+			// redirectPaths が空 = 実際にはリダイレクトしていない（自分自身が宛先）。
+			// 辺は無いので、宛先 URL の content-less なスタブ行を作ってはならない。
+			await db.recordRedirect({
+				...makeSource('http://localhost/no-redirect', 'unused'),
+				redirectPaths: [],
+			});
+
+			const knex = db.getKnex();
+			const [row] = await knex.from('pages').count({ c: '*' });
+			expect(Number(row.c)).toBe(0);
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
+	it('宛先 URL が解析不能でも例外を投げず、そのURLをスキップする', async () => {
+		const dbPath = path.resolve(workingDir, 'record-redirect-bad-dest.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+
+		try {
+			// 壊れた Location などで宛先が解析不能なとき、throw すると WriteQueue 経由で
+			// クロール全体が abort してしまう。1 本の辺記録は best-effort なのでスキップする。
+			await expect(
+				db.recordRedirect({
+					...makeSource('http://localhost/src', 'unused'),
+					redirectPaths: ['not a valid url'],
+				}),
+			).resolves.toBeUndefined();
+
+			const knex = db.getKnex();
+			const [row] = await knex.from('pages').count({ c: '*' });
+			expect(Number(row.c)).toBe(0);
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+});
+
 describe('Config', () => {
 	const configDbPath = path.resolve(workingDir, 'config-test.sqlite');
 

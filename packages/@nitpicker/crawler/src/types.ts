@@ -1,4 +1,4 @@
-import type { CrawlerError } from './utils/types/types.js';
+import type { CrawlerError, PageData } from './utils/types/types.js';
 
 /**
  * Event map for the `CrawlerOrchestrator` class.
@@ -27,4 +27,15 @@ export interface CrawlEvent {
 	 * Emitted when an error occurs during crawling or archiving.
 	 */
 	error: CrawlerError;
+
+	/**
+	 * Emitted when a URL redirects to a destination already rendered during this
+	 * crawl, so only the redirect edge is recorded and the destination is not
+	 * re-rendered (#73). Mirrors the crawler's `redirect` event; useful for
+	 * observing how much redirect-convergence work was skipped.
+	 */
+	redirect: {
+		/** HEAD-resolved page data carrying the redirect chain (source → destination). */
+		result: PageData;
+	};
 }
