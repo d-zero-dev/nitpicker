@@ -328,6 +328,212 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			await db.destroy();
 		}
 	});
+
+	it('再スクレイプで新しいアンカー集合に置き換わる（古い stale 行は残らない）', async () => {
+		const dbPath = path.resolve(workingDir, 'rescrape-replace.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const pageUrl = 'http://localhost/replace-source';
+		/**
+		 * Builds page data linking to the given target slugs.
+		 * @param targets - Target path slugs to link to.
+		 * @returns Page data accepted by `Database.updatePage`.
+		 */
+		const makeData = (targets: string[]) => ({
+			url: parseUrl(pageUrl)!,
+			redirectPaths: [] as string[],
+			isExternal: false,
+			status: 200,
+			statusText: 'OK',
+			contentLength: 100,
+			contentType: 'text/html',
+			responseHeaders: {},
+			meta: { title: 'Replace source' },
+			anchorList: targets.map((t) => ({
+				href: parseUrl(`http://localhost/${t}`)!,
+				textContent: t,
+				isExternal: false,
+			})),
+			imageList: [],
+			html: '<html></html>',
+			isSkipped: false,
+		});
+
+		try {
+			await db.updatePage(makeData(['target-a', 'target-b']), workingDir, true);
+			// 2 回目は target-b を落として target-c を追加。
+			await db.updatePage(makeData(['target-a', 'target-c']), workingDir, true);
+
+			const knex = db.getKnex();
+			const [page] = await knex.from('pages').select('id').where('url', pageUrl);
+			const anchorRows = await knex
+				.from('anchors')
+				.where('pageId', page.id)
+				.select('hrefId');
+			const targetPages = await knex
+				.from('pages')
+				.whereIn(
+					'id',
+					anchorRows.map((r) => r.hrefId),
+				)
+				.select('url');
+			const hrefs = targetPages.map((p) => p.url).toSorted();
+
+			// 古い target-b は消え、最新の {target-a, target-c} だけが残る。
+			expect(hrefs).toEqual(['http://localhost/target-a', 'http://localhost/target-c']);
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
+	it('劣化した再スクレイプ（空 anchorList / imageList）は以前の良データを消さない', async () => {
+		const dbPath = path.resolve(workingDir, 'rescrape-empty.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const pageUrl = 'http://localhost/degraded-source';
+		const full = {
+			url: parseUrl(pageUrl)!,
+			redirectPaths: [] as string[],
+			isExternal: false,
+			status: 200,
+			statusText: 'OK',
+			contentLength: 100,
+			contentType: 'text/html',
+			responseHeaders: {},
+			meta: { title: 'Degraded source' },
+			anchorList: [
+				{
+					href: parseUrl('http://localhost/keep-a')!,
+					textContent: 'A',
+					isExternal: false,
+				},
+				{
+					href: parseUrl('http://localhost/keep-b')!,
+					textContent: 'B',
+					isExternal: false,
+				},
+			],
+			imageList: [
+				{
+					src: 'http://localhost/img.png',
+					currentSrc: 'http://localhost/img.png',
+					alt: 'img',
+					width: 10,
+					height: 10,
+					naturalWidth: 10,
+					naturalHeight: 10,
+					isLazy: false,
+					viewportWidth: 1200,
+					sourceCode: '<img src="img.png">',
+				},
+			],
+			html: '<html></html>',
+			isSkipped: false,
+		};
+
+		try {
+			await db.updatePage(full, workingDir, true);
+			// 2 回目はタイムアウト等で空（劣化スクレイプ）。
+			await db.updatePage({ ...full, anchorList: [], imageList: [] }, workingDir, true);
+
+			const knex = db.getKnex();
+			const [page] = await knex.from('pages').select('id').where('url', pageUrl);
+			const [anchorRow] = await knex
+				.from('anchors')
+				.where('pageId', page.id)
+				.count({ c: '*' });
+			const [imageRow] = await knex
+				.from('images')
+				.where('pageId', page.id)
+				.count({ c: '*' });
+
+			// 空の再スクレイプでは置き換えず据え置く（#70 修正のデータ損失リグレッション回帰）。
+			expect(Number(anchorRow.c)).toBe(2);
+			expect(Number(imageRow.c)).toBe(1);
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
+	it('コンテンツページがリダイレクト元になった時、旧 anchors を消去する', async () => {
+		const dbPath = path.resolve(workingDir, 'rescrape-redirect-source.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const oldUrl = 'http://localhost/old-content';
+
+		try {
+			// 1) /old-content を 200 コンテンツとしてスクレイプ（アンカーを保存）。
+			await db.updatePage(
+				{
+					url: parseUrl(oldUrl)!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'Old content' },
+					anchorList: [
+						{
+							href: parseUrl('http://localhost/stale-x')!,
+							textContent: 'X',
+							isExternal: false,
+						},
+					],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				workingDir,
+				true,
+			);
+
+			const knex = db.getKnex();
+			const [oldPage] = await knex.from('pages').select('id').where('url', oldUrl);
+			const [before] = await knex
+				.from('anchors')
+				.where('pageId', oldPage.id)
+				.count({ c: '*' });
+			expect(Number(before.c)).toBe(1);
+
+			// 2) 後に /old-content が /new-dest へ 301 化（redirectPaths に出現）。
+			await db.updatePage(
+				{
+					url: parseUrl(oldUrl)!,
+					redirectPaths: ['http://localhost/new-dest'],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'New dest' },
+					anchorList: [
+						{
+							href: parseUrl('http://localhost/dest-link')!,
+							textContent: 'D',
+							isExternal: false,
+						},
+					],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				workingDir,
+				true,
+			);
+
+			// /old-content はリダイレクト元になったので旧アンカー(stale-x)は消える。
+			const [after] = await knex
+				.from('anchors')
+				.where('pageId', oldPage.id)
+				.count({ c: '*' });
+			expect(Number(after.c)).toBe(0);
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
 });
 
 describe('Config', () => {

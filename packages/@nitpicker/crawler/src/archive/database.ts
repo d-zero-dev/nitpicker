@@ -731,6 +731,12 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				responseHeaders: '{}',
 				redirectDestId: null,
 			});
+			// Clear the prior crawl's data for the repromoted pages. `updatePage`
+			// also replaces anchors/images when it re-scrapes them, but only when
+			// the new scrape is non-empty — so this pre-clear is still load-bearing
+			// for pages that get repromoted but then re-scrape to nothing (or are
+			// never reached again), and it is the only place `resources-referrers`
+			// is cleared.
 			await this.#instance('anchors').whereIn('pageId', chunk).delete();
 			await this.#instance('images').whereIn('pageId', chunk).delete();
 			await this.#instance('resources-referrers').whereIn('pageId', chunk).delete();
@@ -908,18 +914,36 @@ export class Database extends EventEmitter<DatabaseEvent> {
 						redirectDestId: pageId,
 						isExternal: page.isExternal ? 1 : 0,
 					});
+				// A page that used to be scraped as content can later turn into a
+				// redirect source. It owns no content anymore, so drop any anchors /
+				// images it captured in its former life — otherwise they linger and
+				// leak into referrer / incoming-link reads (which do not filter out
+				// redirect sources).
+				await trx('anchors').where('pageId', redirectId).delete();
+				await trx('images').where('pageId', redirectId).delete();
 			}
 			let snapshot: { html?: string; pageId: number } = { pageId };
 			if (isTarget && snapshotDir) {
 				snapshot = await this.#updateSnapshotPath(pageId, snapshotDir, trx);
 			}
 			// Re-scrape semantics: the same URL can be scraped more than once
-			// (e.g. `crawl --resume`, re-visits). The `anchors` / `images` tables
-			// have no uniqueness constraint, so a plain insert would accumulate a
-			// full duplicate set on every re-scrape. Clear the page's existing rows
-			// first so the data is replaced, not appended.
-			await trx('anchors').where('pageId', pageId).delete();
-			await trx('images').where('pageId', pageId).delete();
+			// (e.g. `crawl --resume`, re-visits, `--append` re-promotion). The
+			// `anchors` / `images` tables have no uniqueness constraint, so
+			// re-inserting without clearing would accumulate a full duplicate set
+			// on every re-scrape (the bug fixed in #70). So we delete-then-insert
+			// to *replace* the previous rows.
+			//
+			// The delete is paired with — and guarded by — a non-empty new list:
+			// a degraded re-scrape (navigation timeout / partial render) can return
+			// an empty `anchorList` for a page that previously had links, and
+			// wiping the prior good data in that case would be destructive. When
+			// the new list is empty we keep what we already had rather than
+			// replacing it with nothing.
+			//
+			// (A DB-level unique constraint + `onConflict` would also prevent
+			// duplication, but multiple distinct anchors can share the same
+			// hrefId/hash/textContent legitimately, so there is no natural unique
+			// key to enforce — replace-on-write is the correct mechanism here.)
 			const anchors = await Promise.all(
 				page.anchorList.map(async (anchor) => {
 					const hrefId = await this.#getIdByUrl(
@@ -937,6 +961,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			);
 			dbLog('Insert anchors.length: %d', anchors.length);
 			if (anchors.length > 0) {
+				await trx('anchors').where('pageId', pageId).delete();
 				await eachSplitted(anchors, 100, async (_anchors) => {
 					await trx('anchors').insert(_anchors);
 				});
@@ -947,6 +972,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			}));
 			dbLog('Insert images.length: %d', images.length);
 			if (images.length > 0) {
+				await trx('images').where('pageId', pageId).delete();
 				await eachSplitted(images, 100, async (_images) => {
 					await trx('images').insert(_images);
 				});
