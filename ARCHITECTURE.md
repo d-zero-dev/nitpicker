@@ -713,6 +713,11 @@ metadata-only（title のみ）と非 HTML は `headCheckResult` を `updatePage
   - **loose（`contentType IS NULL OR = 'text/html'`）**: ユーザー向けのページ一覧/件数。`listPages`、`getSummary` の total/internal/external/statusDistribution。**エラー/到達不能ページ（`contentType = null`・`scraped = 1`）を残す**ため（壊れたページは監査で見えるべき）。除外されるのは **既知の非HTMLリソースだけ**で、それらは Resources ビューに出る。
 - **スナップショット**: `updatePage` は **`page.html.length > 0` のときだけ** HTML スナップショットを書く（非HTMLは `html=''` なので 0 バイトファイルを作らない）。URL が HTML→非HTML に差し替わった再スクレイプでは古い `pages.html` をクリア、劣化スクレイプ（text/html だが html 空）は据え置く。
 
+**既知の制約**（将来の保守者向け）:
+
+- **正規化は書き込み時のみ・backfill 無し**: 上記の正規化は新規 write にだけ適用される。本修正より前に作られたアーカイブの mixed-case content-type（`Text/HTML` 等）は残るため、完全一致述語が拾えないことがある。`#init` のマイグレーションは pages を backfill しない（v0.x、再クロールで解消）。
+- **非正規 casing のページは snapshot 無しになりうる**: `@d-zero/beholder`（外部）は描画判定を exact `contentType === 'text/html'` で行う。サーバが `Text/HTML` を返すと beholder は描画せず `html=''` を返す。`#insertPage` で content-type は `text/html` に正規化されるため**ページとして計上されるが本文（snapshot）は無い**という行になる。nitpicker 側では根治できず（beholder の判定を case-insensitive にする必要がある）、別途 beholder 側の課題。
+
 > **検索キーワード**: 「isTarget 意味」「ページ 非HTML 除外」「normalizeContentType」「listPages contentType」。
 > **更新責任**: ページ性の定義（strict/loose の使い分け）を変える場合、`list-pages.ts` / `get-summary.ts`（query）と `getScrapedHtmlPageCount` / `#insertPage`（crawler）を同時に見直し、各 spec の「PDF 除外 / エラーページ保持 / メタ分母」テストを更新する。content-type は exact 文字列で多数の SQL に inline されている（共有述語は未導入）ため、HTML 判定規則を変える際は全 inline 箇所を確認すること。
 
