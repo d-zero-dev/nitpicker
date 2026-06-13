@@ -145,6 +145,79 @@ describe('getSummary', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+
+		// In-scope non-HTML resource (PDF): isTarget=1 but NOT a page. It must not
+		// inflate totalPages/internalPages and must not dilute the metadata rates.
+		await archive.setPage({
+			url: parseUrl('https://example.com/doc.pdf')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'application/pdf',
+			contentLength: 2048,
+			responseHeaders: {},
+			html: '',
+			meta: {
+				lang: null,
+				title: null,
+				description: null,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': null,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// Errored / unreachable internal page: scraped=1 but contentType=null. It IS
+		// a page (counted, and its status shows in the histogram) but it can never
+		// carry metadata, so it must NOT be in the metadata-fulfillment denominator.
+		await archive.setPage({
+			url: parseUrl('https://example.com/broken')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: -1,
+			statusText: 'ERR_NAME_NOT_RESOLVED',
+			contentType: null,
+			contentLength: null,
+			responseHeaders: {},
+			html: '',
+			meta: {
+				lang: null,
+				title: null,
+				description: null,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': null,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
 	});
 
 	afterAll(async () => {
@@ -160,12 +233,104 @@ describe('getSummary', () => {
 
 		expect(result.baseUrl).toBe('https://example.com');
 		expect(result.roots).toEqual(['https://example.com', 'https://example.com/blog/']);
-		expect(result.totalPages).toBe(3);
-		expect(result.internalPages).toBe(3);
+		// 3 HTML pages + 1 errored page (contentType null) — the in-scope PDF
+		// (application/pdf) is the only thing excluded.
+		expect(result.totalPages).toBe(4);
+		expect(result.internalPages).toBe(4);
 		expect(result.externalPages).toBe(0);
+		// The errored page's status IS in the histogram (broken-link audit needs it).
+		expect(result.statusDistribution).toContainEqual({ status: -1, count: 1 });
+		// The PDF's 200 must not be counted here (would make 200 count 3).
 		expect(result.statusDistribution).toContainEqual({ status: 200, count: 2 });
 		expect(result.statusDistribution).toContainEqual({ status: 404, count: 1 });
+		// Metadata denominator stays 3 (HTML pages only): neither the PDF nor the
+		// errored page dilutes it (otherwise title would be 2/4 or 2/5).
 		expect(result.metadataFulfillment.title).toBeCloseTo(2 / 3);
 		expect(result.metadataFulfillment.description).toBeCloseTo(1 / 3);
+	});
+});
+
+describe('getSummary: HTMLページが1つも無い（全てエラー/到達不能）アーカイブ', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_summary_no_html__');
+	const archiveFilePath = path.resolve(dir, 'summary-no-html.nitpicker');
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			name: 'test',
+			version: '0.4.4',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+		// Only an errored/unreachable internal page — zero text/html rows.
+		await archive.setPage({
+			url: parseUrl('https://example.com/broken')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: -1,
+			statusText: 'ERR_NAME_NOT_RESOLVED',
+			contentType: null,
+			contentLength: null,
+			responseHeaders: {},
+			html: '',
+			meta: {
+				lang: null,
+				title: null,
+				description: null,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': null,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('メタ充足率の分母が 0 でも NaN にならず 0 を返す', async () => {
+		const result = await getSummary(archive);
+		// The errored page is still counted as a page...
+		expect(result.totalPages).toBe(1);
+		// ...but with zero text/html rows the metadata denominator is 0; the guard
+		// must yield 0, not NaN (0/0). Removing the `metaTotal > 0` guard makes these NaN.
+		expect(result.metadataFulfillment.title).toBe(0);
+		expect(result.metadataFulfillment.description).toBe(0);
+		expect(result.metadataFulfillment.ogImage).toBe(0);
 	});
 });

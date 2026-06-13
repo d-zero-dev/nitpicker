@@ -363,7 +363,7 @@ Crawling: 130(85) done / 250 found URLs (+12/20 ext) (56%) [108 remaining] [10 p
 **`--resume` / `--append` 時の挙動:**
 
 - `X`（internalDone）と `Z`（internalTotal）には `resumeOffset = #resumedScraped.length` が加算される
-- `Y`（pagesScraped）には `Archive.getScrapedHtmlPageCount()` の戻り値（`pages` テーブルの `isTarget=1 AND scraped=1` 件数）が初期値として加算される
+- `Y`（pagesScraped）には `Archive.getScrapedHtmlPageCount()` の戻り値（`pages` テーブルの `isTarget=1 AND scraped=1 AND contentType='text/html'` 件数）が初期値として加算される。`contentType='text/html'` で絞るのは、in-scope な非HTMLリソース（PDF 等は `isTarget=1`）を「描画済みHTMLページ」として数えないため（→「ページ性の判定」参照）
 - そのため通算値で表示され、resume 跨ぎでも `Y` と `X` の意味的整合が保たれる
 
 > **更新手順（フォーマット変更）**: 表示文字列を変える場合は `format-crawl-progress.ts` の return 文を編集し、`format-crawl-progress.spec.ts` の「完成形のフォーマット文字列を 1 文字ズレなく組み立てる」テスト（`expect(result).toBe(...)` のリテラル）を併せて更新する。`pagesScraped` のセマンティクスを変える場合（例: launch エラーを含める）は `crawler.ts:#scrapePage` の `markBrowserScrape()` 呼び出し位置と worker 側の `renderedInBrowser` 判定の両方を編集し、`should-discard-predicted.spec.ts` と新規 worker レベルテストの追加を検討する。
@@ -564,34 +564,34 @@ scrapeStart(url, page, options)
 
 ### pages テーブル
 
-| カラム                                                            | 型                    | 説明                            |
-| ----------------------------------------------------------------- | --------------------- | ------------------------------- |
-| id                                                                | INTEGER PK            | 自動採番                        |
-| url                                                               | VARCHAR(8190) UNIQUE  | URL 文字列                      |
-| redirectDestId                                                    | INTEGER FK → pages.id | リダイレクト先ページID          |
-| scraped                                                           | BOOLEAN               | スクレイプ済みか                |
-| isTarget                                                          | BOOLEAN               | ターゲットページか              |
-| isExternal                                                        | BOOLEAN               | 外部ページか                    |
-| status                                                            | INTEGER               | HTTP ステータスコード           |
-| statusText                                                        | TEXT                  |                                 |
-| contentType                                                       | TEXT                  |                                 |
-| contentLength                                                     | INTEGER               |                                 |
-| responseHeaders                                                   | TEXT (JSON)           |                                 |
-| lang                                                              | TEXT                  | `<html lang>`                   |
-| title                                                             | TEXT                  | `<title>`                       |
-| description                                                       | TEXT                  | meta description                |
-| keywords                                                          | TEXT                  | meta keywords                   |
-| noindex                                                           | BOOLEAN               | robots noindex                  |
-| nofollow                                                          | BOOLEAN               | robots nofollow                 |
-| noarchive                                                         | BOOLEAN               | robots noarchive                |
-| canonical                                                         | TEXT                  | link canonical                  |
-| alternate                                                         | TEXT                  | link alternate                  |
-| og_type, og_title, og_site_name, og_description, og_url, og_image | TEXT                  | Open Graph                      |
-| twitter_card                                                      | TEXT                  | Twitter Card                    |
-| html                                                              | TEXT                  | HTML スナップショットの相対パス |
-| isSkipped                                                         | BOOLEAN               | スキップされたか                |
-| skipReason                                                        | TEXT                  | スキップ理由                    |
-| order                                                             | INTEGER               | Natural URL Sort 順序           |
+| カラム                                                            | 型                    | 説明                                                                             |
+| ----------------------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------- |
+| id                                                                | INTEGER PK            | 自動採番                                                                         |
+| url                                                               | VARCHAR(8190) UNIQUE  | URL 文字列                                                                       |
+| redirectDestId                                                    | INTEGER FK → pages.id | リダイレクト先ページID                                                           |
+| scraped                                                           | BOOLEAN               | スクレイプ済みか                                                                 |
+| isTarget                                                          | BOOLEAN               | in-scope なクロール対象か（≠ ページ性。非HTMLリソースも 1。→「ページ性の判定」） |
+| isExternal                                                        | BOOLEAN               | 外部ページか                                                                     |
+| status                                                            | INTEGER               | HTTP ステータスコード                                                            |
+| statusText                                                        | TEXT                  |                                                                                  |
+| contentType                                                       | TEXT                  | 正規化（trim+小文字）して保存                                                    |
+| contentLength                                                     | INTEGER               |                                                                                  |
+| responseHeaders                                                   | TEXT (JSON)           |                                                                                  |
+| lang                                                              | TEXT                  | `<html lang>`                                                                    |
+| title                                                             | TEXT                  | `<title>`                                                                        |
+| description                                                       | TEXT                  | meta description                                                                 |
+| keywords                                                          | TEXT                  | meta keywords                                                                    |
+| noindex                                                           | BOOLEAN               | robots noindex                                                                   |
+| nofollow                                                          | BOOLEAN               | robots nofollow                                                                  |
+| noarchive                                                         | BOOLEAN               | robots noarchive                                                                 |
+| canonical                                                         | TEXT                  | link canonical                                                                   |
+| alternate                                                         | TEXT                  | link alternate                                                                   |
+| og_type, og_title, og_site_name, og_description, og_url, og_image | TEXT                  | Open Graph                                                                       |
+| twitter_card                                                      | TEXT                  | Twitter Card                                                                     |
+| html                                                              | TEXT                  | HTML スナップショットの相対パス                                                  |
+| isSkipped                                                         | BOOLEAN               | スキップされたか                                                                 |
+| skipReason                                                        | TEXT                  | スキップ理由                                                                     |
+| order                                                             | INTEGER               | Natural URL Sort 順序                                                            |
 
 ### anchors テーブル
 
@@ -702,6 +702,24 @@ metadata-only（title のみ）と非 HTML は `headCheckResult` を `updatePage
 | `'internal-no-page'`        | (contentType IS NULL OR != 'text/html') AND isExternal=0 |
 | `'external-no-page'`        | (contentType IS NULL OR != 'text/html') AND isExternal=1 |
 | なし                        | 全件                                                     |
+
+### ページ性の判定（content-type vs isTarget）（#72）
+
+**`isTarget` は「ページか」ではなく「in-scope なクロール対象か」を表す。** `fetch-destination` が `isTarget = !isExternal` で設定するため、in-scope な **非HTMLリソース（PDF / zip / 画像）も `isTarget = 1`** になる。したがって「これはページか」は **content-type で判定する**（`isTarget` で判定してはいけない）。
+
+- **書き込み時に content-type を正規化**: `Database.#insertPage`（`pages`）と `Database.insertResource`（`resources`）が `normalizeContentType`（trim + 小文字化、空→null）を通して保存する。レスポンスは `header.split(';')[0]` で verbatim に記録されるため `Text/HTML` / `text/html ` が来うるが、正規化により **SQL の完全一致述語（`WHERE contentType = 'text/html'`）と コード側の `isHtmlContentType()`（trim+小文字）が一致**し、pages / resources 両テーブルの content-type 表現も揃う。
+- **読み出し時のページ性述語は 2 種類**:
+  - **strict（`= 'text/html'`）**: 「描画済みHTMLページ」を数える/見る所。`getPages('page')`、`getScrapedHtmlPageCount`（resume カウンタ＝ライブの描画カウンタと一致させる）、`getSummary` の metadata 充足率の分母（非HTML/エラー行はメタを持てず率を希釈するため）。
+  - **loose（`contentType IS NULL OR = 'text/html'`）**: ユーザー向けのページ一覧/件数。`listPages`、`getSummary` の total/internal/external/statusDistribution。**エラー/到達不能ページ（`contentType = null`・`scraped = 1`）を残す**ため（壊れたページは監査で見えるべき）。除外されるのは **既知の非HTMLリソースだけ**で、それらは Resources ビューに出る。
+- **スナップショット**: `updatePage` は **`page.html.length > 0` のときだけ** HTML スナップショットを書く（非HTMLは `html=''` なので 0 バイトファイルを作らない）。URL が HTML→非HTML に差し替わった再スクレイプでは古い `pages.html` をクリア、劣化スクレイプ（text/html だが html 空）は据え置く。
+
+**既知の制約**（将来の保守者向け）:
+
+- **正規化は書き込み時のみ・backfill 無し**: 上記の正規化は新規 write にだけ適用される。本修正より前に作られたアーカイブの mixed-case content-type（`Text/HTML` 等）は残るため、完全一致述語が拾えないことがある。`#init` のマイグレーションは pages を backfill しない（v0.x、再クロールで解消）。
+- **非正規 casing のページは snapshot 無しになりうる**: `@d-zero/beholder`（外部）は描画判定を exact `contentType === 'text/html'` で行う。サーバが `Text/HTML` を返すと beholder は描画せず `html=''` を返す。`#insertPage` で content-type は `text/html` に正規化されるため**ページとして計上されるが本文（snapshot）は無い**という行になる。nitpicker 側では根治できず（beholder の判定を case-insensitive にする必要がある）、別途 beholder 側の課題。
+
+> **検索キーワード**: 「isTarget 意味」「ページ 非HTML 除外」「normalizeContentType」「listPages contentType」。
+> **更新責任**: ページ性の定義（strict/loose の使い分け）を変える場合、`list-pages.ts` / `get-summary.ts`（query）と `getScrapedHtmlPageCount` / `#insertPage`（crawler）を同時に見直し、各 spec の「PDF 除外 / エラーページ保持 / メタ分母」テストを更新する。content-type は exact 文字列で多数の SQL に inline されている（共有述語は未導入）ため、HTML 判定規則を変える際は全 inline 箇所を確認すること。
 
 ---
 

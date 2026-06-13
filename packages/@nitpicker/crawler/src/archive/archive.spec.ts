@@ -190,6 +190,43 @@ describe('setPage', () => {
 			await remove(filePath).catch(() => {});
 		}
 	});
+
+	it('非HTML（PDF）の setPage は 0 バイトのスナップショットファイルを作らない（#72）', async () => {
+		// 結合境界: html パスの付与は updatePage、ファイル書き込みは setPage。PDF は
+		// internal で isTarget=true だが html が空なので、スナップショットファイルを
+		// 一切作ってはならない（実体 0 バイトのファイル量産バグ #72）。
+		const filePath = path.resolve(workingDir, 'setpage-pdf-test.nitpicker');
+		const archive = await Archive.create({ filePath, cwd: workingDir });
+		const pageData = {
+			url: parseUrl('http://localhost/document.pdf')!,
+			redirectPaths: [] as string[],
+			isExternal: false,
+			status: 200,
+			statusText: 'OK',
+			contentLength: 1024,
+			contentType: 'application/pdf',
+			responseHeaders: {},
+			meta: { title: '' },
+			anchorList: [] as never[],
+			imageList: [] as never[],
+			html: '',
+			isSkipped: false,
+			isTarget: true,
+		};
+
+		try {
+			const pageId = await archive.setPage(pageData);
+			const snapshotPath = path.resolve(
+				archive.tmpDir,
+				Archive.SNAPSHOT_HTML_DIR,
+				`${pageId}.html`,
+			);
+			expect(existsSync(snapshotPath)).toBe(false);
+		} finally {
+			await archive.close();
+			await remove(filePath).catch(() => {});
+		}
+	});
 });
 
 describe('write: スナップショットzipキャッシュの無効化', () => {

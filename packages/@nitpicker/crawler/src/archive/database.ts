@@ -24,6 +24,8 @@ import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-awa
 import knex from 'knex';
 
 import { findScopeEntry } from '../crawler/find-scope-entry.js';
+import { isHtmlContentType } from '../crawler/is-html-content-type.js';
+import { normalizeContentType } from '../crawler/normalize-content-type.js';
 import { eachSplitted } from '../utils/array/each-splitted.js';
 import { ErrorEmitter } from '../utils/error/error-emitter.js';
 
@@ -574,7 +576,14 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * Used by the crawler to seed its `pagesScraped` counter on resume so the
 	 * progress display reflects all browser-rendered HTML pages across sessions,
 	 * not just the current one.
-	 * @returns The number of rows in `pages` with `isTarget = 1` and `scraped = 1`.
+	 *
+	 * "HTML page" is guaranteed by `contentType = 'text/html'`, NOT by `isTarget`
+	 * alone: `isTarget` means "in-scope crawl target" and is set for in-scope
+	 * non-HTML resources too (e.g. a PDF reached via the HEAD pre-flight is
+	 * `isTarget = 1`). Counting those would over-report the HTML page total, so
+	 * page-ness is asserted at the read layer here rather than by trusting
+	 * `isTarget`.
+	 * @returns The number of `text/html` rows with `isTarget = 1` and `scraped = 1`.
 	 */
 	@ErrorEmitter()
 	@retry(retrySetting)
@@ -583,6 +592,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			.from<DB_Page>('pages')
 			.where('isTarget', 1)
 			.andWhere('scraped', 1)
+			.andWhere('contentType', 'text/html')
 			.count<{ count: number }[]>('* as count');
 		return row ? Number(row.count) : 0;
 	}
@@ -629,7 +639,9 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				isExternal: resource.isExternal ? 1 : 0,
 				status: resource.status,
 				statusText: resource.statusText,
-				contentType: resource.contentType,
+				// Canonicalize like `pages.contentType` (see #insertPage) so resource
+				// content-type filters / dedupe keys are case- and whitespace-stable.
+				contentType: normalizeContentType(resource.contentType),
 				contentLength: resource.contentLength,
 				compress: resource.compress || 0,
 				cdn: resource.cdn || 0,
@@ -967,8 +979,37 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				page.isExternal,
 			);
 			let snapshot: { html?: string; pageId: number } = { pageId };
-			if (isTarget && snapshotDir) {
+			// Only write an HTML snapshot when there is actual HTML to write.
+			// `page.html.length > 0` is the precise signal: the scraper returns
+			// `html: ''` for everything that is not a rendered `text/html` document
+			// (non-HTML responses, metadata-only, external, degraded renders), so a
+			// non-empty `html` is exactly "a rendered HTML body exists". Gating on
+			// `isTarget` alone wrote a 0-byte snapshot (and set `pages.html`) for
+			// every internal non-HTML resource — PDF / zip / images are isTarget=1 —
+			// flooding the archive with empty files pointing at meaningless paths (#72).
+			//
+			// `isTarget` is intentionally NOT part of this condition: it is implied by
+			// `html.length > 0` (only in-scope target pages are browser-rendered into a
+			// non-empty body; metadata-only and external pages carry `html: ''`), so the
+			// content check alone expresses the intent without a redundant term.
+			if (snapshotDir && page.html.length > 0) {
 				snapshot = await this.#updateSnapshotPath(pageId, snapshotDir, trx);
+			} else if (
+				snapshotDir &&
+				page.contentType !== null &&
+				!isHtmlContentType(page.contentType)
+			) {
+				// The page is now a *known* non-HTML type. If a previous scrape stored
+				// an HTML snapshot for this URL (e.g. it served HTML then was replaced
+				// by a PDF across `crawl --resume` / `--append`), clear the stale path
+				// so `pages.html` never contradicts `contentType`. A degraded HTML
+				// re-scrape (text/html or unknown content type with empty html) is NOT
+				// cleared — the last good snapshot is preserved, mirroring the
+				// anchors / images empty-guard below. Gated on `snapshotDir` because a
+				// stale path can only have been written by a snapshot-capable call
+				// (`setPage`); `setExternalPage` passes `snapshotDir = null` and never
+				// sets `html`, so it has nothing to clear.
+				await trx<DB_Page>('pages').where('id', pageId).update({ html: null });
 			}
 			// Re-scrape semantics: the same URL can be scraped more than once
 			// (e.g. `crawl --resume`, re-visits, `--append` re-promotion). The
@@ -1098,7 +1139,12 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				isExternal: page.isExternal,
 				status: page.status,
 				statusText: page.statusText,
-				contentType: page.contentType,
+				// Canonicalize so the stored value matches the exact-string page-ness
+				// predicate (`WHERE contentType = 'text/html'`) used by the read layer
+				// and the case-insensitive `isHtmlContentType` used in code. Responses
+				// are recorded verbatim upstream, so `Text/HTML` / `text/html ` can
+				// otherwise be stored and silently misclassified.
+				contentType: normalizeContentType(page.contentType),
 				contentLength: page.contentLength,
 				responseHeaders: JSON.stringify(page.responseHeaders),
 				lang: page.meta.lang,

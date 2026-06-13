@@ -1,3 +1,4 @@
+import { getSummary, listPages } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
@@ -44,6 +45,27 @@ describe('Resource reuse', () => {
 		expect(resource).toBeDefined();
 		expect(resource!.status).toBe(200);
 		expect(resource!.contentType).toBe('image/png');
+	});
+
+	it('画像（非HTMLリソース）はページ一覧・サマリのページ数から除外される（end-to-end）', async () => {
+		// クロスパッケージ統合: 実クロール（crawler が image/png として分類）→ query が
+		// ページ性を content-type で判定。画像は pages 行・resources には残るが、
+		// listPages / getSummary のページ集計からは除外される。
+		const { items, total } = await listPages(result.accessor);
+		const paths = items.map((p) => new URL(p.url).pathname);
+		expect(paths).toContain('/resource-reuse/');
+		expect(paths).not.toContain('/resource-reuse/counted.png');
+		expect(paths).not.toContain('/resource-reuse/uncounted.png');
+		// 一覧に出るのは HTML（または content-type 未確定）のみ。
+		for (const item of items) {
+			expect(item.contentType === null || item.contentType === 'text/html').toBe(true);
+		}
+		// 唯一の HTML ページは /resource-reuse/（他リンクは全て画像）。listPages も
+		// getSummary も絶対値 1 で固定する（片側だけ壊れても、両側同時に壊れても落ちる）。
+		expect(total).toBe(1);
+		const summary = await getSummary(result.accessor);
+		expect(summary.totalPages).toBe(1);
+		expect(summary.totalPages).toBe(total);
 	});
 
 	it('サブリソースに無い直リンク画像は従来どおり HEAD でフォールバックする', () => {

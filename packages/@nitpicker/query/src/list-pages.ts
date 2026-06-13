@@ -23,7 +23,17 @@ export async function listPages(
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 
-	const baseQuery = knex('pages').where('scraped', 1).whereNull('redirectDestId');
+	// "Pages" = HTML pages PLUS not-yet-classified rows (errored / unreachable,
+	// whose `contentType` is null) so broken pages stay visible to the audit. Only
+	// KNOWN non-HTML resources (PDF / zip / image, `contentType` like
+	// 'application/pdf') are excluded — they live in the Resources view. Page-ness
+	// is content type, NOT `isTarget` (an in-scope PDF is `isTarget = 1`).
+	const baseQuery = knex('pages')
+		.where('scraped', 1)
+		.whereNull('redirectDestId')
+		.where((qb) => {
+			qb.whereNull('contentType').orWhere('contentType', 'text/html');
+		});
 
 	if (options.status != null) {
 		baseQuery.where('status', options.status);

@@ -100,6 +100,42 @@ describe('listPages', () => {
 				isSkipped: false,
 			});
 		}
+
+		// An in-scope non-HTML resource (PDF): isTarget=1 but NOT a page. It must
+		// not appear in the page list (page-ness is content-type, not isTarget).
+		await archive.setPage({
+			url: parseUrl('https://example.com/doc.pdf')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'application/pdf',
+			contentLength: 1024,
+			responseHeaders: {},
+			html: '',
+			meta: {
+				lang: null,
+				title: null,
+				description: null,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': null,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
 	});
 
 	afterAll(async () => {
@@ -114,6 +150,14 @@ describe('listPages', () => {
 		const result = await listPages(archive);
 		expect(result.total).toBe(3);
 		expect(result.items).toHaveLength(3);
+	});
+
+	it('非HTMLリソース（PDF, isTarget=1）はページ一覧に含まれない', async () => {
+		const result = await listPages(archive);
+		// PDF も scraped=1 / isTarget=1 で DB にあるが、content-type が text/html
+		// でないのでページ一覧（SEO メタ一覧）には出さない。Resources ビュー側で見る。
+		expect(result.items.some((p) => p.url.endsWith('/doc.pdf'))).toBe(false);
+		expect(result.items.map((p) => p.contentType)).not.toContain('application/pdf');
 	});
 
 	it('ステータスコードでフィルタする', async () => {
@@ -167,5 +211,88 @@ describe('listPages', () => {
 		const result = await listPages(archive, { directory: 'example.com' });
 		// Root URL (https://example.com) doesn't contain 'example.com/' so only subpages match
 		expect(result.total).toBe(2);
+	});
+});
+
+describe('listPages: ページ性は content-type（エラーページは残し、リソースだけ除外）', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_list_pages_errored__');
+	const archiveFilePath = path.resolve(dir, 'list-pages-errored.nitpicker');
+
+	/**
+	 * Builds page data for this describe's fixtures.
+	 * @param url - The page URL.
+	 * @param status - HTTP status.
+	 * @param contentType - The content type (null for an errored/unreachable page).
+	 * @param html - The rendered HTML (empty for non-HTML / errored).
+	 * @returns Page data accepted by `Archive.setPage`.
+	 */
+	const makePage = (
+		url: string,
+		status: number,
+		contentType: string | null,
+		html: string,
+	) => ({
+		url: parseUrl(url)!,
+		redirectPaths: [] as string[],
+		isExternal: false,
+		isTarget: true,
+		status,
+		statusText: '',
+		contentType,
+		contentLength: 0,
+		responseHeaders: {},
+		html,
+		meta: {
+			lang: null,
+			title: null,
+			description: null,
+			keywords: null,
+			noindex: false,
+			nofollow: false,
+			noarchive: false,
+			canonical: null,
+			alternate: null,
+			'og:type': null,
+			'og:title': null,
+			'og:site_name': null,
+			'og:description': null,
+			'og:url': null,
+			'og:image': null,
+			'twitter:card': null,
+		},
+		anchorList: [] as never[],
+		imageList: [] as never[],
+		isSkipped: false,
+	});
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setPage(
+			makePage('https://example.com/', 200, 'text/html', '<html></html>'),
+		);
+		// In-scope PDF: a resource, excluded.
+		await archive.setPage(
+			makePage('https://example.com/doc.pdf', 200, 'application/pdf', ''),
+		);
+		// Errored / unreachable internal page: contentType null — must STAY listed.
+		await archive.setPage(makePage('https://example.com/broken', -1, null, ''));
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('エラーページ（contentType null）は一覧に残り、リソース（PDF）だけ除外される', async () => {
+		const result = await listPages(archive);
+		const paths = result.items.map((p) => new URL(p.url).pathname).toSorted();
+		expect(paths).toEqual(['/', '/broken']);
+		expect(paths).not.toContain('/doc.pdf');
 	});
 });
