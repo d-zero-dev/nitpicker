@@ -60,8 +60,11 @@ describe('Resource reuse', () => {
 		for (const item of items) {
 			expect(item.contentType === null || item.contentType === 'text/html').toBe(true);
 		}
-		// listPages と getSummary のページ数は一致する（どちらも画像を除外）。
+		// 唯一の HTML ページは /resource-reuse/（他リンクは全て画像）。listPages も
+		// getSummary も絶対値 1 で固定する（片側だけ壊れても、両側同時に壊れても落ちる）。
+		expect(total).toBe(1);
 		const summary = await getSummary(result.accessor);
+		expect(summary.totalPages).toBe(1);
 		expect(summary.totalPages).toBe(total);
 	});
 
