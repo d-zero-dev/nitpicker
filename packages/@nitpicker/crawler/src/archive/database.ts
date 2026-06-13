@@ -639,7 +639,9 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				isExternal: resource.isExternal ? 1 : 0,
 				status: resource.status,
 				statusText: resource.statusText,
-				contentType: resource.contentType,
+				// Canonicalize like `pages.contentType` (see #insertPage) so resource
+				// content-type filters / dedupe keys are case- and whitespace-stable.
+				contentType: normalizeContentType(resource.contentType),
 				contentLength: resource.contentLength,
 				compress: resource.compress || 0,
 				cdn: resource.cdn || 0,

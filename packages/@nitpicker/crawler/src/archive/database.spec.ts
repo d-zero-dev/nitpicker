@@ -1958,4 +1958,32 @@ describe('getResourceByUrl', () => {
 
 		await db.destroy();
 	});
+
+	it('resources の content-type も正規化して保存される（pages と揃える）', async () => {
+		const dbPath2 = path.resolve(workingDir, 'resource-normalize-test.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath2 });
+		try {
+			await db.insertResource({
+				url: parseUrl('https://example.com/asset.PNG')!,
+				isExternal: false,
+				isError: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'IMAGE/PNG ',
+				contentLength: 100,
+				compress: false,
+				cdn: false,
+				headers: {},
+			});
+			const [row] = await db
+				.getKnex()
+				.from('resources')
+				.select('contentType')
+				.where('url', 'https://example.com/asset.PNG');
+			expect(row.contentType).toBe('image/png');
+		} finally {
+			await db.destroy();
+			await remove(dbPath2);
+		}
+	});
 });
