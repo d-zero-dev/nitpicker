@@ -707,7 +707,7 @@ metadata-only（title のみ）と非 HTML は `headCheckResult` を `updatePage
 
 **`isTarget` は「ページか」ではなく「in-scope なクロール対象か」を表す。** `fetch-destination` が `isTarget = !isExternal` で設定するため、in-scope な **非HTMLリソース（PDF / zip / 画像）も `isTarget = 1`** になる。したがって「これはページか」は **content-type で判定する**（`isTarget` で判定してはいけない）。
 
-- **書き込み時に content-type を正規化**: `Database.#insertPage` が `normalizeContentType`（trim + 小文字化、空→null）を通して保存する。レスポンスは `header.split(';')[0]` で verbatim に記録されるため `Text/HTML` / `text/html ` が来うるが、正規化により **SQL の完全一致述語（`WHERE contentType = 'text/html'`）と コード側の `isHtmlContentType()`（trim+小文字）が一致**する。
+- **書き込み時に content-type を正規化**: `Database.#insertPage`（`pages`）と `Database.insertResource`（`resources`）が `normalizeContentType`（trim + 小文字化、空→null）を通して保存する。レスポンスは `header.split(';')[0]` で verbatim に記録されるため `Text/HTML` / `text/html ` が来うるが、正規化により **SQL の完全一致述語（`WHERE contentType = 'text/html'`）と コード側の `isHtmlContentType()`（trim+小文字）が一致**し、pages / resources 両テーブルの content-type 表現も揃う。
 - **読み出し時のページ性述語は 2 種類**:
   - **strict（`= 'text/html'`）**: 「描画済みHTMLページ」を数える/見る所。`getPages('page')`、`getScrapedHtmlPageCount`（resume カウンタ＝ライブの描画カウンタと一致させる）、`getSummary` の metadata 充足率の分母（非HTML/エラー行はメタを持てず率を希釈するため）。
   - **loose（`contentType IS NULL OR = 'text/html'`）**: ユーザー向けのページ一覧/件数。`listPages`、`getSummary` の total/internal/external/statusDistribution。**エラー/到達不能ページ（`contentType = null`・`scraped = 1`）を残す**ため（壊れたページは監査で見えるべき）。除外されるのは **既知の非HTMLリソースだけ**で、それらは Resources ビューに出る。
