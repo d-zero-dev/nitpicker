@@ -186,8 +186,36 @@ crawler/src/
 - **`findMismatches`**: メタデータ不一致の検出（canonical, og:title, og:description）
 - **`getResourceReferrers`**: リソースを参照しているページの特定
 - **`checkHeaders`**: セキュリティヘッダーチェック（CSP, X-Frame-Options, X-Content-Type-Options, HSTS）
+- **`classifyContentType`**: 生 MIME を 14 個の `ContentTypeCategory`（`html`/`pdf`/`image`/`css`/`javascript`/`json`/`xml`/`font`/`audio`/`video`/`archive`/`text`/`other`/`unknown`）に正規化する純関数。`getSummary` の `contentTypeDistribution` 集計と `listPages` の `contentTypeCategory` フィルタが同じカテゴリ境界を共有する単一の源泉
+- **`applyCategoryFilter`**: `ContentTypeCategory` を Knex query に適用する SQL マッチャ。後述の「Content-Type ルール表」から派生し、JS classifier の優先順位を SQL に正確に投影する
+
+**サブエクスポート:**
+
+- `@nitpicker/query/categories` — `ContentTypeCategory` 型と `CONTENT_TYPE_CATEGORIES` 値だけを再エクスポートする browser-safe な leaf モジュール。`knex` 等の Node-only ランタイムを含まないため、viewer の React 側が Vite バンドルから安全にインポートできる
 
 **依存:** `@nitpicker/crawler`（`Archive`, `ArchiveAccessor` を使用）
+
+#### Content-Type ルール表（単一の源泉）
+
+Content-Type カテゴリ判定は `packages/@nitpicker/query/src/content-type-rules.ts` の `CONTENT_TYPE_RULES` 配列が**唯一の源泉**になる。配列の順序が判定の優先順位を表し、上から順に最初にマッチしたルールがそのカテゴリを返す。`classifyContentType`（JS classifier）と `applyCategoryFilter`（SQL マッチャ）の両方がこの 1 表から派生するため、Summary チャートが「PDF: 3 件」を出すならば Pages を `contentTypeCategory='pdf'` で絞り込んだ結果も同じ 3 行になる、という整合性が構造的に保証される。
+
+優先順位による棲み分けの例:
+
+- `image/svg+xml` — `image/` プレフィックスのルールが先にマッチするため `'image'`（`+xml` サフィックスのルールには到達しない）
+- `application/xhtml+xml` — `text/html` ルールの完全一致リストに含まれるため `'html'`
+- `text/calendar+xml` — `+xml` サフィックスのルールが `text/` プレフィックスより先にあるため `'xml'`
+- `text/x-foo+json` — 同様に `+json` サフィックスが先にあるため `'json'`
+
+SQL マッチャ側はこの優先順位を「目的カテゴリの positive 節 AND それより前にある全ルールの negative 節」として自動生成する。`applyCategoryFilter(qb, 'xml')` は `(='application/xml' OR ='text/xml' OR LIKE '%+xml') AND NOT('text/html' or 'application/xhtml+xml') AND NOT LIKE 'image/%' AND ...` を出力する。
+
+**新カテゴリ追加手順**:
+
+1. `packages/@nitpicker/query/src/types.ts` の `ContentTypeCategory` ユニオン型に新しいリテラルを追加（TypeScript が全 switch 文の網羅性検査で残り箇所を教えてくれる）
+2. `packages/@nitpicker/query/src/content-type-rules.ts` の `CONTENT_TYPE_RULES` 配列に新ルールを挿入（順序が優先順位）
+3. `packages/@nitpicker/viewer/web/i18n/translations.ts` の `views.contentType` に新カテゴリの en / ja ラベルを追加
+4. `packages/@nitpicker/cli/src/commands/query.ts` の `--contentTypeCategory` の `desc` と、`packages/@nitpicker/mcp-server/src/tool-definitions.ts` の `enum` リストを更新
+
+`content-type-rules.spec.ts` の property-based テストが「全カテゴリで JS classifier の判定結果と SQL マッチャの返り値が一致する」を全フィクスチャ MIME に対して回すため、ルール表のずれは CI で必ず落ちる。
 
 ### @nitpicker/mcp-server
 
