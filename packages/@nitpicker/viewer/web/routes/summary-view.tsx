@@ -102,11 +102,20 @@ export function SummaryView() {
 					{root}
 				</p>
 			))}
+			{/* Three cards (was four). "Roots" is dropped because the root URL
+			    list is already rendered above as `<p>` rows — a count card is
+			    redundant. The remaining three give the user the three numbers
+			    they actually need at a glance:
+			    - Internal contents: every in-scope URL the crawl reached
+			      (HTML + PDF + CSV + ZIP + ...). This is the "how much stuff
+			      is under your domains" number.
+			    - Internal pages: just the HTML pages — what was rendered + had
+			      metadata extracted. Always ≤ internalContents.
+			    - External contents: every outbound link found (any MIME). */}
 			<div className="cards">
-				<Card label={t('views.summary.totalPages')} value={data.totalPages} />
+				<Card label={t('views.summary.internalContents')} value={data.internalContents} />
 				<Card label={t('views.summary.internalPages')} value={data.internalPages} />
-				<Card label={t('views.summary.externalPages')} value={data.externalPages} />
-				<Card label={t('views.summary.roots')} value={data.roots.length} />
+				<Card label={t('views.summary.externalContents')} value={data.externalContents} />
 			</div>
 
 			<h2>{t('views.summary.statusDistribution')}</h2>
@@ -127,8 +136,18 @@ export function SummaryView() {
 				})}
 			</div>
 
-			<h2>{t('views.summary.contentTypeDistribution')}</h2>
-			<ContentTypeStackedBar entries={data.contentTypeDistribution} />
+			{/* Suppress the whole section when the bar would render nothing.
+			    `ContentTypeStackedBar` returns null on zero in-scope rows;
+			    leaving the heading visible alone reads as a render glitch
+			    on pristine / very-early-interrupted archives. */}
+			{data.contentTypeDistribution.some(
+				(entry) => entry.internal + entry.external > 0,
+			) && (
+				<>
+					<h2>{t('views.summary.contentTypeDistribution')}</h2>
+					<ContentTypeStackedBar entries={data.contentTypeDistribution} />
+				</>
+			)}
 
 			<h2>{t('views.summary.metadataFulfillment')}</h2>
 			<div className="bars">

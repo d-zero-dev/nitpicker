@@ -549,9 +549,16 @@ h2 {
 }
 
 .stacked-bar-legend {
-	display: block grid;
-	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-	gap: 4px 12px;
+	/* One column, top-to-bottom. The earlier 2-column auto-fill grid was
+	   visually compact but made scanning by count harder — the eye had to
+	   zig-zag between columns to compare adjacent categories. A single
+	   column keeps related items (Word / Excel / PowerPoint, Image / Audio
+	   / Video) reading in a natural vertical sequence and lets each row
+	   carry its extension list (".doc, .docx" etc.) without horizontal
+	   cramming. */
+	display: block flex;
+	flex-direction: column;
+	gap: 4px;
 	padding: 0;
 	margin: 0;
 	font-size: var(--font-size-base);
@@ -573,11 +580,13 @@ h2 {
 }
 
 .stacked-bar-legend-label {
+	/* No nowrap/ellipsis: the labels now carry the extension list
+	   (e.g. "Archive / Binary (.zip, .tar, .gz, .7z, .rar)") which is the
+	   exact reason the legend redesign moved to one column. Truncating
+	   here would clip the very text the user reads to interpret the
+	   category. Narrow viewer windows wrap to a second line instead. */
 	flex: 1 1 auto;
 	min-inline-size: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
 .stacked-bar-legend-count {
@@ -604,6 +613,60 @@ h2 {
 		transparent 0 6px,
 		color-mix(in srgb, #000 25%, transparent) 6px 8px
 	);
+}
+
+.bar-segment-csv {
+	/* Distinctive large dots — sets csv apart from the cell-grid patterns
+	   used by excel + json (the three would otherwise look near-identical
+	   under red-green color vision deficiency). The dot family is shared
+	   with image + javascript, but those use different sizes and the
+	   underlying fill colors keep them apart. */
+	--ct-color: #84cc16;
+	background-image: radial-gradient(
+		circle at center,
+		color-mix(in srgb, #000 35%, transparent) 2px,
+		transparent 2.5px
+	);
+	background-size: 8px 8px;
+}
+
+.bar-segment-word {
+	--ct-color: #1e40af;
+	background-image: repeating-linear-gradient(
+		0deg,
+		transparent 0 3px,
+		color-mix(in srgb, #fff 30%, transparent) 3px 5px
+	);
+}
+
+.bar-segment-excel {
+	--ct-color: #15803d;
+	background-image:
+		repeating-linear-gradient(
+			0deg,
+			transparent 0 3px,
+			color-mix(in srgb, #fff 25%, transparent) 3px 4px
+		),
+		repeating-linear-gradient(
+			90deg,
+			transparent 0 3px,
+			color-mix(in srgb, #fff 25%, transparent) 3px 4px
+		);
+}
+
+.bar-segment-powerpoint {
+	--ct-color: #c2410c;
+	background-image:
+		repeating-linear-gradient(
+			45deg,
+			transparent 0 5px,
+			color-mix(in srgb, #fff 30%, transparent) 5px 7px
+		),
+		repeating-linear-gradient(
+			135deg,
+			transparent 0 5px,
+			color-mix(in srgb, #fff 30%, transparent) 5px 7px
+		);
 }
 
 .bar-segment-image {
@@ -669,17 +732,21 @@ h2 {
 }
 
 .bar-segment-json {
+	/* Diagonal crosshatch (45° + 135°) — visually distinct from excel's
+	   axis-aligned cell grid even under color-vision deficiency, while
+	   the doubled diagonals still convey the "structured / hierarchical"
+	   feeling that JSON/YAML share. */
 	--ct-color: #06b6d4;
 	background-image:
 		repeating-linear-gradient(
-			0deg,
-			transparent 0 6px,
-			color-mix(in srgb, #000 25%, transparent) 6px 8px
+			45deg,
+			transparent 0 5px,
+			color-mix(in srgb, #000 25%, transparent) 5px 7px
 		),
 		repeating-linear-gradient(
-			90deg,
-			transparent 0 6px,
-			color-mix(in srgb, #000 25%, transparent) 6px 8px
+			135deg,
+			transparent 0 5px,
+			color-mix(in srgb, #000 25%, transparent) 5px 7px
 		);
 }
 

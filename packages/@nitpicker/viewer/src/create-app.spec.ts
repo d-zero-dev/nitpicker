@@ -101,11 +101,25 @@ describe('createApp', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('GET /api/summary は総ページ数を返す', async () => {
+	it('GET /api/summary は総ページ数 + 内部/外部コンテンツ数を返す', async () => {
 		const res = await app.request('/api/summary');
 		expect(res.status).toBe(200);
-		const body = (await res.json()) as { totalPages: number };
+		const body = (await res.json()) as {
+			totalPages: number;
+			internalPages: number;
+			externalPages: number;
+			internalContents: number;
+			externalContents: number;
+		};
 		expect(body.totalPages).toBeGreaterThanOrEqual(2);
+		/* The two new fields (added in the Summary-cards redesign) must
+		   pass through the API boundary unchanged. Refactoring the route
+		   to `pick()` a subset of SummaryResult would silently drop them
+		   without this assertion. The `>=` form keeps the test robust to
+		   fixture changes — what's pinned is the invariant
+		   `contents ≥ pages` documented in the SummaryResult JSDoc. */
+		expect(body.internalContents).toBeGreaterThanOrEqual(body.internalPages);
+		expect(body.externalContents).toBeGreaterThanOrEqual(body.externalPages);
 	});
 
 	it('GET /api/pages はページ一覧を返す', async () => {

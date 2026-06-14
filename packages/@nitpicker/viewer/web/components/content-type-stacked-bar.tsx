@@ -4,6 +4,7 @@ import type { ContentTypeCount } from '@nitpicker/query';
 import { useI18n } from '../i18n/use-i18n.js';
 import { formatPercent } from '../utils/format-percent.js';
 
+import { buildStackedBarLegendRows } from './build-stacked-bar-legend-rows.js';
 import { buildStackedBarRows } from './build-stacked-bar-rows.js';
 import { contentTypeBarClass } from './content-type-class.js';
 
@@ -50,27 +51,35 @@ function LegendRow(props: { entry: VisibleEntry; ratio: number }) {
 
 /**
  * A horizontally stacked bar showing every non-zero content-type category's
- * share of the total, followed by a legend with per-category counts and
- * shares.
+ * share of the total, followed by a legend listing **every** known category
+ * (including zero-count ones) in canonical order.
  *
  * Modelled on the macOS / iOS storage breakdown. Each segment carries both
  * a fill color and a pattern overlay (defined in `styles.css` via
  * `.bar-segment-<category>` rules), so categories remain distinguishable
  * under color-vision deficiencies without a separate accessibility toggle.
  *
- * All data shaping happens in {@link buildStackedBarRows} (pure, fully
- * unit-tested) — this component only walks the result list. Sub-pixel
- * segments are lifted by CSS (`.bar-segment { min-inline-size: 4px; }`)
- * rather than in JS, so the legend percentage stays the true raw share.
+ * Two pipelines, two contracts:
+ * - **Bar**: {@link buildStackedBarRows} — non-zero categories only, sorted
+ *   by total desc. A 0%-width segment would lift to the 4px CSS floor and
+ *   read as "we have a tiny number of these" — misleading. So bar drops them.
+ * - **Legend**: {@link buildStackedBarLegendRows} — every category in
+ *   `CONTENT_TYPE_CATEGORIES` order, including zeros. Zero counts here say
+ *   "we measured for this and found none" which is useful signal.
+ *
+ * Sub-pixel segments are lifted by CSS (`.bar-segment { min-inline-size:
+ * 4px; }`) rather than in JS, so the legend percentage stays the true raw
+ * share.
  * @param props - The bar inputs.
  * @param props.entries - Per-category counts (from `SummaryResult.contentTypeDistribution`).
  * @returns The stacked-bar + legend element, or `null` when the data is empty.
  */
 export function ContentTypeStackedBar(props: { entries: readonly ContentTypeCount[] }) {
 	const { t } = useI18n();
-	const rows = buildStackedBarRows(props.entries);
+	const barRows = buildStackedBarRows(props.entries);
+	const legendRows = buildStackedBarLegendRows(props.entries);
 
-	if (rows.length === 0) {
+	if (barRows.length === 0) {
 		return null;
 	}
 
@@ -80,7 +89,7 @@ export function ContentTypeStackedBar(props: { entries: readonly ContentTypeCoun
 				className="stacked-bar"
 				role="img"
 				aria-label={t('views.summary.contentTypeStackedBarLabel')}>
-				{rows.map((row) => (
+				{barRows.map((row) => (
 					<span
 						key={row.entry.category}
 						className={contentTypeBarClass(row.entry.category)}
@@ -90,7 +99,7 @@ export function ContentTypeStackedBar(props: { entries: readonly ContentTypeCoun
 				))}
 			</div>
 			<ul className="stacked-bar-legend">
-				{rows.map((row) => (
+				{legendRows.map((row) => (
 					<LegendRow key={row.entry.category} entry={row.entry} ratio={row.ratio} />
 				))}
 			</ul>
