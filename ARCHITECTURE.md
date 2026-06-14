@@ -628,6 +628,25 @@ updatePage(pageData) の処理:
   # destPageId の anchors / images は「置き換え」で保存（→「再スクレイプ時の…」参照）
 ```
 
+### 被リンク/参照の redirect 透過解決（#71）
+
+被リンク（incoming links / referrers）は **読み取り時に redirect を透過解決**する。アンカーがリダイレクト元（例: `http://x` が `https://x` に 301）を指していても、そのリンクは最終宛先（canonical ページ）の被リンクとして集約される。これにより `http`/`https` の別や、同一ページへ至る複数のリダイレクト経路があっても、被リンクが正規ページに合算され分裂しない。
+
+**解決規則:** `redirectDestId` は `#linkRedirectSources` が常に**最終宛先まで pre-flatten** する（`A → B → X` のとき A も B も `redirectDestId = X`）。そのため再帰的なチェーン走査は不要で、`COALESCE(target.redirectDestId, target.id)` の **1 ホップ**で最終宛先が求まる。これは `redirectTable()`（`A.redirectDestId = B.id` UNION identity）と同一セマンティクス。
+
+**読み取り経路間の一貫性:** 以下はすべて同じ規則で解決する。
+
+| 関数                                                    | パッケージ | 用途                                             |
+| ------------------------------------------------------- | ---------- | ------------------------------------------------ |
+| `getPagesWithRels`（`redirect.from`/`fromId` = 経由元） | crawler    | report（Google Sheets）                          |
+| `getReferrersOfPage`（`through`/`throughId` = 経由元）  | crawler    | `Page.getReferrers`/`getRequests` フォールバック |
+| `getPageDetail.inboundLinks`                            | query      | viewer / mcp / cli                               |
+| `listPageLinks.referrerCount`                           | query      | viewer                                           |
+
+`through` / `throughId` は「アンカーが実際に指した URL（= リダイレクト元）」で、report の `[REDIRECTED FROM]` 注記に使う。
+
+**意図的な非対称性（発リンクは解決しない）:** **inbound（被リンク）**は redirect 透過で canonical に集約する一方、**outbound（発リンク）**は `getPageDetail.outboundLinks` がアンカーの **raw な指し先**（例: `http://x`）をそのまま返す。これは「このページは古い/リダイレクトする URL にリンクしている」という監査シグナルを保持するための設計。**この非対称性を「統一」しようとしないこと**（発リンク側を解決すると監査情報が失われる）。
+
 ### 再スクレイプ時の anchors / images（置き換えセマンティクス）
 
 同一ページは 1 クロール内でも複数回 `updatePage` されうる。最も多いのは **多対一リダイレクト**: 多数の旧 URL が 301 で 1 つの宛先ページ D に集約されると、クローラはリダイレクト元 URL を 1 つずつスクレイプし、そのたびに D を再取得して D の anchors / images を保存する（`crawl --resume` で実行をまたいでも同様）。
