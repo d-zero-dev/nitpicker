@@ -1,9 +1,35 @@
 import type { QuerySubCommand } from './types.js';
 import type { commandDef } from '../commands/query.js';
 import type { InferFlags } from '@d-zero/roar';
+import type { ContentTypeCategory } from '@nitpicker/query';
+
+import { CONTENT_TYPE_CATEGORIES } from '@nitpicker/query';
 
 /** Parsed flag values for the query CLI command. */
 type QueryFlags = InferFlags<typeof commandDef.flags>;
+
+/**
+ * Validates the `--contentTypeCategory` flag against {@link CONTENT_TYPE_CATEGORIES}.
+ * Throws a user-friendly error when the value is not a known category,
+ * matching the validation pattern used by the other enum-shaped flags
+ * (`--sortBy`, `--sortOrder`, `--type`, `--field`).
+ * @param value - The raw flag value.
+ * @returns The narrowed category, or `undefined` when the flag was omitted.
+ * @throws {Error} If the value is set but not a recognised category.
+ */
+function parseContentTypeCategoryFlag(
+	value: string | undefined,
+): ContentTypeCategory | undefined {
+	if (value == null) {
+		return undefined;
+	}
+	if (!(CONTENT_TYPE_CATEGORIES as readonly string[]).includes(value)) {
+		throw new Error(
+			`Invalid --contentTypeCategory value: ${value}. Must be one of: ${CONTENT_TYPE_CATEGORIES.join(', ')}`,
+		);
+	}
+	return value as ContentTypeCategory;
+}
 
 /**
  * Builds the options object for a specific query function from flat CLI flags.
@@ -39,6 +65,7 @@ export function mapFlagsToQueryOptions(
 				statusMin: flags.statusMin,
 				statusMax: flags.statusMax,
 				isExternal: flags.isExternal,
+				contentTypeCategory: parseContentTypeCategoryFlag(flags.contentTypeCategory),
 				missingTitle: flags.missingTitle,
 				missingDescription: flags.missingDescription,
 				noindex: flags.noindex,

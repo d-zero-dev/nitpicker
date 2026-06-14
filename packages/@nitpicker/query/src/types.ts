@@ -32,6 +32,42 @@ export interface OpenArchiveResult {
 }
 
 /**
+ * Coarse-grained Content-Type category used by the viewer summary and
+ * page-list filter. The raw MIME string (after parameter stripping) is
+ * mapped to one of these labels by `classifyContentType`.
+ */
+export type ContentTypeCategory =
+	| 'html'
+	| 'pdf'
+	| 'image'
+	| 'css'
+	| 'javascript'
+	| 'json'
+	| 'xml'
+	| 'font'
+	| 'audio'
+	| 'video'
+	| 'archive'
+	| 'text'
+	| 'other'
+	| 'unknown';
+
+/**
+ * A count of in-scope rows (HTML pages + KNOWN non-HTML targets like PDF /
+ * image / zip) grouped by their canonical {@link ContentTypeCategory} and
+ * by `isExternal`. Errored / not-yet-classified rows are bucketed under
+ * `'unknown'` so the user can see the broken slice at a glance.
+ */
+export interface ContentTypeCount {
+	/** The canonical content-type category. */
+	category: ContentTypeCategory;
+	/** Number of internal (`isExternal = 0`) pages in this category. */
+	internal: number;
+	/** Number of external (`isExternal = 1`) pages in this category. */
+	external: number;
+}
+
+/**
  * Site-wide summary statistics for a crawled archive.
  */
 export interface SummaryResult {
@@ -49,6 +85,12 @@ export interface SummaryResult {
 	statusDistribution: StatusCount[];
 	/** Metadata fulfillment rates for internal pages. */
 	metadataFulfillment: MetadataFulfillment;
+	/**
+	 * Distribution of {@link ContentTypeCategory} across all in-scope rows
+	 * (HTML pages plus known non-HTML targets such as PDFs). Sorted by total
+	 * count descending so the dominant types lead the chart.
+	 */
+	contentTypeDistribution: ContentTypeCount[];
 }
 
 /**
@@ -91,6 +133,13 @@ export interface ListPagesOptions {
 	statusMax?: number;
 	/** Filter by external (true) or internal (false) pages. */
 	isExternal?: boolean;
+	/**
+	 * Restrict results to a single {@link ContentTypeCategory}. When set, the
+	 * default HTML-or-null base restriction is RELAXED — passing `'pdf'` shows
+	 * the PDFs that are normally hidden from the Pages view. Omit to keep the
+	 * default (HTML + not-yet-classified rows).
+	 */
+	contentTypeCategory?: ContentTypeCategory;
 	/** Filter to pages missing title metadata. */
 	missingTitle?: boolean;
 	/** Filter to pages missing description metadata. */

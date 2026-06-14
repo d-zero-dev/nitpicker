@@ -20,6 +20,10 @@
 		".": {
 			"import": "./lib/query.js",
 			"types": "./lib/query.d.ts"
+		},
+		"./categories": {
+			"import": "./lib/categories.js",
+			"types": "./lib/categories.d.ts"
 		}
 	},
 	"scripts": {

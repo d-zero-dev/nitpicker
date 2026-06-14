@@ -373,34 +373,35 @@ $ npx @nitpicker/cli query <file> <sub-command> [options]
 
 #### オプション
 
-| オプション             | 値     | デフォルト | 説明                                                                                                |
-| ---------------------- | ------ | ---------- | --------------------------------------------------------------------------------------------------- |
-| `--limit` `-l`         | 数値   | なし       | 最大結果数                                                                                          |
-| `--offset` `-o`        | 数値   | なし       | スキップする結果数                                                                                  |
-| `--url`                | URL    | なし       | 対象 URL（`page-detail`, `html`, `resource-referrers` で必須）                                      |
-| `--status`             | 数値   | なし       | HTTP ステータスコードで絞り込み                                                                     |
-| `--statusMin`          | 数値   | なし       | 最小 HTTP ステータスコード（以上）                                                                  |
-| `--statusMax`          | 数値   | なし       | 最大 HTTP ステータスコード（以下）                                                                  |
-| `--isExternal`         | なし   | なし       | 外部ページのみ表示                                                                                  |
-| `--missingTitle`       | なし   | なし       | title 欠損ページのみ表示                                                                            |
-| `--missingDescription` | なし   | なし       | description 欠損ページのみ表示                                                                      |
-| `--noindex`            | なし   | なし       | noindex ページのみ表示                                                                              |
-| `--urlPattern`         | 文字列 | なし       | URL パターンで絞り込み（SQL LIKE パターン）                                                         |
-| `--directory`          | 文字列 | なし       | ディレクトリパスプレフィックスで絞り込み                                                            |
-| `--sortBy`             | 文字列 | なし       | ソートフィールド（`url`, `status`, `title`）                                                        |
-| `--sortOrder`          | 文字列 | なし       | ソート方向（`asc`, `desc`）                                                                         |
-| `--type`               | 文字列 | なし       | `links`: `broken`, `external`, `orphaned` / `mismatches`: `canonical`, `og:title`, `og:description` |
-| `--contentType`        | 文字列 | なし       | Content-Type プレフィックスで絞り込み（例: `text/css`）                                             |
-| `--missingAlt`         | なし   | なし       | alt 属性欠損の画像のみ表示                                                                          |
-| `--missingDimensions`  | なし   | なし       | 寸法欠損の画像のみ表示                                                                              |
-| `--oversizedThreshold` | 数値   | なし       | 指定寸法を超える画像のみ表示                                                                        |
-| `--validator`          | 文字列 | なし       | バリデータ名で絞り込み（例: `axe`, `markuplint`）                                                   |
-| `--severity`           | 文字列 | なし       | 重要度で絞り込み                                                                                    |
-| `--rule`               | 文字列 | なし       | ルール ID で絞り込み                                                                                |
-| `--field`              | 文字列 | `title`    | 重複チェック対象フィールド（`title`, `description`）                                                |
-| `--missingOnly`        | なし   | なし       | セキュリティヘッダー欠損ページのみ表示                                                              |
-| `--maxLength`          | 数値   | なし       | 返却する HTML の最大長                                                                              |
-| `--pretty`             | なし   | なし       | JSON 出力を整形表示                                                                                 |
+| オプション              | 値     | デフォルト | 説明                                                                                                                                                                                                                                                         |
+| ----------------------- | ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--limit` `-l`          | 数値   | なし       | 最大結果数                                                                                                                                                                                                                                                   |
+| `--offset` `-o`         | 数値   | なし       | スキップする結果数                                                                                                                                                                                                                                           |
+| `--url`                 | URL    | なし       | 対象 URL（`page-detail`, `html`, `resource-referrers` で必須）                                                                                                                                                                                               |
+| `--status`              | 数値   | なし       | HTTP ステータスコードで絞り込み                                                                                                                                                                                                                              |
+| `--statusMin`           | 数値   | なし       | 最小 HTTP ステータスコード（以上）                                                                                                                                                                                                                           |
+| `--statusMax`           | 数値   | なし       | 最大 HTTP ステータスコード（以下）                                                                                                                                                                                                                           |
+| `--isExternal`          | なし   | なし       | 外部ページのみ表示                                                                                                                                                                                                                                           |
+| `--missingTitle`        | なし   | なし       | title 欠損ページのみ表示                                                                                                                                                                                                                                     |
+| `--missingDescription`  | なし   | なし       | description 欠損ページのみ表示                                                                                                                                                                                                                               |
+| `--noindex`             | なし   | なし       | noindex ページのみ表示                                                                                                                                                                                                                                       |
+| `--urlPattern`          | 文字列 | なし       | URL パターンで絞り込み（SQL LIKE パターン）                                                                                                                                                                                                                  |
+| `--directory`           | 文字列 | なし       | ディレクトリパスプレフィックスで絞り込み                                                                                                                                                                                                                     |
+| `--sortBy`              | 文字列 | なし       | ソートフィールド（`url`, `status`, `title`）                                                                                                                                                                                                                 |
+| `--sortOrder`           | 文字列 | なし       | ソート方向（`asc`, `desc`）                                                                                                                                                                                                                                  |
+| `--type`                | 文字列 | なし       | `links`: `broken`, `external`, `orphaned` / `mismatches`: `canonical`, `og:title`, `og:description`                                                                                                                                                          |
+| `--contentType`         | 文字列 | なし       | Content-Type プレフィックスで絞り込み（例: `text/css`）                                                                                                                                                                                                      |
+| `--contentTypeCategory` | 文字列 | なし       | `pages` のみ。Content-Type カテゴリで絞り込み（`html`, `pdf`, `image`, `css`, `javascript`, `json`, `xml`, `font`, `audio`, `video`, `archive`, `text`, `other`, `unknown`）。指定時は既定の HTML-or-null ベースフィルタを外し、PDF など非 HTML 行も列挙する |
+| `--missingAlt`          | なし   | なし       | alt 属性欠損の画像のみ表示                                                                                                                                                                                                                                   |
+| `--missingDimensions`   | なし   | なし       | 寸法欠損の画像のみ表示                                                                                                                                                                                                                                       |
+| `--oversizedThreshold`  | 数値   | なし       | 指定寸法を超える画像のみ表示                                                                                                                                                                                                                                 |
+| `--validator`           | 文字列 | なし       | バリデータ名で絞り込み（例: `axe`, `markuplint`）                                                                                                                                                                                                            |
+| `--severity`            | 文字列 | なし       | 重要度で絞り込み                                                                                                                                                                                                                                             |
+| `--rule`                | 文字列 | なし       | ルール ID で絞り込み                                                                                                                                                                                                                                         |
+| `--field`               | 文字列 | `title`    | 重複チェック対象フィールド（`title`, `description`）                                                                                                                                                                                                         |
+| `--missingOnly`         | なし   | なし       | セキュリティヘッダー欠損ページのみ表示                                                                                                                                                                                                                       |
+| `--maxLength`           | 数値   | なし       | 返却する HTML の最大長                                                                                                                                                                                                                                       |
+| `--pretty`              | なし   | なし       | JSON 出力を整形表示                                                                                                                                                                                                                                          |
 
 > **`--type` フラグの使い分け**: `links` サブコマンドでは `broken`, `external`, `orphaned` のいずれか、`mismatches` サブコマンドでは `canonical`, `og:title`, `og:description` のいずれかを指定する。
 
@@ -412,6 +413,9 @@ $ npx @nitpicker/cli query site.nitpicker summary
 
 # ページ一覧（ステータスコード 404 で絞り込み）
 $ npx @nitpicker/cli query site.nitpicker pages --status 404
+
+# Content-Type カテゴリで絞り込み（既定の HTML-or-null 制約を外して PDF を一覧）
+$ npx @nitpicker/cli query site.nitpicker pages --contentTypeCategory pdf
 
 # 特定ページの詳細
 $ npx @nitpicker/cli query site.nitpicker page-detail --url "https://example.com/about"
@@ -475,6 +479,8 @@ $ npx @nitpicker/cli viewer ._nitpicker-site
 > **仮想スクロール**: ページ一覧などの大規模テーブルは、サーバ側ページネーション（`limit`/`offset`）+ TanStack Query の infinite query + TanStack Virtual による行の仮想化で、クライアントに全件を載せずに 10 万行規模を一定メモリで表示する。
 
 > **HTML スナップショット**: ページ詳細のプレビューは `<iframe sandbox>`（`allow-same-origin`/`allow-scripts` なし）でレンダリングするためローカルでも安全。ソース表示にも切り替えられる。
+
+> **Content-Type 分類**: Summary 画面に Content-Type カテゴリ（`html`/`pdf`/`image`/`css`/...）別の件数バーチャートが表示される。Pages 画面のフィルタバーで Content-Type を選ぶと、既定の HTML-or-null 制約を外して PDF 等の非 HTML ページも一覧できる（例: 「30 万 URL の大半が PDF」を直接ブラウズ）。カテゴリ判定は `@nitpicker/query` の `classifyContentType` ルール表に集約され、Summary チャートと Pages フィルタが同じ行を同じカテゴリに数える。
 
 #### アクセシビリティ
 

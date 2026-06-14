@@ -9,6 +9,9 @@
 export { ArchiveManager } from './archive-manager.js';
 export type { OpenResult } from './archive-manager.js';
 export { checkHeaders } from './check-headers.js';
+export { classifyContentType, CONTENT_TYPE_CATEGORIES } from './classify-content-type.js';
+export { CONTENT_TYPE_RULES } from './content-type-rules.js';
+export type { ContentTypeRule, MimeMatcher } from './content-type-rules.js';
 export { findDuplicates } from './find-duplicates.js';
 export { findMismatches } from './find-mismatches.js';
 export { getLinkGraph } from './get-link-graph.js';

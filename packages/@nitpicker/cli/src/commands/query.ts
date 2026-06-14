@@ -82,6 +82,10 @@ export const commandDef = {
 			type: 'string',
 			desc: 'Filter by content type prefix (e.g. text/css)',
 		},
+		contentTypeCategory: {
+			type: 'string',
+			desc: 'Filter pages by Content-Type category (html, pdf, image, css, javascript, json, xml, font, audio, video, archive, text, other, unknown)',
+		},
 		missingAlt: {
 			type: 'boolean',
 			desc: 'Filter to images missing alt attribute',

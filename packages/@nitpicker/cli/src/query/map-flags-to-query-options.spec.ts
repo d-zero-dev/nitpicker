@@ -24,6 +24,7 @@ describe('mapFlagsToQueryOptions', () => {
 			statusMin: 400,
 			statusMax: 499,
 			isExternal: false,
+			contentTypeCategory: undefined,
 			missingTitle: true,
 			missingDescription: undefined,
 			noindex: undefined,
@@ -34,6 +35,22 @@ describe('mapFlagsToQueryOptions', () => {
 			limit: 50,
 			offset: 10,
 		});
+	});
+
+	it('passes through valid --contentTypeCategory', () => {
+		const result = mapFlagsToQueryOptions('pages', { contentTypeCategory: 'pdf' }) as {
+			contentTypeCategory: string | undefined;
+		};
+		expect(result.contentTypeCategory).toBe('pdf');
+	});
+
+	it('throws for invalid --contentTypeCategory', () => {
+		// Without validation, listPages would crash with a TypeError far from the
+		// CLI entry point; the user-facing message names the flag and lists the
+		// accepted values so they can self-correct.
+		expect(() =>
+			mapFlagsToQueryOptions('pages', { contentTypeCategory: 'jpeg' }),
+		).toThrow('Invalid --contentTypeCategory value: jpeg');
 	});
 
 	it('throws for invalid sortBy value', () => {
