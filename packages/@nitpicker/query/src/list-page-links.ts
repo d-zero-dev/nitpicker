@@ -15,7 +15,10 @@ import { paginateQuery } from './paginate-query.js';
  *
  * Unlike `listLinks` (which analyzes anchors for broken/external/orphaned
  * links), this lists every page. Redirect-from and referrer counts use
- * correlated subqueries so they do not perturb the pagination COUNT.
+ * correlated subqueries so they do not perturb the pagination COUNT. The
+ * referrer count is resolved THROUGH redirects, so a link to a redirect source
+ * (e.g. `http://x` 301-ing to `https://x`) counts toward the final destination
+ * — backlinks stay merged on the canonical page instead of splitting (#71).
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
  * @returns A paginated list of per-page network entries.
@@ -72,8 +75,15 @@ export async function listPageLinks(
 					knex.raw(
 						'(select count(*) from "pages" as "r" where "r"."redirectDestId" = "pages"."id") as redirectFromCount',
 					),
+					// Referrer count is resolved THROUGH redirects: an anchor pointing at a
+					// redirect source (e.g. `http://x` 301-ing to `https://x`) counts toward
+					// the final destination, not the source — so backlinks stay merged on the
+					// canonical page instead of splitting across the `http`/`https` pair (#71).
+					// `redirectDestId` is pre-flattened to the final destination, so
+					// `COALESCE(t.redirectDestId, t.id)` is a single hop (same semantics as
+					// crawler's `redirectTable()`).
 					knex.raw(
-						'(select count(*) from "anchors" where "anchors"."hrefId" = "pages"."id") as referrerCount',
+						'(select count(*) from "anchors" join "pages" as "t" on "anchors"."hrefId" = "t"."id" where coalesce("t"."redirectDestId", "t"."id") = "pages"."id") as referrerCount',
 					),
 				)
 				.orderBy('url'),

@@ -138,3 +138,134 @@ describe('listPageLinks', () => {
 		expect(about?.hasResponseHeaders).toBe(false);
 	});
 });
+
+describe('listPageLinks: referrerCount を redirect 越しに合算する（http/https, #71）', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(dirname, '__test_fixtures_page_links_redirect__');
+	const archiveFilePath = path.resolve(dir, 'page-links-redirect.nitpicker');
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.4.4',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// Canonical https destination.
+		await archive.setPage({
+			url: parseUrl('https://example.com/page')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: 'Page' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// http source 301-ing to the https destination.
+		await archive.setPage({
+			url: parseUrl('http://example.com/page')!,
+			redirectPaths: ['https://example.com/page'],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// One page links the https destination directly, another links the http source.
+		await archive.setPage({
+			url: parseUrl('https://example.com/linker-https')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META },
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/page')!,
+					isExternal: false,
+					title: null,
+					textContent: 'direct https',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/linker-http')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META },
+			anchorList: [
+				{
+					href: parseUrl('http://example.com/page')!,
+					isExternal: false,
+					title: null,
+					textContent: 'via http',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('http リンクと https リンクの両方が宛先の referrerCount に合算される', async () => {
+		const result = await listPageLinks(archive);
+		const page = result.items.find((i) => i.url === 'https://example.com/page');
+		// 直リンク(https) + redirect 元(http)へのリンク = 2 が宛先に集約される（分裂しない）。
+		expect(page?.referrerCount).toBe(2);
+	});
+});
