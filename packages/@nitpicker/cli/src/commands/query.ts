@@ -84,7 +84,7 @@ export const commandDef = {
 		},
 		contentTypeCategory: {
 			type: 'string',
-			desc: 'Filter pages by Content-Type category (html, pdf, image, css, javascript, json, xml, font, audio, video, archive, text, other, unknown)',
+			desc: 'Filter pages by Content-Type category (html, pdf, csv, word, excel, powerpoint, image, css, javascript, json, xml, font, audio, video, archive, text, other, unknown)',
 		},
 		missingAlt: {
 			type: 'boolean',

@@ -39,7 +39,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'get_summary',
 		description:
-			'Get site-wide overview: total pages, internal/external counts, HTTP status distribution, and metadata fulfillment rates (title, description, OG tags). Use this first to understand the archive contents.',
+			'Get site-wide overview. Returns: internal/external HTML page counts (`internalPages` / `externalPages`), internal/external content-row counts across every MIME (`internalContents` / `externalContents` — HTML + PDF + Office docs + CSVs + archives + ...), HTTP status distribution, Content-Type distribution over 18 categories (html, pdf, csv, word, excel, powerpoint, image, css, javascript, json+yaml, xml, font, audio, video, archive, text, other, unknown), and metadata fulfillment rates (title, description, OG tags) for internal HTML pages only. `internalContents` is always >= `internalPages` (the latter applies the historical HTML-or-null filter, the former does not). Use this first to understand the archive contents.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -86,6 +86,10 @@ export const toolDefinitions: Tool[] = [
 					enum: [
 						'html',
 						'pdf',
+						'csv',
+						'word',
+						'excel',
+						'powerpoint',
 						'image',
 						'css',
 						'javascript',
@@ -100,7 +104,7 @@ export const toolDefinitions: Tool[] = [
 						'unknown',
 					],
 					description:
-						'Restrict to one Content-Type category. When set, the default HTML-or-null base filter is relaxed so non-HTML categories (PDF, image, archive…) become reachable through this listing — useful for audits like "show every PDF in scope".',
+						'Restrict to one Content-Type category. When set, the default HTML-or-null base filter is relaxed so non-HTML categories (PDF, image, archive…) become reachable through this listing — useful for audits like "show every PDF in scope". csv groups .csv + .tsv; word groups .doc + .docx; excel groups .xls + .xlsx; powerpoint groups .ppt + .pptx; json groups JSON + YAML; text groups .txt + .md.',
 				},
 				urlPattern: {
 					type: 'string',
