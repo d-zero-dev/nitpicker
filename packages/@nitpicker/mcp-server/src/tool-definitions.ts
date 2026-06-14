@@ -81,6 +81,27 @@ export const toolDefinitions: Tool[] = [
 					description: 'Filter to pages missing description',
 				},
 				noindex: { type: 'boolean', description: 'Filter to pages with noindex set' },
+				contentTypeCategory: {
+					type: 'string',
+					enum: [
+						'html',
+						'pdf',
+						'image',
+						'css',
+						'javascript',
+						'json',
+						'xml',
+						'font',
+						'audio',
+						'video',
+						'archive',
+						'text',
+						'other',
+						'unknown',
+					],
+					description:
+						'Restrict to one Content-Type category. When set, the default HTML-or-null base filter is relaxed so non-HTML categories (PDF, image, archive…) become reachable through this listing — useful for audits like "show every PDF in scope".',
+				},
 				urlPattern: {
 					type: 'string',
 					description: 'URL pattern to search (SQL LIKE: use % as wildcard)',
