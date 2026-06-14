@@ -51,8 +51,8 @@ const METADATA_LABELS: { key: keyof MetadataFulfillment; label: string }[] = [
 ];
 
 /**
- * The summary dashboard: page counts, status distribution, and metadata
- * fulfillment for the opened archive.
+ * The summary dashboard: page counts, status distribution, content-type
+ * distribution, and metadata fulfillment for the opened archive.
  * @returns The summary view element.
  */
 export function SummaryView() {
@@ -70,6 +70,10 @@ export function SummaryView() {
 	}
 
 	const maxStatusCount = Math.max(1, ...data.statusDistribution.map((s) => s.count));
+	const maxContentTypeCount = Math.max(
+		1,
+		...data.contentTypeDistribution.map((c) => c.internal + c.external),
+	);
 
 	return (
 		<div>
@@ -103,6 +107,40 @@ export function SummaryView() {
 						<span>{entry.count.toLocaleString()}</span>
 					</div>
 				))}
+			</div>
+
+			<h2>{t('views.summary.contentTypeDistribution')}</h2>
+			<div className="bars">
+				{data.contentTypeDistribution.map((entry) => {
+					const total = entry.internal + entry.external;
+					return (
+						<div key={entry.category} className="bar-row">
+							<span style={{ width: 160 }}>
+								{t(`views.contentType.${entry.category}` as const)}
+							</span>
+							<span className="bar-track">
+								<span
+									className="bar-fill"
+									style={{
+										width: `${Math.round((total / maxContentTypeCount) * 100)}%`,
+									}}
+								/>
+							</span>
+							<span>
+								{total.toLocaleString()}
+								{entry.external > 0 && (
+									<>
+										{' '}
+										<small>
+											({t('common.internal')} {entry.internal.toLocaleString()} /{' '}
+											{t('common.external')} {entry.external.toLocaleString()})
+										</small>
+									</>
+								)}
+							</span>
+						</div>
+					);
+				})}
 			</div>
 
 			<h2>{t('views.summary.metadataFulfillment')}</h2>

@@ -5,6 +5,7 @@ import type { Hono } from 'hono';
 import { listPages } from '@nitpicker/query';
 
 import { toBoolean } from '../query-params/to-boolean.js';
+import { toContentTypeCategory } from '../query-params/to-content-type-category.js';
 import { toNumber } from '../query-params/to-number.js';
 
 /**
@@ -21,6 +22,7 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 			statusMin: toNumber(q.statusMin),
 			statusMax: toNumber(q.statusMax),
 			isExternal: toBoolean(q.isExternal),
+			contentTypeCategory: toContentTypeCategory(q.contentTypeCategory),
 			missingTitle: toBoolean(q.missingTitle),
 			missingDescription: toBoolean(q.missingDescription),
 			noindex: toBoolean(q.noindex),

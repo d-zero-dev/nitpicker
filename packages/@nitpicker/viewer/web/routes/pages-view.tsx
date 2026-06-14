@@ -1,7 +1,9 @@
 import type { PagesFilter } from '../types.js';
 import type { PageListItem } from '@nitpicker/query';
+import type { ContentTypeCategory } from '@nitpicker/query/categories';
 import type { CellContext, ColumnDef } from '@tanstack/react-table';
 
+import { CONTENT_TYPE_CATEGORIES } from '@nitpicker/query/categories';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -33,9 +35,16 @@ export function PagesView() {
 	const { t } = useI18n();
 
 	const includeExternal = params.get('includeExternal') === 'true';
+	const contentTypeParam = params.get('contentTypeCategory');
+	const contentTypeCategory: ContentTypeCategory | undefined =
+		contentTypeParam &&
+		(CONTENT_TYPE_CATEGORIES as readonly string[]).includes(contentTypeParam)
+			? (contentTypeParam as ContentTypeCategory)
+			: undefined;
 	const filter: PagesFilter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
 		isExternal: includeExternal ? undefined : false,
+		contentTypeCategory,
 		missingTitle: params.get('missingTitle') === 'true' ? true : undefined,
 		sortBy: (params.get('sortBy') as PagesFilter['sortBy']) || undefined,
 		sortOrder: (params.get('sortOrder') as PagesFilter['sortOrder']) || undefined,
@@ -134,6 +143,19 @@ export function PagesView() {
 					/>
 					{t('views.pages.filterMissingTitle')}
 				</label>
+				<select
+					aria-label={t('views.pages.filterContentType')}
+					value={contentTypeCategory ?? ''}
+					onChange={(e) => {
+						update('contentTypeCategory', e.target.value);
+					}}>
+					<option value="">{t('views.pages.filterContentType')}</option>
+					{CONTENT_TYPE_CATEGORIES.map((category) => (
+						<option key={category} value={category}>
+							{t(`views.contentType.${category}` as const)}
+						</option>
+					))}
+				</select>
 				<select
 					aria-label={t('common.sort')}
 					value={params.get('sortBy') ?? ''}
