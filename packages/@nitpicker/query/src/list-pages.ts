@@ -1,6 +1,7 @@
 import type { ListPagesOptions, PageListItem, PaginatedPageList } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { applyCategoryFilter } from './content-type-rules.js';
 import { paginateQuery } from './paginate-query.js';
 
 /**
@@ -28,12 +29,21 @@ export async function listPages(
 	// KNOWN non-HTML resources (PDF / zip / image, `contentType` like
 	// 'application/pdf') are excluded — they live in the Resources view. Page-ness
 	// is content type, NOT `isTarget` (an in-scope PDF is `isTarget = 1`).
-	const baseQuery = knex('pages')
-		.where('scraped', 1)
-		.whereNull('redirectDestId')
-		.where((qb) => {
+	//
+	// When `contentTypeCategory` is supplied, the default is RELAXED and the
+	// rule-table SQL matcher is used instead — the user has explicitly asked to
+	// browse a non-HTML category (PDFs, images...) that the Pages view normally
+	// hides. The matcher mirrors `classifyContentType` precedence so a row that
+	// the Summary chart counts in category X is the same row this filter returns
+	// for X (no double-counting across `xml` / `image` / `html` etc.).
+	const baseQuery = knex('pages').where('scraped', 1).whereNull('redirectDestId');
+	if (options.contentTypeCategory) {
+		applyCategoryFilter(baseQuery, options.contentTypeCategory);
+	} else {
+		baseQuery.where((qb) => {
 			qb.whereNull('contentType').orWhere('contentType', 'text/html');
 		});
+	}
 
 	if (options.status != null) {
 		baseQuery.where('status', options.status);

@@ -247,6 +247,26 @@ describe('getSummary', () => {
 		// errored page dilutes it (otherwise title would be 2/4 or 2/5).
 		expect(result.metadataFulfillment.title).toBeCloseTo(2 / 3);
 		expect(result.metadataFulfillment.description).toBeCloseTo(1 / 3);
+
+		// Content-Type distribution covers EVERY in-scope row, so HTML (3 internal),
+		// PDF (1 internal) and unknown/errored (1 internal) all show up.
+		expect(result.contentTypeDistribution).toContainEqual({
+			category: 'html',
+			internal: 3,
+			external: 0,
+		});
+		expect(result.contentTypeDistribution).toContainEqual({
+			category: 'pdf',
+			internal: 1,
+			external: 0,
+		});
+		expect(result.contentTypeDistribution).toContainEqual({
+			category: 'unknown',
+			internal: 1,
+			external: 0,
+		});
+		// Sorted by total count descending — HTML (3) must come first.
+		expect(result.contentTypeDistribution[0]?.category).toBe('html');
 	});
 });
 

@@ -212,6 +212,22 @@ describe('listPages', () => {
 		// Root URL (https://example.com) doesn't contain 'example.com/' so only subpages match
 		expect(result.total).toBe(2);
 	});
+
+	it('contentTypeCategory="pdf" でフィルタすると PDF だけが返る', async () => {
+		// 既定の HTML-or-null 制約を解除して PDF を表に出す。Pages ビューから
+		// "300k 件の internal URL の大半が PDF" を直接ブラウズできるようにする
+		// ためのフィルタ。
+		const result = await listPages(archive, { contentTypeCategory: 'pdf' });
+		expect(result.total).toBe(1);
+		expect(result.items[0]?.url).toBe('https://example.com/doc.pdf');
+		expect(result.items[0]?.contentType).toBe('application/pdf');
+	});
+
+	it('contentTypeCategory="html" でフィルタすると HTML だけが返る（null は含まない）', async () => {
+		const result = await listPages(archive, { contentTypeCategory: 'html' });
+		expect(result.total).toBe(3);
+		expect(result.items.every((p) => p.contentType === 'text/html')).toBe(true);
+	});
 });
 
 describe('listPages: ページ性は content-type（エラーページは残し、リソースだけ除外）', () => {
