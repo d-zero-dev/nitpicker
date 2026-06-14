@@ -67,9 +67,68 @@ describe('classifyContentType', () => {
 		expect(classifyContentType('application/octet-stream')).toBe('archive');
 	});
 
-	it('falls back to "text" for other text/*', () => {
+	it('falls back to "text" for other text/* once the typed sub-rules are exhausted', () => {
 		expect(classifyContentType('text/plain')).toBe('text');
-		expect(classifyContentType('text/csv')).toBe('text');
+		expect(classifyContentType('text/markdown')).toBe('text');
+	});
+
+	it('routes text/csv to the dedicated csv category (not text)', () => {
+		expect(classifyContentType('text/csv')).toBe('csv');
+		expect(classifyContentType('text/tab-separated-values')).toBe('csv');
+		expect(classifyContentType('application/csv')).toBe('csv');
+	});
+
+	it('Office MIMEs never collide with the archive rule (would happen if someone added a prefix matcher)', () => {
+		/* The archive rule covers `application/octet-stream` exactly, but a
+		   future regression could replace that exact matcher with a prefix
+		   (`application/vnd.openxmlformats-*` typo, etc.) and silently
+		   sweep Office docs into archive. Pin the non-collision so the
+		   regression fails this spec instead of looking right. */
+		expect(classifyContentType('application/msword')).not.toBe('archive');
+		expect(
+			classifyContentType(
+				'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+			),
+		).not.toBe('archive');
+		expect(classifyContentType('application/vnd.ms-excel')).not.toBe('archive');
+		expect(
+			classifyContentType(
+				'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+			),
+		).not.toBe('archive');
+		expect(classifyContentType('application/vnd.ms-powerpoint')).not.toBe('archive');
+		expect(
+			classifyContentType(
+				'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+			),
+		).not.toBe('archive');
+	});
+
+	it('routes Office MIMEs to word / excel / powerpoint', () => {
+		expect(classifyContentType('application/msword')).toBe('word');
+		expect(
+			classifyContentType(
+				'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+			),
+		).toBe('word');
+		expect(classifyContentType('application/vnd.ms-excel')).toBe('excel');
+		expect(
+			classifyContentType(
+				'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+			),
+		).toBe('excel');
+		expect(classifyContentType('application/vnd.ms-powerpoint')).toBe('powerpoint');
+		expect(
+			classifyContentType(
+				'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+			),
+		).toBe('powerpoint');
+	});
+
+	it('routes yaml MIMEs to the json category (json + yaml share a category)', () => {
+		expect(classifyContentType('application/yaml')).toBe('json');
+		expect(classifyContentType('text/yaml')).toBe('json');
+		expect(classifyContentType('application/x-yaml')).toBe('json');
 	});
 
 	it('falls back to "other" for unknown types', () => {

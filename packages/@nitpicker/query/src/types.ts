@@ -39,6 +39,10 @@ export interface OpenArchiveResult {
 export type ContentTypeCategory =
 	| 'html'
 	| 'pdf'
+	| 'csv'
+	| 'word'
+	| 'excel'
+	| 'powerpoint'
 	| 'image'
 	| 'css'
 	| 'javascript'
@@ -75,12 +79,44 @@ export interface SummaryResult {
 	baseUrl: string;
 	/** All user-provided root URLs. Single-root archives report `[baseUrl]`. */
 	roots: string[];
-	/** Total number of pages in the archive. */
+	/**
+	 * Total number of HTML pages (internal + external) — the historical
+	 * "pages" count, restricted to `contentType IS NULL OR text/html` so
+	 * PDFs / images / archives don't inflate it. Kept on the API for
+	 * backward compatibility (CLI / MCP consumers may surface it
+	 * directly); the viewer dashboard now prefers
+	 * {@link internalPages} / {@link internalContents} /
+	 * {@link externalContents} for clearer reads.
+	 */
 	totalPages: number;
-	/** Total number of internal pages. */
+	/**
+	 * Number of internal HTML pages (`isExternal = 0` AND
+	 * `contentType IS NULL OR text/html`). This is the "real pages we
+	 * crawled and rendered" number, excluding non-HTML targets like
+	 * PDFs or downloads.
+	 */
 	internalPages: number;
-	/** Total number of external pages. */
+	/**
+	 * Number of external HTML pages (`isExternal = 1` AND HTML-or-null).
+	 * Kept for backward compatibility; the viewer now prefers
+	 * {@link externalContents} which counts every external link
+	 * regardless of MIME.
+	 */
 	externalPages: number;
+	/**
+	 * Number of internal **content rows** (every `isExternal = 0` page
+	 * in the archive — HTML pages plus typed non-HTML targets such as
+	 * PDFs, CSVs, ZIPs, Office docs). This is the broader "how much
+	 * stuff lives under the in-scope domains" number, with no MIME
+	 * filter. Always `>= internalPages`.
+	 */
+	internalContents: number;
+	/**
+	 * Number of external **content rows** (every `isExternal = 1` page
+	 * in the archive, any MIME). This is the "how many distinct
+	 * outbound links did we find" number. Always `>= externalPages`.
+	 */
+	externalContents: number;
 	/** Distribution of HTTP status codes across all pages. */
 	statusDistribution: StatusCount[];
 	/** Metadata fulfillment rates for internal pages. */

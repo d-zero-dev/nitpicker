@@ -55,6 +55,63 @@ export const CONTENT_TYPE_RULES: readonly ContentTypeRule[] = [
 		category: 'pdf',
 		matchers: [{ kind: 'exact', value: 'application/pdf' }],
 	},
+	/* csv ahead of `text` so `text/csv` doesn't get swept up by the
+	   `prefix: text/` rule below. CSV + TSV share a category (user-
+	   requested grouping). */
+	{
+		category: 'csv',
+		matchers: [
+			{ kind: 'exact', value: 'text/csv' },
+			{ kind: 'exact', value: 'application/csv' },
+			{ kind: 'exact', value: 'application/x-csv' },
+			{ kind: 'exact', value: 'text/tab-separated-values' },
+			{ kind: 'exact', value: 'text/tsv' },
+		],
+	},
+	/* Microsoft Office: doc + docx merged into `word`, xls + xlsx into
+	   `excel`, ppt + pptx into `powerpoint`. The .docx / .xlsx / .pptx
+	   MIMEs are exact matches (long vendor strings), so they don't
+	   collide with the `archive` rule's `application/octet-stream`.
+
+	   Known ambiguity: legacy IE-friendly setups occasionally serve
+	   `.csv` downloads with `application/vnd.ms-excel`. Those land
+	   under `excel` here, not `csv` — by MIME there is no way to
+	   tell them apart without inspecting the URL extension, which
+	   the rule table deliberately avoids (MIME-only classification
+	   keeps the JS classifier and the SQL matcher both pure on the
+	   `contentType` column). Sites that need the .csv slice
+	   separated can filter the Pages list by URL pattern. */
+	{
+		category: 'word',
+		matchers: [
+			{ kind: 'exact', value: 'application/msword' },
+			{
+				kind: 'exact',
+				value: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+			},
+		],
+	},
+	{
+		category: 'excel',
+		matchers: [
+			{ kind: 'exact', value: 'application/vnd.ms-excel' },
+			{
+				kind: 'exact',
+				value: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+			},
+		],
+	},
+	{
+		category: 'powerpoint',
+		matchers: [
+			{ kind: 'exact', value: 'application/vnd.ms-powerpoint' },
+			{
+				kind: 'exact',
+				value:
+					'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+			},
+		],
+	},
 	{
 		category: 'image',
 		matchers: [{ kind: 'prefix', value: 'image/' }],
@@ -88,11 +145,20 @@ export const CONTENT_TYPE_RULES: readonly ContentTypeRule[] = [
 			{ kind: 'exact', value: 'application/ecmascript' },
 		],
 	},
+	/* json + yaml share a category (user-requested grouping). The yaml
+	   exact MIMEs come ahead of the `+json` suffix branch because exact
+	   wins over suffix anyway; `text/yaml` must appear before the later
+	   `text` prefix rule so YAML isn't swept up as plain text. */
 	{
 		category: 'json',
 		matchers: [
 			{ kind: 'exact', value: 'application/json' },
+			{ kind: 'exact', value: 'application/yaml' },
+			{ kind: 'exact', value: 'application/x-yaml' },
+			{ kind: 'exact', value: 'text/yaml' },
+			{ kind: 'exact', value: 'text/x-yaml' },
 			{ kind: 'suffix', value: '+json' },
+			{ kind: 'suffix', value: '+yaml' },
 		],
 	},
 	{
