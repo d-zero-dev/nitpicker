@@ -175,7 +175,7 @@ crawler/src/
 
 - **`ArchiveManager`**: アーカイブのライフサイクル管理（open / get / close / closeAll）。同一ファイルの重複オープンは参照カウントで管理し、untar を再実行しない。`open()` は `.nitpicker` ファイルだけでなく **stub ディレクトリ** (`<dir>/db.sqlite` を含むディレクトリ)も受け付け、ファイル/ディレクトリは `fs.statSync` で自動判定。stub オープンは `Archive.connect` 経由の read-only モードで lock を取らず、close 時には DB ハンドルだけ解放（tmpDir は user の crawl 状態として残す）。close と open は `entry.closing` Promise を介して serialise されるため、teardown 中の同一パスへの concurrent open は close 完了まで待ってから新規 open に進む（ArchiveLockError 競合を防ぐ）。`new ArchiveManager({onWarn})` で警告 sink を差し替え可能（既定は `console.warn`、MCP server は `process.stderr.write` 専用 sink を渡して JSON-RPC stdio framing を守る）。`open()` の戻り値には `mode: 'archive' | 'stub'` と `crawlerLockHolder: ArchiveLockHolder | null`（live PID 検出用、viewer footer が消費）を含む
 - **`listPages`**: ページ一覧取得（ステータス・メタデータ欠損・URL パターンなどでフィルタ）
-- **`getSummary`**: サイト全体の統計（ページ数、ステータス分布、メタデータ充足率）
+- **`getSummary`**: サイト全体の統計（内部/外部のページ数とコンテンツ数、ステータス分布、Content-Type 分布、メタデータ充足率）
 - **`getPageDetail`**: 単一ページの詳細情報（メタデータ、アウトバウンド/インバウンドリンク、リダイレクト元）
 - **`getPageHtml`**: HTML スナップショット取得（truncation サポート）
 - **`listLinks`**: リンク分析（broken / external / orphaned）
@@ -186,7 +186,7 @@ crawler/src/
 - **`findMismatches`**: メタデータ不一致の検出（canonical, og:title, og:description）
 - **`getResourceReferrers`**: リソースを参照しているページの特定
 - **`checkHeaders`**: セキュリティヘッダーチェック（CSP, X-Frame-Options, X-Content-Type-Options, HSTS）
-- **`classifyContentType`**: 生 MIME を 14 個の `ContentTypeCategory`（`html`/`pdf`/`image`/`css`/`javascript`/`json`/`xml`/`font`/`audio`/`video`/`archive`/`text`/`other`/`unknown`）に正規化する純関数。`getSummary` の `contentTypeDistribution` 集計と `listPages` の `contentTypeCategory` フィルタが同じカテゴリ境界を共有する単一の源泉
+- **`classifyContentType`**: 生 MIME を 18 個の `ContentTypeCategory`（`html`/`pdf`/`csv`/`word`/`excel`/`powerpoint`/`image`/`css`/`javascript`/`json`/`xml`/`font`/`audio`/`video`/`archive`/`text`/`other`/`unknown`）に正規化する純関数。`getSummary` の `contentTypeDistribution` 集計と `listPages` の `contentTypeCategory` フィルタが同じカテゴリ境界を共有する単一の源泉。**カテゴリ統合**: `csv` は CSV + TSV、`word` は .doc + .docx、`excel` は .xls + .xlsx、`powerpoint` は .ppt + .pptx、`json` は JSON + YAML、`text` は .txt + .md を 1 カテゴリにまとめる（拡張子別の分散を避け、ユーザーが「文書ファイル」「データファイル」をまとめて評価できるようにする設計判断）
 - **`applyCategoryFilter`**: `ContentTypeCategory` を Knex query に適用する SQL マッチャ。後述の「Content-Type ルール表」から派生し、JS classifier の優先順位を SQL に正確に投影する
 
 **サブエクスポート:**
@@ -263,11 +263,19 @@ nitpicker viewer <file>
 
 > **設計注意（仮想テーブルの ARIA ロールは必須）:** `web/components/virtual-table.tsx` は CSS で table 要素を `display: flex/block` にレイアウトしており、これがネイティブ table セマンティクスをアクセシビリティツリーから剥がす。明示的な ARIA ロール（`table`/`rowgroup`/`row`/`columnheader`/`cell`）+ `aria-row/colcount`/`index` で復元しているため、**これらを削除すると画面読み上げが「無構造なテキストの羅列」に退行する**。列ヘッダーのアクセシブルネームはリサイザーのラベル混入を避けるため `to-accessible-header-label.ts` で固定。E2E（`e2e/viewer.spec.ts` の「アクセシビリティ」群）が回帰を検知する。
 
+> **設計注意（Summary カードの "ページ" vs "コンテンツ"）:** Summary 画面の上部カードは 3 つで、それぞれ意味する分母が異なる。
+>
+> - **総コンテンツ数（内部）** = `internalContents` — 内部の全行（HTML + PDF + CSV + ZIP + Office docs + ...）。MIME フィルタなし。`SummaryResult.contentTypeDistribution` の internal 列の合計と等しい
+> - **総ページ数（内部）** = `internalPages` — 内部の HTML 行のみ（`contentType IS NULL OR text/html`）。`getSummary` が「HTML ページ」と呼ぶ歴史的な数値
+> - **外部リンク（外部コンテンツ）** = `externalContents` — 外部の全行（MIME 不問）
+>
+> `internalPages` ≤ `internalContents` が常に成り立つ。同じ archive に対して両方を提示することで「内部にはページが N 個ある、ただしリソース全体は M 個」をユーザーが一目で把握できる。`totalPages` / `externalPages` も API には残っている（CLI / MCP の後方互換）が viewer 上部カードでは使わない。「起点」カードは廃止（root URL リストが上のテキスト行で既出のため）。
+
 > **設計注意（Summary バーの精度契約）:** Summary 画面のバーは全グループ（Status / Content-Type / Metadata）が「全体に対する割合」を表示する。
 >
 > - **% 表示の単一窓口は `web/utils/format-percent.ts`**: Status 行も Metadata 行も Stacked bar のツールチップ・凡例も `formatPercent(ratio)` を通る。`<0.1%` 表記（非ゼロだが小さい値）はここで決まっており、各呼び出し側で `toFixed` を散らさないこと（散らすと「非ゼロ件数 (0.0%)」のような矛盾表記が再発する）。
 > - **Stacked bar の `min-inline-size` は CSS 側に置く**: `web/components/compute-stacked-bar-widths.ts` は `total / grandTotal × 100` を **再正規化せずに** 返し、サブピクセル分は `.bar-segment { min-inline-size: 4px }` で底上げする。再正規化を JS でやると floor 後の rescale で lifted セグメントが再び floor を下回り、凡例 % とバー幅が乖離する（旧実装のバグ）。**JS は raw proportional、CSS は final-width guarantee** の分担を逆転させないこと。
-> - **カテゴリ同期はテストが強制**: 新カテゴリ追加時は ① `@nitpicker/query` の `content-type-rules.ts` に rule 追加、② `web/styles.css` に `.bar-segment-<新カテゴリ>` ルール追加、③ `web/i18n/translations.ts` の `views.contentType` に en/ja ラベル追加、の 3 点同期が必須。`content-type-class.spec.ts`（CSS 網羅）と `translations.spec.ts`（i18n 網羅）が抜けを検出する。
+> - **カテゴリ同期はテストが強制する 3 箇所** ＋ **手動で同期する 2 箇所**: 新カテゴリ追加時は上記「新カテゴリ追加手順」の 5 ステップが必要だが、そのうち **CI が自動検出する**のは ① `content-type-rules.ts` の rule 追加（`content-type-rules.spec.ts` が SQL/JS パリティを検証）、② `web/styles.css` の `.bar-segment-<新カテゴリ>` ルール追加（`content-type-class.spec.ts` が CSS 網羅 + `--ct-color` 一意性を検証）、③ `web/i18n/translations.ts` の en/ja ラベル追加（`translations.spec.ts` が両ロケール網羅を検証）の **3 点同期のみ**。`types.ts` のユニオン型追加と、`cli/src/commands/query.ts` の `desc` / `mcp-server/src/tool-definitions.ts` の `enum` 更新は **TypeScript の網羅性検査と手動レビュー**で検出する（spec ではガードしていない）。
 
 ### @nitpicker/cli
 
