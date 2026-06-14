@@ -48,6 +48,22 @@ describe('Redirect handling', () => {
 		const anchorUrls = anchors.map((a) => a.url);
 		expect(anchorUrls.some((u) => u.includes('/redirect/start'))).toBe(true);
 	});
+
+	it('被リンクが redirect 元経由で宛先に合算される（end-to-end, #71）', async () => {
+		// /redirect/ は /redirect/start にリンクし、start は dest へ 301→302。
+		// 被リンクを redirect 越しに解決するため、/redirect/start を指す /redirect/ は
+		// 最終宛先 /redirect/dest の被リンクとして現れる（http→https と同じ機構を
+		// http→http で end-to-end 検証）。解決しないと dest の被リンクは 0 になる。
+		const pages = await result.accessor.getPages('internal-page');
+		const dest = pages.find((p) => p.url.pathname === '/redirect/dest');
+		expect(dest).toBeDefined();
+
+		const referrers = await dest!.getReferrers();
+		const fromTop = referrers.find((r) => new URL(r.url).pathname === '/redirect/');
+		expect(fromTop).toBeDefined();
+		// through はアンカーが実際に指した URL（リダイレクト元 /redirect/start）。
+		expect(new URL(fromTop!.through).pathname).toBe('/redirect/start');
+	});
 });
 
 describe('Redirect convergence (#73): 多対一リダイレクト先を1回だけ描画する', () => {

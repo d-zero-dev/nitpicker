@@ -162,3 +162,169 @@ describe('getPageDetail', () => {
 		expect(result).toBeNull();
 	});
 });
+
+describe('getPageDetail: 被リンクを redirect 越しに解決する（http/https 合算, #71）', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_get_page_detail_redirect__');
+	const archiveFilePath = path.resolve(dir, 'page-detail-redirect.nitpicker');
+
+	/**
+	 * Minimal empty metadata object shared by the redirect-resolution fixtures.
+	 * Avoids repeating the full nullable meta shape in every `setPage` call.
+	 */
+	const emptyMeta = {
+		lang: null,
+		title: null,
+		description: null,
+		keywords: null,
+		noindex: false,
+		nofollow: false,
+		noarchive: false,
+		canonical: null,
+		alternate: null,
+		'og:type': null,
+		'og:title': null,
+		'og:site_name': null,
+		'og:description': null,
+		'og:url': null,
+		'og:image': null,
+		'twitter:card': null,
+	};
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.4.4',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// 1) Canonical destination — the https content page.
+		await archive.setPage({
+			url: parseUrl('https://example.com/page')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html><head><title>Page</title></head></html>',
+			meta: { ...emptyMeta, title: 'Page' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// 2) http source that 301s to the https destination → http.redirectDestId = https.id.
+		await archive.setPage({
+			url: parseUrl('http://example.com/page')!,
+			redirectPaths: ['https://example.com/page'],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...emptyMeta },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// 3) A page linking the https destination DIRECTLY.
+		await archive.setPage({
+			url: parseUrl('https://example.com/linker-https')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...emptyMeta },
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/page')!,
+					isExternal: false,
+					title: null,
+					textContent: 'direct https',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// 4) A page linking the http SOURCE (which redirects to the https destination).
+		await archive.setPage({
+			url: parseUrl('https://example.com/linker-http')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...emptyMeta },
+			anchorList: [
+				{
+					href: parseUrl('http://example.com/page')!,
+					isExternal: false,
+					title: null,
+					textContent: 'via http',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('http リンクと https リンクが宛先ページの被リンクに合算される（分裂しない）', async () => {
+		const result = await getPageDetail(archive, 'https://example.com/page');
+		const inboundUrls = result!.inboundLinks.map((l) => l.url).toSorted();
+		// 直リンク(https) と redirect 元(http)へのリンク、両方が宛先に集約される。
+		expect(inboundUrls).toEqual([
+			'https://example.com/linker-http',
+			'https://example.com/linker-https',
+		]);
+	});
+
+	it('redirect 元ページ自身の被リンクは宛先側に付け替えられ、空になる', async () => {
+		// http://example.com/page を指すリンクは https 宛先の被リンクに解決されるため、
+		// 元(http)ページの被リンクには現れない（二重計上を防ぐ）。
+		const result = await getPageDetail(archive, 'http://example.com/page');
+		expect(result!.inboundLinks).toHaveLength(0);
+	});
+});

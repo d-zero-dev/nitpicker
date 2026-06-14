@@ -4,6 +4,9 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 /**
  * Retrieves detailed information about a single page by URL.
  * Includes all metadata, outbound links, inbound links, and redirect sources.
+ * Inbound links are resolved through redirects, so links to a redirect source
+ * (e.g. `http://x` 301-ing to `https://x`) count as backlinks of the final
+ * destination — they stay merged on the canonical page instead of splitting (#71).
  * @param accessor - The archive accessor to query.
  * @param url - The URL of the page to retrieve.
  * @returns Detailed page information, or null if the page is not found.
@@ -28,6 +31,12 @@ export async function getPageDetail(
 		console.warn(`Failed to parse responseHeaders for ${url}:`, error);
 	}
 
+	// Outbound links intentionally do NOT resolve through redirects (asymmetric
+	// with inboundLinks below): they show the RAW anchor target — e.g. a link to
+	// `http://x` that 301s to `https://x` is reported as pointing at `http://x`.
+	// This preserves the audit signal "this page links to a redirecting URL".
+	// Inbound is the opposite: it merges backlinks onto the canonical destination
+	// (#71). See ARCHITECTURE.md「被リンク/参照の redirect 透過解決（#71）」.
 	const outboundRows = await knex('anchors')
 		.select('pages.url', 'anchors.textContent', 'pages.status', 'pages.isExternal')
 		.join('pages', 'anchors.hrefId', '=', 'pages.id')
@@ -47,10 +56,18 @@ export async function getPageDetail(
 		}),
 	);
 
+	// Inbound links are resolved THROUGH redirects: an anchor pointing at a
+	// redirect source (e.g. `http://x` 301-ing to `https://x`) is counted as an
+	// incoming link to the redirect's final destination, not the source — so
+	// backlinks stay merged on the canonical page instead of splitting across the
+	// `http`/`https` pair (#71). `redirectDestId` is pre-flattened to the final
+	// destination, so `COALESCE(target.redirectDestId, target.id)` is a single hop
+	// (same semantics as crawler's `redirectTable()`).
 	const inboundRows = await knex('anchors')
-		.select('pages.url', 'anchors.textContent')
-		.join('pages', 'anchors.pageId', '=', 'pages.id')
-		.where('anchors.hrefId', page.id);
+		.select('referrer.url', 'anchors.textContent')
+		.join('pages as referrer', 'anchors.pageId', '=', 'referrer.id')
+		.join('pages as target', 'anchors.hrefId', '=', 'target.id')
+		.whereRaw('coalesce("target"."redirectDestId", "target"."id") = ?', [page.id]);
 
 	const inboundLinks = inboundRows.map(
 		(row: { url: string; textContent: string | null }) => ({
