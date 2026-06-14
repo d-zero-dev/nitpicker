@@ -70,6 +70,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				roots: 'Roots',
 				statusDistribution: 'Status distribution',
 				contentTypeDistribution: 'Content-Type distribution',
+				contentTypeStackedBarLabel: 'Content-Type breakdown',
 				metadataFulfillment: 'Metadata fulfillment',
 			},
 			contentType: {
@@ -281,6 +282,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				roots: '起点',
 				statusDistribution: 'ステータス分布',
 				contentTypeDistribution: 'Content-Type 分布',
+				contentTypeStackedBarLabel: 'Content-Type の内訳',
 				metadataFulfillment: 'メタデータ充足率',
 			},
 			contentType: {

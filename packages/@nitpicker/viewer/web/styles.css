@@ -501,6 +501,233 @@ h2 {
 	background: var(--accent);
 }
 
+/*
+ * Content-Type stacked bar — macOS / iOS storage-style breakdown.
+ *
+ * The bar itself is a flex row of `.bar-segment-<category>` spans, each given
+ * an inline `width: N%`. Color + pattern overlay live entirely here; the JSX
+ * just composes the class name. Pattern overlays use a constant `rgb(0 0 0 / N%)`
+ * tint (not theme-aware) so a category looks the same in both themes — the
+ * theme switch already shifts the bar's container, no need to also flip the
+ * stripe color (which would defeat the cross-theme recognition).
+ */
+.stacked-bar-wrap {
+	display: block flex;
+	flex-direction: column;
+	gap: 12px;
+	max-inline-size: 720px;
+	margin-block-end: 20px;
+}
+
+.stacked-bar {
+	display: block flex;
+	block-size: 16px;
+	overflow: hidden;
+	background: var(--border);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
+.bar-segment {
+	display: block;
+
+	/* Floor + final-width guarantee for stacked-bar segments. The JS sends
+	   each segment its raw proportional width (`count / grandTotal`); when
+	   the share is sub-pixel, CSS lifts it to a hover-able strip. Doing the
+	   lift in CSS (not JS) means the legend percentage stays exactly the
+	   raw share — no renormalisation needed — and the geometry asymmetry
+	   is absorbed by flexbox shrinking the larger segments. */
+	min-inline-size: 4px;
+	block-size: 100%;
+	background-color: var(--ct-color, var(--accent));
+}
+
+.stacked-bar .bar-segment:only-child {
+	/* The single-category bar fills the track; the 4px floor would
+	   otherwise leave a sliver of `--border` at the right edge. */
+	min-inline-size: 100%;
+}
+
+.stacked-bar-legend {
+	display: block grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 4px 12px;
+	padding: 0;
+	margin: 0;
+	font-size: var(--font-size-base);
+	list-style: none;
+}
+
+.stacked-bar-legend-item {
+	display: block flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.stacked-bar-swatch {
+	flex: 0 0 auto;
+	inline-size: 14px;
+	block-size: 14px;
+	border: 1px solid var(--border);
+	border-radius: 2px;
+}
+
+.stacked-bar-legend-label {
+	flex: 1 1 auto;
+	min-inline-size: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.stacked-bar-legend-count {
+	flex: 0 0 auto;
+	color: var(--text-dim);
+}
+
+.stacked-bar-legend-percent {
+	color: var(--text-dim);
+}
+
+/* Per-category fill + accessibility pattern overlay (always on, no toggle).
+   Adding a new ContentTypeCategory requires adding a `.bar-segment-<new>`
+   rule here — the spec `content-type-class.spec.ts` will fail the build
+   if any category is missing a rule. */
+.bar-segment-html {
+	--ct-color: #3b82f6;
+}
+
+.bar-segment-pdf {
+	--ct-color: #ef4444;
+	background-image: repeating-linear-gradient(
+		45deg,
+		transparent 0 6px,
+		color-mix(in srgb, #000 25%, transparent) 6px 8px
+	);
+}
+
+.bar-segment-image {
+	--ct-color: #22c55e;
+	background-image: radial-gradient(
+		circle at center,
+		color-mix(in srgb, #000 35%, transparent) 1.5px,
+		transparent 1.5px
+	);
+	background-size: 6px 6px;
+}
+
+.bar-segment-audio {
+	--ct-color: #f97316;
+	background-image: repeating-linear-gradient(
+		0deg,
+		transparent 0 6px,
+		color-mix(in srgb, #000 25%, transparent) 6px 8px
+	);
+}
+
+.bar-segment-video {
+	--ct-color: #f43f5e;
+	background-image: repeating-linear-gradient(
+		135deg,
+		transparent 0 6px,
+		color-mix(in srgb, #000 25%, transparent) 6px 8px
+	);
+}
+
+.bar-segment-font {
+	--ct-color: #ec4899;
+	background-image: repeating-linear-gradient(
+		90deg,
+		transparent 0 6px,
+		color-mix(in srgb, #000 25%, transparent) 6px 8px
+	);
+}
+
+.bar-segment-css {
+	--ct-color: #a855f7;
+	background-image:
+		repeating-linear-gradient(
+			45deg,
+			transparent 0 6px,
+			color-mix(in srgb, #000 25%, transparent) 6px 8px
+		),
+		repeating-linear-gradient(
+			135deg,
+			transparent 0 6px,
+			color-mix(in srgb, #000 25%, transparent) 6px 8px
+		);
+}
+
+.bar-segment-javascript {
+	--ct-color: #f59e0b;
+	background-image: radial-gradient(
+		circle at center,
+		color-mix(in srgb, #000 40%, transparent) 1px,
+		transparent 1px
+	);
+	background-size: 4px 4px;
+}
+
+.bar-segment-json {
+	--ct-color: #06b6d4;
+	background-image:
+		repeating-linear-gradient(
+			0deg,
+			transparent 0 6px,
+			color-mix(in srgb, #000 25%, transparent) 6px 8px
+		),
+		repeating-linear-gradient(
+			90deg,
+			transparent 0 6px,
+			color-mix(in srgb, #000 25%, transparent) 6px 8px
+		);
+}
+
+.bar-segment-xml {
+	--ct-color: #14b8a6;
+	background-image: repeating-linear-gradient(
+		45deg,
+		transparent 0 4px,
+		color-mix(in srgb, #000 30%, transparent) 4px 10px
+	);
+}
+
+.bar-segment-archive {
+	--ct-color: #78716c;
+	background-image: repeating-linear-gradient(
+		90deg,
+		transparent 0 4px,
+		color-mix(in srgb, #000 30%, transparent) 4px 10px
+	);
+}
+
+.bar-segment-text {
+	--ct-color: #6366f1;
+	background-image: repeating-linear-gradient(
+		0deg,
+		transparent 0 4px,
+		color-mix(in srgb, #000 30%, transparent) 4px 10px
+	);
+}
+
+.bar-segment-other {
+	--ct-color: #64748b;
+	background-image: repeating-linear-gradient(
+		90deg,
+		transparent 0 8px,
+		color-mix(in srgb, #000 20%, transparent) 8px 9px
+	);
+}
+
+.bar-segment-unknown {
+	--ct-color: #94a3b8;
+	background-image: repeating-linear-gradient(
+		0deg,
+		transparent 0 8px,
+		color-mix(in srgb, #000 20%, transparent) 8px 9px
+	);
+}
+
 /* Detail */
 .detail-grid {
 	display: block grid;

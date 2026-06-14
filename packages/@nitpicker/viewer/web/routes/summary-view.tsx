@@ -1,8 +1,12 @@
 import type { MetadataFulfillment } from '@nitpicker/query';
 
 import { useSummary } from '../api/use-summary.js';
+import { ContentTypeStackedBar } from '../components/content-type-stacked-bar.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useI18n } from '../i18n/use-i18n.js';
+import { clampRatio } from '../utils/clamp-ratio.js';
+import { computeRatio } from '../utils/compute-ratio.js';
+import { formatPercent } from '../utils/format-percent.js';
 
 /**
  * A single statistic card.
@@ -20,22 +24,27 @@ function Card(props: { label: string; value: number }) {
 }
 
 /**
- * A labeled horizontal bar showing a 0–1 ratio.
+ * A labeled horizontal bar showing a 0–1 ratio. The fill width and the
+ * label both derive from the same `clampRatio` + `formatPercent`
+ * pipeline so the visual width and the printed percent cannot drift
+ * apart. The earlier implementation called `Math.round(ratio * 100)`
+ * in two places (once for the inline style, once for the label), so a
+ * future refactor that touched one site without the other would have
+ * produced an off-by-one mismatch between bar and label — funnelling
+ * both sides through one transform keeps that whole class of bug out.
  * @param props - The bar label and ratio.
  * @param props.label - The bar label.
  * @param props.ratio - The ratio (0–1).
  */
 function RatioBar(props: { label: string; ratio: number }) {
+	const clamped = clampRatio(props.ratio);
 	return (
 		<div className="bar-row">
 			<span style={{ width: 110 }}>{props.label}</span>
 			<span className="bar-track">
-				<span
-					className="bar-fill"
-					style={{ width: `${Math.round(props.ratio * 100)}%` }}
-				/>
+				<span className="bar-fill" style={{ width: `${clamped * 100}%` }} />
 			</span>
-			<span>{Math.round(props.ratio * 100)}%</span>
+			<span>{formatPercent(clamped)}</span>
 		</div>
 	);
 }
@@ -53,6 +62,14 @@ const METADATA_LABELS: { key: keyof MetadataFulfillment; label: string }[] = [
 /**
  * The summary dashboard: page counts, status distribution, content-type
  * distribution, and metadata fulfillment for the opened archive.
+ *
+ * All three bar groups now show **shares of the whole** (segment width
+ * proportional to count / total) rather than shares of the largest bucket.
+ * Status / metadata stay as individual rows; content-type collapses into a
+ * single stacked bar plus legend so the user can read all categories at a
+ * glance, the same way the macOS / iOS storage view does. All percent
+ * labels go through {@link formatPercent} so precision and the
+ * sub-0.1%-but-non-zero edge case read consistently across groups.
  * @returns The summary view element.
  */
 export function SummaryView() {
@@ -69,10 +86,9 @@ export function SummaryView() {
 		return null;
 	}
 
-	const maxStatusCount = Math.max(1, ...data.statusDistribution.map((s) => s.count));
-	const maxContentTypeCount = Math.max(
-		1,
-		...data.contentTypeDistribution.map((c) => c.internal + c.external),
+	const statusTotal = data.statusDistribution.reduce(
+		(acc, entry) => acc + entry.count,
+		0,
 	);
 
 	return (
@@ -95,53 +111,24 @@ export function SummaryView() {
 
 			<h2>{t('views.summary.statusDistribution')}</h2>
 			<div className="bars">
-				{data.statusDistribution.map((entry) => (
-					<div key={entry.status ?? 'none'} className="bar-row">
-						<span style={{ width: 60 }}>{entry.status ?? '—'}</span>
-						<span className="bar-track">
-							<span
-								className="bar-fill"
-								style={{ width: `${Math.round((entry.count / maxStatusCount) * 100)}%` }}
-							/>
-						</span>
-						<span>{entry.count.toLocaleString()}</span>
-					</div>
-				))}
-			</div>
-
-			<h2>{t('views.summary.contentTypeDistribution')}</h2>
-			<div className="bars">
-				{data.contentTypeDistribution.map((entry) => {
-					const total = entry.internal + entry.external;
+				{data.statusDistribution.map((entry) => {
+					const ratio = computeRatio(entry.count, statusTotal);
 					return (
-						<div key={entry.category} className="bar-row">
-							<span style={{ width: 160 }}>
-								{t(`views.contentType.${entry.category}` as const)}
-							</span>
+						<div key={entry.status ?? 'none'} className="bar-row">
+							<span style={{ width: 60 }}>{entry.status ?? '—'}</span>
 							<span className="bar-track">
-								<span
-									className="bar-fill"
-									style={{
-										width: `${Math.round((total / maxContentTypeCount) * 100)}%`,
-									}}
-								/>
+								<span className="bar-fill" style={{ width: `${ratio * 100}%` }} />
 							</span>
 							<span>
-								{total.toLocaleString()}
-								{entry.external > 0 && (
-									<>
-										{' '}
-										<small>
-											({t('common.internal')} {entry.internal.toLocaleString()} /{' '}
-											{t('common.external')} {entry.external.toLocaleString()})
-										</small>
-									</>
-								)}
+								{entry.count.toLocaleString()} <small>({formatPercent(ratio)})</small>
 							</span>
 						</div>
 					);
 				})}
 			</div>
+
+			<h2>{t('views.summary.contentTypeDistribution')}</h2>
+			<ContentTypeStackedBar entries={data.contentTypeDistribution} />
 
 			<h2>{t('views.summary.metadataFulfillment')}</h2>
 			<div className="bars">
