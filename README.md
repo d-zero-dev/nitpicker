@@ -480,7 +480,7 @@ $ npx @nitpicker/cli viewer ._nitpicker-site
 
 > **HTML スナップショット**: ページ詳細のプレビューは `<iframe sandbox>`（`allow-same-origin`/`allow-scripts` なし）でレンダリングするためローカルでも安全。ソース表示にも切り替えられる。
 
-> **Content-Type 分類**: Summary 画面に Content-Type カテゴリ（`html`/`pdf`/`image`/`css`/...）別の件数バーチャートが表示される。Pages 画面のフィルタバーで Content-Type を選ぶと、既定の HTML-or-null 制約を外して PDF 等の非 HTML ページも一覧できる（例: 「30 万 URL の大半が PDF」を直接ブラウズ）。カテゴリ判定は `@nitpicker/query` の `classifyContentType` ルール表に集約され、Summary チャートと Pages フィルタが同じ行を同じカテゴリに数える。
+> **Content-Type 分類**: Summary 画面に Content-Type カテゴリ（`html`/`pdf`/`image`/`css`/...）の **シェア（合計に対する内訳）を 1 本の積み上げバー + 凡例** で表示する（macOS / iOS のストレージ画面と同じ可視化）。各セグメントは固定色 + 罫線/水玉のパターンオーバーレイを常時持つので、色覚多様性のあるユーザでもカテゴリを区別できる。サブピクセルセグメントは CSS の `min-inline-size: 4px` でホバー可能な細片に底上げされる一方、JS は再正規化せず生のシェアを返すため凡例の % はバー幅と一致する。Pages 画面のフィルタバーで Content-Type を選ぶと、既定の HTML-or-null 制約を外して PDF 等の非 HTML ページも一覧できる（例: 「30 万 URL の大半が PDF」を直接ブラウズ）。カテゴリ判定は `@nitpicker/query` の `classifyContentType` ルール表に集約され、Summary チャートと Pages フィルタが同じ行を同じカテゴリに数える。
 
 #### アクセシビリティ
 

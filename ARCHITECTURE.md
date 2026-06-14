@@ -213,9 +213,10 @@ SQL マッチャ側はこの優先順位を「目的カテゴリの positive 節
 1. `packages/@nitpicker/query/src/types.ts` の `ContentTypeCategory` ユニオン型に新しいリテラルを追加（TypeScript が全 switch 文の網羅性検査で残り箇所を教えてくれる）
 2. `packages/@nitpicker/query/src/content-type-rules.ts` の `CONTENT_TYPE_RULES` 配列に新ルールを挿入（順序が優先順位）
 3. `packages/@nitpicker/viewer/web/i18n/translations.ts` の `views.contentType` に新カテゴリの en / ja ラベルを追加
-4. `packages/@nitpicker/cli/src/commands/query.ts` の `--contentTypeCategory` の `desc` と、`packages/@nitpicker/mcp-server/src/tool-definitions.ts` の `enum` リストを更新
+4. `packages/@nitpicker/viewer/web/styles.css` に `.bar-segment-<新カテゴリ>` ルールを追加（`--ct-color` の値 + 必要なら `background-image` パターン）。Summary 画面の Stacked bar 用
+5. `packages/@nitpicker/cli/src/commands/query.ts` の `--contentTypeCategory` の `desc` と、`packages/@nitpicker/mcp-server/src/tool-definitions.ts` の `enum` リストを更新
 
-`content-type-rules.spec.ts` の property-based テストが「全カテゴリで JS classifier の判定結果と SQL マッチャの返り値が一致する」を全フィクスチャ MIME に対して回すため、ルール表のずれは CI で必ず落ちる。
+`content-type-rules.spec.ts` の property-based テスト（JS classifier と SQL マッチャの一致）、`content-type-class.spec.ts` の CSS 網羅テスト（`.bar-segment-<cat>` ルール存在と `--ct-color` 一意性）、`translations.spec.ts` の i18n 網羅テスト（全カテゴリの en/ja ラベル存在）の三層で抜けが CI で必ず落ちる。
 
 ### @nitpicker/mcp-server
 
@@ -261,6 +262,12 @@ nitpicker viewer <file>
 > **設計注意（ポート探索は serve と同じ host を probe する）:** `findFreePort(preferred, host)` は **`serve()` がバインドするのと同じ `host` で空きを確認しなければならない**。`localhost` は `::1`（IPv6）に解決される一方、host 未指定の bind は `0.0.0.0`/`::` を使うため、別インターフェースを probe すると「空き」と誤判定し、フォールバックが効かず banner 表示後に `EADDRINUSE` でクラッシュする。`start-viewer.ts` は必ず `host` を渡すこと。回帰テストは `find-free-port.spec.ts`（`net.createServer` をスパイし `listen` への host 転送を検証）。
 
 > **設計注意（仮想テーブルの ARIA ロールは必須）:** `web/components/virtual-table.tsx` は CSS で table 要素を `display: flex/block` にレイアウトしており、これがネイティブ table セマンティクスをアクセシビリティツリーから剥がす。明示的な ARIA ロール（`table`/`rowgroup`/`row`/`columnheader`/`cell`）+ `aria-row/colcount`/`index` で復元しているため、**これらを削除すると画面読み上げが「無構造なテキストの羅列」に退行する**。列ヘッダーのアクセシブルネームはリサイザーのラベル混入を避けるため `to-accessible-header-label.ts` で固定。E2E（`e2e/viewer.spec.ts` の「アクセシビリティ」群）が回帰を検知する。
+
+> **設計注意（Summary バーの精度契約）:** Summary 画面のバーは全グループ（Status / Content-Type / Metadata）が「全体に対する割合」を表示する。
+>
+> - **% 表示の単一窓口は `web/utils/format-percent.ts`**: Status 行も Metadata 行も Stacked bar のツールチップ・凡例も `formatPercent(ratio)` を通る。`<0.1%` 表記（非ゼロだが小さい値）はここで決まっており、各呼び出し側で `toFixed` を散らさないこと（散らすと「非ゼロ件数 (0.0%)」のような矛盾表記が再発する）。
+> - **Stacked bar の `min-inline-size` は CSS 側に置く**: `web/components/compute-stacked-bar-widths.ts` は `total / grandTotal × 100` を **再正規化せずに** 返し、サブピクセル分は `.bar-segment { min-inline-size: 4px }` で底上げする。再正規化を JS でやると floor 後の rescale で lifted セグメントが再び floor を下回り、凡例 % とバー幅が乖離する（旧実装のバグ）。**JS は raw proportional、CSS は final-width guarantee** の分担を逆転させないこと。
+> - **カテゴリ同期はテストが強制**: 新カテゴリ追加時は ① `@nitpicker/query` の `content-type-rules.ts` に rule 追加、② `web/styles.css` に `.bar-segment-<新カテゴリ>` ルール追加、③ `web/i18n/translations.ts` の `views.contentType` に en/ja ラベル追加、の 3 点同期が必須。`content-type-class.spec.ts`（CSS 網羅）と `translations.spec.ts`（i18n 網羅）が抜けを検出する。
 
 ### @nitpicker/cli
 
