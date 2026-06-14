@@ -296,7 +296,14 @@ export default class Page {
 				textContent: r.textContent || '',
 			}));
 		}
-		return this.#archive.getReferrersOfPage(this.#raw.id);
+		const refs = await this.#archive.getReferrersOfPage(this.#raw.id);
+		return refs.map((r) => ({
+			url: r.url,
+			through: r.through,
+			throughId: r.throughId,
+			hash: r.hash,
+			textContent: r.textContent || '',
+		}));
 	}
 
 	/**
@@ -305,7 +312,14 @@ export default class Page {
 	 * @returns An array of {@link Referrer} objects.
 	 */
 	async getRequests(): Promise<Referrer[]> {
-		return this.#archive.getReferrersOfPage(this.#raw.id);
+		const refs = await this.#archive.getReferrersOfPage(this.#raw.id);
+		return refs.map((r) => ({
+			url: r.url,
+			through: r.through,
+			throughId: r.throughId,
+			hash: r.hash,
+			textContent: r.textContent || '',
+		}));
 	}
 
 	/**

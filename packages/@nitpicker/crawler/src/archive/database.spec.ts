@@ -730,6 +730,126 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 		}
 	});
 
+	it('被リンクを redirect 越しに解決する: http 元へのリンクが https 宛先の被リンクに合算される (#71)', async () => {
+		const dbPath = path.resolve(workingDir, 'referrers-redirect-merge.sqlite');
+		const db = await Database.connect({ workingDir, filename: dbPath });
+		const destUrl = 'https://localhost/page';
+		const srcUrl = 'http://localhost/page';
+
+		try {
+			// 1) https 宛先（実コンテンツ）。
+			await db.updatePage(
+				{
+					url: parseUrl(destUrl)!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'Page' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				workingDir,
+				true,
+			);
+
+			// 2) http 元が https 宛先へ 301（src.redirectDestId = dest.id）。
+			await db.updatePage(
+				{
+					url: parseUrl(srcUrl)!,
+					redirectPaths: [destUrl],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'Page (http)' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				workingDir,
+				true,
+			);
+
+			// 3) 一方は https 宛先を直リンク、もう一方は http 元をリンク。
+			await db.updatePage(
+				{
+					url: parseUrl('http://localhost/linker-https')!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'Linker https' },
+					anchorList: [
+						{ href: parseUrl(destUrl)!, textContent: 'direct', isExternal: false },
+					],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				workingDir,
+				true,
+			);
+			await db.updatePage(
+				{
+					url: parseUrl('http://localhost/linker-http')!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'Linker http' },
+					anchorList: [
+						{ href: parseUrl(srcUrl)!, textContent: 'via http', isExternal: false },
+					],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				workingDir,
+				true,
+			);
+
+			const knex = db.getKnex();
+			const [dest] = await knex.from('pages').select('id').where('url', destUrl);
+
+			// 両リンクが宛先の被リンクに合算される（http/https で分裂しない）。
+			const refs = await db.getReferrersOfPage(dest.id);
+			const urls = refs.map((r) => r.url).toSorted();
+			expect(urls).toEqual([
+				'http://localhost/linker-http',
+				'http://localhost/linker-https',
+			]);
+
+			// through はアンカーが実際に指した URL（直リンクなら宛先、redirect 経由なら元）を返す。
+			const viaHttp = refs.find((r) => r.url === 'http://localhost/linker-http');
+			const direct = refs.find((r) => r.url === 'http://localhost/linker-https');
+			expect(viaHttp!.through).toBe(srcUrl);
+			expect(direct!.through).toBe(destUrl);
+
+			// 元(http)ページ側の被リンクは空（宛先に付け替わるため二重計上しない）。
+			const [src] = await knex.from('pages').select('id').where('url', srcUrl);
+			const srcRefs = await db.getReferrersOfPage(src.id);
+			expect(srcRefs).toHaveLength(0);
+		} finally {
+			await db.destroy();
+			await remove(dbPath);
+		}
+	});
+
 	it('ページ内に正当な同一リンク（ヘッダー/フッター重複）がある場合、再スクレイプでも件数を保持する', async () => {
 		// 実アーカイブの「重複」の大半は、全ページのヘッダー/フッターに同じリンクが
 		// 並ぶ正当なページ内重複。delete-then-insert は anchorList をそのまま入れ直す

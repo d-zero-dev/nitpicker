@@ -341,6 +341,34 @@ describe('Page', () => {
 			await page.getReferrers();
 			expect(archive.getReferrersOfPage).toHaveBeenCalledWith(7);
 		});
+
+		it('プリロード無しのフォールバックでも through/throughId を含む Referrer 形状にマップする', async () => {
+			// getReferrersOfPage は redirect 解決済みの行（through = アンカーが実際に
+			// 指した URL）を返す。フォールバック経路でも #rawReferrers 経路と同じ形状に
+			// マップされ、report の "[REDIRECTED FROM]" 判定が機能することを保証する。
+			const archive = createMockArchive({
+				getReferrersOfPage: vi.fn().mockResolvedValue([
+					{
+						url: 'https://example.com/linker',
+						through: 'http://example.com/page',
+						throughId: 9,
+						hash: null,
+						textContent: null,
+					},
+				]),
+			});
+			const page = new Page(archive as never, createRawPage({ id: 7 }));
+			const referrers = await page.getReferrers();
+			expect(referrers).toEqual([
+				{
+					url: 'https://example.com/linker',
+					through: 'http://example.com/page',
+					throughId: 9,
+					hash: null,
+					textContent: '',
+				},
+			]);
+		});
 	});
 
 	describe('getHtml', () => {
@@ -379,6 +407,31 @@ describe('Page', () => {
 			);
 			await page.getRequests();
 			expect(archive.getReferrersOfPage).toHaveBeenCalledWith(3);
+		});
+
+		it('through/throughId を含む Referrer 形状にマップする', async () => {
+			const archive = createMockArchive({
+				getReferrersOfPage: vi.fn().mockResolvedValue([
+					{
+						url: 'https://example.com/linker',
+						through: 'http://example.com/page',
+						throughId: 9,
+						hash: 'sec',
+						textContent: 'text',
+					},
+				]),
+			});
+			const page = new Page(archive as never, createRawPage({ id: 3 }));
+			const requests = await page.getRequests();
+			expect(requests).toEqual([
+				{
+					url: 'https://example.com/linker',
+					through: 'http://example.com/page',
+					throughId: 9,
+					hash: 'sec',
+					textContent: 'text',
+				},
+			]);
 		});
 	});
 });
