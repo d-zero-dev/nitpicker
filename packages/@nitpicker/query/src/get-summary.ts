@@ -137,18 +137,42 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 	// (bounded by the number of distinct MIME strings), then map through
 	// `classifyContentType` in JS so the canonical category lives in exactly
 	// one place — matching the SQL filter the Pages view uses.
+	//
+	// While walking the same rows we also aggregate the "all in-scope rows
+	// regardless of MIME" totals (`internalContents` / `externalContents`).
+	// Doing it here avoids a separate SQL round-trip — the contentType
+	// query already covers every isExternal value with no MIME filter.
+	//
+	// IMPORTANT: the contentTypeRows query above already applies
+	// `whereNull('redirectDestId')` so redirect-destination rows do NOT
+	// inflate the totals (every redirect endpoint would otherwise count
+	// twice — once as the source, once as the resolved target). If you
+	// ever relax that filter on the SQL, also re-evaluate this loop:
+	// `internalContents` and `externalContents` are now defined as
+	// "every non-redirect-resolved row".
 	const contentTypeAcc = new Map<
 		ContentTypeCategory,
 		{ internal: number; external: number }
 	>();
+	let internalContents = 0;
+	let externalContents = 0;
 	for (const row of contentTypeRows) {
 		const category = classifyContentType(row.contentType);
 		const bucket = contentTypeAcc.get(category) ?? { internal: 0, external: 0 };
 		const n = Number(row.count);
-		if (row.isExternal) {
+		/* Strict equality matches `pageRows` above (lines 94–98) — a row
+		   with NULL `isExternal` (the schema permits it; the writer always
+		   writes 0/1 but we stay defensive at the DB boundary) goes into
+		   neither bucket, so `internalContents` / `externalContents` agree
+		   with `internalPages` / `externalPages` on what "internal" means.
+		   Truthy/falsy coercion would put NULL rows into internal here while
+		   the pageRows loop dropped them entirely. */
+		if (row.isExternal === 1) {
 			bucket.external += n;
-		} else {
+			externalContents += n;
+		} else if (row.isExternal === 0) {
 			bucket.internal += n;
+			internalContents += n;
 		}
 		contentTypeAcc.set(category, bucket);
 	}
@@ -171,6 +195,8 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		totalPages: totalNum,
 		internalPages: internalNum,
 		externalPages: externalNum,
+		internalContents,
+		externalContents,
 		statusDistribution,
 		metadataFulfillment,
 		contentTypeDistribution,
