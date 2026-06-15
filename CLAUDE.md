@@ -75,6 +75,8 @@ npx @nitpicker/cli -v | --version                       # `@nitpicker/cli` の�
 
 > **Note**: `-v` / `--version` は `argv[0]` の位置でのみ判定する。`crawl -v` のようにサブコマンドの後ろに置いた場合はそのコマンドのフラグとして解釈される（`@d-zero/roar` の仕様）。
 
+> **エラー原因分類（`query error-kinds` / viewer Errors ビュー）**: クロール失敗を 8 種（dns / connection-refused / connection-reset / connection-timeout / tls / timeout / protocol / unknown）に分類する。**kind は保存せず読み取り時に `classifyErrorKind(message)`（`@nitpicker/query`）で導出**するため、この機能より前のアーカイブもそのまま分類できる（分類ロジックが 1 箇所に集約され、capture 時と read 時で必ず一致する）。失敗は 2 系統: スクレイプ経路は `page_errors`、crawler レベルの `error` チャネル（DNS/接続/TLS）は構造化テーブル **`crawl_errors`**（`Archive.addError` が `error.log` と両方へ記録、`migrateCrawlErrors` で既存アーカイブに後付け）。`getErrorKinds` は `crawl_errors` に行があればそれを、無ければ（テーブル不在 **または空**）`error.log` をパースしてフォールバックする（空フォールバックが無いと、migration で空テーブルだけ作られた legacy アーカイブのエラーが読まれず消える）。`crawl_errors` は read-only 接続では `migrateCrawlErrors` が走らないため作られない（stub viewer は error.log フォールバックで分類）。
+
 ## 主要アーキテクチャ
 
 ### データフロー（crawl）

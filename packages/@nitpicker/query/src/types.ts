@@ -671,3 +671,59 @@ export interface ListPageLinksOptions {
 	/** Number of results to skip. */
 	offset?: number;
 }
+
+/**
+ * Coarse cause of a crawl/scrape failure.
+ *
+ * The crawler stores only the raw error message (in `crawl_errors`,
+ * `page_errors`, or `error.log`); the cause is derived on read by
+ * {@link classifyErrorKind}, so existing archives gain classification without a
+ * re-crawl. `timeout` is a puppeteer/page-level timeout (e.g. navigation or the
+ * scraper's overall race), whereas `connection-timeout` is a transport-level
+ * `ETIMEDOUT`; keeping them apart lets a slow-but-reachable host be told from an
+ * unreachable one.
+ */
+export type ErrorKind =
+	| 'dns'
+	| 'connection-refused'
+	| 'connection-reset'
+	| 'connection-timeout'
+	| 'tls'
+	| 'timeout'
+	| 'protocol'
+	| 'unknown';
+
+/** A single host's failure count within an {@link ErrorKindGroup}. */
+export interface ErrorKindHost {
+	/** Hostname extracted from the failing URL, or `(unknown)` when the URL is absent/unparsable. */
+	host: string;
+	/** Number of failures of the group's kind on this host. */
+	count: number;
+}
+
+/** Aggregated failures sharing one {@link ErrorKind}. */
+export interface ErrorKindGroup {
+	/** The classified cause. */
+	kind: ErrorKind;
+	/** Total failure records classified into this kind. */
+	count: number;
+	/** Per-host breakdown, most failures first. */
+	hosts: ErrorKindHost[];
+	/** Up to a capped number of representative failing URLs. */
+	sampleUrls: string[];
+}
+
+/** Result of {@link getErrorKinds}. */
+export interface ErrorKindsResult {
+	/** Total failure records across all kinds. */
+	total: number;
+	/**
+	 * Where the error-channel (DNS/connection/TLS) records came from:
+	 * `crawl_errors` for archives crawled after structured capture landed,
+	 * `error.log` for older archives parsed on read, or `none` when neither
+	 * yielded rows. `page_errors` (scrape-path) is always merged in regardless.
+	 */
+	channelSource: 'crawl_errors' | 'error.log' | 'none';
+	/** Groups sorted by `count`, most failures first. */
+	groups: ErrorKindGroup[];
+}

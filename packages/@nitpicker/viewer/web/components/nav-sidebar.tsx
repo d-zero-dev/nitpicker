@@ -17,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
 	{ path: '/duplicates', labelKey: 'nav.duplicates' },
 	{ path: '/mismatches', labelKey: 'nav.mismatches' },
 	{ path: '/headers', labelKey: 'nav.headers' },
+	{ path: '/errors', labelKey: 'nav.errors' },
 ];
 
 /**

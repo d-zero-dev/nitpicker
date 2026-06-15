@@ -133,11 +133,17 @@ npx @nitpicker/cli pipeline <URL> --sheet <URL> --all
 npx @nitpicker/cli query <file> <sub-command> [options]
 ```
 
-サブコマンド: `summary` / `pages` / `page-detail` / `html` / `links` / `resources` / `images` / `violations` / `duplicates` / `mismatches` / `headers` / `resource-referrers`。詳細は `--help`。
+サブコマンド: `summary` / `pages` / `page-detail` / `html` / `links` / `resources` / `images` / `violations` / `duplicates` / `mismatches` / `headers` / `resource-referrers` / `error-kinds`。詳細は `--help`。
 
 ### `--contentTypeCategory`
 
 `pages` のみで使える。**指定時は既定の HTML-or-null ベースフィルタを外し、PDF など非 HTML 行も列挙する**。カテゴリ判定は `@nitpicker/query` の `classifyContentType` ルール表に集約され、Summary チャートと Pages フィルタが同じ行を同じカテゴリに数える。
+
+### `error-kinds`: クロール失敗の原因分類
+
+クロール失敗を原因別（`dns` / `connection-refused` / `connection-reset` / `connection-timeout` / `tls` / `timeout` / `protocol` / `unknown`）に集計する。DNS 解決失敗や接続拒否が、ただの「タイムアウト/不明」に埋もれず区別できる。kind 別件数 + ホスト別内訳 + サンプル URL を JSON で返す。
+
+原因の判定（`classifyErrorKind`）は **保存された値ではなく `message` から読み取り時に行う**ため、この機能より前に作成した既存アーカイブもそのまま分類できる。失敗の取得元は 2 系統: スクレイプ経路の失敗は `page_errors`、DNS/接続/TLS など crawler レベルの失敗は構造化テーブル `crawl_errors`（無い古いアーカイブでは `error.log` を読んでフォールバック）。応答しないページが per-property の累積タイムアウトで `timeout` に倒れる現象は beholder 側の既知課題（`getMeta` の逐次取得）。
 
 ## Viewer
 
@@ -154,6 +160,10 @@ npx @nitpicker/cli viewer <file-or-stub-dir> [--port 9000] [--no-open]
 ### 仮想スクロール
 
 ページ一覧は サーバ側ページネーション（`limit`/`offset`）+ TanStack Query infinite query + TanStack Virtual の組み合わせで、**10 万行規模をクライアント全件ロードせず一定メモリで表示**する。
+
+### Errors ビュー
+
+`query error-kinds` と同じ集計をブラウザで表示する。kind 別のバーを選ぶと、その原因で失敗したホスト内訳とサンプル URL にドリルダウンできる。サンプル URL は（解決失敗・接続拒否など本来開けない URL なので）リンクではなく診断用のテキストとして表示する。
 
 ### HTML スナップショットプレビュー
 

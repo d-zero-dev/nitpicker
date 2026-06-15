@@ -13,7 +13,8 @@ export type QuerySubCommand =
 	| 'duplicates'
 	| 'mismatches'
 	| 'headers'
-	| 'resource-referrers';
+	| 'resource-referrers'
+	| 'error-kinds';
 
 /**
  * List of all valid query sub-command names.
@@ -31,4 +32,5 @@ export const VALID_SUB_COMMANDS = [
 	'mismatches',
 	'headers',
 	'resource-referrers',
+	'error-kinds',
 ] as const satisfies readonly QuerySubCommand[];

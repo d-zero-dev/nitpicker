@@ -502,6 +502,47 @@ h2 {
 }
 
 /*
+ * A `.bar-row` rendered as a <button> for the Errors view drill-down. Strip the
+ * native button chrome so it visually matches the static bar rows, but keep it
+ * a real button for keyboard / screen-reader operability.
+ */
+button.bar-row {
+	inline-size: 100%;
+	padding-block: 2px;
+	padding-inline: 4px;
+	font: inherit;
+	color: inherit;
+	text-align: start;
+	cursor: pointer;
+	background: none;
+	border: 1px solid transparent;
+	border-radius: 4px;
+}
+
+button.bar-row:hover {
+	background: var(--border);
+}
+
+.bar-row-active {
+	border-color: var(--accent);
+}
+
+.error-detail {
+	margin-block-start: 24px;
+}
+
+.url-list {
+	padding-inline-start: 18px;
+	margin: 0;
+	font-size: var(--font-size-base);
+	word-break: break-all;
+}
+
+.url-list li {
+	margin-block: 2px;
+}
+
+/*
  * Content-Type stacked bar — macOS / iOS storage-style breakdown.
  *
  * The bar itself is a flex row of `.bar-segment-<category>` spans, each given
