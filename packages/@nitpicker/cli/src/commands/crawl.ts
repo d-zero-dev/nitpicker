@@ -33,6 +33,10 @@ export const commandDef = {
 			isMultiple: true,
 			desc: 'Append crawl: register the URL as a new recursive root for the positional archive (repeat for multiple URLs)',
 		},
+		retryFailed: {
+			type: 'boolean',
+			desc: 'Retry crawl: re-fetch failed pages (missing status/content-type or a 5xx status) in the positional archive; use --no-recursive to skip re-crawling newly found URLs',
+		},
 		interval: {
 			type: 'number',
 			shortFlag: 'I',
@@ -333,6 +337,53 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
 }
 
 /**
+ * Re-fetch failed pages in an existing `.nitpicker` archive and re-crawl.
+ *
+ * Opens the archive at the positional argument, resets every page whose
+ * previous attempt failed (missing status / content type, or a 5xx status)
+ * back to pending, and resumes crawling. Newly-discovered URLs are followed
+ * unless `--no-recursive` was given. The archived crawl configuration
+ * (scopes, excludes, keywords, user agent, …) is reused unless explicitly
+ * overridden. A `<archive>.bak` is taken before any DB mutation; on success it
+ * is removed, on failure it is restored.
+ * @param archivePath - Path to the existing `.nitpicker` archive.
+ * @param flags - Parsed CLI flags from the `crawl` command.
+ */
+async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
+	const errStack: (CrawlerError | Error)[] = [];
+
+	const orchestrator = await CrawlerOrchestrator.retryFailed(
+		archivePath,
+		{
+			...mapFlagsToCrawlConfig(flags),
+			list: false,
+		},
+		(orchestrator, config) => {
+			run(
+				`${archivePath} (retry-failed)`,
+				orchestrator,
+				config,
+				flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
+			).catch((error) => errStack.push(error));
+		},
+	);
+
+	try {
+		await orchestrator.write();
+	} finally {
+		await orchestrator.archive.close();
+		orchestrator.garbageCollect();
+	}
+
+	if (errStack.length > 0) {
+		const error = new CrawlAggregateError(errStack);
+		// eslint-disable-next-line no-console
+		console.error(`\n${error.message}`);
+		throw error;
+	}
+}
+
+/**
  * Validates that all URLs in the list are parseable by the URL constructor.
  * @param urls - Array of URL strings to validate
  * @throws {Error} If any URL is invalid
@@ -374,6 +425,9 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		if (hasAppendFlag) {
 			throw new Error('--diff cannot be combined with --append.');
 		}
+		if (flags.retryFailed) {
+			throw new Error('--diff cannot be combined with --retry-failed.');
+		}
 		if (args.length !== 2) {
 			throw new Error('--diff takes exactly two file paths to compare');
 		}
@@ -404,11 +458,21 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 					'--resume and --append cannot be used together. Pick the existing-archive mode that fits your task.',
 				);
 			}
+			if (flags.retryFailed) {
+				throw new Error(
+					'--resume and --retry-failed cannot be used together. Pick the existing-archive mode that fits your task.',
+				);
+			}
 			await resumeCrawl(flags.resume, flags);
 			return;
 		}
 
 		if (hasAppendFlag) {
+			if (flags.retryFailed) {
+				throw new Error(
+					'--append and --retry-failed cannot be used together. Pick the existing-archive mode that fits your task.',
+				);
+			}
 			if (flags.output) {
 				throw new Error(
 					'--output flag is not supported with --append. The archive path is the positional argument being appended.',
@@ -434,6 +498,35 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 				);
 			}
 			await appendCrawl(args[0]!, flags.append, flags);
+			return;
+		}
+
+		if (flags.retryFailed) {
+			if (flags.output) {
+				throw new Error(
+					'--output flag is not supported with --retry-failed. The archive path is the positional argument being retried.',
+				);
+			}
+			if (flags.listFile) {
+				throw new Error('--retry-failed cannot be combined with --list-file.');
+			}
+			if (hasListFlag) {
+				throw new Error('--retry-failed cannot be combined with --list.');
+			}
+			if (flags.single) {
+				throw new Error('--retry-failed cannot be combined with --single.');
+			}
+			if (args.length === 0) {
+				throw new Error(
+					'--retry-failed requires the archive path as the positional argument (usage: crawl <archive> --retry-failed).',
+				);
+			}
+			if (args.length > 1) {
+				throw new Error(
+					'--retry-failed takes exactly one positional argument (the archive path).',
+				);
+			}
+			await retryFailedCrawl(args[0]!, flags);
 			return;
 		}
 
