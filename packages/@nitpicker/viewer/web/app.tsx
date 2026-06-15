@@ -7,6 +7,7 @@ import { MAIN_CONTENT_ID, SkipLink } from './components/skip-link.js';
 import { TopBar } from './components/top-bar.js';
 import { I18nProvider } from './i18n/i18n-provider.js';
 import { DuplicatesView } from './routes/duplicates-view.js';
+import { ErrorsView } from './routes/errors-view.js';
 import { GraphView } from './routes/graph-view.js';
 import { HeadersView } from './routes/headers-view.js';
 import { ImagesView } from './routes/images-view.js';
@@ -62,6 +63,7 @@ export function App() {
 									<Route path="/duplicates" element={<DuplicatesView />} />
 									<Route path="/mismatches" element={<MismatchesView />} />
 									<Route path="/headers" element={<HeadersView />} />
+									<Route path="/errors" element={<ErrorsView />} />
 									<Route path="*" element={<Navigate to="/" replace />} />
 								</Routes>
 							</main>

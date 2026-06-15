@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 
 import { registerArchiveInfoRoute } from './routes/register-archive-info-route.js';
 import { registerDuplicatesRoute } from './routes/register-duplicates-route.js';
+import { registerErrorKindsRoute } from './routes/register-error-kinds-route.js';
 import { registerGraphRoute } from './routes/register-graph-route.js';
 import { registerHeadersRoute } from './routes/register-headers-route.js';
 import { registerImagesRoute } from './routes/register-images-route.js';
@@ -48,6 +49,7 @@ export function createApp(options: CreateAppOptions): Hono {
 	registerGraphRoute(app, context);
 	registerPageLinksRoute(app, context);
 	registerArchiveInfoRoute(app, context);
+	registerErrorKindsRoute(app, context);
 
 	app.onError((error, c) => {
 		const raw = error instanceof Error ? error.message : String(error);

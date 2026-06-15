@@ -31,6 +31,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			headers: 'Headers',
 			graph: 'Graph',
 			pageLinks: 'Page Links',
+			errors: 'Errors',
 		},
 		common: {
 			loading: 'Loading…',
@@ -220,6 +221,16 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				colRemarks: 'Remarks',
 				filterUrlPattern: 'URL pattern (%foo%)',
 			},
+			errors: {
+				title: 'Errors',
+				description:
+					'Crawl failures grouped by cause (DNS, connection, TLS, timeout, protocol). Select a kind to see which hosts and URLs failed.',
+				total: '{total} failure records',
+				channelSource: 'DNS / connection / TLS source: {source}',
+				empty: 'No crawl errors recorded.',
+				hosts: 'Hosts',
+				sampleUrls: 'Sample URLs',
+			},
 		},
 	},
 	ja: {
@@ -246,6 +257,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			headers: 'ヘッダー',
 			graph: 'グラフ',
 			pageLinks: 'ページリンク',
+			errors: 'エラー',
 		},
 		common: {
 			loading: '読み込み中…',
@@ -434,6 +446,16 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				colHeaders: 'ヘッダー',
 				colRemarks: '備考',
 				filterUrlPattern: 'URL パターン（%foo%）',
+			},
+			errors: {
+				title: 'エラー',
+				description:
+					'クロール失敗を原因別（DNS・接続・TLS・タイムアウト・プロトコル）に分類。種別を選ぶと、失敗したホストと URL を確認できます。',
+				total: '失敗レコード {total} 件',
+				channelSource: 'DNS / 接続 / TLS の取得元: {source}',
+				empty: 'クロールエラーは記録されていません。',
+				hosts: 'ホスト',
+				sampleUrls: 'サンプル URL',
 			},
 		},
 	},
