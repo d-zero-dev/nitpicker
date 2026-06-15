@@ -138,5 +138,19 @@ export async function initSchema(instance: Knex) {
 			t.integer('createdAt').notNullable();
 
 			t.index('pageId');
+		})
+		.createTable('crawl_errors', (t) => {
+			// Structured form of the crawler-level `error` channel that otherwise
+			// only lands in `error.log`. Unlike `page_errors` these are not tied to
+			// a scraped page (the URL may be an external link that failed DNS, or
+			// null for a process-level error), so there is no `pageId` FK and `url`
+			// is nullable. The cause is NOT stored — it is classified on read from
+			// `message` so older archives (which only have `error.log`) classify the
+			// same way.
+			t.increments('id');
+			t.string('url', 8190).nullable();
+			t.boolean('isExternal');
+			t.text('message').notNullable();
+			t.integer('createdAt').notNullable();
 		});
 }

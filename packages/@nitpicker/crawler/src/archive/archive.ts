@@ -101,7 +101,13 @@ export default class Archive extends ArchiveAccessor {
 	abort() {}
 
 	/**
-	 * Appends an error entry to the archive's error log file.
+	 * Records a crawler-level error to both the human-readable `error.log` (full
+	 * stack, for debugging) and the structured `crawl_errors` table (queryable,
+	 * for the `error-kinds` analysis). The cause is not classified here — it is
+	 * derived on read. `error.log` keeps the full stack while `crawl_errors`
+	 * stores `error.message`; both normally carry the same cause token (e.g.
+	 * `ENOTFOUND`), so classification agrees across the two — only an error whose
+	 * cause lives solely in deeper stack frames could differ.
 	 * @param error - The crawler error object containing process and URL information.
 	 */
 	async addError(error: CrawlerError) {
@@ -110,6 +116,7 @@ export default class Archive extends ArchiveAccessor {
 			logFile,
 			`[${error.pid}(${error.isMainProcess ? 'main' : 'sub'})] ${error.url} ${error.error.stack ?? error.error}`,
 		);
+		await this.#db.insertCrawlError(error.url, error.error.message, error.isExternal);
 	}
 
 	/**

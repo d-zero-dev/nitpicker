@@ -35,6 +35,7 @@ import { getJSON } from './get-json.js';
 import { initSchema } from './init-schema.js';
 import { LibsqlDialect } from './libsql-dialect.js';
 import { limitedPageIds } from './limited-page-ids.js';
+import { migrateCrawlErrors } from './migrate-crawl-errors.js';
 import { migrateInfoRoots } from './migrate-info-roots.js';
 import { migratePageErrors } from './migrate-page-errors.js';
 import { redirectTable } from './redirect-table.js';
@@ -617,6 +618,28 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
+	 * Records a crawler-level (`error` channel) failure into `crawl_errors`.
+	 *
+	 * Unlike {@link insertPageError} this is not tied to a scraped page: `url`
+	 * may be an external link that never became a page row, or `null` for a
+	 * process-level error. The cause is intentionally not stored — it is derived
+	 * on read so that older archives (which only have `error.log`) and freshly
+	 * captured rows classify identically.
+	 * @param url - The URL the error is about, or `null` for a process-level error.
+	 * @param message - The error message (one line is enough for classification).
+	 * @param isExternal - Whether the URL is external to the crawl scope.
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async insertCrawlError(url: string | null, message: string, isExternal = false) {
+		await this.#instance('crawl_errors').insert({
+			url,
+			isExternal: isExternal ? 1 : 0,
+			message,
+			createdAt: Date.now(),
+		});
+	}
+	/**
 	 * Records a partial scrape failure against the page identified by `url`.
 	 *
 	 * The page row is resolved (or inserted as a stub) via
@@ -643,6 +666,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			createdAt: Date.now(),
 		});
 	}
+
 	/**
 	 * Inserts a sub-resource into the `resources` table.
 	 * Ignores duplicate URLs (uses `ON CONFLICT IGNORE`).
@@ -1140,6 +1164,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		await initSchema(this.#instance);
 		await migrateInfoRoots(this.#instance);
 		await migratePageErrors(this.#instance);
+		await migrateCrawlErrors(this.#instance);
 	}
 	/**
 	 * Upserts page data into the `pages` table (inserts if new, updates if existing).
