@@ -23,6 +23,7 @@ import {
 	findMismatches,
 	checkHeaders,
 	getResourceReferrers,
+	getErrorKinds,
 } from '@nitpicker/query';
 
 import { mapFlagsToQueryOptions } from './map-flags-to-query-options.js';
@@ -112,6 +113,9 @@ export async function dispatchQuery(
 				throw new Error(`Resource not found: ${url}`);
 			}
 			return result;
+		}
+		case 'error-kinds': {
+			return getErrorKinds(accessor);
 		}
 		default: {
 			const _exhaustive: never = subCommand;
