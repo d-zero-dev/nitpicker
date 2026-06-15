@@ -20,6 +20,7 @@ Web サイトをクロールして `.nitpicker` アーカイブを生成。
 ```sh
 npx @nitpicker/cli crawl <URL> [<URL>...]
 npx @nitpicker/cli crawl existing.nitpicker --append <URL>
+npx @nitpicker/cli crawl existing.nitpicker --retry-failed
 ```
 
 ### スコープと multi-root
@@ -33,6 +34,18 @@ npx @nitpicker/cli crawl existing.nitpicker --append <URL>
 - クロール開始前に `<archive>.bak` を作成。失敗時は自動復元、成功時は `.bak` を削除
 - list-mode archive（`--list` / `--list-file` で作成）への append は不可
 - `--resume` / `--diff` / `--output` / `--list` / `--list-file` / `--single` と同時指定不可
+
+### `--retry-failed`: 失敗ページの再取得
+
+前回クロールで失敗したページだけを再取得する。「サーバ側の一時障害やタイムアウトで取りこぼしたページを、フルクロールし直さずに回収する」ためのモード。
+
+- 再取得対象は **status が `-1`（ネットワークエラー/タイムアウト/ブラウザクラッシュの sentinel）/ `NULL`、content-type が `NULL`、または status が 5xx** のページ。確定応答である 4xx は再取得しても結果が変わらないため対象外
+- `internal` / `external` 両方を対象にする（external はメタデータのみ再取得）
+- 再取得したページが HTML なら新リンクを辿り、未取得の新 URL があればそこから再帰クロールする（デフォルト ON）。`--no-recursive` で「失敗ページの再取得のみ」に限定できる。**この recursive 設定はフラグ値が優先され、アーカイブ作成時の recursive 設定は継承しない**
+- スコープ・除外（`--exclude` 系）・User-Agent などは **アーカイブに保存された設定値を流用**する。明示的にフラグ指定したものだけ上書きされる
+- クロール開始前に `<archive>.bak` を作成。失敗時は自動復元、成功時は `.bak` を削除
+- list-mode archive への retry は不可
+- `--resume` / `--append` / `--diff` / `--output` / `--list` / `--list-file` / `--single` と同時指定不可
 
 ### Basic 認証
 
@@ -184,13 +197,13 @@ LLM が data の鮮度を判定できるよう **`mode` と `crawlerPid` を常�
 
 別プロセスが同じ archive を開いている。`.lock/pid.txt` の PID を `ps -p <PID>` で確認し、稼働中なら終了を待つ。既に終了していれば次回 open 時に stale 検出で自動回復。それでも残れば `rm -rf <path>.lock` で手動削除可能。
 
-### `Cannot append to a list-mode archive`
+### `Cannot append to a list-mode archive` / `Cannot retry a list-mode archive`
 
-`--list` / `--list-file` で作成された archive（`info.fromList=true`）は再帰クロールの土台にならないため append 経路は閉じている。新規 archive を作るかフルクロールで作り直すこと。
+`--list` / `--list-file` で作成された archive（`info.fromList=true`）は再帰クロールの土台にならないため append / retry 経路は閉じている。新規 archive を作るかフルクロールで作り直すこと。
 
 ### `<archive>.bak` が残っている
 
-`--append` の失敗時復元自体が失敗した状態。`AggregateError` がログに残るはず。`mv <archive>.bak <archive>` で原本を復元できる。
+`--append` / `--retry-failed` の失敗時復元自体が失敗した状態。`AggregateError` がログに残るはず。`mv <archive>.bak <archive>` で原本を復元できる。
 
 ### `[migrate] info table upgraded (...)`
 
