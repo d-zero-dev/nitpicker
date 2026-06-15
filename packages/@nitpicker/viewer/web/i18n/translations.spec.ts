@@ -1,3 +1,4 @@
+import { CONTENT_TYPE_CATEGORIES } from '@nitpicker/query/categories';
 import { describe, expect, it } from 'vitest';
 
 import { translations } from './translations.js';
@@ -45,5 +46,23 @@ describe('translations', () => {
 			([, value]) => typeof value !== 'string' || value.length === 0,
 		);
 		expect(offenders).toEqual([]);
+	});
+
+	/* The stacked-bar legend renders `views.contentType.<category>` for every
+	   ContentTypeCategory. Without this check, adding a new category in
+	   `@nitpicker/query` (and a matching `.bar-segment-<new>` CSS rule that
+	   `content-type-class.spec.ts` enforces) still leaves the legend showing
+	   the raw key path because `t()` falls back to the key on miss. This
+	   spec is the i18n half of the same coverage net. */
+	it('views.contentType に全 ContentTypeCategory のラベルが定義されている', () => {
+		for (const locale of ['en', 'ja'] as const) {
+			const flat = new Map(leafEntries(translations[locale]));
+			for (const category of CONTENT_TYPE_CATEGORIES) {
+				const key = `views.contentType.${category}`;
+				const label = flat.get(key);
+				expect(label, `missing ${locale}.${key}`).toBeTypeOf('string');
+				expect((label as string).length, `empty ${locale}.${key}`).toBeGreaterThan(0);
+			}
+		}
 	});
 });

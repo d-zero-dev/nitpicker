@@ -43,6 +43,12 @@
 		"PHPSESSID",
 		"wcag",
 
+		// Microsoft Office Open XML MIME-type vendor strings (e.g.
+		// application/vnd.openxmlformats-officedocument.wordprocessingml.document).
+		"wordprocessingml",
+		"spreadsheetml",
+		"presentationml",
+
 		// HTTP encoding
 		"sdch",
 		"vcdiff",
