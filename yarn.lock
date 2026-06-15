@@ -1105,15 +1105,15 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/beholder@npm:2.1.2":
-  version: 2.1.2
-  resolution: "@d-zero/beholder@npm:2.1.2"
+"@d-zero/beholder@npm:2.1.6":
+  version: 2.1.6
+  resolution: "@d-zero/beholder@npm:2.1.6"
   dependencies:
-    "@d-zero/puppeteer-page-scan": "npm:4.4.8"
-    "@d-zero/shared": "npm:0.21.1"
+    "@d-zero/puppeteer-page-scan": "npm:4.5.1"
+    "@d-zero/shared": "npm:0.22.0"
     debug: "npm:4.4.3"
     puppeteer: "npm:24.37.5"
-  checksum: 10c0/264af5f18860897c5596b855102b330f4731be0859285134d3bbe0cdc44c285fa0ba148bc5ff08ac5601a4db5bd627367b811be85a25c552ae17b5003a153902
+  checksum: 10c0/7ec6926f70424c839573a3ecc24c59b1d5f9c377d2c8c301676b1c0461c4dc937919c322963b7fd809a8bfbdf4f4198d4e0dea6db21ee75a51c70693a5ed8a43
   languageName: node
   linkType: hard
 
@@ -1241,35 +1241,36 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-general-actions@npm:1.2.2":
-  version: 1.2.2
-  resolution: "@d-zero/puppeteer-general-actions@npm:1.2.2"
+"@d-zero/puppeteer-general-actions@npm:1.2.4":
+  version: 1.2.4
+  resolution: "@d-zero/puppeteer-general-actions@npm:1.2.4"
   dependencies:
     ansi-colors: "npm:4.1.3"
-  checksum: 10c0/3ea4247ceb5bfcbe8fda0f7267efe9a53da2c575c0b66bd2a0671ee86a674024a3e4d2e74397d4a034cfafecadf62b997f645e69bff9dcaa607ef45c59e66408
+  checksum: 10c0/0f0e74d8fed81675749876bc06d922ce696e97aa5d95b677549fb035ed7afb4b5de0b62255e028d06f7ebd15aa3c826fa38d88a404317bf31f135d72ba8dccb8
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-page-scan@npm:4.4.8":
-  version: 4.4.8
-  resolution: "@d-zero/puppeteer-page-scan@npm:4.4.8"
+"@d-zero/puppeteer-page-scan@npm:4.5.1":
+  version: 4.5.1
+  resolution: "@d-zero/puppeteer-page-scan@npm:4.5.1"
   dependencies:
-    "@d-zero/puppeteer-general-actions": "npm:1.2.2"
-    "@d-zero/puppeteer-scroll": "npm:3.1.16"
+    "@d-zero/puppeteer-general-actions": "npm:1.2.4"
+    "@d-zero/puppeteer-scroll": "npm:4.0.1"
+    "@d-zero/shared": "npm:0.22.0"
   peerDependencies:
     puppeteer: 24.37.5
-  checksum: 10c0/159d7f63e264e10f6b9141e09d77faeeefc3d395f2b82996bdd692fb37215f0d131ba181c6f6a41bc5f124c3a7d534bc2a01aeca0826bd556169e7381f44b8d1
+  checksum: 10c0/afc0d9a68bf354a8e9c4e306dbb341f09a718beececcd4cd3fc062c601eb6435bb2b23f471c466d0135fae646bd49d08c3f0edd9c2f29618fd4a15d71ef25047
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-scroll@npm:3.1.16":
-  version: 3.1.16
-  resolution: "@d-zero/puppeteer-scroll@npm:3.1.16"
+"@d-zero/puppeteer-scroll@npm:4.0.1":
+  version: 4.0.1
+  resolution: "@d-zero/puppeteer-scroll@npm:4.0.1"
   dependencies:
-    "@d-zero/shared": "npm:0.21.1"
+    "@d-zero/shared": "npm:0.22.0"
   peerDependencies:
     puppeteer: 24.37.5
-  checksum: 10c0/bb10a845e5aab3888c8436e315db9697b6ee4f60ecc7ec93fc8fae030353416e62e175b1544a8a06d3b9f74f0553afe2420cd4b780c0deaeb420c78aeef3dece
+  checksum: 10c0/454feda8c10ed322070d8fe008ed35d3a1b438e79856f294b3d5f1233224928afc616c57eddd48e208f2bb89c8c388d28a8bb96b896f88a9ed84361e243b39a6
   languageName: node
   linkType: hard
 
@@ -1301,21 +1302,6 @@ __metadata:
     micromatch: "npm:4.0.8"
     sanitize-filename: "npm:1.6.3"
   checksum: 10c0/b4cfd509188b2e23f6d1c28baf18eafae2febefca4f5d3302ecee7972e9a412038757d7c4d8115b8879f1a9adc09e5aadf7df65dcc77aca5153cd0ef4deb0e14
-  languageName: node
-  linkType: hard
-
-"@d-zero/shared@npm:0.21.1":
-  version: 0.21.1
-  resolution: "@d-zero/shared@npm:0.21.1"
-  dependencies:
-    "@holiday-jp/holiday_jp": "npm:2.5.1"
-    await-event-emitter: "npm:2.0.2"
-    dayjs: "npm:1.11.19"
-    escape-string-regexp: "npm:5.0.0"
-    front-matter: "npm:4.0.2"
-    micromatch: "npm:4.0.8"
-    sanitize-filename: "npm:1.6.3"
-  checksum: 10c0/6535b99fcf39efc348425d02c812f49b18d9359af9a24606b810d1cd428f7c687826d93e87650d3dd38d1f15160fad45f490849c0a5ef7d616634b3ee704466d
   languageName: node
   linkType: hard
 
@@ -3225,7 +3211,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/crawler@workspace:packages/@nitpicker/crawler"
   dependencies:
-    "@d-zero/beholder": "npm:2.1.2"
+    "@d-zero/beholder": "npm:2.1.6"
     "@d-zero/dealer": "npm:1.9.0"
     "@d-zero/fs": "npm:0.2.2"
     "@d-zero/shared": "npm:0.20.1"
