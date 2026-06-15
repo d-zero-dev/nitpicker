@@ -12,12 +12,14 @@ import { ExitCode } from '../exit-code.js';
 const mockCrawling = vi.fn();
 const mockResume = vi.fn();
 const mockAppend = vi.fn();
+const mockRetryFailed = vi.fn();
 
 vi.mock('@nitpicker/crawler', () => ({
 	CrawlerOrchestrator: {
 		crawling: mockCrawling,
 		resume: mockResume,
 		append: mockAppend,
+		retryFailed: mockRetryFailed,
 	},
 }));
 
@@ -58,6 +60,7 @@ function createFlags(overrides: Partial<CrawlFlags> = {}): CrawlFlags {
 	return {
 		resume: undefined,
 		append: undefined,
+		retryFailed: undefined,
 		interval: undefined,
 		image: true,
 		fetchExternal: true,
@@ -103,6 +106,11 @@ function setupFakeOrchestrator() {
 	});
 
 	mockAppend.mockImplementation((_path, _urls, _opts, cb) => {
+		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
+		return Promise.resolve(fakeOrchestrator);
+	});
+
+	mockRetryFailed.mockImplementation((_path, _opts, cb) => {
 		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
 		return Promise.resolve(fakeOrchestrator);
 	});
@@ -467,6 +475,90 @@ describe('crawl', () => {
 				createFlags({ append: ['https://sample-b.example.com/'], single: true }),
 			),
 		).rejects.toThrow('--append cannot be combined with --single');
+	});
+
+	it('crawl <archive> --retry-failed で CrawlerOrchestrator.retryFailed が呼ばれる', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['/tmp/existing.nitpicker'], createFlags({ retryFailed: true }));
+
+		expect(mockRetryFailed).toHaveBeenCalledOnce();
+		const [archivePath] = mockRetryFailed.mock.calls[0]!;
+		expect(archivePath).toBe('/tmp/existing.nitpicker');
+		expect(mockCrawling).not.toHaveBeenCalled();
+		expect(mockAppend).not.toHaveBeenCalled();
+	});
+
+	it('--retry-failed を指定したのに位置引数が無いとエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(crawl([], createFlags({ retryFailed: true }))).rejects.toThrow(
+			'--retry-failed requires the archive path as the positional argument (usage: crawl <archive> --retry-failed).',
+		);
+	});
+
+	it('--retry-failed を指定したのに位置引数が複数あるとエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(['/tmp/a.nitpicker', '/tmp/b.nitpicker'], createFlags({ retryFailed: true })),
+		).rejects.toThrow(
+			'--retry-failed takes exactly one positional argument (the archive path).',
+		);
+	});
+
+	it('--retry-failed と --resume の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker'],
+				createFlags({ retryFailed: true, resume: '/tmp/stub' }),
+			),
+		).rejects.toThrow('--resume and --retry-failed cannot be used together');
+	});
+
+	it('--retry-failed と --append の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker'],
+				createFlags({ retryFailed: true, append: ['https://sample-b.example.com/'] }),
+			),
+		).rejects.toThrow('--append and --retry-failed cannot be used together');
+	});
+
+	it('--retry-failed と --diff の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(
+				['a.nitpicker', 'b.nitpicker'],
+				createFlags({ retryFailed: true, diff: true }),
+			),
+		).rejects.toThrow('--diff cannot be combined with --retry-failed');
+	});
+
+	it('--retry-failed と --output の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker'],
+				createFlags({ retryFailed: true, output: '/tmp/out.nitpicker' }),
+			),
+		).rejects.toThrow('--output flag is not supported with --retry-failed');
+	});
+
+	it('--retry-failed と --list の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker'],
+				createFlags({ retryFailed: true, list: ['https://example.com/'] }),
+			),
+		).rejects.toThrow('--retry-failed cannot be combined with --list');
+	});
+
+	it('--retry-failed と --single の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(['/tmp/a.nitpicker'], createFlags({ retryFailed: true, single: true })),
+		).rejects.toThrow('--retry-failed cannot be combined with --single');
 	});
 
 	it('--append × list が空配列 ([]) なら通る', async () => {

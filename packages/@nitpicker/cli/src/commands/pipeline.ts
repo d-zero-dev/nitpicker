@@ -238,6 +238,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			silent: flags.silent,
 			resume: undefined,
 			append: [],
+			retryFailed: false,
 			diff: undefined,
 		});
 	} catch (error) {

@@ -861,6 +861,85 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		dbLog('Repromoted %d external pages back to pending', promotedUrls.length);
 		return promotedUrls;
 	}
+
+	/**
+	 * Reset previously-attempted pages that ended in a recoverable failure so a
+	 * follow-up crawl can re-fetch them from scratch.
+	 *
+	 * A page qualifies as a recoverable failure when it was already scraped
+	 * (`scraped = 1`), is not a redirect source (`redirectDestId IS NULL`), was
+	 * not intentionally skipped (`isSkipped` is not `1`), and one of the
+	 * following holds:
+	 *
+	 * - `status = -1` — the sentinel a hard scrape failure (network error,
+	 *   timeout, browser crash) is recorded with (see `handle-scrape-error.ts`);
+	 * - `status IS NULL` — no status was ever stored for the row;
+	 * - `contentType IS NULL` — the content type could not be determined;
+	 * - `status` is in the `5xx` range — a (frequently transient) server error.
+	 *
+	 * Definitive `4xx` responses are intentionally excluded: re-fetching a 404
+	 * almost always yields the same answer. Matching rows — internal and
+	 * external alike — are demoted back to pending (`scraped = 0`) and have their
+	 * stale scrape metadata cleared. The page row itself is kept (id preserved)
+	 * so existing `anchors.hrefId` referrers stay valid, and `isExternal` is left
+	 * untouched so the next pass re-classifies each page from the crawl scope.
+	 * Related `anchors`, `images`, `resources-referrers`, and `page_errors` rows
+	 * are deleted so the re-scrape can re-insert fresh data without duplicates.
+	 *
+	 * SELECT and UPDATE/DELETE statements are chunked to stay below SQLite's
+	 * `SQLITE_LIMIT_VARIABLE_NUMBER`.
+	 * @returns The URLs of the pages that were reset to pending.
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async resetFailedPages(): Promise<string[]> {
+		const candidates = await this.#instance
+			.select('id', 'url')
+			.from<DB_Page>('pages')
+			.where('scraped', 1)
+			.whereNull('redirectDestId')
+			.where((qb) => {
+				qb.where('isSkipped', 0).orWhereNull('isSkipped');
+			})
+			.where((qb) => {
+				qb.whereNull('status')
+					.orWhere('status', -1)
+					.orWhereNull('contentType')
+					.orWhereBetween('status', [500, 599]);
+			});
+
+		if (candidates.length === 0) {
+			return [];
+		}
+
+		const ids = candidates.map((row) => row.id);
+		const urls = candidates.map((row) => row.url);
+
+		const chunkSize = 500;
+		for (let i = 0; i < ids.length; i += chunkSize) {
+			const chunk = ids.slice(i, i + chunkSize);
+			await this.#instance<DB_Page>('pages').whereIn('id', chunk).update({
+				scraped: 0,
+				html: null,
+				status: null,
+				statusText: null,
+				contentType: null,
+				contentLength: null,
+				responseHeaders: '{}',
+			});
+			// Clear the prior crawl's per-page data so the re-scrape starts clean.
+			// `updatePage` only replaces anchors/images when the new scrape is
+			// non-empty, so this pre-clear is load-bearing for pages that reset but
+			// then fail again (or are never reached), and it is the only place
+			// `resources-referrers` and `page_errors` are cleared.
+			await this.#instance('anchors').whereIn('pageId', chunk).delete();
+			await this.#instance('images').whereIn('pageId', chunk).delete();
+			await this.#instance('resources-referrers').whereIn('pageId', chunk).delete();
+			await this.#instance('page_errors').whereIn('pageId', chunk).delete();
+		}
+		dbLog('Reset %d failed pages back to pending', urls.length);
+		return urls;
+	}
 	/**
 	 * Stores the crawl configuration in the `info` table.
 	 * Only fields in {@link INFO_COLUMN_ALLOWLIST} are forwarded — any extra

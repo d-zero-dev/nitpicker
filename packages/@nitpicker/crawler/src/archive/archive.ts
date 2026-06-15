@@ -201,6 +201,17 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.repromoteExternalPages(scopes, options);
 	}
 	/**
+	 * Reset previously-failed pages back to pending so a follow-up crawl re-fetches them.
+	 *
+	 * Delegates to {@link Database.resetFailedPages}. See that method for the
+	 * exact failure criteria (missing status / content type, or a 5xx status).
+	 * @returns The URLs of the pages that were reset to pending.
+	 */
+	async resetFailedPages() {
+		dbLog('Reset failed pages back to pending');
+		return this.#db.resetFailedPages();
+	}
+	/**
 	 * Stores the crawl configuration into the archive database.
 	 * @param config - The configuration object to store.
 	 */

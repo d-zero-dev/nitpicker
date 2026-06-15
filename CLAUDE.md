@@ -54,6 +54,7 @@ packages/
 ```sh
 npx @nitpicker/cli crawl <URL> [<URL>...] [options]     # Web サイトをクロールして .nitpicker ファイルを生成（複数 URL で multi-root）
 npx @nitpicker/cli crawl <archive> --append <URL> [--append <URL>...]  # 既存アーカイブに新しい起点 URL を追加クロール
+npx @nitpicker/cli crawl <archive> --retry-failed [--no-recursive]  # 既存アーカイブの失敗ページ（status -1/NULL・content-type NULL・5xx）を再取得
 npx @nitpicker/cli analyze <file> [options]             # .nitpicker ファイルに対して analyze プラグインを実行
 npx @nitpicker/cli report <file> [options]              # .nitpicker ファイルから Google Sheets レポートを生成
 npx @nitpicker/cli pipeline <URL> [options]             # crawl → analyze → report を直列実行
@@ -65,6 +66,10 @@ npx @nitpicker/cli -v | --version                       # `@nitpicker/cli` の�
 > **Multi-root クロール**: 位置引数で複数 URL を渡すと、それぞれが「再帰クロールの起点」かつ「scope エントリ」として扱われ、1 つの `.nitpicker` に集約される。例: `crawl https://www.example.com/blog/ https://www.example.com/news/` → 両配下が internal として記録される。`(hostname, port, path)` トリプルで scope 一致を判定するため、`localhost:3000` と `localhost:8080` は別 scope として分離される（auth が混入しない）。
 
 > **`--append <URL>`**: 位置引数で指定された既存 `.nitpicker` を開き、`--append` の URL を新しい起点として追加クロールする（`--append` は繰り返し指定で複数 URL 可）。新スコープに該当する旧 external ページは internal として再スクレイプされる。失敗時は `<archive>.bak` から自動復元、成功時は `.bak` 削除。`--resume` / `--diff` / `--output` / `--list` / `--list-file` / `--single` との同時指定は不可。
+
+> **`--retry-failed`**: 位置引数で指定された既存 `.nitpicker` を開き、前回クロールで失敗したページだけを pending に戻して再取得する。失敗の定義は `status = -1`（ハード失敗 sentinel）/ `status IS NULL` / `contentType IS NULL` / `status` が 5xx（4xx は確定応答なので対象外）。internal/external 両方が対象で、external は scope 判定により metadata-only として再取得される。実装は append と同じ「再オープン+`.bak`+`Crawler.resume()`+`crawling()`」フローだが、新起点を足す代わりに `Archive.resetFailedPages()`（→ `Database.resetFailedPages`）で失敗ページを `scraped=0` に戻し、archived roots を seed にして失敗ページを resumedPending 経由で処理する（external 失敗ページを scope へ誤登録しないため）。**recursive はフラグ値（デフォルト true）が優先され、アーカイブ作成時の recursive 設定は継承しない**（`crawling(list, { recursive })` で明示注入）。それ以外の設定（scope/excludes/userAgent 等）は archived 設定を流用し、明示指定したフラグのみ上書き。`--resume` / `--append` / `--diff` / `--output` / `--list` / `--list-file` / `--single` との同時指定は不可。
+>
+> **Note**: 全ページが失敗していた（reset 後に `scraped=1` が 0 件になる）アーカイブでも取りこぼさないよう、`Crawler.start()` の resume 判定は `#resumedScraped` だけでなく `#resumedPending` も見る。`#resumedScraped` のみを見ると「全ページ失敗 retry」や「1ページもスクレイプせず中断した resume」を fresh crawl と誤判定し、pending を全部捨ててしまう。
 
 > **Stub mode viewer**: `viewer` は `.nitpicker` ファイルだけでなく、`crawl` を強制停止した時に残る `._nitpicker-*` ディレクトリ（"stub"）も直接受け付ける。`crawl --resume` と同じ mental model で同じパスを渡せる。stub オープンは `Archive.connect(tmpDir)` 経由の **read-only** 接続で、`Database.connect({readOnly: true})` により `initSchema` / `migrateInfoRoots` は **走らない**（user の tmpDir を絶対に書き換えない）。`getHtmlOfPage` も読み取り専用なら zip を tmpDir 内に展開しない（single-entry 抽出）。close 時には `db.destroy()` だけが呼ばれ、tar 化も tmpDir 削除も発生しないため、その後の `crawl --resume` が安全に走る。viewer footer は `/api/info.crawlerPid` に応じて "Live crawl in progress (PID xxx)" / "Interrupted crawl stub" のバッジを出し分ける（`peekArchiveLockHolder` で `<tmpDir>.lock/pid.txt` を probe）。`Archive.releaseHandle()` は writer の DB ハンドルと lock を解放するが tmpDir は残す書き戻し無しの exit hatch — fixture スクリプトと一部テストが使う。
 

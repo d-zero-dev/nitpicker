@@ -287,6 +287,32 @@ describe('Crawler', () => {
 		});
 	});
 
+	describe('start() resume merge', () => {
+		it('scraped が空でも resumedPending を初期キューに含める（全ページ失敗 retry）', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+
+			let captured: { href: string }[] = [];
+			vi.mocked(deal).mockImplementation((items) => {
+				captured = items as { href: string }[];
+				return Promise.resolve();
+			});
+
+			const crawler = new Crawler(defaultOptions);
+			// Every page in the archive was a failure: resume with an empty
+			// scraped set but a pending (reset) child. Keying isResuming on
+			// scraped alone would drop this child entirely.
+			crawler.resume(['https://example.com/failed-child'], [], []);
+			crawler.start([parseUrl('https://example.com/')!]);
+
+			await vi.waitFor(() => expect(captured.length).toBeGreaterThan(0));
+
+			const hrefs = captured.map((u) => u.href);
+			expect(hrefs).toContain('https://example.com/failed-child');
+			expect(hrefs).toContain('https://example.com');
+		});
+	});
+
 	describe('worker-level error handling', () => {
 		it('ワーカー内の例外が error イベントとして emit され処理が継続する', async () => {
 			const { default: Crawler } = await import('./crawler.js');
