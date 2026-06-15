@@ -241,7 +241,12 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			this.#options.fromList = true;
 		}
 
-		const isResuming = this.#resumedScraped.length > 0;
+		// A resume can have an empty scraped set — e.g. a crawl interrupted before
+		// any page finished, or a `--retry-failed` run where every page in the
+		// archive was a failure and got reset to pending. Keying purely on
+		// `#resumedScraped` would then mistake the session for a fresh crawl and
+		// drop every resumed pending URL, so honour the pending set too.
+		const isResuming = this.#resumedScraped.length > 0 || this.#resumedPending.length > 0;
 		// Dedupe by the same protocol-agnostic key the dealer uses internally.
 		// Append-mode in particular can put the same URL into both
 		// `#resumedPending` (via `repromoteExternalPages`) and `urls` (the

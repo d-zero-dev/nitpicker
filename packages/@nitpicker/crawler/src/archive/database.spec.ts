@@ -1651,6 +1651,281 @@ describe('repromoteExternalPages', () => {
 	});
 });
 
+describe('resetFailedPages', () => {
+	const resetDbPath = path.resolve(workingDir, 'reset-failed-test.sqlite');
+
+	/**
+	 * Insert a fully-formed `pages` row with explicit failure-relevant columns so
+	 * each test can assert the SELECT/reset logic against a precise state.
+	 * @param db - The connected database.
+	 * @param row - The page fields to insert. Defaults model a scraped, internal page.
+	 * @param row.url
+	 * @param row.scraped
+	 * @param row.isTarget
+	 * @param row.isExternal
+	 * @param row.status
+	 * @param row.contentType
+	 * @param row.isSkipped
+	 * @param row.redirectDestId
+	 * @returns The inserted row id.
+	 */
+	async function insertPage(
+		db: Database,
+		row: {
+			url: string;
+			scraped?: number;
+			isTarget?: number;
+			isExternal?: number;
+			status?: number | null;
+			contentType?: string | null;
+			isSkipped?: number | null;
+			redirectDestId?: number | null;
+		},
+	): Promise<number> {
+		const knex = db.getKnex();
+		const [inserted] = await knex('pages')
+			.insert({
+				url: row.url,
+				scraped: row.scraped ?? 1,
+				isTarget: row.isTarget ?? 1,
+				isExternal: row.isExternal ?? 0,
+				status: row.status === undefined ? 200 : row.status,
+				statusText: 'OK',
+				contentType: row.contentType === undefined ? 'text/html' : row.contentType,
+				contentLength: 100,
+				responseHeaders: '{}',
+				html: 'snapshot/x.html',
+				isSkipped: row.isSkipped ?? 0,
+				redirectDestId: row.redirectDestId ?? null,
+			})
+			.returning('id');
+		return Number(
+			typeof inserted === 'object' ? (inserted as { id: number }).id : inserted,
+		);
+	}
+
+	afterAll(async () => {
+		await remove(resetDbPath);
+	});
+
+	it('resets pages with missing status, missing content type, or a 5xx status, and returns their URLs', async () => {
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ workingDir, filename: resetDbPath });
+
+		await insertPage(db, { url: 'https://example.com/null-status', status: null });
+		await insertPage(db, { url: 'https://example.com/null-ctype', contentType: null });
+		await insertPage(db, { url: 'https://example.com/server-error', status: 500 });
+		await insertPage(db, { url: 'https://example.com/unavailable', status: 503 });
+		// Hard scrape failures are stored as status=-1 with a content type still
+		// present, so the -1 sentinel branch (not the null-contentType branch)
+		// is what must catch them.
+		await insertPage(db, {
+			url: 'https://example.com/hard-error',
+			status: -1,
+			contentType: 'text/html',
+		});
+
+		const reset = await db.resetFailedPages();
+		expect(reset.toSorted()).toEqual([
+			'https://example.com/hard-error',
+			'https://example.com/null-ctype',
+			'https://example.com/null-status',
+			'https://example.com/server-error',
+			'https://example.com/unavailable',
+		]);
+
+		// Every reset row is demoted to pending and stripped of scrape metadata.
+		const all = await db.getPages();
+		for (const url of reset) {
+			const page = all.find((p) => p.url === url)!;
+			expect(page.scraped).toBe(0);
+			expect(page.status).toBeNull();
+			expect(page.statusText).toBeNull();
+			expect(page.contentType).toBeNull();
+			expect(page.contentLength).toBeNull();
+			expect(page.html).toBeNull();
+		}
+
+		await db.destroy();
+	});
+
+	it('leaves definitive responses (2xx/4xx), skipped, redirect-source, and pending pages untouched', async () => {
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ workingDir, filename: resetDbPath });
+
+		await insertPage(db, { url: 'https://example.com/ok', status: 200 });
+		await insertPage(db, { url: 'https://example.com/not-found', status: 404 });
+		await insertPage(db, { url: 'https://example.com/gone', status: 410 });
+		// status NULL but intentionally skipped → not a failure.
+		await insertPage(db, {
+			url: 'https://example.com/skipped',
+			status: null,
+			isSkipped: 1,
+		});
+		// status NULL but a redirect source → not a failure.
+		const dest = await insertPage(db, { url: 'https://example.com/dest', status: 200 });
+		await insertPage(db, {
+			url: 'https://example.com/redirect-src',
+			status: null,
+			redirectDestId: dest,
+		});
+		// Already pending (scraped=0) → outside the "previously attempted" set.
+		await insertPage(db, {
+			url: 'https://example.com/pending',
+			scraped: 0,
+			status: null,
+		});
+
+		const reset = await db.resetFailedPages();
+		expect(reset).toEqual([]);
+
+		await db.destroy();
+	});
+
+	it('resets internal and external failures alike while preserving isExternal', async () => {
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ workingDir, filename: resetDbPath });
+
+		await insertPage(db, {
+			url: 'https://example.com/internal-fail',
+			isExternal: 0,
+			status: null,
+		});
+		await insertPage(db, {
+			url: 'https://other.example.com/external-fail',
+			isExternal: 1,
+			status: 500,
+		});
+
+		const reset = await db.resetFailedPages();
+		expect(reset).toHaveLength(2);
+
+		const all = await db.getPages();
+		const internal = all.find((p) => p.url === 'https://example.com/internal-fail')!;
+		const external = all.find(
+			(p) => p.url === 'https://other.example.com/external-fail',
+		)!;
+		expect(internal.isExternal).toBe(0);
+		expect(external.isExternal).toBe(1);
+		expect(internal.scraped).toBe(0);
+		expect(external.scraped).toBe(0);
+
+		await db.destroy();
+	});
+
+	it('clears anchors / images / resources-referrers / page_errors only for reset pages', async () => {
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ workingDir, filename: resetDbPath });
+
+		const failId = await insertPage(db, {
+			url: 'https://example.com/fail',
+			status: null,
+		});
+		const keepId = await insertPage(db, { url: 'https://example.com/keep', status: 200 });
+
+		const knex = db.getKnex();
+		await knex('anchors').insert([
+			{ pageId: failId, hrefId: keepId, hash: null, textContent: 'to keep' },
+			{ pageId: keepId, hrefId: failId, hash: null, textContent: 'to fail' },
+		]);
+		await knex('images').insert([
+			{
+				pageId: failId,
+				src: 'https://example.com/fail.png',
+				currentSrc: null,
+				alt: null,
+				width: 1,
+				height: 1,
+				naturalWidth: 1,
+				naturalHeight: 1,
+				isLazy: 0,
+				viewportWidth: 1024,
+				sourceCode: null,
+			},
+			{
+				pageId: keepId,
+				src: 'https://example.com/keep.png',
+				currentSrc: null,
+				alt: null,
+				width: 1,
+				height: 1,
+				naturalWidth: 1,
+				naturalHeight: 1,
+				isLazy: 0,
+				viewportWidth: 1024,
+				sourceCode: null,
+			},
+		]);
+		const [resourceId] = await knex('resources')
+			.insert({ url: 'https://cdn.example.com/x.css', isExternal: 1 })
+			.returning('id');
+		const rid = Number(
+			typeof resourceId === 'object' ? (resourceId as { id: number }).id : resourceId,
+		);
+		await knex('resources-referrers').insert([
+			{ resourceId: rid, pageId: failId },
+			{ resourceId: rid, pageId: keepId },
+		]);
+		await knex('page_errors').insert([
+			{ pageId: failId, phase: 'render', message: 'boom', createdAt: 1_700_000_000_000 },
+			{ pageId: keepId, phase: 'render', message: 'kept', createdAt: 1_700_000_000_000 },
+		]);
+
+		await db.resetFailedPages();
+
+		expect(await knex('anchors').where('pageId', failId)).toEqual([]);
+		expect(await knex('images').where('pageId', failId)).toEqual([]);
+		expect(await knex('resources-referrers').where('pageId', failId)).toEqual([]);
+		expect(await knex('page_errors').where('pageId', failId)).toEqual([]);
+
+		// The non-failed page keeps all of its related rows.
+		expect(await knex('anchors').where('pageId', keepId)).toHaveLength(1);
+		expect(await knex('images').where('pageId', keepId)).toHaveLength(1);
+		expect(await knex('resources-referrers').where('pageId', keepId)).toHaveLength(1);
+		expect(await knex('page_errors').where('pageId', keepId)).toHaveLength(1);
+
+		await db.destroy();
+	});
+
+	it('returns an empty list when there are no failed pages', async () => {
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ workingDir, filename: resetDbPath });
+
+		await insertPage(db, { url: 'https://example.com/ok', status: 200 });
+		expect(await db.resetFailedPages()).toEqual([]);
+
+		await db.destroy();
+	});
+
+	it('resets every match across the 500-row chunk boundary', async () => {
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ workingDir, filename: resetDbPath });
+
+		const total = 501;
+		for (let i = 0; i < total; i++) {
+			await insertPage(db, { url: `https://example.com/fail-${i}`, status: null });
+		}
+
+		const reset = await db.resetFailedPages();
+		expect(reset).toHaveLength(total);
+
+		const remainingScraped = await db
+			.getKnex()
+			.from('pages')
+			.where('scraped', 1)
+			.count<{ c: number }[]>({ c: '*' });
+		expect(Number(remainingScraped[0]!.c)).toBe(0);
+
+		await db.destroy();
+	});
+});
+
 describe('self-redirect', () => {
 	const selfRedirectDbPath = path.resolve(workingDir, 'self-redirect-test.sqlite');
 

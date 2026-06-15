@@ -201,10 +201,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * when the crawl completes. Discovered pages, external pages, skipped pages,
 	 * and resources are forwarded to the archive for storage.
 	 * @param list - The list of parsed URLs to crawl. The first URL is used as the root.
+	 * @param opts - Optional crawl overrides.
+	 * @param opts.recursive - Whether discovered URLs are followed. Defaults to
+	 *   `!fromList` (recursive unless the archive was created from a URL list), so
+	 *   existing callers keep their behaviour; the retry flow passes it explicitly.
 	 * @returns A promise that resolves when crawling is complete.
 	 * @throws {Error} If the URL list is empty.
 	 */
-	async crawling(list: ExURL[]) {
+	async crawling(list: ExURL[], opts?: { recursive?: boolean }) {
 		const root = list[0];
 
 		if (!root) {
@@ -272,7 +276,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					.catch((error) => reject(error));
 			});
 
-			this.#crawler.start(list, { recursive: !this.#fromList });
+			this.#crawler.start(list, { recursive: opts?.recursive ?? !this.#fromList });
 		});
 	}
 
@@ -516,6 +520,117 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					throw new AggregateError(
 						[error, restoreError],
 						`append failed AND restore from backup failed. Original archive backup is left at: ${backupPath}`,
+					);
+				}
+				throw error;
+			}
+		} catch (error) {
+			await archive.close().catch(() => {});
+			throw error;
+		}
+	}
+
+	/**
+	 * Re-fetch previously-failed pages in an existing `.nitpicker` archive.
+	 *
+	 * Opens the archive, resets every page whose previous attempt ended in a
+	 * recoverable failure (missing status / content type, or a 5xx status — see
+	 * {@link Archive.resetFailedPages}) back to pending, and resumes crawling.
+	 * The archived crawl configuration is reused — scopes, excludes, keywords,
+	 * user agent, etc. — so the retry honours the original crawl boundaries
+	 * unless a field is explicitly overridden via `options`. The exception is
+	 * `recursive`: it is taken from `options` (the CLI flag defaults it to
+	 * `true`) rather than inherited from the archive, so a retry decides afresh
+	 * whether to follow newly-discovered URLs regardless of how the original
+	 * crawl was run.
+	 *
+	 * When `recursive` is enabled (the default), newly-discovered URLs from the
+	 * re-fetched pages are followed and crawled from scratch; when disabled, only
+	 * the failed pages themselves are re-fetched. The archived roots seed the
+	 * crawl scope while the reset pages are picked up through the resumed pending
+	 * set, so failed external pages stay external (metadata-only) instead of being
+	 * promoted into scope, and a failed root is re-fetched in place.
+	 *
+	 * A `<archive>.bak` is created before any DB mutation and removed on success;
+	 * if the crawl throws, the backup is restored to keep the original archive
+	 * intact.
+	 *
+	 * List-mode archives (`info.fromList === true`) are rejected for the same
+	 * reason as {@link CrawlerOrchestrator.append}: their pages are metadata-only.
+	 * @param archivePath - Absolute or relative path to the existing `.nitpicker`.
+	 * @param options - Optional config overrides applied on top of the archived config.
+	 * @param initializedCallback - Optional callback invoked after initialization but before crawling resumes.
+	 * @returns The orchestrator instance after the retry crawl completes.
+	 * @throws {Error} When the archive is in list mode or has no parseable roots.
+	 */
+	static async retryFailed(
+		archivePath: string,
+		options?: Partial<CrawlConfig>,
+		initializedCallback?: CrawlInitializedCallback,
+	) {
+		const cwd = options?.cwd ?? process.cwd();
+		const absFilePath = path.isAbsolute(archivePath)
+			? archivePath
+			: path.resolve(cwd, archivePath);
+
+		const archive = await Archive.open({ filePath: absFilePath, cwd });
+		// Any throw between here and the successful return must release the
+		// archive lock and clean up tmpDir; the caller's `close()` only runs on
+		// the happy path.
+		try {
+			const archived = await archive.getConfig();
+			if (archived.fromList) {
+				throw new Error(
+					'Cannot retry a list-mode archive: this archive was created with --list/--list-file and contains metadata-only pages. Create a fresh archive instead.',
+				);
+			}
+
+			const rootsParsed = sortUrl(archived.roots, archived);
+			if (rootsParsed.length === 0) {
+				throw new Error('retry: archive has no parseable root URLs');
+			}
+
+			const config: Config = {
+				...archived,
+				...cleanObject(options),
+				roots: archived.roots,
+				fromList: false,
+				baseUrl: archived.baseUrl,
+			};
+
+			const backupPath = absFilePath + '.bak';
+			await copyFile(absFilePath, backupPath);
+
+			try {
+				const resetUrls = await archive.resetFailedPages();
+				log('Start retrying failed pages');
+				log('Archive %s', absFilePath);
+				log('Reset %d failed page(s)', resetUrls.length);
+
+				const orchestrator = new CrawlerOrchestrator(archive, config);
+				const { scraped, pending } = await archive.getCrawlingState();
+				const resources = await archive.getResourceUrlList();
+				const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
+				orchestrator.#crawler.resume(pending, scraped, resources, pagesScrapedOffset);
+				if (initializedCallback) {
+					await initializedCallback(orchestrator, config);
+				}
+				await orchestrator.crawling(rootsParsed, { recursive: config.recursive });
+				clearDestinationCache();
+				await archive.setUrlOrder();
+				await ignoreEnoent(unlinkFile(backupPath));
+				return orchestrator;
+			} catch (error) {
+				try {
+					await copyFile(backupPath, absFilePath);
+					await ignoreEnoent(unlinkFile(backupPath));
+				} catch (restoreError) {
+					// Restore itself failed — surface both so the operator knows
+					// the .bak still exists and the original archive may be
+					// corrupt. The outer `catch` still releases the lock.
+					throw new AggregateError(
+						[error, restoreError],
+						`retry failed AND restore from backup failed. Original archive backup is left at: ${backupPath}`,
 					);
 				}
 				throw error;
