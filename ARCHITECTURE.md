@@ -72,7 +72,7 @@ flowchart TD
     Result --> Save["Archive にページデータ保存"]
 
     Crawling --> Write["CrawlerOrchestrator.write()"]
-    Write --> ArchiveWrite["Archive.write()<br/>snapshot を zip 圧縮 → tmpDir を .nitpicker ファイルに tar 圧縮"]
+    Write --> ArchiveWrite["Archive.write()<br/>WAL checkpoint → tmpDir を .nitpicker ファイルに tar"]
 ```
 
 ---
@@ -112,8 +112,8 @@ scrapeStart → openPage → loadDOMContent → getHTML → waitNetworkIdle
 - **`CrawlerOrchestrator`**: エントリポイント。`CrawlerOrchestrator.crawling()`（複数 URL で multi-root）, `CrawlerOrchestrator.resume()`（中断再開）, `CrawlerOrchestrator.append()`（既存アーカイブへの追加クロール）
 - **`Crawler`**: リンク管理・スクレイプスケジューリング
 - **`LinkList`**: URL キュー管理（pending → progress → done）
-- **`Archive`**: アーカイブの作成・再開・書き出し。`Archive.close()` は冪等（`#closeOnce` で破壊的プロローグも含めて1回だけ実行）、`Archive.releaseHandle()` は writer の DB ハンドルと lock だけを解放し tmpDir / `.nitpicker` には触れない代替 exit。`Archive.connect(tmpDir)` は **read-only モード**でアクセサを返し、`Database.connect({readOnly: true})` 経由で `initSchema` / `migrateInfoRoots` を **走らせない**（user の tmpDir を絶対に変更しない）。読み取り専用アクセサは `getHtmlOfPage` で zip を tmpDir 内に展開せず single-entry 抽出に切り替える
-- **`ArchiveAccessor`**: 読み取り専用アクセサ（`getPages`, `getPagesWithRefs` など）。HTML スナップショットの読み取り（`getHtmlOfPage`）は `snapshot-html.zip` を物理展開せず、central directory を 1 度だけ読んでキャッシュし、エントリ単位でストリーミング取得する（zip はランダムアクセス可能なため O(該当エントリ) で済む。全展開方式は単一ページ取得で zip 全体の inflate + 書き戻し I/O を払い、ディスクにも展開ディレクトリが残るため採用しない）。`close()` は冪等 + 5 秒の `db.destroy()` timeout 付き（viewer Ctrl-C が live crawler の write lock で 10 分ハングするのを防ぐ）
+- **`Archive`**: アーカイブの作成・再開・書き出し。`Archive.close()` は冪等（`#closeOnce` で破壊的プロローグも含めて1回だけ実行）、`Archive.releaseHandle()` は writer の DB ハンドルと lock だけを解放し tmpDir / `.nitpicker` には触れない代替 exit。`Archive.connect(tmpDir)` は **read-only モード**でアクセサを返し、`Database.connect({readOnly: true})` 経由で `initSchema` / `migrateInfoRoots` を **走らせない**（user の tmpDir を絶対に変更しない）。HTML スナップショットは SQLite BLOB なので `getHtmlOfPage` は read-only でも単純 SELECT で済む
+- **`ArchiveAccessor`**: 読み取り専用アクセサ（`getPages`, `getPagesWithRefs` など）。`close()` は冪等 + 5 秒の `db.destroy()` timeout 付き（viewer Ctrl-C が live crawler の write lock で 10 分ハングするのを防ぐ）。HTML スナップショットの読み取りは `archive-accessor.ts` / `database.ts` の JSDoc を参照
 - **`peekArchiveLockHolder(tmpDir)`**: `<tmpDir>.lock/pid.txt` を probe する read-only ヘルパ（lock を取りに行かない）。viewer footer の "Live crawl in progress" / "Interrupted crawl stub" バッジ判定に使用。crawler 側 `archive-lock.ts` と同じ alive 判定ロジックを共有
 - **`Page`**: ページデータラッパー
 
@@ -631,7 +631,6 @@ scrapeStart(url, page, options)
 | alternate                                                         | TEXT                  | link alternate                                                                   |
 | og_type, og_title, og_site_name, og_description, og_url, og_image | TEXT                  | Open Graph                                                                       |
 | twitter_card                                                      | TEXT                  | Twitter Card                                                                     |
-| html                                                              | TEXT                  | HTML スナップショットの相対パス                                                  |
 | isSkipped                                                         | BOOLEAN               | スキップされたか                                                                 |
 | skipReason                                                        | TEXT                  | スキップ理由                                                                     |
 | order                                                             | INTEGER               | Natural URL Sort 順序                                                            |
@@ -652,6 +651,7 @@ scrapeStart(url, page, options)
 - **resources**: url, isExternal, status, statusText, contentType, contentLength, compress, cdn, responseHeaders
 - **resources-referrers**: resourceId → resources.id, pageId → pages.id
 - **info**: 設定情報（単一レコード、`Config` 型のフィールドを JSON で保存）。`baseUrl`（先頭起点 URL、`roots[0]` と同値）と `roots`（位置引数で渡された全起点 URL の JSON 配列）を含む。スコープエントリは `roots` 1 本で表現する（独立した `scope` カラムは無い）
+- **page_html_blobs / page_html_ref**: HTML スナップショットを SHA-256 hash PK の content-addressable BLOB として持つ。詳細スキーマと WHY は `init-schema.ts` の JSDoc を参照（同期は実装側を正とする）
 
 ### リダイレクトの保存
 
@@ -773,7 +773,7 @@ metadata-only（title のみ）と非 HTML は `headCheckResult` を `updatePage
 - **読み出し時のページ性述語は 2 種類**:
   - **strict（`= 'text/html'`）**: 「描画済みHTMLページ」を数える/見る所。`getPages('page')`、`getScrapedHtmlPageCount`（resume カウンタ＝ライブの描画カウンタと一致させる）、`getSummary` の metadata 充足率の分母（非HTML/エラー行はメタを持てず率を希釈するため）。
   - **loose（`contentType IS NULL OR = 'text/html'`）**: ユーザー向けのページ一覧/件数。`listPages`、`getSummary` の total/internal/external/statusDistribution。**エラー/到達不能ページ（`contentType = null`・`scraped = 1`）を残す**ため（壊れたページは監査で見えるべき）。除外されるのは **既知の非HTMLリソースだけ**で、それらは Resources ビューに出る。
-- **スナップショット**: `updatePage` は **`page.html.length > 0` のときだけ** HTML スナップショットを書く（非HTMLは `html=''` なので 0 バイトファイルを作らない）。URL が HTML→非HTML に差し替わった再スクレイプでは古い `pages.html` をクリア、劣化スクレイプ（text/html だが html 空）は据え置く。
+- **スナップショット**: `updatePage` は `page.html.length > 0` のときだけ BLOB を書く。劣化スクレイプ vs HTML→非HTML 移行の扱いなど、書き込み判定の WHY は `database.ts` の `updatePage` JSDoc を参照（実装が正）。
 
 **既知の制約**（将来の保守者向け）:
 
