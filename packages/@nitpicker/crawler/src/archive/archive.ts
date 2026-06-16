@@ -4,27 +4,26 @@ import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 
 import path from 'node:path';
 
-import { zip } from '@d-zero/fs/zip';
-
 import { ArchiveAccessor } from './archive-accessor.js';
 import { acquireArchiveLock } from './archive-lock.js';
 import { Database } from './database.js';
 import { dbLog, log, saveLog } from './debug.js';
 import { appendText } from './filesystem/append-text.js';
 import { exists } from './filesystem/exists.js';
-import { extractMissingZipEntries } from './filesystem/extract-missing-zip-entries.js';
 import { isDir } from './filesystem/is-dir.js';
-import { outputText } from './filesystem/output-text.js';
 import { remove } from './filesystem/remove.js';
 import { rename } from './filesystem/rename.js';
 import { tar } from './filesystem/tar.js';
 import { untar } from './filesystem/untar.js';
 
 /**
- * Main archive class for creating, opening, resuming, and writing Nitpicker archive files (`.nitpicker`).
+ * Main archive class for creating, opening, resuming, and writing Nitpicker
+ * archive files (`.nitpicker`).
  *
- * An Archive wraps a SQLite database and optional HTML snapshots into a compressed
- * tar archive. It extends {@link ArchiveAccessor} to provide read access to stored data.
+ * An Archive wraps a single SQLite database into a tar archive. HTML
+ * bodies live inside the same DB as zstd-compressed BLOBs (see #75) — the
+ * tar payload is effectively just `db.sqlite`. It extends
+ * {@link ArchiveAccessor} to provide read access to stored data.
  *
  * Use the static factory methods ({@link Archive.create}, {@link Archive.open},
  * {@link Archive.resume}, {@link Archive.connect}) to obtain instances.
@@ -45,9 +44,7 @@ export default class Archive extends ArchiveAccessor {
 	#filePath: string;
 	/** Lock release function held while the writer owns the archive. */
 	#releaseLock: () => Promise<void>;
-	/** Absolute path to the HTML snapshot directory within the temporary working directory. */
-	#snapshotDir: string;
-	/** Absolute path to the temporary working directory containing the SQLite DB and snapshots. */
+	/** Absolute path to the temporary working directory containing the SQLite DB. */
 	#tmpDir: string;
 
 	/**
@@ -81,13 +78,11 @@ export default class Archive extends ArchiveAccessor {
 		super(tmpDir, db, '');
 		this.#filePath = filePath;
 		this.#tmpDir = tmpDir;
-		this.#snapshotDir = path.resolve(this.#tmpDir, Archive.SNAPSHOT_HTML_DIR);
 		this.#db = db;
 		this.#releaseLock = releaseLock;
 		log('create instance: %O', {
 			filePath,
 			tmpDir,
-			snapshotDir: this.#snapshotDir,
 		});
 
 		this.#db.on('error', (e) => {
@@ -220,43 +215,26 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.setConfig(config);
 	}
 	/**
-	 * Stores an external page's data in the archive database without saving a snapshot.
+	 * Stores an external page's data in the archive database without storing
+	 * an HTML snapshot. External-page rows carry only metadata (status, title,
+	 * content-type), never a rendered body.
 	 * @param pageInfo - The page data to store.
 	 */
 	async setExternalPage(pageInfo: PageData) {
 		dbLog('Set external page: %s', pageInfo.url.href);
-		await this.#db.updatePage(pageInfo, null, false);
+		await this.#db.updatePage(pageInfo, false, false);
 	}
 	/**
-	 * Stores a crawled page's data in the archive database and optionally saves an HTML snapshot.
-	 * If the snapshot file write fails, the HTML path in the database is cleared to prevent
-	 * referencing a non-existent file, and the error is re-thrown.
+	 * Stores a crawled page's data in the archive database, persisting the
+	 * rendered HTML body as a zstd-compressed BLOB inside the same SQLite
+	 * transaction. Storage is content-addressable: identical bodies across
+	 * pages share a single `page_html_blobs` row.
 	 * @param pageInfo - The page data to store.
 	 * @returns The database ID of the stored page.
-	 * @throws {Error} Re-throws any error from the snapshot file write after clearing the HTML path.
 	 */
 	async setPage(pageInfo: PageData): Promise<number> {
 		dbLog('Set page: %s', pageInfo.url.href);
-		const { html, pageId } = await this.#db.updatePage(
-			pageInfo,
-			this.#snapshotDir,
-			pageInfo.isTarget,
-		);
-		if (html) {
-			try {
-				await outputText(html, pageInfo.html);
-			} catch (error) {
-				dbLog('Snapshot write failed for page %d, clearing html path: %s', pageId, html);
-				try {
-					await this.#db.clearHtmlPath(pageId);
-				} catch (clearError) {
-					dbLog('Failed to clear html path for page %d: %s', pageId, clearError);
-				}
-				throw error;
-			}
-		}
-
-		return pageId;
+		return await this.#db.updatePage(pageInfo, true, pageInfo.isTarget);
 	}
 	/**
 	 * Records a redirect edge without re-storing the destination's content.
@@ -317,33 +295,17 @@ export default class Archive extends ArchiveAccessor {
 		await this.#db.updateConfig(patch);
 	}
 	/**
-	 * Writes the archive to disk as a compressed `.nitpicker` file.
+	 * Writes the archive to disk as a `.nitpicker` tar file.
 	 *
-	 * This method compresses the HTML snapshot directory into a zip file,
-	 * renames the temporary working directory, and creates the final tar archive.
-	 * The temporary directory is removed after writing.
+	 * Checkpoints the SQLite WAL so the database is self-contained inside
+	 * `db.sqlite`, renames the temporary working directory to the archive's
+	 * basename, and tars it into the final `.nitpicker`. The tar container
+	 * holds a single `db.sqlite` file (the legacy `snapshot-html.zip` is gone
+	 * — HTML lives as BLOBs in the DB), so finalisation is effectively a
+	 * single-file copy with no per-snapshot syscalls.
 	 */
 	async write() {
 		saveLog('Starts: %s', this.#filePath);
-		// The cached snapshot zip central directories become dangling once the
-		// zip is rewritten or tmpDir is renamed below.
-		this.invalidateSnapshotZipCache();
-		const snapshotZip = `${this.#snapshotDir}.zip`;
-		if (exists(this.#snapshotDir)) {
-			if (exists(snapshotZip)) {
-				// Append flow: the dir holds only the snapshots written during this
-				// session while the zip holds the pre-existing ones. Merge the zip's
-				// entries into the dir (existing files win) and re-zip, so appended
-				// snapshots are not lost.
-				saveLog('Merges zipped snapshots into snapshot dir: %s', this.#snapshotDir);
-				await extractMissingZipEntries(snapshotZip, this.#snapshotDir);
-				await remove(snapshotZip);
-			}
-			saveLog('Zips snapshot dir: %s', this.#snapshotDir);
-			await zip(snapshotZip, this.#snapshotDir);
-			saveLog('Remove snapshot dir: %s', this.#snapshotDir);
-			await remove(this.#snapshotDir);
-		}
 		await this.#db.checkpoint();
 		const filePathWithoutExt = path.resolve(
 			path.dirname(this.#filePath),
@@ -351,7 +313,7 @@ export default class Archive extends ArchiveAccessor {
 		);
 		saveLog('Rename temporary dir: %s to %s', this.#tmpDir, filePathWithoutExt);
 		await rename(this.#tmpDir, filePathWithoutExt, true);
-		saveLog('Zip temporary dir to file: %s to %s', filePathWithoutExt, this.#filePath);
+		saveLog('Tar temporary dir to file: %s to %s', filePathWithoutExt, this.#filePath);
 		await tar(filePathWithoutExt, this.#filePath);
 		saveLog('Remove temporary dir: %s', filePathWithoutExt);
 		await remove(filePathWithoutExt);
@@ -393,8 +355,6 @@ export default class Archive extends ArchiveAccessor {
 	}
 	/** The file extension for Nitpicker archive files (without the leading dot). */
 	static FILE_EXTENSION = 'nitpicker';
-	/** The directory name used for storing HTML snapshots within the archive. */
-	static readonly SNAPSHOT_HTML_DIR = 'snapshot-html';
 	/** The filename of the SQLite database within the archive. */
 	static readonly SQLITE_DB_FILE_NAME = 'db.sqlite';
 	/** The prefix used for temporary working directories during archive operations. */
@@ -473,8 +433,7 @@ export default class Archive extends ArchiveAccessor {
 			const openFiles: string[] = [];
 			if (!openPluginData) {
 				const relDdPath = path.join(fileName, Archive.SQLITE_DB_FILE_NAME);
-				const relSnapshotPath = path.join(fileName, Archive.SNAPSHOT_HTML_DIR + '.zip');
-				openFiles.push(relDdPath, relSnapshotPath);
+				openFiles.push(relDdPath);
 			}
 			log('Unzip file: %s (%O)', filePath, openFiles);
 			await untar(filePath, {
@@ -549,7 +508,6 @@ export default class Archive extends ArchiveAccessor {
 		const dbPath = path.resolve(tmpDir, Archive.SQLITE_DB_FILE_NAME);
 		dbLog('connects database: %s (readOnly=%s)', dbPath, options?.readOnly ?? false);
 		return await Database.connect({
-			workingDir: tmpDir,
 			filename: dbPath,
 			readOnly: options?.readOnly,
 		});

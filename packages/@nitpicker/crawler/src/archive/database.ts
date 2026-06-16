@@ -14,8 +14,10 @@ import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 import type { RetryDecoratorOptions } from '@d-zero/shared/retry';
 import type { Knex } from 'knex';
 
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { zstdCompressSync, zstdDecompressSync } from 'node:zlib';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { retry } from '@d-zero/shared/retry';
@@ -32,10 +34,11 @@ import { ErrorEmitter } from '../utils/error/error-emitter.js';
 import { dbLog } from './debug.js';
 import { mkdir } from './filesystem/mkdir.js';
 import { getJSON } from './get-json.js';
-import { initSchema } from './init-schema.js';
+import { applyConnectionPragmas, initSchema } from './init-schema.js';
 import { LibsqlDialect } from './libsql-dialect.js';
 import { limitedPageIds } from './limited-page-ids.js';
 import { migrateCrawlErrors } from './migrate-crawl-errors.js';
+import { migrateHtmlBlobTables } from './migrate-html-blob-tables.js';
 import { migrateInfoRoots } from './migrate-info-roots.js';
 import { migratePageErrors } from './migrate-page-errors.js';
 import { redirectTable } from './redirect-table.js';
@@ -45,6 +48,32 @@ const retrySetting: RetryDecoratorOptions = {
 	interval: 300,
 	retries: 3,
 };
+
+/**
+ * Decodes a stored HTML body BLOB according to its codec marker. The codec
+ * column on `page_html_blobs` exists so individual rows can be migrated to
+ * a future encoder without rewriting the whole table; readers must dispatch
+ * on it. The body is typed `Uint8Array` (not `Buffer`) because libsql
+ * returns BLOB columns as bare `Uint8Array`; `Buffer.from` wraps it
+ * zero-copy.
+ * @param body - Raw bytes as stored in `page_html_blobs.body`.
+ * @param codec - The `codec` column value (e.g. `'zstd'`, `'none'`).
+ * @returns UTF-8 decoded HTML string.
+ * @throws {Error} If the codec is not recognised.
+ */
+function decodeStoredBlob(body: Uint8Array, codec: string): string {
+	// `Buffer.from(buffer)` accepts Uint8Array, Buffer, and array-like
+	// shapes uniformly; libsql may hand back any of these for a BLOB
+	// column depending on the row encoding.
+	const buffer = Buffer.from(body);
+	if (codec === 'zstd') {
+		return zstdDecompressSync(buffer).toString('utf8');
+	}
+	if (codec === 'none') {
+		return buffer.toString('utf8');
+	}
+	throw new Error(`Unknown page_html_blobs.codec: ${codec}`);
+}
 
 /**
  * Columns of the `info` table that `setConfig` / `updateConfig` are allowed to
@@ -87,10 +116,11 @@ const INFO_JSON_COLUMNS: ReadonlySet<string> = new Set<keyof Config>([
 /**
  * Low-level database abstraction layer for the archive's SQLite database.
  *
- * Manages the `pages`, `anchors`, `images`, `resources`, and `resources-referrers`
- * tables. All public methods that perform database queries use the `@retryable`
- * decorator for automatic retry on transient failures, and `@ErrorEmitter` to
- * propagate errors as events.
+ * Public methods that perform database queries use the `@retryable`
+ * decorator for automatic retry on transient failures, and `@ErrorEmitter`
+ * to propagate errors as events. The set of tables this layer manages is
+ * defined by `init-schema.ts` (the source of truth — query that file for
+ * the canonical list).
  *
  * Use the static {@link Database.connect} factory method to create instances.
  * The constructor is private.
@@ -98,12 +128,9 @@ const INFO_JSON_COLUMNS: ReadonlySet<string> = new Set<keyof Config>([
 export class Database extends EventEmitter<DatabaseEvent> {
 	/** The Knex query builder instance connected to the SQLite database. */
 	#instance: Knex;
-	/** Absolute path to the working directory, used for resolving relative snapshot paths. */
-	#workingDir: string;
 	// eslint-disable-next-line no-restricted-syntax
 	private constructor(options: DatabaseOption) {
 		super();
-		this.#workingDir = options.workingDir;
 		this.#instance = knex({
 			client: LibsqlDialect,
 			connection: {
@@ -138,16 +165,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 */
 	async checkpoint() {
 		await this.#instance.raw('PRAGMA wal_checkpoint(TRUNCATE)');
-	}
-	/**
-	 * Clears the HTML snapshot path for a page.
-	 * Used to roll back the snapshot reference when the snapshot file write fails.
-	 * @param pageId - The database ID of the page whose HTML path should be cleared.
-	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
-	async clearHtmlPath(pageId: number) {
-		await this.#instance<DB_Page>('pages').where('id', pageId).update({ html: null });
 	}
 	/**
 	 * Destroys the database connection, releasing all pooled resources.
@@ -244,20 +261,33 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		};
 	}
 	/**
-	 * Retrieves the HTML snapshot file path for a specific page.
+	 * Reads the HTML snapshot stored as a zstd-compressed BLOB for the given page.
+	 *
+	 * Joins `page_html_ref` → `page_html_blobs` and decompresses inline. Returns
+	 * `null` when the page has no stored body (a non-HTML resource, a redirect
+	 * source, a degraded render). Read works identically on read-only / stub
+	 * connections — the special-cased "do we have a loose dir vs zip?" branching
+	 * the previous file-backed layout required is gone.
+	 *
+	 * Tables `page_html_ref` and `page_html_blobs` are created by `initSchema`.
+	 * Older `.nitpicker` archives that predate this migration must be passed
+	 * through `scripts/migrate-html-to-blob.mjs` before they can be read.
 	 * @param pageId - The database ID of the page.
-	 * @returns The relative file path to the HTML snapshot, or null if not saved.
+	 * @returns The decompressed HTML string, or `null` if no snapshot is stored.
 	 */
 	@ErrorEmitter()
 	@retry(retrySetting)
-	async getHtmlPathOnPage(pageId: number) {
-		return await this.#instance.transaction(async (trx) => {
-			const [{ html }] = await trx
-				.select('html')
-				.from<DB_Page>('pages')
-				.where('id', pageId);
-			return html || null;
-		});
+	async getHtmlOfPageById(pageId: number): Promise<string | null> {
+		const row = await this.#instance
+			.from<{ body: Uint8Array; codec: string }>('page_html_ref')
+			.join('page_html_blobs', 'page_html_ref.hash', '=', 'page_html_blobs.hash')
+			.select('page_html_blobs.body as body', 'page_html_blobs.codec as codec')
+			.where('page_html_ref.page_id', pageId)
+			.first();
+		if (!row) {
+			return null;
+		}
+		return decodeStoredBlob(row.body, row.codec);
 	}
 	/**
 	 * Returns the underlying Knex query builder instance for direct SQL access.
@@ -840,7 +870,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				isExternal: 0,
 				isSkipped: 0,
 				skipReason: null,
-				html: null,
 				status: null,
 				statusText: null,
 				contentType: null,
@@ -853,10 +882,14 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			// the new scrape is non-empty — so this pre-clear is still load-bearing
 			// for pages that get repromoted but then re-scrape to nothing (or are
 			// never reached again), and it is the only place `resources-referrers`
-			// is cleared.
+			// is cleared. The HTML body ref is also cleared so a repromoted page
+			// whose re-scrape ends up degraded does not keep its old external-render
+			// snapshot. Orphan blobs in `page_html_blobs` are left behind; #23 will
+			// add GC.
 			await this.#instance('anchors').whereIn('pageId', chunk).delete();
 			await this.#instance('images').whereIn('pageId', chunk).delete();
 			await this.#instance('resources-referrers').whereIn('pageId', chunk).delete();
+			await this.#instance('page_html_ref').whereIn('page_id', chunk).delete();
 		}
 		dbLog('Repromoted %d external pages back to pending', promotedUrls.length);
 		return promotedUrls;
@@ -920,7 +953,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			const chunk = ids.slice(i, i + chunkSize);
 			await this.#instance<DB_Page>('pages').whereIn('id', chunk).update({
 				scraped: 0,
-				html: null,
 				status: null,
 				statusText: null,
 				contentType: null,
@@ -931,11 +963,14 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			// `updatePage` only replaces anchors/images when the new scrape is
 			// non-empty, so this pre-clear is load-bearing for pages that reset but
 			// then fail again (or are never reached), and it is the only place
-			// `resources-referrers` and `page_errors` are cleared.
+			// `resources-referrers` and `page_errors` are cleared. The HTML body
+			// ref is also cleared so a previously-rendered page that now fails to
+			// re-scrape does not keep its old snapshot.
 			await this.#instance('anchors').whereIn('pageId', chunk).delete();
 			await this.#instance('images').whereIn('pageId', chunk).delete();
 			await this.#instance('resources-referrers').whereIn('pageId', chunk).delete();
 			await this.#instance('page_errors').whereIn('pageId', chunk).delete();
+			await this.#instance('page_html_ref').whereIn('page_id', chunk).delete();
 		}
 		dbLog('Reset %d failed pages back to pending', urls.length);
 		return urls;
@@ -1051,27 +1086,27 @@ export class Database extends EventEmitter<DatabaseEvent> {
 
 	/**
 	 * Inserts or updates a crawled page in the database, including its redirect chain,
-	 * anchors, and images. Optionally creates an HTML snapshot file path entry.
+	 * anchors, images, and (when `writeHtml`) its compressed HTML snapshot BLOB.
 	 *
 	 * Self-redirects (where the source URL equals the destination URL after normalization)
 	 * are skipped to avoid marking a page as redirected to itself — a situation caused by
 	 * authentication challenges (e.g. Basic Auth 302) that would otherwise exclude the page
 	 * from reports via the `whereNull('redirectDestId')` filter.
 	 * @param page - The page data to store.
-	 * @param snapshotDir - The directory for saving HTML snapshots, or null to skip snapshots.
+	 * @param writeHtml - When `true`, this call is allowed to insert (or clear)
+	 *   the page's HTML blob. `setExternalPage` passes `false` because external
+	 *   metadata-only scrapes never carry HTML and must not perturb an already
+	 *   stored body.
 	 * @param isTarget - Whether this page is a crawl target.
-	 * @returns An object with the optional `html` snapshot file path and the page's database `pageId`.
+	 * @returns The database `pageId` of the inserted/updated row.
 	 */
 	@ErrorEmitter()
 	@retry(retrySetting)
 	async updatePage(
 		page: PageData,
-		snapshotDir: string | null,
+		writeHtml: boolean,
 		isTarget: boolean,
-	): Promise<{
-		html?: string | undefined;
-		pageId: number;
-	}> {
+	): Promise<number> {
 		const { destUrl, sources } = resolveRedirectChain(
 			page.url.withoutHashAndAuth,
 			page.redirectPaths,
@@ -1100,38 +1135,36 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				destUrlObject.withoutHashAndAuth,
 				page.isExternal,
 			);
-			let snapshot: { html?: string; pageId: number } = { pageId };
-			// Only write an HTML snapshot when there is actual HTML to write.
+			// Only insert a snapshot blob when there is actual HTML to write.
 			// `page.html.length > 0` is the precise signal: the scraper returns
 			// `html: ''` for everything that is not a rendered `text/html` document
 			// (non-HTML responses, metadata-only, external, degraded renders), so a
 			// non-empty `html` is exactly "a rendered HTML body exists". Gating on
-			// `isTarget` alone wrote a 0-byte snapshot (and set `pages.html`) for
-			// every internal non-HTML resource — PDF / zip / images are isTarget=1 —
-			// flooding the archive with empty files pointing at meaningless paths (#72).
+			// `isTarget` alone would store an empty body for every internal non-HTML
+			// resource — PDF / zip / images are isTarget=1 (#72).
 			//
 			// `isTarget` is intentionally NOT part of this condition: it is implied by
 			// `html.length > 0` (only in-scope target pages are browser-rendered into a
 			// non-empty body; metadata-only and external pages carry `html: ''`), so the
 			// content check alone expresses the intent without a redundant term.
-			if (snapshotDir && page.html.length > 0) {
-				snapshot = await this.#updateSnapshotPath(pageId, snapshotDir, trx);
+			if (writeHtml && page.html.length > 0) {
+				await this.#writePageHtmlBlob(pageId, page.html, trx);
 			} else if (
-				snapshotDir &&
+				writeHtml &&
 				page.contentType !== null &&
 				!isHtmlContentType(page.contentType)
 			) {
 				// The page is now a *known* non-HTML type. If a previous scrape stored
-				// an HTML snapshot for this URL (e.g. it served HTML then was replaced
-				// by a PDF across `crawl --resume` / `--append`), clear the stale path
-				// so `pages.html` never contradicts `contentType`. A degraded HTML
+				// an HTML body for this URL (e.g. it served HTML then was replaced by
+				// a PDF across `crawl --resume` / `--append`), drop the stale ref so
+				// `page_html_ref` never contradicts `contentType`. A degraded HTML
 				// re-scrape (text/html or unknown content type with empty html) is NOT
 				// cleared — the last good snapshot is preserved, mirroring the
-				// anchors / images empty-guard below. Gated on `snapshotDir` because a
-				// stale path can only have been written by a snapshot-capable call
-				// (`setPage`); `setExternalPage` passes `snapshotDir = null` and never
+				// anchors / images empty-guard below. Gated on `writeHtml` because a
+				// stale ref can only have been written by a snapshot-capable call
+				// (`setPage`); `setExternalPage` passes `writeHtml = false` and never
 				// sets `html`, so it has nothing to clear.
-				await trx<DB_Page>('pages').where('id', pageId).update({ html: null });
+				await trx('page_html_ref').where('page_id', pageId).delete();
 			}
 			// Re-scrape semantics: the same URL can be scraped more than once
 			// (e.g. `crawl --resume`, re-visits, `--append` re-promotion). The
@@ -1187,7 +1220,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 					await trx('images').insert(_images);
 				});
 			}
-			return snapshot;
+			return pageId;
 		});
 	}
 
@@ -1237,6 +1270,11 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param readOnly - When true, skip schema init + migrations.
 	 */
 	async #init(readOnly: boolean) {
+		// Connection-level PRAGMAs (foreign_keys, mmap_size, …) must be
+		// reapplied on every connect — they are not persisted across opens.
+		// They are safe in read-only mode because they don't write to the
+		// user's tmpDir, just configure the libsql connection.
+		await applyConnectionPragmas(this.#instance);
 		if (readOnly) {
 			return;
 		}
@@ -1244,6 +1282,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		await migrateInfoRoots(this.#instance);
 		await migratePageErrors(this.#instance);
 		await migrateCrawlErrors(this.#instance);
+		await migrateHtmlBlobTables(this.#instance);
 	}
 	/**
 	 * Upserts page data into the `pages` table (inserts if new, updates if existing).
@@ -1339,22 +1378,47 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
-	 * Assigns and persists the HTML snapshot file path for a page.
-	 * @param pageId
-	 * @param snapshotDir
-	 * @param trx
+	 * Encodes, dedups, and persists a page's HTML snapshot.
+	 *
+	 * Computes SHA-256 over the raw UTF-8 bytes, compresses them with zstd,
+	 * inserts into `page_html_blobs` only if the hash is new (so identical
+	 * bodies — 404 templates, error pages, redirect destinations — share a
+	 * single row), and then upserts `page_html_ref(page_id → hash)` so the
+	 * latest scrape always points at the right body.
+	 *
+	 * Runs entirely inside the caller's transaction; a failure here rolls
+	 * back the rest of `updatePage`, which is the desired semantics (an
+	 * archive that lost its HTML for a page would otherwise serve stale
+	 * meta against a missing body).
+	 * @param pageId - The database id of the page.
+	 * @param html - The raw HTML string (UTF-8).
+	 * @param trx - The active transaction.
 	 */
-	async #updateSnapshotPath(pageId: number, snapshotDir: string, trx?: Knex.Transaction) {
-		const qb = trx ?? this.#instance;
-		const snapshotHtmlPath = path.resolve(snapshotDir, `${pageId}.html`);
-		const snapshotRelHtmlPath = path.relative(this.#workingDir, snapshotHtmlPath);
-		await qb('pages').where('id', pageId).update({
-			html: snapshotRelHtmlPath,
-		});
-		return {
-			html: snapshotHtmlPath,
-			pageId,
-		};
+	async #writePageHtmlBlob(
+		pageId: number,
+		html: string,
+		trx: Knex.Transaction,
+	): Promise<void> {
+		const rawBytes = Buffer.from(html, 'utf8');
+		const hash = createHash('sha256').update(rawBytes).digest();
+		const compressed = zstdCompressSync(rawBytes);
+		await trx('page_html_blobs')
+			.insert({
+				hash,
+				body: compressed,
+				codec: 'zstd',
+				size_raw: rawBytes.byteLength,
+				size_stored: compressed.byteLength,
+			})
+			.onConflict('hash')
+			.ignore();
+		// Upsert so a re-scrape's body cleanly supersedes the prior pointer.
+		// The old blob row is intentionally left in place — a future #23 GC
+		// pass will sweep unreachable hashes.
+		await trx('page_html_ref')
+			.insert({ page_id: pageId, hash })
+			.onConflict('page_id')
+			.merge(['hash']);
 	}
 
 	/**

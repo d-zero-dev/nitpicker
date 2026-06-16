@@ -1,9 +1,50 @@
 import type { Knex } from 'knex';
 
 /**
+ * Applies the connection-level PRAGMAs that govern foreign-key enforcement
+ * and BLOB-read performance. These are **per-connection** settings (libsql
+ * resets them when a new connection is opened), so they must be reapplied
+ * every time `Database.connect` runs — not just on first-time schema
+ * initialization. Keeping them separate from `initSchema`'s one-shot path
+ * also lets `page_size` (which only takes effect against an empty DB)
+ * stay gated behind the existence check.
+ * @param instance - The Knex query builder instance connected to the database.
+ */
+export async function applyConnectionPragmas(instance: Knex): Promise<void> {
+	// Foreign-key enforcement defaults to OFF on every new SQLite
+	// connection. Required for ON DELETE CASCADE on `page_html_ref` to fire.
+	await instance.raw('PRAGMA foreign_keys = ON');
+	await instance.raw('PRAGMA wal_autocheckpoint = 1000');
+	// Negative value = KiB of memory (64 MiB). Helps large BLOB scans.
+	await instance.raw('PRAGMA cache_size = -65536');
+	// 256 MiB mmap window. SQLite falls back to read() past this so the
+	// limit is a soft ceiling, not a hard one.
+	await instance.raw('PRAGMA mmap_size = 268435456');
+}
+
+/**
  * Initializes the archive database schema if tables do not exist.
- * Enables WAL journal mode and foreign keys, then creates all tables
- * (`info`, `pages`, `anchors`, `images`, `resources`, `resources-referrers`).
+ *
+ * Schema notes:
+ *
+ * - HTML snapshots are stored as zstd-compressed BLOBs inside the SQLite
+ *   database itself (`page_html_blobs` + `page_html_ref`). The legacy
+ *   `snapshot-html.zip` container is gone; this collapses the per-`--append`
+ *   re-compression cost and unlocks straight `SELECT body` reads in stub /
+ *   read-only mode.
+ * - `page_html_blobs` is keyed by SHA-256 of the raw HTML bytes so identical
+ *   bodies are stored once per archive (within-crawl dedup of 404s, error
+ *   templates, etc.). This shape is also the natural fit for #23 (commit
+ *   graph + cross-generation dedup): the table can be reused as-is and only
+ *   the per-revision reference table is replaced.
+ * - The `codec` column on `page_html_blobs` exists so future zstd → other
+ *   migrations can flip individual blobs without a global rewrite; reads
+ *   dispatch on it. A `CHECK` constraint pins it to the known set so a
+ *   typo is rejected at write time, not at the next read.
+ * - PRAGMA `page_size` and `journal_mode` are set BEFORE any `CREATE
+ *   TABLE` because SQLite only honors `page_size` changes against an
+ *   empty database, and `journal_mode = WAL` is persistent. Other
+ *   per-connection PRAGMAs live in {@link applyConnectionPragmas}.
  * @param instance - The Knex query builder instance connected to the database.
  */
 export async function initSchema(instance: Knex) {
@@ -12,9 +53,11 @@ export async function initSchema(instance: Knex) {
 		return;
 	}
 
-	// Enable WAL mode and foreign keys for better performance and data integrity
+	// Page size must be set on an empty database file; once any data is
+	// written, only VACUUM can change it. journal_mode is also one-shot
+	// (persistent) and so stays here.
+	await instance.raw('PRAGMA page_size = 16384');
 	await instance.raw('PRAGMA journal_mode = WAL');
-	await instance.raw('PRAGMA foreign_keys = ON');
 
 	await instance.schema
 		.createTable('info', (t) => {
@@ -66,7 +109,6 @@ export async function initSchema(instance: Knex) {
 			t.string('og_url');
 			t.string('og_image');
 			t.string('twitter_card');
-			t.string('html');
 			t.boolean('isSkipped');
 			t.string('skipReason');
 			t.integer('order').unsigned().nullable();
@@ -153,4 +195,27 @@ export async function initSchema(instance: Knex) {
 			t.text('message').notNullable();
 			t.integer('createdAt').notNullable();
 		});
+
+	// Content-addressable HTML blob storage. Knex's schema builder doesn't
+	// expose a WITHOUT ROWID toggle, so the BLOB tables are created via raw
+	// SQL. WITHOUT ROWID keeps the rows packed inside the b-tree leaves
+	// (no hidden rowid + secondary index pair), which matters for the blob
+	// table where a 32-byte hash PK + multi-KB body is the dominant row
+	// shape.
+	await instance.raw(`
+		CREATE TABLE page_html_blobs (
+			hash         BLOB PRIMARY KEY,
+			body         BLOB NOT NULL,
+			codec        TEXT NOT NULL CHECK(codec IN ('zstd', 'none')),
+			size_raw     INTEGER NOT NULL,
+			size_stored  INTEGER NOT NULL
+		) WITHOUT ROWID
+	`);
+	await instance.raw(`
+		CREATE TABLE page_html_ref (
+			page_id  INTEGER PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
+			hash     BLOB NOT NULL REFERENCES page_html_blobs(hash)
+		) WITHOUT ROWID
+	`);
+	await instance.raw('CREATE INDEX idx_page_html_ref_hash ON page_html_ref(hash)');
 }

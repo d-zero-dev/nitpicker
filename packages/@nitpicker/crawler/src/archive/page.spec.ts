@@ -53,7 +53,6 @@ function createRawPage(overrides: Partial<DB_Page> = {}): DB_Page {
 		og_image: 'https://example.com/image.png',
 		twitter_card: 'summary',
 		networkLogs: null,
-		html: 'pages/1.html',
 		isSkipped: 0,
 		skipReason: null,
 		order: 0,
@@ -372,14 +371,14 @@ describe('Page', () => {
 	});
 
 	describe('getHtml', () => {
-		it('delegates to archive with raw html path', async () => {
+		it('delegates to archive with page id (BLOB lookup)', async () => {
 			const archive = createMockArchive({
 				getHtmlOfPage: vi.fn().mockResolvedValue('<html></html>'),
 			});
-			const page = new Page(archive as never, createRawPage({ html: 'pages/1.html' }));
+			const page = new Page(archive as never, createRawPage({ id: 42 }));
 			const html = await page.getHtml();
 			expect(html).toBe('<html></html>');
-			expect(archive.getHtmlOfPage).toHaveBeenCalledWith('pages/1.html');
+			expect(archive.getHtmlOfPage).toHaveBeenCalledWith(42);
 		});
 	});
 
