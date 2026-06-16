@@ -131,8 +131,6 @@ export interface DB_Page {
 	twitter_card: string | null;
 	/** JSON-serialized network logs captured during scraping, or null if not collected. */
 	networkLogs: string | null;
-	/** Relative file path to the saved HTML snapshot, or null if not saved. */
-	html: string | null;
 	/** Whether the page was skipped during crawling (1) or processed normally (0). */
 	isSkipped: 0 | 1;
 	/** The reason the page was skipped, or null if it was not skipped. */
@@ -310,8 +308,6 @@ export interface DB_Resource {
  * Connection options for the archive's libsql-backed database.
  */
 export interface DatabaseOption {
-	/** The working directory for the database (used for resolving relative paths). */
-	workingDir: string;
 	/** The absolute file path to the SQLite database file. */
 	filename: string;
 	/**

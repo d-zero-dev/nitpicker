@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { afterAll, beforeAll, describe, expect, it, vi, type MockInstance } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import Archive from './archive.js';
 import { Database } from './database.js';
@@ -11,15 +11,6 @@ import { remove } from './filesystem/remove.js';
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
 const workingDir = path.resolve(__dirname, '__mock__');
-
-vi.mock('./filesystem/output-text.js', async (importOriginal) => {
-	// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-	const original = await importOriginal<typeof import('./filesystem/output-text.js')>();
-	return {
-		...original,
-		outputText: vi.fn(original.outputText),
-	};
-});
 
 /**
  * Builds minimal page data for `Archive.setPage` in tests.
@@ -47,114 +38,29 @@ function makePageData(pathname: string, html: string) {
 }
 
 describe('setPage', () => {
-	const tmpDirPattern = path.resolve(
-		workingDir,
-		Archive.TMP_DIR_PREFIX + 'set-page-test',
-	);
 	const archiveFilePath = path.resolve(workingDir, 'set-page-test.nitpicker');
 
 	afterAll(async () => {
-		await remove(tmpDirPattern).catch(() => {});
 		await remove(archiveFilePath).catch(() => {});
 	});
 
-	it('スナップショット書き込み失敗時にDB上のHTMLパスがクリアされエラーが伝搬する', async () => {
-		const fsIndex = await import('./filesystem/output-text.js');
-		const mockedOutputText = vi.mocked(fsIndex.outputText);
-		mockedOutputText.mockRejectedValueOnce(new Error('Disk write failure'));
-
-		const archive = await Archive.create({
-			filePath: archiveFilePath,
-			cwd: workingDir,
-		});
-
+	it('Stores the HTML body as a BLOB readable through getHtmlOfPage', async () => {
+		const filePath = path.resolve(workingDir, 'setpage-readback.nitpicker');
+		const archive = await Archive.create({ filePath, cwd: workingDir });
 		try {
-			const pageData = {
-				url: parseUrl('http://localhost/snapshot-fail')!,
-				redirectPaths: [] as string[],
-				isExternal: false,
-				status: 200,
-				statusText: 'OK',
-				contentLength: 100,
-				contentType: 'text/html',
-				responseHeaders: {},
-				meta: { title: 'Snapshot Fail Test' },
-				anchorList: [] as never[],
-				imageList: [] as never[],
-				html: '<html><body>test</body></html>',
-				isSkipped: false,
-				isTarget: true,
-			};
-
-			await expect(archive.setPage(pageData)).rejects.toThrow('Disk write failure');
-
-			expect(mockedOutputText).toHaveBeenCalledTimes(1);
-
-			// HTMLパスがクリアされていることをDB経由で検証
-			const dbPath = path.resolve(tmpDirPattern, Archive.SQLITE_DB_FILE_NAME);
-			const db = await Database.connect({
-				workingDir: tmpDirPattern,
-				filename: dbPath,
-			});
-			try {
-				const pages = await db.getPages();
-				const page = pages.find((p) => p.url === 'http://localhost/snapshot-fail');
-				expect(page).toBeDefined();
-				expect(page!.html).toBeNull();
-			} finally {
-				await db.destroy();
-			}
+			const html = '<html><body>readback</body></html>';
+			const pageId = await archive.setPage(makePageData('/readback', html));
+			await expect(archive.getHtmlOfPage(pageId)).resolves.toBe(html);
 		} finally {
-			mockedOutputText.mockRestore();
 			await archive.close();
+			await remove(filePath).catch(() => {});
 		}
 	});
 
-	it('clearHtmlPath 失敗時も元のスナップショットエラーが伝搬する', async () => {
-		const fsIndex = await import('./filesystem/output-text.js');
-		const mockedOutputText = vi.mocked(fsIndex.outputText);
-		mockedOutputText.mockRejectedValueOnce(new Error('Disk full'));
-
-		const clearSpy: MockInstance = vi
-			.spyOn(Database.prototype, 'clearHtmlPath')
-			.mockRejectedValueOnce(new Error('DB locked'));
-
-		const archive = await Archive.create({
-			filePath: archiveFilePath,
-			cwd: workingDir,
-		});
-
-		try {
-			const pageData = {
-				url: parseUrl('http://localhost/double-fail')!,
-				redirectPaths: [] as string[],
-				isExternal: false,
-				status: 200,
-				statusText: 'OK',
-				contentLength: 50,
-				contentType: 'text/html',
-				responseHeaders: {},
-				meta: { title: 'Double Fail' },
-				anchorList: [] as never[],
-				imageList: [] as never[],
-				html: '<html></html>',
-				isSkipped: false,
-				isTarget: true,
-			};
-
-			// 元のエラー（Disk full）が伝搬する（DB lockedに差し替わらない）
-			await expect(archive.setPage(pageData)).rejects.toThrow('Disk full');
-		} finally {
-			clearSpy.mockRestore();
-			mockedOutputText.mockRestore();
-			await archive.close();
-		}
-	});
-
-	it('同一ページを 2 回 setPage しても発リンクが重複しない（実呼び出し元での re-scrape dedup）', async () => {
+	it('Re-scraping the same page does not duplicate outgoing anchors', async () => {
 		// Integration boundary: the de-dup logic lives in Database.updatePage, but
-		// the production caller is Archive.setPage (which also writes snapshots).
-		// This proves the wrapper does not bypass the replace-on-re-scrape contract.
+		// the production caller is Archive.setPage. This proves the wrapper does
+		// not bypass the replace-on-re-scrape contract.
 		const filePath = path.resolve(workingDir, 'setpage-rescrape-test.nitpicker');
 		const archive = await Archive.create({ filePath, cwd: workingDir });
 		const pageData = {
@@ -179,22 +85,21 @@ describe('setPage', () => {
 
 		try {
 			const pageId = await archive.setPage(pageData);
-			// 同一ページを再スクレイプ。
 			await archive.setPage(pageData);
 
 			const anchors = await archive.getAnchorsOnPage(pageId);
 			expect(anchors).toHaveLength(2);
 		} finally {
-			// close() は .nitpicker を書き出して tmpDir を消す。生成物も後始末する。
 			await archive.close();
 			await remove(filePath).catch(() => {});
 		}
 	});
 
-	it('非HTML（PDF）の setPage は 0 バイトのスナップショットファイルを作らない（#72）', async () => {
-		// 結合境界: html パスの付与は updatePage、ファイル書き込みは setPage。PDF は
-		// internal で isTarget=true だが html が空なので、スナップショットファイルを
-		// 一切作ってはならない（実体 0 バイトのファイル量産バグ #72）。
+	it('Non-HTML (PDF) setPage does not insert a page_html_ref row (#72)', async () => {
+		// Issue #72: previously a PDF with isTarget=1 wrote a 0-byte snapshot.
+		// With BLOB storage, the same intent is "no page_html_ref row for
+		// non-HTML responses": the writer must skip the body INSERT when
+		// `html.length === 0`.
 		const filePath = path.resolve(workingDir, 'setpage-pdf-test.nitpicker');
 		const archive = await Archive.create({ filePath, cwd: workingDir });
 		const pageData = {
@@ -216,12 +121,10 @@ describe('setPage', () => {
 
 		try {
 			const pageId = await archive.setPage(pageData);
-			const snapshotPath = path.resolve(
-				archive.tmpDir,
-				Archive.SNAPSHOT_HTML_DIR,
-				`${pageId}.html`,
-			);
-			expect(existsSync(snapshotPath)).toBe(false);
+			const knex = archive.getKnex();
+			const refRows = await knex('page_html_ref').where('page_id', pageId);
+			expect(refRows).toHaveLength(0);
+			await expect(archive.getHtmlOfPage(pageId)).resolves.toBeNull();
 		} finally {
 			await archive.close();
 			await remove(filePath).catch(() => {});
@@ -229,70 +132,57 @@ describe('setPage', () => {
 	});
 });
 
-describe('write: スナップショットzipキャッシュの無効化', () => {
-	const tmpDirPattern = path.resolve(
-		workingDir,
-		Archive.TMP_DIR_PREFIX + 'cache-invalidate-test',
-	);
-	const archiveFilePath = path.resolve(workingDir, 'cache-invalidate-test.nitpicker');
+describe('write: archive layout', () => {
+	const archiveFilePath = path.resolve(workingDir, 'write-layout-test.nitpicker');
 
 	afterAll(async () => {
-		await remove(tmpDirPattern).catch(() => {});
 		await remove(archiveFilePath).catch(() => {});
 	});
 
-	it('write() 後の getHtmlOfPage は dangling キャッシュ参照で throw せず null を返す', async () => {
-		const html = '<html><body>cached page</body></html>';
+	it('Reopened archive returns the stored HTML body (BLOB survives tar round-trip)', async () => {
+		const html = '<html><body>roundtrip</body></html>';
 		const archive = await Archive.create({
 			filePath: archiveFilePath,
 			cwd: workingDir,
 		});
-		const pageId = await archive.setPage(makePageData('/cached', html));
-
-		// zip 経由の読み取りで central directory キャッシュを充填する
-		const snapshotDir = path.resolve(archive.tmpDir, Archive.SNAPSHOT_HTML_DIR);
-		const { zip } = await import('@d-zero/fs/zip');
-		await zip(`${snapshotDir}.zip`, snapshotDir);
-		await remove(snapshotDir);
-		const filePath = `${Archive.SNAPSHOT_HTML_DIR}/${pageId}.html`;
-		await expect(archive.getHtmlOfPage(filePath)).resolves.toBe(html);
-
-		// write() で tmpDir がリネーム・削除され、キャッシュ先の zip パスは消滅する
-		await archive.write();
-
-		// キャッシュが無効化されていれば ENOENT を投げず null になる
-		await expect(archive.getHtmlOfPage(filePath)).resolves.toBeNull();
-
+		const pageId = await archive.setPage(makePageData('/roundtrip', html));
 		await archive.close();
+
+		const reopened = await Archive.open({
+			filePath: archiveFilePath,
+			cwd: workingDir,
+		});
+		try {
+			await expect(reopened.getHtmlOfPage(pageId)).resolves.toBe(html);
+		} finally {
+			await reopened.close();
+		}
 	});
 });
 
-describe('write: append 時のスナップショットマージ', () => {
-	const tmpDirPattern = path.resolve(
-		workingDir,
-		Archive.TMP_DIR_PREFIX + 'append-merge-test',
-	);
+describe('write: append', () => {
 	const archiveFilePath = path.resolve(workingDir, 'append-merge-test.nitpicker');
 
 	afterAll(async () => {
-		await remove(tmpDirPattern).catch(() => {});
 		await remove(archiveFilePath).catch(() => {});
 	});
 
-	it('既存zipと追記スナップショットがマージされ、両方のHTMLが読める', async () => {
+	it('Append run preserves the existing snapshot and stores the new one', async () => {
 		const html1 = '<html><body>original page</body></html>';
 		const html2 = '<html><body>appended page</body></html>';
 
-		// 1回目: 通常の crawl → write 相当
+		// 1st pass: ordinary crawl → write.
 		const first = await Archive.create({
 			filePath: archiveFilePath,
 			cwd: workingDir,
 		});
 		const pageId1 = await first.setPage(makePageData('/original', html1));
-		await first.write();
 		await first.close();
 
-		// 2回目: append 相当（既存アーカイブを開き、新規ページを追加して write）
+		// 2nd pass: append (open existing archive, add a new page, write).
+		// `close()` auto-writes only when the .nitpicker does NOT yet exist;
+		// for append the archive already exists, so the write() must be
+		// invoked explicitly to persist the new BLOBs back to the tar.
 		const second = await Archive.open({
 			filePath: archiveFilePath,
 			cwd: workingDir,
@@ -301,18 +191,14 @@ describe('write: append 時のスナップショットマージ', () => {
 		await second.write();
 		await second.close();
 
-		// 再オープンして両方のスナップショットが残っていることを検証
+		// Reopen and verify both bodies remain accessible.
 		const reopened = await Archive.open({
 			filePath: archiveFilePath,
 			cwd: workingDir,
 		});
 		try {
-			await expect(
-				reopened.getHtmlOfPage(`${Archive.SNAPSHOT_HTML_DIR}/${pageId1}.html`),
-			).resolves.toBe(html1);
-			await expect(
-				reopened.getHtmlOfPage(`${Archive.SNAPSHOT_HTML_DIR}/${pageId2}.html`),
-			).resolves.toBe(html2);
+			await expect(reopened.getHtmlOfPage(pageId1)).resolves.toBe(html1);
+			await expect(reopened.getHtmlOfPage(pageId2)).resolves.toBe(html2);
 		} finally {
 			await reopened.close();
 		}
@@ -321,13 +207,8 @@ describe('write: append 時のスナップショットマージ', () => {
 
 describe('getScrapedHtmlPageCount', () => {
 	const archiveFilePath = path.resolve(workingDir, 'html-page-count-test.nitpicker');
-	const tmpDirPattern = path.resolve(
-		workingDir,
-		Archive.TMP_DIR_PREFIX + 'html-page-count-test',
-	);
 
 	afterAll(async () => {
-		await remove(tmpDirPattern).catch(() => {});
 		await remove(archiveFilePath).catch(() => {});
 	});
 
@@ -338,7 +219,6 @@ describe('getScrapedHtmlPageCount', () => {
 		});
 
 		try {
-			// HTML ページ 1 件挿入
 			await archive.setPage(makePageData('/html-page', '<html></html>'));
 
 			const count = await archive.getScrapedHtmlPageCount();
@@ -379,7 +259,6 @@ describe('addPageError', () => {
 			// internal Database publicly).
 			const dbPath = path.resolve(tmpDirPattern, Archive.SQLITE_DB_FILE_NAME);
 			const db = await Database.connect({
-				workingDir: tmpDirPattern,
 				filename: dbPath,
 			});
 			try {

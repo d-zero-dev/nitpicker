@@ -67,6 +67,21 @@ CI/CD で外部リンクの一時的障害でビルドを落としたくない�
 - User-Agent デフォルト `Nitpicker/<version>`（`--user-agent` 変更可）
 - `--interval` でリクエスト間隔（ms）
 
+### 過去アーカイブの移行
+
+v0.x のフォーマット変更（#75）で HTML スナップショットの格納方式が `snapshot-html.zip` → SQLite BLOB に変わった。挙動は以下の通り。
+
+- 古い `.nitpicker` ファイルを新 CLI で開くと、`page_html_blobs` / `page_html_ref` テーブルだけは writer 接続時に自動作成される（落ちない）。
+- ただし HTML 本文は移行されないので、viewer / MCP / analyze プラグインは **全ページで HTML が `null` を返す**（API 上「スナップショット未保存」扱い、空文字列ではない）。
+- データを移すには下記スクリプトを **一度だけ** 走らせる必要がある。
+
+```sh
+# リポジトリを clone した状態で
+node scripts/migrate-html-to-blob.mjs <old.nitpicker> [<new.nitpicker>]
+```
+
+出力先省略時は `<old>.migrated.nitpicker` を入力と同じディレクトリに作る。元ファイルは触らない。10 万ページ規模で実行時間は数時間オーダー（SHA-256 + zstd は CPU bound）。スクリプトは `@nitpicker/cli` の npm パッケージには含まれていない ので、移行が必要な場合は `git clone` してリポジトリルートから実行する。
+
 ## Analyze
 
 ```sh

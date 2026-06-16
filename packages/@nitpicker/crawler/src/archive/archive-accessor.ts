@@ -11,11 +11,9 @@ import type { ParseURLOptions } from '@d-zero/shared/parse-url';
 
 import path from 'node:path';
 
-import { extractZip, unzip } from '@d-zero/fs/zip';
 import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-await-event-emitter';
 
 import { log } from './debug.js';
-import { exists } from './filesystem/exists.js';
 import { outputJSON } from './filesystem/output-json.js';
 import { outputText } from './filesystem/output-text.js';
 import { readJSON } from './filesystem/read-json.js';
@@ -23,12 +21,6 @@ import { readText } from './filesystem/read-text.js';
 import Page from './page.js';
 import Resource from './resource.js';
 import { safePath } from './safe-path.js';
-
-/**
- * A single file entry within a snapshot zip's central directory,
- * inferred from the return type of `extractZip`.
- */
-type ZipEntry = Awaited<ReturnType<typeof extractZip>>['files'][number];
 
 /**
  * Provides read-only access to an archive's database and stored data files.
@@ -61,18 +53,13 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	/** Namespace prefix for custom data storage (e.g. `"analysis/plugin-name"`). `null` disables `setData`. */
 	#namespace: string | null = null;
 	/**
-	 * Whether this accessor must avoid every filesystem mutation on
-	 * `#tmpDir`. Set by {@link Archive.connect} for stub-mode (live crawl)
-	 * opens so helpers like {@link getHtmlOfPage} skip the unzip-into-dir
-	 * code path that would race the crawler.
+	 * Whether this accessor was opened in read-only mode. With HTML stored
+	 * as a SQLite BLOB, this no longer toggles any code path — the SELECT
+	 * is identical for writer- and reader-mode accessors. Kept on the
+	 * accessor so callers like the viewer can still surface "this archive
+	 * is being read read-only" UI hints without re-deriving it.
 	 */
 	#readOnly: boolean;
-	/**
-	 * Cached central-directory lookups of snapshot zip files, keyed by zip file path.
-	 * Each value maps an entry file name (e.g. `"123.html"`) to its zip entry,
-	 * enabling O(1) random access without physically extracting the zip.
-	 */
-	#snapshotZipFiles = new Map<string, Promise<Map<string, ZipEntry>>>();
 	/** Absolute path to the temporary working directory containing the database and files. */
 	#tmpDir: string;
 
@@ -197,87 +184,40 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		return await readText(filePath);
 	}
 	/**
-	 * Reads the HTML content of a page snapshot from the archive.
+	 * Reads the HTML snapshot of a page from the archive.
 	 *
-	 * Resolution policy (in order, with read-only safety):
+	 * HTML is stored as zstd-compressed BLOBs in `page_html_blobs` (keyed by
+	 * SHA-256 of the raw bytes) with `page_html_ref` linking `page_id → hash`.
+	 * The read is a straight join + decompress; writer- and read-only (stub)
+	 * accessors take the same code path because nothing here touches the
+	 * filesystem.
 	 *
-	 * 1. **Loose `snapshot-html/<file>`** — read directly from the unzipped
-	 *    directory when it exists AND the requested file is present. Hit by
-	 *    the viewer attached to a live crawl's tmpDir (snapshots not yet
-	 *    zipped) and by an archive that has already been unzipped earlier.
-	 * 2. **Single-entry zip read** — when the loose directory is missing the
-	 *    requested file but `snapshot-html.zip` exists, stream just that one
-	 *    entry out of the zip via its cached central directory, without
-	 *    expanding the zip onto disk. This is also the only path used when
-	 *    this accessor is read-only (e.g. stub-mode opens), so the user's
-	 *    live tmpDir is never mutated. The parsed central directory is cached
-	 *    per zip file, so repeated calls cost only one entry inflation each.
-	 * 3. **Eager unzip into the directory** — writer-mode only fallback when
-	 *    the directory is absent but the zip is present. Future calls then
-	 *    hit path 1 without re-decompressing.
+	 * Returns `null` when the page row exists but has no stored body — for
+	 * example a redirect source, a non-HTML resource (PDF), a page that
+	 * failed to render, or an external page (whose row is metadata-only).
+	 * Distinguishing "no body stored" from "empty body" is preserved: an
+	 * empty HTML string returns `''`, not `null`.
 	 *
-	 * Falling back from "loose dir doesn't have it" to the zip recovers the
-	 * edge case where an interrupted `Archive.write()` produced a partial
-	 * loose directory alongside a complete zip; the previous order would
-	 * return `null` for files only in the zip. An empty snapshot file yields
-	 * an empty string, while a missing snapshot yields null — both code paths
-	 * preserve that distinction.
-	 * @param filePath - The relative file path to the HTML snapshot, or null.
-	 * @param openZipped - Whether to expand the snapshot zip onto disk when
-	 *   the loose directory is absent. Defaults to `true` for writer-mode
-	 *   accessors and is **forced to false** when the accessor is
-	 *   read-only (stub mode) — see {@link ArchiveAccessor#readOnly}.
-	 * @returns The HTML content as a string, or null if the snapshot is
-	 *   not found or filePath is null.
+	 * Throws if the page's referenced blob is missing or the codec marker
+	 * is unrecognised — both indicate an archive that was truncated or
+	 * written by a future tool, neither of which we silently paper over.
+	 * @param pageId - The database id of the page to read.
+	 * @returns The HTML content as a UTF-8 string, or `null` when no body
+	 *   is stored for `pageId`.
+	 * @example
+	 * const html = await accessor.getHtmlOfPage(pageId);
+	 * if (html === null) {
+	 *   // page has no stored body — redirect source / non-HTML / failed render
+	 * } else {
+	 *   processHtml(html);
+	 * }
 	 */
-	async getHtmlOfPage(filePath: string | null, openZipped = true) {
-		if (!filePath) {
-			return null;
+	async getHtmlOfPage(pageId: number): Promise<string | null> {
+		const html = await this.#db.getHtmlOfPageById(pageId);
+		if (html === null) {
+			log('No HTML body stored for page id=%d', pageId);
 		}
-		const snapshotDir = safePath(this.#tmpDir, path.dirname(filePath));
-		const snapshotZip = `${snapshotDir}.zip`;
-		const name = path.basename(filePath);
-		// Read-only accessors must NEVER materialise the loose directory:
-		// doing so writes into a tmpDir that the live crawler owns.
-		const allowUnzip = openZipped && !this.#readOnly;
-
-		// Path 1: loose dir hit.
-		if (exists(snapshotDir)) {
-			const html = await this.#readSnapshotFile(snapshotDir, name);
-			if (html !== null) {
-				log('Loaded %s from loose snapshot dir', name);
-				return html;
-			}
-			log('%s not found in loose snapshot dir — falling back to zip', name);
-		}
-
-		// Path 2: stream a single entry from the zip without expanding it,
-		// reusing the cached central directory so repeated reads cost only one
-		// inflation each. Also the only fallback in read-only (stub) mode.
-		const opening = this.#openSnapshotZip(snapshotZip);
-		if (opening) {
-			const files = await opening;
-			const file = files.get(name);
-			if (file) {
-				const buffer = await file.buffer();
-				log('Loaded %s from snapshot zip (single-entry read)', name);
-				return buffer.toString('utf8');
-			}
-			// Path 3: writer-mode eager unzip — only if the single-entry read
-			// didn't find the file. Defensive: an interrupted archive's loose
-			// dir and zip should normally agree on which files exist.
-			if (allowUnzip && !exists(snapshotDir)) {
-				log('Expanding snapshot zip in writer-mode: %s', snapshotZip);
-				await unzip(snapshotZip, snapshotDir);
-				const html2 = await this.#readSnapshotFile(snapshotDir, name);
-				if (html2 !== null) {
-					return html2;
-				}
-			}
-		}
-
-		log('Snapshot for %s not found in either dir or zip', name);
-		return null;
+		return html;
 	}
 
 	/**
@@ -382,15 +322,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		return this.#db.getResourceUrlList();
 	}
 	/**
-	 * Clears the cached snapshot zip central directories.
-	 * Called when the underlying zip file is about to be rewritten or the
-	 * working directory is moved (e.g. by `Archive.write()`), so later reads
-	 * do not hit a dangling cache entry.
-	 */
-	invalidateSnapshotZipCache() {
-		this.#snapshotZipFiles.clear();
-	}
-	/**
 	 * Stores custom data in the archive under the configured namespace.
 	 * Requires a namespace to be set on this accessor; throws if namespace is null.
 	 * @param name - The base name of the data file (without extension).
@@ -481,45 +412,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		}
 		log('Create Page Data: Done');
 		return pPages;
-	}
-	/**
-	 * Opens a snapshot zip's central directory once and caches a name-to-entry
-	 * lookup map keyed by the zip file path. Subsequent calls for the same zip
-	 * reuse the cached map — skipping even the existence check — so each page
-	 * read costs only a single entry inflation instead of re-parsing the
-	 * central directory.
-	 * Failed opens are evicted from the cache so transient errors do not stick.
-	 * @param zipFilePath - The absolute path to the snapshot zip file.
-	 * @returns A promise of a map of entry file names to their zip entries,
-	 *   or null when the zip file does not exist.
-	 */
-	#openSnapshotZip(zipFilePath: string) {
-		const cached = this.#snapshotZipFiles.get(zipFilePath);
-		if (cached) {
-			return cached;
-		}
-		if (!exists(zipFilePath)) {
-			return null;
-		}
-		const opening = extractZip(zipFilePath).then(
-			(dir) =>
-				new Map(dir.files.filter((f) => f.type === 'File').map((f) => [f.path, f])),
-		);
-		opening.catch(() => {
-			this.#snapshotZipFiles.delete(zipFilePath);
-		});
-		this.#snapshotZipFiles.set(zipFilePath, opening);
-		return opening;
-	}
-	/**
-	 * Reads one HTML file out of the loose snapshot directory. Returns the
-	 * file contents on success, `null` if the file is absent or unreadable.
-	 * @param snapshotDir - The loose `snapshot-html/` directory.
-	 * @param name - The file name to read (basename only).
-	 */
-	async #readSnapshotFile(snapshotDir: string, name: string): Promise<string | null> {
-		const html = await readText(path.resolve(snapshotDir, name)).catch((error) => error);
-		return typeof html === 'string' ? html : null;
 	}
 	/**
 	 * Actual close worker — invoked exactly once per accessor via

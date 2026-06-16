@@ -68,8 +68,11 @@
 		"TOCTOU",
 		"qmark",
 		"dedup",
+		"dedups",
 		"unstarted",
 		"mmm",
+		"mmap",
+		"zstd",
 
 		// Security headers
 		"HSTS",

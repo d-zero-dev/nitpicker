@@ -450,12 +450,13 @@ describe('ArchiveManager stub mode', () => {
 		await manager.closeAll();
 	});
 
-	it('stub mode で開いた accessor は readOnly フラグが立つ（migration / unzip 書き込みの防止経路）', async () => {
-		// Regression hook for the migrateInfoRoots + unzip-into-tmpDir
-		// findings: every consumer-facing write path is gated on
-		// `accessor.readOnly === false`, so as long as Archive.connect
-		// reliably sets the flag, the DB-layer migration and the
-		// getHtmlOfPage unzip are both skipped against the user's tmpDir.
+	it('stub mode で開いた accessor は readOnly フラグが立つ（migration 防止経路）', async () => {
+		// Regression hook for the migrateInfoRoots finding: the writer-side
+		// schema migration is gated on `accessor.readOnly === false`, so
+		// as long as Archive.connect reliably sets the flag, the DB-layer
+		// migration is skipped against the user's tmpDir. (Since #75 HTML
+		// reads are pure SELECTs and no longer touch the filesystem, so
+		// they need no equivalent guard.)
 		const manager = new ArchiveManager();
 		const { accessor } = await manager.open(stubTmpDir);
 		expect(accessor.readOnly).toBe(true);

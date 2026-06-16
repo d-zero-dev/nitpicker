@@ -4,12 +4,20 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 const DEFAULT_MAX_LENGTH = 100_000;
 
 /**
- * Retrieves the HTML snapshot of a page from the archive.
- * Supports truncation to limit response size for large pages.
+ * Looks the page up by URL and returns its stored HTML body, optionally
+ * truncated. Truncation lets MCP / viewer callers cap response size for
+ * pages whose body would otherwise blow past their JSON / payload limits
+ * (large generated documents can exceed several MB).
  * @param accessor - The archive accessor to query.
  * @param url - The URL of the page whose HTML to retrieve.
- * @param maxLength - Maximum number of characters to return. Defaults to 100,000.
- * @returns An object with the HTML content and truncation status, or null if not found.
+ * @param maxLength - Maximum number of characters to return.
+ * @returns The HTML and a `truncated` flag, or `null` when the URL is
+ *   unknown to the archive OR the page has no stored body.
+ * @example
+ * const result = await getPageHtml(accessor, 'https://example.com/');
+ * if (result === null) return notFound();
+ * if (result.truncated) warn('body truncated to maxLength');
+ * return result.html;
  */
 export async function getPageHtml(
 	accessor: ArchiveAccessor,
@@ -18,13 +26,13 @@ export async function getPageHtml(
 ): Promise<{ html: string; truncated: boolean } | null> {
 	const knex = accessor.getKnex();
 
-	const [page] = await knex('pages').select('html').where('url', url).limit(1);
-	if (!page?.html) {
+	const [page] = await knex('pages').select('id').where('url', url).limit(1);
+	if (!page) {
 		return null;
 	}
 
-	const html = await accessor.getHtmlOfPage(page.html);
-	if (!html) {
+	const html = await accessor.getHtmlOfPage(page.id);
+	if (html === null) {
 		return null;
 	}
 

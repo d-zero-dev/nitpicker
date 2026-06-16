@@ -274,11 +274,19 @@ export default class Page {
 	}
 
 	/**
-	 * Reads the HTML snapshot content of this page from the archive.
-	 * @returns The HTML content as a string, or null if no snapshot was saved.
+	 * Thin wrapper that forwards this page's id to the accessor's
+	 * BLOB-read path. Lets callers hold a `Page` reference and ask for its
+	 * HTML without having to thread the page id through.
+	 * @returns The HTML content, or `null` if no snapshot was saved.
+	 * @see {@link ArchiveAccessor.getHtmlOfPage} for the resolution rules.
+	 * @example
+	 * for (const page of await archive.getPages()) {
+	 *   const html = await page.getHtml();
+	 *   if (html !== null) processBody(html);
+	 * }
 	 */
 	async getHtml() {
-		return this.#archive.getHtmlOfPage(this.#raw.html);
+		return this.#archive.getHtmlOfPage(this.#raw.id);
 	}
 
 	/**
