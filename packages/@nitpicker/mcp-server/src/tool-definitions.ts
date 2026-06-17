@@ -54,7 +54,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'list_pages',
 		description:
-			'List pages with rich filtering: by status code (exact or range), missing metadata (title, description), noindex flag, URL patterns, directory paths. Supports sorting and pagination. Use for questions like "show me all 404 pages" or "pages without descriptions".',
+			'List pages with rich filtering: by status code (exact or range), missing metadata (title, description), noindex flag, URL patterns, directory paths. Supports sorting and pagination. Use for questions like "show me all 404 pages" or "pages without descriptions". For large sites, set `limit` to keep the response bounded — to dump the whole list use the CLI (`nitpicker query pages`) and pipe through `jq` instead of pulling everything through MCP.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -130,7 +130,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'get_page_detail',
 		description:
-			'Get full details for a specific page URL: all metadata (title, description, OG, Twitter), outbound links, inbound links, redirects, response headers. Use when drilling down into a specific page.',
+			'Get full details for a specific page URL: ~47 flat meta fields (title, description, OG, Twitter, robots, link, charset, manifest, themeColor, fb_app_id, verification_google, format_detection, og:image:alt/width/height, og:locale, og:article timestamps, twitter:site/creator, etc.), `metaExtras` JSON (referrer, viewport parsed, httpEquiv, apple, msapplication, verification.{bing|yandex|...}, geo, citation, hreflang alternates, others.*, originTrial), JSON-LD/SpeculationRules **summary** (count + unique @types + parseErrorCount), Wappalyzer tag **summary** (count + provider→ids map), outbound/inbound links, redirect sources, response headers, and within-archive timestamps (firstCrawledAt / lastCrawledAt). Raw JSON-LD entries and full tag rows are NOT included — fetch them via `get_page_jsonld` / `get_page_tags`. Use when drilling down into a specific page.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -334,6 +334,158 @@ export const toolDefinitions: Tool[] = [
 				},
 			},
 			required: ['archiveId', 'resourceUrl'],
+		},
+	},
+	{
+		name: 'list_pages_by_tag',
+		description:
+			'List pages that have a Wappalyzer-detected tag matching the given `provider` (and optionally a specific `externalId` like a GTM container ID or GA4 measurement ID). Returns the same shape as `list_pages`. Before pulling the full list, consider calling `count_pages_by_tag` to size-check — on a large site GTM may cover most pages and the response can run into MB. For full bulk extraction prefer the CLI: `nitpicker query pages-by-tag --provider "Google Tag Manager" | jq`.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				provider: {
+					type: 'string',
+					description:
+						'Wappalyzer provider name (e.g. "Google Tag Manager", "Google Analytics 4")',
+				},
+				externalId: {
+					type: 'string',
+					description:
+						'Optional external identifier extracted from the page (GTM-XXXX / G-XXXX / …). Omit for any.',
+				},
+				limit: { type: 'number', description: 'Max results (default: 100)' },
+				offset: { type: 'number', description: 'Results to skip (default: 0)' },
+			},
+			required: ['archiveId', 'provider'],
+		},
+	},
+	{
+		name: 'count_pages_by_tag',
+		description:
+			'Lightweight count-only sibling of `list_pages_by_tag`. Returns `{ pageCount }` for the given provider (and optional `externalId`). Use this to size-check before fetching the full list.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				provider: { type: 'string', description: 'Wappalyzer provider name' },
+				externalId: {
+					type: 'string',
+					description: 'Optional external identifier (GTM-XXXX / G-XXXX / …)',
+				},
+			},
+			required: ['archiveId', 'provider'],
+		},
+	},
+	{
+		name: 'list_pages_by_jsonld_type',
+		description:
+			'List pages with at least one JSON-LD entry having the given top-level `@type` (e.g. "Product", "BreadcrumbList", "FAQPage"). Returns the same shape as `list_pages`. Before pulling the full list, consider calling `count_pages_by_jsonld_type` — on an e-commerce site "Product" may match thousands of pages. For full bulk extraction prefer the CLI: `nitpicker query pages-by-jsonld-type --type Product | jq`.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				type: {
+					type: 'string',
+					description: 'Top-level JSON-LD `@type` value to filter by (e.g. "Product")',
+				},
+				limit: { type: 'number', description: 'Max results (default: 100)' },
+				offset: { type: 'number', description: 'Results to skip (default: 0)' },
+			},
+			required: ['archiveId', 'type'],
+		},
+	},
+	{
+		name: 'count_pages_by_jsonld_type',
+		description:
+			'Lightweight count-only sibling of `list_pages_by_jsonld_type`. Returns `{ pageCount }` for the given JSON-LD `@type`. Use to size-check before fetching the full list.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				type: { type: 'string', description: 'Top-level JSON-LD `@type` value' },
+			},
+			required: ['archiveId', 'type'],
+		},
+	},
+	{
+		name: 'get_tag_inventory',
+		description:
+			'Returns the site-wide Wappalyzer technology inventory: one entry per detected provider, with the count of distinct pages where it was found, sorted by page count desc. Use as a "what tech does this site use?" answer for audit kick-offs. On 1M-page archives this can be MB-sized; for bulk consumption prefer the CLI: `nitpicker query tag-inventory | jq`.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+			},
+			required: ['archiveId'],
+		},
+	},
+	{
+		name: 'get_page_jsonld',
+		description:
+			'Returns the JSON-LD / SpeculationRules entries for a page. Defaults to `slim=true` which omits the `raw` JSON text and the `parsed` object — only `kind`, `type`, `rawByteSize`, and `parseError` are returned per entry. Use `slim=false` for full raw payload, but be aware: an e-commerce product page can have 50 schemas × 50KB each. Before requesting `slim=false`, call `get_page_jsonld_overview` to see entry sizes. For full raw bulk extraction prefer the CLI: `nitpicker query page-jsonld --url <URL> --full | jq`.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				url: { type: 'string', description: 'The page URL' },
+				slim: {
+					type: 'boolean',
+					description:
+						'Omit `raw` and `parsed` (default true). Set to false for full payload.',
+				},
+			},
+			required: ['archiveId', 'url'],
+		},
+	},
+	{
+		name: 'get_page_jsonld_overview',
+		description:
+			'Lightweight overview of a page\'s JSON-LD: one entry per `<script type="application/ld+json">` or `<script type="speculationrules">` with `kind`, `type`, `rawByteSize`, and `parseError`. Designed as the "metadata before data" probe — see total bytes before fetching the full payload via `get_page_jsonld(slim=false)`.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				url: { type: 'string', description: 'The page URL' },
+			},
+			required: ['archiveId', 'url'],
+		},
+	},
+	{
+		name: 'get_page_tags',
+		description:
+			'Returns the Wappalyzer tag rows for a page (one per provider × external-id), with `categories`, `version`, `confidence`, and `sources` preserved. Use after `get_page_detail` returned a tags summary and you need provider details. Bounded payload (KB-scale per page); no slim mode needed.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				url: { type: 'string', description: 'The page URL' },
+			},
+			required: ['archiveId', 'url'],
 		},
 	},
 	{

@@ -37,21 +37,57 @@ function createRawPage(overrides: Partial<DB_Page> = {}): DB_Page {
 		contentLength: 5000,
 		responseHeaders: '{"content-type":"text/html"}',
 		lang: 'ja',
+		dir: null,
+		// eslint-disable-next-line unicorn/text-encoding-identifier-case -- HTML5 attribute value is canonically 'utf-8'.
+		charset: 'utf-8',
+		baseHref: null,
+		viewport_raw: null,
+		themeColor: null,
+		applicationName: null,
+		author: null,
+		generator: null,
+		publisher: null,
 		title: 'Example Page',
 		description: 'A test page',
 		keywords: 'test,example',
-		noindex: 0,
-		nofollow: 0,
-		noarchive: 0,
+		robots_raw: null,
+		robots_noindex: 0,
+		robots_nofollow: 0,
+		robots_noarchive: 0,
+		robots_noimageindex: 0,
+		googlebot: null,
 		canonical: 'https://example.com/',
-		alternate: null,
+		amphtml: null,
+		manifest: null,
+		icon_href: null,
+		appleTouchIcon_href: null,
 		og_type: 'website',
 		og_title: 'Example',
 		og_site_name: 'Example Site',
 		og_description: 'OG description',
 		og_url: 'https://example.com/',
 		og_image: 'https://example.com/image.png',
+		og_image_alt: null,
+		og_image_width: null,
+		og_image_height: null,
+		og_locale: null,
+		og_article_published_time: null,
+		og_article_modified_time: null,
 		twitter_card: 'summary',
+		twitter_site: null,
+		twitter_creator: null,
+		twitter_title: null,
+		twitter_description: null,
+		twitter_image: null,
+		fb_app_id: null,
+		verification_google: null,
+		formatDetection_telephone: null,
+		firstCrawledAt: null,
+		lastCrawledAt: null,
+		tag_count: null,
+		jsonld_count: null,
+		tags_providers_csv: null,
+		meta_extras: null,
 		networkLogs: null,
 		isSkipped: 0,
 		skipReason: null,
@@ -132,14 +168,18 @@ describe('Page', () => {
 			expect(page.isTarget).toBe(true);
 		});
 
-		it('returns noindex/nofollow/noarchive as booleans', () => {
+		it('returns robots_noindex/nofollow/noarchive as booleans', () => {
 			const page = new Page(
 				createMockArchive() as never,
-				createRawPage({ noindex: 1, nofollow: 1, noarchive: 1 }),
+				createRawPage({
+					robots_noindex: 1,
+					robots_nofollow: 1,
+					robots_noarchive: 1,
+				}),
 			);
-			expect(page.noindex).toBe(true);
-			expect(page.nofollow).toBe(true);
-			expect(page.noarchive).toBe(true);
+			expect(page.robots_noindex).toBe(true);
+			expect(page.robots_nofollow).toBe(true);
+			expect(page.robots_noarchive).toBe(true);
 		});
 
 		it('returns og_* and twitter_card from raw data', () => {

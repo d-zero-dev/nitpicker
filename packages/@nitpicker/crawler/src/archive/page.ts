@@ -1,4 +1,5 @@
 import type { ArchiveAccessor } from './archive-accessor.js';
+import type { JsonLdRow, JsonLdSummary, TagRow, TagsSummary } from './meta/types.js';
 import type {
 	Anchor,
 	Redirect,
@@ -14,11 +15,80 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { isHtmlContentType } from '../crawler/is-html-content-type.js';
 import { parseResponseHeaders } from '../utils/object/parse-response-headers.js';
 
+import { summarizeJsonLd } from './meta/summarize-jsonld.js';
+import { summarizeTags } from './meta/summarize-tags.js';
+
+/**
+ * Subset of {@link DB_Page} that maps to the flat meta columns derived from
+ * beholder's nested Meta. Used by {@link Page.metaFlat} so consumers can
+ * iterate every meta column without enumerating each one.
+ *
+ * Keep in sync with {@link import('./meta/types.js').FlatPageMetaColumns} —
+ * one row of `pages` has the same shape.
+ */
+const FLAT_META_COLUMNS = [
+	'lang',
+	'dir',
+	'charset',
+	'baseHref',
+	'viewport_raw',
+	'themeColor',
+	'applicationName',
+	'author',
+	'generator',
+	'publisher',
+	'title',
+	'description',
+	'keywords',
+	'robots_raw',
+	'robots_noindex',
+	'robots_nofollow',
+	'robots_noarchive',
+	'robots_noimageindex',
+	'googlebot',
+	'canonical',
+	'amphtml',
+	'manifest',
+	'icon_href',
+	'appleTouchIcon_href',
+	'og_type',
+	'og_title',
+	'og_url',
+	'og_site_name',
+	'og_description',
+	'og_image',
+	'og_image_alt',
+	'og_image_width',
+	'og_image_height',
+	'og_locale',
+	'og_article_published_time',
+	'og_article_modified_time',
+	'twitter_card',
+	'twitter_site',
+	'twitter_creator',
+	'twitter_title',
+	'twitter_description',
+	'twitter_image',
+	'fb_app_id',
+	'verification_google',
+	'formatDetection_telephone',
+	'tag_count',
+	'jsonld_count',
+	'tags_providers_csv',
+] as const satisfies ReadonlyArray<keyof DB_Page>;
+
 /**
  * Represents a crawled page stored in the archive.
  *
- * Provides access to the page's metadata (title, status, SEO tags, etc.),
- * its relationships (anchors, referrers, redirects), and its HTML snapshot.
+ * Provides typed getters for the most-used meta columns (title, canonical,
+ * og:*, twitter_card, robots flags, lang), plus {@link metaFlat} as an
+ * iterable view over all ~47 flat meta columns and {@link metaExtras} for
+ * the JSON catch-all of nested sub-objects not flattened to columns.
+ *
+ * JSON-LD entries and Wappalyzer tag rows live in dedicated tables and are
+ * fetched on demand via {@link jsonLd} / {@link tags} (lazy reads, same
+ * pattern as {@link getAnchors}).
+ *
  * Instances are created by {@link ArchiveAccessor.getPages} or
  * {@link ArchiveAccessor.getPagesWithRefs}.
  */
@@ -36,17 +106,18 @@ export default class Page {
 	#rawReferrers: DB_Referrer[] | null;
 
 	/**
-	 * The alternate URL from the `<link rel="alternate">` tag, or null if not present.
-	 */
-	get alternate() {
-		return this.#raw.alternate;
-	}
-
-	/**
-	 * The canonical URL from the `<link rel="canonical">` tag, or null if not present.
+	 * The canonical URL from `<link rel="canonical">` (absolutised against the
+	 * page URL at write time), or null if not present.
 	 */
 	get canonical() {
 		return this.#raw.canonical;
+	}
+
+	/**
+	 * The `<meta charset>` value, or null if not present.
+	 */
+	get charset() {
+		return this.#raw.charset;
 	}
 
 	/**
@@ -71,6 +142,15 @@ export default class Page {
 	}
 
 	/**
+	 * UNIX ms timestamp of the first time this page row was inserted, or
+	 * null for legacy rows. Survives `resetFailedPages` so the discovery
+	 * time of a page is preserved across retries.
+	 */
+	get firstCrawledAt() {
+		return this.#raw.firstCrawledAt;
+	}
+
+	/**
 	 * Whether this page is on an external domain (outside the crawl scope).
 	 */
 	get isExternal() {
@@ -92,10 +172,11 @@ export default class Page {
 	}
 
 	/**
-	 * The reason this page was skipped during crawling, or null if it was not skipped.
+	 * Number of JSON-LD + SpeculationRules entries detected on this page
+	 * (denormalised aggregate written at scrape time).
 	 */
-	get skipReason() {
-		return this.#raw.skipReason;
+	get jsonldCount() {
+		return this.#raw.jsonld_count;
 	}
 
 	/**
@@ -113,63 +194,94 @@ export default class Page {
 	}
 
 	/**
-	 * Whether the noarchive robots directive is set.
+	 * UNIX ms timestamp of the most recent successful scrape for this page,
+	 * or null for legacy rows / never-scraped pages.
 	 */
-	get noarchive() {
-		return !!this.#raw.noarchive;
+	get lastCrawledAt() {
+		return this.#raw.lastCrawledAt;
 	}
 
 	/**
-	 * Whether the nofollow robots directive is set.
+	 * Iterable view over every flat meta column (~47 fields). Returns a frozen
+	 * record so consumers can pick fields by name without re-enumerating
+	 * typed getters.
+	 *
+	 * Use the typed getters for high-frequency fields (title, canonical, og_*
+	 * etc.); use `metaFlat` for bulk projection (Sheets row generation,
+	 * `toJSON`, debug dumps).
 	 */
-	get nofollow() {
-		return !!this.#raw.nofollow;
+	get metaFlat(): Readonly<
+		Record<(typeof FLAT_META_COLUMNS)[number], string | number | null>
+	> {
+		const out: Record<string, string | number | null> = {};
+		for (const col of FLAT_META_COLUMNS) {
+			out[col] = this.#raw[col];
+		}
+		return Object.freeze(out) as Readonly<
+			Record<(typeof FLAT_META_COLUMNS)[number], string | number | null>
+		>;
 	}
 
 	/**
-	 * Whether the noindex robots directive is set.
+	 * Parsed `meta_extras` JSON: nested Meta sub-objects (referrer, viewport,
+	 * httpEquiv, og.image[], twitter.*, apple.*, msapplication.*, geo,
+	 * citation, link.alternateHreflang[], others.*, etc.) that were not
+	 * flattened to dedicated columns.
+	 *
+	 * Returns an empty object when the column is null or invalid JSON.
 	 */
-	get noindex() {
-		return !!this.#raw.noindex;
+	get metaExtras(): Record<string, unknown> {
+		const raw = this.#raw.meta_extras;
+		if (raw === null) return {};
+		try {
+			const parsed = JSON.parse(raw) as unknown;
+			if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+				return parsed as Record<string, unknown>;
+			}
+			return {};
+		} catch {
+			return {};
+		}
 	}
 
 	/**
-	 * The Open Graph description (`og:description`), or null if not present.
+	 * Open Graph description, or null if not present.
 	 */
 	get og_description() {
 		return this.#raw.og_description;
 	}
 
 	/**
-	 * The Open Graph image URL (`og:image`), or null if not present.
+	 * Open Graph image URL (first image when og:image is multi-valued;
+	 * absolutised against the page URL at write time), or null if not present.
 	 */
 	get og_image() {
 		return this.#raw.og_image;
 	}
 
 	/**
-	 * The Open Graph site name (`og:site_name`), or null if not present.
+	 * Open Graph site name, or null if not present.
 	 */
 	get og_site_name() {
 		return this.#raw.og_site_name;
 	}
 
 	/**
-	 * The Open Graph title (`og:title`), or null if not present.
+	 * Open Graph title, or null if not present.
 	 */
 	get og_title() {
 		return this.#raw.og_title;
 	}
 
 	/**
-	 * The Open Graph type (`og:type`), or null if not present.
+	 * Open Graph type, or null if not present.
 	 */
 	get og_type() {
 		return this.#raw.og_type;
 	}
 
 	/**
-	 * The Open Graph URL (`og:url`), or null if not present.
+	 * Open Graph URL (absolutised), or null if not present.
 	 */
 	get og_url() {
 		return this.#raw.og_url;
@@ -182,6 +294,42 @@ export default class Page {
 	 */
 	get responseHeaders(): Record<string, string | string[] | undefined> {
 		return parseResponseHeaders(this.#raw.responseHeaders) ?? {};
+	}
+
+	/**
+	 * Whether the robots:noarchive directive is set.
+	 */
+	get robots_noarchive() {
+		return !!this.#raw.robots_noarchive;
+	}
+
+	/**
+	 * Whether the robots:nofollow directive is set.
+	 */
+	get robots_nofollow() {
+		return !!this.#raw.robots_nofollow;
+	}
+
+	/**
+	 * Whether the robots:noindex directive is set.
+	 */
+	get robots_noindex() {
+		return !!this.#raw.robots_noindex;
+	}
+
+	/**
+	 * Raw `<meta name="robots">` content, or null if not present.
+	 * Use for diagnostics; specific directive flags live on `robots_*` getters.
+	 */
+	get robots_raw() {
+		return this.#raw.robots_raw;
+	}
+
+	/**
+	 * The reason this page was skipped during crawling, or null if it was not skipped.
+	 */
+	get skipReason() {
+		return this.#raw.skipReason;
 	}
 
 	/**
@@ -199,6 +347,23 @@ export default class Page {
 	}
 
 	/**
+	 * Number of Wappalyzer tag entries detected on this page (denormalised
+	 * aggregate written at scrape time).
+	 */
+	get tagCount() {
+		return this.#raw.tag_count;
+	}
+
+	/**
+	 * Sorted unique Wappalyzer provider names, comma-separated, empty string
+	 * when no tags. Denormalised aggregate; for the structured form fetch
+	 * {@link tags} (lazy).
+	 */
+	get tagsProvidersCsv() {
+		return this.#raw.tags_providers_csv ?? '';
+	}
+
+	/**
 	 * The page title from the `<title>` element.
 	 * Returns an empty string if no title is set.
 	 */
@@ -207,7 +372,7 @@ export default class Page {
 	}
 
 	/**
-	 * The Twitter Card type (`twitter:card`), or null if not present.
+	 * Twitter Card type (`twitter:card`), or null if not present.
 	 */
 	get twitter_card() {
 		return this.#raw.twitter_card;
@@ -290,6 +455,16 @@ export default class Page {
 	}
 
 	/**
+	 * Retrieves the JSON-LD entries for this page from `page_jsonld`.
+	 * Lazy — runs a single SELECT per call. Returns entries in insertion
+	 * order (matches the scraper's traversal order).
+	 * @returns Ordered JSON-LD / SpeculationRules rows.
+	 */
+	async getJsonLd(): Promise<readonly JsonLdRow[]> {
+		return this.#archive.getJsonLdOfPage(this.#raw.id);
+	}
+
+	/**
 	 * Retrieves the referrers (incoming links) pointing to this page.
 	 * Uses pre-loaded data if available, otherwise queries the database.
 	 * @returns An array of {@link Referrer} objects representing pages that link to this page.
@@ -313,7 +488,6 @@ export default class Page {
 			textContent: r.textContent || '',
 		}));
 	}
-
 	/**
 	 * Retrieves all request referrers for this page directly from the database.
 	 * Unlike {@link getReferrers}, this always queries the database and does not use pre-loaded data.
@@ -328,6 +502,14 @@ export default class Page {
 			hash: r.hash,
 			textContent: r.textContent || '',
 		}));
+	}
+	/**
+	 * Retrieves the Wappalyzer tag rows for this page from `page_tags`.
+	 * Lazy — runs a single SELECT per call.
+	 * @returns Ordered tag rows.
+	 */
+	async getTags(): Promise<readonly TagRow[]> {
+		return this.#archive.getTagsOfPage(this.#raw.id);
 	}
 
 	/**
@@ -347,14 +529,30 @@ export default class Page {
 	}
 
 	/**
-	 * Serializes the page data to a plain JSON object,
-	 * including resolved anchors and referrers.
+	 * Serializes the page data to a plain JSON object including the full flat
+	 * meta column set, the `meta_extras` catch-all, and **summaries** of the
+	 * JSON-LD and tag rows.
+	 *
+	 * Summaries (not raw entries) are inlined so a Page detail payload stays
+	 * token-bounded for MCP / LLM consumers — the full `raw` JSON-LD payload
+	 * is fetched separately via `getJsonLd()` / the dedicated CLI/MCP
+	 * endpoints.
+	 *
+	 * Anchors and referrers are still resolved eagerly because consumers
+	 * (Sheets `eachPage`, viewer detail) depend on having them inline.
 	 * @returns A plain object containing all page metadata and relationships.
 	 */
 	async toJSON() {
+		const [anchors, referrers, jsonLdRows, tagRows] = await Promise.all([
+			this.getAnchors(),
+			this.getReferrers(),
+			this.getJsonLd(),
+			this.getTags(),
+		]);
+		const jsonLdSummary: JsonLdSummary = summarizeJsonLd(jsonLdRows);
+		const tagsSummary: TagsSummary = summarizeTags(tagRows);
 		return {
 			url: this.url.href,
-			title: this.title,
 			status: this.status,
 			statusText: this.statusText,
 			contentType: this.contentType,
@@ -364,26 +562,17 @@ export default class Page {
 			isSkipped: this.isSkipped,
 			skipReason: this.skipReason,
 			isTarget: this.isTarget,
-			lang: this.lang,
-			description: this.description,
-			keywords: this.keywords,
-			noindex: this.noindex,
-			nofollow: this.nofollow,
-			noarchive: this.noarchive,
-			canonical: this.canonical,
-			alternate: this.alternate,
-			twitter_card: this.twitter_card,
-			og_site_name: this.og_site_name,
-			og_url: this.og_url,
-			og_title: this.og_title,
-			og_description: this.og_description,
-			og_type: this.og_type,
-			og_image: this.og_image,
+			firstCrawledAt: this.firstCrawledAt,
+			lastCrawledAt: this.lastCrawledAt,
+			...this.metaFlat,
+			metaExtras: this.metaExtras,
+			jsonLd: jsonLdSummary,
+			tags: tagsSummary,
 			redirectFrom: this.redirectFrom,
 			isPage: this.isPage(),
 			isInternalPage: this.isInternalPage(),
-			getAnchors: await this.getAnchors(),
-			getReferrers: await this.getReferrers(),
+			getAnchors: anchors,
+			getReferrers: referrers,
 		};
 	}
 }

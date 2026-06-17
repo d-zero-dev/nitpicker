@@ -14,7 +14,15 @@ export type QuerySubCommand =
 	| 'mismatches'
 	| 'headers'
 	| 'resource-referrers'
-	| 'error-kinds';
+	| 'error-kinds'
+	| 'pages-by-tag'
+	| 'pages-by-jsonld-type'
+	| 'tag-inventory'
+	| 'page-jsonld'
+	| 'page-tags'
+	| 'count-pages-by-tag'
+	| 'count-pages-by-jsonld-type'
+	| 'page-jsonld-overview';
 
 /**
  * List of all valid query sub-command names.
@@ -33,4 +41,12 @@ export const VALID_SUB_COMMANDS = [
 	'headers',
 	'resource-referrers',
 	'error-kinds',
+	'pages-by-tag',
+	'pages-by-jsonld-type',
+	'tag-inventory',
+	'page-jsonld',
+	'page-tags',
+	'count-pages-by-tag',
+	'count-pages-by-jsonld-type',
+	'page-jsonld-overview',
 ] as const satisfies readonly QuerySubCommand[];

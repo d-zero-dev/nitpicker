@@ -1,3 +1,4 @@
+import type { JsonLdRow, TagRow } from './meta/types.js';
 import type {
 	Config,
 	DatabaseOption,
@@ -37,6 +38,12 @@ import { getJSON } from './get-json.js';
 import { applyConnectionPragmas, initSchema } from './init-schema.js';
 import { LibsqlDialect } from './libsql-dialect.js';
 import { limitedPageIds } from './limited-page-ids.js';
+import { assertCompatibleVersion } from './meta/assert-compatible-version.js';
+import { classifyJsonLdType } from './meta/classify-jsonld-type.js';
+import { computePageDenormalized } from './meta/compute-page-denormalized.js';
+import { deriveFlatFromMeta } from './meta/derive-flat-from-meta.js';
+import { deriveMetaExtras } from './meta/derive-meta-extras.js';
+import { extractTagsForArchive } from './meta/extract-tags-for-archive.js';
 import { migrateCrawlErrors } from './migrate-crawl-errors.js';
 import { migrateHtmlBlobTables } from './migrate-html-blob-tables.js';
 import { migrateInfoRoots } from './migrate-info-roots.js';
@@ -60,6 +67,28 @@ const retrySetting: RetryDecoratorOptions = {
  * @param codec - The `codec` column value (e.g. `'zstd'`, `'none'`).
  * @returns UTF-8 decoded HTML string.
  * @throws {Error} If the codec is not recognised.
+ */
+/**
+ * Parses a JSON column value, returning `null` on parse failure rather than
+ * throwing. JSON columns in `page_jsonld` (`parsed`) and `page_tags`
+ * (`categories`, `sources`) are written by `JSON.stringify` and round-trip
+ * cleanly under normal conditions; a hand-edited archive that has
+ * malformed JSON in those columns should degrade gracefully rather than
+ * propagate a parse error up to the consumer.
+ * @param value - JSON-encoded text.
+ */
+function safeParseJson(value: string): unknown {
+	try {
+		return JSON.parse(value);
+	} catch {
+		return null;
+	}
+}
+
+/**
+ *
+ * @param body
+ * @param codec
  */
 function decodeStoredBlob(body: Uint8Array, codec: string): string {
 	// `Buffer.from(buffer)` accepts Uint8Array, Buffer, and array-like
@@ -112,6 +141,93 @@ const INFO_JSON_COLUMNS: ReadonlySet<string> = new Set<keyof Config>([
 	'excludeKeywords',
 	'excludeUrls',
 ]);
+
+/**
+ * Columns of the `pages` table that should be reset to `null` whenever a
+ * previously-scraped row is demoted back to "pending" (i.e. by
+ * `resetFailedPages` and `repromoteExternalPages`).
+ *
+ * Includes all flat meta columns, the denormalised aggregates, and the
+ * `meta_extras` JSON catch-all. **Excludes** `firstCrawledAt` / `lastCrawledAt`
+ * by design — failure reset must not erase the last-success timestamp, which
+ * is the within-archive observation axis for #11 / #17 / #19 use cases.
+ *
+ * Centralised in one constant so schema growth and reset logic stay in lock-
+ * step: adding a flat meta column without updating this list would leave
+ * stale data after a reset.
+ */
+const META_NULLABLE_COLUMNS: readonly string[] = [
+	// Document basics
+	'lang',
+	'dir',
+	'charset',
+	'baseHref',
+	'viewport_raw',
+	'themeColor',
+	'applicationName',
+	'author',
+	'generator',
+	'publisher',
+	// Title / description / keywords
+	'title',
+	'description',
+	'keywords',
+	// Robots
+	'robots_raw',
+	'robots_noindex',
+	'robots_nofollow',
+	'robots_noarchive',
+	'robots_noimageindex',
+	'googlebot',
+	// Link (1:1)
+	'canonical',
+	'amphtml',
+	'manifest',
+	'icon_href',
+	'appleTouchIcon_href',
+	// Open Graph
+	'og_type',
+	'og_title',
+	'og_url',
+	'og_site_name',
+	'og_description',
+	'og_image',
+	'og_image_alt',
+	'og_image_width',
+	'og_image_height',
+	'og_locale',
+	'og_article_published_time',
+	'og_article_modified_time',
+	// Twitter
+	'twitter_card',
+	'twitter_site',
+	'twitter_creator',
+	'twitter_title',
+	'twitter_description',
+	'twitter_image',
+	// One-offs
+	'fb_app_id',
+	'verification_google',
+	'formatDetection_telephone',
+	// Denormalised aggregates
+	'tag_count',
+	'jsonld_count',
+	'tags_providers_csv',
+	// Catch-all
+	'meta_extras',
+];
+
+/**
+ * Builds the reset payload for {@link META_NULLABLE_COLUMNS} as a plain object
+ * suitable for `knex.update(...)`. All listed columns are mapped to `null`.
+ */
+function makeMetaResetPayload(): Record<string, null> {
+	const payload: Record<string, null> = {};
+	for (const col of META_NULLABLE_COLUMNS) {
+		payload[col] = null;
+	}
+	return payload;
+}
 
 /**
  * Low-level database abstraction layer for the archive's SQLite database.
@@ -289,6 +405,43 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}
 		return decodeStoredBlob(row.body, row.codec);
 	}
+	/**
+	 * Retrieves all `page_jsonld` rows for the given page id, parsed back into
+	 * {@link JsonLdRow} shape (with `parsed` deserialised from its JSON column).
+	 *
+	 * Read-side counterpart to `#insertJsonLd`. Returns rows in insertion order
+	 * by `id` so the order observed by `get-page-jsonld` matches the order the
+	 * scraper saw them.
+	 * @param pageId
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async getJsonLdOfPage(pageId: number): Promise<JsonLdRow[]> {
+		type Row = {
+			id: number;
+			pageId: number;
+			kind: string;
+			type: string | null;
+			raw: string;
+			parsed: string | null;
+			parseError: string | null;
+		};
+		const rows = await this.#instance
+			.select<Row[]>('id', 'pageId', 'kind', 'type', 'raw', 'parsed', 'parseError')
+			.from('page_jsonld')
+			.where('pageId', pageId)
+			.orderBy('id', 'asc');
+		return rows.map((r) => ({
+			id: r.id,
+			pageId: r.pageId,
+			kind: r.kind === 'speculationrules' ? 'speculationrules' : 'ld+json',
+			type: r.type,
+			raw: r.raw,
+			parsed: r.parsed === null ? null : safeParseJson(r.parsed),
+			parseError: r.parseError,
+		}));
+	}
+
 	/**
 	 * Returns the underlying Knex query builder instance for direct SQL access.
 	 * This enables advanced queries (GROUP BY, HAVING, JOINs) at the database
@@ -646,6 +799,49 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			.count<{ count: number }[]>('* as count');
 		return row ? Number(row.count) : 0;
 	}
+	/**
+	 * Retrieves all `page_tags` rows for the given page id, parsed back into
+	 * {@link TagRow} shape (with `categories` and `sources` JSON columns
+	 * deserialised).
+	 *
+	 * Read-side counterpart to `#insertTags`.
+	 * @param pageId
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async getTagsOfPage(pageId: number): Promise<TagRow[]> {
+		type Row = {
+			id: number;
+			pageId: number;
+			provider: string;
+			category: string | null;
+			externalId: string | null;
+			version: string | null;
+			confidence: number | null;
+			categories: string | null;
+			sources: string | null;
+		};
+		const rows = await this.#instance
+			.select<
+				Row[]
+			>('id', 'pageId', 'provider', 'category', 'externalId', 'version', 'confidence', 'categories', 'sources')
+			.from('page_tags')
+			.where('pageId', pageId)
+			.orderBy('id', 'asc');
+		return rows.map((r) => ({
+			id: r.id,
+			pageId: r.pageId,
+			provider: r.provider,
+			category: r.category,
+			externalId: r.externalId,
+			version: r.version,
+			confidence: r.confidence,
+			categories:
+				r.categories === null ? [] : ((safeParseJson(r.categories) as string[]) ?? []),
+			sources:
+				r.sources === null ? [] : ((safeParseJson(r.sources) as TagRow['sources']) ?? []),
+		}));
+	}
 
 	/**
 	 * Records a crawler-level (`error` channel) failure into `crawl_errors`.
@@ -863,33 +1059,47 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}
 
 		const chunkSize = 500;
+		const metaReset = makeMetaResetPayload();
 		for (let i = 0; i < promotedIds.length; i += chunkSize) {
 			const chunk = promotedIds.slice(i, i + chunkSize);
-			await this.#instance<DB_Page>('pages').whereIn('id', chunk).update({
-				scraped: 0,
-				isExternal: 0,
-				isSkipped: 0,
-				skipReason: null,
-				status: null,
-				statusText: null,
-				contentType: null,
-				contentLength: null,
-				responseHeaders: '{}',
-				redirectDestId: null,
-			});
+			await this.#instance<DB_Page>('pages')
+				.whereIn('id', chunk)
+				.update({
+					scraped: 0,
+					isExternal: 0,
+					isSkipped: 0,
+					skipReason: null,
+					status: null,
+					statusText: null,
+					contentType: null,
+					contentLength: null,
+					responseHeaders: '{}',
+					redirectDestId: null,
+					// Null every flat meta column + denormalised aggregates +
+					// meta_extras. `firstCrawledAt` / `lastCrawledAt` are
+					// deliberately omitted from META_NULLABLE_COLUMNS — the
+					// last-success timestamp survives the demotion.
+					...metaReset,
+				});
 			// Clear the prior crawl's data for the repromoted pages. `updatePage`
-			// also replaces anchors/images when it re-scrapes them, but only when
-			// the new scrape is non-empty — so this pre-clear is still load-bearing
-			// for pages that get repromoted but then re-scrape to nothing (or are
-			// never reached again), and it is the only place `resources-referrers`
-			// is cleared. The HTML body ref is also cleared so a repromoted page
-			// whose re-scrape ends up degraded does not keep its old external-render
-			// snapshot. Orphan blobs in `page_html_blobs` are left behind; #23 will
-			// add GC.
+			// also replaces anchors/images/tags/jsonld when it re-scrapes them, but
+			// only when the new scrape is non-empty — so this pre-clear is still
+			// load-bearing for pages that get repromoted but then re-scrape to
+			// nothing (or are never reached again), and it is the only place
+			// `resources-referrers` is cleared. The HTML body ref is also cleared
+			// so a repromoted page whose re-scrape ends up degraded does not keep
+			// its old external-render snapshot. `page_tags` / `page_jsonld` are
+			// cleared explicitly even though both tables also carry ON DELETE
+			// CASCADE — we keep the existing pattern of explicit chunked DELETEs
+			// rather than relying on CASCADE indirectly (and would not cascade
+			// anyway: the parent `pages` row is updated, not deleted). Orphan
+			// blobs in `page_html_blobs` are left behind; #23 will add GC.
 			await this.#instance('anchors').whereIn('pageId', chunk).delete();
 			await this.#instance('images').whereIn('pageId', chunk).delete();
 			await this.#instance('resources-referrers').whereIn('pageId', chunk).delete();
 			await this.#instance('page_html_ref').whereIn('page_id', chunk).delete();
+			await this.#instance('page_tags').whereIn('pageId', chunk).delete();
+			await this.#instance('page_jsonld').whereIn('pageId', chunk).delete();
 		}
 		dbLog('Repromoted %d external pages back to pending', promotedUrls.length);
 		return promotedUrls;
@@ -949,28 +1159,39 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		const urls = candidates.map((row) => row.url);
 
 		const chunkSize = 500;
+		const metaReset = makeMetaResetPayload();
 		for (let i = 0; i < ids.length; i += chunkSize) {
 			const chunk = ids.slice(i, i + chunkSize);
-			await this.#instance<DB_Page>('pages').whereIn('id', chunk).update({
-				scraped: 0,
-				status: null,
-				statusText: null,
-				contentType: null,
-				contentLength: null,
-				responseHeaders: '{}',
-			});
+			await this.#instance<DB_Page>('pages')
+				.whereIn('id', chunk)
+				.update({
+					scraped: 0,
+					status: null,
+					statusText: null,
+					contentType: null,
+					contentLength: null,
+					responseHeaders: '{}',
+					// Null every flat meta column + denormalised aggregates +
+					// meta_extras. `firstCrawledAt` / `lastCrawledAt` are
+					// deliberately omitted from META_NULLABLE_COLUMNS so the
+					// last-success timestamp records survive the demotion (the
+					// within-archive observation axis for #11/#17/#19).
+					...metaReset,
+				});
 			// Clear the prior crawl's per-page data so the re-scrape starts clean.
-			// `updatePage` only replaces anchors/images when the new scrape is
-			// non-empty, so this pre-clear is load-bearing for pages that reset but
-			// then fail again (or are never reached), and it is the only place
-			// `resources-referrers` and `page_errors` are cleared. The HTML body
-			// ref is also cleared so a previously-rendered page that now fails to
-			// re-scrape does not keep its old snapshot.
+			// `updatePage` only replaces anchors/images/tags/jsonld when the new
+			// scrape is non-empty, so this pre-clear is load-bearing for pages that
+			// reset but then fail again (or are never reached), and it is the only
+			// place `resources-referrers` and `page_errors` are cleared. The HTML
+			// body ref is also cleared so a previously-rendered page that now fails
+			// to re-scrape does not keep its old snapshot.
 			await this.#instance('anchors').whereIn('pageId', chunk).delete();
 			await this.#instance('images').whereIn('pageId', chunk).delete();
 			await this.#instance('resources-referrers').whereIn('pageId', chunk).delete();
 			await this.#instance('page_errors').whereIn('pageId', chunk).delete();
 			await this.#instance('page_html_ref').whereIn('page_id', chunk).delete();
+			await this.#instance('page_tags').whereIn('pageId', chunk).delete();
+			await this.#instance('page_jsonld').whereIn('pageId', chunk).delete();
 		}
 		dbLog('Reset %d failed pages back to pending', urls.length);
 		return urls;
@@ -1128,6 +1349,18 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				trx,
 			);
 
+			// Wappalyzer tag detection is HTML-body independent (relies on
+			// `<script src>` / `<iframe src>` / window globals / response
+			// headers) so it runs for every page including external /
+			// metadata-only. JSON-LD on the other hand lives inside the
+			// rendered HTML body, so we only write it when there is HTML to
+			// scrape — see the same `writeHtml` gate as `#writePageHtmlBlob`
+			// below.
+			await this.#insertTags(pageId, page.meta, trx);
+			if (writeHtml) {
+				await this.#insertJsonLd(pageId, page.meta, trx);
+			}
+
 			await this.#linkRedirectSources(
 				trx,
 				sources,
@@ -1275,6 +1508,12 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		// They are safe in read-only mode because they don't write to the
 		// user's tmpDir, just configure the libsql connection.
 		await applyConnectionPragmas(this.#instance);
+		// Reject v1 archives before any further work. Runs for both writer
+		// and read-only (stub viewer) connections so old `._nitpicker-*`
+		// stubs surface a clear error instead of dereferencing missing
+		// columns at query time. New archives (no `info` table yet) pass
+		// through; the schema is filled in by `initSchema` below.
+		await assertCompatibleVersion(this.#instance);
 		if (readOnly) {
 			return;
 		}
@@ -1285,6 +1524,63 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		await migrateHtmlBlobTables(this.#instance);
 	}
 	/**
+	 * Replaces the page's JSON-LD / SpeculationRules rows with the freshly
+	 * captured set. Called inside `updatePage`'s transaction.
+	 *
+	 * `writeHtml = false` branches (`setExternalPage`, metadata-only) skip
+	 * this entirely — JSON-LD lives inside the HTML body, so external pages
+	 * that are not rendered have no entries to write. An empty array on a
+	 * normally-rendered page is treated as a degraded re-scrape: prior rows
+	 * are kept (same `delete-only-when-replacing` invariant as `anchors` /
+	 * `images`).
+	 * @param pageId
+	 * @param meta
+	 * @param trx
+	 */
+	async #insertJsonLd(
+		pageId: number,
+		meta: PageData['meta'],
+		trx: Knex.Transaction,
+	): Promise<void> {
+		// `??` guards tolerate the legacy "minimal meta" shape from older test
+		// fixtures. Real beholder 3.0.0 always populates these required fields.
+		const jsonLd = meta.jsonLd ?? [];
+		const speculationRules = meta.speculationRules ?? [];
+		const rows: Array<{
+			pageId: number;
+			kind: 'ld+json' | 'speculationrules';
+			type: string | null;
+			raw: string;
+			parsed: string | null;
+			parseError: string | null;
+		}> = [];
+		for (const entry of jsonLd) {
+			rows.push({
+				pageId,
+				kind: 'ld+json',
+				type: classifyJsonLdType(entry),
+				raw: entry.raw,
+				parsed: entry.parsed === undefined ? null : JSON.stringify(entry.parsed),
+				parseError: entry.parseError ?? null,
+			});
+		}
+		for (const entry of speculationRules) {
+			rows.push({
+				pageId,
+				kind: 'speculationrules',
+				type: classifyJsonLdType(entry),
+				raw: entry.raw,
+				parsed: entry.parsed === undefined ? null : JSON.stringify(entry.parsed),
+				parseError: entry.parseError ?? null,
+			});
+		}
+		if (rows.length === 0) return;
+		await trx('page_jsonld').where('pageId', pageId).delete();
+		await eachSplitted(rows, 100, async (chunk) => {
+			await trx('page_jsonld').insert(chunk);
+		});
+	}
+	/**
 	 * Upserts page data into the `pages` table (inserts if new, updates if existing).
 	 * @param page
 	 * @param isTarget
@@ -1293,6 +1589,10 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	async #insertPage(page: PageData, isTarget: boolean, trx?: Knex.Transaction) {
 		const qb = trx ?? this.#instance;
 		const pageId = await this.#getIdByUrl(page.url.withoutHashAndAuth, undefined, trx);
+		const flat = deriveFlatFromMeta(page.meta, page.url.href);
+		const denorm = computePageDenormalized(page.meta);
+		const extras = deriveMetaExtras(page.meta);
+		const now = Date.now();
 		await qb('pages')
 			.where('id', pageId)
 			.update({
@@ -1309,25 +1609,67 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				contentType: normalizeContentType(page.contentType),
 				contentLength: page.contentLength,
 				responseHeaders: JSON.stringify(page.responseHeaders),
-				lang: page.meta.lang,
-				title: page.meta.title,
-				description: page.meta.description,
-				keywords: page.meta.keywords,
-				noindex: page.meta.noindex,
-				nofollow: page.meta.nofollow,
-				noarchive: page.meta.noarchive,
-				canonical: page.meta.canonical,
-				alternate: page.meta.alternate,
-				og_type: page.meta['og:type'],
-				og_title: page.meta['og:title'],
-				og_site_name: page.meta['og:site_name'],
-				og_description: page.meta['og:description'],
-				og_url: page.meta['og:url'],
-				og_image: page.meta['og:image'],
-				twitter_card: page.meta['twitter:card'],
+				// Flat meta columns derived from beholder 3.0.0 nested Meta.
+				// URL-shaped columns (canonical / og_url / og_image / amphtml / manifest /
+				// icon_href / appleTouchIcon_href / twitter_image) are already absolutised
+				// by `deriveFlatFromMeta` against the page URL — `find-mismatches` compares
+				// `canonical != url` directly, so storing the raw `getAttribute('href')`
+				// would generate false positives for sites using relative canonicals.
+				...flat,
+				// Denormalised aggregates: written once at scrape time so list reads
+				// (Sheets, page-detail summary) can answer "how many JSON-LD entries?"
+				// and "which Wappalyzer providers?" by selecting a single pages column
+				// rather than running a GROUP BY join on every read.
+				tag_count: denorm.tag_count,
+				jsonld_count: denorm.jsonld_count,
+				tags_providers_csv: denorm.tags_providers_csv,
+				// JSON catch-all for nested Meta sub-objects not flattened above.
+				meta_extras: JSON.stringify(extras),
+				// Timestamps: `firstCrawledAt` is set only on first INSERT — `COALESCE`
+				// preserves the existing value so a re-scrape (`--append`, `--retry-failed`)
+				// does not erase the discovery time. `lastCrawledAt` is updated every
+				// successful scrape.
+				firstCrawledAt: qb.raw('COALESCE(firstCrawledAt, ?)', [now]),
+				lastCrawledAt: now,
 				isSkipped: page.isSkipped,
 			});
 		return pageId;
+	}
+
+	/**
+	 * Replaces the page's Wappalyzer tag rows with the freshly captured set.
+	 * Called inside `updatePage`'s transaction unconditionally — tag
+	 * detection draws on `<script src>` / `<iframe src>` / window globals /
+	 * response headers, not the HTML body, so external pages that skip
+	 * rendering still contribute tags.
+	 *
+	 * Same empty-guard as `#insertJsonLd`: an empty array does not wipe
+	 * prior rows on a degraded re-scrape.
+	 * @param pageId
+	 * @param meta
+	 * @param trx
+	 */
+	async #insertTags(
+		pageId: number,
+		meta: PageData['meta'],
+		trx: Knex.Transaction,
+	): Promise<void> {
+		const partial = extractTagsForArchive(meta.tags);
+		if (partial.length === 0) return;
+		const rows = partial.map((p) => ({
+			pageId,
+			provider: p.provider,
+			category: p.category,
+			externalId: p.externalId,
+			version: p.version,
+			confidence: p.confidence,
+			categories: JSON.stringify(p.categories),
+			sources: JSON.stringify(p.sources),
+		}));
+		await trx('page_tags').where('pageId', pageId).delete();
+		await eachSplitted(rows, 100, async (chunk) => {
+			await trx('page_tags').insert(chunk);
+		});
 	}
 	/**
 	 * Points each redirect-source URL at the destination page, marking it scraped

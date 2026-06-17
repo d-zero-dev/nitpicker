@@ -178,6 +178,65 @@ export function mapFlagsToQueryOptions(
 			// No options: the aggregation always covers the whole archive.
 			return {};
 		}
+		case 'pages-by-tag': {
+			if (!flags.provider) {
+				throw new Error('--provider is required for the pages-by-tag sub-command.');
+			}
+			return {
+				provider: flags.provider,
+				externalId: flags.externalId,
+				limit: flags.limit,
+				offset: flags.offset,
+			};
+		}
+		case 'count-pages-by-tag': {
+			if (!flags.provider) {
+				throw new Error('--provider is required for the count-pages-by-tag sub-command.');
+			}
+			return {
+				provider: flags.provider,
+				externalId: flags.externalId,
+			};
+		}
+		case 'pages-by-jsonld-type': {
+			if (!flags.type) {
+				throw new Error('--type is required for the pages-by-jsonld-type sub-command.');
+			}
+			return {
+				type: flags.type,
+				limit: flags.limit,
+				offset: flags.offset,
+			};
+		}
+		case 'count-pages-by-jsonld-type': {
+			if (!flags.type) {
+				throw new Error(
+					'--type is required for the count-pages-by-jsonld-type sub-command.',
+				);
+			}
+			return { type: flags.type };
+		}
+		case 'tag-inventory': {
+			return {};
+		}
+		case 'page-jsonld': {
+			if (!flags.url) {
+				throw new Error('--url is required for the page-jsonld sub-command.');
+			}
+			return { url: flags.url, full: flags.full };
+		}
+		case 'page-jsonld-overview': {
+			if (!flags.url) {
+				throw new Error('--url is required for the page-jsonld-overview sub-command.');
+			}
+			return { url: flags.url };
+		}
+		case 'page-tags': {
+			if (!flags.url) {
+				throw new Error('--url is required for the page-tags sub-command.');
+			}
+			return { url: flags.url };
+		}
 		default: {
 			const _exhaustive: never = subCommand;
 			throw new Error(`Unknown sub-command: ${String(_exhaustive)}`);

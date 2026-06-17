@@ -171,7 +171,26 @@ async function _fetchHead(
 					contentType: res.headers['content-type']?.split(';')[0] || null,
 					contentLength,
 					responseHeaders: res.headers,
-					meta: { title },
+					// beholder 3.0.0 made jsonLd / speculationRules / tags /
+					// others / originTrial required Meta fields. Even this
+					// HEAD-only fallback path must populate every slot so
+					// downstream insert/derive helpers iterate without crashing.
+					meta: {
+						title,
+						jsonLd: [],
+						speculationRules: [],
+						tags: { detected: {}, entries: [] },
+						others: {
+							meta: {},
+							property: {},
+							httpEquiv: {},
+							itemprop: {},
+							link: [],
+							script: [],
+							iframe: [],
+						},
+						originTrial: [],
+					},
 					imageList: [],
 					anchorList: [],
 					html: '',

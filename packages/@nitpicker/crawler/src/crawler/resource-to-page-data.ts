@@ -51,8 +51,26 @@ export function resourceToPageData(params: ResourceToPageDataParams): PageData |
 		contentType: resource.contentType,
 		contentLength: resource.contentLength,
 		responseHeaders: resource.responseHeaders,
+		// beholder 3.0.0 made jsonLd / speculationRules / tags / others /
+		// originTrial required Meta fields. This fallback wraps a non-HTML
+		// resource (PDF, image, etc.) that was discovered via subresource
+		// inspection rather than full scraping; populate every required slot
+		// so downstream insert/derive helpers iterate without crashing.
 		meta: {
 			title: '',
+			jsonLd: [],
+			speculationRules: [],
+			tags: { detected: {}, entries: [] },
+			others: {
+				meta: {},
+				property: {},
+				httpEquiv: {},
+				itemprop: {},
+				link: [],
+				script: [],
+				iframe: [],
+			},
+			originTrial: [],
 		},
 		anchorList: [],
 		imageList: [],

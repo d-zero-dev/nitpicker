@@ -197,7 +197,54 @@ export interface ListPagesOptions {
 }
 
 /**
- * A page list entry with core metadata.
+ * Raw row shape projected by `listPages` / `listPagesByTag` /
+ * `listPagesByJsonLdType` — the SQL columns each query selects from the
+ * `pages` table. Kept here so all three callers project the same superset
+ * and feed it to `mapPageRowToListItem`.
+ */
+export interface PageListRow {
+	url: string;
+	title: string | null;
+	status: number | null;
+	contentType: string | null;
+	isExternal: 0 | 1;
+	description: string | null;
+	keywords: string | null;
+	lang: string | null;
+	charset: string | null;
+	themeColor: string | null;
+	manifest: string | null;
+	robots_raw: string | null;
+	robots_noindex: number | null;
+	robots_nofollow: number | null;
+	robots_noarchive: number | null;
+	canonical: string | null;
+	og_type: string | null;
+	og_title: string | null;
+	og_site_name: string | null;
+	og_description: string | null;
+	og_url: string | null;
+	og_image: string | null;
+	og_image_alt: string | null;
+	og_locale: string | null;
+	og_article_published_time: string | null;
+	twitter_card: string | null;
+	twitter_site: string | null;
+	twitter_creator: string | null;
+	twitter_image: string | null;
+	tag_count: number | null;
+	jsonld_count: number | null;
+	tags_providers_csv: string | null;
+	firstCrawledAt: number | null;
+	lastCrawledAt: number | null;
+}
+
+/**
+ * A page list entry with core metadata derived from beholder 3.0.0 nested Meta.
+ *
+ * `meta_extras` (the JSON catch-all) is deliberately excluded so list views
+ * (viewer pages grid, MCP `list_pages`, Sheets) stay token-bounded. Fetch
+ * the full detail via `getPageDetail(url)` when extras are needed.
  */
 export interface PageListItem {
 	/** The page URL. */
@@ -214,7 +261,7 @@ export interface PageListItem {
 	hasDescription: boolean;
 	/** Whether the page has og:title. */
 	hasOgTitle: boolean;
-	/** Whether noindex is set. */
+	/** Whether the robots:noindex directive is set. */
 	noindex: boolean;
 	/** Meta description. */
 	description: string | null;
@@ -222,14 +269,14 @@ export interface PageListItem {
 	keywords: string | null;
 	/** Language attribute. */
 	lang: string | null;
-	/** Whether nofollow is set. */
+	/** Whether the robots:nofollow directive is set. */
 	nofollow: boolean;
-	/** Whether noarchive is set. */
+	/** Whether the robots:noarchive directive is set. */
 	noarchive: boolean;
-	/** Canonical URL. */
+	/** Raw `<meta name="robots">` content. */
+	robotsRaw: string | null;
+	/** Absolutised canonical URL. */
 	canonical: string | null;
-	/** Alternate URL. */
-	alternate: string | null;
 	/** OG type. */
 	ogType: string | null;
 	/** OG title. */
@@ -238,12 +285,40 @@ export interface PageListItem {
 	ogSiteName: string | null;
 	/** OG description. */
 	ogDescription: string | null;
-	/** OG URL. */
+	/** Absolutised OG URL. */
 	ogUrl: string | null;
-	/** OG image URL. */
+	/** Absolutised OG image URL. */
 	ogImage: string | null;
+	/** og:image:alt. */
+	ogImageAlt: string | null;
+	/** og:locale. */
+	ogLocale: string | null;
+	/** og:article:published_time. */
+	ogArticlePublishedTime: string | null;
 	/** Twitter card type. */
 	twitterCard: string | null;
+	/** twitter:site. */
+	twitterSite: string | null;
+	/** twitter:creator. */
+	twitterCreator: string | null;
+	/** Absolutised twitter:image. */
+	twitterImage: string | null;
+	/** `<meta charset>`. */
+	charset: string | null;
+	/** Primary theme color. */
+	themeColor: string | null;
+	/** Absolutised `<link rel="manifest">`. */
+	manifest: string | null;
+	/** Wappalyzer tag entry count (denormalised). */
+	tagCount: number | null;
+	/** JSON-LD + SpeculationRules count (denormalised). */
+	jsonldCount: number | null;
+	/** CSV of Wappalyzer providers (denormalised). */
+	tagsProvidersCsv: string | null;
+	/** First-discovery UNIX ms (within-archive). */
+	firstCrawledAt: number | null;
+	/** Most-recent-success UNIX ms (within-archive). */
+	lastCrawledAt: number | null;
 }
 
 /**
@@ -262,6 +337,12 @@ export interface PaginatedPageList {
 
 /**
  * Detailed information about a single page.
+ *
+ * Includes the full flat meta column set, the `metaExtras` JSON catch-all,
+ * and lightweight summaries of `page_jsonld` / `page_tags`. The raw JSON-LD
+ * payload and full tag rows are fetched via the dedicated endpoints
+ * (`getPageJsonLd(url)` / `getPageTags(url)`) so the page-detail response
+ * stays token-bounded for MCP / LLM consumers.
  */
 export interface PageDetail {
 	/** The page URL. */
@@ -276,6 +357,7 @@ export interface PageDetail {
 	contentLength: number | null;
 	/** Whether the page is external. */
 	isExternal: boolean;
+
 	/** The page title. */
 	title: string | null;
 	/** Meta description. */
@@ -284,30 +366,113 @@ export interface PageDetail {
 	keywords: string | null;
 	/** Language attribute. */
 	lang: string | null;
-	/** Canonical URL. */
-	canonical: string | null;
-	/** Alternate URL. */
-	alternate: string | null;
-	/** Whether noindex is set. */
+	/** `dir` attribute. */
+	dir: string | null;
+	/** `<meta charset>`. */
+	charset: string | null;
+	/** Absolutised `<base href>`. */
+	baseHref: string | null;
+	/** Raw `<meta name="viewport">` content. */
+	viewportRaw: string | null;
+	/** Primary `<meta name="theme-color">`. */
+	themeColor: string | null;
+	/** `<meta name="application-name">`. */
+	applicationName: string | null;
+	/** `<meta name="author">`. */
+	author: string | null;
+	/** `<meta name="generator">`. */
+	generator: string | null;
+	/** `<meta name="publisher">`. */
+	publisher: string | null;
+
+	/** Raw `<meta name="robots">` content. */
+	robotsRaw: string | null;
+	/** Whether the robots:noindex directive is set. */
 	noindex: boolean;
-	/** Whether nofollow is set. */
+	/** Whether the robots:nofollow directive is set. */
 	nofollow: boolean;
-	/** Whether noarchive is set. */
+	/** Whether the robots:noarchive directive is set. */
 	noarchive: boolean;
-	/** OG type. */
+	/** Whether the robots:noimageindex directive is set. */
+	noimageindex: boolean;
+	/** `<meta name="googlebot">` content. */
+	googlebot: string | null;
+
+	/** Absolutised `<link rel="canonical">` href. */
+	canonical: string | null;
+	/** Absolutised `<link rel="amphtml">` href. */
+	amphtml: string | null;
+	/** Absolutised `<link rel="manifest">` href. */
+	manifest: string | null;
+	/** Absolutised `<link rel="icon">` href. */
+	iconHref: string | null;
+	/** Absolutised `<link rel="apple-touch-icon">` href. */
+	appleTouchIconHref: string | null;
+
+	/** og:type. */
 	ogType: string | null;
-	/** OG title. */
+	/** og:title. */
 	ogTitle: string | null;
-	/** OG site name. */
-	ogSiteName: string | null;
-	/** OG description. */
-	ogDescription: string | null;
-	/** OG URL. */
+	/** Absolutised og:url. */
 	ogUrl: string | null;
-	/** OG image URL. */
+	/** og:site_name. */
+	ogSiteName: string | null;
+	/** og:description. */
+	ogDescription: string | null;
+	/** Absolutised og:image. */
 	ogImage: string | null;
+	/** og:image:alt. */
+	ogImageAlt: string | null;
+	/** og:image:width. */
+	ogImageWidth: string | null;
+	/** og:image:height. */
+	ogImageHeight: string | null;
+	/** og:locale. */
+	ogLocale: string | null;
+	/** og:article:published_time. */
+	ogArticlePublishedTime: string | null;
+	/** og:article:modified_time. */
+	ogArticleModifiedTime: string | null;
+
 	/** Twitter card type. */
 	twitterCard: string | null;
+	/** twitter:site. */
+	twitterSite: string | null;
+	/** twitter:creator. */
+	twitterCreator: string | null;
+	/** twitter:title. */
+	twitterTitle: string | null;
+	/** twitter:description. */
+	twitterDescription: string | null;
+	/** Absolutised twitter:image. */
+	twitterImage: string | null;
+
+	/** Facebook app id (`fb:app_id`). */
+	fbAppId: string | null;
+	/** Google site verification token. */
+	verificationGoogle: string | null;
+	/** `format-detection` telephone flag (true / false / null). */
+	formatDetectionTelephone: boolean | null;
+
+	/** First-discovery UNIX ms (within-archive). */
+	firstCrawledAt: number | null;
+	/** Most-recent-success UNIX ms (within-archive). */
+	lastCrawledAt: number | null;
+
+	/** Wappalyzer tag entry count (denormalised). */
+	tagCount: number | null;
+	/** JSON-LD + SpeculationRules count (denormalised). */
+	jsonldCount: number | null;
+	/** CSV of Wappalyzer providers (denormalised). */
+	tagsProvidersCsv: string | null;
+
+	/** Parsed `meta_extras` JSON catch-all (nested sub-objects not flattened). */
+	metaExtras: Record<string, unknown>;
+	/** Summary of JSON-LD entries (count + types + parseErrorCount). */
+	jsonLd: JsonLdSummaryDto;
+	/** Summary of Wappalyzer tags (count + provider→ids map). */
+	tags: TagsSummaryDto;
+
 	/** Response headers as key-value pairs. */
 	responseHeaders: Record<string, string>;
 	/** Outgoing links from this page. */
@@ -316,6 +481,136 @@ export interface PageDetail {
 	inboundLinks: InboundLink[];
 	/** URLs that redirect to this page. */
 	redirectFrom: string[];
+}
+
+/**
+ * DTO mirror of {@link import('@nitpicker/crawler/...').JsonLdSummary}.
+ *
+ * Re-declared in query types so the public DTO does not leak crawler
+ * internals; same shape so callers can pass it straight through.
+ */
+export interface JsonLdSummaryDto {
+	/** Total entries across `ld+json` and `speculationrules`. */
+	count: number;
+	/** Unique `@type` values (sorted). `'(unknown)'` denotes entries without a `@type`. */
+	types: readonly string[];
+	/** Number of entries that failed to parse. */
+	parseErrorCount: number;
+}
+
+/**
+ * DTO mirror of {@link import('@nitpicker/crawler/...').TagsSummary}.
+ */
+export interface TagsSummaryDto {
+	/** Total tag rows for the page. */
+	count: number;
+	/** Provider → list of unique external IDs (sorted). */
+	providerIds: Readonly<Record<string, readonly string[]>>;
+}
+
+/**
+ * One JSON-LD entry returned by `getPageJsonLd(url)`.
+ *
+ * When `slim` is true (the default), `raw` and `parsed` are omitted so the
+ * response stays token-bounded for MCP / LLM consumers. When `slim` is
+ * false, both fields are present and the response may reach multi-MB for
+ * e-commerce sites.
+ */
+export interface PageJsonLdEntry {
+	/** `'ld+json'` or `'speculationrules'`. */
+	kind: 'ld+json' | 'speculationrules';
+	/** Top-level `@type`, or null when missing / unparseable. */
+	type: string | null;
+	/** Byte length of the original `raw` JSON text. Always present so callers can size-check. */
+	rawByteSize: number;
+	/** Parse error message preserved from beholder; null when the entry parsed cleanly. */
+	parseError: string | null;
+	/** Original JSON text. Only present when slim=false. */
+	raw?: string;
+	/** Parsed JSON value. Only present when slim=false. */
+	parsed?: unknown;
+}
+
+/**
+ * One tag entry returned by `getPageTags(url)`.
+ */
+export interface PageTagEntry {
+	/** Wappalyzer provider name. */
+	provider: string;
+	/** First category (convenience projection). */
+	category: string | null;
+	/** Real external identifier (GTM-XXXX / G-XXXX / null). */
+	externalId: string | null;
+	/** Wappalyzer-reported version. */
+	version: string | null;
+	/** Wappalyzer-reported confidence (0-100). */
+	confidence: number | null;
+	/** Full categories list. */
+	categories: readonly string[];
+	/** Source details (script-src / inline / iframe-src / window-global / …). */
+	sources: ReadonlyArray<Record<string, unknown>>;
+}
+
+/**
+ * One overview entry returned by `getPageJsonLdOverview(url)` — the
+ * lightweight sibling of `getPageJsonLd`. Lets LLMs see "50 entries totalling
+ * 2.5MB" before requesting the full payload.
+ */
+export interface PageJsonLdOverviewEntry {
+	/** `'ld+json'` or `'speculationrules'`. */
+	kind: 'ld+json' | 'speculationrules';
+	/** Top-level `@type`, or null. */
+	type: string | null;
+	/** Byte length of the `raw` JSON text. */
+	rawByteSize: number;
+	/** Parse error (null when parsed cleanly). */
+	parseError: string | null;
+}
+
+/**
+ * Result of `getTagInventory()` — one row per detected Wappalyzer provider
+ * across the whole archive.
+ */
+export interface TagInventoryEntry {
+	/** Wappalyzer provider name. */
+	provider: string;
+	/** Number of distinct pages where the provider was detected. */
+	pageCount: number;
+}
+
+/**
+ * Filter options for `listPagesByTag(provider, externalId?, …)`.
+ */
+export interface ListPagesByTagOptions {
+	/** Wappalyzer provider name. */
+	provider: string;
+	/** Optional external ID (GTM-XXXX / G-XXXX / …). Omit for any. */
+	externalId?: string;
+	/** Maximum number of results. */
+	limit?: number;
+	/** Number of results to skip. */
+	offset?: number;
+}
+
+/**
+ * Filter options for `listPagesByJsonLdType(type, …)`.
+ */
+export interface ListPagesByJsonLdTypeOptions {
+	/** Top-level `@type` value to filter by. */
+	type: string;
+	/** Maximum number of results. */
+	limit?: number;
+	/** Number of results to skip. */
+	offset?: number;
+}
+
+/**
+ * Result of `countPagesByTag` / `countPagesByJsonLdType` — the lightweight
+ * count-only sibling to the corresponding `list_pages_by_*` queries.
+ */
+export interface PageCountResult {
+	/** Number of distinct pages matching the filter. */
+	pageCount: number;
 }
 
 /**

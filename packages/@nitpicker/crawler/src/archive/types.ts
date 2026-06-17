@@ -72,7 +72,13 @@ export type PageFilter =
 	| 'internal-no-page';
 
 /**
- * Raw database row representing a crawled page in the `pages` table.
+ * Raw database row representing a crawled page in the `pages` table (v2 schema).
+ *
+ * Maps 1:1 to the columns defined by `archive/init-schema.ts`. Most meta
+ * fields are derived from beholder 3.0.0's nested {@link import('@d-zero/beholder').Meta}
+ * via `archive/meta/derive-flat-from-meta.ts` and are stored as plain
+ * scalars for SQL-level filter / projection. The catch-all `meta_extras`
+ * JSON column preserves nested sub-objects not flattened above.
  */
 export interface DB_Page {
 	/** Auto-incremented primary key. */
@@ -97,38 +103,128 @@ export interface DB_Page {
 	contentLength: number | null;
 	/** JSON-serialized HTTP response headers. */
 	responseHeaders: string;
-	/** The `lang` attribute value from the HTML element, or null if not present. */
+
+	// Document basics
+	/** The `lang` attribute value from the HTML element, or null. */
 	lang: string | null;
-	/** The page title from the `<title>` element, or null if not present. */
+	/** The `dir` attribute value, or null. */
+	dir: string | null;
+	/** The `<meta charset>` value, or null. */
+	charset: string | null;
+	/** Absolutised `<base href>`, or null. */
+	baseHref: string | null;
+	/** The raw `<meta name="viewport">` content, or null. */
+	viewport_raw: string | null;
+	/** The primary `<meta name="theme-color">` (no media), or null. */
+	themeColor: string | null;
+	/** `<meta name="application-name">`, or null. */
+	applicationName: string | null;
+	/** `<meta name="author">`, or null. */
+	author: string | null;
+	/** `<meta name="generator">`, or null. */
+	generator: string | null;
+	/** `<meta name="publisher">`, or null. */
+	publisher: string | null;
+
+	// Title / description / keywords
+	/** The page title from the `<title>` element, or null. */
 	title: string | null;
-	/** The meta description content, or null if not present. */
+	/** The meta description content, or null. */
 	description: string | null;
-	/** The meta keywords content, or null if not present. */
+	/** The meta keywords content, or null. */
 	keywords: string | null;
-	/** Whether the noindex robots directive is set (SQLite INTEGER 0/1). */
-	noindex: number | null;
-	/** Whether the nofollow robots directive is set (SQLite INTEGER 0/1). */
-	nofollow: number | null;
-	/** Whether the noarchive robots directive is set (SQLite INTEGER 0/1). */
-	noarchive: number | null;
-	/** The canonical URL from `<link rel="canonical">`, or null if not present. */
+
+	// Robots
+	/** The raw `<meta name="robots">` content, or null. */
+	robots_raw: string | null;
+	/** Whether the noindex directive is set (SQLite INTEGER 0/1). */
+	robots_noindex: number | null;
+	/** Whether the nofollow directive is set (SQLite INTEGER 0/1). */
+	robots_nofollow: number | null;
+	/** Whether the noarchive directive is set (SQLite INTEGER 0/1). */
+	robots_noarchive: number | null;
+	/** Whether the noimageindex directive is set (SQLite INTEGER 0/1). */
+	robots_noimageindex: number | null;
+	/** `<meta name="googlebot">` content, or null. */
+	googlebot: string | null;
+
+	// Link (1:1 only — array shapes live in meta_extras)
+	/** Absolutised `<link rel="canonical">` href, or null. */
 	canonical: string | null;
-	/** The alternate URL from `<link rel="alternate">`, or null if not present. */
-	alternate: string | null;
-	/** The Open Graph type (`og:type`), or null if not present. */
+	/** Absolutised `<link rel="amphtml">` href, or null. */
+	amphtml: string | null;
+	/** Absolutised `<link rel="manifest">` href, or null. */
+	manifest: string | null;
+	/** Absolutised `<link rel="icon">` href, or null. */
+	icon_href: string | null;
+	/** Absolutised `<link rel="apple-touch-icon">` href, or null. */
+	appleTouchIcon_href: string | null;
+
+	// Open Graph
+	/** og:type, or null. */
 	og_type: string | null;
-	/** The Open Graph title (`og:title`), or null if not present. */
+	/** og:title, or null. */
 	og_title: string | null;
-	/** The Open Graph site name (`og:site_name`), or null if not present. */
-	og_site_name: string | null;
-	/** The Open Graph description (`og:description`), or null if not present. */
-	og_description: string | null;
-	/** The Open Graph URL (`og:url`), or null if not present. */
+	/** Absolutised og:url, or null. */
 	og_url: string | null;
-	/** The Open Graph image URL (`og:image`), or null if not present. */
+	/** og:site_name, or null. */
+	og_site_name: string | null;
+	/** og:description, or null. */
+	og_description: string | null;
+	/** Absolutised og:image (first if multiple), or null. */
 	og_image: string | null;
-	/** The Twitter Card type (`twitter:card`), or null if not present. */
+	/** og:image:alt, or null. */
+	og_image_alt: string | null;
+	/** og:image:width as a string (per spec), or null. */
+	og_image_width: string | null;
+	/** og:image:height as a string (per spec), or null. */
+	og_image_height: string | null;
+	/** og:locale, or null. */
+	og_locale: string | null;
+	/** og:article:published_time, or null. */
+	og_article_published_time: string | null;
+	/** og:article:modified_time, or null. */
+	og_article_modified_time: string | null;
+
+	// Twitter
+	/** twitter:card, or null. */
 	twitter_card: string | null;
+	/** twitter:site, or null. */
+	twitter_site: string | null;
+	/** twitter:creator, or null. */
+	twitter_creator: string | null;
+	/** twitter:title, or null. */
+	twitter_title: string | null;
+	/** twitter:description, or null. */
+	twitter_description: string | null;
+	/** Absolutised twitter:image (or twitter:image:src fallback), or null. */
+	twitter_image: string | null;
+
+	// One-offs
+	/** Facebook app id (`fb:app_id`), or null. */
+	fb_app_id: string | null;
+	/** Google site verification token, or null. */
+	verification_google: string | null;
+	/** `format-detection` telephone (SQLite INTEGER 0/1), or null. */
+	formatDetection_telephone: number | null;
+
+	// Within-archive observation timestamps (UNIX ms)
+	/** First time this page row was inserted (UNIX ms), or null on legacy rows. */
+	firstCrawledAt: number | null;
+	/** Last successful re-scrape time (UNIX ms), or null on legacy rows. */
+	lastCrawledAt: number | null;
+
+	// Denormalised aggregates (written by archive/meta/compute-page-denormalized)
+	/** Number of `page_tags` rows belonging to this page. */
+	tag_count: number | null;
+	/** `meta.jsonLd.length + meta.speculationRules.length` at scrape time. */
+	jsonld_count: number | null;
+	/** Sorted unique provider names, comma-separated (empty string when none). */
+	tags_providers_csv: string | null;
+
+	/** JSON-serialised nested Meta sub-objects not flattened above. */
+	meta_extras: string | null;
+
 	/** JSON-serialized network logs captured during scraping, or null if not collected. */
 	networkLogs: string | null;
 	/** Whether the page was skipped during crawling (1) or processed normally (0). */

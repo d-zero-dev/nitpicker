@@ -29,6 +29,7 @@ function createMockPage(overrides: Partial<Record<string, unknown>> = {}): Page 
 		contentType: 'text/html',
 		contentLength: 1000,
 		lang: 'ja',
+		charset: null,
 		isExternal: false,
 		isTarget: true,
 		isSkipped: false,
@@ -37,11 +38,11 @@ function createMockPage(overrides: Partial<Record<string, unknown>> = {}): Page 
 		responseHeaders: {},
 		description: null,
 		keywords: null,
-		noindex: false,
-		nofollow: false,
-		noarchive: false,
+		robots_raw: null,
+		robots_noindex: false,
+		robots_nofollow: false,
+		robots_noarchive: false,
 		canonical: null,
-		alternate: null,
 		twitter_card: null,
 		og_site_name: null,
 		og_url: null,
@@ -49,6 +50,20 @@ function createMockPage(overrides: Partial<Record<string, unknown>> = {}): Page 
 		og_description: null,
 		og_type: null,
 		og_image: null,
+		jsonldCount: null,
+		tagsProvidersCsv: '',
+		// `metaFlat` mirrors the new ~47-column flat-meta projection on the
+		// real Page wrapper. Tests reference specific keys via
+		// `page.metaFlat.manifest` / `page.metaFlat.og_image_alt` etc.
+		metaFlat: {
+			manifest: null,
+			themeColor: null,
+			twitter_site: null,
+			twitter_creator: null,
+			og_image_alt: null,
+			og_locale: null,
+			og_article_published_time: null,
+		},
 		isInternalPage: () => true,
 		isPage: () => true,
 		getAnchors: vi.fn().mockResolvedValue([]),
@@ -124,10 +139,10 @@ describe('createPageList', () => {
 		expect(hasLazyCell).toBe(true);
 	});
 
-	it('returns correct base headers (37 columns)', () => {
+	it('returns correct base headers (47 columns, v2 schema)', () => {
 		const sheet = createPageList([]);
 		const headers = sheet.createHeaders();
-		expect(headers).toHaveLength(37);
+		expect(headers).toHaveLength(47);
 		expect(headers[0]).toBe('Title');
 		expect(headers[1]).toBe('Full Title');
 		expect(headers[2]).toBe('URL');
@@ -148,12 +163,15 @@ describe('createPageList', () => {
 		expect(headers[15]).toBe('Status Code');
 		expect(headers[16]).toBe('Redirect From');
 		expect(headers[17]).toBe('Language');
-		expect(headers[18]).toBe('Internal Links');
-		expect(headers[19]).toBe('Internal Bad Links');
-		expect(headers[20]).toBe('External Links');
-		expect(headers[21]).toBe('External Bad Links');
-		expect(headers[22]).toBe('Internal Referrers');
-		expect(headers[36]).toBe('og:image');
+		expect(headers[18]).toBe('charset');
+		expect(headers[19]).toBe('Internal Links');
+		expect(headers[20]).toBe('Internal Bad Links');
+		expect(headers[21]).toBe('External Links');
+		expect(headers[22]).toBe('External Bad Links');
+		expect(headers[23]).toBe('Internal Referrers');
+		expect(headers[41]).toBe('og:image');
+		expect(headers[45]).toBe('jsonld_count');
+		expect(headers[46]).toBe('tags_providers');
 	});
 
 	it('appends plugin report headers', () => {
@@ -170,9 +188,9 @@ describe('createPageList', () => {
 		const sheet = createPageList(reports);
 		const headers = sheet.createHeaders();
 
-		expect(headers).toHaveLength(39);
-		expect(headers[37]).toBe('Plugin A Col 1');
-		expect(headers[38]).toBe('Plugin A Col 2');
+		expect(headers).toHaveLength(49);
+		expect(headers[47]).toBe('Plugin A Col 1');
+		expect(headers[48]).toBe('Plugin A Col 2');
 	});
 
 	it('skips external pages', async () => {
@@ -279,10 +297,10 @@ describe('createPageList', () => {
 		const sheet = createPageList([]);
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
-		// Internal Links
-		expect(cellValue(rows![0][18])).toBe(2);
+		// Internal Links (shifted by 1 after charset inserted at 18)
+		expect(cellValue(rows![0][19])).toBe(2);
 		// External Links
-		expect(cellValue(rows![0][20])).toBe(1);
+		expect(cellValue(rows![0][21])).toBe(1);
 	});
 
 	it('identifies bad links with status >= 400 (excluding 401)', async () => {
@@ -326,10 +344,10 @@ describe('createPageList', () => {
 		const sheet = createPageList([]);
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
-		// Internal Bad Links (404 counted, 401 excluded)
-		expect(cellValue(rows![0][19])).toBe(1);
-		// External Bad Links (500 counted)
-		expect(cellValue(rows![0][21])).toBe(1);
+		// Internal Bad Links (404 counted, 401 excluded; shifted by 1)
+		expect(cellValue(rows![0][20])).toBe(1);
+		// External Bad Links (500 counted; shifted by 1)
+		expect(cellValue(rows![0][22])).toBe(1);
 	});
 
 	it('counts null/0 status as bad link', async () => {
@@ -357,8 +375,8 @@ describe('createPageList', () => {
 		const sheet = createPageList([]);
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
-		// Both null and 0 status should be counted as bad
-		expect(cellValue(rows![0][19])).toBe(2);
+		// Both null and 0 status should be counted as bad (shifted by 1)
+		expect(cellValue(rows![0][20])).toBe(2);
 	});
 
 	it('includes bad link details in note', async () => {
@@ -378,8 +396,8 @@ describe('createPageList', () => {
 		const sheet = createPageList([]);
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
-		expect(cellNote(rows![0][19])).toContain('broken link');
-		expect(cellNote(rows![0][19])).toContain('404');
+		expect(cellNote(rows![0][20])).toContain('broken link');
+		expect(cellNote(rows![0][20])).toContain('404');
 	});
 
 	it('shows redirect URL when href differs from url', async () => {
@@ -399,7 +417,7 @@ describe('createPageList', () => {
 		const sheet = createPageList([]);
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
-		expect(cellNote(rows![0][19])).toContain('/old => /new');
+		expect(cellNote(rows![0][20])).toContain('/old => /new');
 	});
 
 	it('uses "N/A" when lang is null', async () => {
@@ -414,11 +432,11 @@ describe('createPageList', () => {
 		const page = createMockPage({
 			description: 'A test page',
 			keywords: 'test, example',
-			noindex: true,
-			nofollow: false,
-			noarchive: true,
+			robots_raw: 'noindex, nofollow',
+			robots_noindex: true,
+			robots_nofollow: false,
+			robots_noarchive: true,
 			canonical: 'https://example.com/',
-			alternate: 'https://example.com/en/',
 			twitter_card: 'summary',
 			og_site_name: 'Example Site',
 			og_url: 'https://example.com/',
@@ -432,21 +450,26 @@ describe('createPageList', () => {
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
 		const row = rows![0];
-		expect(cellValue(row[23])).toBe('A test page'); // description
-		expect(cellValue(row[24])).toBe('test, example'); // keywords
-		expect(cellValue(row[25])).toBe(true); // noindex
-		expect(cellValue(row[26])).toBe(false); // nofollow
-		expect(cellValue(row[27])).toBe(true); // noarchive
-		expect(cellValue(row[28])).toBe('https://example.com/'); // canonical
-		expect(cellValue(row[29])).toBe('https://example.com/en/'); // alternate
-		expect(cellValue(row[30])).toBe('summary'); // twitter:card
-		expect(cellValue(row[31])).toBe('Example Site'); // og:site_name
+		// Column indices reflect the v2 layout (charset inserted at 18,
+		// alternate removed, robots:raw / manifest / theme-color / twitter:site
+		// / twitter:creator / og:image:alt / og:locale / og:article:published_time
+		// / jsonld_count / tags_providers added). See
+		// `create-page-list.ts#createHeaders` for the canonical list.
+		expect(cellValue(row[24])).toBe('A test page'); // description
+		expect(cellValue(row[25])).toBe('test, example'); // keywords
+		expect(cellValue(row[26])).toBe(true); // noindex
+		expect(cellValue(row[27])).toBe(false); // nofollow
+		expect(cellValue(row[28])).toBe(true); // noarchive
+		expect(cellValue(row[29])).toBe('noindex, nofollow'); // robots:raw
+		expect(cellValue(row[30])).toBe('https://example.com/'); // canonical
+		expect(cellValue(row[33])).toBe('summary'); // twitter:card
+		expect(cellValue(row[36])).toBe('Example Site'); // og:site_name
 		// og:url has hyperlink so uses formulaValue
-		expect(row[32].provide().hyperlink).toBe('https://example.com/'); // og:url
-		expect(cellValue(row[33])).toBe('OG Title'); // og:title
-		expect(cellValue(row[34])).toBe('OG Description'); // og:description
-		expect(cellValue(row[35])).toBe('website'); // og:type
-		expect(cellValue(row[36])).toBe('https://example.com/og.png'); // og:image
+		expect(row[37].provide().hyperlink).toBe('https://example.com/'); // og:url
+		expect(cellValue(row[38])).toBe('OG Title'); // og:title
+		expect(cellValue(row[39])).toBe('OG Description'); // og:description
+		expect(cellValue(row[40])).toBe('website'); // og:type
+		expect(cellValue(row[41])).toBe('https://example.com/og.png'); // og:image
 	});
 
 	it('shows redirect count and URLs', async () => {
@@ -492,9 +515,11 @@ describe('createPageList', () => {
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
 		const row = rows![0];
-		// Plugin columns start after the 37 base columns (index 37+)
-		expect(cellValue(row[37])).toBe(95);
-		expect(cellValue(row[38])).toBe('A');
+		// Plugin columns start after the 47 base columns (index 47+).
+		// v2 layout: see `create-page-list.ts#createHeaders` for the full
+		// column inventory.
+		expect(cellValue(row[47])).toBe(95);
+		expect(cellValue(row[48])).toBe('A');
 	});
 
 	it('applies report pageData options (bold, fontFamily, fontSize, italic, strike, underline)', async () => {
@@ -527,7 +552,7 @@ describe('createPageList', () => {
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
 		const row = rows![0];
-		const provided = row[37].provide();
+		const provided = row[47].provide();
 		expect(provided.userEnteredFormat.textFormat).toEqual(
 			expect.objectContaining({
 				bold: true,
@@ -695,8 +720,9 @@ describe('createPageList', () => {
 		const rows = await sheet.eachPage!(aboutIndexHtml, 2, 2, aboutIndex as never);
 
 		// Internal Referrers should aggregate across both index pages
+		// (shifted from 22 → 23 after charset insertion at 18)
 		// The cell is a LazyCell — call provide() directly
-		const referrerCell = rows![0][22];
+		const referrerCell = rows![0][23];
 		const provided = referrerCell.provide();
 		// Total referrers: 1 (aboutIndex) + 2 (aboutIndexHtml) = 3
 		expect(provided.userEnteredValue.numberValue).toBe(3);
@@ -801,8 +827,8 @@ describe('createPageList', () => {
 		const sheet = createPageList(reports);
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
-		// Row should have base 37 columns only — no plugin column appended
-		expect(rows![0]).toHaveLength(37);
+		// Row should have base 47 columns only — no plugin column appended
+		expect(rows![0]).toHaveLength(47);
 	});
 
 	it('uses option.note when data.note is absent', async () => {
@@ -827,7 +853,8 @@ describe('createPageList', () => {
 		const sheet = createPageList(reports);
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
-		const provided = rows![0][37].provide();
+		// Plugin column starts at index 47 (base columns = 47 in v2 layout).
+		const provided = rows![0][47].provide();
 		expect(provided.note).toBe('option note text');
 	});
 });
