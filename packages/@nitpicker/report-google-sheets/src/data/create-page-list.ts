@@ -97,6 +97,7 @@ export const createPageList: CreateSheet = (reports) => {
 				'Status Code',
 				'Redirect From',
 				'Language',
+				'charset',
 				'Internal Links',
 				'Internal Bad Links',
 				'External Links',
@@ -107,15 +108,24 @@ export const createPageList: CreateSheet = (reports) => {
 				'noindex',
 				'nofollow',
 				'noarchive',
+				'robots:raw',
 				'canonical',
-				'alternate',
+				'manifest',
+				'theme-color',
 				'twitter:card',
+				'twitter:site',
+				'twitter:creator',
 				'og:site_name',
 				'og:url',
 				'og:title',
 				'og:description',
 				'og:type',
 				'og:image',
+				'og:image:alt',
+				'og:locale',
+				'og:article:published_time',
+				'jsonld_count',
+				'tags_providers',
 			];
 
 			for (const report of reports) {
@@ -246,6 +256,7 @@ export const createPageList: CreateSheet = (reports) => {
 					defaultCellFormat,
 				),
 				createCellData({ value: page.lang || 'N/A' }, defaultCellFormat),
+				createCellData({ value: page.charset }, defaultCellFormat),
 				createCellData({ value: iLinks }, defaultCellFormat),
 				createCellData(
 					{ value: iBadLinks.length, note: iBadLinks.join('\n') },
@@ -278,12 +289,16 @@ export const createPageList: CreateSheet = (reports) => {
 				),
 				createCellData({ value: page.description }, defaultCellFormat),
 				createCellData({ value: page.keywords }, defaultCellFormat),
-				createCellData({ value: !!page.noindex }, defaultCellFormat),
-				createCellData({ value: !!page.nofollow }, defaultCellFormat),
-				createCellData({ value: !!page.noarchive }, defaultCellFormat),
+				createCellData({ value: page.robots_noindex }, defaultCellFormat),
+				createCellData({ value: page.robots_nofollow }, defaultCellFormat),
+				createCellData({ value: page.robots_noarchive }, defaultCellFormat),
+				createCellData({ value: page.robots_raw }, defaultCellFormat),
 				createCellData({ value: page.canonical }, defaultCellFormat),
-				createCellData({ value: page.alternate }, defaultCellFormat),
+				createCellData({ value: page.metaFlat.manifest }, defaultCellFormat),
+				createCellData({ value: page.metaFlat.themeColor }, defaultCellFormat),
 				createCellData({ value: page.twitter_card }, defaultCellFormat),
+				createCellData({ value: page.metaFlat.twitter_site }, defaultCellFormat),
+				createCellData({ value: page.metaFlat.twitter_creator }, defaultCellFormat),
 				createCellData({ value: page.og_site_name }, defaultCellFormat),
 				createCellData(
 					{
@@ -296,6 +311,17 @@ export const createPageList: CreateSheet = (reports) => {
 				createCellData({ value: page.og_description }, defaultCellFormat),
 				createCellData({ value: page.og_type }, defaultCellFormat),
 				createCellData({ value: page.og_image }, defaultCellFormat),
+				createCellData({ value: page.metaFlat.og_image_alt }, defaultCellFormat),
+				createCellData({ value: page.metaFlat.og_locale }, defaultCellFormat),
+				createCellData(
+					{ value: page.metaFlat.og_article_published_time },
+					defaultCellFormat,
+				),
+				// Denormalised aggregates: written at scrape time so no per-page
+				// GROUP BY is needed here. `tagsProvidersCsv` is comma-separated
+				// for native Google Sheets list rendering.
+				createCellData({ value: page.jsonldCount }, defaultCellFormat),
+				createCellData({ value: page.tagsProvidersCsv }, defaultCellFormat),
 			];
 
 			for (const report of reportPageData) {

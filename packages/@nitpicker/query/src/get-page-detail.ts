@@ -1,12 +1,59 @@
 import type { PageDetail } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor, JsonLdRow, TagRow } from '@nitpicker/crawler';
+
+/**
+ * Summarises JSON-LD rows for the page-detail response.
+ *
+ * Mirrors `archive/meta/summarize-jsonld` (crawler internal); kept here as a
+ * thin local copy because the crawler does not export it.
+ * @param rows
+ */
+function summarizeJsonLdRows(rows: readonly JsonLdRow[]): PageDetail['jsonLd'] {
+	const types = new Set<string>();
+	let parseErrorCount = 0;
+	for (const row of rows) {
+		types.add(row.type ?? '(unknown)');
+		if (row.parseError !== null) parseErrorCount++;
+	}
+	return {
+		count: rows.length,
+		types: [...types].toSorted(),
+		parseErrorCount,
+	};
+}
+
+/**
+ * Summarises tag rows for the page-detail response.
+ * @param rows
+ */
+function summarizeTagRows(rows: readonly TagRow[]): PageDetail['tags'] {
+	const providerIds: Record<string, Set<string>> = {};
+	for (const row of rows) {
+		if (!(row.provider in providerIds)) {
+			providerIds[row.provider] = new Set<string>();
+		}
+		if (row.externalId !== null) {
+			providerIds[row.provider]!.add(row.externalId);
+		}
+	}
+	const sorted: Record<string, readonly string[]> = {};
+	for (const provider of Object.keys(providerIds).toSorted()) {
+		sorted[provider] = [...providerIds[provider]!].toSorted();
+	}
+	return { count: rows.length, providerIds: sorted };
+}
 
 /**
  * Retrieves detailed information about a single page by URL.
- * Includes all metadata, outbound links, inbound links, and redirect sources.
- * Inbound links are resolved through redirects, so links to a redirect source
- * (e.g. `http://x` 301-ing to `https://x`) count as backlinks of the final
- * destination — they stay merged on the canonical page instead of splitting (#71).
+ *
+ * Includes the full flat meta column set, the `meta_extras` JSON catch-all,
+ * outbound links, inbound links (resolved through redirects so backlinks to
+ * a redirect source stay merged on the canonical destination per #71),
+ * redirect sources, and lightweight summaries of `page_jsonld` / `page_tags`.
+ *
+ * Raw JSON-LD entries and full tag rows are fetched via the dedicated
+ * `getPageJsonLd(url)` / `getPageTags(url)` endpoints so this response stays
+ * token-bounded for MCP / LLM consumers.
  * @param accessor - The archive accessor to query.
  * @param url - The URL of the page to retrieve.
  * @returns Detailed page information, or null if the page is not found.
@@ -29,6 +76,18 @@ export async function getPageDetail(
 		}
 	} catch (error) {
 		console.warn(`Failed to parse responseHeaders for ${url}:`, error);
+	}
+
+	let metaExtras: Record<string, unknown> = {};
+	try {
+		if (page.meta_extras) {
+			const parsed: unknown = JSON.parse(page.meta_extras);
+			if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+				metaExtras = parsed as Record<string, unknown>;
+			}
+		}
+	} catch (error) {
+		console.warn(`Failed to parse meta_extras for ${url}:`, error);
 	}
 
 	// Outbound links intentionally do NOT resolve through redirects (asymmetric
@@ -80,6 +139,11 @@ export async function getPageDetail(
 
 	const redirectFrom = redirectRows.map((row: { url: string }) => row.url);
 
+	const [jsonLdRows, tagRows] = await Promise.all([
+		accessor.getJsonLdOfPage(page.id),
+		accessor.getTagsOfPage(page.id),
+	]);
+
 	return {
 		url: page.url,
 		status: page.status,
@@ -91,18 +155,58 @@ export async function getPageDetail(
 		description: page.description,
 		keywords: page.keywords,
 		lang: page.lang,
+		dir: page.dir,
+		charset: page.charset,
+		baseHref: page.baseHref,
+		viewportRaw: page.viewport_raw,
+		themeColor: page.themeColor,
+		applicationName: page.applicationName,
+		author: page.author,
+		generator: page.generator,
+		publisher: page.publisher,
+		robotsRaw: page.robots_raw,
+		noindex: !!page.robots_noindex,
+		nofollow: !!page.robots_nofollow,
+		noarchive: !!page.robots_noarchive,
+		noimageindex: !!page.robots_noimageindex,
+		googlebot: page.googlebot,
 		canonical: page.canonical,
-		alternate: page.alternate,
-		noindex: !!page.noindex,
-		nofollow: !!page.nofollow,
-		noarchive: !!page.noarchive,
+		amphtml: page.amphtml,
+		manifest: page.manifest,
+		iconHref: page.icon_href,
+		appleTouchIconHref: page.appleTouchIcon_href,
 		ogType: page.og_type,
 		ogTitle: page.og_title,
+		ogUrl: page.og_url,
 		ogSiteName: page.og_site_name,
 		ogDescription: page.og_description,
-		ogUrl: page.og_url,
 		ogImage: page.og_image,
+		ogImageAlt: page.og_image_alt,
+		ogImageWidth: page.og_image_width,
+		ogImageHeight: page.og_image_height,
+		ogLocale: page.og_locale,
+		ogArticlePublishedTime: page.og_article_published_time,
+		ogArticleModifiedTime: page.og_article_modified_time,
 		twitterCard: page.twitter_card,
+		twitterSite: page.twitter_site,
+		twitterCreator: page.twitter_creator,
+		twitterTitle: page.twitter_title,
+		twitterDescription: page.twitter_description,
+		twitterImage: page.twitter_image,
+		fbAppId: page.fb_app_id,
+		verificationGoogle: page.verification_google,
+		formatDetectionTelephone:
+			page.formatDetection_telephone === null
+				? null
+				: page.formatDetection_telephone === 1,
+		firstCrawledAt: page.firstCrawledAt,
+		lastCrawledAt: page.lastCrawledAt,
+		tagCount: page.tag_count,
+		jsonldCount: page.jsonld_count,
+		tagsProvidersCsv: page.tags_providers_csv,
+		metaExtras,
+		jsonLd: summarizeJsonLdRows(jsonLdRows),
+		tags: summarizeTagRows(tagRows),
 		responseHeaders,
 		outboundLinks,
 		inboundLinks,

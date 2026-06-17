@@ -23,6 +23,19 @@ export * from './archive/types.js';
 export { default as Archive } from './archive/archive.js';
 export { peekArchiveLockHolder } from './archive/peek-archive-lock.js';
 export type { ArchiveLockHolder } from './archive/peek-archive-lock.js';
+export type {
+	FlatPageMetaColumns,
+	JsonLdRow,
+	JsonLdRowForInsert,
+	TagRow,
+	TagRowForInsert,
+	JsonLdSummary,
+	TagsSummary,
+	TagInventoryEntry,
+	PageDenormalizedColumns,
+} from './archive/meta/types.js';
+export { IncompatibleArchiveError } from './archive/meta/types.js';
+export { ARCHIVE_FORMAT_VERSION } from './archive/meta/assert-compatible-version.js';
 
 // Core
 export {

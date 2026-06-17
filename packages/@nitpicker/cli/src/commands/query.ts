@@ -122,6 +122,18 @@ export const commandDef = {
 			type: 'number',
 			desc: 'Maximum HTML length to return',
 		},
+		provider: {
+			type: 'string',
+			desc: 'Wappalyzer provider name (for pages-by-tag, count-pages-by-tag)',
+		},
+		externalId: {
+			type: 'string',
+			desc: 'External identifier (GTM-XXXX / G-XXXX / …) for pages-by-tag, count-pages-by-tag',
+		},
+		full: {
+			type: 'boolean',
+			desc: 'Return full raw JSON-LD (page-jsonld). Default is slim (no raw / parsed).',
+		},
 		pretty: {
 			type: 'boolean',
 			desc: 'Pretty-print JSON output',

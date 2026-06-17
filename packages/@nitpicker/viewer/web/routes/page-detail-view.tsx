@@ -51,6 +51,8 @@ export function PageDetailView() {
 				<dd>{data.contentType ?? '—'}</dd>
 				<dt>{t('views.pageDetail.title2')}</dt>
 				<dd>{data.title ?? '—'}</dd>
+				<dt>lang</dt>
+				<dd>{data.lang ?? '—'}</dd>
 				<dt>{t('views.pageDetail.descriptionField')}</dt>
 				<dd>{data.description ?? '—'}</dd>
 				<dt>{t('views.pageDetail.canonical')}</dt>
@@ -61,14 +63,83 @@ export function PageDetailView() {
 						data.noindex && 'noindex',
 						data.nofollow && 'nofollow',
 						data.noarchive && 'noarchive',
+						data.noimageindex && 'noimageindex',
 					]
 						.filter(Boolean)
 						.join(', ') || '—'}
 				</dd>
+				{data.robotsRaw && (
+					<>
+						<dt>robots:raw</dt>
+						<dd>{data.robotsRaw}</dd>
+					</>
+				)}
 				<dt>{t('views.pageDetail.ogTitle')}</dt>
 				<dd>{data.ogTitle ?? '—'}</dd>
 				<dt>{t('views.pageDetail.ogImage')}</dt>
 				<dd>{data.ogImage ?? '—'}</dd>
+				{data.ogImageAlt && (
+					<>
+						<dt>og:image:alt</dt>
+						<dd>{data.ogImageAlt}</dd>
+					</>
+				)}
+				{data.ogLocale && (
+					<>
+						<dt>og:locale</dt>
+						<dd>{data.ogLocale}</dd>
+					</>
+				)}
+				{data.ogArticlePublishedTime && (
+					<>
+						<dt>og:article:published_time</dt>
+						<dd>{data.ogArticlePublishedTime}</dd>
+					</>
+				)}
+				{(data.twitterSite || data.twitterCreator) && (
+					<>
+						<dt>twitter:site / creator</dt>
+						<dd>
+							{[data.twitterSite, data.twitterCreator].filter(Boolean).join(' / ') || '—'}
+						</dd>
+					</>
+				)}
+				{data.charset && (
+					<>
+						<dt>charset</dt>
+						<dd>{data.charset}</dd>
+					</>
+				)}
+				{data.manifest && (
+					<>
+						<dt>manifest</dt>
+						<dd>{data.manifest}</dd>
+					</>
+				)}
+				{data.themeColor && (
+					<>
+						<dt>theme-color</dt>
+						<dd>{data.themeColor}</dd>
+					</>
+				)}
+				{(data.tagCount ?? 0) > 0 && (
+					<>
+						<dt>Wappalyzer tags</dt>
+						<dd>
+							{data.tagCount} entries
+							{data.tagsProvidersCsv ? ` (${data.tagsProvidersCsv})` : ''}
+						</dd>
+					</>
+				)}
+				{(data.jsonldCount ?? 0) > 0 && (
+					<>
+						<dt>JSON-LD</dt>
+						<dd>
+							{data.jsonldCount} entries
+							{data.jsonLd.types.length > 0 ? ` [${data.jsonLd.types.join(', ')}]` : ''}
+						</dd>
+					</>
+				)}
 			</dl>
 
 			<h2>

@@ -583,19 +583,13 @@ scrapeStart(url, page, options)
   └── keywordCheck(): 除外キーワードチェック
 ```
 
-### メタ情報抽出（dom-evaluation.ts:getMeta）
+### メタ情報抽出（dom-evaluation.ts:getMeta — beholder 3.0.0）
 
-| フィールド                 | セレクタ                    | プロパティ         |
-| -------------------------- | --------------------------- | ------------------ |
-| title                      | `title`                     | `textContent`      |
-| lang                       | `html`                      | `lang`             |
-| description                | `meta[name="description"]`  | `content`          |
-| keywords                   | `meta[name="keywords"]`     | `content`          |
-| noindex/nofollow/noarchive | `meta[name="robots"]`       | `content` をパース |
-| canonical                  | `link[rel="canonical"]`     | `href`             |
-| alternate                  | `link[rel="alternate"]`     | `href`             |
-| og:type, og:title, etc.    | `meta[property="og:*"]`     | `content`          |
-| twitter:card               | `meta[name="twitter:card"]` | `content`          |
+beholder 3.0.0 で `Meta` は flat key (`'og:type'`, `noindex`, `canonical`) から `frontmatter-keys.md` ベースのネスト構造 (`meta.og.type`, `meta.robots.noindex`, `meta.link.canonical`) に再構築された。`<head>` 内の各要素を `collectHead()` でシリアライズし、Node 側で `classify()` が typed Meta に組み立てる流れ。
+
+nitpicker は `crawler/src/archive/meta/derive-flat-from-meta.ts` で nested Meta → pages テーブル ~47 flat カラム に展開する。URL 系列 (`canonical`, `og_url`, `og_image`, `amphtml`, `manifest`, `icon_href`, `appleTouchIcon_href`, `twitter_image`) は `<base href>` + ページ URL を基準に絶対化される（beholder 自体は属性値生のまま返すので nitpicker 側の責務）。
+
+JSON-LD / SpeculationRules は `page_jsonld` テーブル、Wappalyzer 検出は `page_tags` テーブルに分離。残った nested 構造（`meta.referrer` / `meta.viewport` 等）は `pages.meta_extras` JSON にダンプ。詳細フィールド一覧は `archive/meta/types.ts` の `FlatPageMetaColumns` を参照。
 
 ### キーワード除外（keyword-check.ts）
 
@@ -605,35 +599,58 @@ scrapeStart(url, page, options)
 
 ## 6. Archive DB スキーマ
 
-### pages テーブル
+### pages テーブル (v2)
 
-| カラム                                                            | 型                    | 説明                                                                             |
-| ----------------------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------- |
-| id                                                                | INTEGER PK            | 自動採番                                                                         |
-| url                                                               | VARCHAR(8190) UNIQUE  | URL 文字列                                                                       |
-| redirectDestId                                                    | INTEGER FK → pages.id | リダイレクト先ページID                                                           |
-| scraped                                                           | BOOLEAN               | スクレイプ済みか                                                                 |
-| isTarget                                                          | BOOLEAN               | in-scope なクロール対象か（≠ ページ性。非HTMLリソースも 1。→「ページ性の判定」） |
-| isExternal                                                        | BOOLEAN               | 外部ページか                                                                     |
-| status                                                            | INTEGER               | HTTP ステータスコード                                                            |
-| statusText                                                        | TEXT                  |                                                                                  |
-| contentType                                                       | TEXT                  | 正規化（trim+小文字）して保存                                                    |
-| contentLength                                                     | INTEGER               |                                                                                  |
-| responseHeaders                                                   | TEXT (JSON)           |                                                                                  |
-| lang                                                              | TEXT                  | `<html lang>`                                                                    |
-| title                                                             | TEXT                  | `<title>`                                                                        |
-| description                                                       | TEXT                  | meta description                                                                 |
-| keywords                                                          | TEXT                  | meta keywords                                                                    |
-| noindex                                                           | BOOLEAN               | robots noindex                                                                   |
-| nofollow                                                          | BOOLEAN               | robots nofollow                                                                  |
-| noarchive                                                         | BOOLEAN               | robots noarchive                                                                 |
-| canonical                                                         | TEXT                  | link canonical                                                                   |
-| alternate                                                         | TEXT                  | link alternate                                                                   |
-| og_type, og_title, og_site_name, og_description, og_url, og_image | TEXT                  | Open Graph                                                                       |
-| twitter_card                                                      | TEXT                  | Twitter Card                                                                     |
-| isSkipped                                                         | BOOLEAN               | スキップされたか                                                                 |
-| skipReason                                                        | TEXT                  | スキップ理由                                                                     |
-| order                                                             | INTEGER               | Natural URL Sort 順序                                                            |
+beholder 3.0.0 アップグレードで pages のメタカラムは ~47 列の flat 化された beholder Meta フィールド + `meta_extras` JSON 1 列に再構築された。代表的なカラムを抜粋（網羅的な定義は `crawler/src/archive/init-schema.ts` と `crawler/src/archive/meta/types.ts` の `FlatPageMetaColumns` を正とする）:
+
+| カラム群                                                                                                                                                                                    | 型                     | 説明                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id / url / redirectDestId / scraped / isTarget / isExternal                                                                                                                                 | …                      | 基本属性（v1 から踏襲）                                                                                                                                                                                           |
+| status / statusText / contentType / contentLength / responseHeaders                                                                                                                         | …                      | HTTP 応答メタ                                                                                                                                                                                                     |
+| lang / dir / charset / baseHref / viewport_raw / themeColor                                                                                                                                 | TEXT                   | Document basics                                                                                                                                                                                                   |
+| applicationName / author / generator / publisher                                                                                                                                            | TEXT                   | 編集者情報                                                                                                                                                                                                        |
+| title / description / keywords                                                                                                                                                              | TEXT                   | top-level Meta                                                                                                                                                                                                    |
+| robots_raw / robots_noindex / robots_nofollow / robots_noarchive / robots_noimageindex / googlebot                                                                                          | TEXT/INT               | `meta[name="robots"]` の raw + 各フラグ                                                                                                                                                                           |
+| canonical / amphtml / manifest / icon_href / appleTouchIcon_href                                                                                                                            | TEXT (URL absolutised) | `<link rel="*">` の 1:1 マッピング（URL 系は絶対化済み）                                                                                                                                                          |
+| og_type / og_title / og_url / og_site_name / og_description / og_image / og_image_alt / og_image_width / og_image_height / og_locale / og_article_published_time / og_article_modified_time | TEXT                   | Open Graph 系                                                                                                                                                                                                     |
+| twitter_card / twitter_site / twitter_creator / twitter_title / twitter_description / twitter_image                                                                                         | TEXT                   | Twitter Card 系                                                                                                                                                                                                   |
+| fb_app_id / verification_google / formatDetection_telephone                                                                                                                                 | TEXT/INT               | 単発フィールド                                                                                                                                                                                                    |
+| firstCrawledAt / lastCrawledAt                                                                                                                                                              | INTEGER (UNIX ms)      | within-archive 観測軸。`--append` / `--retry-failed` で書き換えるとき `firstCrawledAt` は保護される                                                                                                               |
+| tag_count / jsonld_count / tags_providers_csv                                                                                                                                               | INTEGER / TEXT         | denormalised aggregates（書き込み時に集計、Sheets / page-detail 読み出しで GROUP BY 不要）                                                                                                                        |
+| meta_extras                                                                                                                                                                                 | JSON                   | flat 化されない nested Meta サブオブジェクト（referrer / viewport(parsed) / apple / msapplication / verification.{bing\|yandex\|...} / geo / citation / link.alternateHreflang[] / others.\* / originTrial / 等） |
+| isSkipped / skipReason / order                                                                                                                                                              | …                      | クロール状態                                                                                                                                                                                                      |
+
+**追加 INDEX**: `pages(robots_noindex)`, `pages(og_type)`。`lang` はモノリンガルサイトで cardinality 低く無効なので skip。
+
+**v1 → v2 互換性**: クリーンブレイク。`archive/meta/assert-compatible-version.ts` が `pages.meta_extras` の有無で世代判定し、v1 アーカイブを `Database.connect` で開いた時点で `IncompatibleArchiveError` を throw。`v0.x` 系の breaking 容認方針（MEMORY: `v0-x-breaking-changes`）に基づく。
+
+### page_tags テーブル (v2 新規)
+
+Wappalyzer 検出を構造化。1 行 = 1 (provider × external-id) タプル × 1 ページ。compound INDEX `(provider, externalId)` / `(provider, pageId)` を Phase 1 で先取り済み — 「同一 ID 別ページ検出」「provider 絞り込みリスト」が SQL レベルで stream 化される。
+
+| カラム               | 型                      | 説明                                                                  |
+| -------------------- | ----------------------- | --------------------------------------------------------------------- |
+| id                   | INTEGER PK              |                                                                       |
+| pageId               | FK → pages.id (CASCADE) |                                                                       |
+| provider             | TEXT NOT NULL           | Wappalyzer provider 名 (例: `Google Tag Manager`)                     |
+| category             | TEXT                    | `categories[0]` の便宜的射影                                          |
+| externalId           | TEXT                    | GTM-XXXX / G-XXXX / null                                              |
+| version / confidence | TEXT / INTEGER          | Wappalyzer 由来                                                       |
+| categories / sources | JSON                    | full list & detection sources (script-src / inline / iframe-src / 等) |
+
+### page_jsonld テーブル (v2 新規)
+
+`<script type="application/ld+json">` および `<script type="speculationrules">` を 1 行 1 エントリで保存。compound INDEX `(type, pageId)` を Phase 1 で先取り。
+
+| カラム     | 型                      | 説明                                               |
+| ---------- | ----------------------- | -------------------------------------------------- |
+| id         | INTEGER PK              |                                                    |
+| pageId     | FK → pages.id (CASCADE) |                                                    |
+| kind       | TEXT NOT NULL           | `'ld+json'` または `'speculationrules'`            |
+| type       | TEXT                    | top-level `@type` を `classifyJsonLdType` で正規化 |
+| raw        | TEXT NOT NULL           | 非圧縮（SQLite overflow page に任せる）            |
+| parsed     | JSON                    | `JSON.parse(raw)` 結果（parseError 時は null）     |
+| parseError | TEXT                    | beholder が記録した parse error メッセージ         |
 
 ### anchors テーブル
 

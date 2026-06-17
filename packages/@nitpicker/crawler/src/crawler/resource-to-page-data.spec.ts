@@ -42,7 +42,22 @@ describe('resourceToPageData', () => {
 		expect(result?.contentLength).toBe(1234);
 		expect(result?.responseHeaders).toEqual({ 'content-type': 'image/jpeg' });
 		expect(result?.redirectPaths).toEqual([]);
-		expect(result?.meta).toEqual({ title: '' });
+		expect(result?.meta).toEqual({
+			title: '',
+			jsonLd: [],
+			speculationRules: [],
+			tags: { detected: {}, entries: [] },
+			others: {
+				meta: {},
+				property: {},
+				httpEquiv: {},
+				itemprop: {},
+				link: [],
+				script: [],
+				iframe: [],
+			},
+			originTrial: [],
+		});
 		expect(result?.anchorList).toEqual([]);
 		expect(result?.imageList).toEqual([]);
 		expect(result?.html).toBe('');

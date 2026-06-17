@@ -130,4 +130,26 @@ describe('linkToPageData', () => {
 		const result = linkToPageData(link);
 		expect(result.contentLength).toBeNull();
 	});
+
+	it('populates every beholder 3.0.0 required Meta field', () => {
+		// Required fields per @d-zero/beholder 3.0.0 Meta type:
+		// title, jsonLd, speculationRules, tags, others, originTrial.
+		// Downstream insert paths (`#insertJsonLd`, `#insertTags`,
+		// `deriveFlatFromMeta`) iterate these without null-checks, so a
+		// missing field would crash the page write transaction.
+		const result = linkToPageData(createLink());
+		expect(result.meta.jsonLd).toStrictEqual([]);
+		expect(result.meta.speculationRules).toStrictEqual([]);
+		expect(result.meta.tags).toStrictEqual({ detected: {}, entries: [] });
+		expect(result.meta.others).toStrictEqual({
+			meta: {},
+			property: {},
+			httpEquiv: {},
+			itemprop: {},
+			link: [],
+			script: [],
+			iframe: [],
+		});
+		expect(result.meta.originTrial).toStrictEqual([]);
+	});
 });

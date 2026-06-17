@@ -77,6 +77,8 @@ npx @nitpicker/cli -v | --version                       # `@nitpicker/cli` の�
 
 > **Stub mode の HTML 読み出し caveat**: pre-#75 の `._nitpicker-*` stub を新 CLI の stub viewer に渡すと、read-only 経路では `migrateHtmlBlobTables` が走らず `page_html_*` テーブル不在で `getHtmlOfPageById` が落ちる。古い stub は捨ててから使うこと。
 
+> **v2 schema (beholder 3.0.0)**: pages テーブルは beholder 3.0.0 の nested Meta を ~47 flat 列に展開した v2 schema を採用。`canonical` / `og_url` / `og_image` などの URL 列は `<base href>` + ページ URL を基準に絶対化済み（find_mismatches の `canonical != url` 比較が正しく動く）。`page_tags`（Wappalyzer 検出）と `page_jsonld`（JSON-LD / SpeculationRules）は独立テーブル化、`tag_count` / `jsonld_count` / `tags_providers_csv` は denormalised 集計を pages に持つ（Sheets / page-detail での GROUP BY 不要）。v1 アーカイブは `assertCompatibleVersion` がオープン時に `IncompatibleArchiveError` で拒否する（クリーンブレイク）。詳細は ARCHITECTURE.md の「pages テーブル (v2)」を正とする。
+
 > **Note**: `-v` / `--version` は `argv[0]` の位置でのみ判定する。`crawl -v` のようにサブコマンドの後ろに置いた場合はそのコマンドのフラグとして解釈される（`@d-zero/roar` の仕様）。
 
 > **エラー原因分類（`query error-kinds` / viewer Errors ビュー）**: クロール失敗を 8 種（dns / connection-refused / connection-reset / connection-timeout / tls / timeout / protocol / unknown）に分類する。**kind は保存せず読み取り時に `classifyErrorKind(message)`（`@nitpicker/query`）で導出**するため、この機能より前のアーカイブもそのまま分類できる（分類ロジックが 1 箇所に集約され、capture 時と read 時で必ず一致する）。失敗は 2 系統: スクレイプ経路は `page_errors`、crawler レベルの `error` チャネル（DNS/接続/TLS）は構造化テーブル **`crawl_errors`**（`Archive.addError` が `error.log` と両方へ記録、`migrateCrawlErrors` で既存アーカイブに後付け）。`getErrorKinds` は `crawl_errors` に行があればそれを、無ければ（テーブル不在 **または空**）`error.log` をパースしてフォールバックする（空フォールバックが無いと、migration で空テーブルだけ作られた legacy アーカイブのエラーが読まれず消える）。`crawl_errors` は read-only 接続では `migrateCrawlErrors` が走らないため作られない（stub viewer は error.log フォールバックで分類）。

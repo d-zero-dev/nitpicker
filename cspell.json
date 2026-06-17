@@ -108,6 +108,33 @@
 		"hono",
 		"rollup",
 		"favicon",
-		"clientside"
+		"clientside",
+
+		// beholder 3.0.0 nested Meta terms
+		"Wappalyzer",
+		"noimageindex",
+		"deserialised",
+		"denorm",
+		"absolutised",
+		"absolutises",
+		"absolutisation",
+		"unparseable",
+		"speculationrules",
+		"hreflang",
+		"amphtml",
+		"itemprop",
+		"itemtype",
+		"itemscope",
+		"openidserver",
+		"openid",
+		"originTrial",
+		"jsonld",
+		"camelCase",
+		"Wikipedia",
+		"msapplication",
+
+		// Test fixtures (people)
+		"Yusuke",
+		"Hirao"
 	]
 }

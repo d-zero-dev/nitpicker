@@ -219,6 +219,15 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		}
 		return html;
 	}
+	/**
+	 * Retrieves the JSON-LD / SpeculationRules entries for the given page,
+	 * parsed back from the `page_jsonld` table.
+	 * @param pageId - The database id of the page.
+	 * @returns Ordered entries with `kind`, `type`, `raw`, `parsed`, `parseError`.
+	 */
+	async getJsonLdOfPage(pageId: number) {
+		return this.#db.getJsonLdOfPage(pageId);
+	}
 
 	/**
 	 * Returns the underlying Knex query builder instance for direct SQL access.
@@ -321,6 +330,16 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	async getResourceUrlList() {
 		return this.#db.getResourceUrlList();
 	}
+	/**
+	 * Retrieves the Wappalyzer tag entries for the given page, parsed back
+	 * from the `page_tags` table.
+	 * @param pageId - The database id of the page.
+	 * @returns Ordered entries with provider, category, externalId, etc.
+	 */
+	async getTagsOfPage(pageId: number) {
+		return this.#db.getTagsOfPage(pageId);
+	}
+
 	/**
 	 * Stores custom data in the archive under the configured namespace.
 	 * Requires a namespace to be set on this accessor; throws if namespace is null.

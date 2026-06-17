@@ -12,7 +12,8 @@ import type { Knex } from 'knex';
  */
 export async function applyConnectionPragmas(instance: Knex): Promise<void> {
 	// Foreign-key enforcement defaults to OFF on every new SQLite
-	// connection. Required for ON DELETE CASCADE on `page_html_ref` to fire.
+	// connection. Required for ON DELETE CASCADE on `page_html_ref`,
+	// `page_tags`, and `page_jsonld` to fire.
 	await instance.raw('PRAGMA foreign_keys = ON');
 	await instance.raw('PRAGMA wal_autocheckpoint = 1000');
 	// Negative value = KiB of memory (64 MiB). Helps large BLOB scans.
@@ -27,24 +28,45 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  *
  * Schema notes:
  *
- * - HTML snapshots are stored as zstd-compressed BLOBs inside the SQLite
- *   database itself (`page_html_blobs` + `page_html_ref`). The legacy
- *   `snapshot-html.zip` container is gone; this collapses the per-`--append`
- *   re-compression cost and unlocks straight `SELECT body` reads in stub /
- *   read-only mode.
- * - `page_html_blobs` is keyed by SHA-256 of the raw HTML bytes so identical
- *   bodies are stored once per archive (within-crawl dedup of 404s, error
- *   templates, etc.). This shape is also the natural fit for #23 (commit
- *   graph + cross-generation dedup): the table can be reused as-is and only
- *   the per-revision reference table is replaced.
- * - The `codec` column on `page_html_blobs` exists so future zstd → other
- *   migrations can flip individual blobs without a global rewrite; reads
- *   dispatch on it. A `CHECK` constraint pins it to the known set so a
- *   typo is rejected at write time, not at the next read.
- * - PRAGMA `page_size` and `journal_mode` are set BEFORE any `CREATE
- *   TABLE` because SQLite only honors `page_size` changes against an
- *   empty database, and `journal_mode = WAL` is persistent. Other
+ * - **Meta columns (v2)**: pages carries ~47 flat columns derived from
+ *   beholder 3.0.0's nested Meta shape (`canonical`, `og_*`, `twitter_*`,
+ *   `robots_*`, document basics, editorial fields) plus a `meta_extras`
+ *   JSON column for everything not flattened. URL-shaped columns are
+ *   absolutised against the page URL before write (see
+ *   `archive/meta/derive-flat-from-meta.ts`).
+ * - **Denormalised aggregates** (`tag_count`, `jsonld_count`,
+ *   `tags_providers_csv`): computed at write time from `meta.tags` /
+ *   `meta.jsonLd` to avoid N+1 GROUP BY at Sheets-render / page-detail time.
+ *   Plan: "ファイルサイズが多少増えてもいいから取り出しパフォーマンスを優先".
+ * - **Per-page timestamps** (`firstCrawledAt`, `lastCrawledAt`): UNIX ms.
+ *   Written by `#insertPage` on INSERT (`first = last = now`) and UPDATE
+ *   (`last = now`, `first` preserved). `resetFailedPages` deliberately
+ *   leaves them alone so failure-reset does not erase the last-success
+ *   record.
+ * - **`page_tags`** (Wappalyzer): per-provider × external-id row shape, plus
+ *   `categories`/`sources` JSON columns. Compound indexes
+ *   `(provider, externalId)` / `(provider, pageId)` are pre-built for the
+ *   Phase 2+ "find duplicate IDs across pages" and "list pages using
+ *   provider X" hot paths — Phase 1 read perf > storage cost trade-off.
+ * - **`page_jsonld`** (JSON-LD / SpeculationRules): one row per
+ *   `<script type="application/ld+json">` or `<script type="speculationrules">`.
+ *   `raw` is stored uncompressed (SQLite overflow pages handle large rows);
+ *   if cross-archive bulk export becomes a use case, add a `codec` column
+ *   à la `page_html_blobs`. Compound `(type, pageId)` accelerates streaming
+ *   `list_pages_by_jsonld_type` JOINs.
+ * - **HTML snapshots** (`page_html_blobs` + `page_html_ref`): unchanged
+ *   from v1. zstd-compressed BLOBs keyed by SHA-256 for content-addressable
+ *   dedup. WITHOUT ROWID via raw SQL because knex's schema builder cannot
+ *   express it.
+ * - **PRAGMA `page_size` and `journal_mode`** are set BEFORE any
+ *   `CREATE TABLE` because SQLite only honors `page_size` changes against
+ *   an empty database, and `journal_mode = WAL` is persistent. Other
  *   per-connection PRAGMAs live in {@link applyConnectionPragmas}.
+ *
+ * v1 → v2 migration is intentionally absent. `assertCompatibleVersion`
+ * (called before `initSchema`) rejects v1 archives with a friendly error;
+ * `v0.x` policy allows breaking changes (see MEMORY:
+ * `v0-x-breaking-changes`).
  * @param instance - The Knex query builder instance connected to the database.
  */
 export async function initSchema(instance: Knex) {
@@ -93,22 +115,80 @@ export async function initSchema(instance: Knex) {
 			t.string('contentType').nullable();
 			t.integer('contentLength').unsigned().nullable();
 			t.json('responseHeaders').nullable();
+
+			// Document basics
 			t.string('lang');
+			t.string('dir');
+			t.string('charset');
+			t.string('baseHref');
+			t.text('viewport_raw');
+			t.string('themeColor');
+			t.string('applicationName');
+			t.string('author');
+			t.string('generator');
+			t.string('publisher');
+
+			// Title / description / keywords (top-level Meta fields)
 			t.string('title');
-			t.string('description');
-			t.string('keywords');
-			t.boolean('noindex');
-			t.boolean('nofollow');
-			t.boolean('noarchive');
-			t.string('canonical');
-			t.string('alternate');
+			t.text('description');
+			t.text('keywords');
+
+			// Robots
+			t.text('robots_raw');
+			t.integer('robots_noindex');
+			t.integer('robots_nofollow');
+			t.integer('robots_noarchive');
+			t.integer('robots_noimageindex');
+			t.string('googlebot');
+
+			// Link (1:1 only — array shapes live in meta_extras)
+			t.string('canonical', 8190);
+			t.string('amphtml', 8190);
+			t.string('manifest', 8190);
+			t.string('icon_href', 8190);
+			t.string('appleTouchIcon_href', 8190);
+
+			// Open Graph
 			t.string('og_type');
 			t.string('og_title');
+			t.string('og_url', 8190);
 			t.string('og_site_name');
-			t.string('og_description');
-			t.string('og_url');
-			t.string('og_image');
+			t.text('og_description');
+			t.string('og_image', 8190);
+			t.string('og_image_alt');
+			t.string('og_image_width');
+			t.string('og_image_height');
+			t.string('og_locale');
+			t.string('og_article_published_time');
+			t.string('og_article_modified_time');
+
+			// Twitter
 			t.string('twitter_card');
+			t.string('twitter_site');
+			t.string('twitter_creator');
+			t.string('twitter_title');
+			t.text('twitter_description');
+			t.string('twitter_image', 8190);
+
+			// One-offs
+			t.string('fb_app_id');
+			t.string('verification_google');
+			t.integer('formatDetection_telephone');
+
+			// Within-archive observation timestamps (UNIX ms)
+			t.integer('firstCrawledAt');
+			t.integer('lastCrawledAt');
+
+			// Denormalised aggregates (written at scrape time, see
+			// archive/meta/compute-page-denormalized.ts)
+			t.integer('tag_count');
+			t.integer('jsonld_count');
+			t.text('tags_providers_csv');
+
+			// Catch-all JSON for nested Meta sub-objects not flattened above
+			t.json('meta_extras');
+
+			// Crawl lifecycle
 			t.boolean('isSkipped');
 			t.string('skipReason');
 			t.integer('order').unsigned().nullable();
@@ -118,6 +198,13 @@ export async function initSchema(instance: Knex) {
 			t.index('scraped');
 			t.index('redirectDestId');
 			t.index('order');
+			// Phase 1: noindex filter (list_pages) and og:type filter
+			// (analytics) are the only new flat-column filters with enough
+			// selectivity to benefit from an index. `lang` has cardinality 1
+			// on mono-language sites (D-Zero's typical customer) so it is
+			// skipped.
+			t.index('robots_noindex');
+			t.index('og_type');
 		})
 		.createTable('anchors', (t) => {
 			t.increments('id');
@@ -194,7 +281,65 @@ export async function initSchema(instance: Knex) {
 			t.boolean('isExternal');
 			t.text('message').notNullable();
 			t.integer('createdAt').notNullable();
+		})
+		.createTable('page_tags', (t) => {
+			// Wappalyzer-derived technology detection. One row per
+			// (provider × externalId) tuple per page. `category` is the first
+			// element of `categories`; the full list lives in the JSON
+			// `categories` column. `sources` records where the provider was
+			// detected (script-src / inline / iframe-src / window-global / …).
+			t.increments('id');
+			t.integer('pageId')
+				.notNullable()
+				.unsigned()
+				.references('pages.id')
+				.onDelete('CASCADE');
+			t.string('provider').notNullable();
+			t.string('category');
+			t.string('externalId');
+			t.string('version');
+			t.integer('confidence');
+			t.json('categories');
+			t.json('sources');
+
+			t.index('pageId');
+			t.index('provider');
+			t.index('externalId');
+		})
+		.createTable('page_jsonld', (t) => {
+			// JSON-LD and SpeculationRules entries captured from
+			// `<script type="application/ld+json">` and
+			// `<script type="speculationrules">`. `kind` discriminates; `type`
+			// is the top-level `@type` extracted by classify-jsonld-type for
+			// indexable filtering. `raw` is stored uncompressed; SQLite
+			// overflow pages handle multi-KB JSON bodies transparently.
+			t.increments('id');
+			t.integer('pageId')
+				.notNullable()
+				.unsigned()
+				.references('pages.id')
+				.onDelete('CASCADE');
+			t.string('kind').notNullable();
+			t.string('type');
+			t.text('raw').notNullable();
+			t.json('parsed');
+			t.text('parseError');
+
+			t.index('pageId');
+			t.index('type');
 		});
+
+	// ON DELETE CASCADE and compound indexes for the new tables. Knex's
+	// schema builder can't express CASCADE / compound indexes inline in a
+	// way that round-trips through libsql consistently, so we use raw SQL
+	// to mirror the `page_html_ref` pattern.
+	await instance.raw(
+		'CREATE INDEX page_tags_provider_extId ON page_tags(provider, externalId)',
+	);
+	await instance.raw(
+		'CREATE INDEX page_tags_provider_pageId ON page_tags(provider, pageId)',
+	);
+	await instance.raw('CREATE INDEX page_jsonld_type_pageId ON page_jsonld(type, pageId)');
 
 	// Content-addressable HTML blob storage. Knex's schema builder doesn't
 	// expose a WITHOUT ROWID toggle, so the BLOB tables are created via raw

@@ -95,7 +95,6 @@ export function PagesView() {
 			{ accessorKey: 'nofollow', header: 'nofollow', size: 80, cell: boolCell },
 			{ accessorKey: 'noarchive', header: 'noarchive', size: 90, cell: boolCell },
 			{ accessorKey: 'canonical', header: 'canonical', size: 280, cell: textCell },
-			{ accessorKey: 'alternate', header: 'alternate', size: 200, cell: textCell },
 			{ accessorKey: 'twitterCard', header: 'twitter:card', size: 120, cell: textCell },
 			{ accessorKey: 'ogSiteName', header: 'og:site_name', size: 160, cell: textCell },
 			{ accessorKey: 'ogUrl', header: 'og:url', size: 240, cell: textCell },
@@ -108,6 +107,34 @@ export function PagesView() {
 			},
 			{ accessorKey: 'ogType', header: 'og:type', size: 100, cell: textCell },
 			{ accessorKey: 'ogImage', header: 'og:image', size: 240, cell: textCell },
+			{ accessorKey: 'ogImageAlt', header: 'og:image:alt', size: 200, cell: textCell },
+			{ accessorKey: 'ogLocale', header: 'og:locale', size: 100, cell: textCell },
+			{
+				accessorKey: 'ogArticlePublishedTime',
+				header: 'og:article:published_time',
+				size: 180,
+				cell: textCell,
+			},
+			{ accessorKey: 'twitterSite', header: 'twitter:site', size: 140, cell: textCell },
+			{
+				accessorKey: 'twitterCreator',
+				header: 'twitter:creator',
+				size: 160,
+				cell: textCell,
+			},
+			{ accessorKey: 'twitterImage', header: 'twitter:image', size: 240, cell: textCell },
+			{ accessorKey: 'charset', header: 'charset', size: 80, cell: textCell },
+			{ accessorKey: 'themeColor', header: 'theme-color', size: 100, cell: textCell },
+			{ accessorKey: 'manifest', header: 'manifest', size: 240, cell: textCell },
+			{ accessorKey: 'robotsRaw', header: 'robots:raw', size: 160, cell: textCell },
+			{ accessorKey: 'tagCount', header: '# tags', size: 70, cell: textCell },
+			{
+				accessorKey: 'tagsProvidersCsv',
+				header: 'tag providers',
+				size: 240,
+				cell: textCell,
+			},
+			{ accessorKey: 'jsonldCount', header: '# JSON-LD', size: 80, cell: textCell },
 		];
 	}, [navigate, t]);
 

@@ -5,6 +5,7 @@ import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getPageDetail } from './get-page-detail.js';
+import { makeBeholderMeta } from './test-helpers/make-beholder-meta.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -55,24 +56,22 @@ describe('getPageDetail', () => {
 			contentLength: 500,
 			responseHeaders: { 'X-Frame-Options': 'DENY' },
 			html: '<html><head><title>Home</title></head></html>',
-			meta: {
+			meta: makeBeholderMeta({
 				lang: 'ja',
 				title: 'Home',
 				description: 'Home page',
 				keywords: 'test',
-				noindex: false,
-				nofollow: false,
-				noarchive: false,
-				canonical: 'https://example.com/',
-				alternate: null,
-				'og:type': 'website',
-				'og:title': 'Home OG',
-				'og:site_name': 'Example',
-				'og:description': 'Home OG desc',
-				'og:url': 'https://example.com/',
-				'og:image': 'https://example.com/og.png',
-				'twitter:card': 'summary',
-			},
+				link: { canonical: 'https://example.com/' },
+				og: {
+					type: 'website',
+					title: 'Home OG',
+					siteName: 'Example',
+					description: 'Home OG desc',
+					url: 'https://example.com/',
+					image: ['https://example.com/og.png'],
+				},
+				twitter: { card: 'summary' },
+			}),
 			anchorList: [
 				{
 					href: parseUrl('https://example.com/about')!,
@@ -96,24 +95,7 @@ describe('getPageDetail', () => {
 			contentLength: 300,
 			responseHeaders: {},
 			html: '<html><head><title>About</title></head></html>',
-			meta: {
-				lang: 'ja',
-				title: 'About',
-				description: null,
-				keywords: null,
-				noindex: false,
-				nofollow: false,
-				noarchive: false,
-				canonical: null,
-				alternate: null,
-				'og:type': null,
-				'og:title': null,
-				'og:site_name': null,
-				'og:description': null,
-				'og:url': null,
-				'og:image': null,
-				'twitter:card': null,
-			},
+			meta: makeBeholderMeta({ lang: 'ja', title: 'About' }),
 			anchorList: [],
 			imageList: [],
 			isSkipped: false,

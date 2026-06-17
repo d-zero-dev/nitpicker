@@ -11,19 +11,27 @@ import type {
 } from '@nitpicker/query';
 
 import {
-	getSummary,
-	listPages,
-	getPageDetail,
-	getPageHtml,
-	listLinks,
-	listResources,
-	listImages,
-	getViolations,
+	checkHeaders,
+	countPagesByJsonLdType,
+	countPagesByTag,
 	findDuplicates,
 	findMismatches,
-	checkHeaders,
-	getResourceReferrers,
 	getErrorKinds,
+	getPageDetail,
+	getPageHtml,
+	getPageJsonLd,
+	getPageJsonLdOverview,
+	getPageTags,
+	getResourceReferrers,
+	getSummary,
+	getTagInventory,
+	getViolations,
+	listImages,
+	listLinks,
+	listPages,
+	listPagesByJsonLdType,
+	listPagesByTag,
+	listResources,
 } from '@nitpicker/query';
 
 import { mapFlagsToQueryOptions } from './map-flags-to-query-options.js';
@@ -116,6 +124,49 @@ export async function dispatchQuery(
 		}
 		case 'error-kinds': {
 			return getErrorKinds(accessor);
+		}
+		case 'pages-by-tag': {
+			const { provider, externalId, limit, offset } = options as {
+				provider: string;
+				externalId?: string;
+				limit?: number;
+				offset?: number;
+			};
+			return listPagesByTag(accessor, { provider, externalId, limit, offset });
+		}
+		case 'count-pages-by-tag': {
+			const { provider, externalId } = options as {
+				provider: string;
+				externalId?: string;
+			};
+			return countPagesByTag(accessor, { provider, externalId });
+		}
+		case 'pages-by-jsonld-type': {
+			const { type, limit, offset } = options as {
+				type: string;
+				limit?: number;
+				offset?: number;
+			};
+			return listPagesByJsonLdType(accessor, { type, limit, offset });
+		}
+		case 'count-pages-by-jsonld-type': {
+			const { type } = options as { type: string };
+			return countPagesByJsonLdType(accessor, { type });
+		}
+		case 'tag-inventory': {
+			return getTagInventory(accessor);
+		}
+		case 'page-jsonld': {
+			const { url, full } = options as { url: string; full?: boolean };
+			return getPageJsonLd(accessor, url, !full);
+		}
+		case 'page-jsonld-overview': {
+			const { url } = options as { url: string };
+			return getPageJsonLdOverview(accessor, url);
+		}
+		case 'page-tags': {
+			const { url } = options as { url: string };
+			return getPageTags(accessor, url);
 		}
 		default: {
 			const _exhaustive: never = subCommand;

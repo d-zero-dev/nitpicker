@@ -202,7 +202,7 @@ WCAG 2.1 AA 目標。仮想テーブルは flexbox レイアウトで table セ�
 }
 ```
 
-ツール一覧（14 種）と引数仕様は `@nitpicker/mcp-server` の `src/tools/` の JSDoc を参照。
+ツール一覧（22 種）と引数仕様は `@nitpicker/mcp-server` の `src/tool-definitions.ts` の description / JSON Schema を参照。v2 で追加された Wappalyzer / JSON-LD 系（`list_pages_by_tag` / `count_pages_by_tag` / `list_pages_by_jsonld_type` / `count_pages_by_jsonld_type` / `get_tag_inventory` / `get_page_tags` / `get_page_jsonld` / `get_page_jsonld_overview`）は MB 級になり得るので、大規模サイトでは事前に `count_*` で size-check し、本体は CLI `nitpicker query <subcommand>` + `jq` 経由を推奨。
 
 ### `open_archive` のレスポンス契約
 

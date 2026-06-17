@@ -5,6 +5,7 @@ import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { findMismatches } from './find-mismatches.js';
+import { makeBeholderMeta } from './test-helpers/make-beholder-meta.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -56,24 +57,15 @@ describe('findMismatches', () => {
 			contentLength: 100,
 			responseHeaders: {},
 			html: '<html></html>',
-			meta: {
-				lang: null,
+			meta: makeBeholderMeta({
 				title: 'Home',
 				description: 'Home description',
-				keywords: null,
-				noindex: false,
-				nofollow: false,
-				noarchive: false,
-				canonical: 'https://example.com/home',
-				alternate: null,
-				'og:type': null,
-				'og:title': 'Different OG Title',
-				'og:site_name': null,
-				'og:description': 'Different OG Description',
-				'og:url': null,
-				'og:image': null,
-				'twitter:card': null,
-			},
+				link: { canonical: 'https://example.com/home' },
+				og: {
+					title: 'Different OG Title',
+					description: 'Different OG Description',
+				},
+			}),
 			anchorList: [],
 			imageList: [],
 			isSkipped: false,
@@ -91,24 +83,11 @@ describe('findMismatches', () => {
 			contentLength: 100,
 			responseHeaders: {},
 			html: '<html></html>',
-			meta: {
-				lang: null,
+			meta: makeBeholderMeta({
 				title: 'About',
-				description: null,
-				keywords: null,
-				noindex: false,
-				nofollow: false,
-				noarchive: false,
-				canonical: 'https://example.com/about',
-				alternate: null,
-				'og:type': null,
-				'og:title': 'About',
-				'og:site_name': null,
-				'og:description': null,
-				'og:url': null,
-				'og:image': null,
-				'twitter:card': null,
-			},
+				link: { canonical: 'https://example.com/about' },
+				og: { title: 'About' },
+			}),
 			anchorList: [],
 			imageList: [],
 			isSkipped: false,

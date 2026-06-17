@@ -7,16 +7,24 @@ import {
 import {
 	ArchiveManager,
 	checkHeaders,
+	countPagesByJsonLdType,
+	countPagesByTag,
 	findDuplicates,
 	findMismatches,
 	getPageDetail,
 	getPageHtml,
+	getPageJsonLd,
+	getPageJsonLdOverview,
+	getPageTags,
 	getResourceReferrers,
 	getSummary,
+	getTagInventory,
 	getViolations,
 	listImages,
 	listLinks,
 	listPages,
+	listPagesByJsonLdType,
+	listPagesByTag,
 	listResources,
 } from '@nitpicker/query';
 
@@ -260,6 +268,67 @@ export function createServer() {
 					case 'check_headers': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(await checkHeaders(accessor, omit(args, 'archiveId')));
+					}
+					case 'list_pages_by_tag': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await listPagesByTag(accessor, {
+								provider: requireString(args, 'provider'),
+								externalId:
+									typeof args.externalId === 'string' ? args.externalId : undefined,
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
+					}
+					case 'count_pages_by_tag': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await countPagesByTag(accessor, {
+								provider: requireString(args, 'provider'),
+								externalId:
+									typeof args.externalId === 'string' ? args.externalId : undefined,
+							}),
+						);
+					}
+					case 'list_pages_by_jsonld_type': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await listPagesByJsonLdType(accessor, {
+								type: requireString(args, 'type'),
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
+					}
+					case 'count_pages_by_jsonld_type': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await countPagesByJsonLdType(accessor, {
+								type: requireString(args, 'type'),
+							}),
+						);
+					}
+					case 'get_tag_inventory': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(await getTagInventory(accessor));
+					}
+					case 'get_page_jsonld': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						const slim = typeof args.slim === 'boolean' ? args.slim : true;
+						return jsonResult(
+							await getPageJsonLd(accessor, requireString(args, 'url'), slim),
+						);
+					}
+					case 'get_page_jsonld_overview': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await getPageJsonLdOverview(accessor, requireString(args, 'url')),
+						);
+					}
+					case 'get_page_tags': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(await getPageTags(accessor, requireString(args, 'url')));
 					}
 					default: {
 						return {
