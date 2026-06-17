@@ -15,6 +15,58 @@ export type ArchiveMode = 'archive' | 'stub';
 export type { PageSource } from '@nitpicker/crawler';
 
 /**
+ * One row of {@link listIsolatedPages} output — an HTML page that no
+ * other archived page anchors to (excluding archived roots).
+ */
+export interface IsolatedPageEntry {
+	/** Page URL. */
+	url: string;
+	/** `<title>` value, or `null` if absent. */
+	title: string | null;
+	/** HTTP status of the page, or `null` if not yet known. */
+	status: number | null;
+	/** Provenance label — see {@link PageSource}. Shown as a viewer badge. */
+	source: import('@nitpicker/crawler').PageSource;
+}
+
+/**
+ * Pagination options for {@link listIsolatedPages}.
+ */
+export interface ListIsolatedPagesOptions {
+	/** Maximum rows to return. Defaults to 100. */
+	limit?: number;
+	/** Rows to skip from the start. Defaults to 0. */
+	offset?: number;
+}
+
+/**
+ * One row of {@link listUnusedResources} output — an internal sub-resource
+ * with zero referrers.
+ */
+export interface UnusedResourceEntry {
+	/** Resource URL. */
+	url: string;
+	/** HTTP status of the resource, or `null` if not yet known. */
+	status: number | null;
+	/** Content-Type header value, or `null` if unknown. */
+	contentType: string | null;
+	/** Content-Length header value in bytes, or `null` if unknown. */
+	contentLength: number | null;
+	/** Provenance label — see {@link PageSource}. Shown as a viewer badge. */
+	source: import('@nitpicker/crawler').PageSource;
+}
+
+/**
+ * Pagination options for {@link listUnusedResources}.
+ */
+export interface ListUnusedResourcesOptions {
+	/** Maximum rows to return. Defaults to 100. */
+	limit?: number;
+	/** Rows to skip from the start. Defaults to 0. */
+	offset?: number;
+}
+
+/**
  * Options for opening a .nitpicker archive file.
  */
 export interface OpenArchiveOptions {
