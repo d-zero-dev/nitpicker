@@ -17,7 +17,7 @@ const archive = await Archive.create({ filePath: FIXTURE_PATH, cwd: FIXTURE_CWD 
 await archive.setConfig({
 	baseUrl: 'https://example.com',
 	name: 'e2e-fixture',
-	version: '0.4.4',
+	version: '0.10.0',
 	recursive: true,
 	interval: 0,
 	image: true,

@@ -32,7 +32,7 @@ const archive = await Archive.create({
 await archive.setConfig({
 	baseUrl: 'https://example.com',
 	name: STUB_NAME,
-	version: '0.4.4',
+	version: '0.10.0',
 	recursive: true,
 	interval: 0,
 	image: true,
