@@ -55,6 +55,7 @@ packages/
 npx @nitpicker/cli crawl <URL> [<URL>...] [options]     # Web サイトをクロールして .nitpicker ファイルを生成（複数 URL で multi-root）
 npx @nitpicker/cli crawl <archive> --append <URL> [--append <URL>...]  # 既存アーカイブに新しい起点 URL を追加クロール
 npx @nitpicker/cli crawl <archive> --retry-failed [--no-recursive]  # 既存アーカイブの失敗ページ（status -1/NULL・content-type NULL・5xx）を再取得
+npx @nitpicker/cli crawl <archive> --inventory <urls.txt>           # URL リストファイルと既存アーカイブを突合、新規 URL のみ取り込み（孤立ページ・未使用ファイル発見用）
 npx @nitpicker/cli analyze <file> [options]             # .nitpicker ファイルに対して analyze プラグインを実行
 npx @nitpicker/cli report <file> [options]              # .nitpicker ファイルから Google Sheets レポートを生成
 npx @nitpicker/cli pipeline <URL> [options]             # crawl → analyze → report を直列実行
@@ -67,6 +68,8 @@ npx @nitpicker/cli -v | --version                       # `@nitpicker/cli` の�
 
 > **`--append <URL>`**: 位置引数で指定された既存 `.nitpicker` を開き、`--append` の URL を新しい起点として追加クロールする（`--append` は繰り返し指定で複数 URL 可）。新スコープに該当する旧 external ページは internal として再スクレイプされる。失敗時は `<archive>.bak` から自動復元、成功時は `.bak` 削除。`--resume` / `--diff` / `--output` / `--list` / `--list-file` / `--single` との同時指定は不可。
 
+> **`--inventory <urls.txt>`**: 位置引数で指定された既存 `.nitpicker` を開き、URL リストファイル中の **アーカイブにまだ無い URL だけ** を取り込む。HTML は puppeteer でレンダリング + 再帰クロール、非 HTML は HEAD のみで `resources` に直接登録。新規 page/resource には `source` 列に `'inventory-seed'`（リスト直接由来）または `'inventory-discovered'`（seed からのリンク follow / puppeteer サブリソース）がラベリングされる。既存行は touch しない（2 回目以降の inventory pass は非破壊、`inventory-seed` 行が demote されることはない）。スコープ外 URL は警告 skip。失敗時は `<archive>.bak` から自動復元、成功時 `.bak` 削除。`query isolated-pages` / `query unused-resources` の入力データを増やすのが主用途。`--append` / `--retry-failed` / `--resume` / `--diff` / `--output` / `--list` / `--list-file` / `--single` との同時指定は不可。
+>
 > **`--retry-failed`**: 位置引数で指定された既存 `.nitpicker` を開き、前回クロールで失敗したページだけを pending に戻して再取得する。失敗の定義は `status = -1`（ハード失敗 sentinel）/ `status IS NULL` / `contentType IS NULL` / `status` が 5xx（4xx は確定応答なので対象外）。internal/external 両方が対象で、external は scope 判定により metadata-only として再取得される。実装は append と同じ「再オープン+`.bak`+`Crawler.resume()`+`crawling()`」フローだが、新起点を足す代わりに `Archive.resetFailedPages()`（→ `Database.resetFailedPages`）で失敗ページを `scraped=0` に戻し、archived roots を seed にして失敗ページを resumedPending 経由で処理する（external 失敗ページを scope へ誤登録しないため）。**recursive はフラグ値（デフォルト true）が優先され、アーカイブ作成時の recursive 設定は継承しない**（`crawling(list, { recursive })` で明示注入）。それ以外の設定（scope/excludes/userAgent 等）は archived 設定を流用し、明示指定したフラグのみ上書き。`--resume` / `--append` / `--diff` / `--output` / `--list` / `--list-file` / `--single` との同時指定は不可。
 >
 > **Note**: 全ページが失敗していた（reset 後に `scraped=1` が 0 件になる）アーカイブでも取りこぼさないよう、`Crawler.start()` の resume 判定は `#resumedScraped` だけでなく `#resumedPending` も見る。`#resumedScraped` のみを見ると「全ページ失敗 retry」や「1ページもスクレイプせず中断した resume」を fresh crawl と誤判定し、pending を全部捨ててしまう。

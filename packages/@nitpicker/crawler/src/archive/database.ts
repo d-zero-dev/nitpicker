@@ -1691,6 +1691,22 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		const denorm = computePageDenormalized(page.meta);
 		const extras = deriveMetaExtras(page.meta);
 		const now = Date.now();
+		// Source promotion on UPDATE: when an inventory-mode scrape lands on
+		// a row that was created earlier as a placeholder (e.g. an anchor
+		// from a seed page pointed at this URL and `#getIdByUrl` inserted a
+		// row with the DB DEFAULT `'crawled'`), bump the label to the
+		// inventory variant. But never demote an already-inventoried row —
+		// `CASE WHEN source = 'crawled' THEN ? ELSE source END` keeps a
+		// previously labelled `'inventory-seed'` or `'inventory-discovered'`
+		// row intact on a second pass.
+		const sourceUpdate =
+			source === undefined
+				? {}
+				: {
+						source: qb.raw("CASE WHEN source = 'crawled' THEN ? ELSE source END", [
+							source,
+						]),
+					};
 		await qb('pages')
 			.where('id', pageId)
 			.update({
@@ -1730,6 +1746,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				firstCrawledAt: qb.raw('COALESCE(firstCrawledAt, ?)', [now]),
 				lastCrawledAt: now,
 				isSkipped: page.isSkipped,
+				...sourceUpdate,
 			});
 		return pageId;
 	}
