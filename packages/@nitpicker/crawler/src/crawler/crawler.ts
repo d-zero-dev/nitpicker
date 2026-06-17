@@ -27,6 +27,7 @@ import { crawlerLog } from '../debug.js';
 
 import { createChangePhaseHandler } from './create-change-phase-handler.js';
 import { derivePageSource } from './derive-page-source.js';
+import { deriveResourceSource } from './derive-resource-source.js';
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
 import { drainPhaseErrors } from './drain-phase-errors.js';
 import { fetchDestination } from './fetch-destination.js';
@@ -328,13 +329,11 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @param resources - Sub-resource entries captured during the page load
 	 */
 	#handleResources(resources: ResourceEntry[]) {
-		// Sub-resources are never themselves seeds — when inventory mode is
-		// active, every fresh sub-resource is `'inventory-discovered'`.
-		// Outside inventory mode, we emit no source label and the DB DEFAULT
-		// (`'crawled'`) applies. See `derivePageSource` for the page-side
-		// counterpart.
-		const subResourceSource =
-			this.#options.inventoryMode === null ? undefined : 'inventory-discovered';
+		// `deriveResourceSource` encodes the "sub-resources are never seeds"
+		// rule and stays in lockstep with `derivePageSource` if PageSource
+		// gains new variants. Computed once outside the loop because the
+		// inventoryMode reference does not change mid-batch.
+		const subResourceSource = deriveResourceSource(this.#options.inventoryMode);
 		for (const { resource, pageUrl } of resources) {
 			const { isNew } = handleResourceResponse(
 				resource as CrawlerEventTypes['response']['resource'],
@@ -732,7 +731,13 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 								isLowerLayer: false,
 							});
 							this.#linkList.done(url, this.#scope, { page: pageData }, this.#options);
-							void this.emit('externalPage', { result: pageData });
+							void this.emit('externalPage', {
+								result: pageData,
+								source: derivePageSource(
+									this.#options.inventoryMode,
+									url.withoutHashAndAuth,
+								),
+							});
 							log(c.dim('External (skip fetch)'));
 							return;
 						}

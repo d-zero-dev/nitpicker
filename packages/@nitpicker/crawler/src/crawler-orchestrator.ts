@@ -1,6 +1,7 @@
 import type { Config } from './archive/types.js';
 import type { InventoryMode } from './crawler/types.js';
 import type { CrawlEvent } from './types.js';
+import type { PageData } from './utils/types/types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
 import { copyFile, unlink as unlinkFile } from 'node:fs/promises';
@@ -15,6 +16,9 @@ import pkg from '../package.json' with { type: 'json' };
 import Archive from './archive/archive.js';
 import { clearDestinationCache } from './crawler/clear-destination-cache.js';
 import Crawler from './crawler/crawler.js';
+import { fetchDestination } from './crawler/fetch-destination.js';
+import { findScopeEntry } from './crawler/find-scope-entry.js';
+import { isHtmlContentType } from './crawler/is-html-content-type.js';
 import { crawlerLog, log } from './debug.js';
 import { normalizeToArray } from './normalize-to-array.js';
 import { resolveOutputPath } from './resolve-output-path.js';
@@ -533,6 +537,290 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					throw new AggregateError(
 						[error, restoreError],
 						`append failed AND restore from backup failed. Original archive backup is left at: ${backupPath}`,
+					);
+				}
+				throw error;
+			}
+		} catch (error) {
+			await archive.close().catch(() => {});
+			throw error;
+		}
+	}
+
+	/**
+	 * Inventory mode: cross-reference a user-supplied URL list against an
+	 * existing `.nitpicker` archive and import ONLY the URLs that are not yet
+	 * tracked there. Designed to surface "orphan" landing pages that link
+	 * graph traversal could not reach, and "unused" server-side files that
+	 * no crawled page references — both of which the
+	 * `listIsolatedPages` / `listUnusedResources` queries can then list.
+	 *
+	 * Flow:
+	 *
+	 * 1. Open the archive (writer mode, takes the archive lock).
+	 * 2. Reject list-mode archives — they hold metadata-only rows that
+	 *    inventory has no business touching.
+	 * 3. Reject archives with unfinished `pending` URLs — those would inherit
+	 *    the inventory `source` label by mistake. Operator must resume /
+	 *    retry-failed first.
+	 * 4. Parse the URL list. Anything outside the archived scope is warned
+	 *    and skipped (inventory is per-server by design).
+	 * 5. Subtract URLs that already exist in `pages` or `resources` so the
+	 *    second (and N-th) inventory pass is a no-op for known rows — keeps
+	 *    `'inventory-seed'` rows from being silently demoted.
+	 * 6. Make `<archive>.bak`. Anything thrown beyond this point restores
+	 *    from the backup.
+	 * 7. HEAD-probe each novel URL. Responses classified as HTML are queued
+	 *    as Crawler seeds (`'inventory-seed'`); everything else is recorded
+	 *    in `resources` directly as `'inventory-seed'` (no browser launch).
+	 * 8. If any HTML seeds exist, start a Crawler with
+	 *    `inventoryMode = { seedUrls }` so the rendered page and every newly
+	 *    discovered downstream link is labelled correctly. `resume` is fed
+	 *    the existing `scraped` / `resources` sets so links into already-
+	 *    crawled pages stop at the seen-gate without re-rendering.
+	 * 9. Drop the backup on success; restore it on any throw.
+	 *
+	 * Mutually exclusive with `--append` / `--retry-failed` / `--resume` /
+	 * `--diff` / `--list` / `--list-file` / `--single` / `--output` — the
+	 * CLI dispatch enforces this; this method assumes the caller honoured
+	 * the contract.
+	 * @param archivePath - Absolute or cwd-relative path to the `.nitpicker` archive.
+	 * @param inventoryUrls - Pre-read URL list (one URL per element).
+	 * @param options - Optional config overrides — most callers leave this blank and let the archived config flow through.
+	 * @param initializedCallback - Hook invoked once the orchestrator is constructed but before `crawling` runs (the CLI uses it to attach progress reporting).
+	 * @returns The orchestrator instance after a successful inventory pass.
+	 * @throws {Error} When `inventoryUrls` is empty, the archive is in list mode, or pending URLs from a previous crawl remain unresolved.
+	 */
+	static async inventory(
+		archivePath: string,
+		inventoryUrls: string[],
+		options?: Partial<CrawlConfig>,
+		initializedCallback?: CrawlInitializedCallback,
+	) {
+		if (inventoryUrls.length === 0) {
+			throw new Error('inventory: URL list is empty');
+		}
+		const cwd = options?.cwd ?? process.cwd();
+		const absFilePath = path.isAbsolute(archivePath)
+			? archivePath
+			: path.resolve(cwd, archivePath);
+
+		const archive = await Archive.open({ filePath: absFilePath, cwd });
+		try {
+			const archived = await archive.getConfig();
+			if (archived.fromList) {
+				throw new Error(
+					'Cannot run inventory on a list-mode archive: this archive was created with --list/--list-file and contains metadata-only pages. Create a fresh archive instead.',
+				);
+			}
+
+			const { scraped, pending } = await archive.getCrawlingState();
+			if (pending.length > 0) {
+				throw new Error(
+					`inventory: archive has ${pending.length} pending URLs from a previous crawl. Resume or retry-failed first so inventory does not mislabel them as 'inventory-discovered'.`,
+				);
+			}
+
+			// Parse + scope-classify the candidate URLs. sortUrl drops
+			// unparseable strings; findScopeEntry separates in-scope from
+			// out-of-scope.
+			const parsedAll = sortUrl(inventoryUrls, archived);
+			const scopeMap = new Map<string, ExURL[]>();
+			for (const raw of archived.roots) {
+				const parsed = parseUrl(raw, archived);
+				if (!parsed) continue;
+				const existing = scopeMap.get(parsed.hostname) ?? [];
+				scopeMap.set(parsed.hostname, [...existing, parsed]);
+			}
+			const inScope: ExURL[] = [];
+			let outOfScope = 0;
+			for (const url of parsedAll) {
+				if (findScopeEntry(url, scopeMap, archived) === null) {
+					outOfScope++;
+				} else {
+					inScope.push(url);
+				}
+			}
+			if (outOfScope > 0) {
+				log(
+					'[inventory] %d URL(s) skipped (outside archived scope: %O)',
+					outOfScope,
+					archived.roots,
+				);
+			}
+
+			// Drop URLs that are already represented in the archive (either
+			// as pages or resources). Comparison key is `withoutHashAndAuth`
+			// to mirror what `#getIdByUrl` / `insertResource` actually store.
+			// Two independent reads — Promise.all halves the wait on large
+			// archives where each `WHERE url IN (?)` chunk costs real I/O.
+			const candidateUrls = inScope.map((u) => u.withoutHashAndAuth);
+			const [existingPageUrlList, existingResourceUrlList] = await Promise.all([
+				archive.getExistingPageUrls(candidateUrls),
+				archive.getExistingResourceUrls(candidateUrls),
+			]);
+			const existingPageUrls = new Set(existingPageUrlList);
+			const existingResourceUrls = new Set(existingResourceUrlList);
+			const novelUrls = inScope.filter((u) => {
+				const key = u.withoutHashAndAuth;
+				return !existingPageUrls.has(key) && !existingResourceUrls.has(key);
+			});
+			const knownCount = existingPageUrls.size + existingResourceUrls.size;
+			log(
+				'[inventory] %d in-scope, %d already in archive, %d new',
+				inScope.length,
+				knownCount,
+				novelUrls.length,
+			);
+
+			if (novelUrls.length === 0) {
+				// Nothing to do — release the archive cleanly without taking a
+				// backup. The orchestrator returned here is empty; the caller
+				// should only invoke `close` on it.
+				const noopConfig: Config = {
+					...archived,
+					...cleanObject(options),
+				};
+				const orchestrator = new CrawlerOrchestrator(archive, noopConfig);
+				if (initializedCallback) {
+					await initializedCallback(orchestrator, noopConfig);
+				}
+				return orchestrator;
+			}
+
+			const backupPath = absFilePath + '.bak';
+			await copyFile(absFilePath, backupPath);
+
+			try {
+				// HEAD each novel URL once. HTML responses become seeds for
+				// the recursive crawl; everything else is recorded straight
+				// into `resources` so a PDF or stray asset registered on the
+				// server still shows up as "exists but not referenced" in
+				// `listUnusedResources`.
+				//
+				// Probes run concurrently — fetchDestination is a single
+				// HTTP HEAD with no shared mutable state, so N URLs no longer
+				// cost N × HEAD-latency wall-clock. The trade-off is that we
+				// blast the target server with novelUrls.length parallel
+				// requests; for the inventory use case (one-off audit on a
+				// site we control) this is acceptable, and an internal cap
+				// can be added later if it becomes an issue.
+				type HeadResult =
+					| { url: ExURL; head: PageData; error: null }
+					| { url: ExURL; head: null; error: Error };
+				const headResults: HeadResult[] = await Promise.all(
+					novelUrls.map(async (url): Promise<HeadResult> => {
+						try {
+							const head = await fetchDestination({
+								url,
+								isExternal: false,
+								userAgent: archived.userAgent,
+							});
+							return { url, head, error: null };
+						} catch (headError) {
+							const error =
+								headError instanceof Error ? headError : new Error(String(headError));
+							return { url, head: null, error };
+						}
+					}),
+				);
+
+				const htmlSeeds: ExURL[] = [];
+				for (const result of headResults) {
+					const { url, head, error } = result;
+					if (error !== null) {
+						// HEAD failure is recorded as a crawl_errors row so
+						// the URL is visible in `query error-kinds`, but does
+						// NOT abort the whole inventory pass — other novel
+						// URLs may still succeed.
+						await archive.addError({
+							pid: process.pid,
+							isMainProcess: true,
+							url: url.href,
+							isExternal: false,
+							error,
+						});
+						continue;
+					}
+					if (head.contentType == null || isHtmlContentType(head.contentType)) {
+						htmlSeeds.push(url);
+					} else {
+						await archive.setResources(
+							{
+								url,
+								isExternal: false,
+								isError: false,
+								status: head.status,
+								statusText: head.statusText,
+								contentType: head.contentType,
+								contentLength: head.contentLength,
+								compress: false,
+								cdn: false,
+								headers: head.responseHeaders ?? null,
+							},
+							'inventory-seed',
+						);
+					}
+				}
+
+				// Config sent to the user-facing `initializedCallback`
+				// (matches the rest of the orchestrator's public surface —
+				// no inventory bookkeeping leaks out).
+				const baseConfig: Config = {
+					...archived,
+					...cleanObject(options),
+					recursive: true,
+					fromList: false,
+				};
+				const seedSet = new Set(htmlSeeds.map((u) => u.withoutHashAndAuth));
+				// CrawlConfig overlay handed to the orchestrator constructor —
+				// carries the runtime-only `inventoryMode` that drives source
+				// labelling. Not persisted to the archive.
+				const orchestratorOptions: Partial<CrawlConfig> = {
+					...baseConfig,
+					inventoryMode: { seedUrls: seedSet },
+				};
+				if (htmlSeeds.length > 0) {
+					const orchestrator = new CrawlerOrchestrator(archive, orchestratorOptions);
+					const resources = await archive.getResourceUrlList();
+					// Empty pending (we rejected non-empty above) but feed
+					// every already-scraped URL into `seen` so the Crawler's
+					// link enqueueing path drops links that hit a known
+					// page without re-rendering it.
+					orchestrator.#crawler.resume(pending, scraped, resources, 0);
+					if (initializedCallback) {
+						await initializedCallback(orchestrator, baseConfig);
+					}
+					log('Start inventory');
+					log('Archive %s', absFilePath);
+					log(
+						'HTML seeds %O',
+						htmlSeeds.map((u) => u.href),
+					);
+					await orchestrator.crawling(htmlSeeds, { recursive: true });
+					clearDestinationCache();
+					await archive.setUrlOrder();
+					await ignoreEnoent(unlinkFile(backupPath));
+					return orchestrator;
+				}
+
+				// Only non-HTML URLs were imported — nothing left to render,
+				// but still update sort order and finalize.
+				const orchestrator = new CrawlerOrchestrator(archive, orchestratorOptions);
+				if (initializedCallback) {
+					await initializedCallback(orchestrator, baseConfig);
+				}
+				await archive.setUrlOrder();
+				await ignoreEnoent(unlinkFile(backupPath));
+				return orchestrator;
+			} catch (error) {
+				try {
+					await copyFile(backupPath, absFilePath);
+					await ignoreEnoent(unlinkFile(backupPath));
+				} catch (restoreError) {
+					throw new AggregateError(
+						[error, restoreError],
+						`inventory failed AND restore from backup failed. Original archive backup is left at: ${backupPath}`,
 					);
 				}
 				throw error;

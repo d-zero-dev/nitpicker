@@ -138,6 +138,29 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.getCrawlingState();
 	}
 	/**
+	 * Return the subset of `urls` that already exist as `pages.url`. Used by
+	 * `CrawlerOrchestrator.inventory` to filter the user-supplied URL list
+	 * down to "URLs that are NOT yet in the archive" — only those reach the
+	 * HEAD / scrape pipeline. Existing URLs are skipped to keep the second
+	 * (and N-th) `--inventory` pass non-destructive.
+	 * @param urls - Candidate URLs in `withoutHashAndAuth` form.
+	 * @returns URLs already present in `pages`.
+	 */
+	async getExistingPageUrls(urls: readonly string[]): Promise<string[]> {
+		return this.#db.getExistingPageUrls(urls);
+	}
+	/**
+	 * Return the subset of `urls` that already exist as `resources.url`. See
+	 * {@link Archive.getExistingPageUrls} — the resource-side counterpart used
+	 * by inventory mode to skip URLs that are already tracked as
+	 * sub-resources.
+	 * @param urls - Candidate URLs.
+	 * @returns URLs already present in `resources`.
+	 */
+	async getExistingResourceUrls(urls: readonly string[]): Promise<string[]> {
+		return this.#db.getExistingResourceUrls(urls);
+	}
+	/**
 	 * Retrieves a single recorded sub-resource by its URL.
 	 * @param urls - URL candidates to match against the stored resource URL.
 	 * @returns The raw resource row, or `null` if none match.
@@ -145,6 +168,7 @@ export default class Archive extends ArchiveAccessor {
 	async getResourceByUrl(urls: readonly string[]) {
 		return this.#db.getResourceByUrl(urls);
 	}
+
 	/**
 	 * Counts the number of pages already scraped as crawl targets in the archive.
 	 *
@@ -181,6 +205,7 @@ export default class Archive extends ArchiveAccessor {
 		this.#closeOnce = this.#runReleaseHandle();
 		return this.#closeOnce;
 	}
+
 	/**
 	 * Promote previously-external pages that now fall under the (possibly extended)
 	 * scope back to a pending state so that the crawler re-scrapes them as fully

@@ -379,6 +379,58 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		};
 	}
 	/**
+	 * Return the subset of `urls` that already exist in the `pages` table.
+	 * Chunked into batches so SQLite's `IN (?, ?, …)` parameter limit
+	 * (`SQLITE_MAX_VARIABLE_NUMBER`, default 999) cannot be hit even when the
+	 * inventory list contains tens of thousands of URLs.
+	 *
+	 * Read-only — no transaction, no lock contention with the crawler write
+	 * pipeline (callers run this BEFORE the `<archive>.bak` is taken and the
+	 * crawl is started).
+	 * @param urls - URL strings to probe (already in `withoutHashAndAuth` form).
+	 * @returns URLs found in `pages`. Order is not preserved.
+	 */
+	@ErrorEmitter()
+	async getExistingPageUrls(urls: readonly string[]): Promise<string[]> {
+		if (urls.length === 0) {
+			return [];
+		}
+		const found: string[] = [];
+		await eachSplitted([...urls], 500, async (chunk) => {
+			const rows = await this.#instance
+				.select('url')
+				.from<DB_Page>('pages')
+				.whereIn('url', chunk);
+			for (const row of rows) {
+				found.push(row.url);
+			}
+		});
+		return found;
+	}
+	/**
+	 * Return the subset of `urls` that already exist in the `resources` table.
+	 * See {@link Database.getExistingPageUrls} — same chunking strategy.
+	 * @param urls - URL strings to probe.
+	 * @returns URLs found in `resources`.
+	 */
+	@ErrorEmitter()
+	async getExistingResourceUrls(urls: readonly string[]): Promise<string[]> {
+		if (urls.length === 0) {
+			return [];
+		}
+		const found: string[] = [];
+		await eachSplitted([...urls], 500, async (chunk) => {
+			const rows = await this.#instance
+				.select('url')
+				.from<DB_Resource>('resources')
+				.whereIn('url', chunk);
+			for (const row of rows) {
+				found.push(row.url);
+			}
+		});
+		return found;
+	}
+	/**
 	 * Reads the HTML snapshot stored as a zstd-compressed BLOB for the given page.
 	 *
 	 * Joins `page_html_ref` → `page_html_blobs` and decompresses inline. Returns
@@ -407,6 +459,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}
 		return decodeStoredBlob(row.body, row.codec);
 	}
+
 	/**
 	 * Retrieves all `page_jsonld` rows for the given page id, parsed back into
 	 * {@link JsonLdRow} shape (with `parsed` deserialised from its JSON column).
