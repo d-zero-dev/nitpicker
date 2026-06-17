@@ -144,7 +144,14 @@ describe('migrateInfoRoots', () => {
 		await instance.destroy();
 	});
 
-	it('Database.connect で legacy archive を開くと migration が自動実行され getConfig().roots に baseUrl が seed される', async () => {
+	// TODO(post-0.10): clean-break policy now rejects pre-0.10 archives at
+	// `Database.connect`'s assertCompatibleVersion gate, so runtime auto-
+	// migration of legacy info.roots no longer applies — the operator must
+	// run `scripts/migrate-to-0.10.mjs` first. The migrateInfoRoots
+	// function itself is still exercised by the other tests in this file
+	// (driven directly via knex). Re-evaluate whether to delete the
+	// function or keep it for any future intra-0.x bump.
+	it.skip('Database.connect で legacy archive を開くと migration が自動実行され getConfig().roots に baseUrl が seed される', async () => {
 		// 1) legacy schema (roots 列無し) の archive を直接作る
 		const filename = path.resolve(workingDir, 'migrate-via-connect.sqlite');
 		await fs.rm(filename, { force: true });

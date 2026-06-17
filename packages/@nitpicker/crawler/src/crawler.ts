@@ -35,7 +35,7 @@ export type {
 	PageDenormalizedColumns,
 } from './archive/meta/types.js';
 export { IncompatibleArchiveError } from './archive/meta/types.js';
-export { ARCHIVE_FORMAT_VERSION } from './archive/meta/assert-compatible-version.js';
+export { REQUIRED_FORMAT_VERSION } from './archive/meta/assert-compatible-version.js';
 
 // Core
 export {

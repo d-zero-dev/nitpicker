@@ -387,7 +387,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 *
 	 * Tables `page_html_ref` and `page_html_blobs` are created by `initSchema`.
 	 * Older `.nitpicker` archives that predate this migration must be passed
-	 * through `scripts/migrate-html-to-blob.mjs` before they can be read.
+	 * through `scripts/migrate-to-0.10.mjs` before they can be read.
 	 * @param pageId - The database ID of the page.
 	 * @returns The decompressed HTML string, or `null` if no snapshot is stored.
 	 */
@@ -1508,11 +1508,12 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		// They are safe in read-only mode because they don't write to the
 		// user's tmpDir, just configure the libsql connection.
 		await applyConnectionPragmas(this.#instance);
-		// Reject v1 archives before any further work. Runs for both writer
-		// and read-only (stub viewer) connections so old `._nitpicker-*`
-		// stubs surface a clear error instead of dereferencing missing
-		// columns at query time. New archives (no `info` table yet) pass
-		// through; the schema is filled in by `initSchema` below.
+		// Reject pre-0.10 archives before any further work. Runs for both
+		// writer and read-only (stub viewer) connections so old
+		// `._nitpicker-*` stubs surface a clear error instead of
+		// dereferencing missing columns at query time. New archives (no
+		// `info` table yet) pass through; the schema is filled in by
+		// `initSchema` below.
 		await assertCompatibleVersion(this.#instance);
 		if (readOnly) {
 			return;

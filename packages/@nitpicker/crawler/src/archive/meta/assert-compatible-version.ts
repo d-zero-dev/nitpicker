@@ -1,57 +1,76 @@
 import type { Knex } from 'knex';
 
+import { compareSemver } from './compare-semver.js';
 import { IncompatibleArchiveError } from './types.js';
 
 /**
- * Current archive format version. Bumped whenever the on-disk schema changes
- * in a way that would corrupt or mis-read prior archives.
+ * Minimum `info.version` this build accepts. Archives older than this must
+ * be upgraded with `scripts/migrate-to-0.10.mjs` before they can be opened.
  *
  * History:
  *
- * - **v1** — pre-this-PR. Flat OG / Twitter / robots columns derived from
- *   beholder 2.x's flat Meta shape. No `pages.meta_extras`, no `page_tags`,
- *   no `page_jsonld`.
- * - **v2** — this PR. Nested Meta-derived flat columns, `meta_extras` JSON,
- *   `page_tags` / `page_jsonld` tables, denormalised `tag_count` /
- *   `jsonld_count` / `tags_providers_csv` on `pages`.
+ * - **pre-0.10**: HTML snapshots in `snapshot-html.zip` (#75), then
+ *   relocated to `page_html_blobs` (#84); pages table has flat `noindex`,
+ *   `og:type`-style columns derived from beholder 2.x's flat `Meta`.
+ * - **0.10.0**: this build. `page_html_blobs` BLOB storage (#75/#84) +
+ *   nested-`Meta`-derived flat columns, `meta_extras` JSON, `page_tags` /
+ *   `page_jsonld` tables, denormalised aggregates (#85).
  */
-export const ARCHIVE_FORMAT_VERSION = 2;
+export const REQUIRED_FORMAT_VERSION = '0.10.0';
 
 /**
- * Verifies that the archive's on-disk schema is compatible with this build.
+ * Verifies that the archive's on-disk format is compatible with this build.
  *
- * The check uses the presence of `pages.meta_extras` as the v1→v2 marker
- * (rather than an explicit `info.archiveFormatVersion` column) because the
- * v1 schema is already locked in the wild and we cannot retroactively add
- * the marker column. New archives created by v2 always have `meta_extras`,
- * so the check is symmetric.
+ * Compares the archive's `info.version` (a semver string written by
+ * `setConfig` at archive-create time, or by the migration script) against
+ * {@link REQUIRED_FORMAT_VERSION}. Older archives throw
+ * {@link IncompatibleArchiveError} pointing the operator at the migration
+ * script.
  *
- * Called from `Database.#init` after the read-only early-return so that
- * stub viewers (read-only connections to interrupted crawl tmpDirs) also
- * surface the error. New archives where `info` does not yet exist are
- * tolerated — they will be initialised by `initSchema` in the next step.
+ * Called from `Database.#init` for both writer and read-only (stub viewer)
+ * connections so old `._nitpicker-*` stubs surface the error too. New
+ * archives where the `info` table does not yet exist are tolerated —
+ * `initSchema` will fill them in next.
  *
- * Plan: clean-break migration. Existing v1 archives are rejected with a
- * friendly message rather than auto-migrated; `v0.x` policy allows breaking
- * changes (see MEMORY: `v0-x-breaking-changes`).
+ * The check is intentionally version-string-only, not schema-shape-based:
+ * `info.version` is the single declared source of truth, and a v0.10
+ * `migrate-to-0.10.mjs` run bumps it explicitly so the assertion passes
+ * once migration completes.
  * @param instance - The Knex query builder for the archive's libsql connection.
- * @throws {IncompatibleArchiveError} when the archive is v1 (or any pre-v2 format).
+ * @throws {IncompatibleArchiveError} when `info.version` is older than
+ *   {@link REQUIRED_FORMAT_VERSION}, or missing entirely on a non-empty
+ *   archive.
  */
 export async function assertCompatibleVersion(instance: Knex): Promise<void> {
 	const hasInfo = await instance.schema.hasTable('info');
 	if (!hasInfo) {
-		// Brand-new archive — `initSchema` will fill in the v2 layout next.
+		// Brand-new archive — `initSchema` will create `info` and fill in
+		// the version next.
 		return;
 	}
-	const hasPages = await instance.schema.hasTable('pages');
-	if (!hasPages) {
-		// Partial archive (info exists, pages does not). Out of scope; let
-		// downstream code surface the I/O-level error.
+	const hasVersionColumn = await instance.schema.hasColumn('info', 'version');
+	if (!hasVersionColumn) {
+		// Pre-version-tracked archive (very old). The column did not exist
+		// before the version was added to the info schema; reject with
+		// `'unknown'` so the operator runs the migration script.
+		throw new IncompatibleArchiveError('unknown', REQUIRED_FORMAT_VERSION);
+	}
+	const row = await instance
+		.from<{ version: string | null }>('info')
+		.select('version')
+		.first();
+	if (row === undefined) {
+		// `Archive.create()` calls `Database.connect` (which runs
+		// `initSchema` to create the info table) BEFORE `setConfig` writes
+		// the initial row. The transient empty-info state is a normal step
+		// of archive creation, not a corrupted pre-0.10 archive.
 		return;
 	}
-	const hasMetaExtras = await instance.schema.hasColumn('pages', 'meta_extras');
-	if (hasMetaExtras) return;
-	const row = await instance.from<{ version?: string }>('info').select('version').first();
-	const archiveVersion = row?.version ?? 'unknown';
-	throw new IncompatibleArchiveError(archiveVersion, ARCHIVE_FORMAT_VERSION);
+	const archiveVersion = row.version ?? null;
+	if (archiveVersion === null || archiveVersion === '') {
+		throw new IncompatibleArchiveError('unknown', REQUIRED_FORMAT_VERSION);
+	}
+	if (compareSemver(archiveVersion, REQUIRED_FORMAT_VERSION) < 0) {
+		throw new IncompatibleArchiveError(archiveVersion, REQUIRED_FORMAT_VERSION);
+	}
 }

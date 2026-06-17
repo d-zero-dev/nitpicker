@@ -63,10 +63,10 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  *   an empty database, and `journal_mode = WAL` is persistent. Other
  *   per-connection PRAGMAs live in {@link applyConnectionPragmas}.
  *
- * v1 → v2 migration is intentionally absent. `assertCompatibleVersion`
- * (called before `initSchema`) rejects v1 archives with a friendly error;
- * `v0.x` policy allows breaking changes (see MEMORY:
- * `v0-x-breaking-changes`).
+ * Pre-0.10 → 0.10 migration is intentionally absent. `assertCompatibleVersion`
+ * (called before `initSchema`) rejects pre-0.10 archives with a friendly
+ * error pointing the operator at `scripts/migrate-to-0.10.mjs`; `v0.x`
+ * policy allows breaking changes.
  * @param instance - The Knex query builder instance connected to the database.
  */
 export async function initSchema(instance: Knex) {

@@ -222,24 +222,25 @@ export interface TagInventoryEntry {
 
 /**
  * Error thrown by `assert-compatible-version` when the archive's
- * `info.version` is incompatible with the current Nitpicker major version.
+ * `info.version` is older than the format version this build accepts.
  *
  * Catch this at CLI / viewer boundaries to print a friendly message; do not
  * confuse with generic `Error` thrown by `Database.connect` (lockfile / I/O).
  */
 export class IncompatibleArchiveError extends Error {
 	/**
-	 * @param archiveVersion - The `info.version` value read from the archive.
-	 * @param currentMajor - The current Nitpicker major version this build accepts.
+	 * @param archiveVersion - The `info.version` value read from the archive
+	 *   (or `'unknown'` when the column is missing / null).
+	 * @param requiredVersion - The minimum format version this build accepts
+	 *   (semver string, e.g. `'0.10.0'`).
 	 */
 	constructor(
 		readonly archiveVersion: string,
-		readonly currentMajor: number,
+		readonly requiredVersion: string,
 	) {
 		super(
-			`Archive was created by Nitpicker ${archiveVersion}, ` +
-				`which is incompatible with this build (requires major v${currentMajor}). ` +
-				`Re-crawl with the new CLI to upgrade.`,
+			`Archive uses Nitpicker ${archiveVersion}; this build requires ${requiredVersion} or newer. ` +
+				`Run \`node scripts/migrate-to-0.10.mjs <path>\` to produce an upgraded copy next to it.`,
 		);
 		this.name = 'IncompatibleArchiveError';
 	}

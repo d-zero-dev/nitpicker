@@ -11,6 +11,7 @@ import { dbLog, log, saveLog } from './debug.js';
 import { appendText } from './filesystem/append-text.js';
 import { exists } from './filesystem/exists.js';
 import { isDir } from './filesystem/is-dir.js';
+import { peekTarTopDir } from './filesystem/peek-tar-top-dir.js';
 import { remove } from './filesystem/remove.js';
 import { rename } from './filesystem/rename.js';
 import { tar } from './filesystem/tar.js';
@@ -426,13 +427,22 @@ export default class Archive extends ArchiveAccessor {
 			cwd,
 			openPluginData,
 		});
-		const fileName = path.basename(filePath, path.extname(filePath));
-		const tmpDir = path.resolve(cwd, Archive.TMP_DIR_PREFIX + fileName);
+		// Read the tar's actual top-level directory name instead of deriving
+		// it from the outer file's basename. `.nitpicker` files are plain
+		// tar archives and users routinely rename them (`mv X.nitpicker
+		// Y.nitpicker`) — that operation must not break `open`. The inner
+		// directory keeps whatever name `Archive.write()` baked in at write
+		// time, and `tmpDir` mirrors the OUTER basename (so concurrent
+		// crawls on differently-named copies of the same archive don't
+		// collide on the lockfile).
+		const outerBasename = path.basename(filePath, path.extname(filePath));
+		const innerDirName = await peekTarTopDir(filePath);
+		const tmpDir = path.resolve(cwd, Archive.TMP_DIR_PREFIX + outerBasename);
 		const releaseLock = await acquireArchiveLock(tmpDir);
 		try {
 			const openFiles: string[] = [];
 			if (!openPluginData) {
-				const relDdPath = path.join(fileName, Archive.SQLITE_DB_FILE_NAME);
+				const relDdPath = path.join(innerDirName, Archive.SQLITE_DB_FILE_NAME);
 				openFiles.push(relDdPath);
 			}
 			log('Unzip file: %s (%O)', filePath, openFiles);
@@ -440,7 +450,7 @@ export default class Archive extends ArchiveAccessor {
 				cwd,
 				fileList: openFiles.length > 0 ? openFiles : undefined,
 			});
-			const extractedDir = path.resolve(cwd, fileName);
+			const extractedDir = path.resolve(cwd, innerDirName);
 			log('Move directory: %s to %s', extractedDir, tmpDir);
 			await rename(extractedDir, tmpDir, true);
 			return await Archive.#init(filePath, tmpDir, releaseLock);
