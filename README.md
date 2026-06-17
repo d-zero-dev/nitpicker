@@ -69,18 +69,29 @@ CI/CD で外部リンクの一時的障害でビルドを落としたくない�
 
 ### 過去アーカイブの移行
 
-v0.x のフォーマット変更（#75）で HTML スナップショットの格納方式が `snapshot-html.zip` → SQLite BLOB に変わった。挙動は以下の通り。
+v0.10 で archive フォーマットが大きく変わった (#84 で HTML を `snapshot-html.zip`
+から SQLite BLOB に移行、#85 で beholder 3.0.0 の nested Meta を受けて pages テーブルを
+リシェイプ + `page_tags` / `page_jsonld` 追加)。新 CLI は `info.version >= 0.10.0`
+を要求し、それより古い archive は `IncompatibleArchiveError` で拒否する。
 
-- 古い `.nitpicker` ファイルを新 CLI で開くと、`page_html_blobs` / `page_html_ref` テーブルだけは writer 接続時に自動作成される（落ちない）。
-- ただし HTML 本文は移行されないので、viewer / MCP / analyze プラグインは **全ページで HTML が `null` を返す**（API 上「スナップショット未保存」扱い、空文字列ではない）。
-- データを移すには下記スクリプトを **一度だけ** 走らせる必要がある。
+移行は下記スクリプトを **一度だけ** 走らせる:
 
 ```sh
 # リポジトリを clone した状態で
-node scripts/migrate-html-to-blob.mjs <old.nitpicker> [<new.nitpicker>]
+yarn install
+yarn build          # Step C が crawler の compiled lib/ から meta 派生 helper を import するため必須
+node scripts/migrate-to-0.10.mjs <old.nitpicker> [<new.nitpicker>]
 ```
 
-出力先省略時は `<old>.migrated.nitpicker` を入力と同じディレクトリに作る。元ファイルは触らない。10 万ページ規模で実行時間は数時間オーダー（SHA-256 + zstd は CPU bound）。スクリプトは `@nitpicker/cli` の npm パッケージには含まれていない ので、移行が必要な場合は `git clone` してリポジトリルートから実行する。
+スクリプトは入力の状態を検知して必要なステップだけ実行する（HTML→BLOB がまだなら
+それも、メタスキーマだけ古いならそれだけ）。さらに最後のステップとして、保存済み
+HTML BLOB を jsdom でパースして beholder 3.1.0 の `extractMetaFromDocument` に渡し、
+0.10 で追加した meta 列・`meta_extras`・`page_tags`・`page_jsonld` を新規 crawl と
+同等の状態に充填する。最後に `info.version` を `0.10.0` に bump する。出力先を
+省略すると `<old>.0.10.nitpicker` を入力と同じディレクトリに作る (元ファイルは
+触らない)。10 万ページ規模で実行時間は **数時間〜十数時間オーダー** (jsdom + Wappalyzer
+が per-page CPU bound)。スクリプトは `@nitpicker/cli` の npm パッケージには含まれて
+いないので、移行が必要な場合は `git clone` してリポジトリルートから実行する。
 
 ## Analyze
 
