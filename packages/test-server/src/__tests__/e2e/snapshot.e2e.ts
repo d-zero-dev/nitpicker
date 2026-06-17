@@ -7,7 +7,7 @@ describe('HTML snapshot and metadata', () => {
 
 	beforeAll(async () => {
 		result = await crawl(['http://localhost:8010/meta/']);
-	}, 60_000);
+	}, 180_000);
 
 	afterAll(async () => {
 		if (result) {

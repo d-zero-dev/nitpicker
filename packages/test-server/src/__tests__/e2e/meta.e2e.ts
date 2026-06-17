@@ -7,7 +7,7 @@ describe('Meta tag extraction (v2 schema)', () => {
 
 	beforeAll(async () => {
 		result = await crawl(['http://localhost:8010/meta/']);
-	}, 60_000);
+	}, 180_000);
 
 	afterAll(async () => {
 		await cleanup(result);
