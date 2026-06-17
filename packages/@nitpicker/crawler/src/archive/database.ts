@@ -48,6 +48,7 @@ import { migrateCrawlErrors } from './migrate-crawl-errors.js';
 import { migrateHtmlBlobTables } from './migrate-html-blob-tables.js';
 import { migrateInfoRoots } from './migrate-info-roots.js';
 import { migratePageErrors } from './migrate-page-errors.js';
+import { migratePagesResourcesSource } from './migrate-pages-resources-source.js';
 import { redirectTable } from './redirect-table.js';
 import { resolveRedirectChain } from './resolve-redirect-chain.js';
 
@@ -1523,6 +1524,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		await migratePageErrors(this.#instance);
 		await migrateCrawlErrors(this.#instance);
 		await migrateHtmlBlobTables(this.#instance);
+		await migratePagesResourcesSource(this.#instance);
 	}
 	/**
 	 * Replaces the page's JSON-LD / SpeculationRules rows with the freshly
