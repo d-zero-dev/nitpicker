@@ -26,6 +26,7 @@ import pkg from '../../package.json' with { type: 'json' };
 import { crawlerLog } from '../debug.js';
 
 import { createChangePhaseHandler } from './create-change-phase-handler.js';
+import { derivePageSource } from './derive-page-source.js';
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
 import { drainPhaseErrors } from './drain-phase-errors.js';
 import { fetchDestination } from './fetch-destination.js';
@@ -137,6 +138,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			userAgent: options?.userAgent || `Nitpicker/${pkg.version}`,
 			ignoreRobots: options?.ignoreRobots ?? false,
 			lookupResource: options?.lookupResource ?? null,
+			inventoryMode: options?.inventoryMode ?? null,
 		};
 
 		this.#robotsChecker = new RobotsChecker(
@@ -326,6 +328,13 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @param resources - Sub-resource entries captured during the page load
 	 */
 	#handleResources(resources: ResourceEntry[]) {
+		// Sub-resources are never themselves seeds — when inventory mode is
+		// active, every fresh sub-resource is `'inventory-discovered'`.
+		// Outside inventory mode, we emit no source label and the DB DEFAULT
+		// (`'crawled'`) applies. See `derivePageSource` for the page-side
+		// counterpart.
+		const subResourceSource =
+			this.#options.inventoryMode === null ? undefined : 'inventory-discovered';
 		for (const { resource, pageUrl } of resources) {
 			const { isNew } = handleResourceResponse(
 				resource as CrawlerEventTypes['response']['resource'],
@@ -334,6 +343,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			if (isNew) {
 				void this.emit('response', {
 					resource: resource as CrawlerEventTypes['response']['resource'],
+					source: subResourceSource,
 				});
 			}
 			void this.emit('responseReferrers', {
@@ -427,10 +437,22 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						paginationState.lastPushedWasPredicted = false;
 					},
 				);
-				if (result.pageData.isExternal) {
-					void this.emit('externalPage', { result: result.pageData });
-				} else {
-					void this.emit('page', { result: result.pageData });
+				{
+					const pageSource = derivePageSource(
+						this.#options.inventoryMode,
+						result.pageData.url.withoutHashAndAuth,
+					);
+					if (result.pageData.isExternal) {
+						void this.emit('externalPage', {
+							result: result.pageData,
+							source: pageSource,
+						});
+					} else {
+						void this.emit('page', {
+							result: result.pageData,
+							source: pageSource,
+						});
+					}
 				}
 				break;
 			}
@@ -468,10 +490,17 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				);
 				const isExternal = findScopeEntry(url, this.#scope, this.#options) === null;
 				if (pageResult) {
+					const pageSource = derivePageSource(
+						this.#options.inventoryMode,
+						pageResult.url.withoutHashAndAuth,
+					);
 					if (pageResult.isExternal) {
-						void this.emit('externalPage', { result: pageResult });
+						void this.emit('externalPage', {
+							result: pageResult,
+							source: pageSource,
+						});
 					} else {
-						void this.emit('page', { result: pageResult });
+						void this.emit('page', { result: pageResult, source: pageSource });
 					}
 				}
 				void this.emit('error', {

@@ -1,3 +1,4 @@
+import type { PageSource } from '../archive/types.js';
 import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
 import type { ChangePhaseEvent, ScrapeResult } from '@d-zero/beholder';
 import type { ParseURLOptions } from '@d-zero/shared/parse-url';
@@ -85,6 +86,30 @@ export interface CrawlerOptions extends Required<
 	 * resource-reuse optimization. See {@link ResourceLookup}.
 	 */
 	lookupResource: ResourceLookup | null;
+
+	/**
+	 * When non-null, the crawler is running in `--inventory` mode. New page
+	 * rows whose URL matches `seedUrls` are labelled `'inventory-seed'`;
+	 * every other newly-inserted page or sub-resource is labelled
+	 * `'inventory-discovered'`. When `null`, no source label is emitted —
+	 * the DB DEFAULT `'crawled'` applies.
+	 */
+	inventoryMode: InventoryMode | null;
+}
+
+/**
+ * Inventory-mode runtime configuration. Passed from
+ * `CrawlerOrchestrator.inventory` into the Crawler so the emit pipeline can
+ * label new rows with the correct {@link PageSource}.
+ */
+export interface InventoryMode {
+	/**
+	 * URLs explicitly listed in the user-supplied URL file, keyed by their
+	 * `withoutHashAndAuth` form (so credentials in the URL don't break the
+	 * match). Membership decides `inventory-seed` vs `inventory-discovered`
+	 * for HTML pages.
+	 */
+	seedUrls: ReadonlySet<string>;
 }
 
 /**
@@ -147,6 +172,12 @@ export interface CrawlerEventTypes {
 	page: {
 		/** The scraped page data including HTML, metadata, anchors, and images. */
 		result: PageData;
+		/**
+		 * Inventory provenance to write to `pages.source` when this row is new.
+		 * `undefined` means the DB default (`'crawled'`) applies, which is the
+		 * common case outside `crawl --inventory`. See {@link PageSource}.
+		 */
+		source?: PageSource;
 	};
 
 	/**
@@ -155,6 +186,8 @@ export interface CrawlerEventTypes {
 	externalPage: {
 		/** The scraped page data for the external page. */
 		result: PageData;
+		/** Inventory provenance for new rows — see {@link CrawlerEventTypes.page.source}. */
+		source?: PageSource;
 	};
 
 	/**
@@ -176,6 +209,14 @@ export interface CrawlerEventTypes {
 	response: {
 		/** The captured resource data including URL, status, content type, and headers. */
 		resource: Resource;
+		/**
+		 * Inventory provenance to write to `resources.source` when this row is new.
+		 * Sub-resources discovered while puppeteer renders an inventory-seed
+		 * page are always `'inventory-discovered'` (a sub-resource is never
+		 * itself a seed). `undefined` means the DB default (`'crawled'`)
+		 * applies. See {@link PageSource}.
+		 */
+		source?: PageSource;
 	};
 
 	/**

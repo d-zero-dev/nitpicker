@@ -1,4 +1,5 @@
 import type { Config } from './archive/types.js';
+import type { InventoryMode } from './crawler/types.js';
 import type { CrawlEvent } from './types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
@@ -80,6 +81,13 @@ interface CrawlConfig extends Config {
 
 	/** Whether to ignore robots.txt restrictions. */
 	ignoreRobots: boolean;
+
+	/**
+	 * Inventory-mode runtime configuration (see {@link InventoryMode}). Set
+	 * by {@link CrawlerOrchestrator.inventory}; the default crawl path leaves
+	 * this `null` so new rows are labelled `'crawled'` by the DB DEFAULT.
+	 */
+	inventoryMode: InventoryMode | null;
 }
 
 /**
@@ -180,6 +188,11 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				);
 				return row ? resourceRowToLookupResult(row) : null;
 			},
+			// Inventory mode is opted into by `CrawlerOrchestrator.inventory`
+			// (see T3); the default crawl path stays in normal mode so new
+			// rows continue to land in pages/resources with the DB DEFAULT
+			// `'crawled'` provenance label.
+			inventoryMode: options?.inventoryMode ?? null,
 		});
 	}
 
@@ -226,15 +239,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				void this.emit('error', error);
 			});
 
-			this.#crawler.on('page', ({ result }) => {
+			this.#crawler.on('page', ({ result, source }) => {
 				writeQueue
-					.enqueue(() => this.#archive.setPage(result))
+					.enqueue(() => this.#archive.setPage(result, source))
 					.catch((error) => reject(error));
 			});
 
-			this.#crawler.on('externalPage', ({ result }) => {
+			this.#crawler.on('externalPage', ({ result, source }) => {
 				writeQueue
-					.enqueue(() => this.#archive.setExternalPage(result))
+					.enqueue(() => this.#archive.setExternalPage(result, source))
 					.catch((error) => reject(error));
 			});
 
@@ -257,9 +270,9 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				void this.emit('redirect', { result });
 			});
 
-			this.#crawler.on('response', ({ resource }) => {
+			this.#crawler.on('response', ({ resource, source }) => {
 				writeQueue
-					.enqueue(() => this.#archive.setResources(resource))
+					.enqueue(() => this.#archive.setResources(resource, source))
 					.catch((error) => reject(error));
 			});
 

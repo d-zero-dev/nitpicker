@@ -9,6 +9,7 @@ import type {
 	DB_Resource,
 	DatabaseEvent,
 	PageFilter,
+	PageSource,
 } from './types.js';
 import type { PageData, Resource } from '../utils/types/types.js';
 import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
@@ -897,11 +898,17 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	/**
 	 * Inserts a sub-resource into the `resources` table.
 	 * Ignores duplicate URLs (uses `ON CONFLICT IGNORE`).
+	 *
+	 * The `source` provenance label is written ONLY on insert; an
+	 * `ON CONFLICT IGNORE` collision leaves an existing row's source untouched
+	 * (this is what makes a second `crawl --inventory` non-destructive — see
+	 * the inventory plan).
 	 * @param resource - The resource data to insert.
+	 * @param source - Provenance label for new rows. `undefined` leaves the DB DEFAULT (`'crawled'`).
 	 */
 	@ErrorEmitter()
 	@retry(retrySetting)
-	async insertResource(resource: Resource) {
+	async insertResource(resource: Resource, source?: PageSource) {
 		await this.#instance
 			.from<DB_Resource>('resources')
 			.insert({
@@ -916,6 +923,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				compress: resource.compress || 0,
 				cdn: resource.cdn || 0,
 				responseHeaders: JSON.stringify(resource.headers),
+				...(source === undefined ? {} : { source }),
 			})
 			.onConflict('url')
 			.ignore();
@@ -1320,6 +1328,10 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 *   metadata-only scrapes never carry HTML and must not perturb an already
 	 *   stored body.
 	 * @param isTarget - Whether this page is a crawl target.
+	 * @param source - Provenance label written ONLY when the row is freshly
+	 *   inserted. Existing rows keep their original `source` (this is why a
+	 *   second `crawl --inventory` does not "demote" an `'inventory-seed'` row
+	 *   that was discovered earlier).
 	 * @returns The database `pageId` of the inserted/updated row.
 	 */
 	@ErrorEmitter()
@@ -1328,6 +1340,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		page: PageData,
 		writeHtml: boolean,
 		isTarget: boolean,
+		source?: PageSource,
 	): Promise<number> {
 		const { destUrl, sources } = resolveRedirectChain(
 			page.url.withoutHashAndAuth,
@@ -1348,6 +1361,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				},
 				isTarget,
 				trx,
+				source,
 			);
 
 			// Wappalyzer tag detection is HTML-body independent (relies on
@@ -1461,11 +1475,23 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	/**
 	 * Returns the database ID for a URL, creating a new page row if needed.
 	 * Uses `ON CONFLICT IGNORE` to handle race conditions in concurrent inserts.
+	 *
+	 * `source` is written ONLY on the INSERT path — when the row already
+	 * exists, we never reach the INSERT and the existing row's `source`
+	 * stays untouched. This is what keeps a second `crawl --inventory` from
+	 * "demoting" a page that was first labelled `'inventory-seed'` back to
+	 * `'inventory-discovered'` on later passes.
 	 * @param url
 	 * @param isExternal
 	 * @param trx
+	 * @param source - Provenance label to put on the newly-inserted row. `undefined` lets the DB DEFAULT (`'crawled'`) apply.
 	 */
-	async #getIdByUrl(url: string, isExternal?: 0 | 1, trx?: Knex.Transaction) {
+	async #getIdByUrl(
+		url: string,
+		isExternal?: 0 | 1,
+		trx?: Knex.Transaction,
+		source?: PageSource,
+	) {
 		const qb = trx ?? this.#instance;
 		const [record] = await qb.select('id').from<DB_Page>('pages').where('url', url);
 		// Must use `?` because it may be `undefined`
@@ -1479,6 +1505,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				scraped: 0,
 				isTarget: 0,
 				...(isExternal != null && { isExternal }),
+				...(source === undefined ? {} : { source }),
 			})
 			.onConflict('url')
 			.ignore();
@@ -1585,13 +1612,28 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 	/**
 	 * Upserts page data into the `pages` table (inserts if new, updates if existing).
+	 *
+	 * `source` is intentionally NOT in the UPDATE clause — provenance is set
+	 * once at INSERT time inside `#getIdByUrl`, and existing rows keep
+	 * whatever label they were first inserted with.
 	 * @param page
 	 * @param isTarget
 	 * @param trx
+	 * @param source - Inventory provenance for the INSERT path. Ignored on UPDATE.
 	 */
-	async #insertPage(page: PageData, isTarget: boolean, trx?: Knex.Transaction) {
+	async #insertPage(
+		page: PageData,
+		isTarget: boolean,
+		trx?: Knex.Transaction,
+		source?: PageSource,
+	) {
 		const qb = trx ?? this.#instance;
-		const pageId = await this.#getIdByUrl(page.url.withoutHashAndAuth, undefined, trx);
+		const pageId = await this.#getIdByUrl(
+			page.url.withoutHashAndAuth,
+			undefined,
+			trx,
+			source,
+		);
 		const flat = deriveFlatFromMeta(page.meta, page.url.href);
 		const denorm = computePageDenormalized(page.meta);
 		const extras = deriveMetaExtras(page.meta);

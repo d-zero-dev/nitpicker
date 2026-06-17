@@ -1,4 +1,4 @@
-import type { Config } from './types.js';
+import type { Config, PageSource } from './types.js';
 import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
 import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 
@@ -220,10 +220,11 @@ export default class Archive extends ArchiveAccessor {
 	 * an HTML snapshot. External-page rows carry only metadata (status, title,
 	 * content-type), never a rendered body.
 	 * @param pageInfo - The page data to store.
+	 * @param source - Provenance label for new rows. `undefined` leaves the DB DEFAULT (`'crawled'`).
 	 */
-	async setExternalPage(pageInfo: PageData) {
+	async setExternalPage(pageInfo: PageData, source?: PageSource) {
 		dbLog('Set external page: %s', pageInfo.url.href);
-		await this.#db.updatePage(pageInfo, false, false);
+		await this.#db.updatePage(pageInfo, false, false, source);
 	}
 	/**
 	 * Stores a crawled page's data in the archive database, persisting the
@@ -231,11 +232,12 @@ export default class Archive extends ArchiveAccessor {
 	 * transaction. Storage is content-addressable: identical bodies across
 	 * pages share a single `page_html_blobs` row.
 	 * @param pageInfo - The page data to store.
+	 * @param source - Provenance label for new rows. `undefined` leaves the DB DEFAULT (`'crawled'`).
 	 * @returns The database ID of the stored page.
 	 */
-	async setPage(pageInfo: PageData): Promise<number> {
+	async setPage(pageInfo: PageData, source?: PageSource): Promise<number> {
 		dbLog('Set page: %s', pageInfo.url.href);
-		return await this.#db.updatePage(pageInfo, true, pageInfo.isTarget);
+		return await this.#db.updatePage(pageInfo, true, pageInfo.isTarget, source);
 	}
 	/**
 	 * Records a redirect edge without re-storing the destination's content.
@@ -253,10 +255,11 @@ export default class Archive extends ArchiveAccessor {
 	/**
 	 * Stores a sub-resource (CSS, JS, image, etc.) in the archive database.
 	 * @param resource - The resource data to store.
+	 * @param source - Provenance label for new rows. `undefined` leaves the DB DEFAULT (`'crawled'`).
 	 */
-	async setResources(resource: Resource) {
+	async setResources(resource: Resource, source?: PageSource) {
 		dbLog('Set resource: %s', resource.url.href);
-		await this.#db.insertResource(resource);
+		await this.#db.insertResource(resource, source);
 	}
 	/**
 	 * Stores the referrer relationship between a resource and the page that references it.
