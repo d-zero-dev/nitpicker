@@ -129,7 +129,7 @@ export function createServer() {
 		},
 	});
 	const server = new Server(
-		{ name: 'nitpicker', version: '0.4.4' },
+		{ name: 'nitpicker', version: '0.10.0' },
 		{ capabilities: { tools: {} } },
 	);
 

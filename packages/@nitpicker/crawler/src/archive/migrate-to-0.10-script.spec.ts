@@ -8,13 +8,14 @@ import * as tar from 'tar';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import Archive from './archive.js';
+import { peekTarTopDir } from './filesystem/peek-tar-top-dir.js';
 import { LibsqlDialect } from './libsql-dialect.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
 const workingDir = path.resolve(__dirname, '__test_fixtures_migrate_script__');
 const repoRoot = path.resolve(__dirname, '..', '..', '..', '..', '..');
-const migrateScript = path.resolve(repoRoot, 'scripts', 'migrate-html-to-blob.mjs');
+const migrateScript = path.resolve(repoRoot, 'scripts', 'migrate-to-0.10.mjs');
 
 /**
  * Builds a minimal pre-#75 `.nitpicker` archive on disk so the migration
@@ -178,15 +179,15 @@ async function buildLegacyArchive(
 }
 
 /**
- * Integration smoke test for `scripts/migrate-html-to-blob.mjs`. The
- * script is a multi-hour CPU-bound one-shot, so a full end-to-end
- * fidelity test against 100k+ pages is impractical for CI. This spec
- * pins the user-visible contract: round-trip a tiny legacy archive
- * through the script and confirm the migrated output is readable by the
- * post-#75 Archive API, that within-archive body dedup fires, and that
- * missing snapshot entries do not abort the run.
+ * Integration smoke test for `scripts/migrate-to-0.10.mjs`. The script is
+ * a multi-hour CPU-bound one-shot, so a full end-to-end fidelity test
+ * against 100k+ pages is impractical for CI. This spec pins the user-
+ * visible contract: round-trip a tiny pre-0.10 archive through the script
+ * and confirm the migrated output is readable by the post-0.10 Archive
+ * API, that within-archive body dedup fires, and that missing snapshot
+ * entries do not abort the run.
  */
-describe('scripts/migrate-html-to-blob.mjs (integration)', () => {
+describe('scripts/migrate-to-0.10.mjs (integration)', () => {
 	beforeEach(() => {
 		mkdirSync(workingDir, { recursive: true });
 	});
@@ -194,19 +195,12 @@ describe('scripts/migrate-html-to-blob.mjs (integration)', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	// TODO(v2): this migration test builds a legacy v1 archive via raw SQL
-	// (different schema than v2), then runs `migrate-html-to-blob.mjs` against
-	// it. The script targets v2 schema; assertCompatibleVersion now rejects
-	// the legacy fixture before migration can run. Either the fixture builder
-	// needs updating to write the v2 pages-table shape, or the script needs a
-	// separate v1→v2 path. Skipped here to keep the regression suite green
-	// during the v2 cutover.
-	it.skip(
-		'Round-trips a legacy archive: bodies are readable, identical bodies dedup, missing entries skipped',
+	it(
+		'Round-trips a pre-0.10 archive: bodies are readable, identical bodies dedup, missing entries skipped',
 		{ timeout: 30_000 },
 		async () => {
 			const legacyPath = path.resolve(workingDir, 'legacy.nitpicker');
-			const migratedPath = path.resolve(workingDir, 'legacy.migrated.nitpicker');
+			const migratedPath = path.resolve(workingDir, 'legacy.0.10.nitpicker');
 			const bodyA = '<html><body>shared body</body></html>';
 			const bodyB = '<html><body>distinct body</body></html>';
 
@@ -225,8 +219,11 @@ describe('scripts/migrate-html-to-blob.mjs (integration)', () => {
 			const inspectDir = path.resolve(workingDir, 'inspect');
 			mkdirSync(inspectDir, { recursive: true });
 			await tar.x({ file: migratedPath, cwd: inspectDir });
-			const migratedBase = path.basename(migratedPath, path.extname(migratedPath));
-			const innerDbPath = path.resolve(inspectDir, migratedBase, 'db.sqlite');
+			// Peek the tar's actual inner-dir name — the migrate script
+			// preserves the legacy archive's `legacy/` name regardless of
+			// the output basename (`legacy.0.10`).
+			const innerDirName = await peekTarTopDir(migratedPath);
+			const innerDbPath = path.resolve(inspectDir, innerDirName, 'db.sqlite');
 			expect(existsSync(innerDbPath)).toBe(true);
 
 			const inspectKnex = knex({
@@ -311,6 +308,186 @@ describe('scripts/migrate-html-to-blob.mjs (integration)', () => {
 			// Output file from the failed re-run is cleaned up so the
 			// next invocation sees a clean slate.
 			expect(existsSync(reRunOutput)).toBe(false);
+		},
+	);
+
+	it(
+		'Step B reshapes the pages table to the 0.10 schema and bumps info.version',
+		{ timeout: 30_000 },
+		async () => {
+			// Asserts the schema-level contract of Step B (meta schema
+			// upgrade) on the migrated `db.sqlite`. The pre-0.10 fixture
+			// builder seeds the legacy noindex/alternate columns and lacks
+			// meta_extras / page_tags / page_jsonld — exactly the inputs
+			// Step B is designed to fix. We inspect the inner db.sqlite
+			// directly rather than opening with Archive.open to keep the
+			// assertion targeted at migration output (orthogonal to read-
+			// path regressions).
+			const legacyPath = path.resolve(workingDir, 'step-b.nitpicker');
+			const migratedPath = path.resolve(workingDir, 'step-b.0.10.nitpicker');
+			await buildLegacyArchive(legacyPath, '<p>a</p>', '<p>b</p>');
+
+			execFileSync('node', [migrateScript, legacyPath, migratedPath], {
+				cwd: repoRoot,
+				stdio: 'pipe',
+			});
+
+			const inspectDir = path.resolve(workingDir, 'step-b-inspect');
+			mkdirSync(inspectDir, { recursive: true });
+			await tar.x({ file: migratedPath, cwd: inspectDir });
+			// Use the tar's actual top-dir name — the migrate script
+			// preserves the legacy archive's inner-dir name regardless of
+			// the output basename.
+			const innerDirName = await peekTarTopDir(migratedPath);
+			const innerDbPath = path.resolve(inspectDir, innerDirName, 'db.sqlite');
+
+			const inspectKnex = knex({
+				client: LibsqlDialect,
+				connection: { filename: innerDbPath },
+				useNullAsDefault: true,
+			});
+			try {
+				const columns: { name: string }[] = await inspectKnex.raw(
+					"PRAGMA table_info('pages')",
+				);
+				const columnNames = new Set(columns.map((c) => c.name));
+
+				// New 0.10 columns must be present.
+				expect(columnNames.has('meta_extras')).toBe(true);
+				expect(columnNames.has('robots_raw')).toBe(true);
+				expect(columnNames.has('tag_count')).toBe(true);
+				expect(columnNames.has('jsonld_count')).toBe(true);
+
+				// Legacy column renames must have taken effect.
+				expect(columnNames.has('robots_noindex')).toBe(true);
+				expect(columnNames.has('robots_nofollow')).toBe(true);
+				expect(columnNames.has('robots_noarchive')).toBe(true);
+				expect(columnNames.has('noindex')).toBe(false);
+				expect(columnNames.has('nofollow')).toBe(false);
+				expect(columnNames.has('noarchive')).toBe(false);
+
+				// `alternate` was dropped in 0.10.
+				expect(columnNames.has('alternate')).toBe(false);
+
+				// New empty tables must exist.
+				const tagsTable = await inspectKnex.schema.hasTable('page_tags');
+				const jsonldTable = await inspectKnex.schema.hasTable('page_jsonld');
+				expect(tagsTable).toBe(true);
+				expect(jsonldTable).toBe(true);
+
+				// info.version was bumped — the post-migration archive must
+				// satisfy assertCompatibleVersion's `>= 0.10.0` check.
+				const infoRow: { version: string } | undefined = await inspectKnex
+					.from('info')
+					.select('version')
+					.first();
+				expect(infoRow?.version).toBe('0.10.0');
+			} finally {
+				await inspectKnex.destroy();
+			}
+		},
+	);
+
+	it(
+		'Step C backfills flat meta columns, meta_extras, and page_jsonld from HTML BLOB',
+		{ timeout: 60_000 },
+		async () => {
+			// Asserts that Step C's HTML → jsdom → extractMetaFromDocument
+			// pipeline actually populates the 0.10 columns it shapes in
+			// Step B. The fixture HTML carries lang, OG, robots, and an
+			// embedded JSON-LD entry; after migration the inspected db
+			// should reflect each.
+			const legacyPath = path.resolve(workingDir, 'step-c.nitpicker');
+			const migratedPath = path.resolve(workingDir, 'step-c.0.10.nitpicker');
+			const richHtml = `<!DOCTYPE html>
+<html lang="ja-JP">
+<head>
+<meta charset="utf-8">
+<title>Sample Page</title>
+<meta name="description" content="Sample description for Step C">
+<meta name="robots" content="noindex, nofollow">
+<meta property="og:title" content="OG Title">
+<meta property="og:type" content="article">
+<meta property="og:url" content="http://example.com/a">
+<link rel="canonical" href="http://example.com/a">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Test"}</script>
+</head>
+<body><h1>Sample</h1></body>
+</html>`;
+			const plainHtml = '<html><body>plain</body></html>';
+
+			await buildLegacyArchive(legacyPath, richHtml, plainHtml);
+
+			execFileSync('node', [migrateScript, legacyPath, migratedPath], {
+				cwd: repoRoot,
+				stdio: 'pipe',
+			});
+
+			const inspectDir = path.resolve(workingDir, 'step-c-inspect');
+			mkdirSync(inspectDir, { recursive: true });
+			await tar.x({ file: migratedPath, cwd: inspectDir });
+			const innerDirName = await peekTarTopDir(migratedPath);
+			const innerDbPath = path.resolve(inspectDir, innerDirName, 'db.sqlite');
+
+			const inspectKnex = knex({
+				client: LibsqlDialect,
+				connection: { filename: innerDbPath },
+				useNullAsDefault: true,
+			});
+			try {
+				type PageRow = {
+					url: string;
+					lang: string | null;
+					title: string | null;
+					og_title: string | null;
+					og_type: string | null;
+					og_url: string | null;
+					canonical: string | null;
+					robots_noindex: number | null;
+					robots_nofollow: number | null;
+					meta_extras: string | null;
+					jsonld_count: number | null;
+				};
+				const rich: PageRow | undefined = await inspectKnex
+					.from<PageRow>('pages')
+					.where('url', 'http://example.com/a')
+					.first();
+				expect(rich?.lang).toBe('ja-JP');
+				expect(rich?.title).toBe('Sample Page');
+				expect(rich?.og_title).toBe('OG Title');
+				expect(rich?.og_type).toBe('article');
+				expect(rich?.canonical).toBe('http://example.com/a');
+				expect(rich?.robots_noindex).toBe(1);
+				expect(rich?.robots_nofollow).toBe(1);
+				expect(rich?.jsonld_count).toBe(1);
+				expect(typeof rich?.meta_extras).toBe('string');
+				const extras = JSON.parse(rich?.meta_extras ?? '{}');
+				expect(extras.og?.title).toBe('OG Title');
+
+				// JSON-LD row landed in page_jsonld with the expected @type.
+				const jsonldRows: { type: string | null; kind: string }[] = await inspectKnex
+					.from('page_jsonld')
+					.join('pages', 'pages.id', '=', 'page_jsonld.pageId')
+					.where('pages.url', 'http://example.com/a')
+					.select('page_jsonld.type as type', 'page_jsonld.kind as kind');
+				expect(jsonldRows).toHaveLength(1);
+				expect(jsonldRows[0]?.type).toBe('Article');
+				expect(jsonldRows[0]?.kind).toBe('ld+json');
+
+				// Plain body has no meta beyond what jsdom infers as defaults.
+				// `title` defaults to empty string after jsdom serialisation;
+				// deriveFlatFromMeta normalises empty → null. The fixture
+				// uses `plainHtml` for the /c page (bodies /a and /b share
+				// richHtml for dedup observability in the round-trip test).
+				const plain: PageRow | undefined = await inspectKnex
+					.from<PageRow>('pages')
+					.where('url', 'http://example.com/c')
+					.first();
+				expect(plain?.og_title).toBeNull();
+				expect(plain?.canonical).toBeNull();
+			} finally {
+				await inspectKnex.destroy();
+			}
 		},
 	);
 });

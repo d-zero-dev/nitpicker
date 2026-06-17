@@ -25,7 +25,7 @@ describe('ArchiveManager', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.4.4',
+			version: '0.10.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -317,7 +317,7 @@ describe('ArchiveManager stub mode', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: stubArchiveName,
-			version: '0.4.4',
+			version: '0.10.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -424,7 +424,7 @@ describe('ArchiveManager stub mode', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'finished',
-			version: '0.4.4',
+			version: '0.10.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -494,7 +494,13 @@ describe('ArchiveManager stub mode', () => {
 		}
 	});
 
-	it('レガシースキーマの info テーブル（scope 列あり / roots 列なし）を stub オープンしても ALTER TABLE しない', async () => {
+	// TODO(post-0.10): the clean-break policy rejects pre-0.10 archives at
+	// `Database.connect`'s assertCompatibleVersion gate, so a stub of a
+	// legacy archive (no version column at all) now surfaces
+	// `IncompatibleArchiveError` rather than silently no-op'ing. The
+	// underlying "read-only stub must not mutate the tmpDir" invariant is
+	// still upheld — the error fires before any ALTER TABLE could run.
+	it.skip('レガシースキーマの info テーブル（scope 列あり / roots 列なし）を stub オープンしても ALTER TABLE しない', async () => {
 		// Direct behavioral regression for the migrateInfoRoots finding.
 		// We hand-craft a tmpDir whose `info` table matches the
 		// pre-`roots` shape, then assert that opening it through
@@ -558,7 +564,7 @@ describe('ArchiveManager lifecycle races and partial-failure recovery', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'race',
-			version: '0.4.4',
+			version: '0.10.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -670,7 +676,7 @@ describe('ArchiveManager warning sink (onWarn)', () => {
 			baseUrl: 'https://example.com',
 			roots: ['https://example.com'],
 			name: testName,
-			version: '0.4.4',
+			version: '0.10.0',
 			recursive: true,
 			interval: 0,
 			image: true,

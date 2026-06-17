@@ -17,7 +17,7 @@ function runReportParse(argv: string[]) {
 	try {
 		return parseCli({
 			name: 'nitpicker',
-			version: '0.0.0-test',
+			version: '0.10.0',
 			commands: { report: reportDef },
 			onError: () => true,
 		});
@@ -37,7 +37,7 @@ function runPipelineParse(argv: string[]) {
 	try {
 		return parseCli({
 			name: 'nitpicker',
-			version: '0.0.0-test',
+			version: '0.10.0',
 			commands: { pipeline: pipelineDef },
 			onError: () => true,
 		});

@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -152,6 +153,38 @@ describe('write: archive layout', () => {
 			filePath: archiveFilePath,
 			cwd: workingDir,
 		});
+		try {
+			await expect(reopened.getHtmlOfPage(pageId)).resolves.toBe(html);
+		} finally {
+			await reopened.close();
+		}
+	});
+});
+
+describe('open: rename-safe', () => {
+	const original = path.resolve(workingDir, 'rename-original.nitpicker');
+	const renamed = path.resolve(workingDir, 'rename-after.nitpicker');
+
+	afterAll(async () => {
+		await remove(original).catch(() => {});
+		await remove(renamed).catch(() => {});
+	});
+
+	it('Opens an archive whose `.nitpicker` file has been renamed after creation', async () => {
+		// Reproduces the user-reported breakage: a `.nitpicker` is created
+		// with one basename, then renamed by the user (`mv original.nitpicker
+		// renamed.nitpicker`). The inner tar layout still names its top-level
+		// directory after the original basename, so any code path that
+		// reconstructs the inner-dir name from the outer file basename would
+		// fail to find `db.sqlite` and throw.
+		const html = '<html><body>renamed-archive</body></html>';
+		const archive = await Archive.create({ filePath: original, cwd: workingDir });
+		const pageId = await archive.setPage(makePageData('/renamed', html));
+		await archive.close();
+
+		await fs.rename(original, renamed);
+
+		const reopened = await Archive.open({ filePath: renamed, cwd: workingDir });
 		try {
 			await expect(reopened.getHtmlOfPage(pageId)).resolves.toBe(html);
 		} finally {

@@ -599,13 +599,13 @@ JSON-LD / SpeculationRules は `page_jsonld` テーブル、Wappalyzer 検出は
 
 ## 6. Archive DB スキーマ
 
-### pages テーブル (v2)
+### pages テーブル (0.10)
 
 beholder 3.0.0 アップグレードで pages のメタカラムは ~47 列の flat 化された beholder Meta フィールド + `meta_extras` JSON 1 列に再構築された。代表的なカラムを抜粋（網羅的な定義は `crawler/src/archive/init-schema.ts` と `crawler/src/archive/meta/types.ts` の `FlatPageMetaColumns` を正とする）:
 
 | カラム群                                                                                                                                                                                    | 型                     | 説明                                                                                                                                                                                                              |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id / url / redirectDestId / scraped / isTarget / isExternal                                                                                                                                 | …                      | 基本属性（v1 から踏襲）                                                                                                                                                                                           |
+| id / url / redirectDestId / scraped / isTarget / isExternal                                                                                                                                 | …                      | 基本属性（pre-0.10 から踏襲）                                                                                                                                                                                     |
 | status / statusText / contentType / contentLength / responseHeaders                                                                                                                         | …                      | HTTP 応答メタ                                                                                                                                                                                                     |
 | lang / dir / charset / baseHref / viewport_raw / themeColor                                                                                                                                 | TEXT                   | Document basics                                                                                                                                                                                                   |
 | applicationName / author / generator / publisher                                                                                                                                            | TEXT                   | 編集者情報                                                                                                                                                                                                        |
@@ -622,9 +622,9 @@ beholder 3.0.0 アップグレードで pages のメタカラムは ~47 列の f
 
 **追加 INDEX**: `pages(robots_noindex)`, `pages(og_type)`。`lang` はモノリンガルサイトで cardinality 低く無効なので skip。
 
-**v1 → v2 互換性**: クリーンブレイク。`archive/meta/assert-compatible-version.ts` が `pages.meta_extras` の有無で世代判定し、v1 アーカイブを `Database.connect` で開いた時点で `IncompatibleArchiveError` を throw。`v0.x` 系の breaking 容認方針（MEMORY: `v0-x-breaking-changes`）に基づく。
+**pre-0.10 互換性**: clean-break。`archive/meta/assert-compatible-version.ts` が `info.version` を読んで `REQUIRED_FORMAT_VERSION = "0.10.0"` と semver 比較し、古い archive を `Database.connect` で開いた時点で `IncompatibleArchiveError` を throw する。`v0.x` 系の breaking 容認方針（MEMORY: `v0-x-breaking-changes`）に基づく。移行は `scripts/migrate-to-0.10.mjs`。
 
-### page_tags テーブル (v2 新規)
+### page_tags テーブル (0.10 新規)
 
 Wappalyzer 検出を構造化。1 行 = 1 (provider × external-id) タプル × 1 ページ。compound INDEX `(provider, externalId)` / `(provider, pageId)` を Phase 1 で先取り済み — 「同一 ID 別ページ検出」「provider 絞り込みリスト」が SQL レベルで stream 化される。
 
@@ -638,7 +638,7 @@ Wappalyzer 検出を構造化。1 行 = 1 (provider × external-id) タプル ×
 | version / confidence | TEXT / INTEGER          | Wappalyzer 由来                                                       |
 | categories / sources | JSON                    | full list & detection sources (script-src / inline / iframe-src / 等) |
 
-### page_jsonld テーブル (v2 新規)
+### page_jsonld テーブル (0.10 新規)
 
 `<script type="application/ld+json">` および `<script type="speculationrules">` を 1 行 1 エントリで保存。compound INDEX `(type, pageId)` を Phase 1 で先取り。
 

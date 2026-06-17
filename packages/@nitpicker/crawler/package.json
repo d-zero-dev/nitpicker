@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/crawler",
-	"version": "0.9.0",
+	"version": "0.10.0",
 	"description": "Web crawler engine with headless browser rendering and archive storage",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
@@ -27,7 +27,7 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@d-zero/beholder": "3.0.0",
+		"@d-zero/beholder": "3.1.0",
 		"@d-zero/dealer": "1.9.0",
 		"@d-zero/fs": "0.2.2",
 		"@d-zero/shared": "0.20.1",

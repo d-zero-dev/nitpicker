@@ -15,7 +15,7 @@ function runParse(argv: string[]) {
 	try {
 		return parseCli({
 			name: 'nitpicker',
-			version: '0.0.0-test',
+			version: '0.10.0',
 			commands: { crawl: commandDef },
 			onError: () => true,
 		});

@@ -10,7 +10,7 @@ import type { Knex } from 'knex';
  * raising raw "no such table" errors against legacy archives. It does NOT
  * touch the `pages.html` column or backfill the new tables from the
  * archive's `snapshot-html.zip`: that data migration belongs to the
- * `scripts/migrate-html-to-blob.mjs` one-shot, which can run whenever the
+ * `scripts/migrate-to-0.10.mjs` one-shot, which can run whenever the
  * user is ready to commit the (multi-hour) CPU cost.
  *
  * Outcome on a legacy archive that has NOT yet been data-migrated:
@@ -52,6 +52,6 @@ export async function migrateHtmlBlobTables(instance: Knex): Promise<void> {
 	// eslint-disable-next-line no-console
 	console.error(
 		'[migrate] page_html_blobs / page_html_ref tables created. ' +
-			'HTML snapshots are empty until `node scripts/migrate-html-to-blob.mjs` is run on the original archive.',
+			'HTML snapshots are empty until `node scripts/migrate-to-0.10.mjs` is run on the original archive.',
 	);
 }
