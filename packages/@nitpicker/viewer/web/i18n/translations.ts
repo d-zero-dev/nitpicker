@@ -32,6 +32,8 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			graph: 'Graph',
 			pageLinks: 'Page Links',
 			errors: 'Errors',
+			isolatedPages: 'Isolated Pages',
+			unusedResources: 'Unused Resources',
 		},
 		common: {
 			loading: 'Loading…',
@@ -231,6 +233,30 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				hosts: 'Hosts',
 				sampleUrls: 'Sample URLs',
 			},
+			isolatedPages: {
+				title: 'Isolated Pages',
+				description:
+					'Internal HTML pages no other page links to (archived roots excluded). Combine with `crawl --inventory` to surface pages that only exist on the server.',
+				total: '{total} isolated pages',
+				empty:
+					'No isolated pages — every internal HTML page has at least one inbound link.',
+				url: 'URL',
+				pageTitle: 'Title',
+				status: 'Status',
+				source: 'Source',
+			},
+			unusedResources: {
+				title: 'Unused Resources',
+				description:
+					'Internal sub-resources no archived page references — candidates for deletion. The source badge marks rows registered via `crawl --inventory`.',
+				total: '{total} unused resources',
+				empty: 'No unused resources — every internal resource has at least one referrer.',
+				url: 'URL',
+				status: 'Status',
+				contentType: 'Content-Type',
+				contentLength: 'Content-Length',
+				source: 'Source',
+			},
 		},
 	},
 	ja: {
@@ -258,6 +284,8 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			graph: 'グラフ',
 			pageLinks: 'ページリンク',
 			errors: 'エラー',
+			isolatedPages: '孤立ページ',
+			unusedResources: '未使用リソース',
 		},
 		common: {
 			loading: '読み込み中…',
@@ -456,6 +484,31 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				empty: 'クロールエラーは記録されていません。',
 				hosts: 'ホスト',
 				sampleUrls: 'サンプル URL',
+			},
+			isolatedPages: {
+				title: '孤立ページ',
+				description:
+					'他のページからリンクされていない内部 HTML ページ（クロール起点は除外）。`crawl --inventory` と組み合わせて、サーバー上にしか存在しないページを浮かび上がらせます。',
+				total: '孤立ページ {total} 件',
+				empty:
+					'孤立ページなし — すべての内部 HTML ページに少なくとも 1 つの被リンクがあります。',
+				url: 'URL',
+				pageTitle: 'タイトル',
+				status: 'ステータス',
+				source: 'ソース',
+			},
+			unusedResources: {
+				title: '未使用リソース',
+				description:
+					'どのページからも参照されていない内部サブリソース — 削除候補。ソースバッジは `crawl --inventory` 経由で登録された行を示します。',
+				total: '未使用リソース {total} 件',
+				empty:
+					'未使用リソースなし — すべての内部リソースが少なくとも 1 つのページから参照されています。',
+				url: 'URL',
+				status: 'ステータス',
+				contentType: 'Content-Type',
+				contentLength: 'Content-Length',
+				source: 'ソース',
 			},
 		},
 	},

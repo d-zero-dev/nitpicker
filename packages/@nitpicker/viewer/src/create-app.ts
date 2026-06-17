@@ -9,6 +9,7 @@ import { registerErrorKindsRoute } from './routes/register-error-kinds-route.js'
 import { registerGraphRoute } from './routes/register-graph-route.js';
 import { registerHeadersRoute } from './routes/register-headers-route.js';
 import { registerImagesRoute } from './routes/register-images-route.js';
+import { registerIsolatedPagesRoute } from './routes/register-isolated-pages-route.js';
 import { registerLinksRoute } from './routes/register-links-route.js';
 import { registerMismatchesRoute } from './routes/register-mismatches-route.js';
 import { registerPageDetailRoute } from './routes/register-page-detail-route.js';
@@ -18,6 +19,7 @@ import { registerPagesRoute } from './routes/register-pages-route.js';
 import { registerResourceReferrersRoute } from './routes/register-resource-referrers-route.js';
 import { registerResourcesRoute } from './routes/register-resources-route.js';
 import { registerSummaryRoute } from './routes/register-summary-route.js';
+import { registerUnusedResourcesRoute } from './routes/register-unused-resources-route.js';
 import { registerViolationsRoute } from './routes/register-violations-route.js';
 import { sanitizeErrorMessage } from './sanitize-error-message.js';
 
@@ -50,6 +52,8 @@ export function createApp(options: CreateAppOptions): Hono {
 	registerPageLinksRoute(app, context);
 	registerArchiveInfoRoute(app, context);
 	registerErrorKindsRoute(app, context);
+	registerIsolatedPagesRoute(app, context);
+	registerUnusedResourcesRoute(app, context);
 
 	app.onError((error, c) => {
 		const raw = error instanceof Error ? error.message : String(error);
