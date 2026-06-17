@@ -27,11 +27,13 @@ import {
 	getTagInventory,
 	getViolations,
 	listImages,
+	listIsolatedPages,
 	listLinks,
 	listPages,
 	listPagesByJsonLdType,
 	listPagesByTag,
 	listResources,
+	listUnusedResources,
 } from '@nitpicker/query';
 
 import { mapFlagsToQueryOptions } from './map-flags-to-query-options.js';
@@ -163,6 +165,14 @@ export async function dispatchQuery(
 		case 'page-jsonld-overview': {
 			const { url } = options as { url: string };
 			return getPageJsonLdOverview(accessor, url);
+		}
+		case 'isolated-pages': {
+			const { limit, offset } = options as { limit?: number; offset?: number };
+			return listIsolatedPages(accessor, { limit, offset });
+		}
+		case 'unused-resources': {
+			const { limit, offset } = options as { limit?: number; offset?: number };
+			return listUnusedResources(accessor, { limit, offset });
 		}
 		case 'page-tags': {
 			const { url } = options as { url: string };

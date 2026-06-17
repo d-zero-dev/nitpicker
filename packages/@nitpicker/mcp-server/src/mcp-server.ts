@@ -21,11 +21,13 @@ import {
 	getTagInventory,
 	getViolations,
 	listImages,
+	listIsolatedPages,
 	listLinks,
 	listPages,
 	listPagesByJsonLdType,
 	listPagesByTag,
 	listResources,
+	listUnusedResources,
 } from '@nitpicker/query';
 
 import { toolDefinitions } from './tool-definitions.js';
@@ -268,6 +270,24 @@ export function createServer() {
 					case 'check_headers': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(await checkHeaders(accessor, omit(args, 'archiveId')));
+					}
+					case 'list_isolated_pages': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await listIsolatedPages(accessor, {
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
+					}
+					case 'list_unused_resources': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await listUnusedResources(accessor, {
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
 					}
 					case 'list_pages_by_tag': {
 						const accessor = manager.get(requireString(args, 'archiveId'));

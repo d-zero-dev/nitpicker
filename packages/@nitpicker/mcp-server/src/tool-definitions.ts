@@ -509,4 +509,38 @@ export const toolDefinitions: Tool[] = [
 			required: ['archiveId'],
 		},
 	},
+	{
+		name: 'list_isolated_pages',
+		description:
+			'List internal HTML pages that no other archived page anchors to (excluding archived roots). These are the "orphan landing pages" the recursive crawl could not reach via the link graph. Combine with `crawl --inventory` to surface pages that only exist on the server but are unreachable from the site map. Each row carries a `source` badge (`crawled` / `inventory-seed` / `inventory-discovered`) indicating how the page entered the archive.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				limit: { type: 'number', description: 'Max results (default: 100)' },
+				offset: { type: 'number', description: 'Results to skip (default: 0)' },
+			},
+			required: ['archiveId'],
+		},
+	},
+	{
+		name: 'list_unused_resources',
+		description:
+			'List internal sub-resources that no archived page references — candidates for deletion from the server. Each row carries a `source` badge so callers can distinguish files registered via `crawl --inventory` (no page ever loaded them) from files that were once referenced but lost their last referrer.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				limit: { type: 'number', description: 'Max results (default: 100)' },
+				offset: { type: 'number', description: 'Results to skip (default: 0)' },
+			},
+			required: ['archiveId'],
+		},
+	},
 ];

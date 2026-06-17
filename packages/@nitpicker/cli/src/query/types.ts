@@ -22,7 +22,9 @@ export type QuerySubCommand =
 	| 'page-tags'
 	| 'count-pages-by-tag'
 	| 'count-pages-by-jsonld-type'
-	| 'page-jsonld-overview';
+	| 'page-jsonld-overview'
+	| 'isolated-pages'
+	| 'unused-resources';
 
 /**
  * List of all valid query sub-command names.
@@ -49,4 +51,6 @@ export const VALID_SUB_COMMANDS = [
 	'count-pages-by-tag',
 	'count-pages-by-jsonld-type',
 	'page-jsonld-overview',
+	'isolated-pages',
+	'unused-resources',
 ] as const satisfies readonly QuerySubCommand[];
