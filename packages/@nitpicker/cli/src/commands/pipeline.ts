@@ -239,6 +239,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			resume: undefined,
 			append: [],
 			retryFailed: false,
+			inventory: undefined,
 			diff: undefined,
 		});
 	} catch (error) {

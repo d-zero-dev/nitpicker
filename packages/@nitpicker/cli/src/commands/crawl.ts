@@ -37,6 +37,10 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Retry crawl: re-fetch failed pages (missing status/content-type or a 5xx status) in the positional archive; use --no-recursive to skip re-crawling newly found URLs',
 		},
+		inventory: {
+			type: 'string',
+			desc: 'Inventory crawl: take a server-side URL list file and import only URLs that the positional archive does not yet track. HTML responses are rendered + recursively crawled; non-HTML URLs are HEAD-probed and stored directly. Use with `query isolated-pages` / `unused-resources` to surface orphan pages / unused files.',
+		},
 		interval: {
 			type: 'number',
 			shortFlag: 'I',
@@ -337,6 +341,57 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
 }
 
 /**
+ * Inventory-mode dispatch: read the URL list file, hand it to
+ * {@link CrawlerOrchestrator.inventory}, and surface the result through
+ * the same `run` progress reporter as the other crawl modes.
+ *
+ * The URL list file is parsed by `@d-zero/readtext/list`, which strips
+ * blank lines and `#` comments — same conventions as `--list-file`.
+ * @param archivePath - Path to the existing `.nitpicker` archive (positional).
+ * @param listFile - Path to the URL list file passed via `--inventory`.
+ * @param flags - Parsed CLI flags from the `crawl` command.
+ */
+async function inventoryCrawl(archivePath: string, listFile: string, flags: CrawlFlags) {
+	const list = await readList(path.resolve(process.cwd(), listFile));
+	if (list.length === 0) {
+		throw new Error(`No URLs found in inventory file: ${listFile}`);
+	}
+	validateUrls(list);
+	const errStack: (CrawlerError | Error)[] = [];
+
+	const orchestrator = await CrawlerOrchestrator.inventory(
+		archivePath,
+		list,
+		{
+			...mapFlagsToCrawlConfig(flags),
+			list: false,
+		},
+		(orchestrator, config) => {
+			run(
+				`${archivePath} (inventory: ${listFile})`,
+				orchestrator,
+				config,
+				flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
+			).catch((error) => errStack.push(error));
+		},
+	);
+
+	try {
+		await orchestrator.write();
+	} finally {
+		await orchestrator.archive.close();
+		orchestrator.garbageCollect();
+	}
+
+	if (errStack.length > 0) {
+		const error = new CrawlAggregateError(errStack);
+		// eslint-disable-next-line no-console
+		console.error(`\n${error.message}`);
+		throw error;
+	}
+}
+
+/**
  * Re-fetch failed pages in an existing `.nitpicker` archive and re-crawl.
  *
  * Opens the archive at the positional argument, resets every page whose
@@ -420,6 +475,7 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 	log('Options: %O', flags);
 
 	const hasAppendFlag = !!flags.append && flags.append.length > 0;
+	const hasInventoryFlag = !!flags.inventory;
 
 	if (flags.diff) {
 		if (hasAppendFlag) {
@@ -427,6 +483,9 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		}
 		if (flags.retryFailed) {
 			throw new Error('--diff cannot be combined with --retry-failed.');
+		}
+		if (hasInventoryFlag) {
+			throw new Error('--diff cannot be combined with --inventory.');
 		}
 		if (args.length !== 2) {
 			throw new Error('--diff takes exactly two file paths to compare');
@@ -463,7 +522,51 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 					'--resume and --retry-failed cannot be used together. Pick the existing-archive mode that fits your task.',
 				);
 			}
+			if (hasInventoryFlag) {
+				throw new Error(
+					'--resume and --inventory cannot be used together. Pick the existing-archive mode that fits your task.',
+				);
+			}
 			await resumeCrawl(flags.resume, flags);
+			return;
+		}
+
+		if (hasInventoryFlag) {
+			if (hasAppendFlag) {
+				throw new Error(
+					'--inventory and --append cannot be used together. Pick the existing-archive mode that fits your task.',
+				);
+			}
+			if (flags.retryFailed) {
+				throw new Error(
+					'--inventory and --retry-failed cannot be used together. Pick the existing-archive mode that fits your task.',
+				);
+			}
+			if (flags.output) {
+				throw new Error(
+					'--output flag is not supported with --inventory. The archive path is the positional argument being inventoried.',
+				);
+			}
+			if (flags.listFile) {
+				throw new Error('--inventory cannot be combined with --list-file.');
+			}
+			if (hasListFlag) {
+				throw new Error('--inventory cannot be combined with --list.');
+			}
+			if (flags.single) {
+				throw new Error('--inventory cannot be combined with --single.');
+			}
+			if (args.length === 0) {
+				throw new Error(
+					'--inventory requires the archive path as the positional argument (usage: crawl <archive> --inventory <urls.txt>).',
+				);
+			}
+			if (args.length > 1) {
+				throw new Error(
+					'--inventory takes exactly one positional argument (the archive path).',
+				);
+			}
+			await inventoryCrawl(args[0]!, flags.inventory!, flags);
 			return;
 		}
 
