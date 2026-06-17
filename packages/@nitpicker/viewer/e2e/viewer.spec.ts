@@ -26,7 +26,9 @@ test.describe('Nitpicker Viewer', () => {
 
 	test('サイドバーから各ビューへ遷移できる', async ({ page }) => {
 		await page.goto('/');
-		await page.getByRole('link', { name: 'Resources' }).click();
+		// `exact: true` so "Resources" does not also match the "Unused
+		// Resources" nav entry (substring match would resolve to 2 links).
+		await page.getByRole('link', { name: 'Resources', exact: true }).click();
 		await expect(
 			page.getByRole('heading', { name: 'Resources', level: 1 }),
 		).toBeVisible();
