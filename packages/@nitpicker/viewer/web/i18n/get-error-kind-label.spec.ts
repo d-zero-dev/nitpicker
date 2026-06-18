@@ -32,10 +32,13 @@ describe('getErrorKindLabel', () => {
 	it('covers every kind in the ErrorKind union', () => {
 		const kinds: ErrorKind[] = [
 			'dns',
+			'dns-transient',
 			'connection-refused',
 			'connection-reset',
 			'connection-timeout',
 			'tls',
+			'local-network',
+			'parse-error',
 			'timeout',
 			'protocol',
 			'unknown',
