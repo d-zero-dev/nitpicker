@@ -1209,6 +1209,36 @@ CrawlAggregateError
 
 `--strict` フラグを指定すると、外部リンクエラーのみの場合でも exit 1（致命的）として扱う。CI/CD パイプラインで外部リンクの一時的な障害を許容したい場合は `--strict` を省略する。
 
+### DNS-burned host cache
+
+「死んだホスト」（DNS で引けないドメイン）の HEAD pre-flight を 1 セッションを越えて省略するための in-memory + crawl_errors-backed キャッシュ。`getaddrinfo ENOTFOUND` のような確定的失敗で、同 host 配下の URL が retry 3 回 × interval を独立に消費するのを止める。
+
+**真理ソース**: `classifyErrorKind`（`@nitpicker/crawler`）。crawler パッケージへ物理移動し、`@nitpicker/query` は re-export 専用。crawler 自身がキャッシュの mark / preload 判定で必要としており、`query → crawler` の依存方向はあっても `crawler → query` は禁止だから（query が `ArchiveAccessor` 等を import する既存方向と矛盾しない）。
+
+**Session learning（同一セッション内の学習）**: `Crawler.#sendHeadRequest` の `onGiveUp` callback で `classifyErrorKind(error.message) === 'dns'` のとき host を `dnsBurnedHostCache: Map<string, ErrorKind>` に投入する。`onWait`（retry 待機開始）ではなく `onGiveUp`（全 retry 使い果たし）で mark する設計は、一過性の `EAI_AGAIN` を巻き込んで host を不当に burn しないため。最初の URL は retry を消化するが、その後のキュー pull は短絡される。
+
+**Session preload（既存 archive からの seeding）**: `append` / `inventory` / `retryFailed` / `resume` で archive を再オープンする 4 経路で `Archive.listDnsBurnedHostCandidates()` を呼び、`crawl_errors` 履歴のうち DNS only でかつ復活シグナル（pages / resources の 2xx-3xx、`pages.lastCrawledAt > crawl_errors.createdAt`）が無い host を cache に投入する。これにより `--retry-failed` の 2 回目以降は 1 URL の retry すら消費せず即 skip。
+
+**Short-circuit と自己増殖の遮断**: cache hit 時は `PreloadShortCircuitError` を throw する。orchestrator の `crawler.on('error', …)` ハンドラが `error.error instanceof PreloadShortCircuitError` を見て `addError` を skip するので、`crawl_errors` への同一行重複挿入が起こらない（さもなくば `--retry-failed` を回すたびに DNS 行が膨らみ、次回 preload の候補が雪だるま式に増えてしまう）。`pages.status = -1` は通常の scrape-error 経路で set されるので、見た目は現状維持。
+
+**生存期間**: 1 crawl セッション。既存の `clearDestinationCache()` と同じ 4 箇所（orchestrator の crawl/append/inventory/retryFailed 終了直後）で `clearDnsBurnedHostCache()` を呼び、Map と short-circuit カウンタを両方リセットする。crawl 完了時には `[preload] Short-circuited N URL(s) on DNS-burned hosts` を stderr に出力。
+
+**復活時のリセット手段**: 専用 CLI は設けない。DNS が復活した host を強制的に再評価したいときは `crawl_errors` から該当 message を持つ行を SQL で削除すれば、次回 preload で除外される。`migration` を伴わないので legacy archive は空配列を返し、何も壊れない。
+
+### Summary view の status=-1 errorKind 細分化
+
+`viewer` の Summary 画面では、`pages.status = -1`（ハード失敗 sentinel）の bar 行直下に DNS / connection-timeout / unknown 等の **errorKind 別 sub-rows** を入れ子描画する。WHY:
+
+- `-1` のままだと「何が原因で取得できなかったか」が読み取れない。Errors view を開けば分かるが、Summary で原因の分布が見えると最初のスクリーンで判断材料が揃う。
+- 分類は **読み取り時** に行う（`classifyErrorKind`）。既存 archive を再 crawl せずに細分化が表示されるので、`StatusCount.errorKindBreakdown` は optional フィールドで additive な拡張。
+
+実装上の核：
+
+- `getSummary` の `Promise.all` に「`pages WHERE status=-1` の id 取得 → `resolveFailedPageMessages` で page_errors → crawl_errors → error.log の 3 段 fallback でメッセージ解決 → `classifyErrorKind` で kind 別 count」を **並列クエリの一段** として追加（メタ / コンテンツタイプ集計と同時実行で waterfall を作らない）。
+- 不変条件: `sum(errorKindBreakdown[*].count) === parent count`。メッセージ解決失敗の pageId は `'unknown'` に倒すことでこれを保つ。
+- viewer 側は `summary-view.tsx` の `-1` 行直下に `ul` 要素を入れ子描画。bar 幅の分母は **親 `-1` の count**（全体ではない）— `-1` の内訳構成比として読ませるため。
+- kind ラベルは `views.errorKind.{kind}` の i18n key を `getErrorKindLabel` 経由で参照。Errors view 側も同じ helper を使うので、両ビューで kind 表記がブレない。
+
 ---
 
 ## 12. E2E テスト構成
