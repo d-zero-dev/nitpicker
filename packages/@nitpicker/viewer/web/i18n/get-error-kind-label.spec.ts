@@ -39,6 +39,7 @@ describe('getErrorKindLabel', () => {
 			'tls',
 			'local-network',
 			'parse-error',
+			'client-blocked',
 			'timeout',
 			'protocol',
 			'unknown',
