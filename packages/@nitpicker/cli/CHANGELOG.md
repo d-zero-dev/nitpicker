@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.11.0](https://github.com/d-zero-dev/nitpicker/compare/v0.9.0...v0.11.0) (2026-06-18)
+
+### Features
+
+- **cli,mcp:** expose isolated-pages / unused-resources via query CLI and MCP tools ([e0c0c5c](https://github.com/d-zero-dev/nitpicker/commit/e0c0c5c6180afb4b5f7f720c8df4553408c42f30))
+- **cli:** accept a stub directory as `viewer` positional arg ([cbab270](https://github.com/d-zero-dev/nitpicker/commit/cbab270a735a253a9d2a317838ceb9e4d9e50872))
+- **cli:** add --contentTypeCategory flag to pages sub-command ([27f10cb](https://github.com/d-zero-dev/nitpicker/commit/27f10cb2c99ef6f0cd571c7d7da7f8548ec2deae))
+- **cli:** add --retry-failed flag to the crawl command ([89485d4](https://github.com/d-zero-dev/nitpicker/commit/89485d424aa3a83caa0d9be3eb21f67b60052bed))
+- **cli:** add the error-kinds query sub-command ([7657d57](https://github.com/d-zero-dev/nitpicker/commit/7657d571a9cbf84b5e7c3fc4c792444515d68cae))
+- **cli:** add viewer subcommand ([c386949](https://github.com/d-zero-dev/nitpicker/commit/c3869499804be1817543170db0fee5a2015353f5))
+- **cli:** wire up crawl --inventory flag and dispatch ([61b9054](https://github.com/d-zero-dev/nitpicker/commit/61b905484dbf3e016c472dc6b246e28b6da5d0c1))
+
 # [0.9.0](https://github.com/d-zero-dev/nitpicker/compare/v0.8.0...v0.9.0) (2026-05-29)
 
 ### Features

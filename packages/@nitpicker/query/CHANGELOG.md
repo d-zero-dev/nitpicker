@@ -3,6 +3,24 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.11.0](https://github.com/d-zero-dev/nitpicker/compare/v0.9.0...v0.11.0) (2026-06-18)
+
+### Bug Fixes
+
+- **query:** exclude non-HTML resources (not errored pages) from page list and summary ([354e0b7](https://github.com/d-zero-dev/nitpicker/commit/354e0b7fd861f7e44e80cf0f1da15a70b68ac15d)), closes [#72](https://github.com/d-zero-dev/nitpicker/issues/72)
+- **query:** resolve inbound links and referrer counts through redirects ([f39b4b4](https://github.com/d-zero-dev/nitpicker/commit/f39b4b4c5ca66bc64640a34cbeb503a82b3d4ac0)), closes [#71](https://github.com/d-zero-dev/nitpicker/issues/71)
+
+### Features
+
+- **crawler:** add source provenance column to pages and resources ([1a78fe1](https://github.com/d-zero-dev/nitpicker/commit/1a78fe12eb786c8f7292bcd8bf5e423aee046178))
+- **crawler:** thread inventoryMode source label through Crawler → Archive → Database ([109d346](https://github.com/d-zero-dev/nitpicker/commit/109d346503af5ada413bb3fd5a3f5e4a3bacaf36))
+- **query:** accept stub directories in ArchiveManager.open ([d51b605](https://github.com/d-zero-dev/nitpicker/commit/d51b60517e9aa83108fd3142e800521b4aa8ca5d))
+- **query:** add content-type classification engine ([529df8c](https://github.com/d-zero-dev/nitpicker/commit/529df8c4daddb1ceb7f8a685662da26999b22af9))
+- **query:** add link-graph and per-page-links queries ([4b8fb69](https://github.com/d-zero-dev/nitpicker/commit/4b8fb69fbf7d891c4c6551fabfd387a949376313))
+- **query:** add listIsolatedPages / listUnusedResources ([5a467d3](https://github.com/d-zero-dev/nitpicker/commit/5a467d304bd0f9764d88c7c08b287434c3d0f25c))
+- **query:** classify crawl failures by cause with getErrorKinds + error-kinds query ([a7601ad](https://github.com/d-zero-dev/nitpicker/commit/a7601adec4213dcb84deef9773d519ed1114ce3e))
+- **query:** expand ContentTypeCategory and add content-row totals to summary ([bac1aed](https://github.com/d-zero-dev/nitpicker/commit/bac1aedefd830ad24f620e3d38fba38add218917))
+
 # [0.9.0](https://github.com/d-zero-dev/nitpicker/compare/v0.8.0...v0.9.0) (2026-05-29)
 
 **Note:** Version bump only for package @nitpicker/query

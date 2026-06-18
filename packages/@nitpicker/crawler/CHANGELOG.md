@@ -3,6 +3,63 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.11.0](https://github.com/d-zero-dev/nitpicker/compare/v0.9.0...v0.11.0) (2026-06-18)
+
+### Bug Fixes
+
+- **crawler:** clear a page's anchors and images before re-insert on re-scrape ([42b3c9a](https://github.com/d-zero-dev/nitpicker/commit/42b3c9a1bd3617e0ad58ae8f27c940965008da83)), closes [#70](https://github.com/d-zero-dev/nitpicker/issues/70)
+- **crawler:** force-kill chromium when browser.close() hangs after session loss ([bef710c](https://github.com/d-zero-dev/nitpicker/commit/bef710c071fdaf940f6ed319f9ea1c57c9306d25))
+- **crawler:** merge zipped snapshots on write so appended pages keep their HTML ([3e29c17](https://github.com/d-zero-dev/nitpicker/commit/3e29c17d02e1066862ec334fb1cdb412f9864791))
+- **crawler:** normalize resources content-type too ([d7d5dc3](https://github.com/d-zero-dev/nitpicker/commit/d7d5dc36b7d52664addb6b626910e7e530e95df3)), closes [#72](https://github.com/d-zero-dev/nitpicker/issues/72)
+- **crawler:** normalize stored content-type so page-ness predicates agree ([31d034d](https://github.com/d-zero-dev/nitpicker/commit/31d034d84147304b3d367ada3bf29c1768442b05)), closes [#72](https://github.com/d-zero-dev/nitpicker/issues/72)
+- **crawler:** preserve anchors on empty re-scrape and clear redirect-source rows ([4a1176b](https://github.com/d-zero-dev/nitpicker/commit/4a1176bb7e93b2b204194fc22c99edb91dfab885)), closes [#70](https://github.com/d-zero-dev/nitpicker/issues/70)
+- **crawler:** reject the crawl when persisting a crawl error fails ([b4ee344](https://github.com/d-zero-dev/nitpicker/commit/b4ee3440bd2d8a8a51caaf85688306fe825cc2f5))
+- **crawler:** resolve referrers through redirects and expose through/throughId ([0aa00ec](https://github.com/d-zero-dev/nitpicker/commit/0aa00ec84778cff48cc8977a42995c71ccc53f20))
+- **crawler:** stop treating non-HTML resources as HTML pages ([a2aa506](https://github.com/d-zero-dev/nitpicker/commit/a2aa5069d924d887dfc48cb2021a88a28cf3504f)), closes [#72](https://github.com/d-zero-dev/nitpicker/issues/72)
+- **crawler:** unify HTML detection and widen the responseHeaders type ([0d74049](https://github.com/d-zero-dev/nitpicker/commit/0d7404987e67af58e8e2f4808e16bf3deadd89e1))
+- **crawler:** widen Spawner stdio to SpawnOptions so CI build passes ([0d0d337](https://github.com/d-zero-dev/nitpicker/commit/0d0d337381706cdb695eafbac7d6874a17d37975))
+
+- feat(crawler)!: gate archive opens by info.version and survive .nitpicker renames ([7989e09](https://github.com/d-zero-dev/nitpicker/commit/7989e09f7174b153549fe109dd1d546bcdaee16e))
+- feat(crawler)!: store HTML snapshots as zstd BLOBs inside SQLite ([1da73c3](https://github.com/d-zero-dev/nitpicker/commit/1da73c36024cad4d68f4efd744b04e3192e361f1)), closes [#23](https://github.com/d-zero-dev/nitpicker/issues/23) [pre-#75](https://github.com/pre-/issues/75)
+
+### Features
+
+- **crawler:** add CrawlerOrchestrator.inventory() + existing-url helpers ([869e99e](https://github.com/d-zero-dev/nitpicker/commit/869e99e9140e96276ccf7ddbb56739497d7ff75f))
+- **crawler:** add read-only mode and live-crawl-aware helpers ([e67ac75](https://github.com/d-zero-dev/nitpicker/commit/e67ac75fded57ab614d39a2a200279f2c23bb0c7))
+- **crawler:** add retryFailed to re-fetch failed pages from an archive ([7e20a29](https://github.com/d-zero-dev/nitpicker/commit/7e20a2933f7e8d63d38afef7012a0a9f15f54a9f))
+- **crawler:** add source provenance column to pages and resources ([1a78fe1](https://github.com/d-zero-dev/nitpicker/commit/1a78fe12eb786c8f7292bcd8bf5e423aee046178))
+- **crawler:** force-kill the entire Chromium process tree on close timeout ([e91c0f2](https://github.com/d-zero-dev/nitpicker/commit/e91c0f256fc49520d02a47f8c55b09a21c4e42a0))
+- **crawler:** label crawl progress counts as URLs and add thousands separators ([1ab7418](https://github.com/d-zero-dev/nitpicker/commit/1ab7418a43d044d7c383165ee6432c30ddca7a5e))
+- **crawler:** prioritise likely-HTML URLs in the crawl queue ([df73a9f](https://github.com/d-zero-dev/nitpicker/commit/df73a9fcbd2444185f07a02e30877f804d00c869))
+- **crawler:** record crawler-level errors to a structured crawl_errors table ([2ebdc08](https://github.com/d-zero-dev/nitpicker/commit/2ebdc089fb1ece9d430e462f6a3834f127dde030))
+- **crawler:** record partial scrape failures in the page_errors archive table ([ee3c832](https://github.com/d-zero-dev/nitpicker/commit/ee3c832f0420ccf1e0b03b2e87cd10c5b4aa3c3c))
+- **crawler:** reuse captured sub-resource data to skip redundant HEAD pre-flights ([c99144c](https://github.com/d-zero-dev/nitpicker/commit/c99144c446dec8d39ec980acabb179c6cd20240b))
+- **crawler:** show rendered HTML page count in crawl progress header ([06cc9d7](https://github.com/d-zero-dev/nitpicker/commit/06cc9d793bef045b4ed5b5c3c05aa8fb3bc7b473))
+- **crawler:** skip re-rendering redirect destinations already crawled ([a0bb037](https://github.com/d-zero-dev/nitpicker/commit/a0bb037e3a614a00962ec29bb86b2b3089931a02)), closes [#73](https://github.com/d-zero-dev/nitpicker/issues/73)
+- **crawler:** stream snapshot HTML from the zip central directory ([cc87054](https://github.com/d-zero-dev/nitpicker/commit/cc87054f60bd2def104078ae5f1bd8f5e545b8ef))
+- **crawler:** thread inventoryMode source label through Crawler → Archive → Database ([109d346](https://github.com/d-zero-dev/nitpicker/commit/109d346503af5ada413bb3fd5a3f5e4a3bacaf36))
+
+### BREAKING CHANGES
+
+- IncompatibleArchiveError(archiveVersion, currentMajor: number)
+  became IncompatibleArchiveError(archiveVersion, requiredVersion: string).
+  Callers outside this monorepo will need to update construction sites; the
+  public crawler API re-export now surfaces the new signature.
+- `.nitpicker` archives no longer contain `snapshot-html.zip`. HTML bodies live in two
+  new SQLite tables (`page_html_blobs` keyed by SHA-256, `page_html_ref` mapping page id → hash) inside
+  the same `db.sqlite` file. The tar payload is effectively a single SQLite file.
+
+`Database.updatePage` now returns just `pageId` and takes `writeHtml: boolean` in place of the legacy
+`snapshotDir` argument. `ArchiveAccessor.getHtmlOfPage` now takes a `pageId: number` instead of a
+relative file path. `Database.clearHtmlPath` / `getHtmlPathOnPage`, `Archive.SNAPSHOT_HTML_DIR`, and
+`DatabaseOption.workingDir` are gone.
+
+Why:
+
+- Eliminates the per-`--append` zip re-compression cost (multi-tens-of-minutes for 100k+ pages),
+  unlocking million-page-scale crawls.
+- Hash-keyed storage dedups identical bodies within a crawl (404 templates, error pages, …) and
+
 # [0.9.0](https://github.com/d-zero-dev/nitpicker/compare/v0.8.0...v0.9.0) (2026-05-29)
 
 **Note:** Version bump only for package @nitpicker/crawler

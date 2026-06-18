@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.11.0](https://github.com/d-zero-dev/nitpicker/compare/v0.9.0...v0.11.0) (2026-06-18)
+
+### Features
+
+- **cli,mcp:** expose isolated-pages / unused-resources via query CLI and MCP tools ([e0c0c5c](https://github.com/d-zero-dev/nitpicker/commit/e0c0c5c6180afb4b5f7f720c8df4553408c42f30))
+- **mcp-server:** advertise contentTypeCategory on list_pages ([c616c89](https://github.com/d-zero-dev/nitpicker/commit/c616c8946b43a5cabacc8c892f469dc44b7a9408))
+- **mcp-server:** surface mode and crawlerPid via open_archive ([9f54def](https://github.com/d-zero-dev/nitpicker/commit/9f54defc41e07666109e5c766586312e47f1f9f4))
+
 # [0.9.0](https://github.com/d-zero-dev/nitpicker/compare/v0.8.0...v0.9.0) (2026-05-29)
 
 **Note:** Version bump only for package @nitpicker/mcp-server

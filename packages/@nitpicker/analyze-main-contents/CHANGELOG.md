@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.11.0](https://github.com/d-zero-dev/nitpicker/compare/v0.9.0...v0.11.0) (2026-06-18)
+
+### Bug Fixes
+
+- **analyze-main-contents:** report zero counts when no main content is found ([9c946c4](https://github.com/d-zero-dev/nitpicker/commit/9c946c4b3fbc1d9fb82ed185b56e1b1a39b1ad0f))
+
 # [0.9.0](https://github.com/d-zero-dev/nitpicker/compare/v0.8.0...v0.9.0) (2026-05-29)
 
 **Note:** Version bump only for package @nitpicker/analyze-main-contents
