@@ -1215,7 +1215,11 @@ CrawlAggregateError
 
 **真理ソース**: `classifyErrorKind`（`@nitpicker/crawler`）。crawler パッケージへ物理移動し、`@nitpicker/query` は re-export 専用。crawler 自身がキャッシュの mark / preload 判定で必要としており、`query → crawler` の依存方向はあっても `crawler → query` は禁止だから（query が `ArchiveAccessor` 等を import する既存方向と矛盾しない）。
 
-**Session learning（同一セッション内の学習）**: `Crawler.#sendHeadRequest` の `onGiveUp` callback で `classifyErrorKind(error.message) === 'dns'` のとき host を `dnsBurnedHostCache: Map<string, ErrorKind>` に投入する。`onWait`（retry 待機開始）ではなく `onGiveUp`（全 retry 使い果たし）で mark する設計は、一過性の `EAI_AGAIN` を巻き込んで host を不当に burn しないため。最初の URL は retry を消化するが、その後のキュー pull は短絡される。
+**Session learning（同一セッション内の学習）**: `Crawler.#sendHeadRequest` の `onGiveUp` callback で `classifyErrorKind(error.message) === 'dns'` のとき host を `dnsBurnedHostCache: Map<string, ErrorKind>` に投入する。`onWait`（retry 待機開始）ではなく `onGiveUp`（全 retry 使い果たし）で mark する設計は、一過性のエラーを巻き込んで host を不当に burn しないため。最初の URL は retry を消化するが、その後のキュー pull は短絡される。
+
+> **WHY: `EAI_AGAIN` は `dns` ではなく `dns-transient` に分類**: `getaddrinfo EAI_AGAIN <host>` はローカル DNS resolver の一時的失敗（WiFi 切替、resolver 過負荷）であり、本物の NXDOMAIN とは性質が違う。`dns` バケットに入れたままだと、ローカル resolver が一時不調なときに 3 retry 後の onGiveUp で **無実の host を全 burn する** 穴になる。`MATCHERS` の first-match-wins 順序で `dns-transient` を `dns` より前に評価することで、`getaddrinfo` トークンを共有しても EAI_AGAIN は transient ラベル側に倒す。`Database.listDnsBurnedHostCandidates` の SQL LIKE フィルタも `%EAI_AGAIN%` を意図的に外しており、JS 側 `classifyErrorKind` の確定判定と二段で守る。
+
+> **WHY: HEAD pre-flight の timeout は attempt ごとに `10s → 30s → 60s` に escalate**: 一律 10s race だと、政府系/重負荷サーバの遅延（応答に 20-40s かかる）を全 retry で取りこぼす。最初の attempt を短めにして健常 URL のスループットを保ち、後の retry を長くして「遅いだけのサーバ」を救う。本当に死んでるサーバは 3 attempt 目で 60s 消費するが、一律 10s で諦めて recoverable な URL を取りこぼすより総量で得。実装は `Crawler.#sendHeadRequest` の retryCall fn クロージャ内で `let attempt` を increment し、`fetchDestination({ ..., timeout: HEAD_TIMEOUT_ESCALATION_MS[attempt] })` で呼ぶ。
 
 **Session preload（既存 archive からの seeding）**: `append` / `inventory` / `retryFailed` / `resume` で archive を再オープンする 4 経路で `Archive.listDnsBurnedHostCandidates()` を呼び、`crawl_errors` 履歴のうち DNS only でかつ復活シグナル（pages / resources の 2xx-3xx、`pages.lastCrawledAt > crawl_errors.createdAt`）が無い host を cache に投入する。これにより `--retry-failed` の 2 回目以降は 1 URL の retry すら消費せず即 skip。
 
