@@ -23,12 +23,15 @@ import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-awa
 import c from 'ansi-colors';
 
 import pkg from '../../package.json' with { type: 'json' };
+import { classifyErrorKind } from '../classify-error-kind.js';
 import { crawlerLog } from '../debug.js';
 
 import { createChangePhaseHandler } from './create-change-phase-handler.js';
 import { derivePageSource } from './derive-page-source.js';
 import { deriveResourceSource } from './derive-resource-source.js';
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
+import { dnsBurnedHostCache } from './dns-burned-host-cache.js';
+import { dnsBurnedHostShortCircuitCounter } from './dns-burned-host-short-circuit-counter.js';
 import { drainPhaseErrors } from './drain-phase-errors.js';
 import { fetchDestination } from './fetch-destination.js';
 import { findScopeEntry } from './find-scope-entry.js';
@@ -45,6 +48,7 @@ import LinkList from './link-list.js';
 import { linkToPageData } from './link-to-page-data.js';
 import { logUndrainedPhaseErrors } from './log-undrained-phase-errors.js';
 import { partitionUrlsByHtml } from './partition-urls-by-html.js';
+import { PreloadShortCircuitError } from './preload-short-circuit-error.js';
 import { protocolAgnosticKey } from './protocol-agnostic-key.js';
 import { redirectDestKey } from './redirect-dest-key.js';
 import { resourceToPageData } from './resource-to-page-data.js';
@@ -1089,6 +1093,18 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		update: (msg: string) => void,
 		laneIndex: number,
 	): Promise<PageData> {
+		const host = url.hostname.toLowerCase();
+		if (dnsBurnedHostCache.has(host)) {
+			// Either session-learned earlier in this crawl (one URL on this host
+			// already exhausted retries with a DNS error) or preload-seeded from
+			// `crawl_errors` on archive open. Either way: skip the HEAD entirely.
+			// The orchestrator's error-channel listener detects
+			// PreloadShortCircuitError via instanceof and refuses to write it to
+			// `crawl_errors`, preventing self-amplification across crawls.
+			dnsBurnedHostShortCircuitCounter.count++;
+			update(c.red(`HEAD request: host ${host} DNS-burned — skipping`));
+			throw new PreloadShortCircuitError(host);
+		}
 		return retryCall(
 			() => fetchDestination({ url, isExternal, userAgent: this.#options.userAgent }),
 			{
@@ -1100,6 +1116,13 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					);
 				},
 				onGiveUp: (retryCount, error, label) => {
+					if (classifyErrorKind(error.message) === 'dns') {
+						// All retries consumed and the final error is DNS — burn the
+						// host so subsequent URLs on it short-circuit. Only mark in
+						// `onGiveUp` (not `onWait`) so a transient `EAI_AGAIN` that
+						// recovers on retry doesn't unfairly burn the host.
+						dnsBurnedHostCache.set(host, 'dns');
+					}
 					update(
 						c.red(`${label}: gave up after ${retryCount} retries — ${error.message}`),
 					);

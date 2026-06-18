@@ -15,10 +15,14 @@ import pkg from '../package.json' with { type: 'json' };
 
 import Archive from './archive/archive.js';
 import { clearDestinationCache } from './crawler/clear-destination-cache.js';
+import { clearDnsBurnedHostCache } from './crawler/clear-dns-burned-host-cache.js';
 import Crawler from './crawler/crawler.js';
+import { dnsBurnedHostCache } from './crawler/dns-burned-host-cache.js';
+import { dnsBurnedHostShortCircuitCounter } from './crawler/dns-burned-host-short-circuit-counter.js';
 import { fetchDestination } from './crawler/fetch-destination.js';
 import { findScopeEntry } from './crawler/find-scope-entry.js';
 import { isHtmlContentType } from './crawler/is-html-content-type.js';
+import { PreloadShortCircuitError } from './crawler/preload-short-circuit-error.js';
 import { crawlerLog, log } from './debug.js';
 import { normalizeToArray } from './normalize-to-array.js';
 import { resolveOutputPath } from './resolve-output-path.js';
@@ -236,6 +240,18 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 		return new Promise<void>((resolve, reject) => {
 			this.#crawler.on('error', (error) => {
+				if (error.error instanceof PreloadShortCircuitError) {
+					// DNS-burned host short-circuit: the underlying cause already
+					// lives in `crawl_errors` from the original DNS failure.
+					// Writing it again on every subsequent URL would amplify the
+					// row count on each `--retry-failed` re-run and could even
+					// inflate the preload selection on the next open. Drop it
+					// here; `pages.status = -1` still gets set via the normal
+					// scrape-error path (handleScrapeError → addPageError) so the
+					// page record itself is unchanged.
+					crawlerLog('Skipping addError for preload short-circuit: %s', error.url);
+					return;
+				}
 				crawlerLog('On error: %O', error);
 				writeQueue
 					.enqueue(() => this.#archive.addError(error))
@@ -422,7 +438,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		log('Config %O', config);
 		await orchestrator.crawling(list);
 		log('Crawling completed');
-		clearDestinationCache();
+		CrawlerOrchestrator.#finalizeCrawlSession();
 		log('Set order natural URL sort');
 		await archive.setUrlOrder();
 		log('Sorting done');
@@ -521,8 +537,9 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				log('Archive %s', absFilePath);
 				log('New roots %O', newRoots);
 				log('Merged roots %O', mergedRoots);
+				await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 				await orchestrator.crawling(newParsed);
-				clearDestinationCache();
+				CrawlerOrchestrator.#finalizeCrawlSession();
 				await archive.setUrlOrder();
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
@@ -797,8 +814,9 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 						'HTML seeds %O',
 						htmlSeeds.map((u) => u.href),
 					);
+					await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 					await orchestrator.crawling(htmlSeeds, { recursive: true });
-					clearDestinationCache();
+					CrawlerOrchestrator.#finalizeCrawlSession();
 					await archive.setUrlOrder();
 					await ignoreEnoent(unlinkFile(backupPath));
 					return orchestrator;
@@ -916,8 +934,9 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				if (initializedCallback) {
 					await initializedCallback(orchestrator, config);
 				}
+				await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 				await orchestrator.crawling(rootsParsed, { recursive: config.recursive });
-				clearDestinationCache();
+				CrawlerOrchestrator.#finalizeCrawlSession();
 				await archive.setUrlOrder();
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
@@ -982,8 +1001,51 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		log('Data %s', stubPath);
 		log('URL %s', url.href);
 		log('Config %O', config);
+		await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 		await orchestrator.crawling([url]);
+		CrawlerOrchestrator.#finalizeCrawlSession();
 		return orchestrator;
+	}
+
+	/**
+	 * Seeds {@link dnsBurnedHostCache} from `crawl_errors` history at re-open
+	 * (append / inventory / retryFailed / resume). Called after Archive.open
+	 * succeeds and before crawling starts, so the first URL on a burned host
+	 * already short-circuits — no retry budget is spent on a dead host that
+	 * the previous crawl already proved was dead.
+	 *
+	 * Fresh `crawling()` skips this — there is no archive history to seed
+	 * from. Within-session learning still kicks in via the `onGiveUp` mark.
+	 * @param archive - The opened archive whose `crawl_errors` is read.
+	 */
+	static async #preloadDnsBurnedHostCache(archive: Archive): Promise<void> {
+		const hosts = await archive.listDnsBurnedHostCandidates();
+		for (const host of hosts) {
+			dnsBurnedHostCache.set(host, 'dns');
+		}
+		if (hosts.length > 0) {
+			// eslint-disable-next-line no-console
+			console.error(
+				`[preload] DNS-burned hosts: ${hosts.length} (will short-circuit subsequent URLs)`,
+			);
+		}
+	}
+
+	/**
+	 * Tears down session-scoped crawler caches and prints a short-circuit
+	 * summary if any URL fetches were skipped. Invoked at the four
+	 * crawl-session boundaries (`crawling` / `append` / `inventory` /
+	 * `retryFailed` / `resume`) where the previous `clearDestinationCache`
+	 * call already lived.
+	 */
+	static #finalizeCrawlSession(): void {
+		const skipped = dnsBurnedHostShortCircuitCounter.count;
+		if (skipped > 0) {
+			// eslint-disable-next-line no-console
+			console.error(`[preload] Short-circuited ${skipped} URL(s) on DNS-burned hosts`);
+		}
+		clearDestinationCache();
+		clearDnsBurnedHostCache();
 	}
 }
 

@@ -104,6 +104,85 @@ describe('CrawlerOrchestrator.crawling: error イベントの書き込み失敗'
 	});
 });
 
+describe('CrawlerOrchestrator.crawling: PreloadShortCircuitError', () => {
+	it('PreloadShortCircuitError は addError を呼ばずに skip される', async () => {
+		// crawl_errors への重複挿入を止めるためのカーブアウト。short-circuit
+		// が起きるたびに addError を呼んでしまうと、同じ host の URL ぶんだけ
+		// crawl_errors が肥大化し、次回 preload の選定が暴走する。設計の核心
+		// 部分なので、これを保証する unit assertion を残す。
+		const addError = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			addError,
+			filePath: '/tmp/orchestrator-preload-skip-test.nitpicker',
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		const { PreloadShortCircuitError } =
+			await import('./crawler/preload-short-circuit-error.js');
+
+		fakeCrawlerDriver = (crawler) => {
+			const error: CrawlerError = {
+				pid: process.pid,
+				isMainProcess: true,
+				url: 'https://foo.invalid/page',
+				isExternal: false,
+				error: new PreloadShortCircuitError('foo.invalid'),
+			};
+			crawler.handlers.get('error')?.(error as never);
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-preload-skip-test.nitpicker',
+		});
+
+		expect(addError).not.toHaveBeenCalled();
+	});
+
+	it('PreloadShortCircuitError 以外の error は通常通り addError を呼ぶ（regression guard）', async () => {
+		const addError = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			addError,
+			filePath: '/tmp/orchestrator-non-preload-test.nitpicker',
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			const error: CrawlerError = {
+				pid: process.pid,
+				isMainProcess: true,
+				url: 'https://example.com/',
+				isExternal: false,
+				error: new Error('ordinary scrape failure'),
+			};
+			crawler.handlers.get('error')?.(error as never);
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-non-preload-test.nitpicker',
+		});
+
+		expect(addError).toHaveBeenCalledOnce();
+	});
+});
+
 describe('CrawlerOrchestrator.crawling: pageError ハンドラ', () => {
 	it('pageError イベントが archive.addPageError 経由で書き込まれる', async () => {
 		const addPageError = vi.fn(() => Promise.resolve());

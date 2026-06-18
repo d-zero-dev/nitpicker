@@ -10,11 +10,33 @@ vi.mock('@d-zero/dealer', () => ({
 
 vi.mock('@d-zero/shared/retry', () => ({
 	/**
-	 * Stub retryCall that calls the function once without retries.
+	 * Stub retryCall that runs the function once and, on failure, invokes the
+	 * onGiveUp callback before rethrowing. The original behaviour (no retries,
+	 * single call) is preserved for success paths; only the give-up callback
+	 * is exercised so the DNS-burned host learning hook can be tested.
 	 * @param fn - The function to call.
+	 * @param opts - Retry options carrying onGiveUp / label / retries.
+	 * @param opts.retries
+	 * @param opts.label
+	 * @param opts.onGiveUp
 	 * @returns The result of calling fn.
 	 */
-	retryCall: (fn: () => unknown) => fn(),
+	retryCall: async <T>(
+		fn: () => Promise<T> | T,
+		opts?: {
+			retries?: number;
+			label?: string;
+			onGiveUp?: (retryCount: number, error: Error, label?: string) => void;
+		},
+	): Promise<T> => {
+		try {
+			return await fn();
+		} catch (rawError: unknown) {
+			const error = rawError instanceof Error ? rawError : new Error(String(rawError));
+			opts?.onGiveUp?.(opts.retries ?? 0, error, opts.label);
+			throw error;
+		}
+	},
 }));
 
 vi.mock('./robots-checker.js', () => {
@@ -633,6 +655,129 @@ describe('Crawler', () => {
 			});
 			const initialUrls = vi.mocked(deal).mock.calls[0]![0] as ExURL[];
 			expect(initialUrls.map((u) => u.pathname)).toEqual(['/blog/', '/news/']);
+		});
+	});
+
+	describe('DNS-burned host cache', () => {
+		it('marks the host as DNS-burned when the HEAD pre-flight gives up with an ENOTFOUND error', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { dnsBurnedHostCache } = await import('./dns-burned-host-cache.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockRejectedValue(
+				new Error('getaddrinfo ENOTFOUND foo.invalid'),
+			);
+
+			const crawler = new Crawler(defaultOptions);
+			const errors: CrawlerEventTypes['error'][] = [];
+			crawler.on('error', (e) => {
+				errors.push(e);
+			});
+
+			crawler.start([parseUrl('https://foo.invalid/page-1')!]);
+
+			await vi.waitFor(() => {
+				expect(errors).toHaveLength(1);
+			});
+
+			expect(dnsBurnedHostCache.get('foo.invalid')).toBe('dns');
+			clearDnsBurnedHostCache();
+		});
+
+		it('short-circuits subsequent URLs on a burned host without invoking fetchDestination', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { dnsBurnedHostCache } = await import('./dns-burned-host-cache.js');
+			const { dnsBurnedHostShortCircuitCounter } =
+				await import('./dns-burned-host-short-circuit-counter.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+			dnsBurnedHostCache.set('foo.invalid', 'dns');
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			const fetchSpy = vi.spyOn(fetchDestMod, 'fetchDestination');
+
+			const crawler = new Crawler(defaultOptions);
+			const errors: CrawlerEventTypes['error'][] = [];
+			crawler.on('error', (e) => {
+				errors.push(e);
+			});
+
+			crawler.start([parseUrl('https://foo.invalid/page-2')!]);
+
+			await vi.waitFor(() => {
+				expect(errors).toHaveLength(1);
+			});
+
+			expect(fetchSpy).not.toHaveBeenCalled();
+			// Identifying via `name` instead of `instanceof` insulates the
+			// assertion from any class-identity divergence between static and
+			// dynamic ESM imports under the vitest module loader.
+			expect(errors[0]!.error.name).toBe('PreloadShortCircuitError');
+			expect(dnsBurnedHostShortCircuitCounter.count).toBeGreaterThanOrEqual(1);
+			clearDnsBurnedHostCache();
+		});
+
+		it('does not burn the host for transient timeout failures', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { dnsBurnedHostCache } = await import('./dns-burned-host-cache.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockRejectedValue(
+				new Error('connect ETIMEDOUT 93.184.216.34:443'),
+			);
+
+			const crawler = new Crawler(defaultOptions);
+			const errors: CrawlerEventTypes['error'][] = [];
+			crawler.on('error', (e) => {
+				errors.push(e);
+			});
+
+			crawler.start([parseUrl('https://slow.example.com/page')!]);
+
+			await vi.waitFor(() => {
+				expect(errors).toHaveLength(1);
+			});
+
+			expect(dnsBurnedHostCache.has('slow.example.com')).toBe(false);
+			clearDnsBurnedHostCache();
+		});
+
+		it('uses the lowercased hostname as the cache key', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { dnsBurnedHostCache } = await import('./dns-burned-host-cache.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockRejectedValue(
+				new Error('getaddrinfo ENOTFOUND mixed.invalid'),
+			);
+
+			const crawler = new Crawler(defaultOptions);
+			crawler.on('error', () => {});
+
+			// The WHATWG URL parser lowercases the hostname already, but the cache
+			// codifies the contract: only lowercased keys round-trip.
+			crawler.start([parseUrl('https://Mixed.INVALID/page')!]);
+
+			await vi.waitFor(() => {
+				expect(dnsBurnedHostCache.has('mixed.invalid')).toBe(true);
+			});
+
+			expect(dnsBurnedHostCache.has('Mixed.INVALID')).toBe(false);
+			clearDnsBurnedHostCache();
 		});
 	});
 

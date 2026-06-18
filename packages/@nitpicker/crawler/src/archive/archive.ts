@@ -168,7 +168,6 @@ export default class Archive extends ArchiveAccessor {
 	async getResourceByUrl(urls: readonly string[]) {
 		return this.#db.getResourceByUrl(urls);
 	}
-
 	/**
 	 * Counts the number of pages already scraped as crawl targets in the archive.
 	 *
@@ -179,7 +178,6 @@ export default class Archive extends ArchiveAccessor {
 	async getScrapedHtmlPageCount() {
 		return this.#db.getScrapedHtmlPageCount();
 	}
-
 	/**
 	 * Retrieves the base URL of the crawl session from the archive database.
 	 * @returns The base URL string.
@@ -187,6 +185,23 @@ export default class Archive extends ArchiveAccessor {
 	async getUrl() {
 		return this.#db.getBaseUrl();
 	}
+	/**
+	 * Hostnames whose `crawl_errors` history is consistently DNS failures and
+	 * for which no recent 2xx/3xx page or resource is recorded. Consumed by
+	 * `CrawlerOrchestrator.#preloadDnsBurnedHostCache` to seed the DNS-burned
+	 * host cache at re-open (append / inventory / retryFailed / resume), so
+	 * the next crawl skips HEAD pre-flight on hosts the previous crawl
+	 * already proved unreachable.
+	 *
+	 * Deliberately exposed only on `Archive` (writer-side) — read-only
+	 * `ArchiveAccessor` (stub viewer) does not see this method so the
+	 * stub's no-migration contract is preserved.
+	 * @returns Lower-cased hostnames safe to short-circuit.
+	 */
+	async listDnsBurnedHostCandidates(): Promise<string[]> {
+		return this.#db.listDnsBurnedHostCandidates();
+	}
+
 	/**
 	 * Releases the SQLite handle and the advisory lock **without** writing
 	 * the archive or removing `tmpDir`.
