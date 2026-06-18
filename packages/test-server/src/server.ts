@@ -14,6 +14,7 @@ import { paginationRoutes } from './routes/pagination.js';
 import { recursiveRoutes } from './routes/recursive.js';
 import { redirectRoutes } from './routes/redirect.js';
 import { resourceReuseRoutes } from './routes/resource-reuse.js';
+import { scopeAuthLeakRoutes } from './routes/scope-auth-leak.js';
 import { scopeRoutes } from './routes/scope.js';
 import { scrollJackRoutes } from './routes/scroll-jack.js';
 
@@ -32,6 +33,7 @@ export function createApp() {
 	optionsRoutes(app);
 	errorStatusRoutes(app);
 	scopeRoutes(app);
+	scopeAuthLeakRoutes(app);
 	paginationRoutes(app);
 	scrollJackRoutes(app);
 	resourceReuseRoutes(app);
