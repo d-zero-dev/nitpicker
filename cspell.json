@@ -74,6 +74,11 @@
 		"mmap",
 		"zstd",
 
+		// Network / DNS / HTTP error tokens
+		"NXDOMAIN",
+		"libc",
+		"RTSP",
+
 		// Security headers
 		"HSTS",
 

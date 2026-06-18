@@ -145,6 +145,21 @@ describe('Database.listDnsBurnedHostCandidates', () => {
 		expect(burned).toEqual([]);
 	});
 
+	it('excludes hosts whose only error is EAI_AGAIN (transient local resolver hiccup)', async () => {
+		// `EAI_AGAIN` rides on top of the `getaddrinfo` token so the SQL LIKE
+		// pulls it in, but `classifyErrorKind` routes it to `dns-transient`
+		// (not `dns`). The host must not be burned — otherwise a single WiFi
+		// glitch during a crawl would brick every host the local resolver
+		// happened to choke on, on every subsequent --retry-failed.
+		const db = await openDb();
+		await db.insertCrawlError(
+			'https://wifi-hiccup.invalid/x',
+			'getaddrinfo EAI_AGAIN wifi-hiccup.invalid',
+		);
+		const burned = await db.listDnsBurnedHostCandidates();
+		expect(burned).not.toContain('wifi-hiccup.invalid');
+	});
+
 	it('normalises hostnames to lowercase', async () => {
 		const db = await openDb();
 		await db.insertCrawlError(

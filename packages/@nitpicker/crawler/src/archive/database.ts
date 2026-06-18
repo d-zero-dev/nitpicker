@@ -1043,12 +1043,18 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		// rows that COULD match a DNS token. Each LIKE is anchored on a known
 		// substring of the regex so future additions to the regex (without
 		// matching new SQL terms) widen the JS-side filter only — never narrow it.
+		//
+		// `%EAI_AGAIN%` is deliberately NOT in the SQL filter: it now classifies
+		// as `dns-transient` (local resolver hiccup), not `dns`, so it must not
+		// reach this candidate set. The `%getaddrinfo%` term still pulls
+		// `getaddrinfo EAI_AGAIN ...` rows but the JS-side `classifyErrorKind`
+		// check (first-match-wins) routes them to `dns-transient` and they
+		// silently drop out — keeping the cache focused on real NXDOMAIN.
 		const dnsLikeRows = (await this.#instance('crawl_errors')
 			.select('url', 'message', 'createdAt')
 			.whereNotNull('url')
 			.where((qb) => {
 				qb.where('message', 'like', '%ENOTFOUND%')
-					.orWhere('message', 'like', '%EAI_AGAIN%')
 					.orWhere('message', 'like', '%getaddrinfo%')
 					.orWhere('message', 'like', '%ERR_NAME_NOT_RESOLVED%')
 					.orWhere('message', 'like', '%ERR_NAME_RESOLUTION_FAILED%');

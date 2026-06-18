@@ -6,21 +6,41 @@ import type { CrawlerError, PageData } from './utils/types/types.js';
  * The crawler stores only the raw error message (in `crawl_errors`,
  * `page_errors`, or `error.log`); the cause is derived on read by
  * `classifyErrorKind`, so existing archives gain classification without a
- * re-crawl. `timeout` is a puppeteer/page-level timeout (e.g. navigation or the
- * scraper's overall race), whereas `connection-timeout` is a transport-level
- * `ETIMEDOUT`; keeping them apart lets a slow-but-reachable host be told from an
- * unreachable one.
+ * re-crawl.
  *
  * Owned by the crawler package because both the crawler (for DNS-burned host
  * caching) and `@nitpicker/query` (for `getErrorKinds` / `getSummary`) need to
  * classify error messages, and crawler cannot depend on query.
+ *
+ * ### transient vs persistent
+ *
+ * | kind | transient? | DNS-burn? | notes |
+ * | --- | --- | --- | --- |
+ * | `dns` | no | yes | NXDOMAIN; the host does not resolve at all |
+ * | `dns-transient` | **yes** | no | `EAI_AGAIN`; local resolver hiccup, retry often recovers |
+ * | `tls` | no | no | certificate issue, usually persistent until cert rotates |
+ * | `connection-refused` | mostly persistent | no | server actively rejecting on this port |
+ * | `connection-reset` | yes | no | TCP reset mid-stream, often transient |
+ * | `connection-timeout` | yes | no | TCP-level timeout (`ETIMEDOUT`); slow but reachable |
+ * | `local-network` | **yes** | no | local machine's network is unreachable / changed (WiFi, sleep, ICMP-unreachable, …) |
+ * | `parse-error` | mostly persistent | no | HTTP response could not be parsed (proxy, garbage, MITM) |
+ * | `protocol` | yes | no | puppeteer protocol layer (frame detached, target closed, …) |
+ * | `timeout` | yes | no | puppeteer navigation timeout or HEAD pre-flight race timeout (`Timeout: <url>`) |
+ * | `unknown` | unknown | no | catch-all for messages no matcher recognised |
+ *
+ * Only `dns` is mark-target for the DNS-burned host cache; everything else is
+ * either too transient to burn (network glitch / browser hiccup) or too
+ * server-specific to extrapolate to "this whole host is dead."
  */
 export type ErrorKind =
 	| 'dns'
+	| 'dns-transient'
 	| 'connection-refused'
 	| 'connection-reset'
 	| 'connection-timeout'
 	| 'tls'
+	| 'local-network'
+	| 'parse-error'
 	| 'timeout'
 	| 'protocol'
 	| 'unknown';

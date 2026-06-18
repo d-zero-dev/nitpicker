@@ -8,10 +8,15 @@ import type { ErrorKind } from './types.js';
  * `Protocol error` must not be swallowed by the `timeout` matcher.
  */
 const MATCHERS: readonly { readonly kind: ErrorKind; readonly pattern: RegExp }[] = [
+	// `dns-transient` must be evaluated before `dns`: an `EAI_AGAIN` line also
+	// carries the `getaddrinfo` token, so the more specific transient pattern
+	// has to win. Splitting it out from `dns` keeps the DNS-burned host cache
+	// (which marks on `kind === 'dns'`) from punishing a host whose only sin
+	// was a local resolver hiccup.
+	{ kind: 'dns-transient', pattern: /EAI_AGAIN|\bEREFUSED\b/i },
 	{
 		kind: 'dns',
-		pattern:
-			/ENOTFOUND|EAI_AGAIN|getaddrinfo|ERR_NAME_NOT_RESOLVED|ERR_NAME_RESOLUTION_FAILED/i,
+		pattern: /ENOTFOUND|getaddrinfo|ERR_NAME_NOT_RESOLVED|ERR_NAME_RESOLUTION_FAILED/i,
 	},
 	{
 		kind: 'tls',
@@ -28,6 +33,20 @@ const MATCHERS: readonly { readonly kind: ErrorKind; readonly pattern: RegExp }[
 		kind: 'connection-timeout',
 		pattern: /ETIMEDOUT|ERR_CONNECTION_TIMED_OUT|ERR_TIMED_OUT/i,
 	},
+	// `local-network` is evaluated AFTER the connection-* matchers so a
+	// concrete cause (refused / reset / timeout) wins when both apply. Only
+	// "local network is unreachable / changed" symptoms — and the OS-level
+	// errors that surface them — land here. Short tokens (`EPIPE`, `EREFUSED`)
+	// are word-bounded so unrelated identifiers don't false-positive.
+	{
+		kind: 'local-network',
+		pattern:
+			/ERR_INTERNET_DISCONNECTED|ERR_NETWORK_CHANGED|ERR_NETWORK_IO_SUSPENDED|ERR_ADDRESS_UNREACHABLE|ERR_NETWORK_UNREACHABLE|ENETUNREACH|EHOSTUNREACH|EADDRNOTAVAIL|ENOTCONN|\bEPIPE\b/i,
+	},
+	{
+		kind: 'parse-error',
+		pattern: /Parse Error|Expected HTTP\/|Unexpected end of stream/i,
+	},
 	{
 		kind: 'protocol',
 		pattern:
@@ -35,8 +54,13 @@ const MATCHERS: readonly { readonly kind: ErrorKind; readonly pattern: RegExp }[
 	},
 	{
 		kind: 'timeout',
+		// `^Timeout:` covers the NetTimeoutError "Timeout: <url>" form emitted
+		// by the HEAD pre-flight race. Anchored at line start so the same
+		// substring inside a longer trace ("…Timeout: the field above…") cannot
+		// hijack the classification — only the bare NetTimeoutError message
+		// lands here.
 		pattern:
-			/Race \d|Navigation timeout|timeout of \d+\s*ms exceeded|TimeoutError|Timed out/i,
+			/Race \d|Navigation timeout|timeout of \d+\s*ms exceeded|TimeoutError|Timed out|^Timeout:/i,
 	},
 ];
 
