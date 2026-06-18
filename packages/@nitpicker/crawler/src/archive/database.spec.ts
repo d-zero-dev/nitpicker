@@ -1949,6 +1949,144 @@ describe('resetFailedPages', () => {
 		await db.destroy();
 	});
 
+	it('excludes pages whose page_errors message classifies as a permanent failure kind', async () => {
+		// The whole point of the exclusion is that `--retry-failed` converges
+		// across iterations: NXDOMAIN, expired-cert, `ERR_BLOCKED_BY_CLIENT`,
+		// HTTP parse-error, and ECONNREFUSED hosts must NOT be reset every pass.
+		// We seed one failed page per permanent kind plus one retryable kind
+		// (timeout) and one with no recorded message (genuinely unknown), and
+		// assert only the latter two come back as reset URLs.
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ filename: resetDbPath });
+		const knex = db.getKnex();
+
+		const dnsId = await insertPage(db, {
+			url: 'https://gone.example.invalid/',
+			status: -1,
+		});
+		const tlsId = await insertPage(db, {
+			url: 'https://expired.example.com/',
+			status: -1,
+		});
+		const blockedId = await insertPage(db, {
+			url: 'https://ad.example.com/pixel',
+			status: -1,
+		});
+		const parseId = await insertPage(db, { url: 'https://waf.example.com/', status: -1 });
+		const refusedId = await insertPage(db, {
+			url: 'https://closed.example.com/',
+			status: -1,
+		});
+		const timeoutId = await insertPage(db, {
+			url: 'https://slow.example.org/',
+			status: -1,
+		});
+		// `orphan.example.com` intentionally has no page_errors row — its
+		// message resolves to absent → treated as `unknown` → still reset.
+		await insertPage(db, {
+			url: 'https://orphan.example.com/',
+			status: -1,
+		});
+
+		await knex('page_errors').insert([
+			{
+				pageId: dnsId,
+				phase: 'crawl',
+				message: 'getaddrinfo ENOTFOUND gone.example.invalid',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				pageId: tlsId,
+				phase: 'crawl',
+				message: 'net::ERR_CERT_DATE_INVALID',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				pageId: blockedId,
+				phase: 'render',
+				message: 'net::ERR_BLOCKED_BY_CLIENT',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				pageId: parseId,
+				phase: 'crawl',
+				message: 'Parse Error: Expected HTTP/, RTSP/ or ICE/',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				pageId: refusedId,
+				phase: 'crawl',
+				message: 'connect ECONNREFUSED 127.0.0.1:443',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				pageId: timeoutId,
+				phase: 'crawl',
+				message: '[Retried 3 times] Timeout: https://slow.example.org/',
+				createdAt: 1_700_000_000_000,
+			},
+		]);
+
+		const reset = await db.resetFailedPages();
+		expect(reset.toSorted()).toEqual([
+			'https://orphan.example.com/',
+			'https://slow.example.org/',
+		]);
+
+		// Verify the excluded pages were left untouched on disk too (still
+		// scraped=1, status=-1) — not just absent from the return value.
+		for (const url of [
+			'https://gone.example.invalid/',
+			'https://expired.example.com/',
+			'https://ad.example.com/pixel',
+			'https://waf.example.com/',
+			'https://closed.example.com/',
+		]) {
+			const row = await knex('pages').where('url', url).first();
+			expect(row.scraped).toBe(1);
+			expect(row.status).toBe(-1);
+		}
+
+		await db.destroy();
+	});
+
+	it('falls back to crawl_errors when page_errors has no message for the candidate', async () => {
+		// `page_errors` is populated by scrape attempts; pages that failed at
+		// the crawler-channel level (DNS / TLS / refused before any scrape
+		// fires) only have a row in `crawl_errors`. The exclusion must reach
+		// through that second table or the convergence guarantee breaks for
+		// the exact failures it most needs to catch.
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ filename: resetDbPath });
+		const knex = db.getKnex();
+
+		await insertPage(db, { url: 'https://crawl-only-dns.example.invalid/', status: -1 });
+		// The retryable page is intentionally inserted without any
+		// `page_errors` / `crawl_errors` row — its message resolves to absent,
+		// treated as `unknown`, and therefore reset. The row exists only to
+		// prove that exclusion is per-candidate, not all-or-nothing.
+		await insertPage(db, {
+			url: 'https://crawl-only-retry.example.com/',
+			status: -1,
+		});
+
+		await knex('crawl_errors').insert([
+			{
+				url: 'https://crawl-only-dns.example.invalid/',
+				isExternal: 0,
+				message: 'getaddrinfo ENOTFOUND crawl-only-dns.example.invalid',
+				createdAt: 1_700_000_000_000,
+			},
+		]);
+
+		const reset = await db.resetFailedPages();
+		expect(reset).toEqual(['https://crawl-only-retry.example.com/']);
+
+		await db.destroy();
+	});
+
 	it('resets every match across the 500-row chunk boundary', async () => {
 		const { rmSync } = await import('node:fs');
 		rmSync(resetDbPath, { force: true });

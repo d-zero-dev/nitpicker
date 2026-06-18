@@ -31,11 +31,13 @@ import { classifyErrorKind } from '../classify-error-kind.js';
 import { findScopeEntry } from '../crawler/find-scope-entry.js';
 import { isHtmlContentType } from '../crawler/is-html-content-type.js';
 import { normalizeContentType } from '../crawler/normalize-content-type.js';
+import { PERMANENT_ERROR_KINDS } from '../permanent-error-kinds.js';
 import { eachSplitted } from '../utils/array/each-splitted.js';
 import { ErrorEmitter } from '../utils/error/error-emitter.js';
 
 import { dbLog } from './debug.js';
 import { mkdir } from './filesystem/mkdir.js';
+import { getFailedPageMessages } from './get-failed-page-messages.js';
 import { getJSON } from './get-json.js';
 import { applyConnectionPragmas, initSchema } from './init-schema.js';
 import { LibsqlDialect } from './libsql-dialect.js';
@@ -1330,13 +1332,26 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * - `status` is in the `5xx` range — a (frequently transient) server error.
 	 *
 	 * Definitive `4xx` responses are intentionally excluded: re-fetching a 404
-	 * almost always yields the same answer. Matching rows — internal and
-	 * external alike — are demoted back to pending (`scraped = 0`) and have their
-	 * stale scrape metadata cleared. The page row itself is kept (id preserved)
-	 * so existing `anchors.hrefId` referrers stay valid, and `isExternal` is left
-	 * untouched so the next pass re-classifies each page from the crawl scope.
-	 * Related `anchors`, `images`, `resources-referrers`, and `page_errors` rows
-	 * are deleted so the re-scrape can re-insert fresh data without duplicates.
+	 * almost always yields the same answer.
+	 *
+	 * A second exclusion runs in JS after the SQL candidate scan: any page whose
+	 * latest recorded `page_errors` / `crawl_errors` message classifies into a
+	 * permanent {@link PERMANENT_ERROR_KINDS} kind (dns / tls / client-blocked /
+	 * parse-error / connection-refused) is left as-is rather than reset to
+	 * pending. Without this filter, `--retry-failed` never converges: NXDOMAIN
+	 * hosts, expired-cert hosts, and `ERR_BLOCKED_BY_CLIENT` ad pixels would be
+	 * reset every iteration, re-attempted, fail identically, and rejoin the
+	 * candidate pool for the next iteration. The exclusion keeps the retry
+	 * target shrinking across `--retry-failed` passes by leaving deterministic
+	 * dead-ends alone.
+	 *
+	 * Matching rows — internal and external alike — are demoted back to pending
+	 * (`scraped = 0`) and have their stale scrape metadata cleared. The page row
+	 * itself is kept (id preserved) so existing `anchors.hrefId` referrers stay
+	 * valid, and `isExternal` is left untouched so the next pass re-classifies
+	 * each page from the crawl scope. Related `anchors`, `images`,
+	 * `resources-referrers`, and `page_errors` rows are deleted so the re-scrape
+	 * can re-insert fresh data without duplicates.
 	 *
 	 * SELECT and UPDATE/DELETE statements are chunked to stay below SQLite's
 	 * `SQLITE_LIMIT_VARIABLE_NUMBER`.
@@ -1364,8 +1379,36 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			return [];
 		}
 
-		const ids = candidates.map((row) => row.id);
-		const urls = candidates.map((row) => row.url);
+		const candidateIds = candidates.map((row) => row.id);
+		const candidateUrls = candidates.map((row) => row.url);
+		const messages = await getFailedPageMessages(
+			this.#instance,
+			candidateIds,
+			candidateUrls,
+		);
+		// Drop candidates whose latest recorded message classifies as permanent.
+		// An empty/absent message stays in the retry pool — we keep retrying when
+		// we don't know it's permanent, erring on the side of investigation.
+		const retryable = candidates.filter((row) => {
+			const message = messages.get(row.id) ?? '';
+			if (message === '') {
+				return true;
+			}
+			return !PERMANENT_ERROR_KINDS.has(classifyErrorKind(message));
+		});
+		const excludedCount = candidates.length - retryable.length;
+		if (excludedCount > 0) {
+			dbLog(
+				'Excluded %d page(s) from retry — permanent failure kinds (dns/tls/client-blocked/parse-error/connection-refused)',
+				excludedCount,
+			);
+		}
+		if (retryable.length === 0) {
+			return [];
+		}
+
+		const ids = retryable.map((row) => row.id);
+		const urls = retryable.map((row) => row.url);
 
 		const chunkSize = 500;
 		const metaReset = makeMetaResetPayload();
