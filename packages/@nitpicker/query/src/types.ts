@@ -9,10 +9,12 @@
  */
 export type ArchiveMode = 'archive' | 'stub';
 
-// Re-export the canonical PageSource owned by the crawler package — keeps
-// query consumers (CLI / MCP / viewer) from reaching across packages for
-// the same enum.
-export type { PageSource } from '@nitpicker/crawler';
+// Re-export the canonical PageSource / ErrorKind owned by the crawler
+// package — keeps query consumers (CLI / MCP / viewer) from reaching across
+// packages for the same enums. crawler needs ErrorKind for its DNS-burned
+// host cache and cannot depend on query.
+export type { PageSource, ErrorKind } from '@nitpicker/crawler';
+import type { ErrorKind } from '@nitpicker/crawler';
 
 /**
  * One row of {@link listIsolatedPages} output — an HTML page that no
@@ -193,6 +195,27 @@ export interface StatusCount {
 	/** HTTP status code (e.g. 200, 301, 404). */
 	status: number | null;
 	/** Number of pages with this status code. */
+	count: number;
+	/**
+	 * Per-cause breakdown of the `status === -1` bucket, classified by
+	 * {@link classifyErrorKind} on the underlying message.
+	 *
+	 * Present only on the `status === -1` row (the hard-failure sentinel). The
+	 * sum of `errorKindBreakdown[*].count` is always equal to the parent
+	 * `count` — pages whose message cannot be resolved fall into the
+	 * `'unknown'` bucket so the totals stay reconciled.
+	 */
+	errorKindBreakdown?: ErrorKindCount[];
+}
+
+/**
+ * One sub-row of {@link StatusCount.errorKindBreakdown} — count of hard-failed
+ * pages whose underlying message classifies as this {@link ErrorKind}.
+ */
+export interface ErrorKindCount {
+	/** Classified cause (e.g. `'dns'`, `'timeout'`, `'unknown'`). */
+	kind: ErrorKind;
+	/** Number of pages classified into this cause. */
 	count: number;
 }
 
@@ -1025,25 +1048,20 @@ export interface ListPageLinksOptions {
 }
 
 /**
- * Coarse cause of a crawl/scrape failure.
+ * One failure record before aggregation, shared by the error-reader helpers
+ * (`readPageErrors` / `readCrawlErrors` / `readErrorLog`) and by
+ * `getErrorKinds` / `resolveFailedPageMessages` consumers.
  *
- * The crawler stores only the raw error message (in `crawl_errors`,
- * `page_errors`, or `error.log`); the cause is derived on read by
- * {@link classifyErrorKind}, so existing archives gain classification without a
- * re-crawl. `timeout` is a puppeteer/page-level timeout (e.g. navigation or the
- * scraper's overall race), whereas `connection-timeout` is a transport-level
- * `ETIMEDOUT`; keeping them apart lets a slow-but-reachable host be told from an
- * unreachable one.
+ * The cause is intentionally NOT recorded here — classification is performed
+ * on read by `classifyErrorKind` so the same archive yields the same groups
+ * regardless of when it was crawled.
  */
-export type ErrorKind =
-	| 'dns'
-	| 'connection-refused'
-	| 'connection-reset'
-	| 'connection-timeout'
-	| 'tls'
-	| 'timeout'
-	| 'protocol'
-	| 'unknown';
+export interface ErrorRecord {
+	/** URL the failure is about, or `null` when unknown / process-level. */
+	url: string | null;
+	/** Raw message used to classify the cause. */
+	message: string;
+}
 
 /** A single host's failure count within an {@link ErrorKindGroup}. */
 export interface ErrorKindHost {

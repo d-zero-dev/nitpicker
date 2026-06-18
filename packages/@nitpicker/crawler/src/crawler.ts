@@ -44,3 +44,4 @@ export {
 } from './crawler-orchestrator.js';
 export * from './types.js';
 export * from './crawler/types.js';
+export { classifyErrorKind } from './classify-error-kind.js';
