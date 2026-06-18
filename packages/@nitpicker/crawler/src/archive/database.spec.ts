@@ -1,5 +1,6 @@
 import type { Config } from './types.js';
 
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -8,6 +9,17 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { Database } from './database.js';
 import { remove } from './filesystem/remove.js';
 import { LibsqlDialect } from './libsql-dialect.js';
+
+/**
+ * Force-remove a temp DB file. Unlike `remove()`, this is ENOENT-tolerant —
+ * the new `getExistingPageUrls / getExistingResourceUrls` specs call it
+ * BEFORE the SQLite file exists (to guarantee a clean slate per test), so
+ * a missing file must not throw.
+ * @param filePath - Absolute path to the SQLite fixture file.
+ */
+async function removeIfExists(filePath: string): Promise<void> {
+	await fs.rm(filePath, { force: true, recursive: true });
+}
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -310,7 +322,7 @@ describe('snapshot 付与: 非HTML / 空html にスナップショットを作�
 			expect(await getRefByUrl(db, url)).toBeUndefined();
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -327,7 +339,7 @@ describe('snapshot 付与: 非HTML / 空html にスナップショットを作�
 			expect(Buffer.from(ref!.hash)).toHaveLength(32);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -340,7 +352,7 @@ describe('snapshot 付与: 非HTML / 空html にスナップショットを作�
 			expect(await getRefByUrl(db, url)).toBeUndefined();
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -357,7 +369,7 @@ describe('snapshot 付与: 非HTML / 空html にスナップショットを作�
 			expect(await getRefByUrl(db, url)).toBeDefined();
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -377,7 +389,7 @@ describe('snapshot 付与: 非HTML / 空html にスナップショットを作�
 			expect(await getRefByUrl(db, url)).toBeUndefined();
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -399,7 +411,7 @@ describe('snapshot 付与: 非HTML / 空html にスナップショットを作�
 			expect(Buffer.from(after!.hash).equals(Buffer.from(before!.hash))).toBe(true);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 });
@@ -443,7 +455,7 @@ describe('content-type の正規化（#72）', () => {
 			expect(pages.some((p) => p.url === url)).toBe(true);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 });
@@ -582,7 +594,7 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			expect(hrefs).toEqual(['http://localhost/target-a', 'http://localhost/target-c']);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -653,7 +665,7 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			expect(Number(imageRow.c)).toBe(1);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -744,7 +756,7 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			expect(refsAfter.map((r) => r.url)).not.toContain(oldUrl);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -864,7 +876,7 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			expect(srcRefs).toHaveLength(0);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -925,7 +937,7 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			expect(Number(row.c)).toBe(3);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -977,7 +989,7 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			expect(Number(row.c)).toBe(2);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 });
@@ -1066,7 +1078,7 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 			expect(sourcePage.redirectDestId).toBe(destPage.id);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -1085,7 +1097,7 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 			expect(page.redirectDestId).toBeNull();
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -1117,7 +1129,7 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 			expect(middle.redirectDestId).toBe(destPage.id);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -1150,7 +1162,7 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 			expect(Number(after.c)).toBe(0);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -1171,7 +1183,7 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 			expect(Number(row.c)).toBe(0);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 
@@ -1194,7 +1206,7 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 			expect(Number(row.c)).toBe(0);
 		} finally {
 			await db.destroy();
-			await remove(dbPath);
+			await removeIfExists(dbPath);
 		}
 	});
 });
@@ -2540,6 +2552,130 @@ describe('getResourceByUrl', () => {
 		} finally {
 			await db.destroy();
 			await remove(dbPath2);
+		}
+	});
+});
+
+describe('getExistingPageUrls / getExistingResourceUrls', () => {
+	it('returns an empty array when called with an empty input', async () => {
+		const dbPath = path.resolve(workingDir, 'existing-empty.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			expect(await db.getExistingPageUrls([])).toEqual([]);
+			expect(await db.getExistingResourceUrls([])).toEqual([]);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('returns only the candidate URLs that already exist in pages', async () => {
+		const dbPath = path.resolve(workingDir, 'existing-pages.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.updatePage(
+				{
+					url: parseUrl('http://localhost/known')!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 1,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'known' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				true,
+				true,
+			);
+
+			const result = await db.getExistingPageUrls([
+				'http://localhost/known',
+				'http://localhost/unknown',
+			]);
+			expect(result.toSorted()).toEqual(['http://localhost/known']);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('returns only the candidate URLs that already exist in resources', async () => {
+		const dbPath = path.resolve(workingDir, 'existing-resources.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.insertResource({
+				url: parseUrl('http://localhost/known.css')!,
+				isExternal: false,
+				isError: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/css',
+				contentLength: 100,
+				compress: false,
+				cdn: false,
+				headers: {},
+			});
+
+			const result = await db.getExistingResourceUrls([
+				'http://localhost/known.css',
+				'http://localhost/unknown.css',
+			]);
+			expect(result.toSorted()).toEqual(['http://localhost/known.css']);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('handles input arrays larger than the chunk size (500)', async () => {
+		const dbPath = path.resolve(workingDir, 'existing-chunked.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Insert 750 pages (1.5× chunk size) so getExistingPageUrls has to
+			// iterate the eachSplitted batches at least twice and merge
+			// results across them.
+			for (let i = 0; i < 750; i++) {
+				await db.updatePage(
+					{
+						url: parseUrl(`http://localhost/page-${i}`)!,
+						redirectPaths: [],
+						isExternal: false,
+						status: 200,
+						statusText: 'OK',
+						contentLength: 1,
+						contentType: 'text/html',
+						responseHeaders: {},
+						meta: { title: `page-${i}` },
+						anchorList: [],
+						imageList: [],
+						html: '',
+						isSkipped: false,
+					},
+					true,
+					true,
+				);
+			}
+
+			// Probe with 1000 candidates — 750 known, 250 unknown — split
+			// across multiple chunk batches inside the helper.
+			const candidates: string[] = [];
+			for (let i = 0; i < 1000; i++) {
+				candidates.push(`http://localhost/page-${i}`);
+			}
+			const result = await db.getExistingPageUrls(candidates);
+			expect(result.length).toBe(750);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
 		}
 	});
 });

@@ -9,6 +9,7 @@ import type {
 	DB_Resource,
 	DatabaseEvent,
 	PageFilter,
+	PageSource,
 } from './types.js';
 import type { PageData, Resource } from '../utils/types/types.js';
 import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
@@ -48,6 +49,7 @@ import { migrateCrawlErrors } from './migrate-crawl-errors.js';
 import { migrateHtmlBlobTables } from './migrate-html-blob-tables.js';
 import { migrateInfoRoots } from './migrate-info-roots.js';
 import { migratePageErrors } from './migrate-page-errors.js';
+import { migratePagesResourcesSource } from './migrate-pages-resources-source.js';
 import { redirectTable } from './redirect-table.js';
 import { resolveRedirectChain } from './resolve-redirect-chain.js';
 
@@ -377,6 +379,58 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		};
 	}
 	/**
+	 * Return the subset of `urls` that already exist in the `pages` table.
+	 * Chunked into batches so SQLite's `IN (?, ?, …)` parameter limit
+	 * (`SQLITE_MAX_VARIABLE_NUMBER`, default 999) cannot be hit even when the
+	 * inventory list contains tens of thousands of URLs.
+	 *
+	 * Read-only — no transaction, no lock contention with the crawler write
+	 * pipeline (callers run this BEFORE the `<archive>.bak` is taken and the
+	 * crawl is started).
+	 * @param urls - URL strings to probe (already in `withoutHashAndAuth` form).
+	 * @returns URLs found in `pages`. Order is not preserved.
+	 */
+	@ErrorEmitter()
+	async getExistingPageUrls(urls: readonly string[]): Promise<string[]> {
+		if (urls.length === 0) {
+			return [];
+		}
+		const found: string[] = [];
+		await eachSplitted([...urls], 500, async (chunk) => {
+			const rows = await this.#instance
+				.select('url')
+				.from<DB_Page>('pages')
+				.whereIn('url', chunk);
+			for (const row of rows) {
+				found.push(row.url);
+			}
+		});
+		return found;
+	}
+	/**
+	 * Return the subset of `urls` that already exist in the `resources` table.
+	 * See {@link Database.getExistingPageUrls} — same chunking strategy.
+	 * @param urls - URL strings to probe.
+	 * @returns URLs found in `resources`.
+	 */
+	@ErrorEmitter()
+	async getExistingResourceUrls(urls: readonly string[]): Promise<string[]> {
+		if (urls.length === 0) {
+			return [];
+		}
+		const found: string[] = [];
+		await eachSplitted([...urls], 500, async (chunk) => {
+			const rows = await this.#instance
+				.select('url')
+				.from<DB_Resource>('resources')
+				.whereIn('url', chunk);
+			for (const row of rows) {
+				found.push(row.url);
+			}
+		});
+		return found;
+	}
+	/**
 	 * Reads the HTML snapshot stored as a zstd-compressed BLOB for the given page.
 	 *
 	 * Joins `page_html_ref` → `page_html_blobs` and decompresses inline. Returns
@@ -405,6 +459,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}
 		return decodeStoredBlob(row.body, row.codec);
 	}
+
 	/**
 	 * Retrieves all `page_jsonld` rows for the given page id, parsed back into
 	 * {@link JsonLdRow} shape (with `parsed` deserialised from its JSON column).
@@ -896,11 +951,17 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	/**
 	 * Inserts a sub-resource into the `resources` table.
 	 * Ignores duplicate URLs (uses `ON CONFLICT IGNORE`).
+	 *
+	 * The `source` provenance label is written ONLY on insert; an
+	 * `ON CONFLICT IGNORE` collision leaves an existing row's source untouched
+	 * (this is what makes a second `crawl --inventory` non-destructive — see
+	 * the inventory plan).
 	 * @param resource - The resource data to insert.
+	 * @param source - Provenance label for new rows. `undefined` leaves the DB DEFAULT (`'crawled'`).
 	 */
 	@ErrorEmitter()
 	@retry(retrySetting)
-	async insertResource(resource: Resource) {
+	async insertResource(resource: Resource, source?: PageSource) {
 		await this.#instance
 			.from<DB_Resource>('resources')
 			.insert({
@@ -915,6 +976,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				compress: resource.compress || 0,
 				cdn: resource.cdn || 0,
 				responseHeaders: JSON.stringify(resource.headers),
+				...(source === undefined ? {} : { source }),
 			})
 			.onConflict('url')
 			.ignore();
@@ -1319,6 +1381,10 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 *   metadata-only scrapes never carry HTML and must not perturb an already
 	 *   stored body.
 	 * @param isTarget - Whether this page is a crawl target.
+	 * @param source - Provenance label written ONLY when the row is freshly
+	 *   inserted. Existing rows keep their original `source` (this is why a
+	 *   second `crawl --inventory` does not "demote" an `'inventory-seed'` row
+	 *   that was discovered earlier).
 	 * @returns The database `pageId` of the inserted/updated row.
 	 */
 	@ErrorEmitter()
@@ -1327,6 +1393,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		page: PageData,
 		writeHtml: boolean,
 		isTarget: boolean,
+		source?: PageSource,
 	): Promise<number> {
 		const { destUrl, sources } = resolveRedirectChain(
 			page.url.withoutHashAndAuth,
@@ -1347,6 +1414,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				},
 				isTarget,
 				trx,
+				source,
 			);
 
 			// Wappalyzer tag detection is HTML-body independent (relies on
@@ -1460,11 +1528,23 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	/**
 	 * Returns the database ID for a URL, creating a new page row if needed.
 	 * Uses `ON CONFLICT IGNORE` to handle race conditions in concurrent inserts.
+	 *
+	 * `source` is written ONLY on the INSERT path — when the row already
+	 * exists, we never reach the INSERT and the existing row's `source`
+	 * stays untouched. This is what keeps a second `crawl --inventory` from
+	 * "demoting" a page that was first labelled `'inventory-seed'` back to
+	 * `'inventory-discovered'` on later passes.
 	 * @param url
 	 * @param isExternal
 	 * @param trx
+	 * @param source - Provenance label to put on the newly-inserted row. `undefined` lets the DB DEFAULT (`'crawled'`) apply.
 	 */
-	async #getIdByUrl(url: string, isExternal?: 0 | 1, trx?: Knex.Transaction) {
+	async #getIdByUrl(
+		url: string,
+		isExternal?: 0 | 1,
+		trx?: Knex.Transaction,
+		source?: PageSource,
+	) {
 		const qb = trx ?? this.#instance;
 		const [record] = await qb.select('id').from<DB_Page>('pages').where('url', url);
 		// Must use `?` because it may be `undefined`
@@ -1478,6 +1558,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				scraped: 0,
 				isTarget: 0,
 				...(isExternal != null && { isExternal }),
+				...(source === undefined ? {} : { source }),
 			})
 			.onConflict('url')
 			.ignore();
@@ -1523,6 +1604,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		await migratePageErrors(this.#instance);
 		await migrateCrawlErrors(this.#instance);
 		await migrateHtmlBlobTables(this.#instance);
+		await migratePagesResourcesSource(this.#instance);
 	}
 	/**
 	 * Replaces the page's JSON-LD / SpeculationRules rows with the freshly
@@ -1583,17 +1665,48 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 	/**
 	 * Upserts page data into the `pages` table (inserts if new, updates if existing).
+	 *
+	 * `source` is intentionally NOT in the UPDATE clause — provenance is set
+	 * once at INSERT time inside `#getIdByUrl`, and existing rows keep
+	 * whatever label they were first inserted with.
 	 * @param page
 	 * @param isTarget
 	 * @param trx
+	 * @param source - Inventory provenance for the INSERT path. Ignored on UPDATE.
 	 */
-	async #insertPage(page: PageData, isTarget: boolean, trx?: Knex.Transaction) {
+	async #insertPage(
+		page: PageData,
+		isTarget: boolean,
+		trx?: Knex.Transaction,
+		source?: PageSource,
+	) {
 		const qb = trx ?? this.#instance;
-		const pageId = await this.#getIdByUrl(page.url.withoutHashAndAuth, undefined, trx);
+		const pageId = await this.#getIdByUrl(
+			page.url.withoutHashAndAuth,
+			undefined,
+			trx,
+			source,
+		);
 		const flat = deriveFlatFromMeta(page.meta, page.url.href);
 		const denorm = computePageDenormalized(page.meta);
 		const extras = deriveMetaExtras(page.meta);
 		const now = Date.now();
+		// Source promotion on UPDATE: when an inventory-mode scrape lands on
+		// a row that was created earlier as a placeholder (e.g. an anchor
+		// from a seed page pointed at this URL and `#getIdByUrl` inserted a
+		// row with the DB DEFAULT `'crawled'`), bump the label to the
+		// inventory variant. But never demote an already-inventoried row —
+		// `CASE WHEN source = 'crawled' THEN ? ELSE source END` keeps a
+		// previously labelled `'inventory-seed'` or `'inventory-discovered'`
+		// row intact on a second pass.
+		const sourceUpdate =
+			source === undefined
+				? {}
+				: {
+						source: qb.raw("CASE WHEN source = 'crawled' THEN ? ELSE source END", [
+							source,
+						]),
+					};
 		await qb('pages')
 			.where('id', pageId)
 			.update({
@@ -1633,6 +1746,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				firstCrawledAt: qb.raw('COALESCE(firstCrawledAt, ?)', [now]),
 				lastCrawledAt: now,
 				isSkipped: page.isSkipped,
+				...sourceUpdate,
 			});
 		return pageId;
 	}

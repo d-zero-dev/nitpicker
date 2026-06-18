@@ -18,6 +18,8 @@ const NAV_ITEMS: NavItem[] = [
 	{ path: '/mismatches', labelKey: 'nav.mismatches' },
 	{ path: '/headers', labelKey: 'nav.headers' },
 	{ path: '/errors', labelKey: 'nav.errors' },
+	{ path: '/isolated-pages', labelKey: 'nav.isolatedPages' },
+	{ path: '/unused-resources', labelKey: 'nav.unusedResources' },
 ];
 
 /**

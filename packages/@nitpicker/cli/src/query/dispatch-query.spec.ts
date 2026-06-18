@@ -23,6 +23,8 @@ vi.mock('@nitpicker/query', () => ({
 		pageUrls: [],
 		total: 0,
 	}),
+	listIsolatedPages: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+	listUnusedResources: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	ArchiveManager: vi.fn(),
 }));
 
@@ -228,5 +230,31 @@ describe('dispatchQuery', () => {
 				url: 'https://missing.example.com/style.css',
 			} as never),
 		).rejects.toThrow('Resource not found: https://missing.example.com/style.css');
+	});
+
+	it('dispatches isolated-pages sub-command with limit and offset', async () => {
+		const { listIsolatedPages } = await import('@nitpicker/query');
+		const result = await dispatchQuery(mockAccessor, 'isolated-pages', {
+			limit: 50,
+			offset: 25,
+		} as never);
+		expect(result).toEqual({ items: [], total: 0 });
+		expect(listIsolatedPages).toHaveBeenCalledWith(mockAccessor, {
+			limit: 50,
+			offset: 25,
+		});
+	});
+
+	it('dispatches unused-resources sub-command with limit and offset', async () => {
+		const { listUnusedResources } = await import('@nitpicker/query');
+		const result = await dispatchQuery(mockAccessor, 'unused-resources', {
+			limit: 10,
+			offset: 0,
+		} as never);
+		expect(result).toEqual({ items: [], total: 0 });
+		expect(listUnusedResources).toHaveBeenCalledWith(mockAccessor, {
+			limit: 10,
+			offset: 0,
+		});
 	});
 });

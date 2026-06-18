@@ -35,6 +35,25 @@ npx @nitpicker/cli crawl existing.nitpicker --retry-failed
 - list-mode archive（`--list` / `--list-file` で作成）への append は不可
 - `--resume` / `--diff` / `--output` / `--list` / `--list-file` / `--single` と同時指定不可
 
+### `--inventory`: サーバーファイルリストとの突合
+
+サーバー側で取得した URL リストファイル（1 行 1 URL、空行 / `#` コメント可）と既存
+`.nitpicker` を突き合わせ、**まだアーカイブに無い URL だけを取り込む** モード。
+クロールでは到達できなかった「孤立 LP」「使われていない置きっぱなしファイル」を
+浮かび上がらせる用途。
+
+```sh
+npx @nitpicker/cli crawl <archive> --inventory <urls.txt>
+```
+
+- HTML 応答は puppeteer で描画して再帰クロールに乗せ、新規 page を `'inventory-seed'`、
+  そこから follow したリンク先を `'inventory-discovered'` のラベルで保存する
+- 非 HTML 応答（PDF / 画像 / CSS / JS …）は HEAD のみで `resources` に直接登録、ラベルは `'inventory-seed'`
+- 既存 `pages` / `resources` にすでにある URL は skip（2 回目以降の `--inventory` は新規分だけ処理）
+- スコープ外 URL は警告して skip
+- 結果は `query isolated-pages` / `query unused-resources` で見るのが想定動線（後述）
+- `--append` / `--retry-failed` / `--resume` / `--diff` / `--output` / `--list` / `--list-file` / `--single` と同時指定不可
+
 ### `--retry-failed`: 失敗ページの再取得
 
 前回クロールで失敗したページだけを再取得する。「サーバ側の一時障害やタイムアウトで取りこぼしたページを、フルクロールし直さずに回収する」ためのモード。

@@ -193,6 +193,14 @@ export async function initSchema(instance: Knex) {
 			t.string('skipReason');
 			t.integer('order').unsigned().nullable();
 
+			// Provenance: which channel inserted this row. Values:
+			//   'crawled'              — discovered via the recursive crawl from one of `info.roots`
+			//   'inventory-seed'       — supplied directly by `crawl --inventory` URL list
+			//   'inventory-discovered' — found by following links from an `inventory-seed` page
+			// Used by `listIsolatedPages` only for badge display; isolation
+			// itself is judged by `anchors.hrefId IS NULL`, not by source.
+			t.string('source').notNullable().defaultTo('crawled');
+
 			t.index('isExternal');
 			t.index('contentType');
 			t.index('scraped');
@@ -205,6 +213,7 @@ export async function initSchema(instance: Knex) {
 			// skipped.
 			t.index('robots_noindex');
 			t.index('og_type');
+			t.index('source');
 		})
 		.createTable('anchors', (t) => {
 			t.increments('id');
@@ -243,6 +252,13 @@ export async function initSchema(instance: Knex) {
 			t.string('compress').nullable();
 			t.string('cdn').nullable();
 			t.json('responseHeaders').nullable();
+			// See `pages.source` for the provenance taxonomy. `inventory-seed`
+			// rows here come from non-HTML URLs handed in by
+			// `crawl --inventory`; `inventory-discovered` rows are sub-resources
+			// pulled in while puppeteer rendered an inventory-seed page.
+			t.string('source').notNullable().defaultTo('crawled');
+
+			t.index('source');
 		})
 		.createTable('resources-referrers', (t) => {
 			t.increments('id');

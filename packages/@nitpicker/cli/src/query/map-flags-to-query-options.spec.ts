@@ -210,4 +210,25 @@ describe('mapFlagsToQueryOptions', () => {
 			url: 'https://example.com/style.css',
 		});
 	});
+
+	it('returns limit/offset only for isolated-pages (no required filters)', () => {
+		expect(mapFlagsToQueryOptions('isolated-pages', { limit: 50, offset: 10 })).toEqual({
+			limit: 50,
+			offset: 10,
+		});
+	});
+
+	it('returns limit/offset only for unused-resources (no required filters)', () => {
+		expect(mapFlagsToQueryOptions('unused-resources', { limit: 25, offset: 0 })).toEqual({
+			limit: 25,
+			offset: 0,
+		});
+	});
+
+	it('passes through undefined limit/offset for isolated-pages so query helper defaults apply', () => {
+		expect(mapFlagsToQueryOptions('isolated-pages', {})).toEqual({
+			limit: undefined,
+			offset: undefined,
+		});
+	});
 });

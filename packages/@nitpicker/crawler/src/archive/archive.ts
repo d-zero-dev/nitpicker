@@ -1,4 +1,4 @@
-import type { Config } from './types.js';
+import type { Config, PageSource } from './types.js';
 import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
 import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 
@@ -138,6 +138,29 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.getCrawlingState();
 	}
 	/**
+	 * Return the subset of `urls` that already exist as `pages.url`. Used by
+	 * `CrawlerOrchestrator.inventory` to filter the user-supplied URL list
+	 * down to "URLs that are NOT yet in the archive" — only those reach the
+	 * HEAD / scrape pipeline. Existing URLs are skipped to keep the second
+	 * (and N-th) `--inventory` pass non-destructive.
+	 * @param urls - Candidate URLs in `withoutHashAndAuth` form.
+	 * @returns URLs already present in `pages`.
+	 */
+	async getExistingPageUrls(urls: readonly string[]): Promise<string[]> {
+		return this.#db.getExistingPageUrls(urls);
+	}
+	/**
+	 * Return the subset of `urls` that already exist as `resources.url`. See
+	 * {@link Archive.getExistingPageUrls} — the resource-side counterpart used
+	 * by inventory mode to skip URLs that are already tracked as
+	 * sub-resources.
+	 * @param urls - Candidate URLs.
+	 * @returns URLs already present in `resources`.
+	 */
+	async getExistingResourceUrls(urls: readonly string[]): Promise<string[]> {
+		return this.#db.getExistingResourceUrls(urls);
+	}
+	/**
 	 * Retrieves a single recorded sub-resource by its URL.
 	 * @param urls - URL candidates to match against the stored resource URL.
 	 * @returns The raw resource row, or `null` if none match.
@@ -145,6 +168,7 @@ export default class Archive extends ArchiveAccessor {
 	async getResourceByUrl(urls: readonly string[]) {
 		return this.#db.getResourceByUrl(urls);
 	}
+
 	/**
 	 * Counts the number of pages already scraped as crawl targets in the archive.
 	 *
@@ -181,6 +205,7 @@ export default class Archive extends ArchiveAccessor {
 		this.#closeOnce = this.#runReleaseHandle();
 		return this.#closeOnce;
 	}
+
 	/**
 	 * Promote previously-external pages that now fall under the (possibly extended)
 	 * scope back to a pending state so that the crawler re-scrapes them as fully
@@ -220,10 +245,11 @@ export default class Archive extends ArchiveAccessor {
 	 * an HTML snapshot. External-page rows carry only metadata (status, title,
 	 * content-type), never a rendered body.
 	 * @param pageInfo - The page data to store.
+	 * @param source - Provenance label for new rows. `undefined` leaves the DB DEFAULT (`'crawled'`).
 	 */
-	async setExternalPage(pageInfo: PageData) {
+	async setExternalPage(pageInfo: PageData, source?: PageSource) {
 		dbLog('Set external page: %s', pageInfo.url.href);
-		await this.#db.updatePage(pageInfo, false, false);
+		await this.#db.updatePage(pageInfo, false, false, source);
 	}
 	/**
 	 * Stores a crawled page's data in the archive database, persisting the
@@ -231,11 +257,12 @@ export default class Archive extends ArchiveAccessor {
 	 * transaction. Storage is content-addressable: identical bodies across
 	 * pages share a single `page_html_blobs` row.
 	 * @param pageInfo - The page data to store.
+	 * @param source - Provenance label for new rows. `undefined` leaves the DB DEFAULT (`'crawled'`).
 	 * @returns The database ID of the stored page.
 	 */
-	async setPage(pageInfo: PageData): Promise<number> {
+	async setPage(pageInfo: PageData, source?: PageSource): Promise<number> {
 		dbLog('Set page: %s', pageInfo.url.href);
-		return await this.#db.updatePage(pageInfo, true, pageInfo.isTarget);
+		return await this.#db.updatePage(pageInfo, true, pageInfo.isTarget, source);
 	}
 	/**
 	 * Records a redirect edge without re-storing the destination's content.
@@ -253,10 +280,11 @@ export default class Archive extends ArchiveAccessor {
 	/**
 	 * Stores a sub-resource (CSS, JS, image, etc.) in the archive database.
 	 * @param resource - The resource data to store.
+	 * @param source - Provenance label for new rows. `undefined` leaves the DB DEFAULT (`'crawled'`).
 	 */
-	async setResources(resource: Resource) {
+	async setResources(resource: Resource, source?: PageSource) {
 		dbLog('Set resource: %s', resource.url.href);
-		await this.#db.insertResource(resource);
+		await this.#db.insertResource(resource, source);
 	}
 	/**
 	 * Stores the referrer relationship between a resource and the page that references it.

@@ -237,6 +237,14 @@ export function mapFlagsToQueryOptions(
 			}
 			return { url: flags.url };
 		}
+		case 'isolated-pages':
+		case 'unused-resources': {
+			// Pagination-only — no required filters.
+			return {
+				limit: flags.limit,
+				offset: flags.offset,
+			};
+		}
 		default: {
 			const _exhaustive: never = subCommand;
 			throw new Error(`Unknown sub-command: ${String(_exhaustive)}`);

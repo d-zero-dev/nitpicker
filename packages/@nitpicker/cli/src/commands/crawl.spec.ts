@@ -13,6 +13,7 @@ const mockCrawling = vi.fn();
 const mockResume = vi.fn();
 const mockAppend = vi.fn();
 const mockRetryFailed = vi.fn();
+const mockInventory = vi.fn();
 
 vi.mock('@nitpicker/crawler', () => ({
 	CrawlerOrchestrator: {
@@ -20,6 +21,7 @@ vi.mock('@nitpicker/crawler', () => ({
 		resume: mockResume,
 		append: mockAppend,
 		retryFailed: mockRetryFailed,
+		inventory: mockInventory,
 	},
 }));
 
@@ -61,6 +63,7 @@ function createFlags(overrides: Partial<CrawlFlags> = {}): CrawlFlags {
 		resume: undefined,
 		append: undefined,
 		retryFailed: undefined,
+		inventory: undefined,
 		interval: undefined,
 		image: true,
 		fetchExternal: true,
@@ -111,6 +114,11 @@ function setupFakeOrchestrator() {
 	});
 
 	mockRetryFailed.mockImplementation((_path, _opts, cb) => {
+		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
+		return Promise.resolve(fakeOrchestrator);
+	});
+
+	mockInventory.mockImplementation((_path, _urls, _opts, cb) => {
 		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
 		return Promise.resolve(fakeOrchestrator);
 	});
@@ -751,6 +759,153 @@ describe('crawl', () => {
 		await crawl([], flags);
 
 		expect(mockLog).toHaveBeenCalledWith('Options: %O', flags);
+	});
+
+	it('--inventory フラグでアーカイブと URL リストを CrawlerOrchestrator.inventory に渡す', async () => {
+		mockReadList.mockResolvedValueOnce(['https://example.com/hidden']);
+		const { crawl } = await import('./crawl.js');
+
+		await crawl(['/tmp/test.nitpicker'], createFlags({ inventory: '/tmp/urls.txt' }));
+
+		expect(mockInventory).toHaveBeenCalledWith(
+			'/tmp/test.nitpicker',
+			['https://example.com/hidden'],
+			expect.any(Object),
+			expect.any(Function),
+		);
+	});
+
+	it('--inventory で空ファイルの場合、エラーを投げる', async () => {
+		mockReadList.mockResolvedValueOnce([]);
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(['/tmp/test.nitpicker'], createFlags({ inventory: '/tmp/empty.txt' })),
+		).rejects.toThrow('No URLs found in inventory file: /tmp/empty.txt');
+	});
+
+	it('--inventory に無効な URL が含まれる場合、エラーを投げる', async () => {
+		mockReadList.mockResolvedValueOnce(['https://example.com', 'not-a-url']);
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(['/tmp/test.nitpicker'], createFlags({ inventory: '/tmp/urls.txt' })),
+		).rejects.toThrow('Invalid URL: "not-a-url"');
+	});
+
+	it('--inventory と位置引数なしの場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl([], createFlags({ inventory: '/tmp/urls.txt' }))).rejects.toThrow(
+			'--inventory requires the archive path as the positional argument',
+		);
+	});
+
+	it('--inventory と複数位置引数の場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker', '/tmp/b.nitpicker'],
+				createFlags({ inventory: '/tmp/urls.txt' }),
+			),
+		).rejects.toThrow(
+			'--inventory takes exactly one positional argument (the archive path).',
+		);
+	});
+
+	it('--inventory と --append の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/test.nitpicker'],
+				createFlags({
+					inventory: '/tmp/urls.txt',
+					append: ['https://example.com/new'],
+				}),
+			),
+		).rejects.toThrow('--inventory and --append cannot be used together');
+	});
+
+	it('--inventory と --retry-failed の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/test.nitpicker'],
+				createFlags({ inventory: '/tmp/urls.txt', retryFailed: true }),
+			),
+		).rejects.toThrow('--inventory and --retry-failed cannot be used together');
+	});
+
+	it('--inventory と --resume の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				[],
+				createFlags({ inventory: '/tmp/urls.txt', resume: '/tmp/_nitpicker-stub' }),
+			),
+		).rejects.toThrow('--resume and --inventory cannot be used together');
+	});
+
+	it('--inventory と --diff の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker', '/tmp/b.nitpicker'],
+				createFlags({ inventory: '/tmp/urls.txt', diff: true }),
+			),
+		).rejects.toThrow('--diff cannot be combined with --inventory');
+	});
+
+	it('--inventory と --output の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/test.nitpicker'],
+				createFlags({ inventory: '/tmp/urls.txt', output: '/tmp/out.nitpicker' }),
+			),
+		).rejects.toThrow('--output flag is not supported with --inventory');
+	});
+
+	it('--inventory と --list-file の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/test.nitpicker'],
+				createFlags({ inventory: '/tmp/urls.txt', listFile: '/tmp/list.txt' }),
+			),
+		).rejects.toThrow('--inventory cannot be combined with --list-file');
+	});
+
+	it('--inventory と --list の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/test.nitpicker'],
+				createFlags({
+					inventory: '/tmp/urls.txt',
+					list: ['https://example.com'],
+				}),
+			),
+		).rejects.toThrow('--inventory cannot be combined with --list');
+	});
+
+	it('--inventory と --single の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/test.nitpicker'],
+				createFlags({ inventory: '/tmp/urls.txt', single: true }),
+			),
+		).rejects.toThrow('--inventory cannot be combined with --single');
 	});
 });
 

@@ -1000,3 +1000,33 @@ button.bar-row:hover {
 		transition: none;
 	}
 }
+
+/*
+ * Provenance badge used by the Isolated Pages / Unused Resources views to
+ * mark which channel inserted a row. Three styles so an operator can
+ * scan a long table and spot inventory-sourced rows at a glance.
+ */
+.source-badge {
+	display: inline flow-root;
+	padding-block: 1px;
+	padding-inline: 6px;
+	font-family: monospace;
+	font-size: var(--font-size-xs);
+	white-space: nowrap;
+	border-radius: 3px;
+}
+
+.source-badge--crawled {
+	color: var(--text-dim);
+	background: color-mix(in srgb, var(--text-dim) 14%, transparent);
+}
+
+.source-badge--inventory-seed {
+	color: var(--badge-warn-fg);
+	background: var(--badge-warn-bg);
+}
+
+.source-badge--inventory-discovered {
+	color: var(--badge-warn-fg);
+	background: color-mix(in srgb, var(--badge-warn-fg) 10%, transparent);
+}

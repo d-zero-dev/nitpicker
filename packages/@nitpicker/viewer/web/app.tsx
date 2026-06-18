@@ -11,6 +11,7 @@ import { ErrorsView } from './routes/errors-view.js';
 import { GraphView } from './routes/graph-view.js';
 import { HeadersView } from './routes/headers-view.js';
 import { ImagesView } from './routes/images-view.js';
+import { IsolatedPagesView } from './routes/isolated-pages-view.js';
 import { LinksView } from './routes/links-view.js';
 import { MismatchesView } from './routes/mismatches-view.js';
 import { PageDetailView } from './routes/page-detail-view.js';
@@ -18,6 +19,7 @@ import { PageLinksView } from './routes/page-links-view.js';
 import { PagesView } from './routes/pages-view.js';
 import { ResourcesView } from './routes/resources-view.js';
 import { SummaryView } from './routes/summary-view.js';
+import { UnusedResourcesView } from './routes/unused-resources-view.js';
 import { ViolationsView } from './routes/violations-view.js';
 
 /** Shared TanStack Query client. Server data is read-only and rarely changes. */
@@ -64,6 +66,8 @@ export function App() {
 									<Route path="/mismatches" element={<MismatchesView />} />
 									<Route path="/headers" element={<HeadersView />} />
 									<Route path="/errors" element={<ErrorsView />} />
+									<Route path="/isolated-pages" element={<IsolatedPagesView />} />
+									<Route path="/unused-resources" element={<UnusedResourcesView />} />
 									<Route path="*" element={<Navigate to="/" replace />} />
 								</Routes>
 							</main>

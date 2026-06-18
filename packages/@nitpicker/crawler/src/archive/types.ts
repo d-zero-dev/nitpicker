@@ -52,6 +52,29 @@ export interface Config extends Required<Pick<ParseURLOptions, 'disableQueries'>
 }
 
 /**
+ * Provenance of a page or resource row — which crawler channel originally
+ * inserted it. Stored as `pages.source` / `resources.source` in the
+ * SQLite schema (NOT NULL DEFAULT `'crawled'`).
+ *
+ * - `'crawled'` — discovered via the recursive crawl rooted at `info.roots`.
+ *   Default for pre-`--inventory` archives after the
+ *   `migratePagesResourcesSource` runtime migration.
+ * - `'inventory-seed'` — supplied directly by a `crawl --inventory` URL
+ *   list. For pages this is the HTML URL that was rendered; for resources
+ *   this is a non-HTML URL handed in by the list (HEAD-fetched without
+ *   rendering).
+ * - `'inventory-discovered'` — found by following links from an
+ *   `inventory-seed` page, OR (for resources) loaded by puppeteer while
+ *   rendering one of those pages.
+ *
+ * Used by the viewer as a badge and to indicate why a row was added.
+ * Isolation queries (`listIsolatedPages` / `listUnusedResources`) judge
+ * orphans by `referrer = 0`, NOT by this value — `source` only labels
+ * the row.
+ */
+export type PageSource = 'crawled' | 'inventory-seed' | 'inventory-discovered';
+
+/**
  * Filter type for querying pages from the database.
  *
  * - `'page'` - HTML pages that are crawl targets
@@ -233,6 +256,8 @@ export interface DB_Page {
 	skipReason: string | null;
 	/** The natural URL sort order index, or null if not yet assigned. */
 	order: number | null;
+	/** Provenance of the row — see {@link PageSource}. */
+	source: PageSource;
 }
 
 /**
@@ -398,6 +423,8 @@ export interface DB_Resource {
 	cdn: string | 0;
 	/** JSON-serialized HTTP response headers, or null if not available. */
 	responseHeaders: string | null;
+	/** Provenance of the row — see {@link PageSource}. */
+	source: PageSource;
 }
 
 /**
