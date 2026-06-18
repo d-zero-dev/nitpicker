@@ -572,38 +572,48 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			update('Creating page%dots%');
 			const page = await browser.newPage();
 			await page.setUserAgent(this.#options.userAgent);
-			// `page.authenticate` is ALWAYS registered, even with empty credentials.
+			// HTTP-auth handling — two cooperating pieces, BOTH required:
 			//
-			// Why default-empty: the page itself OR any sub-resource it loads
-			// (third-party scripts, ad pixels, abandoned CDN domains that now
-			// serve `WWW-Authenticate: Basic ...`) can trigger Chromium's
-			// **native HTTP-auth dialog**. Unlike `alert/confirm/prompt`, the
-			// HTTP-auth dialog is NOT captured by puppeteer's `page.on('dialog')`
-			// — without `page.authenticate` registered, Chromium blocks the
-			// request waiting for input that never arrives, and the entire
-			// page navigation hangs until puppeteer's navigation timeout
-			// fires. The hang shows up downstream as a `timeout` ErrorKind
-			// even though the root cause is "one sub-resource demands Basic
-			// auth and no one is at the dialog."
+			// 1. `page.authenticate({user, pass})` (always, even with empty
+			//    strings) registers a Fetch-domain auth handler with
+			//    Chromium. With empty credentials it ALSO drains Chromium's
+			//    native HTTP-auth dialog without sending anything
+			//    privileged — the dialog cannot be captured by
+			//    `page.on('dialog')` (HTTP-auth is not a JS dialog) and
+			//    would otherwise hang the navigation until puppeteer's
+			//    timeout fires. With non-empty credentials it provides the
+			//    scope's auth so the in-scope navigation succeeds.
 			//
-			// Registering with empty credentials makes Chromium reply
-			// immediately with an empty Authorization header; the server
-			// either accepts (rare, intentional public endpoint behind 401)
-			// or responds with another 401 that puppeteer surfaces as a
-			// definitive sub-resource failure — no hang either way.
+			// 2. Stripping URL-embedded credentials from the navigation
+			//    target. **This is the credential-leak guard.** When the
+			//    URL we hand puppeteer carries `user:pass@host`, Chromium
+			//    promotes those credentials into its HTTP-auth cache
+			//    keyed by (scheme, host, port, realm). Subsequent
+			//    sub-resource requests issued from the same page —
+			//    including cross-origin requests to a different hostname
+			//    sharing the same IP / port (e.g. an embedded
+			//    `<img src="http://127.0.0.1:8010/…">` loaded from a
+			//    `localhost:8010` page) — get the cached `Authorization`
+			//    header re-attached by the network stack. The
+			//    `Fetch.authRequired` event never fires for these
+			//    pre-emptive attachments, so neither `page.authenticate`
+			//    nor any custom Fetch listener can filter them. The only
+			//    way to keep the cred out of the cross-origin request is
+			//    to make sure it never enters the cache in the first
+			//    place — hence stripping the URL before navigation.
 			//
-			// URL-embedded credentials still win: when `https://user:pass@host/`
-			// is the scope-injected form, we pass them explicitly so a single
-			// real auth handshake succeeds. The empty-default only applies
-			// when the URL carries no inline credentials.
-			// `??  ''` because ExURL types these as `string | null` while
-			// puppeteer's `Credentials` interface needs `string`. The empty
-			// string is what we want as the safe default anyway — see the
-			// docstring above.
+			// Verified by `scope-auth-leak.e2e.ts`: removing either piece
+			// causes that test to fail (without auth → main 401 hangs;
+			// without strip → scope cred leaks to off-scope sub-resource).
 			await page.authenticate({
 				username: url.username ?? '',
 				password: url.password ?? '',
 			});
+			const navigateUrl = parseUrl(url.href);
+			if (navigateUrl) {
+				navigateUrl.username = '';
+				navigateUrl.password = '';
+			}
 			const scraper = new Scraper();
 
 			scraper.on(
@@ -617,7 +627,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				}),
 			);
 
-			const result = await scraper.scrapeStart(page, url, {
+			const result = await scraper.scrapeStart(page, navigateUrl ?? url, {
 				isExternal,
 				captureImages: !isExternal && this.#options.captureImages,
 				excludeKeywords: this.#options.excludeKeywords,
