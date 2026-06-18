@@ -59,6 +59,7 @@ npx @nitpicker/cli crawl <archive> --inventory <urls.txt>
 前回クロールで失敗したページだけを再取得する。「サーバ側の一時障害やタイムアウトで取りこぼしたページを、フルクロールし直さずに回収する」ためのモード。
 
 - 再取得対象は **status が `-1`（ネットワークエラー/タイムアウト/ブラウザクラッシュの sentinel）/ `NULL`、content-type が `NULL`、または status が 5xx** のページ。確定応答である 4xx は再取得しても結果が変わらないため対象外
+- さらに、最終エラーメッセージが**永続失敗 kind**（`dns` / `tls` / `client-blocked` / `parse-error` / `connection-refused`）に分類されるページは **対象から除外**される。NXDOMAIN や証明書失効、Chromium のブロック判定、HTTP パースエラーなどは再試行しても同じ結果しか返さないため、`--retry-failed` を繰り返すほどリトライ対象が縮んでいく（収束する）。一過性のネットワーク要因や middlebox 由来のタイムアウトは引き続きリトライ対象
 - `internal` / `external` 両方を対象にする（external はメタデータのみ再取得）
 - 再取得したページが HTML なら新リンクを辿り、未取得の新 URL があればそこから再帰クロールする（デフォルト ON）。`--no-recursive` で「失敗ページの再取得のみ」に限定できる。**この recursive 設定はフラグ値が優先され、アーカイブ作成時の recursive 設定は継承しない**
 - スコープ・除外（`--exclude` 系）・User-Agent などは **アーカイブに保存された設定値を流用**する。明示的にフラグ指定したものだけ上書きされる
@@ -186,7 +187,7 @@ npx @nitpicker/cli query <file> <sub-command> [options]
 
 ### `error-kinds`: クロール失敗の原因分類
 
-クロール失敗を原因別（`dns` / `connection-refused` / `connection-reset` / `connection-timeout` / `tls` / `timeout` / `protocol` / `unknown`）に集計する。DNS 解決失敗や接続拒否が、ただの「タイムアウト/不明」に埋もれず区別できる。kind 別件数 + ホスト別内訳 + サンプル URL を JSON で返す。
+クロール失敗を原因別に集計する。kind の網羅集合は `@nitpicker/crawler` の `ErrorKind` union（`packages/@nitpicker/crawler/src/types.ts`）が正で、現在は `dns` / `dns-transient` / `connection-refused` / `connection-reset` / `connection-timeout` / `tls` / `local-network` / `parse-error` / `client-blocked` / `timeout` / `protocol` / `unknown` の 12 種。DNS 解決失敗や Chromium のブロック判定、HTTP パースエラーが、ただの「タイムアウト/不明」に埋もれず区別できる。kind 別件数 + ホスト別内訳 + サンプル URL を JSON で返す。
 
 原因の判定（`classifyErrorKind`）は **保存された値ではなく `message` から読み取り時に行う**ため、この機能より前に作成した既存アーカイブもそのまま分類できる。失敗の取得元は 2 系統: スクレイプ経路の失敗は `page_errors`、DNS/接続/TLS など crawler レベルの失敗は構造化テーブル `crawl_errors`（無い古いアーカイブでは `error.log` を読んでフォールバック）。応答しないページが per-property の累積タイムアウトで `timeout` に倒れる現象は beholder 側の既知課題（`getMeta` の逐次取得）。
 

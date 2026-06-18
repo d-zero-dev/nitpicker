@@ -32,6 +32,22 @@ import type { CrawlerError, PageData } from './utils/types/types.js';
  * Only `dns` is mark-target for the DNS-burned host cache; everything else is
  * either too transient to burn (network glitch / browser hiccup) or too
  * server-specific to extrapolate to "this whole host is dead."
+ *
+ * ### Derived constants that MUST be reviewed when this union changes
+ *
+ * - `PERMANENT_ERROR_KINDS` (`permanent-error-kinds.ts`) — the set of kinds
+ *   excluded from `--retry-failed` so retry iterations actually converge.
+ *   A new kind that is deterministically permanent (server-state, cert,
+ *   browser-block, …) likely belongs here.
+ * - `PUPPETEER_FALLBACK_KINDS` (`crawler/is-puppeteer-fallback-candidate.ts`)
+ *   — the set of kinds where one puppeteer attempt has a realistic chance
+ *   of succeeding after HEAD+GET pre-flight exhausted retries. A new kind
+ *   modelling a middlebox / WAF / slow-server quirk likely belongs here.
+ *
+ * Adding a kind without reviewing both sets risks a silent regression:
+ * `--retry-failed` re-trying a permanent failure forever (no PERMANENT
+ * entry), or a recoverable URL never reaching the puppeteer fallback (no
+ * PUPPETEER_FALLBACK entry).
  */
 export type ErrorKind =
 	| 'dns'
