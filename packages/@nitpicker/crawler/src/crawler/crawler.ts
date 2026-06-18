@@ -45,6 +45,8 @@ import { handleScrapeEnd } from './handle-scrape-end.js';
 import { handleScrapeError } from './handle-scrape-error.js';
 import { injectScopeAuth } from './inject-scope-auth.js';
 import { isHtmlContentType } from './is-html-content-type.js';
+import { isLikelyHtmlUrl } from './is-likely-html-url.js';
+import { isPuppeteerFallbackCandidate } from './is-puppeteer-fallback-candidate.js';
 import LinkList from './link-list.js';
 import { linkToPageData } from './link-to-page-data.js';
 import { logUndrainedPhaseErrors } from './log-undrained-phase-errors.js';
@@ -988,6 +990,79 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		try {
 			headCheckResult = await this.#sendHeadRequest(url, isExternal, update, laneIndex);
 		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			// Puppeteer-only fallback: when the HEAD pre-flight (and its GET
+			// companion inside `fetchDestination`) exhaust retries on what
+			// looks like an HTML URL, give the browser exactly one chance
+			// before recording the page as `status = -1`. Some middleboxes /
+			// WAF configurations drop bare HEAD/GET probes (parse-error,
+			// reset, silent timeout) while still answering a real puppeteer
+			// navigation; those URLs would otherwise be permanently lost.
+			//
+			// Restricted to non-metadataOnly scrapes because metadata-only
+			// mode is a bandwidth-saving path for external pages — there is
+			// no payoff in spinning up puppeteer when the row was never
+			// going to be fully rendered. `isPuppeteerFallbackCandidate`
+			// filters PreloadShortCircuitError automatically via its
+			// classifier check (its synthesised message classifies as `dns`).
+			if (
+				!metadataOnly &&
+				isLikelyHtmlUrl(url) &&
+				isPuppeteerFallbackCandidate(errorMessage)
+			) {
+				update(c.yellow('HEAD/GET unreachable — trying puppeteer once'));
+				try {
+					const fallback = await this.#launchBrowserAndScrape(
+						url,
+						update,
+						isExternal,
+						metadataOnly,
+					);
+					if (fallback.type === 'success') {
+						if (fallback.pageData) {
+							const renderedKey = redirectDestKey(url, fallback.pageData.redirectPaths);
+							this.#scrapedDestinations.add(renderedKey);
+						}
+						markBrowserScrape();
+						return fallback;
+					}
+					if (fallback.type === 'skipped') {
+						// Puppeteer rendered the page far enough for the scraper
+						// to match an `excludeKeywords` rule. That is a definitive
+						// "skip" verdict from the browser, NOT an unreachable
+						// host — surface the skip so downstream handling (skip
+						// counter, anchor-extraction suppression, `setSkippedPage`
+						// in the archive) behaves identically to the case where
+						// HEAD had succeeded. Without this branch, the page would
+						// be recorded as `status = -1` with the HEAD timeout
+						// message — a misleading entry that conflates
+						// "operator-intended skip" with "network failure".
+						return fallback;
+					}
+				} catch (browserError) {
+					// Browser launch / runtime crash — fall through to the
+					// unreachable path below. The original HEAD error is more
+					// informative about WHY the URL wasn't reachable, so it
+					// (not the puppeteer noise) is what we surface in
+					// `crawl_errors`. The lane display flag below (
+					// "Unreachable (fallback failed)") preserves the fact
+					// that puppeteer also tried, so operators reading the
+					// progress log can tell this URL got the safety-net
+					// attempt versus the cheap-probe-only path.
+					crawlerLog('Puppeteer fallback also failed for %s: %O', url.href, browserError);
+				}
+				update(c.red('Unreachable (fallback failed)'));
+				return {
+					type: 'error',
+					resources: [],
+					error: {
+						name: error instanceof Error ? error.name : 'Error',
+						message: errorMessage,
+						stack: error instanceof Error ? error.stack : undefined,
+						shutdown: false,
+					},
+				};
+			}
 			// Server unreachable — skip browser launch entirely
 			update(c.red('Unreachable'));
 			return {
@@ -995,7 +1070,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				resources: [],
 				error: {
 					name: error instanceof Error ? error.name : 'Error',
-					message: error instanceof Error ? error.message : String(error),
+					message: errorMessage,
 					stack: error instanceof Error ? error.stack : undefined,
 					shutdown: false,
 				},
