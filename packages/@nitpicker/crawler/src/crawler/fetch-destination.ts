@@ -205,7 +205,12 @@ async function _fetchHead(
 
 					if (rep.status === 405) {
 						if (method === 'GET') {
-							reject(new Error(`Method Not Allowed: ${url.href} ${rep.statusText}`));
+							// GET fallback also returned 405 — the server really does
+							// reject both methods. Resolve with the PageData so the
+							// archive records `status: 405` instead of the `-1`
+							// sentinel a reject would land on (which would erase the
+							// only useful diagnostic the server gave us).
+							resolve(rep);
 							return;
 						}
 						try {
@@ -218,7 +223,9 @@ async function _fetchHead(
 
 					if (rep.status === 501) {
 						if (method === 'GET') {
-							reject(new Error(`Method Not Implemented: ${url.href} ${rep.statusText}`));
+							// GET fallback also returned 501 — preserve the status
+							// rather than dropping it into the `-1` bucket.
+							resolve(rep);
 							return;
 						}
 						await delay(5 * 1000);
@@ -232,7 +239,12 @@ async function _fetchHead(
 
 					if (rep.status === 503) {
 						if (method === 'GET') {
-							reject(new Error(`Retrying failed: ${url.href} ${rep.statusText}`));
+							// GET fallback also returned 503 — preserve the status.
+							// A second-pass 5xx from a different method is the
+							// server's real answer, not a transient HEAD-only quirk,
+							// so the archive should remember it as 503 instead of
+							// the generic `-1` sentinel.
+							resolve(rep);
 							return;
 						}
 						await delay(5 * 1000);
