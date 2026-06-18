@@ -3,6 +3,7 @@ import type { MetadataFulfillment } from '@nitpicker/query';
 import { useSummary } from '../api/use-summary.js';
 import { ContentTypeStackedBar } from '../components/content-type-stacked-bar.js';
 import { ViewHeader } from '../components/view-header.js';
+import { getErrorKindLabel } from '../i18n/get-error-kind-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
 import { clampRatio } from '../utils/clamp-ratio.js';
 import { computeRatio } from '../utils/compute-ratio.js';
@@ -122,15 +123,62 @@ export function SummaryView() {
 			<div className="bars">
 				{data.statusDistribution.map((entry) => {
 					const ratio = computeRatio(entry.count, statusTotal);
+					const showBreakdown =
+						entry.status === -1 &&
+						entry.errorKindBreakdown !== undefined &&
+						entry.errorKindBreakdown.length > 0;
 					return (
-						<div key={entry.status ?? 'none'} className="bar-row">
-							<span style={{ width: 60 }}>{entry.status ?? '—'}</span>
-							<span className="bar-track">
-								<span className="bar-fill" style={{ width: `${ratio * 100}%` }} />
-							</span>
-							<span>
-								{entry.count.toLocaleString()} <small>({formatPercent(ratio)})</small>
-							</span>
+						<div
+							key={entry.status ?? 'none'}
+							role={showBreakdown ? 'group' : undefined}
+							aria-label={
+								showBreakdown
+									? t('views.summary.statusBreakdownAria', {
+											count: entry.count,
+										})
+									: undefined
+							}>
+							<div className="bar-row">
+								<span style={{ width: 60 }}>{entry.status ?? '—'}</span>
+								<span className="bar-track">
+									<span className="bar-fill" style={{ width: `${ratio * 100}%` }} />
+								</span>
+								<span>
+									{entry.count.toLocaleString()} <small>({formatPercent(ratio)})</small>
+								</span>
+							</div>
+							{showBreakdown && entry.errorKindBreakdown && (
+								<ul
+									style={{
+										listStyle: 'none',
+										paddingLeft: 24,
+										margin: 0,
+										fontSize: '0.8em',
+									}}>
+									{entry.errorKindBreakdown.map((sub) => {
+										// Denominator is the parent -1 count so the sub-bars
+										// describe the composition of -1, not the global mix.
+										const subRatio = computeRatio(sub.count, entry.count);
+										return (
+											<li key={sub.kind} className="bar-row">
+												<span style={{ width: 60 }}>
+													{getErrorKindLabel(sub.kind, t)}
+												</span>
+												<span className="bar-track">
+													<span
+														className="bar-fill"
+														style={{ width: `${subRatio * 100}%` }}
+													/>
+												</span>
+												<span>
+													{sub.count.toLocaleString()}{' '}
+													<small>({formatPercent(subRatio)})</small>
+												</span>
+											</li>
+										);
+									})}
+								</ul>
+							)}
 						</div>
 					);
 				})}

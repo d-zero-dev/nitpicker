@@ -1,7 +1,15 @@
-import type { ContentTypeCategory, ContentTypeCount, SummaryResult } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type {
+	ContentTypeCategory,
+	ContentTypeCount,
+	StatusCount,
+	SummaryResult,
+} from './types.js';
+import type { ArchiveAccessor, ErrorKind } from '@nitpicker/crawler';
+
+import { classifyErrorKind } from '@nitpicker/crawler';
 
 import { classifyContentType } from './classify-content-type.js';
+import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
 
 /**
  * Retrieves site-wide summary statistics from the archive.
@@ -28,56 +36,75 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 	// in JS. The metadata rates use a stricter `text/html`-only filter (errored
 	// rows can never carry metadata) so they stay independent. ContentType
 	// distribution covers EVERY in-scope row (including PDFs) so it also lives
-	// in its own query.
-	const [pageRows, metaRows, contentTypeRows] = await Promise.all([
-		knex('pages')
-			.select('isExternal', 'status')
-			.count('id as count')
-			.where('scraped', 1)
-			.whereNull('redirectDestId')
-			.where((qb) => {
-				qb.whereNull('contentType').orWhere('contentType', 'text/html');
-			})
-			.groupBy('isExternal', 'status') as Promise<
-			{ isExternal: 0 | 1; status: number | null; count: number | string }[]
-		>,
-		knex('pages')
-			.select(
-				knex.raw('COUNT(*) as total'),
-				knex.raw(
-					"COUNT(CASE WHEN title IS NOT NULL AND title != '' THEN 1 END) as hasTitle",
-				),
-				knex.raw(
-					"COUNT(CASE WHEN description IS NOT NULL AND description != '' THEN 1 END) as hasDescription",
-				),
-				knex.raw(
-					"COUNT(CASE WHEN keywords IS NOT NULL AND keywords != '' THEN 1 END) as hasKeywords",
-				),
-				knex.raw(
-					"COUNT(CASE WHEN og_title IS NOT NULL AND og_title != '' THEN 1 END) as hasOgTitle",
-				),
-				knex.raw(
-					"COUNT(CASE WHEN og_description IS NOT NULL AND og_description != '' THEN 1 END) as hasOgDescription",
-				),
-				knex.raw(
-					"COUNT(CASE WHEN og_image IS NOT NULL AND og_image != '' THEN 1 END) as hasOgImage",
-				),
-			)
-			.where({ scraped: 1, isExternal: 0, contentType: 'text/html' })
-			.whereNull('redirectDestId') as Promise<Record<string, number>[]>,
-		knex('pages')
-			.select('contentType', 'isExternal')
-			.count('id as count')
-			.where('scraped', 1)
-			.whereNull('redirectDestId')
-			.groupBy('contentType', 'isExternal') as Promise<
-			{
-				contentType: string | null;
-				isExternal: 0 | 1;
-				count: number | string;
-			}[]
-		>,
-	]);
+	// in its own query. The hard-failed page id list runs alongside so the
+	// status=-1 errorKind breakdown can be materialised in one waterfall. The
+	// `resolveFailedPageMessages` call chains off the failed-id query inside
+	// the same Promise.all — so the (often slow) page_errors / crawl_errors /
+	// error.log fetches overlap with the meta + content-type aggregations
+	// instead of running serially after the all settles.
+	const failedPageIdRowsPromise = knex('pages')
+		.select('id')
+		.where('scraped', 1)
+		.where('status', -1)
+		.whereNull('redirectDestId') as Promise<{ id: number }[]>;
+	const failedPageMessagesPromise = failedPageIdRowsPromise.then((rows) =>
+		resolveFailedPageMessages(
+			accessor,
+			rows.map((r) => r.id),
+		),
+	);
+	const [pageRows, metaRows, contentTypeRows, failedPageIdRows, failedPageMessages] =
+		await Promise.all([
+			knex('pages')
+				.select('isExternal', 'status')
+				.count('id as count')
+				.where('scraped', 1)
+				.whereNull('redirectDestId')
+				.where((qb) => {
+					qb.whereNull('contentType').orWhere('contentType', 'text/html');
+				})
+				.groupBy('isExternal', 'status') as Promise<
+				{ isExternal: 0 | 1; status: number | null; count: number | string }[]
+			>,
+			knex('pages')
+				.select(
+					knex.raw('COUNT(*) as total'),
+					knex.raw(
+						"COUNT(CASE WHEN title IS NOT NULL AND title != '' THEN 1 END) as hasTitle",
+					),
+					knex.raw(
+						"COUNT(CASE WHEN description IS NOT NULL AND description != '' THEN 1 END) as hasDescription",
+					),
+					knex.raw(
+						"COUNT(CASE WHEN keywords IS NOT NULL AND keywords != '' THEN 1 END) as hasKeywords",
+					),
+					knex.raw(
+						"COUNT(CASE WHEN og_title IS NOT NULL AND og_title != '' THEN 1 END) as hasOgTitle",
+					),
+					knex.raw(
+						"COUNT(CASE WHEN og_description IS NOT NULL AND og_description != '' THEN 1 END) as hasOgDescription",
+					),
+					knex.raw(
+						"COUNT(CASE WHEN og_image IS NOT NULL AND og_image != '' THEN 1 END) as hasOgImage",
+					),
+				)
+				.where({ scraped: 1, isExternal: 0, contentType: 'text/html' })
+				.whereNull('redirectDestId') as Promise<Record<string, number>[]>,
+			knex('pages')
+				.select('contentType', 'isExternal')
+				.count('id as count')
+				.where('scraped', 1)
+				.whereNull('redirectDestId')
+				.groupBy('contentType', 'isExternal') as Promise<
+				{
+					contentType: string | null;
+					isExternal: 0 | 1;
+					count: number | string;
+				}[]
+			>,
+			failedPageIdRowsPromise,
+			failedPageMessagesPromise,
+		]);
 
 	// Pivot pageRows into total/internal/external counts and the status histogram.
 	// `totalNum` counts every row (including any row with a NULL `isExternal`,
@@ -98,7 +125,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		}
 		statusAcc.set(row.status, (statusAcc.get(row.status) ?? 0) + n);
 	}
-	const statusDistribution = [...statusAcc.entries()]
+	const statusDistribution: StatusCount[] = [...statusAcc.entries()]
 		.map(([status, count]) => ({ status, count }))
 		.toSorted((a, b) => {
 			// `null` status (errored / not-yet-classified) bubbles to the end;
@@ -111,6 +138,24 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 			}
 			return a.status - b.status;
 		});
+
+	// status=-1 breakdown: classify each hard-failed page by its underlying
+	// message and attach a per-kind histogram to the `-1` row. `failedPageMessages`
+	// was already resolved in parallel with the other aggregations above, so
+	// here we just iterate the failed ids and bucket them. Pages with no
+	// recorded message fall into `'unknown'`, keeping `sum(breakdown) === count`.
+	const minusOneEntry = statusDistribution.find((e) => e.status === -1);
+	if (minusOneEntry && failedPageIdRows.length > 0) {
+		const kindCounts = new Map<ErrorKind, number>();
+		for (const row of failedPageIdRows) {
+			const message = failedPageMessages.get(row.id) ?? '';
+			const kind = message === '' ? 'unknown' : classifyErrorKind(message);
+			kindCounts.set(kind, (kindCounts.get(kind) ?? 0) + 1);
+		}
+		minusOneEntry.errorKindBreakdown = [...kindCounts.entries()]
+			.map(([kind, count]) => ({ kind, count }))
+			.toSorted((a, b) => b.count - a.count);
+	}
 
 	const meta = metaRows[0] ?? ({} as Record<string, number>);
 	const metaTotal = Number(meta.total ?? 0);

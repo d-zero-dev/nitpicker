@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { useErrorKinds } from '../api/use-error-kinds.js';
 import { ViewHeader } from '../components/view-header.js';
+import { getErrorKindLabel } from '../i18n/get-error-kind-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
 import { computeRatio } from '../utils/compute-ratio.js';
 import { formatPercent } from '../utils/format-percent.js';
@@ -79,7 +80,9 @@ export function ErrorsView() {
 							className={isActive ? 'bar-row bar-row-active' : 'bar-row'}
 							aria-pressed={isActive}
 							onClick={() => setSelected(group.kind)}>
-							<span style={{ width: 160, textAlign: 'left' }}>{group.kind}</span>
+							<span style={{ width: 160, textAlign: 'left' }}>
+								{getErrorKindLabel(group.kind, t)}
+							</span>
 							<span className="bar-track">
 								<span className="bar-fill" style={{ width: `${ratio * 100}%` }} />
 							</span>
@@ -94,7 +97,7 @@ export function ErrorsView() {
 			{activeGroup && (
 				<div className="error-detail">
 					<h2>
-						{activeGroup.kind} — {t('views.errors.hosts')}
+						{getErrorKindLabel(activeGroup.kind, t)} — {t('views.errors.hosts')}
 					</h2>
 					<div className="bars">
 						{activeGroup.hosts.map((host) => (

@@ -313,7 +313,17 @@ describe('getSummary', () => {
 		expect(result.internalPages).toBe(4);
 		expect(result.externalPages).toBe(1);
 		// The errored page's status IS in the histogram (broken-link audit needs it).
-		expect(result.statusDistribution).toContainEqual({ status: -1, count: 1 });
+		// The `-1` row now carries an `errorKindBreakdown` summing to its `count`,
+		// so we match `count`/`status` with `objectContaining` and assert the
+		// breakdown invariant separately rather than re-spelling it inline.
+		const minusOne = result.statusDistribution.find((e) => e.status === -1);
+		expect(minusOne).toBeDefined();
+		expect(minusOne!.count).toBe(1);
+		const breakdownSum = (minusOne!.errorKindBreakdown ?? []).reduce(
+			(acc, e) => acc + e.count,
+			0,
+		);
+		expect(breakdownSum).toBe(minusOne!.count);
 		/* 200 = 2 internal HTML + 1 external HTML. The PDFs are excluded by
 		   the same HTML-or-null filter, so adding the external PDF doesn't
 		   bump this. */
