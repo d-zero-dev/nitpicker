@@ -24,6 +24,7 @@ import type { CrawlerError, PageData } from './utils/types/types.js';
  * | `connection-timeout` | yes | no | TCP-level timeout (`ETIMEDOUT`); slow but reachable |
  * | `local-network` | **yes** | no | local machine's network is unreachable / changed (WiFi, sleep, ICMP-unreachable, …) |
  * | `parse-error` | mostly persistent | no | HTTP response could not be parsed (proxy, garbage, MITM) |
+ * | `client-blocked` | persistent (per browser) | no | Chromium-side `ERR_BLOCKED_BY_*` family — the browser actively refused the request (ad/tracker heuristics, CSP, CORP, administrator block list, …) |
  * | `protocol` | yes | no | puppeteer protocol layer (frame detached, target closed, …) |
  * | `timeout` | yes | no | puppeteer navigation timeout or HEAD pre-flight race timeout (`Timeout: <url>`) |
  * | `unknown` | unknown | no | catch-all for messages no matcher recognised |
@@ -41,6 +42,7 @@ export type ErrorKind =
 	| 'tls'
 	| 'local-network'
 	| 'parse-error'
+	| 'client-blocked'
 	| 'timeout'
 	| 'protocol'
 	| 'unknown';

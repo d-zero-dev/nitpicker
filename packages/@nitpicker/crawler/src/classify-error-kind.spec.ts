@@ -31,6 +31,20 @@ describe('classifyErrorKind', () => {
 		expect(classifyErrorKind('net::ERR_SSL_PROTOCOL_ERROR')).toBe('tls');
 	});
 
+	it('classifies Node hostname/altname certificate mismatch as tls', () => {
+		// Node's tls layer reports certificate-vs-host mismatches with this
+		// exact phrasing; without an explicit matcher it falls through to
+		// `unknown` and stops being actionable in the viewer's Errors panel.
+		expect(
+			classifyErrorKind(
+				"[Retried 3 times] Hostname/IP does not match certificate's altnames: Host: edge.example.com",
+			),
+		).toBe('tls');
+		expect(classifyErrorKind('altnames: Host: foo.example.com. is not in the cert')).toBe(
+			'tls',
+		);
+	});
+
 	it('classifies connection-refused as connection-refused', () => {
 		expect(classifyErrorKind('connect ECONNREFUSED 127.0.0.1:443')).toBe(
 			'connection-refused',
@@ -65,10 +79,21 @@ describe('classifyErrorKind', () => {
 
 	it('classifies the NetTimeoutError "Timeout: <url>" form as timeout', () => {
 		// The HEAD pre-flight race emits exactly this shape via
-		// `NetTimeoutError`. Without an anchored "^Timeout:" pattern it would
-		// fall through to `unknown` and inflate the Errors view's noise bucket.
+		// `NetTimeoutError`. Match by the URL-shaped tail (not just an
+		// anchored line start) so the retry-exhaustion wrapper variant —
+		// `[Retried N times] Timeout: https://...` that ends up in
+		// `crawl_errors` / `error.log` — is captured too. Both forms must
+		// land in `timeout` rather than `unknown`.
 		expect(classifyErrorKind('Timeout: https://www.example.com/path')).toBe('timeout');
 		expect(classifyErrorKind('Timeout: http://slow.example.org/page/')).toBe('timeout');
+		expect(
+			classifyErrorKind('[Retried 3 times] Timeout: https://www.example.com/press/2023/'),
+		).toBe('timeout');
+		expect(
+			classifyErrorKind(
+				'NetTimeoutError: [Retried 3 times] Timeout: http://example.com/x',
+			),
+		).toBe('timeout');
 	});
 
 	it('classifies local-network failures (WiFi / OS sleep / unreachable) as local-network', () => {
@@ -93,6 +118,27 @@ describe('classifyErrorKind', () => {
 		expect(classifyErrorKind('Error: getaddrinfo EREFUSED foo.example.com')).toBe(
 			'dns-transient',
 		);
+	});
+
+	it('classifies Chromium client-side blocks as client-blocked', () => {
+		// Per Chromium `net/base/net_error_list.h`: ERR_BLOCKED_BY_CLIENT is
+		// documented as "The client chose to block the request." The entire
+		// ERR_BLOCKED_* family is a deliberate browser-side rejection (ad
+		// heuristics, CSP, CORB / ORB, administrator block lists, …) and is
+		// orthogonal to "the server didn't respond" — it must not land in
+		// unknown or be conflated with protocol / local-network.
+		expect(
+			classifyErrorKind('net::ERR_BLOCKED_BY_CLIENT at https://ad.example.com/'),
+		).toBe('client-blocked');
+		expect(classifyErrorKind('net::ERR_BLOCKED_BY_ADMINISTRATOR')).toBe('client-blocked');
+		expect(classifyErrorKind('net::ERR_BLOCKED_BY_RESPONSE')).toBe('client-blocked');
+		expect(classifyErrorKind('net::ERR_BLOCKED_BY_CSP')).toBe('client-blocked');
+		expect(classifyErrorKind('net::ERR_BLOCKED_BY_ORB')).toBe('client-blocked');
+		expect(classifyErrorKind('net::ERR_BLOCKED_BY_FINGERPRINTING_PROTECTION')).toBe(
+			'client-blocked',
+		);
+		expect(classifyErrorKind('net::ERR_CLEARTEXT_NOT_PERMITTED')).toBe('client-blocked');
+		expect(classifyErrorKind('net::ERR_NETWORK_ACCESS_REVOKED')).toBe('client-blocked');
 	});
 
 	it('classifies HTTP parse failures as parse-error', () => {
