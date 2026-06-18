@@ -1105,16 +1105,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/beholder@npm:3.1.1":
-  version: 3.1.1
-  resolution: "@d-zero/beholder@npm:3.1.1"
+"@d-zero/beholder@npm:3.1.2":
+  version: 3.1.2
+  resolution: "@d-zero/beholder@npm:3.1.2"
   dependencies:
-    "@d-zero/puppeteer-page-scan": "npm:4.6.0"
+    "@d-zero/puppeteer-page-scan": "npm:4.6.1"
     "@d-zero/shared": "npm:0.22.0"
     debug: "npm:4.4.3"
     puppeteer: "npm:24.37.5"
     simple-wappalyzer: "npm:1.1.99"
-  checksum: 10c0/ce7787e10efd8ed6e940dedefbb6bb1b1c5847cc12dc4eace3c2add7753007ac7ae1c31d5ff5ab17629fbdbc565d00665f551eb01ac45510de5684d1635ce4d6
+  checksum: 10c0/b7c8c32fd7bd57e3f2f197087da70159942f5f6900ed04f703d80a667d5db8cc7949c808e7bb6b87552e3b8effc69dff424d4ea66cf9f9f6263f9a09755aa6cd
   languageName: node
   linkType: hard
 
@@ -1251,27 +1251,27 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-page-scan@npm:4.6.0":
-  version: 4.6.0
-  resolution: "@d-zero/puppeteer-page-scan@npm:4.6.0"
+"@d-zero/puppeteer-page-scan@npm:4.6.1":
+  version: 4.6.1
+  resolution: "@d-zero/puppeteer-page-scan@npm:4.6.1"
   dependencies:
     "@d-zero/puppeteer-general-actions": "npm:1.2.5"
-    "@d-zero/puppeteer-scroll": "npm:4.0.3"
+    "@d-zero/puppeteer-scroll": "npm:4.0.4"
     "@d-zero/shared": "npm:0.22.0"
   peerDependencies:
     puppeteer: 24.37.5
-  checksum: 10c0/e407f7887f26654d26c5ef074bddaf6fcd6e07676529b32a8559c06c6252f03ec7cc3560f5b45c61a8d090537e5e42aae8f1041c65e53a0da4f90fed45ac119d
+  checksum: 10c0/6b1eb74d18308624931809d2211b8a206656d2b2dbd680a71c488bddb928b828caa43fe0c8a4baff470f75aab0608f502c71b0eb5be7b278b97788314bd15977
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-scroll@npm:4.0.3":
-  version: 4.0.3
-  resolution: "@d-zero/puppeteer-scroll@npm:4.0.3"
+"@d-zero/puppeteer-scroll@npm:4.0.4":
+  version: 4.0.4
+  resolution: "@d-zero/puppeteer-scroll@npm:4.0.4"
   dependencies:
     "@d-zero/shared": "npm:0.22.0"
   peerDependencies:
     puppeteer: 24.37.5
-  checksum: 10c0/07234339cf3466a05abd0bd754864f1625291f263784685722ae52ce227838ce21d4e6ee3cbcdb21bb8c03a5ea094feed36d2c74ea5d4b321adc30d5ab02ed1d
+  checksum: 10c0/b0e0876ea7cf20b727aadc125dc421f06dcc2d2d9a7b6d2ef0c3b41d87cdf2f14484ecffce53453665e5049c5924b22b260a6f56748975667fe0a7dd23899588
   languageName: node
   linkType: hard
 
@@ -3212,7 +3212,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/crawler@workspace:packages/@nitpicker/crawler"
   dependencies:
-    "@d-zero/beholder": "npm:3.1.1"
+    "@d-zero/beholder": "npm:3.1.2"
     "@d-zero/dealer": "npm:1.9.0"
     "@d-zero/fs": "npm:0.2.2"
     "@d-zero/shared": "npm:0.20.1"
