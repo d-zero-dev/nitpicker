@@ -17,6 +17,7 @@ import path from 'node:path';
 
 import Scraper from '@d-zero/beholder';
 import { deal } from '@d-zero/dealer';
+import { delay } from '@d-zero/shared/delay';
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { retryCall } from '@d-zero/shared/retry';
 import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-await-event-emitter';
@@ -691,6 +692,23 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				};
 
 				return async () => {
+					// Interval delay is handled here instead of by dealer because
+					// DNS-burned hosts must skip the wait entirely. Spending the
+					// per-URL interval on a host the cache already knows is dead
+					// just slows the crawl down for zero benefit — the HEAD won't
+					// be fired and `Crawler.#sendHeadRequest` will throw the
+					// preload short-circuit immediately. For all other URLs, run
+					// the same `delay()` + `%countdown(...)` log that dealer would
+					// have emitted, so the dealer display reads identically.
+					const burned = dnsBurnedHostCache.has(url.hostname.toLowerCase());
+					if (!burned && this.#options.interval && this.#options.interval > 0) {
+						await delay(this.#options.interval, (determinedInterval) => {
+							update(
+								`Waiting interval: %countdown(${determinedInterval},${_index}_interval)%ms`,
+							);
+						});
+					}
+
 					const log = createTimedUpdate(update, this.#options.verbose);
 
 					// `#scrapePage` 内のブラウザ HTML レンダーが成功したかをマークするフラグ。
@@ -847,7 +865,10 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			},
 			{
 				limit: concurrency,
-				interval: this.#options.interval,
+				// Interval is applied per-URL inside the worker callback above so
+				// DNS-burned hosts can skip it. Letting dealer handle interval
+				// would run the wait before our short-circuit check fires.
+				interval: 0,
 				verbose: this.#options.verbose || !process.stdout.isTTY,
 				signal: this.#abortController.signal,
 				header: (_progress, done, total, limit) => {
