@@ -572,15 +572,38 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			update('Creating page%dots%');
 			const page = await browser.newPage();
 			await page.setUserAgent(this.#options.userAgent);
-			// Defence-in-depth: beholder sets Authorization via setExtraHTTPHeaders,
-			// but page.authenticate() handles Chromium-level HTTP auth challenges
-			// (401 + WWW-Authenticate) that setExtraHTTPHeaders cannot cover.
-			if (url.username && url.password) {
-				await page.authenticate({
-					username: url.username,
-					password: url.password,
-				});
-			}
+			// `page.authenticate` is ALWAYS registered, even with empty credentials.
+			//
+			// Why default-empty: the page itself OR any sub-resource it loads
+			// (third-party scripts, ad pixels, abandoned CDN domains that now
+			// serve `WWW-Authenticate: Basic ...`) can trigger Chromium's
+			// **native HTTP-auth dialog**. Unlike `alert/confirm/prompt`, the
+			// HTTP-auth dialog is NOT captured by puppeteer's `page.on('dialog')`
+			// — without `page.authenticate` registered, Chromium blocks the
+			// request waiting for input that never arrives, and the entire
+			// page navigation hangs until puppeteer's navigation timeout
+			// fires. The hang shows up downstream as a `timeout` ErrorKind
+			// even though the root cause is "one sub-resource demands Basic
+			// auth and no one is at the dialog."
+			//
+			// Registering with empty credentials makes Chromium reply
+			// immediately with an empty Authorization header; the server
+			// either accepts (rare, intentional public endpoint behind 401)
+			// or responds with another 401 that puppeteer surfaces as a
+			// definitive sub-resource failure — no hang either way.
+			//
+			// URL-embedded credentials still win: when `https://user:pass@host/`
+			// is the scope-injected form, we pass them explicitly so a single
+			// real auth handshake succeeds. The empty-default only applies
+			// when the URL carries no inline credentials.
+			// `??  ''` because ExURL types these as `string | null` while
+			// puppeteer's `Credentials` interface needs `string`. The empty
+			// string is what we want as the safe default anyway — see the
+			// docstring above.
+			await page.authenticate({
+				username: url.username ?? '',
+				password: url.password ?? '',
+			});
 			const scraper = new Scraper();
 
 			scraper.on(
