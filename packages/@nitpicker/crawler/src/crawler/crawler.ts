@@ -60,6 +60,18 @@ import { shouldSkipUrl } from './should-skip-url.js';
 export type { CrawlerOptions } from './types.js';
 
 /**
+ * Per-attempt HEAD pre-flight timeouts in milliseconds.
+ *
+ * `retryCall` re-invokes the work function up to `retry + 1` times; we keep
+ * the first attempt short so a fast healthy site never pays the slow-server
+ * tax, then escalate so that a slow-but-eventually-responsive host gets a
+ * larger budget on retry. The attempt index is clamped to the last element
+ * of the array, so configurations with `retry > escalation.length - 1` just
+ * stay on the final (longest) timeout for any additional attempts.
+ */
+const HEAD_TIMEOUT_ESCALATION_MS: readonly number[] = [10_000, 30_000, 60_000];
+
+/**
  * The core crawler engine that discovers and scrapes web pages.
  *
  * The Crawler manages the crawl queue, uses the dealer pattern for concurrent
@@ -1126,8 +1138,29 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			update(c.red(`HEAD request: host ${host} DNS-burned — skipping`));
 			throw new PreloadShortCircuitError(host);
 		}
+		// Escalating per-attempt timeout: a slow-but-reachable server (e.g. some
+		// government sites under load) often answers in 20-40 s but is missed by
+		// a flat 10 s race on every retry. Start short to keep crawl throughput
+		// up on healthy URLs, then back off so the last attempt is generous
+		// enough that "really slow" gets a fair shot before we give up.
+		let attempt = 0;
 		return retryCall(
-			() => fetchDestination({ url, isExternal, userAgent: this.#options.userAgent }),
+			() => {
+				// Clamp the attempt index to the last entry of the escalation array
+				// so retry counts past the array length keep using the longest
+				// budget instead of falling off into `undefined`. `as number`
+				// only because TS can't see that a positive-length readonly array
+				// always has a defined last element.
+				const escalationIndex = Math.min(attempt, HEAD_TIMEOUT_ESCALATION_MS.length - 1);
+				const timeoutMs = HEAD_TIMEOUT_ESCALATION_MS[escalationIndex] as number;
+				attempt += 1;
+				return fetchDestination({
+					url,
+					isExternal,
+					userAgent: this.#options.userAgent,
+					timeout: timeoutMs,
+				});
+			},
 			{
 				retries: this.#options.retry,
 				label: 'HEAD request',

@@ -10,14 +10,15 @@ vi.mock('@d-zero/dealer', () => ({
 
 vi.mock('@d-zero/shared/retry', () => ({
 	/**
-	 * Stub retryCall that runs the function once and, on failure, invokes the
-	 * onGiveUp callback before rethrowing. The original behaviour (no retries,
-	 * single call) is preserved for success paths; only the give-up callback
-	 * is exercised so the DNS-burned host learning hook can be tested.
+	 * Stub retryCall that honours the `retries` option, runs the function up
+	 * to `retries + 1` times on failure, and invokes `onWait` between attempts
+	 * and `onGiveUp` after the last failure. Real interval delays are skipped
+	 * (zero wait) so tests don't pay actual back-off seconds per retry.
 	 * @param fn - The function to call.
-	 * @param opts - Retry options carrying onGiveUp / label / retries.
+	 * @param opts - Retry options.
 	 * @param opts.retries
 	 * @param opts.label
+	 * @param opts.onWait
 	 * @param opts.onGiveUp
 	 * @returns The result of calling fn.
 	 */
@@ -26,16 +27,33 @@ vi.mock('@d-zero/shared/retry', () => ({
 		opts?: {
 			retries?: number;
 			label?: string;
+			onWait?: (
+				determinedInterval: number,
+				retryCount: number,
+				label?: string,
+				error?: Error,
+			) => void;
 			onGiveUp?: (retryCount: number, error: Error, label?: string) => void;
 		},
 	): Promise<T> => {
-		try {
-			return await fn();
-		} catch (rawError: unknown) {
-			const error = rawError instanceof Error ? rawError : new Error(String(rawError));
-			opts?.onGiveUp?.(opts.retries ?? 0, error, opts.label);
-			throw error;
+		const maxRetries = opts?.retries ?? 0;
+		let lastError: Error | undefined;
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				return await fn();
+			} catch (rawError: unknown) {
+				lastError = rawError instanceof Error ? rawError : new Error(String(rawError));
+				if (attempt < maxRetries) {
+					opts?.onWait?.(0, attempt, opts.label, lastError);
+				}
+			}
 		}
+		// Loop must have run at least once and captured an error before this
+		// line is reachable; the `?? new Error(...)` is purely defensive so a
+		// malformed `retries: -1` could not crash the stub.
+		const finalError = lastError ?? new Error('retryCall stub: no error captured');
+		opts?.onGiveUp?.(maxRetries, finalError, opts?.label);
+		throw finalError;
 	},
 }));
 
@@ -655,6 +673,40 @@ describe('Crawler', () => {
 			});
 			const initialUrls = vi.mocked(deal).mock.calls[0]![0] as ExURL[];
 			expect(initialUrls.map((u) => u.pathname)).toEqual(['/blog/', '/news/']);
+		});
+	});
+
+	describe('HEAD pre-flight timeout escalation', () => {
+		it('passes escalating timeouts (10s → 30s → 60s) to fetchDestination across retry attempts', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			const fetchSpy = vi
+				.spyOn(fetchDestMod, 'fetchDestination')
+				.mockRejectedValue(new Error('Timeout: https://slow.example.com/'));
+
+			const crawler = new Crawler(defaultOptions);
+			crawler.on('error', () => {});
+
+			crawler.start([parseUrl('https://slow.example.com/')!]);
+
+			await vi.waitFor(() => {
+				expect(fetchSpy).toHaveBeenCalledTimes(4); // retry=3 → 1 + 3 attempts
+			});
+
+			// Attempt-indexed timeout: first call short for a fast healthy site,
+			// later calls generous so a slow-but-reachable server gets a chance.
+			expect(fetchSpy.mock.calls[0]![0]).toMatchObject({ timeout: 10_000 });
+			expect(fetchSpy.mock.calls[1]![0]).toMatchObject({ timeout: 30_000 });
+			expect(fetchSpy.mock.calls[2]![0]).toMatchObject({ timeout: 60_000 });
+			// Anything past the declared array falls back to the max budget.
+			expect(fetchSpy.mock.calls[3]![0]).toMatchObject({ timeout: 60_000 });
+
+			clearDnsBurnedHostCache();
 		});
 	});
 

@@ -9,6 +9,9 @@ import redirects from 'follow-redirects';
 import { destinationCache } from './destination-cache.js';
 import NetTimeoutError from './net-timeout-error.js';
 
+/** Default race timeout for the HEAD pre-flight, in milliseconds. */
+const DEFAULT_HEAD_TIMEOUT_MS = 10 * 1000;
+
 /**
  * Parameters for {@link fetchDestination}.
  */
@@ -29,26 +32,34 @@ export interface FetchDestinationParams {
 	};
 	/** User-Agent string to send with the request. */
 	readonly userAgent?: string;
+	/**
+	 * Race timeout for the network request in milliseconds. Defaults to
+	 * {@link DEFAULT_HEAD_TIMEOUT_MS} (10s). `Crawler.#sendHeadRequest` passes
+	 * a longer value on later retry attempts so a slow-but-reachable server
+	 * gets another chance before being given up on.
+	 */
+	readonly timeout?: number;
 }
 
 /**
  * Fetches the destination metadata for a URL using an HTTP HEAD request (or GET as fallback).
  *
  * Results are cached in memory so that repeated calls for the same URL
- * (without hash) return immediately. The request races against a 10-second
- * timeout; if the server does not respond in time, a {@link NetTimeoutError} is thrown.
+ * (without hash) return immediately. The request races against a configurable
+ * timeout (defaults to {@link DEFAULT_HEAD_TIMEOUT_MS}, 10 seconds); if the
+ * server does not respond in time, a {@link NetTimeoutError} is thrown.
  *
  * If the server returns 405 (Method Not Allowed), 501 (Not Implemented), or 503
  * (Service Unavailable) for a HEAD request, the function automatically retries with GET.
- * @param params - Parameters containing URL, external flag, method, options, and optional User-Agent.
+ * @param params - Parameters containing URL, external flag, method, options, optional User-Agent, and optional timeout.
  * @returns The page metadata obtained from the HTTP response.
- * @throws {NetTimeoutError} If the request exceeds the 10-second timeout.
+ * @throws {NetTimeoutError} If the request exceeds the configured timeout.
  * @throws {Error} If the HTTP request fails for any other reason.
  */
 export async function fetchDestination(
 	params: FetchDestinationParams,
 ): Promise<PageData> {
-	const { url, isExternal, method = 'HEAD', options, userAgent } = params;
+	const { url, isExternal, method = 'HEAD', options, userAgent, timeout } = params;
 	const titleBytesLimit = options?.titleBytesLimit;
 	const cacheKey = titleBytesLimit == null ? url.withoutHash : `${url.withoutHash}:title`;
 
@@ -61,23 +72,43 @@ export async function fetchDestination(
 	}
 
 	const effectiveMethod = titleBytesLimit == null ? method : 'GET';
+	const raceTimeoutMs = timeout ?? DEFAULT_HEAD_TIMEOUT_MS;
 
-	// Race the fetch against a 10-second timeout. The losing timer is cleared
+	// Race the fetch against the requested timeout. The losing timer is cleared
 	// explicitly so it never keeps the event loop alive after the race settles
 	// (a plain `delay()` in `Promise.race` would leak the timer until it fires).
 	let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 	const result = await Promise.race([
-		_fetchHead(url, isExternal, effectiveMethod, titleBytesLimit, userAgent).catch(
-			(error: unknown) => (error instanceof Error ? error : new Error(String(error))),
+		_fetchHead(
+			url,
+			isExternal,
+			effectiveMethod,
+			titleBytesLimit,
+			userAgent,
+			timeout,
+		).catch((error: unknown) =>
+			error instanceof Error ? error : new Error(String(error)),
 		),
 		new Promise<NetTimeoutError>((resolve) => {
-			timeoutHandle = setTimeout(() => resolve(new NetTimeoutError(url.href)), 10 * 1000);
+			timeoutHandle = setTimeout(
+				() => resolve(new NetTimeoutError(url.href)),
+				raceTimeoutMs,
+			);
 		}),
 	]).finally(() => {
 		if (timeoutHandle) clearTimeout(timeoutHandle);
 	});
 
-	destinationCache.set(cacheKey, result);
+	// NetTimeoutError is intentionally NOT cached: the caller may retry the
+	// same URL with a longer timeout (see Crawler.#sendHeadRequest's
+	// HEAD_TIMEOUT_ESCALATION_MS), and a cache hit here would re-throw the
+	// stale 10s timeout instead of letting the 30s/60s retry actually run.
+	// Other errors (DNS / TLS / refused / parse) are persistent within a
+	// crawl session so caching them is what keeps a doomed host from
+	// re-paying the network cost N times.
+	if (!(result instanceof NetTimeoutError)) {
+		destinationCache.set(cacheKey, result);
+	}
 	if (result instanceof Error) {
 		throw result;
 	}
@@ -96,6 +127,8 @@ export async function fetchDestination(
  * @param titleBytesLimit - When set, reads up to this many bytes from the response body
  *   to extract a `<title>` tag, then destroys the connection.
  * @param userAgent - Optional User-Agent string to send with the request.
+ * @param timeout - Optional race timeout in ms, forwarded to GET fallback so the
+ *   second pass keeps the same budget as the original HEAD attempt.
  * @returns A promise resolving to {@link PageData} with response metadata.
  */
 async function _fetchHead(
@@ -104,6 +137,7 @@ async function _fetchHead(
 	method: string,
 	titleBytesLimit?: number,
 	userAgent?: string,
+	timeout?: number,
 ) {
 	return new Promise<PageData>((resolve, reject) => {
 		const hostHeader = url.port ? `${url.hostname}:${url.port}` : url.hostname;
@@ -214,7 +248,12 @@ async function _fetchHead(
 							return;
 						}
 						try {
-							rep = await fetchDestination({ url, isExternal, method: 'GET' });
+							rep = await fetchDestination({
+								url,
+								isExternal,
+								method: 'GET',
+								timeout,
+							});
 						} catch (error) {
 							reject(error);
 							return;
@@ -230,7 +269,12 @@ async function _fetchHead(
 						}
 						await delay(5 * 1000);
 						try {
-							rep = await fetchDestination({ url, isExternal, method: 'GET' });
+							rep = await fetchDestination({
+								url,
+								isExternal,
+								method: 'GET',
+								timeout,
+							});
 						} catch (error) {
 							reject(error);
 							return;
@@ -249,7 +293,12 @@ async function _fetchHead(
 						}
 						await delay(5 * 1000);
 						try {
-							rep = await fetchDestination({ url, isExternal, method: 'GET' });
+							rep = await fetchDestination({
+								url,
+								isExternal,
+								method: 'GET',
+								timeout,
+							});
 						} catch (error) {
 							reject(error);
 							return;
