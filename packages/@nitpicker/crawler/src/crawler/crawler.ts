@@ -655,6 +655,34 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			});
 
 			update('Closing browser%dots%');
+			// JS-redirect rescue capture: when `scrapeStart` catches a
+			// `#fetchData` throw internally (e.g. `Page.goto returned null`
+			// because a client-side `window.location.replace()` /
+			// meta-refresh fired), it returns `{ type: 'error', ... }`
+			// instead of re-throwing — so the `catch` arm below never
+			// sees those cases. Read `page.url()` here while `page` is
+			// still alive (finally still hasn't called `handleBrowserClose`)
+			// and attach it to the result so `#scrapePage` can fold the
+			// source into a redirect edge. Without this capture, the
+			// rescue path is dead for the most common failure shape it
+			// was designed to handle.
+			//
+			// `page.url()` itself can throw when the browser context died
+			// mid-scrape (target crashed, session killed). On failure we
+			// fall through with `postNavigationUrl` unset so the existing
+			// HEAD-chain rescue / normal error path takes over.
+			if (result.type === 'error') {
+				try {
+					const postNavigationUrl = page.url();
+					return { ...result, postNavigationUrl };
+				} catch (urlReadError) {
+					crawlerLog(
+						'Reading page.url() for JS-redirect detection failed on %s: %O',
+						url.href,
+						urlReadError,
+					);
+				}
+			}
 			return result;
 		} catch (error) {
 			// JS-redirect rescue: when `scrapeStart` throws because
