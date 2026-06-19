@@ -24,9 +24,15 @@ const MATCHERS: readonly { readonly kind: ErrorKind; readonly pattern: RegExp }[
 		// node:tls hostname mismatch error and is emphatically a TLS issue;
 		// adding it here (alongside the OpenSSL / Chromium tokens) keeps
 		// hosts that serve the wrong-name cert (common with misconfigured
-		// edge / load-balancer setups) out of `unknown`.
+		// edge / load-balancer setups) out of `unknown`. `altnames` is
+		// anchored to the preceding `certificate` token so a request whose
+		// error message merely mentions a path containing the substring
+		// `altnames` (e.g. `https://api.example.com/altnames/lookup` in a
+		// 5xx body) does NOT get misclassified into `tls` (which is a
+		// `PERMANENT_ERROR_KINDS` member — a false-positive would
+		// permanently exclude that page from `--retry-failed`).
 		pattern:
-			/ERR_CERT|ERR_SSL|\bCERT_|SSL routines|ERR_BAD_SSL|UNABLE_TO_VERIFY|unable to verify|self.signed certificate|\bERR_TLS|Hostname\/IP does not match certificate|altnames/i,
+			/ERR_CERT|ERR_SSL|\bCERT_|SSL routines|ERR_BAD_SSL|UNABLE_TO_VERIFY|unable to verify|self.signed certificate|\bERR_TLS|Hostname\/IP does not match certificate|certificate'?s? altnames/i,
 	},
 	{ kind: 'connection-refused', pattern: /ECONNREFUSED|ERR_CONNECTION_REFUSED/i },
 	{

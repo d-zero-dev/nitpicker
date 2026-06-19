@@ -2087,6 +2087,86 @@ describe('resetFailedPages', () => {
 		await db.destroy();
 	});
 
+	it('returns [] AND leaves every candidate untouched when ALL of them classify as permanent', async () => {
+		// Pins the `retryable.length === 0` short-circuit in
+		// `resetFailedPages`: when every SQL candidate's latest message
+		// classifies into `PERMANENT_ERROR_KINDS`, no row should be
+		// demoted. The previous implementation would have called the
+		// chunked UPDATE / DELETE with empty `whereIn` arrays — knex
+		// renders that as `WHERE 0 = 1` so it happened not to corrupt
+		// data, but a refactor removing the early return would silently
+		// regress. Locking the no-op behavior in a test prevents that.
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ filename: resetDbPath });
+		const knex = db.getKnex();
+
+		const dnsId = await insertPage(db, {
+			url: 'https://gone.example.invalid/',
+			status: -1,
+		});
+		const tlsId = await insertPage(db, {
+			url: 'https://expired.example.com/',
+			status: -1,
+		});
+
+		await knex('page_errors').insert([
+			{
+				pageId: dnsId,
+				phase: 'crawl',
+				message: 'getaddrinfo ENOTFOUND gone.example.invalid',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				pageId: tlsId,
+				phase: 'crawl',
+				message: 'net::ERR_CERT_DATE_INVALID',
+				createdAt: 1_700_000_000_000,
+			},
+		]);
+
+		const reset = await db.resetFailedPages();
+		expect(reset).toEqual([]);
+
+		// Both permanent candidates are still `scraped = 1` with their
+		// original `status = -1`, NOT demoted to pending.
+		const remaining = await knex('pages')
+			.select('url', 'scraped', 'status')
+			.whereIn('id', [dnsId, tlsId]);
+		expect(remaining.every((r) => r.scraped === 1 && r.status === -1)).toBe(true);
+
+		await db.destroy();
+	});
+
+	it('also excludes the [Retried N times] wrapped DNS error form (retryCall prefix)', async () => {
+		// `@d-zero/shared/retry` prepends `[Retried N times] ` to the
+		// surviving error message. The substring match for `ENOTFOUND` /
+		// `getaddrinfo` already catches the wrapped form, but no test
+		// previously pinned it — a future regex-tightening change that
+		// anchored to `^getaddrinfo` would silently let wrapped DNS
+		// failures rejoin the retry pool every `--retry-failed` pass.
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ filename: resetDbPath });
+		const knex = db.getKnex();
+
+		const wrappedDnsId = await insertPage(db, {
+			url: 'https://wrapped-dns.example.invalid/',
+			status: -1,
+		});
+		await knex('page_errors').insert({
+			pageId: wrappedDnsId,
+			phase: 'crawl',
+			message: '[Retried 5 times] getaddrinfo ENOTFOUND wrapped-dns.example.invalid',
+			createdAt: 1_700_000_000_000,
+		});
+
+		const reset = await db.resetFailedPages();
+		expect(reset).toEqual([]);
+
+		await db.destroy();
+	});
+
 	it('resets every match across the 500-row chunk boundary', async () => {
 		const { rmSync } = await import('node:fs');
 		rmSync(resetDbPath, { force: true });

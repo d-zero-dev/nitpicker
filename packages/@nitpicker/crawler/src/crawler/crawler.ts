@@ -609,11 +609,17 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				username: url.username ?? '',
 				password: url.password ?? '',
 			});
-			const navigateUrl = parseUrl(url.href);
-			if (navigateUrl) {
-				navigateUrl.username = '';
-				navigateUrl.password = '';
-			}
+			// Re-parse from `withoutHashAndAuth` rather than mutating the
+			// re-parsed `url.href` object: ExURL pre-computes `href`,
+			// `withoutHash` and other derived strings at parse time, and
+			// post-hoc field assignment (`navigateUrl.username = ''`)
+			// leaves those derived strings stale. Anything downstream that
+			// reads `navigateUrl.href` (e.g. a future beholder bump that
+			// switches `page.goto` from `withoutHashAndAuth` to `href`)
+			// would silently get back the credentialed string — defeating
+			// the leak guard. Building the navigation URL from a known
+			// credential-free string guarantees every field is consistent.
+			const navigateUrl = parseUrl(url.withoutHashAndAuth) ?? url;
 			const scraper = new Scraper();
 
 			scraper.on(
@@ -627,7 +633,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				}),
 			);
 
-			const result = await scraper.scrapeStart(page, navigateUrl ?? url, {
+			const result = await scraper.scrapeStart(page, navigateUrl, {
 				isExternal,
 				captureImages: !isExternal && this.#options.captureImages,
 				excludeKeywords: this.#options.excludeKeywords,
@@ -1072,6 +1078,21 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						// "operator-intended skip" with "network failure".
 						return fallback;
 					}
+					// `fallback.type === 'error'`. `#launchBrowserAndScrape`
+					// catches its own exceptions and returns
+					// `{type:'error', shutdown:...}` rather than throwing, so
+					// the `catch` arm below would NOT see this branch. Log
+					// the puppeteer-side cause (and any `shutdown` flag the
+					// scraper attached) so operators have a breadcrumb that
+					// the safety net actually fired and lost — otherwise
+					// only the HEAD error reaches `crawl_errors` and the
+					// browser failure mode is invisible.
+					crawlerLog(
+						'Puppeteer fallback returned error for %s: %s (shutdown=%s)',
+						url.href,
+						fallback.error?.message ?? '(no message)',
+						fallback.error?.shutdown ?? false,
+					);
 				} catch (browserError) {
 					// Browser launch / runtime crash — fall through to the
 					// unreachable path below. The original HEAD error is more

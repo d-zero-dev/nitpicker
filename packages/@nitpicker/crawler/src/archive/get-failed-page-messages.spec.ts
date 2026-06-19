@@ -145,6 +145,73 @@ describe('getFailedPageMessages', () => {
 		await db.destroy();
 	});
 
+	it('treats an empty-string page_errors message as "no signal" and falls through to crawl_errors', async () => {
+		// A `page_errors` row with `message=''` is recorded when a scraper
+		// phase fires its trigger but has no descriptive text. The empty
+		// message carries zero classification value — without this
+		// fallthrough, `--retry-failed`'s permanent-kind filter would see
+		// `''` (classifies as `unknown`) and keep retrying the page on
+		// every iteration, even though the crawl_errors row holds a
+		// `dns` / `tls` / `client-blocked` message that would correctly
+		// classify the failure as permanent.
+		await fs.rm(dbPath, { force: true });
+		const db = await Database.connect({ filename: dbPath });
+		const knex = db.getKnex();
+
+		const url = 'https://example.com/empty-page-error';
+		const pageId = await insertPageRow(db, url);
+		await knex('page_errors').insert({
+			pageId,
+			phase: 'crawl',
+			message: '',
+			createdAt: 1_700_000_000_000,
+		});
+		await knex('crawl_errors').insert({
+			url,
+			isExternal: 0,
+			message: 'getaddrinfo ENOTFOUND empty-page-error.example.com',
+			createdAt: 1_700_000_000_000,
+		});
+
+		const result = await getFailedPageMessages(knex, [pageId], [url]);
+		expect(result.get(pageId)).toBe('getaddrinfo ENOTFOUND empty-page-error.example.com');
+
+		await db.destroy();
+	});
+
+	it('ignores crawl_errors rows whose url is NULL (process-level errors)', async () => {
+		// `crawl_errors.url` is schema-nullable for process-level errors
+		// that have no associated URL. The helper has a defensive guard
+		// (`row.url !== null`) but no test had pinned it — a future
+		// refactor narrowing the type to `string` could remove the guard
+		// and a null url would silently be coerced into a Map key.
+		await fs.rm(dbPath, { force: true });
+		const db = await Database.connect({ filename: dbPath });
+		const knex = db.getKnex();
+
+		const trackedUrl = 'https://example.com/tracked';
+		const trackedId = await insertPageRow(db, trackedUrl);
+		await knex('crawl_errors').insert([
+			{
+				url: null,
+				isExternal: 0,
+				message: 'process-level boom',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				url: trackedUrl,
+				isExternal: 0,
+				message: 'real per-url msg',
+				createdAt: 1_700_000_000_000,
+			},
+		]);
+
+		const result = await getFailedPageMessages(knex, [trackedId], [trackedUrl]);
+		expect(result.get(trackedId)).toBe('real per-url msg');
+
+		await db.destroy();
+	});
+
 	it('omits ids with no recorded message from the returned map', async () => {
 		await fs.rm(dbPath, { force: true });
 		const db = await Database.connect({ filename: dbPath });

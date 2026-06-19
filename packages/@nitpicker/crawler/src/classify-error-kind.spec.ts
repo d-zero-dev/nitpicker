@@ -40,9 +40,29 @@ describe('classifyErrorKind', () => {
 				"[Retried 3 times] Hostname/IP does not match certificate's altnames: Host: edge.example.com",
 			),
 		).toBe('tls');
-		expect(classifyErrorKind('altnames: Host: foo.example.com. is not in the cert')).toBe(
-			'tls',
-		);
+		expect(
+			classifyErrorKind(
+				"certificate's altnames: Host: foo.example.com. is not in the cert",
+			),
+		).toBe('tls');
+	});
+
+	it('does NOT misclassify the word "altnames" appearing in unrelated contexts as tls', () => {
+		// Regression guard: the tls matcher used to be `…|altnames/i` (bare
+		// word), which matched ANY message containing the substring — including
+		// a URL path or 5xx body text mentioning `/altnames/`. tls is in
+		// `PERMANENT_ERROR_KINDS`, so a false positive would permanently
+		// exclude that page from `--retry-failed`. The pattern is now anchored
+		// to `certificate'?s? altnames`, so these messages must fall through
+		// to `unknown`.
+		expect(
+			classifyErrorKind(
+				'GET https://api.example.com/altnames/lookup — 500 Internal Server Error',
+			),
+		).toBe('unknown');
+		expect(
+			classifyErrorKind('Internal log dump: altnames lookup returned 42 records'),
+		).toBe('unknown');
 	});
 
 	it('classifies connection-refused as connection-refused', () => {

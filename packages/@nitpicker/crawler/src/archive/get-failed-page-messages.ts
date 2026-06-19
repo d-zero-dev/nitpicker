@@ -79,7 +79,16 @@ export async function getFailedPageMessages(
 				// (the same scrape can record several phase errors); the
 				// first row inserted is usually the trigger cause, later
 				// rows are follow-on noise from the same failure cascade.
-				if (!messageByPageId.has(row.pageId)) {
+				//
+				// An empty `message` is treated as "no signal" and ignored
+				// so the crawl_errors lookup can fill it in. Without this,
+				// a page_errors row with `message=''` (recorded by a
+				// scraper phase that fired its trigger but had no error
+				// text) would short-circuit and we'd lose access to the
+				// crawl_errors row that classifies the failure as
+				// `dns` / `tls` / `client-blocked` etc. — defeating
+				// `--retry-failed`'s permanent-kind exclusion.
+				if (row.message !== '' && !messageByPageId.has(row.pageId)) {
 					messageByPageId.set(row.pageId, row.message);
 				}
 			}

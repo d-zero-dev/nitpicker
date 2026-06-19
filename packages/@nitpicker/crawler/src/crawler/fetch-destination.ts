@@ -166,14 +166,20 @@ export async function fetchDestination(
 		}
 	}
 
-	// NetTimeoutError is intentionally NOT cached: the caller may retry the
-	// same URL with a longer timeout (see Crawler.#sendHeadRequest's
-	// HEAD_TIMEOUT_ESCALATION_MS), and a cache hit here would re-throw the
-	// stale 10s timeout instead of letting the 30s/60s retry actually run.
-	// Other errors (DNS / TLS / refused / parse) are persistent within a
-	// crawl session so caching them is what keeps a doomed host from
-	// re-paying the network cost N times.
-	if (!(result instanceof NetTimeoutError)) {
+	// Errors that are RECOVERABLE on retry — NetTimeoutError plus the kinds
+	// `shouldGetFallbackOnHeadFailure` already singles out as
+	// possibly-recoverable (parse-error, connection-reset) — are
+	// intentionally NOT cached. Caching a recoverable failure would freeze
+	// the first slow probe as the verdict for every later caller on the
+	// same host AND defeat `Crawler.#sendHeadRequest`'s
+	// HEAD_TIMEOUT_ESCALATION_MS (the 30s/60s retry would hit the cache and
+	// re-throw the stale 10s failure instead of getting the longer
+	// budget). DNS / TLS / refused / blocked are persistent within a crawl
+	// session so caching them is what keeps a doomed host from re-paying
+	// the network cost N times.
+	const isRecoverableError =
+		result instanceof Error && shouldGetFallbackOnHeadFailure(result);
+	if (!isRecoverableError) {
 		destinationCache.set(cacheKey, result);
 	}
 	if (result instanceof Error) {
