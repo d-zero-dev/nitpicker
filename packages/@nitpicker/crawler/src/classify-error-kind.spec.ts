@@ -31,6 +31,57 @@ describe('classifyErrorKind', () => {
 		expect(classifyErrorKind('net::ERR_SSL_PROTOCOL_ERROR')).toBe('tls');
 	});
 
+	it('classifies the bare "certificate has expired" Node tls message as tls', () => {
+		// Real-world archive observation: multiple distinct pages on one
+		// site surfaced `[Retried 3 times] certificate has expired` (no
+		// ERR_CERT prefix, no Chromium error code) and fell through to
+		// `unknown`, which then left them out of the tls bucket on the
+		// Errors view and exempt from the `PERMANENT_ERROR_KINDS`
+		// `--retry-failed` exclusion. Node's tls layer emits exactly this
+		// phrase when the peer cert's `notAfter` is past, so anchoring on
+		// it pulls those rows back into tls.
+		expect(classifyErrorKind('certificate has expired')).toBe('tls');
+		expect(classifyErrorKind('[Retried 3 times] certificate has expired')).toBe('tls');
+	});
+
+	it('does NOT classify a body containing "certificate has expired" mid-string as tls', () => {
+		// Regression guard: the tls token is end-anchored (`\s*$`) so a
+		// WAF / upstream-leaked 5xx body that happens to echo the phrase
+		// in the MIDDLE of an error message does NOT misclassify as `tls`
+		// — `tls ∈ PERMANENT_ERROR_KINDS`, so a false positive would
+		// permanently exclude that page from `--retry-failed`.
+		// Representative shapes the regex must reject — application-layer
+		// error bodies that could legitimately echo the phrase but are NOT
+		// TLS errors (synthetic inputs, not historical archive
+		// observations):
+		expect(
+			classifyErrorKind(
+				'Error: License certificate has expired (LICENSE_EXPIRED) — please renew',
+			),
+		).toBe('unknown');
+		expect(
+			classifyErrorKind(
+				'JWT signing certificate has expired at 2026-01-01 — rotate the signing key',
+			),
+		).toBe('unknown');
+		expect(classifyErrorKind('Application certificate has expired, contact admin')).toBe(
+			'unknown',
+		);
+	});
+
+	it('accepts trailing whitespace after "certificate has expired" (the `\\s*$` bound)', () => {
+		// The end-anchor uses `\s*$` rather than `$` so a message that
+		// arrives with stray trailing whitespace (space / tab / newline)
+		// still classifies. Without this allowance, a retry wrapper that
+		// pads its message with a newline could silently drop the
+		// expired-cert page out of the tls bucket. Pin all three common
+		// trailing-whitespace shapes so a future tightening of `\s*` to
+		// `$` would break this test instead of silently regressing.
+		expect(classifyErrorKind('certificate has expired ')).toBe('tls');
+		expect(classifyErrorKind('certificate has expired\t')).toBe('tls');
+		expect(classifyErrorKind('certificate has expired\n')).toBe('tls');
+	});
+
 	it('classifies Node hostname/altname certificate mismatch as tls', () => {
 		// Node's tls layer reports certificate-vs-host mismatches with this
 		// exact phrasing; without an explicit matcher it falls through to
@@ -178,6 +229,60 @@ describe('classifyErrorKind', () => {
 		);
 		expect(classifyErrorKind('Navigating frame was detached')).toBe('protocol');
 		expect(classifyErrorKind('The method Page.goto returned null')).toBe('protocol');
+	});
+
+	it('classifies any "Page.<method> returned" puppeteer wrapper as protocol (the `\\w+` wildcard)', () => {
+		// The matcher uses `Page\.\w+ returned` (not just `Page.goto`) so
+		// other puppeteer Page-domain methods that surface the same
+		// "returned <something>" shape land in protocol consistently. The
+		// production observation that prompted this was `Page.goto` only,
+		// but the regex's `\w+` is the intended generalization — pin it so
+		// a future tightening to a literal method name has to update this
+		// test, not silently degrade coverage for the broader contract.
+		expect(classifyErrorKind('The method Page.reload returned null')).toBe('protocol');
+		expect(classifyErrorKind('The method Page.evaluate returned undefined')).toBe(
+			'protocol',
+		);
+		expect(classifyErrorKind('Page.close returned an unexpected value')).toBe('protocol');
+	});
+
+	it('classifies puppeteer "Attempted to use detached Frame" symptom as protocol', () => {
+		// Puppeteer's current Frame.ts surfaces frame-detach symptoms as
+		// `Attempted to use detached Frame '<frame-id>'.` — the word order
+		// is `detached Frame`, not `frame ... detached`. The matcher used
+		// to require the latter and miss every instance of the former,
+		// quietly routing them to `unknown` (observed on a real archive
+		// with multiple distinct frame IDs).
+		expect(
+			classifyErrorKind(
+				"[Retried 3 times] Attempted to use detached Frame 'F80D11D75F28561E62F453DB933EC08D'.",
+			),
+		).toBe('protocol');
+		expect(classifyErrorKind('Attempted to use detached Frame: x')).toBe('protocol');
+	});
+
+	it('matches the puppeteer prefix case-insensitively (detached frame / detached Frame)', () => {
+		// The classifier uses the `i` flag so `frame (case-insensitive)` is just one of
+		// several casing variants Chromium may surface. Pin both
+		// orientations so a future regex tightening that drops the case
+		// flag does not silently shut off either path.
+		expect(classifyErrorKind('Attempted to use detached frame X')).toBe('protocol');
+		expect(classifyErrorKind('attempted to use detached Frame X')).toBe('protocol');
+	});
+
+	it('does NOT classify unrelated diagnostics that mention "detached frame" as protocol', () => {
+		// The puppeteer prefix `Attempted to use detached frame (case-insensitive)` is the
+		// only puppeteer-originating shape. Console / logger / Sentry-style
+		// messages that mention the same two tokens in unrelated context
+		// (`detached Frame ref leaked at app.js:1234`, etc.) MUST fall
+		// through to `unknown`. Without the prefix anchor those would land
+		// in `protocol` and inflate the Errors view's `protocol` bucket.
+		expect(classifyErrorKind('Console: detached Frame ref leaked at app.js:1234')).toBe(
+			'unknown',
+		);
+		expect(
+			classifyErrorKind('TypeError: detached frame property access on null receiver'),
+		).toBe('unknown');
 	});
 
 	it('falls back to unknown when no matcher applies', () => {

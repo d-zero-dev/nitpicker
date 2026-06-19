@@ -32,7 +32,7 @@ const MATCHERS: readonly { readonly kind: ErrorKind; readonly pattern: RegExp }[
 		// `PERMANENT_ERROR_KINDS` member — a false-positive would
 		// permanently exclude that page from `--retry-failed`).
 		pattern:
-			/ERR_CERT|ERR_SSL|\bCERT_|SSL routines|ERR_BAD_SSL|UNABLE_TO_VERIFY|unable to verify|self.signed certificate|\bERR_TLS|Hostname\/IP does not match certificate|certificate'?s? altnames/i,
+			/ERR_CERT|ERR_SSL|\bCERT_|SSL routines|ERR_BAD_SSL|UNABLE_TO_VERIFY|unable to verify|self.signed certificate|certificate has expired\s*$|\bERR_TLS|Hostname\/IP does not match certificate|certificate'?s? altnames/i,
 	},
 	{ kind: 'connection-refused', pattern: /ECONNREFUSED|ERR_CONNECTION_REFUSED/i },
 	{
@@ -74,8 +74,19 @@ const MATCHERS: readonly { readonly kind: ErrorKind; readonly pattern: RegExp }[
 	},
 	{
 		kind: 'protocol',
+		// `detached frame` is anchored to puppeteer's exact prefix
+		// `Attempted to use detached Frame` (its current Frame.ts
+		// emitter; the `i` flag below catches the lowercase variant
+		// automatically), not the bare two-token substring. The bare
+		// form would match unrelated diagnostics like a console message
+		// "detached frame ref leaked" echoed through a logger. The older
+		// Page-domain `frame (?:was |got )?detached` form is kept as a
+		// separate alternative because Chromium still surfaces that
+		// phrasing in some legacy code paths. Without one of these, the
+		// "Attempted to use detached Frame ..." messages observed on a
+		// real archive would slip into `unknown`.
 		pattern:
-			/Protocol error|Target closed|Session closed|Execution context was destroyed|frame (?:was |got )?detached|Navigating frame was detached|Cannot find context|Node with given id|Page\.\w+ returned/i,
+			/Protocol error|Target closed|Session closed|Execution context was destroyed|frame (?:was |got )?detached|Attempted to use detached frame|Navigating frame was detached|Cannot find context|Node with given id|Page\.\w+ returned/i,
 	},
 	{
 		kind: 'timeout',
