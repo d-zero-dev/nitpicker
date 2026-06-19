@@ -87,28 +87,22 @@ describe('Scope credential leak guard — sub-resource Basic auth (E2E)', () => 
 		expect(externalHeaders.length).toBeGreaterThan(0);
 
 		for (const header of externalHeaders) {
-			// `Basic <base64(scope-user:scope-pass)>` is the exact string
-			// that would identify a leak. Comparing the full header keeps
-			// the assertion precise — a partial match (e.g. just the
-			// username) is covered by the substring checks below as
-			// defence-in-depth.
+			// Three independent invariants, expressed without nested `if`s
+			// so the test reads as a single contract: NO observed header
+			// may carry the scope credentials, in any encoding.
+			//
+			// `not.toBe(SCOPE_AUTH_HEADER)` covers the exact-string leak
+			// (the most likely shape).
+			// `not.toContain(SCOPE_USER / PASS)` covers Digest / NTLM /
+			// Negotiate variants the test-server might surface if a future
+			// change broadens the scheme.
+			// `expect([null, EMPTY_AUTH_HEADER]).toContain(header)` whitelists
+			// the only two values that are safe to observe — no Authorization
+			// header at all, or the empty-credential fallback (`Basic Og==`).
 			expect(header).not.toBe(SCOPE_AUTH_HEADER);
-			if (header !== null) {
-				// The credential bytes themselves must not appear anywhere
-				// in the observed Authorization header. Catches Digest /
-				// NTLM / Negotiate variants the test server might surface
-				// if the scheme is ever broadened.
-				expect(header).not.toContain(SCOPE_USER);
-				expect(header).not.toContain(SCOPE_PASS);
-				// Belt-and-suspenders: the only Authorization header we
-				// allow the off-scope endpoint to see is the empty-cred
-				// fallback (`Basic Og==` — i.e. `Basic <base64(":")>`).
-				// `expect(...).toBe(EMPTY_AUTH_HEADER)` would also work
-				// here; the OR keeps the test forward-compatible with a
-				// future change that opts to send no Authorization header
-				// at all instead of an empty one.
-				expect([EMPTY_AUTH_HEADER]).toContain(header);
-			}
+			expect(header ?? '').not.toContain(SCOPE_USER);
+			expect(header ?? '').not.toContain(SCOPE_PASS);
+			expect([null, EMPTY_AUTH_HEADER]).toContain(header);
 		}
 	});
 });
