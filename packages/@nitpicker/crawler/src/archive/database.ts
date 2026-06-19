@@ -31,11 +31,13 @@ import { classifyErrorKind } from '../classify-error-kind.js';
 import { findScopeEntry } from '../crawler/find-scope-entry.js';
 import { isHtmlContentType } from '../crawler/is-html-content-type.js';
 import { normalizeContentType } from '../crawler/normalize-content-type.js';
+import { PERMANENT_ERROR_KINDS } from '../permanent-error-kinds.js';
 import { eachSplitted } from '../utils/array/each-splitted.js';
 import { ErrorEmitter } from '../utils/error/error-emitter.js';
 
 import { dbLog } from './debug.js';
 import { mkdir } from './filesystem/mkdir.js';
+import { getFailedPageMessages } from './get-failed-page-messages.js';
 import { getJSON } from './get-json.js';
 import { applyConnectionPragmas, initSchema } from './init-schema.js';
 import { LibsqlDialect } from './libsql-dialect.js';
@@ -1043,12 +1045,18 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		// rows that COULD match a DNS token. Each LIKE is anchored on a known
 		// substring of the regex so future additions to the regex (without
 		// matching new SQL terms) widen the JS-side filter only — never narrow it.
+		//
+		// `%EAI_AGAIN%` is deliberately NOT in the SQL filter: it now classifies
+		// as `dns-transient` (local resolver hiccup), not `dns`, so it must not
+		// reach this candidate set. The `%getaddrinfo%` term still pulls
+		// `getaddrinfo EAI_AGAIN ...` rows but the JS-side `classifyErrorKind`
+		// check (first-match-wins) routes them to `dns-transient` and they
+		// silently drop out — keeping the cache focused on real NXDOMAIN.
 		const dnsLikeRows = (await this.#instance('crawl_errors')
 			.select('url', 'message', 'createdAt')
 			.whereNotNull('url')
 			.where((qb) => {
 				qb.where('message', 'like', '%ENOTFOUND%')
-					.orWhere('message', 'like', '%EAI_AGAIN%')
 					.orWhere('message', 'like', '%getaddrinfo%')
 					.orWhere('message', 'like', '%ERR_NAME_NOT_RESOLVED%')
 					.orWhere('message', 'like', '%ERR_NAME_RESOLUTION_FAILED%');
@@ -1324,13 +1332,26 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * - `status` is in the `5xx` range — a (frequently transient) server error.
 	 *
 	 * Definitive `4xx` responses are intentionally excluded: re-fetching a 404
-	 * almost always yields the same answer. Matching rows — internal and
-	 * external alike — are demoted back to pending (`scraped = 0`) and have their
-	 * stale scrape metadata cleared. The page row itself is kept (id preserved)
-	 * so existing `anchors.hrefId` referrers stay valid, and `isExternal` is left
-	 * untouched so the next pass re-classifies each page from the crawl scope.
-	 * Related `anchors`, `images`, `resources-referrers`, and `page_errors` rows
-	 * are deleted so the re-scrape can re-insert fresh data without duplicates.
+	 * almost always yields the same answer.
+	 *
+	 * A second exclusion runs in JS after the SQL candidate scan: any page whose
+	 * latest recorded `page_errors` / `crawl_errors` message classifies into a
+	 * permanent {@link PERMANENT_ERROR_KINDS} kind (dns / tls / client-blocked /
+	 * parse-error / connection-refused) is left as-is rather than reset to
+	 * pending. Without this filter, `--retry-failed` never converges: NXDOMAIN
+	 * hosts, expired-cert hosts, and `ERR_BLOCKED_BY_CLIENT` ad pixels would be
+	 * reset every iteration, re-attempted, fail identically, and rejoin the
+	 * candidate pool for the next iteration. The exclusion keeps the retry
+	 * target shrinking across `--retry-failed` passes by leaving deterministic
+	 * dead-ends alone.
+	 *
+	 * Matching rows — internal and external alike — are demoted back to pending
+	 * (`scraped = 0`) and have their stale scrape metadata cleared. The page row
+	 * itself is kept (id preserved) so existing `anchors.hrefId` referrers stay
+	 * valid, and `isExternal` is left untouched so the next pass re-classifies
+	 * each page from the crawl scope. Related `anchors`, `images`,
+	 * `resources-referrers`, and `page_errors` rows are deleted so the re-scrape
+	 * can re-insert fresh data without duplicates.
 	 *
 	 * SELECT and UPDATE/DELETE statements are chunked to stay below SQLite's
 	 * `SQLITE_LIMIT_VARIABLE_NUMBER`.
@@ -1358,8 +1379,36 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			return [];
 		}
 
-		const ids = candidates.map((row) => row.id);
-		const urls = candidates.map((row) => row.url);
+		const candidateIds = candidates.map((row) => row.id);
+		const candidateUrls = candidates.map((row) => row.url);
+		const messages = await getFailedPageMessages(
+			this.#instance,
+			candidateIds,
+			candidateUrls,
+		);
+		// Drop candidates whose latest recorded message classifies as permanent.
+		// An empty/absent message stays in the retry pool — we keep retrying when
+		// we don't know it's permanent, erring on the side of investigation.
+		const retryable = candidates.filter((row) => {
+			const message = messages.get(row.id) ?? '';
+			if (message === '') {
+				return true;
+			}
+			return !PERMANENT_ERROR_KINDS.has(classifyErrorKind(message));
+		});
+		const excludedCount = candidates.length - retryable.length;
+		if (excludedCount > 0) {
+			dbLog(
+				'Excluded %d page(s) from retry — permanent failure kinds (dns/tls/client-blocked/parse-error/connection-refused)',
+				excludedCount,
+			);
+		}
+		if (retryable.length === 0) {
+			return [];
+		}
+
+		const ids = retryable.map((row) => row.id);
+		const urls = retryable.map((row) => row.url);
 
 		const chunkSize = 500;
 		const metaReset = makeMetaResetPayload();
@@ -1965,6 +2014,36 @@ export class Database extends EventEmitter<DatabaseEvent> {
 					redirectDestId: destId,
 					isExternal: isExternal ? 1 : 0,
 				});
+			// Conditional `301 Moved Permanently` stamp — applied ONLY
+			// when the row carries no definitive status yet (NULL or
+			// the `-1` hard-failure sentinel). HEAD pre-flight does not
+			// retain each hop's individual status code (`redirectPaths`
+			// is a URL[] without statuses), so the only honest answer
+			// for an unknown-status hop is "some 3xx" — 301 is the
+			// canonical representative.
+			//
+			// We deliberately do NOT overwrite an existing definitive
+			// status (200 / 302 / 307 / etc.): a row that already
+			// captured a concrete status from a prior direct scrape
+			// would lose accuracy. The stamp only flips two cases:
+			// - NULL: a placeholder row created by `#getIdByUrl`
+			//   because the URL was reached only as a redirect
+			//   target / source, never directly scraped. Without the
+			//   stamp the row is invisible on the Errors view's status
+			//   distribution.
+			// - -1: a row that recorded a hard scrape failure (e.g. a
+			//   puppeteer goto returned null on a HTTPS→HTTP downgrade
+			//   redirect) BEFORE the chain was understood. That `-1`
+			//   then conflated "real failure" with "actually a redirect
+			//   source we now know about", polluting the `-1` bucket
+			//   AND inflating the `--retry-failed` target (via the
+			//   `whereNull('redirectDestId')` filter — the redirectDestId
+			//   update above already excludes the row from retry; this
+			//   stamp restores the visible identity).
+			await trx<DB_Page>('pages')
+				.where('id', redirectId)
+				.where((qb) => qb.whereNull('status').orWhere('status', -1))
+				.update({ status: 301, statusText: 'Moved Permanently' });
 			// A page that used to be scraped as content can later turn into a
 			// redirect source. It owns no content anymore, so drop any anchors /
 			// images it captured in its former life — otherwise they linger and

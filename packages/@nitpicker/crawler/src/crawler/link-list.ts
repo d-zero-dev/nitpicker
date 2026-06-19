@@ -72,6 +72,24 @@ export default class LinkList {
 	 * @param resource.page - The scraped page data, if the scrape succeeded.
 	 * @param resource.error - The error object, if the scrape failed.
 	 * @param options - URL parsing options (e.g., `disableQueries`).
+	 * @param completion - Behaviour overrides for how the redirect chain is folded into
+	 *   the done-set.
+	 * @param completion.includeRedirectPaths - When `false`, do NOT mark the URLs in
+	 *   `resource.page.redirectPaths` as done. The default `true` preserves the
+	 *   long-standing behaviour where a redirect chain (`/a → /b → /c`) folds every
+	 *   intermediate URL into the done-set in a single sweep — correct for HTTP-layer
+	 *   chains because the browser actually followed each hop, so reaching `/b` later
+	 *   is a no-op. Pass `false` from the JS-redirect rescue: there `redirectPaths`
+	 *   contains a single URL (the JS target Chromium navigated to after `page.goto()`
+	 *   returned null), which the browser has NOT yet rendered. Folding it into the
+	 *   done-set would make a subsequent `linkList.add(destinationUrl)` no-op (the
+	 *   add() guard at line 51-53 refuses keys already in `#done`), so the dest URL
+	 *   never enters `#pending` and the dealer never sees a push to enqueue. The
+	 *   dealer's own `seen` Set in `#runDeal` (the gate `onPush` consults) is a
+	 *   separate registry from `#done` — they are NOT kept in sync — but here it
+	 *   does not matter: the rescue's `add()` is what feeds the eventual `enqueue()`
+	 *   call, so blocking `add()` alone is enough to silently lose the JS target
+	 *   from the archive.
 	 * @returns The constructed {@link Link} object, or `null` if the URL was not in the queue.
 	 */
 	done(
@@ -79,6 +97,7 @@ export default class LinkList {
 		scope: ReadonlyMap<string /* hostname */, readonly ExURL[]>,
 		resource: { page?: PageData; error?: Error },
 		options: ParseURLOptions,
+		completion?: { includeRedirectPaths?: boolean },
 	): Link | null {
 		const key = protocolAgnosticKey(url.withoutHashAndAuth);
 		if (!(this.#pending.has(key) || this.#progress.has(key))) {
@@ -110,8 +129,10 @@ export default class LinkList {
 				title: resource.page.meta.title,
 			};
 
-			for (const path of resource.page.redirectPaths) {
-				urlList.add(protocolAgnosticKey(path));
+			if (completion?.includeRedirectPaths !== false) {
+				for (const path of resource.page.redirectPaths) {
+					urlList.add(protocolAgnosticKey(path));
+				}
 			}
 		}
 		if (resource.error?.message.includes('ERR_NAME_NOT_RESOLVED')) {

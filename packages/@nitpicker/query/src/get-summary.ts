@@ -9,6 +9,7 @@ import type { ArchiveAccessor, ErrorKind } from '@nitpicker/crawler';
 import { classifyErrorKind } from '@nitpicker/crawler';
 
 import { classifyContentType } from './classify-content-type.js';
+import { excludeSkippedPages } from './exclude-skipped-pages.js';
 import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
 
 /**
@@ -60,6 +61,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 				.count('id as count')
 				.where('scraped', 1)
 				.whereNull('redirectDestId')
+				.where(excludeSkippedPages)
 				.where((qb) => {
 					qb.whereNull('contentType').orWhere('contentType', 'text/html');
 				})
@@ -95,6 +97,10 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 				.count('id as count')
 				.where('scraped', 1)
 				.whereNull('redirectDestId')
+				// Same exclude-pattern carve-out as the status histogram above
+				// — skipped rows would inflate the "Unknown / Errored"
+				// bucket without ever having been fetched.
+				.where(excludeSkippedPages)
 				.groupBy('contentType', 'isExternal') as Promise<
 				{
 					contentType: string | null;

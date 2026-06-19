@@ -141,6 +141,92 @@ describe('Retry failed crawl (--no-recursive)', () => {
 	});
 });
 
+describe('Retry failed crawl: permanent-kind exclusion converges across iterations', () => {
+	let filePath: string;
+	let cwd: string;
+	let accessor: Archive;
+
+	beforeAll(async () => {
+		// 1) Baseline crawl while `/flaky/recoverable` returns 500. The page
+		//    enters the archive with status=500, classified as a recoverable
+		//    candidate by the SQL fail-shape filter.
+		await setFlakyState('reset');
+		const baseline = await crawlAndPersist(['http://localhost:8010/flaky/']);
+		filePath = baseline.filePath;
+		cwd = baseline.cwd;
+
+		// 2) Annotate the failed page with a PERMANENT-kind message (DNS
+		//    NXDOMAIN). In production this is what a real archive looks like
+		//    when a host stops resolving — the SQL fail-shape filter still
+		//    picks it up (status=5xx / -1 / NULL), but `resetFailedPages`
+		//    consults `getFailedPageMessages` and classifies the latest
+		//    message as `dns ∈ PERMANENT_ERROR_KINDS`. We inject the message
+		//    directly so the test does not depend on actually triggering a
+		//    DNS failure (which is hard to simulate hermetically on a CI
+		//    runner).
+		const archive = await Archive.open({ filePath, cwd });
+		const knex = archive.getKnex();
+		const baselinePages = await archive.getPages('page');
+		const recoverable = baselinePages.find(
+			(p) => p.url.pathname === '/flaky/recoverable',
+		);
+		expect(recoverable).toBeDefined();
+		expect(recoverable!.status).toBe(500);
+		// `Page` does not expose a public `id` getter — fetch it via the
+		// `pages.url` lookup so the `page_errors` foreign key is real.
+		const recoverableRow = (await knex('pages')
+			.select('id')
+			.where('url', 'http://localhost:8010/flaky/recoverable')
+			.first()) as { id: number } | undefined;
+		expect(recoverableRow).toBeDefined();
+		await knex('page_errors').insert({
+			pageId: recoverableRow!.id,
+			phase: 'crawl',
+			message: 'getaddrinfo ENOTFOUND permanent-dns.example.invalid',
+			createdAt: 1_700_000_000_000,
+		});
+		await archive.write();
+		await archive.close();
+
+		// 3) Heal the flaky endpoint and run --retry-failed TWICE in a row.
+		//    Without the PERMANENT_ERROR_KINDS exclusion, the recoverable
+		//    page would be reset on every pass, re-fetched (and healed) into
+		//    a 200, then on pass 2 it would already be 200 → not a
+		//    candidate. WITH the exclusion, the page is treated as
+		//    permanently-DNS-failed and NEVER re-fetched, so its
+		//    `status=500` persists across both passes. Verifying the
+		//    status remains 500 across two iterations is the structural
+		//    proof that the exclusion converges (i.e. the retry pool
+		//    shrinks even though the SQL filter would otherwise re-add the
+		//    page every iteration).
+		await setFlakyState('heal');
+		for (let pass = 0; pass < 2; pass++) {
+			const orchestrator = await CrawlerOrchestrator.retryFailed(filePath, { cwd });
+			await orchestrator.write();
+			await orchestrator.archive.close();
+			orchestrator.garbageCollect();
+		}
+
+		accessor = await Archive.open({ filePath, cwd });
+	}, 240_000);
+
+	afterAll(async () => {
+		await accessor?.close();
+		await fs.rm(cwd, { recursive: true, force: true });
+		await setFlakyState('reset');
+	});
+
+	it('a candidate whose latest message classifies as PERMANENT is NOT reset across --retry-failed passes', async () => {
+		const pages = await accessor.getPages('page');
+		const recoverable = pages.find((p) => p.url.pathname === '/flaky/recoverable');
+		expect(recoverable).toBeDefined();
+		// The page is still recorded as status=500 — proves the exclusion
+		// kept it out of the retry target set on both passes. Without the
+		// exclusion, the healed endpoint would have set it to 200.
+		expect(recoverable!.status).toBe(500);
+	});
+});
+
 describe('Retry failed crawl: list-mode rejection', () => {
 	let filePath: string;
 	let cwd: string;

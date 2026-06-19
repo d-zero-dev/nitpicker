@@ -74,6 +74,12 @@
 		"mmap",
 		"zstd",
 
+		// Network / DNS / HTTP error tokens
+		"NXDOMAIN",
+		"libc",
+		"RTSP",
+		"CORB", // Chromium Cross-Origin Read Blocking (ERR_BLOCKED_BY_ORB predecessor)
+
 		// Security headers
 		"HSTS",
 

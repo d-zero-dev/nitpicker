@@ -8,12 +8,14 @@ import { errorStatusRoutes } from './routes/error-status.js';
 import { excludeRoutes } from './routes/exclude.js';
 import { flakyRoutes } from './routes/flaky.js';
 import { inventoryRoutes } from './routes/inventory.js';
+import { jsRedirectRoutes } from './routes/js-redirect.js';
 import { metaRoutes } from './routes/meta.js';
 import { optionsRoutes } from './routes/options.js';
 import { paginationRoutes } from './routes/pagination.js';
 import { recursiveRoutes } from './routes/recursive.js';
 import { redirectRoutes } from './routes/redirect.js';
 import { resourceReuseRoutes } from './routes/resource-reuse.js';
+import { scopeAuthLeakRoutes } from './routes/scope-auth-leak.js';
 import { scopeRoutes } from './routes/scope.js';
 import { scrollJackRoutes } from './routes/scroll-jack.js';
 
@@ -32,11 +34,13 @@ export function createApp() {
 	optionsRoutes(app);
 	errorStatusRoutes(app);
 	scopeRoutes(app);
+	scopeAuthLeakRoutes(app);
 	paginationRoutes(app);
 	scrollJackRoutes(app);
 	resourceReuseRoutes(app);
 	flakyRoutes(app);
 	inventoryRoutes(app);
+	jsRedirectRoutes(app);
 	return app;
 }
 

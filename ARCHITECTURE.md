@@ -1177,13 +1177,14 @@ normalizeToArray('/blog/*.{html,php},/admin/*')
 
 ## 11. エラーハンドリング
 
-| フェーズ        | エラー                              | 処理                                                                         |
-| --------------- | ----------------------------------- | ---------------------------------------------------------------------------- |
-| HEAD リクエスト | タイムアウト(10s), ECONNREFUSED 等  | `ScrapeResult.type='error'`（shutdown=false）                                |
-| ブラウザ起動    | Puppeteer 起動失敗                  | `ScrapeResult.type='error'`（shutdown=true）                                 |
-| page.goto()     | タイムアウト, ERR_NAME_NOT_RESOLVED | `@retryable` でリトライ後 `type='error'` で返却                              |
-| 画像抽出        | context 破壊, タイムアウト          | デバイスプリセット単位で try-catch、部分結果を返却。全失敗時は `fallback:[]` |
-| DOM 解析        | evaluate 失敗                       | catch でフォールバック値                                                     |
+| フェーズ                         | エラー                                                              | 処理                                                                                                                                                                                        |
+| -------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HEAD リクエスト                  | タイムアウト(10s), ECONNREFUSED 等                                  | `ScrapeResult.type='error'`（shutdown=false）                                                                                                                                               |
+| ブラウザ起動                     | Puppeteer 起動失敗                                                  | `ScrapeResult.type='error'`（shutdown=true）                                                                                                                                                |
+| page.goto()                      | タイムアウト, ERR_NAME_NOT_RESOLVED                                 | `@retryable` でリトライ後 `type='error'` で返却                                                                                                                                             |
+| page.goto() = null (JS redirect) | `window.location.replace()` / `<meta refresh>` で navigation 上書き | `Crawler.#scrapePage` の rescue が `page.url()` を救出し redirect-edge として記録（`buildJsRedirectEdge` / `derive-js-redirect-target.ts` / `is-js-redirect-error-shape.ts` の JSDoc が正） |
+| 画像抽出                         | context 破壊, タイムアウト                                          | デバイスプリセット単位で try-catch、部分結果を返却。全失敗時は `fallback:[]`                                                                                                                |
+| DOM 解析                         | evaluate 失敗                                                       | catch でフォールバック値                                                                                                                                                                    |
 
 ### CLI 終了コード
 
@@ -1215,7 +1216,15 @@ CrawlAggregateError
 
 **真理ソース**: `classifyErrorKind`（`@nitpicker/crawler`）。crawler パッケージへ物理移動し、`@nitpicker/query` は re-export 専用。crawler 自身がキャッシュの mark / preload 判定で必要としており、`query → crawler` の依存方向はあっても `crawler → query` は禁止だから（query が `ArchiveAccessor` 等を import する既存方向と矛盾しない）。
 
-**Session learning（同一セッション内の学習）**: `Crawler.#sendHeadRequest` の `onGiveUp` callback で `classifyErrorKind(error.message) === 'dns'` のとき host を `dnsBurnedHostCache: Map<string, ErrorKind>` に投入する。`onWait`（retry 待機開始）ではなく `onGiveUp`（全 retry 使い果たし）で mark する設計は、一過性の `EAI_AGAIN` を巻き込んで host を不当に burn しないため。最初の URL は retry を消化するが、その後のキュー pull は短絡される。
+**Session learning（同一セッション内の学習）**: `Crawler.#sendHeadRequest` の `onGiveUp` callback で `classifyErrorKind(error.message) === 'dns'` のとき host を `dnsBurnedHostCache: Map<string, ErrorKind>` に投入する。`onWait`（retry 待機開始）ではなく `onGiveUp`（全 retry 使い果たし）で mark する設計は、一過性のエラーを巻き込んで host を不当に burn しないため。最初の URL は retry を消化するが、その後のキュー pull は短絡される。
+
+> **WHY: `EAI_AGAIN` は `dns` ではなく `dns-transient` に分類**: `getaddrinfo EAI_AGAIN <host>` はローカル DNS resolver の一時的失敗（WiFi 切替、resolver 過負荷）であり、本物の NXDOMAIN とは性質が違う。`dns` バケットに入れたままだと、ローカル resolver が一時不調なときに 3 retry 後の onGiveUp で **無実の host を全 burn する** 穴になる。`MATCHERS` の first-match-wins 順序で `dns-transient` を `dns` より前に評価することで、`getaddrinfo` トークンを共有しても EAI_AGAIN は transient ラベル側に倒す。`Database.listDnsBurnedHostCandidates` の SQL LIKE フィルタも `%EAI_AGAIN%` を意図的に外しており、JS 側 `classifyErrorKind` の確定判定と二段で守る。
+
+> **WHY: HEAD pre-flight の timeout は attempt ごとに `10s → 30s → 60s` に escalate**: 一律 10s race だと、政府系/重負荷サーバの遅延（応答に 20-40s かかる）を全 retry で取りこぼす。最初の attempt を短めにして健常 URL のスループットを保ち、後の retry を長くして「遅いだけのサーバ」を救う。本当に死んでるサーバは 3 attempt 目で 60s 消費するが、一律 10s で諦めて recoverable な URL を取りこぼすより総量で得。実装は `Crawler.#sendHeadRequest` の retryCall fn クロージャ内で `let attempt` を increment し、`fetchDestination({ ..., timeout: HEAD_TIMEOUT_ESCALATION_MS[attempt] })` で呼ぶ。
+
+> **WHY: HEAD が unusable な時の GET fallback と puppeteer fallback の二段救済**: WAF / 中間箱は HEAD を平気で握りつぶす（parse-error / TCP reset / silent timeout）一方、GET や本物のブラウザ navigation は通すことがある。HEAD/GET 両層で見逃すと、生きたページが status=-1 で永久に保存される。3 層構造で救済する: (1) `fetchDestination` 内部で HEAD が `NetTimeoutError` / `connection-reset` / `parse-error` を返したら同じ URL を **GET で 1 回再試行**し、200/3xx/4xx の確定応答を得る（4xx/5xx は GET でも HEAD と一致するため preserve）。(2) GET も同上の失敗で死んで、(3a) URL が HTML 形（`isLikelyHtmlUrl`）かつ (3b) エラー kind が `timeout` / `connection-reset` / `parse-error`（`isPuppeteerFallbackCandidate` = `PUPPETEER_FALLBACK_KINDS` に属する）の時のみ、`Crawler.#scrapePage` の HEAD catch ブロックで **puppeteer fallback を 1 回だけ起動**する。fallback で 'success' なら通常の scrape 経路と同じ後処理（`markBrowserScrape` / `#scrapedDestinations` 登録）、'skipped' なら excludeKeywords ヒットとして skipped を尊重、それ以外は `Unreachable (fallback failed)` を lane 表示して **HEAD のエラーメッセージ**を `crawl_errors` に記録する（puppeteer の noisier wrapper メッセージではなく root cause を残す）。`dns` / `tls` / `client-blocked` / `connection-refused` / `connection-timeout` / `local-network` / `unknown` は fallback 対象外（puppeteer でも同じ結果しか出ない or コストに見合わない）。`PreloadShortCircuitError` は `dns` 分類になるので自動的に除外される。
+
+> **WHY: `--retry-failed` の収束には `PERMANENT_ERROR_KINDS` 除外が要る**: 旧 `resetFailedPages` は SQL の粗いフィルタ（status=-1 / NULL / contentType NULL / 5xx）だけで候補を取り、reset → re-crawl → 同じ NXDOMAIN / 期限切れ証明書 / `ERR_BLOCKED_BY_CLIENT` / HTTP パースエラー / ECONNREFUSED で再失敗 → 次の `--retry-failed` でもまた同じ候補が並ぶ、で収束しなかった。`PERMANENT_ERROR_KINDS` (`packages/@nitpicker/crawler/src/permanent-error-kinds.ts`) に登録された 5 種は **何度試しても結果が変わらない** ことが分類上確定しているので、`resetFailedPages` は候補 SELECT 後に `getFailedPageMessages` で page_errors → crawl_errors の順に最新メッセージを取り、`classifyErrorKind` 結果が永続 kind なら reset せずスキップする。これにより `--retry-failed` を繰り返すほどリトライ対象が縮む。Known limitation: 失敗が `error.log` だけに残っている pre-`crawl_errors` archive は `getFailedPageMessages` が message を解決できず（writer 側は依存方向の都合で error.log を読まない）、永続失敗でも `unknown` として再 reset される。書き換え経路の依存サーフェスを最小に保つトレードオフで、必要なら一度通常クロールを走らせて構造化テーブルを populate すれば次回以降は収束する。
 
 **Session preload（既存 archive からの seeding）**: `append` / `inventory` / `retryFailed` / `resume` で archive を再オープンする 4 経路で `Archive.listDnsBurnedHostCandidates()` を呼び、`crawl_errors` 履歴のうち DNS only でかつ復活シグナル（pages / resources の 2xx-3xx、`pages.lastCrawledAt > crawl_errors.createdAt`）が無い host を cache に投入する。これにより `--retry-failed` の 2 回目以降は 1 URL の retry すら消費せず即 skip。
 

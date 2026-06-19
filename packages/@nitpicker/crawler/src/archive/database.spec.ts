@@ -1082,6 +1082,133 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 		}
 	});
 
+	it('stamps a redirect source whose status was -1 (puppeteer failure) with 301', async () => {
+		// Regression guard for the migration shape: a row that captured
+		// `status=-1 / UnknownError` BEFORE the chain was understood
+		// (e.g. a HEAD pre-flight succeeded but puppeteer goto returned
+		// null on a HTTPS→HTTP downgrade, the failure landed on the
+		// source URL) MUST be flipped to 301 once recordRedirect learns
+		// the chain. Otherwise the page row stays in the `-1` bucket on
+		// the Errors view AND keeps re-entering `--retry-failed`.
+		const dbPath = path.resolve(
+			workingDir,
+			'record-redirect-status-from-minus-one.sqlite',
+		);
+		const db = await Database.connect({ filename: dbPath });
+		const dest = 'http://localhost/dest-minus-one';
+		const source = 'http://localhost/legacy-source';
+		try {
+			await db.updatePage(makeDest(dest, 'Dest'), true, true);
+			const knex = db.getKnex();
+			await knex('pages').insert({
+				url: source,
+				scraped: 1,
+				isTarget: 1,
+				isExternal: 0,
+				status: -1,
+				statusText: 'UnknownError',
+				contentType: null,
+				contentLength: null,
+				responseHeaders: '{}',
+				isSkipped: 0,
+			});
+
+			await db.recordRedirect(makeSource(source, dest));
+
+			const [sourcePage] = (await knex
+				.from('pages')
+				.select('status', 'statusText', 'redirectDestId')
+				.where('url', source)) as {
+				status: number | null;
+				statusText: string | null;
+				redirectDestId: number | null;
+			}[];
+			expect(sourcePage!.status).toBe(301);
+			expect(sourcePage!.statusText).toBe('Moved Permanently');
+			expect(sourcePage!.redirectDestId).not.toBeNull();
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('preserves an existing definitive status (e.g. 302) when a row later becomes a redirect source', async () => {
+		// Negative guard for the conditional stamp: a row that already
+		// captured a real status (200 / 302 / 307 / etc.) from a prior
+		// direct scrape MUST NOT be overwritten with 301. The stamp only
+		// flips NULL / -1 ("no signal yet") shapes; any other value is
+		// authoritative and kept verbatim.
+		const dbPath = path.resolve(workingDir, 'record-redirect-status-keep-302.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const dest = 'http://localhost/dest-302';
+		const source = 'http://localhost/source-already-302';
+		try {
+			await db.updatePage(makeDest(dest, 'Dest'), true, true);
+			const knex = db.getKnex();
+			await knex('pages').insert({
+				url: source,
+				scraped: 1,
+				isTarget: 1,
+				isExternal: 0,
+				status: 302,
+				statusText: 'Found',
+				contentType: null,
+				contentLength: null,
+				responseHeaders: '{}',
+				isSkipped: 0,
+			});
+
+			await db.recordRedirect(makeSource(source, dest));
+
+			const [sourcePage] = (await knex
+				.from('pages')
+				.select('status', 'statusText', 'redirectDestId')
+				.where('url', source)) as {
+				status: number | null;
+				statusText: string | null;
+				redirectDestId: number | null;
+			}[];
+			expect(sourcePage!.status).toBe(302);
+			expect(sourcePage!.statusText).toBe('Found');
+			expect(sourcePage!.redirectDestId).not.toBeNull();
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('stamps a NULL-status placeholder row with 301 (redirect-only URL never directly scraped)', async () => {
+		// `#getIdByUrl` materialises a placeholder row when a URL is
+		// reached only as a redirect source — `status` is NULL on that
+		// row. recordRedirect should stamp it 301 so the row is visible
+		// as a redirect source on the Summary distribution.
+		const dbPath = path.resolve(workingDir, 'record-redirect-status-from-null.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const dest = 'http://localhost/dest-null';
+		const source = 'http://localhost/source-null';
+		try {
+			await db.updatePage(makeDest(dest, 'Dest'), true, true);
+
+			await db.recordRedirect(makeSource(source, dest));
+
+			const knex = db.getKnex();
+			const [sourcePage] = (await knex
+				.from('pages')
+				.select('status', 'statusText', 'redirectDestId')
+				.where('url', source)) as {
+				status: number | null;
+				statusText: string | null;
+				redirectDestId: number | null;
+			}[];
+			expect(sourcePage!.status).toBe(301);
+			expect(sourcePage!.statusText).toBe('Moved Permanently');
+			expect(sourcePage!.redirectDestId).not.toBeNull();
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
 	it('自己リダイレクト（元URL===宛先）は辺を立てない', async () => {
 		const dbPath = path.resolve(workingDir, 'record-redirect-self.sqlite');
 		const db = await Database.connect({ filename: dbPath });
@@ -1945,6 +2072,224 @@ describe('resetFailedPages', () => {
 
 		await insertPage(db, { url: 'https://example.com/ok', status: 200 });
 		expect(await db.resetFailedPages()).toEqual([]);
+
+		await db.destroy();
+	});
+
+	it('excludes pages whose page_errors message classifies as a permanent failure kind', async () => {
+		// The whole point of the exclusion is that `--retry-failed` converges
+		// across iterations: NXDOMAIN, expired-cert, `ERR_BLOCKED_BY_CLIENT`,
+		// HTTP parse-error, and ECONNREFUSED hosts must NOT be reset every pass.
+		// We seed one failed page per permanent kind plus one retryable kind
+		// (timeout) and one with no recorded message (genuinely unknown), and
+		// assert only the latter two come back as reset URLs.
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ filename: resetDbPath });
+		const knex = db.getKnex();
+
+		const dnsId = await insertPage(db, {
+			url: 'https://gone.example.invalid/',
+			status: -1,
+		});
+		const tlsId = await insertPage(db, {
+			url: 'https://expired.example.com/',
+			status: -1,
+		});
+		const blockedId = await insertPage(db, {
+			url: 'https://ad.example.com/pixel',
+			status: -1,
+		});
+		const parseId = await insertPage(db, { url: 'https://waf.example.com/', status: -1 });
+		const refusedId = await insertPage(db, {
+			url: 'https://closed.example.com/',
+			status: -1,
+		});
+		const timeoutId = await insertPage(db, {
+			url: 'https://slow.example.org/',
+			status: -1,
+		});
+		// `orphan.example.com` intentionally has no page_errors row — its
+		// message resolves to absent → treated as `unknown` → still reset.
+		await insertPage(db, {
+			url: 'https://orphan.example.com/',
+			status: -1,
+		});
+
+		await knex('page_errors').insert([
+			{
+				pageId: dnsId,
+				phase: 'crawl',
+				message: 'getaddrinfo ENOTFOUND gone.example.invalid',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				pageId: tlsId,
+				phase: 'crawl',
+				message: 'net::ERR_CERT_DATE_INVALID',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				pageId: blockedId,
+				phase: 'render',
+				message: 'net::ERR_BLOCKED_BY_CLIENT',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				pageId: parseId,
+				phase: 'crawl',
+				message: 'Parse Error: Expected HTTP/, RTSP/ or ICE/',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				pageId: refusedId,
+				phase: 'crawl',
+				message: 'connect ECONNREFUSED 127.0.0.1:443',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				pageId: timeoutId,
+				phase: 'crawl',
+				message: '[Retried 3 times] Timeout: https://slow.example.org/',
+				createdAt: 1_700_000_000_000,
+			},
+		]);
+
+		const reset = await db.resetFailedPages();
+		expect(reset.toSorted()).toEqual([
+			'https://orphan.example.com/',
+			'https://slow.example.org/',
+		]);
+
+		// Verify the excluded pages were left untouched on disk too (still
+		// scraped=1, status=-1) — not just absent from the return value.
+		for (const url of [
+			'https://gone.example.invalid/',
+			'https://expired.example.com/',
+			'https://ad.example.com/pixel',
+			'https://waf.example.com/',
+			'https://closed.example.com/',
+		]) {
+			const row = await knex('pages').where('url', url).first();
+			expect(row.scraped).toBe(1);
+			expect(row.status).toBe(-1);
+		}
+
+		await db.destroy();
+	});
+
+	it('falls back to crawl_errors when page_errors has no message for the candidate', async () => {
+		// `page_errors` is populated by scrape attempts; pages that failed at
+		// the crawler-channel level (DNS / TLS / refused before any scrape
+		// fires) only have a row in `crawl_errors`. The exclusion must reach
+		// through that second table or the convergence guarantee breaks for
+		// the exact failures it most needs to catch.
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ filename: resetDbPath });
+		const knex = db.getKnex();
+
+		await insertPage(db, { url: 'https://crawl-only-dns.example.invalid/', status: -1 });
+		// The retryable page is intentionally inserted without any
+		// `page_errors` / `crawl_errors` row — its message resolves to absent,
+		// treated as `unknown`, and therefore reset. The row exists only to
+		// prove that exclusion is per-candidate, not all-or-nothing.
+		await insertPage(db, {
+			url: 'https://crawl-only-retry.example.com/',
+			status: -1,
+		});
+
+		await knex('crawl_errors').insert([
+			{
+				url: 'https://crawl-only-dns.example.invalid/',
+				isExternal: 0,
+				message: 'getaddrinfo ENOTFOUND crawl-only-dns.example.invalid',
+				createdAt: 1_700_000_000_000,
+			},
+		]);
+
+		const reset = await db.resetFailedPages();
+		expect(reset).toEqual(['https://crawl-only-retry.example.com/']);
+
+		await db.destroy();
+	});
+
+	it('returns [] AND leaves every candidate untouched when ALL of them classify as permanent', async () => {
+		// Pins the `retryable.length === 0` short-circuit in
+		// `resetFailedPages`: when every SQL candidate's latest message
+		// classifies into `PERMANENT_ERROR_KINDS`, no row should be
+		// demoted. The previous implementation would have called the
+		// chunked UPDATE / DELETE with empty `whereIn` arrays — knex
+		// renders that as `WHERE 0 = 1` so it happened not to corrupt
+		// data, but a refactor removing the early return would silently
+		// regress. Locking the no-op behavior in a test prevents that.
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ filename: resetDbPath });
+		const knex = db.getKnex();
+
+		const dnsId = await insertPage(db, {
+			url: 'https://gone.example.invalid/',
+			status: -1,
+		});
+		const tlsId = await insertPage(db, {
+			url: 'https://expired.example.com/',
+			status: -1,
+		});
+
+		await knex('page_errors').insert([
+			{
+				pageId: dnsId,
+				phase: 'crawl',
+				message: 'getaddrinfo ENOTFOUND gone.example.invalid',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				pageId: tlsId,
+				phase: 'crawl',
+				message: 'net::ERR_CERT_DATE_INVALID',
+				createdAt: 1_700_000_000_000,
+			},
+		]);
+
+		const reset = await db.resetFailedPages();
+		expect(reset).toEqual([]);
+
+		// Both permanent candidates are still `scraped = 1` with their
+		// original `status = -1`, NOT demoted to pending.
+		const remaining = await knex('pages')
+			.select('url', 'scraped', 'status')
+			.whereIn('id', [dnsId, tlsId]);
+		expect(remaining.every((r) => r.scraped === 1 && r.status === -1)).toBe(true);
+
+		await db.destroy();
+	});
+
+	it('also excludes the [Retried N times] wrapped DNS error form (retryCall prefix)', async () => {
+		// `@d-zero/shared/retry` prepends `[Retried N times] ` to the
+		// surviving error message. The substring match for `ENOTFOUND` /
+		// `getaddrinfo` already catches the wrapped form, but no test
+		// previously pinned it — a future regex-tightening change that
+		// anchored to `^getaddrinfo` would silently let wrapped DNS
+		// failures rejoin the retry pool every `--retry-failed` pass.
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ filename: resetDbPath });
+		const knex = db.getKnex();
+
+		const wrappedDnsId = await insertPage(db, {
+			url: 'https://wrapped-dns.example.invalid/',
+			status: -1,
+		});
+		await knex('page_errors').insert({
+			pageId: wrappedDnsId,
+			phase: 'crawl',
+			message: '[Retried 5 times] getaddrinfo ENOTFOUND wrapped-dns.example.invalid',
+			createdAt: 1_700_000_000_000,
+		});
+
+		const reset = await db.resetFailedPages();
+		expect(reset).toEqual([]);
 
 		await db.destroy();
 	});

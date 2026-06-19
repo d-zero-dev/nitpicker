@@ -13,6 +13,29 @@ export interface RedirectEdgeResult {
 	type: 'redirect-edge';
 	/** HEAD-resolved page data carrying the redirect chain (source → destination). */
 	pageData: PageData;
+	/**
+	 * Where the chain came from. The caller needs this to decide whether the
+	 * URLs in `pageData.redirectPaths` are already-known (HTTP chain — every
+	 * hop was followed by the browser/HEAD pre-flight and the destination is
+	 * already rendered) or brand-new (JS redirect — only the source was
+	 * processed, the destination came out of `page.url()` and has never been
+	 * touched).
+	 *
+	 * - `'http-chain'` — Returned when the HEAD pre-flight resolved a real
+	 *   3xx chain and the destination has already been claimed via
+	 *   `#scrapedDestinations`. The crawler folds every URL in
+	 *   `redirectPaths` into the link-list's done-set; the destination is not
+	 *   re-enqueued because it is already in the archive.
+	 * - `'js-redirect'` — Returned when `scraper.scrapeStart` threw because
+	 *   `page.goto()` resolved to `null` (client-side
+	 *   `window.location.replace()` / `<meta http-equiv="refresh">`) and
+	 *   `page.url()` exposed a different destination. `redirectPaths`
+	 *   contains exactly one URL: the JS-redirect target. The crawler MUST
+	 *   enqueue that destination so it reaches the browser, and MUST NOT
+	 *   fold it into the done-set (otherwise the dealer's `seen` rejects
+	 *   the push and the destination is silently lost from the archive).
+	 */
+	source: 'http-chain' | 'js-redirect';
 }
 
 /**
@@ -21,6 +44,53 @@ export interface RedirectEdgeResult {
  * redirect destination was already rendered and only the edge needs recording.
  */
 export type ScrapeOutcome = ScrapeResult | RedirectEdgeResult;
+
+/**
+ * Internal envelope returned by {@link Crawler.#launchBrowserAndScrape} that
+ * augments beholder's {@link ScrapeResult} with the puppeteer-side
+ * post-navigation URL.
+ *
+ * **Why:** when `scraper.scrapeStart` throws because `page.goto()` resolved to
+ * `null` (the classic puppeteer symptom of a client-side
+ * `window.location.replace()` / meta-refresh firing mid-navigation), the only
+ * authoritative source for the URL the browser actually landed on is
+ * `page.url()` — neither the HEAD pre-flight nor the thrown error carries it.
+ * Capturing it here lets `#scrapePage` fold the source into a redirect edge
+ * instead of recording a hard `status = -1` that `--retry-failed` would chase
+ * forever (`Page.goto returned null` classifies as `protocol`, which is neither
+ * permanent nor a puppeteer-fallback kind — so the SQL filter resets it every
+ * pass and the next pass replays the same failure).
+ *
+ * `postNavigationUrl` is optional because:
+ * - successful / skipped outcomes do not need it (the success path already
+ *   exposes the final URL via `pageData.url` + `redirectPaths`);
+ * - capturing can itself fail when the underlying browser context is already
+ *   torn down (target closed, session killed) — we treat that as "no extra
+ *   information" and fall through to the existing error path.
+ */
+export type BrowserScrapeResult = ScrapeResult & {
+	/**
+	 * URL puppeteer reports via `page.url()` *after* a thrown navigation.
+	 *
+	 * Semantically only meaningful when the parent result is `type: 'error'`
+	 * — `#launchBrowserAndScrape` sets it from inside its catch arm, and the
+	 * success / skipped paths never write to it. The field is typed as
+	 * optional on the whole envelope rather than narrowed to the error
+	 * variant because beholder's `ScrapeResult` is not a discriminated
+	 * union (all variants share the same shape and disambiguate via
+	 * `type`), so narrowing here would force a parallel ad-hoc union with
+	 * no compile-time payoff. Consumers MUST therefore check
+	 * `result.type === 'error'` before reading `postNavigationUrl` — and in
+	 * practice the only consumer is the JS-redirect rescue, which does
+	 * exactly that.
+	 *
+	 * Consumers should also confirm the URL is meaningful via
+	 * {@link deriveJsRedirectTarget} — `about:blank`, identity values,
+	 * case-only or trailing-slash variants are all filtered there, not
+	 * here.
+	 */
+	postNavigationUrl?: string;
+};
 
 /**
  * Configuration options that control crawler behavior.
