@@ -6,43 +6,9 @@ import type { ClientRequest, IncomingMessage, RequestOptions } from 'node:http';
 import { delay } from '@d-zero/shared/delay';
 import redirects from 'follow-redirects';
 
-import { classifyErrorKind } from '../classify-error-kind.js';
-
 import { destinationCache } from './destination-cache.js';
 import NetTimeoutError from './net-timeout-error.js';
-
-/**
- * Return true when an HTTP HEAD attempt failed in a way that warrants a GET
- * retry on the same URL.
- *
- * The existing `_fetchHead` already covers the "HEAD returned a status that
- * proves the method isn't accepted" case (405 / 501 / 503). This helper
- * picks up the *other* shape of HEAD rejection: the server returned no
- * status at all because a WAF / middlebox silently dropped or mangled the
- * HEAD request. Government / corporate sites with strict bot defences do
- * this — they answer GET fine in a real browser but ignore HEAD entirely.
- *
- * Only error kinds that genuinely describe "HEAD reached the server but the
- * server (or its middlebox) refused to respond cleanly" qualify:
- *
- * - `NetTimeoutError` — race timeout, no answer in budget
- * - `'parse-error'` — server returned bytes but they're not parseable HTTP
- *   (proxy garbage / WAF rewrite)
- * - `'connection-reset'` — TCP reset mid-response
- *
- * Errors that prove "the request couldn't reach the server at all" (DNS,
- * connection-refused / -timeout, TLS, local-network) are excluded — a GET
- * retry there would just pay the same network cost for the same answer.
- * @param error - The Error that the HEAD attempt rejected with.
- * @returns Whether a GET fallback should be attempted.
- */
-function shouldGetFallbackOnHeadFailure(error: Error): boolean {
-	if (error instanceof NetTimeoutError) {
-		return true;
-	}
-	const kind = classifyErrorKind(error.message);
-	return kind === 'parse-error' || kind === 'connection-reset';
-}
+import { shouldGetFallbackOnHeadFailure } from './should-get-fallback-on-head-failure.js';
 
 /** Default race timeout for the HEAD pre-flight, in milliseconds. */
 const DEFAULT_HEAD_TIMEOUT_MS = 10 * 1000;
