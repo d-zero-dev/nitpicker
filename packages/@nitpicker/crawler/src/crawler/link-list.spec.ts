@@ -298,6 +298,54 @@ describe('LinkList', () => {
 			expect(pending).not.toContain(protocolAgnosticKey(redirectUrl.withoutHashAndAuth));
 		});
 
+		it('does NOT fold redirectPaths into done-set when completion.includeRedirectPaths is false', () => {
+			// JS-redirect rescue contract: the rescue path enqueues the
+			// destination separately (because it has NOT been rendered
+			// yet) and passes `includeRedirectPaths: false` to keep
+			// `add()` accepting that destination into `#pending`. If a
+			// future refactor inverts the conditional (`=== true` instead
+			// of `!== false`), this test fails — without it, the rescue
+			// would silently lose the JS-redirect destination from the
+			// archive every time and only an E2E that explicitly hits the
+			// rescue path would catch the regression.
+			const list = new LinkList();
+			const url = createUrl('https://example.com/source');
+			const scope = createScope([['example.com', ['https://example.com/']]]);
+			list.add(url);
+			const page = createPageData({
+				redirectPaths: ['https://example.com/js-target'],
+			});
+			list.done(url, scope, { page }, defaultOptions, {
+				includeRedirectPaths: false,
+			});
+			// js-target was NOT folded into #done, so add() must accept
+			// it into #pending — proving the rescue's enqueue path will
+			// reach the dealer.
+			const target = createUrl('https://example.com/js-target');
+			list.add(target);
+			const { pending } = list.getLinks();
+			expect(pending).toContain(protocolAgnosticKey(target.withoutHashAndAuth));
+		});
+
+		it('default completion (omitted) folds redirectPaths (= same as includeRedirectPaths: true)', () => {
+			// Pinning the default explicitly so a future refactor that
+			// switches the option's polarity or default is caught here
+			// instead of silently breaking every HTTP-301 redirect-edge
+			// fold-into-done invariant the original design relies on.
+			const list = new LinkList();
+			const url = createUrl('https://example.com/start');
+			const scope = createScope([['example.com', ['https://example.com/']]]);
+			list.add(url);
+			const page = createPageData({
+				redirectPaths: ['https://example.com/intermediate'],
+			});
+			list.done(url, scope, { page }, defaultOptions);
+			const intermediate = createUrl('https://example.com/intermediate');
+			list.add(intermediate);
+			const { pending } = list.getLinks();
+			expect(pending).not.toContain(protocolAgnosticKey(intermediate.withoutHashAndAuth));
+		});
+
 		it('returns null if URL was not added', () => {
 			const list = new LinkList();
 			const url = createUrl('https://example.com/unknown');

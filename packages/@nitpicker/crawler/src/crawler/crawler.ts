@@ -1,4 +1,5 @@
 import type {
+	BrowserScrapeResult,
 	CrawlerEventTypes,
 	CrawlerOptions,
 	ResourceLookupResult,
@@ -11,6 +12,7 @@ import type {
 	ScrapeResult,
 } from '@d-zero/beholder';
 import type { ExURL } from '@d-zero/shared/parse-url';
+import type { Page as PuppeteerPage } from 'puppeteer';
 
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -27,6 +29,7 @@ import pkg from '../../package.json' with { type: 'json' };
 import { classifyErrorKind } from '../classify-error-kind.js';
 import { crawlerLog } from '../debug.js';
 
+import { buildJsRedirectEdge } from './build-js-redirect-edge.js';
 import { createChangePhaseHandler } from './create-change-phase-handler.js';
 import { derivePageSource } from './derive-page-source.js';
 import { deriveResourceSource } from './derive-resource-source.js';
@@ -552,7 +555,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		isExternal: boolean,
 		metadataOnly: boolean,
 		headCheckResult?: PageData,
-	): Promise<ScrapeResult> {
+	): Promise<BrowserScrapeResult> {
 		update('Launching browser%dots%');
 		if (this.#options.executablePath) {
 			const execPath = path.resolve(this.#options.executablePath);
@@ -568,9 +571,17 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				: {}),
 		});
 
+		// `page` is hoisted out of the try-block so the catch arm can read
+		// `page.url()` for JS-redirect detection. See `BrowserScrapeResult`
+		// JSDoc for the full why; in short, when `scrapeStart` throws because
+		// `page.goto()` returned `null`, the puppeteer page object still
+		// holds the URL Chromium actually navigated to via the offending
+		// `window.location.replace()` / meta-refresh, and that is the only
+		// authoritative source for the JS-redirect destination.
+		let page: PuppeteerPage | null = null;
 		try {
 			update('Creating page%dots%');
-			const page = await browser.newPage();
+			page = await browser.newPage();
 			await page.setUserAgent(this.#options.userAgent);
 			// HTTP-auth handling — two cooperating pieces, BOTH required:
 			//
@@ -646,6 +657,35 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			update('Closing browser%dots%');
 			return result;
 		} catch (error) {
+			// JS-redirect rescue: when `scrapeStart` throws because
+			// `page.goto()` returned `null` (the symptom of a client-side
+			// `window.location.replace()` / meta-refresh navigating away
+			// before the original response materialised), `page.url()` still
+			// reports the destination Chromium ended up on. Capturing it
+			// here lets `#scrapePage` fold the source into a redirect edge
+			// instead of recording a hard `status = -1` — `Page.goto returned
+			// null` classifies as `protocol`, which is neither permanent nor
+			// a puppeteer-fallback kind, so without this rescue the page
+			// loops through `--retry-failed` forever with the same failure.
+			//
+			// `page.url()` itself can throw when the browser context is
+			// already torn down (target closed, session killed). Treat any
+			// such failure as "no extra information" and fall back to the
+			// normal error path — the existing redirect-edge fallback that
+			// keys off `headCheckResult.redirectPaths` may still rescue the
+			// page when the HEAD pre-flight resolved a chain.
+			let postNavigationUrl: string | undefined;
+			if (page) {
+				try {
+					postNavigationUrl = page.url();
+				} catch (urlReadError) {
+					crawlerLog(
+						'Reading page.url() for JS-redirect detection failed on %s: %O',
+						url.href,
+						urlReadError,
+					);
+				}
+			}
 			return {
 				type: 'error',
 				resources: [],
@@ -655,6 +695,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					stack: error instanceof Error ? error.stack : undefined,
 					shutdown: true,
 				},
+				...(postNavigationUrl === undefined ? {} : { postNavigationUrl }),
 			};
 		} finally {
 			// handleBrowserClose force-kills the underlying Chromium when a
@@ -842,12 +883,65 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 							// path, where the first predicted source to a destination renders
 							// it and is recorded as a redirect source the same way; only 404 /
 							// error predicted URLs are dropped (by `shouldDiscardPredicted`).
-							this.#linkList.done(
-								url,
-								this.#scope,
-								{ page: result.pageData },
-								this.#options,
-							);
+							//
+							// The `source` discriminator divides this branch in two:
+							//
+							// - `'http-chain'` — the HEAD pre-flight resolved a real 3xx chain
+							//   and the destination is already rendered (`#scrapedDestinations`
+							//   claim). Every URL in `redirectPaths` is intermediate / known,
+							//   so the existing behaviour applies: `linkList.done` folds the
+							//   whole chain into the done-set so later references skip cleanly.
+							//
+							// - `'js-redirect'` — `scraper.scrapeStart` threw because
+							//   `page.goto()` returned null (`window.location.replace()` /
+							//   meta-refresh fired mid-navigation), and `redirectPaths`
+							//   carries the single JS target Chromium ended up on. That target
+							//   has NOT been rendered yet — it must enter the crawl queue, and
+							//   `linkList.done` MUST NOT fold it into the done-set (otherwise
+							//   the dealer's `seen` rejects the push and the destination is
+							//   silently lost from the archive).
+							if (result.source === 'js-redirect') {
+								const destination = result.pageData.redirectPaths.at(-1);
+								if (destination) {
+									const destinationUrl = parseUrl(destination, this.#options);
+									if (destinationUrl) {
+										this.#linkList.add(destinationUrl);
+										void enqueue(destinationUrl);
+									} else {
+										// `deriveJsRedirectTarget` already canonicalises
+										// via WHATWG URL parsing, so reaching the
+										// `parseUrl === null` branch here would mean
+										// `@d-zero/shared/parse-url` rejected what
+										// WHATWG accepted — unexpected, and silently
+										// dropping the destination would be a silent
+										// archive loss. Log it so DEBUG=Nitpicker:Crawler
+										// catches the case.
+										crawlerLog(
+											'JS-redirect destination %s failed to parse — dropping enqueue',
+											destination,
+										);
+									}
+								} else {
+									crawlerLog(
+										'JS-redirect result for %s had no redirectPaths destination — dropping enqueue',
+										url.href,
+									);
+								}
+								this.#linkList.done(
+									url,
+									this.#scope,
+									{ page: result.pageData },
+									this.#options,
+									{ includeRedirectPaths: false },
+								);
+							} else {
+								this.#linkList.done(
+									url,
+									this.#scope,
+									{ page: result.pageData },
+									this.#options,
+								);
+							}
 							void this.emit('redirect', { result: result.pageData });
 							log(c.dim('Redirect (dest already scraped)'));
 							return;
@@ -1093,6 +1187,41 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						fallback.error?.message ?? '(no message)',
 						fallback.error?.shutdown ?? false,
 					);
+					// JS-redirect rescue on the puppeteer-fallback branch:
+					// the HEAD/GET probes died (the kind set in
+					// `isPuppeteerFallbackCandidate` — middlebox / WAF
+					// shapes), the one-shot puppeteer attempt also threw,
+					// but `page.url()` reported a different post-navigation
+					// URL. This is the same WAF-+-JS-redirect shape the
+					// HEAD-success rescue handles one branch below, applied
+					// to the prior failure layer. Without this, a URL whose
+					// only sin is "HEAD blocked + JS-redirected body" falls
+					// to `status = -1` and joins the retry-forever loop the
+					// rescue is supposed to break. The trigger is the same
+					// narrow `Page.goto returned null` shape — anything
+					// else (TLS failure inside puppeteer, target crash, …)
+					// must fall through to the unreachable path so the real
+					// failure surfaces. We synthesise the redirect-edge
+					// PageData from the HEAD error (status = -1) instead of
+					// from a HEAD success, so `#linkRedirectSources` still
+					// stamps the source as 301 and the edge wires the dest
+					// in.
+					const fallbackRescue = buildJsRedirectEdge({
+						url,
+						isExternal,
+						errorMessage: fallback.error?.message,
+						postNavigationUrl: fallback.postNavigationUrl,
+						// No `headCheckResult`: HEAD itself died on this
+						// path, so the synthesised PageData starts from a
+						// `linkToPageData` placeholder with `status = -1`
+						// carrying the original HEAD error message.
+						// `#linkRedirectSources` still flips the source row
+						// to 301 because NULL/-1 satisfies its conditional
+						// stamp predicate.
+					});
+					if (fallbackRescue !== null) {
+						return fallbackRescue;
+					}
 				} catch (browserError) {
 					// Browser launch / runtime crash — fall through to the
 					// unreachable path below. The original HEAD error is more
@@ -1151,7 +1280,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		const finalKey = redirectDestKey(url, headCheckResult.redirectPaths);
 		if (this.#scrapedDestinations.has(finalKey)) {
 			crawlerLog('Redirect dest already rendered, edge only: %s', url.href);
-			return { type: 'redirect-edge', pageData: headCheckResult };
+			return { type: 'redirect-edge', source: 'http-chain', pageData: headCheckResult };
 		}
 
 		// Title-only mode — extract <title> via partial GET for HTML, skip browser
@@ -1266,7 +1395,68 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				'Browser scrape failed for %s but HEAD resolved a redirect chain — recording as edge',
 				url.href,
 			);
-			return { type: 'redirect-edge', pageData: headCheckResult };
+			return { type: 'redirect-edge', source: 'http-chain', pageData: headCheckResult };
+		}
+
+		// JS-redirect rescue: HEAD returned a definitive response (no chain),
+		// the browser scrape threw with the specific `Page.goto returned null`
+		// shape (gated by `isJsRedirectErrorShape` below), and puppeteer
+		// reports a different post-navigation URL via `page.url()`. The
+		// motivating case is a server returning `200 OK` whose body contains
+		// `window.location.replace(...)` or `<meta http-equiv="refresh">` —
+		// `page.goto()` resolves to `null` once the JS-driven navigation
+		// supersedes the original, and the scraper throws
+		// `The method Page.goto returned null`. Recording the edge preserves
+		// the link from the source to the JS-redirect target, removes the
+		// page from `--retry-failed`'s candidate pool (the SQL filter
+		// excludes rows with a non-null `redirectDestId`), and matches what
+		// a real browser shows the user.
+		//
+		// What the source row reads as:
+		// - the source is not committed via `setPage`/`updatePage` on this
+		//   path (the redirect-edge handler in `#runDeal` only calls
+		//   `linkList.done` + `emit('redirect', ...)` → `Archive.setRedirect`),
+		//   so `recordRedirect` → `#getIdByUrl` creates a NULL-status
+		//   placeholder row for the source if it did not already exist;
+		// - `#linkRedirectSources` then stamps `status = 301
+		//   statusText='Moved Permanently'` because NULL satisfies its
+		//   conditional-update predicate.
+		// That is the same shape an HTTP 301 source ends up with — the
+		// truthful HTTP layer (the upstream's 200) is lost on this path, but
+		// the alternative (status=-1 retry-forever) is strictly worse. A
+		// future refinement could keep the HEAD-derived status by routing
+		// the source through `setPage` before `setRedirect`; intentionally
+		// deferred to keep this rescue minimal.
+		//
+		// Pre-claiming the destination in `#scrapedDestinations` would
+		// short-circuit the freshly-enqueued destination at the top of
+		// `#scrapePage` (the `if (#scrapedDestinations.has(finalKey))` guard
+		// at line 1213), leaving the dest row as a content-less HEAD edge
+		// instead of a fully rendered page. So we *do not* claim here — the
+		// destination renders normally via the queue, and `#scrapedDestinations`
+		// is populated at line ~1322 of the render-success path the way every
+		// other URL is. Sibling JS-redirect sources to the same destination
+		// still converge: the second sibling enters this branch, observes its
+		// own `page.url()` landing on the same target, records its own
+		// redirect-edge, and re-enqueues — the dealer's `seen` dedup absorbs
+		// the duplicate push, so the destination renders exactly once.
+		if (browserResult.type === 'error') {
+			const headSuccessRescue = buildJsRedirectEdge({
+				url,
+				isExternal,
+				errorMessage: browserResult.error?.message,
+				postNavigationUrl: browserResult.postNavigationUrl,
+				// `headCheckResult` is supplied here so the synthesised
+				// PageData carries the real HTTP-level status / content
+				// type from the HEAD pre-flight. `#linkRedirectSources`
+				// only stamps 301 onto NULL/-1 status rows, so the
+				// HEAD-derived status DOES survive on this path — the
+				// truthful HTTP 200 is preserved.
+				headCheckResult,
+			});
+			if (headSuccessRescue !== null) {
+				return headSuccessRescue;
+			}
 		}
 		return browserResult;
 	}

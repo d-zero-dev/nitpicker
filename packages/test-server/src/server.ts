@@ -8,6 +8,7 @@ import { errorStatusRoutes } from './routes/error-status.js';
 import { excludeRoutes } from './routes/exclude.js';
 import { flakyRoutes } from './routes/flaky.js';
 import { inventoryRoutes } from './routes/inventory.js';
+import { jsRedirectRoutes } from './routes/js-redirect.js';
 import { metaRoutes } from './routes/meta.js';
 import { optionsRoutes } from './routes/options.js';
 import { paginationRoutes } from './routes/pagination.js';
@@ -39,6 +40,7 @@ export function createApp() {
 	resourceReuseRoutes(app);
 	flakyRoutes(app);
 	inventoryRoutes(app);
+	jsRedirectRoutes(app);
 	return app;
 }
 
