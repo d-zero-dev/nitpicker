@@ -1234,6 +1234,39 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				? redirectDestKey(url, browserResult.pageData.redirectPaths)
 				: finalKey;
 			this.#scrapedDestinations.add(renderedKey);
+			return browserResult;
+		}
+
+		// Browser scrape failed but the HEAD pre-flight already resolved a
+		// redirect chain — fall back to the redirect-edge path so the chain
+		// is not lost. Without this, a URL whose final destination is on
+		// HTTPS→HTTP downgrade (or any other navigation Chromium refuses
+		// to complete while the underlying redirect was a normal 301/302)
+		// would be persisted as `status = -1` with NULL `redirectDestId`,
+		// then re-picked up by every `--retry-failed` pass forever — the
+		// HEAD answer is the authoritative truth and the browser cannot
+		// invalidate it.
+		//
+		// Restricted to `type === 'error'` because:
+		// - `'skipped'` is an `excludeKeywords` verdict from the browser
+		//   on the rendered URL and is its own definitive outcome —
+		//   surfacing it as a redirect-edge would lose the skip signal.
+		// - `'success'` is handled above.
+		//
+		// The destination is claimed even though no row was rendered for
+		// it: subsequent siblings on the same chain should also fold into
+		// the same edge instead of re-firing the same failing browser
+		// attempt. If the destination URL itself reaches the queue later,
+		// it goes through the normal `#scrapePage` path (the claim only
+		// short-circuits sibling redirect SOURCES, not the destination
+		// itself).
+		if (browserResult.type === 'error' && headCheckResult.redirectPaths.length > 0) {
+			this.#scrapedDestinations.add(finalKey);
+			crawlerLog(
+				'Browser scrape failed for %s but HEAD resolved a redirect chain — recording as edge',
+				url.href,
+			);
+			return { type: 'redirect-edge', pageData: headCheckResult };
 		}
 		return browserResult;
 	}

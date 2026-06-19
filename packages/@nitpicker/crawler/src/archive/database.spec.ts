@@ -1082,6 +1082,133 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 		}
 	});
 
+	it('stamps a redirect source whose status was -1 (puppeteer failure) with 301', async () => {
+		// Regression guard for the migration shape: a row that captured
+		// `status=-1 / UnknownError` BEFORE the chain was understood
+		// (e.g. a HEAD pre-flight succeeded but puppeteer goto returned
+		// null on a HTTPS→HTTP downgrade, the failure landed on the
+		// source URL) MUST be flipped to 301 once recordRedirect learns
+		// the chain. Otherwise the page row stays in the `-1` bucket on
+		// the Errors view AND keeps re-entering `--retry-failed`.
+		const dbPath = path.resolve(
+			workingDir,
+			'record-redirect-status-from-minus-one.sqlite',
+		);
+		const db = await Database.connect({ filename: dbPath });
+		const dest = 'http://localhost/dest-minus-one';
+		const source = 'http://localhost/legacy-source';
+		try {
+			await db.updatePage(makeDest(dest, 'Dest'), true, true);
+			const knex = db.getKnex();
+			await knex('pages').insert({
+				url: source,
+				scraped: 1,
+				isTarget: 1,
+				isExternal: 0,
+				status: -1,
+				statusText: 'UnknownError',
+				contentType: null,
+				contentLength: null,
+				responseHeaders: '{}',
+				isSkipped: 0,
+			});
+
+			await db.recordRedirect(makeSource(source, dest));
+
+			const [sourcePage] = (await knex
+				.from('pages')
+				.select('status', 'statusText', 'redirectDestId')
+				.where('url', source)) as {
+				status: number | null;
+				statusText: string | null;
+				redirectDestId: number | null;
+			}[];
+			expect(sourcePage!.status).toBe(301);
+			expect(sourcePage!.statusText).toBe('Moved Permanently');
+			expect(sourcePage!.redirectDestId).not.toBeNull();
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('preserves an existing definitive status (e.g. 302) when a row later becomes a redirect source', async () => {
+		// Negative guard for the conditional stamp: a row that already
+		// captured a real status (200 / 302 / 307 / etc.) from a prior
+		// direct scrape MUST NOT be overwritten with 301. The stamp only
+		// flips NULL / -1 ("no signal yet") shapes; any other value is
+		// authoritative and kept verbatim.
+		const dbPath = path.resolve(workingDir, 'record-redirect-status-keep-302.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const dest = 'http://localhost/dest-302';
+		const source = 'http://localhost/source-already-302';
+		try {
+			await db.updatePage(makeDest(dest, 'Dest'), true, true);
+			const knex = db.getKnex();
+			await knex('pages').insert({
+				url: source,
+				scraped: 1,
+				isTarget: 1,
+				isExternal: 0,
+				status: 302,
+				statusText: 'Found',
+				contentType: null,
+				contentLength: null,
+				responseHeaders: '{}',
+				isSkipped: 0,
+			});
+
+			await db.recordRedirect(makeSource(source, dest));
+
+			const [sourcePage] = (await knex
+				.from('pages')
+				.select('status', 'statusText', 'redirectDestId')
+				.where('url', source)) as {
+				status: number | null;
+				statusText: string | null;
+				redirectDestId: number | null;
+			}[];
+			expect(sourcePage!.status).toBe(302);
+			expect(sourcePage!.statusText).toBe('Found');
+			expect(sourcePage!.redirectDestId).not.toBeNull();
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('stamps a NULL-status placeholder row with 301 (redirect-only URL never directly scraped)', async () => {
+		// `#getIdByUrl` materialises a placeholder row when a URL is
+		// reached only as a redirect source — `status` is NULL on that
+		// row. recordRedirect should stamp it 301 so the row is visible
+		// as a redirect source on the Summary distribution.
+		const dbPath = path.resolve(workingDir, 'record-redirect-status-from-null.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const dest = 'http://localhost/dest-null';
+		const source = 'http://localhost/source-null';
+		try {
+			await db.updatePage(makeDest(dest, 'Dest'), true, true);
+
+			await db.recordRedirect(makeSource(source, dest));
+
+			const knex = db.getKnex();
+			const [sourcePage] = (await knex
+				.from('pages')
+				.select('status', 'statusText', 'redirectDestId')
+				.where('url', source)) as {
+				status: number | null;
+				statusText: string | null;
+				redirectDestId: number | null;
+			}[];
+			expect(sourcePage!.status).toBe(301);
+			expect(sourcePage!.statusText).toBe('Moved Permanently');
+			expect(sourcePage!.redirectDestId).not.toBeNull();
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
 	it('自己リダイレクト（元URL===宛先）は辺を立てない', async () => {
 		const dbPath = path.resolve(workingDir, 'record-redirect-self.sqlite');
 		const db = await Database.connect({ filename: dbPath });

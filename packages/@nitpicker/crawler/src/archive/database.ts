@@ -2014,6 +2014,36 @@ export class Database extends EventEmitter<DatabaseEvent> {
 					redirectDestId: destId,
 					isExternal: isExternal ? 1 : 0,
 				});
+			// Conditional `301 Moved Permanently` stamp — applied ONLY
+			// when the row carries no definitive status yet (NULL or
+			// the `-1` hard-failure sentinel). HEAD pre-flight does not
+			// retain each hop's individual status code (`redirectPaths`
+			// is a URL[] without statuses), so the only honest answer
+			// for an unknown-status hop is "some 3xx" — 301 is the
+			// canonical representative.
+			//
+			// We deliberately do NOT overwrite an existing definitive
+			// status (200 / 302 / 307 / etc.): a row that already
+			// captured a concrete status from a prior direct scrape
+			// would lose accuracy. The stamp only flips two cases:
+			// - NULL: a placeholder row created by `#getIdByUrl`
+			//   because the URL was reached only as a redirect
+			//   target / source, never directly scraped. Without the
+			//   stamp the row is invisible on the Errors view's status
+			//   distribution.
+			// - -1: a row that recorded a hard scrape failure (e.g. a
+			//   puppeteer goto returned null on a HTTPS→HTTP downgrade
+			//   redirect) BEFORE the chain was understood. That `-1`
+			//   then conflated "real failure" with "actually a redirect
+			//   source we now know about", polluting the `-1` bucket
+			//   AND inflating the `--retry-failed` target (via the
+			//   `whereNull('redirectDestId')` filter — the redirectDestId
+			//   update above already excludes the row from retry; this
+			//   stamp restores the visible identity).
+			await trx<DB_Page>('pages')
+				.where('id', redirectId)
+				.where((qb) => qb.whereNull('status').orWhere('status', -1))
+				.update({ status: 301, statusText: 'Moved Permanently' });
 			// A page that used to be scraped as content can later turn into a
 			// redirect source. It owns no content anymore, so drop any anchors /
 			// images it captured in its former life — otherwise they linger and
