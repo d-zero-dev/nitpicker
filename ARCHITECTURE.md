@@ -1177,13 +1177,14 @@ normalizeToArray('/blog/*.{html,php},/admin/*')
 
 ## 11. エラーハンドリング
 
-| フェーズ        | エラー                              | 処理                                                                         |
-| --------------- | ----------------------------------- | ---------------------------------------------------------------------------- |
-| HEAD リクエスト | タイムアウト(10s), ECONNREFUSED 等  | `ScrapeResult.type='error'`（shutdown=false）                                |
-| ブラウザ起動    | Puppeteer 起動失敗                  | `ScrapeResult.type='error'`（shutdown=true）                                 |
-| page.goto()     | タイムアウト, ERR_NAME_NOT_RESOLVED | `@retryable` でリトライ後 `type='error'` で返却                              |
-| 画像抽出        | context 破壊, タイムアウト          | デバイスプリセット単位で try-catch、部分結果を返却。全失敗時は `fallback:[]` |
-| DOM 解析        | evaluate 失敗                       | catch でフォールバック値                                                     |
+| フェーズ                         | エラー                                                              | 処理                                                                                                                                                                                        |
+| -------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HEAD リクエスト                  | タイムアウト(10s), ECONNREFUSED 等                                  | `ScrapeResult.type='error'`（shutdown=false）                                                                                                                                               |
+| ブラウザ起動                     | Puppeteer 起動失敗                                                  | `ScrapeResult.type='error'`（shutdown=true）                                                                                                                                                |
+| page.goto()                      | タイムアウト, ERR_NAME_NOT_RESOLVED                                 | `@retryable` でリトライ後 `type='error'` で返却                                                                                                                                             |
+| page.goto() = null (JS redirect) | `window.location.replace()` / `<meta refresh>` で navigation 上書き | `Crawler.#scrapePage` の rescue が `page.url()` を救出し redirect-edge として記録（`buildJsRedirectEdge` / `derive-js-redirect-target.ts` / `is-js-redirect-error-shape.ts` の JSDoc が正） |
+| 画像抽出                         | context 破壊, タイムアウト                                          | デバイスプリセット単位で try-catch、部分結果を返却。全失敗時は `fallback:[]`                                                                                                                |
+| DOM 解析                         | evaluate 失敗                                                       | catch でフォールバック値                                                                                                                                                                    |
 
 ### CLI 終了コード
 
