@@ -9,6 +9,7 @@ import type { ArchiveAccessor, ErrorKind } from '@nitpicker/crawler';
 import { classifyErrorKind } from '@nitpicker/crawler';
 
 import { classifyContentType } from './classify-content-type.js';
+import { excludeSkippedPages } from './exclude-skipped-pages.js';
 import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
 
 /**
@@ -60,17 +61,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 				.count('id as count')
 				.where('scraped', 1)
 				.whereNull('redirectDestId')
-				// `isSkipped = 1` rows are discovered URLs that matched the
-				// exclude pattern and never actually got scraped — they live
-				// in `pages` with `scraped = 1` purely so the discovery layer
-				// can dedupe them, but they carry NULL status / contentType.
-				// Including them in the status histogram produces a confusing
-				// 2,799-row "—" bucket that obscures the real distribution.
-				// `OR isSkipped IS NULL` keeps legacy archives (pre-flag)
-				// rows visible.
-				.where((qb) => {
-					qb.where('isSkipped', 0).orWhereNull('isSkipped');
-				})
+				.where(excludeSkippedPages)
 				.where((qb) => {
 					qb.whereNull('contentType').orWhere('contentType', 'text/html');
 				})
@@ -107,13 +98,9 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 				.where('scraped', 1)
 				.whereNull('redirectDestId')
 				// Same exclude-pattern carve-out as the status histogram above
-				// — skipped rows always carry `contentType = NULL` and would
-				// inflate the "Unknown / Errored" bucket of the Content-Type
-				// distribution without ever having been fetched. Keep
-				// `isSkipped IS NULL` legacy rows visible.
-				.where((qb) => {
-					qb.where('isSkipped', 0).orWhereNull('isSkipped');
-				})
+				// — skipped rows would inflate the "Unknown / Errored"
+				// bucket without ever having been fetched.
+				.where(excludeSkippedPages)
 				.groupBy('contentType', 'isExternal') as Promise<
 				{
 					contentType: string | null;
