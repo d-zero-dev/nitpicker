@@ -3218,3 +3218,195 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 		}
 	});
 });
+
+describe('getCrawlingState: strict pending filter', () => {
+	/**
+	 * Minimal page-data factory for these tests. Every `pending` candidate
+	 * scenario is set up by either calling `updatePage` (which lands at
+	 * `scraped = 1`) or by directly inserting a `pages` row via knex (to
+	 * simulate placeholder / leak states that the public API does not let
+	 * us produce cleanly).
+	 * @param url - The URL of the page being scraped.
+	 * @returns Page data accepted by `Database.updatePage`.
+	 */
+	const makePage = (url: string) => ({
+		url: parseUrl(url)!,
+		redirectPaths: [] as string[],
+		isExternal: false,
+		status: 200,
+		statusText: 'OK',
+		contentLength: 0,
+		contentType: 'text/html',
+		responseHeaders: {},
+		meta: { title: '' },
+		anchorList: [],
+		imageList: [],
+		html: '',
+		isSkipped: false,
+	});
+
+	it('includes scraped=0 + isExternal=0 rows that have an anchor referrer', async () => {
+		// The legitimate resume case: a parent page was scraped, anchored to
+		// a child URL that has not been visited yet. The strict filter must
+		// keep this row in the pending set so `--resume` can pick it up.
+		const dbPath = path.resolve(workingDir, 'pending-strict-includes-real.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.updatePage(
+				{
+					...makePage('http://localhost/parent'),
+					anchorList: [
+						{
+							href: parseUrl('http://localhost/child')!,
+							textContent: '',
+							isExternal: false,
+						},
+					],
+				},
+				true,
+				true,
+			);
+
+			const { pending } = await db.getCrawlingState();
+			expect(pending).toContain('http://localhost/child');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('excludes orphan placeholders (scraped=0 with NO anchor referrer)', async () => {
+		// Predicted-discard leak surrogate: a placeholder row exists at
+		// `scraped = 0` but no `anchors` row references it. The strict
+		// filter must skip such rows so resume / inventory cannot resurrect
+		// them on the next session.
+		const dbPath = path.resolve(workingDir, 'pending-strict-excludes-orphan.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			const knex = db.getKnex();
+			await knex('pages').insert({
+				url: 'http://localhost/orphan-predicted',
+				scraped: 0,
+				isTarget: 0,
+				isExternal: 0,
+			});
+
+			const { pending } = await db.getCrawlingState();
+			expect(pending).not.toContain('http://localhost/orphan-predicted');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('excludes external scraped=0 rows even if they have an anchor referrer', async () => {
+		// External URLs go through HEAD-only / setExternalPage paths that
+		// always terminate at `scraped = 1`. A row with `isExternal = 1 AND
+		// scraped = 0` is therefore a data anomaly, regardless of whether
+		// it is anchored. The strict filter excludes it so the writer-side
+		// resume / inventory does not retry external work that the previous
+		// session intentionally never processed (e.g. `fetchExternal: false`
+		// session that crashed mid-anchor-extraction).
+		const dbPath = path.resolve(workingDir, 'pending-strict-excludes-external.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.updatePage(
+				{
+					...makePage('http://localhost/parent'),
+					anchorList: [
+						{
+							href: parseUrl('https://external.example/asset')!,
+							textContent: '',
+							isExternal: true,
+						},
+					],
+				},
+				true,
+				true,
+			);
+
+			// Pre-condition assertion: the test's premise is that the
+			// external anchor produced a placeholder row at `isExternal=1,
+			// scraped=0` AND that an `anchors` row references it. If
+			// either side stops being true (e.g. `updatePage` changes to
+			// skip external-anchor placeholders), the test would
+			// silently pass — the strict filter would exclude the row
+			// for the wrong reason. Pin both halves of the precondition
+			// before exercising the filter.
+			const knex = db.getKnex();
+			const [extRow] = await knex('pages')
+				.select('id', 'scraped', 'isExternal')
+				.where('url', 'https://external.example/asset');
+			expect(extRow, 'external anchor must create a placeholder row').toBeDefined();
+			expect(Number(extRow.scraped)).toBe(0);
+			expect(Number(extRow.isExternal)).toBe(1);
+			const [{ c: anchorCount }] = await knex('anchors')
+				.where('hrefId', extRow.id)
+				.count({ c: '*' });
+			expect(Number(anchorCount)).toBeGreaterThan(0);
+
+			const { pending } = await db.getCrawlingState();
+			expect(pending).not.toContain('https://external.example/asset');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('does not duplicate a pending URL referenced by multiple anchors', async () => {
+		// `EXISTS` is the right operator (vs JOIN) precisely because a
+		// destination URL can be anchored from many parents and we want
+		// it to appear in `pending` exactly once. Pin that contract
+		// directly so a future refactor to a JOIN-based shape gets
+		// caught.
+		const dbPath = path.resolve(workingDir, 'pending-strict-dedup-anchors.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			const childAnchor = {
+				href: parseUrl('http://localhost/child')!,
+				textContent: '',
+				isExternal: false,
+			};
+			await db.updatePage(
+				{ ...makePage('http://localhost/parent-a'), anchorList: [childAnchor] },
+				true,
+				true,
+			);
+			await db.updatePage(
+				{ ...makePage('http://localhost/parent-b'), anchorList: [childAnchor] },
+				true,
+				true,
+			);
+
+			const { pending } = await db.getCrawlingState();
+			const occurrences = pending.filter((u) => u === 'http://localhost/child').length;
+			expect(occurrences).toBe(1);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('excludes scraped=1 rows (regression guard for the scraped flag)', async () => {
+		// Sanity check: the strict filter must not accidentally include
+		// already-completed pages just because the anchor / external gates
+		// expand the query shape.
+		const dbPath = path.resolve(workingDir, 'pending-strict-excludes-scraped.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.updatePage(makePage('http://localhost/done'), true, true);
+
+			const { pending, scraped } = await db.getCrawlingState();
+			expect(pending).not.toContain('http://localhost/done');
+			expect(scraped).toContain('http://localhost/done');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+});

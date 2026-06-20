@@ -631,16 +631,19 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 			const { scraped, pending } = await archive.getCrawlingState();
 			if (pending.length > 0) {
-				// Predicted-discard leaks placeholder rows as scraped=0
-				// (`crawler.ts:980` emits no 'skip') and `--retry-failed`
-				// cannot clear them, so a hard rejection here would block
-				// legitimate inventory runs forever. Crawled-wins source
-				// priority (`#insertPage`) keeps stale `'crawled'`
-				// placeholders labelled `'crawled'` even when re-scraped
-				// in inventory mode, so the original mislabeling concern
-				// no longer applies — degrade to a warning.
+				// `getCrawlingState` returns the STRICT pending set — in-scope,
+				// anchor-referenced, `scraped=0` rows. Predicted-discard leaks
+				// and external anomalies are filtered out at the reader, so a
+				// non-empty pending here means the previous session genuinely
+				// stopped with interrupted in-scope work. The original hard
+				// rejection blocked legitimate inventory runs in practice
+				// because leak rows polluted the count; with the strict
+				// reader those false positives are gone, so a warning is
+				// enough — the inventory pass continues and the crawled-wins
+				// source priority keeps stale labels stable even if some of
+				// the strict-pending rows happen to land on inventory seeds.
 				console.warn(
-					`inventory: archive has ${pending.length} pending URLs from a previous crawl. Proceeding — crawled-wins priority keeps their labels stable.`,
+					`inventory: archive has ${pending.length} pending URLs from a previous crawl. Proceeding — crawled-wins priority keeps their labels stable. Consider \`--resume\` first if you want the prior work finalized.`,
 				);
 			}
 

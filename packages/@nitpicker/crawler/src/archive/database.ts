@@ -360,7 +360,56 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 	/**
 	 * Retrieves the current crawling state by listing scraped and pending URLs.
-	 * @returns An object with `scraped` (completed URLs) and `pending` (remaining URLs) arrays.
+	 *
+	 * `scraped` is straightforward: every page row whose `scraped` flag is `1`
+	 * — that is, every URL the crawl reached a terminal state on, including
+	 * setSkippedPage / setExternalPage / outright setPage success or failure.
+	 *
+	 * `pending` is intentionally STRICT — not "every `scraped = 0` row".
+	 * Three filters apply:
+	 *
+	 * 1. `scraped = 0` — work still incomplete.
+	 * 2. `isExternal = 0` — only in-scope work. External URLs go through a
+	 *    HEAD-only path that always lands on `scraped = 1` (either setPage or
+	 *    setExternalPage). A row with `isExternal = 1 AND scraped = 0` is
+	 *    therefore a data anomaly, and resume / inventory / append have no
+	 *    business retrying it on the next session.
+	 * 3. `EXISTS (anchor with hrefId = pages.id)` — the row was discovered as
+	 *    an anchor destination during a previous scrape. This excludes
+	 *    orphan placeholders created by code paths that fail to record a
+	 *    terminal state — most notably the predicted-discard leak in
+	 *    `crawler.ts` where `shouldDiscardPredicted` returns true but no
+	 *    `emit('skip')` follows, leaving the placeholder at `scraped = 0`
+	 *    forever. Such placeholders have no anchor referrer (predicted URLs
+	 *    are synthesised from pagination patterns, never anchored from a
+	 *    rendered page) and are filtered out here so they cannot poison a
+	 *    `--resume` or trigger a stale `--inventory` warning.
+	 *
+	 * The defensive shape is on purpose: the data source can drift into
+	 * anomalous states under interruption, but the reader must never throw
+	 * or feed garbage back into the dealer. A real in-scope URL that was
+	 * truly interrupted mid-crawl will always have at least one anchor
+	 * referrer (otherwise the dealer would not have queued it), so the
+	 * strict filter loses no legitimate pending work.
+	 *
+	 * Seeds passed directly to `Crawler.start()` are NOT in the strict
+	 * pending set when they were never picked by the dealer — they have no
+	 * DB row at all in that case (`linkList.add` is purely in-memory until
+	 * `setPage` runs). A Ctrl-C between dealer pick and `setPage` likewise
+	 * leaves no row to recover. Recovery of un-picked seeds is the
+	 * responsibility of the caller (e.g. re-running `--inventory ./list.txt`
+	 * with the same URL list).
+	 *
+	 * The query uses an explicit `p` alias on the `pages` table so the
+	 * correlated `EXISTS` subquery can join via `whereRaw('anchors.hrefId =
+	 * p.id')`. A future refactor that renames the alias must update both
+	 * sites — the raw string in the subquery cannot be grep-resolved
+	 * automatically. Read-only / stub viewer connections never call this
+	 * method (they do not need to know about pending state), so the EXISTS
+	 * shape is safe to use without the `migrate*` guards that other writer
+	 * methods carry.
+	 * @returns An object with `scraped` (completed URLs) and `pending` (the
+	 *   strict set of in-scope, anchor-referenced, unfinished URLs).
 	 */
 	@ErrorEmitter()
 	@retry(retrySetting)
@@ -372,9 +421,18 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			.where('scraped', 1);
 		const scraped = $scraped.map(ex);
 		const $pending = await this.#instance
-			.select('url')
-			.from<DB_Page>('pages')
-			.where('scraped', 0);
+			.select('p.url')
+			.from<DB_Page>({ p: 'pages' })
+			.where('p.scraped', 0)
+			.where('p.isExternal', 0)
+			.whereExists(function () {
+				// `select('*')` is the canonical EXISTS pattern in knex
+				// — the column list is irrelevant inside an existence
+				// check, and going through `select(this.client.raw(...))`
+				// reaches for a private builder field that is not part
+				// of the documented surface.
+				this.select('*').from('anchors').whereRaw('anchors.hrefId = p.id');
+			});
 		const pending = $pending.map(ex);
 		return {
 			scraped,
