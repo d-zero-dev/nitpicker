@@ -718,11 +718,32 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// Classify novel URLs by URL-extension heuristic (no I/O).
 				// Source file lists come from `ls` on the doc-root, so the
 				// extension reflects the real file type — a HEAD pre-flight
-				// here would be pure wasted I/O. Edge cases (`.do` returning
-				// HTML, `.html` returning 404) are absorbed by the normal
-				// crawler HEAD/GET path that runs on the HTML seeds anyway;
-				// non-HTML rows are recorded with null metadata, which is
-				// sufficient for `listUnusedResources` (referrer-count = 0).
+				// here would be pure wasted I/O. Edge cases:
+				//
+				// - `.html` returning 404 / 200: the normal crawler HEAD/GET
+				//   path absorbs this because every HTML-classified URL is
+				//   fed through the dealer and gets its real HEAD/GET there.
+				//
+				// - Extensionless API endpoints (e.g. `/api/foo`) that the
+				//   server returns as `text/html`: `isLikelyHtmlUrl` accepts
+				//   them as HTML so the dealer's render path runs — the
+				//   real content-type wins downstream.
+				//
+				// - `.aspx` / `.do` / `.jsp` / other server-handler
+				//   extensions that the heuristic does NOT recognise as
+				//   HTML: these are classified as non-HTML here, recorded
+				//   as `resources` rows with all-null metadata, and never
+				//   get a HEAD/GET probe. The accepted trade-off for
+				//   `--inventory`'s "list of static-looking server files"
+				//   contract; sites that mix server-handlers into the
+				//   inventory list will need a follow-up `--retry-failed`
+				//   pass (or a re-`--inventory` with the corrected list)
+				//   to populate metadata.
+				//
+				// non-HTML rows are recorded with null status/content-type
+				// which is sufficient for `listUnusedResources` (referrer
+				// count = 0) but means downstream consumers must treat
+				// null as "not probed" rather than "failed".
 				const htmlSeeds: ExURL[] = [];
 				for (const url of novelUrls) {
 					if (isLikelyHtmlUrl(url)) {

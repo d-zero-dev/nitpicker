@@ -3024,3 +3024,197 @@ describe('getExistingPageUrls / getExistingResourceUrls', () => {
 		}
 	});
 });
+
+describe('source priority (crawled > inventory-seed > inventory-discovered)', () => {
+	/**
+	 * Build a minimal page payload for `updatePage` at the given URL.
+	 * @param url - The URL of the page being scraped.
+	 * @returns Page data accepted by `Database.updatePage`.
+	 */
+	const makePage = (url: string) => ({
+		url: parseUrl(url)!,
+		redirectPaths: [] as string[],
+		isExternal: false,
+		status: 200,
+		statusText: 'OK',
+		contentLength: 0,
+		contentType: 'text/html',
+		responseHeaders: {},
+		meta: { title: '' },
+		anchorList: [],
+		imageList: [],
+		html: '',
+		isSkipped: false,
+	});
+
+	it('crawled stays crawled when an `inventory-seed` scrape lands on it', async () => {
+		// Crawled-wins: a row that was first crawled in the normal chain must
+		// not be promoted to `inventory-seed` even if the same URL appears in
+		// a later `--inventory` list. The orphan-detection semantics require
+		// "reachable from the crawl graph" to dominate "listed in inventory".
+		const dbPath = path.resolve(workingDir, 'source-priority-crawled-wins-seed.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.updatePage(makePage('http://localhost/p'), true, true);
+			await db.updatePage(makePage('http://localhost/p'), true, true, 'inventory-seed');
+			const [row] = await db
+				.getKnex()
+				.from('pages')
+				.select('source')
+				.where('url', 'http://localhost/p');
+			expect(row.source).toBe('crawled');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('inventory-discovered is promoted to inventory-seed by an explicit seed scrape', async () => {
+		// Within the inventory variants, explicit user-listed seeds beat
+		// transitively-discovered URLs. A URL that was first reached as an
+		// anchor placeholder (`inventory-discovered`) gains `inventory-seed`
+		// only if a later pass explicitly lists it.
+		const dbPath = path.resolve(workingDir, 'source-priority-discovered-promote.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.updatePage(
+				makePage('http://localhost/p'),
+				true,
+				true,
+				'inventory-discovered',
+			);
+			await db.updatePage(makePage('http://localhost/p'), true, true, 'inventory-seed');
+			const [row] = await db
+				.getKnex()
+				.from('pages')
+				.select('source')
+				.where('url', 'http://localhost/p');
+			expect(row.source).toBe('inventory-seed');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('inventory-seed is NOT demoted to inventory-discovered when re-encountered as a transitive', async () => {
+		// Tier order within inventory is fixed: seed never falls back to
+		// discovered even if a later inventory pass reaches the URL through
+		// an anchor (which would have classified it as discovered for a
+		// brand-new row).
+		const dbPath = path.resolve(workingDir, 'source-priority-no-seed-demote.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.updatePage(makePage('http://localhost/p'), true, true, 'inventory-seed');
+			await db.updatePage(
+				makePage('http://localhost/p'),
+				true,
+				true,
+				'inventory-discovered',
+			);
+			const [row] = await db
+				.getKnex()
+				.from('pages')
+				.select('source')
+				.where('url', 'http://localhost/p');
+			expect(row.source).toBe('inventory-seed');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('inventory-discovered is downgraded to crawled when reached from a crawled anchor (#getIdByUrl path)', async () => {
+		// The crawled-wins downgrade fires inside `#getIdByUrl` when an
+		// anchor lineage SELECT lands on an existing `inventory-*` row and
+		// the anchor's parent page is `crawled`. The lineage propagation in
+		// `updatePage` passes `'crawled'` explicitly for crawled parents so
+		// the SELECT path can do the downgrade UPDATE on the destination.
+		const dbPath = path.resolve(workingDir, 'source-priority-anchor-downgrade.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Step 1: an inventory-discovered placeholder exists.
+			await db.updatePage(
+				makePage('http://localhost/dest'),
+				true,
+				true,
+				'inventory-discovered',
+			);
+
+			// Step 2: a crawled page anchors to /dest. The anchor stores a
+			// hrefId via `#getIdByUrl(href, ..., trx, 'crawled')`, which
+			// triggers the downgrade UPDATE on the existing /dest row.
+			await db.updatePage(
+				{
+					...makePage('http://localhost/parent'),
+					anchorList: [
+						{
+							href: parseUrl('http://localhost/dest')!,
+							textContent: '',
+							isExternal: false,
+						},
+					],
+				},
+				true,
+				true,
+			);
+
+			const [row] = await db
+				.getKnex()
+				.from('pages')
+				.select('source')
+				.where('url', 'http://localhost/dest');
+			expect(row.source).toBe('crawled');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('anchor INSERT inherits inventory-discovered when the parent page is inventory-seed', async () => {
+		// Lineage propagation: a freshly-discovered URL reached from an
+		// `inventory-seed` parent gets `inventory-discovered`, not the DB
+		// DEFAULT `'crawled'`. This is what keeps a chain of transitively
+		// reached URLs labelled with their inventory provenance even when
+		// the orchestrator's runtime `inventoryMode` is gone (e.g. during
+		// `--retry-failed`).
+		const dbPath = path.resolve(workingDir, 'source-priority-lineage-propagation.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Parent is inventory-seed and anchors to /child. The anchor
+			// placeholder row for /child is created via `#getIdByUrl` with
+			// lineage `'inventory-discovered'` (parent is inventory-*).
+			await db.updatePage(
+				{
+					...makePage('http://localhost/parent'),
+					anchorList: [
+						{
+							href: parseUrl('http://localhost/child')!,
+							textContent: '',
+							isExternal: false,
+						},
+					],
+				},
+				true,
+				true,
+				'inventory-seed',
+			);
+
+			const [row] = await db
+				.getKnex()
+				.from('pages')
+				.select('source', 'scraped')
+				.where('url', 'http://localhost/child');
+			expect(row.source).toBe('inventory-discovered');
+			// Anchor placeholder row, never visited yet.
+			expect(Number(row.scraped)).toBe(0);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+});

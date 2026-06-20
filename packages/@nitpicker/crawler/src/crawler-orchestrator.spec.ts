@@ -370,3 +370,129 @@ describe('CrawlerOrchestrator.append', () => {
 		expect(openArg.filePath).toBe('/abs/path/existing.nitpicker');
 	});
 });
+
+describe('CrawlerOrchestrator.inventory: pending guard demote', () => {
+	it('warns instead of throwing when the archive carries pending placeholder URLs', async () => {
+		// The original guard threw whenever `pending.length > 0`, which blocked
+		// every inventory run on an archive that had leaked predicted-discard
+		// placeholders (`crawler.ts:980` emits no 'skip', so the rows stay
+		// `scraped=0` and `--retry-failed` cannot clear them). The new
+		// behaviour warns and proceeds — crawled-wins source priority keeps
+		// stale labels stable. Drive the orchestrator with an inventory list
+		// that resolves to zero novel URLs so the no-op early-return path
+		// fires immediately after the guard, isolating the guard's branch.
+		const fakeArchive = {
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+				}),
+			),
+			getCrawlingState: vi.fn(() =>
+				Promise.resolve({
+					scraped: [],
+					pending: ['https://example.com/leaked-placeholder'],
+				}),
+			),
+			getExistingPageUrls: vi.fn(() =>
+				Promise.resolve(['https://example.com/already-known']),
+			),
+			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		// All inventory URLs match `getExistingPageUrls` → `novelUrls === []`
+		// → the orchestrator hits the no-op early return without taking the
+		// `.bak` or invoking the Crawler. Any throw from the pending check
+		// would short-circuit before that point.
+		await expect(
+			CrawlerOrchestrator.inventory(
+				'fixture.nitpicker',
+				['https://example.com/already-known'],
+				{
+					cwd: '/tmp/inventory-pending-guard-test',
+				},
+			),
+		).resolves.toBeDefined();
+
+		expect(warnSpy).toHaveBeenCalledWith(
+			expect.stringMatching(/pending URLs from a previous crawl/),
+		);
+	});
+
+	it('does NOT warn when the archive has no pending URLs', async () => {
+		// Regression guard: the warn message must only fire when there is an
+		// actual pending row. A stray warn on every inventory call would
+		// drown the operator in false-positive noise.
+		const fakeArchive = {
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+				}),
+			),
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			getExistingPageUrls: vi.fn(() =>
+				Promise.resolve(['https://example.com/already-known']),
+			),
+			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		await expect(
+			CrawlerOrchestrator.inventory(
+				'fixture.nitpicker',
+				['https://example.com/already-known'],
+				{
+					cwd: '/tmp/inventory-no-pending-test',
+				},
+			),
+		).resolves.toBeDefined();
+
+		expect(warnSpy).not.toHaveBeenCalled();
+	});
+});

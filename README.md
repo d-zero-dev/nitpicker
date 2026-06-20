@@ -46,11 +46,13 @@ npx @nitpicker/cli crawl existing.nitpicker --retry-failed
 npx @nitpicker/cli crawl <archive> --inventory <urls.txt>
 ```
 
-- HTML 応答は puppeteer で描画して再帰クロールに乗せ、新規 page を `'inventory-seed'`、
-  そこから follow したリンク先を `'inventory-discovered'` のラベルで保存する
-- 非 HTML 応答（PDF / 画像 / CSS / JS …）は HEAD のみで `resources` に直接登録、ラベルは `'inventory-seed'`
+- URL は **拡張子ヒューリスティクス**（`isLikelyHtmlUrl`）で HTML / 非 HTML に同期分類する。HEAD pre-flight は orchestrator 段では行わず、HTML 判定されたものだけ Crawler の通常 dealer 経路（HEAD + puppeteer 描画 + 再帰クロール）に流す。`.html` / `.htm` / 拡張子なしなどが HTML 扱い、`.pdf` / `.jpg` / `.css` / `.js` 等が非 HTML 扱い
+- HTML として処理された新規 page は `'inventory-seed'`、その描画中に anchor / subresource として発見された URL は `'inventory-discovered'` のラベルで保存
+- 非 HTML 判定された URL は `setResources` で `status` / `contentType` / `contentLength` 全 null の薄い行として直接登録（`'inventory-seed'` ラベル）。HEAD を撃たないので「URL が実在するか / 何バイトか」は確定しない — 後で `query unused-resources` で referrer 0 件として浮上することだけ保証する
+- **source 優先度は `'crawled' > 'inventory-seed' > 'inventory-discovered'`**。inventory は「離れ小島の発見」が目的なので、既存 `'inventory-*'` 行が後の crawl で anchor 到達された瞬間に `'crawled'` に降格する（孤立判定の精度を保つ）
 - 既存 `pages` / `resources` にすでにある URL は skip（2 回目以降の `--inventory` は新規分だけ処理）
 - スコープ外 URL は警告して skip
+- アーカイブに pending URL (scraped=0) が残っていても hard reject せず `console.warn` で続行（crawled-wins UPDATE が source ラベルの整合性を保つ前提）
 - 結果は `query isolated-pages` / `query unused-resources` で見るのが想定動線（後述）
 - `--append` / `--retry-failed` / `--resume` / `--diff` / `--output` / `--list` / `--list-file` / `--single` と同時指定不可
 

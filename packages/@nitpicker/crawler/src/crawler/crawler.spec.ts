@@ -1004,4 +1004,125 @@ describe('Crawler', () => {
 			expect(header).toContain('1(0) done');
 		});
 	});
+
+	describe('inventoryMode scope-build skip', () => {
+		it('does NOT add seed URLs to `#scope` when inventoryMode is non-null', async () => {
+			// 70k+ seed URLs in inventory mode were forming a per-host scope
+			// list via `existing.some` + array spread on each iteration, which
+			// is O(N²) on build and O(N) per later `findScopeEntry`. Skip the
+			// scope add entirely when inventoryMode is present — the archived
+			// `roots` already cover the scope semantics through the
+			// constructor's seed of `#scope`. Probe via the SAME observable
+			// effect a runtime `findScopeEntry` would see: a seed URL whose
+			// host is NOT in the archived roots must be classified external
+			// when inventoryMode is non-null, because the per-seed scope add
+			// is suppressed (so its hostname never enters the scope map).
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url: parseUrl('https://other-host.example.com/page')!,
+				redirectPaths: [],
+				isTarget: true,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'image/png',
+				contentLength: 1234,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			});
+
+			const crawler = new Crawler({
+				...defaultOptions,
+				// `fetchExternal: false` makes the worker take the early
+				// external-skip branch and emit `externalPage` immediately
+				// after the scope classification, which is the most direct
+				// observable that says "this URL was classified external" —
+				// without needing to wire up scraping or HTTP mocks beyond
+				// the trivial mock above.
+				fetchExternal: false,
+				// Archived roots only cover `example.com/`. The seed below is on
+				// `other-host.example.com`, which would normally be added to
+				// `#scope` by `start()` and treated as internal. With
+				// inventoryMode != null, the scope add is skipped and the seed
+				// is observed as external by `findScopeEntry`.
+				inventoryMode: { seedUrls: new Set<string>() },
+			});
+			const externals: CrawlerEventTypes['externalPage'][] = [];
+			crawler.on('externalPage', (p) => {
+				externals.push(p);
+			});
+
+			crawler.start([parseUrl('https://other-host.example.com/page')!]);
+
+			await vi.waitFor(() => {
+				// External classification routes through the `externalPage`
+				// emit path (`Crawler.ts:900-916`), confirming the seed was
+				// NOT added to `#scope`.
+				expect(externals).toHaveLength(1);
+			});
+		});
+
+		it('adds seed URLs to `#scope` as usual when inventoryMode is null (regression guard)', async () => {
+			// The skip must be conditional. Outside inventory mode the seeds
+			// are the entire scope definition — drop the scope-add and every
+			// internal URL becomes external. Mirror the inventoryMode test
+			// observation channel (`externalPage` emit under
+			// `fetchExternal: false`) so the assertions read symmetrically:
+			// without inventoryMode, seed-on-arbitrary-host is treated as
+			// internal and the early external-skip emit does NOT fire.
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url: parseUrl('https://other-host.example.com/page')!,
+				redirectPaths: [],
+				isTarget: true,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'image/png',
+				contentLength: 1234,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			});
+
+			const crawler = new Crawler({
+				...defaultOptions,
+				fetchExternal: false,
+				// No inventoryMode — seeds register themselves into `#scope`.
+			});
+			const externals: CrawlerEventTypes['externalPage'][] = [];
+			crawler.on('externalPage', (p) => {
+				externals.push(p);
+			});
+			// Wait for the worker to complete via the `page` event so the
+			// assertion below sees the post-processing state. Without
+			// inventoryMode, the seed adds its hostname to `#scope` and the
+			// worker treats it as internal, emitting `page` (not
+			// `externalPage`).
+			const pages: CrawlerEventTypes['page'][] = [];
+			crawler.on('page', (p) => {
+				pages.push(p);
+			});
+
+			crawler.start([parseUrl('https://other-host.example.com/page')!]);
+
+			await vi.waitFor(() => {
+				expect(pages).toHaveLength(1);
+			});
+			expect(externals).toHaveLength(0);
+		});
+	});
 });

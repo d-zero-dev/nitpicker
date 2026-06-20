@@ -1687,6 +1687,13 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			// parent passes `'inventory-discovered'` to label transitively-
 			// reached URLs correctly without the orchestrator needing to
 			// rehydrate `inventoryMode` from disk.
+			//
+			// Cost: one extra SELECT on `pages` per scraped page (the
+			// `id` is a PK index lookup so it is sub-millisecond even at
+			// 1M-row scale). The alternative — passing `mergedSource`
+			// through from the UPDATE result — would require RETURNING
+			// support that knex's SQLite dialect handles inconsistently;
+			// the small per-page round-trip is the cheaper trade.
 			const [parentRow] = await trx
 				.select('source')
 				.from<DB_Page>('pages')
@@ -1921,6 +1928,17 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		// labelled `'inventory-*'`. Within the inventory variants, the
 		// explicit user-listed `'inventory-seed'` wins over the transitive
 		// `'inventory-discovered'`.
+		//
+		// Note: in current callers, `source` only arrives as
+		// `'inventory-seed'` / `'inventory-discovered'` / `undefined`
+		// (`derivePageSource` never emits `'crawled'`, and outside inventory
+		// mode `source` is `undefined` so this CASE never runs). The
+		// `? = 'crawled'` branch is therefore reachable only via a future
+		// call site that wants to explicitly assert a crawled lineage —
+		// today the actual crawled-wins downgrade fires in `#getIdByUrl`'s
+		// SELECT path when an anchor lineage `'crawled'` lands on an
+		// existing `'inventory-*'` row. The branch is kept so the CASE
+		// completely describes the priority lattice in one place.
 		const sourceUpdate =
 			source === undefined
 				? {}
