@@ -59,6 +59,7 @@ import { protocolAgnosticKey } from './protocol-agnostic-key.js';
 import { redirectDestKey } from './redirect-dest-key.js';
 import { resourceToPageData } from './resource-to-page-data.js';
 import { RobotsChecker } from './robots-checker.js';
+import { shouldBurnHost } from './should-burn-host.js';
 import { shouldDiscardPredicted } from './should-discard-predicted.js';
 import { shouldSkipUrl } from './should-skip-url.js';
 
@@ -124,6 +125,21 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * Keyed by {@link redirectDestKey}. Reset at the start of {@link #runDeal}.
 	 */
 	readonly #scrapedDestinations = new Set<string>();
+
+	/**
+	 * Lower-cased hostnames for which at least one URL has returned an
+	 * HTTP response (any status) via `fetchDestination` in this session.
+	 * Consulted by {@link shouldBurnHost} as the cascade guard against
+	 * "transient local DNS hiccup wipes out a healthy host": a host that
+	 * responded earlier is treated as still alive even when the next URL on
+	 * it exhausts retries with a `getaddrinfo ENOTFOUND`, since the most
+	 * likely cause is the operator's resolver flipping mid-crawl rather than
+	 * the host suddenly disappearing. Populated by {@link #sendHeadRequest}
+	 * on the success path; reset at the start of {@link #runDeal} alongside
+	 * {@link #scrapedDestinations} so a fresh session does not inherit
+	 * stale liveness assumptions.
+	 */
+	readonly #successfulHosts = new Set<string>();
 
 	/**
 	 * The AbortSignal associated with this crawler's AbortController.
@@ -768,6 +784,10 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 		// Redirect-destination dedup is per-crawl; clear any state from a prior run.
 		this.#scrapedDestinations.clear();
+		// Session-liveness signal is per-crawl too; clear so a fresh session
+		// does not inherit "host alive" claims from a prior run that may have
+		// happened on an entirely different network.
+		this.#successfulHosts.clear();
 
 		// external URL の追跡（target は deal の total/done から導出）
 		const externalUrls = new Set<string>();
@@ -1193,6 +1213,14 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 							const renderedKey = redirectDestKey(url, fallback.pageData.redirectPaths);
 							this.#scrapedDestinations.add(renderedKey);
 						}
+						// Puppeteer fallback proved the host is reachable
+						// (HEAD/GET probes died at a middlebox / WAF but the
+						// real browser navigation got a response). Mark the
+						// host alive for the cascade guard — without this, a
+						// host whose first URL only succeeded via the
+						// browser-rescue path would still be vulnerable to
+						// the next URL's HEAD failure burning it.
+						this.#successfulHosts.add(url.hostname.toLowerCase());
 						markBrowserScrape();
 						return fallback;
 					}
@@ -1207,6 +1235,11 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						// be recorded as `status = -1` with the HEAD timeout
 						// message — a misleading entry that conflates
 						// "operator-intended skip" with "network failure".
+						//
+						// Skipped also counts as proof-of-life: the browser
+						// reached the page far enough to match exclude rules,
+						// so the host was clearly responding.
+						this.#successfulHosts.add(url.hostname.toLowerCase());
 						return fallback;
 					}
 					// `fallback.type === 'error'`. `#launchBrowserAndScrape`
@@ -1534,7 +1567,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		// enough that "really slow" gets a fair shot before we give up.
 		let attempt = 0;
 		return retryCall(
-			() => {
+			async () => {
 				// Clamp the attempt index to the last entry of the escalation array
 				// so retry counts past the array length keep using the longest
 				// budget instead of falling off into `undefined`. `as number`
@@ -1543,12 +1576,22 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				const escalationIndex = Math.min(attempt, HEAD_TIMEOUT_ESCALATION_MS.length - 1);
 				const timeoutMs = HEAD_TIMEOUT_ESCALATION_MS[escalationIndex] as number;
 				attempt += 1;
-				return fetchDestination({
+				const headResult = await fetchDestination({
 					url,
 					isExternal,
 					userAgent: this.#options.userAgent,
 					timeout: timeoutMs,
 				});
+				// Mark host alive the MOMENT an HTTP response is observed,
+				// before retryCall's outer resolution settles. A later attempt
+				// (or a sibling worker's onGiveUp) racing this success would
+				// otherwise see an empty `#successfulHosts` and burn the host
+				// — exactly the cascade the guard is here to prevent. Any HTTP
+				// status counts: the guard cares about DNS-and-TCP reachability,
+				// not application-level success, and `fetchDestination` only
+				// resolves when an HTTP response was actually received.
+				this.#successfulHosts.add(host);
+				return headResult;
 			},
 			{
 				retries: this.#options.retry,
@@ -1559,11 +1602,22 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					);
 				},
 				onGiveUp: (retryCount, error, label) => {
-					if (classifyErrorKind(error.message) === 'dns') {
-						// All retries consumed and the final error is DNS — burn the
-						// host so subsequent URLs on it short-circuit. Only mark in
-						// `onGiveUp` (not `onWait`) so a transient `EAI_AGAIN` that
-						// recovers on retry doesn't unfairly burn the host.
+					// Burn the host so subsequent URLs short-circuit — but ONLY
+					// when this is the first time we've ever seen the host fail
+					// in this session. A host that responded earlier is treated
+					// as transiently unreachable (operator's resolver flipped
+					// mid-crawl etc.), not a dead domain. `shouldBurnHost`
+					// encapsulates this decision so the cascade guard is
+					// independently testable. Also gated to `onGiveUp` rather
+					// than `onWait` so an `EAI_AGAIN` that recovers on retry
+					// doesn't trip the guard prematurely.
+					if (
+						shouldBurnHost({
+							errorKind: classifyErrorKind(error.message),
+							host,
+							successfulHosts: this.#successfulHosts,
+						})
+					) {
 						dnsBurnedHostCache.set(host, 'dns');
 					}
 					update(

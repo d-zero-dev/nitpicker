@@ -831,6 +831,111 @@ describe('Crawler', () => {
 			expect(dnsBurnedHostCache.has('Mixed.INVALID')).toBe(false);
 			clearDnsBurnedHostCache();
 		});
+
+		it('does NOT burn a host whose earlier URL responded in this session', async () => {
+			// Cascade guard: a DNS failure on a host that already proved alive
+			// (some earlier URL on the host received an HTTP response in this
+			// session) is treated as a transient local-network blip — operator
+			// flipped WiFi → tethering / VPN / ISP DNS hiccup — and the burn
+			// is suppressed. Without this guard, the first ENOTFOUND after the
+			// blip would short-circuit every remaining URL on the host into a
+			// degenerate `crawlEnd`. `driveDeal` runs the seed URLs
+			// sequentially in this test stub, so the first URL completes
+			// (populating `#successfulHosts`) strictly before the second
+			// reaches `onGiveUp`.
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { dnsBurnedHostCache } = await import('./dns-burned-host-cache.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+
+			// Use a non-HTML contentType so the success URL resolves on HEAD
+			// alone (no puppeteer launch required in the test mock surface).
+			// The cascade-guard semantics are content-type-independent: any
+			// `fetchDestination` resolution populates `#successfulHosts`.
+			const successUrl = parseUrl('https://example.com/asset.png')!;
+			const failUrl = parseUrl('https://example.com/missing.png')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockImplementation(
+				({ url: probeUrl }) => {
+					if (probeUrl.href === successUrl.href) {
+						return Promise.resolve({
+							url: successUrl,
+							redirectPaths: [],
+							isTarget: true,
+							isExternal: false,
+							status: 200,
+							statusText: 'OK',
+							contentType: 'image/png',
+							contentLength: 1234,
+							responseHeaders: {},
+							meta: { title: '' },
+							anchorList: [],
+							imageList: [],
+							html: '',
+							isSkipped: false,
+						});
+					}
+					return Promise.reject(new Error('getaddrinfo ENOTFOUND example.com'));
+				},
+			);
+
+			const crawler = new Crawler(defaultOptions);
+			const errors: CrawlerEventTypes['error'][] = [];
+			crawler.on('error', (e) => {
+				errors.push(e);
+			});
+
+			crawler.start([successUrl, failUrl]);
+
+			await vi.waitFor(() => {
+				expect(errors).toHaveLength(1);
+			});
+
+			// `example.com/b` failed with ENOTFOUND but the guard kept the
+			// host out of the burn cache because `example.com/a` succeeded
+			// earlier in this session.
+			expect(dnsBurnedHostCache.has('example.com')).toBe(false);
+			clearDnsBurnedHostCache();
+		});
+
+		it('still burns a host when ALL URLs on it fail (no success-guard hit)', async () => {
+			// Regression test for the un-guarded burn path. When the first URL
+			// on a host fails with ENOTFOUND, `#successfulHosts` is still empty
+			// and `shouldBurnHost` lets the burn through. This is the original
+			// behaviour (dead-domain fast-fail) that the cascade guard must
+			// not regress.
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { dnsBurnedHostCache } = await import('./dns-burned-host-cache.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockRejectedValue(
+				new Error('getaddrinfo ENOTFOUND dead.invalid'),
+			);
+
+			const crawler = new Crawler(defaultOptions);
+			const errors: CrawlerEventTypes['error'][] = [];
+			crawler.on('error', (e) => {
+				errors.push(e);
+			});
+
+			crawler.start([
+				parseUrl('https://dead.invalid/a')!,
+				parseUrl('https://dead.invalid/b')!,
+			]);
+
+			await vi.waitFor(() => {
+				expect(errors.length).toBeGreaterThanOrEqual(1);
+			});
+
+			expect(dnsBurnedHostCache.get('dead.invalid')).toBe('dns');
+			clearDnsBurnedHostCache();
+		});
 	});
 
 	describe('pagesScrapedOffset propagation', () => {
