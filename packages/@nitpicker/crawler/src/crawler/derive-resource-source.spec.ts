@@ -3,21 +3,29 @@ import { describe, expect, it } from 'vitest';
 import { deriveResourceSource } from './derive-resource-source.js';
 
 describe('deriveResourceSource', () => {
-	it('returns undefined outside inventory mode (DB DEFAULT crawled applies)', () => {
-		expect(deriveResourceSource(null)).toBeUndefined();
+	it('returns undefined when the parent is `undefined` (no lineage signal)', () => {
+		// Either the parent page has not been recorded yet, or it lives outside
+		// the inventory chain — both cases must leave sub-resources at the DB
+		// DEFAULT `'crawled'`, NOT silently upgrade them.
+		expect(deriveResourceSource()).toBeUndefined();
 	});
 
-	it('always returns inventory-discovered when inventory mode is active', () => {
-		const seedUrls = new Set(['https://example.com/seed']);
-		// Sub-resources are never themselves seeds — the rule is independent
-		// of which seed URL triggered the rendering, so the helper does not
-		// even look at the resource URL.
-		expect(deriveResourceSource({ seedUrls })).toBe('inventory-discovered');
+	it('returns undefined when the parent is `crawled`', () => {
+		// Crawled parents are part of the normal crawl graph — their
+		// sub-resources are also `crawled` (default), never inventory.
+		expect(deriveResourceSource('crawled')).toBeUndefined();
 	});
 
-	it('ignores the seed set contents — never returns inventory-seed', () => {
-		// Even an empty seed set yields inventory-discovered, mirroring the
-		// `derivePageSource` contract that membership only matters for pages.
-		expect(deriveResourceSource({ seedUrls: new Set() })).toBe('inventory-discovered');
+	it('returns `inventory-discovered` when the parent is `inventory-seed`', () => {
+		// A sub-resource captured while rendering an explicitly-listed
+		// inventory seed inherits its lineage, but is itself a transitively
+		// reached asset — `inventory-discovered`, never `inventory-seed`.
+		expect(deriveResourceSource('inventory-seed')).toBe('inventory-discovered');
+	});
+
+	it('returns `inventory-discovered` when the parent is `inventory-discovered`', () => {
+		// Lineage is transitive: a sub-resource of an already-inventory-discovered
+		// page is still in the inventory chain.
+		expect(deriveResourceSource('inventory-discovered')).toBe('inventory-discovered');
 	});
 });

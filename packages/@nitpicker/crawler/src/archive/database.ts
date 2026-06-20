@@ -535,7 +535,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}
 		return decodeStoredBlob(row.body, row.codec);
 	}
-
 	/**
 	 * Retrieves all `page_jsonld` rows for the given page id, parsed back into
 	 * {@link JsonLdRow} shape (with `parsed` deserialised from its JSON column).
@@ -572,7 +571,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			parseError: r.parseError,
 		}));
 	}
-
 	/**
 	 * Returns the underlying Knex query builder instance for direct SQL access.
 	 * This enables advanced queries (GROUP BY, HAVING, JOINs) at the database
@@ -699,6 +697,35 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}
 		return q.limit(limit).offset(offset);
 	}
+	/**
+	 * Look up the `source` column of a single page by its URL key. Used by
+	 * the orchestrator's `PageSourceLookup` injection so the Crawler can
+	 * resolve a parent page's lineage on `--resume` / `--retry-failed`
+	 * sessions, where the in-memory `inventoryMode` is no longer
+	 * available but the DB still remembers what label was last persisted.
+	 *
+	 * Returns `undefined` when the URL has no `pages` row (e.g. a brand-new
+	 * URL that has not been seen yet) so the caller can fall through to
+	 * its default behaviour without distinguishing "row absent" from "row
+	 * present with NULL source" — the schema's `NOT NULL DEFAULT 'crawled'`
+	 * makes a NULL value impossible in practice.
+	 *
+	 * Read-only — no transaction, single PK-equivalent lookup on
+	 * `pages.url` (a UNIQUE column), so the cost is constant per call. The
+	 * Crawler calls this at most once per page render, NOT per
+	 * sub-resource, so the N+1 risk does not apply.
+	 * @param url - URL key in `url.withoutHashAndAuth` form.
+	 * @returns The recorded `source`, or `undefined` when no row exists.
+	 */
+	@ErrorEmitter()
+	async getPageSourceByUrl(url: string): Promise<PageSource | undefined> {
+		const [row] = await this.#instance
+			.select('source')
+			.from<DB_Page>('pages')
+			.where('url', url);
+		return row?.source;
+	}
+
 	/**
 	 * Retrieves pages along with their related redirect, anchor, and referrer data.
 	 * Results are ordered by the natural URL sort order. Only non-redirected pages are returned.

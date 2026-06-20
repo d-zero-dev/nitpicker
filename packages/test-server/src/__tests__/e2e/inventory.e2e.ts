@@ -114,7 +114,16 @@ describe('Inventory crawl', () => {
 		);
 		expect(orphan, 'orphan.pdf must be present in unused resources').toBeDefined();
 		expect(orphan?.source).toBe('inventory-seed');
-		expect(orphan?.contentType).toContain('pdf');
+		// New behaviour: the orchestrator no longer fires a HEAD pre-flight per
+		// URL, so non-HTML inventory entries land with NULL metadata. The
+		// extension-based classification is the contract here — `query
+		// unused-resources` still surfaces the row by referrer-count = 0, and a
+		// downstream `--retry-failed` (or a re-`--inventory`) can populate
+		// status / contentType later if needed. Asserting `null` pins the
+		// regression: if we ever restore HEAD-based metadata, this test must
+		// be updated deliberately.
+		expect(orphan?.contentType).toBeNull();
+		expect(orphan?.status).toBeNull();
 	});
 
 	// Note: a "second inventory pass keeps the existing source label"

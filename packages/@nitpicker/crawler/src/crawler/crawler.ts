@@ -5,6 +5,7 @@ import type {
 	ResourceLookupResult,
 	ScrapeOutcome,
 } from './types.js';
+import type { PageSource } from '../archive/types.js';
 import type {
 	ChangePhaseEvent,
 	PageData,
@@ -32,7 +33,6 @@ import { crawlerLog } from '../debug.js';
 import { buildJsRedirectEdge } from './build-js-redirect-edge.js';
 import { createChangePhaseHandler } from './create-change-phase-handler.js';
 import { derivePageSource } from './derive-page-source.js';
-import { deriveResourceSource } from './derive-resource-source.js';
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
 import { dnsBurnedHostCache } from './dns-burned-host-cache.js';
 import { dnsBurnedHostShortCircuitCounter } from './dns-burned-host-short-circuit-counter.js';
@@ -43,7 +43,6 @@ import { formatCrawlProgress } from './format-crawl-progress.js';
 import { generatePredictedUrls } from './generate-predicted-urls.js';
 import { handleBrowserClose } from './handle-browser-close.js';
 import { handleIgnoreAndSkip } from './handle-ignore-and-skip.js';
-import { handleResourceResponse } from './handle-resource-response.js';
 import { handleScrapeEnd } from './handle-scrape-end.js';
 import { handleScrapeError } from './handle-scrape-error.js';
 import { injectScopeAuth } from './inject-scope-auth.js';
@@ -54,6 +53,7 @@ import LinkList from './link-list.js';
 import { linkToPageData } from './link-to-page-data.js';
 import { logUndrainedPhaseErrors } from './log-undrained-phase-errors.js';
 import { partitionUrlsByHtml } from './partition-urls-by-html.js';
+import { planSubResourceEmits } from './plan-sub-resource-emits.js';
 import { PreloadShortCircuitError } from './preload-short-circuit-error.js';
 import { protocolAgnosticKey } from './protocol-agnostic-key.js';
 import { redirectDestKey } from './redirect-dest-key.js';
@@ -96,7 +96,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	/** Merged crawler configuration (user overrides + defaults). */
 	readonly #options: CrawlerOptions;
 	/**
-	 * Phase errors observed during {@link Crawler.#launchBrowserAndScrape},
+	 * Phase errors observed during {@link Crawler._launchBrowserAndScrape},
 	 * buffered per URL href so they can be emitted as `pageError` events
 	 * AFTER the corresponding `page` / `externalPage` event. This ordering
 	 * lets the orchestrator's WriteQueue serialise `setPage` before
@@ -177,6 +177,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			userAgent: options?.userAgent || `Nitpicker/${pkg.version}`,
 			ignoreRobots: options?.ignoreRobots ?? false,
 			lookupResource: options?.lookupResource ?? null,
+			lookupPageSource: options?.lookupPageSource ?? null,
 			inventoryMode: options?.inventoryMode ?? null,
 		};
 
@@ -374,28 +375,26 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * Processes captured sub-resources from a page scrape, deduplicates them,
 	 * and emits `response` / `responseReferrers` events for new resources.
 	 * @param resources - Sub-resource entries captured during the page load
+	 * @param parentSource
 	 */
-	#handleResources(resources: ResourceEntry[]) {
-		// `deriveResourceSource` encodes the "sub-resources are never seeds"
-		// rule and stays in lockstep with `derivePageSource` if PageSource
-		// gains new variants. Computed once outside the loop because the
-		// inventoryMode reference does not change mid-batch.
-		const subResourceSource = deriveResourceSource(this.#options.inventoryMode);
-		for (const { resource, pageUrl } of resources) {
-			const { isNew } = handleResourceResponse(
-				resource as CrawlerEventTypes['response']['resource'],
-				this.#resources,
-			);
-			if (isNew) {
-				void this.emit('response', {
-					resource: resource as CrawlerEventTypes['response']['resource'],
-					source: subResourceSource,
-				});
-			}
-			void this.emit('responseReferrers', {
-				url: pageUrl,
-				src: resource.url.withoutHash,
-			});
+	#handleResources(resources: ResourceEntry[], parentSource: PageSource | undefined) {
+		// Decide the full emit plan first via the pure planner — that lets
+		// the lineage propagation contract (parent source → sub-resource
+		// `source`) be unit-tested in `plan-sub-resource-emits.spec.ts`
+		// without spinning up the puppeteer stack here. The previous
+		// inline shape made the `source` value invisible to tests because
+		// emit() side effects were only observable via a full scrape run
+		// that requires a mocked Chromium instance.
+		const { responseEmits, referrerEmits } = planSubResourceEmits(
+			resources,
+			parentSource,
+			this.#resources,
+		);
+		for (const payload of responseEmits) {
+			void this.emit('response', payload);
+		}
+		for (const payload of referrerEmits) {
+			void this.emit('responseReferrers', payload);
 		}
 	}
 	/**
@@ -560,7 +559,6 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			}
 		}
 	}
-
 	/**
 	 * Launches a fresh Puppeteer browser, runs the beholder scraper, and cleans up.
 	 *
@@ -574,188 +572,62 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @param headCheckResult - Optional HEAD result to pass to the scraper, avoiding a redundant request
 	 * @returns The scrape result from beholder
 	 */
-	async #launchBrowserAndScrape(
-		url: ExURL,
-		update: (log: string) => void,
-		isExternal: boolean,
-		metadataOnly: boolean,
-		headCheckResult?: PageData,
-	): Promise<BrowserScrapeResult> {
-		update('Launching browser%dots%');
-		if (this.#options.executablePath) {
-			const execPath = path.resolve(this.#options.executablePath);
-			if (!existsSync(execPath)) {
-				throw new Error(`Executable path does not exist: ${execPath}`);
-			}
+	/**
+	 * @param url
+	 * @param update
+	 * @param isExternal
+	 * @param metadataOnly
+	 * @param headCheckResult
+	 * @internal
+	 * cascade-guard contract for the puppeteer-fallback success / skipped
+	 * branches can be exercised via `vi.spyOn(Crawler.prototype,
+	 * '_launchBrowserAndScrape')` in unit tests. There is no production
+	 * consumer outside this class.
+	 */
+	/**
+	 * Resolve the source label of the page being scraped so sub-resources
+	 * captured during its render can inherit the correct lineage label
+	 * (`'inventory-discovered'` when the parent is in the inventory chain,
+	 * `undefined` otherwise so the DB DEFAULT `'crawled'` lands).
+	 *
+	 * Two-stage resolution:
+	 *
+	 * 1. If `inventoryMode` is active (live `--inventory` session), use
+	 *    `derivePageSource` directly — the in-memory seed set is the
+	 *    authoritative answer and no DB round-trip is needed.
+	 *
+	 * 2. Otherwise (`--resume`, `--retry-failed`, `--append`, or a normal
+	 *    `crawl` of a previously-inventoried archive), ask the injected
+	 *    `lookupPageSource` callback. The orchestrator wires that callback
+	 *    to `Archive.getPageSourceByUrl` so the parent's lineage from
+	 *    earlier sessions survives across sessions.
+	 *
+	 * One round-trip per page render at most — the result is not memoised
+	 * because each worker scrapes a single page per `#scrapePage` call
+	 * and the cost is amortised across every sub-resource of that page.
+	 * @param url - The URL of the page being scraped.
+	 * @returns The parent page's source, or `undefined` when none applies.
+	 */
+	async #resolveParentSource(url: ExURL): Promise<PageSource | undefined> {
+		const fromInventoryMode = derivePageSource(
+			this.#options.inventoryMode,
+			url.withoutHashAndAuth,
+		);
+		if (fromInventoryMode !== undefined) {
+			return fromInventoryMode;
 		}
-		const puppeteer = await import('puppeteer');
-		const browser = await puppeteer.launch({
-			headless: true,
-			...(this.#options.executablePath
-				? { executablePath: this.#options.executablePath }
-				: {}),
-		});
-
-		// `page` is hoisted out of the try-block so the catch arm can read
-		// `page.url()` for JS-redirect detection. See `BrowserScrapeResult`
-		// JSDoc for the full why; in short, when `scrapeStart` throws because
-		// `page.goto()` returned `null`, the puppeteer page object still
-		// holds the URL Chromium actually navigated to via the offending
-		// `window.location.replace()` / meta-refresh, and that is the only
-		// authoritative source for the JS-redirect destination.
-		let page: PuppeteerPage | null = null;
+		const lookupPageSource = this.#options.lookupPageSource;
+		if (!lookupPageSource) {
+			return undefined;
+		}
 		try {
-			update('Creating page%dots%');
-			page = await browser.newPage();
-			await page.setUserAgent(this.#options.userAgent);
-			// HTTP-auth handling — two cooperating pieces, BOTH required:
-			//
-			// 1. `page.authenticate({user, pass})` (always, even with empty
-			//    strings) registers a Fetch-domain auth handler with
-			//    Chromium. With empty credentials it ALSO drains Chromium's
-			//    native HTTP-auth dialog without sending anything
-			//    privileged — the dialog cannot be captured by
-			//    `page.on('dialog')` (HTTP-auth is not a JS dialog) and
-			//    would otherwise hang the navigation until puppeteer's
-			//    timeout fires. With non-empty credentials it provides the
-			//    scope's auth so the in-scope navigation succeeds.
-			//
-			// 2. Stripping URL-embedded credentials from the navigation
-			//    target. **This is the credential-leak guard.** When the
-			//    URL we hand puppeteer carries `user:pass@host`, Chromium
-			//    promotes those credentials into its HTTP-auth cache
-			//    keyed by (scheme, host, port, realm). Subsequent
-			//    sub-resource requests issued from the same page —
-			//    including cross-origin requests to a different hostname
-			//    sharing the same IP / port (e.g. an embedded
-			//    `<img src="http://127.0.0.1:8010/…">` loaded from a
-			//    `localhost:8010` page) — get the cached `Authorization`
-			//    header re-attached by the network stack. The
-			//    `Fetch.authRequired` event never fires for these
-			//    pre-emptive attachments, so neither `page.authenticate`
-			//    nor any custom Fetch listener can filter them. The only
-			//    way to keep the cred out of the cross-origin request is
-			//    to make sure it never enters the cache in the first
-			//    place — hence stripping the URL before navigation.
-			//
-			// Verified by `scope-auth-leak.e2e.ts`: removing either piece
-			// causes that test to fail (without auth → main 401 hangs;
-			// without strip → scope cred leaks to off-scope sub-resource).
-			await page.authenticate({
-				username: url.username ?? '',
-				password: url.password ?? '',
-			});
-			// Re-parse from `withoutHashAndAuth` rather than mutating the
-			// re-parsed `url.href` object: ExURL pre-computes `href`,
-			// `withoutHash` and other derived strings at parse time, and
-			// post-hoc field assignment (`navigateUrl.username = ''`)
-			// leaves those derived strings stale. Anything downstream that
-			// reads `navigateUrl.href` (e.g. a future beholder bump that
-			// switches `page.goto` from `withoutHashAndAuth` to `href`)
-			// would silently get back the credentialed string — defeating
-			// the leak guard. Building the navigation URL from a known
-			// credential-free string guarantees every field is consistent.
-			const navigateUrl = parseUrl(url.withoutHashAndAuth) ?? url;
-			const scraper = new Scraper();
-
-			scraper.on(
-				'changePhase',
-				createChangePhaseHandler({
-					emit: (event) => void this.emit('changePhase', event),
-					update,
-					formatLog: formatPhaseLog,
-					buffer: this.#pendingPhaseErrors,
-					urlHref: url.href,
-				}),
-			);
-
-			const result = await scraper.scrapeStart(page, navigateUrl, {
-				isExternal,
-				captureImages: !isExternal && this.#options.captureImages,
-				excludeKeywords: this.#options.excludeKeywords,
-				disableQueries: this.#options.disableQueries,
-				metadataOnly,
-				retries: this.#options.retry,
-				headCheckResult,
-			});
-
-			update('Closing browser%dots%');
-			// JS-redirect rescue capture: when `scrapeStart` catches a
-			// `#fetchData` throw internally (e.g. `Page.goto returned null`
-			// because a client-side `window.location.replace()` /
-			// meta-refresh fired), it returns `{ type: 'error', ... }`
-			// instead of re-throwing — so the `catch` arm below never
-			// sees those cases. Read `page.url()` here while `page` is
-			// still alive (finally still hasn't called `handleBrowserClose`)
-			// and attach it to the result so `#scrapePage` can fold the
-			// source into a redirect edge. Without this capture, the
-			// rescue path is dead for the most common failure shape it
-			// was designed to handle.
-			//
-			// `page.url()` itself can throw when the browser context died
-			// mid-scrape (target crashed, session killed). On failure we
-			// fall through with `postNavigationUrl` unset so the existing
-			// HEAD-chain rescue / normal error path takes over.
-			if (result.type === 'error') {
-				try {
-					const postNavigationUrl = page.url();
-					return { ...result, postNavigationUrl };
-				} catch (urlReadError) {
-					crawlerLog(
-						'Reading page.url() for JS-redirect detection failed on %s: %O',
-						url.href,
-						urlReadError,
-					);
-				}
-			}
-			return result;
+			return await lookupPageSource(url.withoutHashAndAuth);
 		} catch (error) {
-			// JS-redirect rescue: when `scrapeStart` throws because
-			// `page.goto()` returned `null` (the symptom of a client-side
-			// `window.location.replace()` / meta-refresh navigating away
-			// before the original response materialised), `page.url()` still
-			// reports the destination Chromium ended up on. Capturing it
-			// here lets `#scrapePage` fold the source into a redirect edge
-			// instead of recording a hard `status = -1` — `Page.goto returned
-			// null` classifies as `protocol`, which is neither permanent nor
-			// a puppeteer-fallback kind, so without this rescue the page
-			// loops through `--retry-failed` forever with the same failure.
-			//
-			// `page.url()` itself can throw when the browser context is
-			// already torn down (target closed, session killed). Treat any
-			// such failure as "no extra information" and fall back to the
-			// normal error path — the existing redirect-edge fallback that
-			// keys off `headCheckResult.redirectPaths` may still rescue the
-			// page when the HEAD pre-flight resolved a chain.
-			let postNavigationUrl: string | undefined;
-			if (page) {
-				try {
-					postNavigationUrl = page.url();
-				} catch (urlReadError) {
-					crawlerLog(
-						'Reading page.url() for JS-redirect detection failed on %s: %O',
-						url.href,
-						urlReadError,
-					);
-				}
-			}
-			return {
-				type: 'error',
-				resources: [],
-				error: {
-					name: error instanceof Error ? error.name : 'Error',
-					message: error instanceof Error ? error.message : String(error),
-					stack: error instanceof Error ? error.stack : undefined,
-					shutdown: true,
-				},
-				...(postNavigationUrl === undefined ? {} : { postNavigationUrl }),
-			};
-		} finally {
-			// handleBrowserClose force-kills the underlying Chromium when a
-			// graceful close() hangs (e.g. the session died mid-scrape) and
-			// guarantees the finally never throws, so the try-block's return
-			// value or caught error is never masked.
-			await handleBrowserClose(browser, url.href, crawlerLog);
+			// A lookup failure must never be worse than not having lineage
+			// — fall back to undefined so the sub-resources land at the DB
+			// DEFAULT `'crawled'` rather than crashing the whole worker.
+			crawlerLog('Parent source lookup failed for %s: %O', url.href, error);
+			return undefined;
 		}
 	}
 	/**
@@ -1021,7 +893,8 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 						log('Saving results%dots%');
 						this.#handleResult(result, url, enqueue, paginationState, concurrency);
-						this.#handleResources(result.resources);
+						const parentSource = await this.#resolveParentSource(url);
+						this.#handleResources(result.resources, parentSource);
 						log(formatResultSummary(result));
 
 						// Phase errors must be emitted AFTER 'page' / 'externalPage'
@@ -1115,7 +988,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @param metadataOnly - When true, only extract title metadata without full browser scraping
 	 * @param laneIndex - The dealer lane index, used to create unique countdown IDs
 	 * @param markBrowserScrape - Called once **after** the browser successfully
-	 *   renders an HTML page (i.e. `#launchBrowserAndScrape` resolved with
+	 *   renders an HTML page (i.e. `_launchBrowserAndScrape` resolved with
 	 *   `type: 'success'`). Not called for HEAD-only, title-only, captured-resource
 	 *   reuse, non-HTML responses, non-HTTP protocols (mailto:, tel:), browser
 	 *   launch throws (e.g. invalid executablePath), or scraper-returned
@@ -1134,7 +1007,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 		// Non-HTTP protocols (mailto:, tel:, etc.) — let the scraper handle early return
 		if (!url.isHTTP) {
-			return this.#launchBrowserAndScrape(url, update, isExternal, metadataOnly);
+			return this._launchBrowserAndScrape(url, update, isExternal, metadataOnly);
 		}
 
 		// Reuse captured resource data — when this URL was already observed as a
@@ -1202,7 +1075,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			) {
 				update(c.yellow('HEAD/GET unreachable — trying puppeteer once'));
 				try {
-					const fallback = await this.#launchBrowserAndScrape(
+					const fallback = await this._launchBrowserAndScrape(
 						url,
 						update,
 						isExternal,
@@ -1242,7 +1115,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						this.#successfulHosts.add(url.hostname.toLowerCase());
 						return fallback;
 					}
-					// `fallback.type === 'error'`. `#launchBrowserAndScrape`
+					// `fallback.type === 'error'`. `_launchBrowserAndScrape`
 					// catches its own exceptions and returns
 					// `{type:'error', shutdown:...}` rather than throwing, so
 					// the `catch` arm below would NOT see this branch. Log
@@ -1398,12 +1271,12 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 		// HTML or unknown content type — launch browser with preflight result.
 		// markBrowserScrape() fires only when the result is `success`.
-		// `#launchBrowserAndScrape` catches internal errors and returns
+		// `_launchBrowserAndScrape` catches internal errors and returns
 		// `{ type: 'error', ... }` instead of throwing (see its catch block),
 		// so awaiting alone does NOT prove the page was rendered. The explicit
 		// success check excludes navigation failures, scraper exceptions, and
 		// shutdown-class errors from the pages-rendered count.
-		const browserResult = await this.#launchBrowserAndScrape(
+		const browserResult = await this._launchBrowserAndScrape(
 			url,
 			update,
 			isExternal,
@@ -1626,6 +1499,191 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				},
 			},
 		);
+	}
+	// eslint-disable-next-line no-restricted-syntax -- intentional `private` (vs `#`) so tests can spyOn the prototype to drive the puppeteer-fallback cascade-guard branches without a full browser mock; see JSDoc above.
+	private async _launchBrowserAndScrape(
+		url: ExURL,
+		update: (log: string) => void,
+		isExternal: boolean,
+		metadataOnly: boolean,
+		headCheckResult?: PageData,
+	): Promise<BrowserScrapeResult> {
+		update('Launching browser%dots%');
+		if (this.#options.executablePath) {
+			const execPath = path.resolve(this.#options.executablePath);
+			if (!existsSync(execPath)) {
+				throw new Error(`Executable path does not exist: ${execPath}`);
+			}
+		}
+		const puppeteer = await import('puppeteer');
+		const browser = await puppeteer.launch({
+			headless: true,
+			...(this.#options.executablePath
+				? { executablePath: this.#options.executablePath }
+				: {}),
+		});
+
+		// `page` is hoisted out of the try-block so the catch arm can read
+		// `page.url()` for JS-redirect detection. See `BrowserScrapeResult`
+		// JSDoc for the full why; in short, when `scrapeStart` throws because
+		// `page.goto()` returned `null`, the puppeteer page object still
+		// holds the URL Chromium actually navigated to via the offending
+		// `window.location.replace()` / meta-refresh, and that is the only
+		// authoritative source for the JS-redirect destination.
+		let page: PuppeteerPage | null = null;
+		try {
+			update('Creating page%dots%');
+			page = await browser.newPage();
+			await page.setUserAgent(this.#options.userAgent);
+			// HTTP-auth handling — two cooperating pieces, BOTH required:
+			//
+			// 1. `page.authenticate({user, pass})` (always, even with empty
+			//    strings) registers a Fetch-domain auth handler with
+			//    Chromium. With empty credentials it ALSO drains Chromium's
+			//    native HTTP-auth dialog without sending anything
+			//    privileged — the dialog cannot be captured by
+			//    `page.on('dialog')` (HTTP-auth is not a JS dialog) and
+			//    would otherwise hang the navigation until puppeteer's
+			//    timeout fires. With non-empty credentials it provides the
+			//    scope's auth so the in-scope navigation succeeds.
+			//
+			// 2. Stripping URL-embedded credentials from the navigation
+			//    target. **This is the credential-leak guard.** When the
+			//    URL we hand puppeteer carries `user:pass@host`, Chromium
+			//    promotes those credentials into its HTTP-auth cache
+			//    keyed by (scheme, host, port, realm). Subsequent
+			//    sub-resource requests issued from the same page —
+			//    including cross-origin requests to a different hostname
+			//    sharing the same IP / port (e.g. an embedded
+			//    `<img src="http://127.0.0.1:8010/…">` loaded from a
+			//    `localhost:8010` page) — get the cached `Authorization`
+			//    header re-attached by the network stack. The
+			//    `Fetch.authRequired` event never fires for these
+			//    pre-emptive attachments, so neither `page.authenticate`
+			//    nor any custom Fetch listener can filter them. The only
+			//    way to keep the cred out of the cross-origin request is
+			//    to make sure it never enters the cache in the first
+			//    place — hence stripping the URL before navigation.
+			//
+			// Verified by `scope-auth-leak.e2e.ts`: removing either piece
+			// causes that test to fail (without auth → main 401 hangs;
+			// without strip → scope cred leaks to off-scope sub-resource).
+			await page.authenticate({
+				username: url.username ?? '',
+				password: url.password ?? '',
+			});
+			// Re-parse from `withoutHashAndAuth` rather than mutating the
+			// re-parsed `url.href` object: ExURL pre-computes `href`,
+			// `withoutHash` and other derived strings at parse time, and
+			// post-hoc field assignment (`navigateUrl.username = ''`)
+			// leaves those derived strings stale. Anything downstream that
+			// reads `navigateUrl.href` (e.g. a future beholder bump that
+			// switches `page.goto` from `withoutHashAndAuth` to `href`)
+			// would silently get back the credentialed string — defeating
+			// the leak guard. Building the navigation URL from a known
+			// credential-free string guarantees every field is consistent.
+			const navigateUrl = parseUrl(url.withoutHashAndAuth) ?? url;
+			const scraper = new Scraper();
+
+			scraper.on(
+				'changePhase',
+				createChangePhaseHandler({
+					emit: (event) => void this.emit('changePhase', event),
+					update,
+					formatLog: formatPhaseLog,
+					buffer: this.#pendingPhaseErrors,
+					urlHref: url.href,
+				}),
+			);
+
+			const result = await scraper.scrapeStart(page, navigateUrl, {
+				isExternal,
+				captureImages: !isExternal && this.#options.captureImages,
+				excludeKeywords: this.#options.excludeKeywords,
+				disableQueries: this.#options.disableQueries,
+				metadataOnly,
+				retries: this.#options.retry,
+				headCheckResult,
+			});
+
+			update('Closing browser%dots%');
+			// JS-redirect rescue capture: when `scrapeStart` catches a
+			// `#fetchData` throw internally (e.g. `Page.goto returned null`
+			// because a client-side `window.location.replace()` /
+			// meta-refresh fired), it returns `{ type: 'error', ... }`
+			// instead of re-throwing — so the `catch` arm below never
+			// sees those cases. Read `page.url()` here while `page` is
+			// still alive (finally still hasn't called `handleBrowserClose`)
+			// and attach it to the result so `#scrapePage` can fold the
+			// source into a redirect edge. Without this capture, the
+			// rescue path is dead for the most common failure shape it
+			// was designed to handle.
+			//
+			// `page.url()` itself can throw when the browser context died
+			// mid-scrape (target crashed, session killed). On failure we
+			// fall through with `postNavigationUrl` unset so the existing
+			// HEAD-chain rescue / normal error path takes over.
+			if (result.type === 'error') {
+				try {
+					const postNavigationUrl = page.url();
+					return { ...result, postNavigationUrl };
+				} catch (urlReadError) {
+					crawlerLog(
+						'Reading page.url() for JS-redirect detection failed on %s: %O',
+						url.href,
+						urlReadError,
+					);
+				}
+			}
+			return result;
+		} catch (error) {
+			// JS-redirect rescue: when `scrapeStart` throws because
+			// `page.goto()` returned `null` (the symptom of a client-side
+			// `window.location.replace()` / meta-refresh navigating away
+			// before the original response materialised), `page.url()` still
+			// reports the destination Chromium ended up on. Capturing it
+			// here lets `#scrapePage` fold the source into a redirect edge
+			// instead of recording a hard `status = -1` — `Page.goto returned
+			// null` classifies as `protocol`, which is neither permanent nor
+			// a puppeteer-fallback kind, so without this rescue the page
+			// loops through `--retry-failed` forever with the same failure.
+			//
+			// `page.url()` itself can throw when the browser context is
+			// already torn down (target closed, session killed). Treat any
+			// such failure as "no extra information" and fall back to the
+			// normal error path — the existing redirect-edge fallback that
+			// keys off `headCheckResult.redirectPaths` may still rescue the
+			// page when the HEAD pre-flight resolved a chain.
+			let postNavigationUrl: string | undefined;
+			if (page) {
+				try {
+					postNavigationUrl = page.url();
+				} catch (urlReadError) {
+					crawlerLog(
+						'Reading page.url() for JS-redirect detection failed on %s: %O',
+						url.href,
+						urlReadError,
+					);
+				}
+			}
+			return {
+				type: 'error',
+				resources: [],
+				error: {
+					name: error instanceof Error ? error.name : 'Error',
+					message: error instanceof Error ? error.message : String(error),
+					stack: error instanceof Error ? error.stack : undefined,
+					shutdown: true,
+				},
+				...(postNavigationUrl === undefined ? {} : { postNavigationUrl }),
+			};
+		} finally {
+			// handleBrowserClose force-kills the underlying Chromium when a
+			// graceful close() hangs (e.g. the session died mid-scrape) and
+			// guarantees the finally never throws, so the try-block's return
+			// value or caught error is never masked.
+			await handleBrowserClose(browser, url.href, crawlerLog);
+		}
 	}
 
 	/**

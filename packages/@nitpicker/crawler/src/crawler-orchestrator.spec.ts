@@ -1,6 +1,9 @@
 import type Archive from './archive/archive.js';
 import type { CrawlerError } from './utils/types/types.js';
 
+import fs from 'node:fs/promises';
+import path from 'node:path';
+
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import { CrawlerOrchestrator } from './crawler-orchestrator.js';
@@ -494,5 +497,134 @@ describe('CrawlerOrchestrator.inventory: pending guard demote', () => {
 		).resolves.toBeDefined();
 
 		expect(warnSpy).not.toHaveBeenCalled();
+	});
+});
+
+describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
+	it('records non-HTML novel URLs as `setResources` rows with all-null metadata and NO HEAD probe', async () => {
+		// F4 + F5: the new inventory orchestrator classifies URLs by
+		// extension via `isLikelyHtmlUrl` and writes non-HTML entries
+		// directly into `resources` without a HEAD probe. This pins
+		// three contracts in one shot:
+		//
+		// 1. `setResources` is called for each non-HTML novel URL with
+		//    `source: 'inventory-seed'`.
+		// 2. The recorded row carries `status / statusText / contentType
+		//    / contentLength / headers === null` — downstream consumers
+		//    must treat this as "not probed" rather than "probed and
+		//    failed".
+		// 3. NO `fetchDestination` HEAD call is made AND NO `addError`
+		//    `crawl_errors` row is written. The orchestrator-side
+		//    network failure logging is intentionally absent because no
+		//    probe happens.
+		//
+		// Pin in one test so a regression that restores HEAD-based
+		// metadata (and the associated `addError` logging) fails
+		// loudly here.
+		const setResourcesCalls: {
+			url: string;
+			source: string | undefined;
+			resource: unknown;
+		}[] = [];
+		const fakeArchive = {
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+				}),
+			),
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			getExistingPageUrls: vi.fn(() => Promise.resolve([])),
+			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+			setResources: vi.fn(
+				(resource: { url: { href: string } }, source: string | undefined) => {
+					setResourcesCalls.push({ url: resource.url.href, source, resource });
+					return Promise.resolve();
+				},
+			),
+			addError: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		const fetchDestMod = await import('./crawler/fetch-destination.js');
+		const fetchSpy = vi.spyOn(fetchDestMod, 'fetchDestination');
+
+		// The orchestrator copies the archive to a `.bak` before
+		// processing novel URLs. The Archive instance itself is mocked,
+		// but the copyFile happens at the filesystem layer — create a
+		// throwaway file so the copy succeeds.
+		const testCwd = path.resolve('/tmp/inventory-non-html-contract-test');
+		await fs.mkdir(testCwd, { recursive: true });
+		const fixturePath = path.join(testCwd, 'fixture.nitpicker');
+		await fs.writeFile(fixturePath, '');
+
+		try {
+			// All four URLs are non-HTML (extension-based classification
+			// drops them into the `setResources` path) and all are novel
+			// (`getExistingPageUrls` / `getExistingResourceUrls` return
+			// empty). So `htmlSeeds.length === 0`, the orchestrator hits
+			// the no-op early return after writing the resource rows.
+			await CrawlerOrchestrator.inventory(
+				'fixture.nitpicker',
+				[
+					'https://example.com/orphan-a.pdf',
+					'https://example.com/orphan-b.jpg',
+					'https://example.com/orphan-c.css',
+					'https://example.com/orphan-d.js',
+				],
+				{ cwd: testCwd },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		// Four `setResources` calls, all labelled `'inventory-seed'`.
+		expect(setResourcesCalls).toHaveLength(4);
+		for (const call of setResourcesCalls) {
+			expect(call.source).toBe('inventory-seed');
+			const resource = call.resource as {
+				status: number | null;
+				statusText: string | null;
+				contentType: string | null;
+				contentLength: number | null;
+				headers: unknown;
+			};
+			expect(resource.status).toBeNull();
+			expect(resource.statusText).toBeNull();
+			expect(resource.contentType).toBeNull();
+			expect(resource.contentLength).toBeNull();
+			expect(resource.headers).toBeNull();
+		}
+
+		// Zero HEAD probes. The whole point of the new design is that
+		// the orchestrator does not pre-flight non-HTML URLs.
+		expect(fetchSpy).not.toHaveBeenCalled();
+
+		// Zero `addError` calls. The previous code wrote `crawl_errors`
+		// rows on HEAD failure; the new code does not probe, so this
+		// telemetry surface is intentionally silent for non-HTML
+		// inventory URLs.
+		const addErrorMock = vi.mocked(fakeArchive.addError);
+		expect(addErrorMock).not.toHaveBeenCalled();
 	});
 });

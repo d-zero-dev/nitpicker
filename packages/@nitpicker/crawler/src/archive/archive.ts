@@ -161,6 +161,19 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.getExistingResourceUrls(urls);
 	}
 	/**
+	 * Look up the `source` column of a single page row by its URL key. Thin
+	 * facade over {@link Database.getPageSourceByUrl} — exposes the lookup
+	 * to the orchestrator so it can inject a `PageSourceLookup` into the
+	 * Crawler for sub-resource lineage propagation on `--resume` /
+	 * `--retry-failed` sessions.
+	 * @param url - URL key in `url.withoutHashAndAuth` form.
+	 * @returns The recorded `source`, or `undefined` when no row exists.
+	 */
+	async getPageSourceByUrl(url: string) {
+		return this.#db.getPageSourceByUrl(url);
+	}
+
+	/**
 	 * Retrieves a single recorded sub-resource by its URL.
 	 * @param urls - URL candidates to match against the stored resource URL.
 	 * @returns The raw resource row, or `null` if none match.

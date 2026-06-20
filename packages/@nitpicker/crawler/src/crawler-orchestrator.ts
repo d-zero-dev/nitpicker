@@ -194,6 +194,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				);
 				return row ? resourceRowToLookupResult(row) : null;
 			},
+			// Let the crawler propagate the parent's source lineage to
+			// sub-resources on `--resume` / `--retry-failed` sessions, where
+			// `inventoryMode` is not in memory but the DB still remembers
+			// the parent's `source`. Without this, sub-resources captured
+			// during a re-render of an inventory-labelled page would fall
+			// back to the DB DEFAULT `'crawled'` and lose their
+			// `'inventory-discovered'` provenance.
+			lookupPageSource: async (url) => this.#archive.getPageSourceByUrl(url),
 			// Inventory mode is opted into by `CrawlerOrchestrator.inventory`
 			// (see T3); the default crawl path stays in normal mode so new
 			// rows continue to land in pages/resources with the DB DEFAULT

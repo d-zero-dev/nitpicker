@@ -936,6 +936,259 @@ describe('Crawler', () => {
 			expect(dnsBurnedHostCache.get('dead.invalid')).toBe('dns');
 			clearDnsBurnedHostCache();
 		});
+
+		it('marks the host alive when puppeteer fallback succeeds after HEAD fails (cascade guard via WAF/middlebox path)', async () => {
+			// Pin the F1 contract: when HEAD dies at a middlebox / WAF
+			// (parse-error / connection-reset / timeout) and the puppeteer
+			// fallback succeeds, the host MUST be added to
+			// `#successfulHosts` so a later DNS failure on the same host
+			// does not burn it. Without this, sites whose first URL is
+			// only reachable via the browser-rescue path would still be
+			// vulnerable to the cascade.
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { dnsBurnedHostCache } = await import('./dns-burned-host-cache.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			const fetchSpy = vi.spyOn(fetchDestMod, 'fetchDestination');
+			// First URL: HEAD throws with a puppeteer-fallback-candidate
+			// kind (`connection-reset`). The fallback is mocked further
+			// below to return a success result, simulating the browser
+			// punching through a WAF that bare HEAD/GET cannot.
+			// Second URL: HEAD throws with `getaddrinfo ENOTFOUND` — the
+			// cascade trigger. If the fallback success did not mark the
+			// host alive, this would burn the host.
+			fetchSpy.mockImplementation(({ url: probeUrl }) => {
+				if (probeUrl.href === 'https://waf.example.com/page-a.html') {
+					return Promise.reject(new Error('socket hang up'));
+				}
+				return Promise.reject(new Error('getaddrinfo ENOTFOUND waf.example.com'));
+			});
+
+			// Replace the puppeteer-launching method with a spy so we can
+			// simulate a successful browser fallback without spinning up
+			// Chromium. `_launchBrowserAndScrape` is the TS-private
+			// (runtime-accessible) seam introduced specifically so this
+			// branch of the cascade-guard contract can be unit-tested.
+			vi.spyOn(
+				Crawler.prototype as unknown as {
+					_launchBrowserAndScrape: (...args: unknown[]) => Promise<unknown>;
+				},
+				'_launchBrowserAndScrape',
+			).mockResolvedValue({
+				type: 'success',
+				pageData: {
+					url: parseUrl('https://waf.example.com/page-a.html')!,
+					redirectPaths: [],
+					isTarget: true,
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					meta: { title: '' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				resources: [],
+			});
+
+			const crawler = new Crawler(defaultOptions);
+			const errors: CrawlerEventTypes['error'][] = [];
+			crawler.on('error', (e) => {
+				errors.push(e);
+			});
+
+			crawler.start([
+				parseUrl('https://waf.example.com/page-a.html')!,
+				parseUrl('https://waf.example.com/page-b.html')!,
+			]);
+
+			await vi.waitFor(() => {
+				expect(errors).toHaveLength(1);
+			});
+
+			expect(dnsBurnedHostCache.has('waf.example.com')).toBe(false);
+			clearDnsBurnedHostCache();
+		});
+
+		it('marks the host alive even when the first URL returns 4xx (cascade guard is status-agnostic)', async () => {
+			// Pin the F2 contract: `#successfulHosts` is populated by ANY
+			// HTTP response — 4xx and 5xx still prove DNS + TCP are alive,
+			// so a subsequent DNS failure must NOT burn the host. A
+			// regression that gates the add on `headResult.status < 400`
+			// would silently re-introduce the cascade for sites that
+			// front-load 401/403/5xx (auth walls, overloaded prod).
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { dnsBurnedHostCache } = await import('./dns-burned-host-cache.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+
+			const successUrl = parseUrl('https://auth.example.com/protected.png')!;
+			const failUrl = parseUrl('https://auth.example.com/missing.png')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockImplementation(
+				({ url: probeUrl }) => {
+					if (probeUrl.href === successUrl.href) {
+						return Promise.resolve({
+							url: successUrl,
+							redirectPaths: [],
+							isTarget: true,
+							isExternal: false,
+							status: 403,
+							statusText: 'Forbidden',
+							contentType: 'image/png',
+							contentLength: 0,
+							responseHeaders: {},
+							meta: { title: '' },
+							anchorList: [],
+							imageList: [],
+							html: '',
+							isSkipped: false,
+						});
+					}
+					return Promise.reject(new Error('getaddrinfo ENOTFOUND auth.example.com'));
+				},
+			);
+
+			const crawler = new Crawler(defaultOptions);
+			const errors: CrawlerEventTypes['error'][] = [];
+			crawler.on('error', (e) => {
+				errors.push(e);
+			});
+
+			crawler.start([successUrl, failUrl]);
+
+			await vi.waitFor(() => {
+				expect(errors).toHaveLength(1);
+			});
+
+			// A 403 response proves the host is reachable. The cascade
+			// guard must keep `auth.example.com` out of the burn cache
+			// even though the first URL did not resolve to a 2xx.
+			expect(dnsBurnedHostCache.has('auth.example.com')).toBe(false);
+			clearDnsBurnedHostCache();
+		});
+
+		it('marks the host alive when the first URL returns 5xx (cascade guard is status-agnostic, server-error variant)', async () => {
+			// Companion of the 4xx test: 5xx is also "host alive, app
+			// failed". Pinning both 4xx and 5xx surfaces protects the
+			// "any HTTP response counts" contract against a regression
+			// that splits the gate by error class.
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { dnsBurnedHostCache } = await import('./dns-burned-host-cache.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+
+			const successUrl = parseUrl('https://busy.example.com/overload.png')!;
+			const failUrl = parseUrl('https://busy.example.com/missing.png')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockImplementation(
+				({ url: probeUrl }) => {
+					if (probeUrl.href === successUrl.href) {
+						return Promise.resolve({
+							url: successUrl,
+							redirectPaths: [],
+							isTarget: true,
+							isExternal: false,
+							status: 503,
+							statusText: 'Service Unavailable',
+							contentType: 'image/png',
+							contentLength: 0,
+							responseHeaders: {},
+							meta: { title: '' },
+							anchorList: [],
+							imageList: [],
+							html: '',
+							isSkipped: false,
+						});
+					}
+					return Promise.reject(new Error('getaddrinfo ENOTFOUND busy.example.com'));
+				},
+			);
+
+			const crawler = new Crawler(defaultOptions);
+			const errors: CrawlerEventTypes['error'][] = [];
+			crawler.on('error', (e) => {
+				errors.push(e);
+			});
+
+			crawler.start([successUrl, failUrl]);
+
+			await vi.waitFor(() => {
+				expect(errors).toHaveLength(1);
+			});
+
+			expect(dnsBurnedHostCache.has('busy.example.com')).toBe(false);
+			clearDnsBurnedHostCache();
+		});
+
+		it('marks the host alive when puppeteer fallback returns `skipped` (excludeKeywords match)', async () => {
+			// Companion to the success-path test above: `fallback.type ===
+			// 'skipped'` (browser rendered enough to match an
+			// `excludeKeywords` rule) also indicates the host is
+			// responding. The host must be marked alive — otherwise a
+			// site whose first URL is skipped after a browser rescue
+			// would still cascade-burn on the next URL.
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { dnsBurnedHostCache } = await import('./dns-burned-host-cache.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			const fetchSpy = vi.spyOn(fetchDestMod, 'fetchDestination');
+			fetchSpy.mockImplementation(({ url: probeUrl }) => {
+				if (probeUrl.href === 'https://waf-skip.example.com/page-a.html') {
+					return Promise.reject(new Error('socket hang up'));
+				}
+				return Promise.reject(new Error('getaddrinfo ENOTFOUND waf-skip.example.com'));
+			});
+
+			vi.spyOn(
+				Crawler.prototype as unknown as {
+					_launchBrowserAndScrape: (...args: unknown[]) => Promise<unknown>;
+				},
+				'_launchBrowserAndScrape',
+			).mockResolvedValue({
+				type: 'skipped',
+				resources: [],
+				ignored: {
+					url: parseUrl('https://waf-skip.example.com/page-a.html')!,
+					matchedText: 'excluded-keyword',
+					excludeKeywords: ['excluded-keyword'],
+				},
+			});
+
+			const crawler = new Crawler(defaultOptions);
+			const errors: CrawlerEventTypes['error'][] = [];
+			crawler.on('error', (e) => {
+				errors.push(e);
+			});
+
+			crawler.start([
+				parseUrl('https://waf-skip.example.com/page-a.html')!,
+				parseUrl('https://waf-skip.example.com/page-b.html')!,
+			]);
+
+			await vi.waitFor(() => {
+				expect(errors).toHaveLength(1);
+			});
+
+			expect(dnsBurnedHostCache.has('waf-skip.example.com')).toBe(false);
+			clearDnsBurnedHostCache();
+		});
 	});
 
 	describe('pagesScrapedOffset propagation', () => {
@@ -1069,6 +1322,58 @@ describe('Crawler', () => {
 			});
 		});
 
+		it('skips scope-add whenever inventoryMode is non-null, regardless of seedUrls contents', async () => {
+			// F10: the existing skip test seeds an EMPTY `seedUrls`,
+			// which leaves the door open for a future regression where
+			// the skip condition is tightened to e.g.
+			// `inventoryMode?.seedUrls?.size > 0` and would silently
+			// continue passing. Run the same scope-skip observation with
+			// a NON-empty seedUrls to discriminate: the skip must fire
+			// regardless of whether the seed set is populated. Together
+			// with the empty-seed variant above, this pins the gate as
+			// "`inventoryMode != null` alone", not any deeper field.
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const seedUrl = parseUrl('https://other-host.example.com/page')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url: seedUrl,
+				redirectPaths: [],
+				isTarget: true,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'image/png',
+				contentLength: 1234,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			});
+
+			const crawler = new Crawler({
+				...defaultOptions,
+				fetchExternal: false,
+				// Non-empty seedUrls — the gate must still fire on
+				// `inventoryMode != null` rather than peeking inside
+				// the object.
+				inventoryMode: { seedUrls: new Set([seedUrl.withoutHashAndAuth]) },
+			});
+			const externals: CrawlerEventTypes['externalPage'][] = [];
+			crawler.on('externalPage', (p) => {
+				externals.push(p);
+			});
+
+			crawler.start([seedUrl]);
+
+			await vi.waitFor(() => {
+				expect(externals).toHaveLength(1);
+			});
+		});
+
 		it('adds seed URLs to `#scope` as usual when inventoryMode is null (regression guard)', async () => {
 			// The skip must be conditional. Outside inventory mode the seeds
 			// are the entire scope definition — drop the scope-add and every
@@ -1123,6 +1428,330 @@ describe('Crawler', () => {
 				expect(pages).toHaveLength(1);
 			});
 			expect(externals).toHaveLength(0);
+		});
+	});
+
+	describe('sub-resource lineage propagation', () => {
+		// Repro for the bug surfaced during dogfooding: in `--resume` /
+		// `--retry-failed` mode `inventoryMode` is `null` (it is not
+		// persisted across sessions), and the previous implementation
+		// computed the sub-resource `source` from `inventoryMode` alone.
+		// That made every sub-resource captured during the re-render of an
+		// inventory-labelled page fall back to the DB DEFAULT `'crawled'`,
+		// losing the `'inventory-discovered'` provenance.
+		//
+		// The fix injects a `lookupPageSource` callback so the Crawler can
+		// resolve the parent's stored source. These tests pin the wire-up
+		// from both directions:
+		//
+		// - resume mode (inventoryMode = null, callback returns
+		//   `inventory-seed`) → response emit carries `inventory-discovered`
+		// - resume mode + crawled parent → emit carries `undefined` (default)
+		// - inventory mode (inventoryMode != null) → emit carries
+		//   `inventory-discovered` WITHOUT touching the callback
+		//
+		// The crawler is driven with a sub-resource response by mocking
+		// `#launchBrowserAndScrape` indirectly: a deep mock of the puppeteer
+		// stack would balloon the test surface, so we instead reach into
+		// the public `#handleResources` path via the existing dealer-driven
+		// scrape and read back the emitted `response` payload.
+		it('emits `response` with `source === "inventory-discovered"` when the parent is `inventory-seed` (resume path, end-to-end pin)', async () => {
+			// F6: previous shape only asserted that `lookupPageSource` was
+			// called — never that an emitted `response.source` actually
+			// carried `'inventory-discovered'`. This test drives a real
+			// scrape that yields a sub-resource (via the
+			// `_launchBrowserAndScrape` spy) and asserts the emit's
+			// `source` matches the parent's lineage. A mutation that
+			// breaks the wire-up between `#resolveParentSource` and
+			// `#handleResources` (e.g. always passing `undefined` to
+			// `planSubResourceEmits`) is caught here.
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const url = parseUrl('https://example.com/seed-page.html')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url,
+				redirectPaths: [],
+				isTarget: true,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			});
+
+			const subResourceUrl = parseUrl('https://example.com/style.css')!;
+			vi.spyOn(
+				Crawler.prototype as unknown as {
+					_launchBrowserAndScrape: (...args: unknown[]) => Promise<unknown>;
+				},
+				'_launchBrowserAndScrape',
+			).mockResolvedValue({
+				type: 'success',
+				pageData: {
+					url,
+					redirectPaths: [],
+					isTarget: true,
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					meta: { title: '' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				resources: [
+					{
+						log: {},
+						resource: {
+							url: subResourceUrl,
+							isExternal: false,
+							isError: false,
+							status: 200,
+							statusText: 'OK',
+							contentType: 'text/css',
+							contentLength: 0,
+							compress: false,
+							cdn: false,
+							headers: null,
+						},
+						pageUrl: url.withoutHash,
+					},
+				],
+			});
+
+			const lookupPageSource = vi.fn(() => Promise.resolve('inventory-seed' as const));
+			const crawler = new Crawler({
+				...defaultOptions,
+				// `inventoryMode: null` — emulate `--resume` / `--retry-failed`
+				// session where the seed set is not in memory and the DB
+				// callback is the only source of truth for parent lineage.
+				lookupPageSource,
+			});
+
+			const responses: CrawlerEventTypes['response'][] = [];
+			crawler.on('response', (r) => {
+				responses.push(r);
+			});
+
+			crawler.start([url]);
+
+			await vi.waitFor(() => {
+				expect(responses).toHaveLength(1);
+			});
+
+			expect(responses[0]!.source).toBe('inventory-discovered');
+			expect(lookupPageSource).toHaveBeenCalledWith(url.withoutHashAndAuth);
+		});
+
+		it('emits `response` with `source === undefined` when the parent is `crawled` (resume path, regression guard)', async () => {
+			// Symmetric counter-test: a crawled parent must NOT promote
+			// its sub-resources to `'inventory-discovered'`. The DB
+			// DEFAULT `'crawled'` applies, so the emit carries
+			// `undefined` and the orchestrator's setResources call
+			// omits the source column from the INSERT.
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const url = parseUrl('https://example.com/crawled-page.html')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url,
+				redirectPaths: [],
+				isTarget: true,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			});
+
+			const subResourceUrl = parseUrl('https://example.com/app.js')!;
+			vi.spyOn(
+				Crawler.prototype as unknown as {
+					_launchBrowserAndScrape: (...args: unknown[]) => Promise<unknown>;
+				},
+				'_launchBrowserAndScrape',
+			).mockResolvedValue({
+				type: 'success',
+				pageData: {
+					url,
+					redirectPaths: [],
+					isTarget: true,
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					meta: { title: '' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				resources: [
+					{
+						log: {},
+						resource: {
+							url: subResourceUrl,
+							isExternal: false,
+							isError: false,
+							status: 200,
+							statusText: 'OK',
+							contentType: 'application/javascript',
+							contentLength: 0,
+							compress: false,
+							cdn: false,
+							headers: null,
+						},
+						pageUrl: url.withoutHash,
+					},
+				],
+			});
+
+			const crawler = new Crawler({
+				...defaultOptions,
+				lookupPageSource: () => Promise.resolve('crawled' as const),
+			});
+
+			const responses: CrawlerEventTypes['response'][] = [];
+			crawler.on('response', (r) => {
+				responses.push(r);
+			});
+
+			crawler.start([url]);
+
+			await vi.waitFor(() => {
+				expect(responses).toHaveLength(1);
+			});
+
+			expect(responses[0]!.source).toBeUndefined();
+		});
+
+		it('skips the page-source lookup when inventoryMode is active', async () => {
+			// In a live `--inventory` session the seed set is in memory, so
+			// the in-memory `derivePageSource` answer dominates and the
+			// `lookupPageSource` callback must NOT be called — keeping the
+			// hot path free of an unnecessary DB round-trip per page.
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const url = parseUrl('https://example.com/listed-seed.html')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url,
+				redirectPaths: [],
+				isTarget: true,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			});
+
+			// Drive a real sub-resource emit through the puppeteer-spy
+			// path so the assertion below pins the COMPLETE wire-up: in
+			// inventory mode the `derivePageSource` short-circuit
+			// resolves the parent source from the seed set AND the
+			// emit carries `'inventory-discovered'`. An emit-free
+			// version of this test would still pass after a regression
+			// where `#handleResources` is bypassed entirely.
+			const subResourceUrl = parseUrl('https://example.com/seed-style.css')!;
+			vi.spyOn(
+				Crawler.prototype as unknown as {
+					_launchBrowserAndScrape: (...args: unknown[]) => Promise<unknown>;
+				},
+				'_launchBrowserAndScrape',
+			).mockResolvedValue({
+				type: 'success',
+				pageData: {
+					url,
+					redirectPaths: [],
+					isTarget: true,
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					meta: { title: '' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				resources: [
+					{
+						log: {},
+						resource: {
+							url: subResourceUrl,
+							isExternal: false,
+							isError: false,
+							status: 200,
+							statusText: 'OK',
+							contentType: 'text/css',
+							contentLength: 0,
+							compress: false,
+							cdn: false,
+							headers: null,
+						},
+						pageUrl: url.withoutHash,
+					},
+				],
+			});
+
+			const lookupPageSource = vi.fn(() => Promise.resolve());
+			const crawler = new Crawler({
+				...defaultOptions,
+				inventoryMode: { seedUrls: new Set([url.withoutHashAndAuth]) },
+				lookupPageSource,
+			});
+
+			const responses: CrawlerEventTypes['response'][] = [];
+			crawler.on('response', (r) => {
+				responses.push(r);
+			});
+
+			crawler.start([url]);
+
+			await vi.waitFor(() => {
+				expect(responses).toHaveLength(1);
+			});
+
+			// Two assertions in one to pin both halves of the
+			// inventory-mode contract:
+			//   1. Sub-resource emit carries `'inventory-discovered'`
+			//      — the seed-set match propagates correctly.
+			//   2. `lookupPageSource` is NOT called — the in-memory
+			//      `derivePageSource` short-circuits the lookup, keeping
+			//      the hot path free of an unnecessary DB round-trip per
+			//      page in a live `--inventory` session.
+			expect(responses[0]!.source).toBe('inventory-discovered');
+			expect(lookupPageSource).not.toHaveBeenCalled();
 		});
 	});
 });

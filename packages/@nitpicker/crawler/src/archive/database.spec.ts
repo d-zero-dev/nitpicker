@@ -3174,6 +3174,201 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 		}
 	});
 
+	it('anchor INSERT inherits inventory-discovered when the parent page is `inventory-discovered` (transitive lineage)', async () => {
+		// Multi-hop coverage for the lineage OR: a parent that is itself
+		// `'inventory-discovered'` (i.e. reached transitively via the
+		// inventory chain) must still propagate `'inventory-discovered'`
+		// to its anchor children. Without this branch of the OR, a
+		// chain like seed → A (inventory-discovered) → B would label B
+		// as `'crawled'` on first INSERT, silently re-classifying
+		// multi-hop inventory descendants as crawl-graph members.
+		const dbPath = path.resolve(workingDir, 'source-priority-lineage-transitive.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Parent is `'inventory-discovered'` (the intermediate hop)
+			// and anchors to /grandchild. The anchor placeholder for
+			// /grandchild must inherit `'inventory-discovered'`.
+			await db.updatePage(
+				{
+					...makePage('http://localhost/intermediate'),
+					anchorList: [
+						{
+							href: parseUrl('http://localhost/grandchild')!,
+							textContent: '',
+							isExternal: false,
+						},
+					],
+				},
+				true,
+				true,
+				'inventory-discovered',
+			);
+
+			const [row] = await db
+				.getKnex()
+				.from('pages')
+				.select('source', 'scraped')
+				.where('url', 'http://localhost/grandchild');
+			expect(row.source).toBe('inventory-discovered');
+			expect(Number(row.scraped)).toBe(0);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('keeps an existing `crawled` page as `crawled` when an inventory-seed parent later anchors to it (no overwrite via anchor lineage)', async () => {
+		// U2: a crawled page that is already in the archive must NOT be
+		// re-labelled when a later inventory pass renders an
+		// `inventory-seed` parent that anchors to it. This is the
+		// orphan-detection contract — "reachable from the crawl graph"
+		// dominates "listed in inventory". The crawled-wins downgrade in
+		// `#getIdByUrl` only fires when incoming source IS `'crawled'`;
+		// for incoming `'inventory-discovered'` (the anchor lineage from
+		// an inventory-seed parent), the SELECT path returns the
+		// existing pageId without updating the row, so the existing
+		// `'crawled'` stays. Pin this directly so a refactor of
+		// `#getIdByUrl`'s downgrade clause that accidentally inverts the
+		// condition is caught here.
+		const dbPath = path.resolve(
+			workingDir,
+			'source-priority-crawled-no-overwrite.sqlite',
+		);
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Step 1: /existing-page is recorded as `'crawled'` by an
+			// ordinary scrape.
+			await db.updatePage(makePage('http://localhost/existing-page'), true, true);
+
+			// Step 2: a later inventory-seed parent renders and emits
+			// an anchor to /existing-page. The anchor lineage source is
+			// `'inventory-discovered'`, fed through `#getIdByUrl` for
+			// the existing row.
+			await db.updatePage(
+				{
+					...makePage('http://localhost/inventory-parent'),
+					anchorList: [
+						{
+							href: parseUrl('http://localhost/existing-page')!,
+							textContent: '',
+							isExternal: false,
+						},
+					],
+				},
+				true,
+				true,
+				'inventory-seed',
+			);
+
+			const [row] = await db
+				.getKnex()
+				.from('pages')
+				.select('source')
+				.where('url', 'http://localhost/existing-page');
+			// The existing crawled label must survive — even though an
+			// inventory-seed parent now anchors to this URL, it is
+			// still reachable from the original crawl graph and the
+			// orphan-detection contract demands it stay `'crawled'`.
+			expect(row.source).toBe('crawled');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('round-trips the full source-priority lattice across `setPage`, `#getIdByUrl`, and the downgrade clause', async () => {
+		// F9: the source-priority and lineage tests above exercise the
+		// `setPage` UPDATE CASE and the `#getIdByUrl` downgrade
+		// SEPARATELY. This case pins them as a coherent lattice in one
+		// flow:
+		//
+		//   1. Start with /shared as `'crawled'` (UPDATE CASE: incoming
+		//      undefined, existing absent → DB DEFAULT).
+		//   2. Render an inventory-seed parent that anchors to /shared
+		//      (#getIdByUrl SELECT path: incoming
+		//      `'inventory-discovered'`, existing `'crawled'` — no
+		//      change, crawled stays).
+		//   3. setPage /shared again with source=undefined (UPDATE CASE
+		//      sourceUpdate empty → crawled stays).
+		//   4. Render /shared as part of a fresh crawled parent's anchor
+		//      list (#getIdByUrl SELECT: incoming `'crawled'`, existing
+		//      `'crawled'` — no-op).
+		//
+		// At every step the row must remain `'crawled'`. A mutation in
+		// any one of the three sites can drop the contract; running all
+		// four together pins the lattice as a single observable.
+		const dbPath = path.resolve(workingDir, 'source-priority-round-trip.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			const knex = db.getKnex();
+
+			// (1) Initial crawled scrape.
+			await db.updatePage(makePage('http://localhost/shared'), true, true);
+			let [row] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'http://localhost/shared');
+			expect(row.source).toBe('crawled');
+
+			// (2) Inventory-seed parent anchors to /shared.
+			await db.updatePage(
+				{
+					...makePage('http://localhost/inv-parent'),
+					anchorList: [
+						{
+							href: parseUrl('http://localhost/shared')!,
+							textContent: '',
+							isExternal: false,
+						},
+					],
+				},
+				true,
+				true,
+				'inventory-seed',
+			);
+			[row] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'http://localhost/shared');
+			expect(row.source).toBe('crawled');
+
+			// (3) Re-scrape /shared without an explicit source.
+			await db.updatePage(makePage('http://localhost/shared'), true, true);
+			[row] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'http://localhost/shared');
+			expect(row.source).toBe('crawled');
+
+			// (4) Crawled parent anchors to /shared again.
+			await db.updatePage(
+				{
+					...makePage('http://localhost/crawled-parent'),
+					anchorList: [
+						{
+							href: parseUrl('http://localhost/shared')!,
+							textContent: '',
+							isExternal: false,
+						},
+					],
+				},
+				true,
+				true,
+			);
+			[row] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'http://localhost/shared');
+			expect(row.source).toBe('crawled');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
 	it('anchor INSERT inherits inventory-discovered when the parent page is inventory-seed', async () => {
 		// Lineage propagation: a freshly-discovered URL reached from an
 		// `inventory-seed` parent gets `inventory-discovered`, not the DB
@@ -3437,6 +3632,69 @@ describe('getCrawlingState: strict pending filter', () => {
 			const { pending, scraped } = await db.getCrawlingState();
 			expect(pending).not.toContain('http://localhost/done');
 			expect(scraped).toContain('http://localhost/done');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('cross-verifies orchestrator-side pending-guard with the DB-side strict filter (end-to-end)', async () => {
+		// F8: the orchestrator's pending-guard test mocks
+		// `getCrawlingState` to a hard-coded pending list, so a mutation
+		// to the DB-level strict filter (`scraped=0 AND isExternal=0 AND
+		// (EXISTS anchor OR source != 'crawled')`) goes uncaught by the
+		// orchestrator test alone. This case pins the contract end-to-end:
+		// an archive with leak placeholders + one real anchored pending
+		// row produces a strict `pending` list containing ONLY the real
+		// row. Both sides — strict filter + downstream consumer — must
+		// agree, and this is the join.
+		const dbPath = path.resolve(workingDir, 'pending-strict-cross-verify.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// (a) real anchored pending: a scraped parent links to
+			// /real-pending, creating an anchor placeholder at
+			// `scraped=0, isExternal=0, source='crawled' (DEFAULT)`.
+			await db.updatePage(
+				{
+					...makePage('http://localhost/parent'),
+					anchorList: [
+						{
+							href: parseUrl('http://localhost/real-pending')!,
+							textContent: '',
+							isExternal: false,
+						},
+					],
+				},
+				true,
+				true,
+			);
+			// (b) leak placeholder: a synthesised orphan row with no
+			// anchor referrer and source='crawled' (predicted-discard
+			// leak surrogate).
+			const knex = db.getKnex();
+			await knex('pages').insert({
+				url: 'http://localhost/leak-orphan',
+				scraped: 0,
+				isTarget: 0,
+				isExternal: 0,
+			});
+			// (c) inventory-seed leak: an inventory-seed row reset by
+			// `--retry-failed` (no anchor referrer, but source !=
+			// 'crawled' so the strict filter keeps it).
+			await knex('pages').insert({
+				url: 'http://localhost/inventory-stuck',
+				scraped: 0,
+				isTarget: 1,
+				isExternal: 0,
+				source: 'inventory-seed',
+			});
+
+			const { pending } = await db.getCrawlingState();
+			// Strict filter must keep (a) and (c), drop (b).
+			expect(pending).toContain('http://localhost/real-pending');
+			expect(pending).toContain('http://localhost/inventory-stuck');
+			expect(pending).not.toContain('http://localhost/leak-orphan');
 		} finally {
 			await db.destroy();
 			await removeIfExists(dbPath);
