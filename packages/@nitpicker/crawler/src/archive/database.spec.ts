@@ -3391,6 +3391,39 @@ describe('getCrawlingState: strict pending filter', () => {
 		}
 	});
 
+	it('includes inventory-seed rows even when no anchor referrer exists', async () => {
+		// `--inventory ./list.txt` writes URLs directly via `setPage` with
+		// `source = 'inventory-seed'` — they never get anchored from a
+		// rendered parent. After `--retry-failed` resets some of them to
+		// `scraped = 0`, a subsequent `--resume` must still pick them up.
+		// The strict pending filter saves these via the `source != 'crawled'`
+		// branch of the OR, because the inventory-seed label is direct
+		// evidence that the URL was deliberately enqueued.
+		const dbPath = path.resolve(workingDir, 'pending-strict-inventory-seed.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Simulate the post-retry-failed state: an `inventory-seed`
+			// page row that was setPage'd then reset to scraped=0. No
+			// anchor referrer exists — the URL came from the operator's
+			// list, not from a rendered parent.
+			const knex = db.getKnex();
+			await knex('pages').insert({
+				url: 'http://localhost/inventory-seed-page',
+				scraped: 0,
+				isTarget: 1,
+				isExternal: 0,
+				source: 'inventory-seed',
+			});
+
+			const { pending } = await db.getCrawlingState();
+			expect(pending).toContain('http://localhost/inventory-seed-page');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
 	it('excludes scraped=1 rows (regression guard for the scraped flag)', async () => {
 		// Sanity check: the strict filter must not accidentally include
 		// already-completed pages just because the anchor / external gates

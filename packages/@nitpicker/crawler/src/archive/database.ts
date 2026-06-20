@@ -374,16 +374,27 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 *    setExternalPage). A row with `isExternal = 1 AND scraped = 0` is
 	 *    therefore a data anomaly, and resume / inventory / append have no
 	 *    business retrying it on the next session.
-	 * 3. `EXISTS (anchor with hrefId = pages.id)` — the row was discovered as
-	 *    an anchor destination during a previous scrape. This excludes
-	 *    orphan placeholders created by code paths that fail to record a
-	 *    terminal state — most notably the predicted-discard leak in
+	 * 3. `EXISTS (anchor with hrefId = pages.id) OR source != 'crawled'` —
+	 *    the row was either discovered as an anchor destination during a
+	 *    previous scrape OR was explicitly tagged with a non-default
+	 *    source label (`'inventory-seed'`, `'inventory-discovered'`, …).
+	 *    Both halves of the OR represent "deliberately enqueued, expected
+	 *    to be processed", which is exactly what `resume` should pick up.
+	 *
+	 *    The orphan filter targets the **predicted-discard leak** in
 	 *    `crawler.ts` where `shouldDiscardPredicted` returns true but no
-	 *    `emit('skip')` follows, leaving the placeholder at `scraped = 0`
-	 *    forever. Such placeholders have no anchor referrer (predicted URLs
-	 *    are synthesised from pagination patterns, never anchored from a
-	 *    rendered page) and are filtered out here so they cannot poison a
-	 *    `--resume` or trigger a stale `--inventory` warning.
+	 *    `emit('skip')` follows. Such placeholders are inserted with the
+	 *    DB DEFAULT `source = 'crawled'` (no caller explicitly labels
+	 *    them) AND have no anchor referrer (predicted URLs are
+	 *    synthesised from pagination patterns, never anchored from a
+	 *    rendered page) — both halves of the OR are therefore false and
+	 *    the leak is excluded.
+	 *
+	 *    The `source != 'crawled'` clause specifically saves the
+	 *    `--inventory` × `--retry-failed` interaction: an inventory-seed
+	 *    URL came from the operator's URL list (no anchor referrer) and
+	 *    `resetFailedPages` puts it back at `scraped = 0`. Without this
+	 *    clause those legitimate retries would be dropped on resume.
 	 *
 	 * The defensive shape is on purpose: the data source can drift into
 	 * anomalous states under interruption, but the reader must never throw
@@ -425,13 +436,17 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			.from<DB_Page>({ p: 'pages' })
 			.where('p.scraped', 0)
 			.where('p.isExternal', 0)
-			.whereExists(function () {
-				// `select('*')` is the canonical EXISTS pattern in knex
-				// — the column list is irrelevant inside an existence
-				// check, and going through `select(this.client.raw(...))`
-				// reaches for a private builder field that is not part
-				// of the documented surface.
-				this.select('*').from('anchors').whereRaw('anchors.hrefId = p.id');
+			.where((qb) => {
+				// "Anchored OR explicitly labelled". Either side is evidence
+				// that the row was deliberately enqueued for processing —
+				// only the predicted-discard leak (DEFAULT 'crawled' + no
+				// anchor) fails both halves. The `whereExists` callback
+				// uses `select('*')` since the column list is irrelevant
+				// inside an EXISTS check; calling through `client.raw(...)`
+				// would reach a private builder field.
+				qb.whereExists(function () {
+					this.select('*').from('anchors').whereRaw('anchors.hrefId = p.id');
+				}).orWhereNot('p.source', 'crawled');
 			});
 		const pending = $pending.map(ex);
 		return {
