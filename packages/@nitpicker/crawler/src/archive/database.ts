@@ -1678,12 +1678,31 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			// duplication, but multiple distinct anchors can share the same
 			// hrefId/hash/textContent legitimately, so there is no natural unique
 			// key to enforce — replace-on-write is the correct mechanism here.)
+			// Lineage propagation: read the current page's merged source
+			// (post-UPDATE by `#insertPage`) so anchor placeholder rows
+			// inherit a label that reflects the parent's chain. A
+			// `'crawled'`-lineage parent passes `'crawled'` explicitly so the
+			// crawled-wins downgrade in `#getIdByUrl` fires when an anchor
+			// hits an existing `'inventory-*'` row. An inventory-lineage
+			// parent passes `'inventory-discovered'` to label transitively-
+			// reached URLs correctly without the orchestrator needing to
+			// rehydrate `inventoryMode` from disk.
+			const [parentRow] = await trx
+				.select('source')
+				.from<DB_Page>('pages')
+				.where('id', pageId);
+			const parentSource = parentRow?.source ?? 'crawled';
+			const anchorLineageSource: PageSource =
+				parentSource === 'inventory-seed' || parentSource === 'inventory-discovered'
+					? 'inventory-discovered'
+					: 'crawled';
 			const anchors = await Promise.all(
 				page.anchorList.map(async (anchor) => {
 					const hrefId = await this.#getIdByUrl(
 						anchor.href.withoutHashAndAuth,
 						anchor.isExternal ? 1 : 0,
 						trx,
+						anchorLineageSource,
 					);
 					return {
 						pageId,
@@ -1736,10 +1755,23 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		source?: PageSource,
 	) {
 		const qb = trx ?? this.#instance;
-		const [record] = await qb.select('id').from<DB_Page>('pages').where('url', url);
+		const [record] = await qb
+			.select('id', 'source')
+			.from<DB_Page>('pages')
+			.where('url', url);
 		// Must use `?` because it may be `undefined`
 		const pageId = record?.id ?? Number.NaN;
 		if (Number.isFinite(pageId)) {
+			// Crawled-wins downgrade: when a row that was previously labelled
+			// `'inventory-seed'` or `'inventory-discovered'` is re-encountered
+			// via a `'crawled'`-lineage anchor (the parent page is part of the
+			// graph reachable from the original crawl roots), downgrade it to
+			// `'crawled'`. The inventory goal is finding orphans — anything
+			// reachable from the crawled chain is NOT an orphan and should
+			// not retain an inventory label.
+			if (source === 'crawled' && record?.source && record.source !== 'crawled') {
+				await qb<DB_Page>('pages').where('id', pageId).update({ source: 'crawled' });
+			}
 			return pageId;
 		}
 		const insertedRows = await qb<DB_Page>('pages')
@@ -1881,21 +1913,27 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		const denorm = computePageDenormalized(page.meta);
 		const extras = deriveMetaExtras(page.meta);
 		const now = Date.now();
-		// Source promotion on UPDATE: when an inventory-mode scrape lands on
-		// a row that was created earlier as a placeholder (e.g. an anchor
-		// from a seed page pointed at this URL and `#getIdByUrl` inserted a
-		// row with the DB DEFAULT `'crawled'`), bump the label to the
-		// inventory variant. But never demote an already-inventoried row —
-		// `CASE WHEN source = 'crawled' THEN ? ELSE source END` keeps a
-		// previously labelled `'inventory-seed'` or `'inventory-discovered'`
-		// row intact on a second pass.
+		// Source priority on UPDATE: 'crawled' > 'inventory-seed' >
+		// 'inventory-discovered'. The inventory feature exists to surface
+		// orphans (= URLs NOT reachable from the original crawl roots).
+		// Anything reachable via the crawled chain is therefore NOT an
+		// orphan and must be labelled `'crawled'`, even if previously
+		// labelled `'inventory-*'`. Within the inventory variants, the
+		// explicit user-listed `'inventory-seed'` wins over the transitive
+		// `'inventory-discovered'`.
 		const sourceUpdate =
 			source === undefined
 				? {}
 				: {
-						source: qb.raw("CASE WHEN source = 'crawled' THEN ? ELSE source END", [
-							source,
-						]),
+						source: qb.raw(
+							`CASE
+								WHEN source = 'crawled' OR ? = 'crawled' THEN 'crawled'
+								WHEN source = 'inventory-seed' OR ? = 'inventory-seed' THEN 'inventory-seed'
+								WHEN source = 'inventory-discovered' OR ? = 'inventory-discovered' THEN 'inventory-discovered'
+								ELSE source
+							END`,
+							[source, source, source],
+						),
 					};
 		await qb('pages')
 			.where('id', pageId)

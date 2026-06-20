@@ -252,10 +252,19 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			throw new Error('urls is empty');
 		}
 
+		// Inventory mode pre-loads tens of thousands of seed URLs that all
+		// fall under archived `roots` (already populated into `#scope` by
+		// the constructor). Adding each seed as its own scope entry was
+		// O(N²) on build (per-host `existing.some` + array spread) AND
+		// turned every later `findScopeEntry` into a 70k linear scan. Skip
+		// the scope add — seeds remain entry points via `#linkList`.
+		const skipScopeAdd = this.#options.inventoryMode != null;
 		for (const url of urls) {
-			const existing = this.#scope.get(url.hostname) || [];
-			if (!existing.some((u) => u.href === url.href)) {
-				this.#scope.set(url.hostname, [...existing, url]);
+			if (!skipScopeAdd) {
+				const existing = this.#scope.get(url.hostname) || [];
+				if (!existing.some((u) => u.href === url.href)) {
+					this.#scope.set(url.hostname, [...existing, url]);
+				}
 			}
 			this.#linkList.add(url);
 		}

@@ -1,7 +1,6 @@
 import type { Config } from './archive/types.js';
 import type { InventoryMode } from './crawler/types.js';
 import type { CrawlEvent } from './types.js';
-import type { PageData } from './utils/types/types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
 import { copyFile, unlink as unlinkFile } from 'node:fs/promises';
@@ -19,9 +18,8 @@ import { clearDnsBurnedHostCache } from './crawler/clear-dns-burned-host-cache.j
 import Crawler from './crawler/crawler.js';
 import { dnsBurnedHostCache } from './crawler/dns-burned-host-cache.js';
 import { dnsBurnedHostShortCircuitCounter } from './crawler/dns-burned-host-short-circuit-counter.js';
-import { fetchDestination } from './crawler/fetch-destination.js';
 import { findScopeEntry } from './crawler/find-scope-entry.js';
-import { isHtmlContentType } from './crawler/is-html-content-type.js';
+import { isLikelyHtmlUrl } from './crawler/is-likely-html-url.js';
 import { PreloadShortCircuitError } from './crawler/preload-short-circuit-error.js';
 import { crawlerLog, log } from './debug.js';
 import { normalizeToArray } from './normalize-to-array.js';
@@ -633,8 +631,16 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 			const { scraped, pending } = await archive.getCrawlingState();
 			if (pending.length > 0) {
-				throw new Error(
-					`inventory: archive has ${pending.length} pending URLs from a previous crawl. Resume or retry-failed first so inventory does not mislabel them as 'inventory-discovered'.`,
+				// Predicted-discard leaks placeholder rows as scraped=0
+				// (`crawler.ts:980` emits no 'skip') and `--retry-failed`
+				// cannot clear them, so a hard rejection here would block
+				// legitimate inventory runs forever. Crawled-wins source
+				// priority (`#insertPage`) keeps stale `'crawled'`
+				// placeholders labelled `'crawled'` even when re-scraped
+				// in inventory mode, so the original mislabeling concern
+				// no longer applies — degrade to a warning.
+				console.warn(
+					`inventory: archive has ${pending.length} pending URLs from a previous crawl. Proceeding — crawled-wins priority keeps their labels stable.`,
 				);
 			}
 
@@ -709,57 +715,17 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			await copyFile(absFilePath, backupPath);
 
 			try {
-				// HEAD each novel URL once. HTML responses become seeds for
-				// the recursive crawl; everything else is recorded straight
-				// into `resources` so a PDF or stray asset registered on the
-				// server still shows up as "exists but not referenced" in
-				// `listUnusedResources`.
-				//
-				// Probes run concurrently — fetchDestination is a single
-				// HTTP HEAD with no shared mutable state, so N URLs no longer
-				// cost N × HEAD-latency wall-clock. The trade-off is that we
-				// blast the target server with novelUrls.length parallel
-				// requests; for the inventory use case (one-off audit on a
-				// site we control) this is acceptable, and an internal cap
-				// can be added later if it becomes an issue.
-				type HeadResult =
-					| { url: ExURL; head: PageData; error: null }
-					| { url: ExURL; head: null; error: Error };
-				const headResults: HeadResult[] = await Promise.all(
-					novelUrls.map(async (url): Promise<HeadResult> => {
-						try {
-							const head = await fetchDestination({
-								url,
-								isExternal: false,
-								userAgent: archived.userAgent,
-							});
-							return { url, head, error: null };
-						} catch (headError) {
-							const error =
-								headError instanceof Error ? headError : new Error(String(headError));
-							return { url, head: null, error };
-						}
-					}),
-				);
-
+				// Classify novel URLs by URL-extension heuristic (no I/O).
+				// Source file lists come from `ls` on the doc-root, so the
+				// extension reflects the real file type — a HEAD pre-flight
+				// here would be pure wasted I/O. Edge cases (`.do` returning
+				// HTML, `.html` returning 404) are absorbed by the normal
+				// crawler HEAD/GET path that runs on the HTML seeds anyway;
+				// non-HTML rows are recorded with null metadata, which is
+				// sufficient for `listUnusedResources` (referrer-count = 0).
 				const htmlSeeds: ExURL[] = [];
-				for (const result of headResults) {
-					const { url, head, error } = result;
-					if (error !== null) {
-						// HEAD failure is recorded as a crawl_errors row so
-						// the URL is visible in `query error-kinds`, but does
-						// NOT abort the whole inventory pass — other novel
-						// URLs may still succeed.
-						await archive.addError({
-							pid: process.pid,
-							isMainProcess: true,
-							url: url.href,
-							isExternal: false,
-							error,
-						});
-						continue;
-					}
-					if (head.contentType == null || isHtmlContentType(head.contentType)) {
+				for (const url of novelUrls) {
+					if (isLikelyHtmlUrl(url)) {
 						htmlSeeds.push(url);
 					} else {
 						await archive.setResources(
@@ -767,18 +733,23 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 								url,
 								isExternal: false,
 								isError: false,
-								status: head.status,
-								statusText: head.statusText,
-								contentType: head.contentType,
-								contentLength: head.contentLength,
+								status: null,
+								statusText: null,
+								contentType: null,
+								contentLength: null,
 								compress: false,
 								cdn: false,
-								headers: head.responseHeaders ?? null,
+								headers: null,
 							},
 							'inventory-seed',
 						);
 					}
 				}
+				log(
+					'[inventory] %d HTML seed(s), %d non-HTML resource(s) recorded',
+					htmlSeeds.length,
+					novelUrls.length - htmlSeeds.length,
+				);
 
 				// Config sent to the user-facing `initializedCallback`
 				// (matches the rest of the orchestrator's public surface —
