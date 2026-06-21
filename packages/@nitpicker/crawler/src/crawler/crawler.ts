@@ -31,6 +31,7 @@ import { classifyErrorKind } from '../classify-error-kind.js';
 import { crawlerLog } from '../debug.js';
 
 import { buildJsRedirectEdge } from './build-js-redirect-edge.js';
+import { buildRedirectEvent } from './build-redirect-event.js';
 import { createChangePhaseHandler } from './create-change-phase-handler.js';
 import { derivePageSource } from './derive-page-source.js';
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
@@ -882,13 +883,14 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 							// which is correct: the DB-side lookup in
 							// `#linkRedirectSources` reads the destination's
 							// stored source for those sessions.
-							void this.emit('redirect', {
-								result: result.pageData,
-								source: derivePageSource(
+							void this.emit(
+								'redirect',
+								buildRedirectEvent(
+									result.pageData,
 									this.#options.inventoryMode,
 									url.withoutHashAndAuth,
 								),
-							});
+							);
 							log(c.dim('Redirect (dest already scraped)'));
 							return;
 						}

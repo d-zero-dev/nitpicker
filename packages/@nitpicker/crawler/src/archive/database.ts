@@ -1277,7 +1277,15 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * The destination's existing anchors / images are never touched here.
 	 * @param page - HEAD-resolved page data carrying the redirect chain. Its
 	 *   `anchorList` / `imageList` are ignored (a redirect source owns no content).
-	 * @param source
+	 * @param source - Inventory provenance forwarded by the orchestrator
+	 *   (`Archive.setRedirect` → here) for the redirect-edge fast path. Used
+	 *   as the fallback when the originating URL's row does NOT yet exist in
+	 *   the archive (`#73` convergence on first sight, js-redirect rescue
+	 *   before any prior write). When the originating row already exists
+	 *   (e.g. anchor-lineage INSERT from a prior pass), its stored `source`
+	 *   takes precedence so transitive lineage is preserved across resume /
+	 *   retry-failed sessions. `undefined` keeps the DB DEFAULT `'crawled'`
+	 *   on a brand-new destination row.
 	 */
 	@ErrorEmitter()
 	@retry(retrySetting)

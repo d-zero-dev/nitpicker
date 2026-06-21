@@ -4102,4 +4102,159 @@ describe('redirect chain intermediate lineage propagation', () => {
 			await removeIfExists(dbPath);
 		}
 	});
+
+	it('reads originating page source from the DB to drive `recordRedirect` chain lineage when `source` arg is undefined (resume / retry-failed path)', async () => {
+		// M1: the production scenario for js-redirect rescue / #73
+		// convergence is "originating URL was already INSERTed by a
+		// prior pass (anchor lineage), then later the edge-only
+		// `recordRedirect` fires with `source = undefined` because the
+		// orchestrator is in resume mode". The fix's value lives in
+		// the DB lookup branch — without it, the chain laundered to
+		// `'crawled'`. Pin the branch directly: mutate the production
+		// code to drop the lookup and this test must fail.
+		const dbPath = path.resolve(
+			workingDir,
+			'redirect-chain-lineage-recordRedirect-resume.sqlite',
+		);
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			const knex = db.getKnex();
+			// Pre-seed the originating URL as `'inventory-discovered'`
+			// (anchor-lineage INSERT from a prior pass). The row has no
+			// content yet — `recordRedirect` is about to add the
+			// redirect chain edges.
+			await knex('pages').insert({
+				url: 'https://example.com/origin-prebuilt/',
+				scraped: 0,
+				isTarget: 0,
+				isExternal: 0,
+				source: 'inventory-discovered',
+			});
+
+			// Edge-only `recordRedirect` fires WITHOUT a source argument
+			// (resume mode). The originating row's stored source is the
+			// only signal available.
+			await db.recordRedirect({
+				url: parseUrl('https://example.com/origin-prebuilt/')!,
+				redirectPaths: [
+					'http://example.com/origin-prebuilt/index.html',
+					'https://example.com/origin-prebuilt/index.html',
+				],
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 0,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			});
+
+			const [intermediate] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'http://example.com/origin-prebuilt/index.html');
+			// The intermediate inherits the originating row's
+			// `'inventory-discovered'` via the DB lookup — NOT the
+			// `source` arg (which was undefined).
+			expect(intermediate?.source).toBe('inventory-discovered');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('propagates `inventory-discovered` to an EXTERNAL intermediate when the originating page is `inventory-seed` (lineage applies regardless of scope)', async () => {
+		// S2: lineage propagation is scope-agnostic — the
+		// `isExternal=1` rows go through the same `#getIdByUrl` path
+		// as internal rows. Pin the contract so a future refactor that
+		// skips lineage for externals (e.g. on the assumption that
+		// external rows are not orphan-relevant) gets caught.
+		const dbPath = path.resolve(workingDir, 'redirect-chain-lineage-external.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.updatePage(
+				{
+					...makePage('https://external.invalid/seed/'),
+					isExternal: true,
+					redirectPaths: [
+						'http://external.invalid/seed/index.html',
+						'https://external.invalid/seed/index.html',
+					],
+				},
+				true,
+				true,
+				'inventory-seed',
+			);
+
+			const knex = db.getKnex();
+			const [intermediate] = await knex
+				.from('pages')
+				.select('source', 'isExternal')
+				.where('url', 'http://external.invalid/seed/index.html');
+			expect(intermediate?.source).toBe('inventory-discovered');
+			expect(intermediate?.isExternal).toBe(1);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('does not INSERT the destination as its own redirect source when the chain self-resolves (self-redirect skip path)', async () => {
+		// S3: `#linkRedirectSources` short-circuits with
+		// `if (redirect === destUrlNormalized) continue;` when a
+		// redirect source URL equals the destination URL (a chain that
+		// normalises to itself, e.g. `/foo` → `/foo` after trailing-
+		// slash collapse on some servers). The skip must NOT taint the
+		// destination row's source label with `chainLineageSource` and
+		// must NOT create a duplicate row for the destination URL.
+		const dbPath = path.resolve(
+			workingDir,
+			'redirect-chain-lineage-self-redirect.sqlite',
+		);
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// `redirectPaths` lists the destination URL itself as the
+			// only "intermediate" — `resolveRedirectChain` produces
+			// `sources = [page.url]` and `destUrl = redirectPaths[0]`.
+			// When `page.url === destUrl`, the loop body in
+			// `#linkRedirectSources` hits the self-redirect skip on
+			// every iteration.
+			await db.updatePage(
+				{
+					...makePage('https://example.com/self/'),
+					redirectPaths: ['https://example.com/self/'],
+				},
+				true,
+				true,
+				'inventory-seed',
+			);
+
+			const knex = db.getKnex();
+			const rows = await knex
+				.from('pages')
+				.select('source', 'redirectDestId')
+				.where('url', 'https://example.com/self/');
+			// Exactly one row for the URL — no duplicate INSERT from
+			// `#linkRedirectSources` taking the redirect-source path
+			// despite the URL equality.
+			expect(rows).toHaveLength(1);
+			// The single row keeps the call's inventory-seed label
+			// (set by `#insertPage` with `source='inventory-seed'`),
+			// not the chain's downgrade-armed `chainLineageSource`.
+			expect(rows[0]?.source).toBe('inventory-seed');
+			// And the self-redirect is NOT written as an edge: the
+			// destination does not redirect to itself.
+			expect(rows[0]?.redirectDestId).toBeNull();
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
 });
