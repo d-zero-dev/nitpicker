@@ -27,6 +27,7 @@ import {
 	getTagInventory,
 	getViolations,
 	listImages,
+	listInventoryRuns,
 	listIsolatedPages,
 	listLinks,
 	listPages,
@@ -173,6 +174,10 @@ export async function dispatchQuery(
 		case 'unused-resources': {
 			const { limit, offset } = options as { limit?: number; offset?: number };
 			return listUnusedResources(accessor, { limit, offset });
+		}
+		case 'inventory-runs': {
+			const { limit, offset } = options as { limit?: number; offset?: number };
+			return listInventoryRuns(accessor, { limit, offset });
 		}
 		case 'page-tags': {
 			const { url } = options as { url: string };

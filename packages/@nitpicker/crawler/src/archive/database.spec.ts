@@ -4258,3 +4258,166 @@ describe('redirect chain intermediate lineage propagation', () => {
 		}
 	});
 });
+
+describe('inventory run audit log', () => {
+	it('records every field on INSERT and reads them back via SELECT', async () => {
+		const dbPath = path.resolve(workingDir, 'inventory-runs-full-fields.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			const id = await db.recordInventoryRun({
+				ran_at: '2026-06-21T11:30:00+09:00',
+				list_label: 'prod-2026-06',
+				source_file_path: '/tmp/list.txt',
+				source_file_sha256: 'a'.repeat(64),
+				total_lines: 113_268,
+				new_pages: 1234,
+				new_resources: 56,
+				scope_skipped: 7,
+				notes: 'first prod run',
+			});
+			expect(typeof id).toBe('number');
+			expect(id).toBeGreaterThan(0);
+
+			const [row] = await db
+				.getKnex()
+				.from('inventory_runs')
+				.select(
+					'id',
+					'ran_at',
+					'list_label',
+					'source_file_path',
+					'source_file_sha256',
+					'total_lines',
+					'new_pages',
+					'new_resources',
+					'scope_skipped',
+					'notes',
+				)
+				.where('id', id);
+			expect(row).toMatchObject({
+				id,
+				ran_at: '2026-06-21T11:30:00+09:00',
+				list_label: 'prod-2026-06',
+				source_file_path: '/tmp/list.txt',
+				source_file_sha256: 'a'.repeat(64),
+				total_lines: 113_268,
+				new_pages: 1234,
+				new_resources: 56,
+				scope_skipped: 7,
+				notes: 'first prod run',
+			});
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('treats optional fields as NULL when omitted (backfill UX)', async () => {
+		// Pinned for the post-merge raw-SQL backfill path: minimal call
+		// with just `ran_at` (the only non-nullable column) must succeed
+		// so a one-off `sqlite3` INSERT with absent summary stats is
+		// retroactively expressible.
+		const dbPath = path.resolve(workingDir, 'inventory-runs-minimal.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			const id = await db.recordInventoryRun({
+				ran_at: '2026-06-19T22:09:00+09:00',
+			});
+			const [row] = await db.getKnex().from('inventory_runs').select('*').where('id', id);
+			expect(row.ran_at).toBe('2026-06-19T22:09:00+09:00');
+			expect(row.list_label).toBeNull();
+			expect(row.source_file_path).toBeNull();
+			expect(row.source_file_sha256).toBeNull();
+			expect(row.total_lines).toBeNull();
+			expect(row.new_pages).toBeNull();
+			expect(row.new_resources).toBeNull();
+			expect(row.scope_skipped).toBeNull();
+			expect(row.notes).toBeNull();
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('returns the autoincremented run id from each INSERT (monotonically increasing)', async () => {
+		const dbPath = path.resolve(workingDir, 'inventory-runs-ids.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			const id1 = await db.recordInventoryRun({ ran_at: '2026-06-19T00:00:00Z' });
+			const id2 = await db.recordInventoryRun({ ran_at: '2026-06-20T00:00:00Z' });
+			const id3 = await db.recordInventoryRun({ ran_at: '2026-06-21T00:00:00Z' });
+			expect(id2).toBeGreaterThan(id1);
+			expect(id3).toBeGreaterThan(id2);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('orders rows by `ran_at` DESC when read with the ran_at index (newest first)', async () => {
+		const dbPath = path.resolve(workingDir, 'inventory-runs-order.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Insert out of chronological order so the assertion proves
+			// the ORDER BY is meaningful (not just INSERT order luck).
+			await db.recordInventoryRun({
+				ran_at: '2026-06-20T00:00:00Z',
+				list_label: 'mid',
+			});
+			await db.recordInventoryRun({
+				ran_at: '2026-06-19T00:00:00Z',
+				list_label: 'oldest',
+			});
+			await db.recordInventoryRun({
+				ran_at: '2026-06-21T00:00:00Z',
+				list_label: 'newest',
+			});
+			const rows = await db
+				.getKnex()
+				.from('inventory_runs')
+				.select('list_label')
+				.orderBy('ran_at', 'desc');
+			expect(rows.map((r) => r.list_label)).toEqual(['newest', 'mid', 'oldest']);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('allows the same `source_file_sha256` across multiple runs (Phase 1 records; Phase 3 dedupes)', async () => {
+		// Phase 1 contract: the audit log is append-only and DOES NOT
+		// enforce uniqueness on the file hash. Two consecutive applies
+		// of the SAME list each produce a new row. Phase 3 (`--refresh`)
+		// is where dedupe / pre-flight against this column would land —
+		// pin the current shape so accidentally adding a UNIQUE index
+		// here is caught.
+		const dbPath = path.resolve(workingDir, 'inventory-runs-same-sha.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			const sha = 'b'.repeat(64);
+			const id1 = await db.recordInventoryRun({
+				ran_at: '2026-06-19T00:00:00Z',
+				source_file_sha256: sha,
+			});
+			const id2 = await db.recordInventoryRun({
+				ran_at: '2026-06-21T00:00:00Z',
+				source_file_sha256: sha,
+			});
+			expect(id1).not.toBe(id2);
+			const rows = await db
+				.getKnex()
+				.from('inventory_runs')
+				.select('id')
+				.where('source_file_sha256', sha);
+			expect(rows).toHaveLength(2);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+});

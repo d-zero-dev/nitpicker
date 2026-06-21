@@ -8,6 +8,7 @@ import type {
 	DB_Referrer,
 	DB_Resource,
 	DatabaseEvent,
+	InventoryRunMeta,
 	PageFilter,
 	PageSource,
 } from './types.js';
@@ -52,6 +53,7 @@ import { extractTagsForArchive } from './meta/extract-tags-for-archive.js';
 import { migrateCrawlErrors } from './migrate-crawl-errors.js';
 import { migrateHtmlBlobTables } from './migrate-html-blob-tables.js';
 import { migrateInfoRoots } from './migrate-info-roots.js';
+import { migrateInventoryRuns } from './migrate-inventory-runs.js';
 import { migratePageErrors } from './migrate-page-errors.js';
 import { migratePagesResourcesSource } from './migrate-pages-resources-source.js';
 import { redirectTable } from './redirect-table.js';
@@ -1261,6 +1263,47 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return burned;
 	}
 	/**
+	 * Appends one row to the `inventory_runs` audit log.
+	 *
+	 * Called by {@link CrawlerOrchestrator.inventory} on every successful
+	 * `--inventory <list>` invocation so the archive carries a durable
+	 * record of which deploy list was applied when and at what scale —
+	 * the operational question "did we apply last month's list" the
+	 * archive itself can answer without consulting external bookkeeping.
+	 *
+	 * Append-only at Phase 1. There is intentionally no UPDATE path and
+	 * no UNIQUE constraint on `source_file_sha256`; two applies of the
+	 * same list each get their own row, and `Phase 3 --refresh` is where
+	 * dedupe / pre-flight against the hash will land. Field-level NULL
+	 * semantics live on {@link InventoryRunMeta}.
+	 * @param meta - The run metadata to record. Only `ran_at` is required.
+	 * @returns The autoincremented `id` of the newly-inserted row.
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async recordInventoryRun(meta: InventoryRunMeta): Promise<number> {
+		const inserted = await this.#instance
+			.from('inventory_runs')
+			.insert({
+				ran_at: meta.ran_at,
+				list_label: meta.list_label ?? null,
+				source_file_path: meta.source_file_path ?? null,
+				source_file_sha256: meta.source_file_sha256 ?? null,
+				total_lines: meta.total_lines ?? null,
+				new_pages: meta.new_pages ?? null,
+				new_resources: meta.new_resources ?? null,
+				scope_skipped: meta.scope_skipped ?? null,
+				notes: meta.notes ?? null,
+			})
+			.returning('id');
+		const id = inserted[0]?.id;
+		if (typeof id !== 'number') {
+			throw new TypeError('recordInventoryRun: INSERT returned no row id');
+		}
+		return id;
+	}
+
+	/**
 	 * Records a redirect edge (source → destination) **without** re-storing the
 	 * destination's content.
 	 *
@@ -1992,6 +2035,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		await migrateCrawlErrors(this.#instance);
 		await migrateHtmlBlobTables(this.#instance);
 		await migratePagesResourcesSource(this.#instance);
+		await migrateInventoryRuns(this.#instance);
 	}
 	/**
 	 * Replaces the page's JSON-LD / SpeculationRules rows with the freshly

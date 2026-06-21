@@ -1,6 +1,6 @@
 import type { Config } from './archive/types.js';
 import type { InventoryMode } from './crawler/types.js';
-import type { CrawlEvent } from './types.js';
+import type { CrawlEvent, InventoryRunAggregates } from './types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
 import { copyFile, unlink as unlinkFile } from 'node:fs/promises';
@@ -25,6 +25,7 @@ import { crawlerLog, log } from './debug.js';
 import { normalizeToArray } from './normalize-to-array.js';
 import { resolveOutputPath } from './resolve-output-path.js';
 import { resourceRowToLookupResult } from './resource-row-to-lookup-result.js';
+import { computeFileSha256 } from './utils/compute-file-sha256.js';
 import { cleanObject } from './utils/object/clean-object.js';
 import { WriteQueue } from './write-queue.js';
 
@@ -611,6 +612,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * @param inventoryUrls - Pre-read URL list (one URL per element).
 	 * @param options - Optional config overrides — most callers leave this blank and let the archived config flow through.
 	 * @param initializedCallback - Hook invoked once the orchestrator is constructed but before `crawling` runs (the CLI uses it to attach progress reporting).
+	 * @param sourceFilePath - Absolute path of the URL list file the
+	 *   caller read `inventoryUrls` from. Forwarded onto the
+	 *   `inventory_runs` audit row so future passes can fingerprint the
+	 *   input (sha256) and recover the provenance via `query
+	 *   inventory-runs`. Pass `undefined` for programmatic callers that
+	 *   constructed the URL list in-memory; `source_file_path` /
+	 *   `source_file_sha256` will be recorded as `null`.
 	 * @returns The orchestrator instance after a successful inventory pass.
 	 * @throws {Error} When `inventoryUrls` is empty, the archive is in list mode, or pending URLs from a previous crawl remain unresolved.
 	 */
@@ -619,6 +627,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		inventoryUrls: string[],
 		options?: Partial<CrawlConfig>,
 		initializedCallback?: CrawlInitializedCallback,
+		sourceFilePath?: string,
 	) {
 		if (inventoryUrls.length === 0) {
 			throw new Error('inventory: URL list is empty');
@@ -821,6 +830,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await orchestrator.crawling(htmlSeeds, { recursive: true });
 					CrawlerOrchestrator.#finalizeCrawlSession();
 					await archive.setUrlOrder();
+					await CrawlerOrchestrator.#writeInventoryRunRow(archive, {
+						inventoryUrlsCount: inventoryUrls.length,
+						htmlSeedsCount: htmlSeeds.length,
+						nonHtmlCount: novelUrls.length - htmlSeeds.length,
+						outOfScope,
+						sourceFilePath,
+					});
 					await ignoreEnoent(unlinkFile(backupPath));
 					return orchestrator;
 				}
@@ -832,6 +848,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await initializedCallback(orchestrator, baseConfig);
 				}
 				await archive.setUrlOrder();
+				await CrawlerOrchestrator.#writeInventoryRunRow(archive, {
+					inventoryUrlsCount: inventoryUrls.length,
+					htmlSeedsCount: htmlSeeds.length,
+					nonHtmlCount: novelUrls.length - htmlSeeds.length,
+					outOfScope,
+					sourceFilePath,
+				});
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
 			} catch (error) {
@@ -1030,6 +1053,63 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			// eslint-disable-next-line no-console
 			console.error(
 				`[preload] DNS-burned hosts: ${hosts.length} (will short-circuit subsequent URLs)`,
+			);
+		}
+	}
+
+	/**
+	 * Persist one `inventory_runs` audit row at the tail of a successful
+	 * `--inventory` invocation. Centralised here so the two success-exit
+	 * paths in {@link CrawlerOrchestrator.inventory} (HTML-seed branch +
+	 * non-HTML-only branch) stay in lockstep.
+	 *
+	 * `ran_at` is stamped now (run completion timestamp). `list_label`
+	 * is auto-generated from `ran_at` when the CLI did not pass one —
+	 * Phase 1 has no `--label` flag, so this is always the auto form.
+	 * `source_file_sha256` is computed via streaming hash over the txt
+	 * file; failure yields `null` (audit loss tolerated, the ingestion
+	 * itself has already succeeded by this point).
+	 *
+	 * **Audit-write failures are swallowed** (logged to stderr, not
+	 * re-thrown). The ingestion has already committed by the time we get
+	 * here — `setUrlOrder()` was the last semantically-important write.
+	 * Letting a libsql hiccup or a transient lock on the audit INSERT
+	 * bubble up to the orchestrator's outer catch would restore the
+	 * archive from `.bak` and discard the user's entire crawl, which is
+	 * strictly worse than losing one audit row. Phase 2 may stage the
+	 * failure for a later retry; Phase 1 just logs.
+	 *
+	 * Forward-compat: when Phase 2 introduces an explicit `--label`
+	 * flag, thread `labelOverride` through {@link inventory} into the
+	 * `aggregates` shape so the auto-name can be overridden.
+	 * @param archive - The opened archive to write the audit row into.
+	 * @param aggregates - The counts captured during the inventory pass; see {@link InventoryRunAggregates}.
+	 */
+	static async #writeInventoryRunRow(
+		archive: Archive,
+		aggregates: InventoryRunAggregates,
+	): Promise<void> {
+		const ranAt = new Date().toISOString();
+		const sourceFileSha256 = aggregates.sourceFilePath
+			? await computeFileSha256(aggregates.sourceFilePath)
+			: null;
+		try {
+			await archive.recordInventoryRun({
+				ran_at: ranAt,
+				list_label: `inventory-${ranAt}`,
+				source_file_path: aggregates.sourceFilePath ?? null,
+				source_file_sha256: sourceFileSha256,
+				total_lines: aggregates.inventoryUrlsCount,
+				new_pages: aggregates.htmlSeedsCount,
+				new_resources: aggregates.nonHtmlCount,
+				scope_skipped: aggregates.outOfScope,
+			});
+		} catch (error) {
+			// eslint-disable-next-line no-console
+			console.error(
+				`[inventory] audit-log write failed (run NOT recorded, ingestion preserved): ${
+					error instanceof Error ? error.message : String(error)
+				}`,
 			);
 		}
 	}

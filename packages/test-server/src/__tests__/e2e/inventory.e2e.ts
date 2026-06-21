@@ -4,7 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
-import { listIsolatedPages, listUnusedResources } from '@nitpicker/query';
+import {
+	listInventoryRuns,
+	listIsolatedPages,
+	listUnusedResources,
+} from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
@@ -134,4 +138,165 @@ describe('Inventory crawl', () => {
 	// from even reaching the INSERT — so an E2E re-pass would only retest
 	// what those unit tests already cover, at the cost of running a full
 	// browser-render crawl twice in CI.
+
+	it('exposes the run via the public `listInventoryRuns` API (read-side integration)', async () => {
+		// Direct-knex assertions below pin the table schema; this one
+		// pins the public API integration: CLI / MCP / viewer all call
+		// listInventoryRuns rather than reaching for raw SQL, so the
+		// helper's column subset + sort order must match what the
+		// orchestrator writes.
+		const { items, total } = await listInventoryRuns(accessor);
+		expect(total).toBe(1);
+		expect(items).toHaveLength(1);
+		expect(items[0]).toMatchObject({
+			total_lines: 2,
+			new_pages: 1,
+			new_resources: 1,
+			scope_skipped: 0,
+		});
+		expect(items[0]?.list_label).toMatch(/^inventory-/);
+		expect(typeof items[0]?.id).toBe('number');
+	});
+
+	it('records one inventory_runs row per successful --inventory invocation with the expected aggregate counts', async () => {
+		// Phase 1 audit-log contract. The beforeAll inventory pass above
+		// fed two URLs (1 HTML seed + 1 non-HTML resource) into the same
+		// archive; the orchestrator MUST have written one `inventory_runs`
+		// row with matching aggregates so client conversations of the
+		// form "did we apply this list" have an in-archive answer.
+		const knex = accessor.getKnex();
+		const rows = (await knex('inventory_runs')
+			.select('*')
+			.orderBy('ran_at', 'desc')) as Array<{
+			id: number;
+			ran_at: string;
+			list_label: string | null;
+			source_file_path: string | null;
+			source_file_sha256: string | null;
+			total_lines: number | null;
+			new_pages: number | null;
+			new_resources: number | null;
+			scope_skipped: number | null;
+			notes: string | null;
+		}>;
+		expect(rows).toHaveLength(1);
+		const [row] = rows;
+		expect(row.ran_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+		expect(row.list_label).toMatch(/^inventory-/);
+		expect(row.total_lines).toBe(2);
+		expect(row.new_pages).toBe(1);
+		expect(row.new_resources).toBe(1);
+		expect(row.scope_skipped).toBe(0);
+		// `source_file_path` / `source_file_sha256` are populated by the
+		// CLI's `inventoryCrawl` plumbing, which the test invokes directly
+		// at the orchestrator level — both are expected NULL for this
+		// programmatic call. Field presence is exercised by a dedicated
+		// describe block below that goes through a tmp txt file.
+		expect(row.source_file_path).toBeNull();
+		expect(row.source_file_sha256).toBeNull();
+	});
+});
+
+describe('Inventory crawl run-audit fingerprint (with source file)', () => {
+	let filePath: string;
+	let cwd: string;
+	let listFilePath: string;
+	let accessor: Archive;
+
+	beforeAll(async () => {
+		const baseline = await crawlAndPersist(['http://localhost:8010/']);
+		filePath = baseline.filePath;
+		cwd = baseline.cwd;
+
+		// Write a real txt list under cwd so the orchestrator can hash
+		// it. Two URLs — one HTML seed, one non-HTML resource.
+		listFilePath = path.join(cwd, 'inventory-list.txt');
+		await fs.writeFile(
+			listFilePath,
+			[
+				'http://localhost:8010/inventory/hidden-lp',
+				'http://localhost:8010/inventory/orphan.pdf',
+			].join('\n'),
+		);
+
+		const orchestrator = await CrawlerOrchestrator.inventory(
+			filePath,
+			[
+				'http://localhost:8010/inventory/hidden-lp',
+				'http://localhost:8010/inventory/orphan.pdf',
+			],
+			{ cwd },
+			undefined,
+			listFilePath,
+		);
+		await orchestrator.write();
+		await orchestrator.archive.close();
+		orchestrator.garbageCollect();
+
+		accessor = await Archive.open({ filePath, cwd });
+	}, 120_000);
+
+	afterAll(async () => {
+		if (accessor) {
+			await accessor.close();
+		}
+		await fs.rm(cwd, { recursive: true, force: true });
+	});
+
+	it('records the source file path and a 64-char hex sha256 on the run row', async () => {
+		const knex = accessor.getKnex();
+		const [row] = (await knex('inventory_runs')
+			.select('source_file_path', 'source_file_sha256')
+			.orderBy('ran_at', 'desc')) as Array<{
+			source_file_path: string | null;
+			source_file_sha256: string | null;
+		}>;
+		expect(row.source_file_path).toBe(listFilePath);
+		expect(row.source_file_sha256).toMatch(/^[0-9a-f]{64}$/);
+	});
+});
+
+describe('Inventory crawl noop run (all URLs already in archive)', () => {
+	let filePath: string;
+	let cwd: string;
+	let accessor: Archive;
+
+	beforeAll(async () => {
+		// Baseline crawl reaches `/` and `/about` (anchored from index).
+		const baseline = await crawlAndPersist(['http://localhost:8010/']);
+		filePath = baseline.filePath;
+		cwd = baseline.cwd;
+
+		// Inventory with a URL that the baseline crawl already covered —
+		// the orchestrator's existing-URL filter (`getExistingPageUrls`)
+		// drops it before any work happens, so this is the noop branch.
+		const orchestrator = await CrawlerOrchestrator.inventory(
+			filePath,
+			['http://localhost:8010/'],
+			{ cwd },
+		);
+		await orchestrator.write();
+		await orchestrator.archive.close();
+		orchestrator.garbageCollect();
+
+		accessor = await Archive.open({ filePath, cwd });
+	}, 60_000);
+
+	afterAll(async () => {
+		if (accessor) {
+			await accessor.close();
+		}
+		await fs.rm(cwd, { recursive: true, force: true });
+	});
+
+	it('does NOT write an inventory_runs row on the noop early-return path (Phase 1 caveat pin)', async () => {
+		// Phase 1 trade-off: the noop branch doesn't take a `.bak`, so a
+		// DB write here would risk tar-rewrite corruption on interrupt.
+		// We skip the audit row entirely instead. Pinned so a future
+		// change that adds `.bak` to the noop path can lift this and
+		// catch the lift in test review.
+		const knex = accessor.getKnex();
+		const rows = await knex('inventory_runs').select('id');
+		expect(rows).toHaveLength(0);
+	});
 });

@@ -238,7 +238,8 @@ export function mapFlagsToQueryOptions(
 			return { url: flags.url };
 		}
 		case 'isolated-pages':
-		case 'unused-resources': {
+		case 'unused-resources':
+		case 'inventory-runs': {
 			// Pagination-only — no required filters.
 			return {
 				limit: flags.limit,

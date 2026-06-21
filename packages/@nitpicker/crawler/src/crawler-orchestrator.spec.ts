@@ -561,6 +561,11 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 				},
 			),
 			addError: vi.fn(() => Promise.resolve()),
+			// Phase 1 audit log: the orchestrator records one row per
+			// successful inventory run via `recordInventoryRun`. The mock
+			// just needs to resolve — the row content is exercised by
+			// `database.spec.ts` and the inventory E2E.
+			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
 		} as unknown as Archive;
 
 		const archiveModule = await import('./archive/archive.js');
@@ -626,5 +631,98 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 		// inventory URLs.
 		const addErrorMock = vi.mocked(fakeArchive.addError);
 		expect(addErrorMock).not.toHaveBeenCalled();
+
+		// Phase 1 audit log: the non-HTML-only success branch MUST
+		// still write one `inventory_runs` row with the correct
+		// aggregate counts. Pin the call shape so a future refactor
+		// that drops `#writeInventoryRunRow` from this branch surfaces
+		// here — without this assertion the mock provided above would
+		// silently absorb a missing call.
+		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
+		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
+		const [meta] = recordInventoryRunMock.mock.calls[0]!;
+		expect(meta.total_lines).toBe(4);
+		expect(meta.new_pages).toBe(0);
+		expect(meta.new_resources).toBe(4);
+		expect(meta.scope_skipped).toBe(0);
+		expect(meta.list_label).toMatch(/^inventory-/);
+	});
+
+	it('preserves successful ingestion when the audit-log INSERT fails (swallows, never rolls back)', async () => {
+		// The audit-log row is non-essential — the ingestion has
+		// already committed by the time #writeInventoryRunRow runs.
+		// If `recordInventoryRun` throws (libsql hiccup, transient
+		// lock), the orchestrator MUST swallow the error and return
+		// normally rather than letting the outer catch restore from
+		// `.bak` and wipe the user's crawl. This test pins that
+		// failure-tolerance contract; without it a regression that
+		// removed the try/catch in #writeInventoryRunRow would
+		// silently turn audit failures into data-loss events.
+		const setResourcesCalls: { url: string }[] = [];
+		const fakeArchive = {
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+				}),
+			),
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			getExistingPageUrls: vi.fn(() => Promise.resolve([])),
+			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+			setResources: vi.fn((resource: { url: { href: string } }) => {
+				setResourcesCalls.push({ url: resource.url.href });
+				return Promise.resolve();
+			}),
+			addError: vi.fn(() => Promise.resolve()),
+			// The mock throws — simulating a libsql lock / disk error.
+			recordInventoryRun: vi.fn(() => Promise.reject(new Error('simulated libsql lock'))),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		const testCwd = path.resolve('/tmp/inventory-audit-failure-test');
+		await fs.mkdir(testCwd, { recursive: true });
+		const fixturePath = path.join(testCwd, 'fixture.nitpicker');
+		await fs.writeFile(fixturePath, '');
+
+		try {
+			// MUST NOT throw — the orchestrator swallows the audit
+			// failure and returns the orchestrator instance normally.
+			await expect(
+				CrawlerOrchestrator.inventory(
+					'fixture.nitpicker',
+					['https://example.com/non-html.pdf'],
+					{ cwd: testCwd },
+				),
+			).resolves.toBeDefined();
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		// The ingestion side-effect (`setResources`) was preserved
+		// despite the audit failure.
+		expect(setResourcesCalls).toHaveLength(1);
+		// recordInventoryRun WAS attempted — confirming the failure
+		// path actually ran.
+		expect(vi.mocked(fakeArchive.recordInventoryRun)).toHaveBeenCalledTimes(1);
 	});
 });

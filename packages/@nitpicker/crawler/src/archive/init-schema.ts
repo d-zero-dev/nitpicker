@@ -343,6 +343,24 @@ export async function initSchema(instance: Knex) {
 
 			t.index('pageId');
 			t.index('type');
+		})
+		.createTable('inventory_runs', (t) => {
+			// One row per successful `--inventory <list>` invocation. The
+			// archive's audit log of "when did we apply which deploy list
+			// at what scale". `.bak` is removed on success so this table
+			// is the only durable provenance record. Schema rationale +
+			// non-goals live in {@link migrateInventoryRuns}.
+			t.increments('id');
+			t.string('ran_at').notNullable();
+			t.string('list_label').nullable();
+			t.string('source_file_path', 8190).nullable();
+			t.string('source_file_sha256', 64).nullable();
+			t.integer('total_lines').nullable();
+			t.integer('new_pages').nullable();
+			t.integer('new_resources').nullable();
+			t.integer('scope_skipped').nullable();
+			t.text('notes').nullable();
+			t.index('ran_at');
 		});
 
 	// ON DELETE CASCADE and compound indexes for the new tables. Knex's
