@@ -871,7 +871,24 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 									this.#options,
 								);
 							}
-							void this.emit('redirect', { result: result.pageData });
+							// The redirect-edge call path may INSERT a brand-new
+							// destination row (js-redirect rescue, #73
+							// convergence on first sight). Forward the
+							// originating page's inventory provenance so the
+							// destination + intermediate hops inherit the
+							// chain's lineage instead of laundering to DB
+							// DEFAULT `'crawled'`. `inventoryMode === null`
+							// (resume / retry-failed) yields `undefined`,
+							// which is correct: the DB-side lookup in
+							// `#linkRedirectSources` reads the destination's
+							// stored source for those sessions.
+							void this.emit('redirect', {
+								result: result.pageData,
+								source: derivePageSource(
+									this.#options.inventoryMode,
+									url.withoutHashAndAuth,
+								),
+							});
 							log(c.dim('Redirect (dest already scraped)'));
 							return;
 						}

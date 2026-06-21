@@ -36,6 +36,7 @@ import { eachSplitted } from '../utils/array/each-splitted.js';
 import { ErrorEmitter } from '../utils/error/error-emitter.js';
 
 import { dbLog } from './debug.js';
+import { deriveLineageFromParent } from './derive-lineage-from-parent.js';
 import { mkdir } from './filesystem/mkdir.js';
 import { getFailedPageMessages } from './get-failed-page-messages.js';
 import { getJSON } from './get-json.js';
@@ -1276,10 +1277,11 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * The destination's existing anchors / images are never touched here.
 	 * @param page - HEAD-resolved page data carrying the redirect chain. Its
 	 *   `anchorList` / `imageList` are ignored (a redirect source owns no content).
+	 * @param source
 	 */
 	@ErrorEmitter()
 	@retry(retrySetting)
-	async recordRedirect(page: PageData): Promise<void> {
+	async recordRedirect(page: PageData, source?: PageSource): Promise<void> {
 		const { destUrl, sources } = resolveRedirectChain(
 			page.url.withoutHashAndAuth,
 			page.redirectPaths,
@@ -1306,17 +1308,45 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}
 
 		await this.#instance.transaction(async (trx) => {
+			// Pass the caller-supplied `source` straight through so a
+			// brand-new destination row INSERTed here picks up the
+			// inventory lineage (instead of the DB DEFAULT `'crawled'`)
+			// when the caller is in the inventory chain — closes the
+			// hole where `recordRedirect` was previously laundering
+			// inventory lineage to `'crawled'` for js-redirect rescue /
+			// #73 convergence destinations that had not yet been
+			// rendered.
 			const destId = await this.#getIdByUrl(
 				destUrlObject.withoutHashAndAuth,
 				undefined,
 				trx,
+				source,
 			);
+			// Chain lineage propagates FROM the originating URL
+			// (`page.url`), NOT from the destination. The originating
+			// URL is what initiated the redirect chain, so its lineage
+			// is what every intermediate hop transitively inherits.
+			// Reading from the destination would mis-propagate in
+			// "inventory-seed → ... → existing crawled dest" chains:
+			// the intermediates are reached only via the inventory
+			// chain, so they belong to the inventory chain even though
+			// the chain happens to land on a crawled URL. The
+			// `'crawled'` fallback arms the crawled-wins downgrade for
+			// existing `'inventory-*'` intermediates that a crawled
+			// chain reaches.
+			const [originatingRow] = await trx
+				.select('source')
+				.from<DB_Page>('pages')
+				.where('url', page.url.withoutHashAndAuth);
+			const originatingSource = originatingRow?.source ?? source;
+			const chainLineageSource = deriveLineageFromParent(originatingSource, 'crawled');
 			await this.#linkRedirectSources(
 				trx,
 				sources,
 				destId,
 				destUrlObject.withoutHashAndAuth,
 				page.isExternal,
+				chainLineageSource,
 			);
 		});
 	}
@@ -1719,12 +1749,30 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				await this.#insertJsonLd(pageId, page.meta, trx);
 			}
 
+			// Chain lineage propagates FROM the originating URL
+			// (`page.url`), NOT from the destination. See the matching
+			// rationale in `recordRedirect` above: intermediates are
+			// reached transitively from the originating URL's render,
+			// so they inherit its lineage. The `source` argument is the
+			// authoritative origin label when inventoryMode is live;
+			// fall through to a DB lookup of `page.url` for the resume
+			// / retry-failed path where the call-site has no source.
+			let originatingSource: PageSource | undefined = source;
+			if (originatingSource === undefined) {
+				const [originatingRow] = await trx
+					.select('source')
+					.from<DB_Page>('pages')
+					.where('url', page.url.withoutHashAndAuth);
+				originatingSource = originatingRow?.source;
+			}
+			const chainLineageSource = deriveLineageFromParent(originatingSource, 'crawled');
 			await this.#linkRedirectSources(
 				trx,
 				sources,
 				pageId,
 				destUrlObject.withoutHashAndAuth,
 				page.isExternal,
+				chainLineageSource,
 			);
 			// Only insert a snapshot blob when there is actual HTML to write.
 			// `page.html.length > 0` is the precise signal: the scraper returns
@@ -1798,11 +1846,13 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				.select('source')
 				.from<DB_Page>('pages')
 				.where('id', pageId);
-			const parentSource = parentRow?.source ?? 'crawled';
-			const anchorLineageSource: PageSource =
-				parentSource === 'inventory-seed' || parentSource === 'inventory-discovered'
-					? 'inventory-discovered'
-					: 'crawled';
+			// `deriveLineageFromParent` collapses the three call sites
+			// (anchor / redirect intermediate × updatePage / recordRedirect)
+			// onto the same rule. `'crawled'` fallback (vs `undefined`)
+			// arms the crawled-wins downgrade in `#getIdByUrl` for
+			// existing `'inventory-*'` rows reached from a crawled
+			// parent — see `isInventorySource` for the membership rule.
+			const anchorLineageSource = deriveLineageFromParent(parentRow?.source, 'crawled');
 			const anchors = await Promise.all(
 				page.anchorList.map(async (anchor) => {
 					const hrefId = await this.#getIdByUrl(
@@ -2148,6 +2198,17 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param destUrlNormalized - Normalised destination URL, used to detect and
 	 *   skip self-redirects.
 	 * @param isExternal - Whether the sources are external to the crawl scope.
+	 * @param chainLineageSource - Lineage label propagated to each intermediate
+	 *   hop's row (passed through to {@link #getIdByUrl}). Derived by the caller
+	 *   from the **originating** page's source (`page.url`), not from the
+	 *   destination — intermediates are reached transitively from the
+	 *   originating render, so they inherit its lineage. Pass `'inventory-discovered'`
+	 *   for chains rooted at inventory-seed/discovered pages so new intermediates
+	 *   stay in the inventory chain; pass `'crawled'` for crawled chains so the
+	 *   crawled-wins downgrade inside `#getIdByUrl` fires on existing
+	 *   `'inventory-*'` intermediates a crawled chain reaches. Pass `undefined`
+	 *   to fall back to the DB DEFAULT (`'crawled'`) on INSERT without
+	 *   triggering the downgrade on existing rows.
 	 */
 	async #linkRedirectSources(
 		trx: Knex.Transaction,
@@ -2155,6 +2216,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		destId: number,
 		destUrlNormalized: string,
 		isExternal: boolean,
+		chainLineageSource?: PageSource,
 	): Promise<void> {
 		for (const redirect of sources) {
 			if (redirect === destUrlNormalized) {
@@ -2162,7 +2224,21 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				continue;
 			}
 			dbLog('Set redirected url: %s -> id:%d', redirect, destId);
-			const redirectId = await this.#getIdByUrl(redirect, undefined, trx);
+			// Pass `chainLineageSource` through so a brand-new
+			// intermediate hop INSERTed here inherits the originating
+			// page's lineage label (inventory-discovered when the
+			// originating chain is in the inventory chain, undefined
+			// otherwise). The crawled-wins downgrade inside
+			// `#getIdByUrl` still fires when this argument is `'crawled'`,
+			// matching the anchor-lineage propagation contract — an
+			// existing inventory-* intermediate that is later traversed
+			// by a `'crawled'` chain gets downgraded.
+			const redirectId = await this.#getIdByUrl(
+				redirect,
+				undefined,
+				trx,
+				chainLineageSource,
+			);
 			await trx<DB_Page>('pages')
 				.where('id', redirectId)
 				.update({

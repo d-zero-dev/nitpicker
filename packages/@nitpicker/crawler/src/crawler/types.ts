@@ -381,5 +381,14 @@ export interface CrawlerEventTypes {
 	redirect: {
 		/** HEAD-resolved page data carrying the redirect chain (source → destination). */
 		result: PageData;
+		/**
+		 * Inventory provenance for the redirect-edge call. Forwarded by the
+		 * orchestrator to `Archive.setRedirect` → `Database.recordRedirect`
+		 * so brand-new destination rows INSERTed by the edge-only path pick
+		 * up the inventory label (and propagate it to intermediates) when
+		 * the originating chain is in the inventory chain. `undefined` keeps
+		 * the DB DEFAULT `'crawled'`.
+		 */
+		source: PageSource | undefined;
 	};
 }

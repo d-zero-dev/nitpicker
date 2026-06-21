@@ -3701,3 +3701,405 @@ describe('getCrawlingState: strict pending filter', () => {
 		}
 	});
 });
+
+describe('redirect chain intermediate lineage propagation', () => {
+	/**
+	 * Build a minimal page payload for `updatePage` at the given URL.
+	 * @param url - The URL of the page being scraped.
+	 * @returns Page data accepted by `Database.updatePage`.
+	 */
+	const makePage = (url: string) => ({
+		url: parseUrl(url)!,
+		redirectPaths: [] as string[],
+		isExternal: false,
+		status: 200,
+		statusText: 'OK',
+		contentLength: 0,
+		contentType: 'text/html',
+		responseHeaders: {},
+		meta: { title: '' },
+		anchorList: [],
+		imageList: [],
+		html: '',
+		isSkipped: false,
+	});
+
+	it('records redirect chain intermediates as `inventory-discovered` when the originating page is `inventory-seed`', async () => {
+		// Dogfooding repro: an inventory-seed URL that redirects through
+		// a previously-unknown intermediate URL on its way to a final
+		// destination. The intermediate is created inside
+		// `#linkRedirectSources` via `#getIdByUrl(..., undefined)` and
+		// ended up labelled `'crawled'` because the lineage propagation
+		// only covered the anchor path. Fix the gap: the intermediate
+		// must inherit `'inventory-discovered'` from the inventory chain.
+		const dbPath = path.resolve(workingDir, 'redirect-chain-lineage-inventory.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// inventory-seed scrape: original URL redirects through an
+			// intermediate hop to a final destination.
+			//
+			//   https://example.com/seed/
+			//     ↓ 301
+			//   http://example.com/seed/index.html   ← intermediate (NEW)
+			//     ↓ 301
+			//   https://example.com/seed/index.html  ← final destination
+			await db.updatePage(
+				{
+					...makePage('https://example.com/seed/'),
+					redirectPaths: [
+						'http://example.com/seed/index.html',
+						'https://example.com/seed/index.html',
+					],
+				},
+				true,
+				true,
+				'inventory-seed',
+			);
+
+			const knex = db.getKnex();
+			const [finalDest] = await knex
+				.from('pages')
+				.select('id')
+				.where('url', 'https://example.com/seed/index.html');
+			expect(finalDest, 'final destination row must exist').toBeDefined();
+			const [intermediate] = await knex
+				.from('pages')
+				.select('source', 'status', 'redirectDestId')
+				.where('url', 'http://example.com/seed/index.html');
+			expect(intermediate, 'intermediate hop must be recorded').toBeDefined();
+			expect(intermediate.source).toBe('inventory-discovered');
+			expect(intermediate.status).toBe(301);
+			// Pin to the final destination id (not just `not null`) so a
+			// regression that points the intermediate at itself / the
+			// originating seed row is caught.
+			expect(intermediate.redirectDestId).toBe(finalDest.id);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('propagates `inventory-discovered` through a real two-step inventory chain (seed → anchor-discovered page → redirect chain)', async () => {
+		// True transitive lineage, end-to-end:
+		//
+		//   1. An inventory-seed scrape (page A) has an anchor to page B.
+		//      The anchor-lineage path INSERTs B as `'inventory-discovered'`.
+		//   2. Page B is then scraped (e.g. picked off the queue) and its
+		//      response is a redirect chain through a new intermediate
+		//      hop C to a final destination D.
+		//   3. The redirect-chain lineage propagation must see B's source
+		//      (`'inventory-discovered'`, set by step 1's anchor INSERT)
+		//      and propagate `'inventory-discovered'` to C.
+		//
+		// The previous shape of this test passed `'inventory-discovered'`
+		// directly as the `updatePage` source argument, which short-
+		// circuits the propagation by setting B's source from the call
+		// arg rather than from the prior anchor-lineage write. This
+		// version reproduces the actual production flow.
+		const dbPath = path.resolve(workingDir, 'redirect-chain-lineage-transitive.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Step 1: inventory-seed page A anchors to B.
+			await db.updatePage(
+				{
+					...makePage('https://example.com/seed-a/'),
+					anchorList: [
+						{
+							href: parseUrl('https://example.com/discovered-b/')!,
+							textContent: '',
+							isExternal: false,
+						},
+					],
+				},
+				true,
+				true,
+				'inventory-seed',
+			);
+
+			// Pre-condition pin: B was INSERTed as 'inventory-discovered'
+			// by the anchor-lineage path. If this is `'crawled'` the
+			// rest of the test does not actually exercise transitive
+			// propagation.
+			const knex = db.getKnex();
+			const [bAfterAnchor] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'https://example.com/discovered-b/');
+			expect(bAfterAnchor?.source).toBe('inventory-discovered');
+
+			// Step 2: B is scraped (no explicit `source` argument —
+			// emulates `--resume` / `--retry-failed` where the
+			// orchestrator's `derivePageSource` returns `undefined`).
+			// B's stored source ('inventory-discovered') is what the
+			// redirect-chain lineage propagation must read back.
+			await db.updatePage(
+				{
+					...makePage('https://example.com/discovered-b/'),
+					redirectPaths: [
+						'http://example.com/discovered-b/index.html',
+						'https://example.com/discovered-b/index.html',
+					],
+				},
+				true,
+				true,
+			);
+
+			// Step 3: the intermediate hop C inherits inventory-discovered
+			// even though B was scraped with `source = undefined`.
+			const [intermediate] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'http://example.com/discovered-b/index.html');
+			expect(intermediate?.source).toBe('inventory-discovered');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('keeps redirect chain intermediates as `crawled` when the originating page is `crawled` (regression guard)', async () => {
+		// Regression test: a normal crawl that redirects through a new
+		// intermediate must NOT taint the intermediate with any
+		// inventory label. The DB DEFAULT `'crawled'` lands on the row.
+		const dbPath = path.resolve(workingDir, 'redirect-chain-lineage-crawled.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.updatePage(
+				{
+					...makePage('https://example.com/crawled-source/'),
+					redirectPaths: [
+						'http://example.com/crawled-source/index.html',
+						'https://example.com/crawled-source/index.html',
+					],
+				},
+				true,
+				true,
+				// No source — normal crawl.
+			);
+
+			const knex = db.getKnex();
+			const [intermediate] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'http://example.com/crawled-source/index.html');
+			expect(intermediate.source).toBe('crawled');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('propagates `inventory-discovered` to intermediates via `recordRedirect` when an explicit inventory source is passed (js-redirect rescue + #73 convergence)', async () => {
+		// F3: `Archive.setRedirect` → `Database.recordRedirect` is the
+		// edge-only path (e.g. #73 redirect-convergence when the dest
+		// was already rendered this session, or the js-redirect rescue
+		// after puppeteer.goto returns null). The previous shape called
+		// `#getIdByUrl(destUrl, undefined, trx)` and then read back the
+		// destination's source — but when the destination row did NOT
+		// yet exist, the INSERT defaulted to `'crawled'` and the SELECT
+		// laundered the inventory lineage of the whole chain to
+		// `'crawled'`. The fix threads `source` through `recordRedirect`
+		// so the caller (Crawler emit path) can pass the source it
+		// already knows.
+		const dbPath = path.resolve(
+			workingDir,
+			'redirect-chain-lineage-recordRedirect.sqlite',
+		);
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Simulate the redirect-edge-only call path: a brand-new
+			// destination URL reached only via the redirect chain, no
+			// prior `updatePage` for it. The intermediate hop is also
+			// brand new.
+			await db.recordRedirect(
+				{
+					url: parseUrl('https://example.com/seed-via-record/')!,
+					redirectPaths: [
+						'http://example.com/seed-via-record/index.html',
+						'https://example.com/seed-via-record/index.html',
+					],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 0,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: '' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				'inventory-seed',
+			);
+
+			const knex = db.getKnex();
+			const [intermediate] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'http://example.com/seed-via-record/index.html');
+			expect(intermediate?.source).toBe('inventory-discovered');
+			const [destination] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'https://example.com/seed-via-record/index.html');
+			expect(destination?.source).toBe('inventory-seed');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('downgrades an existing `inventory-discovered` intermediate to `crawled` when a crawled redirect chain reaches it (crawled-wins symmetry with anchor lineage)', async () => {
+		// F1: the original `chainLineageSource` derivation passed
+		// `undefined` for crawled destinations, which meant the
+		// crawled-wins downgrade inside `#getIdByUrl` (which fires only
+		// when incoming source is `'crawled'`) never ran for redirect
+		// intermediates. The anchor branch was already symmetric (it
+		// passes `'crawled'` explicitly). This test asserts the
+		// previously-missing direction: an inventory-discovered
+		// intermediate must be DOWNGRADED to `'crawled'` once a
+		// crawled redirect chain traverses it — the URL is now
+		// reachable from the crawl graph, so it is NOT an orphan.
+		const dbPath = path.resolve(
+			workingDir,
+			'redirect-chain-lineage-crawled-wins-downgrade.sqlite',
+		);
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Step 1: an inventory pass writes /shared-hop with
+			// `'inventory-discovered'` (anchor-lineage from an
+			// inventory-seed parent).
+			const knex = db.getKnex();
+			await knex('pages').insert({
+				url: 'http://example.com/shared-hop.html',
+				scraped: 0,
+				isTarget: 0,
+				isExternal: 0,
+				source: 'inventory-discovered',
+			});
+			// Pre-condition pin: row really exists with the inventory
+			// label so the test cannot accidentally pass by hitting a
+			// brand-new INSERT path.
+			const [before] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'http://example.com/shared-hop.html');
+			expect(before?.source).toBe('inventory-discovered');
+
+			// Step 2: a normal crawl renders /crawled-source/ which
+			// redirects through /shared-hop.html to a final 200
+			// destination. No `source` argument — this is a `'crawled'`
+			// chain.
+			await db.updatePage(
+				{
+					...makePage('https://example.com/crawled-source/'),
+					redirectPaths: [
+						'http://example.com/shared-hop.html',
+						'https://example.com/crawled-source/index.html',
+					],
+				},
+				true,
+				true,
+			);
+
+			const [after] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'http://example.com/shared-hop.html');
+			// The inventory-discovered label must give way to the
+			// stronger crawled-graph evidence. Without the fix
+			// (`: undefined` instead of `: 'crawled'`), this stayed
+			// `'inventory-discovered'` forever.
+			expect(after?.source).toBe('crawled');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('does NOT overwrite an existing `crawled` intermediate when an inventory-seed chain reaches it (NO-OP direction)', async () => {
+		// Crawled-wins in the redirect-chain context, NO-OP direction:
+		// an intermediate URL already in the archive as `'crawled'` must
+		// stay `'crawled'` when a later inventory-seed chain passes
+		// through it. `#getIdByUrl` returns the existing row's id with
+		// NO source UPDATE because the downgrade clause only fires on
+		// incoming `'crawled'` — incoming `'inventory-discovered'`
+		// (which is what an inventory-seed parent propagates) is a
+		// no-op, and the existing label survives.
+		//
+		// Paired with the `crawled-wins symmetry` test above which
+		// verifies the active-downgrade direction; together they pin
+		// the crawled-wins contract from both sides.
+		const dbPath = path.resolve(workingDir, 'redirect-chain-lineage-no-overwrite.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Pre-seed the intermediate as `'crawled'` (simulating a
+			// prior crawl that already passed through this URL).
+			await db.updatePage(
+				makePage('http://example.com/known-intermediate.html'),
+				true,
+				true,
+			);
+
+			// Pre-condition pin: the pre-seed actually landed at
+			// `source='crawled'` AND there is exactly one row for the
+			// URL. Without this, a URL-normalisation drift (trailing
+			// slash, port, http vs https) would put pre-seed and
+			// redirect chain into different rows and the final SELECT's
+			// `'crawled'` reading would be a brand-new INSERT's DB
+			// DEFAULT, not the crawled-wins guard.
+			const knex = db.getKnex();
+			const [preSeed] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'http://example.com/known-intermediate.html');
+			expect(preSeed, 'pre-seed must exist').toBeDefined();
+			expect(preSeed.source).toBe('crawled');
+			const [{ c: preCount }] = await knex
+				.from('pages')
+				.where('url', 'http://example.com/known-intermediate.html')
+				.count({ c: '*' });
+			expect(Number(preCount)).toBe(1);
+
+			// Now an inventory-seed scrape redirects through the same
+			// intermediate.
+			await db.updatePage(
+				{
+					...makePage('https://example.com/seed-via-known/'),
+					redirectPaths: [
+						'http://example.com/known-intermediate.html',
+						'https://example.com/seed-via-known/index.html',
+					],
+				},
+				true,
+				true,
+				'inventory-seed',
+			);
+
+			const [intermediate] = await knex
+				.from('pages')
+				.select('source')
+				.where('url', 'http://example.com/known-intermediate.html');
+			expect(intermediate.source).toBe('crawled');
+			// Verify row identity is preserved (same single row, no
+			// duplicate INSERT) so the assertion above is really
+			// "the SAME row stayed crawled" rather than "some row
+			// happens to be crawled".
+			const [{ c: postCount }] = await knex
+				.from('pages')
+				.where('url', 'http://example.com/known-intermediate.html')
+				.count({ c: '*' });
+			expect(Number(postCount)).toBe(1);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+});

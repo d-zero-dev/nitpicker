@@ -300,10 +300,15 @@ export default class Archive extends ArchiveAccessor {
 	 * destination edge is written, leaving the destination's stored title / meta /
 	 * anchors / images untouched.
 	 * @param pageInfo - The HEAD-resolved page data carrying the redirect chain.
+	 * @param source - Inventory provenance for a brand-new destination row.
+	 *   Forwarded to `recordRedirect` so the destination's `source` (and the
+	 *   chain-intermediate `source` derived from it) lands on the inventory
+	 *   label instead of the DB DEFAULT `'crawled'` when the orchestrator is
+	 *   running an inventory pass. `undefined` keeps the DB DEFAULT.
 	 */
-	async setRedirect(pageInfo: PageData) {
+	async setRedirect(pageInfo: PageData, source?: PageSource) {
 		dbLog('Set redirect: %s', pageInfo.url.href);
-		await this.#db.recordRedirect(pageInfo);
+		await this.#db.recordRedirect(pageInfo, source);
 	}
 	/**
 	 * Stores a sub-resource (CSS, JS, image, etc.) in the archive database.
