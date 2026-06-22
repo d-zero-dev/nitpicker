@@ -1,6 +1,29 @@
 import type { CrawlerError, PageData } from './utils/types/types.js';
 
 /**
+ * Aggregate counts captured during a `--inventory` invocation, forwarded to
+ * `#writeInventoryRunRow` so the audit log row is consistent between the
+ * HTML-seed branch and the non-HTML-only branch of
+ * {@link CrawlerOrchestrator.inventory}.
+ *
+ * Spelled out here (not inlined at the call site) so a new field added to
+ * the audit row has a single edit point and so each field's semantics are
+ * documented per-property rather than scattered across the two emit sites.
+ */
+export interface InventoryRunAggregates {
+	/** Total non-empty lines in the input list (= `inventoryUrls.length` before any filtering). Stored verbatim as `inventory_runs.total_lines`. */
+	inventoryUrlsCount: number;
+	/** Number of novel URLs classified as HTML and queued for render. Stored as `new_pages` (excludes anchor-discovered descendants — those add later via the crawler graph and are NOT counted here). */
+	htmlSeedsCount: number;
+	/** Number of novel URLs classified as non-HTML and written directly into `resources`. Stored as `new_resources`. */
+	nonHtmlCount: number;
+	/** URLs dropped because they fell outside the archived scope. Stored as `scope_skipped`. */
+	outOfScope: number;
+	/** Absolute path of the source `.txt` so `computeFileSha256` can fingerprint it. `undefined` means programmatic invocation (no file) — sha256 stays `null`. */
+	sourceFilePath: string | undefined;
+}
+
+/**
  * Coarse cause of a crawl/scrape failure.
  *
  * The crawler stores only the raw error message (in `crawl_errors`,

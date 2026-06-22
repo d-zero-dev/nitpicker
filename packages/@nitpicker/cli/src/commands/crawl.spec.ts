@@ -772,6 +772,11 @@ describe('crawl', () => {
 			['https://example.com/hidden'],
 			expect.any(Object),
 			expect.any(Function),
+			// 5th arg: the resolved absolute path of the source file,
+			// forwarded so the orchestrator can fingerprint the txt with
+			// sha256 on the `inventory_runs` audit row. The CLI calls
+			// `path.resolve(process.cwd(), listFile)` on the input.
+			expect.stringMatching(/urls\.txt$/),
 		);
 	});
 

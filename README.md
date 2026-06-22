@@ -46,12 +46,15 @@ npx @nitpicker/cli crawl existing.nitpicker --retry-failed
 npx @nitpicker/cli crawl <archive> --inventory <urls.txt>
 ```
 
-- HTML 応答は puppeteer で描画して再帰クロールに乗せ、新規 page を `'inventory-seed'`、
-  そこから follow したリンク先を `'inventory-discovered'` のラベルで保存する
-- 非 HTML 応答（PDF / 画像 / CSS / JS …）は HEAD のみで `resources` に直接登録、ラベルは `'inventory-seed'`
+- URL は **拡張子ヒューリスティクス**（`isLikelyHtmlUrl`）で HTML / 非 HTML に同期分類する。HEAD pre-flight は orchestrator 段では行わず、HTML 判定されたものだけ Crawler の通常 dealer 経路（HEAD + puppeteer 描画 + 再帰クロール）に流す。`.html` / `.htm` / 拡張子なしなどが HTML 扱い、`.pdf` / `.jpg` / `.css` / `.js` 等が非 HTML 扱い
+- HTML として処理された新規 page は `'inventory-seed'`、その描画中に anchor / subresource として発見された URL は `'inventory-discovered'` のラベルで保存
+- 非 HTML 判定された URL は `setResources` で `status` / `contentType` / `contentLength` 全 null の薄い行として直接登録（`'inventory-seed'` ラベル）。HEAD を撃たないので「URL が実在するか / 何バイトか」は確定しない — 後で `query unused-resources` で referrer 0 件として浮上することだけ保証する
+- **source 優先度は `'crawled' > 'inventory-seed' > 'inventory-discovered'`**。inventory は「離れ小島の発見」が目的なので、既存 `'inventory-*'` 行が後の crawl で anchor 到達された瞬間に `'crawled'` に降格する（孤立判定の精度を保つ）
 - 既存 `pages` / `resources` にすでにある URL は skip（2 回目以降の `--inventory` は新規分だけ処理）
 - スコープ外 URL は警告して skip
+- アーカイブに pending URL (scraped=0) が残っていても hard reject せず `console.warn` で続行（crawled-wins UPDATE が source ラベルの整合性を保つ前提）
 - 結果は `query isolated-pages` / `query unused-resources` で見るのが想定動線（後述）
+- **監査ログ (Phase 1)**: 成功した `--inventory` 実行ごとに `inventory_runs` テーブルへ 1 行追加される（`ran_at` / 自動命名 `list_label` / `source_file_path` / stream hash された `source_file_sha256` / `total_lines` / `new_pages` / `new_resources` / `scope_skipped`）。「先月もらった list を反映したか」「同じ list を 2 回反映してないか」をクライアント / ディレクターに即答するための durable な記録。`nitpicker query <archive> inventory-runs --pretty` で履歴一覧
 - `--append` / `--retry-failed` / `--resume` / `--diff` / `--output` / `--list` / `--list-file` / `--single` と同時指定不可
 
 ### `--retry-failed`: 失敗ページの再取得
@@ -179,11 +182,56 @@ npx @nitpicker/cli pipeline <URL> --sheet <URL> --all
 npx @nitpicker/cli query <file> <sub-command> [options]
 ```
 
-サブコマンド: `summary` / `pages` / `page-detail` / `html` / `links` / `resources` / `images` / `violations` / `duplicates` / `mismatches` / `headers` / `resource-referrers` / `error-kinds`。詳細は `--help`。
+サブコマンド: `summary` / `pages` / `page-detail` / `html` / `links` / `resources` / `images` / `violations` / `duplicates` / `mismatches` / `headers` / `resource-referrers` / `error-kinds` / `isolated-pages` / `unused-resources` / `inventory-runs` / `pages-by-tag` / `count-pages-by-tag` / `pages-by-jsonld-type` / `count-pages-by-jsonld-type` / `tag-inventory` / `page-jsonld` / `page-jsonld-overview` / `page-tags`。詳細は `--help`。
 
 ### `--contentTypeCategory`
 
 `pages` のみで使える。**指定時は既定の HTML-or-null ベースフィルタを外し、PDF など非 HTML 行も列挙する**。カテゴリ判定は `@nitpicker/query` の `classifyContentType` ルール表に集約され、Summary チャートと Pages フィルタが同じ行を同じカテゴリに数える。
+
+### `inventory-runs`: `--inventory` 実行履歴
+
+成功した `crawl --inventory <urls.txt>` 1 回ごとに 1 行が `inventory_runs` テーブルに記録され、ここで `ran_at DESC` 順 (新しい順) で取得できる。クライアント / ディレクター対応の「先月もらった list 反映しました？」「同じ list 2 度反映してないですよね？」に archive 単独で答えるための監査ログ。
+
+```sh
+npx @nitpicker/cli query <file> inventory-runs --pretty
+```
+
+各行: `id` / `ran_at` (ISO 8601) / `list_label` (未指定なら `inventory-${ran_at}` 自動命名) / `source_file_path` / `source_file_sha256` (stream hash) / `total_lines` / `new_pages` / `new_resources` / `scope_skipped` / `notes`。
+
+**append-only / UNIQUE 制約なし**: 同じ list を 2 回 apply すれば 2 行できる。重複検知 / 旧 list との差分適用は Phase 3 (`--refresh`) で導入予定。
+
+**noop run は記録されない**: 全 URL が既存だった場合は `.bak` を作らない設計なので run 行も書かない (Phase 1 の trade-off)。console log には `[inventory] N already in archive, 0 new` が残る。
+
+**Phase 1 deploy 前の archive**: 初回 writer 接続時に `migrateInventoryRuns` がテーブルを作成する。read-only 接続のみ (viewer / stub mode) では migration が走らないので `query inventory-runs` は空配列フォールバックを返す。
+
+**Phase 1 デプロイ前の inventory pass を後付け記録する (one-off backfill)**:
+
+`--register-run` CLI は Phase 1 では実装していない。1 回限りの手動 INSERT は次のシェルコマンドで:
+
+```sh
+# 1. アーカイブを writer モードで一度開いて `inventory_runs` テーブルを作成させる
+#    (--retry-failed や --resume を起動して migration を走らせる)
+npx @nitpicker/cli crawl <archive>.nitpicker --retry-failed
+# Ctrl-C で停止 → テーブルは作成済の状態で残る
+
+# 2. sha256 を計算
+sha=$(shasum -a 256 ./<list>.txt | cut -c1-64)
+
+# 3. アーカイブ (もしくは stub tmpDir) の db.sqlite に直接 INSERT
+sqlite3 <stubDir>/db.sqlite "
+INSERT INTO inventory_runs
+  (ran_at, list_label, source_file_path, source_file_sha256, total_lines, notes)
+VALUES
+  ('2026-06-19T22:09:00+09:00',    -- 実際に走った日時 (backdate)
+   '2026-06-19-initial',           -- 任意ラベル
+   '/abs/path/to/<list>.txt',
+   '$sha',
+   $(awk 'NF{c++}END{print c}' ./<list>.txt),  -- 非空行数
+   'Backfilled — initial inventory pass before run tracking shipped');
+"
+```
+
+`new_pages` / `new_resources` / `scope_skipped` は NULL でよい (Phase 1 では正確な値を遡及計算する API なし、Phase 2 の差分機能で扱う領域)。
 
 ### `error-kinds`: クロール失敗の原因分類
 

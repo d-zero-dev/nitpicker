@@ -8,6 +8,7 @@ import type {
 	DB_Referrer,
 	DB_Resource,
 	DatabaseEvent,
+	InventoryRunMeta,
 	PageFilter,
 	PageSource,
 } from './types.js';
@@ -36,6 +37,7 @@ import { eachSplitted } from '../utils/array/each-splitted.js';
 import { ErrorEmitter } from '../utils/error/error-emitter.js';
 
 import { dbLog } from './debug.js';
+import { deriveLineageFromParent } from './derive-lineage-from-parent.js';
 import { mkdir } from './filesystem/mkdir.js';
 import { getFailedPageMessages } from './get-failed-page-messages.js';
 import { getJSON } from './get-json.js';
@@ -51,6 +53,7 @@ import { extractTagsForArchive } from './meta/extract-tags-for-archive.js';
 import { migrateCrawlErrors } from './migrate-crawl-errors.js';
 import { migrateHtmlBlobTables } from './migrate-html-blob-tables.js';
 import { migrateInfoRoots } from './migrate-info-roots.js';
+import { migrateInventoryRuns } from './migrate-inventory-runs.js';
 import { migratePageErrors } from './migrate-page-errors.js';
 import { migratePagesResourcesSource } from './migrate-pages-resources-source.js';
 import { redirectTable } from './redirect-table.js';
@@ -360,7 +363,67 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 	/**
 	 * Retrieves the current crawling state by listing scraped and pending URLs.
-	 * @returns An object with `scraped` (completed URLs) and `pending` (remaining URLs) arrays.
+	 *
+	 * `scraped` is straightforward: every page row whose `scraped` flag is `1`
+	 * — that is, every URL the crawl reached a terminal state on, including
+	 * setSkippedPage / setExternalPage / outright setPage success or failure.
+	 *
+	 * `pending` is intentionally STRICT — not "every `scraped = 0` row".
+	 * Three filters apply:
+	 *
+	 * 1. `scraped = 0` — work still incomplete.
+	 * 2. `isExternal = 0` — only in-scope work. External URLs go through a
+	 *    HEAD-only path that always lands on `scraped = 1` (either setPage or
+	 *    setExternalPage). A row with `isExternal = 1 AND scraped = 0` is
+	 *    therefore a data anomaly, and resume / inventory / append have no
+	 *    business retrying it on the next session.
+	 * 3. `EXISTS (anchor with hrefId = pages.id) OR source != 'crawled'` —
+	 *    the row was either discovered as an anchor destination during a
+	 *    previous scrape OR was explicitly tagged with a non-default
+	 *    source label (`'inventory-seed'`, `'inventory-discovered'`, …).
+	 *    Both halves of the OR represent "deliberately enqueued, expected
+	 *    to be processed", which is exactly what `resume` should pick up.
+	 *
+	 *    The orphan filter targets the **predicted-discard leak** in
+	 *    `crawler.ts` where `shouldDiscardPredicted` returns true but no
+	 *    `emit('skip')` follows. Such placeholders are inserted with the
+	 *    DB DEFAULT `source = 'crawled'` (no caller explicitly labels
+	 *    them) AND have no anchor referrer (predicted URLs are
+	 *    synthesised from pagination patterns, never anchored from a
+	 *    rendered page) — both halves of the OR are therefore false and
+	 *    the leak is excluded.
+	 *
+	 *    The `source != 'crawled'` clause specifically saves the
+	 *    `--inventory` × `--retry-failed` interaction: an inventory-seed
+	 *    URL came from the operator's URL list (no anchor referrer) and
+	 *    `resetFailedPages` puts it back at `scraped = 0`. Without this
+	 *    clause those legitimate retries would be dropped on resume.
+	 *
+	 * The defensive shape is on purpose: the data source can drift into
+	 * anomalous states under interruption, but the reader must never throw
+	 * or feed garbage back into the dealer. A real in-scope URL that was
+	 * truly interrupted mid-crawl will always have at least one anchor
+	 * referrer (otherwise the dealer would not have queued it), so the
+	 * strict filter loses no legitimate pending work.
+	 *
+	 * Seeds passed directly to `Crawler.start()` are NOT in the strict
+	 * pending set when they were never picked by the dealer — they have no
+	 * DB row at all in that case (`linkList.add` is purely in-memory until
+	 * `setPage` runs). A Ctrl-C between dealer pick and `setPage` likewise
+	 * leaves no row to recover. Recovery of un-picked seeds is the
+	 * responsibility of the caller (e.g. re-running `--inventory ./list.txt`
+	 * with the same URL list).
+	 *
+	 * The query uses an explicit `p` alias on the `pages` table so the
+	 * correlated `EXISTS` subquery can join via `whereRaw('anchors.hrefId =
+	 * p.id')`. A future refactor that renames the alias must update both
+	 * sites — the raw string in the subquery cannot be grep-resolved
+	 * automatically. Read-only / stub viewer connections never call this
+	 * method (they do not need to know about pending state), so the EXISTS
+	 * shape is safe to use without the `migrate*` guards that other writer
+	 * methods carry.
+	 * @returns An object with `scraped` (completed URLs) and `pending` (the
+	 *   strict set of in-scope, anchor-referenced, unfinished URLs).
 	 */
 	@ErrorEmitter()
 	@retry(retrySetting)
@@ -372,9 +435,22 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			.where('scraped', 1);
 		const scraped = $scraped.map(ex);
 		const $pending = await this.#instance
-			.select('url')
-			.from<DB_Page>('pages')
-			.where('scraped', 0);
+			.select('p.url')
+			.from<DB_Page>({ p: 'pages' })
+			.where('p.scraped', 0)
+			.where('p.isExternal', 0)
+			.where((qb) => {
+				// "Anchored OR explicitly labelled". Either side is evidence
+				// that the row was deliberately enqueued for processing —
+				// only the predicted-discard leak (DEFAULT 'crawled' + no
+				// anchor) fails both halves. The `whereExists` callback
+				// uses `select('*')` since the column list is irrelevant
+				// inside an EXISTS check; calling through `client.raw(...)`
+				// would reach a private builder field.
+				qb.whereExists(function () {
+					this.select('*').from('anchors').whereRaw('anchors.hrefId = p.id');
+				}).orWhereNot('p.source', 'crawled');
+			});
 		const pending = $pending.map(ex);
 		return {
 			scraped,
@@ -462,7 +538,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}
 		return decodeStoredBlob(row.body, row.codec);
 	}
-
 	/**
 	 * Retrieves all `page_jsonld` rows for the given page id, parsed back into
 	 * {@link JsonLdRow} shape (with `parsed` deserialised from its JSON column).
@@ -499,7 +574,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			parseError: r.parseError,
 		}));
 	}
-
 	/**
 	 * Returns the underlying Knex query builder instance for direct SQL access.
 	 * This enables advanced queries (GROUP BY, HAVING, JOINs) at the database
@@ -626,6 +700,35 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}
 		return q.limit(limit).offset(offset);
 	}
+	/**
+	 * Look up the `source` column of a single page by its URL key. Used by
+	 * the orchestrator's `PageSourceLookup` injection so the Crawler can
+	 * resolve a parent page's lineage on `--resume` / `--retry-failed`
+	 * sessions, where the in-memory `inventoryMode` is no longer
+	 * available but the DB still remembers what label was last persisted.
+	 *
+	 * Returns `undefined` when the URL has no `pages` row (e.g. a brand-new
+	 * URL that has not been seen yet) so the caller can fall through to
+	 * its default behaviour without distinguishing "row absent" from "row
+	 * present with NULL source" — the schema's `NOT NULL DEFAULT 'crawled'`
+	 * makes a NULL value impossible in practice.
+	 *
+	 * Read-only — no transaction, single PK-equivalent lookup on
+	 * `pages.url` (a UNIQUE column), so the cost is constant per call. The
+	 * Crawler calls this at most once per page render, NOT per
+	 * sub-resource, so the N+1 risk does not apply.
+	 * @param url - URL key in `url.withoutHashAndAuth` form.
+	 * @returns The recorded `source`, or `undefined` when no row exists.
+	 */
+	@ErrorEmitter()
+	async getPageSourceByUrl(url: string): Promise<PageSource | undefined> {
+		const [row] = await this.#instance
+			.select('source')
+			.from<DB_Page>('pages')
+			.where('url', url);
+		return row?.source;
+	}
+
 	/**
 	 * Retrieves pages along with their related redirect, anchor, and referrer data.
 	 * Results are ordered by the natural URL sort order. Only non-redirected pages are returned.
@@ -1160,6 +1263,47 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return burned;
 	}
 	/**
+	 * Appends one row to the `inventory_runs` audit log.
+	 *
+	 * Called by {@link CrawlerOrchestrator.inventory} on every successful
+	 * `--inventory <list>` invocation so the archive carries a durable
+	 * record of which deploy list was applied when and at what scale —
+	 * the operational question "did we apply last month's list" the
+	 * archive itself can answer without consulting external bookkeeping.
+	 *
+	 * Append-only at Phase 1. There is intentionally no UPDATE path and
+	 * no UNIQUE constraint on `source_file_sha256`; two applies of the
+	 * same list each get their own row, and `Phase 3 --refresh` is where
+	 * dedupe / pre-flight against the hash will land. Field-level NULL
+	 * semantics live on {@link InventoryRunMeta}.
+	 * @param meta - The run metadata to record. Only `ran_at` is required.
+	 * @returns The autoincremented `id` of the newly-inserted row.
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async recordInventoryRun(meta: InventoryRunMeta): Promise<number> {
+		const inserted = await this.#instance
+			.from('inventory_runs')
+			.insert({
+				ran_at: meta.ran_at,
+				list_label: meta.list_label ?? null,
+				source_file_path: meta.source_file_path ?? null,
+				source_file_sha256: meta.source_file_sha256 ?? null,
+				total_lines: meta.total_lines ?? null,
+				new_pages: meta.new_pages ?? null,
+				new_resources: meta.new_resources ?? null,
+				scope_skipped: meta.scope_skipped ?? null,
+				notes: meta.notes ?? null,
+			})
+			.returning('id');
+		const id = inserted[0]?.id;
+		if (typeof id !== 'number') {
+			throw new TypeError('recordInventoryRun: INSERT returned no row id');
+		}
+		return id;
+	}
+
+	/**
 	 * Records a redirect edge (source → destination) **without** re-storing the
 	 * destination's content.
 	 *
@@ -1176,10 +1320,19 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * The destination's existing anchors / images are never touched here.
 	 * @param page - HEAD-resolved page data carrying the redirect chain. Its
 	 *   `anchorList` / `imageList` are ignored (a redirect source owns no content).
+	 * @param source - Inventory provenance forwarded by the orchestrator
+	 *   (`Archive.setRedirect` → here) for the redirect-edge fast path. Used
+	 *   as the fallback when the originating URL's row does NOT yet exist in
+	 *   the archive (`#73` convergence on first sight, js-redirect rescue
+	 *   before any prior write). When the originating row already exists
+	 *   (e.g. anchor-lineage INSERT from a prior pass), its stored `source`
+	 *   takes precedence so transitive lineage is preserved across resume /
+	 *   retry-failed sessions. `undefined` keeps the DB DEFAULT `'crawled'`
+	 *   on a brand-new destination row.
 	 */
 	@ErrorEmitter()
 	@retry(retrySetting)
-	async recordRedirect(page: PageData): Promise<void> {
+	async recordRedirect(page: PageData, source?: PageSource): Promise<void> {
 		const { destUrl, sources } = resolveRedirectChain(
 			page.url.withoutHashAndAuth,
 			page.redirectPaths,
@@ -1206,17 +1359,45 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}
 
 		await this.#instance.transaction(async (trx) => {
+			// Pass the caller-supplied `source` straight through so a
+			// brand-new destination row INSERTed here picks up the
+			// inventory lineage (instead of the DB DEFAULT `'crawled'`)
+			// when the caller is in the inventory chain — closes the
+			// hole where `recordRedirect` was previously laundering
+			// inventory lineage to `'crawled'` for js-redirect rescue /
+			// #73 convergence destinations that had not yet been
+			// rendered.
 			const destId = await this.#getIdByUrl(
 				destUrlObject.withoutHashAndAuth,
 				undefined,
 				trx,
+				source,
 			);
+			// Chain lineage propagates FROM the originating URL
+			// (`page.url`), NOT from the destination. The originating
+			// URL is what initiated the redirect chain, so its lineage
+			// is what every intermediate hop transitively inherits.
+			// Reading from the destination would mis-propagate in
+			// "inventory-seed → ... → existing crawled dest" chains:
+			// the intermediates are reached only via the inventory
+			// chain, so they belong to the inventory chain even though
+			// the chain happens to land on a crawled URL. The
+			// `'crawled'` fallback arms the crawled-wins downgrade for
+			// existing `'inventory-*'` intermediates that a crawled
+			// chain reaches.
+			const [originatingRow] = await trx
+				.select('source')
+				.from<DB_Page>('pages')
+				.where('url', page.url.withoutHashAndAuth);
+			const originatingSource = originatingRow?.source ?? source;
+			const chainLineageSource = deriveLineageFromParent(originatingSource, 'crawled');
 			await this.#linkRedirectSources(
 				trx,
 				sources,
 				destId,
 				destUrlObject.withoutHashAndAuth,
 				page.isExternal,
+				chainLineageSource,
 			);
 		});
 	}
@@ -1619,12 +1800,30 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				await this.#insertJsonLd(pageId, page.meta, trx);
 			}
 
+			// Chain lineage propagates FROM the originating URL
+			// (`page.url`), NOT from the destination. See the matching
+			// rationale in `recordRedirect` above: intermediates are
+			// reached transitively from the originating URL's render,
+			// so they inherit its lineage. The `source` argument is the
+			// authoritative origin label when inventoryMode is live;
+			// fall through to a DB lookup of `page.url` for the resume
+			// / retry-failed path where the call-site has no source.
+			let originatingSource: PageSource | undefined = source;
+			if (originatingSource === undefined) {
+				const [originatingRow] = await trx
+					.select('source')
+					.from<DB_Page>('pages')
+					.where('url', page.url.withoutHashAndAuth);
+				originatingSource = originatingRow?.source;
+			}
+			const chainLineageSource = deriveLineageFromParent(originatingSource, 'crawled');
 			await this.#linkRedirectSources(
 				trx,
 				sources,
 				pageId,
 				destUrlObject.withoutHashAndAuth,
 				page.isExternal,
+				chainLineageSource,
 			);
 			// Only insert a snapshot blob when there is actual HTML to write.
 			// `page.html.length > 0` is the precise signal: the scraper returns
@@ -1678,12 +1877,40 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			// duplication, but multiple distinct anchors can share the same
 			// hrefId/hash/textContent legitimately, so there is no natural unique
 			// key to enforce — replace-on-write is the correct mechanism here.)
+			// Lineage propagation: read the current page's merged source
+			// (post-UPDATE by `#insertPage`) so anchor placeholder rows
+			// inherit a label that reflects the parent's chain. A
+			// `'crawled'`-lineage parent passes `'crawled'` explicitly so the
+			// crawled-wins downgrade in `#getIdByUrl` fires when an anchor
+			// hits an existing `'inventory-*'` row. An inventory-lineage
+			// parent passes `'inventory-discovered'` to label transitively-
+			// reached URLs correctly without the orchestrator needing to
+			// rehydrate `inventoryMode` from disk.
+			//
+			// Cost: one extra SELECT on `pages` per scraped page (the
+			// `id` is a PK index lookup so it is sub-millisecond even at
+			// 1M-row scale). The alternative — passing `mergedSource`
+			// through from the UPDATE result — would require RETURNING
+			// support that knex's SQLite dialect handles inconsistently;
+			// the small per-page round-trip is the cheaper trade.
+			const [parentRow] = await trx
+				.select('source')
+				.from<DB_Page>('pages')
+				.where('id', pageId);
+			// `deriveLineageFromParent` collapses the three call sites
+			// (anchor / redirect intermediate × updatePage / recordRedirect)
+			// onto the same rule. `'crawled'` fallback (vs `undefined`)
+			// arms the crawled-wins downgrade in `#getIdByUrl` for
+			// existing `'inventory-*'` rows reached from a crawled
+			// parent — see `isInventorySource` for the membership rule.
+			const anchorLineageSource = deriveLineageFromParent(parentRow?.source, 'crawled');
 			const anchors = await Promise.all(
 				page.anchorList.map(async (anchor) => {
 					const hrefId = await this.#getIdByUrl(
 						anchor.href.withoutHashAndAuth,
 						anchor.isExternal ? 1 : 0,
 						trx,
+						anchorLineageSource,
 					);
 					return {
 						pageId,
@@ -1736,10 +1963,23 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		source?: PageSource,
 	) {
 		const qb = trx ?? this.#instance;
-		const [record] = await qb.select('id').from<DB_Page>('pages').where('url', url);
+		const [record] = await qb
+			.select('id', 'source')
+			.from<DB_Page>('pages')
+			.where('url', url);
 		// Must use `?` because it may be `undefined`
 		const pageId = record?.id ?? Number.NaN;
 		if (Number.isFinite(pageId)) {
+			// Crawled-wins downgrade: when a row that was previously labelled
+			// `'inventory-seed'` or `'inventory-discovered'` is re-encountered
+			// via a `'crawled'`-lineage anchor (the parent page is part of the
+			// graph reachable from the original crawl roots), downgrade it to
+			// `'crawled'`. The inventory goal is finding orphans — anything
+			// reachable from the crawled chain is NOT an orphan and should
+			// not retain an inventory label.
+			if (source === 'crawled' && record?.source && record.source !== 'crawled') {
+				await qb<DB_Page>('pages').where('id', pageId).update({ source: 'crawled' });
+			}
 			return pageId;
 		}
 		const insertedRows = await qb<DB_Page>('pages')
@@ -1795,6 +2035,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		await migrateCrawlErrors(this.#instance);
 		await migrateHtmlBlobTables(this.#instance);
 		await migratePagesResourcesSource(this.#instance);
+		await migrateInventoryRuns(this.#instance);
 	}
 	/**
 	 * Replaces the page's JSON-LD / SpeculationRules rows with the freshly
@@ -1881,21 +2122,38 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		const denorm = computePageDenormalized(page.meta);
 		const extras = deriveMetaExtras(page.meta);
 		const now = Date.now();
-		// Source promotion on UPDATE: when an inventory-mode scrape lands on
-		// a row that was created earlier as a placeholder (e.g. an anchor
-		// from a seed page pointed at this URL and `#getIdByUrl` inserted a
-		// row with the DB DEFAULT `'crawled'`), bump the label to the
-		// inventory variant. But never demote an already-inventoried row —
-		// `CASE WHEN source = 'crawled' THEN ? ELSE source END` keeps a
-		// previously labelled `'inventory-seed'` or `'inventory-discovered'`
-		// row intact on a second pass.
+		// Source priority on UPDATE: 'crawled' > 'inventory-seed' >
+		// 'inventory-discovered'. The inventory feature exists to surface
+		// orphans (= URLs NOT reachable from the original crawl roots).
+		// Anything reachable via the crawled chain is therefore NOT an
+		// orphan and must be labelled `'crawled'`, even if previously
+		// labelled `'inventory-*'`. Within the inventory variants, the
+		// explicit user-listed `'inventory-seed'` wins over the transitive
+		// `'inventory-discovered'`.
+		//
+		// Note: in current callers, `source` only arrives as
+		// `'inventory-seed'` / `'inventory-discovered'` / `undefined`
+		// (`derivePageSource` never emits `'crawled'`, and outside inventory
+		// mode `source` is `undefined` so this CASE never runs). The
+		// `? = 'crawled'` branch is therefore reachable only via a future
+		// call site that wants to explicitly assert a crawled lineage —
+		// today the actual crawled-wins downgrade fires in `#getIdByUrl`'s
+		// SELECT path when an anchor lineage `'crawled'` lands on an
+		// existing `'inventory-*'` row. The branch is kept so the CASE
+		// completely describes the priority lattice in one place.
 		const sourceUpdate =
 			source === undefined
 				? {}
 				: {
-						source: qb.raw("CASE WHEN source = 'crawled' THEN ? ELSE source END", [
-							source,
-						]),
+						source: qb.raw(
+							`CASE
+								WHEN source = 'crawled' OR ? = 'crawled' THEN 'crawled'
+								WHEN source = 'inventory-seed' OR ? = 'inventory-seed' THEN 'inventory-seed'
+								WHEN source = 'inventory-discovered' OR ? = 'inventory-discovered' THEN 'inventory-discovered'
+								ELSE source
+							END`,
+							[source, source, source],
+						),
 					};
 		await qb('pages')
 			.where('id', pageId)
@@ -1992,6 +2250,17 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param destUrlNormalized - Normalised destination URL, used to detect and
 	 *   skip self-redirects.
 	 * @param isExternal - Whether the sources are external to the crawl scope.
+	 * @param chainLineageSource - Lineage label propagated to each intermediate
+	 *   hop's row (passed through to {@link #getIdByUrl}). Derived by the caller
+	 *   from the **originating** page's source (`page.url`), not from the
+	 *   destination — intermediates are reached transitively from the
+	 *   originating render, so they inherit its lineage. Pass `'inventory-discovered'`
+	 *   for chains rooted at inventory-seed/discovered pages so new intermediates
+	 *   stay in the inventory chain; pass `'crawled'` for crawled chains so the
+	 *   crawled-wins downgrade inside `#getIdByUrl` fires on existing
+	 *   `'inventory-*'` intermediates a crawled chain reaches. Pass `undefined`
+	 *   to fall back to the DB DEFAULT (`'crawled'`) on INSERT without
+	 *   triggering the downgrade on existing rows.
 	 */
 	async #linkRedirectSources(
 		trx: Knex.Transaction,
@@ -1999,6 +2268,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		destId: number,
 		destUrlNormalized: string,
 		isExternal: boolean,
+		chainLineageSource?: PageSource,
 	): Promise<void> {
 		for (const redirect of sources) {
 			if (redirect === destUrlNormalized) {
@@ -2006,7 +2276,21 @@ export class Database extends EventEmitter<DatabaseEvent> {
 				continue;
 			}
 			dbLog('Set redirected url: %s -> id:%d', redirect, destId);
-			const redirectId = await this.#getIdByUrl(redirect, undefined, trx);
+			// Pass `chainLineageSource` through so a brand-new
+			// intermediate hop INSERTed here inherits the originating
+			// page's lineage label (inventory-discovered when the
+			// originating chain is in the inventory chain, undefined
+			// otherwise). The crawled-wins downgrade inside
+			// `#getIdByUrl` still fires when this argument is `'crawled'`,
+			// matching the anchor-lineage propagation contract — an
+			// existing inventory-* intermediate that is later traversed
+			// by a `'crawled'` chain gets downgraded.
+			const redirectId = await this.#getIdByUrl(
+				redirect,
+				undefined,
+				trx,
+				chainLineageSource,
+			);
 			await trx<DB_Page>('pages')
 				.where('id', redirectId)
 				.update({

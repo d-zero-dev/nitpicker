@@ -75,6 +75,42 @@ export interface Config extends Required<Pick<ParseURLOptions, 'disableQueries'>
 export type PageSource = 'crawled' | 'inventory-seed' | 'inventory-discovered';
 
 /**
+ * One row written to the `inventory_runs` audit table on each successful
+ * `--inventory <list>` invocation.
+ *
+ * Schema-mirror interface: every column on `inventory_runs` is represented
+ * here. Only `ran_at` is required — every other field is nullable so the
+ * post-merge raw-SQL backfill path (a one-off `sqlite3 INSERT` for the
+ * initial inventory pass that predated this table) can omit summary
+ * stats it cannot reconstruct.
+ *
+ * The audit log is append-only at Phase 1: there is no UPDATE path, no
+ * UNIQUE constraint on `source_file_sha256`, and no FK to pages /
+ * resources. Phase 2 (`inventory_memberships`) introduces the M:N link
+ * to URLs; Phase 3 (`--refresh`) uses `source_file_sha256` for dedupe.
+ */
+export interface InventoryRunMeta {
+	/** ISO 8601 timestamp at which the run completed (e.g. `'2026-06-21T11:30:00+09:00'`). */
+	ran_at: string;
+	/** Human-readable identifier (e.g. `'prod-2026-06-21'`). `null` when the caller did not supply one. */
+	list_label?: string | null;
+	/** Absolute path to the source URL list `.txt` so the run is reproducible. */
+	source_file_path?: string | null;
+	/** SHA-256 hex digest of the source file. `null` if hashing failed (e.g. file vanished mid-run). */
+	source_file_sha256?: string | null;
+	/** Number of non-empty lines in the input list (= URL count before scope filtering). */
+	total_lines?: number | null;
+	/** Number of new HTML seeds inserted as `pages` rows by this run. */
+	new_pages?: number | null;
+	/** Number of new non-HTML URLs inserted as `resources` rows by this run. */
+	new_resources?: number | null;
+	/** Number of input URLs dropped because they fell outside the archived scope. */
+	scope_skipped?: number | null;
+	/** Free-form text for backfill annotations or operator notes. */
+	notes?: string | null;
+}
+
+/**
  * Filter type for querying pages from the database.
  *
  * - `'page'` - HTML pages that are crawl targets

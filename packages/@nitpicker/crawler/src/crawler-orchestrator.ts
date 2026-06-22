@@ -1,7 +1,6 @@
 import type { Config } from './archive/types.js';
 import type { InventoryMode } from './crawler/types.js';
-import type { CrawlEvent } from './types.js';
-import type { PageData } from './utils/types/types.js';
+import type { CrawlEvent, InventoryRunAggregates } from './types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
 import { copyFile, unlink as unlinkFile } from 'node:fs/promises';
@@ -19,14 +18,14 @@ import { clearDnsBurnedHostCache } from './crawler/clear-dns-burned-host-cache.j
 import Crawler from './crawler/crawler.js';
 import { dnsBurnedHostCache } from './crawler/dns-burned-host-cache.js';
 import { dnsBurnedHostShortCircuitCounter } from './crawler/dns-burned-host-short-circuit-counter.js';
-import { fetchDestination } from './crawler/fetch-destination.js';
 import { findScopeEntry } from './crawler/find-scope-entry.js';
-import { isHtmlContentType } from './crawler/is-html-content-type.js';
+import { isLikelyHtmlUrl } from './crawler/is-likely-html-url.js';
 import { PreloadShortCircuitError } from './crawler/preload-short-circuit-error.js';
 import { crawlerLog, log } from './debug.js';
 import { normalizeToArray } from './normalize-to-array.js';
 import { resolveOutputPath } from './resolve-output-path.js';
 import { resourceRowToLookupResult } from './resource-row-to-lookup-result.js';
+import { computeFileSha256 } from './utils/compute-file-sha256.js';
 import { cleanObject } from './utils/object/clean-object.js';
 import { WriteQueue } from './write-queue.js';
 
@@ -196,6 +195,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				);
 				return row ? resourceRowToLookupResult(row) : null;
 			},
+			// Let the crawler propagate the parent's source lineage to
+			// sub-resources on `--resume` / `--retry-failed` sessions, where
+			// `inventoryMode` is not in memory but the DB still remembers
+			// the parent's `source`. Without this, sub-resources captured
+			// during a re-render of an inventory-labelled page would fall
+			// back to the DB DEFAULT `'crawled'` and lose their
+			// `'inventory-discovered'` provenance.
+			lookupPageSource: async (url) => this.#archive.getPageSourceByUrl(url),
 			// Inventory mode is opted into by `CrawlerOrchestrator.inventory`
 			// (see T3); the default crawl path stays in normal mode so new
 			// rows continue to land in pages/resources with the DB DEFAULT
@@ -283,9 +290,9 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					.catch((error) => reject(error));
 			});
 
-			this.#crawler.on('redirect', ({ result }) => {
+			this.#crawler.on('redirect', ({ result, source }) => {
 				writeQueue
-					.enqueue(() => this.#archive.setRedirect(result))
+					.enqueue(() => this.#archive.setRedirect(result, source))
 					.catch((error) => reject(error));
 				void this.emit('redirect', { result });
 			});
@@ -605,6 +612,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * @param inventoryUrls - Pre-read URL list (one URL per element).
 	 * @param options - Optional config overrides — most callers leave this blank and let the archived config flow through.
 	 * @param initializedCallback - Hook invoked once the orchestrator is constructed but before `crawling` runs (the CLI uses it to attach progress reporting).
+	 * @param sourceFilePath - Absolute path of the URL list file the
+	 *   caller read `inventoryUrls` from. Forwarded onto the
+	 *   `inventory_runs` audit row so future passes can fingerprint the
+	 *   input (sha256) and recover the provenance via `query
+	 *   inventory-runs`. Pass `undefined` for programmatic callers that
+	 *   constructed the URL list in-memory; `source_file_path` /
+	 *   `source_file_sha256` will be recorded as `null`.
 	 * @returns The orchestrator instance after a successful inventory pass.
 	 * @throws {Error} When `inventoryUrls` is empty, the archive is in list mode, or pending URLs from a previous crawl remain unresolved.
 	 */
@@ -613,6 +627,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		inventoryUrls: string[],
 		options?: Partial<CrawlConfig>,
 		initializedCallback?: CrawlInitializedCallback,
+		sourceFilePath?: string,
 	) {
 		if (inventoryUrls.length === 0) {
 			throw new Error('inventory: URL list is empty');
@@ -633,8 +648,19 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 			const { scraped, pending } = await archive.getCrawlingState();
 			if (pending.length > 0) {
-				throw new Error(
-					`inventory: archive has ${pending.length} pending URLs from a previous crawl. Resume or retry-failed first so inventory does not mislabel them as 'inventory-discovered'.`,
+				// `getCrawlingState` returns the STRICT pending set — in-scope,
+				// anchor-referenced, `scraped=0` rows. Predicted-discard leaks
+				// and external anomalies are filtered out at the reader, so a
+				// non-empty pending here means the previous session genuinely
+				// stopped with interrupted in-scope work. The original hard
+				// rejection blocked legitimate inventory runs in practice
+				// because leak rows polluted the count; with the strict
+				// reader those false positives are gone, so a warning is
+				// enough — the inventory pass continues and the crawled-wins
+				// source priority keeps stale labels stable even if some of
+				// the strict-pending rows happen to land on inventory seeds.
+				console.warn(
+					`inventory: archive has ${pending.length} pending URLs from a previous crawl. Proceeding — crawled-wins priority keeps their labels stable. Consider \`--resume\` first if you want the prior work finalized.`,
 				);
 			}
 
@@ -709,57 +735,38 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			await copyFile(absFilePath, backupPath);
 
 			try {
-				// HEAD each novel URL once. HTML responses become seeds for
-				// the recursive crawl; everything else is recorded straight
-				// into `resources` so a PDF or stray asset registered on the
-				// server still shows up as "exists but not referenced" in
-				// `listUnusedResources`.
+				// Classify novel URLs by URL-extension heuristic (no I/O).
+				// Source file lists come from `ls` on the doc-root, so the
+				// extension reflects the real file type — a HEAD pre-flight
+				// here would be pure wasted I/O. Edge cases:
 				//
-				// Probes run concurrently — fetchDestination is a single
-				// HTTP HEAD with no shared mutable state, so N URLs no longer
-				// cost N × HEAD-latency wall-clock. The trade-off is that we
-				// blast the target server with novelUrls.length parallel
-				// requests; for the inventory use case (one-off audit on a
-				// site we control) this is acceptable, and an internal cap
-				// can be added later if it becomes an issue.
-				type HeadResult =
-					| { url: ExURL; head: PageData; error: null }
-					| { url: ExURL; head: null; error: Error };
-				const headResults: HeadResult[] = await Promise.all(
-					novelUrls.map(async (url): Promise<HeadResult> => {
-						try {
-							const head = await fetchDestination({
-								url,
-								isExternal: false,
-								userAgent: archived.userAgent,
-							});
-							return { url, head, error: null };
-						} catch (headError) {
-							const error =
-								headError instanceof Error ? headError : new Error(String(headError));
-							return { url, head: null, error };
-						}
-					}),
-				);
-
+				// - `.html` returning 404 / 200: the normal crawler HEAD/GET
+				//   path absorbs this because every HTML-classified URL is
+				//   fed through the dealer and gets its real HEAD/GET there.
+				//
+				// - Extensionless API endpoints (e.g. `/api/foo`) that the
+				//   server returns as `text/html`: `isLikelyHtmlUrl` accepts
+				//   them as HTML so the dealer's render path runs — the
+				//   real content-type wins downstream.
+				//
+				// - `.aspx` / `.do` / `.jsp` / other server-handler
+				//   extensions that the heuristic does NOT recognise as
+				//   HTML: these are classified as non-HTML here, recorded
+				//   as `resources` rows with all-null metadata, and never
+				//   get a HEAD/GET probe. The accepted trade-off for
+				//   `--inventory`'s "list of static-looking server files"
+				//   contract; sites that mix server-handlers into the
+				//   inventory list will need a follow-up `--retry-failed`
+				//   pass (or a re-`--inventory` with the corrected list)
+				//   to populate metadata.
+				//
+				// non-HTML rows are recorded with null status/content-type
+				// which is sufficient for `listUnusedResources` (referrer
+				// count = 0) but means downstream consumers must treat
+				// null as "not probed" rather than "failed".
 				const htmlSeeds: ExURL[] = [];
-				for (const result of headResults) {
-					const { url, head, error } = result;
-					if (error !== null) {
-						// HEAD failure is recorded as a crawl_errors row so
-						// the URL is visible in `query error-kinds`, but does
-						// NOT abort the whole inventory pass — other novel
-						// URLs may still succeed.
-						await archive.addError({
-							pid: process.pid,
-							isMainProcess: true,
-							url: url.href,
-							isExternal: false,
-							error,
-						});
-						continue;
-					}
-					if (head.contentType == null || isHtmlContentType(head.contentType)) {
+				for (const url of novelUrls) {
+					if (isLikelyHtmlUrl(url)) {
 						htmlSeeds.push(url);
 					} else {
 						await archive.setResources(
@@ -767,18 +774,23 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 								url,
 								isExternal: false,
 								isError: false,
-								status: head.status,
-								statusText: head.statusText,
-								contentType: head.contentType,
-								contentLength: head.contentLength,
+								status: null,
+								statusText: null,
+								contentType: null,
+								contentLength: null,
 								compress: false,
 								cdn: false,
-								headers: head.responseHeaders ?? null,
+								headers: null,
 							},
 							'inventory-seed',
 						);
 					}
 				}
+				log(
+					'[inventory] %d HTML seed(s), %d non-HTML resource(s) recorded',
+					htmlSeeds.length,
+					novelUrls.length - htmlSeeds.length,
+				);
 
 				// Config sent to the user-facing `initializedCallback`
 				// (matches the rest of the orchestrator's public surface —
@@ -818,6 +830,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await orchestrator.crawling(htmlSeeds, { recursive: true });
 					CrawlerOrchestrator.#finalizeCrawlSession();
 					await archive.setUrlOrder();
+					await CrawlerOrchestrator.#writeInventoryRunRow(archive, {
+						inventoryUrlsCount: inventoryUrls.length,
+						htmlSeedsCount: htmlSeeds.length,
+						nonHtmlCount: novelUrls.length - htmlSeeds.length,
+						outOfScope,
+						sourceFilePath,
+					});
 					await ignoreEnoent(unlinkFile(backupPath));
 					return orchestrator;
 				}
@@ -829,6 +848,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await initializedCallback(orchestrator, baseConfig);
 				}
 				await archive.setUrlOrder();
+				await CrawlerOrchestrator.#writeInventoryRunRow(archive, {
+					inventoryUrlsCount: inventoryUrls.length,
+					htmlSeedsCount: htmlSeeds.length,
+					nonHtmlCount: novelUrls.length - htmlSeeds.length,
+					outOfScope,
+					sourceFilePath,
+				});
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
 			} catch (error) {
@@ -1027,6 +1053,63 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			// eslint-disable-next-line no-console
 			console.error(
 				`[preload] DNS-burned hosts: ${hosts.length} (will short-circuit subsequent URLs)`,
+			);
+		}
+	}
+
+	/**
+	 * Persist one `inventory_runs` audit row at the tail of a successful
+	 * `--inventory` invocation. Centralised here so the two success-exit
+	 * paths in {@link CrawlerOrchestrator.inventory} (HTML-seed branch +
+	 * non-HTML-only branch) stay in lockstep.
+	 *
+	 * `ran_at` is stamped now (run completion timestamp). `list_label`
+	 * is auto-generated from `ran_at` when the CLI did not pass one —
+	 * Phase 1 has no `--label` flag, so this is always the auto form.
+	 * `source_file_sha256` is computed via streaming hash over the txt
+	 * file; failure yields `null` (audit loss tolerated, the ingestion
+	 * itself has already succeeded by this point).
+	 *
+	 * **Audit-write failures are swallowed** (logged to stderr, not
+	 * re-thrown). The ingestion has already committed by the time we get
+	 * here — `setUrlOrder()` was the last semantically-important write.
+	 * Letting a libsql hiccup or a transient lock on the audit INSERT
+	 * bubble up to the orchestrator's outer catch would restore the
+	 * archive from `.bak` and discard the user's entire crawl, which is
+	 * strictly worse than losing one audit row. Phase 2 may stage the
+	 * failure for a later retry; Phase 1 just logs.
+	 *
+	 * Forward-compat: when Phase 2 introduces an explicit `--label`
+	 * flag, thread `labelOverride` through {@link inventory} into the
+	 * `aggregates` shape so the auto-name can be overridden.
+	 * @param archive - The opened archive to write the audit row into.
+	 * @param aggregates - The counts captured during the inventory pass; see {@link InventoryRunAggregates}.
+	 */
+	static async #writeInventoryRunRow(
+		archive: Archive,
+		aggregates: InventoryRunAggregates,
+	): Promise<void> {
+		const ranAt = new Date().toISOString();
+		const sourceFileSha256 = aggregates.sourceFilePath
+			? await computeFileSha256(aggregates.sourceFilePath)
+			: null;
+		try {
+			await archive.recordInventoryRun({
+				ran_at: ranAt,
+				list_label: `inventory-${ranAt}`,
+				source_file_path: aggregates.sourceFilePath ?? null,
+				source_file_sha256: sourceFileSha256,
+				total_lines: aggregates.inventoryUrlsCount,
+				new_pages: aggregates.htmlSeedsCount,
+				new_resources: aggregates.nonHtmlCount,
+				scope_skipped: aggregates.outOfScope,
+			});
+		} catch (error) {
+			// eslint-disable-next-line no-console
+			console.error(
+				`[inventory] audit-log write failed (run NOT recorded, ingestion preserved): ${
+					error instanceof Error ? error.message : String(error)
+				}`,
 			);
 		}
 	}

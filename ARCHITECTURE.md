@@ -522,6 +522,69 @@ CrawlerOrchestrator
 >
 > **検証**: `migrate-page-errors.spec.ts`（3 ケース: 作成 / 冪等性 / 空 archive スキップ）、`database.spec.ts > insertPageError`（3 ケース）、`archive.spec.ts > addPageError`（separate Database 接続で row 検証）、`crawler-orchestrator.spec.ts > pageError ハンドラ`（archive.addPageError の呼び出し + 失敗時の reject 伝播）、`drain-phase-errors.spec.ts`（6 ケース）、`create-change-phase-handler.spec.ts`（9 ケース）、`log-undrained-phase-errors.spec.ts`（5 ケース）。**worker → drain wiring の直接 e2e テストは puppeteer mock コストの兼ね合いで意図的に省略**（`Crawler.#drainPhaseErrors` の JSDoc に known gap として明記）。
 
+### inventory_runs 監査ログ（Phase 1）
+
+`crawl --inventory <urls.txt>` の **成功 path** で `inventory_runs` テーブルに 1 行追加する監査ログ。クライアント・ディレクター対応で頻発する「先月もらった list 反映しました？」「同じ list 2 度 apply してないですよね」を archive 単体で答えるための durable な記録。`.bak` は成功時に消えるので、それ以外に provenance が残らない問題への対策。
+
+```
+inventory_runs:
+  id                  INTEGER PK AUTOINCREMENT
+  ran_at              TEXT NOT NULL   ISO 8601 timestamp (UTC または local TZ 文字列)
+  list_label          TEXT            人間可読 ID。未指定なら `inventory-${ran_at}` 自動命名
+  source_file_path    TEXT            CLI 引数の txt 絶対パス
+  source_file_sha256  TEXT            stream hash で算出 (O(1) メモリ)、失敗時は NULL
+  total_lines         INTEGER         入力 URL 総数
+  new_pages           INTEGER         HTML seed として新規 page 化された件数
+  new_resources       INTEGER         非 HTML として新規 resources 行になった件数
+  scope_skipped       INTEGER         scope 外で skip した件数
+  notes               TEXT            自由記述 (将来用予約、Phase 1 では空)
+  INDEX (ran_at)
+```
+
+イベントフロー:
+
+```
+CLI inventoryCrawl
+  → resolveListFile (absolute path)
+  → readList (parse txt → URL[])
+  → CrawlerOrchestrator.inventory(archivePath, urls, options, callback, sourceFilePath)
+       → orchestrator.crawling(htmlSeeds, ...) で render + ingest
+       → archive.setUrlOrder()
+       → #writeInventoryRunRow(archive, aggregates)
+            → computeFileSha256(sourceFilePath)  (stream hash, null on error)
+            → archive.recordInventoryRun(meta)
+                 → Database.recordInventoryRun → INSERT INTO inventory_runs
+       → unlinkFile(<archive>.bak)
+       → return orchestrator
+```
+
+**ストレージ契約**:
+
+- **append-only**: UPDATE 経路なし、`source_file_sha256` に UNIQUE 制約なし。同じ list を 2 度 apply すれば 2 行。重複検知は Phase 3 (`--refresh`) で `source_file_sha256` を pre-flight key として使う領域
+- **ran_at だけ NOT NULL**: 残り 8 列はすべて NULL 可。post-merge backfill (Phase 1 deploy 前の initial inventory pass を後付け記録するための1回限り raw SQL INSERT) で集計値を欠損させたままでも記録できる
+- **`.bak` 削除直前で INSERT**: 失敗時は `.bak` から復元され、run 行も巻き戻る (transaction atomicity ではなく `.bak` revert semantics)
+- **noop early-return path (`novelUrls.length === 0`) は run 行を書かない**: 現実装では novel = 0 で `.bak` を作らず即 return するため、ここで DB write すると tar 書き戻し中断時の archive 破損リスクが出る。全 URL が既存だった run の audit は console log `[inventory] N already in archive, 0 new` でしか残らない (Phase 2 候補: `.bak` 取得拡張と合わせて noop 記録対応)
+- **list_label 自動命名**: `--label` CLI フラグは Phase 1 で実装しない。orchestrator が `inventory-${ran_at}` を自動付与
+
+**読み出し**:
+
+- `nitpicker query <archive> inventory-runs [--limit N] [--offset M]` で `ran_at DESC` 順
+- 関数: `@nitpicker/query` の `listInventoryRuns(accessor, { limit?, offset? })`
+- ArchiveAccessor 経由なので **read-only / stub mode でも動く** が、migration が走らない read-only 接続では `inventory_runs` テーブルが不在 → `hasTable` フォールバックで空配列を返す (`get-error-kinds.ts` の error.log フォールバックと同型)
+
+**既存 archive の自動マイグレーション**: `Database.#init` で `migrateInventoryRuns` を呼び、テーブルがなければ作成する (idempotent)。Phase 1 deploy 前の archive を新 CLI で開くと、最初の writer 接続 (= `--inventory` / `--retry-failed` / `--resume` / `--append` のいずれか) で migration が走る。`pages` テーブルすら無い空 archive は `initSchema` 経路に任せる。
+
+**Phase 1 で意図的に未実装**:
+
+- `--register-run` CLI: 1 回限りの backfill には raw SQL INSERT で足りるので CLI 追加しない。再帰的な手動登録ユースケースが Phase 2/3 で見えてきたら実装
+- MCP tool / viewer UI: CLI で run 一覧が見えれば Phase 1 のユースケースは満たすので、AI/UI 露出は実運用フィードバック待ち
+- `inventory_memberships` (run × page/resource の M:N): Phase 2 で diff 機能の基盤として導入
+- `--diff <new.txt>` / `--apply <new.txt>` / `--refresh <new.txt>`: 旧 list との差分適用は Phase 3
+
+> **更新手順（カラム追加）**: 新規列を加える場合、(1) `init-schema.ts` の `inventory_runs` createTable に追加、(2) `migrate-inventory-runs.ts` には追加列の `hasColumn` チェックと `alterTable` を追加 (新規 archive と既存 archive の両方をカバーするため)、(3) `InventoryRunMeta` / `InventoryRunEntry` interface に追加、(4) `Database.recordInventoryRun` の INSERT object に追加、(5) `listInventoryRuns` の SELECT columns に追加。
+>
+> **検証**: `migrate-inventory-runs.spec.ts`（3 ケース: 作成 / 冪等性 / 空 archive スキップ）、`compute-file-sha256.spec.ts`（4 ケース: 空ファイル / 既知バイト列 / >1MB streaming / 存在しないファイル `null` 返し）、`database.spec.ts > inventory run audit log`（5 ケース: 全フィールド / NULL省略 / 自動採番 / ran_at DESC ソート / 同 sha256 で 2 行）、`list-inventory-runs.spec.ts`（5 ケース: ソート / pagination / 全列 / テーブル不在フォールバック / 空テーブル）、`inventory.e2e.ts` の追加 describe（成功 path で run 行が書かれる + sha256 が 64 文字 hex + noop run では書かれない）。
+
 ### CLI プロセス終了とリソース解放
 
 `commands/crawl.ts` の `startCrawl` / `resumeCrawl` では `try { write } finally { close + garbageCollect }` 構造で SQLite コネクションプール（Knex の `acquireTimeoutMillis: 600_000`）を `archive.close()` → `db.destroy()` で確実に解放する。これをサボると `.nitpicker` ファイルは生成されるがプロセスが終了しない（pool 内部の reaper timer が event loop を握る）。
@@ -1216,7 +1279,9 @@ CrawlAggregateError
 
 **真理ソース**: `classifyErrorKind`（`@nitpicker/crawler`）。crawler パッケージへ物理移動し、`@nitpicker/query` は re-export 専用。crawler 自身がキャッシュの mark / preload 判定で必要としており、`query → crawler` の依存方向はあっても `crawler → query` は禁止だから（query が `ArchiveAccessor` 等を import する既存方向と矛盾しない）。
 
-**Session learning（同一セッション内の学習）**: `Crawler.#sendHeadRequest` の `onGiveUp` callback で `classifyErrorKind(error.message) === 'dns'` のとき host を `dnsBurnedHostCache: Map<string, ErrorKind>` に投入する。`onWait`（retry 待機開始）ではなく `onGiveUp`（全 retry 使い果たし）で mark する設計は、一過性のエラーを巻き込んで host を不当に burn しないため。最初の URL は retry を消化するが、その後のキュー pull は短絡される。
+**Session learning（同一セッション内の学習）**: `Crawler.#sendHeadRequest` の `onGiveUp` callback で `shouldBurnHost`（`packages/@nitpicker/crawler/src/crawler/should-burn-host.ts`）が `true` を返す時のみ host を `dnsBurnedHostCache: Map<string, ErrorKind>` に投入する。`onWait`（retry 待機開始）ではなく `onGiveUp`（全 retry 使い果たし）で mark する設計は、一過性のエラーを巻き込んで host を不当に burn しないため。最初の URL は retry を消化するが、その後のキュー pull は短絡される。
+
+> **WHY: session-success guard（cascade 防止）**: `shouldBurnHost` は `errorKind === 'dns'` に加えて **「同 host で本セッション中に 1 件でも HTTP 応答があった（= `#successfulHosts: Set<string>`）」を否定条件として満たす場合のみ** burn を許可する。理由: ローカル resolver が crawl の途中で flip する事故（WiFi → tether / VPN flip / ISP DNS hiccup）が起きると、dealer の並列 in-flight 全てが同時に `getaddrinfo ENOTFOUND` を返し、最初の onGiveUp が host を burn → 残りの URL が `PreloadShortCircuitError` で短絡 → dealer の queue が秒〜分で枯渇 → `crawlEnd` が「成功」発火 → tar 化、で **健全な host を含むセッション丸ごとが degenerate completion に陥る**。session-success guard を入れることで、過去に同 host で 1 件でも HTTP 応答を得た事実があれば burn しない（= 短絡しない＝ retry layer に任せる）。dead-domain の fast-fail 挙動は session-success の無い host については従来通り保たれる。実装の正は `should-burn-host.ts` の JSDoc。`#successfulHosts` の populate は `Crawler.#sendHeadRequest` 内の `retryCall` callable で `fetchDestination` が resolve した瞬間（外側 `await` の前）と puppeteer fallback の success / skipped 経路で行う。 Known limitation（実装 JSDoc にも記載）: (1) 同セッション初回 URL が直接ネットワーク blip に当たった host は guard が空のため burn される（pause-dealer-on-outage で塞ぐ別 issue #91）。(2) preload で seeded された host は `#sendHeadRequest` 冒頭で `PreloadShortCircuitError` を即 throw するので `#successfulHosts` に到達せず、session-success による un-burn は起こらない（= 仕様）。
 
 > **WHY: `EAI_AGAIN` は `dns` ではなく `dns-transient` に分類**: `getaddrinfo EAI_AGAIN <host>` はローカル DNS resolver の一時的失敗（WiFi 切替、resolver 過負荷）であり、本物の NXDOMAIN とは性質が違う。`dns` バケットに入れたままだと、ローカル resolver が一時不調なときに 3 retry 後の onGiveUp で **無実の host を全 burn する** 穴になる。`MATCHERS` の first-match-wins 順序で `dns-transient` を `dns` より前に評価することで、`getaddrinfo` トークンを共有しても EAI_AGAIN は transient ラベル側に倒す。`Database.listDnsBurnedHostCandidates` の SQL LIKE フィルタも `%EAI_AGAIN%` を意図的に外しており、JS 側 `classifyErrorKind` の確定判定と二段で守る。
 

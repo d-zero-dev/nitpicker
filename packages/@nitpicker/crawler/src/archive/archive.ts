@@ -1,4 +1,4 @@
-import type { Config, PageSource } from './types.js';
+import type { Config, InventoryRunMeta, PageSource } from './types.js';
 import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
 import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 
@@ -161,6 +161,18 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.getExistingResourceUrls(urls);
 	}
 	/**
+	 * Look up the `source` column of a single page row by its URL key. Thin
+	 * facade over {@link Database.getPageSourceByUrl} — exposes the lookup
+	 * to the orchestrator so it can inject a `PageSourceLookup` into the
+	 * Crawler for sub-resource lineage propagation on `--resume` /
+	 * `--retry-failed` sessions.
+	 * @param url - URL key in `url.withoutHashAndAuth` form.
+	 * @returns The recorded `source`, or `undefined` when no row exists.
+	 */
+	async getPageSourceByUrl(url: string) {
+		return this.#db.getPageSourceByUrl(url);
+	}
+	/**
 	 * Retrieves a single recorded sub-resource by its URL.
 	 * @param urls - URL candidates to match against the stored resource URL.
 	 * @returns The raw resource row, or `null` if none match.
@@ -200,6 +212,20 @@ export default class Archive extends ArchiveAccessor {
 	 */
 	async listDnsBurnedHostCandidates(): Promise<string[]> {
 		return this.#db.listDnsBurnedHostCandidates();
+	}
+	/**
+	 * Appends one row to the `inventory_runs` audit log.
+	 *
+	 * Thin facade over {@link Database.recordInventoryRun} — keeps the
+	 * orchestrator decoupled from the knex layer and gives a single
+	 * write entry point that future Archive-level concerns (locking,
+	 * mirror sync, etc.) can hook into without touching every caller.
+	 * @param meta - The run metadata. Only `ran_at` is required.
+	 * @returns The autoincremented `id` of the inserted row.
+	 */
+	async recordInventoryRun(meta: InventoryRunMeta): Promise<number> {
+		dbLog('Record inventory run: %s', meta.list_label ?? meta.ran_at);
+		return await this.#db.recordInventoryRun(meta);
 	}
 
 	/**
@@ -287,10 +313,15 @@ export default class Archive extends ArchiveAccessor {
 	 * destination edge is written, leaving the destination's stored title / meta /
 	 * anchors / images untouched.
 	 * @param pageInfo - The HEAD-resolved page data carrying the redirect chain.
+	 * @param source - Inventory provenance for a brand-new destination row.
+	 *   Forwarded to `recordRedirect` so the destination's `source` (and the
+	 *   chain-intermediate `source` derived from it) lands on the inventory
+	 *   label instead of the DB DEFAULT `'crawled'` when the orchestrator is
+	 *   running an inventory pass. `undefined` keeps the DB DEFAULT.
 	 */
-	async setRedirect(pageInfo: PageData) {
+	async setRedirect(pageInfo: PageData, source?: PageSource) {
 		dbLog('Set redirect: %s', pageInfo.url.href);
-		await this.#db.recordRedirect(pageInfo);
+		await this.#db.recordRedirect(pageInfo, source);
 	}
 	/**
 	 * Stores a sub-resource (CSS, JS, image, etc.) in the archive database.

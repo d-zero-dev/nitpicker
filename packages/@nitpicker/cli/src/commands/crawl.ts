@@ -352,7 +352,8 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
  * @param flags - Parsed CLI flags from the `crawl` command.
  */
 async function inventoryCrawl(archivePath: string, listFile: string, flags: CrawlFlags) {
-	const list = await readList(path.resolve(process.cwd(), listFile));
+	const resolvedListFile = path.resolve(process.cwd(), listFile);
+	const list = await readList(resolvedListFile);
 	if (list.length === 0) {
 		throw new Error(`No URLs found in inventory file: ${listFile}`);
 	}
@@ -374,6 +375,7 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 				flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
 			).catch((error) => errStack.push(error));
 		},
+		resolvedListFile,
 	);
 
 	try {

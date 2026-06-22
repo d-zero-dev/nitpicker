@@ -158,6 +158,20 @@ export interface CrawlerOptions extends Required<
 	lookupResource: ResourceLookup | null;
 
 	/**
+	 * Lookup for an already-persisted page's `source` column, or `null` when
+	 * lineage propagation across sessions is not required. See
+	 * {@link PageSourceLookup}.
+	 *
+	 * Injected by the orchestrator so that `#scrapePage` can resolve the
+	 * parent's source on `--resume` / `--retry-failed` paths, where
+	 * `inventoryMode` is not persisted but the page's `source` column is.
+	 * Without this, sub-resources captured during a re-render of an
+	 * inventory-labelled page would fall back to the DB DEFAULT `'crawled'`
+	 * and lose their `'inventory-discovered'` provenance.
+	 */
+	lookupPageSource: PageSourceLookup | null;
+
+	/**
 	 * When non-null, the crawler is running in `--inventory` mode. New page
 	 * rows whose URL matches `seedUrls` are labelled `'inventory-seed'`;
 	 * every other newly-inserted page or sub-resource is labelled
@@ -195,6 +209,25 @@ export interface InventoryMode {
 export type ResourceLookup = (
 	urls: readonly string[],
 ) => Promise<ResourceLookupResult | null>;
+
+/**
+ * Looks up the `source` column of a previously persisted page by URL.
+ *
+ * Returns `undefined` when no row matches (e.g. a freshly-discovered URL
+ * that has not been INSERTed yet) so the caller can fall through to its
+ * default behaviour.
+ *
+ * Used by {@link Crawler} during sub-resource lineage propagation:
+ * `#scrapePage` consults this once per page to resolve the parent's
+ * lineage when the in-memory `inventoryMode` is unavailable (i.e. on
+ * `--resume` / `--retry-failed` sessions where inventory state lives only
+ * in the DB).
+ * @param urlWithoutHashAndAuth - The URL key (`url.withoutHashAndAuth` form) to look up.
+ * @returns The recorded `source`, or `undefined` when no matching row exists.
+ */
+export type PageSourceLookup = (
+	urlWithoutHashAndAuth: string,
+) => Promise<PageSource | undefined>;
 
 /**
  * Minimal sub-resource data needed to synthesize {@link PageData}
@@ -348,5 +381,14 @@ export interface CrawlerEventTypes {
 	redirect: {
 		/** HEAD-resolved page data carrying the redirect chain (source → destination). */
 		result: PageData;
+		/**
+		 * Inventory provenance for the redirect-edge call. Forwarded by the
+		 * orchestrator to `Archive.setRedirect` → `Database.recordRedirect`
+		 * so brand-new destination rows INSERTed by the edge-only path pick
+		 * up the inventory label (and propagate it to intermediates) when
+		 * the originating chain is in the inventory chain. `undefined` keeps
+		 * the DB DEFAULT `'crawled'`.
+		 */
+		source: PageSource | undefined;
 	};
 }

@@ -23,6 +23,7 @@ vi.mock('@nitpicker/query', () => ({
 		pageUrls: [],
 		total: 0,
 	}),
+	listInventoryRuns: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	listIsolatedPages: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	listUnusedResources: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	ArchiveManager: vi.fn(),
@@ -255,6 +256,19 @@ describe('dispatchQuery', () => {
 		expect(listUnusedResources).toHaveBeenCalledWith(mockAccessor, {
 			limit: 10,
 			offset: 0,
+		});
+	});
+
+	it('dispatches inventory-runs sub-command with limit and offset', async () => {
+		const { listInventoryRuns } = await import('@nitpicker/query');
+		const result = await dispatchQuery(mockAccessor, 'inventory-runs', {
+			limit: 25,
+			offset: 5,
+		} as never);
+		expect(result).toEqual({ items: [], total: 0 });
+		expect(listInventoryRuns).toHaveBeenCalledWith(mockAccessor, {
+			limit: 25,
+			offset: 5,
 		});
 	});
 });

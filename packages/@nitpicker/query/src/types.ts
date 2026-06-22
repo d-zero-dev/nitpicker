@@ -69,6 +69,49 @@ export interface ListUnusedResourcesOptions {
 }
 
 /**
+ * One row of {@link listInventoryRuns} output — one record per successful
+ * `--inventory <list>` invocation against the archive.
+ *
+ * Schema-mirror of the `inventory_runs` table. All NULL semantics, the
+ * "ran_at is the only required field" backfill contract, and the
+ * append-only invariant live on
+ * {@link import('@nitpicker/crawler').InventoryRunMeta} in the crawler
+ * package — this interface is the read-side shape.
+ */
+export interface InventoryRunEntry {
+	/** Autoincrement primary key (monotonically increasing per archive). */
+	id: number;
+	/** ISO 8601 timestamp at which the run completed. */
+	ran_at: string;
+	/** Human-readable label (auto-generated as `inventory-${ran_at}` when the CLI did not supply one). */
+	list_label: string | null;
+	/** Absolute path the operator passed to `--inventory <file>`. */
+	source_file_path: string | null;
+	/** SHA-256 hex digest of the source file at run time. `null` if hashing failed. */
+	source_file_sha256: string | null;
+	/** Number of non-empty lines in the input list. */
+	total_lines: number | null;
+	/** Number of newly-inserted `pages` rows produced by this run. */
+	new_pages: number | null;
+	/** Number of newly-inserted `resources` rows produced by this run. */
+	new_resources: number | null;
+	/** Number of input URLs dropped because they fell outside the archived scope. */
+	scope_skipped: number | null;
+	/** Free-form annotation from a backfill or manual `INSERT`. */
+	notes: string | null;
+}
+
+/**
+ * Pagination options for {@link listInventoryRuns}.
+ */
+export interface ListInventoryRunsOptions {
+	/** Maximum rows to return. Defaults to 100. */
+	limit?: number;
+	/** Rows to skip from the start. Defaults to 0. */
+	offset?: number;
+}
+
+/**
  * Options for opening a .nitpicker archive file.
  */
 export interface OpenArchiveOptions {

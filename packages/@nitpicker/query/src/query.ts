@@ -29,6 +29,7 @@ export { getSummary } from './get-summary.js';
 export { getTagInventory } from './get-tag-inventory.js';
 export { getViolations } from './get-violations.js';
 export { listImages } from './list-images.js';
+export { listInventoryRuns } from './list-inventory-runs.js';
 export { listIsolatedPages } from './list-isolated-pages.js';
 export { listLinks } from './list-links.js';
 export { listPageLinks } from './list-page-links.js';
