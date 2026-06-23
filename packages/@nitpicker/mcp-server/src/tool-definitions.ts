@@ -169,7 +169,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'list_links',
 		description:
-			'Analyze links: find broken links (4xx/5xx status), external links, or orphaned pages (no incoming links). Use for link health checks and site structure analysis.',
+			'Analyse links: find **broken** links (4xx/5xx status or no status) or **external** links. Anchor destinations are resolved through `pages.redirectDestId` to the canonical final destination before judgment, so a 301 intermediate that lands on a 404 reports as broken with the 404 URL — not as a stale 301. Pass `includeRedirectSources: true` to disable the resolution and see the literal anchor target (diagnostic view). For orphan analysis, use `list_isolated_pages` (singletons) or `list_isolated_clusters` (interconnected orphan groups) — the previous `orphaned` type was removed in favour of those two well-separated concepts.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -179,9 +179,14 @@ export const toolDefinitions: Tool[] = [
 				},
 				type: {
 					type: 'string',
-					enum: ['broken', 'external', 'orphaned'],
+					enum: ['broken', 'external'],
 					description:
-						'Type of link analysis: broken (4xx/5xx), external, or orphaned (no inbound links)',
+						'Type of link analysis: broken (4xx/5xx or no status) or external (anchor leaves the in-scope hostname). Judged against the redirect-resolved canonical destination by default.',
+				},
+				includeRedirectSources: {
+					type: 'boolean',
+					description:
+						'When true, skip the redirect resolution and judge against the literal anchor target. Diagnostic — default is false.',
 				},
 				limit: { type: 'number', description: 'Max results (default: 100)' },
 				offset: { type: 'number', description: 'Results to skip (default: 0)' },
@@ -512,7 +517,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'list_isolated_pages',
 		description:
-			'List internal HTML pages that no other archived page anchors to (excluding archived roots). These are the "orphan landing pages" the recursive crawl could not reach via the link graph. Combine with `crawl --inventory` to surface pages that only exist on the server but are unreachable from the site map. Each row carries a `source` badge (`crawled` / `inventory-seed` / `inventory-discovered`) indicating how the page entered the archive.',
+			'List **完全孤立** — inventory-* HTML pages that form singleton components in the inventory subgraph (no resolved-anchor inbound from any other inventory-* node). `source` is typically `inventory-seed`, but an `inventory-discovered` row can also surface here if its discoverer was later demoted to `crawled` (the crawled-wins downgrade). `crawled` rows never appear here by definition — that label asserts "reachable via the recursive crawl chain", which excludes orphan status. For interconnected orphan groups (size ≥ 2), use `list_isolated_clusters` instead.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -524,6 +529,43 @@ export const toolDefinitions: Tool[] = [
 				offset: { type: 'number', description: 'Results to skip (default: 0)' },
 			},
 			required: ['archiveId'],
+		},
+	},
+	{
+		name: 'list_isolated_clusters',
+		description:
+			"List **孤立集合** — connected components of the inventory-* subgraph with size ≥ 2. Each cluster is identified by `representativeUrl` (the lexicographically smallest member URL), with `size` and the representative member's title/status for at-a-glance scanning. Sort: size DESC, representativeUrl ASC. Follow up with `get_isolated_cluster` to fetch the full member list of a specific cluster. Singletons are reported by `list_isolated_pages`; cluster listing omits them so the operator sees interconnected orphan groups (typical: date-series archive pages, paginated category indexes, etc.) without singleton noise.",
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				limit: { type: 'number', description: 'Max clusters to return (default: 100)' },
+				offset: { type: 'number', description: 'Clusters to skip (default: 0)' },
+			},
+			required: ['archiveId'],
+		},
+	},
+	{
+		name: 'get_isolated_cluster',
+		description:
+			"Fetch the full member list of one isolated cluster, identified by its `representativeUrl` (from `list_isolated_clusters`). Returns null when no cluster matches — typically because a follow-up crawl reached one of the cluster's members via the crawled chain, demoting the inventory-* labels and collapsing the cluster. Members are sorted by URL ASC, so `members[0].url === representativeUrl` is invariant.",
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				representativeUrl: {
+					type: 'string',
+					description:
+						"The cluster's representative URL (returned by list_isolated_clusters).",
+				},
+			},
+			required: ['archiveId', 'representativeUrl'],
 		},
 	},
 	{

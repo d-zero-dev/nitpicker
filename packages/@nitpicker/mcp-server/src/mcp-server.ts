@@ -11,6 +11,7 @@ import {
 	countPagesByTag,
 	findDuplicates,
 	findMismatches,
+	getIsolatedCluster,
 	getPageDetail,
 	getPageHtml,
 	getPageJsonLd,
@@ -21,6 +22,7 @@ import {
 	getTagInventory,
 	getViolations,
 	listImages,
+	listIsolatedClusters,
 	listIsolatedPages,
 	listLinks,
 	listPages,
@@ -66,8 +68,38 @@ function optionalNumber(args: Record<string, unknown>, key: string): number | un
 	return num;
 }
 
+/**
+ * Validates an optional boolean argument, coercing common string forms
+ * (`"true"` / `"false"`) so LLM clients that JSON-encode tool arguments
+ * don't silently fall into the truthy-string trap (`"false"` being truthy
+ * would otherwise flip a diagnostic flag on when the caller asked it off).
+ * @param args - The MCP tool-call arguments object.
+ * @param key - The argument key.
+ * @returns The boolean value, or `undefined` if not present.
+ * @throws {TypeError} If the value is present but not a boolean / coercible string.
+ */
+function optionalBoolean(
+	args: Record<string, unknown>,
+	key: string,
+): boolean | undefined {
+	const value = args[key];
+	if (value == null) {
+		return undefined;
+	}
+	if (typeof value === 'boolean') {
+		return value;
+	}
+	if (value === 'true') {
+		return true;
+	}
+	if (value === 'false') {
+		return false;
+	}
+	throw new TypeError(`Invalid boolean for argument: ${key}`);
+}
+
 /** Valid link analysis types. */
-const VALID_LINK_TYPES = ['broken', 'external', 'orphaned'] as const;
+const VALID_LINK_TYPES = ['broken', 'external'] as const;
 
 /** Valid mismatch types. */
 const VALID_MISMATCH_TYPES = ['canonical', 'og:title', 'og:description'] as const;
@@ -213,11 +245,12 @@ export function createServer() {
 							VALID_LINK_TYPES,
 							'link type',
 						);
-						const linkOpts = omit(args, 'archiveId');
 						return jsonResult(
 							await listLinks(accessor, {
-								...linkOpts,
 								type,
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+								includeRedirectSources: optionalBoolean(args, 'includeRedirectSources'),
 							}),
 						);
 					}
@@ -279,6 +312,26 @@ export function createServer() {
 								offset: optionalNumber(args, 'offset'),
 							}),
 						);
+					}
+					case 'list_isolated_clusters': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await listIsolatedClusters(accessor, {
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
+					}
+					case 'get_isolated_cluster': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						const result = await getIsolatedCluster(
+							accessor,
+							requireString(args, 'representativeUrl'),
+						);
+						if (result === null) {
+							return textResult('Isolated cluster not found.');
+						}
+						return jsonResult(result);
 					}
 					case 'list_unused_resources': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
