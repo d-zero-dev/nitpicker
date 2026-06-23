@@ -7,10 +7,12 @@ import { CONTENT_TYPE_CATEGORIES } from '@nitpicker/query/categories';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 
+import { usePagedQuery } from '../api/use-paged-query.js';
 import { usePagesInfinite } from '../api/use-pages-infinite.js';
+import { DataTable } from '../components/data-table.js';
 import { FilterBar } from '../components/filter-bar.js';
 import { ViewHeader } from '../components/view-header.js';
-import { VirtualTable } from '../components/virtual-table.js';
+import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
@@ -24,15 +26,17 @@ function textCell(info: CellContext<PageListItem, unknown>) {
 }
 
 /**
- * The page list: a virtualized, filterable, sortable table backed by an
- * infinite query, with columns ordered to match the google-sheets "Page List"
- * sheet. Internal pages only by default; check "Include external" to show all.
+ * The page list: a filterable, sortable table backed by the user's chosen
+ * pagination mode (MPA `?page=` by default, opt-in virtual scroll). Internal
+ * pages only by default; check "Include external" to show all. Columns are
+ * ordered to match the google-sheets "Page List" sheet.
  * @returns The pages view element.
  */
 export function PagesView() {
 	const { params, update } = useUrlFilter();
 	const navigate = useNavigate();
 	const { t } = useI18n();
+	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 
 	const includeExternal = params.get('includeExternal') === 'true';
 	const contentTypeParam = params.get('contentTypeCategory');
@@ -50,10 +54,21 @@ export function PagesView() {
 		sortOrder: (params.get('sortOrder') as PagesFilter['sortOrder']) || undefined,
 	};
 
-	const { data, fetchNextPage, hasNextPage, isFetching, isLoading } =
-		usePagesInfinite(filter);
-	const rows = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
-	const total = data?.pages[0]?.total ?? 0;
+	const offset = (currentPage - 1) * pageSize;
+	const paged = usePagedQuery<PageListItem>(
+		'/api/pages',
+		{ ...filter, limit: pageSize, offset },
+		['pages-paged', filter, pageSize, currentPage],
+		{ enabled: mode === 'mpa' },
+	);
+	const infinite = usePagesInfinite(filter, { enabled: mode === 'virtual' });
+
+	const infiniteRows = useMemo(
+		() => infinite.data?.pages.flatMap((page) => page.items) ?? [],
+		[infinite.data],
+	);
+	const pagedTotal = paged.data?.total ?? 0;
+	const infiniteTotal = infinite.data?.pages[0]?.total ?? 0;
 
 	const columns = useMemo<ColumnDef<PageListItem>[]>(() => {
 		const boolCell = (info: CellContext<PageListItem, unknown>) =>
@@ -205,17 +220,37 @@ export function PagesView() {
 					<option value="desc">{t('common.desc')}</option>
 				</select>
 			</FilterBar>
-			<VirtualTable
-				data={rows}
-				columns={columns}
-				total={total}
-				hasNextPage={hasNextPage}
-				isFetching={isFetching}
-				isLoading={isLoading}
-				onLoadMore={() => {
-					void fetchNextPage();
-				}}
-			/>
+			{mode === 'mpa' ? (
+				<DataTable
+					mode="mpa"
+					columns={columns}
+					data={paged.data?.items ?? []}
+					total={pagedTotal}
+					currentPage={currentPage}
+					pageSize={pageSize}
+					onPageChange={setPage}
+					onPageSizeChange={setPageSize}
+					isFetching={paged.isFetching}
+					isLoading={paged.isLoading}
+					isError={paged.isError}
+					error={paged.error}
+				/>
+			) : (
+				<DataTable
+					mode="virtual"
+					columns={columns}
+					data={infiniteRows}
+					total={infiniteTotal}
+					hasNextPage={infinite.hasNextPage}
+					isFetching={infinite.isFetching}
+					isLoading={infinite.isLoading}
+					isError={infinite.isError}
+					error={infinite.error}
+					onLoadMore={() => {
+						void infinite.fetchNextPage();
+					}}
+				/>
+			)}
 		</div>
 	);
 }

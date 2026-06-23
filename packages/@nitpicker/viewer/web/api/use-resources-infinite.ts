@@ -1,3 +1,4 @@
+import type { InfiniteQueryOptions } from './infinite-query-options.js';
 import type { PaginatedResourceList } from '@nitpicker/query';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -17,9 +18,13 @@ export interface ResourcesFilter {
 /**
  * Infinite-scrolling resource list.
  * @param filter - The active filter state.
+ * @param options - Optional flags (`enabled`).
  * @returns The TanStack infinite-query result.
  */
-export function useResourcesInfinite(filter: ResourcesFilter) {
+export function useResourcesInfinite(
+	filter: ResourcesFilter,
+	options?: InfiniteQueryOptions,
+) {
 	return useInfiniteQuery({
 		queryKey: ['resources', filter],
 		initialPageParam: 0,
@@ -31,5 +36,6 @@ export function useResourcesInfinite(filter: ResourcesFilter) {
 			}),
 		getNextPageParam: (lastPage, _allPages, lastPageParam) =>
 			getNextOffset(lastPage, lastPageParam),
+		enabled: options?.enabled ?? true,
 	});
 }

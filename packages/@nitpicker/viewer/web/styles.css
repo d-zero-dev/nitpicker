@@ -446,6 +446,226 @@ h2 {
 	border-radius: 3px;
 }
 
+/* Paged table (MPA mode) — same visual surface as .vt-*, no virtualizer. */
+.pt {
+	display: block flex;
+	flex: 1 1 0%;
+	flex-direction: column;
+	min-block-size: 0;
+}
+
+.pt-meta {
+	margin-block-end: 6px;
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+}
+
+.pt-scroll {
+	flex: 1 1 0%;
+	overflow: auto;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+
+.pt-table {
+	inline-size: max-content;
+	min-inline-size: 100%;
+	border-collapse: collapse;
+}
+
+.pt-table thead {
+	position: sticky;
+	inset-block-start: 0;
+	z-index: var(--z-table-header);
+	background: var(--bg-elev);
+}
+
+.pt-table thead tr {
+	display: block flex;
+}
+
+.pt-table th {
+	position: relative;
+	flex-shrink: 0;
+	padding-block: 8px;
+	padding-inline: 10px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--font-size-sm);
+	font-weight: 600;
+	color: var(--text-dim);
+	text-align: start;
+	white-space: nowrap;
+	border-block-end: 1px solid var(--border);
+}
+
+.pt-resizer {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-end: 0;
+	inline-size: 5px;
+	block-size: 100%;
+	touch-action: none;
+	cursor: col-resize;
+	user-select: none;
+}
+
+.pt-resizer:hover,
+.pt-resizer:focus-visible,
+.pt-resizer.is-resizing {
+	background: var(--accent);
+}
+
+.pt-resizer:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+.pt-table tbody {
+	display: block flow;
+	inline-size: 100%;
+}
+
+.pt-row {
+	display: block flex;
+	inline-size: 100%;
+	border-block-end: 1px solid var(--border);
+}
+
+.pt-skeleton-row {
+	pointer-events: none;
+}
+
+.pt-row td {
+	flex-shrink: 0;
+	padding-block: 7px;
+	padding-inline: 10px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--font-size-base);
+	white-space: nowrap;
+}
+
+.pt-skeleton {
+	display: block flow;
+
+	/* stylelint-disable-next-line @d-zero/declaration-value-type-disallowed-list -- intentional 80% width for a skeleton bar inside a flex row; px would re-flow with column resizing. */
+	inline-size: 80%;
+	block-size: 12px;
+	background: var(--skeleton);
+	border-radius: 3px;
+	animation: skeleton-pulse 1200ms ease-in-out infinite;
+}
+
+/* Pager footer */
+.pager {
+	display: block flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-block-start: 10px;
+	font-size: var(--font-size-sm);
+}
+
+.pager-controls {
+	display: block flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: center;
+}
+
+.pager-list {
+	display: block flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: center;
+	padding: 0;
+	margin: 0;
+	list-style: none;
+}
+
+.pager-button {
+	display: block flex;
+	align-items: center;
+	justify-content: center;
+	min-inline-size: 32px;
+	padding-block: 4px;
+	padding-inline: 10px;
+	font-size: var(--font-size-sm);
+	color: var(--text);
+	cursor: pointer;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
+.pager-button:hover:not(:disabled) {
+	border-color: var(--accent);
+}
+
+.pager-button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+.pager-button:disabled {
+	cursor: not-allowed;
+	opacity: 0.5;
+}
+
+.pager-number.is-current {
+	color: #fff;
+	cursor: default;
+	background: var(--accent);
+	border-color: var(--accent);
+	opacity: 1;
+}
+
+.pager-ellipsis {
+	display: block flex;
+	align-items: center;
+	padding-inline: 4px;
+	color: var(--text-dim);
+}
+
+.pager-meta {
+	display: block flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	align-items: center;
+	color: var(--text-dim);
+}
+
+.pager-jump,
+.pager-size {
+	display: block flex;
+	gap: 6px;
+	align-items: center;
+}
+
+.pager-label {
+	color: var(--text-dim);
+}
+
+.pager-jump input {
+	inline-size: 6ch;
+	padding-block: 3px;
+	padding-inline: 6px;
+	color: var(--text);
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
+.pager-size select {
+	padding-block: 3px;
+	padding-inline: 6px;
+	color: var(--text);
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
 /* Summary cards */
 .cards {
 	display: block flex;

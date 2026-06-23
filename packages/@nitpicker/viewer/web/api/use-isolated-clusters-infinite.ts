@@ -1,3 +1,4 @@
+import type { InfiniteQueryOptions } from './infinite-query-options.js';
 import type { IsolatedClusterSummary } from '@nitpicker/query';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -22,9 +23,10 @@ export interface IsolatedClustersPage {
  * Infinite-scrolling **孤立集合** cluster summary list. Each row identifies
  * a cluster by its `representativeUrl`; the viewer drills into a specific
  * cluster via {@link import('./use-isolated-cluster.js').useIsolatedCluster}.
+ * @param options - Optional flags (`enabled`).
  * @returns The TanStack infinite-query result for cluster summaries.
  */
-export function useIsolatedClustersInfinite() {
+export function useIsolatedClustersInfinite(options?: InfiniteQueryOptions) {
 	return useInfiniteQuery({
 		queryKey: ['isolated-clusters-infinite'],
 		initialPageParam: 0,
@@ -35,5 +37,6 @@ export function useIsolatedClustersInfinite() {
 			}),
 		getNextPageParam: (lastPage, _allPages, lastPageParam) =>
 			getNextOffset(lastPage, lastPageParam),
+		enabled: options?.enabled ?? true,
 	});
 }

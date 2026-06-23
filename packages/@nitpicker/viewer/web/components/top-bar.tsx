@@ -3,6 +3,7 @@ import { useIsFetching } from '@tanstack/react-query';
 import { useI18n } from '../i18n/use-i18n.js';
 
 import { LanguageToggle } from './language-toggle.js';
+import { PaginationModeToggle } from './pagination-mode-toggle.js';
 import { ThemeToggle } from './theme-toggle.js';
 
 /**
@@ -18,6 +19,7 @@ export function TopBar() {
 			<div className="top-bar-title">{t('app.title')}</div>
 			<div className="top-bar-actions">
 				<LanguageToggle />
+				<PaginationModeToggle />
 				<ThemeToggle />
 			</div>
 			{isFetching > 0 && (

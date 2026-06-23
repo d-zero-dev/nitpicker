@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
 
+/**
+ * MPA pagination is the viewer's default mode. These tests assume that
+ * default — the `infinite scroll (virtual mode)` describe block at the
+ * bottom flips the preference via localStorage to cover the opt-in path.
+ */
+
 test.describe('Nitpicker Viewer', () => {
 	test('サマリーダッシュボードが表示される', async ({ page }) => {
 		await page.goto('/');
@@ -7,16 +13,16 @@ test.describe('Nitpicker Viewer', () => {
 		await expect(page.locator('.card-value').first()).toBeVisible();
 	});
 
-	test('ページ一覧が仮想スクロールで表示される', async ({ page }) => {
+	test('ページ一覧が MPA ページネーションで表示される', async ({ page }) => {
 		await page.goto('/pages');
 		await expect(page.getByRole('heading', { name: 'Pages', level: 1 })).toBeVisible();
-		await expect(page.locator('.vt-row').first()).toBeVisible();
-		await expect(page.locator('.vt-meta')).toContainText('rows');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		await expect(page.locator('.pager')).toBeVisible();
 	});
 
 	test('ページ詳細と HTML スナップショットプレビューが表示される', async ({ page }) => {
 		await page.goto('/pages');
-		await page.locator('.vt-row .link-button').first().click();
+		await page.locator('.pt-row .link-button').first().click();
 		await expect(
 			page.getByRole('heading', { name: 'Page detail', level: 1 }),
 		).toBeVisible();
@@ -78,7 +84,7 @@ test.describe('Nitpicker Viewer', () => {
 		await expect(
 			page.getByRole('heading', { name: 'Page Links', level: 1 }),
 		).toBeVisible();
-		await expect(page.locator('.vt-row').first()).toBeVisible();
+		await expect(page.locator('.pt-row').first()).toBeVisible();
 	});
 
 	test('Errors ビューに遷移して見出しと解説が表示される', async ({ page }) => {
@@ -92,6 +98,102 @@ test.describe('Nitpicker Viewer', () => {
 	});
 });
 
+test.describe('MPA ページネーション', () => {
+	test('Pager の Next ボタンで ?page=2 へ遷移し 2 ページ目が読み込まれる', async ({
+		page,
+	}) => {
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		const next = page.getByRole('button', { name: 'Next' });
+		await next.click();
+		await expect(page).toHaveURL(/[?&]page=2(?:&|$)/);
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+	});
+
+	test('1 ページ目では Prev が disabled', async ({ page }) => {
+		await page.goto('/pages');
+		const prev = page.getByRole('button', { name: 'Previous' });
+		await expect(prev).toBeDisabled();
+	});
+
+	test('フィルタを変えると ?page= が消える', async ({ page }) => {
+		await page.goto('/pages?page=2');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		const urlInput = page.getByRole('textbox', { name: 'URL pattern (%foo%)' });
+		await urlInput.fill('%does-not-match%');
+		await urlInput.blur();
+		await expect(page).not.toHaveURL(/[?&]page=/);
+	});
+
+	test('ページサイズ select を変えると localStorage に保存される', async ({ page }) => {
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		const sizeSelect = page.getByRole('combobox', { name: 'Rows / page:' });
+		await sizeSelect.selectOption('50');
+		await expect
+			.poll(async () =>
+				page.evaluate(() => globalThis.localStorage.getItem('nitpicker-page-size')),
+			)
+			.toBe('50');
+	});
+
+	test('モード切替で MPA ↔ virtual が入れ替わる', async ({ page }) => {
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		// Toggle to virtual.
+		await page.getByRole('button', { name: 'Switch to infinite scroll' }).click();
+		await expect(page.locator('.vt-row').first()).toBeVisible();
+		await expect(page.locator('.pager')).toHaveCount(0);
+		// Toggle back to MPA.
+		await page.getByRole('button', { name: 'Switch to per-page navigation' }).click();
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		await expect(page.locator('.pager')).toBeVisible();
+	});
+});
+
+test.describe('infinite scroll (virtual mode)', () => {
+	test.beforeEach(async ({ page }) => {
+		// Pin the localStorage preference *before* the SPA loads so the first
+		// render is already in virtual mode.
+		await page.addInitScript(() => {
+			globalThis.localStorage.setItem('nitpicker-pagination-mode', 'virtual');
+		});
+	});
+
+	test('ページ一覧が仮想スクロールで表示される', async ({ page }) => {
+		await page.goto('/pages');
+		await expect(page.getByRole('heading', { name: 'Pages', level: 1 })).toBeVisible();
+		await expect(page.locator('.vt-row').first()).toBeVisible();
+		await expect(page.locator('.vt-meta')).toContainText('rows');
+	});
+
+	test('Page Links ビューが全ページを表示する', async ({ page }) => {
+		await page.goto('/page-links');
+		await expect(
+			page.getByRole('heading', { name: 'Page Links', level: 1 }),
+		).toBeVisible();
+		await expect(page.locator('.vt-row').first()).toBeVisible();
+	});
+
+	test('テーブルが ARIA の grid セマンティクスを公開する (virtual)', async ({ page }) => {
+		await page.goto('/pages');
+		await expect(page.locator('.vt-row').first()).toBeVisible();
+		const table = page.getByRole('table');
+		await expect(table).toHaveAttribute('aria-rowcount', /\d+/);
+		await expect(table).toHaveAttribute('aria-colcount', /\d+/);
+		expect(await page.getByRole('columnheader').count()).toBeGreaterThan(5);
+		await expect(
+			page.getByRole('columnheader', { name: 'Title', exact: true }),
+		).toBeVisible();
+		await expect(page.getByRole('cell').first()).toBeVisible();
+	});
+
+	test('行数表示がライブリージョンになっている (virtual)', async ({ page }) => {
+		await page.goto('/pages');
+		await expect(page.locator('.vt-meta')).toHaveAttribute('aria-live', 'polite');
+	});
+});
+
 test.describe('アクセシビリティ', () => {
 	test('スキップリンクが最初のフォーカス要素で本文を指す', async ({ page }) => {
 		await page.goto('/pages');
@@ -102,9 +204,9 @@ test.describe('アクセシビリティ', () => {
 		await expect(page.locator('main#main-content')).toBeVisible();
 	});
 
-	test('テーブルが ARIA の grid セマンティクスを公開する', async ({ page }) => {
+	test('テーブルが ARIA の grid セマンティクスを公開する (MPA)', async ({ page }) => {
 		await page.goto('/pages');
-		await expect(page.locator('.vt-row').first()).toBeVisible();
+		await expect(page.locator('.pt-row').first()).toBeVisible();
 		const table = page.getByRole('table');
 		await expect(table).toHaveAttribute('aria-rowcount', /\d+/);
 		await expect(table).toHaveAttribute('aria-colcount', /\d+/);
@@ -152,9 +254,9 @@ test.describe('アクセシビリティ', () => {
 		await expect(page.getByRole('img', { name: /Network graph/ })).toBeVisible();
 	});
 
-	test('行数表示がライブリージョンになっている', async ({ page }) => {
+	test('行数表示がライブリージョンになっている (MPA)', async ({ page }) => {
 		await page.goto('/pages');
-		await expect(page.locator('.vt-meta')).toHaveAttribute('aria-live', 'polite');
+		await expect(page.locator('.pt-meta')).toHaveAttribute('aria-live', 'polite');
 	});
 });
 

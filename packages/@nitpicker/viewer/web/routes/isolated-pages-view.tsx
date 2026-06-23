@@ -4,26 +4,37 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useMemo } from 'react';
 
 import { useIsolatedPagesInfinite } from '../api/use-isolated-pages-infinite.js';
+import { usePagedQuery } from '../api/use-paged-query.js';
+import { DataTable } from '../components/data-table.js';
 import { SourceBadge } from '../components/source-badge.js';
 import { ViewHeader } from '../components/view-header.js';
-import { VirtualTable } from '../components/virtual-table.js';
+import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 /**
  * **完全孤立** page list: inventory-* HTML pages that form singleton
  * components in the inventory subgraph (no resolved-anchor inbound from any
- * other inventory-* node). Backed by `useIsolatedPagesInfinite` so the
- * rendered list grows to match the displayed `total` as the user scrolls —
- * unlike the previous fixed-100-row hook which left "{total} 件" lying
- * about the visible rows.
+ * other inventory-* node). Rendered via the user's chosen pagination mode —
+ * MPA `?page=` by default, opt-in virtual scroll.
  * @returns The isolated pages view element.
  */
 export function IsolatedPagesView() {
 	const { t } = useI18n();
-	const { data, fetchNextPage, hasNextPage, isFetching, isLoading } =
-		useIsolatedPagesInfinite();
-	const rows = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
-	const total = data?.pages[0]?.total ?? 0;
+	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
+
+	const offset = (currentPage - 1) * pageSize;
+	const paged = usePagedQuery<IsolatedPageEntry>(
+		'/api/isolated-pages',
+		{ limit: pageSize, offset },
+		['isolated-pages-paged', pageSize, currentPage],
+		{ enabled: mode === 'mpa' },
+	);
+	const infinite = useIsolatedPagesInfinite({ enabled: mode === 'virtual' });
+	const infiniteRows = useMemo(
+		() => infinite.data?.pages.flatMap((page) => page.items) ?? [],
+		[infinite.data],
+	);
+	const infiniteTotal = infinite.data?.pages[0]?.total ?? 0;
 
 	const columns = useMemo<ColumnDef<IsolatedPageEntry>[]>(
 		() => [
@@ -65,17 +76,37 @@ export function IsolatedPagesView() {
 				titleKey="views.isolatedPages.title"
 				descriptionKey="views.isolatedPages.description"
 			/>
-			<VirtualTable
-				data={rows}
-				columns={columns}
-				total={total}
-				hasNextPage={hasNextPage}
-				isFetching={isFetching}
-				isLoading={isLoading}
-				onLoadMore={() => {
-					void fetchNextPage();
-				}}
-			/>
+			{mode === 'mpa' ? (
+				<DataTable
+					mode="mpa"
+					columns={columns}
+					data={paged.data?.items ?? []}
+					total={paged.data?.total ?? 0}
+					currentPage={currentPage}
+					pageSize={pageSize}
+					onPageChange={setPage}
+					onPageSizeChange={setPageSize}
+					isFetching={paged.isFetching}
+					isLoading={paged.isLoading}
+					isError={paged.isError}
+					error={paged.error}
+				/>
+			) : (
+				<DataTable
+					mode="virtual"
+					columns={columns}
+					data={infiniteRows}
+					total={infiniteTotal}
+					hasNextPage={infinite.hasNextPage}
+					isFetching={infinite.isFetching}
+					isLoading={infinite.isLoading}
+					isError={infinite.isError}
+					error={infinite.error}
+					onLoadMore={() => {
+						void infinite.fetchNextPage();
+					}}
+				/>
+			)}
 		</div>
 	);
 }

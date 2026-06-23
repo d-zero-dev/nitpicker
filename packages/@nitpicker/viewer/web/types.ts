@@ -86,3 +86,22 @@ export interface DiffResult {
 	/** Segments for the expected value (with `added` middle). */
 	expected: DiffSegment[];
 }
+
+/**
+ * Pagination mode for list views.
+ *
+ * `'mpa'` — classic per-page table with Prev/Next + page number controls and
+ * the current page encoded in the URL (`?page=N`). The default mode; lets
+ * operators deep-link, share URLs, and use the browser back button.
+ *
+ * `'virtual'` — windowed (virtualized) infinite scroll backed by
+ * `useInfiniteQuery`. Best when bouncing through 100k+ rows with the keyboard
+ * and not needing a shareable position.
+ */
+export type PaginationMode = 'mpa' | 'virtual';
+
+/**
+ * Allowed page-size values for MPA pagination. The default is `100` (matches
+ * the historical `PAGE_SIZE` used by virtual-mode infinite queries).
+ */
+export type PageSize = 50 | 100 | 200;

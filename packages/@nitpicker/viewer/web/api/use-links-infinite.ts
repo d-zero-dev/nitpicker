@@ -1,3 +1,4 @@
+import type { InfiniteQueryOptions } from './infinite-query-options.js';
 import type { LinkEntry } from '@nitpicker/query';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -27,9 +28,10 @@ interface LinksPage {
 /**
  * Infinite-scrolling link analysis (broken / external).
  * @param type - The link analysis type.
+ * @param options - Optional flags (`enabled`).
  * @returns The TanStack infinite-query result.
  */
-export function useLinksInfinite(type: LinkType) {
+export function useLinksInfinite(type: LinkType, options?: InfiniteQueryOptions) {
 	return useInfiniteQuery({
 		queryKey: ['links', type],
 		initialPageParam: 0,
@@ -41,5 +43,6 @@ export function useLinksInfinite(type: LinkType) {
 			}),
 		getNextPageParam: (lastPage, _allPages, lastPageParam) =>
 			getNextOffset(lastPage, lastPageParam),
+		enabled: options?.enabled ?? true,
 	});
 }

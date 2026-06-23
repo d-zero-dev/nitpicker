@@ -1,3 +1,4 @@
+import type { InfiniteQueryOptions } from './infinite-query-options.js';
 import type { IsolatedPageEntry } from '@nitpicker/query';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -24,9 +25,10 @@ export interface IsolatedPagesPage {
  * loaded — replaces the previous fixed-100-row {@link useIsolatedPages}
  * hook so the rendered list count matches the displayed total at every
  * scroll position.
+ * @param options - Optional flags (`enabled`).
  * @returns The TanStack infinite-query result for singleton inventory pages.
  */
-export function useIsolatedPagesInfinite() {
+export function useIsolatedPagesInfinite(options?: InfiniteQueryOptions) {
 	return useInfiniteQuery({
 		queryKey: ['isolated-pages-infinite'],
 		initialPageParam: 0,
@@ -37,5 +39,6 @@ export function useIsolatedPagesInfinite() {
 			}),
 		getNextPageParam: (lastPage, _allPages, lastPageParam) =>
 			getNextOffset(lastPage, lastPageParam),
+		enabled: options?.enabled ?? true,
 	});
 }

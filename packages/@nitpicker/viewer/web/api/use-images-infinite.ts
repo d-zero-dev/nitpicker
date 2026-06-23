@@ -1,3 +1,4 @@
+import type { InfiniteQueryOptions } from './infinite-query-options.js';
 import type { PaginatedImageList } from '@nitpicker/query';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -21,9 +22,10 @@ export interface ImagesFilter {
 /**
  * Infinite-scrolling image list.
  * @param filter - The active filter state.
+ * @param options - Optional flags (`enabled`).
  * @returns The TanStack infinite-query result.
  */
-export function useImagesInfinite(filter: ImagesFilter) {
+export function useImagesInfinite(filter: ImagesFilter, options?: InfiniteQueryOptions) {
 	return useInfiniteQuery({
 		queryKey: ['images', filter],
 		initialPageParam: 0,
@@ -35,5 +37,6 @@ export function useImagesInfinite(filter: ImagesFilter) {
 			}),
 		getNextPageParam: (lastPage, _allPages, lastPageParam) =>
 			getNextOffset(lastPage, lastPageParam),
+		enabled: options?.enabled ?? true,
 	});
 }
