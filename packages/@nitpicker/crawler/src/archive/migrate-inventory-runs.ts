@@ -41,7 +41,6 @@ export async function migrateInventoryRuns(instance: Knex): Promise<void> {
 		t.increments('id');
 		t.string('ran_at').notNullable();
 		t.string('list_label').nullable();
-		t.string('source_file_path', 8190).nullable();
 		t.string('source_file_sha256', 64).nullable();
 		t.integer('total_lines').nullable();
 		t.integer('new_pages').nullable();

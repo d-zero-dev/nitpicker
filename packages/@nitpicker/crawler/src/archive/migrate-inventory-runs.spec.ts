@@ -38,6 +38,7 @@ afterEach(async () => {
 		'migrate-inventory-runs.sqlite',
 		'migrate-inventory-runs-idempotent.sqlite',
 		'migrate-inventory-runs-empty.sqlite',
+		'migrate-inventory-runs-no-source-path.sqlite',
 	]) {
 		await fs.rm(path.resolve(workingDir, name), { force: true });
 	}
@@ -50,15 +51,12 @@ describe('migrateInventoryRuns', () => {
 		await migrateInventoryRuns(instance);
 
 		expect(await instance.schema.hasTable('inventory_runs')).toBe(true);
-		// All 10 columns of the Phase 1 schema. Listed individually so a
-		// rename / drop in the implementation surfaces as a single column
-		// failure rather than a generic "table mismatch".
+		// Columns listed individually so a rename / drop in the
+		// implementation surfaces as a single-column failure rather
+		// than a generic "table mismatch".
 		expect(await instance.schema.hasColumn('inventory_runs', 'id')).toBe(true);
 		expect(await instance.schema.hasColumn('inventory_runs', 'ran_at')).toBe(true);
 		expect(await instance.schema.hasColumn('inventory_runs', 'list_label')).toBe(true);
-		expect(await instance.schema.hasColumn('inventory_runs', 'source_file_path')).toBe(
-			true,
-		);
 		expect(await instance.schema.hasColumn('inventory_runs', 'source_file_sha256')).toBe(
 			true,
 		);
@@ -67,6 +65,27 @@ describe('migrateInventoryRuns', () => {
 		expect(await instance.schema.hasColumn('inventory_runs', 'new_resources')).toBe(true);
 		expect(await instance.schema.hasColumn('inventory_runs', 'scope_skipped')).toBe(true);
 		expect(await instance.schema.hasColumn('inventory_runs', 'notes')).toBe(true);
+
+		await instance.destroy();
+	});
+
+	it('does NOT create a `source_file_path` column (privacy regression guard)', async () => {
+		// `source_file_path` was dropped post-Phase-1 because absolute
+		// paths leak user-home / OS structure when archives are shared.
+		// Pinning the column's absence here prevents an accidental re-
+		// introduction via `migrate-inventory-runs.ts` (the legacy-
+		// archive bring-up path) — re-adding it on initSchema would be
+		// caught by the symmetric guard in `database.spec.ts`'s
+		// inventory run audit log describe.
+		const { instance } = await buildLegacyArchive(
+			'migrate-inventory-runs-no-source-path.sqlite',
+		);
+
+		await migrateInventoryRuns(instance);
+
+		expect(await instance.schema.hasColumn('inventory_runs', 'source_file_path')).toBe(
+			false,
+		);
 
 		await instance.destroy();
 	});

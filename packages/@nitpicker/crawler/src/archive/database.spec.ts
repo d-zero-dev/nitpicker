@@ -4260,6 +4260,30 @@ describe('redirect chain intermediate lineage propagation', () => {
 });
 
 describe('inventory run audit log', () => {
+	it('initSchema does NOT create a `source_file_path` column (privacy regression guard, symmetric to migrate-inventory-runs.spec.ts)', async () => {
+		// `source_file_path` was dropped post-Phase-1 because absolute
+		// paths leak user-home / OS structure when archives are shared.
+		// `migrate-inventory-runs.spec.ts` pins the legacy bring-up
+		// path; this asserts the FRESH-archive path (`initSchema`) is
+		// symmetric. Without this guard, accidentally re-adding
+		// `t.string('source_file_path', ...)` to `init-schema.ts` would
+		// pass the existing tests in this describe — they use either
+		// explicit `select(name, ...)` lists or `toMatchObject` (which
+		// silently ignores extra columns) and would not surface the
+		// regression.
+		const dbPath = path.resolve(workingDir, 'inventory-runs-no-source-path.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			expect(
+				await db.getKnex().schema.hasColumn('inventory_runs', 'source_file_path'),
+			).toBe(false);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
 	it('records every field on INSERT and reads them back via SELECT', async () => {
 		const dbPath = path.resolve(workingDir, 'inventory-runs-full-fields.sqlite');
 		await removeIfExists(dbPath);
@@ -4268,7 +4292,6 @@ describe('inventory run audit log', () => {
 			const id = await db.recordInventoryRun({
 				ran_at: '2026-06-21T11:30:00+09:00',
 				list_label: 'prod-2026-06',
-				source_file_path: '/tmp/list.txt',
 				source_file_sha256: 'a'.repeat(64),
 				total_lines: 113_268,
 				new_pages: 1234,
@@ -4286,7 +4309,6 @@ describe('inventory run audit log', () => {
 					'id',
 					'ran_at',
 					'list_label',
-					'source_file_path',
 					'source_file_sha256',
 					'total_lines',
 					'new_pages',
@@ -4299,7 +4321,6 @@ describe('inventory run audit log', () => {
 				id,
 				ran_at: '2026-06-21T11:30:00+09:00',
 				list_label: 'prod-2026-06',
-				source_file_path: '/tmp/list.txt',
 				source_file_sha256: 'a'.repeat(64),
 				total_lines: 113_268,
 				new_pages: 1234,
@@ -4328,7 +4349,6 @@ describe('inventory run audit log', () => {
 			const [row] = await db.getKnex().from('inventory_runs').select('*').where('id', id);
 			expect(row.ran_at).toBe('2026-06-19T22:09:00+09:00');
 			expect(row.list_label).toBeNull();
-			expect(row.source_file_path).toBeNull();
 			expect(row.source_file_sha256).toBeNull();
 			expect(row.total_lines).toBeNull();
 			expect(row.new_pages).toBeNull();

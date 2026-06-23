@@ -45,3 +45,4 @@ export {
 export * from './types.js';
 export * from './crawler/types.js';
 export { classifyErrorKind } from './classify-error-kind.js';
+export { computeFileSha256 } from './utils/compute-file-sha256.js';

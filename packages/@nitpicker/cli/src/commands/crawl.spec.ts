@@ -14,6 +14,7 @@ const mockResume = vi.fn();
 const mockAppend = vi.fn();
 const mockRetryFailed = vi.fn();
 const mockInventory = vi.fn();
+const mockComputeFileSha256 = vi.fn(() => Promise.resolve('d'.repeat(64)));
 
 vi.mock('@nitpicker/crawler', () => ({
 	CrawlerOrchestrator: {
@@ -23,6 +24,7 @@ vi.mock('@nitpicker/crawler', () => ({
 		retryFailed: mockRetryFailed,
 		inventory: mockInventory,
 	},
+	computeFileSha256: mockComputeFileSha256,
 }));
 
 const mockEventAssignments = vi.fn().mockResolvedValue();
@@ -772,10 +774,17 @@ describe('crawl', () => {
 			['https://example.com/hidden'],
 			expect.any(Object),
 			expect.any(Function),
-			// 5th arg: the resolved absolute path of the source file,
-			// forwarded so the orchestrator can fingerprint the txt with
-			// sha256 on the `inventory_runs` audit row. The CLI calls
-			// `path.resolve(process.cwd(), listFile)` on the input.
+			// 5th arg: the **pre-computed** SHA-256 of the source file.
+			// The CLI hashes the resolved txt at `inventoryCrawl` and
+			// passes the digest to the orchestrator — the absolute path
+			// is deliberately NOT forwarded (privacy: leaks user-home /
+			// OS structure when archives are shared). 64-char hex.
+			expect.stringMatching(/^[0-9a-f]{64}$/),
+		);
+		// And the CLI actually ran the hash against the resolved
+		// absolute path (= `process.cwd() + '/tmp/urls.txt'` resolution
+		// path), not bypassed it.
+		expect(mockComputeFileSha256).toHaveBeenCalledWith(
 			expect.stringMatching(/urls\.txt$/),
 		);
 	});
