@@ -96,7 +96,6 @@ describe('listInventoryRuns', () => {
 		await archive.recordInventoryRun({
 			ran_at: '2026-06-21T11:30:00+09:00',
 			list_label: 'full-fields',
-			source_file_path: '/tmp/list.txt',
 			source_file_sha256: 'c'.repeat(64),
 			total_lines: 100,
 			new_pages: 10,
@@ -109,7 +108,6 @@ describe('listInventoryRuns', () => {
 		expect(result.items[0]).toMatchObject({
 			ran_at: '2026-06-21T11:30:00+09:00',
 			list_label: 'full-fields',
-			source_file_path: '/tmp/list.txt',
 			source_file_sha256: 'c'.repeat(64),
 			total_lines: 100,
 			new_pages: 10,
@@ -118,6 +116,10 @@ describe('listInventoryRuns', () => {
 			notes: 'first applied list',
 		});
 		expect(typeof result.items[0]?.id).toBe('number');
+		// Privacy: `source_file_path` is no longer persisted post-Phase-1.
+		// Pin the read shape so a regression that reintroduces SELECT of
+		// the orphan column on legacy archives gets caught here.
+		expect(result.items[0]).not.toHaveProperty('source_file_path');
 	});
 
 	it('returns an empty result when `inventory_runs` is missing (Phase 1 pre-migration archive fallback)', async () => {

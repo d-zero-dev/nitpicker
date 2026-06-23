@@ -4,7 +4,7 @@ import type { Config, CrawlerError } from '@nitpicker/crawler';
 import path from 'node:path';
 
 import { readList } from '@d-zero/readtext/list';
-import { CrawlerOrchestrator } from '@nitpicker/crawler';
+import { computeFileSha256, CrawlerOrchestrator } from '@nitpicker/crawler';
 
 import { log, verbosely } from '../crawl/debug.js';
 import { diff } from '../crawl/diff.js';
@@ -358,6 +358,11 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 		throw new Error(`No URLs found in inventory file: ${listFile}`);
 	}
 	validateUrls(list);
+	// Compute the source-file digest HERE — at the CLI boundary — so the
+	// absolute path never crosses into the orchestrator. The path is
+	// privacy-sensitive (user-home / OS structure leaks when archives are
+	// shared), and the audit row only needs the content fingerprint.
+	const sourceFileSha256 = await computeFileSha256(resolvedListFile);
 	const errStack: (CrawlerError | Error)[] = [];
 
 	const orchestrator = await CrawlerOrchestrator.inventory(
@@ -375,7 +380,7 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 				flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
 			).catch((error) => errStack.push(error));
 		},
-		resolvedListFile,
+		sourceFileSha256,
 	);
 
 	try {

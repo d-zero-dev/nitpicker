@@ -531,7 +531,6 @@ inventory_runs:
   id                  INTEGER PK AUTOINCREMENT
   ran_at              TEXT NOT NULL   ISO 8601 timestamp (UTC または local TZ 文字列)
   list_label          TEXT            人間可読 ID。未指定なら `inventory-${ran_at}` 自動命名
-  source_file_path    TEXT            CLI 引数の txt 絶対パス
   source_file_sha256  TEXT            stream hash で算出 (O(1) メモリ)、失敗時は NULL
   total_lines         INTEGER         入力 URL 総数
   new_pages           INTEGER         HTML seed として新規 page 化された件数
@@ -541,18 +540,20 @@ inventory_runs:
   INDEX (ran_at)
 ```
 
+**`source_file_path` は永続化しない**: absolute path に user-home / OS 構造が混入し、archive 共有時に環境が漏れる。同一ファイル 2 度反映の検出は `source_file_sha256` (content identity) で完結する。CLI / orchestrator は依然 path を受け取り `computeFileSha256` の入力に使うが、DB の行には書かない。
+
 イベントフロー:
 
 ```
 CLI inventoryCrawl
-  → resolveListFile (absolute path)
+  → resolveListFile (absolute path, sha256 計算用)
   → readList (parse txt → URL[])
   → CrawlerOrchestrator.inventory(archivePath, urls, options, callback, sourceFilePath)
        → orchestrator.crawling(htmlSeeds, ...) で render + ingest
        → archive.setUrlOrder()
        → #writeInventoryRunRow(archive, aggregates)
             → computeFileSha256(sourceFilePath)  (stream hash, null on error)
-            → archive.recordInventoryRun(meta)
+            → archive.recordInventoryRun(meta)   (path は meta に含めない)
                  → Database.recordInventoryRun → INSERT INTO inventory_runs
        → unlinkFile(<archive>.bak)
        → return orchestrator
@@ -561,7 +562,8 @@ CLI inventoryCrawl
 **ストレージ契約**:
 
 - **append-only**: UPDATE 経路なし、`source_file_sha256` に UNIQUE 制約なし。同じ list を 2 度 apply すれば 2 行。重複検知は Phase 3 (`--refresh`) で `source_file_sha256` を pre-flight key として使う領域
-- **ran_at だけ NOT NULL**: 残り 8 列はすべて NULL 可。post-merge backfill (Phase 1 deploy 前の initial inventory pass を後付け記録するための1回限り raw SQL INSERT) で集計値を欠損させたままでも記録できる
+- **ran_at だけ NOT NULL**: 残り 7 列はすべて NULL 可。post-merge backfill (Phase 1 deploy 前の initial inventory pass を後付け記録するための1回限り raw SQL INSERT) で集計値を欠損させたままでも記録できる
+- **Strategy A (orphan column 容認)**: pre-update archive (= `source_file_path` 列を持つ Phase 1 直後の archive) は当該列を残置したまま新コードで開ける。READ / WRITE 経路は SELECT / INSERT に列を含めないので JSON 出力には現れず、orphan として残るだけ。`ALTER TABLE ... DROP COLUMN` migration は打たない (SQLite version 制約回避 + 実書き込み 0 件)。物理削除したい運用者は手動 `sqlite3 db.sqlite "ALTER TABLE inventory_runs DROP COLUMN source_file_path"` を打てる
 - **`.bak` 削除直前で INSERT**: 失敗時は `.bak` から復元され、run 行も巻き戻る (transaction atomicity ではなく `.bak` revert semantics)
 - **noop early-return path (`novelUrls.length === 0`) は run 行を書かない**: 現実装では novel = 0 で `.bak` を作らず即 return するため、ここで DB write すると tar 書き戻し中断時の archive 破損リスクが出る。全 URL が既存だった run の audit は console log `[inventory] N already in archive, 0 new` でしか残らない (Phase 2 候補: `.bak` 取得拡張と合わせて noop 記録対応)
 - **list_label 自動命名**: `--label` CLI フラグは Phase 1 で実装しない。orchestrator が `inventory-${ran_at}` を自動付与

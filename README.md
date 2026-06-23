@@ -54,7 +54,7 @@ npx @nitpicker/cli crawl <archive> --inventory <urls.txt>
 - スコープ外 URL は警告して skip
 - アーカイブに pending URL (scraped=0) が残っていても hard reject せず `console.warn` で続行（crawled-wins UPDATE が source ラベルの整合性を保つ前提）
 - 結果は `query isolated-pages` / `query unused-resources` で見るのが想定動線（後述）
-- **監査ログ (Phase 1)**: 成功した `--inventory` 実行ごとに `inventory_runs` テーブルへ 1 行追加される（`ran_at` / 自動命名 `list_label` / `source_file_path` / stream hash された `source_file_sha256` / `total_lines` / `new_pages` / `new_resources` / `scope_skipped`）。「先月もらった list を反映したか」「同じ list を 2 回反映してないか」をクライアント / ディレクターに即答するための durable な記録。`nitpicker query <archive> inventory-runs --pretty` で履歴一覧
+- **監査ログ (Phase 1)**: 成功した `--inventory` 実行ごとに `inventory_runs` テーブルへ 1 行追加される（`ran_at` / 自動命名 `list_label` / stream hash された `source_file_sha256` / `total_lines` / `new_pages` / `new_resources` / `scope_skipped`）。`source_file_path` は永続化されない（privacy; 詳細は ARCHITECTURE.md）。「先月もらった list を反映したか」「同じ list を 2 回反映してないか」をクライアント / ディレクターに即答するための durable な記録。`nitpicker query <archive> inventory-runs --pretty` で履歴一覧
 - `--append` / `--retry-failed` / `--resume` / `--diff` / `--output` / `--list` / `--list-file` / `--single` と同時指定不可
 
 ### `--retry-failed`: 失敗ページの再取得
@@ -196,7 +196,7 @@ npx @nitpicker/cli query <file> <sub-command> [options]
 npx @nitpicker/cli query <file> inventory-runs --pretty
 ```
 
-各行: `id` / `ran_at` (ISO 8601) / `list_label` (未指定なら `inventory-${ran_at}` 自動命名) / `source_file_path` / `source_file_sha256` (stream hash) / `total_lines` / `new_pages` / `new_resources` / `scope_skipped` / `notes`。
+各行: `id` / `ran_at` (ISO 8601) / `list_label` (未指定なら `inventory-${ran_at}` 自動命名) / `source_file_sha256` (stream hash) / `total_lines` / `new_pages` / `new_resources` / `scope_skipped` / `notes`。`source_file_path` は永続化されない (privacy; ARCHITECTURE.md 参照)。
 
 **append-only / UNIQUE 制約なし**: 同じ list を 2 回 apply すれば 2 行できる。重複検知 / 旧 list との差分適用は Phase 3 (`--refresh`) で導入予定。
 
@@ -220,11 +220,10 @@ sha=$(shasum -a 256 ./<list>.txt | cut -c1-64)
 # 3. アーカイブ (もしくは stub tmpDir) の db.sqlite に直接 INSERT
 sqlite3 <stubDir>/db.sqlite "
 INSERT INTO inventory_runs
-  (ran_at, list_label, source_file_path, source_file_sha256, total_lines, notes)
+  (ran_at, list_label, source_file_sha256, total_lines, notes)
 VALUES
   ('2026-06-19T22:09:00+09:00',    -- 実際に走った日時 (backdate)
    '2026-06-19-initial',           -- 任意ラベル
-   '/abs/path/to/<list>.txt',
    '$sha',
    $(awk 'NF{c++}END{print c}' ./<list>.txt),  -- 非空行数
    'Backfilled — initial inventory pass before run tracking shipped');

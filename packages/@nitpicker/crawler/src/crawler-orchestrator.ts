@@ -25,7 +25,6 @@ import { crawlerLog, log } from './debug.js';
 import { normalizeToArray } from './normalize-to-array.js';
 import { resolveOutputPath } from './resolve-output-path.js';
 import { resourceRowToLookupResult } from './resource-row-to-lookup-result.js';
-import { computeFileSha256 } from './utils/compute-file-sha256.js';
 import { cleanObject } from './utils/object/clean-object.js';
 import { WriteQueue } from './write-queue.js';
 
@@ -612,13 +611,16 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * @param inventoryUrls - Pre-read URL list (one URL per element).
 	 * @param options - Optional config overrides — most callers leave this blank and let the archived config flow through.
 	 * @param initializedCallback - Hook invoked once the orchestrator is constructed but before `crawling` runs (the CLI uses it to attach progress reporting).
-	 * @param sourceFilePath - Absolute path of the URL list file the
-	 *   caller read `inventoryUrls` from. Forwarded onto the
-	 *   `inventory_runs` audit row so future passes can fingerprint the
-	 *   input (sha256) and recover the provenance via `query
-	 *   inventory-runs`. Pass `undefined` for programmatic callers that
-	 *   constructed the URL list in-memory; `source_file_path` /
-	 *   `source_file_sha256` will be recorded as `null`.
+	 * @param sourceFileSha256 - **Pre-computed** SHA-256 hex digest of the
+	 *   source URL list. The orchestrator deliberately does NOT receive
+	 *   the file path: the path is privacy-sensitive (leaks user-home /
+	 *   OS structure when archives are shared) and we want it lifted off
+	 *   this boundary so no future log line / breadcrumb / error message
+	 *   inside the orchestrator can accidentally re-leak it. The CLI
+	 *   computes the digest via `computeFileSha256(resolvedListFile)`
+	 *   and passes it through here. Pass `null` for programmatic
+	 *   callers that built `inventoryUrls` in-memory; the audit row's
+	 *   `source_file_sha256` column will be `NULL`.
 	 * @returns The orchestrator instance after a successful inventory pass.
 	 * @throws {Error} When `inventoryUrls` is empty, the archive is in list mode, or pending URLs from a previous crawl remain unresolved.
 	 */
@@ -627,7 +629,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		inventoryUrls: string[],
 		options?: Partial<CrawlConfig>,
 		initializedCallback?: CrawlInitializedCallback,
-		sourceFilePath?: string,
+		sourceFileSha256: string | null = null,
 	) {
 		if (inventoryUrls.length === 0) {
 			throw new Error('inventory: URL list is empty');
@@ -835,7 +837,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 						htmlSeedsCount: htmlSeeds.length,
 						nonHtmlCount: novelUrls.length - htmlSeeds.length,
 						outOfScope,
-						sourceFilePath,
+						sourceFileSha256,
 					});
 					await ignoreEnoent(unlinkFile(backupPath));
 					return orchestrator;
@@ -853,7 +855,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					htmlSeedsCount: htmlSeeds.length,
 					nonHtmlCount: novelUrls.length - htmlSeeds.length,
 					outOfScope,
-					sourceFilePath,
+					sourceFileSha256,
 				});
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
@@ -1066,9 +1068,12 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * `ran_at` is stamped now (run completion timestamp). `list_label`
 	 * is auto-generated from `ran_at` when the CLI did not pass one —
 	 * Phase 1 has no `--label` flag, so this is always the auto form.
-	 * `source_file_sha256` is computed via streaming hash over the txt
-	 * file; failure yields `null` (audit loss tolerated, the ingestion
-	 * itself has already succeeded by this point).
+	 * `source_file_sha256` arrives pre-computed via
+	 * `aggregates.sourceFileSha256` (the CLI's `inventoryCrawl` ran
+	 * `computeFileSha256` against the input txt before the orchestrator
+	 * was even invoked). The orchestrator boundary deliberately never
+	 * sees the absolute path — see {@link InventoryRunAggregates} for
+	 * the privacy rationale.
 	 *
 	 * **Audit-write failures are swallowed** (logged to stderr, not
 	 * re-thrown). The ingestion has already committed by the time we get
@@ -1090,15 +1095,11 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		aggregates: InventoryRunAggregates,
 	): Promise<void> {
 		const ranAt = new Date().toISOString();
-		const sourceFileSha256 = aggregates.sourceFilePath
-			? await computeFileSha256(aggregates.sourceFilePath)
-			: null;
 		try {
 			await archive.recordInventoryRun({
 				ran_at: ranAt,
 				list_label: `inventory-${ranAt}`,
-				source_file_path: aggregates.sourceFilePath ?? null,
-				source_file_sha256: sourceFileSha256,
+				source_file_sha256: aggregates.sourceFileSha256,
 				total_lines: aggregates.inventoryUrlsCount,
 				new_pages: aggregates.htmlSeedsCount,
 				new_resources: aggregates.nonHtmlCount,

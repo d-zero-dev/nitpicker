@@ -19,8 +19,20 @@ export interface InventoryRunAggregates {
 	nonHtmlCount: number;
 	/** URLs dropped because they fell outside the archived scope. Stored as `scope_skipped`. */
 	outOfScope: number;
-	/** Absolute path of the source `.txt` so `computeFileSha256` can fingerprint it. `undefined` means programmatic invocation (no file) — sha256 stays `null`. */
-	sourceFilePath: string | undefined;
+	/**
+	 * SHA-256 hex digest of the source `.txt`, **pre-computed by the caller**
+	 * (typically the CLI's `inventoryCrawl`). Stored verbatim as
+	 * `inventory_runs.source_file_sha256`.
+	 *
+	 * Pre-computation lifts the absolute path off the orchestrator
+	 * boundary entirely — the path is privacy-sensitive (leaks
+	 * user-home / OS structure when archives are shared), and the
+	 * orchestrator has no business handling it after the audit-row
+	 * column was dropped. Pass `null` for programmatic callers that
+	 * built `inventoryUrls` in-memory; the audit row's
+	 * `source_file_sha256` will be `NULL`.
+	 */
+	sourceFileSha256: string | null;
 }
 
 /**

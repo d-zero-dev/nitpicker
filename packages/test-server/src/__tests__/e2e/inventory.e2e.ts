@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
+import { Archive, computeFileSha256, CrawlerOrchestrator } from '@nitpicker/crawler';
 import {
 	listInventoryRuns,
 	listIsolatedPages,
@@ -171,7 +171,6 @@ describe('Inventory crawl', () => {
 			id: number;
 			ran_at: string;
 			list_label: string | null;
-			source_file_path: string | null;
 			source_file_sha256: string | null;
 			total_lines: number | null;
 			new_pages: number | null;
@@ -187,20 +186,20 @@ describe('Inventory crawl', () => {
 		expect(row.new_pages).toBe(1);
 		expect(row.new_resources).toBe(1);
 		expect(row.scope_skipped).toBe(0);
-		// `source_file_path` / `source_file_sha256` are populated by the
-		// CLI's `inventoryCrawl` plumbing, which the test invokes directly
-		// at the orchestrator level — both are expected NULL for this
-		// programmatic call. Field presence is exercised by a dedicated
-		// describe block below that goes through a tmp txt file.
-		expect(row.source_file_path).toBeNull();
+		// `source_file_sha256` is populated by the CLI's `inventoryCrawl`
+		// plumbing, which the test invokes directly at the orchestrator
+		// level — expected NULL for this programmatic call. sha256
+		// presence is exercised by a dedicated describe block below that
+		// goes through a tmp txt file.
 		expect(row.source_file_sha256).toBeNull();
 	});
 });
 
-describe('Inventory crawl run-audit fingerprint (with source file)', () => {
+describe('Inventory crawl run-audit fingerprint (with source file sha256)', () => {
 	let filePath: string;
 	let cwd: string;
 	let listFilePath: string;
+	let expectedSha256: string;
 	let accessor: Archive;
 
 	beforeAll(async () => {
@@ -208,16 +207,26 @@ describe('Inventory crawl run-audit fingerprint (with source file)', () => {
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
 
-		// Write a real txt list under cwd so the orchestrator can hash
-		// it. Two URLs — one HTML seed, one non-HTML resource.
+		// Write a real txt list under cwd. Two URLs — one HTML seed, one
+		// non-HTML resource. The CLI normally hashes the file; this
+		// e2e simulates that boundary by calling `computeFileSha256`
+		// here and passing the digest to `inventory()` (the orchestrator
+		// boundary deliberately does NOT receive the path post-lift).
 		listFilePath = path.join(cwd, 'inventory-list.txt');
-		await fs.writeFile(
-			listFilePath,
-			[
-				'http://localhost:8010/inventory/hidden-lp',
-				'http://localhost:8010/inventory/orphan.pdf',
-			].join('\n'),
-		);
+		const listBody = [
+			'http://localhost:8010/inventory/hidden-lp',
+			'http://localhost:8010/inventory/orphan.pdf',
+		].join('\n');
+		await fs.writeFile(listFilePath, listBody);
+
+		// Compute the expected sha256 INDEPENDENTLY (= via Node's
+		// `crypto.createHash`) so the assertion below is a content-
+		// equality check, not a vacuous `^[0-9a-f]{64}$` shape check.
+		// A regression where `computeFileSha256` hashes the wrong input
+		// (e.g. the path string instead of the file body) gets caught.
+		expectedSha256 = crypto.createHash('sha256').update(listBody).digest('hex');
+
+		const sourceFileSha256 = await computeFileSha256(listFilePath);
 
 		const orchestrator = await CrawlerOrchestrator.inventory(
 			filePath,
@@ -227,7 +236,7 @@ describe('Inventory crawl run-audit fingerprint (with source file)', () => {
 			],
 			{ cwd },
 			undefined,
-			listFilePath,
+			sourceFileSha256,
 		);
 		await orchestrator.write();
 		await orchestrator.archive.close();
@@ -243,16 +252,18 @@ describe('Inventory crawl run-audit fingerprint (with source file)', () => {
 		await fs.rm(cwd, { recursive: true, force: true });
 	});
 
-	it('records the source file path and a 64-char hex sha256 on the run row', async () => {
+	it('records the sha256 that matches the byte content of the supplied list file (content-equality, not just shape)', async () => {
 		const knex = accessor.getKnex();
 		const [row] = (await knex('inventory_runs')
-			.select('source_file_path', 'source_file_sha256')
+			.select('source_file_sha256')
 			.orderBy('ran_at', 'desc')) as Array<{
-			source_file_path: string | null;
 			source_file_sha256: string | null;
 		}>;
-		expect(row.source_file_path).toBe(listFilePath);
-		expect(row.source_file_sha256).toMatch(/^[0-9a-f]{64}$/);
+		// Equality (not shape): regression-proof against an
+		// implementation that hashes the wrong bytes / the path string
+		// / a buffered slice / etc. The expected digest was computed
+		// independently above from the same body written to the file.
+		expect(row.source_file_sha256).toBe(expectedSha256);
 	});
 });
 

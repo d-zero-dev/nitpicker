@@ -94,8 +94,6 @@ export interface InventoryRunMeta {
 	ran_at: string;
 	/** Human-readable identifier (e.g. `'prod-2026-06-21'`). `null` when the caller did not supply one. */
 	list_label?: string | null;
-	/** Absolute path to the source URL list `.txt` so the run is reproducible. */
-	source_file_path?: string | null;
 	/** SHA-256 hex digest of the source file. `null` if hashing failed (e.g. file vanished mid-run). */
 	source_file_sha256?: string | null;
 	/** Number of non-empty lines in the input list (= URL count before scope filtering). */

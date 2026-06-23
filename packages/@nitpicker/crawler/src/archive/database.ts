@@ -1287,7 +1287,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			.insert({
 				ran_at: meta.ran_at,
 				list_label: meta.list_label ?? null,
-				source_file_path: meta.source_file_path ?? null,
 				source_file_sha256: meta.source_file_sha256 ?? null,
 				total_lines: meta.total_lines ?? null,
 				new_pages: meta.new_pages ?? null,

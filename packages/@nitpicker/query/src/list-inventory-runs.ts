@@ -66,7 +66,6 @@ export async function listInventoryRuns(
 			'id',
 			'ran_at',
 			'list_label',
-			'source_file_path',
 			'source_file_sha256',
 			'total_lines',
 			'new_pages',
