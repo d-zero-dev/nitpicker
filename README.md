@@ -53,7 +53,7 @@ npx @nitpicker/cli crawl <archive> --inventory <urls.txt>
 - 既存 `pages` / `resources` にすでにある URL は skip（2 回目以降の `--inventory` は新規分だけ処理）
 - スコープ外 URL は警告して skip
 - アーカイブに pending URL (scraped=0) が残っていても hard reject せず `console.warn` で続行（crawled-wins UPDATE が source ラベルの整合性を保つ前提）
-- 結果は `query isolated-pages` / `query unused-resources` で見るのが想定動線（後述）
+- 結果は `query isolated-pages` (完全孤立 = singleton inventory-_ ページ) / `query isolated-clusters` (孤立集合 = inventory-_ 同士で繋がるが crawled 集合からは隔離されたクラスタ) / `query unused-resources` で見るのが想定動線（後述）。 `crawled` ラベルの行は定義上孤立にならない（source = `crawled` は「クロール経路で到達した」を assertively 表す）
 - **監査ログ (Phase 1)**: 成功した `--inventory` 実行ごとに `inventory_runs` テーブルへ 1 行追加される（`ran_at` / 自動命名 `list_label` / stream hash された `source_file_sha256` / `total_lines` / `new_pages` / `new_resources` / `scope_skipped`）。`source_file_path` は永続化されない（privacy; 詳細は ARCHITECTURE.md）。「先月もらった list を反映したか」「同じ list を 2 回反映してないか」をクライアント / ディレクターに即答するための durable な記録。`nitpicker query <archive> inventory-runs --pretty` で履歴一覧
 - `--append` / `--retry-failed` / `--resume` / `--diff` / `--output` / `--list` / `--list-file` / `--single` と同時指定不可
 
@@ -182,7 +182,9 @@ npx @nitpicker/cli pipeline <URL> --sheet <URL> --all
 npx @nitpicker/cli query <file> <sub-command> [options]
 ```
 
-サブコマンド: `summary` / `pages` / `page-detail` / `html` / `links` / `resources` / `images` / `violations` / `duplicates` / `mismatches` / `headers` / `resource-referrers` / `error-kinds` / `isolated-pages` / `unused-resources` / `inventory-runs` / `pages-by-tag` / `count-pages-by-tag` / `pages-by-jsonld-type` / `count-pages-by-jsonld-type` / `tag-inventory` / `page-jsonld` / `page-jsonld-overview` / `page-tags`。詳細は `--help`。
+サブコマンド: `summary` / `pages` / `page-detail` / `html` / `links` (`--type broken|external`) / `resources` / `images` / `violations` / `duplicates` / `mismatches` / `headers` / `resource-referrers` / `error-kinds` / `isolated-pages` (完全孤立 = singleton inventory-_ ページ) / `isolated-clusters` (孤立集合 = inventory-_ connected component, size ≥ 2) / `get-isolated-cluster --representativeUrl <url>` (特定クラスタの member 詳細) / `unused-resources` / `inventory-runs` / `pages-by-tag` / `count-pages-by-tag` / `pages-by-jsonld-type` / `count-pages-by-jsonld-type` / `tag-inventory` / `page-jsonld` / `page-jsonld-overview` / `page-tags`。詳細は `--help`。
+
+> **redirect-source 取扱い**: `query links` の broken / external は anchor の `dest` を `pages.redirectDestId` 経由で canonical destination まで解決した上で判定する。301 中間ホップは表示しない。`--include-redirect-sources` で resolution を無効化し literal anchor target を見ることもできる（診断用）。`isolated-pages` / `isolated-clusters` は inventory subgraph 内のみを扱う source-based filter なので、redirect-source 行は常に除外される（`crawled` 行も同様に除外）。
 
 ### `--contentTypeCategory`
 
