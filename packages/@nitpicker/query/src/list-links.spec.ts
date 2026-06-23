@@ -233,17 +233,169 @@ describe('listLinks', () => {
 		});
 	});
 
-	it('orphaned ページを検出する', async () => {
-		const result = await listLinks(archive, { type: 'orphaned' });
-		// Home page has no inbound links from other pages, so it should be orphaned
-		expect(result.items.length).toBe(1);
-		expect(result.items[0]).toMatchObject({
-			url: 'https://example.com',
-		});
-	});
-
 	it('ページネーションが機能する', async () => {
 		const result = await listLinks(archive, { type: 'broken', limit: 1, offset: 0 });
 		expect(result.items).toHaveLength(1);
+	});
+});
+
+/**
+ * Separate describe with a dedicated fixture: an anchor that points at a
+ * redirect-source URL whose canonical destination is broken (404). This
+ * pins the redirect-resolved broken/external judgment introduced when
+ * `'orphaned'` was removed and listLinks switched to canonical-folded
+ * destinations by default.
+ */
+describe('listLinks — redirect resolution', () => {
+	let archive: InstanceType<typeof Archive>;
+	const redirectWorkingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_list_links_redirect__',
+	);
+	const redirectArchiveFilePath = path.resolve(
+		redirectWorkingDir,
+		'list-links-redirect-test.nitpicker',
+	);
+
+	const META = {
+		lang: null,
+		title: null,
+		description: null,
+		keywords: null,
+		noindex: false,
+		nofollow: false,
+		noarchive: false,
+		canonical: null,
+		alternate: null,
+		'og:type': null,
+		'og:title': null,
+		'og:site_name': null,
+		'og:description': null,
+		'og:url': null,
+		'og:image': null,
+		'twitter:card': null,
+	};
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(redirectWorkingDir, { recursive: true });
+		archive = await Archive.create({
+			filePath: redirectArchiveFilePath,
+			cwd: redirectWorkingDir,
+		});
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.10.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// Source page with anchor to /old (a redirect-source pointing at /404-canonical).
+		await archive.setPage({
+			url: parseUrl('https://example.com/source')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: 'Source' },
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/old')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Old',
+					hash: null,
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// Canonical destination: 404 (broken).
+		await archive.setPage({
+			url: parseUrl('https://example.com/404-canonical')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 404,
+			statusText: 'Not Found',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// Record /old → /404-canonical redirect.
+		await archive.setRedirect({
+			url: parseUrl('https://example.com/old')!,
+			redirectPaths: ['https://example.com/404-canonical'],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(redirectWorkingDir, { recursive: true, force: true });
+	});
+
+	it('reports the canonical destination URL + status for broken anchors via redirect chain', async () => {
+		const result = await listLinks(archive, { type: 'broken' });
+		// One anchor: /source → /old (redirect-source) → /404-canonical.
+		// Broken judgment uses canonical status (404), and `destUrl` reports
+		// the canonical URL — not the literal redirect-source.
+		expect(result.items).toHaveLength(1);
+		expect(result.items[0]).toMatchObject({
+			sourceUrl: 'https://example.com/source',
+			destUrl: 'https://example.com/404-canonical',
+			status: 404,
+		});
+	});
+
+	it('includeRedirectSources=true reports literal dest (the 301 intermediate)', async () => {
+		const result = await listLinks(archive, {
+			type: 'broken',
+			includeRedirectSources: true,
+		});
+		// With resolution disabled, the anchor's literal dest is /old whose
+		// stamped status is 301 (`Moved Permanently`), so it does NOT
+		// satisfy the broken filter — the result is empty.
+		expect(result.items).toHaveLength(0);
 	});
 });

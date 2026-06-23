@@ -1,0 +1,70 @@
+import type { IsolatedClusterSummary, ListIsolatedClustersOptions } from './types.js';
+import type { ArchiveAccessor } from '@nitpicker/crawler';
+
+import { computeIsolatedClusters } from './compute-isolated-clusters.js';
+
+/**
+ * List **孤立集合** — connected components of the inventory-* subgraph with
+ * size ≥ 2.
+ *
+ * Each summary row identifies one cluster by its `representativeUrl` (the
+ * lexicographically smallest member URL) and reports `size` plus the
+ * representative member's title/status so the viewer can render a useful
+ * table row without having to fetch every member. The caller follows up
+ * with {@link import('./get-isolated-cluster.js').getIsolatedCluster} to
+ * pull the full member list for a specific cluster.
+ *
+ * Singletons (size 1 — **完全孤立**) are reported separately by
+ * {@link import('./list-isolated-pages.js').listIsolatedPages}; cluster
+ * listing intentionally omits them so the operator sees "interconnected
+ * orphan groups" without the singleton noise that swamps a typical
+ * inventory dump.
+ *
+ * Sort: `size DESC, representativeUrl ASC`. Largest clusters lead — they
+ * are the audit operator's first interest (a 50-page archive index
+ * dropped from the main nav vs a 2-page disconnected pair).
+ *
+ * Read-only — safe against viewer / stub-mode archives.
+ * @param accessor - The archive accessor to query.
+ * @param options - Pagination options.
+ * @returns Paginated cluster summaries with their representative URL and size.
+ */
+export async function listIsolatedClusters(
+	accessor: ArchiveAccessor,
+	options: ListIsolatedClustersOptions = {},
+): Promise<{ items: IsolatedClusterSummary[]; total: number }> {
+	const limit = options.limit ?? 100;
+	const offset = options.offset ?? 0;
+
+	const components = await computeIsolatedClusters(accessor);
+	const clusters: IsolatedClusterSummary[] = [];
+	for (const component of components) {
+		if (component.size < 2) {
+			continue;
+		}
+		const representative = component.members[0];
+		if (representative === undefined) {
+			continue;
+		}
+		clusters.push({
+			representativeUrl: component.representativeUrl,
+			representativeTitle: representative.title,
+			representativeStatus: representative.status,
+			size: component.size,
+		});
+	}
+
+	clusters.sort((a, b) => {
+		if (a.size !== b.size) {
+			return b.size - a.size;
+		}
+		return a.representativeUrl < b.representativeUrl
+			? -1
+			: a.representativeUrl > b.representativeUrl
+				? 1
+				: 0;
+	});
+
+	const items = clusters.slice(offset, offset + limit);
+	return { items, total: clusters.length };
+}
