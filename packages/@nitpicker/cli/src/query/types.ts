@@ -24,6 +24,8 @@ export type QuerySubCommand =
 	| 'count-pages-by-jsonld-type'
 	| 'page-jsonld-overview'
 	| 'isolated-pages'
+	| 'isolated-clusters'
+	| 'get-isolated-cluster'
 	| 'unused-resources'
 	| 'inventory-runs';
 
@@ -53,6 +55,8 @@ export const VALID_SUB_COMMANDS = [
 	'count-pages-by-jsonld-type',
 	'page-jsonld-overview',
 	'isolated-pages',
+	'isolated-clusters',
+	'get-isolated-cluster',
 	'unused-resources',
 	'inventory-runs',
 ] as const satisfies readonly QuerySubCommand[];
