@@ -1,65 +1,81 @@
-import { useIsolatedPages } from '../api/use-isolated-pages.js';
+import type { IsolatedPageEntry } from '@nitpicker/query';
+import type { ColumnDef } from '@tanstack/react-table';
+
+import { useMemo } from 'react';
+
+import { useIsolatedPagesInfinite } from '../api/use-isolated-pages-infinite.js';
 import { SourceBadge } from '../components/source-badge.js';
 import { ViewHeader } from '../components/view-header.js';
+import { VirtualTable } from '../components/virtual-table.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 /**
- * Isolated pages view — lists internal HTML pages that no other page
- * anchors to, excluding archived roots. The `source` badge on each row
- * tells the operator whether a page was discovered by the original
- * crawl (its links went missing later) or supplied via
- * `crawl --inventory` (the URL only exists on the server, never linked).
+ * **完全孤立** page list: inventory-* HTML pages that form singleton
+ * components in the inventory subgraph (no resolved-anchor inbound from any
+ * other inventory-* node). Backed by `useIsolatedPagesInfinite` so the
+ * rendered list grows to match the displayed `total` as the user scrolls —
+ * unlike the previous fixed-100-row hook which left "{total} 件" lying
+ * about the visible rows.
  * @returns The isolated pages view element.
  */
 export function IsolatedPagesView() {
 	const { t } = useI18n();
-	const { data, isLoading, error } = useIsolatedPages();
+	const { data, fetchNextPage, hasNextPage, isFetching, isLoading } =
+		useIsolatedPagesInfinite();
+	const rows = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
+	const total = data?.pages[0]?.total ?? 0;
 
-	if (isLoading) {
-		return <div className="state">{t('common.loading')}</div>;
-	}
-	if (error) {
-		return <div className="state state-error">{error.message}</div>;
-	}
-	if (!data) {
-		return null;
-	}
+	const columns = useMemo<ColumnDef<IsolatedPageEntry>[]>(
+		() => [
+			{
+				id: 'url',
+				header: t('views.isolatedPages.url'),
+				size: 440,
+				accessorFn: (r) => r.url,
+				cell: (info) => <code>{info.getValue<string>()}</code>,
+			},
+			{
+				id: 'title',
+				header: t('views.isolatedPages.pageTitle'),
+				size: 280,
+				accessorFn: (r) => r.title ?? '—',
+			},
+			{
+				id: 'status',
+				header: t('views.isolatedPages.status'),
+				size: 90,
+				accessorFn: (r) => r.status ?? '—',
+			},
+			{
+				id: 'source',
+				header: t('views.isolatedPages.source'),
+				size: 110,
+				accessorFn: (r) => r.source,
+				cell: (info) => (
+					<SourceBadge source={info.getValue<IsolatedPageEntry['source']>()} />
+				),
+			},
+		],
+		[t],
+	);
 
 	return (
-		<div>
+		<div className="view">
 			<ViewHeader
 				titleKey="views.isolatedPages.title"
 				descriptionKey="views.isolatedPages.description"
 			/>
-			<p className="state">{t('views.isolatedPages.total', { total: data.total })}</p>
-			{data.items.length === 0 ? (
-				<div className="state">{t('views.isolatedPages.empty')}</div>
-			) : (
-				<table className="data-table">
-					<thead>
-						<tr>
-							<th>{t('views.isolatedPages.url')}</th>
-							<th>{t('views.isolatedPages.pageTitle')}</th>
-							<th>{t('views.isolatedPages.status')}</th>
-							<th>{t('views.isolatedPages.source')}</th>
-						</tr>
-					</thead>
-					<tbody>
-						{data.items.map((row) => (
-							<tr key={row.url}>
-								<td>
-									<code>{row.url}</code>
-								</td>
-								<td>{row.title ?? '—'}</td>
-								<td>{row.status ?? '—'}</td>
-								<td>
-									<SourceBadge source={row.source} />
-								</td>
-							</tr>
-						))}
-					</tbody>
-				</table>
-			)}
+			<VirtualTable
+				data={rows}
+				columns={columns}
+				total={total}
+				hasNextPage={hasNextPage}
+				isFetching={isFetching}
+				isLoading={isLoading}
+				onLoadMore={() => {
+					void fetchNextPage();
+				}}
+			/>
 		</div>
 	);
 }

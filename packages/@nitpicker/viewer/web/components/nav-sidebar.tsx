@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
 	{ path: '/headers', labelKey: 'nav.headers' },
 	{ path: '/errors', labelKey: 'nav.errors' },
 	{ path: '/isolated-pages', labelKey: 'nav.isolatedPages' },
+	{ path: '/isolated-clusters', labelKey: 'nav.isolatedClusters' },
 	{ path: '/unused-resources', labelKey: 'nav.unusedResources' },
 ];
 
