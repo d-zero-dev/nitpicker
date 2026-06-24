@@ -101,12 +101,22 @@ export function PagedTable<T>(props: PagedTableProps<T>) {
 		}
 	}, [isLoading, currentPage, totalPages, onPageChange]);
 
+	// Show the in-flight overlay whenever a refetch is happening on top of
+	// already-rendered data (keepPreviousData kept the prior page visible).
+	// The initial-load case is handled by `showSkeleton` below — distinct UX
+	// so a fresh visit shows skeleton rows, a Next-click shows the overlay
+	// over still-visible-prior-page data.
+	const showRefetchOverlay = isFetching && !showSkeleton;
+
 	return (
 		<div className="pt">
 			<div className="pt-meta" role="status" aria-live="polite">
 				{t('pagination.totalRows', { total: total.toLocaleString() })}
+				{showRefetchOverlay ? ` · ${t('pagination.refreshing')}` : ''}
 			</div>
-			<div className="pt-scroll" aria-busy={isFetching || isLoading}>
+			<div
+				className={`pt-scroll${showRefetchOverlay ? ' is-fetching' : ''}`}
+				aria-busy={isFetching || isLoading}>
 				{/*
 				 * The CSS lays the table out with flexbox (`display: flex/block`),
 				 * stripping native table semantics from the accessibility tree.

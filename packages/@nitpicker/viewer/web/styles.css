@@ -468,6 +468,24 @@ h2 {
 	border-radius: 6px;
 }
 
+/* While a refetch is in flight on top of already-rendered data (Next click
+ * with `keepPreviousData: true`), dim the table so the operator immediately
+ * sees their click was received — without this, the prior page stays
+ * visible unchanged and a slow backend looks like an unresponsive UI. The
+ * `.pt-meta` text flips to "Loading…" simultaneously (via the
+ * `pagination.refreshing` i18n key) and the TopBar progress bar already
+ * pulses for any in-flight query. */
+.pt-scroll.is-fetching > .pt-table {
+	opacity: 0.55;
+	transition: opacity 150ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pt-scroll.is-fetching > .pt-table {
+		transition: none;
+	}
+}
+
 .pt-table {
 	inline-size: max-content;
 	min-inline-size: 100%;
