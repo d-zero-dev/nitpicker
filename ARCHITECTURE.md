@@ -692,11 +692,19 @@ beholder 3.0.0 アップグレードで pages のメタカラムは ~47 列の f
 
 **追加 INDEX**: `pages(robots_noindex)`, `pages(og_type)`。`lang` はモノリンガルサイトで cardinality 低く無効なので skip。
 
-**追加 INDEX (listPages 高速化)**: `idx_pages_listfilter` (`scraped, redirectDestId, url, contentType`) を `init-schema.ts` の末尾で raw SQL 経由で追加。listPages の default WHERE (`scraped=1 AND redirectDestId IS NULL AND (contentType IS NULL OR contentType='text/html')`) + `ORDER BY url ASC` を index-ordered scan で完結させる covering 構成。**428k 行 / フィルタ後 168k 行の実 archive で 15s → 45ms (368x speedup)** を確認。
+**追加 INDEX 群 (viewer 高速化)**: `init-schema.ts` 末尾で 3 つの perf index を raw SQL で追加。428k 行 / フィルタ後 168k 行の実 archive 計測:
 
-> **設計注意（.nitpicker archive に `ANALYZE` を絶対に走らせない）:** `idx_pages_listfilter` は SQLite の planner heuristics に依存して動作する。`ANALYZE` で per-index 統計が生成されると、planner は同 index を `listLinks` / `getLinkGraph` / `listPageLinks` の JOIN paths でも source/dest seek に流用しはじめ、これらが ~15s → ~500s (33x worse) に回帰する。実証: `scripts/bench-partial-listfilter.mjs` の no-ANALYZE / +ANALYZE pass 比較。crawler / viewer / MCP / migration の**いかなる経路でも** `ANALYZE` / `PRAGMA optimize` を実行しないこと。既存 archive への手動適用は `scripts/add-pages-listfilter-index.mjs` で行う (このスクリプトも ANALYZE しない)。
+| Index                                                                                                           | 対象 query            | Before | After       |
+| --------------------------------------------------------------------------------------------------------------- | --------------------- | ------ | ----------- |
+| `idx_pages_listfilter` (PR #96) — `pages(scraped, redirectDestId, url, contentType)`                            | `listPages`           | 15s    | 45ms (368x) |
+| `idx_resources_internal_url` — `resources(isExternal, url)` covering                                            | `listUnusedResources` | 66s    | 7.5s (8.8x) |
+| `idx_images_covering` — `images(pageId, src, alt, width, height, naturalWidth, naturalHeight, isLazy)` covering | `listImages`          | 32s    | 16s (2.0x)  |
 
-> **既知の遅い query (本 PR スコープ外)**: `idx_pages_listfilter` 追加で listPages 系は解消されたが、Viewer の他ビューは依然遅い (実 archive 計測値): `findDuplicates` 474s, `listUnusedResources` 60s, `getLinkGraph` 33s, `listPageLinks` 22s, `getSummary` 22s, `listLinks` 13-16s, `listIsolated*` 15-17s, `listImages` 8-12s。次フェーズで「JS 側のデータ加工を SQL 側に押し下げる」方針で個別に最適化する予定。
+加えて `find-duplicates` を N+1 SQL (代表値ごとに別 `SELECT url` ループ) から `GROUP_CONCAT(url, X'1F')` の単発 query に書換 (414s → 8s, 49.6x、`scripts/bench-find-duplicates.mjs`)。`get-link-graph` の `pageRows` + `edgeRows` を `Promise.all` に統合 (sequential 38s → parallel 30s ish、JS aggregation はそのまま — SQL push-down を試した結果 10x 悪化したため不採用、根拠は `get-link-graph.ts` の JSDoc)。
+
+> **設計注意（.nitpicker archive に `ANALYZE` を絶対に走らせない）:** `idx_pages_listfilter` は SQLite の planner heuristics に依存して動作する。`ANALYZE` で per-index 統計が生成されると、planner は同 index を `listLinks` / `getLinkGraph` / `listPageLinks` の JOIN paths でも source/dest seek に流用しはじめ、これらが ~15s → ~500s (33x worse) に回帰する。実証: `scripts/bench-partial-listfilter.mjs` の no-ANALYZE / +ANALYZE pass 比較。crawler / viewer / MCP / migration の**いかなる経路でも** `ANALYZE` / `PRAGMA optimize` を実行しないこと。既存 archive への手動適用は `scripts/add-perf-indexes.mjs` で行う (このスクリプトも ANALYZE しない、3 index 一括追加)。
+
+> **受容済みの遅い query**: `listLinks` 13-16s (anchor SCAN + 3-way JOIN + COALESCE、SQL-first push-down 不能、`canonicalId` 列の denormalisation 待ち), `listPageLinks` 22s (correlated subquery × 2 per row、`referrer_count` 列の denormalisation 待ち), `getSummary` 22s (4 並列 COUNT、既に SQL-optimal、pre-aggregated summary 待ち), `computeIsolatedClusters` 17s (66k inventory pages + 5M anchors、SQL-side filter 試したが 11.6s で改善なし、`isolated_root` 列の denormalisation 待ち)。各 query.ts の JSDoc に「push-down 不能の根拠」と「次のステップ (schema 変更)」を記載。
 
 **pre-0.10 互換性**: clean-break。`archive/meta/assert-compatible-version.ts` が `info.version` を読んで `REQUIRED_FORMAT_VERSION = "0.10.0"` と semver 比較し、古い archive を `Database.connect` で開いた時点で `IncompatibleArchiveError` を throw する。`v0.x` 系の breaking 容認方針（MEMORY: `v0-x-breaking-changes`）に基づく。移行は `scripts/migrate-to-0.10.mjs`。
 
