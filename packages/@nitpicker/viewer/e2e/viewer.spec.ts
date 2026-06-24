@@ -125,16 +125,38 @@ test.describe('MPA ページネーション', () => {
 		await expect(page).not.toHaveURL(/[?&]page=/);
 	});
 
-	test('ページサイズ select を変えると localStorage に保存される', async ({ page }) => {
+	test('ページサイズ select を変えると ?pageSize= が URL に乗り localStorage にも保存される', async ({
+		page,
+	}) => {
 		await page.goto('/pages');
 		await expect(page.locator('.pt-row').first()).toBeVisible();
 		const sizeSelect = page.getByRole('combobox', { name: 'Rows / page:' });
 		await sizeSelect.selectOption('50');
+		// URL is the source of truth — without `?pageSize=` in the URL a
+		// shared deep-link would resolve to a different state on the receiver
+		// side depending on their own localStorage hint.
+		await expect(page).toHaveURL(/[?&]pageSize=50(?:&|$)/);
+		// localStorage is the hint for new tabs / direct-URL visits.
 		await expect
 			.poll(async () =>
 				page.evaluate(() => globalThis.localStorage.getItem('nitpicker-page-size')),
 			)
 			.toBe('50');
+	});
+
+	test('?pageSize= の deep-link が初期表示に反映される', async ({ page }) => {
+		await page.goto('/pages?pageSize=50');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		const sizeSelect = page.getByRole('combobox', { name: 'Rows / page:' });
+		await expect(sizeSelect).toHaveValue('50');
+	});
+
+	test('ページサイズ変更時に ?page= は自動クリアされる', async ({ page }) => {
+		await page.goto('/pages?page=2');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		const sizeSelect = page.getByRole('combobox', { name: 'Rows / page:' });
+		await sizeSelect.selectOption('50');
+		await expect(page).not.toHaveURL(/[?&]page=/);
 	});
 
 	test('モード切替で MPA ↔ virtual が入れ替わる', async ({ page }) => {

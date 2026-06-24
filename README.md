@@ -254,12 +254,12 @@ npx @nitpicker/cli viewer <file-or-stub-dir> [--port 9000] [--no-open]
 
 ### ページネーション（MPA がデフォルト / 仮想スクロールは opt-in）
 
-ページ一覧は TopBar のモード切替で **MPA ページネーション**（既定）と **仮想スクロール** を切り替えられる。設定は localStorage に永続化（`nitpicker-pagination-mode`、`nitpicker-page-size`）。
+ページ一覧は TopBar のモード切替で **MPA ページネーション**（既定）と **仮想スクロール** を切り替えられる。
 
-- **MPA**: Prev / Next + ページ番号 + ジャンプ入力。現在ページは URL の `?page=N`（1-indexed）に乗るため deep-link / 共有 / ブラウザ戻る/進むが効く。表示件数は 50 / 100 / 200 を選択可。フィルタ変更で `?page=` は自動クリア（旧ページ番号は新しい結果集合では意味を持たない）
+- **MPA**: Prev / Next + ページ番号 + ジャンプ入力。現在ページとページサイズはどちらも URL クエリ（`?page=N` / `?pageSize=N`、ともに 1-indexed）に乗るため deep-link / 共有 / ブラウザ戻る/進むが完全に成立する（ページサイズが URL に無いと、`?page=5` を共有しても受け手側のサイズ次第で別の行が見えてしまう）。表示件数は 50 / 100 / 200。フィルタ変更で `?page=` は自動クリア、ページサイズ変更時も `?page=` を 1 に戻す（旧オフセットは新しい窓では意味を持たない）。デフォルト値（page=1, pageSize=100）は URL から省略
 - **仮想スクロール**: TanStack Query infinite query + TanStack Virtual。**10 万行規模をクライアント全件ロードせず一定メモリで表示**するため、deep-link は捨てて巨大データの探索性を優先したいときの opt-in
 
-両モードとも backend は同じ `limit`/`offset` API（無改修）。
+モード本体は localStorage（`nitpicker-pagination-mode`）。ページサイズも localStorage（`nitpicker-page-size`）に保存されるが、これは新規タブ・直 URL 訪問時の hint であり、URL の `?pageSize=` が常に優先される。両モードとも backend は同じ `limit`/`offset` API（無改修）。
 
 ### Errors ビュー
 

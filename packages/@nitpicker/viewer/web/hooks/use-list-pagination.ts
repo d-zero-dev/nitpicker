@@ -1,7 +1,5 @@
 import type { PageSize, PaginationMode } from '../types.js';
 
-import { useCallback } from 'react';
-
 import { useCurrentPage } from './use-current-page.js';
 import { usePageSize } from './use-page-size.js';
 import { usePaginationMode } from './use-pagination-mode.js';
@@ -16,7 +14,11 @@ export interface ListPagination {
 	currentPage: number;
 	/** Sets the current page (writes to `?page=`). */
 	setPage: (next: number) => void;
-	/** Sets the page size and rewinds to page 1 to keep the offset coherent. */
+	/**
+	 * Sets the page size. The underlying {@link usePageSize} hook writes
+	 * `?pageSize=N` to the URL **and** clears `?page=` in the same updater
+	 * so the row-coherent invariant survives the size change.
+	 */
 	setPageSize: (next: PageSize) => void;
 }
 
@@ -24,26 +26,18 @@ export interface ListPagination {
  * Aggregates the three preference hooks every list view needs so each view
  * call-site has one line instead of three:
  *
- * - {@link usePaginationMode} (mode toggle, persisted)
- * - {@link usePageSize} (rows per MPA page, persisted)
+ * - {@link usePaginationMode} (mode toggle, persisted in localStorage)
+ * - {@link usePageSize} (rows per MPA page, URL-primary with localStorage hint)
  * - {@link useCurrentPage} (URL `?page=` cursor)
  *
- * Changing the page size also resets the page to 1 — otherwise the old
- * offset stays applied to a wider window and the user can land on an
- * out-of-range page (e.g. page 50 of 100 becomes page 50 of 50 with no rows
- * visible).
+ * Page-size changes reset the cursor to page 1 — that responsibility is
+ * owned by {@link usePageSize.setPageSize} (single URL update, no race) so
+ * this hook is now a flat composition.
  * @returns The aggregate pagination state plus setters.
  */
 export function useListPagination(): ListPagination {
 	const { mode } = usePaginationMode();
-	const { pageSize, setPageSize: setPageSizeRaw } = usePageSize();
+	const { pageSize, setPageSize } = usePageSize();
 	const { currentPage, setPage } = useCurrentPage();
-	const setPageSize = useCallback(
-		(next: PageSize) => {
-			setPageSizeRaw(next);
-			setPage(1);
-		},
-		[setPageSizeRaw, setPage],
-	);
 	return { mode, pageSize, currentPage, setPage, setPageSize };
 }
