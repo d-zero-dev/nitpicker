@@ -124,6 +124,12 @@ try {
 			const ms = Number(process.hrtime.bigint() - start) / 1e6;
 			console.log(`      ${ms.toFixed(0).padStart(6)}ms  ${name}`);
 		}
+		// Flush the WAL back into the main DB so the SHM / WAL sidecar
+		// files become empty. Without this the subsequent tar step
+		// occasionally races against SQLite's transient teardown of those
+		// files (listdir sees `-shm`, then open(`-shm`) fails because
+		// libsql already removed it on connection close).
+		await db.raw('PRAGMA wal_checkpoint(TRUNCATE)');
 		// Deliberately NO `ANALYZE` — see header comment. If `sqlite_stat1`
 		// is non-empty for some unrelated reason (a pre-existing manual
 		// ANALYZE on this archive), warn the user.
@@ -145,7 +151,19 @@ try {
 	}
 
 	console.log(`[3/3] tar -> ${outputPath}`);
-	await tar.c({ file: outputPath, cwd: workDir, portable: true }, [innerDirName]);
+	// Defensive filter for the SQLite sidecars even after the WAL
+	// checkpoint above — SQLite is allowed to recreate `-shm` / `-wal`
+	// briefly during cleanup. Skipping them is safe: SQLite recreates
+	// them on next open if needed.
+	await tar.c(
+		{
+			file: outputPath,
+			cwd: workDir,
+			portable: true,
+			filter: (entry) => !entry.endsWith('-shm') && !entry.endsWith('-wal'),
+		},
+		[innerDirName],
+	);
 } finally {
 	rmSync(workDir, { recursive: true, force: true });
 }
