@@ -7,6 +7,27 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ArchiveManager } from './archive-manager.js';
 
+// These tests were written against the historical writer path
+// (`Archive.open` → tmpDir owned by manager → cleanup on close). The
+// new default opens archives through the tar cache (read-only, cache
+// directory persisted across opens), so the cleanup / refCount /
+// failure-cleanup assertions only make sense with the cache disabled.
+// Cache-path coverage lives in `archive-manager-cache.spec.ts`.
+//
+// Setting the env at module top + restoring in a top-level afterAll
+// (rather than letting it leak across spec files) prevents adjacent
+// specs that DO want the cache enabled from picking up a stale value
+// when vitest reuses a worker for the next file.
+const ORIGINAL_DISABLE_TAR_CACHE = process.env.NITPICKER_DISABLE_TAR_CACHE;
+process.env.NITPICKER_DISABLE_TAR_CACHE = '1';
+afterAll(() => {
+	if (ORIGINAL_DISABLE_TAR_CACHE === undefined) {
+		delete process.env.NITPICKER_DISABLE_TAR_CACHE;
+	} else {
+		process.env.NITPICKER_DISABLE_TAR_CACHE = ORIGINAL_DISABLE_TAR_CACHE;
+	}
+});
+
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
 const workingDir = path.resolve(__dirname, '__test_fixtures_archive_manager__');
