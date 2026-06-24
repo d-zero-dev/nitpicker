@@ -6,6 +6,10 @@ import path from 'node:path';
 
 import { ArchiveAccessor } from './archive-accessor.js';
 import { acquireArchiveLock } from './archive-lock.js';
+import { computeArchiveCacheKey } from './cache/compute-archive-cache-key.js';
+import { extractArchiveToCache } from './cache/extract-archive-to-cache.js';
+import { getArchiveCacheRoot } from './cache/get-archive-cache-root.js';
+import { resolveArchiveCacheDir } from './cache/resolve-archive-cache-dir.js';
 import { Database } from './database.js';
 import { dbLog, log, saveLog } from './debug.js';
 import { appendText } from './filesystem/append-text.js';
@@ -455,6 +459,61 @@ export default class Archive extends ArchiveAccessor {
 		const db = await Archive.#connectDB(tmpDir, { readOnly: true });
 		const archive = new ArchiveAccessor(tmpDir, db, namespace, { readOnly: true });
 		return archive;
+	}
+	/**
+	 * Open a `.nitpicker` archive through the read-only tar cache.
+	 *
+	 * This is the fast path for read-only consumers (viewer, MCP, query
+	 * CLI). It diverges from {@link Archive.open} in two important ways:
+	 *
+	 * 1. The extracted contents land in an OS-temp-scoped cache directory
+	 *    keyed by the archive's `size + mtime_ns + ctime_ns` (see
+	 *    {@link computeArchiveCacheKey}). Subsequent opens of the same
+	 *    unchanged archive skip the untar entirely. A fresh 10 GB archive
+	 *    pays the ~10 s untar cost once; reopens are instant.
+	 * 2. The returned value is an {@link ArchiveAccessor} (read-only), not
+	 *    an `Archive` (writer). Closing it tears down the DB handle but
+	 *    leaves the cache directory in place for the next reader. The
+	 *    OS's own temp-directory cleanup (macOS reboot, Linux
+	 *    `systemd-tmpfiles`, Windows Disk Cleanup) reclaims stale
+	 *    entries — we do not own eviction.
+	 *
+	 * Migrations: the writer-side migration stack
+	 * (`initSchema` / `migrate*`) runs once at cache-miss extraction, so
+	 * the cache directory always lands on the current schema before the
+	 * read-only re-open. Cache hits then skip migrations entirely.
+	 *
+	 * Override the cache location with `NITPICKER_TAR_CACHE_DIR`. The
+	 * disable switch (`NITPICKER_DISABLE_TAR_CACHE=1`) is honoured by
+	 * the caller (`ArchiveManager.open` falls back to {@link Archive.open}
+	 * in that case); this function itself always goes through the cache.
+	 *
+	 * Writer entry points (`crawl --append`, `crawl --retry-failed`) must
+	 * NOT use this path — they need the lock + write-back semantics of
+	 * {@link Archive.open}.
+	 * @param filePath - Absolute path to the `.nitpicker` file.
+	 * @param namespace - Optional namespace forwarded to {@link ArchiveAccessor}.
+	 * @returns A read-only {@link ArchiveAccessor} backed by the cache directory.
+	 * @example
+	 * ```ts
+	 * const accessor = await Archive.openCached('/path/to/site.nitpicker');
+	 * try {
+	 *   const summary = await getSummary(accessor);
+	 * } finally {
+	 *   await accessor.close(); // tears down DB handle, cacheDir persists.
+	 * }
+	 * ```
+	 */
+	static async openCached(
+		filePath: string,
+		namespace: string | null = null,
+	): Promise<ArchiveAccessor> {
+		const cacheRoot = getArchiveCacheRoot();
+		const cacheKey = await computeArchiveCacheKey(filePath);
+		const cacheDir = resolveArchiveCacheDir(cacheRoot, cacheKey, filePath);
+		log('Open cached: %s (cacheDir=%s)', filePath, cacheDir);
+		await extractArchiveToCache(filePath, cacheRoot, cacheDir, cacheKey);
+		return await Archive.connect(cacheDir, namespace);
 	}
 	/**
 	 * Creates a new archive at the specified file path.

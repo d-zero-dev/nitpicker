@@ -252,6 +252,17 @@ npx @nitpicker/cli viewer <file-or-stub-dir> [--port 9000] [--no-open]
 
 `crawl --resume <stub>` と同じパスを `viewer <stub>` に渡せば、その時点までに集めたデータを **read-only オープン**（`Archive.connect`）で閲覧できる。`.nitpicker` ファイルへの tar 化も tmpDir 削除も `info` マイグレーションも一切走らないため、その後 `crawl --resume` を安全に続行できる。Footer に "Live crawl in progress (PID xxx)" / "Interrupted crawl stub" のバッジが出る（`<tmpDir>.lock/pid.txt` を probe して判定）。
 
+### タールキャッシュ（同じアーカイブの 2 回目以降の起動を高速化）
+
+`.nitpicker` ファイルを開くと、untar 結果が OS の temp スコープ（`<os.tmpdir>/nitpicker/cache/<key>-<basename>/`）に **永続キャッシュ** される。同じファイルの 2 回目以降の起動は untar をスキップして即起動する（10 GB 級で cold ~10 秒 → warm 即時）。MCP / `query` CLI も同じキャッシュを共有する。**キャッシュの evict は OS の temp cleanup に任せる**（macOS は再起動時、Linux は `systemd-tmpfiles` で 10 日、Windows は Disk Cleanup）。手動で空にしたい場合は `rm -rf $(node -e 'console.log(require("os").tmpdir())')/nitpicker/cache/`。
+
+| env 変数                      | デフォルト                     | 用途                                                                                                                                                                            |
+| ----------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NITPICKER_TAR_CACHE_DIR`     | `<os.tmpdir>/nitpicker/cache/` | キャッシュの配置先を override（CI / 別ボリュームに置きたい場合）。`0` / `false` / `null` などの sentinel 風ワードはデフォルトに倒す                                             |
+| `NITPICKER_DISABLE_TAR_CACHE` | (未設定)                       | `1` / `true` / `yes` / `on` のいずれかを設定するとキャッシュを完全に無効化し、毎回 `<cwd>/._nitpicker-*` に untar してクローズ時に削除する旧挙動に戻る（debug / sandbox CI 用） |
+
+クロール経路（`crawl --append` / `--retry-failed`）は env と無関係に常に旧挙動。キャッシュは reader 経路（viewer / MCP / `query`）専用。
+
 ### ページネーション（MPA がデフォルト / 仮想スクロールは opt-in）
 
 ページ一覧は TopBar のモード切替で **MPA ページネーション**（既定）と **仮想スクロール** を切り替えられる。

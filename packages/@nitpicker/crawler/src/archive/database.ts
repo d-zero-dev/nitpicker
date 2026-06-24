@@ -255,6 +255,20 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	// eslint-disable-next-line no-restricted-syntax
 	private constructor(options: DatabaseOption) {
 		super();
+		// **Known caveat (libsql 0.5.x)**: passing `readonly: true` via
+		// `connection.options` is accepted by the libsql driver but is
+		// NOT enforced at the SQL layer — `CREATE TABLE` / `INSERT`
+		// against the resulting connection still succeed. The flag
+		// remains a no-op until libsql adds real read-only enforcement
+		// upstream. Read-only safety in cache mode therefore relies on:
+		//
+		// 1. `Database.#init` skipping schema init + migrations when
+		//    `readOnly` is set (so no `initSchema` / `migrate*` ever
+		//    writes to the shared cache directory).
+		// 2. `ArchiveAccessor.setData` rejecting writes when the
+		//    `readOnly` flag is set on the accessor.
+		// 3. Code review on any future internal use of
+		//    `accessor.getKnex()` — there is no driver-level guard.
 		this.#instance = knex({
 			client: LibsqlDialect,
 			connection: {

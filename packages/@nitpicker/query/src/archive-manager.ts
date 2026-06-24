@@ -11,7 +11,11 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 
-import { Archive, peekArchiveLockHolder } from '@nitpicker/crawler';
+import {
+	Archive,
+	isArchiveCacheDisabled,
+	peekArchiveLockHolder,
+} from '@nitpicker/crawler';
 
 /** Maximum number of concurrently opened archives to prevent resource exhaustion. */
 const MAX_OPEN_ARCHIVES = 20;
@@ -53,6 +57,14 @@ export interface OpenResult {
 interface SharedArchiveEntry {
 	/** The read-only accessor for querying the archive. */
 	accessor: ArchiveAccessor;
+	/**
+	 * Underlying `Archive` writer instance, populated only on the legacy
+	 * (`NITPICKER_DISABLE_TAR_CACHE=1`) writer path. Surfaced through
+	 * {@link OpenResult.archive} so the orchestrator can take ownership
+	 * of finalisation when it goes through this manager. Always
+	 * `undefined` on stub and cache modes.
+	 */
+	archive?: Archive;
 	/**
 	 * Resource-release callback invoked when refCount reaches 0. For
 	 * archive mode this delegates to `Archive.close()` (writes the
@@ -135,6 +147,17 @@ export class ArchiveManager {
 	#nextId = 1;
 	/** Warning sink — defaults to `console.warn`. */
 	readonly #onWarn: ArchiveManagerWarn;
+	/**
+	 * Promises for opens that are still in-flight, keyed by the resolved
+	 * canonical path. A concurrent `open()` call on the same path awaits
+	 * the in-flight promise instead of racing into a parallel
+	 * `Archive.openCached` / `Archive.open` — without this guard, two
+	 * callers can both create their own accessor for the same archive
+	 * and the second `#pathToEntry.set` silently overwrites the first,
+	 * leaking the loser's DB handle.
+	 */
+	readonly #openInflight = new Map<string, Promise<SharedArchiveEntry>>();
+
 	/** Map of resolved canonical paths to their shared archive entry. */
 	readonly #pathToEntry = new Map<string, SharedArchiveEntry>();
 
@@ -297,15 +320,20 @@ export class ArchiveManager {
 
 		// Wait out any in-flight close on this path before claiming the
 		// entry — prevents racing the still-releasing lock.
-		const inflight = this.#pathToEntry.get(realPath)?.closing;
-		if (inflight) {
-			await inflight;
+		const inflightClose = this.#pathToEntry.get(realPath)?.closing;
+		if (inflightClose) {
+			await inflightClose;
 		}
 
 		const existing = this.#pathToEntry.get(realPath);
 		if (existing && !existing.closing) {
 			existing.refCount++;
 			const archiveId = this.#issueId(realPath);
+			// `archive` is intentionally NOT forwarded to refCount-shared
+			// reuses: writer-mode lifecycle is owned by the caller that
+			// triggered the initial open (the orchestrator), and a second
+			// shared opener handing out the same writer would let either
+			// caller close the underlying tmpDir under the other's feet.
 			return {
 				archiveId,
 				accessor: existing.accessor,
@@ -314,6 +342,67 @@ export class ArchiveManager {
 			};
 		}
 
+		// Open dedup: serialise concurrent first-opens on the same path so
+		// we never spawn two parallel `Archive.openCached` / `Archive.open`
+		// calls that both land their own entry into `#pathToEntry`.
+		const inflightOpen = this.#openInflight.get(realPath);
+		if (inflightOpen) {
+			const entry = await inflightOpen;
+			entry.refCount++;
+			const archiveId = this.#issueId(realPath);
+			// Same writer-ownership rule as the cache-hit branch above:
+			// only the caller that triggered the initial open receives
+			// the writer instance.
+			return {
+				archiveId,
+				accessor: entry.accessor,
+				mode: entry.mode,
+				crawlerLockHolder: entry.crawlerLockHolder,
+			};
+		}
+
+		const openPromise = this.#performOpen(realPath, mode);
+		this.#openInflight.set(realPath, openPromise);
+		let entry: SharedArchiveEntry;
+		try {
+			entry = await openPromise;
+		} finally {
+			this.#openInflight.delete(realPath);
+		}
+		this.#pathToEntry.set(realPath, entry);
+		const archiveId = this.#issueId(realPath);
+		return {
+			archiveId,
+			accessor: entry.accessor,
+			mode: entry.mode,
+			crawlerLockHolder: entry.crawlerLockHolder,
+			archive: entry.archive,
+		};
+	}
+
+	/**
+	 * Allocates and registers a new archive ID for the given canonical path.
+	 * Centralised so a failed open does NOT burn the counter (the helper is
+	 * only called after the entry is successfully registered).
+	 * @param realPath - Resolved canonical path being registered.
+	 */
+	#issueId(realPath: string): string {
+		const archiveId = `archive_${this.#nextId++}`;
+		this.#idToPath.set(archiveId, realPath);
+		return archiveId;
+	}
+	/**
+	 * Run the mode-specific archive open. Pulled out of {@link open} so
+	 * the concurrent-open dedup can hold a single Promise to it without
+	 * the rest of the open() method having to live inside a closure.
+	 *
+	 * The returned entry has `refCount = 1` reserved for the caller that
+	 * triggered the open. Concurrent waiters increment further when they
+	 * resolve from `#openInflight`.
+	 * @param realPath - Resolved canonical path of the archive.
+	 * @param mode - Classified source kind (`'archive'` or `'stub'`).
+	 */
+	async #performOpen(realPath: string, mode: ArchiveMode): Promise<SharedArchiveEntry> {
 		if (mode === 'stub') {
 			const crawlerLockHolder = peekArchiveLockHolder(realPath);
 			if (crawlerLockHolder?.alive) {
@@ -322,7 +411,7 @@ export class ArchiveManager {
 				);
 			}
 			const accessor = await Archive.connect(realPath);
-			const entry: SharedArchiveEntry = {
+			return {
 				accessor,
 				close: () => accessor.close(),
 				cleanupOnFailure: () => {
@@ -336,9 +425,34 @@ export class ArchiveManager {
 				refCount: 1,
 				tmpDir: realPath,
 			};
-			this.#pathToEntry.set(realPath, entry);
-			const archiveId = this.#issueId(realPath);
-			return { archiveId, accessor, mode, crawlerLockHolder };
+		}
+
+		if (!isArchiveCacheDisabled()) {
+			// Read-only path. The accessor returned by `Archive.openCached`
+			// is backed by an OS-temp-scoped cache directory; closing it
+			// only tears down the DB handle. The cache directory itself is
+			// intentionally left in place so the next reader of the same
+			// (unchanged) archive skips the untar. OS-level temp cleanup
+			// reclaims stale entries — we do not own eviction here.
+			const accessor = await Archive.openCached(realPath);
+			return {
+				accessor,
+				close: () => accessor.close(),
+				cleanupOnFailure: () => {
+					// The cache directory is shared across processes; even
+					// on a manager-side failure we must NOT remove it,
+					// because another concurrent reader may still be using
+					// it. Stale or half-populated entries are handled by
+					// `extractArchiveToCache` at the next miss (it
+					// quarantines half-extracted entries before
+					// re-extracting when the ready marker is absent).
+				},
+				closing: null,
+				crawlerLockHolder: null,
+				mode,
+				refCount: 1,
+				tmpDir: accessor.tmpDir,
+			};
 		}
 
 		const archive = await Archive.open({ filePath: realPath, openPluginData: true });
@@ -347,9 +461,9 @@ export class ArchiveManager {
 		// tmpDir to `renamedDir` before tarring, and a `tar()` failure
 		// after that point would leave `renamedDir` orphaned.
 		const renamedDir = archive.renamedDir;
-		const accessor: ArchiveAccessor = archive;
-		const entry: SharedArchiveEntry = {
-			accessor,
+		return {
+			accessor: archive,
+			archive,
 			close: () => archive.close(),
 			cleanupOnFailure: () => {
 				rmSync(archive.tmpDir, { recursive: true, force: true });
@@ -361,21 +475,6 @@ export class ArchiveManager {
 			refCount: 1,
 			tmpDir: archive.tmpDir,
 		};
-		this.#pathToEntry.set(realPath, entry);
-		const archiveId = this.#issueId(realPath);
-		return { archiveId, accessor, mode, crawlerLockHolder: null, archive };
-	}
-
-	/**
-	 * Allocates and registers a new archive ID for the given canonical path.
-	 * Centralised so a failed open does NOT burn the counter (the helper is
-	 * only called after the entry is successfully registered).
-	 * @param realPath - Resolved canonical path being registered.
-	 */
-	#issueId(realPath: string): string {
-		const archiveId = `archive_${this.#nextId++}`;
-		this.#idToPath.set(archiveId, realPath);
-		return archiveId;
 	}
 
 	/**
