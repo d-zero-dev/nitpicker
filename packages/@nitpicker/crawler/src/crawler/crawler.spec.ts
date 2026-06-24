@@ -328,6 +328,44 @@ describe('Crawler', () => {
 	});
 
 	describe('start() resume merge', () => {
+		it('resuming で pending も新規 root も無ければ crawlEnd を emit して正常終了する', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+			vi.mocked(deal).mockResolvedValue();
+
+			const crawler = new Crawler(defaultOptions);
+			let crawlEnded = false;
+			crawler.on('crawlEnd', () => {
+				crawlEnded = true;
+			});
+
+			crawler.resume([], ['https://example.com/done'], []);
+			expect(() => crawler.start([], { recursive: true })).not.toThrow();
+
+			await vi.waitFor(() => {
+				expect(crawlEnded).toBe(true);
+			});
+			expect(deal).not.toHaveBeenCalled();
+		});
+
+		it('resumedPending があれば新しい root なしでも開始できる（retry-failed）', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+			vi.mocked(deal).mockResolvedValue();
+
+			const crawler = new Crawler(defaultOptions);
+			crawler.resume(['https://example.com/failed-child'], [], []);
+			crawler.start([], { recursive: true });
+
+			await vi.waitFor(() => {
+				expect(deal).toHaveBeenCalled();
+			});
+			const initialUrls = vi.mocked(deal).mock.calls[0]![0] as ExURL[];
+			expect(initialUrls.map((u) => u.href)).toEqual([
+				'https://example.com/failed-child',
+			]);
+		});
+
 		it('scraped が空でも resumedPending を初期キューに含める（全ページ失敗 retry）', async () => {
 			const { deal } = await import('@d-zero/dealer');
 			const { default: Crawler } = await import('./crawler.js');

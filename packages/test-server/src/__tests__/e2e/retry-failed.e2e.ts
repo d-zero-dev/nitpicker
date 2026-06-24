@@ -48,6 +48,7 @@ describe('Retry failed crawl (recursive, default)', () => {
 	let filePath: string;
 	let cwd: string;
 	let accessor: Archive;
+	let rootLastCrawledAtBeforeRetry: number | null;
 
 	beforeAll(async () => {
 		// 1) Baseline crawl while /flaky/recoverable returns 500. The page is
@@ -56,6 +57,11 @@ describe('Retry failed crawl (recursive, default)', () => {
 		const baseline = await crawlAndPersist(['http://localhost:8010/flaky/']);
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
+		const baselineArchive = await Archive.open({ filePath, cwd });
+		const baselinePages = await baselineArchive.getPages('page');
+		rootLastCrawledAtBeforeRetry =
+			baselinePages.find((p) => p.url.pathname === '/flaky/')?.lastCrawledAt ?? null;
+		await baselineArchive.close();
 
 		// 2) Heal the endpoint, then retry the failed pages. The 5xx page is
 		//    reset, re-fetched as a 200, and its newly-exposed child is crawled.
@@ -87,6 +93,13 @@ describe('Retry failed crawl (recursive, default)', () => {
 		expect(child).toBeDefined();
 		expect(child!.isExternal).toBe(false);
 		expect(child!.isTarget).toBe(true);
+	});
+
+	it('retry-failed は失敗していない root を再スクレイプしない', async () => {
+		const pages = await accessor.getPages('page');
+		const root = pages.find((p) => p.url.pathname === '/flaky/');
+		expect(root).toBeDefined();
+		expect(root!.lastCrawledAt).toBe(rootLastCrawledAtBeforeRetry);
 	});
 
 	it('removes the .bak backup file once the retry succeeds', async () => {
