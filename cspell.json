@@ -6,6 +6,15 @@
 		"readtext",
 		"unanalyzed",
 		"Untarring",
+		"untars",
+
+		// Filesystems / OS storage primitives (tar cache documentation)
+		"APFS",
+		"tmpfs",
+
+		// English compounds used in technical commentary
+		"unsuffixed",
+		"greppable",
 
 		// HTML
 		"noarchive",
