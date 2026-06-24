@@ -692,6 +692,12 @@ beholder 3.0.0 アップグレードで pages のメタカラムは ~47 列の f
 
 **追加 INDEX**: `pages(robots_noindex)`, `pages(og_type)`。`lang` はモノリンガルサイトで cardinality 低く無効なので skip。
 
+**追加 INDEX (listPages 高速化)**: `idx_pages_listfilter` (`scraped, redirectDestId, url, contentType`) を `init-schema.ts` の末尾で raw SQL 経由で追加。listPages の default WHERE (`scraped=1 AND redirectDestId IS NULL AND (contentType IS NULL OR contentType='text/html')`) + `ORDER BY url ASC` を index-ordered scan で完結させる covering 構成。**428k 行 / フィルタ後 168k 行の実 archive で 15s → 45ms (368x speedup)** を確認。
+
+> **設計注意（.nitpicker archive に `ANALYZE` を絶対に走らせない）:** `idx_pages_listfilter` は SQLite の planner heuristics に依存して動作する。`ANALYZE` で per-index 統計が生成されると、planner は同 index を `listLinks` / `getLinkGraph` / `listPageLinks` の JOIN paths でも source/dest seek に流用しはじめ、これらが ~15s → ~500s (33x worse) に回帰する。実証: `scripts/bench-partial-listfilter.mjs` の no-ANALYZE / +ANALYZE pass 比較。crawler / viewer / MCP / migration の**いかなる経路でも** `ANALYZE` / `PRAGMA optimize` を実行しないこと。既存 archive への手動適用は `scripts/add-pages-listfilter-index.mjs` で行う (このスクリプトも ANALYZE しない)。
+
+> **既知の遅い query (本 PR スコープ外)**: `idx_pages_listfilter` 追加で listPages 系は解消されたが、Viewer の他ビューは依然遅い (実 archive 計測値): `findDuplicates` 474s, `listUnusedResources` 60s, `getLinkGraph` 33s, `listPageLinks` 22s, `getSummary` 22s, `listLinks` 13-16s, `listIsolated*` 15-17s, `listImages` 8-12s。次フェーズで「JS 側のデータ加工を SQL 側に押し下げる」方針で個別に最適化する予定。
+
 **pre-0.10 互換性**: clean-break。`archive/meta/assert-compatible-version.ts` が `info.version` を読んで `REQUIRED_FORMAT_VERSION = "0.10.0"` と semver 比較し、古い archive を `Database.connect` で開いた時点で `IncompatibleArchiveError` を throw する。`v0.x` 系の breaking 容認方針（MEMORY: `v0-x-breaking-changes`）に基づく。移行は `scripts/migrate-to-0.10.mjs`。
 
 ### page_tags テーブル (0.10 新規)
