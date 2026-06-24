@@ -17,8 +17,17 @@ export type { PageSource, ErrorKind } from '@nitpicker/crawler';
 import type { ErrorKind } from '@nitpicker/crawler';
 
 /**
- * One row of {@link listIsolatedPages} output — an HTML page that no
- * other archived page anchors to (excluding archived roots).
+ * One row of {@link listIsolatedPages} output — a **完全孤立** (singleton)
+ * inventory-* HTML page with no resolved-anchor inbound from any other
+ * inventory-* node.
+ *
+ * Source is typically `'inventory-seed'` — a freshly discovered page
+ * normally carries its discoverer's anchor inbound and so is excluded
+ * from singletons. However, an `'inventory-discovered'` row CAN appear
+ * here if the crawled-wins downgrade later demoted its discoverer (the
+ * discoverer became `'crawled'`, breaking the inventory-subgraph edge
+ * even though the anchor row still exists in `anchors`). Both source
+ * labels are valid and shown via the same {@link SourceBadge} UI.
  */
 export interface IsolatedPageEntry {
 	/** Page URL. */
@@ -27,7 +36,7 @@ export interface IsolatedPageEntry {
 	title: string | null;
 	/** HTTP status of the page, or `null` if not yet known. */
 	status: number | null;
-	/** Provenance label — see {@link PageSource}. Shown as a viewer badge. */
+	/** Provenance label — see {@link PageSource}. Either `'inventory-seed'` or `'inventory-discovered'`. */
 	source: import('@nitpicker/crawler').PageSource;
 }
 
@@ -38,6 +47,77 @@ export interface ListIsolatedPagesOptions {
 	/** Maximum rows to return. Defaults to 100. */
 	limit?: number;
 	/** Rows to skip from the start. Defaults to 0. */
+	offset?: number;
+}
+
+/**
+ * One row of {@link listIsolatedClusters} output — a connected component of
+ * the inventory-* subgraph with size ≥ 2 (= **孤立集合**).
+ *
+ * The cluster is identified by `representativeUrl` (the lexicographically
+ * smallest member URL). The viewer / CLI / MCP all use this URL as the
+ * cluster key when requesting member details via {@link getIsolatedCluster}.
+ */
+export interface IsolatedClusterSummary {
+	/** Lexicographically smallest member URL — the cluster's stable identifier. */
+	representativeUrl: string;
+	/** `<title>` of the representative member, or `null` if absent. */
+	representativeTitle: string | null;
+	/** HTTP status of the representative member, or `null` if not yet known. */
+	representativeStatus: number | null;
+	/** Number of pages in this cluster (always ≥ 2). */
+	size: number;
+}
+
+/**
+ * Result of {@link getIsolatedCluster} — full member list for a single
+ * isolated cluster, identified by its representative URL.
+ */
+export interface IsolatedClusterDetail {
+	/** The cluster's representative URL (echoed for caller convenience). */
+	representativeUrl: string;
+	/** All pages in this cluster, sorted by URL ASC. */
+	members: IsolatedClusterMember[];
+	/** Number of members (`members.length` — duplicated for symmetry with the summary). */
+	size: number;
+}
+
+/**
+ * One member of an {@link IsolatedClusterDetail}.
+ */
+export interface IsolatedClusterMember {
+	/** Member URL. */
+	url: string;
+	/** `<title>` value, or `null` if absent. */
+	title: string | null;
+	/** HTTP status of the member, or `null` if not yet known. */
+	status: number | null;
+	/** Provenance label — see {@link PageSource}. Either `'inventory-seed'` or `'inventory-discovered'`. */
+	source: import('@nitpicker/crawler').PageSource;
+}
+
+/**
+ * Connected component of the inventory-* subgraph as computed by
+ * `computeIsolatedClusters`. Both {@link listIsolatedClusters} (size ≥ 2)
+ * and {@link listIsolatedPages} (singletons, size === 1) consume this
+ * shared result.
+ */
+export interface IsolatedComponent {
+	/** Lexicographically smallest member URL — the cluster's stable identifier. */
+	representativeUrl: string;
+	/** All inventory-* pages in this component, sorted by URL ASC. */
+	members: IsolatedClusterMember[];
+	/** Member count (`members.length`, kept for sort convenience). */
+	size: number;
+}
+
+/**
+ * Pagination options for {@link listIsolatedClusters}.
+ */
+export interface ListIsolatedClustersOptions {
+	/** Maximum clusters to return. Defaults to 100. */
+	limit?: number;
+	/** Clusters to skip from the start. Defaults to 0. */
 	offset?: number;
 }
 
@@ -760,14 +840,28 @@ export interface InboundLink {
 
 /**
  * Filter options for listing links.
+ *
+ * `'orphaned'` was removed: its semantics collapsed into
+ * {@link listIsolatedPages} (singleton inventory-* pages) and the new
+ * {@link listIsolatedClusters} (cluster-shaped orphans). The remaining
+ * `'broken'` / `'external'` types report links where the anchor's resolved
+ * final destination matches the criterion — redirect-source rows are
+ * walked through `pages.redirectDestId` to the canonical destination before
+ * the broken/external judgment is applied, so a 301 hop never counts as a
+ * broken link on its own.
  */
 export interface ListLinksOptions {
 	/** Filter type for links. */
-	type: 'broken' | 'external' | 'orphaned';
+	type: 'broken' | 'external';
 	/** Maximum number of results. */
 	limit?: number;
 	/** Number of results to skip. */
 	offset?: number;
+	/**
+	 * Include anchors whose literal destination is a redirect-source row, in
+	 * addition to the default canonical-destination view. Default `false`.
+	 */
+	includeRedirectSources?: boolean;
 }
 
 /**
@@ -794,18 +888,6 @@ export interface LinkAnalysisResult {
 	items: LinkEntry[];
 	/** Total count of matching links. */
 	total: number;
-}
-
-/**
- * Orphaned page entry (page with no incoming links).
- */
-export interface OrphanedPageEntry {
-	/** The orphaned page URL. */
-	url: string;
-	/** HTTP status code. */
-	status: number | null;
-	/** Page title. */
-	title: string | null;
 }
 
 /**

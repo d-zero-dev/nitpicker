@@ -221,13 +221,15 @@ describe('createServer', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('ListTools で24個のツールが返される (v2: + 8 new Wappalyzer / JSON-LD tools, + 2 inventory tools)', async () => {
+	it('ListTools で26個のツールが返される (v3: + list_isolated_clusters + get_isolated_cluster)', async () => {
 		const result = await listTools(server);
-		expect(result.tools).toHaveLength(24);
+		expect(result.tools).toHaveLength(26);
 		const names = result.tools.map((t) => t.name);
 		expect(names).toContain('open_archive');
 		expect(names).toContain('close_archive');
 		expect(names).toContain('get_summary');
+		expect(names).toContain('list_isolated_clusters');
+		expect(names).toContain('get_isolated_cluster');
 		// New in v2:
 		expect(names).toContain('list_pages_by_tag');
 		expect(names).toContain('list_pages_by_jsonld_type');

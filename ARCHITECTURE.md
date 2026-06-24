@@ -178,7 +178,8 @@ crawler/src/
 - **`getSummary`**: サイト全体の統計（内部/外部のページ数とコンテンツ数、ステータス分布、Content-Type 分布、メタデータ充足率）
 - **`getPageDetail`**: 単一ページの詳細情報（メタデータ、アウトバウンド/インバウンドリンク、リダイレクト元）
 - **`getPageHtml`**: HTML スナップショット取得（truncation サポート）
-- **`listLinks`**: リンク分析（broken / external / orphaned）
+- **`listLinks`**: リンク分析（broken / external）。anchor の dest は `pages.redirectDestId` 経由で canonical destination まで解決した上で broken/external 判定（`includeRedirectSources: true` で解決を無効化し literal を見る）
+- **`listIsolatedPages`** / **`listIsolatedClusters`** / **`getIsolatedCluster`**: inventory subgraph の **完全孤立** (singleton) / **孤立集合** (connected component, size ≥ 2)。crawled-wins downgrade の不変量により crawled 行は定義上 isolated 判定から除外される。cluster の edge は redirect 解決済み anchor を無向で見た weakly connected component（共通ヘルパー `compute-isolated-clusters.ts` が `resolve-redirect-chain` + union-find で計算）
 - **`listResources`**: サブリソース一覧（CSS, JS, 画像、フォント）
 - **`listImages`**: 画像一覧（alt 欠損、寸法欠損、オーバーサイズ検出）
 - **`getViolations`**: 分析プラグインの違反データ取得
