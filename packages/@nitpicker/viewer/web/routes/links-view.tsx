@@ -2,12 +2,14 @@ import type { LinkRow, LinkType } from '../api/use-links-infinite.js';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router';
 
 import { useLinksInfinite } from '../api/use-links-infinite.js';
+import { usePagedQuery } from '../api/use-paged-query.js';
+import { DataTable } from '../components/data-table.js';
 import { FilterBar } from '../components/filter-bar.js';
 import { ViewHeader } from '../components/view-header.js';
-import { VirtualTable } from '../components/virtual-table.js';
+import { useListPagination } from '../hooks/use-list-pagination.js';
+import { useUrlFilter } from '../hooks/use-url-filter.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 /** Valid link types for the selector. */
@@ -25,18 +27,20 @@ function field(row: LinkRow, key: string): string {
 }
 
 /**
- * The link analysis view: broken or external links in a virtualised table.
+ * The link analysis view: broken or external links, rendered via the user's
+ * chosen pagination mode.
  *
- * The previous `'orphaned'` chip was retired together with
- * `listLinks type:'orphaned'`. Complete singleton inventory-* pages now
- * live in the **孤立ページ** view, and interconnected orphan groups in the
- * **孤立集合** view — the two well-separated concepts that the old single
- * `'orphaned'` bucket conflated.
+ * The previous `'orphaned'` chip was retired together with `listLinks
+ * type:'orphaned'`. Complete singleton inventory-* pages now live in the
+ * **孤立ページ** view, and interconnected orphan groups in the **孤立集合**
+ * view — the two well-separated concepts that the old single `'orphaned'`
+ * bucket conflated.
  * @returns The links view element.
  */
 export function LinksView() {
-	const [params, setParams] = useSearchParams();
+	const { params, update } = useUrlFilter();
 	const { t } = useI18n();
+	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const rawType = params.get('type') as LinkType | null;
 	const type: LinkType =
 		rawType !== null && LINK_TYPES.includes(rawType) ? rawType : 'broken';
@@ -46,19 +50,27 @@ export function LinksView() {
 	// the coercion in the URL bar so the shown rows stay consistent with
 	// what the address says. Otherwise the table would render `broken`
 	// rows under a `type=orphaned` URL — a silent data-meaning swap that
-	// confuses sharing/handoff.
+	// confuses sharing/handoff. `replace: true` keeps the back button from
+	// returning the user to the just-corrected invalid URL.
 	useEffect(() => {
 		if (rawType !== null && !LINK_TYPES.includes(rawType)) {
-			const next = new URLSearchParams(params);
-			next.set('type', type);
-			setParams(next, { replace: true });
+			update('type', type, { replace: true });
 		}
-	}, [rawType, type, params, setParams]);
+	}, [rawType, type, update]);
 
-	const { data, fetchNextPage, hasNextPage, isFetching, isLoading } =
-		useLinksInfinite(type);
-	const rows = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
-	const total = data?.pages[0]?.total ?? 0;
+	const offset = (currentPage - 1) * pageSize;
+	const paged = usePagedQuery<LinkRow>(
+		'/api/links',
+		{ type, limit: pageSize, offset },
+		['links-paged', type, pageSize, currentPage],
+		{ enabled: mode === 'mpa' },
+	);
+	const infinite = useLinksInfinite(type, { enabled: mode === 'virtual' });
+	const infiniteRows = useMemo(
+		() => infinite.data?.pages.flatMap((page) => page.items) ?? [],
+		[infinite.data],
+	);
+	const infiniteTotal = infinite.data?.pages[0]?.total ?? 0;
 
 	const columns = useMemo<ColumnDef<LinkRow>[]>(
 		() => [
@@ -92,9 +104,7 @@ export function LinksView() {
 					aria-label={t('common.type')}
 					value={type}
 					onChange={(e) => {
-						const next = new URLSearchParams(params);
-						next.set('type', e.target.value);
-						setParams(next);
+						update('type', e.target.value);
 					}}>
 					{LINK_TYPES.map((linkType) => (
 						<option key={linkType} value={linkType}>
@@ -103,17 +113,37 @@ export function LinksView() {
 					))}
 				</select>
 			</FilterBar>
-			<VirtualTable
-				data={rows}
-				columns={columns}
-				total={total}
-				hasNextPage={hasNextPage}
-				isFetching={isFetching}
-				isLoading={isLoading}
-				onLoadMore={() => {
-					void fetchNextPage();
-				}}
-			/>
+			{mode === 'mpa' ? (
+				<DataTable
+					mode="mpa"
+					columns={columns}
+					data={paged.data?.items ?? []}
+					total={paged.data?.total ?? 0}
+					currentPage={currentPage}
+					pageSize={pageSize}
+					onPageChange={setPage}
+					onPageSizeChange={setPageSize}
+					isFetching={paged.isFetching}
+					isLoading={paged.isLoading}
+					isError={paged.isError}
+					error={paged.error}
+				/>
+			) : (
+				<DataTable
+					mode="virtual"
+					columns={columns}
+					data={infiniteRows}
+					total={infiniteTotal}
+					hasNextPage={infinite.hasNextPage}
+					isFetching={infinite.isFetching}
+					isLoading={infinite.isLoading}
+					isError={infinite.isError}
+					error={infinite.error}
+					onLoadMore={() => {
+						void infinite.fetchNextPage();
+					}}
+				/>
+			)}
 		</div>
 	);
 }

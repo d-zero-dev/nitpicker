@@ -1,3 +1,4 @@
+import type { InfiniteQueryOptions } from './infinite-query-options.js';
 import type { PaginatedPageLinkList } from '@nitpicker/query';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -17,9 +18,13 @@ export interface PageLinksFilter {
 /**
  * Infinite-scrolling per-page network list (google-sheets "Links" equivalent).
  * @param filter - The active filter state.
+ * @param options - Optional flags (`enabled`).
  * @returns The TanStack infinite-query result.
  */
-export function usePageLinksInfinite(filter: PageLinksFilter) {
+export function usePageLinksInfinite(
+	filter: PageLinksFilter,
+	options?: InfiniteQueryOptions,
+) {
 	return useInfiniteQuery({
 		queryKey: ['page-links', filter],
 		initialPageParam: 0,
@@ -31,5 +36,6 @@ export function usePageLinksInfinite(filter: PageLinksFilter) {
 			}),
 		getNextPageParam: (lastPage, _allPages, lastPageParam) =>
 			getNextOffset(lastPage, lastPageParam),
+		enabled: options?.enabled ?? true,
 	});
 }

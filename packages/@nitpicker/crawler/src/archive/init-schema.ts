@@ -396,4 +396,27 @@ export async function initSchema(instance: Knex) {
 		) WITHOUT ROWID
 	`);
 	await instance.raw('CREATE INDEX idx_page_html_ref_hash ON page_html_ref(hash)');
+
+	// Composite covering index for the default Pages-view filter + url-ordered
+	// scan. Without it, `listPages` on a 400k-row archive runs ~15s per page
+	// click (SCAN pages USING pages_scraped_index + TEMP B-TREE FOR ORDER BY);
+	// with it, the same query runs ~45ms (368x speedup, confirmed via
+	// `scripts/bench-partial-listfilter.mjs` against a real customer archive).
+	// The same index also serves `listIsolatedPages`, `listIsolatedClusters`,
+	// and `getSummary`'s HTML-page counts.
+	//
+	// **DO NOT RUN `ANALYZE` ON .nitpicker ARCHIVES.** With ANALYZE statistics
+	// available, the planner switches the JOIN paths in `listLinks`,
+	// `getLinkGraph`, and `listPageLinks` to use this index for source/dest
+	// seeks (SCAN dest → SEARCH anchors → SEARCH source) instead of the
+	// existing `SCAN anchors → rowid seek` plan. That regression takes those
+	// queries from ~15s to ~500s (33x worse). The unanalyzed-table heuristic
+	// happens to pick the right plan for the joins while still picking the new
+	// index for `listPages` because the column order (`scraped, redirectDestId,
+	// url, contentType`) exactly matches the WHERE+ORDER predicates. If a
+	// future change adds `ANALYZE` anywhere in the crawler / viewer / MCP /
+	// migration paths, this index must be re-evaluated first.
+	await instance.raw(
+		'CREATE INDEX idx_pages_listfilter ON pages(scraped, redirectDestId, url, contentType)',
+	);
 }

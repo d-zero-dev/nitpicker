@@ -1,3 +1,4 @@
+import type { InfiniteQueryOptions } from './infinite-query-options.js';
 import type { ViolationEntry } from '../types.js';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -27,9 +28,13 @@ export interface ViolationsFilter {
 /**
  * Infinite-scrolling analysis violations list.
  * @param filter - The active filter state.
+ * @param options - Optional flags (`enabled`).
  * @returns The TanStack infinite-query result.
  */
-export function useViolationsInfinite(filter: ViolationsFilter) {
+export function useViolationsInfinite(
+	filter: ViolationsFilter,
+	options?: InfiniteQueryOptions,
+) {
 	return useInfiniteQuery({
 		queryKey: ['violations', filter],
 		initialPageParam: 0,
@@ -41,5 +46,6 @@ export function useViolationsInfinite(filter: ViolationsFilter) {
 			}),
 		getNextPageParam: (lastPage, _allPages, lastPageParam) =>
 			getNextOffset(lastPage, lastPageParam),
+		enabled: options?.enabled ?? true,
 	});
 }

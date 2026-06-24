@@ -252,9 +252,14 @@ npx @nitpicker/cli viewer <file-or-stub-dir> [--port 9000] [--no-open]
 
 `crawl --resume <stub>` と同じパスを `viewer <stub>` に渡せば、その時点までに集めたデータを **read-only オープン**（`Archive.connect`）で閲覧できる。`.nitpicker` ファイルへの tar 化も tmpDir 削除も `info` マイグレーションも一切走らないため、その後 `crawl --resume` を安全に続行できる。Footer に "Live crawl in progress (PID xxx)" / "Interrupted crawl stub" のバッジが出る（`<tmpDir>.lock/pid.txt` を probe して判定）。
 
-### 仮想スクロール
+### ページネーション（MPA がデフォルト / 仮想スクロールは opt-in）
 
-ページ一覧は サーバ側ページネーション（`limit`/`offset`）+ TanStack Query infinite query + TanStack Virtual の組み合わせで、**10 万行規模をクライアント全件ロードせず一定メモリで表示**する。
+ページ一覧は TopBar のモード切替で **MPA ページネーション**（既定）と **仮想スクロール** を切り替えられる。
+
+- **MPA**: Prev / Next + ページ番号 + ジャンプ入力。現在ページとページサイズはどちらも URL クエリ（`?page=N` / `?pageSize=N`、ともに 1-indexed）に乗るため deep-link / 共有 / ブラウザ戻る/進むが完全に成立する（ページサイズが URL に無いと、`?page=5` を共有しても受け手側のサイズ次第で別の行が見えてしまう）。表示件数は 50 / 100 / 200。フィルタ変更で `?page=` は自動クリア、ページサイズ変更時も `?page=` を 1 に戻す（旧オフセットは新しい窓では意味を持たない）。デフォルト値（page=1, pageSize=100）は URL から省略
+- **仮想スクロール**: TanStack Query infinite query + TanStack Virtual。**10 万行規模をクライアント全件ロードせず一定メモリで表示**するため、deep-link は捨てて巨大データの探索性を優先したいときの opt-in
+
+モード本体は localStorage（`nitpicker-pagination-mode`）。ページサイズも localStorage（`nitpicker-page-size`）に保存されるが、これは新規タブ・直 URL 訪問時の hint であり、URL の `?pageSize=` が常に優先される。両モードとも backend は同じ `limit`/`offset` API（無改修）。
 
 ### Errors ビュー
 
@@ -266,7 +271,7 @@ npx @nitpicker/cli viewer <file-or-stub-dir> [--port 9000] [--no-open]
 
 ### アクセシビリティ
 
-WCAG 2.1 AA 目標。仮想テーブルは flexbox レイアウトで table セマンティクスがアクセシビリティツリーから剥がれるため、**ARIA ロール（`table`/`row`/`columnheader`/`cell`）と `aria-rowcount`/`aria-colcount` を明示付与**する設計。`web/components/virtual-table.tsx` のロール属性を削除すると画面読み上げで「ただのテキストの羅列」に退行するため必須。検証は `yarn workspace @nitpicker/viewer test:e2e` の a11y 専用テスト群でカバー。
+WCAG 2.1 AA 目標。`PagedTable`（MPA）/ `VirtualTable`（仮想スクロール）の両方が flexbox レイアウトで table セマンティクスをアクセシビリティツリーから剥がすため、**ARIA ロール（`table`/`row`/`columnheader`/`cell`）と `aria-rowcount`/`aria-colcount` を明示付与**する設計。`web/components/{paged,virtual}-table.tsx` のロール属性を削除すると画面読み上げで「ただのテキストの羅列」に退行するため必須。検証は `yarn workspace @nitpicker/viewer test:e2e` の a11y 専用テスト群が両モード分カバー。
 
 ## MCP Server
 

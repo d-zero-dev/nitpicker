@@ -23,6 +23,7 @@ import { registerSummaryRoute } from './routes/register-summary-route.js';
 import { registerUnusedResourcesRoute } from './routes/register-unused-resources-route.js';
 import { registerViolationsRoute } from './routes/register-violations-route.js';
 import { sanitizeErrorMessage } from './sanitize-error-message.js';
+import { serverTimingMiddleware } from './server-timing-middleware.js';
 
 /**
  * Builds the Hono application: registers all REST API routes, a sanitizing
@@ -36,6 +37,11 @@ import { sanitizeErrorMessage } from './sanitize-error-message.js';
 export function createApp(options: CreateAppOptions): Hono {
 	const { context, publicDir } = options;
 	const app = new Hono();
+
+	// Attach Server-Timing to every API route so DevTools surfaces backend
+	// wall-clock per request — primary triage tool for "is X slow because of
+	// the DB or because of React?" without needing a separate profiler.
+	app.use('/api/*', serverTimingMiddleware());
 
 	registerSummaryRoute(app, context);
 	registerPagesRoute(app, context);

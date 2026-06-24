@@ -7,7 +7,11 @@ import { Archive } from '@nitpicker/crawler';
 const dirname = import.meta.dirname;
 const FIXTURE_PATH = path.resolve(dirname, '.fixture.nitpicker');
 const FIXTURE_CWD = path.resolve(dirname, '.fixture-tmp');
-const PAGE_COUNT = 50;
+// Bumped from 50 → 120 so the default MPA `pageSize=100` paginates (Next
+// button enables, `?page=2` lands on the second page). Smaller fixtures
+// collapse to one page and the pagination smoke tests can't actually
+// observe a page-change event.
+const PAGE_COUNT = 120;
 
 rmSync(FIXTURE_PATH, { force: true });
 rmSync(FIXTURE_CWD, { recursive: true, force: true });

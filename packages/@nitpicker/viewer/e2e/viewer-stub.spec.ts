@@ -46,8 +46,12 @@ test.describe('Nitpicker Viewer (stub mode)', () => {
 	test('stub からページ一覧と詳細が表示できる', async ({ page }) => {
 		await page.goto('/pages');
 		await expect(page.getByRole('heading', { name: 'Pages', level: 1 })).toBeVisible();
-		await expect(page.locator('.vt-row').first()).toBeVisible();
-		await page.locator('.vt-row .link-button').first().click();
+		// MPA pagination is the default mode (rendered as `.pt-row`), so the
+		// stub-mode smoke test asserts against the paged table rather than
+		// `.vt-row`. The opt-in virtual scroll has its own coverage in the
+		// main viewer.spec.ts.
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		await page.locator('.pt-row .link-button').first().click();
 		await expect(
 			page.getByRole('heading', { name: 'Page detail', level: 1 }),
 		).toBeVisible();

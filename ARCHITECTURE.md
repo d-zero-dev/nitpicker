@@ -239,7 +239,7 @@ SQL マッチャ側はこの優先順位を「目的カテゴリの positive 節
 **構成（単一パッケージ、backend + frontend 同居）:**
 
 - **backend（`src/` → `tsc` → `lib/`）**: Hono アプリ。`start-viewer.ts`（サーバ起動 + ブラウザオープン + SIGINT graceful shutdown）、`create-app.ts`（全ルート登録 + `serveStatic` + エラーハンドラ）、`archive-context.ts`（`ArchiveManager` で 1 アーカイブを常駐保持）、`routes/register-*-route.ts`（query 関数 1:1 の 12 ルート）
-- **frontend（`web/` → `vite build` → `lib/public/`）**: React 19 SPA。`@tanstack/react-query`（infinite query）+ `@tanstack/react-table` + `@tanstack/react-virtual` による仮想スクロール、BrowserRouter（History API、未マッチ GET は Hono が index.html を返す SPA フォールバック）ルーティング、`@nitpicker/query` の型を DTO として再利用。ダーク/ライトテーマ切替（`data-theme` + localStorage、`web/theme/`）、i18n（en/ja、`web/i18n/` の自前辞書 + Context）、列リサイズ（マウス + 矢印キー）、ローディングスケルトン + `aria-busy` + グローバル進捗バー、画像サムネイルプレビュー、Mismatches の赤緑文字差分（`web/utils/diff-text.ts`）を備える。アクセシビリティ（WCAG 2.1 AA）対応として、仮想テーブルへの明示的 ARIA グリッドロール、スキップリンク（`web/components/skip-link.tsx`）、フォームコントロールのアクセシブルネーム、ライブリージョン、`prefers-reduced-motion`、AA コントラストを実装（README「アクセシビリティ」節 + 下記「設計注意」参照）
+- **frontend（`web/` → `vite build` → `lib/public/`）**: React 19 SPA。`@tanstack/react-query` + `@tanstack/react-table` をベースに、**ページネーションモードを TopBar から切替**できる（`PagedTable` = MPA、`VirtualTable` = `@tanstack/react-virtual` 経由の仮想スクロール、`DataTable` がモードで dispatch）。BrowserRouter（History API、未マッチ GET は Hono が index.html を返す SPA フォールバック）ルーティング、`@nitpicker/query` の型を DTO として再利用。ダーク/ライトテーマ切替（`data-theme` + localStorage、`web/theme/`）、i18n（en/ja、`web/i18n/` の自前辞書 + Context）、列リサイズ（マウス + 矢印キー）、ローディングスケルトン + `aria-busy` + グローバル進捗バー、画像サムネイルプレビュー、Mismatches の赤緑文字差分（`web/utils/diff-text.ts`）を備える。アクセシビリティ（WCAG 2.1 AA）対応として、`PagedTable` / `VirtualTable` 両方への明示的 ARIA グリッドロール、スキップリンク（`web/components/skip-link.tsx`）、フォームコントロールのアクセシブルネーム、ライブリージョン、`prefers-reduced-motion`、AA コントラストを実装（README「アクセシビリティ」節 + 下記「設計注意」参照）
 
 **データフロー:**
 
@@ -262,7 +262,11 @@ nitpicker viewer <file>
 
 > **設計注意（ポート探索は serve と同じ host を probe する）:** `findFreePort(preferred, host)` は **`serve()` がバインドするのと同じ `host` で空きを確認しなければならない**。`localhost` は `::1`（IPv6）に解決される一方、host 未指定の bind は `0.0.0.0`/`::` を使うため、別インターフェースを probe すると「空き」と誤判定し、フォールバックが効かず banner 表示後に `EADDRINUSE` でクラッシュする。`start-viewer.ts` は必ず `host` を渡すこと。回帰テストは `find-free-port.spec.ts`（`net.createServer` をスパイし `listen` への host 転送を検証）。
 
-> **設計注意（仮想テーブルの ARIA ロールは必須）:** `web/components/virtual-table.tsx` は CSS で table 要素を `display: flex/block` にレイアウトしており、これがネイティブ table セマンティクスをアクセシビリティツリーから剥がす。明示的な ARIA ロール（`table`/`rowgroup`/`row`/`columnheader`/`cell`）+ `aria-row/colcount`/`index` で復元しているため、**これらを削除すると画面読み上げが「無構造なテキストの羅列」に退行する**。列ヘッダーのアクセシブルネームはリサイザーのラベル混入を避けるため `to-accessible-header-label.ts` で固定。E2E（`e2e/viewer.spec.ts` の「アクセシビリティ」群）が回帰を検知する。
+> **設計注意（テーブルの ARIA ロールは必須）:** `web/components/virtual-table.tsx`（仮想スクロール）と `web/components/paged-table.tsx`（MPA）の両方が CSS で table 要素を `display: flex/block` にレイアウトしており、これがネイティブ table セマンティクスをアクセシビリティツリーから剥がす。明示的な ARIA ロール（`table`/`rowgroup`/`row`/`columnheader`/`cell`）+ `aria-row/colcount`/`index` で復元しているため、**これらを削除すると画面読み上げが「無構造なテキストの羅列」に退行する**。列ヘッダーのアクセシブルネームはリサイザーのラベル混入を避けるため `to-accessible-header-label.ts` で固定（両モード共有）。E2E（`e2e/viewer.spec.ts` の「アクセシビリティ」群）は両モードで回帰を検知する。
+
+> **設計注意（ページネーションは MPA をデフォルト・仮想スクロールを opt-in にする）:** リスト系ビュー（pages / resources / images / links / page-links / violations / headers / isolated-pages / isolated-clusters）はすべて `DataTable` 経由で `usePaginationMode()` を読み、MPA（`PagedTable` + `?page=` / `?pageSize=` URL クエリ）と virtual scroll（`VirtualTable` + `useInfiniteQuery`）を切り替える。**MPA をデフォルトにしている理由は (a) deep-link / URL 共有 / ブラウザ戻る・進むが効くこと、(b) クライアント / ディレクター用途では特定ページに直行できる UX が好まれること**。virtual scroll は 10 万行規模の探索性が必要なときの opt-in。両モードとも backend は同じ `limit`/`offset` API で、view 側で `usePagedQuery` / `use-*-infinite` のどちらかを `enabled` フラグで起動する。
+
+> **設計注意（page と pageSize は両方が URL クエリの正、localStorage は hint）:** `?page=` だけが URL に乗って `?pageSize=` が無いと、共有された `?page=5` は受け手の localStorage の窓サイズ次第で別の行を指す ─ deep-link / 共有の意義が崩れる。そのため `usePageSize` も `useSearchParams` 経由で URL を読み書きする（`?pageSize=N`、デフォルト値 100 は URL から省略してクリーンに保つ）。localStorage（`nitpicker-page-size`）は「URL 未指定で新規タブ訪問したときの hint」にしか使わない。フィルタ変更時の `?page=` リセットは `useUrlFilter` の副作用に集約、`?pageSize=` 変更時の `?page=` リセットは `usePageSize.setPageSize` の updater 内で同じ `setSearchParams` 一発で実行する（2 つに分けると一時的に矛盾状態を経由してフェッチが 2 回走る）。モード（mpa / virtual）は URL に乗せず localStorage のみ（`nitpicker-pagination-mode`、`useSyncExternalStore` で全 view に即時伝播）— モードは「閲覧スタイル」であって個別 URL の状態ではないため。
 
 > **設計注意（Summary カードの "ページ" vs "コンテンツ"）:** Summary 画面の上部カードは 3 つで、それぞれ意味する分母が異なる。
 >
@@ -687,6 +691,12 @@ beholder 3.0.0 アップグレードで pages のメタカラムは ~47 列の f
 | isSkipped / skipReason / order                                                                                                                                                              | …                      | クロール状態                                                                                                                                                                                                      |
 
 **追加 INDEX**: `pages(robots_noindex)`, `pages(og_type)`。`lang` はモノリンガルサイトで cardinality 低く無効なので skip。
+
+**追加 INDEX (listPages 高速化)**: `idx_pages_listfilter` (`scraped, redirectDestId, url, contentType`) を `init-schema.ts` の末尾で raw SQL 経由で追加。listPages の default WHERE (`scraped=1 AND redirectDestId IS NULL AND (contentType IS NULL OR contentType='text/html')`) + `ORDER BY url ASC` を index-ordered scan で完結させる covering 構成。**428k 行 / フィルタ後 168k 行の実 archive で 15s → 45ms (368x speedup)** を確認。
+
+> **設計注意（.nitpicker archive に `ANALYZE` を絶対に走らせない）:** `idx_pages_listfilter` は SQLite の planner heuristics に依存して動作する。`ANALYZE` で per-index 統計が生成されると、planner は同 index を `listLinks` / `getLinkGraph` / `listPageLinks` の JOIN paths でも source/dest seek に流用しはじめ、これらが ~15s → ~500s (33x worse) に回帰する。実証: `scripts/bench-partial-listfilter.mjs` の no-ANALYZE / +ANALYZE pass 比較。crawler / viewer / MCP / migration の**いかなる経路でも** `ANALYZE` / `PRAGMA optimize` を実行しないこと。既存 archive への手動適用は `scripts/add-pages-listfilter-index.mjs` で行う (このスクリプトも ANALYZE しない)。
+
+> **既知の遅い query (本 PR スコープ外)**: `idx_pages_listfilter` 追加で listPages 系は解消されたが、Viewer の他ビューは依然遅い (実 archive 計測値): `findDuplicates` 474s, `listUnusedResources` 60s, `getLinkGraph` 33s, `listPageLinks` 22s, `getSummary` 22s, `listLinks` 13-16s, `listIsolated*` 15-17s, `listImages` 8-12s。次フェーズで「JS 側のデータ加工を SQL 側に押し下げる」方針で個別に最適化する予定。
 
 **pre-0.10 互換性**: clean-break。`archive/meta/assert-compatible-version.ts` が `info.version` を読んで `REQUIRED_FORMAT_VERSION = "0.10.0"` と semver 比較し、古い archive を `Database.connect` で開いた時点で `IncompatibleArchiveError` を throw する。`v0.x` 系の breaking 容認方針（MEMORY: `v0-x-breaking-changes`）に基づく。移行は `scripts/migrate-to-0.10.mjs`。
 
