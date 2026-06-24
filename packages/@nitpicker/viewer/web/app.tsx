@@ -11,6 +11,7 @@ import { ErrorsView } from './routes/errors-view.js';
 import { GraphView } from './routes/graph-view.js';
 import { HeadersView } from './routes/headers-view.js';
 import { ImagesView } from './routes/images-view.js';
+import { IsolatedClustersView } from './routes/isolated-clusters-view.js';
 import { IsolatedPagesView } from './routes/isolated-pages-view.js';
 import { LinksView } from './routes/links-view.js';
 import { MismatchesView } from './routes/mismatches-view.js';
@@ -67,6 +68,7 @@ export function App() {
 									<Route path="/headers" element={<HeadersView />} />
 									<Route path="/errors" element={<ErrorsView />} />
 									<Route path="/isolated-pages" element={<IsolatedPagesView />} />
+									<Route path="/isolated-clusters" element={<IsolatedClustersView />} />
 									<Route path="/unused-resources" element={<UnusedResourcesView />} />
 									<Route path="*" element={<Navigate to="/" replace />} />
 								</Routes>

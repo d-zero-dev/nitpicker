@@ -17,6 +17,7 @@ import {
 	findDuplicates,
 	findMismatches,
 	getErrorKinds,
+	getIsolatedCluster,
 	getPageDetail,
 	getPageHtml,
 	getPageJsonLd,
@@ -28,6 +29,7 @@ import {
 	getViolations,
 	listImages,
 	listInventoryRuns,
+	listIsolatedClusters,
 	listIsolatedPages,
 	listLinks,
 	listPages,
@@ -170,6 +172,20 @@ export async function dispatchQuery(
 		case 'isolated-pages': {
 			const { limit, offset } = options as { limit?: number; offset?: number };
 			return listIsolatedPages(accessor, { limit, offset });
+		}
+		case 'isolated-clusters': {
+			const { limit, offset } = options as { limit?: number; offset?: number };
+			return listIsolatedClusters(accessor, { limit, offset });
+		}
+		case 'get-isolated-cluster': {
+			const { representativeUrl } = options as { representativeUrl: string };
+			const result = await getIsolatedCluster(accessor, representativeUrl);
+			if (result === null) {
+				throw new Error(
+					`No isolated cluster found for representativeUrl: ${representativeUrl}`,
+				);
+			}
+			return result;
 		}
 		case 'unused-resources': {
 			const { limit, offset } = options as { limit?: number; offset?: number };

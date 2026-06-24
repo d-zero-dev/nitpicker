@@ -76,7 +76,7 @@ export const commandDef = {
 		},
 		type: {
 			type: 'string',
-			desc: 'Filter type: broken, external, orphaned (links) or canonical, og:title, og:description (mismatches)',
+			desc: 'Filter type: broken, external (links) or canonical, og:title, og:description (mismatches)',
 		},
 		contentType: {
 			type: 'string',
@@ -133,6 +133,14 @@ export const commandDef = {
 		full: {
 			type: 'boolean',
 			desc: 'Return full raw JSON-LD (page-jsonld). Default is slim (no raw / parsed).',
+		},
+		representativeUrl: {
+			type: 'string',
+			desc: 'Representative URL of an isolated cluster (get-isolated-cluster); obtain via `query <archive> isolated-clusters`.',
+		},
+		includeRedirectSources: {
+			type: 'boolean',
+			desc: 'Include redirect-source rows / disable redirect resolution. Diagnostic — default behaviour resolves to canonical destinations.',
 		},
 		pretty: {
 			type: 'boolean',

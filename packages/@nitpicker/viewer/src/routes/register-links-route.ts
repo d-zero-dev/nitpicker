@@ -6,10 +6,16 @@ import { listLinks } from '@nitpicker/query';
 import { toNumber } from '../query-params/to-number.js';
 
 /** Valid `type` values for the links route. */
-const VALID_LINK_TYPES = ['broken', 'external', 'orphaned'] as const;
+const VALID_LINK_TYPES = ['broken', 'external'] as const;
 
 /**
- * Registers `GET /api/links?type=broken|external|orphaned` — link analysis.
+ * Registers `GET /api/links?type=broken|external` — link analysis.
+ *
+ * `orphaned` was retired: completely isolated inventory-* pages are reported
+ * by `/api/isolated-pages`, and interconnected orphan clusters by
+ * `/api/isolated-clusters`. Anchor destinations on `broken` / `external`
+ * are resolved through `pages.redirectDestId` to the canonical final
+ * destination unless `includeRedirectSources=true`.
  * @param app - The Hono application.
  * @param context - The opened archive context.
  */
@@ -25,10 +31,12 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 			);
 		}
 		const accessor = context.manager.get(context.archiveId);
+		const includeRedirectSources = c.req.query('includeRedirectSources') === 'true';
 		const result = await listLinks(accessor, {
 			type: type as (typeof VALID_LINK_TYPES)[number],
 			limit: toNumber(c.req.query('limit')),
 			offset: toNumber(c.req.query('offset')),
+			includeRedirectSources,
 		});
 		return c.json(result);
 	});

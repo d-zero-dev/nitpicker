@@ -92,16 +92,17 @@ export function mapFlagsToQueryOptions(
 		case 'links': {
 			if (!flags.type) {
 				throw new Error(
-					'--type is required for the links sub-command. Must be one of: broken, external, orphaned',
+					'--type is required for the links sub-command. Must be one of: broken, external',
 				);
 			}
-			if (!['broken', 'external', 'orphaned'].includes(flags.type)) {
+			if (!['broken', 'external'].includes(flags.type)) {
 				throw new Error(
-					`Invalid --type value: ${flags.type}. Must be one of: broken, external, orphaned`,
+					`Invalid --type value: ${flags.type}. Must be one of: broken, external`,
 				);
 			}
 			return {
-				type: flags.type as 'broken' | 'external' | 'orphaned',
+				type: flags.type as 'broken' | 'external',
+				includeRedirectSources: flags.includeRedirectSources,
 				limit: flags.limit,
 				offset: flags.offset,
 			};
@@ -238,6 +239,7 @@ export function mapFlagsToQueryOptions(
 			return { url: flags.url };
 		}
 		case 'isolated-pages':
+		case 'isolated-clusters':
 		case 'unused-resources':
 		case 'inventory-runs': {
 			// Pagination-only — no required filters.
@@ -245,6 +247,14 @@ export function mapFlagsToQueryOptions(
 				limit: flags.limit,
 				offset: flags.offset,
 			};
+		}
+		case 'get-isolated-cluster': {
+			if (!flags.representativeUrl) {
+				throw new Error(
+					'--representativeUrl is required for the get-isolated-cluster sub-command.',
+				);
+			}
+			return { representativeUrl: flags.representativeUrl };
 		}
 		default: {
 			const _exhaustive: never = subCommand;

@@ -33,6 +33,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			pageLinks: 'Page Links',
 			errors: 'Errors',
 			isolatedPages: 'Isolated Pages',
+			isolatedClusters: 'Isolated Clusters',
 			unusedResources: 'Unused Resources',
 		},
 		common: {
@@ -171,10 +172,9 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			links: {
 				title: 'Links',
 				description:
-					'Link analysis: broken links (4xx/5xx destinations), external links, and orphaned pages.',
+					'Link analysis: broken links (4xx/5xx destinations) and external links. Anchor destinations are redirect-resolved to their canonical target. For orphan pages use the Isolated Pages / Isolated Clusters views.',
 				broken: 'broken',
 				external: 'external',
-				orphaned: 'orphaned',
 				colSource: 'Source',
 				colDest: 'Destination',
 				colStatus: 'Status',
@@ -251,14 +251,30 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			isolatedPages: {
 				title: 'Isolated Pages',
 				description:
-					'Internal HTML pages no other page links to (archived roots excluded). Combine with `crawl --inventory` to surface pages that only exist on the server.',
+					'Completely isolated inventory-* pages — singletons in the inventory subgraph with no resolved-anchor inbound from any other inventory node. Crawled pages never appear here by definition.',
 				total: '{total} isolated pages',
 				empty:
-					'No isolated pages — every internal HTML page has at least one inbound link.',
+					'No completely isolated pages — run `crawl --inventory` to surface unlinked URLs.',
 				url: 'URL',
 				pageTitle: 'Title',
 				status: 'Status',
 				source: 'Source',
+			},
+			isolatedClusters: {
+				title: 'Isolated Clusters',
+				description:
+					'Interconnected orphan groups — connected components of the inventory-* subgraph with size ≥ 2. Each cluster row links to its members.',
+				total: '{total} isolated clusters',
+				empty:
+					'No isolated clusters — no inventory-* pages link to each other in this archive.',
+				representativeUrl: 'Representative URL',
+				size: 'Size',
+				pageTitle: 'Title',
+				status: 'Status',
+				detailTitle: 'Cluster Members',
+				memberUrl: 'URL',
+				memberSource: 'Source',
+				back: '← Back to clusters',
 			},
 			unusedResources: {
 				title: 'Unused Resources',
@@ -300,6 +316,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			pageLinks: 'ページリンク',
 			errors: 'エラー',
 			isolatedPages: '孤立ページ',
+			isolatedClusters: '孤立集合',
 			unusedResources: '未使用リソース',
 		},
 		common: {
@@ -438,10 +455,9 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			links: {
 				title: 'リンク',
 				description:
-					'リンク分析：リンク切れ（4xx/5xx 先）、外部リンク、被リンクのない孤立ページ。',
+					'リンク分析：リンク切れ（4xx/5xx 先）と外部リンク。リダイレクト先は canonical destination に解決されます。孤立ページは「孤立ページ」「孤立集合」タブを参照。',
 				broken: 'リンク切れ',
 				external: '外部',
-				orphaned: '孤立',
 				colSource: 'リンク元',
 				colDest: 'リンク先',
 				colStatus: 'ステータス',
@@ -516,16 +532,31 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				sampleUrls: 'サンプル URL',
 			},
 			isolatedPages: {
-				title: '孤立ページ',
+				title: '完全孤立ページ',
 				description:
-					'他のページからリンクされていない内部 HTML ページ（クロール起点は除外）。`crawl --inventory` と組み合わせて、サーバー上にしか存在しないページを浮かび上がらせます。',
-				total: '孤立ページ {total} 件',
+					'inventory-* で他のどのページからも参照されていない単独ノード（inventory subgraph 内で singleton）。クロール経路で到達したページは定義上ここには現れません。',
+				total: '完全孤立ページ {total} 件',
 				empty:
-					'孤立ページなし — すべての内部 HTML ページに少なくとも 1 つの被リンクがあります。',
+					'完全孤立ページなし — `crawl --inventory` でリンクされていない URL を可視化できます。',
 				url: 'URL',
 				pageTitle: 'タイトル',
 				status: 'ステータス',
 				source: 'ソース',
+			},
+			isolatedClusters: {
+				title: '孤立集合',
+				description:
+					'inventory-* 同士で繋がっているがクロール集合からは隔離されたクラスタ（connected component, size ≥ 2）。クリックで member 詳細に進めます。',
+				total: '孤立集合 {total} 件',
+				empty: '孤立集合なし — inventory-* 同士で繋がるリンクが見つかりませんでした。',
+				representativeUrl: '代表 URL',
+				size: 'サイズ',
+				pageTitle: 'タイトル',
+				status: 'ステータス',
+				detailTitle: 'クラスタメンバー',
+				memberUrl: 'URL',
+				memberSource: 'ソース',
+				back: '← クラスタ一覧へ戻る',
 			},
 			unusedResources: {
 				title: '未使用リソース',

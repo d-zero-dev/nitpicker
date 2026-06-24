@@ -4,11 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { Archive, computeFileSha256, CrawlerOrchestrator } from '@nitpicker/crawler';
-import {
-	listInventoryRuns,
-	listIsolatedPages,
-	listUnusedResources,
-} from '@nitpicker/query';
+import { listInventoryRuns, listUnusedResources } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
@@ -83,12 +79,21 @@ describe('Inventory crawl', () => {
 	});
 
 	it('labels the URL-list HTML page as inventory-seed', async () => {
-		const rows = await listIsolatedPages(accessor, { limit: 50 });
-		const hidden = rows.items.find(
-			(row) => row.url === 'http://localhost:8010/inventory/hidden-lp',
-		);
-		expect(hidden, 'hidden-lp must be present in isolated pages').toBeDefined();
-		expect(hidden?.source).toBe('inventory-seed');
+		// hidden-lp anchors to inner-link (which itself becomes
+		// inventory-discovered), so the two form a size-2 cluster — NOT a
+		// singleton — under the new `listIsolatedPages` definition.
+		// Probe the raw `pages.source` column directly to pin the
+		// inventory-seed label that `derivePageSource` writes for URLs
+		// supplied via `--inventory`. The orphan-set behaviour is covered
+		// separately by `compute-isolated-clusters.spec.ts`.
+		const knex = accessor.getKnex();
+		const [row] = (await knex('pages')
+			.select('source')
+			.where('url', 'http://localhost:8010/inventory/hidden-lp')) as {
+			source: string;
+		}[];
+		expect(row, 'hidden-lp must have been inserted by --inventory').toBeDefined();
+		expect(row?.source).toBe('inventory-seed');
 	});
 
 	it('labels pages discovered by following links from a seed as inventory-discovered', async () => {
