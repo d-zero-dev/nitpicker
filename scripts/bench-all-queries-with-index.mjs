@@ -135,7 +135,7 @@ try {
 		// validated by bench against this archive and either dropped (status
 		// + anchors caused 30x regressions in listLinks/getLinkGraph) or
 		// deferred to per-query investigation (findDuplicates, listUnusedResources).
-		`CREATE INDEX idx_pages_listfilter ON pages(scraped, redirectDestId, url, contentType)`,
+		`CREATE INDEX idx_pages_listfilter ON pages(isExternal, scraped, redirectDestId, url, contentType)`,
 	];
 	for (const sql of indexes) {
 		const start = process.hrtime.bigint();

@@ -51,7 +51,7 @@ packages/
 
 > **Note (viewer 高速化用 index 群)**: `init-schema.ts` 末尾で複数の perf index を貼っている。428k 行 archive 計測値:
 >
-> - `idx_pages_listfilter` (PR #96): listPages 15s → 45ms (368x)
+> - `idx_pages_listfilter`: listPages 15s → 45ms (368x)。**column 順は `(isExternal, scraped, redirectDestId, url, contentType)`** — PR #96 で `scraped` 先頭の 4 列で出したら paginate-query の COUNT が `isExternal=0` フィルタで `pages_isexternal_index` に倒れて 8.7s かかる事案が出たので、本 PR で `isExternal` 先頭の 5 列に張り替え (264x for COUNT)
 > - `idx_resources_internal_url`: listUnusedResources 66s → 7.5s (8.8x)
 > - `idx_images_covering`: listImages 32s → 16s (2.0x)
 >

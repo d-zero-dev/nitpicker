@@ -206,7 +206,7 @@ try {
 	const t1 = process.hrtime.bigint();
 	await db.raw(
 		`CREATE INDEX IF NOT EXISTS idx_pages_listfilter
-		 ON pages(scraped, redirectDestId, url, contentType)`,
+		 ON pages(isExternal, scraped, redirectDestId, url, contentType)`,
 	);
 	console.log(`    ${(Number(process.hrtime.bigint() - t1) / 1e6).toFixed(0)}ms`);
 

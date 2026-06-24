@@ -172,7 +172,7 @@ try {
 	console.log('\n[1] Ensure idx_pages_listfilter (PR #96 baseline)');
 	await db.raw(
 		`CREATE INDEX IF NOT EXISTS idx_pages_listfilter
-		 ON pages(scraped, redirectDestId, url, contentType)`,
+		 ON pages(isExternal, scraped, redirectDestId, url, contentType)`,
 	);
 
 	console.log('\n[2] BASELINE decompose');

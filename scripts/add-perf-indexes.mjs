@@ -81,8 +81,15 @@ mkdirSync(workDir, { recursive: true });
 const INDEXES = [
 	{
 		name: 'idx_pages_listfilter',
-		sql: `CREATE INDEX IF NOT EXISTS idx_pages_listfilter
-		      ON pages(scraped, redirectDestId, url, contentType)`,
+		// Drop first so that archives that already have the PR #96 column
+		// order (without `isExternal` leading) get the new column order on
+		// re-migration. Without `isExternal` first, the paginate-query
+		// COUNT for the Pages view default (`isExternal=false`) falls back
+		// to `pages_isexternal_index` and runs ~8.7s on a 165k-internal-page
+		// archive — see init-schema.ts.
+		dropFirst: true,
+		sql: `CREATE INDEX idx_pages_listfilter
+		      ON pages(isExternal, scraped, redirectDestId, url, contentType)`,
 	},
 	{
 		name: 'idx_resources_internal_url',
@@ -118,8 +125,13 @@ try {
 		useNullAsDefault: true,
 	});
 	try {
-		for (const { name, sql } of INDEXES) {
+		for (const { name, sql, dropFirst } of INDEXES) {
 			const start = process.hrtime.bigint();
+			if (dropFirst) {
+				// Used when the index name pre-exists with a different column
+				// order — `IF NOT EXISTS` would no-op against the stale shape.
+				await db.raw(`DROP INDEX IF EXISTS ${name}`);
+			}
 			await db.raw(sql);
 			const ms = Number(process.hrtime.bigint() - start) / 1e6;
 			console.log(`      ${ms.toFixed(0).padStart(6)}ms  ${name}`);

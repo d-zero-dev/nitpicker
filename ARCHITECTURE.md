@@ -694,13 +694,15 @@ beholder 3.0.0 アップグレードで pages のメタカラムは ~47 列の f
 
 **追加 INDEX 群 (viewer 高速化)**: `init-schema.ts` 末尾で 3 つの perf index を raw SQL で追加。428k 行 / フィルタ後 168k 行の実 archive 計測:
 
-| Index                                                                                                           | 対象 query            | Before | After       |
-| --------------------------------------------------------------------------------------------------------------- | --------------------- | ------ | ----------- |
-| `idx_pages_listfilter` (PR #96) — `pages(scraped, redirectDestId, url, contentType)`                            | `listPages`           | 15s    | 45ms (368x) |
-| `idx_resources_internal_url` — `resources(isExternal, url)` covering                                            | `listUnusedResources` | 66s    | 7.5s (8.8x) |
-| `idx_images_covering` — `images(pageId, src, alt, width, height, naturalWidth, naturalHeight, isLazy)` covering | `listImages`          | 32s    | 16s (2.0x)  |
+| Index                                                                                                                                                    | 対象 query            | Before | After       |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ------ | ----------- |
+| `idx_pages_listfilter` — `pages(isExternal, scraped, redirectDestId, url, contentType)` (PR #96 では 4 列、本 PR で先頭に `isExternal` を追加。詳細下記) | `listPages`           | 15s    | 45ms (368x) |
+| `idx_resources_internal_url` — `resources(isExternal, url)` covering                                                                                     | `listUnusedResources` | 66s    | 7.5s (8.8x) |
+| `idx_images_covering` — `images(pageId, src, alt, width, height, naturalWidth, naturalHeight, isLazy)` covering                                          | `listImages`          | 32s    | 16s (2.0x)  |
 
 加えて `find-duplicates` を N+1 SQL (代表値ごとに別 `SELECT url` ループ) から `GROUP_CONCAT(url, X'1F')` の単発 query に書換 (414s → 8s, 49.6x、`scripts/bench-find-duplicates.mjs`)。`get-link-graph` の `pageRows` + `edgeRows` を `Promise.all` に統合 (sequential 38s → parallel 30s ish、JS aggregation はそのまま — SQL push-down を試した結果 10x 悪化したため不採用、根拠は `get-link-graph.ts` の JSDoc)。
+
+> **設計注意（`idx_pages_listfilter` の column 順は `isExternal` 先頭）:** PR #96 では 4 列 `(scraped, redirectDestId, url, contentType)` だったが、本 PR で先頭に `isExternal` を追加した。Pages view のデフォルト「Include external 無し」フィルタは WHERE に `isExternal=0` を入れ、これは paginate-query の COUNT と SELECT の両方に効く。**SELECT は `ORDER BY url` のおかげで listfilter index が選ばれていたが、COUNT には ORDER BY が無いので planner が単一列 `pages_isexternal_index` を選んで scan + per-row filter に倒れ、165k internal page archive で COUNT だけで ~8.7 秒消費していた**。`isExternal` を先頭に置くと COUNT も SELECT も同じ covering 構成で完結し、COUNT は ~33ms に短縮 (264x)。確認スクリプト: `scripts/try-isexternal-first-index.mjs`。**Include external を ON にした場合は依然 8s 級** (`pages_scraped_index` への fallback、partial index で別途解決可能)。既存 archive 側は `scripts/add-perf-indexes.mjs` が `DROP INDEX IF EXISTS` 経由で 4 列版を 5 列版に張り替える。
 
 > **設計注意（.nitpicker archive に `ANALYZE` を絶対に走らせない）:** `idx_pages_listfilter` は SQLite の planner heuristics に依存して動作する。`ANALYZE` で per-index 統計が生成されると、planner は同 index を `listLinks` / `getLinkGraph` / `listPageLinks` の JOIN paths でも source/dest seek に流用しはじめ、これらが ~15s → ~500s (33x worse) に回帰する。実証: `scripts/bench-partial-listfilter.mjs` の no-ANALYZE / +ANALYZE pass 比較。crawler / viewer / MCP / migration の**いかなる経路でも** `ANALYZE` / `PRAGMA optimize` を実行しないこと。既存 archive への手動適用は `scripts/add-perf-indexes.mjs` で行う (このスクリプトも ANALYZE しない、3 index 一括追加)。
 

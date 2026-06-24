@@ -405,6 +405,18 @@ export async function initSchema(instance: Knex) {
 	// The same index also serves `listIsolatedPages`, `listIsolatedClusters`,
 	// and `getSummary`'s HTML-page counts.
 	//
+	// **Column order: `(isExternal, scraped, redirectDestId, url, contentType)`.**
+	// The leading `isExternal` is critical: the Pages view's default
+	// "external excluded" filter adds `WHERE isExternal = 0` to both the
+	// SELECT and the paginate-query COUNT. A previous version of this index
+	// (`(scraped, redirectDestId, url, contentType)`) shipped without
+	// `isExternal`, and the SELECT picked it up (`ORDER BY url` forced the
+	// match) while the COUNT — having no `ORDER BY` — fell back to the
+	// single-column `pages_isexternal_index` + scan + per-row WHERE filter,
+	// costing ~8.7s for the COUNT alone on a 165k-internal-page archive.
+	// Putting `isExternal` first makes both shapes pick this index as a
+	// covering scan (~33ms COUNT, ~1ms SELECT warm).
+	//
 	// **DO NOT RUN `ANALYZE` ON .nitpicker ARCHIVES.** With ANALYZE statistics
 	// available, the planner switches the JOIN paths in `listLinks`,
 	// `getLinkGraph`, and `listPageLinks` to use this index for source/dest
@@ -412,12 +424,12 @@ export async function initSchema(instance: Knex) {
 	// existing `SCAN anchors → rowid seek` plan. That regression takes those
 	// queries from ~15s to ~500s (33x worse). The unanalyzed-table heuristic
 	// happens to pick the right plan for the joins while still picking the new
-	// index for `listPages` because the column order (`scraped, redirectDestId,
-	// url, contentType`) exactly matches the WHERE+ORDER predicates. If a
-	// future change adds `ANALYZE` anywhere in the crawler / viewer / MCP /
-	// migration paths, this index must be re-evaluated first.
+	// index for `listPages` because the column order exactly matches the
+	// WHERE+ORDER predicates. If a future change adds `ANALYZE` anywhere in
+	// the crawler / viewer / MCP / migration paths, this index must be
+	// re-evaluated first.
 	await instance.raw(
-		'CREATE INDEX idx_pages_listfilter ON pages(scraped, redirectDestId, url, contentType)',
+		'CREATE INDEX idx_pages_listfilter ON pages(isExternal, scraped, redirectDestId, url, contentType)',
 	);
 
 	// Covering index for `listUnusedResources`. Without it the query SCAN s

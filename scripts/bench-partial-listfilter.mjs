@@ -136,7 +136,7 @@ try {
 	console.log('\n— CREATE composite covering index, no ANALYZE —');
 	const start1 = process.hrtime.bigint();
 	await db.raw(
-		`CREATE INDEX idx_pages_listfilter ON pages(scraped, redirectDestId, url, contentType)`,
+		`CREATE INDEX idx_pages_listfilter ON pages(isExternal, scraped, redirectDestId, url, contentType)`,
 	);
 	console.log(
 		`  index built in ${(Number(process.hrtime.bigint() - start1) / 1e6).toFixed(0)}ms`,
