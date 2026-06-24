@@ -808,11 +808,18 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				if (htmlSeeds.length > 0) {
 					const orchestrator = new CrawlerOrchestrator(archive, orchestratorOptions);
 					const resources = await archive.getResourceUrlList();
+					// Pre-existing rendered HTML page count seeds the
+					// session-spanning `pagesScraped` counter so the progress
+					// header reads `internalDone(cumulative pagesScraped)`
+					// rather than session-only — matches the `append` /
+					// `retryFailed` / `resume` paths and avoids users reading
+					// the parenthesised number as "inner pages dropped to N".
+					const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
 					// Empty pending (we rejected non-empty above) but feed
 					// every already-scraped URL into `seen` so the Crawler's
 					// link enqueueing path drops links that hit a known
 					// page without re-rendering it.
-					orchestrator.#crawler.resume(pending, scraped, resources, 0);
+					orchestrator.#crawler.resume(pending, scraped, resources, pagesScrapedOffset);
 					if (initializedCallback) {
 						await initializedCallback(orchestrator, baseConfig);
 					}
