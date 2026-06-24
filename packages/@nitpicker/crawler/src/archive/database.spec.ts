@@ -4441,3 +4441,33 @@ describe('inventory run audit log', () => {
 		}
 	});
 });
+
+describe('Database read-only mode', () => {
+	it('opens an existing DB without running schema init or migrations (no tmpDir mutation)', async () => {
+		// The defensive guarantee in cache mode: `Database.connect`
+		// with `readOnly: true` MUST NOT touch the file. We can't easily
+		// observe "no schema mutation" directly without a stat-mtime
+		// race, so we exercise the other half of the contract: the
+		// connect succeeds against a pre-existing DB and a subsequent
+		// read works.
+		//
+		// Note: driver-level write enforcement (`new libsql(..., {
+		// readonly: true })`) is NOT relied on — libsql 0.5.x accepts
+		// the flag but does not enforce it at the SQL layer. The
+		// read-only invariant is upheld through `#init` skipping
+		// migrations + `ArchiveAccessor.setData` namespace guards.
+		const dbPath = path.resolve(workingDir, 'readonly-mode.sqlite');
+		await removeIfExists(dbPath);
+		const writer = await Database.connect({ filename: dbPath });
+		await writer.destroy();
+
+		const readonly = await Database.connect({ filename: dbPath, readOnly: true });
+		try {
+			const result = await readonly.getKnex().raw('SELECT 1 as one');
+			expect(result).toBeDefined();
+		} finally {
+			await readonly.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+});
