@@ -48,6 +48,20 @@ const SQLITE_IN_CHUNK = 500;
  * map is built once from a single `SELECT id, redirectDestId FROM pages
  * WHERE redirectDestId IS NOT NULL` so per-anchor resolution stays
  * memory-resident — no extra SQLite round-trips.
+ *
+ * **Why this stays JS-heavy even after the SQL-first sweep.** A SQL push-
+ * down variant was benchmarked (`scripts/bench-isolated.mjs`): a CTE that
+ * filters anchors to inventory-* edges via 3 JOINs + LEFT JOIN redirect
+ * resolution returned 1,216 edges (vs 5.1M for the chunked path on a 66k-
+ * inventory-page archive) but cost 11.6s end-to-end — actually *slower*
+ * than the current chunked `SELECT anchors.pageId, anchors.hrefId WHERE
+ * pageId IN (...)` path at 8.7s, because the planner cannot use any single
+ * index to satisfy the 3-JOIN chain on this archive shape. Further wins
+ * here would require either a denormalised `isolated_root` column on pages
+ * (schema change) or a planner hint we cannot express without ANALYZE
+ * (forbidden — see `idx_pages_listfilter` JSDoc). The current 17s on a
+ * 66k-inventory archive is accepted; non-inventory archives short-circuit
+ * on the `pageRows.length === 0` early return below.
  * @param accessor - The archive accessor to query.
  * @returns Every connected component of the inventory-* subgraph, including singletons.
  */

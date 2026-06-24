@@ -22,6 +22,15 @@ import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
  * scan with the HTML-or-null filter, collapsing four full-table aggregations
  * into one. Metadata fulfillment and content-type distribution stay as
  * separate queries because their filters and grouping differ.
+ *
+ * **SQL-first verified.** The ~22s baseline on a 428k-row archive lives
+ * entirely inside the underlying scans (each aggregation is a single
+ * full-table scan with no JS post-processing). JS pivots
+ * `statusDistribution` cells out of the GROUP BY rows in O(rows-returned)
+ * — measured at <50ms — so no JS push-down is available. The cost
+ * reduction here requires either more selective indexes per query (none
+ * found that the planner picks without ANALYZE) or pre-aggregated
+ * summary rows at crawl time (schema change, deferred).
  * @param accessor - The archive accessor to query.
  * @returns Summary statistics including page counts, status distribution,
  *   metadata rates, and content-type distribution.

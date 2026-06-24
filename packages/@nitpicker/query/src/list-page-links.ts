@@ -19,6 +19,17 @@ import { paginateQuery } from './paginate-query.js';
  * referrer count is resolved THROUGH redirects, so a link to a redirect source
  * (e.g. `http://x` 301-ing to `https://x`) counts toward the final destination
  * — backlinks stay merged on the canonical page instead of splitting (#71).
+ *
+ * **Performance note.** On a 428k-row archive this query runs in ~22s,
+ * dominated by the two per-row correlated subqueries (`redirectFromCount`
+ * and `referrerCount`) — for `limit=100` that is 100 redirect-from counts
+ * + 100 referrer counts + the redirect-through-canonical hop. SQL-first
+ * push-down does not help here: pulling the counts into the outer query
+ * via JOIN+GROUP BY would force SQLite to compute the aggregate for every
+ * page row (the full 428k) before the LIMIT, which is strictly worse than
+ * the current "compute the count only for the 100 rows we are returning"
+ * shape. The real fix is a denormalised `referrer_count` column on pages
+ * (schema change, deferred).
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
  * @returns A paginated list of per-page network entries.

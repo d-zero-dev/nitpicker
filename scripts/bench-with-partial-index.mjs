@@ -124,11 +124,11 @@ try {
 	// `ORDER BY url ASC` from a single index-ordered scan, killing the
 	// `USE TEMP B-TREE FOR ORDER BY` overhead at deep offsets.
 	console.log(
-		'\nCREATE INDEX idx_pages_listfilter ON pages(scraped, redirectDestId, url, contentType)',
+		'\nCREATE INDEX idx_pages_listfilter ON pages(isExternal, scraped, redirectDestId, url, contentType)',
 	);
 	const indexStart = process.hrtime.bigint();
 	await db.raw(
-		`CREATE INDEX idx_pages_listfilter ON pages(scraped, redirectDestId, url, contentType)`,
+		`CREATE INDEX idx_pages_listfilter ON pages(isExternal, scraped, redirectDestId, url, contentType)`,
 	);
 	const indexMs = Number(process.hrtime.bigint() - indexStart) / 1e6;
 	console.log(`  index built in ${indexMs.toFixed(0)}ms`);

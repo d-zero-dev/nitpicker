@@ -28,6 +28,16 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * {@link import('./list-isolated-clusters.js').listIsolatedClusters}
  * (孤立集合 / clusters) — two well-separated concepts that the old
  * single-bucket `'orphaned'` filter conflated.
+ *
+ * **Performance note.** On a 428k-row archive this query is anchor-scan-
+ * bound: ~13-16s per page click, dominated by `SCAN anchors → rowid seek
+ * source / dest / canonical`. The `idx_pages_listfilter` (PR #96) heuristic
+ * keeps the planner on this fast path; switching to source/dest seeks via
+ * the listfilter index would balloon the query to ~500s (33x worse — see
+ * `idx_pages_listfilter` JSDoc). No JS push-down is possible (the JS side
+ * only does `!!row.isExternal` casts), and the SQL `COALESCE` for redirect
+ * canonical resolution cannot be denormalised without a `canonicalId`
+ * column on pages (schema change, deferred). The current cost is accepted.
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
  * @returns Link analysis results with entries and total count.

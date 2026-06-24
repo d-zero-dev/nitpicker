@@ -45,9 +45,44 @@ describe('findDuplicates', () => {
 		});
 
 		const pages = [
-			{ url: 'https://example.com/a', title: 'Duplicate Title' },
-			{ url: 'https://example.com/b', title: 'Duplicate Title' },
-			{ url: 'https://example.com/c', title: 'Unique Title' },
+			// Two-page group sharing a title — minimum duplicate.
+			{ url: 'https://example.com/a', title: 'Duplicate Title', description: null },
+			{ url: 'https://example.com/b', title: 'Duplicate Title', description: null },
+			// Singleton — must NOT appear in the duplicates result.
+			{ url: 'https://example.com/c', title: 'Unique Title', description: null },
+			// Three-page group with a shared description — verifies that
+			// (a) the description code path works, (b) ORDER BY cnt DESC
+			// ranks the 3-page group above the 2-page one, and (c)
+			// GROUP_CONCAT covers > 2 URLs without truncation.
+			{
+				url: 'https://example.com/x',
+				title: 'X',
+				description: 'Shared description',
+			},
+			{
+				url: 'https://example.com/y',
+				title: 'Y',
+				description: 'Shared description',
+			},
+			{
+				url: 'https://example.com/z',
+				title: 'Z',
+				description: 'Shared description',
+			},
+			// Title containing the GROUP_CONCAT delimiter substitute (comma)
+			// — ensures the implementation does not assume comma as the
+			// separator (it uses ASCII Unit Separator `\x1F`, which RFC 3986
+			// disallows in URLs).
+			{
+				url: 'https://example.com/comma-1',
+				title: 'comma, in title',
+				description: null,
+			},
+			{
+				url: 'https://example.com/comma-2',
+				title: 'comma, in title',
+				description: null,
+			},
 		];
 
 		for (const p of pages) {
@@ -65,7 +100,7 @@ describe('findDuplicates', () => {
 				meta: {
 					lang: 'ja',
 					title: p.title,
-					description: null,
+					description: p.description,
 					keywords: null,
 					noindex: false,
 					nofollow: false,
@@ -97,9 +132,39 @@ describe('findDuplicates', () => {
 
 	it('重複タイトルを検出する', async () => {
 		const result = await findDuplicates(archive, 'title');
+		// Three duplicate title groups in the fixture: 'Duplicate Title' (2),
+		// 'comma, in title' (2). The 'X' / 'Y' / 'Z' pages share a
+		// description, not a title — so they are NOT title-duplicates.
+		expect(result).toHaveLength(2);
+		const titles = result.map((entry) => entry.value).toSorted();
+		expect(titles).toEqual(['Duplicate Title', 'comma, in title']);
+		for (const entry of result) {
+			expect(entry.urls).toHaveLength(2);
+			expect(entry.count).toBe(2);
+			// URLs from `GROUP_CONCAT(url, X'1F')` are split client-side; the
+			// presence of an in-title comma must not leak across URLs.
+			expect(entry.urls.every((u) => u.startsWith('https://example.com/'))).toBe(true);
+		}
+	});
+
+	it('重複 description を検出し ORDER BY cnt DESC で並ぶ', async () => {
+		const result = await findDuplicates(archive, 'description');
 		expect(result).toHaveLength(1);
-		expect(result[0]?.value).toBe('Duplicate Title');
-		expect(result[0]?.urls).toHaveLength(2);
+		expect(result[0]?.value).toBe('Shared description');
+		expect(result[0]?.count).toBe(3);
+		expect(result[0]?.urls).toHaveLength(3);
+		expect(result[0]?.urls.toSorted()).toEqual([
+			'https://example.com/x',
+			'https://example.com/y',
+			'https://example.com/z',
+		]);
+	});
+
+	it('limit が groups の上限として効く', async () => {
+		const result = await findDuplicates(archive, 'title', 1);
+		expect(result).toHaveLength(1);
+		// ORDER BY cnt DESC — both title-duplicate groups have cnt = 2 so
+		// SQLite picks one; only the count is contractually stable.
 		expect(result[0]?.count).toBe(2);
 	});
 });

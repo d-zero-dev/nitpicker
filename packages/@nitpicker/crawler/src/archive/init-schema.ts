@@ -405,6 +405,18 @@ export async function initSchema(instance: Knex) {
 	// The same index also serves `listIsolatedPages`, `listIsolatedClusters`,
 	// and `getSummary`'s HTML-page counts.
 	//
+	// **Column order: `(isExternal, scraped, redirectDestId, url, contentType)`.**
+	// The leading `isExternal` is critical: the Pages view's default
+	// "external excluded" filter adds `WHERE isExternal = 0` to both the
+	// SELECT and the paginate-query COUNT. A previous version of this index
+	// (`(scraped, redirectDestId, url, contentType)`) shipped without
+	// `isExternal`, and the SELECT picked it up (`ORDER BY url` forced the
+	// match) while the COUNT — having no `ORDER BY` — fell back to the
+	// single-column `pages_isexternal_index` + scan + per-row WHERE filter,
+	// costing ~8.7s for the COUNT alone on a 165k-internal-page archive.
+	// Putting `isExternal` first makes both shapes pick this index as a
+	// covering scan (~33ms COUNT, ~1ms SELECT warm).
+	//
 	// **DO NOT RUN `ANALYZE` ON .nitpicker ARCHIVES.** With ANALYZE statistics
 	// available, the planner switches the JOIN paths in `listLinks`,
 	// `getLinkGraph`, and `listPageLinks` to use this index for source/dest
@@ -412,11 +424,37 @@ export async function initSchema(instance: Knex) {
 	// existing `SCAN anchors → rowid seek` plan. That regression takes those
 	// queries from ~15s to ~500s (33x worse). The unanalyzed-table heuristic
 	// happens to pick the right plan for the joins while still picking the new
-	// index for `listPages` because the column order (`scraped, redirectDestId,
-	// url, contentType`) exactly matches the WHERE+ORDER predicates. If a
-	// future change adds `ANALYZE` anywhere in the crawler / viewer / MCP /
-	// migration paths, this index must be re-evaluated first.
+	// index for `listPages` because the column order exactly matches the
+	// WHERE+ORDER predicates. If a future change adds `ANALYZE` anywhere in
+	// the crawler / viewer / MCP / migration paths, this index must be
+	// re-evaluated first.
 	await instance.raw(
-		'CREATE INDEX idx_pages_listfilter ON pages(scraped, redirectDestId, url, contentType)',
+		'CREATE INDEX idx_pages_listfilter ON pages(isExternal, scraped, redirectDestId, url, contentType)',
+	);
+
+	// Covering index for `listUnusedResources`. Without it the query SCAN s
+	// `resources_url_unique` (every resource, including externals) then
+	// filters `isExternal = 0` row-by-row — ~66s on the bench archive. With
+	// the `(isExternal, url)` leading prefix, the planner serves the WHERE
+	// + ORDER BY url from one covering scan — ~7.5s (8.8x). Same
+	// no-ANALYZE invariant applies (see `idx_pages_listfilter` above);
+	// validated against the 4 regression sentinels in
+	// `scripts/bench-unused-images.mjs`.
+	await instance.raw(
+		'CREATE INDEX idx_resources_internal_url ON resources(isExternal, url)',
+	);
+
+	// Covering index for `listImages`. The default query joins `images` to
+	// `pages` and orders by `pages.url`. Without this index the planner
+	// scans `images` first, seeks `pages` by rowid, and pays a TEMP B-TREE
+	// FOR ORDER BY (~32s on the bench archive). With the index the plan
+	// flips to SCAN pages (via `pages_url_unique`, url-ordered already)
+	// → SEARCH images via the covering pageId index — no temp sort, ~16s
+	// (2.0x). The included columns (src, alt, dimensions, isLazy) make
+	// `idx_images_covering` covering for every `select` `listImages` does,
+	// so the SEARCH does not need to materialise the underlying row.
+	// Validated by `scripts/bench-unused-images.mjs`.
+	await instance.raw(
+		'CREATE INDEX idx_images_covering ON images(pageId, src, alt, width, height, naturalWidth, naturalHeight, isLazy)',
 	);
 }

@@ -32,6 +32,21 @@ function aliasedInternalWhere(alias: string): Record<string, unknown> {
  *
  * When `options.limit` is set, only the highest in-degree nodes are kept and
  * edges are filtered to that subset; `truncated` reports whether this happened.
+ *
+ * **Why `inDegree` is aggregated in JS, not SQL.** A SQL push-down variant
+ * (`LEFT JOIN (… GROUP BY dest.id …)`) was benchmarked against a 428k-row
+ * archive (`scripts/bench-get-link-graph.mjs`) and was **~10x slower** (38s
+ * → 388s) because the aggregate subquery forces SQLite to materialise the
+ * full 6M-row anchor join twice — once to count, once to enumerate. The
+ * `Map`-based JS aggregation finishes in ~1.5s regardless of edge count,
+ * so the JS hot loop is *not* the bottleneck here. The dominant cost is
+ * the 6M-row `edgeRows` fetch itself; reducing it further requires either
+ * a denormalised `inDegree` column on pages (schema change, out of scope)
+ * or accepting partial truncation.
+ *
+ * **Parallel fetch.** `pageRows` and `edgeRows` are independent — issuing
+ * them concurrently via `Promise.all` saves the smaller of the two from
+ * the wall-clock (~8s on the bench archive).
  * @param accessor - The archive accessor to query.
  * @param options - Optional node cap.
  * @returns The link graph (nodes + edges + truncated flag).
@@ -42,23 +57,21 @@ export async function getLinkGraph(
 ): Promise<LinkGraph> {
 	const knex = accessor.getKnex();
 
-	const pageRows = (await knex('pages')
-		.select('url', 'status')
-		.where(INTERNAL_PAGE_WHERE)
-		.whereNull('redirectDestId')) as { url: string; status: number | null }[];
-
-	const edgeRows = (await knex('anchors')
-		.distinct('source.url as source', 'dest.url as target')
-		.join('pages as source', 'anchors.pageId', '=', 'source.id')
-		.join('pages as dest', 'anchors.hrefId', '=', 'dest.id')
-		.where(aliasedInternalWhere('source'))
-		.whereNull('source.redirectDestId')
-		.where(aliasedInternalWhere('dest'))
-		.whereNull('dest.redirectDestId')
-		.whereRaw('anchors.pageId != anchors.hrefId')) as {
-		source: string;
-		target: string;
-	}[];
+	const [pageRows, edgeRows] = (await Promise.all([
+		knex('pages')
+			.select('url', 'status')
+			.where(INTERNAL_PAGE_WHERE)
+			.whereNull('redirectDestId'),
+		knex('anchors')
+			.distinct('source.url as source', 'dest.url as target')
+			.join('pages as source', 'anchors.pageId', '=', 'source.id')
+			.join('pages as dest', 'anchors.hrefId', '=', 'dest.id')
+			.where(aliasedInternalWhere('source'))
+			.whereNull('source.redirectDestId')
+			.where(aliasedInternalWhere('dest'))
+			.whereNull('dest.redirectDestId')
+			.whereRaw('anchors.pageId != anchors.hrefId'),
+	])) as [{ url: string; status: number | null }[], { source: string; target: string }[]];
 
 	const inDegree = new Map<string, number>();
 	for (const edge of edgeRows) {
