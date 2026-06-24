@@ -258,18 +258,14 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * before reaching the dealer so a URL that exists in both sources — which
 	 * is common in append-mode when a new root coincides with a repromoted
 	 * previously-external page — does not race on two parallel slots.
-	 * @param urls - The list of root URLs to begin crawling from. Must be non-empty.
+	 * @param urls - The list of root URLs to begin crawling from. May be empty
+	 *   when resumed pending URLs already exist (for example `--retry-failed`).
 	 * @param opts - Optional overrides; currently only `recursive` is honoured.
 	 * @param opts.recursive - When `false`, disables recursive discovery and forces list-mode.
 	 *   Defaults to the constructor option's `recursive` value.
 	 * @throws {Error} If the URL list is empty.
 	 */
 	start(urls: ExURL[], opts?: { recursive?: boolean }) {
-		const root = urls[0];
-		if (!root) {
-			throw new Error('urls is empty');
-		}
-
 		// Inventory mode pre-loads tens of thousands of seed URLs that all
 		// fall under archived `roots` (already populated into `#scope` by
 		// the constructor). Adding each seed as its own scope entry was
@@ -312,14 +308,17 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			seenInitial.add(key);
 			initialUrls.push(url);
 		}
+		const root = initialUrls[0];
+		if (!root) {
+			if (isResuming) {
+				crawlerLog('Crawl End (nothing to resume)');
+				void this.emit('crawlEnd', {});
+				return;
+			}
+			throw new Error('urls is empty');
+		}
 		const resumeOffset = this.#resumedScraped.length;
 		const pagesScrapedOffset = this.#resumedPagesScraped;
-
-		if (initialUrls.length === 0) {
-			crawlerLog('Crawl End (nothing to resume)');
-			void this.emit('crawlEnd', {});
-			return;
-		}
 
 		void this.#runDeal(initialUrls, resumeOffset, pagesScrapedOffset).catch((error) => {
 			crawlerLog('runDeal error: %O', error);

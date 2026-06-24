@@ -227,21 +227,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * Sets up event listeners on the crawler, starts crawling, and resolves
 	 * when the crawl completes. Discovered pages, external pages, skipped pages,
 	 * and resources are forwarded to the archive for storage.
-	 * @param list - The list of parsed URLs to crawl. The first URL is used as the root.
+	 * @param list - The list of parsed URLs to crawl. May be empty when a resumed
+	 *   session already has pending pages queued (for example `--retry-failed`).
 	 * @param opts - Optional crawl overrides.
 	 * @param opts.recursive - Whether discovered URLs are followed. Defaults to
 	 *   `!fromList` (recursive unless the archive was created from a URL list), so
 	 *   existing callers keep their behaviour; the retry flow passes it explicitly.
 	 * @returns A promise that resolves when crawling is complete.
-	 * @throws {Error} If the URL list is empty.
 	 */
 	async crawling(list: ExURL[], opts?: { recursive?: boolean }) {
-		const root = list[0];
-
-		if (!root) {
-			throw new Error('URL is empty');
-		}
-
 		const writeQueue = this.#writeQueue;
 
 		return new Promise<void>((resolve, reject) => {
@@ -963,7 +957,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await initializedCallback(orchestrator, config);
 				}
 				await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
-				await orchestrator.crawling(rootsParsed, { recursive: config.recursive });
+				await orchestrator.crawling([], { recursive: config.recursive });
 				CrawlerOrchestrator.#finalizeCrawlSession();
 				await archive.setUrlOrder();
 				await ignoreEnoent(unlinkFile(backupPath));
