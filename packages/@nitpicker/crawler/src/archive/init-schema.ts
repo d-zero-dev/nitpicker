@@ -419,4 +419,30 @@ export async function initSchema(instance: Knex) {
 	await instance.raw(
 		'CREATE INDEX idx_pages_listfilter ON pages(scraped, redirectDestId, url, contentType)',
 	);
+
+	// Covering index for `listUnusedResources`. Without it the query SCAN s
+	// `resources_url_unique` (every resource, including externals) then
+	// filters `isExternal = 0` row-by-row — ~66s on the bench archive. With
+	// the `(isExternal, url)` leading prefix, the planner serves the WHERE
+	// + ORDER BY url from one covering scan — ~7.5s (8.8x). Same
+	// no-ANALYZE invariant applies (see `idx_pages_listfilter` above);
+	// validated against the 4 regression sentinels in
+	// `scripts/bench-unused-images.mjs`.
+	await instance.raw(
+		'CREATE INDEX idx_resources_internal_url ON resources(isExternal, url)',
+	);
+
+	// Covering index for `listImages`. The default query joins `images` to
+	// `pages` and orders by `pages.url`. Without this index the planner
+	// scans `images` first, seeks `pages` by rowid, and pays a TEMP B-TREE
+	// FOR ORDER BY (~32s on the bench archive). With the index the plan
+	// flips to SCAN pages (via `pages_url_unique`, url-ordered already)
+	// → SEARCH images via the covering pageId index — no temp sort, ~16s
+	// (2.0x). The included columns (src, alt, dimensions, isLazy) make
+	// `idx_images_covering` covering for every `select` `listImages` does,
+	// so the SEARCH does not need to materialise the underlying row.
+	// Validated by `scripts/bench-unused-images.mjs`.
+	await instance.raw(
+		'CREATE INDEX idx_images_covering ON images(pageId, src, alt, width, height, naturalWidth, naturalHeight, isLazy)',
+	);
 }
