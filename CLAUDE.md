@@ -64,7 +64,9 @@ packages/
 >
 > in-process `app.request()` bench (`scripts/bench-viewer-endpoints.mjs`) では page-links 459ms と出るが、SQLite page cache が異常 warm な環境の数字なので実運用との乖離あり、信用しない。実 HTTP curl で再現できる数字だけを正とする。両 cache とも max 4 entry LRU、Promise 単位 cache で concurrent 初回 request 共有、rejected promise は cache から落として retry 可能に。query API には `precomputedComponents` / `precomputedReferrerCounts` option を追加し、viewer route が cache から供給する。CLI / MCP は option を渡さず従来の SQL 経路を使う（一回呼び切りで precompute payback できないため意図通り）。
 
-> **Note (`getSummary` perf indexes — `idx_pages_summary_contenttype` + `idx_pages_summary_failed`)**: 10 GB archive 計測で **/api/summary cold 45s → 26s / warm 24s → 3 s avg (5-7x)** を達成。`init-schema.ts` に 2 個追加:
+> **Note (`getSummary` viewer プロセス cache + perf indexes)**: 10 GB archive 計測で **/api/summary cold 45s → 14s / warm 24s → 1 ms (13800x)** を達成。viewer は read-only / archive 不変なので `getSummary` 結果を archive 単位で memoise すれば SQLite に再入する必要がない (`packages/@nitpicker/viewer/src/summary-cache.ts` で `createPromiseLru` を共有)。stub mode (live crawl) は cache を bypass (writer が pages 列を追記中なので snapshot は永久 stale になる)。
+>
+> cold first-hit の 14 s は SQLite 側の I/O bound 残コスト。`init-schema.ts` に 2 個の perf index も追加して cold/uncached の場合の disk read を減らしている:
 >
 > - `idx_pages_summary_contenttype ON pages(scraped, redirectDestId, contentType, isExternal, isSkipped)` — Q2 (metadata count) + Q3 (content-type histogram) を **COVERING INDEX** で satisfy。Q1 (status histogram) の seek にも使われるが GROUP BY 列 (isExternal, status) と index 列 (contentType, isExternal) の順序不一致のため Q1 は `USE TEMP B-TREE FOR GROUP BY` が残る — これでも 38% 改善できるのは Q2+Q3 が covering 化される効果。
 > - `idx_pages_summary_failed ON pages(scraped, status, redirectDestId)` — Q4 (failed page id lookup) — 5113ms → 14ms (365x)。`(scraped, status)` 2-col seek で status=-1 の希少 slice に直接当てる。
