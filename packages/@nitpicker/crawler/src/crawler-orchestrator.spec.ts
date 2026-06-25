@@ -38,6 +38,23 @@ vi.mock('./crawler/crawler.js', () => {
 			this.handlers.set(event, handler);
 		}
 
+		/**
+		 * Captures `resume()` invocations so tests can assert the orchestrator
+		 * threaded the right `pagesScrapedOffset` through.
+		 * @param pending - Pending URLs from the previous session.
+		 * @param scraped - Already-scraped URLs from the previous session.
+		 * @param resources - Resource URLs from the previous session.
+		 * @param pagesScrapedOffset - Cumulative pagesScraped counter seed.
+		 */
+		resume(
+			pending: string[],
+			scraped: string[],
+			resources: string[],
+			pagesScrapedOffset?: number,
+		) {
+			fakeCrawlerResumeCalls.push({ pending, scraped, resources, pagesScrapedOffset });
+		}
+
 		/** Emits `error` and then `crawlEnd`, simulating a crawl with one error. */
 		start() {
 			const driver = fakeCrawlerDriver;
@@ -60,6 +77,16 @@ vi.mock('./crawler/crawler.js', () => {
 });
 
 /**
+ * Per-test record of `Crawler.resume()` invocations. Reset in `afterEach`.
+ */
+const fakeCrawlerResumeCalls: {
+	pending: string[];
+	scraped: string[];
+	resources: string[];
+	pagesScrapedOffset: number | undefined;
+}[] = [];
+
+/**
  * Optional per-test override of the FakeCrawler's `start()` behaviour. When
  * set, the FakeCrawler delegates to this function instead of running its
  * default error-then-crawlEnd emission. Tests should reset it to `null` in
@@ -72,6 +99,7 @@ let fakeCrawlerDriver:
 afterEach(() => {
 	vi.restoreAllMocks();
 	fakeCrawlerDriver = null;
+	fakeCrawlerResumeCalls.length = 0;
 });
 
 describe('CrawlerOrchestrator.crawling: error イベントの書き込み失敗', () => {
@@ -724,5 +752,80 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 		// recordInventoryRun WAS attempted — confirming the failure
 		// path actually ran.
 		expect(vi.mocked(fakeArchive.recordInventoryRun)).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => {
+	it('seeds Crawler.resume with archive.getScrapedHtmlPageCount() in the HTML-seed branch', async () => {
+		// Inventory previously hard-coded `pagesScrapedOffset = 0`, so the
+		// progress header showed `(N)` as a session-only browser-render
+		// counter. Operators running inventory against an archive with
+		// pre-existing pages misread the small N as "inner pages dropped
+		// to N" data loss. The HTML-seed branch must now seed the
+		// counter from `getScrapedHtmlPageCount()` so the header reads
+		// cumulative (matching `append` / `retryFailed` / `resume`).
+		const fakeArchive = {
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+				}),
+			),
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			getExistingPageUrls: vi.fn(() => Promise.resolve([])),
+			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(140_000)),
+			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+			setResources: vi.fn(() => Promise.resolve()),
+			addError: vi.fn(() => Promise.resolve()),
+			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		// FakeCrawler.start() emits `crawlEnd` (no real network), so the
+		// HTML-seed branch reaches `recordInventoryRun` and resolves.
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = path.resolve('/tmp/inventory-pagesscraped-offset-test');
+		await fs.mkdir(testCwd, { recursive: true });
+		const fixturePath = path.join(testCwd, 'fixture.nitpicker');
+		await fs.writeFile(fixturePath, '');
+
+		try {
+			await CrawlerOrchestrator.inventory(
+				'fixture.nitpicker',
+				['https://example.com/new-page.html'],
+				{ cwd: testCwd },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(fakeArchive.getScrapedHtmlPageCount).toHaveBeenCalledTimes(1);
+		expect(fakeCrawlerResumeCalls).toHaveLength(1);
+		expect(fakeCrawlerResumeCalls[0]?.pagesScrapedOffset).toBe(140_000);
 	});
 });
