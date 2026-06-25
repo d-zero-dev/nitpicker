@@ -3,6 +3,7 @@ import type { SummaryResult } from '@nitpicker/query';
 
 import { getSummary } from '@nitpicker/query';
 
+import { getOrComputeOnDisk } from './precomputed-disk-cache.js';
 import { createPromiseLru } from './promise-lru.js';
 
 /**
@@ -53,9 +54,12 @@ const lru = createPromiseLru<string, SummaryResult>({ maxEntries: MAX_ENTRIES })
  *   mode) `SummaryResult`.
  */
 export async function getCachedSummary(context: ArchiveContext): Promise<SummaryResult> {
-	const accessor = context.manager.get(context.archiveId);
 	if (context.mode === 'stub') {
+		const accessor = context.manager.get(context.archiveId);
 		return getSummary(accessor);
 	}
-	return lru.getOrLoad(context.archiveId, () => getSummary(accessor));
+	return lru.getOrLoad(context.archiveId, () => {
+		const accessor = context.manager.get(context.archiveId);
+		return getOrComputeOnDisk(accessor.tmpDir, 'summary', () => getSummary(accessor));
+	});
 }

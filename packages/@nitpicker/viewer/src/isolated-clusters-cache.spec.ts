@@ -14,6 +14,16 @@ vi.mock('@nitpicker/query', async () => {
 	};
 });
 
+// Disk persistence is tested separately in `precomputed-disk-cache.spec.ts`.
+// Here we only care that the in-memory LRU + stub-mode policies behave; the
+// stub returns the compute result directly so disk hits / misses do not
+// pollute the assertions on `computeIsolatedClusters` call counts.
+vi.mock('./precomputed-disk-cache.js', () => ({
+	getOrComputeOnDisk: vi.fn((_cacheDir: string, _name: string, compute: () => unknown) =>
+		compute(),
+	),
+}));
+
 const { computeIsolatedClusters } = await import('@nitpicker/query');
 
 afterEach(() => {

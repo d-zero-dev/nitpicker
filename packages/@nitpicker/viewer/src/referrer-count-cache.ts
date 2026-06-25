@@ -1,5 +1,6 @@
 import type { ArchiveContext } from './types.js';
 
+import { getOrComputeOnDisk } from './precomputed-disk-cache.js';
 import { createPromiseLru } from './promise-lru.js';
 
 /**
@@ -48,21 +49,36 @@ export async function getCachedReferrerCounts(
 	if (context.mode === 'stub') {
 		return null;
 	}
-	return lru.getOrLoad(context.archiveId, () => buildReferrerCountMap(context));
+	return lru.getOrLoad(context.archiveId, async () => {
+		// Resolve accessor lazily inside the cache miss callback so
+		// warm hits do not touch the manager. Map is not directly
+		// JSON-serialisable; persist as `[[pageId, count], …]` and
+		// reconstruct the Map on read.
+		const accessor = context.manager.get(context.archiveId);
+		const entries = await getOrComputeOnDisk<Array<[number, number]>>(
+			accessor.tmpDir,
+			'referrer-counts',
+			async () => {
+				const map = await buildReferrerCountMap(accessor);
+				return [...map.entries()];
+			},
+		);
+		return new Map(entries);
+	});
 }
 
 /**
  * Issue the actual `GROUP BY` for the referrer-count map. Pulled out
  * of the cache helper so the LRU only holds the promise and the
  * compute logic stays unit-testable on its own.
- * @param context - The viewer's archive context.
+ * @param accessor - The archive accessor (resolved once by the caller
+ *   so cache hits do not re-touch the manager).
  * @returns A `Map<pageId, referrerCount>` covering every canonical
  *   page touched by at least one anchor.
  */
 async function buildReferrerCountMap(
-	context: ArchiveContext,
+	accessor: ReturnType<ArchiveContext['manager']['get']>,
 ): Promise<Map<number, number>> {
-	const accessor = context.manager.get(context.archiveId);
 	const knex = accessor.getKnex();
 	// Resolve through `redirectDestId` so anchors pointing at redirect
 	// sources count toward their canonical destination. `redirectDestId`

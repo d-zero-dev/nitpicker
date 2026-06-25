@@ -14,6 +14,14 @@ vi.mock('@nitpicker/query', async () => {
 	};
 });
 
+// Disk persistence is exercised separately; here the in-memory LRU is the
+// target. The stubbed `getOrComputeOnDisk` just invokes `compute`.
+vi.mock('./precomputed-disk-cache.js', () => ({
+	getOrComputeOnDisk: vi.fn((_cacheDir: string, _name: string, compute: () => unknown) =>
+		compute(),
+	),
+}));
+
 const { getSummary } = await import('@nitpicker/query');
 
 afterEach(() => {

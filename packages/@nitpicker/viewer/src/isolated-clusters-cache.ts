@@ -3,6 +3,7 @@ import type { IsolatedComponent } from '@nitpicker/query';
 
 import { computeIsolatedClusters } from '@nitpicker/query';
 
+import { getOrComputeOnDisk } from './precomputed-disk-cache.js';
 import { createPromiseLru } from './promise-lru.js';
 
 /**
@@ -52,10 +53,22 @@ const lru = createPromiseLru<string, IsolatedComponent[]>({ maxEntries: MAX_ENTR
 export async function getCachedIsolatedClusters(
 	context: ArchiveContext,
 ): Promise<IsolatedComponent[]> {
-	const accessor = context.manager.get(context.archiveId);
 	if (context.mode === 'stub') {
 		// Live crawl — recompute every time so the user sees updates.
+		const accessor = context.manager.get(context.archiveId);
 		return computeIsolatedClusters(accessor);
 	}
-	return lru.getOrLoad(context.archiveId, () => computeIsolatedClusters(accessor));
+	return lru.getOrLoad(context.archiveId, () => {
+		// Resolve accessor lazily inside the cache miss callback so
+		// warm hits do not even hit the manager. Disk persistence
+		// (PR #98 tar cache dir) survives across viewer restarts so a
+		// Ctrl-C / re-open does not re-pay the 25-30 s union-find cost
+		// on the first /api/isolated-* hit. Archive content changes
+		// invalidate via the cache dir's content-hash key (new content
+		// gets a new cacheDir).
+		const accessor = context.manager.get(context.archiveId);
+		return getOrComputeOnDisk(accessor.tmpDir, 'isolated-clusters', () =>
+			computeIsolatedClusters(accessor),
+		);
+	});
 }

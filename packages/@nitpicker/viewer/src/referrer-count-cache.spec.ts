@@ -3,7 +3,15 @@ import type { ArchiveAccessor, ArchiveManager } from '@nitpicker/query';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getCachedReferrerCounts } from './referrer-count-cache.js';
+// Disk persistence layer is tested separately. Stub it so spec assertions
+// observe only the in-memory LRU + GROUP BY shape.
+vi.mock('./precomputed-disk-cache.js', () => ({
+	getOrComputeOnDisk: vi.fn((_cacheDir: string, _name: string, compute: () => unknown) =>
+		compute(),
+	),
+}));
+
+const { getCachedReferrerCounts } = await import('./referrer-count-cache.js');
 
 /**
  * Build a stub knex chain that returns the supplied aggregate rows
