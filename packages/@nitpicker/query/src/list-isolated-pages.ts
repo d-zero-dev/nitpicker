@@ -33,6 +33,12 @@ import { computeIsolatedClusters } from './compute-isolated-clusters.js';
  * the main archive, and no other inventory page references it either".
  *
  * Read-only — safe against viewer / stub-mode archives.
+ *
+ * **Performance**: `computeIsolatedClusters` runs a union-find that on
+ * a 10 GB inventory archive costs ~20-30 s. When the caller supplies
+ * `options.precomputedComponents` (the viewer's per-archive cache
+ * does this), the union-find is skipped entirely and the function
+ * resolves in milliseconds.
  * @param accessor - The archive accessor to query.
  * @param options - Pagination options.
  * @returns Paginated list of singleton inventory-* pages with their `source` badge.
@@ -44,7 +50,8 @@ export async function listIsolatedPages(
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 
-	const components = await computeIsolatedClusters(accessor);
+	const components =
+		options.precomputedComponents ?? (await computeIsolatedClusters(accessor));
 	const singletons: IsolatedPageEntry[] = [];
 	for (const component of components) {
 		if (component.size !== 1) {

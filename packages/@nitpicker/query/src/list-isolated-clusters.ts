@@ -25,6 +25,12 @@ import { computeIsolatedClusters } from './compute-isolated-clusters.js';
  * dropped from the main nav vs a 2-page disconnected pair).
  *
  * Read-only — safe against viewer / stub-mode archives.
+ *
+ * **Performance**: shares the `computeIsolatedClusters` cost with
+ * `listIsolatedPages` / `getIsolatedCluster`. Pass
+ * `options.precomputedComponents` to skip the union-find; the viewer's
+ * per-archive cache supplies this so all three isolated-* endpoints
+ * pay the cost once per archive instead of per endpoint hit.
  * @param accessor - The archive accessor to query.
  * @param options - Pagination options.
  * @returns Paginated cluster summaries with their representative URL and size.
@@ -36,7 +42,8 @@ export async function listIsolatedClusters(
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 
-	const components = await computeIsolatedClusters(accessor);
+	const components =
+		options.precomputedComponents ?? (await computeIsolatedClusters(accessor));
 	const clusters: IsolatedClusterSummary[] = [];
 	for (const component of components) {
 		if (component.size < 2) {

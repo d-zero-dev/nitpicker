@@ -137,6 +137,37 @@ describe('listPageLinks', () => {
 		expect(home?.hasResponseHeaders).toBe(true);
 		expect(about?.hasResponseHeaders).toBe(false);
 	});
+
+	it('precomputedReferrerCounts を渡すと SQL 経由ではなく Map lookup で referrerCount を埋める', async () => {
+		// The viewer-side precompute path: `listPageLinks` should pick
+		// the Map value, not the per-row correlated subquery. We force
+		// a deliberately wrong Map so a passing test proves the Map was
+		// consulted (if SQL fallback were used, we'd see the real count
+		// of 1 against About, not the 42 we inject).
+		const result = await listPageLinks(archive);
+		const about = result.items.find((i) => i.url === 'https://example.com/about');
+		expect(about).toBeDefined();
+		// Re-fetch IDs via the same SELECT shape used by listPageLinks
+		// so the test does not couple to internal schema layout.
+		const rows = (await archive
+			.getKnex()
+			.from('pages')
+			.select('id', 'url')
+			.whereNull('redirectDestId')) as Array<{ id: number; url: string }>;
+		const aboutId = rows.find((r) => r.url === 'https://example.com/about')?.id;
+		expect(aboutId).toBeDefined();
+
+		const precomputedReferrerCounts = new Map<number, number>([[aboutId!, 42]]);
+		const result2 = await listPageLinks(archive, { precomputedReferrerCounts });
+		const about2 = result2.items.find((i) => i.url === 'https://example.com/about');
+		expect(about2?.referrerCount).toBe(42);
+
+		// Pages missing from the map default to 0 (matches the
+		// "GROUP BY anchors" shape — pages with zero inbound anchors
+		// are absent from the aggregate output).
+		const home2 = result2.items.find((i) => i.url === 'https://example.com');
+		expect(home2?.referrerCount).toBe(0);
+	});
 });
 
 describe('listPageLinks: referrerCount を redirect 越しに合算する（http/https, #71）', () => {

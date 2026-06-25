@@ -1,4 +1,4 @@
-import type { IsolatedClusterDetail } from './types.js';
+import type { GetIsolatedClusterOptions, IsolatedClusterDetail } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { computeIsolatedClusters } from './compute-isolated-clusters.js';
@@ -27,13 +27,16 @@ import { computeIsolatedClusters } from './compute-isolated-clusters.js';
  * Read-only — safe against viewer / stub-mode archives.
  * @param accessor - The archive accessor to query.
  * @param representativeUrl - The cluster's representative URL (from `listIsolatedClusters`).
+ * @param options - Optional pre-computed components for cache reuse.
  * @returns The cluster detail with all members, or `null` if no such cluster exists.
  */
 export async function getIsolatedCluster(
 	accessor: ArchiveAccessor,
 	representativeUrl: string,
+	options: GetIsolatedClusterOptions = {},
 ): Promise<IsolatedClusterDetail | null> {
-	const components = await computeIsolatedClusters(accessor);
+	const components =
+		options.precomputedComponents ?? (await computeIsolatedClusters(accessor));
 	for (const component of components) {
 		if (component.representativeUrl !== representativeUrl) {
 			continue;

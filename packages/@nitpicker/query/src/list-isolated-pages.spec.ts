@@ -268,4 +268,33 @@ describe('listIsolatedPages', () => {
 		expect(third.items).toHaveLength(0);
 		expect(third.total).toBe(2);
 	});
+
+	it('uses precomputedComponents when supplied so the union-find pass is skipped', async () => {
+		// The viewer caches `computeIsolatedClusters` results across the
+		// three isolated-* endpoints. Verify the option is honoured by
+		// passing a deliberately-stuffed component list whose contents
+		// do not match what the SQL would produce — if the option is
+		// ignored, the returned URL would come from the real archive,
+		// not from `injected-singleton`.
+		const injected = [
+			{
+				representativeUrl: 'https://injected.example.com/only',
+				members: [
+					{
+						id: 999_999,
+						url: 'https://injected.example.com/only',
+						title: 'Injected',
+						status: 200,
+						source: 'inventory-seed' as const,
+					},
+				],
+				size: 1,
+			},
+		];
+		const result = await listIsolatedPages(archive, {
+			precomputedComponents: injected,
+		});
+		expect(result.total).toBe(1);
+		expect(result.items[0]?.url).toBe('https://injected.example.com/only');
+	});
 });

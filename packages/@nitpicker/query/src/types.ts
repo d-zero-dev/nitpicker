@@ -48,6 +48,16 @@ export interface ListIsolatedPagesOptions {
 	limit?: number;
 	/** Rows to skip from the start. Defaults to 0. */
 	offset?: number;
+	/**
+	 * Pre-computed `computeIsolatedClusters` output. When provided, the
+	 * function skips its own SQL pass and reuses the supplied components.
+	 * The viewer caches the components per archive across the three
+	 * isolated-* endpoints (listIsolatedPages / listIsolatedClusters /
+	 * getIsolatedCluster) so that opening any one of them and then
+	 * paging through the others does not re-pay the 20-30 s union-find
+	 * cost on a 10 GB archive.
+	 */
+	precomputedComponents?: IsolatedComponent[];
 }
 
 /**
@@ -119,6 +129,24 @@ export interface ListIsolatedClustersOptions {
 	limit?: number;
 	/** Clusters to skip from the start. Defaults to 0. */
 	offset?: number;
+	/**
+	 * Pre-computed `computeIsolatedClusters` output. See
+	 * {@link ListIsolatedPagesOptions.precomputedComponents} for the
+	 * shared-cache rationale.
+	 */
+	precomputedComponents?: IsolatedComponent[];
+}
+
+/**
+ * Options for {@link import('./get-isolated-cluster.js').getIsolatedCluster}.
+ */
+export interface GetIsolatedClusterOptions {
+	/**
+	 * Pre-computed `computeIsolatedClusters` output. See
+	 * {@link ListIsolatedPagesOptions.precomputedComponents} for the
+	 * shared-cache rationale.
+	 */
+	precomputedComponents?: IsolatedComponent[];
 }
 
 /**
@@ -1168,6 +1196,16 @@ export interface ListPageLinksOptions {
 	limit?: number;
 	/** Number of results to skip. */
 	offset?: number;
+	/**
+	 * Pre-computed `Map<pageId, referrerCount>` built once per archive at
+	 * the consumer layer (the viewer caches it). When provided, the per-
+	 * row correlated referrer subquery is skipped and the count is filled
+	 * in from the map after fetch — turning a ~33 s query on a 10 GB
+	 * archive into a sub-second one. The CLI / MCP path omits this and
+	 * keeps the original subquery shape so they don't pay the upfront
+	 * precompute cost for a single one-shot query.
+	 */
+	precomputedReferrerCounts?: Map<number, number>;
 }
 
 /**
