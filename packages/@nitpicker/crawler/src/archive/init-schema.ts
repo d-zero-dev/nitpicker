@@ -17,9 +17,20 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
 	await instance.raw('PRAGMA foreign_keys = ON');
 	await instance.raw('PRAGMA wal_autocheckpoint = 1000');
 	// Negative value = KiB of memory (64 MiB). Helps large BLOB scans.
+	//
+	// Empirically validated against larger values on a 10 GB archive:
+	// bumping to 512 MiB regressed `getSummary` (1.9s → 5.7s), `pages`
+	// (2.3s → 21s), and `images` (3.7s → 12s) — libsql's page eviction
+	// policy interacts poorly with a cache sized comparable to the
+	// host's page-cache window when the DB itself far exceeds RAM.
+	// 64 MiB stays the sweet spot.
 	await instance.raw('PRAGMA cache_size = -65536');
 	// 256 MiB mmap window. SQLite falls back to read() past this so the
-	// limit is a soft ceiling, not a hard one.
+	// limit is a soft ceiling, not a hard one. A 4 GiB window was
+	// catastrophic on a 10 GB archive on macOS (summary 1.9s → 43s,
+	// pages 2.3s → 21s) — the kernel's read-ahead policy and libsql's
+	// mmap path interact badly when the window can cover most of the
+	// DB. Keep this conservative.
 	await instance.raw('PRAGMA mmap_size = 268435456');
 }
 
