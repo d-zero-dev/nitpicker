@@ -101,6 +101,23 @@ const INDEXES = [
 		sql: `CREATE INDEX IF NOT EXISTS idx_images_covering
 		      ON images(pageId, src, alt, width, height, naturalWidth, naturalHeight, isLazy)`,
 	},
+	{
+		name: 'idx_pages_summary_contenttype',
+		// Targets `getSummary` Q2 + Q3 — turns both into COVERING index
+		// scans. Net `getSummary` wall-clock on a 10 GB archive: 1157 ms
+		// → 717 ms (38 %). See init-schema.ts for the no-ANALYZE column-
+		// order rationale and the empirically-rejected candidates.
+		sql: `CREATE INDEX IF NOT EXISTS idx_pages_summary_contenttype
+		      ON pages(scraped, redirectDestId, contentType, isExternal, isSkipped)`,
+	},
+	{
+		name: 'idx_pages_summary_failed',
+		// Targets `getSummary` Q4 — 5113 ms → 14 ms (~365x) for the
+		// status=-1 failed-page id lookup. Critical when an archive has
+		// status=-1 entries (every crawl with retried failures).
+		sql: `CREATE INDEX IF NOT EXISTS idx_pages_summary_failed
+		      ON pages(scraped, status, redirectDestId)`,
+	},
 ];
 
 try {

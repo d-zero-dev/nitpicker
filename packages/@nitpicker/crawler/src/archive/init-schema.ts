@@ -17,9 +17,20 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
 	await instance.raw('PRAGMA foreign_keys = ON');
 	await instance.raw('PRAGMA wal_autocheckpoint = 1000');
 	// Negative value = KiB of memory (64 MiB). Helps large BLOB scans.
+	//
+	// Empirically validated against larger values on a 10 GB archive:
+	// bumping to 512 MiB regressed `getSummary` (1.9s → 5.7s), `pages`
+	// (2.3s → 21s), and `images` (3.7s → 12s) — libsql's page eviction
+	// policy interacts poorly with a cache sized comparable to the
+	// host's page-cache window when the DB itself far exceeds RAM.
+	// 64 MiB stays the sweet spot.
 	await instance.raw('PRAGMA cache_size = -65536');
 	// 256 MiB mmap window. SQLite falls back to read() past this so the
-	// limit is a soft ceiling, not a hard one.
+	// limit is a soft ceiling, not a hard one. A 4 GiB window was
+	// catastrophic on a 10 GB archive on macOS (summary 1.9s → 43s,
+	// pages 2.3s → 21s) — the kernel's read-ahead policy and libsql's
+	// mmap path interact badly when the window can cover most of the
+	// DB. Keep this conservative.
 	await instance.raw('PRAGMA mmap_size = 268435456');
 }
 
@@ -456,5 +467,83 @@ export async function initSchema(instance: Knex) {
 	// Validated by `scripts/bench-unused-images.mjs`.
 	await instance.raw(
 		'CREATE INDEX idx_images_covering ON images(pageId, src, alt, width, height, naturalWidth, naturalHeight, isLazy)',
+	);
+
+	// Targets `getSummary` Q2 (metadata fulfilment) + Q3 (content-type
+	// histogram). With this index Q2 and Q3 both become covering
+	// (`SEARCH ... USING COVERING INDEX`) — the SELECT columns are
+	// contained inside the index entry, so no rowid lookup is needed.
+	// Q1 (status histogram) also picks this index for its seek but
+	// keeps `USE TEMP B-TREE FOR GROUP BY` because the index column
+	// order leads with `contentType, isExternal` while Q1's GROUP BY
+	// is `(isExternal, status)` — the residual ordering inside the
+	// `scraped=1 AND redirectDestId IS NULL` slice does not match.
+	// Empirically this still gives the largest net win because Q2 +
+	// Q3 dominate `getSummary` on archives whose `pages` table dwarfs
+	// the SQLite page cache (10 GB bench: 1157 ms → 717 ms, 38 %).
+	//
+	// **An additional candidate index `(scraped, redirectDestId,
+	// isExternal, status)` was empirically rejected**: in isolation it
+	// matches Q1's GROUP BY column order and would eliminate the temp
+	// B-tree there, but in combination with this one or with the
+	// `pages_scraped_index` fallback the planner shifted to plans that
+	// regressed `getSummary` to 4.6-10 s (PR #96 教訓 — bulk index
+	// addition without ANALYZE confuses the heuristic). The
+	// `idx_pages_summary_contenttype` form below is the only summary
+	// index that survived the matrix test in
+	// `scripts/bench-summary-configs.mjs`.
+	//
+	// Column order rationale:
+	//
+	// 1. `scraped` — leading seek key. All summary queries constrain
+	//    it to `=1`.
+	// 2. `redirectDestId` — post-seek filter, IS NULL folded into the
+	//    seek key by SQLite's index walk without needing ANALYZE
+	//    (per operator forum; the IS NULL leading column rule only
+	//    bites when the column is the LEADING one and there is no
+	//    other equality constraint).
+	// 3. `contentType` — the column Q3 groups by.
+	// 4. `isExternal` — Q3's second GROUP BY column AND Q2's WHERE
+	//    constraint (`isExternal=0`).
+	// 5. `isSkipped` — Q1/Q3's residual `(isSkipped=0 OR IS NULL)`
+	//    filter (`excludeSkippedPages`). Having it in the index lets
+	//    the residual filter use the index entry instead of a per-row
+	//    rowid lookup.
+	//
+	// `id` is implicitly included (every SQLite index entry carries
+	// the rowid), so the `count(id)` aggregates cover off-index.
+	//
+	// **No-ANALYZE invariant** identical to `idx_pages_listfilter`
+	// (PR #96): the column order matches the WHERE+GROUP BY predicates
+	// exactly, so SQLite's heuristic-only planner picks it without
+	// needing `sqlite_stat1`. Adding `ANALYZE` would risk planner
+	// shifts in this and other queries.
+	//
+	// **Regression check**: `listPages` / `listPages COUNT` /
+	// `listLinks broken` / `listPageLinks` plans were re-verified
+	// against this index — `idx_pages_listfilter` continues to win
+	// for all of them. See `scripts/bench-summary-configs.mjs`.
+	await instance.raw(
+		'CREATE INDEX idx_pages_summary_contenttype ON pages(scraped, redirectDestId, contentType, isExternal, isSkipped)',
+	);
+
+	// Targets `getSummary` Q4 (`failedPageIdRows`) — selects pages with
+	// `scraped=1 AND status=-1 AND redirectDestId IS NULL`. `status=-1`
+	// is highly selective (a few hundred rows on archives with
+	// ~400 k `scraped=1` pages), but without this index the planner
+	// seeks all `scraped=1` rows via `pages_scraped_index` and then
+	// row-by-row filters status, costing ~5 s. The 3-column form
+	// `(scraped, status, redirectDestId)` is fully covering for
+	// `SELECT id` and gives a 5113 ms → 14 ms (~365x) reduction
+	// verified by `scripts/prototype-summary-indexes.mjs`.
+	//
+	// Note the column order: `status` comes second so the `(scraped=1
+	// AND status=-1)` 2-column equality seek lands directly in the
+	// failed-page slice without scanning the 400 k+ healthy rows.
+	// Putting `redirectDestId` last keeps it as a 3rd-level seek
+	// constraint that the planner folds into the slice once the
+	// (scraped, status) pair is fixed.
+	await instance.raw(
+		'CREATE INDEX idx_pages_summary_failed ON pages(scraped, status, redirectDestId)',
 	);
 }

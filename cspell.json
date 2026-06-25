@@ -1,6 +1,14 @@
 {
 	"import": ["@d-zero/cspell-config"],
-	"ignorePaths": ["*.sqlite", "**/CODEOWNERS"],
+	"ignorePaths": [
+		"*.sqlite",
+		"**/CODEOWNERS",
+		"inventory-*.csv",
+		"inventory-*.md",
+		"*-inventory-*.csv",
+		"*-inventory-*.md",
+		"bench-output/**"
+	],
 	"words": [
 		// nitpicker
 		"readtext",

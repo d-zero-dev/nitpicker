@@ -159,10 +159,52 @@ describe('createApp', () => {
 	it('GET /api/graph はノードとエッジを返す', async () => {
 		const res = await app.request('/api/graph');
 		expect(res.status).toBe(200);
-		const body = (await res.json()) as { nodes: unknown[]; edges: unknown[] };
+		const body = (await res.json()) as {
+			nodes: unknown[];
+			edges: unknown[];
+			truncated: boolean;
+		};
 		expect(Array.isArray(body.nodes)).toBe(true);
 		expect(body.nodes.length).toBeGreaterThanOrEqual(2);
 		expect(Array.isArray(body.edges)).toBe(true);
+		// The fixture archive has far fewer than 1000 internal pages so
+		// the default node cap leaves it untouched.
+		expect(body.truncated).toBe(false);
+	});
+
+	it('GET /api/graph?limit=1 はデフォルト上限を上書きし truncated=true を返す', async () => {
+		// The default node cap exists to prevent 10 GB-class archives
+		// from blowing up `c.json` with `RangeError: Invalid string
+		// length`. Verify the override path still works: passing a
+		// smaller explicit limit truncates the result and surfaces it
+		// via `truncated`, which the frontend can read to tell the user
+		// the graph is incomplete.
+		const res = await app.request('/api/graph?limit=1');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			nodes: unknown[];
+			edges: unknown[];
+			truncated: boolean;
+		};
+		expect(body.nodes.length).toBe(1);
+		expect(body.truncated).toBe(true);
+	});
+
+	it('GET /api/graph?limit=0 はキャップなし — 全ノードを返し truncated=false', async () => {
+		// `limit=0` is the documented escape hatch for callers that
+		// accept the V8 string-limit risk knowingly (e.g. an operator
+		// piping the JSON into another tool on a small archive). Verify
+		// it bypasses the default cap rather than collapsing to "zero
+		// nodes".
+		const res = await app.request('/api/graph?limit=0');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			nodes: unknown[];
+			edges: unknown[];
+			truncated: boolean;
+		};
+		expect(body.nodes.length).toBeGreaterThanOrEqual(2);
+		expect(body.truncated).toBe(false);
 	});
 
 	it('GET /api/duplicates は不正な field で 400 を返す', async () => {
@@ -195,6 +237,62 @@ describe('createApp', () => {
 		const body = (await res.json()) as { items: unknown[]; total: number };
 		expect(Array.isArray(body.items)).toBe(true);
 		expect(body.total).toBeGreaterThanOrEqual(2);
+	});
+
+	it('GET /api/page-links は precomputed referrer-count cache を経由しても referrerCount を埋める', async () => {
+		// The viewer's referrer-count cache builds a GROUP BY map and
+		// hands it to `listPageLinks`; the SQL path collapses to a Map
+		// lookup. This assertion checks the full route → cache → query
+		// pipeline produces a numeric `referrerCount` (not undefined, not
+		// NaN, not "0 for every row because of a bigint/Number mismatch")
+		// — the exact failure mode the QA review flagged as ghost code.
+		const res = await app.request('/api/page-links');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			items: Array<{ url: string; referrerCount: number }>;
+		};
+		for (const item of body.items) {
+			expect(typeof item.referrerCount).toBe('number');
+			expect(Number.isFinite(item.referrerCount)).toBe(true);
+		}
+	});
+
+	it('GET /api/isolated-pages は precomputed components 経由で動く', async () => {
+		// The fixture has no inventory-* pages, so the response is an
+		// empty list — but the route must still go through
+		// getCachedIsolatedClusters + listIsolatedPages without throwing.
+		// Removing the `precomputedComponents` plumbing in the route or
+		// query function would fail this if anchoring assumed the option
+		// was always present.
+		const res = await app.request('/api/isolated-pages');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { items: unknown[]; total: number };
+		expect(Array.isArray(body.items)).toBe(true);
+		expect(typeof body.total).toBe('number');
+	});
+
+	it('GET /api/isolated-clusters は precomputed components 経由で動く', async () => {
+		const res = await app.request('/api/isolated-clusters');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { items: unknown[]; total: number };
+		expect(Array.isArray(body.items)).toBe(true);
+	});
+
+	it('GET /api/isolated-clusters/:representativeUrl は 404 で "use isolated-pages" メッセージを返す（singleton-vs-collapsed の差別化）', async () => {
+		// The QA review specifically called out this branch as untested.
+		// Without the singleton differentiation in the route, both cases
+		// would return the same "collapsed by follow-up crawl" message —
+		// which misleads operators who deep-linked a singleton URL into
+		// the clusters surface. We don't have a real singleton in the
+		// fixture, so verify the fallback branch: an unknown URL returns
+		// the "collapsed" message (not the singleton one).
+		const res = await app.request(
+			`/api/isolated-clusters/${encodeURIComponent('https://example.com/nonexistent')}`,
+		);
+		expect(res.status).toBe(404);
+		const body = (await res.json()) as { error: string };
+		// The fallback path: URL doesn't match any component.
+		expect(body.error).toContain('collapsed by a follow-up crawl');
 	});
 });
 

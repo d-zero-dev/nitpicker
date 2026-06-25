@@ -3,6 +3,7 @@ import type { Hono } from 'hono';
 
 import { getIsolatedCluster, listIsolatedClusters } from '@nitpicker/query';
 
+import { getCachedIsolatedClusters } from '../isolated-clusters-cache.js';
 import { toNumber } from '../query-params/to-number.js';
 
 /**
@@ -24,9 +25,11 @@ import { toNumber } from '../query-params/to-number.js';
 export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext): void {
 	app.get('/api/isolated-clusters', async (c) => {
 		const accessor = context.manager.get(context.archiveId);
+		const precomputedComponents = await getCachedIsolatedClusters(context);
 		const result = await listIsolatedClusters(accessor, {
 			limit: toNumber(c.req.query('limit')),
 			offset: toNumber(c.req.query('offset')),
+			precomputedComponents,
 		});
 		return c.json(result);
 	});
@@ -34,8 +37,31 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 	app.get('/api/isolated-clusters/:representativeUrl', async (c) => {
 		const accessor = context.manager.get(context.archiveId);
 		const representativeUrl = c.req.param('representativeUrl');
-		const result = await getIsolatedCluster(accessor, representativeUrl);
+		const precomputedComponents = await getCachedIsolatedClusters(context);
+		const result = await getIsolatedCluster(accessor, representativeUrl, {
+			precomputedComponents,
+		});
 		if (result === null) {
+			// Distinguish "the URL maps to a singleton, you wanted
+			// /api/isolated-pages" from "the cluster collapsed". Deep-
+			// linking a singleton URL into the clusters surface is a
+			// realistic operator error (e.g. teammates sharing URLs
+			// between the two tables); merging both into the same 404
+			// "collapsed by follow-up crawl" message has been a
+			// recurring source of confused diff-the-archive triage.
+			const isSingleton = precomputedComponents.some(
+				(component) =>
+					component.representativeUrl === representativeUrl && component.size === 1,
+			);
+			if (isSingleton) {
+				return c.json(
+					{
+						error:
+							'This URL identifies a singleton (size 1) in the inventory subgraph — use /api/isolated-pages to view it. The isolated-clusters surface only lists components with size ≥ 2.',
+					},
+					404,
+				);
+			}
 			return c.json(
 				{
 					error:

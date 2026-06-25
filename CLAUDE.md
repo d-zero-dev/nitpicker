@@ -55,7 +55,25 @@ packages/
 > - `idx_resources_internal_url`: listUnusedResources 66s → 7.5s (8.8x)
 > - `idx_images_covering`: listImages 32s → 16s (2.0x)
 >
-> 加えて `find-duplicates` を N+1 SQL から `GROUP_CONCAT` 一発に書換 (414s → 8s, 49.6x)、`get-link-graph` を Promise.all parallel に。**重要: `.nitpicker` archive に `ANALYZE` を絶対に走らせない** — 統計が出ると planner が `idx_pages_listfilter` を JOIN paths にも流用して `listLinks` / `getLinkGraph` / `listPageLinks` を 15s → 500s に回帰させる (33x worse)。既存 archive 適用は `scripts/add-perf-indexes.mjs` (PR #96 の `add-pages-listfilter-index.mjs` をリネーム + 拡張、3 index 一括)。詳細は ARCHITECTURE.md の「設計注意 (ANALYZE を走らせない)」を正とする。残る重い view (`listLinks`, `listPageLinks`, `getSummary`, `compute-isolated-clusters`) は `canonicalId` / `referrer_count` / `isolated_root` 等の schema denormalisation 無しではこれ以上削れず、当面受容 (各 query.ts の JSDoc に根拠記載)。
+> 加えて `find-duplicates` を N+1 SQL から `GROUP_CONCAT` 一発に書換 (414s → 8s, 49.6x)、`get-link-graph` を Promise.all parallel に。**重要: `.nitpicker` archive に `ANALYZE` を絶対に走らせない** — 統計が出ると planner が `idx_pages_listfilter` を JOIN paths にも流用して `listLinks` / `getLinkGraph` / `listPageLinks` を 15s → 500s に回帰させる (33x worse)。既存 archive 適用は `scripts/add-perf-indexes.mjs` (PR #96 の `add-pages-listfilter-index.mjs` をリネーム + 拡張、3 index 一括)。詳細は ARCHITECTURE.md の「設計注意 (ANALYZE を走らせない)」を正とする。
+
+> **Note (viewer プロセス側 precompute cache)**: 10 GB scale archive で **isolated-\* (20-30s)** と **page-links (~33s)** を schema 不変で詰めた経路。実 HTTP 計測値:
+>
+> - `packages/@nitpicker/viewer/src/isolated-clusters-cache.ts` が `computeIsolatedClusters` 結果を archive 単位で memoise、3 つの isolated-\* endpoint が共有して **初回 25s (cache miss、union-find は速くなっていない) → 2 回目以降 1-7 ms** — この PR の最大の実効果
+> - `packages/@nitpicker/viewer/src/referrer-count-cache.ts` が `Map<pageId, referrerCount>` を 1 回の `GROUP BY` で構築、`/api/page-links` の per-row correlated subquery を Map lookup に置換して **初回 32s → 2 回目以降 12-13s (2.5x)** — Map 化で subquery は消えるが outer SELECT が listfilter index を踏めず full scan に倒れている残コスト
+>
+> in-process `app.request()` bench (`scripts/bench-viewer-endpoints.mjs`) では page-links 459ms と出るが、SQLite page cache が異常 warm な環境の数字なので実運用との乖離あり、信用しない。実 HTTP curl で再現できる数字だけを正とする。両 cache とも max 4 entry LRU、Promise 単位 cache で concurrent 初回 request 共有、rejected promise は cache から落として retry 可能に。query API には `precomputedComponents` / `precomputedReferrerCounts` option を追加し、viewer route が cache から供給する。CLI / MCP は option を渡さず従来の SQL 経路を使う（一回呼び切りで precompute payback できないため意図通り）。
+
+> **Note (`getSummary` viewer プロセス cache + perf indexes)**: 10 GB archive 計測で **/api/summary cold 45s → 14s / warm 24s → 1 ms (13800x)** を達成。viewer は read-only / archive 不変なので `getSummary` 結果を archive 単位で memoise すれば SQLite に再入する必要がない (`packages/@nitpicker/viewer/src/summary-cache.ts` で `createPromiseLru` を共有)。stub mode (live crawl) は cache を bypass (writer が pages 列を追記中なので snapshot は永久 stale になる)。
+>
+> cold first-hit の 14 s は SQLite 側の I/O bound 残コスト。`init-schema.ts` に 2 個の perf index も追加して cold/uncached の場合の disk read を減らしている:
+>
+> - `idx_pages_summary_contenttype ON pages(scraped, redirectDestId, contentType, isExternal, isSkipped)` — Q2 (metadata count) + Q3 (content-type histogram) を **COVERING INDEX** で satisfy。Q1 (status histogram) の seek にも使われるが GROUP BY 列 (isExternal, status) と index 列 (contentType, isExternal) の順序不一致のため Q1 は `USE TEMP B-TREE FOR GROUP BY` が残る — これでも 38% 改善できるのは Q2+Q3 が covering 化される効果。
+> - `idx_pages_summary_failed ON pages(scraped, status, redirectDestId)` — Q4 (failed page id lookup) — 5113ms → 14ms (365x)。`(scraped, status)` 2-col seek で status=-1 の希少 slice に直接当てる。
+>
+> **却下した候補**: `idx_pages_summary_status (scraped, redirectDestId, isExternal, status)` を ANALYZE 抜きで加えると planner が Q1 の plan を変えて regression (1.1 s → 4.6-10 s)。PR #96 教訓「bulk index 追加で planner heuristic が崩れる」の再現。`scripts/bench-summary-configs.mjs` の 4-config matrix で確認。
+>
+> **scope-out**: `/api/links?type=broken` 20s / `/api/duplicates` 12s / `/api/images` 14s は本 PR で改善せず accept、denorm 列 (`canonicalId` / pre-aggregate) 無しでは詰まらない別 issue 候補。`/api/summary` cold 26s も I/O bound (10GB DB に対して 64MB cache)、index でこれ以上は詰まらない。
 
 > **Note (ページネーションモード)**: リスト系ビューは MPA ページネーション（`PagedTable` + `?page=` + `?pageSize=`、デフォルト）と仮想スクロール（`VirtualTable` + `useInfiniteQuery`、opt-in）の 2 モードを TopBar のトグルで切替えられる。`DataTable` がモードに応じて dispatch し、`usePagedQuery` / `use-*-infinite` を `enabled` フラグで切替えるため backend は無改修。**page と pageSize は URL クエリが正**（deep-link / 共有が成立するため両方が URL に乗らないと意味がない、`?pageSize=` 無しで `?page=5` を共有しても受け手の窓サイズが違うと別の行が見える）。デフォルト値（page=1, pageSize=100）は URL から省略してクリーンに保つ。localStorage は `nitpicker-pagination-mode`（モード本体）と `nitpicker-page-size`（**新規タブ初回の hint**）のみ。MPA がデフォルトな理由は deep-link / URL 共有 / 戻る進むが効くため。仮想スクロールは 10 万行規模の探索性が要るとき opt-in。詳細は ARCHITECTURE.md の `@nitpicker/viewer` 節「設計注意（ページネーション...）」を正とする。
 

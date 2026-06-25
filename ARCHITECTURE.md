@@ -268,6 +268,22 @@ nitpicker viewer <file>
 >
 > **libsql 0.5.x の read-only 強制は no-op**: `Database.connect({ readOnly: true })` は `#init` で migration をスキップする + `ArchiveAccessor.setData` の namespace ガード + `getKnex()` 経由の writes を内部 review で防ぐ — の 3 層で担保している。libsql 自体の `readonly: true` driver オプションは flag として accept されるが SQL 層では強制されない（known libsql limitation、将来のバンプで改善する可能性あり）。`accessor.getKnex().raw('INSERT ...')` のような ad-hoc 書き込みは現状 cacheDir を変更できてしまうので、新規開発時の自衛が必要。
 
+> **設計注意（viewer プロセス側 precompute cache）:** 10 GB scale archive で **isolated-\* 系 (20-30 s)** と **page-links (~33 s)** の wall-clock を SQL 単独で詰めるのは denorm 列（`canonicalId` / `referrer_count` / `isolated_root`）導入が必須、しかし schema 変更は consistency / migration / archive 互換性リスクが大きく本 PR では避ける判断。代替として viewer プロセス側で per-archive の memoised computation を 2 つ持つ:
+>
+> - `packages/@nitpicker/viewer/src/isolated-clusters-cache.ts` (`getCachedIsolatedClusters`): `computeIsolatedClusters` 結果 (`IsolatedComponent[]`) を archive 単位で memoise。`/api/isolated-pages` / `/api/isolated-clusters` / `/api/isolated-clusters/:rep` の 3 endpoint が共有。10 GB archive 実 HTTP 計測: **初回 25 s (union-find 自体は速くなっていない、cache miss コスト) → 2 回目以降 1-7 ms** (Map から返るので確実な改善、~3000-24000x)。この PR の最も大きな実効果
+> - `packages/@nitpicker/viewer/src/referrer-count-cache.ts` (`getCachedReferrerCounts`): `Map<pageId, referrerCount>` を 1 回の `GROUP BY` で構築。`/api/page-links` の per-row correlated subquery を Map lookup に置換。10 GB archive 実 HTTP 計測: **初回 32 s → 2 回目以降 12-13 s (2.5x)**。Map 化で per-row subquery は消えるが、`listPageLinks` の outer SELECT 自体が WHERE/ORDER で `idx_pages_listfilter` を踏めず (`isExternal` 制約なし) full scan に倒れているのが残コスト — 別 issue 級。in-process `app.request()` bench では 459 ms と出るが、これは SQLite page cache が異常に warm な状態の数字で実運用 (実 HTTP curl) とは乖離するため信用しない
+>
+> 両者とも共通 LRU helper `packages/@nitpicker/viewer/src/promise-lru.ts` (`createPromiseLru`) を使う。Promise 単位で cache (concurrent 初回 request 1 回 computation で済む)、**read promote-on-read で真の LRU** (`Map.set` の existing key は insertion order を更新しないので `delete` + 再 `set`)、rejected promise は cache から落として retry 可能、max 4 entry。
+>
+> **stub mode (live crawl) bypass**: `context.mode === 'stub'` の archive は writer が in-place で anchors / pages を書き続けるため、cache snapshot を返すと**永久 stale** になる (`/api/links` と数字が食い違う、新規 page の `referrerCount` が 0 に張り付く等)。
+>
+> - `getCachedIsolatedClusters` は stub mode で **cache を経由せず毎回 union-find** を再計算 (slow but live)
+> - `getCachedReferrerCounts` は stub mode で **`null` を返し、route が `precomputedReferrerCounts` option を渡さず** `listPageLinks` の per-row correlated subquery 経路にフォールバック (slow but live)
+>
+> Query API 側は `listIsolatedPages` / `listIsolatedClusters` / `getIsolatedCluster` に `precomputedComponents?` option、`listPageLinks` に `precomputedReferrerCounts?` option を追加。viewer route が cache から取って渡す。CLI / MCP は option を渡さないので従来の SQL 経路を踏む (一回呼び切りなので precompute コストを payback できないため、これは意図通り)。`get-isolated-cluster` の 404 は singleton（`/api/isolated-pages` を使うべき URL）と collapsed cluster で別メッセージに分けて、deep-link / 共有 URL の混在で「実は singleton でした」を判別可能にしている。
+>
+> **scope 外**: `/api/links?type=broken` 19 s / `/api/summary` 3.6 s / `/api/duplicates` 3.5 s / `/api/images` 2.6 s は本 PR で改善せず accept。`listLinks` は anchor-scan bound (`SCAN anchors → rowid seek source / dest / canonical`)で、denorm 列 `canonicalId` を入れても JOIN 経路の dominant cost である anchor scan が残るため意味が薄い。残り 3 endpoint は covering index 追加で詰める余地ありだが、PR #96 教訓（status + anchor の 7 個 bulk 追加が listLinks/Graph を 30-50x 回帰させた）に従って index 追加は最大 2 個までと自制したい — 本 PR では加えず別 issue 候補。**検索キーワード**: 「viewer endpoint 遅い」「page-links 33s」「isolated 28s」「precomputed cache viewer」「referrer_count denorm」「stub mode stale」。
+
 > **設計注意（ポート探索は serve と同じ host を probe する）:** `findFreePort(preferred, host)` は **`serve()` がバインドするのと同じ `host` で空きを確認しなければならない**。`localhost` は `::1`（IPv6）に解決される一方、host 未指定の bind は `0.0.0.0`/`::` を使うため、別インターフェースを probe すると「空き」と誤判定し、フォールバックが効かず banner 表示後に `EADDRINUSE` でクラッシュする。`start-viewer.ts` は必ず `host` を渡すこと。回帰テストは `find-free-port.spec.ts`（`net.createServer` をスパイし `listen` への host 転送を検証）。
 
 > **設計注意（テーブルの ARIA ロールは必須）:** `web/components/virtual-table.tsx`（仮想スクロール）と `web/components/paged-table.tsx`（MPA）の両方が CSS で table 要素を `display: flex/block` にレイアウトしており、これがネイティブ table セマンティクスをアクセシビリティツリーから剥がす。明示的な ARIA ロール（`table`/`rowgroup`/`row`/`columnheader`/`cell`）+ `aria-row/colcount`/`index` で復元しているため、**これらを削除すると画面読み上げが「無構造なテキストの羅列」に退行する**。列ヘッダーのアクセシブルネームはリサイザーのラベル混入を避けるため `to-accessible-header-label.ts` で固定（両モード共有）。E2E（`e2e/viewer.spec.ts` の「アクセシビリティ」群）は両モードで回帰を検知する。
