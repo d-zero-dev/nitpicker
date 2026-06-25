@@ -455,6 +455,16 @@ export class ArchiveManager {
 			};
 		}
 
+		// Known limitation: `cwd` is not forwarded here, so `Archive.open`
+		// falls back to `process.cwd()` and materialises `tmpDir` /
+		// `<tmpDir>.lock` next to the caller's cwd rather than next to the
+		// archive file. In production this is harmless (the `finally` in
+		// `Archive.#runFullClose` always releases the lock) but it makes the
+		// writer path (`crawl --append` / `--retry-failed` invoked from an
+		// unrelated directory) drop a `._nitpicker-<basename>` workspace into
+		// the user's cwd for the duration of the run. Forwarding cwd here
+		// (and exposing it on `ArchiveManager.open`) is the cleaner fix — out
+		// of scope for the surrounding work.
 		const archive = await Archive.open({ filePath: realPath, openPluginData: true });
 		// Capture both `tmpDir` and `archive.renamedDir` so a partial-failure
 		// rmSync recovery can clean either — `Archive.write()` renames the
