@@ -20,6 +20,10 @@
 		".": {
 			"import": "./lib/start-viewer.js",
 			"types": "./lib/start-viewer.d.ts"
+		},
+		"./create-app": {
+			"import": "./lib/create-app.js",
+			"types": "./lib/create-app.d.ts"
 		}
 	},
 	"scripts": {

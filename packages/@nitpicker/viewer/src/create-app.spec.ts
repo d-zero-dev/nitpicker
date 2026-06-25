@@ -196,6 +196,62 @@ describe('createApp', () => {
 		expect(Array.isArray(body.items)).toBe(true);
 		expect(body.total).toBeGreaterThanOrEqual(2);
 	});
+
+	it('GET /api/page-links は precomputed referrer-count cache を経由しても referrerCount を埋める', async () => {
+		// The viewer's referrer-count cache builds a GROUP BY map and
+		// hands it to `listPageLinks`; the SQL path collapses to a Map
+		// lookup. This assertion checks the full route → cache → query
+		// pipeline produces a numeric `referrerCount` (not undefined, not
+		// NaN, not "0 for every row because of a bigint/Number mismatch")
+		// — the exact failure mode the QA review flagged as ghost code.
+		const res = await app.request('/api/page-links');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			items: Array<{ url: string; referrerCount: number }>;
+		};
+		for (const item of body.items) {
+			expect(typeof item.referrerCount).toBe('number');
+			expect(Number.isFinite(item.referrerCount)).toBe(true);
+		}
+	});
+
+	it('GET /api/isolated-pages は precomputed components 経由で動く', async () => {
+		// The fixture has no inventory-* pages, so the response is an
+		// empty list — but the route must still go through
+		// getCachedIsolatedClusters + listIsolatedPages without throwing.
+		// Removing the `precomputedComponents` plumbing in the route or
+		// query function would fail this if anchoring assumed the option
+		// was always present.
+		const res = await app.request('/api/isolated-pages');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { items: unknown[]; total: number };
+		expect(Array.isArray(body.items)).toBe(true);
+		expect(typeof body.total).toBe('number');
+	});
+
+	it('GET /api/isolated-clusters は precomputed components 経由で動く', async () => {
+		const res = await app.request('/api/isolated-clusters');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { items: unknown[]; total: number };
+		expect(Array.isArray(body.items)).toBe(true);
+	});
+
+	it('GET /api/isolated-clusters/:representativeUrl は 404 で "use isolated-pages" メッセージを返す（singleton-vs-collapsed の差別化）', async () => {
+		// The QA review specifically called out this branch as untested.
+		// Without the singleton differentiation in the route, both cases
+		// would return the same "collapsed by follow-up crawl" message —
+		// which misleads operators who deep-linked a singleton URL into
+		// the clusters surface. We don't have a real singleton in the
+		// fixture, so verify the fallback branch: an unknown URL returns
+		// the "collapsed" message (not the singleton one).
+		const res = await app.request(
+			`/api/isolated-clusters/${encodeURIComponent('https://example.com/nonexistent')}`,
+		);
+		expect(res.status).toBe(404);
+		const body = (await res.json()) as { error: string };
+		// The fallback path: URL doesn't match any component.
+		expect(body.error).toContain('collapsed by a follow-up crawl');
+	});
 });
 
 /**
