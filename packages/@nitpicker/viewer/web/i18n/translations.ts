@@ -233,6 +233,8 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				description:
 					'Internal pages as a force-directed graph: node size reflects incoming links, edges are internal links. Click a node to open its detail.',
 				stats: '{nodes} nodes / {edges} edges',
+				truncated:
+					'Showing the top {nodes} pages by in-degree — larger graphs are capped so the JSON response fits in V8 string limits and the layout stays usable. Pass `?limit=0` in the URL to opt out.',
 				ariaLabel:
 					'Network graph of internal pages (visual representation). The same link data is available as an accessible table on the Page Links view.',
 			},
@@ -529,6 +531,8 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				description:
 					'内部ページを力学モデルのグラフで表示：ノードのサイズは被リンク数、エッジは内部リンク。ノードをクリックすると詳細を開きます。',
 				stats: '{nodes} ノード / {edges} エッジ',
+				truncated:
+					'被リンク数の多い上位 {nodes} 件のみ表示しています。これより大きなグラフは JSON レスポンスの V8 文字列上限とレイアウトの可読性を保つために打ち切られます。URL に `?limit=0` を付けると上限を解除できます。',
 				ariaLabel:
 					'内部ページのネットワークグラフ（視覚表現）。同じリンクデータはページリンク画面のテーブルでアクセシブルに参照できます。',
 			},

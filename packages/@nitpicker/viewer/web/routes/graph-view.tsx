@@ -84,6 +84,11 @@ export function GraphView() {
 			{data && (
 				<div className="graph-meta">
 					{t('views.graph.stats', { nodes: data.nodes.length, edges: data.edges.length })}
+					{data.truncated && (
+						<div className="state-warning">
+							{t('views.graph.truncated', { nodes: data.nodes.length })}
+						</div>
+					)}
 				</div>
 			)}
 			<div

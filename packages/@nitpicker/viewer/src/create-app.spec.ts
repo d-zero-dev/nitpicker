@@ -159,10 +159,52 @@ describe('createApp', () => {
 	it('GET /api/graph はノードとエッジを返す', async () => {
 		const res = await app.request('/api/graph');
 		expect(res.status).toBe(200);
-		const body = (await res.json()) as { nodes: unknown[]; edges: unknown[] };
+		const body = (await res.json()) as {
+			nodes: unknown[];
+			edges: unknown[];
+			truncated: boolean;
+		};
 		expect(Array.isArray(body.nodes)).toBe(true);
 		expect(body.nodes.length).toBeGreaterThanOrEqual(2);
 		expect(Array.isArray(body.edges)).toBe(true);
+		// The fixture archive has far fewer than 1000 internal pages so
+		// the default node cap leaves it untouched.
+		expect(body.truncated).toBe(false);
+	});
+
+	it('GET /api/graph?limit=1 はデフォルト上限を上書きし truncated=true を返す', async () => {
+		// The default node cap exists to prevent 10 GB-class archives
+		// from blowing up `c.json` with `RangeError: Invalid string
+		// length`. Verify the override path still works: passing a
+		// smaller explicit limit truncates the result and surfaces it
+		// via `truncated`, which the frontend can read to tell the user
+		// the graph is incomplete.
+		const res = await app.request('/api/graph?limit=1');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			nodes: unknown[];
+			edges: unknown[];
+			truncated: boolean;
+		};
+		expect(body.nodes.length).toBe(1);
+		expect(body.truncated).toBe(true);
+	});
+
+	it('GET /api/graph?limit=0 はキャップなし — 全ノードを返し truncated=false', async () => {
+		// `limit=0` is the documented escape hatch for callers that
+		// accept the V8 string-limit risk knowingly (e.g. an operator
+		// piping the JSON into another tool on a small archive). Verify
+		// it bypasses the default cap rather than collapsing to "zero
+		// nodes".
+		const res = await app.request('/api/graph?limit=0');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			nodes: unknown[];
+			edges: unknown[];
+			truncated: boolean;
+		};
+		expect(body.nodes.length).toBeGreaterThanOrEqual(2);
+		expect(body.truncated).toBe(false);
 	});
 
 	it('GET /api/duplicates は不正な field で 400 を返す', async () => {
