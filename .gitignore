@@ -95,3 +95,13 @@ token.json
 
 # Scratch files
 _*.txt
+
+# Operator-side inventory exports (never commit — these may carry
+# customer-side URL data even though the repo is open-source).
+inventory-*.csv
+inventory-*.md
+*-inventory-*.csv
+*-inventory-*.md
+
+# Local bench output (per-archive EXPLAIN dumps, timing tables).
+bench-output/

@@ -263,6 +263,10 @@ npx @nitpicker/cli viewer <file-or-stub-dir> [--port 9000] [--no-open]
 
 クロール経路（`crawl --append` / `--retry-failed`）は env と無関係に常に旧挙動。キャッシュは reader 経路（viewer / MCP / `query`）専用。
 
+### viewer プロセス内キャッシュ（同一アーカイブ内の重い計算を 1 回だけにする）
+
+10 GB クラスのアーカイブで `Isolated pages` / `Isolated clusters` / `Page links` 画面が初回 20-30 秒、2 回目以降は数ミリ秒に縮む。viewer プロセス側で per-archive の Map を 4 archive 分まで LRU で持っており、同じアーカイブを開いている間は union-find / referrer count GROUP BY を再実行しない。stub mode（live crawl 中の `._nitpicker-*` ディレクトリ）は **キャッシュを使わず毎回再計算する**（クロール中に追加された anchor / page を即座に反映するため、画面ロードは遅いままだが数字は常に live）。CLI / MCP には影響なし（1 回呼び切りでペイバックできないので元の SQL 経路のまま）。
+
 ### ページネーション（MPA がデフォルト / 仮想スクロールは opt-in）
 
 ページ一覧は TopBar のモード切替で **MPA ページネーション**（既定）と **仮想スクロール** を切り替えられる。
