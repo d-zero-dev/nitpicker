@@ -39,18 +39,19 @@ jobs:
         env:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
       - run: yarn build
-      # Cache the build output keyed by yarn.lock + every TS source file. A PR
-      # that pushes a doc-only follow-up commit, or a re-run of the same SHA,
-      # reuses this cache and skips the ~2 min build. restore-keys gives a
-      # graceful partial fallback (unused today, kept for future flexibility).
+      # Cache the build output keyed by commit SHA. A re-run of the same SHA
+      # (e.g. retry after a flaky shard) reuses this cache and skips the ~2 min
+      # build. hashFiles-based keys are tempting for cross-commit reuse but
+      # caused build/e2e key mismatch when the build step generated *.d.ts
+      # files that flipped `hashFiles('packages/**/*.ts')` between save & restore.
       - uses: actions/cache/save@v4
         with:
           path: packages/**/lib
-          key: e2e-build-node24-${{ hashFiles('yarn.lock', 'packages/**/*.ts', 'packages/**/*.tsx') }}
+          key: e2e-build-node24-${{ github.sha }}
           enableCrossOsArchive: true
 
   verify-shards:
-    # Runs in parallel with `build`. Just a checkout + an awk diff; ~10 s.
+    # Runs in parallel with `build`. Just a checkout + a grep diff; ~5 s.
     # Catches the "added an e2e file but forgot to add it to the matrix below"
     # mistake — that file would otherwise silently never run in CI.
     runs-on: ubuntu-latest
@@ -134,7 +135,7 @@ jobs:
       - uses: actions/cache/restore@v4
         with:
           path: packages/**/lib
-          key: e2e-build-node24-${{ hashFiles('yarn.lock', 'packages/**/*.ts', 'packages/**/*.tsx') }}
+          key: e2e-build-node24-${{ github.sha }}
           enableCrossOsArchive: true
           fail-on-cache-miss: true
       # Puppeteer's browser download is a silent no-op on this runner (it creates an
