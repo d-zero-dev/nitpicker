@@ -59,17 +59,7 @@ jobs:
       - name: Verify shard manifest covers all e2e files
         run: |
           expected=$(find packages/test-server/src/__tests__/e2e -name '*.e2e.ts' -printf '%f\n' | sort)
-          declared=$(awk '
-            /^[[:space:]]+files:[[:space:]]*\[/ {
-              sub(/^[^[]*\[/, "")
-              sub(/\].*/, "")
-              n = split($0, arr, ",")
-              for (i = 1; i <= n; i++) {
-                gsub(/[[:space:]]/, "", arr[i])
-                if (arr[i] != "") print arr[i]
-              }
-            }
-          ' .github/workflows/e2e.yml | sort -u)
+          declared=$(grep -oE '[a-z][a-z0-9-]*\.e2e\.ts' .github/workflows/e2e.yml | sort -u)
           if ! diff <(echo "$expected") <(echo "$declared"); then
             echo "::error::e2e shard manifest in .github/workflows/e2e.yml is out of sync with packages/test-server/src/__tests__/e2e/*.e2e.ts"
             exit 1
