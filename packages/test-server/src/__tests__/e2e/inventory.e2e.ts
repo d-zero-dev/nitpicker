@@ -272,6 +272,290 @@ describe('Inventory crawl run-audit fingerprint (with source file sha256)', () =
 	});
 });
 
+describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
+	// Regression test for issue #121. Before the fix, HTML seeds lived only in
+	// the Crawler's in-memory `LinkList` until `setPage` ran — a Ctrl+C between
+	// dealer pick and `setPage` lost the URL with no archive trace, and
+	// `crawl --resume` could not recover it because the strict-pending set
+	// requires a `pages` row. The fix pre-inserts seeds as
+	// `scraped=0, source='inventory-seed'` *before* the scrape phase, so the
+	// strict pending set (`OR p.source != 'crawled'`) picks them up on resume.
+	//
+	// We simulate the Ctrl+C by passing an `initializedCallback` that calls
+	// `orchestrator.abort()` right before the dealer launches — the aborted
+	// crawler's `crawlEnd` fires immediately without rendering any seed, so
+	// the post-condition is "ingestion happened, scrape didn't". Then we
+	// re-open the archive and assert the strict-pending set recovers the seed.
+	//
+	// NOTE: this test pins the *pre-insert durability* property. It does
+	// NOT exercise the post-ingestion `archive.write()` recovery branch
+	// that fires when the scrape phase throws a *non-abort* error
+	// (puppeteer crash, DB lock, init callback throw). That recovery
+	// path is exercised by the separate "Inventory scrape-phase failure
+	// persists ingested state" describe below.
+	let filePath: string;
+	let cwd: string;
+	let accessor: Archive;
+
+	beforeAll(async () => {
+		const baseline = await crawlAndPersist(['http://localhost:8010/']);
+		filePath = baseline.filePath;
+		cwd = baseline.cwd;
+
+		const orchestrator = await CrawlerOrchestrator.inventory(
+			filePath,
+			[
+				// Two HTML seeds to make sure the assertion is not a single-row
+				// coincidence — both must show up in the strict pending set.
+				'http://localhost:8010/inventory/hidden-lp',
+				'http://localhost:8010/inventory/inner-link',
+			],
+			{ cwd },
+			(orch) => {
+				// `initializedCallback` runs after `crawler.resume(pending, …)`
+				// but before `orchestrator.crawling([])` dispatches the dealer.
+				// Aborting here is the cleanest in-process proxy for a Ctrl+C
+				// landing in that window.
+				orch.abort();
+			},
+		);
+		await orchestrator.write();
+		await orchestrator.archive.close();
+		orchestrator.garbageCollect();
+
+		accessor = await Archive.open({ filePath, cwd });
+	}, 60_000);
+
+	afterAll(async () => {
+		if (accessor) {
+			await accessor.close();
+		}
+		await fs.rm(cwd, { recursive: true, force: true });
+	});
+
+	it('pre-inserts every HTML seed into pages with scraped=0 source=inventory-seed', async () => {
+		// The load-bearing assertion: even though the dealer never scraped a
+		// single seed, every URL is durably tracked as an `inventory-seed`
+		// placeholder in `pages`. Pre-#121, these rows would not exist.
+		const knex = accessor.getKnex();
+		const rows = (await knex('pages')
+			.select('url', 'source', 'scraped')
+			.whereIn('url', [
+				'http://localhost:8010/inventory/hidden-lp',
+				'http://localhost:8010/inventory/inner-link',
+			])
+			.orderBy('url')) as Array<{
+			url: string;
+			source: string;
+			scraped: number;
+		}>;
+		expect(rows.map((r) => r.url)).toEqual([
+			'http://localhost:8010/inventory/hidden-lp',
+			'http://localhost:8010/inventory/inner-link',
+		]);
+		for (const row of rows) {
+			expect(row.source).toBe('inventory-seed');
+			expect(row.scraped).toBe(0);
+		}
+	});
+
+	it('exposes the seeds in the strict pending set so --resume recovers them', async () => {
+		// The fix's whole point: `getCrawlingState().pending` must include
+		// the pre-inserted seeds via the `OR p.source != 'crawled'` clause,
+		// even though no anchor row references them. Without this, an
+		// interrupted inventory pass is irrecoverable.
+		const { pending } = await accessor.getCrawlingState();
+		expect(pending.toSorted()).toEqual([
+			'http://localhost:8010/inventory/hidden-lp',
+			'http://localhost:8010/inventory/inner-link',
+		]);
+	});
+
+	it('writes the inventory_runs audit row inside the ingestion phase (before scrape)', async () => {
+		// Audit row is written in the `.bak`-protected ingestion phase, so
+		// it survives a Ctrl+C in the scrape phase — operators can still
+		// answer "did we run inventory on this archive" even though no
+		// seed was rendered.
+		const knex = accessor.getKnex();
+		const rows = (await knex('inventory_runs').select('*')) as Array<{
+			total_lines: number | null;
+			new_pages: number | null;
+			new_resources: number | null;
+		}>;
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.total_lines).toBe(2);
+		expect(rows[0]?.new_pages).toBe(2);
+		expect(rows[0]?.new_resources).toBe(0);
+	});
+});
+
+describe('Inventory scrape-phase failure persists ingested state (#121 recovery path)', () => {
+	// Regression test for the post-ingestion recovery branch (the F1 path
+	// in the code review): when scrape phase throws *after* ingestion
+	// completes (`.bak` is gone), the orchestrator must persist `tmpDir`
+	// to the `.nitpicker` tar via `archive.write()` before unwinding —
+	// otherwise the outer catch's `archive.close()` would see the original
+	// archive file still on disk, hit the `remove(tmpDir)` branch of
+	// `Archive.#runFullClose`, and silently wipe every pre-inserted
+	// `inventory-seed` row + the `inventory_runs` audit row.
+	//
+	// We drive the scrape-phase failure by throwing inside
+	// `initializedCallback`, which fires *after* the ingestion-complete
+	// flag is set and the `.bak` is unlinked but *before* the dealer
+	// dispatches. That lands the throw squarely in the scrape-phase
+	// catch and exercises the `archive.write()` + `releaseHandle()`
+	// recovery path that this test pins.
+	let filePath: string;
+	let cwd: string;
+
+	beforeAll(async () => {
+		const baseline = await crawlAndPersist(['http://localhost:8010/']);
+		filePath = baseline.filePath;
+		cwd = baseline.cwd;
+
+		const scrapePhaseError = new Error('simulated scrape-phase failure');
+		await expect(
+			CrawlerOrchestrator.inventory(
+				filePath,
+				[
+					'http://localhost:8010/inventory/hidden-lp',
+					'http://localhost:8010/inventory/inner-link',
+				],
+				{ cwd },
+				() => {
+					// Throws *after* ingestion completes — exercises the
+					// `ingestionComplete=true` branch of the orchestrator's
+					// outer catch.
+					throw scrapePhaseError;
+				},
+			),
+		).rejects.toThrow('simulated scrape-phase failure');
+	}, 60_000);
+
+	afterAll(async () => {
+		await fs.rm(cwd, { recursive: true, force: true });
+	});
+
+	it('persists pre-inserted inventory-seed rows to the .nitpicker tar despite the scrape throw', async () => {
+		// The load-bearing assertion: after the scrape-phase throw, the
+		// orchestrator's catch must call `archive.write()` to tar `tmpDir`
+		// into the `.nitpicker` file. If that call were missing (or if the
+		// `ingestionComplete=true` guard fell through to the `.bak` restore
+		// branch), re-opening the archive would show zero `inventory-seed`
+		// rows. The previous-fix coverage E2E only exercises the abort
+		// path, which short-circuits before reaching this branch.
+		const accessor = await Archive.open({ filePath, cwd });
+		try {
+			const knex = accessor.getKnex();
+			const rows = (await knex('pages')
+				.select('url', 'source', 'scraped')
+				.whereIn('url', [
+					'http://localhost:8010/inventory/hidden-lp',
+					'http://localhost:8010/inventory/inner-link',
+				])
+				.orderBy('url')) as Array<{
+				url: string;
+				source: string;
+				scraped: number;
+			}>;
+			expect(rows.map((r) => r.url)).toEqual([
+				'http://localhost:8010/inventory/hidden-lp',
+				'http://localhost:8010/inventory/inner-link',
+			]);
+			for (const row of rows) {
+				expect(row.source).toBe('inventory-seed');
+				expect(row.scraped).toBe(0);
+			}
+		} finally {
+			await accessor.close();
+		}
+	});
+
+	it('persists the inventory_runs audit row despite the scrape throw', async () => {
+		// Audit row was written before the throw (inside the ingestion
+		// phase). The `archive.write()` recovery flush must carry it
+		// through to the on-disk archive, otherwise the operator has no
+		// record that the inventory pass ever started.
+		const accessor = await Archive.open({ filePath, cwd });
+		try {
+			const knex = accessor.getKnex();
+			const rows = (await knex('inventory_runs').select('*')) as Array<{
+				total_lines: number | null;
+				new_pages: number | null;
+			}>;
+			expect(rows).toHaveLength(1);
+			expect(rows[0]?.total_lines).toBe(2);
+			expect(rows[0]?.new_pages).toBe(2);
+		} finally {
+			await accessor.close();
+		}
+	});
+});
+
+describe('Inventory http/https dedup keeps a single inventory-seed row per origin (#121 review F6)', () => {
+	// Edge-case pin for the dedup boundary added in `inventory()` —
+	// `protocolAgnosticKey` is the only thing that keeps an inventory
+	// list with cross-scheme duplicates from creating an orphan
+	// `pages` row. Without this dedup, the dealer's `seenInitial`
+	// would collapse both to one URL and only scrape one, leaving the
+	// other stuck at `scraped=0, source='inventory-seed'` forever and
+	// indistinguishable from a real recovery candidate.
+	let filePath: string;
+	let cwd: string;
+	let accessor: Archive;
+
+	beforeAll(async () => {
+		const baseline = await crawlAndPersist(['http://localhost:8010/']);
+		filePath = baseline.filePath;
+		cwd = baseline.cwd;
+
+		const orchestrator = await CrawlerOrchestrator.inventory(
+			filePath,
+			[
+				// Same URL with two schemes. Without dedup, both would
+				// pass `getExistingPageUrls` (which matches exact `url`)
+				// and produce two `pages` rows.
+				'http://localhost:8010/inventory/hidden-lp',
+				'https://localhost:8010/inventory/hidden-lp',
+			],
+			{ cwd },
+			(orch) => {
+				// Skip scrape to keep the test deterministic — we only
+				// care about the dedup at insert time.
+				orch.abort();
+			},
+		);
+		await orchestrator.write();
+		await orchestrator.archive.close();
+		orchestrator.garbageCollect();
+
+		accessor = await Archive.open({ filePath, cwd });
+	}, 60_000);
+
+	afterAll(async () => {
+		if (accessor) {
+			await accessor.close();
+		}
+		await fs.rm(cwd, { recursive: true, force: true });
+	});
+
+	it('creates exactly one inventory-seed row across http/https duplicates', async () => {
+		const knex = accessor.getKnex();
+		const rows = (await knex('pages')
+			.select('url', 'source')
+			.whereIn('url', [
+				'http://localhost:8010/inventory/hidden-lp',
+				'https://localhost:8010/inventory/hidden-lp',
+			])) as Array<{ url: string; source: string }>;
+		// First-seen wins: the http scheme was supplied first so it
+		// survives the dedup. The order is documented contract for the
+		// dedup helper — if it ever needs to flip, this test catches it.
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.url).toBe('http://localhost:8010/inventory/hidden-lp');
+		expect(rows[0]?.source).toBe('inventory-seed');
+	});
+});
+
 describe('Inventory crawl noop run (all URLs already in archive)', () => {
 	let filePath: string;
 	let cwd: string;
