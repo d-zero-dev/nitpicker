@@ -202,6 +202,48 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.getBaseUrl();
 	}
 	/**
+	 * Pre-insert inventory non-HTML URLs as `source='inventory-seed'`
+	 * placeholders in the `resources` table — the non-HTML counterpart of
+	 * {@link Archive.insertInventorySeeds}. Replaces the previous per-URL
+	 * `setResources` loop in `CrawlerOrchestrator.inventory` so the
+	 * ingestion phase commits all non-HTML rows in one chunked round-trip
+	 * per 500 (a 50k-URL inventory list dropped from minutes-inside-`.bak`
+	 * to seconds).
+	 *
+	 * Thin facade over {@link Database.insertInventoryResources}.
+	 * `ExURL.href` is the storage key for `resources.url` (matches what
+	 * `insertResource` writes for the per-URL path); we normalise here so
+	 * the orchestrator stays decoupled from the storage form.
+	 * @param urls - Non-HTML inventory URLs to record. No-op when empty.
+	 */
+	async insertInventoryResources(urls: readonly ExURL[]): Promise<void> {
+		if (urls.length === 0) {
+			return;
+		}
+		dbLog('Insert inventory resources: %d URL(s)', urls.length);
+		await this.#db.insertInventoryResources(urls.map((u) => u.href));
+	}
+	/**
+	 * Pre-insert inventory HTML seeds as `scraped=0`, `source='inventory-seed'`
+	 * placeholder pages so the URL is durably tracked in the archive **before**
+	 * the scrape phase starts. Thin facade over
+	 * {@link Database.insertInventorySeeds} — see that method's JSDoc for the
+	 * Ctrl+C-tolerance rationale and the `getCrawlingState` interaction.
+	 *
+	 * `ExURL` inputs are normalised to `withoutHashAndAuth` here so the storage
+	 * key matches what `#getIdByUrl` writes for crawled rows, keeping the
+	 * crawled-wins downgrade and the existing-URL filter (`getExistingPageUrls`)
+	 * lookups consistent.
+	 * @param urls - HTML seed URLs to pre-insert. No-op when empty.
+	 */
+	async insertInventorySeeds(urls: readonly ExURL[]): Promise<void> {
+		if (urls.length === 0) {
+			return;
+		}
+		dbLog('Insert inventory seeds: %d URL(s)', urls.length);
+		await this.#db.insertInventorySeeds(urls.map((u) => u.withoutHashAndAuth));
+	}
+	/**
 	 * Hostnames whose `crawl_errors` history is consistently DNS failures and
 	 * for which no recent 2xx/3xx page or resource is recorded. Consumed by
 	 * `CrawlerOrchestrator.#preloadDnsBurnedHostCache` to seed the DNS-burned
@@ -217,6 +259,7 @@ export default class Archive extends ArchiveAccessor {
 	async listDnsBurnedHostCandidates(): Promise<string[]> {
 		return this.#db.listDnsBurnedHostCandidates();
 	}
+
 	/**
 	 * Appends one row to the `inventory_runs` audit log.
 	 *

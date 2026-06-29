@@ -742,7 +742,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			.where('url', url);
 		return row?.source;
 	}
-
 	/**
 	 * Retrieves pages along with their related redirect, anchor, and referrer data.
 	 * Results are ordered by the natural URL sort order. Only non-redirected pages are returned.
@@ -1016,6 +1015,104 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			sources:
 				r.sources === null ? [] : ((safeParseJson(r.sources) as TagRow['sources']) ?? []),
 		}));
+	}
+	/**
+	 * Pre-insert inventory non-HTML URLs into `resources` as placeholder rows
+	 * with `source = 'inventory-seed'` and all metadata columns NULL — the
+	 * non-HTML counterpart of {@link Database.insertInventorySeeds}. Used by
+	 * `CrawlerOrchestrator.inventory` so the ingestion phase commits all of
+	 * its non-HTML URLs in one chunked round-trip per 500 instead of N
+	 * sequential `insertResource` awaits. On a 50k-URL inventory list the
+	 * old per-URL loop spent minutes inside the `.bak`-protected window;
+	 * the bulk path finishes in seconds.
+	 *
+	 * Idempotent: `onConflict('url').ignore()` leaves existing rows untouched
+	 * (the orchestrator's `getExistingResourceUrls` filter is what keeps a
+	 * crawled-lineage `resources` row from being downgraded to the
+	 * inventory label here).
+	 *
+	 * Chunked at 500 to stay well under SQLite's `SQLITE_MAX_VARIABLE_NUMBER`
+	 * (default 999) — every row binds the URL plus the `responseHeaders`
+	 * JSON null, so the per-chunk bound budget is well within limits.
+	 * @param urls - URL strings (already in `withoutHashAndAuth` form).
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async insertInventoryResources(urls: readonly string[]): Promise<void> {
+		if (urls.length === 0) {
+			return;
+		}
+		await eachSplitted([...urls], 500, async (chunk) => {
+			await this.#instance<DB_Resource>('resources')
+				.insert(
+					chunk.map((url) => ({
+						url,
+						isExternal: 0 as const,
+						status: null,
+						statusText: null,
+						contentType: null,
+						contentLength: null,
+						compress: 0 as const,
+						cdn: 0 as const,
+						responseHeaders: null,
+						source: 'inventory-seed' as PageSource,
+					})),
+				)
+				.onConflict('url')
+				.ignore();
+		});
+	}
+
+	/**
+	 * Pre-insert inventory HTML seeds into `pages` as `scraped = 0`,
+	 * `source = 'inventory-seed'` placeholders so the URL's existence in the
+	 * archive is **durable before the scrape phase starts**.
+	 *
+	 * Why this is the linchpin of `--inventory` Ctrl+C tolerance: HTML seeds
+	 * used to live only in the Crawler's in-memory `LinkList` until the
+	 * dealer eventually called `setPage`. A Ctrl+C / crash before that point
+	 * lost the seed without trace, and `--resume` could not recover it
+	 * because `getCrawlingState`'s strict pending set requires a `pages` row.
+	 * Pre-inserting fills exactly that gap: the strict pending set picks
+	 * these rows up via its `OR p.source != 'crawled'` clause, so
+	 * `--resume` after an interrupted inventory pass picks every seed back
+	 * up. See {@link Database.getCrawlingState} for the strict-set rationale.
+	 *
+	 * Idempotent: `onConflict('url').ignore()` keeps existing rows intact.
+	 * The {@link Database.#getIdByUrl} crawled-wins downgrade still fires
+	 * later when a crawled-lineage anchor reaches one of these seeds —
+	 * that's the right behaviour (a seed that turned out to be reachable
+	 * is not an orphan and should not retain the inventory label).
+	 *
+	 * Chunked into 500-URL batches so SQLite's bound-parameter limit
+	 * (`SQLITE_MAX_VARIABLE_NUMBER`, default 999) cannot be hit even on a
+	 * tens-of-thousands inventory list.
+	 *
+	 * Called by {@link CrawlerOrchestrator.inventory} during the
+	 * `.bak`-protected ingestion phase, so any failure here aborts the run
+	 * and restores from backup — the operator reruns from scratch.
+	 * @param urls - URL strings already in `withoutHashAndAuth` form.
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async insertInventorySeeds(urls: readonly string[]): Promise<void> {
+		if (urls.length === 0) {
+			return;
+		}
+		await eachSplitted([...urls], 500, async (chunk) => {
+			await this.#instance<DB_Page>('pages')
+				.insert(
+					chunk.map((url) => ({
+						url,
+						scraped: 0 as const,
+						isExternal: 0 as const,
+						isTarget: 0 as const,
+						source: 'inventory-seed' as PageSource,
+					})),
+				)
+				.onConflict('url')
+				.ignore();
+		});
 	}
 
 	/**
