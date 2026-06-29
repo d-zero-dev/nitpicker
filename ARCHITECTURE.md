@@ -577,14 +577,20 @@ inventory_runs:
 CLI inventoryCrawl
   → resolveListFile (absolute path, sha256 計算用)
   → readList (parse txt → URL[])
-  → CrawlerOrchestrator.inventory(archivePath, urls, options, callback, sourceFilePath)
-       → orchestrator.crawling(htmlSeeds, ...) で render + ingest
-       → archive.setUrlOrder()
+  → CrawlerOrchestrator.inventory(archivePath, urls, options, callback, sourceFileSha256)
+       --- ingestion フェーズ (.bak 保護下) ---
+       → archive.insertInventoryResources(nonHtmlSeeds)   (chunked bulk insert)
+       → archive.insertInventorySeeds(htmlSeeds)          (chunked bulk insert, scraped=0)
        → #writeInventoryRunRow(archive, aggregates)
-            → computeFileSha256(sourceFilePath)  (stream hash, null on error)
-            → archive.recordInventoryRun(meta)   (path は meta に含めない)
+            → archive.recordInventoryRun(meta)  (path は meta に含めない)
                  → Database.recordInventoryRun → INSERT INTO inventory_runs
-       → unlinkFile(<archive>.bak)
+       → ingestionComplete = true                         (.bak restore は以降ガードされる)
+       → unlinkFile(<archive>.bak)                        (ingestion フェーズ終了)
+       --- scrape フェーズ (.bak 保護なし、Ctrl+C は --resume で復活) ---
+       → getCrawlingState() を再取得 (pre-inserted seeds が pending に乗る)
+       → crawler.resume(pendingAfter, scrapedAfter, ...)
+       → orchestrator.crawling([], { recursive: true })   (seed list 空、pending から起動)
+       → archive.setUrlOrder()
        → return orchestrator
 ```
 
@@ -593,7 +599,8 @@ CLI inventoryCrawl
 - **append-only**: UPDATE 経路なし、`source_file_sha256` に UNIQUE 制約なし。同じ list を 2 度 apply すれば 2 行。重複検知は Phase 3 (`--refresh`) で `source_file_sha256` を pre-flight key として使う領域
 - **ran_at だけ NOT NULL**: 残り 7 列はすべて NULL 可。post-merge backfill (Phase 1 deploy 前の initial inventory pass を後付け記録するための1回限り raw SQL INSERT) で集計値を欠損させたままでも記録できる
 - **Strategy A (orphan column 容認)**: pre-update archive (= `source_file_path` 列を持つ Phase 1 直後の archive) は当該列を残置したまま新コードで開ける。READ / WRITE 経路は SELECT / INSERT に列を含めないので JSON 出力には現れず、orphan として残るだけ。`ALTER TABLE ... DROP COLUMN` migration は打たない (SQLite version 制約回避 + 実書き込み 0 件)。物理削除したい運用者は手動 `sqlite3 db.sqlite "ALTER TABLE inventory_runs DROP COLUMN source_file_path"` を打てる
-- **`.bak` 削除直前で INSERT**: 失敗時は `.bak` から復元され、run 行も巻き戻る (transaction atomicity ではなく `.bak` revert semantics)
+- **ingestion フェーズ内で INSERT (issue #121)**: pre-insert + audit 行 + `.bak` 削除を1セットの ingestion として扱い、いずれかが失敗すれば `.bak` 復元で全て巻き戻る (transaction atomicity ではなく `.bak` revert semantics)。scrape フェーズの失敗 (Ctrl+C / puppeteer crash / dealer error) は **ingestion 完了後** なので `.bak` 復元しない — `crawler-orchestrator.ts` の `ingestionComplete` フラグが境界を表す。scrape 失敗時は orchestrator が `archive.write()` で tmpDir を `.nitpicker` に persist し、operator は `crawl --resume <archive>` で残りを scrape できる
+- **audit-write 失敗の扱い**: 旧実装は audit-row INSERT 失敗を swallow していた (audit が scrape の末尾だったため、巻き戻すと完走済み crawl まで失われる懸念があった)。新実装は audit を ingestion フェーズに lift したので失敗→`.bak`復元→operator 再実行が "ingestion 全体が乗るか乗らないか" の原子性を担保する設計に。`#writeInventoryRunRow` の swallow 削除はこの境界の置き換えに対応する
 - **noop early-return path (`novelUrls.length === 0`) は run 行を書かない**: 現実装では novel = 0 で `.bak` を作らず即 return するため、ここで DB write すると tar 書き戻し中断時の archive 破損リスクが出る。全 URL が既存だった run の audit は console log `[inventory] N already in archive, 0 new` でしか残らない (Phase 2 候補: `.bak` 取得拡張と合わせて noop 記録対応)
 - **list_label 自動命名**: `--label` CLI フラグは Phase 1 で実装しない。orchestrator が `inventory-${ran_at}` を自動付与
 
