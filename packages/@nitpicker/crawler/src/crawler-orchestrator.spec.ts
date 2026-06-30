@@ -529,31 +529,26 @@ describe('CrawlerOrchestrator.inventory: pending guard demote', () => {
 });
 
 describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
-	it('records non-HTML novel URLs as `setResources` rows with all-null metadata and NO HEAD probe', async () => {
-		// F4 + F5: the new inventory orchestrator classifies URLs by
-		// extension via `isLikelyHtmlUrl` and writes non-HTML entries
-		// directly into `resources` without a HEAD probe. This pins
-		// three contracts in one shot:
+	it('routes non-HTML novel URLs through `insertInventoryResources` (bulk) and never HEAD-probes them', async () => {
+		// The new inventory orchestrator classifies URLs by extension via
+		// `isLikelyHtmlUrl` and writes non-HTML entries through the
+		// chunked `insertInventoryResources` bulk path (issue #121
+		// review F14 — the old per-URL `setResources` loop spent minutes
+		// inside the `.bak` window on 50k-URL inventory lists). This
+		// pins three contracts in one shot:
 		//
-		// 1. `setResources` is called for each non-HTML novel URL with
-		//    `source: 'inventory-seed'`.
-		// 2. The recorded row carries `status / statusText / contentType
-		//    / contentLength / headers === null` — downstream consumers
-		//    must treat this as "not probed" rather than "probed and
-		//    failed".
+		// 1. `insertInventoryResources` is called once with every
+		//    non-HTML novel URL. The all-null-metadata + `'inventory-seed'`
+		//    label shape is asserted at the database layer (see
+		//    `database.spec.ts > insertInventoryResources`), not here —
+		//    this test only verifies the orchestrator routes correctly.
+		// 2. The legacy `setResources` per-URL path is NOT taken (a
+		//    regression that reverts to it would surface here).
 		// 3. NO `fetchDestination` HEAD call is made AND NO `addError`
 		//    `crawl_errors` row is written. The orchestrator-side
 		//    network failure logging is intentionally absent because no
 		//    probe happens.
-		//
-		// Pin in one test so a regression that restores HEAD-based
-		// metadata (and the associated `addError` logging) fails
-		// loudly here.
-		const setResourcesCalls: {
-			url: string;
-			source: string | undefined;
-			resource: unknown;
-		}[] = [];
+		const insertInventoryResourcesCalls: { urls: string[] }[] = [];
 		const fakeArchive = {
 			on: vi.fn(),
 			getConfig: vi.fn(() =>
@@ -582,17 +577,13 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
 			setUrlOrder: vi.fn(() => Promise.resolve()),
 			close: vi.fn(() => Promise.resolve()),
-			setResources: vi.fn(
-				(resource: { url: { href: string } }, source: string | undefined) => {
-					setResourcesCalls.push({ url: resource.url.href, source, resource });
-					return Promise.resolve();
-				},
-			),
+			setResources: vi.fn(() => Promise.resolve()),
+			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventoryResources: vi.fn((urls: readonly { href: string }[]) => {
+				insertInventoryResourcesCalls.push({ urls: urls.map((u) => u.href) });
+				return Promise.resolve();
+			}),
 			addError: vi.fn(() => Promise.resolve()),
-			// Phase 1 audit log: the orchestrator records one row per
-			// successful inventory run via `recordInventoryRun`. The mock
-			// just needs to resolve — the row content is exercised by
-			// `database.spec.ts` and the inventory E2E.
 			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
 		} as unknown as Archive;
 
@@ -612,11 +603,6 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 		await fs.writeFile(fixturePath, '');
 
 		try {
-			// All four URLs are non-HTML (extension-based classification
-			// drops them into the `setResources` path) and all are novel
-			// (`getExistingPageUrls` / `getExistingResourceUrls` return
-			// empty). So `htmlSeeds.length === 0`, the orchestrator hits
-			// the no-op early return after writing the resource rows.
 			await CrawlerOrchestrator.inventory(
 				'fixture.nitpicker',
 				[
@@ -631,23 +617,16 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		// Four `setResources` calls, all labelled `'inventory-seed'`.
-		expect(setResourcesCalls).toHaveLength(4);
-		for (const call of setResourcesCalls) {
-			expect(call.source).toBe('inventory-seed');
-			const resource = call.resource as {
-				status: number | null;
-				statusText: string | null;
-				contentType: string | null;
-				contentLength: number | null;
-				headers: unknown;
-			};
-			expect(resource.status).toBeNull();
-			expect(resource.statusText).toBeNull();
-			expect(resource.contentType).toBeNull();
-			expect(resource.contentLength).toBeNull();
-			expect(resource.headers).toBeNull();
-		}
+		// Exactly one bulk call carrying every non-HTML novel URL.
+		expect(insertInventoryResourcesCalls).toHaveLength(1);
+		expect(insertInventoryResourcesCalls[0]?.urls.toSorted()).toEqual([
+			'https://example.com/orphan-a.pdf',
+			'https://example.com/orphan-b.jpg',
+			'https://example.com/orphan-c.css',
+			'https://example.com/orphan-d.js',
+		]);
+		// Legacy per-URL path is NOT taken.
+		expect(vi.mocked(fakeArchive.setResources)).not.toHaveBeenCalled();
 
 		// Zero HEAD probes. The whole point of the new design is that
 		// the orchestrator does not pre-flight non-HTML URLs.
@@ -662,10 +641,7 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 
 		// Phase 1 audit log: the non-HTML-only success branch MUST
 		// still write one `inventory_runs` row with the correct
-		// aggregate counts. Pin the call shape so a future refactor
-		// that drops `#writeInventoryRunRow` from this branch surfaces
-		// here — without this assertion the mock provided above would
-		// silently absorb a missing call.
+		// aggregate counts.
 		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
 		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
 		const [meta] = recordInventoryRunMock.mock.calls[0]!;
@@ -676,17 +652,17 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 		expect(meta.list_label).toMatch(/^inventory-/);
 	});
 
-	it('preserves successful ingestion when the audit-log INSERT fails (swallows, never rolls back)', async () => {
-		// The audit-log row is non-essential — the ingestion has
-		// already committed by the time #writeInventoryRunRow runs.
-		// If `recordInventoryRun` throws (libsql hiccup, transient
-		// lock), the orchestrator MUST swallow the error and return
-		// normally rather than letting the outer catch restore from
-		// `.bak` and wipe the user's crawl. This test pins that
-		// failure-tolerance contract; without it a regression that
-		// removed the try/catch in #writeInventoryRunRow would
-		// silently turn audit failures into data-loss events.
-		const setResourcesCalls: { url: string }[] = [];
+	it('aborts the ingestion and re-throws when the audit-log INSERT fails (issue #121: no more swallow)', async () => {
+		// Issue #121 inverted the audit-failure contract. The old code
+		// wrote the audit row at the *tail* of a successful crawl and
+		// swallowed any failure, because re-throwing would have wiped
+		// the completed crawl via `.bak` restore. The new code lifts
+		// the audit row into the `.bak`-protected ingestion phase, so a
+		// failure here CAN restore safely — and SHOULD, to keep the
+		// "either the whole ingestion took or none of it did" atomicity
+		// at the boundary. This test pins the inversion so a regression
+		// that re-adds the swallow surfaces here as a missing throw.
+		const insertInventoryResourcesCalls: { urls: string[] }[] = [];
 		const fakeArchive = {
 			on: vi.fn(),
 			getConfig: vi.fn(() =>
@@ -715,12 +691,15 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
 			setUrlOrder: vi.fn(() => Promise.resolve()),
 			close: vi.fn(() => Promise.resolve()),
-			setResources: vi.fn((resource: { url: { href: string } }) => {
-				setResourcesCalls.push({ url: resource.url.href });
+			setResources: vi.fn(() => Promise.resolve()),
+			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventoryResources: vi.fn((urls: readonly { href: string }[]) => {
+				insertInventoryResourcesCalls.push({ urls: urls.map((u) => u.href) });
 				return Promise.resolve();
 			}),
 			addError: vi.fn(() => Promise.resolve()),
-			// The mock throws — simulating a libsql lock / disk error.
+			// The mock throws — simulating a libsql lock / disk error
+			// during the audit-row INSERT.
 			recordInventoryRun: vi.fn(() => Promise.reject(new Error('simulated libsql lock'))),
 		} as unknown as Archive;
 
@@ -733,24 +712,22 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 		await fs.writeFile(fixturePath, '');
 
 		try {
-			// MUST NOT throw — the orchestrator swallows the audit
-			// failure and returns the orchestrator instance normally.
+			// MUST throw — the orchestrator no longer swallows audit
+			// failures. The outer catch path restores `.bak` and
+			// re-throws the underlying libsql error.
 			await expect(
 				CrawlerOrchestrator.inventory(
 					'fixture.nitpicker',
 					['https://example.com/non-html.pdf'],
 					{ cwd: testCwd },
 				),
-			).resolves.toBeDefined();
+			).rejects.toThrow('simulated libsql lock');
 		} finally {
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		// The ingestion side-effect (`setResources`) was preserved
-		// despite the audit failure.
-		expect(setResourcesCalls).toHaveLength(1);
 		// recordInventoryRun WAS attempted — confirming the failure
-		// path actually ran.
+		// path actually ran (not a false positive on some earlier step).
 		expect(vi.mocked(fakeArchive.recordInventoryRun)).toHaveBeenCalledTimes(1);
 	});
 });
@@ -796,6 +773,8 @@ describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => 
 			setUrlOrder: vi.fn(() => Promise.resolve()),
 			close: vi.fn(() => Promise.resolve()),
 			setResources: vi.fn(() => Promise.resolve()),
+			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventoryResources: vi.fn(() => Promise.resolve()),
 			addError: vi.fn(() => Promise.resolve()),
 			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
 		} as unknown as Archive;
