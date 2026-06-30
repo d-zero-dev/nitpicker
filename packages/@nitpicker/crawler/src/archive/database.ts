@@ -1017,6 +1017,28 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		}));
 	}
 	/**
+	 * Records a crawler-level (`error` channel) failure into `crawl_errors`.
+	 *
+	 * Unlike {@link insertPageError} this is not tied to a scraped page: `url`
+	 * may be an external link that never became a page row, or `null` for a
+	 * process-level error. The cause is intentionally not stored — it is derived
+	 * on read so that older archives (which only have `error.log`) and freshly
+	 * captured rows classify identically.
+	 * @param url - The URL the error is about, or `null` for a process-level error.
+	 * @param message - The error message (one line is enough for classification).
+	 * @param isExternal - Whether the URL is external to the crawl scope.
+	 */
+	@ErrorEmitter()
+	@retry(retrySetting)
+	async insertCrawlError(url: string | null, message: string, isExternal = false) {
+		await this.#instance('crawl_errors').insert({
+			url,
+			isExternal: isExternal ? 1 : 0,
+			message,
+			createdAt: Date.now(),
+		});
+	}
+	/**
 	 * Pre-insert inventory non-HTML URLs into `resources` as placeholder rows
 	 * with `source = 'inventory-seed'` and all metadata columns NULL — the
 	 * non-HTML counterpart of {@link Database.insertInventorySeeds}. Used by
@@ -1115,28 +1137,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		});
 	}
 
-	/**
-	 * Records a crawler-level (`error` channel) failure into `crawl_errors`.
-	 *
-	 * Unlike {@link insertPageError} this is not tied to a scraped page: `url`
-	 * may be an external link that never became a page row, or `null` for a
-	 * process-level error. The cause is intentionally not stored — it is derived
-	 * on read so that older archives (which only have `error.log`) and freshly
-	 * captured rows classify identically.
-	 * @param url - The URL the error is about, or `null` for a process-level error.
-	 * @param message - The error message (one line is enough for classification).
-	 * @param isExternal - Whether the URL is external to the crawl scope.
-	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
-	async insertCrawlError(url: string | null, message: string, isExternal = false) {
-		await this.#instance('crawl_errors').insert({
-			url,
-			isExternal: isExternal ? 1 : 0,
-			message,
-			createdAt: Date.now(),
-		});
-	}
 	/**
 	 * Records a partial scrape failure against the page identified by `url`.
 	 *
