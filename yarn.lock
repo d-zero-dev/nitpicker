@@ -1867,12 +1867,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hono/node-server@npm:1.19.9, @hono/node-server@npm:^1.19.9":
-  version: 1.19.9
-  resolution: "@hono/node-server@npm:1.19.9"
+"@hono/node-server@npm:1.19.13":
+  version: 1.19.13
+  resolution: "@hono/node-server@npm:1.19.13"
   peerDependencies:
     hono: ^4
-  checksum: 10c0/de18c06b6b266dc45fe55fb82053bd1da8fe84939c49b6fbab4d2448b679d54ab5affbf8b15de9bead26f29b1755284d770aafb5ad14a8e4b3cfb4f79334554e
+  checksum: 10c0/e6a13a4831acd6ad2d80f20e9921b9a4207a3c18d78f457647ed102581bd5bbbd3464903b89544a88e5571e470badf105d9ef5c4657a7c2f47f5d0a7beafe51d
   languageName: node
   linkType: hard
 
@@ -1882,6 +1882,15 @@ __metadata:
   peerDependencies:
     hono: ^4
   checksum: 10c0/d3697679af17e755275390d8ac145cbedd97304c59fe9c53103249da4e93910a75a073e6330db37216338209c40b35778d07ce65f611f9125aed7151c0d69170
+  languageName: node
+  linkType: hard
+
+"@hono/node-server@npm:^1.19.9":
+  version: 1.19.9
+  resolution: "@hono/node-server@npm:1.19.9"
+  peerDependencies:
+    hono: ^4
+  checksum: 10c0/de18c06b6b266dc45fe55fb82053bd1da8fe84939c49b6fbab4d2448b679d54ab5affbf8b15de9bead26f29b1755284d770aafb5ad14a8e4b3cfb4f79334554e
   languageName: node
   linkType: hard
 
@@ -18670,7 +18679,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "test-server@workspace:packages/test-server"
   dependencies:
-    "@hono/node-server": "npm:1.19.9"
+    "@hono/node-server": "npm:1.19.13"
     "@nitpicker/analyze-main-contents": "npm:0.11.0"
     "@nitpicker/core": "npm:0.11.0"
     "@nitpicker/crawler": "npm:0.11.0"
