@@ -1,13 +1,125 @@
 {
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
 	"extends": ["config:recommended"],
-	"ignoreDeps": [
-		"@d-zero/cspell-config",
-		"@d-zero/eslint-config",
-		"@d-zero/lint-staged-config",
-		"@d-zero/prettier-config",
-		"@d-zero/textlint-config",
-		"@d-zero/tsconfig",
-		"@d-zero/commitlint-config"
+	"rangeStrategy": "pin",
+	"lockFileMaintenance": {
+		"enabled": true,
+		"automerge": true,
+		"schedule": ["before 6am on monday"]
+	},
+	"packageRules": [
+		{
+			"matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+			"automerge": true
+		},
+		{
+			"groupName": "puppeteer",
+			"matchPackageNames": ["puppeteer", "puppeteer-core", "/^@puppeteer\\//"]
+		},
+		{
+			"groupName": "react",
+			"matchPackageNames": [
+				"react",
+				"react-dom",
+				"react-router",
+				"@types/react",
+				"@types/react-dom"
+			]
+		},
+		{
+			"groupName": "hono",
+			"matchPackageNames": ["hono", "/^@hono\\//"]
+		},
+		{
+			"groupName": "tanstack",
+			"matchPackageNames": ["/^@tanstack\\//"]
+		},
+		{
+			"groupName": "textlint",
+			"matchPackageNames": [
+				"textlint",
+				"/^@textlint\\//",
+				"/^@textlint-ja\\//",
+				"/^textlint-rule-/",
+				"/^textlint-plugin-/"
+			]
+		},
+		{
+			"groupName": "testing-library",
+			"matchPackageNames": ["/^@testing-library\\//"]
+		},
+		{
+			"groupName": "eslint-plugins",
+			"matchPackageNames": ["/^eslint-plugin-/", "@types/eslint-plugin-jsx-a11y"]
+		},
+		{
+			"groupName": "jsdom",
+			"matchPackageNames": ["jsdom", "@types/jsdom"]
+		},
+		{
+			"groupName": "lighthouse",
+			"matchPackageNames": ["lighthouse", "chrome-launcher"]
+		},
+		{
+			"groupName": "vite",
+			"matchPackageNames": ["vite", "@vitejs/plugin-react"]
+		},
+		{
+			"groupName": "graphology",
+			"matchPackageNames": ["/^graphology/", "sigma"]
+		},
+		{
+			"groupName": "sqlite-stack",
+			"matchPackageNames": ["knex", "libsql"]
+		},
+		{
+			"groupName": "typescript",
+			"matchPackageNames": ["typescript", "@d-zero/tsconfig"]
+		},
+		{
+			"groupName": "@d-zero configs",
+			"matchPackageNames": [
+				"@d-zero/cspell-config",
+				"@d-zero/eslint-config",
+				"@d-zero/lint-staged-config",
+				"@d-zero/markuplint-config",
+				"@d-zero/prettier-config",
+				"@d-zero/stylelint-config",
+				"@d-zero/textlint-config"
+			]
+		},
+		{
+			"groupName": "@d-zero runtime",
+			"matchPackageNames": [
+				"@d-zero/beholder",
+				"@d-zero/dealer",
+				"@d-zero/fs",
+				"@d-zero/google-auth",
+				"@d-zero/google-sheets",
+				"@d-zero/readtext",
+				"@d-zero/roar",
+				"@d-zero/shared"
+			]
+		},
+		{
+			"groupName": "debug",
+			"matchPackageNames": ["debug", "@types/debug"]
+		},
+		{
+			"groupName": "fs-extra",
+			"matchPackageNames": ["fs-extra", "@types/fs-extra"]
+		},
+		{
+			"groupName": "tar",
+			"matchPackageNames": ["tar", "@types/tar"]
+		},
+		{
+			"groupName": "follow-redirects",
+			"matchPackageNames": ["follow-redirects", "@types/follow-redirects"]
+		},
+		{
+			"groupName": "turndown",
+			"matchPackageNames": ["turndown", "@types/turndown"]
+		}
 	]
 }
