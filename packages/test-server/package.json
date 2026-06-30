@@ -7,8 +7,8 @@
 	"private": true,
 	"type": "module",
 	"dependencies": {
-		"@hono/node-server": "1.19.9",
-		"hono": "4.12.2"
+		"@hono/node-server": "1.19.14",
+		"hono": "4.12.27"
 	},
 	"devDependencies": {
 		"@nitpicker/analyze-main-contents": "0.11.0",
@@ -17,7 +17,7 @@
 		"@nitpicker/query": "0.11.0",
 		"@nitpicker/types": "0.11.0",
 		"await-event-emitter": "2.0.2",
-		"knex": "3.1.0",
-		"vitest": "4.0.18"
+		"knex": "3.2.10",
+		"vitest": "4.1.9"
 	}
 }
