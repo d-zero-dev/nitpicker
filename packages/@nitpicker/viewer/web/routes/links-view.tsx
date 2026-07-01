@@ -5,15 +5,20 @@ import { useEffect, useMemo } from 'react';
 
 import { useLinksInfinite } from '../api/use-links-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
+import {
+	addRadioFilter,
+	addSort,
+	addTextFilter,
+	createTableControls,
+} from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
-import { FilterBar } from '../components/filter-bar.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 /** Valid link types for the selector. */
-const LINK_TYPES: LinkType[] = ['broken', 'external'];
+const LINK_TYPES = new Set<LinkType>(['broken', 'external']);
 
 /**
  * Reads a string property from a link row.
@@ -38,12 +43,11 @@ function field(row: LinkRow, key: string): string {
  * @returns The links view element.
  */
 export function LinksView() {
-	const { params, update } = useUrlFilter();
+	const { params, update, updateMany } = useUrlFilter();
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const rawType = params.get('type') as LinkType | null;
-	const type: LinkType =
-		rawType !== null && LINK_TYPES.includes(rawType) ? rawType : 'broken';
+	const type: LinkType = rawType !== null && LINK_TYPES.has(rawType) ? rawType : 'broken';
 
 	// If the URL was visited with a now-removed `type` (e.g. a bookmarked
 	// `?type=orphaned` from before the retirement of that filter), surface
@@ -53,7 +57,7 @@ export function LinksView() {
 	// confuses sharing/handoff. `replace: true` keeps the back button from
 	// returning the user to the just-corrected invalid URL.
 	useEffect(() => {
-		if (rawType !== null && !LINK_TYPES.includes(rawType)) {
+		if (rawType !== null && !LINK_TYPES.has(rawType)) {
 			update('type', type, { replace: true });
 		}
 	}, [rawType, type, update]);
@@ -61,8 +65,15 @@ export function LinksView() {
 	const offset = (currentPage - 1) * pageSize;
 	const paged = usePagedQuery<LinkRow>(
 		'/api/links',
-		{ type, limit: pageSize, offset },
-		['links-paged', type, pageSize, currentPage],
+		{
+			type,
+			urlPattern: params.get('urlPattern') ?? undefined,
+			sortBy: params.get('sortBy') ?? undefined,
+			sortOrder: params.get('sortOrder') ?? undefined,
+			limit: pageSize,
+			offset,
+		},
+		['links-paged', type, params.toString(), pageSize, currentPage],
 		{ enabled: mode === 'mpa' },
 	);
 	const infinite = useLinksInfinite(type, { enabled: mode === 'virtual' });
@@ -74,6 +85,12 @@ export function LinksView() {
 
 	const columns = useMemo<ColumnDef<LinkRow>[]>(
 		() => [
+			{
+				id: 'type',
+				header: t('common.type'),
+				size: 110,
+				accessorFn: () => t(`views.links.${type}`),
+			},
 			{
 				id: 'sourceUrl',
 				header: t('views.links.colSource'),
@@ -93,26 +110,46 @@ export function LinksView() {
 				accessorFn: (r) => field(r, 'status') || '—',
 			},
 		],
-		[t],
+		[t, type],
 	);
+	const columnControls = useMemo(() => {
+		const context = { params, updateMany };
+		const controls = createTableControls(context);
+		for (const key of ['sourceUrl', 'destUrl', 'status']) {
+			addSort(controls, context, key, key);
+		}
+		addRadioFilter(
+			controls,
+			context,
+			'type',
+			'type',
+			t('common.type'),
+			[
+				{ value: 'broken', label: t('views.links.broken'), checked: false },
+				{ value: 'external', label: t('views.links.external'), checked: false },
+			],
+			'broken',
+		);
+		addTextFilter(
+			controls,
+			context,
+			'sourceUrl',
+			'urlPattern',
+			t('views.pages.filterUrlPattern'),
+		);
+		addTextFilter(
+			controls,
+			context,
+			'destUrl',
+			'urlPattern',
+			t('views.pages.filterUrlPattern'),
+		);
+		return controls;
+	}, [params, t, updateMany]);
 
 	return (
 		<div className="view">
 			<ViewHeader titleKey="views.links.title" descriptionKey="views.links.description" />
-			<FilterBar>
-				<select
-					aria-label={t('common.type')}
-					value={type}
-					onChange={(e) => {
-						update('type', e.target.value);
-					}}>
-					{LINK_TYPES.map((linkType) => (
-						<option key={linkType} value={linkType}>
-							{t(`views.links.${linkType}`)}
-						</option>
-					))}
-				</select>
-			</FilterBar>
 			{mode === 'mpa' ? (
 				<DataTable
 					mode="mpa"
@@ -127,6 +164,7 @@ export function LinksView() {
 					isLoading={paged.isLoading}
 					isError={paged.isError}
 					error={paged.error}
+					columnControls={columnControls}
 				/>
 			) : (
 				<DataTable

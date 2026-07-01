@@ -5,6 +5,7 @@ import type {
 } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { applyListOrder } from './apply-list-order.js';
 import { paginateQuery } from './paginate-query.js';
 
 /**
@@ -53,6 +54,26 @@ export async function listPageLinks(
 	if (options.urlPattern) {
 		baseQuery.where('url', 'like', options.urlPattern);
 	}
+	if (options.contentType) {
+		baseQuery.where('contentType', 'like', `${options.contentType}%`);
+	}
+	if (options.hasResponseHeaders != null) {
+		if (options.hasResponseHeaders) {
+			baseQuery
+				.whereNotNull('responseHeaders')
+				.whereNot('responseHeaders', '')
+				.whereNot('responseHeaders', '{}');
+		} else {
+			baseQuery.where((qb) => {
+				qb.whereNull('responseHeaders')
+					.orWhere('responseHeaders', '')
+					.orWhere('responseHeaders', '{}');
+			});
+		}
+	}
+	const sortBy = options.sortBy ?? 'url';
+	const sortOrder = options.sortOrder ?? 'asc';
+	const useUrlSort = options.sortBy != null;
 
 	return paginateQuery<
 		{
@@ -62,6 +83,7 @@ export async function listPageLinks(
 			status: number | null;
 			statusText: string | null;
 			contentType: string | null;
+			isExternal: 0 | 1;
 			responseHeaders: string | null;
 			isSkipped: 0 | 1;
 			skipReason: string | null;
@@ -80,6 +102,7 @@ export async function listPageLinks(
 				'status',
 				'statusText',
 				'contentType',
+				'isExternal',
 				'responseHeaders',
 				'isSkipped',
 				'skipReason',
@@ -97,7 +120,19 @@ export async function listPageLinks(
 					),
 				);
 			}
-			return q.select(...(selects as Parameters<typeof q.select>)).orderBy('url');
+			q.select(...(selects as Parameters<typeof q.select>));
+			return applyListOrder(q, knex, sortBy, sortOrder, {
+				url: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
+				title: { column: '"pages"."title"' },
+				status: { column: '"pages"."status"' },
+				statusText: { column: '"pages"."statusText"' },
+				contentType: { column: '"pages"."contentType"' },
+				redirectFromCount: { column: '"redirectFromCount"' },
+				referrerCount: { column: '"referrerCount"' },
+				hasResponseHeaders: { column: '"pages"."responseHeaders"' },
+				skipReason: { column: '"pages"."skipReason"' },
+				isExternal: { column: '"pages"."isExternal"' },
+			});
 		},
 		limit,
 		offset,
@@ -107,6 +142,7 @@ export async function listPageLinks(
 			status: row.status,
 			statusText: row.statusText,
 			contentType: row.contentType,
+			isExternal: !!row.isExternal,
 			redirectFromCount: Number(row.redirectFromCount),
 			referrerCount:
 				precomputedReferrerCounts === undefined

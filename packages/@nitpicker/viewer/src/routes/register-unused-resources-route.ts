@@ -16,6 +16,21 @@ export function registerUnusedResourcesRoute(app: Hono, context: ArchiveContext)
 	app.get('/api/unused-resources', async (c) => {
 		const accessor = context.manager.get(context.archiveId);
 		const result = await listUnusedResources(accessor, {
+			urlPattern: c.req.query('urlPattern'),
+			contentType: c.req.query('contentType'),
+			source: c.req.query('source') as
+				| 'crawled'
+				| 'inventory-seed'
+				| 'inventory-discovered'
+				| undefined,
+			sortBy: c.req.query('sortBy') as
+				| 'url'
+				| 'status'
+				| 'contentType'
+				| 'contentLength'
+				| 'source'
+				| undefined,
+			sortOrder: c.req.query('sortOrder') as 'asc' | 'desc' | undefined,
 			limit: toNumber(c.req.query('limit')),
 			offset: toNumber(c.req.query('offset')),
 		});

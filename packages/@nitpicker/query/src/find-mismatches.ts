@@ -1,5 +1,16 @@
 import type { MismatchEntry } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { Knex } from 'knex';
+
+import { applyListOrder } from './apply-list-order.js';
+
+export interface FindMismatchesOptions {
+	limit?: number;
+	offset?: number;
+	urlPattern?: string;
+	sortBy?: 'url' | 'actual' | 'expected';
+	sortOrder?: 'asc' | 'desc';
+}
 
 /**
  * Finds metadata mismatches in the archive: canonical URL != page URL,
@@ -14,46 +25,93 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 export async function findMismatches(
 	accessor: ArchiveAccessor,
 	type: 'canonical' | 'og:title' | 'og:description',
-	limit: number = 100,
-	offset: number = 0,
-): Promise<MismatchEntry[]> {
+	limit?: number,
+	offset?: number,
+): Promise<MismatchEntry[]>;
+export async function findMismatches(
+	accessor: ArchiveAccessor,
+	type: 'canonical' | 'og:title' | 'og:description',
+	options: FindMismatchesOptions,
+): Promise<{ items: MismatchEntry[]; total: number; limit: number; offset: number }>;
+export async function findMismatches(
+	accessor: ArchiveAccessor,
+	type: 'canonical' | 'og:title' | 'og:description',
+	optionsOrLimit?: FindMismatchesOptions | number,
+	offsetArgument = 0,
+): Promise<
+	| MismatchEntry[]
+	| { items: MismatchEntry[]; total: number; limit: number; offset: number }
+> {
 	const knex = accessor.getKnex();
+	const pagedMode = typeof optionsOrLimit === 'object';
+	const options = pagedMode ? optionsOrLimit : {};
+	const limit = pagedMode ? (options.limit ?? 100) : (optionsOrLimit ?? 100);
+	const offset = pagedMode ? (options.offset ?? 0) : offsetArgument;
+	const sortBy = options.sortBy ?? 'url';
+	const sortOrder = options.sortOrder ?? 'asc';
+	const useUrlSort = options.sortBy != null;
 
 	const baseQuery = knex('pages')
 		.where({ scraped: 1, isExternal: 0, contentType: 'text/html' })
 		.whereNull('redirectDestId');
+	if (options.urlPattern) {
+		baseQuery.where('url', 'like', options.urlPattern);
+	}
 
 	switch (type) {
 		case 'canonical': {
-			const rows = await baseQuery
+			const query = baseQuery
 				.clone()
-				.select('url', 'canonical')
 				.whereNotNull('canonical')
 				.whereNot('canonical', '')
-				.whereRaw('canonical != url')
+				.whereRaw('canonical != url');
+			const total = await count(query, 'id');
+			const rows = await applyListOrder(
+				query.select('url', 'canonical'),
+				knex,
+				sortBy,
+				sortOrder,
+				{
+					url: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
+					actual: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
+					expected: { column: '"pages"."canonical"', type: 'url' },
+				},
+			)
 				.limit(limit)
 				.offset(offset);
 
-			return rows.map((row: { url: string; canonical: string | null }) => ({
+			const items = rows.map((row: { url: string; canonical: string | null }) => ({
 				url: row.url,
 				type: 'canonical' as const,
 				actual: row.url,
 				expected: row.canonical,
 			}));
+			return pagedMode ? { items, total, limit, offset } : items;
 		}
 		case 'og:title': {
-			const rows = await baseQuery
+			const query = baseQuery
 				.clone()
-				.select('url', 'title', 'og_title')
 				.whereNotNull('og_title')
 				.whereNot('og_title', '')
 				.whereNotNull('title')
 				.whereNot('title', '')
-				.whereRaw('og_title != title')
+				.whereRaw('og_title != title');
+			const total = await count(query, 'id');
+			const rows = await applyListOrder(
+				query.select('url', 'title', 'og_title'),
+				knex,
+				sortBy,
+				sortOrder,
+				{
+					url: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
+					actual: { column: '"pages"."og_title"' },
+					expected: { column: '"pages"."title"' },
+				},
+			)
 				.limit(limit)
 				.offset(offset);
 
-			return rows.map(
+			const items = rows.map(
 				(row: { url: string; title: string | null; og_title: string | null }) => ({
 					url: row.url,
 					type: 'og:title' as const,
@@ -61,20 +119,32 @@ export async function findMismatches(
 					expected: row.title,
 				}),
 			);
+			return pagedMode ? { items, total, limit, offset } : items;
 		}
 		case 'og:description': {
-			const rows = await baseQuery
+			const query = baseQuery
 				.clone()
-				.select('url', 'description', 'og_description')
 				.whereNotNull('og_description')
 				.whereNot('og_description', '')
 				.whereNotNull('description')
 				.whereNot('description', '')
-				.whereRaw('og_description != description')
+				.whereRaw('og_description != description');
+			const total = await count(query, 'id');
+			const rows = await applyListOrder(
+				query.select('url', 'description', 'og_description'),
+				knex,
+				sortBy,
+				sortOrder,
+				{
+					url: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
+					actual: { column: '"pages"."og_description"' },
+					expected: { column: '"pages"."description"' },
+				},
+			)
 				.limit(limit)
 				.offset(offset);
 
-			return rows.map(
+			const items = rows.map(
 				(row: {
 					url: string;
 					description: string | null;
@@ -86,6 +156,19 @@ export async function findMismatches(
 					expected: row.description,
 				}),
 			);
+			return pagedMode ? { items, total, limit, offset } : items;
 		}
 	}
+}
+
+/**
+ * Counts the same filtered mismatch query without carrying selected columns.
+ * @param query - Filtered mismatch query.
+ * @param column - Primary key column to count.
+ */
+async function count(query: Knex.QueryBuilder, column: string) {
+	const result = (await query.clone().clearSelect().count(`${column} as total`)) as {
+		total: number;
+	}[];
+	return Number(result[0]?.total ?? 0);
 }

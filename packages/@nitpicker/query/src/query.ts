@@ -41,4 +41,5 @@ export { listPagesByJsonLdType } from './list-pages-by-jsonld-type.js';
 export { listPagesByTag } from './list-pages-by-tag.js';
 export { listResources } from './list-resources.js';
 export { listUnusedResources } from './list-unused-resources.js';
+export { prepareUrlSortTempTable } from './url-sort-temp-table.js';
 export * from './types.js';

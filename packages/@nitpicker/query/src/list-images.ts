@@ -1,6 +1,7 @@
 import type { ImageEntry, ListImagesOptions, PaginatedImageList } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { applyListOrder } from './apply-list-order.js';
 import { paginateQuery } from './paginate-query.js';
 
 /**
@@ -43,6 +44,9 @@ export async function listImages(
 	if (options.urlPattern) {
 		baseQuery.where('images.src', 'like', options.urlPattern);
 	}
+	const sortBy = options.sortBy ?? 'pageUrl';
+	const sortOrder = options.sortOrder ?? 'asc';
+	const useUrlSort = options.sortBy != null;
 
 	return paginateQuery<
 		{
@@ -59,19 +63,28 @@ export async function listImages(
 	>({
 		baseQuery,
 		countColumn: 'images.id',
-		applySelect: (q) =>
-			q
-				.select(
-					'pages.url as pageUrl',
-					'images.src',
-					'images.alt',
-					'images.width',
-					'images.height',
-					'images.naturalWidth',
-					'images.naturalHeight',
-					'images.isLazy',
-				)
-				.orderBy('pages.url'),
+		applySelect: (q) => {
+			q.select(
+				'pages.url as pageUrl',
+				'images.src',
+				'images.alt',
+				'images.width',
+				'images.height',
+				'images.naturalWidth',
+				'images.naturalHeight',
+				'images.isLazy',
+			);
+			return applyListOrder(q, knex, sortBy, sortOrder, {
+				pageUrl: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
+				src: { column: '"images"."src"', type: 'url' },
+				alt: { column: '"images"."alt"' },
+				width: { column: '"images"."width"' },
+				height: { column: '"images"."height"' },
+				naturalWidth: { column: '"images"."naturalWidth"' },
+				naturalHeight: { column: '"images"."naturalHeight"' },
+				isLazy: { column: '"images"."isLazy"' },
+			});
+		},
 		limit,
 		offset,
 		mapRow: (row) => ({

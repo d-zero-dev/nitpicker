@@ -17,8 +17,11 @@ export function registerResourcesRoute(app: Hono, context: ArchiveContext): void
 		const q = c.req.query();
 		const accessor = context.manager.get(context.archiveId);
 		const options: ListResourcesOptions = {
+			urlPattern: q.urlPattern,
 			contentType: q.contentType,
 			isExternal: toBoolean(q.isExternal),
+			sortBy: q.sortBy as ListResourcesOptions['sortBy'],
+			sortOrder: q.sortOrder as ListResourcesOptions['sortOrder'],
 			limit: toNumber(q.limit),
 			offset: toNumber(q.offset),
 		};

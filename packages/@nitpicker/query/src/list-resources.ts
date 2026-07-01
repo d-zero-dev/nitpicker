@@ -5,6 +5,7 @@ import type {
 } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { applyListOrder } from './apply-list-order.js';
 import { paginateQuery } from './paginate-query.js';
 
 /**
@@ -29,12 +30,18 @@ export async function listResources(
 
 	const baseQuery = knex('resources');
 
+	if (options.urlPattern) {
+		baseQuery.where('url', 'like', options.urlPattern);
+	}
 	if (options.contentType) {
 		baseQuery.where('contentType', 'like', `${options.contentType}%`);
 	}
 	if (options.isExternal != null) {
 		baseQuery.where('isExternal', options.isExternal ? 1 : 0);
 	}
+	const sortBy = options.sortBy ?? 'url';
+	const sortOrder = options.sortOrder ?? 'asc';
+	const useUrlSort = options.sortBy != null;
 
 	return paginateQuery<
 		{
@@ -52,22 +59,32 @@ export async function listResources(
 	>({
 		baseQuery,
 		countColumn: 'id',
-		applySelect: (q) =>
-			q
-				.select(
-					'url',
-					'status',
-					'statusText',
-					'contentType',
-					'contentLength',
-					'isExternal',
-					'compress',
-					'cdn',
-					knex.raw(
-						'(select count(*) from "resources-referrers" where "resources-referrers"."resourceId" = "resources"."id") as referrerCount',
-					),
-				)
-				.orderBy('url'),
+		applySelect: (q) => {
+			q.select(
+				'url',
+				'status',
+				'statusText',
+				'contentType',
+				'contentLength',
+				'isExternal',
+				'compress',
+				'cdn',
+				knex.raw(
+					'(select count(*) from "resources-referrers" where "resources-referrers"."resourceId" = "resources"."id") as referrerCount',
+				),
+			);
+			return applyListOrder(q, knex, sortBy, sortOrder, {
+				url: { column: '"resources"."url"', type: useUrlSort ? 'url' : 'plain' },
+				status: { column: '"resources"."status"' },
+				statusText: { column: '"resources"."statusText"' },
+				contentType: { column: '"resources"."contentType"' },
+				contentLength: { column: '"resources"."contentLength"' },
+				isExternal: { column: '"resources"."isExternal"' },
+				referrerCount: { column: '"referrerCount"' },
+				compress: { column: '"resources"."compress"' },
+				cdn: { column: '"resources"."cdn"' },
+			});
+		},
 		limit,
 		offset,
 		mapRow: (row) => ({

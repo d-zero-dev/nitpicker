@@ -1,4 +1,5 @@
 import type { PageSize } from '../types.js';
+import type { TableColumnControls } from './paged-table.js';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { PagedTable } from './paged-table.js';
@@ -31,6 +32,8 @@ export interface DataTableMpaProps<T> extends DataTableBaseProps<T> {
 	mode: 'mpa';
 	/** The rows on the currently selected page. */
 	data: T[];
+	/** Optional sort/filter controls for paged table headers. */
+	columnControls?: TableColumnControls;
 	/** Current 1-indexed page (read from `?page=`). */
 	currentPage: number;
 	/** Rows per page (from the user's `usePageSize` preference). */
@@ -86,6 +89,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
 				<PagedTable
 					data={props.data}
 					columns={props.columns}
+					columnControls={props.columnControls}
 					total={props.total}
 					currentPage={props.currentPage}
 					pageSize={props.pageSize}
