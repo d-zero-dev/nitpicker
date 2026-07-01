@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.12.0](https://github.com/d-zero-dev/nitpicker/compare/v0.11.0...v0.12.0) (2026-07-01)
+
+### Features
+
+- **mcp-server:** list_isolated_clusters / get_isolated_cluster + redirect-resolved list_links ([b89a577](https://github.com/d-zero-dev/nitpicker/commit/b89a5779837f19125f36fda683e502f6655c623b))
+
 # [0.11.0](https://github.com/d-zero-dev/nitpicker/compare/v0.9.0...v0.11.0) (2026-06-18)
 
 ### Features
