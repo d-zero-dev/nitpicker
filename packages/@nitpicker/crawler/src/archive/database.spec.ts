@@ -4720,3 +4720,32 @@ describe('Database read-only mode', () => {
 		}
 	});
 });
+
+describe("Database.emit('error')", () => {
+	// Guards the decorator-to-HOF migration: the deleted `@ErrorEmitter()`
+	// decorator was invoked at Database method entry — the new
+	// `emitError` / `emitErrorAndRetry` HOFs must preserve that contract so
+	// downstream `error` listeners (crawler orchestrator abort path) keep
+	// firing on real Errors.
+	it("emits an 'error' event with the caught Error and re-throws when a wrapped method fails", async () => {
+		const dbPath = path.resolve(workingDir, 'emit-error-integration.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Close the connection so subsequent SQL fails deterministically
+			// (knex reports "Unable to acquire a connection"). `getExistingPageUrls`
+			// is a Pattern-B (no-retry) method, so the throw propagates immediately
+			// without incurring the retry back-off.
+			await db.destroy();
+			const seen: unknown[] = [];
+			db.on('error', (error) => {
+				seen.push(error);
+			});
+			await expect(db.getExistingPageUrls()).rejects.toBeInstanceOf(Error);
+			expect(seen).toHaveLength(1);
+			expect(seen[0]).toBeInstanceOf(Error);
+		} finally {
+			await removeIfExists(dbPath);
+		}
+	});
+});

@@ -125,7 +125,7 @@ crawler/src/
 │   ├── types/                  # ExURL, PageData, Link, CrawlerError 等
 │   ├── array/                  # eachSplitted
 │   ├── object/                 # cleanObject
-│   └── error/                  # DOMEvaluationError, ErrorEmitter
+│   └── error/                  # DOMEvaluationError, emitError / emitErrorAndRetry (HOF)
 ├── archive/                    # SQLite アーカイブストレージ
 │   ├── filesystem/             # 1関数1ファイル（16ファイル）+ tar, untar
 │   ├── archive-lock.ts         # tmpDir 単位の advisory lock（mkdir + pid.txt + stale 検出）
@@ -395,8 +395,8 @@ PageData を合成する。
 - **非 HTML 限定の理由**: HTML はアンカー抽出のため Puppeteer レンダリングが必須。
   MIME タイプ比較は `isHtmlContentType()`（大文字小文字非依存）で行う —
   Puppeteer 由来の値はサーバーの大文字小文字をそのまま保持するため
-- **lookup 失敗は HEAD にフォールバック**: `getResourceByUrl` は意図的に `@ErrorEmitter` を
-  付けない（DB `error` イベント → orchestrator の abort listener はクロール全体を中断するため）。
+- **lookup 失敗は HEAD にフォールバック**: `getResourceByUrl` は意図的に `emitError` を
+  付けず `retryCall` 直呼びのみ（DB `error` イベント → orchestrator の abort listener はクロール全体を中断するため）。
   crawler 側フックも try/catch で握り、読み取り失敗は「最適化なし」と同じ挙動に縮退する
 - **注入はコンストラクタ DI**: `CrawlerOptions.lookupResource` として `new Crawler()` 時に
   渡す（セッターの呼び順依存を排除）。`null` なら最適化は無効
