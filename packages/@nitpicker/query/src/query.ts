@@ -8,6 +8,7 @@
 
 export { ArchiveManager } from './archive-manager.js';
 export type { OpenResult } from './archive-manager.js';
+export { buildViewerReadModel } from './viewer-read-model/build-viewer-read-model.js';
 export { checkHeaders } from './check-headers.js';
 export { classifyErrorKind } from '@nitpicker/crawler';
 export { computeIsolatedClusters } from './compute-isolated-clusters.js';
@@ -16,6 +17,8 @@ export { CONTENT_TYPE_RULES } from './content-type-rules.js';
 export type { ContentTypeRule, MimeMatcher } from './content-type-rules.js';
 export { countPagesByJsonLdType } from './count-pages-by-jsonld-type.js';
 export { countPagesByTag } from './count-pages-by-tag.js';
+export { dropViewerReadModel } from './viewer-read-model/drop-viewer-read-model.js';
+export { ensureViewerReadModel } from './viewer-read-model/ensure-viewer-read-model.js';
 export { findDuplicates } from './find-duplicates.js';
 export { findMismatches } from './find-mismatches.js';
 export { getErrorKinds } from './get-error-kinds.js';
@@ -29,7 +32,9 @@ export { getResourceReferrers } from './get-resource-referrers.js';
 export { getSummary } from './get-summary.js';
 export { getTagInventory } from './get-tag-inventory.js';
 export { getIsolatedCluster } from './get-isolated-cluster.js';
+export { getViewerReadModelVersion } from './viewer-read-model/get-viewer-read-model-version.js';
 export { getViolations } from './get-violations.js';
+export { hasViewerReadModel } from './viewer-read-model/has-viewer-read-model.js';
 export { listImages } from './list-images.js';
 export { listInventoryRuns } from './list-inventory-runs.js';
 export { listIsolatedClusters } from './list-isolated-clusters.js';
