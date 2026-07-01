@@ -160,6 +160,9 @@
 
 		// Test fixtures (people)
 		"Yusuke",
-		"Hirao"
+		"Hirao",
+
+		// Claude Code effort levels (referenced in commit messages / CHANGELOG)
+		"xhigh"
 	]
 }
