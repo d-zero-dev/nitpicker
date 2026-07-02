@@ -8,6 +8,7 @@ import { computeFileSha256, CrawlerOrchestrator } from '@nitpicker/crawler';
 
 import { log, verbosely } from '../crawl/debug.js';
 import { diff } from '../crawl/diff.js';
+import { ensureViewerReadModelQuietly } from '../crawl/ensure-viewer-read-model-quietly.js';
 import { eventAssignments } from '../crawl/event-assignments.js';
 import { mapFlagsToCrawlConfig } from '../crawl/map-flags-to-crawl-config.js';
 import { ExitCode } from '../exit-code.js';
@@ -227,6 +228,7 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 	);
 
 	try {
+		await ensureViewerReadModelQuietly(orchestrator.archive);
 		await orchestrator.write();
 	} finally {
 		await orchestrator.archive.close();
@@ -277,6 +279,7 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 	);
 
 	try {
+		await ensureViewerReadModelQuietly(orchestrator.archive);
 		await orchestrator.write();
 	} finally {
 		await orchestrator.archive.close();
@@ -326,6 +329,7 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
 	);
 
 	try {
+		await ensureViewerReadModelQuietly(orchestrator.archive);
 		await orchestrator.write();
 	} finally {
 		await orchestrator.archive.close();
@@ -384,6 +388,7 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 	);
 
 	try {
+		await ensureViewerReadModelQuietly(orchestrator.archive);
 		await orchestrator.write();
 	} finally {
 		await orchestrator.archive.close();
@@ -431,6 +436,7 @@ async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
 	);
 
 	try {
+		await ensureViewerReadModelQuietly(orchestrator.archive);
 		await orchestrator.write();
 	} finally {
 		await orchestrator.archive.close();
