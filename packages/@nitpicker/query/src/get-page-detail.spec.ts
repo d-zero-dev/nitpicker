@@ -119,6 +119,20 @@ describe('getPageDetail', () => {
 		expect(result!.ogTitle).toBe('Home OG');
 		expect(result!.twitterCard).toBe('summary');
 		expect(result!.status).toBe(200);
+		expect(result!.isSkipped).toBe(false);
+		expect(result!.skipReason).toBeNull();
+	});
+
+	it('除外 (isSkipped) されたページは skipReason を返す', async () => {
+		// The only remaining way to discover *why* a URL was excluded from
+		// crawling (robots.txt / excludeUrls / excludeKeywords) after the
+		// Page Links view (which used to show a Remarks column for every
+		// page regardless of `scraped`) was removed.
+		await archive.setSkippedPage('https://example.com/excluded', 'excluded', false);
+		const result = await getPageDetail(archive, 'https://example.com/excluded');
+		expect(result).not.toBeNull();
+		expect(result!.isSkipped).toBe(true);
+		expect(result!.skipReason).toBe('excluded');
 	});
 
 	it('レスポンスヘッダーをパースして返す', async () => {

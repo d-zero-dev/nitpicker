@@ -24,6 +24,10 @@
 		"./categories": {
 			"import": "./lib/categories.js",
 			"types": "./lib/categories.d.ts"
+		},
+		"./header-presence": {
+			"import": "./lib/header-presence.js",
+			"types": "./lib/header-presence.d.ts"
 		}
 	},
 	"scripts": {

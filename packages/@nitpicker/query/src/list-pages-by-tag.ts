@@ -1,6 +1,7 @@
 import type { ListPagesByTagOptions, PageListItem, PageListRow } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
 import { mapPageRowToListItem, PAGE_LIST_COLUMNS } from './map-page-row-to-list-item.js';
 
 /**
@@ -28,7 +29,7 @@ export async function listPagesByTag(
 	const offset = options.offset ?? 0;
 	const columns = PAGE_LIST_COLUMNS.map((c) => `pages.${c}`);
 	let q = knex('pages')
-		.distinct(...columns, 'pages.id')
+		.distinct(...columns, 'pages.id', ...buildHeaderPresenceSelects(knex))
 		.join('page_tags', 'page_tags.pageId', '=', 'pages.id')
 		.where('page_tags.provider', options.provider)
 		.where('pages.scraped', 1)

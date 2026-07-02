@@ -4,8 +4,18 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import { applyListOrder } from './apply-list-order.js';
 
 /**
- * Analyse links in the archive: **broken** (4xx/5xx or no status) or
- * **external** (anchors leaving the in-scope hostname).
+ * Analyse links in the archive: **broken** (canonical destination resolved
+ * to HTTP 404 Not Found) or **external** (anchors leaving the in-scope
+ * hostname).
+ *
+ * `broken` is deliberately narrow. 403 Forbidden means the resource exists
+ * but access is denied (bot blocking, auth-gated) — not a broken link, so
+ * it is excluded. 5xx and the `status = -1` hard-failure sentinel are also
+ * excluded: they are transient/infra concerns tracked separately (Errors
+ * view / `--retry-failed`), not "this link goes nowhere". A destination
+ * that was never fetched — genuinely unattempted, or `isSkipped` via
+ * robots.txt / `excludeUrls` — has `status IS NULL`, which never satisfies
+ * `= 404`, so excluded destinations are never misreported as broken links.
  *
  * Anchor destinations are resolved through `pages.redirectDestId` to their
  * canonical final destination before broken / external judgment. The
@@ -94,9 +104,10 @@ export async function listLinks(
 	if (options.type === 'broken') {
 		// `status` here is the COALESCE-ed expression — broken judgment runs
 		// against the canonical destination's status, not the 301 intermediate's.
+		// Strictly `= 404`: see the broken-link scope note in the function JSDoc.
 		const brokenCondition = includeRedirectSources
-			? `"dest"."status" >= 400 OR "dest"."status" IS NULL`
-			: `COALESCE("canonical"."status", "dest"."status") >= 400 OR COALESCE("canonical"."status", "dest"."status") IS NULL`;
+			? `"dest"."status" = 404`
+			: `COALESCE("canonical"."status", "dest"."status") = 404`;
 		baseQuery.whereRaw(brokenCondition);
 	} else {
 		const externalCondition = includeRedirectSources

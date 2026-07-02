@@ -1,13 +1,15 @@
-import type { HeaderCheckEntry, PaginatedHeaderCheckList } from './types.js';
+import type {
+	HeaderCheckEntry,
+	HeaderPresence,
+	PaginatedHeaderCheckList,
+} from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { applyListOrder } from './apply-list-order.js';
+import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
+import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presence-sql.js';
 
-type HeaderPresenceKey =
-	| 'hasCSP'
-	| 'hasXFrameOptions'
-	| 'hasXContentTypeOptions'
-	| 'hasHSTS';
+type HeaderPresenceKey = keyof HeaderPresence;
 
 type CheckHeadersOptions = {
 	limit?: number;
@@ -20,21 +22,6 @@ type CheckHeadersOptions = {
 	sortBy?: 'url' | HeaderPresenceKey;
 	sortOrder?: 'asc' | 'desc';
 };
-
-const HEADER_PATTERNS: Record<HeaderPresenceKey, string> = {
-	hasCSP: '%content-security-policy%',
-	hasXFrameOptions: '%x-frame-options%',
-	hasXContentTypeOptions: '%x-content-type-options%',
-	hasHSTS: '%strict-transport-security%',
-};
-
-/**
- * Builds the SQL boolean expression used for paging before JSON parsing.
- * @param key - Header presence field to evaluate.
- */
-function headerPresenceExpression(key: HeaderPresenceKey): string {
-	return `case when lower(coalesce("pages"."responseHeaders", '')) like '${HEADER_PATTERNS[key]}' then 1 else 0 end`;
-}
 
 /**
  * Checks security-related HTTP response headers for internal pages.
@@ -64,12 +51,12 @@ export async function checkHeaders(
 
 	if (options.missingOnly) {
 		baseQuery.where((qb) => {
-			for (const key of Object.keys(HEADER_PATTERNS) as HeaderPresenceKey[]) {
+			for (const key of HEADER_PRESENCE_KEYS) {
 				qb.orWhereRaw(`${headerPresenceExpression(key)} = 0`);
 			}
 		});
 	}
-	for (const key of Object.keys(HEADER_PATTERNS) as HeaderPresenceKey[]) {
+	for (const key of HEADER_PRESENCE_KEYS) {
 		const expected = options[key];
 		if (expected != null) {
 			baseQuery.whereRaw(`${headerPresenceExpression(key)} = ?`, [expected ? 1 : 0]);
@@ -82,7 +69,7 @@ export async function checkHeaders(
 	// SQL count() always returns exactly one row
 	const totalCount = countResult[0]?.total ?? 0;
 
-	const dataQuery = baseQuery.clone().select('url', 'responseHeaders');
+	const dataQuery = baseQuery.clone().select('url', ...buildHeaderPresenceSelects(knex));
 	applyListOrder(dataQuery, knex, sortBy, sortOrder, {
 		url: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
 		hasCSP: { column: headerPresenceExpression('hasCSP') },
@@ -92,34 +79,18 @@ export async function checkHeaders(
 		},
 		hasHSTS: { column: headerPresenceExpression('hasHSTS') },
 	});
-	const rows = await dataQuery.limit(limit).offset(offset);
+	const rows = (await dataQuery.limit(limit).offset(offset)) as (Record<
+		HeaderPresenceKey,
+		0 | 1
+	> & { url: string })[];
 
-	const items: HeaderCheckEntry[] = [];
-
-	for (const row of rows) {
-		let headers: Record<string, string> = {};
-		try {
-			if (row.responseHeaders) {
-				headers = JSON.parse(row.responseHeaders);
-			}
-		} catch (error) {
-			console.warn(`Failed to parse responseHeaders for ${row.url}:`, error);
-		}
-
-		const lowerHeaders = Object.fromEntries(
-			Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]),
-		);
-
-		const entry: HeaderCheckEntry = {
-			url: row.url,
-			hasCSP: 'content-security-policy' in lowerHeaders,
-			hasXFrameOptions: 'x-frame-options' in lowerHeaders,
-			hasXContentTypeOptions: 'x-content-type-options' in lowerHeaders,
-			hasHSTS: 'strict-transport-security' in lowerHeaders,
-		};
-
-		items.push(entry);
-	}
+	const items: HeaderCheckEntry[] = rows.map((row) => ({
+		url: row.url,
+		hasCSP: !!row.hasCSP,
+		hasXFrameOptions: !!row.hasXFrameOptions,
+		hasXContentTypeOptions: !!row.hasXContentTypeOptions,
+		hasHSTS: !!row.hasHSTS,
+	}));
 
 	return {
 		items,

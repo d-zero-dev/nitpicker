@@ -35,7 +35,6 @@ export { listInventoryRuns } from './list-inventory-runs.js';
 export { listIsolatedClusters } from './list-isolated-clusters.js';
 export { listIsolatedPages } from './list-isolated-pages.js';
 export { listLinks } from './list-links.js';
-export { listPageLinks } from './list-page-links.js';
 export { listPages } from './list-pages.js';
 export { listPagesByJsonLdType } from './list-pages-by-jsonld-type.js';
 export { listPagesByTag } from './list-pages-by-tag.js';
