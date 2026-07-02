@@ -77,7 +77,7 @@ packages/
 
 > **Note (ページネーションモード)**: リスト系ビューは MPA ページネーション（`PagedTable` + `?page=` + `?pageSize=`、デフォルト）と仮想スクロール（`VirtualTable` + `useInfiniteQuery`、opt-in）の 2 モードを TopBar のトグルで切替えられる。`DataTable` がモードに応じて dispatch し、`usePagedQuery` / `use-*-infinite` を `enabled` フラグで切替えるため backend は無改修。**page と pageSize は URL クエリが正**（deep-link / 共有が成立するため両方が URL に乗らないと意味がない、`?pageSize=` 無しで `?page=5` を共有しても受け手の窓サイズが違うと別の行が見える）。デフォルト値（page=1, pageSize=100）は URL から省略してクリーンに保つ。localStorage は `nitpicker-pagination-mode`（モード本体）と `nitpicker-page-size`（**新規タブ初回の hint**）のみ。MPA がデフォルトな理由は deep-link / URL 共有 / 戻る進むが効くため。仮想スクロールは 10 万行規模の探索性が要るとき opt-in。詳細は ARCHITECTURE.md の `@nitpicker/viewer` 節「設計注意（ページネーション...）」を正とする。
 
-> **Note (`/api/pages` の viewer_pages fast path)**: `/api/pages` は `urlPattern`/`directory` 未指定 かつ `viewer_pages` read model が最新の場合のみ `listViewerPages`（narrow indexed read model + keyset cursor）を使い、それ以外は従来の `listPages`（wide table + offset）にフォールバックする。read model の自動ビルド（issue #112）は未実装で、`node scripts/migrate-viewer-read-model.mjs <archive.nitpicker> [--force]` の手動サイドカービルドのみ対応。legacy 経路も offset を素の文字列 cursor として返すことで、フロントの `nextCursor`-only 継続契約（仮想スクロール）をどちらの経路でも満たす。詳細は ARCHITECTURE.md の `@nitpicker/viewer` 節「設計注意（`/api/pages` の viewer_pages fast path...）」を正とする。
+> **Note (`/api/pages` の viewer_pages fast path)**: `/api/pages` は `urlPattern`/`directory` 未指定 かつ `viewer_pages` read model が最新の場合のみ `listViewerPages`（narrow indexed read model + keyset cursor）を使い、それ以外は従来の `listPages`（wide table + offset）にフォールバックする。read model のビルドタイミング（issue #112）は3経路: (1) crawl完了時（`CrawlerOrchestrator.write()` 直前、CLI層の `ensureViewerReadModelQuietly` 経由）に persistent read model を自動ビルド、(2) `nitpicker viewer-build <archive> [--force]` による明示ビルド（既存アーカイブの事前永続化用）、(3) `Archive.openCached` 経由の read-only open（viewer/MCP/query CLI 共通）で read model が無い/古い場合の on-open opportunistic build（タールキャッシュ dir にのみ書き込み、元の `.nitpicker` は不変。専用ロックで多重ビルドを防止、失敗時は warn して legacy fallback）。stub mode は常にビルド対象外。legacy 経路も offset を素の文字列 cursor として返すことで、フロントの `nextCursor`-only 継続契約（仮想スクロール）をどちらの経路でも満たす。詳細は ARCHITECTURE.md の `@nitpicker/viewer` 節「設計注意（`/api/pages` の viewer_pages fast path...）」を正とする。
 
 ## CLI コマンド
 
@@ -91,6 +91,7 @@ npx @nitpicker/cli report <file> [options]              # .nitpicker ファイ�
 npx @nitpicker/cli pipeline <URL> [options]             # crawl → analyze → report を直列実行
 npx @nitpicker/cli query <file> <sub-command> [options] # .nitpicker ファイルに対してクエリを実行し JSON 出力
 npx @nitpicker/cli viewer <file-or-stub-dir> [options]  # ローカルブラウザビューアを起動（.nitpicker ファイル / stub tmpDir の両方を受け付ける、Ctrl-C で停止）
+npx @nitpicker/cli viewer-build <archive> [--force]     # 永続 viewer read model を明示的に(再)ビルド（issue #112、既存アーカイブの事前永続化用）
 npx @nitpicker/cli -v | --version                       # `@nitpicker/cli` のバージョンを出力して exit 0
 ```
 

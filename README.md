@@ -263,6 +263,16 @@ npx @nitpicker/cli viewer <file-or-stub-dir> [--port 9000] [--no-open]
 
 クロール経路（`crawl --append` / `--retry-failed`）は env と無関係に常に旧挙動。キャッシュは reader 経路（viewer / MCP / `query`）専用。
 
+### `/api/pages` の高速化と viewer read model
+
+`crawl` 完了時に viewer 専用の read model（`viewer_pages` 等）が自動でアーカイブ内に構築され、`/api/pages` の応答が速くなる。これより前にクロールした既存アーカイブや、read model の再構築が必要な場合は明示的にビルドできる:
+
+```sh
+npx @nitpicker/cli viewer-build <archive.nitpicker> [--force]
+```
+
+`--force` なしでは read model が無い/古い場合のみビルドする。省略した場合でも、viewer / MCP / `query` CLI で当該アーカイブを開いた時点で自動的にビルドされる（初回のみ、タールキャッシュに保存されるので以降の起動には影響しない）。
+
 ### viewer プロセス内キャッシュ（同一アーカイブ内の重い計算を 1 回だけにする）
 
 10 GB クラスのアーカイブで `Isolated pages` / `Isolated clusters` / `Page links` 画面が初回 20-30 秒、2 回目以降は数ミリ秒に縮む。viewer プロセス側で per-archive の Map を 4 archive 分まで LRU で持っており、同じアーカイブを開いている間は union-find / referrer count GROUP BY を再実行しない。stub mode（live crawl 中の `._nitpicker-*` ディレクトリ）は **キャッシュを使わず毎回再計算する**（クロール中に追加された anchor / page を即座に反映するため、画面ロードは遅いままだが数字は常に live）。CLI / MCP には影響なし（1 回呼び切りでペイバックできないので元の SQL 経路のまま）。
@@ -328,7 +338,7 @@ LLM が data の鮮度を判定できるよう **`mode` と `crawlerPid` を常�
 
 ### `<archive>.bak` が残っている
 
-`--append` / `--retry-failed` の失敗時復元自体が失敗した状態。`AggregateError` がログに残るはず。`mv <archive>.bak <archive>` で原本を復元できる。
+`--append` / `--retry-failed` / `viewer-build` の失敗時復元自体が失敗した状態。`AggregateError` がログに残るはず。`mv <archive>.bak <archive>` で原本を復元できる。
 
 ### `[migrate] info table upgraded (...)`
 
