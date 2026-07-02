@@ -24,6 +24,7 @@ export function registerIsolatedPagesRoute(app: Hono, context: ArchiveContext): 
 		const precomputedComponents = await getCachedIsolatedClusters(context);
 		const result = await listIsolatedPages(accessor, {
 			urlPattern: c.req.query('urlPattern'),
+			status: toNumber(c.req.query('status')),
 			source: c.req.query('source') as
 				| 'crawled'
 				| 'inventory-seed'

@@ -70,6 +70,9 @@ export async function getIsolatedCluster(
 				if (options.source && member.source !== options.source) {
 					return false;
 				}
+				if (options.status != null && member.status !== options.status) {
+					return false;
+				}
 				return true;
 			});
 		const sorted = sortArrayItems(

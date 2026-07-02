@@ -38,6 +38,7 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 			offset: toNumber(c.req.query('offset')),
 			includeRedirectSources,
 			urlPattern: c.req.query('urlPattern'),
+			status: toNumber(c.req.query('status')),
 			sortBy: c.req.query('sortBy') as
 				| 'sourceUrl'
 				| 'destUrl'

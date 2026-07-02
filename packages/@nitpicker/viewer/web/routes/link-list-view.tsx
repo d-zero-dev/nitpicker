@@ -5,7 +5,9 @@ import { useMemo } from 'react';
 
 import { useLinksInfinite } from '../api/use-links-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
+import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
 import {
+	addRadioFilter,
 	addSort,
 	addTextFilter,
 	createTableControls,
@@ -63,20 +65,23 @@ export function LinkListView({
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 
-	const offset = (currentPage - 1) * pageSize;
+	const status = params.get('status');
+	const statusValue = status == null ? undefined : Number(status);
 	const filter = {
-		type,
 		urlPattern: params.get('urlPattern') ?? undefined,
+		status: Number.isFinite(statusValue) ? statusValue : undefined,
 		sortBy: params.get('sortBy') ?? undefined,
 		sortOrder: params.get('sortOrder') ?? undefined,
 	};
+
+	const offset = (currentPage - 1) * pageSize;
 	const paged = usePagedQuery<LinkRow>(
 		'/api/links',
-		{ ...filter, limit: pageSize, offset },
+		{ type, ...filter, limit: pageSize, offset },
 		[`${type}-links-paged`, filter, pageSize, currentPage],
 		{ enabled: mode === 'mpa' },
 	);
-	const infinite = useLinksInfinite(type, { enabled: mode === 'virtual' });
+	const infinite = useLinksInfinite(type, filter, { enabled: mode === 'virtual' });
 	const infiniteRows = useMemo(
 		() => infinite.data?.pages.flatMap((page) => page.items) ?? [],
 		[infinite.data],
@@ -119,6 +124,19 @@ export function LinkListView({
 			'urlPattern',
 			t('views.pages.filterUrlPattern'),
 		);
+		addRadioFilter(
+			controls,
+			context,
+			'status',
+			'status',
+			t(`${i18nPrefix}.colStatus`),
+			buildStatusFilterOptions(
+				paged.data?.items,
+				(item) => item.status,
+				status,
+				t('common.all'),
+			),
+		);
 		addTextFilter(
 			controls,
 			context,
@@ -127,7 +145,7 @@ export function LinkListView({
 			t('views.pages.filterUrlPattern'),
 		);
 		return controls;
-	}, [params, t, updateMany]);
+	}, [i18nPrefix, paged.data?.items, params, status, t, updateMany]);
 
 	return (
 		<div className="view">
