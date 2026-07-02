@@ -349,19 +349,49 @@ describe('buildViewerReadModel', () => {
 			expect(external).toMatchObject({ is_external: 1 });
 		});
 
-		it('seeds one matching viewer_query_profiles and viewer_count_buckets row, both equal to the hardcoded 5-page total', async () => {
+		it('seeds one matching viewer_query_profiles row and a total viewer_count_buckets row, both equal to the hardcoded 5-page total', async () => {
 			const knex = archive.getKnex();
 
 			const profiles = await knex('viewer_query_profiles').select('*');
 			expect(profiles).toHaveLength(1);
 			expect(profiles[0]).toMatchObject({ scope: 'pages', total: 5 });
 
-			const buckets = await knex('viewer_count_buckets').select('*');
-			expect(buckets).toHaveLength(1);
-			expect(buckets[0]).toMatchObject({ scope: 'pages', count: 5 });
+			const totalBucket = await knex('viewer_count_buckets')
+				.where({ scope: 'pages', key: 'total', value: 'all' })
+				.first();
+			expect(totalBucket).toMatchObject({ count: 5 });
 
 			const meta = await knex('viewer_read_model_meta').where('id', 1).first();
 			expect(meta).toMatchObject({ source_row_count: 5 });
+		});
+
+		it('populates viewer_count_buckets with per-category and default-scoped facet rows', async () => {
+			const knex = archive.getKnex();
+			const buckets: { key: string; value: string; count: number }[] = await knex(
+				'viewer_count_buckets',
+			)
+				.where('scope', 'pages')
+				.where('key', 'like', 'facet:%')
+				.select('key', 'value', 'count');
+			const byKeyValue = new Map(buckets.map((b) => [`${b.key}=${b.value}`, b.count]));
+
+			// html category: home / empty-meta / external / new-canonical — all
+			// status 200; is_external splits 3 internal / 1 external. None of
+			// this fixture's pages set a lang, so no lang facet row exists at all.
+			expect(byKeyValue.get('facet:status:content_category=html=200')).toBe(4);
+			expect(byKeyValue.get('facet:is_external:content_category=html=0')).toBe(3);
+			expect(byKeyValue.get('facet:is_external:content_category=html=1')).toBe(1);
+			expect(buckets.some((b) => b.key.startsWith('facet:lang:'))).toBe(false);
+
+			// unknown category: only the null-contentType errored page (null
+			// status is excluded from the status facet entirely).
+			expect(byKeyValue.get('facet:is_external:content_category=unknown=0')).toBe(1);
+			expect(byKeyValue.has('facet:status:content_category=unknown=200')).toBe(false);
+
+			// default (html ∪ unknown) mirrors the combined html+unknown population.
+			expect(byKeyValue.get('facet:status:content_category=default=200')).toBe(4);
+			expect(byKeyValue.get('facet:is_external:content_category=default=0')).toBe(4);
+			expect(byKeyValue.get('facet:is_external:content_category=default=1')).toBe(1);
 		});
 
 		it('viewer_page_anchors stays empty (page-jump population is out of scope for #108)', async () => {

@@ -60,6 +60,7 @@ interface PageFixture {
 	description?: string | null;
 	noindex?: boolean;
 	source?: 'crawled' | 'inventory-seed' | 'inventory-discovered';
+	lang?: string | null;
 }
 
 describe('listViewerPages', () => {
@@ -90,6 +91,7 @@ describe('listViewerPages', () => {
 					title: fixture.title ?? null,
 					description: fixture.description ?? null,
 					robots: { noindex: fixture.noindex ?? false },
+					lang: fixture.lang ?? null,
 				},
 				anchorList: [],
 				imageList: [],
@@ -106,8 +108,8 @@ describe('listViewerPages', () => {
 		await archive.setConfig(BASE_CONFIG);
 
 		// 5 internal HTML pages, url-ascending: a, b, c, d, e.
-		await addPage({ url: 'https://example.com/a', title: 'A', status: 200 });
-		await addPage({ url: 'https://example.com/b', title: 'B', status: 404 });
+		await addPage({ url: 'https://example.com/a', title: 'A', status: 200, lang: 'ja' });
+		await addPage({ url: 'https://example.com/b', title: 'B', status: 404, lang: 'en' });
 		await addPage({
 			url: 'https://example.com/c',
 			title: null,
@@ -133,6 +135,7 @@ describe('listViewerPages', () => {
 			url: 'https://example.com/g.pdf',
 			title: 'G',
 			contentType: 'application/pdf',
+			lang: 'fr',
 		});
 
 		// inventory-seed provenance, for the `source` filter.
@@ -349,6 +352,31 @@ describe('listViewerPages', () => {
 			const omitted = await listViewerPages(archive, { limit: 3 });
 			expect(withZero.items.map((i) => i.url)).toEqual(omitted.items.map((i) => i.url));
 			expect(withZero.prevCursor).toBeNull();
+		});
+	});
+
+	describe('facets', () => {
+		it('returns precomputed status/lang/isExternal enum candidates for the default view', async () => {
+			const result = await listViewerPages(archive, { limit: 100 });
+			// Default view = html/unknown content_category (excludes g.pdf, whose
+			// 'fr' lang and 'application/pdf' page must not leak into this scope).
+			expect(result.facets).toEqual({
+				statuses: [200, 404, 500],
+				langs: ['en', 'ja'],
+				types: [false, true],
+			});
+		});
+
+		it('scopes facets to an explicit contentTypeCategory filter', async () => {
+			const result = await listViewerPages(archive, {
+				contentTypeCategory: 'pdf',
+				limit: 100,
+			});
+			expect(result.facets).toEqual({
+				statuses: [200],
+				langs: ['fr'],
+				types: [false],
+			});
 		});
 	});
 

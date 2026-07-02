@@ -4,6 +4,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import { classifyContentType } from '../classify-content-type.js';
 import { excludeSkippedPages } from '../exclude-skipped-pages.js';
 
+import { computePageFacetBuckets } from './compute-page-facet-buckets.js';
 import { createViewerReadModelTables } from './create-viewer-read-model-tables.js';
 import { dropViewerReadModelTables } from './drop-viewer-read-model-tables.js';
 import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model-schema-version.js';
@@ -71,6 +72,12 @@ interface PagesSourceRow {
 	jsonld_count: number | null;
 	/** Provenance label — see {@link PageSource}. Always non-null (`NOT NULL DEFAULT 'crawled'` in `init-schema.ts`). */
 	source: PageSource;
+	/**
+	 * `<html lang>` tag value, or `null`/`''` when absent. Read only for
+	 * `computePageFacetBuckets`'s `lang` facet tally — never persisted onto
+	 * `viewer_pages` itself.
+	 */
+	lang: string | null;
 }
 
 /** One row to insert into `viewer_pages`, derived from a {@link PagesSourceRow}. */
@@ -195,10 +202,11 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
  * Performs a full rebuild of the viewer read model: drops all 5 tables if
  * present, recreates them, populates `viewer_pages` from the current
  * `pages` write-model table, seeds one smoke-test row into
- * `viewer_query_profiles` and `viewer_count_buckets`, and writes the
- * `viewer_read_model_meta` row — all inside one transaction, so a mid-build
- * failure leaves the previous read model (or no read model) intact, never a
- * partially-built one.
+ * `viewer_query_profiles`, writes the `viewer_count_buckets` totals row plus
+ * one row per distinct Pages-list facet value (see
+ * `computePageFacetBuckets`), and writes the `viewer_read_model_meta` row —
+ * all inside one transaction, so a mid-build failure leaves the previous
+ * read model (or no read model) intact, never a partially-built one.
  *
  * `viewer_pages` includes every listable page regardless of content-type
  * category (`scraped = 1 AND redirectDestId IS NULL`, plus excluding
@@ -267,6 +275,7 @@ export async function buildViewerReadModel(
 				'source',
 				'tag_count',
 				'jsonld_count',
+				'lang',
 			);
 
 		const insertRows = sourceRows.map(toViewerPageInsertRow);
@@ -302,6 +311,12 @@ export async function buildViewerReadModel(
 			value: 'all',
 			count: total,
 		});
+		const facetBuckets = computePageFacetBuckets(sourceRows);
+		for (let start = 0; start < facetBuckets.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_count_buckets').insert(
+				facetBuckets.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
 
 		await trx('viewer_read_model_meta').insert({
 			id: 1,
