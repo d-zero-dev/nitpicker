@@ -115,7 +115,10 @@ export function addRadioFilter(
 	defaultValue = '',
 ) {
 	controls.filter ??= {};
-	const current = context.params.get(key) ?? defaultValue;
+	const current =
+		context.params.get(key) ??
+		options.find((option) => option.checked)?.value ??
+		defaultValue;
 	controls.filter[columnId] = {
 		label,
 		kind: 'radio',
