@@ -30,7 +30,7 @@ describe('createViewerReadModelTables', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('creates all 5 tables and the 5 named viewer_pages indexes', async () => {
+	it('creates all 5 tables and the named viewer_pages indexes', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 
@@ -51,9 +51,12 @@ describe('createViewerReadModelTables', () => {
 		for (const indexName of [
 			'vp_default',
 			'vp_status',
+			'vp_status_desc',
 			'vp_title',
 			'vp_missing_title',
+			'vp_missing_description',
 			'vp_noindex',
+			'vp_source',
 		]) {
 			expect(indexNames.has(indexName)).toBe(true);
 		}

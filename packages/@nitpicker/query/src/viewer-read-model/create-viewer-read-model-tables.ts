@@ -33,16 +33,19 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			url text not null,
 			title text,
 			status integer,
+			status_sort_key integer not null,
+			status_desc_key integer not null,
 			content_category text not null,
 			is_external integer not null,
 			has_title integer not null,
 			has_description integer not null,
 			has_og_title integer not null,
 			robots_noindex integer not null,
+			source text not null,
 			tag_count integer not null default 0,
 			jsonld_count integer not null default 0,
 			url_sort_key text not null,
-			title_sort_key text,
+			title_sort_key text not null,
 			path_sort_key text not null
 		)
 	`);
@@ -50,7 +53,10 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 		'CREATE INDEX vp_default ON viewer_pages(is_external, content_category, url_sort_key, page_id)',
 	);
 	await trx.raw(
-		'CREATE INDEX vp_status ON viewer_pages(is_external, content_category, status, url_sort_key, page_id)',
+		'CREATE INDEX vp_status ON viewer_pages(is_external, content_category, status_sort_key, url_sort_key, page_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vp_status_desc ON viewer_pages(is_external, content_category, status_desc_key, url_sort_key, page_id)',
 	);
 	await trx.raw(
 		'CREATE INDEX vp_title ON viewer_pages(is_external, content_category, title_sort_key, url_sort_key, page_id)',
@@ -59,7 +65,13 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 		'CREATE INDEX vp_missing_title ON viewer_pages(is_external, content_category, has_title, url_sort_key, page_id)',
 	);
 	await trx.raw(
+		'CREATE INDEX vp_missing_description ON viewer_pages(is_external, content_category, has_description, url_sort_key, page_id)',
+	);
+	await trx.raw(
 		'CREATE INDEX vp_noindex ON viewer_pages(is_external, content_category, robots_noindex, url_sort_key, page_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vp_source ON viewer_pages(is_external, content_category, source, url_sort_key, page_id)',
 	);
 
 	await trx.raw(`

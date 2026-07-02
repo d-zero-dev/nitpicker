@@ -565,6 +565,83 @@ export interface PaginatedPageList {
 }
 
 /**
+ * Filter and pagination options for {@link listViewerPages} — the
+ * `viewer_pages` read-model-backed counterpart of {@link ListPagesOptions}.
+ *
+ * Deliberately narrower than {@link ListPagesOptions}: `urlPattern` /
+ * `directory` (LIKE-based) are excluded per `docs/viewer-sql-query-plan.md`'s
+ * "Don't make LIKE part of the 100ms contract" — callers that need those
+ * fall back to `listPages` instead. `source` is new (not on
+ * {@link ListPagesOptions}, which has no equivalent contract to preserve).
+ */
+export interface ListViewerPagesOptions {
+	/** Filter by external (true) or internal (false) pages. */
+	isExternal?: boolean;
+	/**
+	 * Restrict results to a single {@link ContentTypeCategory}. Omit to keep
+	 * the default (`'html'` + `'unknown'` — the pre-classified equivalent of
+	 * `listPages`'s HTML-or-null base restriction).
+	 */
+	contentTypeCategory?: ContentTypeCategory;
+	/** Filter by exact HTTP status code. */
+	status?: number;
+	/** Filter by minimum HTTP status code (inclusive). */
+	statusMin?: number;
+	/** Filter by maximum HTTP status code (inclusive). */
+	statusMax?: number;
+	/** Filter to pages missing title metadata. */
+	missingTitle?: boolean;
+	/** Filter to pages missing description metadata. */
+	missingDescription?: boolean;
+	/** Filter to pages with noindex set. */
+	noindex?: boolean;
+	/** Filter by provenance — see {@link PageSource}. */
+	source?: import('@nitpicker/crawler').PageSource;
+	/** Field to sort results by. Defaults to `'url'`. */
+	sortBy?: 'url' | 'status' | 'title';
+	/** Sort direction. Defaults to `'asc'`. */
+	sortOrder?: 'asc' | 'desc';
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedPageList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward — used by "scroll up" / "previous page"). Ignored
+	 * when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`. `offset = 0` (or omitted, with no `cursor`) is the fast
+	 * "initial query" path; `offset > 0` runs a direct `OFFSET` read against
+	 * the narrow `viewer_pages` index rather than the wide `pages` table.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result wrapper for {@link listViewerPages} — {@link PaginatedPageList}
+ * plus keyset cursors for virtual-scroll continuation.
+ */
+export interface CursorPaginatedPageList extends PaginatedPageList {
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the previous page in the current sort order, or
+	 * `null` when this is already the first page.
+	 */
+	prevCursor: string | null;
+}
+
+/**
  * Detailed information about a single page.
  *
  * Includes the full flat meta column set, the `metaExtras` JSON catch-all,

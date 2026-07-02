@@ -307,6 +307,40 @@ describe('buildViewerReadModel', () => {
 			expect(errored).toMatchObject({ content_category: 'unknown', status: null });
 		});
 
+		it('substitutes the null-status sentinel into status_sort_key/status_desc_key for a null-status page', async () => {
+			const knex = archive.getKnex();
+			const errored = await knex('viewer_pages')
+				.where('url', 'https://example.com/errored')
+				.first();
+			// -32768: NULL_STATUS_SENTINEL, smaller than any real HTTP status so
+			// unknown-status rows sort first in ascending order (see that
+			// constant's docs in build-viewer-read-model.ts).
+			expect(errored).toMatchObject({
+				status_sort_key: -32_768,
+				status_desc_key: 32_768,
+			});
+		});
+
+		it('derives status_sort_key/status_desc_key as status and its negation for a known-status page', async () => {
+			const knex = archive.getKnex();
+			const home = await knex('viewer_pages').where('url', 'https://example.com').first();
+			expect(home).toMatchObject({ status_sort_key: 200, status_desc_key: -200 });
+		});
+
+		it('defaults source to "crawled" and stores "" (not null) for title_sort_key on an empty title', async () => {
+			const knex = archive.getKnex();
+			const home = await knex('viewer_pages').where('url', 'https://example.com').first();
+			expect(home).toMatchObject({ source: 'crawled', title_sort_key: 'Home' });
+
+			const emptyMeta = await knex('viewer_pages')
+				.where('url', 'https://example.com/empty-meta')
+				.first();
+			// The write model itself normalises an empty-string title to `null`
+			// (see `has_title: 0` assertion above) — title_sort_key must still
+			// come out `''`, not `null`.
+			expect(emptyMeta).toMatchObject({ title: null, title_sort_key: '' });
+		});
+
 		it('flows is_external through for external pages', async () => {
 			const knex = archive.getKnex();
 			const external = await knex('viewer_pages')
@@ -483,6 +517,13 @@ describe('buildViewerReadModel', () => {
 				jsonld_count: 0,
 				url_sort_key: 'not a valid url',
 				path_sort_key: 'not a valid url',
+				// Never-null keyset sort keys, substituted for the row's null
+				// title/status (pages.source keeps its own NOT NULL DEFAULT
+				// 'crawled', so no substitution is needed there).
+				title_sort_key: '',
+				status_sort_key: -32_768,
+				status_desc_key: 32_768,
+				source: 'crawled',
 			});
 		});
 	});
