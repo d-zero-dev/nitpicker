@@ -82,6 +82,9 @@ export async function listLinks(
 	const destUrlExpression = includeRedirectSources
 		? '"dest"."url"'
 		: 'COALESCE("canonical"."url", "dest"."url")';
+	const statusExpression = includeRedirectSources
+		? '"dest"."status"'
+		: 'COALESCE("canonical"."status", "dest"."status")';
 
 	baseQuery.select(
 		'source.url as sourceUrl',
@@ -113,6 +116,9 @@ export async function listLinks(
 			);
 		});
 	}
+	if (options.status != null) {
+		baseQuery.whereRaw(`${statusExpression} = ?`, [options.status]);
+	}
 
 	const countResult = (await baseQuery
 		.clone()
@@ -128,9 +134,7 @@ export async function listLinks(
 			type: 'url',
 		},
 		status: {
-			column: includeRedirectSources
-				? '"dest"."status"'
-				: 'COALESCE("canonical"."status", "dest"."status")',
+			column: statusExpression,
 		},
 		isExternal: {
 			column: includeRedirectSources

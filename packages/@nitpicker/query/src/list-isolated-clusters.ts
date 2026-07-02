@@ -62,11 +62,18 @@ export async function listIsolatedClusters(
 		});
 	}
 
-	const filtered = options.urlPattern
-		? clusters.filter((item) =>
-				item.representativeUrl.includes(options.urlPattern!.replaceAll('%', '')),
-			)
-		: clusters;
+	const filtered = clusters.filter((item) => {
+		if (
+			options.urlPattern &&
+			!item.representativeUrl.includes(options.urlPattern.replaceAll('%', ''))
+		) {
+			return false;
+		}
+		if (options.status != null && item.representativeStatus !== options.status) {
+			return false;
+		}
+		return true;
+	});
 	const sorted = sortArrayItems(
 		filtered,
 		options.sortBy ?? 'size',

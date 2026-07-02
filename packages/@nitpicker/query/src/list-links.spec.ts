@@ -233,6 +233,12 @@ describe('listLinks', () => {
 		});
 	});
 
+	it('status でリンク先をフィルタする', async () => {
+		const result = await listLinks(archive, { type: 'external', status: 404 });
+		expect(result.items).toHaveLength(0);
+		expect(result.total).toBe(0);
+	});
+
 	it('ページネーションが機能する', async () => {
 		const result = await listLinks(archive, { type: 'broken', limit: 1, offset: 0 });
 		expect(result.items).toHaveLength(1);

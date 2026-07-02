@@ -46,6 +46,8 @@ export interface IsolatedPageEntry {
 export interface ListIsolatedPagesOptions {
 	/** URL pattern to search (SQL LIKE-ish substring for computed results). */
 	urlPattern?: string;
+	/** Filter by HTTP status. */
+	status?: number;
 	/** Filter by source. */
 	source?: PageSource;
 	/** Field to sort results by. */
@@ -135,6 +137,8 @@ export interface IsolatedComponent {
 export interface ListIsolatedClustersOptions {
 	/** URL pattern to search representative URLs. */
 	urlPattern?: string;
+	/** Filter by representative member status. */
+	status?: number;
 	/** Field to sort results by. */
 	sortBy?: 'representativeUrl' | 'representativeTitle' | 'representativeStatus' | 'size';
 	/** Sort direction. */
@@ -157,6 +161,8 @@ export interface ListIsolatedClustersOptions {
 export interface GetIsolatedClusterOptions {
 	/** URL pattern to search member URLs. */
 	urlPattern?: string;
+	/** Filter by HTTP status. */
+	status?: number;
 	/** Filter by source. */
 	source?: PageSource;
 	/** Field to sort results by. */
@@ -198,6 +204,8 @@ export interface UnusedResourceEntry {
 export interface ListUnusedResourcesOptions {
 	/** URL pattern to search. */
 	urlPattern?: string;
+	/** Filter by HTTP status. */
+	status?: number;
 	/** Filter by content type prefix. */
 	contentType?: string;
 	/** Filter by source. */
@@ -977,6 +985,8 @@ export interface ListLinksOptions {
 	includeRedirectSources?: boolean;
 	/** URL pattern to search source or destination URLs. */
 	urlPattern?: string;
+	/** Filter by destination HTTP status. */
+	status?: number;
 	/** Field to sort results by. */
 	sortBy?: 'sourceUrl' | 'destUrl' | 'status' | 'isExternal' | 'textContent';
 	/** Sort direction. */
@@ -1015,6 +1025,8 @@ export interface LinkAnalysisResult {
 export interface ListResourcesOptions {
 	/** URL pattern to filter resource URLs. */
 	urlPattern?: string;
+	/** Filter by HTTP status. */
+	status?: number;
 	/** Filter by content type prefix (e.g., "text/css", "application/javascript"). */
 	contentType?: string;
 	/** Filter by external (true) or internal (false) resources. */
@@ -1318,6 +1330,8 @@ export interface ListPageLinksOptions {
 	isExternal?: boolean;
 	/** URL pattern to search (SQL LIKE pattern). */
 	urlPattern?: string;
+	/** Filter by HTTP status. */
+	status?: number;
 	/** Filter by content type prefix. */
 	contentType?: string;
 	/** Filter to rows with or without response headers. */

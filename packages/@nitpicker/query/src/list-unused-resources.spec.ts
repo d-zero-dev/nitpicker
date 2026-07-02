@@ -149,8 +149,8 @@ describe('listUnusedResources', () => {
 				url: parseUrl('https://example.com/inventory-discovered.png')!,
 				isExternal: false,
 				isError: false,
-				status: 200,
-				statusText: 'OK',
+				status: 404,
+				statusText: 'Not Found',
 				contentType: 'image/png',
 				contentLength: 500,
 				compress: false,
@@ -195,6 +195,12 @@ describe('listUnusedResources', () => {
 		expect(bySource['https://example.com/inventory-discovered.png']).toBe(
 			'inventory-discovered',
 		);
+	});
+
+	it('filters unused resources by status', async () => {
+		const result = await listUnusedResources(archive, { status: 404 });
+		expect(result.total).toBe(1);
+		expect(result.items[0]?.url).toBe('https://example.com/inventory-discovered.png');
 	});
 
 	it('respects limit and offset across the full unused set', async () => {

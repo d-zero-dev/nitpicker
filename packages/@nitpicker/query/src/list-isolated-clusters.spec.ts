@@ -80,13 +80,19 @@ describe('listIsolatedClusters', () => {
 		);
 
 		// Cluster of size 3: a → b → c (chained anchors).
-		const buildSeed = (urlPath: string, anchorPath: string | null, title: string) => ({
+		const buildSeed = (
+			urlPath: string,
+			anchorPath: string | null,
+			title: string,
+			status = 200,
+			statusText = 'OK',
+		) => ({
 			url: parseUrl(`https://example.com${urlPath}`)!,
 			redirectPaths: [],
 			isExternal: false,
 			isTarget: true,
-			status: 200,
-			statusText: 'OK',
+			status,
+			statusText,
 			contentType: 'text/html',
 			contentLength: 100,
 			responseHeaders: {},
@@ -119,7 +125,7 @@ describe('listIsolatedClusters', () => {
 
 		// Cluster of size 2: x → y.
 		await archive.setPage(
-			buildSeed('/small-cluster/x', '/small-cluster/y', 'X'),
+			buildSeed('/small-cluster/x', '/small-cluster/y', 'X', 404, 'Not Found'),
 			'inventory-seed',
 		);
 		await archive.setPage(buildSeed('/small-cluster/y', null, 'Y'), 'inventory-seed');
@@ -170,5 +176,13 @@ describe('listIsolatedClusters', () => {
 		const third = await listIsolatedClusters(archive, { limit: 1, offset: 2 });
 		expect(third.items).toHaveLength(0);
 		expect(third.total).toBe(2);
+	});
+
+	it('filters cluster summaries by representative status', async () => {
+		const result = await listIsolatedClusters(archive, { status: 404 });
+		expect(result.total).toBe(1);
+		expect(result.items[0]?.representativeUrl).toBe(
+			'https://example.com/small-cluster/x',
+		);
 	});
 });
