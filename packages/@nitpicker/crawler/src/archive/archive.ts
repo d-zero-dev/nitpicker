@@ -439,25 +439,47 @@ export default class Archive extends ArchiveAccessor {
 	/** The prefix used for temporary working directories during archive operations. */
 	static TMP_DIR_PREFIX = '._nitpicker-';
 	/**
-	 * Opens a read-only connection to an existing archive's database.
+	 * Opens a connection to an existing archive's database, defaulting to
+	 * read-only.
 	 *
-	 * Returns an {@link ArchiveAccessor} that provides query methods
-	 * without the ability to modify or write the archive. The DB is opened
-	 * in **read-only mode**: no schema migrations run, and the connection
+	 * Returns an {@link ArchiveAccessor} that provides query methods. In the
+	 * default read-only mode, no schema migrations run and the connection
 	 * refuses to resurrect a missing parent directory or db file (so a
 	 * TOCTOU window between source classification and this call cannot
-	 * silently produce an empty phantom tmpDir).
+	 * silently produce an empty phantom tmpDir); the returned accessor is
+	 * also marked read-only so consumer-facing helpers (e.g.
+	 * {@link ArchiveAccessor.getHtmlOfPage}) avoid any filesystem mutation
+	 * on the user's tmpDir.
 	 *
-	 * The returned accessor is also marked read-only so consumer-facing
-	 * helpers (e.g. {@link ArchiveAccessor.getHtmlOfPage}) avoid any
-	 * filesystem mutation on the user's tmpDir.
+	 * `options.readOnly: false` is the narrow escape hatch for issue #112's
+	 * on-open viewer read-model build: it opens a second, writable
+	 * connection to a `tmpDir` that {@link Archive.openCached} already
+	 * extracted (and migrated) into an OS-temp cache directory — never the
+	 * caller's live/interrupted crawl tmpDir, which must stay read-only.
+	 * Callers opening this way are responsible for their own
+	 * cross-process coordination (see `acquireArchiveLock`); this method
+	 * does not acquire any lock itself.
 	 * @param tmpDir - The path to the temporary directory containing the database.
 	 * @param namespace - An optional namespace for scoping data access within the archive.
+	 * @param options - Connection options.
+	 * @param options.readOnly - Defaults to `true`. Pass `false` to obtain a
+	 *   writable accessor against an already-extracted cache directory.
 	 * @returns An ArchiveAccessor instance for querying the archive data.
+	 * @example
+	 * // Default (read-only) — safe for stub mode and cache reads:
+	 * const accessor = await Archive.connect(tmpDir);
+	 * @example
+	 * // Writable escape hatch — only against a tar-cache extraction:
+	 * const writable = await Archive.connect(cacheDir, null, { readOnly: false });
 	 */
-	static async connect(tmpDir: string, namespace: string | null = null) {
-		const db = await Archive.#connectDB(tmpDir, { readOnly: true });
-		const archive = new ArchiveAccessor(tmpDir, db, namespace, { readOnly: true });
+	static async connect(
+		tmpDir: string,
+		namespace: string | null = null,
+		options: { readOnly?: boolean } = {},
+	) {
+		const readOnly = options.readOnly ?? true;
+		const db = await Archive.#connectDB(tmpDir, { readOnly });
+		const archive = new ArchiveAccessor(tmpDir, db, namespace, { readOnly });
 		return archive;
 	}
 	/**

@@ -22,6 +22,7 @@ export { default as ArchiveResource } from './archive/resource.js';
 export * from './archive/types.js';
 export { default as Archive } from './archive/archive.js';
 export { isArchiveCacheDisabled } from './archive/cache/is-archive-cache-disabled.js';
+export { acquireArchiveLock, ArchiveLockError } from './archive/archive-lock.js';
 export { peekArchiveLockHolder } from './archive/peek-archive-lock.js';
 export type { ArchiveLockHolder } from './archive/peek-archive-lock.js';
 export type {
