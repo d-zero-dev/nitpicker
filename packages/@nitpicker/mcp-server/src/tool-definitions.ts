@@ -54,7 +54,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'list_pages',
 		description:
-			'List pages with rich filtering: by status code (exact or range), missing metadata (title, description), noindex flag, URL patterns, directory paths. Supports sorting and pagination. Use for questions like "show me all 404 pages" or "pages without descriptions". For large sites, set `limit` to keep the response bounded — to dump the whole list use the CLI (`nitpicker query pages`) and pipe through `jq` instead of pulling everything through MCP.',
+			'List pages with rich filtering: by status code (exact or range), missing metadata (title, description), noindex flag, security header presence (CSP / X-Frame-Options / X-Content-Type-Options / HSTS), URL patterns, directory paths. Supports sorting and pagination. Use for questions like "show me all 404 pages", "pages without descriptions", or "internal pages missing CSP". For large sites, set `limit` to keep the response bounded — to dump the whole list use the CLI (`nitpicker query pages`) and pipe through `jq` instead of pulling everything through MCP.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -81,6 +81,22 @@ export const toolDefinitions: Tool[] = [
 					description: 'Filter to pages missing description',
 				},
 				noindex: { type: 'boolean', description: 'Filter to pages with noindex set' },
+				hasCSP: {
+					type: 'boolean',
+					description: 'Filter by Content-Security-Policy header presence',
+				},
+				hasXFrameOptions: {
+					type: 'boolean',
+					description: 'Filter by X-Frame-Options header presence',
+				},
+				hasXContentTypeOptions: {
+					type: 'boolean',
+					description: 'Filter by X-Content-Type-Options header presence',
+				},
+				hasHSTS: {
+					type: 'boolean',
+					description: 'Filter by Strict-Transport-Security header presence',
+				},
 				contentTypeCategory: {
 					type: 'string',
 					enum: [
@@ -169,7 +185,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'list_links',
 		description:
-			'Analyse links: find **broken** links (4xx/5xx status or no status) or **external** links. Anchor destinations are resolved through `pages.redirectDestId` to the canonical final destination before judgment, so a 301 intermediate that lands on a 404 reports as broken with the 404 URL — not as a stale 301. Pass `includeRedirectSources: true` to disable the resolution and see the literal anchor target (diagnostic view). For orphan analysis, use `list_isolated_pages` (singletons) or `list_isolated_clusters` (interconnected orphan groups) — the previous `orphaned` type was removed in favour of those two well-separated concepts.',
+			'Analyse links: find **broken** links (canonical destination is exactly HTTP 404 Not Found — 403 Forbidden, 5xx server errors, and destinations excluded from crawling are deliberately NOT counted as broken, since those are separate concerns) or **external** links. Anchor destinations are resolved through `pages.redirectDestId` to the canonical final destination before judgment, so a 301 intermediate that lands on a 404 reports as broken with the 404 URL — not as a stale 301. Pass `includeRedirectSources: true` to disable the resolution and see the literal anchor target (diagnostic view). For orphan analysis, use `list_isolated_pages` (singletons) or `list_isolated_clusters` (interconnected orphan groups) — the previous `orphaned` type was removed in favour of those two well-separated concepts.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -181,7 +197,7 @@ export const toolDefinitions: Tool[] = [
 					type: 'string',
 					enum: ['broken', 'external'],
 					description:
-						'Type of link analysis: broken (4xx/5xx or no status) or external (anchor leaves the in-scope hostname). Judged against the redirect-resolved canonical destination by default.',
+						'Type of link analysis: broken (canonical destination is exactly HTTP 404) or external (anchor leaves the in-scope hostname). Judged against the redirect-resolved canonical destination by default.',
 				},
 				includeRedirectSources: {
 					type: 'boolean',
