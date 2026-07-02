@@ -18,9 +18,9 @@ const PRECOMPUTED_DIR_NAME = 'precomputed';
  *
  * **Why disk persistence on top of the in-memory `createPromiseLru`**:
  * the in-memory cache only survives the viewer process. The first
- * `/api/isolated-pages` / `/api/summary` / `/api/page-links` hit after
- * a viewer restart re-paid the 14-30 s SQL cost even though the
- * underlying archive hadn't changed. Persisting to disk extends the
+ * `/api/isolated-pages` / `/api/summary` hit after a viewer restart
+ * re-paid the 14-30 s SQL cost even though the underlying archive
+ * hadn't changed. Persisting to disk extends the
  * cache lifetime to "until the archive's content key rolls" — i.e.
  * until the operator `crawl --append`s or otherwise mutates the
  * `.nitpicker`. Across viewer restarts (Ctrl-C, machine reboot, etc.)
@@ -39,7 +39,7 @@ const PRECOMPUTED_DIR_NAME = 'precomputed';
  * @template T - The artefact type. Must be JSON-serialisable. The
  *   caller is responsible for round-trip safe shapes (e.g. `Map<K,V>`
  *   must be serialised as `[[k,v],…]` and deserialised through
- *   `new Map(arr)` — see `referrer-count-cache.ts` for the example).
+ *   `new Map(arr)` on read).
  * @param cacheDir - Absolute path to the archive's tar-cache dir
  *   (taken from `accessor.tmpDir` on archive-mode opens). The
  *   precomputed artefact lives at

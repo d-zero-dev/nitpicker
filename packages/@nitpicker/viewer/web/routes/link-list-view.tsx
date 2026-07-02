@@ -1,12 +1,11 @@
 import type { LinkRow, LinkType } from '../api/use-links-infinite.js';
 import type { ColumnDef } from '@tanstack/react-table';
 
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { useLinksInfinite } from '../api/use-links-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
 import {
-	addRadioFilter,
 	addSort,
 	addTextFilter,
 	createTableControls,
@@ -17,8 +16,19 @@ import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
-/** Valid link types for the selector. */
-const LINK_TYPES = new Set<LinkType>(['broken', 'external']);
+/**
+ * Props for {@link LinkListView}.
+ */
+interface LinkListViewProps {
+	/** Which link analysis this instance renders. */
+	type: LinkType;
+	/** i18n dot-path for the view title. */
+	titleKey: string;
+	/** i18n dot-path for the view description. */
+	descriptionKey: string;
+	/** i18n dot-path prefix for the column labels (`${prefix}.colSource` etc.). */
+	i18nPrefix: string;
+}
 
 /**
  * Reads a string property from a link row.
@@ -27,53 +37,43 @@ const LINK_TYPES = new Set<LinkType>(['broken', 'external']);
  * @returns The stringified value, or an empty string if absent.
  */
 function field(row: LinkRow, key: string): string {
-	const value = (row as Record<string, unknown>)[key];
+	const value = (row as unknown as Record<string, unknown>)[key];
 	return value == null ? '' : String(value);
 }
 
 /**
- * The link analysis view: broken or external links, rendered via the user's
+ * Shared table for the broken-links and external-links views: same columns
+ * (source / destination / status) and controls, differing only in the fixed
+ * `type` sent to `/api/links` and the i18n copy. Rendered via the user's
  * chosen pagination mode.
- *
- * The previous `'orphaned'` chip was retired together with `listLinks
- * type:'orphaned'`. Complete singleton inventory-* pages now live in the
- * **孤立ページ** view, and interconnected orphan groups in the **孤立集合**
- * view — the two well-separated concepts that the old single `'orphaned'`
- * bucket conflated.
- * @returns The links view element.
+ * @param props - See {@link LinkListViewProps}.
+ * @param props.type
+ * @param props.titleKey
+ * @param props.descriptionKey
+ * @param props.i18nPrefix
+ * @returns The link-list view element.
  */
-export function LinksView() {
-	const { params, update, updateMany } = useUrlFilter();
+export function LinkListView({
+	type,
+	titleKey,
+	descriptionKey,
+	i18nPrefix,
+}: LinkListViewProps) {
+	const { params, updateMany } = useUrlFilter();
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
-	const rawType = params.get('type') as LinkType | null;
-	const type: LinkType = rawType !== null && LINK_TYPES.has(rawType) ? rawType : 'broken';
-
-	// If the URL was visited with a now-removed `type` (e.g. a bookmarked
-	// `?type=orphaned` from before the retirement of that filter), surface
-	// the coercion in the URL bar so the shown rows stay consistent with
-	// what the address says. Otherwise the table would render `broken`
-	// rows under a `type=orphaned` URL — a silent data-meaning swap that
-	// confuses sharing/handoff. `replace: true` keeps the back button from
-	// returning the user to the just-corrected invalid URL.
-	useEffect(() => {
-		if (rawType !== null && !LINK_TYPES.has(rawType)) {
-			update('type', type, { replace: true });
-		}
-	}, [rawType, type, update]);
 
 	const offset = (currentPage - 1) * pageSize;
+	const filter = {
+		type,
+		urlPattern: params.get('urlPattern') ?? undefined,
+		sortBy: params.get('sortBy') ?? undefined,
+		sortOrder: params.get('sortOrder') ?? undefined,
+	};
 	const paged = usePagedQuery<LinkRow>(
 		'/api/links',
-		{
-			type,
-			urlPattern: params.get('urlPattern') ?? undefined,
-			sortBy: params.get('sortBy') ?? undefined,
-			sortOrder: params.get('sortOrder') ?? undefined,
-			limit: pageSize,
-			offset,
-		},
-		['links-paged', type, params.toString(), pageSize, currentPage],
+		{ ...filter, limit: pageSize, offset },
+		[`${type}-links-paged`, filter, pageSize, currentPage],
 		{ enabled: mode === 'mpa' },
 	);
 	const infinite = useLinksInfinite(type, { enabled: mode === 'virtual' });
@@ -86,31 +86,25 @@ export function LinksView() {
 	const columns = useMemo<ColumnDef<LinkRow>[]>(
 		() => [
 			{
-				id: 'type',
-				header: t('common.type'),
-				size: 110,
-				accessorFn: () => t(`views.links.${type}`),
-			},
-			{
 				id: 'sourceUrl',
-				header: t('views.links.colSource'),
+				header: t(`${i18nPrefix}.colSource`),
 				size: 380,
 				accessorFn: (r) => field(r, 'sourceUrl'),
 			},
 			{
 				id: 'destUrl',
-				header: t('views.links.colDest'),
+				header: t(`${i18nPrefix}.colDest`),
 				size: 380,
 				accessorFn: (r) => field(r, 'destUrl'),
 			},
 			{
 				id: 'status',
-				header: t('views.links.colStatus'),
+				header: t(`${i18nPrefix}.colStatus`),
 				size: 90,
 				accessorFn: (r) => field(r, 'status') || '—',
 			},
 		],
-		[t, type],
+		[i18nPrefix, t],
 	);
 	const columnControls = useMemo(() => {
 		const context = { params, updateMany };
@@ -118,18 +112,6 @@ export function LinksView() {
 		for (const key of ['sourceUrl', 'destUrl', 'status']) {
 			addSort(controls, context, key, key);
 		}
-		addRadioFilter(
-			controls,
-			context,
-			'type',
-			'type',
-			t('common.type'),
-			[
-				{ value: 'broken', label: t('views.links.broken'), checked: false },
-				{ value: 'external', label: t('views.links.external'), checked: false },
-			],
-			'broken',
-		);
 		addTextFilter(
 			controls,
 			context,
@@ -149,7 +131,7 @@ export function LinksView() {
 
 	return (
 		<div className="view">
-			<ViewHeader titleKey="views.links.title" descriptionKey="views.links.description" />
+			<ViewHeader titleKey={titleKey} descriptionKey={descriptionKey} />
 			{mode === 'mpa' ? (
 				<DataTable
 					mode="mpa"

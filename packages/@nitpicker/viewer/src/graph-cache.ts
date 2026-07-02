@@ -17,7 +17,7 @@ import { createPromiseLru } from './promise-lru.js';
  *   ~66 MB at `limit=1000` (the route default). At 4 entries the
  *   in-memory ceiling is ~250 MB which fits inside the viewer's
  *   default ~4 GB V8 heap without crowding `summary-cache` /
- *   `isolated-clusters-cache` / `referrer-count-cache`.
+ *   `isolated-clusters-cache`.
  *
  * Distinct `limit` values are treated as distinct entries so an
  * operator passing `?limit=0` (uncapped) never serves a capped result
