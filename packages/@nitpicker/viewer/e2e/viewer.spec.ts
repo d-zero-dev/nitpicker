@@ -252,7 +252,11 @@ test.describe('MPA ページネーション', () => {
 		]) {
 			await page.goto(target.path);
 			await expect(page.locator('.pt-row').first()).toBeVisible();
-			await page.getByRole('button', { name: target.filter }).click();
+			// `.first()`: `/broken-links` has both a Source and a Destination
+			// column sharing the same "URL pattern (%foo%)" filter label, so
+			// the role query resolves to two buttons — either one is fine for
+			// this generic "does the popover fit in viewport" smoke check.
+			await page.getByRole('button', { name: target.filter }).first().click();
 			await expectPopoverInViewport(page);
 		}
 	});
