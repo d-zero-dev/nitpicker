@@ -1,0 +1,238 @@
+import path from 'node:path';
+
+import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
+import { Archive } from '@nitpicker/crawler';
+import { ArchiveManager, buildViewerReadModel } from '@nitpicker/query';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { createApp } from '../create-app.js';
+
+const __filename = new URL(import.meta.url).pathname;
+const __dirname = path.dirname(__filename);
+
+const BASE_CONFIG = {
+	baseUrl: 'https://example.com',
+	name: 'test',
+	version: '0.10.0',
+	recursive: true,
+	interval: 0,
+	image: true,
+	fetchExternal: false,
+	parallels: 1,
+	roots: ['https://example.com'],
+	excludes: [],
+	excludeKeywords: [],
+	excludeUrls: [],
+	maxExcludedDepth: 0,
+	retry: 3,
+	fromList: false,
+	disableQueries: false,
+	userAgent: 'test',
+	ignoreRobots: false,
+};
+
+const META = {
+	lang: null,
+	title: null,
+	description: null,
+	keywords: null,
+	noindex: false,
+	nofollow: false,
+	noarchive: false,
+	canonical: null,
+	alternate: null,
+	'og:type': null,
+	'og:title': null,
+	'og:site_name': null,
+	'og:description': null,
+	'og:url': null,
+	'og:image': null,
+	'twitter:card': null,
+};
+
+/**
+ * Builds a fixture archive with 5 internal HTML pages (`a`..`e`) and returns
+ * an in-process Hono app wired to it via the same read-only-open path the
+ * real viewer uses (`ArchiveManager.open` against the archive's own tmpDir —
+ * `Archive.create`'s tmpDir is a valid stub-mode source, so this opens
+ * read-only without ever writing a `.nitpicker` tar).
+ * @param workingDir - Unique scratch directory for this fixture.
+ * @param withReadModel - Whether to build the `viewer_pages` read model
+ *   before opening read-only (exercises the fast path) or leave it unbuilt
+ *   (exercises the legacy fallback path).
+ * @returns The app, archive, and manager — callers must close both in
+ *   `afterAll`.
+ */
+async function buildFixture(workingDir: string, withReadModel: boolean) {
+	const { mkdirSync } = await import('node:fs');
+	mkdirSync(workingDir, { recursive: true });
+	const archive = await Archive.create({
+		filePath: path.resolve(workingDir, 'fixture.nitpicker'),
+		cwd: workingDir,
+	});
+	await archive.setConfig(BASE_CONFIG);
+	for (const letter of ['a', 'b', 'c', 'd', 'e']) {
+		await archive.setPage({
+			url: parseUrl(`https://example.com/${letter}`)!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: letter.toUpperCase() },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+	}
+	if (withReadModel) {
+		await buildViewerReadModel(archive);
+	}
+
+	const manager = new ArchiveManager();
+	const { archiveId, mode } = await manager.open(archive.tmpDir);
+	const app = createApp({
+		context: {
+			manager,
+			archiveId,
+			filePath: archive.tmpDir,
+			mode,
+			crawlerLockHolder: null,
+		},
+		publicDir: '/tmp/no-such-dir-register-pages-route-spec',
+	});
+	return { app, archive, manager };
+}
+
+/**
+ * Drives `/api/pages?limit=...` to exhaustion via `nextCursor` alone (the
+ * same continuation contract `usePagesInfinite` relies on), collecting every
+ * page's URLs in request order.
+ * @param app - The in-process Hono app.
+ * @param query - The base query string (without `limit`/`cursor`), e.g. `''`
+ *   or `'&urlPattern=%25example.com%25'`.
+ * @param limit - The page size.
+ * @param maxPages - Safety cap so a broken "never terminates" regression
+ *   fails the test instead of hanging.
+ * @returns The concatenated URLs across every page, in order.
+ */
+async function paginateAllViaNextCursor(
+	app: ReturnType<typeof createApp>,
+	query: string,
+	limit: number,
+	maxPages = 10,
+): Promise<string[]> {
+	const urls: string[] = [];
+	let cursor: string | null = null;
+	for (let page = 0; page < maxPages; page++) {
+		const cursorParam = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+		const res = await app.request(`/api/pages?limit=${limit}${cursorParam}${query}`);
+		const body = (await res.json()) as {
+			items: { url: string }[];
+			nextCursor: string | null;
+		};
+		urls.push(...body.items.map((i) => i.url));
+		if (!body.nextCursor) {
+			return urls;
+		}
+		cursor = body.nextCursor;
+	}
+	throw new Error(`paginateAllViaNextCursor: did not terminate within ${maxPages} pages`);
+}
+
+describe('registerPagesRoute (integration)', () => {
+	describe('fast path (viewer_pages read model built)', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_register_pages_route_fast__',
+		);
+		let fixture: Awaited<ReturnType<typeof buildFixture>>;
+
+		beforeAll(async () => {
+			fixture = await buildFixture(workingDir, true);
+		});
+
+		afterAll(async () => {
+			await fixture.manager.closeAll();
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('paginates to completion via nextCursor with no duplicates or gaps', async () => {
+			const urls = await paginateAllViaNextCursor(fixture.app, '', 2);
+			expect(urls).toEqual([
+				'https://example.com/a',
+				'https://example.com/b',
+				'https://example.com/c',
+				'https://example.com/d',
+				'https://example.com/e',
+			]);
+		});
+	});
+
+	describe('legacy fallback path (no read model built)', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_register_pages_route_legacy_no_read_model__',
+		);
+		let fixture: Awaited<ReturnType<typeof buildFixture>>;
+
+		beforeAll(async () => {
+			fixture = await buildFixture(workingDir, false);
+		});
+
+		afterAll(async () => {
+			await fixture.manager.closeAll();
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('still paginates to completion via nextCursor using the offset-based pseudo-cursor (regression: previously stuck at page 1)', async () => {
+			const urls = await paginateAllViaNextCursor(fixture.app, '', 2);
+			expect(urls).toEqual([
+				'https://example.com/a',
+				'https://example.com/b',
+				'https://example.com/c',
+				'https://example.com/d',
+				'https://example.com/e',
+			]);
+		});
+	});
+
+	describe('legacy fallback path (urlPattern forces legacy even though a read model exists)', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_register_pages_route_legacy_urlpattern__',
+		);
+		let fixture: Awaited<ReturnType<typeof buildFixture>>;
+
+		beforeAll(async () => {
+			fixture = await buildFixture(workingDir, true);
+		});
+
+		afterAll(async () => {
+			await fixture.manager.closeAll();
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('still paginates to completion via nextCursor (regression: previously stuck at page 1)', async () => {
+			const urls = await paginateAllViaNextCursor(
+				fixture.app,
+				`&urlPattern=${encodeURIComponent('%example.com%')}`,
+				2,
+			);
+			expect(urls).toEqual([
+				'https://example.com/a',
+				'https://example.com/b',
+				'https://example.com/c',
+				'https://example.com/d',
+				'https://example.com/e',
+			]);
+		});
+	});
+});
