@@ -13,6 +13,16 @@ export interface PageLinksFilter {
 	isExternal?: boolean;
 	/** URL pattern (SQL LIKE). */
 	urlPattern?: string;
+	/** Filter by HTTP status. */
+	status?: number;
+	/** Filter by content type prefix. */
+	contentType?: string;
+	/** Filter to rows with/without response headers. */
+	hasResponseHeaders?: boolean;
+	/** Sort field. */
+	sortBy?: string;
+	/** Sort direction. */
+	sortOrder?: string;
 }
 
 /**

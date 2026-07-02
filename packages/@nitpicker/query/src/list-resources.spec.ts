@@ -95,8 +95,8 @@ describe('listResources', () => {
 			url: parseUrl('https://cdn.example.com/app.js')!,
 			isExternal: true,
 			isError: false,
-			status: 200,
-			statusText: 'OK',
+			status: 404,
+			statusText: 'Not Found',
 			contentType: 'application/javascript',
 			contentLength: 5000,
 			compress: false,
@@ -129,6 +129,12 @@ describe('listResources', () => {
 		const result = await listResources(archive, { isExternal: true });
 		expect(result.total).toBe(1);
 		expect(result.items[0]!.url).toBe('https://cdn.example.com/app.js');
+	});
+
+	it('status でフィルタする', async () => {
+		const result = await listResources(archive, { status: 200 });
+		expect(result.total).toBe(1);
+		expect(result.items[0]!.url).toBe('https://example.com/style.css');
 	});
 
 	it('ページネーションが機能する', async () => {

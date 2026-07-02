@@ -92,8 +92,8 @@ describe('getIsolatedCluster', () => {
 				redirectPaths: [],
 				isExternal: false,
 				isTarget: true,
-				status: 200,
-				statusText: 'OK',
+				status: 404,
+				statusText: 'Not Found',
 				contentType: 'text/html',
 				contentLength: 100,
 				responseHeaders: {},
@@ -148,5 +148,15 @@ describe('getIsolatedCluster', () => {
 			// the public DTO must not expose database row ids.
 			expect(member).not.toHaveProperty('id');
 		}
+	});
+
+	it('filters cluster members by status', async () => {
+		const result = await getIsolatedCluster(archive, 'https://example.com/cluster/a', {
+			status: 404,
+		});
+		expect(result?.size).toBe(1);
+		expect(result?.members.map((member) => member.url)).toEqual([
+			'https://example.com/cluster/b',
+		]);
 	});
 });

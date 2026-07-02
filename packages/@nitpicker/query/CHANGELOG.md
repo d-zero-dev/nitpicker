@@ -3,6 +3,25 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.12.0](https://github.com/d-zero-dev/nitpicker/compare/v0.11.0...v0.12.0) (2026-07-01)
+
+### Bug Fixes
+
+- **crawler,query,cli:** drop inventory_runs.source_file_path column ([5514e59](https://github.com/d-zero-dev/nitpicker/commit/5514e5959ac4d33b57a5f45a430c3c58857ceda7))
+- **query:** exclude excludes-pattern pages from summary distributions ([0284b5e](https://github.com/d-zero-dev/nitpicker/commit/0284b5ec76290c6460976943b60e9da0756fd7dc))
+
+### Features
+
+- **crawler,query,cli:** inventory_runs audit log (Phase 1) ([4fccf41](https://github.com/d-zero-dev/nitpicker/commit/4fccf410c7a60625ad55f39f2d71e5d92b8bffcf))
+- **query,viewer:** subdivide status=-1 by errorKind in Summary ([cd9a85b](https://github.com/d-zero-dev/nitpicker/commit/cd9a85bc4ac0c168f6c5760e18d92f4a64b022a7))
+- **query:** accept precomputed components / referrer-count map on isolated-\* and page-links ([bf610fd](https://github.com/d-zero-dev/nitpicker/commit/bf610fd61be379816403996e74e14774841440f3))
+- **query:** isolated-clusters + source-based isolated-pages + redirect-resolved listLinks ([48d3e77](https://github.com/d-zero-dev/nitpicker/commit/48d3e77e6796583e307f79968eb062ccb30db190))
+- **query:** route ArchiveManager open through Archive.openCached ([f607cfd](https://github.com/d-zero-dev/nitpicker/commit/f607cfd5fb4b1989279b3af98384493124ab864c))
+
+### Performance Improvements
+
+- **query:** SQL-first sweep — N+1 → GROUP_CONCAT, parallelise graph fetch, document accepted costs ([508f4b8](https://github.com/d-zero-dev/nitpicker/commit/508f4b8c28f6a2e82bfc1b5051bc7e2176da669b))
+
 # [0.11.0](https://github.com/d-zero-dev/nitpicker/compare/v0.9.0...v0.11.0) (2026-06-18)
 
 ### Bug Fixes

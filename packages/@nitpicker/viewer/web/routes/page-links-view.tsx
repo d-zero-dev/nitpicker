@@ -6,8 +6,14 @@ import { useNavigate } from 'react-router';
 
 import { usePageLinksInfinite } from '../api/use-page-links-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
+import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
+import {
+	addRadioFilter,
+	addSort,
+	addTextFilter,
+	createTableControls,
+} from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
-import { FilterBar } from '../components/filter-bar.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
@@ -20,14 +26,24 @@ import { useI18n } from '../i18n/use-i18n.js';
  * @returns The page-links view element.
  */
 export function PageLinksView() {
-	const { params, update } = useUrlFilter();
+	const { params, updateMany } = useUrlFilter();
 	const navigate = useNavigate();
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
-	const includeExternal = params.get('includeExternal') === 'true';
+	const scope = params.get('isExternal') ?? 'false';
+	const status = params.get('status');
+	const statusValue = status == null ? undefined : Number(status);
 	const filter = {
-		isExternal: includeExternal ? undefined : false,
+		isExternal: scope === 'all' ? undefined : scope === 'true',
 		urlPattern: params.get('urlPattern') ?? undefined,
+		status: Number.isFinite(statusValue) ? statusValue : undefined,
+		contentType: params.get('contentType') ?? undefined,
+		hasResponseHeaders:
+			params.get('hasResponseHeaders') == null
+				? undefined
+				: params.get('hasResponseHeaders') === 'true',
+		sortBy: params.get('sortBy') ?? undefined,
+		sortOrder: params.get('sortOrder') ?? undefined,
 	};
 
 	const offset = (currentPage - 1) * pageSize;
@@ -88,6 +104,13 @@ export function PageLinksView() {
 				cell: (i) => i.getValue<string | null>() ?? '—',
 			},
 			{
+				accessorKey: 'isExternal',
+				header: t('common.type'),
+				size: 90,
+				cell: (i) =>
+					i.getValue<boolean>() ? t('common.external') : t('common.internal'),
+			},
+			{
 				accessorKey: 'redirectFromCount',
 				header: t('views.pageLinks.colRedirectFrom'),
 				size: 110,
@@ -114,6 +137,77 @@ export function PageLinksView() {
 		],
 		[navigate, t],
 	);
+	const columnControls = useMemo(() => {
+		const context = { params, updateMany };
+		const controls = createTableControls(context);
+		for (const key of [
+			'url',
+			'title',
+			'status',
+			'statusText',
+			'contentType',
+			'redirectFromCount',
+			'referrerCount',
+			'hasResponseHeaders',
+			'skipReason',
+			'isExternal',
+		]) {
+			addSort(controls, context, key, key);
+		}
+		addTextFilter(
+			controls,
+			context,
+			'url',
+			'urlPattern',
+			t('views.pageLinks.filterUrlPattern'),
+		);
+		addRadioFilter(
+			controls,
+			context,
+			'status',
+			'status',
+			t('views.pageLinks.colStatus'),
+			buildStatusFilterOptions(
+				paged.data?.items,
+				(item) => item.status,
+				status,
+				t('common.all'),
+			),
+		);
+		addTextFilter(
+			controls,
+			context,
+			'contentType',
+			'contentType',
+			t('views.resources.filterContentType'),
+		);
+		addRadioFilter(
+			controls,
+			context,
+			'isExternal',
+			'isExternal',
+			t('common.type'),
+			[
+				{ value: 'all', label: t('common.all'), checked: false },
+				{ value: 'false', label: t('common.internal'), checked: false },
+				{ value: 'true', label: t('common.external'), checked: false },
+			],
+			'false',
+		);
+		addRadioFilter(
+			controls,
+			context,
+			'hasResponseHeaders',
+			'hasResponseHeaders',
+			t('views.pageLinks.colHeaders'),
+			[
+				{ value: '', label: t('common.all'), checked: false },
+				{ value: 'true', label: t('common.yes'), checked: false },
+				{ value: 'false', label: t('common.none'), checked: false },
+			],
+		);
+		return controls;
+	}, [paged.data?.items, params, status, t, updateMany]);
 
 	return (
 		<div className="view">
@@ -121,26 +215,6 @@ export function PageLinksView() {
 				titleKey="views.pageLinks.title"
 				descriptionKey="views.pageLinks.description"
 			/>
-			<FilterBar>
-				<input
-					aria-label={t('views.pageLinks.filterUrlPattern')}
-					placeholder={t('views.pageLinks.filterUrlPattern')}
-					defaultValue={filter.urlPattern ?? ''}
-					onBlur={(e) => {
-						update('urlPattern', e.target.value);
-					}}
-				/>
-				<label>
-					<input
-						type="checkbox"
-						checked={includeExternal}
-						onChange={(e) => {
-							update('includeExternal', e.target.checked ? 'true' : '');
-						}}
-					/>
-					{t('common.includeExternal')}
-				</label>
-			</FilterBar>
 			{mode === 'mpa' ? (
 				<DataTable
 					mode="mpa"
@@ -155,6 +229,7 @@ export function PageLinksView() {
 					isLoading={paged.isLoading}
 					isError={paged.isError}
 					error={paged.error}
+					columnControls={columnControls}
 				/>
 			) : (
 				<DataTable

@@ -3025,6 +3025,255 @@ describe('getExistingPageUrls / getExistingResourceUrls', () => {
 	});
 });
 
+describe('insertInventorySeeds', () => {
+	it('is a no-op when the input array is empty', async () => {
+		const dbPath = path.resolve(workingDir, 'insert-seeds-empty.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Empty input must not throw and must not write any row.
+			await db.insertInventorySeeds([]);
+			const pages = await db.getPages();
+			expect(pages.length).toBe(0);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('inserts placeholder rows with scraped=0 source=inventory-seed isExternal=0 isTarget=0', async () => {
+		const dbPath = path.resolve(workingDir, 'insert-seeds-basic.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.insertInventorySeeds([
+				'http://localhost/seed-a',
+				'http://localhost/seed-b',
+			]);
+			const pages = await db.getPages();
+			expect(pages.map((p) => p.url).toSorted()).toEqual([
+				'http://localhost/seed-a',
+				'http://localhost/seed-b',
+			]);
+			for (const page of pages) {
+				expect(page.scraped).toBe(0);
+				expect(page.isExternal).toBe(0);
+				expect(page.isTarget).toBe(0);
+				expect(page.source).toBe('inventory-seed');
+			}
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('rows land in the strict pending set so --resume picks them up', async () => {
+		// Regression test for issue #121: pre-inserted seeds must satisfy the
+		// strict pending filter (`scraped=0 AND isExternal=0 AND (EXISTS anchors
+		// OR source != "crawled")`) so an interrupted `--inventory` scrape phase
+		// can be recovered with `crawl --resume`. Anchor coverage is *not*
+		// expected for these rows — the `OR p.source != 'crawled'` branch is
+		// the load-bearing clause.
+		const dbPath = path.resolve(workingDir, 'insert-seeds-pending.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.insertInventorySeeds(['http://localhost/recoverable-seed']);
+			const { pending } = await db.getCrawlingState();
+			expect(pending).toEqual(['http://localhost/recoverable-seed']);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('is idempotent when called twice with the same URL (onConflict ignore)', async () => {
+		const dbPath = path.resolve(workingDir, 'insert-seeds-idempotent.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.insertInventorySeeds(['http://localhost/seed']);
+			await db.insertInventorySeeds(['http://localhost/seed']);
+			const pages = await db.getPages();
+			expect(pages.length).toBe(1);
+			expect(pages[0]?.source).toBe('inventory-seed');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('does not overwrite an existing crawled row', async () => {
+		// Crawled-wins is the priority order documented at PageSource —
+		// a row that already says `source='crawled'` must NOT be downgraded
+		// to `inventory-seed` when the inventory list re-includes the URL.
+		// The orchestrator pre-filters via `getExistingPageUrls`, but the
+		// raw method must be safe even if that filter is bypassed.
+		const dbPath = path.resolve(workingDir, 'insert-seeds-no-overwrite.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.updatePage(
+				{
+					url: parseUrl('http://localhost/already-crawled')!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 1,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'already-crawled' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				true,
+				true,
+			);
+			await db.insertInventorySeeds(['http://localhost/already-crawled']);
+			const pages = await db.getPages();
+			expect(pages.length).toBe(1);
+			expect(pages[0]?.source).toBe('crawled');
+			expect(pages[0]?.scraped).toBe(1);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('handles input arrays larger than the chunk size (500)', async () => {
+		// 750 URLs > the 500-URL chunk size — every batch must commit.
+		const dbPath = path.resolve(workingDir, 'insert-seeds-chunked.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			const urls: string[] = [];
+			for (let i = 0; i < 750; i++) {
+				urls.push(`http://localhost/seed-${i}`);
+			}
+			await db.insertInventorySeeds(urls);
+			const pages = await db.getPages();
+			expect(pages.length).toBe(750);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+});
+
+describe('insertInventoryResources', () => {
+	it('is a no-op when the input array is empty', async () => {
+		const dbPath = path.resolve(workingDir, 'insert-resources-empty.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.insertInventoryResources([]);
+			const resources = await db.getResources();
+			expect(resources.length).toBe(0);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('inserts placeholder rows with all metadata NULL and source=inventory-seed', async () => {
+		const dbPath = path.resolve(workingDir, 'insert-resources-basic.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.insertInventoryResources([
+				'http://localhost/asset-a.pdf',
+				'http://localhost/asset-b.zip',
+			]);
+			const resources = await db.getResources();
+			expect(resources.map((r) => r.url).toSorted()).toEqual([
+				'http://localhost/asset-a.pdf',
+				'http://localhost/asset-b.zip',
+			]);
+			for (const row of resources) {
+				expect(row.source).toBe('inventory-seed');
+				expect(row.status).toBeNull();
+				expect(row.statusText).toBeNull();
+				expect(row.contentType).toBeNull();
+				expect(row.contentLength).toBeNull();
+				expect(row.responseHeaders).toBeNull();
+				expect(row.isExternal).toBe(0);
+			}
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('is idempotent across repeat calls (onConflict ignore)', async () => {
+		const dbPath = path.resolve(workingDir, 'insert-resources-idempotent.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.insertInventoryResources(['http://localhost/asset.pdf']);
+			await db.insertInventoryResources(['http://localhost/asset.pdf']);
+			const resources = await db.getResources();
+			expect(resources.length).toBe(1);
+			expect(resources[0]?.source).toBe('inventory-seed');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('does not overwrite a pre-existing crawled resource row', async () => {
+		// The orchestrator's existing-URL filter normally keeps inventory
+		// from re-touching a row already known to the archive, but the
+		// raw method must be safe even if that filter is bypassed.
+		const dbPath = path.resolve(workingDir, 'insert-resources-no-overwrite.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.insertResource({
+				url: parseUrl('http://localhost/style.css')!,
+				isExternal: false,
+				isError: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/css',
+				contentLength: 100,
+				compress: false,
+				cdn: false,
+				headers: {},
+			});
+			await db.insertInventoryResources(['http://localhost/style.css']);
+			const resources = await db.getResources();
+			expect(resources.length).toBe(1);
+			expect(resources[0]?.source).toBe('crawled');
+			expect(resources[0]?.status).toBe(200);
+			expect(resources[0]?.contentType).toBe('text/css');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('handles input arrays larger than the chunk size (500)', async () => {
+		const dbPath = path.resolve(workingDir, 'insert-resources-chunked.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			const urls: string[] = [];
+			for (let i = 0; i < 750; i++) {
+				urls.push(`http://localhost/asset-${i}.bin`);
+			}
+			await db.insertInventoryResources(urls);
+			const resources = await db.getResources();
+			expect(resources.length).toBe(750);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+});
+
 describe('source priority (crawled > inventory-seed > inventory-discovered)', () => {
 	/**
 	 * Build a minimal page payload for `updatePage` at the given URL.
@@ -4467,6 +4716,35 @@ describe('Database read-only mode', () => {
 			expect(result).toBeDefined();
 		} finally {
 			await readonly.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+});
+
+describe("Database.emit('error')", () => {
+	// Guards the decorator-to-HOF migration: the deleted `@ErrorEmitter()`
+	// decorator was invoked at Database method entry — the new
+	// `emitError` / `emitErrorAndRetry` HOFs must preserve that contract so
+	// downstream `error` listeners (crawler orchestrator abort path) keep
+	// firing on real Errors.
+	it("emits an 'error' event with the caught Error and re-throws when a wrapped method fails", async () => {
+		const dbPath = path.resolve(workingDir, 'emit-error-integration.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			// Close the connection so subsequent SQL fails deterministically
+			// (knex reports "Unable to acquire a connection"). `getExistingPageUrls`
+			// is a Pattern-B (no-retry) method, so the throw propagates immediately
+			// without incurring the retry back-off.
+			await db.destroy();
+			const seen: unknown[] = [];
+			db.on('error', (error) => {
+				seen.push(error);
+			});
+			await expect(db.getExistingPageUrls()).rejects.toBeInstanceOf(Error);
+			expect(seen).toHaveLength(1);
+			expect(seen[0]).toBeInstanceOf(Error);
+		} finally {
 			await removeIfExists(dbPath);
 		}
 	});

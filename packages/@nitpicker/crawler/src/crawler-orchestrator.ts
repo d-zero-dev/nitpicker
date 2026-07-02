@@ -21,6 +21,7 @@ import { dnsBurnedHostShortCircuitCounter } from './crawler/dns-burned-host-shor
 import { findScopeEntry } from './crawler/find-scope-entry.js';
 import { isLikelyHtmlUrl } from './crawler/is-likely-html-url.js';
 import { PreloadShortCircuitError } from './crawler/preload-short-circuit-error.js';
+import { protocolAgnosticKey } from './crawler/protocol-agnostic-key.js';
 import { crawlerLog, log } from './debug.js';
 import { normalizeToArray } from './normalize-to-array.js';
 import { resolveOutputPath } from './resolve-output-path.js';
@@ -642,7 +643,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				);
 			}
 
-			const { scraped, pending } = await archive.getCrawlingState();
+			const { pending } = await archive.getCrawlingState();
 			if (pending.length > 0) {
 				// `getCrawlingState` returns the STRICT pending set — in-scope,
 				// anchor-referenced, `scraped=0` rows. Predicted-discard leaks
@@ -730,6 +731,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			const backupPath = absFilePath + '.bak';
 			await copyFile(absFilePath, backupPath);
 
+			// Ingestion (pre-insert + audit) is `.bak`-protected — a failure
+			// there restores the archive and the operator reruns. Once
+			// ingestion completes and the `.bak` is released, the scrape
+			// phase runs without `.bak` protection: a Ctrl+C / crash leaves
+			// the pre-inserted `inventory-seed` rows in `pages` so
+			// `crawl --resume` recovers them via the strict-pending set
+			// (see {@link Database.getCrawlingState}'s `OR p.source != 'crawled'`
+			// clause). This flag steers the catch below.
+			let ingestionComplete = false;
 			try {
 				// Classify novel URLs by URL-extension heuristic (no I/O).
 				// Source file lists come from `ls` on the doc-root, so the
@@ -760,33 +770,79 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// which is sufficient for `listUnusedResources` (referrer
 				// count = 0) but means downstream consumers must treat
 				// null as "not probed" rather than "failed".
-				const htmlSeeds: ExURL[] = [];
+				const rawHtmlSeeds: ExURL[] = [];
+				const nonHtmlSeeds: ExURL[] = [];
 				for (const url of novelUrls) {
 					if (isLikelyHtmlUrl(url)) {
-						htmlSeeds.push(url);
+						rawHtmlSeeds.push(url);
 					} else {
-						await archive.setResources(
-							{
-								url,
-								isExternal: false,
-								isError: false,
-								status: null,
-								statusText: null,
-								contentType: null,
-								contentLength: null,
-								compress: false,
-								cdn: false,
-								headers: null,
-							},
-							'inventory-seed',
-						);
+						nonHtmlSeeds.push(url);
 					}
 				}
+				// Dedup HTML seeds by `protocolAgnosticKey` so an inventory
+				// list that mixes `http://` and `https://` for the same
+				// origin does not produce two `pages` rows that the dealer
+				// later collapses to one — the loser would otherwise stay
+				// `scraped=0, source='inventory-seed'` forever and look like
+				// a real recovery candidate on `--resume`. `getExistingPageUrls`
+				// keys on the full URL (with protocol), so it cannot catch
+				// the cross-scheme duplicate; this is the dedup boundary.
+				const seenKeys = new Set<string>();
+				const htmlSeeds: ExURL[] = [];
+				for (const url of rawHtmlSeeds) {
+					const key = protocolAgnosticKey(url.withoutHashAndAuth);
+					if (seenKeys.has(key)) {
+						continue;
+					}
+					seenKeys.add(key);
+					htmlSeeds.push(url);
+				}
+				// Bulk-record non-HTML novel URLs in `resources` as
+				// `source='inventory-seed'` placeholders. The previous
+				// per-URL `await setResources(...)` loop spent minutes
+				// inside the `.bak`-protected window on large inventory
+				// lists; the chunked bulk path collapses N round-trips
+				// to N/500.
+				await archive.insertInventoryResources(nonHtmlSeeds);
+				// Pre-insert HTML seeds as `scraped = 0`,
+				// `source = 'inventory-seed'` placeholders *before* the
+				// scrape phase, so a Ctrl+C between here and `setPage`
+				// no longer loses the URL. The strict-pending set picks
+				// these rows up on the next `--resume` via the
+				// `OR p.source != 'crawled'` clause.
+				await archive.insertInventorySeeds(htmlSeeds);
 				log(
 					'[inventory] %d HTML seed(s), %d non-HTML resource(s) recorded',
 					htmlSeeds.length,
-					novelUrls.length - htmlSeeds.length,
+					nonHtmlSeeds.length,
 				);
+				// Audit row is written *inside* the `.bak` window: a libsql
+				// hiccup or transient lock on the INSERT aborts the ingestion
+				// and the `.bak` restore wipes the pre-inserted seeds too,
+				// so "either the whole run took or none of it did" holds at
+				// the ingestion boundary. Past behaviour swallowed the
+				// failure post-scrape; the new boundary makes restore safe
+				// and useful, so the swallow is gone (see
+				// {@link CrawlerOrchestrator.#writeInventoryRunRow}).
+				await CrawlerOrchestrator.#writeInventoryRunRow(archive, {
+					inventoryUrlsCount: inventoryUrls.length,
+					htmlSeedsCount: htmlSeeds.length,
+					nonHtmlCount: nonHtmlSeeds.length,
+					outOfScope,
+					sourceFileSha256,
+				});
+				// Ingestion's DB writes are now committed. From here on a
+				// throw must NOT trigger the `.bak` restore (it would wipe
+				// the durable seeds + audit row). Setting the flag *before*
+				// the `.bak` unlink covers the rare Windows / antivirus
+				// path where `unlinkFile` itself fails with EBUSY/EPERM —
+				// the `.bak` may leak on disk for the operator to delete
+				// manually, but the archive state stays intact.
+				ingestionComplete = true;
+				// Release `.bak` — ingestion succeeded. Beyond this point a
+				// throw is the scrape phase's problem; the archive stays
+				// intact and the operator runs `--resume` to recover.
+				await ignoreEnoent(unlinkFile(backupPath));
 
 				// Config sent to the user-facing `initializedCallback`
 				// (matches the rest of the orchestrator's public surface —
@@ -807,6 +863,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				};
 				if (htmlSeeds.length > 0) {
 					const orchestrator = new CrawlerOrchestrator(archive, orchestratorOptions);
+					// Re-read pending *after* the pre-insert so the strict-
+					// pending set includes the freshly inserted
+					// `inventory-seed` rows; feed that into `crawler.resume`
+					// and start a seedless `crawling([])` — the same pattern
+					// `retryFailed` uses to drive the dealer from the
+					// pending set alone (see retryFailed's
+					// `crawling([], { recursive })` invocation).
+					const { scraped: scrapedAfter, pending: pendingAfter } =
+						await archive.getCrawlingState();
 					const resources = await archive.getResourceUrlList();
 					// Pre-existing rendered HTML page count seeds the
 					// session-spanning `pagesScraped` counter so the progress
@@ -815,11 +880,12 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					// `retryFailed` / `resume` paths and avoids users reading
 					// the parenthesised number as "inner pages dropped to N".
 					const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
-					// Empty pending (we rejected non-empty above) but feed
-					// every already-scraped URL into `seen` so the Crawler's
-					// link enqueueing path drops links that hit a known
-					// page without re-rendering it.
-					orchestrator.#crawler.resume(pending, scraped, resources, pagesScrapedOffset);
+					orchestrator.#crawler.resume(
+						pendingAfter,
+						scrapedAfter,
+						resources,
+						pagesScrapedOffset,
+					);
 					if (initializedCallback) {
 						await initializedCallback(orchestrator, baseConfig);
 					}
@@ -830,17 +896,9 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 						htmlSeeds.map((u) => u.href),
 					);
 					await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
-					await orchestrator.crawling(htmlSeeds, { recursive: true });
+					await orchestrator.crawling([], { recursive: true });
 					CrawlerOrchestrator.#finalizeCrawlSession();
 					await archive.setUrlOrder();
-					await CrawlerOrchestrator.#writeInventoryRunRow(archive, {
-						inventoryUrlsCount: inventoryUrls.length,
-						htmlSeedsCount: htmlSeeds.length,
-						nonHtmlCount: novelUrls.length - htmlSeeds.length,
-						outOfScope,
-						sourceFileSha256,
-					});
-					await ignoreEnoent(unlinkFile(backupPath));
 					return orchestrator;
 				}
 
@@ -851,16 +909,35 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await initializedCallback(orchestrator, baseConfig);
 				}
 				await archive.setUrlOrder();
-				await CrawlerOrchestrator.#writeInventoryRunRow(archive, {
-					inventoryUrlsCount: inventoryUrls.length,
-					htmlSeedsCount: htmlSeeds.length,
-					nonHtmlCount: novelUrls.length - htmlSeeds.length,
-					outOfScope,
-					sourceFileSha256,
-				});
-				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
 			} catch (error) {
+				if (ingestionComplete) {
+					// Scrape phase failed; the pre-inserted seeds + audit
+					// row are durable inside `tmpDir/db.sqlite` but not yet
+					// on disk as a `.nitpicker` tar. The outer catch below
+					// runs `archive.close()`, which sees the original
+					// (pre-inventory) `.nitpicker` already on disk and
+					// would just `remove(tmpDir)` — silently wiping every
+					// `inventory-seed` row and the audit row.
+					//
+					// Persist the ingested state ourselves before letting
+					// the outer catch unwind, then re-throw so the operator
+					// learns about the scrape failure (and can recover via
+					// `crawl --resume <archive>`). `releaseHandle` shares
+					// the orchestrator's `#closeOnce` guard, so the outer
+					// catch's `close()` becomes a no-op for the destructive
+					// step and only runs `releaseLock` cleanup.
+					try {
+						await archive.write();
+						await archive.releaseHandle();
+					} catch (persistError) {
+						throw new AggregateError(
+							[error, persistError],
+							'inventory scrape phase failed AND persisting the ingested state to disk also failed. The archive may be in an inconsistent state — check tmpDir.',
+						);
+					}
+					throw error;
+				}
 				try {
 					await copyFile(backupPath, absFilePath);
 					await ignoreEnoent(unlinkFile(backupPath));
@@ -1061,33 +1138,37 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	}
 
 	/**
-	 * Persist one `inventory_runs` audit row at the tail of a successful
-	 * `--inventory` invocation. Centralised here so the two success-exit
-	 * paths in {@link CrawlerOrchestrator.inventory} (HTML-seed branch +
-	 * non-HTML-only branch) stay in lockstep.
+	 * Persist one `inventory_runs` audit row inside the ingestion phase of a
+	 * `--inventory` invocation, before the `.bak` is released. Lives as a
+	 * static helper because the audit-row shape (timestamp stamping + label
+	 * auto-gen + the privacy-driven path elision documented below) is a
+	 * cohesive concern that benefits from staying outside the long
+	 * `inventory()` body even though only one caller remains after the
+	 * ingestion-phase consolidation.
 	 *
-	 * `ran_at` is stamped now (run completion timestamp). `list_label`
-	 * is auto-generated from `ran_at` when the CLI did not pass one —
-	 * Phase 1 has no `--label` flag, so this is always the auto form.
+	 * `ran_at` is stamped now (ingestion-completion timestamp; the scrape
+	 * phase that may follow is treated as separate). `list_label` is
+	 * auto-generated from `ran_at` when the CLI did not pass one — Phase 1
+	 * has no `--label` flag, so this is always the auto form.
 	 * `source_file_sha256` arrives pre-computed via
 	 * `aggregates.sourceFileSha256` (the CLI's `inventoryCrawl` ran
 	 * `computeFileSha256` against the input txt before the orchestrator
-	 * was even invoked). The orchestrator boundary deliberately never
-	 * sees the absolute path — see {@link InventoryRunAggregates} for
-	 * the privacy rationale.
+	 * was even invoked). The orchestrator boundary deliberately never sees
+	 * the absolute path — see {@link InventoryRunAggregates} for the
+	 * privacy rationale.
 	 *
-	 * **Audit-write failures are swallowed** (logged to stderr, not
-	 * re-thrown). The ingestion has already committed by the time we get
-	 * here — `setUrlOrder()` was the last semantically-important write.
-	 * Letting a libsql hiccup or a transient lock on the audit INSERT
-	 * bubble up to the orchestrator's outer catch would restore the
-	 * archive from `.bak` and discard the user's entire crawl, which is
-	 * strictly worse than losing one audit row. Phase 2 may stage the
-	 * failure for a later retry; Phase 1 just logs.
+	 * **Audit-write failures abort the ingestion phase.** The earlier
+	 * implementation swallowed them because the audit was the last write
+	 * after* the scrape, so re-throwing would have wiped a completed crawl;
+	 * with audit now lifted into the `.bak`-protected ingestion phase the
+	 * trade-off flips. A failed audit row is restorable: the outer catch
+	 * copies `.bak` back over the archive and the operator reruns the
+	 * (short) ingestion from scratch. That keeps `inventory_runs` honest
+	 * (no "ran but unrecorded" rows) at the cost of one rerun.
 	 *
-	 * Forward-compat: when Phase 2 introduces an explicit `--label`
-	 * flag, thread `labelOverride` through {@link inventory} into the
-	 * `aggregates` shape so the auto-name can be overridden.
+	 * Forward-compat: when Phase 2 introduces an explicit `--label` flag,
+	 * thread `labelOverride` through {@link inventory} into the `aggregates`
+	 * shape so the auto-name can be overridden.
 	 * @param archive - The opened archive to write the audit row into.
 	 * @param aggregates - The counts captured during the inventory pass; see {@link InventoryRunAggregates}.
 	 */
@@ -1096,24 +1177,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		aggregates: InventoryRunAggregates,
 	): Promise<void> {
 		const ranAt = new Date().toISOString();
-		try {
-			await archive.recordInventoryRun({
-				ran_at: ranAt,
-				list_label: `inventory-${ranAt}`,
-				source_file_sha256: aggregates.sourceFileSha256,
-				total_lines: aggregates.inventoryUrlsCount,
-				new_pages: aggregates.htmlSeedsCount,
-				new_resources: aggregates.nonHtmlCount,
-				scope_skipped: aggregates.outOfScope,
-			});
-		} catch (error) {
-			// eslint-disable-next-line no-console
-			console.error(
-				`[inventory] audit-log write failed (run NOT recorded, ingestion preserved): ${
-					error instanceof Error ? error.message : String(error)
-				}`,
-			);
-		}
+		await archive.recordInventoryRun({
+			ran_at: ranAt,
+			list_label: `inventory-${ranAt}`,
+			source_file_sha256: aggregates.sourceFileSha256,
+			total_lines: aggregates.inventoryUrlsCount,
+			new_pages: aggregates.htmlSeedsCount,
+			new_resources: aggregates.nonHtmlCount,
+			scope_skipped: aggregates.outOfScope,
+		});
 	}
 
 	/**

@@ -3,6 +3,48 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.12.0](https://github.com/d-zero-dev/nitpicker/compare/v0.11.0...v0.12.0) (2026-07-01)
+
+### Bug Fixes
+
+- **crawler,query,cli:** drop inventory_runs.source_file_path column ([5514e59](https://github.com/d-zero-dev/nitpicker/commit/5514e5959ac4d33b57a5f45a430c3c58857ceda7))
+- **crawler:** avoid requeueing roots on retry-failed ([dcb1702](https://github.com/d-zero-dev/nitpicker/commit/dcb17028d20b43d0846586a7ab5c3cd56e06b870))
+- **crawler:** capture page.url() on scrapeStart's error-return path so JS-redirect rescue fires ([7496a1c](https://github.com/d-zero-dev/nitpicker/commit/7496a1cb56faad0b7989e6a83668a148fb9cf9d4))
+- **crawler:** include inventory-seed rows in strict pending even without anchors ([82f866a](https://github.com/d-zero-dev/nitpicker/commit/82f866abd8df7463bad219eb8dfdae094c0851d2))
+- **crawler:** inventory source labeling and large-list performance ([6c96584](https://github.com/d-zero-dev/nitpicker/commit/6c965845d842c0706e4e91c111837abd8d8222a7))
+- **crawler:** keep HEAD-resolved redirect chain when puppeteer goto returns null ([f3c5c91](https://github.com/d-zero-dev/nitpicker/commit/f3c5c91795275490c3c8aabfb36930e0d69c05be))
+- **crawler:** make `getCrawlingState` pending strictly in-scope and anchor-referenced ([8f1dc4a](https://github.com/d-zero-dev/nitpicker/commit/8f1dc4ab223108b148993acc30c5b7fbc0e2d971))
+- **crawler:** pre-insert --inventory HTML seeds to survive scrape-phase interruption ([#121](https://github.com/d-zero-dev/nitpicker/issues/121)) ([be4e25b](https://github.com/d-zero-dev/nitpicker/commit/be4e25bd9e0de3536daec227973ca0116f3ea8d8))
+- **crawler:** preserve 4xx/5xx status when GET fallback returns the same code ([7c358f7](https://github.com/d-zero-dev/nitpicker/commit/7c358f76e3704da53b1aee84f4759dab7d862f99))
+- **crawler:** propagate inventory lineage through redirect chain intermediates ([c0f0ea4](https://github.com/d-zero-dev/nitpicker/commit/c0f0ea40b7ee39306068157b7e93734f6a4d0fff))
+- **crawler:** put isExternal first in idx_pages_listfilter — fix the COUNT-only 8.7s regression ([e2837fc](https://github.com/d-zero-dev/nitpicker/commit/e2837fcd6b04d62f5f3dde0dbd24f9038cdc5b87)), closes [#96](https://github.com/d-zero-dev/nitpicker/issues/96) [#96](https://github.com/d-zero-dev/nitpicker/issues/96) [#96](https://github.com/d-zero-dev/nitpicker/issues/96)
+- **crawler:** recover "certificate has expired" + puppeteer "detached frame" from unknown ([82379ed](https://github.com/d-zero-dev/nitpicker/commit/82379edb6d3a8265c8e4c259cc0a69b82de77ab9))
+- **crawler:** register page.authenticate by default to drain native HTTP-auth dialogs ([3310dba](https://github.com/d-zero-dev/nitpicker/commit/3310dba92f4e887c6e2a9689fd5252291a2788df))
+- **crawler:** seed inventory pagesScrapedOffset from existing scraped count ([4f2a872](https://github.com/d-zero-dev/nitpicker/commit/4f2a8729562ae24591fe1266502214cc0005d660))
+- **crawler:** skip per-URL interval delay for DNS-burned hosts ([f1a7ac0](https://github.com/d-zero-dev/nitpicker/commit/f1a7ac092f84785910a04a885aaae4f91f5069e3))
+- **crawler:** strip URL-embedded credentials before scrapeStart to stop cross-origin leak ([abfc15e](https://github.com/d-zero-dev/nitpicker/commit/abfc15e09d0cf216ce5eaf8cd653fabae7201c75))
+- **crawler:** suppress DNS burn cascade for hosts proven alive in this session ([8a9d46c](https://github.com/d-zero-dev/nitpicker/commit/8a9d46cd1cd1bb05c89909c2310e9bcf7079ad34)), closes [#91](https://github.com/d-zero-dev/nitpicker/issues/91)
+- **crawler:** tighten error-recovery edges flagged by code-review xhigh ([2ef4748](https://github.com/d-zero-dev/nitpicker/commit/2ef47484960430de063084dd34e6b65086c0c42d))
+
+### Features
+
+- **crawler,query,cli:** inventory_runs audit log (Phase 1) ([4fccf41](https://github.com/d-zero-dev/nitpicker/commit/4fccf410c7a60625ad55f39f2d71e5d92b8bffcf))
+- **crawler:** add client-blocked kind + tighten tls / timeout regex ([05516c5](https://github.com/d-zero-dev/nitpicker/commit/05516c5126317f5889a322ad67fb707621c8c94b))
+- **crawler:** add idx_pages_summary_contenttype + idx_pages_summary_failed for getSummary ([790e9e4](https://github.com/d-zero-dev/nitpicker/commit/790e9e49e821aa0937217c2c34b4a32c09fbdf86)), closes [#96](https://github.com/d-zero-dev/nitpicker/issues/96) [#96](https://github.com/d-zero-dev/nitpicker/issues/96)
+- **crawler:** add tar cache for read-only archive opens ([8632a44](https://github.com/d-zero-dev/nitpicker/commit/8632a44be9c840bf3f1aa858fee60135d653f644))
+- **crawler:** cache DNS-burned hosts and short-circuit retries ([7d2681e](https://github.com/d-zero-dev/nitpicker/commit/7d2681e1ccfb605add5da4acb97bdd0a41db8abf))
+- **crawler:** classify EAI_AGAIN / EREFUSED / local-network / parse-error ([65b1ea5](https://github.com/d-zero-dev/nitpicker/commit/65b1ea59a9553f0ea670806d4f7bcdc6e6955ccc))
+- **crawler:** escalate HEAD pre-flight timeout per retry attempt ([ccaa263](https://github.com/d-zero-dev/nitpicker/commit/ccaa263a131618211540caeccafb13a5312671ed))
+- **crawler:** exclude permanent failure kinds from --retry-failed reset ([8ab1f21](https://github.com/d-zero-dev/nitpicker/commit/8ab1f21a0f48dad9864428cf97e49f708bbe648b))
+- **crawler:** fall back to GET when HEAD response is unusable ([cc8f3e4](https://github.com/d-zero-dev/nitpicker/commit/cc8f3e4e4851b7b5ce70a77796f680ba80860a55))
+- **crawler:** puppeteer one-shot fallback when HEAD/GET both die on HTML URL ([ca38053](https://github.com/d-zero-dev/nitpicker/commit/ca38053a099dc8088140fd22ca8997954890911a))
+- **crawler:** rescue JS-redirect navigations as redirect edges ([a39a486](https://github.com/d-zero-dev/nitpicker/commit/a39a486722de57dd35d36d7b61c2b484304ae315))
+
+### Performance Improvements
+
+- **crawler:** 368x faster listPages on large archives via composite covering index ([7747f49](https://github.com/d-zero-dev/nitpicker/commit/7747f4907e4e9a25332ca016588e566d7bda7065))
+- **crawler:** add covering indexes for listUnusedResources and listImages ([e1b6b95](https://github.com/d-zero-dev/nitpicker/commit/e1b6b95788f7878174cc97ab0a13dce9a204b807)), closes [#96](https://github.com/d-zero-dev/nitpicker/issues/96)
+
 # [0.11.0](https://github.com/d-zero-dev/nitpicker/compare/v0.9.0...v0.11.0) (2026-06-18)
 
 ### Bug Fixes

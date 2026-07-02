@@ -6,6 +6,8 @@ import type {
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type { Knex } from 'knex';
 
+import { applyListOrder } from './apply-list-order.js';
+
 /**
  * List internal sub-resources that no archived page references — "unused"
  * server-side files (CSS / JS / images / PDFs / fonts / …) that the crawl
@@ -34,9 +36,12 @@ export async function listUnusedResources(
 	const knex = accessor.getKnex();
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
+	const sortBy = options.sortBy ?? 'url';
+	const sortOrder = options.sortOrder ?? 'asc';
+	const useUrlSort = options.sortBy != null;
 
-	const baseWhere = (qb: Knex.QueryBuilder): Knex.QueryBuilder =>
-		qb
+	const baseWhere = (qb: Knex.QueryBuilder): Knex.QueryBuilder => {
+		const query = qb
 			.leftJoin(
 				'resources-referrers',
 				'resources.id',
@@ -45,6 +50,20 @@ export async function listUnusedResources(
 			)
 			.whereNull('resources-referrers.id')
 			.where('resources.isExternal', 0);
+		if (options.urlPattern) {
+			query.where('resources.url', 'like', options.urlPattern);
+		}
+		if (options.status != null) {
+			query.where('resources.status', options.status);
+		}
+		if (options.contentType) {
+			query.where('resources.contentType', 'like', `${options.contentType}%`);
+		}
+		if (options.source) {
+			query.where('resources.source', options.source);
+		}
+		return query;
+	};
 
 	const countResult = (await baseWhere(knex('resources')).count(
 		'resources.id as total',
@@ -53,17 +72,21 @@ export async function listUnusedResources(
 	}[];
 	const total = countResult[0]?.total ?? 0;
 
-	const rows = (await baseWhere(knex('resources'))
-		.select(
-			'resources.url',
-			'resources.status',
-			'resources.contentType',
-			'resources.contentLength',
-			'resources.source',
-		)
-		.orderBy('resources.url')
-		.limit(limit)
-		.offset(offset)) as {
+	const rowQuery = baseWhere(knex('resources')).select(
+		'resources.url',
+		'resources.status',
+		'resources.contentType',
+		'resources.contentLength',
+		'resources.source',
+	);
+	applyListOrder(rowQuery, knex, sortBy, sortOrder, {
+		url: { column: '"resources"."url"', type: useUrlSort ? 'url' : 'plain' },
+		status: { column: '"resources"."status"' },
+		contentType: { column: '"resources"."contentType"' },
+		contentLength: { column: '"resources"."contentLength"' },
+		source: { column: '"resources"."source"' },
+	});
+	const rows = (await rowQuery.limit(limit).offset(offset)) as {
 		url: string;
 		status: number | null;
 		contentType: string | null;

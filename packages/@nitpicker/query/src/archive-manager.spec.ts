@@ -567,14 +567,46 @@ describe('ArchiveManager stub mode', () => {
 	});
 });
 
+/**
+ * Remove the orphan `._nitpicker-<name>.lock` directories that mocked-`close`
+ * tests leak into `process.cwd()`. `ArchiveManager.open` calls `Archive.open`
+ * without forwarding `cwd`, so `Archive.open` defaults to `process.cwd()` and
+ * acquires `<cwd>/._nitpicker-<basename>.lock`. The lock is normally released
+ * inside `Archive.#runFullClose`'s `finally`, but these tests fully mock
+ * `archive.close` to reject — that path never runs, and `cleanupOnFailure`
+ * does not touch the `.lock` directory. We sweep them here so the repo root
+ * does not accumulate stale `pid.txt` directories across test runs.
+ *
+ * Whitelist-by-basename (not a glob of `._nitpicker-*.lock` in `process.cwd()`)
+ * is deliberate: vitest worker pools run multiple spec files in parallel against
+ * the same `process.cwd()`, and a glob sweep would race-delete locks owned by
+ * sibling specs that are still mid-test.
+ *
+ * **Drift caveat**: when you add a new test that does
+ * `vi.spyOn(archive, 'close').mockRejectedValue(...)` (or otherwise prevents
+ * `Archive.#runFullClose` from reaching its `finally` releaseLock), append
+ * that archive's basename to the calling describe's `leakedLockBasenames`
+ * array. Forgetting reintroduces the original leak silently — CI does not
+ * fail on residual lock dirs.
+ * @param basenames - The archive basenames whose lock directories to remove.
+ */
+function cleanupLeakedLocksInCwd(basenames: readonly string[]) {
+	for (const basename of basenames) {
+		const lockDir = path.resolve(process.cwd(), `._nitpicker-${basename}.lock`);
+		rmSync(lockDir, { recursive: true, force: true });
+	}
+}
+
 describe('ArchiveManager lifecycle races and partial-failure recovery', () => {
 	const raceWorkingDir = path.resolve(
 		__dirname,
 		'__test_fixtures_archive_manager_race__',
 	);
 	const raceArchiveFilePath = path.resolve(raceWorkingDir, 'race-archive.nitpicker');
+	const raceLeakedLockBasenames = ['race-archive'] as const;
 
 	beforeAll(async () => {
+		cleanupLeakedLocksInCwd(raceLeakedLockBasenames);
 		mkdirSync(raceWorkingDir, { recursive: true });
 		// Build a small finished archive once so the race tests can re-open
 		// it cheaply without rebuilding a full DB each time.
@@ -608,6 +640,7 @@ describe('ArchiveManager lifecycle races and partial-failure recovery', () => {
 
 	afterAll(() => {
 		rmSync(raceWorkingDir, { recursive: true, force: true });
+		cleanupLeakedLocksInCwd(raceLeakedLockBasenames);
 	});
 
 	it('close 中の同一パスへの concurrent open は close 完了を待ち、新しい accessor を返す', async () => {
@@ -673,13 +706,16 @@ describe('ArchiveManager warning sink (onWarn)', () => {
 		__dirname,
 		'__test_fixtures_archive_manager_warn__',
 	);
+	const warnLeakedLockBasenames = ['routed', 'default-sink', 'non-error'] as const;
 
 	beforeAll(() => {
+		cleanupLeakedLocksInCwd(warnLeakedLockBasenames);
 		mkdirSync(warnWorkingDir, { recursive: true });
 	});
 
 	afterAll(() => {
 		rmSync(warnWorkingDir, { recursive: true, force: true });
+		cleanupLeakedLocksInCwd(warnLeakedLockBasenames);
 	});
 
 	/**

@@ -14,7 +14,7 @@ import type {
 } from './types.js';
 import type { PageData, Resource } from '../utils/types/types.js';
 import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
-import type { RetryDecoratorOptions } from '@d-zero/shared/retry';
+import type { RetryCallOptions } from '@d-zero/shared/retry';
 import type { Knex } from 'knex';
 
 import { createHash } from 'node:crypto';
@@ -23,7 +23,7 @@ import path from 'node:path';
 import { zstdCompressSync, zstdDecompressSync } from 'node:zlib';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { retry } from '@d-zero/shared/retry';
+import { retryCall } from '@d-zero/shared/retry';
 import { pathComparator } from '@d-zero/shared/sort/path';
 import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-await-event-emitter';
 import knex from 'knex';
@@ -34,7 +34,8 @@ import { isHtmlContentType } from '../crawler/is-html-content-type.js';
 import { normalizeContentType } from '../crawler/normalize-content-type.js';
 import { PERMANENT_ERROR_KINDS } from '../permanent-error-kinds.js';
 import { eachSplitted } from '../utils/array/each-splitted.js';
-import { ErrorEmitter } from '../utils/error/error-emitter.js';
+import { emitErrorAndRetry } from '../utils/error/emit-error-with-retry.js';
+import { emitError } from '../utils/error/emit-error.js';
 
 import { dbLog } from './debug.js';
 import { deriveLineageFromParent } from './derive-lineage-from-parent.js';
@@ -59,7 +60,7 @@ import { migratePagesResourcesSource } from './migrate-pages-resources-source.js
 import { redirectTable } from './redirect-table.js';
 import { resolveRedirectChain } from './resolve-redirect-chain.js';
 
-const retrySetting: RetryDecoratorOptions = {
+const retrySetting: RetryCallOptions = {
 	interval: 300,
 	retries: 3,
 };
@@ -240,11 +241,19 @@ function makeMetaResetPayload(): Record<string, null> {
 /**
  * Low-level database abstraction layer for the archive's SQLite database.
  *
- * Public methods that perform database queries use the `@retryable`
- * decorator for automatic retry on transient failures, and `@ErrorEmitter`
- * to propagate errors as events. The set of tables this layer manages is
+ * Public methods that perform database queries use the `emitErrorAndRetry`
+ * HOF for automatic retry on transient failures combined with error-event
+ * propagation, or `emitError` when retry is not appropriate. The set of
+ * tables this layer manages is
  * defined by `init-schema.ts` (the source of truth — query that file for
  * the canonical list).
+ *
+ * **Label sync caveat**: each `emitError` / `emitErrorAndRetry` call passes
+ * the method name as a string literal (e.g. `'Database.getAnchorsOnPage'`).
+ * TypeScript cannot check that the string matches the enclosing method's
+ * real name — the two-way sync is manual. Renaming a method here **must**
+ * update the literal string too, otherwise debug logs and `RetryTimeoutError`
+ * messages will silently report the old name.
  *
  * Use the static {@link Database.connect} factory method to create instances.
  * The constructor is private.
@@ -316,38 +325,48 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param pageId - The database ID of the page whose anchors to retrieve.
 	 * @returns An array of anchor records with resolved URL, title, status, and content type.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getAnchorsOnPage(pageId: number) {
-		const res = await this.#instance
-			.select(
-				'pages.url',
-				'pages.title',
-				'pages.status',
-				'pages.statusText',
-				'pages.contentType',
-				'anchors.hash',
-				'anchors.textContent',
-			)
-			.from('anchors')
-			.join('pages', 'anchors.hrefId', '=', 'pages.id')
-			.where('anchors.pageId', pageId);
-		return res;
+		return emitErrorAndRetry(
+			this,
+			'Database.getAnchorsOnPage',
+			async () => {
+				const res = await this.#instance
+					.select(
+						'pages.url',
+						'pages.title',
+						'pages.status',
+						'pages.statusText',
+						'pages.contentType',
+						'anchors.hash',
+						'anchors.textContent',
+					)
+					.from('anchors')
+					.join('pages', 'anchors.hrefId', '=', 'pages.id')
+					.where('anchors.pageId', pageId);
+				return res;
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Retrieves the base URL of the crawl session from the `info` table.
 	 * @returns The base URL string.
 	 * @throws {Error} If no base URL is found in the database.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getBaseUrl() {
-		const selected = await this.#instance.select('baseUrl').from<Config>('info');
-		if (!selected[0]) {
-			throw new Error('No baseUrl');
-		}
-		const [{ baseUrl }] = selected;
-		return baseUrl || '';
+		return emitErrorAndRetry(
+			this,
+			'Database.getBaseUrl',
+			async () => {
+				const selected = await this.#instance.select('baseUrl').from<Config>('info');
+				if (!selected[0]) {
+					throw new Error('No baseUrl');
+				}
+				const [{ baseUrl }] = selected;
+				return baseUrl || '';
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Retrieves the full crawl configuration from the `info` table.
@@ -355,25 +374,30 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @returns The parsed {@link Config} object.
 	 * @throws {Error} If no configuration is found in the database.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getConfig() {
-		const [config] = await this.#instance.select('*').from<Config>('info');
-		if (!config) {
-			throw new Error('No config');
-		}
-		const opt: Config = {
-			...config,
-			excludes: getJSON<string[]>(config.excludes, []),
-			excludeKeywords: getJSON<string[]>(config.excludeKeywords, []),
-			excludeUrls: getJSON<string[]>(config.excludeUrls, []),
-			roots: getJSON<string[]>(config.roots, []),
-			retry: config.retry ?? 3,
-		};
-		// @ts-expect-error — `id` is the primary key, not part of the public Config shape
-		delete opt.id;
-		dbLog('Table `info`: %O => %O', config, opt);
-		return opt;
+		return emitErrorAndRetry(
+			this,
+			'Database.getConfig',
+			async () => {
+				const [config] = await this.#instance.select('*').from<Config>('info');
+				if (!config) {
+					throw new Error('No config');
+				}
+				const opt: Config = {
+					...config,
+					excludes: getJSON<string[]>(config.excludes, []),
+					excludeKeywords: getJSON<string[]>(config.excludeKeywords, []),
+					excludeUrls: getJSON<string[]>(config.excludeUrls, []),
+					roots: getJSON<string[]>(config.roots, []),
+					retry: config.retry ?? 3,
+				};
+				// @ts-expect-error — `id` is the primary key, not part of the public Config shape
+				delete opt.id;
+				dbLog('Table `info`: %O => %O', config, opt);
+				return opt;
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Retrieves the current crawling state by listing scraped and pending URLs.
@@ -439,37 +463,42 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @returns An object with `scraped` (completed URLs) and `pending` (the
 	 *   strict set of in-scope, anchor-referenced, unfinished URLs).
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getCrawlingState() {
-		const ex = (r: { url: string }) => r.url;
-		const $scraped = await this.#instance
-			.select('url')
-			.from<DB_Page>('pages')
-			.where('scraped', 1);
-		const scraped = $scraped.map(ex);
-		const $pending = await this.#instance
-			.select('p.url')
-			.from<DB_Page>({ p: 'pages' })
-			.where('p.scraped', 0)
-			.where('p.isExternal', 0)
-			.where((qb) => {
-				// "Anchored OR explicitly labelled". Either side is evidence
-				// that the row was deliberately enqueued for processing —
-				// only the predicted-discard leak (DEFAULT 'crawled' + no
-				// anchor) fails both halves. The `whereExists` callback
-				// uses `select('*')` since the column list is irrelevant
-				// inside an EXISTS check; calling through `client.raw(...)`
-				// would reach a private builder field.
-				qb.whereExists(function () {
-					this.select('*').from('anchors').whereRaw('anchors.hrefId = p.id');
-				}).orWhereNot('p.source', 'crawled');
-			});
-		const pending = $pending.map(ex);
-		return {
-			scraped,
-			pending,
-		};
+		return emitErrorAndRetry(
+			this,
+			'Database.getCrawlingState',
+			async () => {
+				const ex = (r: { url: string }) => r.url;
+				const $scraped = await this.#instance
+					.select('url')
+					.from<DB_Page>('pages')
+					.where('scraped', 1);
+				const scraped = $scraped.map(ex);
+				const $pending = await this.#instance
+					.select('p.url')
+					.from<DB_Page>({ p: 'pages' })
+					.where('p.scraped', 0)
+					.where('p.isExternal', 0)
+					.where((qb) => {
+						// "Anchored OR explicitly labelled". Either side is evidence
+						// that the row was deliberately enqueued for processing —
+						// only the predicted-discard leak (DEFAULT 'crawled' + no
+						// anchor) fails both halves. The `whereExists` callback
+						// uses `select('*')` since the column list is irrelevant
+						// inside an EXISTS check; calling through `client.raw(...)`
+						// would reach a private builder field.
+						qb.whereExists(function () {
+							this.select('*').from('anchors').whereRaw('anchors.hrefId = p.id');
+						}).orWhereNot('p.source', 'crawled');
+					});
+				const pending = $pending.map(ex);
+				return {
+					scraped,
+					pending,
+				};
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Return the subset of `urls` that already exist in the `pages` table.
@@ -483,22 +512,23 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param urls - URL strings to probe (already in `withoutHashAndAuth` form).
 	 * @returns URLs found in `pages`. Order is not preserved.
 	 */
-	@ErrorEmitter()
 	async getExistingPageUrls(urls: readonly string[]): Promise<string[]> {
-		if (urls.length === 0) {
-			return [];
-		}
-		const found: string[] = [];
-		await eachSplitted([...urls], 500, async (chunk) => {
-			const rows = await this.#instance
-				.select('url')
-				.from<DB_Page>('pages')
-				.whereIn('url', chunk);
-			for (const row of rows) {
-				found.push(row.url);
+		return emitError(this, 'Database.getExistingPageUrls', async () => {
+			if (urls.length === 0) {
+				return [];
 			}
+			const found: string[] = [];
+			await eachSplitted([...urls], 500, async (chunk) => {
+				const rows = await this.#instance
+					.select('url')
+					.from<DB_Page>('pages')
+					.whereIn('url', chunk);
+				for (const row of rows) {
+					found.push(row.url);
+				}
+			});
+			return found;
 		});
-		return found;
 	}
 	/**
 	 * Return the subset of `urls` that already exist in the `resources` table.
@@ -506,22 +536,23 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param urls - URL strings to probe.
 	 * @returns URLs found in `resources`.
 	 */
-	@ErrorEmitter()
 	async getExistingResourceUrls(urls: readonly string[]): Promise<string[]> {
-		if (urls.length === 0) {
-			return [];
-		}
-		const found: string[] = [];
-		await eachSplitted([...urls], 500, async (chunk) => {
-			const rows = await this.#instance
-				.select('url')
-				.from<DB_Resource>('resources')
-				.whereIn('url', chunk);
-			for (const row of rows) {
-				found.push(row.url);
+		return emitError(this, 'Database.getExistingResourceUrls', async () => {
+			if (urls.length === 0) {
+				return [];
 			}
+			const found: string[] = [];
+			await eachSplitted([...urls], 500, async (chunk) => {
+				const rows = await this.#instance
+					.select('url')
+					.from<DB_Resource>('resources')
+					.whereIn('url', chunk);
+				for (const row of rows) {
+					found.push(row.url);
+				}
+			});
+			return found;
 		});
-		return found;
 	}
 	/**
 	 * Reads the HTML snapshot stored as a zstd-compressed BLOB for the given page.
@@ -538,19 +569,24 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param pageId - The database ID of the page.
 	 * @returns The decompressed HTML string, or `null` if no snapshot is stored.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getHtmlOfPageById(pageId: number): Promise<string | null> {
-		const row = await this.#instance
-			.from<{ body: Uint8Array; codec: string }>('page_html_ref')
-			.join('page_html_blobs', 'page_html_ref.hash', '=', 'page_html_blobs.hash')
-			.select('page_html_blobs.body as body', 'page_html_blobs.codec as codec')
-			.where('page_html_ref.page_id', pageId)
-			.first();
-		if (!row) {
-			return null;
-		}
-		return decodeStoredBlob(row.body, row.codec);
+		return emitErrorAndRetry(
+			this,
+			'Database.getHtmlOfPageById',
+			async () => {
+				const row = await this.#instance
+					.from<{ body: Uint8Array; codec: string }>('page_html_ref')
+					.join('page_html_blobs', 'page_html_ref.hash', '=', 'page_html_blobs.hash')
+					.select('page_html_blobs.body as body', 'page_html_blobs.codec as codec')
+					.where('page_html_ref.page_id', pageId)
+					.first();
+				if (!row) {
+					return null;
+				}
+				return decodeStoredBlob(row.body, row.codec);
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Retrieves all `page_jsonld` rows for the given page id, parsed back into
@@ -561,32 +597,37 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * scraper saw them.
 	 * @param pageId
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getJsonLdOfPage(pageId: number): Promise<JsonLdRow[]> {
-		type Row = {
-			id: number;
-			pageId: number;
-			kind: string;
-			type: string | null;
-			raw: string;
-			parsed: string | null;
-			parseError: string | null;
-		};
-		const rows = await this.#instance
-			.select<Row[]>('id', 'pageId', 'kind', 'type', 'raw', 'parsed', 'parseError')
-			.from('page_jsonld')
-			.where('pageId', pageId)
-			.orderBy('id', 'asc');
-		return rows.map((r) => ({
-			id: r.id,
-			pageId: r.pageId,
-			kind: r.kind === 'speculationrules' ? 'speculationrules' : 'ld+json',
-			type: r.type,
-			raw: r.raw,
-			parsed: r.parsed === null ? null : safeParseJson(r.parsed),
-			parseError: r.parseError,
-		}));
+		return emitErrorAndRetry(
+			this,
+			'Database.getJsonLdOfPage',
+			async () => {
+				type Row = {
+					id: number;
+					pageId: number;
+					kind: string;
+					type: string | null;
+					raw: string;
+					parsed: string | null;
+					parseError: string | null;
+				};
+				const rows = await this.#instance
+					.select<Row[]>('id', 'pageId', 'kind', 'type', 'raw', 'parsed', 'parseError')
+					.from('page_jsonld')
+					.where('pageId', pageId)
+					.orderBy('id', 'asc');
+				return rows.map((r) => ({
+					id: r.id,
+					pageId: r.pageId,
+					kind: r.kind === 'speculationrules' ? 'speculationrules' : 'ld+json',
+					type: r.type,
+					raw: r.raw,
+					parsed: r.parsed === null ? null : safeParseJson(r.parsed),
+					parseError: r.parseError,
+				}));
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Returns the underlying Knex query builder instance for direct SQL access.
@@ -602,32 +643,42 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @returns The name string.
 	 * @throws {Error} If no name is found in the database.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getName() {
-		const selected = await this.#instance.select('name').from<Config>('info');
-		if (!selected[0]) {
-			throw new Error('No name');
-		}
-		const [{ name }] = selected;
-		return name;
+		return emitErrorAndRetry(
+			this,
+			'Database.getName',
+			async () => {
+				const selected = await this.#instance.select('name').from<Config>('info');
+				if (!selected[0]) {
+					throw new Error('No name');
+				}
+				const [{ name }] = selected;
+				return name;
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Counts the total number of pages in the database.
 	 * @returns The total page count.
 	 * @throws {Error} If the count query fails.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getPageCount() {
-		const selected = await this.#instance.count('id').from<DB_Page>('pages');
-		if (!selected[0]) {
-			throw new Error('No count');
-		}
-		// @ts-expect-error
-		const count: number = selected[0]['count(`id`)'];
-		dbLog('Number of pages: %d', count);
-		return count;
+		return emitErrorAndRetry(
+			this,
+			'Database.getPageCount',
+			async () => {
+				const selected = await this.#instance.count('id').from<DB_Page>('pages');
+				if (!selected[0]) {
+					throw new Error('No count');
+				}
+				// @ts-expect-error
+				const count: number = selected[0]['count(`id`)'];
+				dbLog('Number of pages: %d', count);
+				return count;
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Retrieves pages from the database with optional filtering, pagination via offset and limit.
@@ -636,83 +687,88 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param limit - The maximum number of rows to return. Defaults to `100000`.
 	 * @returns An array of raw {@link DB_Page} rows.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getPages(filter?: PageFilter, offset = 0, limit = 100_000) {
-		const q = this.#instance.select('*').from<DB_Page>('pages');
-		switch (filter) {
-			case 'page': {
-				return q
-					.where({
-						contentType: 'text/html',
-						isTarget: 1,
-					})
-					.limit(limit)
-					.offset(offset);
-			}
-			case 'page-included-no-target': {
-				return q
-					.where({
-						contentType: 'text/html',
-					})
-					.limit(limit)
-					.offset(offset);
-			}
-			case 'external-page': {
-				return q
-					.where({
-						contentType: 'text/html',
-						isExternal: 1,
-					})
-					.limit(limit)
-					.offset(offset);
-			}
-			case 'internal-page': {
-				return q
-					.where({
-						contentType: 'text/html',
-						isExternal: 0,
-					})
-					.limit(limit)
-					.offset(offset);
-			}
-			case 'no-page': {
-				return q
-					.whereNull('contentType')
-					.orWhereNot({
-						contentType: 'text/html',
-					})
-					.limit(limit)
-					.offset(offset);
-			}
-			case 'external-no-page': {
-				return q
-					.where((qb) => {
-						qb.whereNull('contentType').orWhereNot({
-							contentType: 'text/html',
-						});
-					})
-					.andWhere({
-						isExternal: 1,
-					})
-					.limit(limit)
-					.offset(offset);
-			}
-			case 'internal-no-page': {
-				return q
-					.where((qb) => {
-						qb.whereNull('contentType').orWhereNot({
-							contentType: 'text/html',
-						});
-					})
-					.andWhere({
-						isExternal: 0,
-					})
-					.limit(limit)
-					.offset(offset);
-			}
-		}
-		return q.limit(limit).offset(offset);
+		return emitErrorAndRetry(
+			this,
+			'Database.getPages',
+			async () => {
+				const q = this.#instance.select('*').from<DB_Page>('pages');
+				switch (filter) {
+					case 'page': {
+						return q
+							.where({
+								contentType: 'text/html',
+								isTarget: 1,
+							})
+							.limit(limit)
+							.offset(offset);
+					}
+					case 'page-included-no-target': {
+						return q
+							.where({
+								contentType: 'text/html',
+							})
+							.limit(limit)
+							.offset(offset);
+					}
+					case 'external-page': {
+						return q
+							.where({
+								contentType: 'text/html',
+								isExternal: 1,
+							})
+							.limit(limit)
+							.offset(offset);
+					}
+					case 'internal-page': {
+						return q
+							.where({
+								contentType: 'text/html',
+								isExternal: 0,
+							})
+							.limit(limit)
+							.offset(offset);
+					}
+					case 'no-page': {
+						return q
+							.whereNull('contentType')
+							.orWhereNot({
+								contentType: 'text/html',
+							})
+							.limit(limit)
+							.offset(offset);
+					}
+					case 'external-no-page': {
+						return q
+							.where((qb) => {
+								qb.whereNull('contentType').orWhereNot({
+									contentType: 'text/html',
+								});
+							})
+							.andWhere({
+								isExternal: 1,
+							})
+							.limit(limit)
+							.offset(offset);
+					}
+					case 'internal-no-page': {
+						return q
+							.where((qb) => {
+								qb.whereNull('contentType').orWhereNot({
+									contentType: 'text/html',
+								});
+							})
+							.andWhere({
+								isExternal: 0,
+							})
+							.limit(limit)
+							.offset(offset);
+					}
+				}
+				return q.limit(limit).offset(offset);
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Look up the `source` column of a single page by its URL key. Used by
@@ -734,15 +790,15 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param url - URL key in `url.withoutHashAndAuth` form.
 	 * @returns The recorded `source`, or `undefined` when no row exists.
 	 */
-	@ErrorEmitter()
 	async getPageSourceByUrl(url: string): Promise<PageSource | undefined> {
-		const [row] = await this.#instance
-			.select('source')
-			.from<DB_Page>('pages')
-			.where('url', url);
-		return row?.source;
+		return emitError(this, 'Database.getPageSourceByUrl', async () => {
+			const [row] = await this.#instance
+				.select('source')
+				.from<DB_Page>('pages')
+				.where('url', url);
+			return row?.source;
+		});
 	}
-
 	/**
 	 * Retrieves pages along with their related redirect, anchor, and referrer data.
 	 * Results are ordered by the natural URL sort order. Only non-redirected pages are returned.
@@ -750,110 +806,120 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param limit - The maximum number of pages to return.
 	 * @returns An object containing `pages`, `redirects`, `anchors`, and `referrers` arrays.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getPagesWithRels(offset: number, limit: number) {
-		await this.addOrderField();
-		await this.setUrlOrder();
-		dbLog('Get Pages');
-		const pages = await this.#instance
-			.select('*')
-			.from<DB_Page>('pages')
-			.orderByRaw('`order` ASC NULLS LAST')
-			.whereNull('redirectDestId')
-			.limit(limit)
-			.offset(offset);
+		return emitErrorAndRetry(
+			this,
+			'Database.getPagesWithRels',
+			async () => {
+				await this.addOrderField();
+				await this.setUrlOrder();
+				dbLog('Get Pages');
+				const pages = await this.#instance
+					.select('*')
+					.from<DB_Page>('pages')
+					.orderByRaw('`order` ASC NULLS LAST')
+					.whereNull('redirectDestId')
+					.limit(limit)
+					.offset(offset);
 
-		// When empty
-		if (pages.length === 0) {
-			return {
-				pages: [],
-				redirects: [],
-				referrers: [],
-				anchors: [],
-			};
-		}
+				// When empty
+				if (pages.length === 0) {
+					return {
+						pages: [],
+						redirects: [],
+						referrers: [],
+						anchors: [],
+					};
+				}
 
-		dbLog('Get Pages: Redirects');
-		const redirects: DB_Redirect[] = await this.#instance
-			.with('limitedPages', limitedPageIds(limit, offset))
-			.with('redirect', redirectTable(false))
-			.select('id as pageId', 'from', 'fromId')
-			.from('redirect')
-			// Filter
-			.join('limitedPages', 'redirect.toId', '=', 'limitedPages.id')
-			// Sort
-			.orderBy('id', 'asc');
+				dbLog('Get Pages: Redirects');
+				const redirects: DB_Redirect[] = await this.#instance
+					.with('limitedPages', limitedPageIds(limit, offset))
+					.with('redirect', redirectTable(false))
+					.select('id as pageId', 'from', 'fromId')
+					.from('redirect')
+					// Filter
+					.join('limitedPages', 'redirect.toId', '=', 'limitedPages.id')
+					// Sort
+					.orderBy('id', 'asc');
 
-		dbLog('Get Pages: Anchors');
-		const anchors: DB_Anchor[] = await this.#instance
-			.with('limitedPages', limitedPageIds(limit, offset))
-			.with('redirect', redirectTable())
-			.select(
-				'limitedPages.id as pageId',
-				'href.url',
-				'redirect.from as href',
-				'href.isExternal',
-				'href.title',
-				'href.status',
-				'href.statusText',
-				'href.contentType',
-				'anchors.hash',
-				'anchors.textContent',
-			)
-			.from('anchors')
-			// Filters
-			.join('limitedPages', 'anchors.pageId', '=', 'limitedPages.id')
-			// Resolves redirect
-			.join('redirect', 'anchors.hrefId', '=', 'redirect.fromId')
-			// Target
-			.join('pages as href', 'redirect.toId', '=', 'href.id')
-			// Sort
-			.orderBy('anchors.id', 'asc');
+				dbLog('Get Pages: Anchors');
+				const anchors: DB_Anchor[] = await this.#instance
+					.with('limitedPages', limitedPageIds(limit, offset))
+					.with('redirect', redirectTable())
+					.select(
+						'limitedPages.id as pageId',
+						'href.url',
+						'redirect.from as href',
+						'href.isExternal',
+						'href.title',
+						'href.status',
+						'href.statusText',
+						'href.contentType',
+						'anchors.hash',
+						'anchors.textContent',
+					)
+					.from('anchors')
+					// Filters
+					.join('limitedPages', 'anchors.pageId', '=', 'limitedPages.id')
+					// Resolves redirect
+					.join('redirect', 'anchors.hrefId', '=', 'redirect.fromId')
+					// Target
+					.join('pages as href', 'redirect.toId', '=', 'href.id')
+					// Sort
+					.orderBy('anchors.id', 'asc');
 
-		dbLog('Get Pages: Referrers');
-		const referrers: DB_Referrer[] = await this.#instance
-			.with('limitedPages', limitedPageIds(limit, offset))
-			.with('redirect', redirectTable())
-			.select(
-				'redirect.toId as pageId',
-				'referrer.url',
-				'redirect.from as through',
-				'redirect.fromId as throughId',
-				'anchors.hash',
-				'anchors.textContent',
-			)
-			.from('anchors')
-			// Resolves redirect
-			.join('redirect', 'anchors.hrefId', '=', 'redirect.fromId')
-			// Referrer
-			.join('pages as referrer', 'anchors.pageId', '=', 'referrer.id')
-			// Filters
-			.join('limitedPages', 'redirect.toId', '=', 'limitedPages.id')
-			// Sort
-			.orderBy('anchors.id', 'asc');
+				dbLog('Get Pages: Referrers');
+				const referrers: DB_Referrer[] = await this.#instance
+					.with('limitedPages', limitedPageIds(limit, offset))
+					.with('redirect', redirectTable())
+					.select(
+						'redirect.toId as pageId',
+						'referrer.url',
+						'redirect.from as through',
+						'redirect.fromId as throughId',
+						'anchors.hash',
+						'anchors.textContent',
+					)
+					.from('anchors')
+					// Resolves redirect
+					.join('redirect', 'anchors.hrefId', '=', 'redirect.fromId')
+					// Referrer
+					.join('pages as referrer', 'anchors.pageId', '=', 'referrer.id')
+					// Filters
+					.join('limitedPages', 'redirect.toId', '=', 'limitedPages.id')
+					// Sort
+					.orderBy('anchors.id', 'asc');
 
-		dbLog('Get Pages: Done');
-		return {
-			pages,
-			redirects,
-			anchors,
-			referrers,
-		};
+				dbLog('Get Pages: Done');
+				return {
+					pages,
+					redirects,
+					anchors,
+					referrers,
+				};
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Retrieves redirect sources for the given page IDs in bulk.
 	 * @param pageIds - The database IDs of the destination pages.
 	 * @returns An array of {@link DB_Redirect} records mapping destination pages to their redirect sources.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getRedirectsForPages(pageIds: number[]): Promise<DB_Redirect[]> {
-		if (pageIds.length === 0) return [];
-		return this.#instance
-			.select('redirectDestId as pageId', 'url as from', 'id as fromId')
-			.from('pages')
-			.whereIn('redirectDestId', pageIds);
+		return emitErrorAndRetry(
+			this,
+			'Database.getRedirectsForPages',
+			async () => {
+				if (pageIds.length === 0) return [];
+				return this.#instance
+					.select('redirectDestId as pageId', 'url as from', 'id as fromId')
+					.from('pages')
+					.whereIn('redirectDestId', pageIds);
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Retrieves pages that link to a specific page (incoming links / referrers).
@@ -868,42 +934,52 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param pageId - The database ID of the target page.
 	 * @returns An array of referrer records with URL, hash, and text content.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getReferrersOfPage(pageId: number) {
-		const res = await this.#instance
-			.select(
-				'referrer.url',
-				// `through` / `throughId` = the URL the anchor actually pointed at (the
-				// redirect source, e.g. `http://x`), mirroring `getPagesWithRels`'
-				// `redirect.from` / `redirect.fromId`. Lets report code print the
-				// "[REDIRECTED FROM]" note even on this (non-preloaded) referrer path.
-				'target.url as through',
-				'target.id as throughId',
-				'anchors.hash',
-				'anchors.textContent',
-			)
-			.from('anchors')
-			.join('pages as referrer', 'anchors.pageId', '=', 'referrer.id')
-			.join('pages as target', 'anchors.hrefId', '=', 'target.id')
-			.whereRaw('coalesce("target"."redirectDestId", "target"."id") = ?', [pageId]);
-		return res;
+		return emitErrorAndRetry(
+			this,
+			'Database.getReferrersOfPage',
+			async () => {
+				const res = await this.#instance
+					.select(
+						'referrer.url',
+						// `through` / `throughId` = the URL the anchor actually pointed at (the
+						// redirect source, e.g. `http://x`), mirroring `getPagesWithRels`'
+						// `redirect.from` / `redirect.fromId`. Lets report code print the
+						// "[REDIRECTED FROM]" note even on this (non-preloaded) referrer path.
+						'target.url as through',
+						'target.id as throughId',
+						'anchors.hash',
+						'anchors.textContent',
+					)
+					.from('anchors')
+					.join('pages as referrer', 'anchors.pageId', '=', 'referrer.id')
+					.join('pages as target', 'anchors.hrefId', '=', 'target.id')
+					.whereRaw('coalesce("target"."redirectDestId", "target"."id") = ?', [pageId]);
+				return res;
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Retrieves the page URLs that reference a specific resource.
 	 * @param id - The database ID of the resource.
 	 * @returns An array of page URL strings that reference the resource.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getReferrersOfResource(id: number): Promise<string[]> {
-		const res = await this.#instance
-			.select('pages.url')
-			.from('resources-referrers')
-			.join('resources', 'resources.id', '=', 'resources-referrers.resourceId')
-			.join('pages', 'pages.id', '=', 'resources-referrers.pageId')
-			.where('resources.id', id);
-		return res.map((r) => r.url);
+		return emitErrorAndRetry(
+			this,
+			'Database.getReferrersOfResource',
+			async () => {
+				const res = await this.#instance
+					.select('pages.url')
+					.from('resources-referrers')
+					.join('resources', 'resources.id', '=', 'resources-referrers.resourceId')
+					.join('pages', 'pages.id', '=', 'resources-referrers.pageId')
+					.where('resources.id', id);
+				return res.map((r) => r.url);
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Retrieves a single sub-resource from the `resources` table by its URL.
@@ -912,7 +988,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * `href` while callers may only know the hash-stripped form; the first match
 	 * wins.
 	 *
-	 * Deliberately NOT decorated with `@ErrorEmitter`: the only caller (the
+	 * Deliberately NOT wrapped with `emitError`/`emitErrorAndRetry`: the only caller (the
 	 * crawler's resource-reuse hook) has a full fallback (the HEAD pre-flight),
 	 * so a read failure here must not surface as a database `error` event —
 	 * the orchestrator aborts the whole crawl on that event, which is the
@@ -920,33 +996,47 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param urls - URL candidates to match against the `url` column.
 	 * @returns The raw {@link DB_Resource} row, or `null` if none match.
 	 */
-	@retry(retrySetting)
 	async getResourceByUrl(urls: readonly string[]): Promise<DB_Resource | null> {
-		const res = await this.#instance
-			.select('*')
-			.from<DB_Resource>('resources')
-			.whereIn('url', [...urls])
-			.first();
-		return res ?? null;
+		return retryCall(
+			async () => {
+				const res = await this.#instance
+					.select('*')
+					.from<DB_Resource>('resources')
+					.whereIn('url', [...urls])
+					.first();
+				return res ?? null;
+			},
+			{ ...retrySetting, label: 'Database.getResourceByUrl' },
+		);
 	}
 	/**
 	 * Retrieves all sub-resources from the `resources` table.
 	 * @returns An array of raw {@link DB_Resource} rows.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getResources() {
-		return this.#instance.select('*').from<DB_Resource>('resources');
+		return emitErrorAndRetry(
+			this,
+			'Database.getResources',
+			async () => {
+				return this.#instance.select('*').from<DB_Resource>('resources');
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Retrieves a flat list of all resource URLs from the `resources` table.
 	 * @returns An array of resource URL strings.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getResourceUrlList() {
-		const res = await this.#instance.select('url').from<DB_Resource>('resources');
-		return res.map((r) => r.url);
+		return emitErrorAndRetry(
+			this,
+			'Database.getResourceUrlList',
+			async () => {
+				const res = await this.#instance.select('url').from<DB_Resource>('resources');
+				return res.map((r) => r.url);
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Counts pages that were scraped as crawl targets (full HTML render).
@@ -963,16 +1053,21 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * `isTarget`.
 	 * @returns The number of `text/html` rows with `isTarget = 1` and `scraped = 1`.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getScrapedHtmlPageCount() {
-		const [row] = await this.#instance
-			.from<DB_Page>('pages')
-			.where('isTarget', 1)
-			.andWhere('scraped', 1)
-			.andWhere('contentType', 'text/html')
-			.count<{ count: number }[]>('* as count');
-		return row ? Number(row.count) : 0;
+		return emitErrorAndRetry(
+			this,
+			'Database.getScrapedHtmlPageCount',
+			async () => {
+				const [row] = await this.#instance
+					.from<DB_Page>('pages')
+					.where('isTarget', 1)
+					.andWhere('scraped', 1)
+					.andWhere('contentType', 'text/html')
+					.count<{ count: number }[]>('* as count');
+				return row ? Number(row.count) : 0;
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Retrieves all `page_tags` rows for the given page id, parsed back into
@@ -982,42 +1077,50 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * Read-side counterpart to `#insertTags`.
 	 * @param pageId
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async getTagsOfPage(pageId: number): Promise<TagRow[]> {
-		type Row = {
-			id: number;
-			pageId: number;
-			provider: string;
-			category: string | null;
-			externalId: string | null;
-			version: string | null;
-			confidence: number | null;
-			categories: string | null;
-			sources: string | null;
-		};
-		const rows = await this.#instance
-			.select<
-				Row[]
-			>('id', 'pageId', 'provider', 'category', 'externalId', 'version', 'confidence', 'categories', 'sources')
-			.from('page_tags')
-			.where('pageId', pageId)
-			.orderBy('id', 'asc');
-		return rows.map((r) => ({
-			id: r.id,
-			pageId: r.pageId,
-			provider: r.provider,
-			category: r.category,
-			externalId: r.externalId,
-			version: r.version,
-			confidence: r.confidence,
-			categories:
-				r.categories === null ? [] : ((safeParseJson(r.categories) as string[]) ?? []),
-			sources:
-				r.sources === null ? [] : ((safeParseJson(r.sources) as TagRow['sources']) ?? []),
-		}));
+		return emitErrorAndRetry(
+			this,
+			'Database.getTagsOfPage',
+			async () => {
+				type Row = {
+					id: number;
+					pageId: number;
+					provider: string;
+					category: string | null;
+					externalId: string | null;
+					version: string | null;
+					confidence: number | null;
+					categories: string | null;
+					sources: string | null;
+				};
+				const rows = await this.#instance
+					.select<
+						Row[]
+					>('id', 'pageId', 'provider', 'category', 'externalId', 'version', 'confidence', 'categories', 'sources')
+					.from('page_tags')
+					.where('pageId', pageId)
+					.orderBy('id', 'asc');
+				return rows.map((r) => ({
+					id: r.id,
+					pageId: r.pageId,
+					provider: r.provider,
+					category: r.category,
+					externalId: r.externalId,
+					version: r.version,
+					confidence: r.confidence,
+					categories:
+						r.categories === null
+							? []
+							: ((safeParseJson(r.categories) as string[]) ?? []),
+					sources:
+						r.sources === null
+							? []
+							: ((safeParseJson(r.sources) as TagRow['sources']) ?? []),
+				}));
+			},
+			retrySetting,
+		);
 	}
-
 	/**
 	 * Records a crawler-level (`error` channel) failure into `crawl_errors`.
 	 *
@@ -1030,16 +1133,130 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param message - The error message (one line is enough for classification).
 	 * @param isExternal - Whether the URL is external to the crawl scope.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async insertCrawlError(url: string | null, message: string, isExternal = false) {
-		await this.#instance('crawl_errors').insert({
-			url,
-			isExternal: isExternal ? 1 : 0,
-			message,
-			createdAt: Date.now(),
-		});
+		return emitErrorAndRetry(
+			this,
+			'Database.insertCrawlError',
+			async () => {
+				await this.#instance('crawl_errors').insert({
+					url,
+					isExternal: isExternal ? 1 : 0,
+					message,
+					createdAt: Date.now(),
+				});
+			},
+			retrySetting,
+		);
 	}
+	/**
+	 * Pre-insert inventory non-HTML URLs into `resources` as placeholder rows
+	 * with `source = 'inventory-seed'` and all metadata columns NULL — the
+	 * non-HTML counterpart of {@link Database.insertInventorySeeds}. Used by
+	 * `CrawlerOrchestrator.inventory` so the ingestion phase commits all of
+	 * its non-HTML URLs in one chunked round-trip per 500 instead of N
+	 * sequential `insertResource` awaits. On a 50k-URL inventory list the
+	 * old per-URL loop spent minutes inside the `.bak`-protected window;
+	 * the bulk path finishes in seconds.
+	 *
+	 * Idempotent: `onConflict('url').ignore()` leaves existing rows untouched
+	 * (the orchestrator's `getExistingResourceUrls` filter is what keeps a
+	 * crawled-lineage `resources` row from being downgraded to the
+	 * inventory label here).
+	 *
+	 * Chunked at 500 to stay well under SQLite's `SQLITE_MAX_VARIABLE_NUMBER`
+	 * (default 999) — every row binds the URL plus the `responseHeaders`
+	 * JSON null, so the per-chunk bound budget is well within limits.
+	 * @param urls - URL strings (already in `withoutHashAndAuth` form).
+	 */
+	async insertInventoryResources(urls: readonly string[]): Promise<void> {
+		return emitErrorAndRetry(
+			this,
+			'Database.insertInventoryResources',
+			async () => {
+				if (urls.length === 0) {
+					return;
+				}
+				await eachSplitted([...urls], 500, async (chunk) => {
+					await this.#instance<DB_Resource>('resources')
+						.insert(
+							chunk.map((url) => ({
+								url,
+								isExternal: 0 as const,
+								status: null,
+								statusText: null,
+								contentType: null,
+								contentLength: null,
+								compress: 0 as const,
+								cdn: 0 as const,
+								responseHeaders: null,
+								source: 'inventory-seed' as PageSource,
+							})),
+						)
+						.onConflict('url')
+						.ignore();
+				});
+			},
+			retrySetting,
+		);
+	}
+
+	/**
+	 * Pre-insert inventory HTML seeds into `pages` as `scraped = 0`,
+	 * `source = 'inventory-seed'` placeholders so the URL's existence in the
+	 * archive is **durable before the scrape phase starts**.
+	 *
+	 * Why this is the linchpin of `--inventory` Ctrl+C tolerance: HTML seeds
+	 * used to live only in the Crawler's in-memory `LinkList` until the
+	 * dealer eventually called `setPage`. A Ctrl+C / crash before that point
+	 * lost the seed without trace, and `--resume` could not recover it
+	 * because `getCrawlingState`'s strict pending set requires a `pages` row.
+	 * Pre-inserting fills exactly that gap: the strict pending set picks
+	 * these rows up via its `OR p.source != 'crawled'` clause, so
+	 * `--resume` after an interrupted inventory pass picks every seed back
+	 * up. See {@link Database.getCrawlingState} for the strict-set rationale.
+	 *
+	 * Idempotent: `onConflict('url').ignore()` keeps existing rows intact.
+	 * The {@link Database.#getIdByUrl} crawled-wins downgrade still fires
+	 * later when a crawled-lineage anchor reaches one of these seeds —
+	 * that's the right behaviour (a seed that turned out to be reachable
+	 * is not an orphan and should not retain the inventory label).
+	 *
+	 * Chunked into 500-URL batches so SQLite's bound-parameter limit
+	 * (`SQLITE_MAX_VARIABLE_NUMBER`, default 999) cannot be hit even on a
+	 * tens-of-thousands inventory list.
+	 *
+	 * Called by {@link CrawlerOrchestrator.inventory} during the
+	 * `.bak`-protected ingestion phase, so any failure here aborts the run
+	 * and restores from backup — the operator reruns from scratch.
+	 * @param urls - URL strings already in `withoutHashAndAuth` form.
+	 */
+	async insertInventorySeeds(urls: readonly string[]): Promise<void> {
+		return emitErrorAndRetry(
+			this,
+			'Database.insertInventorySeeds',
+			async () => {
+				if (urls.length === 0) {
+					return;
+				}
+				await eachSplitted([...urls], 500, async (chunk) => {
+					await this.#instance<DB_Page>('pages')
+						.insert(
+							chunk.map((url) => ({
+								url,
+								scraped: 0 as const,
+								isExternal: 0 as const,
+								isTarget: 0 as const,
+								source: 'inventory-seed' as PageSource,
+							})),
+						)
+						.onConflict('url')
+						.ignore();
+				});
+			},
+			retrySetting,
+		);
+	}
+
 	/**
 	 * Records a partial scrape failure against the page identified by `url`.
 	 *
@@ -1056,16 +1273,21 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param message - Human-readable failure message.
 	 * @param isExternal - Whether the URL is external. Defaults to `false`.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async insertPageError(url: string, phase: string, message: string, isExternal = false) {
-		const pageId = await this.#getIdByUrl(url, isExternal ? 1 : 0);
-		await this.#instance('page_errors').insert({
-			pageId,
-			phase,
-			message,
-			createdAt: Date.now(),
-		});
+		return emitErrorAndRetry(
+			this,
+			'Database.insertPageError',
+			async () => {
+				const pageId = await this.#getIdByUrl(url, isExternal ? 1 : 0);
+				await this.#instance('page_errors').insert({
+					pageId,
+					phase,
+					message,
+					createdAt: Date.now(),
+				});
+			},
+			retrySetting,
+		);
 	}
 
 	/**
@@ -1079,27 +1301,32 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param resource - The resource data to insert.
 	 * @param source - Provenance label for new rows. `undefined` leaves the DB DEFAULT (`'crawled'`).
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async insertResource(resource: Resource, source?: PageSource) {
-		await this.#instance
-			.from<DB_Resource>('resources')
-			.insert({
-				url: resource.url.href,
-				isExternal: resource.isExternal ? 1 : 0,
-				status: resource.status,
-				statusText: resource.statusText,
-				// Canonicalize like `pages.contentType` (see #insertPage) so resource
-				// content-type filters / dedupe keys are case- and whitespace-stable.
-				contentType: normalizeContentType(resource.contentType),
-				contentLength: resource.contentLength,
-				compress: resource.compress || 0,
-				cdn: resource.cdn || 0,
-				responseHeaders: JSON.stringify(resource.headers),
-				...(source === undefined ? {} : { source }),
-			})
-			.onConflict('url')
-			.ignore();
+		return emitErrorAndRetry(
+			this,
+			'Database.insertResource',
+			async () => {
+				await this.#instance
+					.from<DB_Resource>('resources')
+					.insert({
+						url: resource.url.href,
+						isExternal: resource.isExternal ? 1 : 0,
+						status: resource.status,
+						statusText: resource.statusText,
+						// Canonicalize like `pages.contentType` (see #insertPage) so resource
+						// content-type filters / dedupe keys are case- and whitespace-stable.
+						contentType: normalizeContentType(resource.contentType),
+						contentLength: resource.contentLength,
+						compress: resource.compress || 0,
+						cdn: resource.cdn || 0,
+						responseHeaders: JSON.stringify(resource.headers),
+						...(source === undefined ? {} : { source }),
+					})
+					.onConflict('url')
+					.ignore();
+			},
+			retrySetting,
+		);
 	}
 
 	/**
@@ -1108,26 +1335,31 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param src - The URL of the resource.
 	 * @param pageUrl - The URL of the page that references the resource.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async insertResourceReferrers(src: string, pageUrl: string) {
-		const selected = await this.#instance
-			.select('id')
-			.from<DB_Resource>('resources')
-			.where('url', src);
-		if (!selected[0]) {
-			// Ignore when the resource is not found
-			return;
-		}
-		const [{ id: resourceId }] = selected;
-		const pageId = await this.#getIdByUrl(pageUrl);
-		await this.#instance('resources-referrers')
-			.insert({
-				resourceId,
-				pageId,
-			})
-			.onConflict(['resourceId', 'pageId'])
-			.ignore();
+		return emitErrorAndRetry(
+			this,
+			'Database.insertResourceReferrers',
+			async () => {
+				const selected = await this.#instance
+					.select('id')
+					.from<DB_Resource>('resources')
+					.where('url', src);
+				if (!selected[0]) {
+					// Ignore when the resource is not found
+					return;
+				}
+				const [{ id: resourceId }] = selected;
+				const pageId = await this.#getIdByUrl(pageUrl);
+				await this.#instance('resources-referrers')
+					.insert({
+						resourceId,
+						pageId,
+					})
+					.onConflict(['resourceId', 'pageId'])
+					.ignore();
+			},
+			retrySetting,
+		);
 	}
 
 	/**
@@ -1149,132 +1381,137 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * table — the `hasTable` guard keeps the call non-destructive.
 	 * @returns Lower-cased hostnames safe to short-circuit.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async listDnsBurnedHostCandidates(): Promise<string[]> {
-		const hasCrawlErrors = await this.#instance.schema.hasTable('crawl_errors');
-		if (!hasCrawlErrors) {
-			return [];
-		}
-
-		// Coarse SQL filter: cheap LIKE OR-chain over `message`. The dns regex
-		// truth source lives in `classifyErrorKind`, so we only need to feed it
-		// rows that COULD match a DNS token. Each LIKE is anchored on a known
-		// substring of the regex so future additions to the regex (without
-		// matching new SQL terms) widen the JS-side filter only — never narrow it.
-		//
-		// `%EAI_AGAIN%` is deliberately NOT in the SQL filter: it now classifies
-		// as `dns-transient` (local resolver hiccup), not `dns`, so it must not
-		// reach this candidate set. The `%getaddrinfo%` term still pulls
-		// `getaddrinfo EAI_AGAIN ...` rows but the JS-side `classifyErrorKind`
-		// check (first-match-wins) routes them to `dns-transient` and they
-		// silently drop out — keeping the cache focused on real NXDOMAIN.
-		const dnsLikeRows = (await this.#instance('crawl_errors')
-			.select('url', 'message', 'createdAt')
-			.whereNotNull('url')
-			.where((qb) => {
-				qb.where('message', 'like', '%ENOTFOUND%')
-					.orWhere('message', 'like', '%getaddrinfo%')
-					.orWhere('message', 'like', '%ERR_NAME_NOT_RESOLVED%')
-					.orWhere('message', 'like', '%ERR_NAME_RESOLUTION_FAILED%');
-			})) as { url: string; message: string; createdAt: number }[];
-
-		if (dnsLikeRows.length === 0) {
-			return [];
-		}
-
-		// Map<hostname, latestErrorCreatedAt> for hosts whose error message
-		// confidently classifies as DNS (LIKE matched but classifyErrorKind says
-		// e.g. `unknown` → drop).
-		const candidateLatestErrorAt = new Map<string, number>();
-		for (const row of dnsLikeRows) {
-			if (classifyErrorKind(row.message) !== 'dns') {
-				continue;
-			}
-			let host: string;
-			try {
-				host = new URL(row.url).hostname.toLowerCase();
-			} catch {
-				continue;
-			}
-			if (!host) {
-				continue;
-			}
-			const createdAt = typeof row.createdAt === 'number' ? row.createdAt : 0;
-			const previous = candidateLatestErrorAt.get(host) ?? 0;
-			if (createdAt > previous) {
-				candidateLatestErrorAt.set(host, createdAt);
-			}
-		}
-
-		if (candidateLatestErrorAt.size === 0) {
-			return [];
-		}
-
-		// Exclusion-bag #1: pages with a 2xx-3xx status anywhere on the host.
-		// Tracking the latest `lastCrawledAt` per host lets us additionally
-		// drop hosts whose last successful contact post-dates the most recent
-		// DNS error (the host probably came back after a transient outage).
-		const pageOkRows = (await this.#instance('pages')
-			.select('url', 'lastCrawledAt')
-			.whereBetween('status', [200, 399])) as {
-			url: string;
-			lastCrawledAt: number | null;
-		}[];
-		const pageOkHosts = new Set<string>();
-		const latestPageOkAt = new Map<string, number>();
-		for (const row of pageOkRows) {
-			let host: string;
-			try {
-				host = new URL(row.url).hostname.toLowerCase();
-			} catch {
-				continue;
-			}
-			pageOkHosts.add(host);
-			if (typeof row.lastCrawledAt === 'number') {
-				const previous = latestPageOkAt.get(host) ?? 0;
-				if (row.lastCrawledAt > previous) {
-					latestPageOkAt.set(host, row.lastCrawledAt);
+		return emitErrorAndRetry(
+			this,
+			'Database.listDnsBurnedHostCandidates',
+			async () => {
+				const hasCrawlErrors = await this.#instance.schema.hasTable('crawl_errors');
+				if (!hasCrawlErrors) {
+					return [];
 				}
-			}
-		}
 
-		// Exclusion-bag #2: non-HTML resources with a 2xx-3xx status. resources
-		// have no timestamp column so this is presence-only.
-		const resourceOkRows = (await this.#instance('resources')
-			.select('url')
-			.whereBetween('status', [200, 399])) as { url: string }[];
-		const resourceOkHosts = new Set<string>();
-		for (const row of resourceOkRows) {
-			let host: string;
-			try {
-				host = new URL(row.url).hostname.toLowerCase();
-			} catch {
-				continue;
-			}
-			resourceOkHosts.add(host);
-		}
+				// Coarse SQL filter: cheap LIKE OR-chain over `message`. The dns regex
+				// truth source lives in `classifyErrorKind`, so we only need to feed it
+				// rows that COULD match a DNS token. Each LIKE is anchored on a known
+				// substring of the regex so future additions to the regex (without
+				// matching new SQL terms) widen the JS-side filter only — never narrow it.
+				//
+				// `%EAI_AGAIN%` is deliberately NOT in the SQL filter: it now classifies
+				// as `dns-transient` (local resolver hiccup), not `dns`, so it must not
+				// reach this candidate set. The `%getaddrinfo%` term still pulls
+				// `getaddrinfo EAI_AGAIN ...` rows but the JS-side `classifyErrorKind`
+				// check (first-match-wins) routes them to `dns-transient` and they
+				// silently drop out — keeping the cache focused on real NXDOMAIN.
+				const dnsLikeRows = (await this.#instance('crawl_errors')
+					.select('url', 'message', 'createdAt')
+					.whereNotNull('url')
+					.where((qb) => {
+						qb.where('message', 'like', '%ENOTFOUND%')
+							.orWhere('message', 'like', '%getaddrinfo%')
+							.orWhere('message', 'like', '%ERR_NAME_NOT_RESOLVED%')
+							.orWhere('message', 'like', '%ERR_NAME_RESOLUTION_FAILED%');
+					})) as { url: string; message: string; createdAt: number }[];
 
-		// A candidate host is burned only if neither pages nor resources hold a
-		// 2xx-3xx for it, AND its latest 2xx page (if any) is not newer than
-		// the latest DNS error. The third check guards against re-burning a
-		// host that recovered between the last DNS failure and the most recent
-		// crawl.
-		const burned: string[] = [];
-		for (const [host, latestErrorAt] of candidateLatestErrorAt) {
-			if (pageOkHosts.has(host)) {
-				continue;
-			}
-			if (resourceOkHosts.has(host)) {
-				continue;
-			}
-			const latestOkAt = latestPageOkAt.get(host);
-			if (typeof latestOkAt === 'number' && latestOkAt > latestErrorAt) {
-				continue;
-			}
-			burned.push(host);
-		}
-		return burned;
+				if (dnsLikeRows.length === 0) {
+					return [];
+				}
+
+				// Map<hostname, latestErrorCreatedAt> for hosts whose error message
+				// confidently classifies as DNS (LIKE matched but classifyErrorKind says
+				// e.g. `unknown` → drop).
+				const candidateLatestErrorAt = new Map<string, number>();
+				for (const row of dnsLikeRows) {
+					if (classifyErrorKind(row.message) !== 'dns') {
+						continue;
+					}
+					let host: string;
+					try {
+						host = new URL(row.url).hostname.toLowerCase();
+					} catch {
+						continue;
+					}
+					if (!host) {
+						continue;
+					}
+					const createdAt = typeof row.createdAt === 'number' ? row.createdAt : 0;
+					const previous = candidateLatestErrorAt.get(host) ?? 0;
+					if (createdAt > previous) {
+						candidateLatestErrorAt.set(host, createdAt);
+					}
+				}
+
+				if (candidateLatestErrorAt.size === 0) {
+					return [];
+				}
+
+				// Exclusion-bag #1: pages with a 2xx-3xx status anywhere on the host.
+				// Tracking the latest `lastCrawledAt` per host lets us additionally
+				// drop hosts whose last successful contact post-dates the most recent
+				// DNS error (the host probably came back after a transient outage).
+				const pageOkRows = (await this.#instance('pages')
+					.select('url', 'lastCrawledAt')
+					.whereBetween('status', [200, 399])) as {
+					url: string;
+					lastCrawledAt: number | null;
+				}[];
+				const pageOkHosts = new Set<string>();
+				const latestPageOkAt = new Map<string, number>();
+				for (const row of pageOkRows) {
+					let host: string;
+					try {
+						host = new URL(row.url).hostname.toLowerCase();
+					} catch {
+						continue;
+					}
+					pageOkHosts.add(host);
+					if (typeof row.lastCrawledAt === 'number') {
+						const previous = latestPageOkAt.get(host) ?? 0;
+						if (row.lastCrawledAt > previous) {
+							latestPageOkAt.set(host, row.lastCrawledAt);
+						}
+					}
+				}
+
+				// Exclusion-bag #2: non-HTML resources with a 2xx-3xx status. resources
+				// have no timestamp column so this is presence-only.
+				const resourceOkRows = (await this.#instance('resources')
+					.select('url')
+					.whereBetween('status', [200, 399])) as { url: string }[];
+				const resourceOkHosts = new Set<string>();
+				for (const row of resourceOkRows) {
+					let host: string;
+					try {
+						host = new URL(row.url).hostname.toLowerCase();
+					} catch {
+						continue;
+					}
+					resourceOkHosts.add(host);
+				}
+
+				// A candidate host is burned only if neither pages nor resources hold a
+				// 2xx-3xx for it, AND its latest 2xx page (if any) is not newer than
+				// the latest DNS error. The third check guards against re-burning a
+				// host that recovered between the last DNS failure and the most recent
+				// crawl.
+				const burned: string[] = [];
+				for (const [host, latestErrorAt] of candidateLatestErrorAt) {
+					if (pageOkHosts.has(host)) {
+						continue;
+					}
+					if (resourceOkHosts.has(host)) {
+						continue;
+					}
+					const latestOkAt = latestPageOkAt.get(host);
+					if (typeof latestOkAt === 'number' && latestOkAt > latestErrorAt) {
+						continue;
+					}
+					burned.push(host);
+				}
+				return burned;
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Appends one row to the `inventory_runs` audit log.
@@ -1293,27 +1530,32 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param meta - The run metadata to record. Only `ran_at` is required.
 	 * @returns The autoincremented `id` of the newly-inserted row.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async recordInventoryRun(meta: InventoryRunMeta): Promise<number> {
-		const inserted = await this.#instance
-			.from('inventory_runs')
-			.insert({
-				ran_at: meta.ran_at,
-				list_label: meta.list_label ?? null,
-				source_file_sha256: meta.source_file_sha256 ?? null,
-				total_lines: meta.total_lines ?? null,
-				new_pages: meta.new_pages ?? null,
-				new_resources: meta.new_resources ?? null,
-				scope_skipped: meta.scope_skipped ?? null,
-				notes: meta.notes ?? null,
-			})
-			.returning('id');
-		const id = inserted[0]?.id;
-		if (typeof id !== 'number') {
-			throw new TypeError('recordInventoryRun: INSERT returned no row id');
-		}
-		return id;
+		return emitErrorAndRetry(
+			this,
+			'Database.recordInventoryRun',
+			async () => {
+				const inserted = await this.#instance
+					.from('inventory_runs')
+					.insert({
+						ran_at: meta.ran_at,
+						list_label: meta.list_label ?? null,
+						source_file_sha256: meta.source_file_sha256 ?? null,
+						total_lines: meta.total_lines ?? null,
+						new_pages: meta.new_pages ?? null,
+						new_resources: meta.new_resources ?? null,
+						scope_skipped: meta.scope_skipped ?? null,
+						notes: meta.notes ?? null,
+					})
+					.returning('id');
+				const id = inserted[0]?.id;
+				if (typeof id !== 'number') {
+					throw new TypeError('recordInventoryRun: INSERT returned no row id');
+				}
+				return id;
+			},
+			retrySetting,
+		);
 	}
 
 	/**
@@ -1343,76 +1585,84 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 *   retry-failed sessions. `undefined` keeps the DB DEFAULT `'crawled'`
 	 *   on a brand-new destination row.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async recordRedirect(page: PageData, source?: PageSource): Promise<void> {
-		const { destUrl, sources } = resolveRedirectChain(
-			page.url.withoutHashAndAuth,
-			page.redirectPaths,
+		return emitErrorAndRetry(
+			this,
+			'Database.recordRedirect',
+			async () => {
+				const { destUrl, sources } = resolveRedirectChain(
+					page.url.withoutHashAndAuth,
+					page.redirectPaths,
+				);
+
+				// No redirect chain (the URL is itself the already-rendered destination,
+				// reached both directly and via a redirect) → there is no edge to write.
+				// Returning here avoids opening a transaction and, crucially, avoids
+				// `#getIdByUrl` inserting a content-less placeholder row for a destination
+				// that may not have been written yet.
+				if (sources.length === 0) {
+					return;
+				}
+
+				const destUrlObject = parseUrl(destUrl);
+
+				if (!destUrlObject) {
+					// A malformed redirect target should not abort the whole crawl (this
+					// runs inside the WriteQueue, whose rejection aborts the run). Recording
+					// a single redirect edge is best-effort, so skip it and move on. Unlike
+					// `updatePage`, there is no page content at stake here.
+					dbLog('recordRedirect: skip malformed destination URL: %s', destUrl);
+					return;
+				}
+
+				await this.#instance.transaction(async (trx) => {
+					// Pass the caller-supplied `source` straight through so a
+					// brand-new destination row INSERTed here picks up the
+					// inventory lineage (instead of the DB DEFAULT `'crawled'`)
+					// when the caller is in the inventory chain — closes the
+					// hole where `recordRedirect` was previously laundering
+					// inventory lineage to `'crawled'` for js-redirect rescue /
+					// #73 convergence destinations that had not yet been
+					// rendered.
+					const destId = await this.#getIdByUrl(
+						destUrlObject.withoutHashAndAuth,
+						undefined,
+						trx,
+						source,
+					);
+					// Chain lineage propagates FROM the originating URL
+					// (`page.url`), NOT from the destination. The originating
+					// URL is what initiated the redirect chain, so its lineage
+					// is what every intermediate hop transitively inherits.
+					// Reading from the destination would mis-propagate in
+					// "inventory-seed → ... → existing crawled dest" chains:
+					// the intermediates are reached only via the inventory
+					// chain, so they belong to the inventory chain even though
+					// the chain happens to land on a crawled URL. The
+					// `'crawled'` fallback arms the crawled-wins downgrade for
+					// existing `'inventory-*'` intermediates that a crawled
+					// chain reaches.
+					const [originatingRow] = await trx
+						.select('source')
+						.from<DB_Page>('pages')
+						.where('url', page.url.withoutHashAndAuth);
+					const originatingSource = originatingRow?.source ?? source;
+					const chainLineageSource = deriveLineageFromParent(
+						originatingSource,
+						'crawled',
+					);
+					await this.#linkRedirectSources(
+						trx,
+						sources,
+						destId,
+						destUrlObject.withoutHashAndAuth,
+						page.isExternal,
+						chainLineageSource,
+					);
+				});
+			},
+			retrySetting,
 		);
-
-		// No redirect chain (the URL is itself the already-rendered destination,
-		// reached both directly and via a redirect) → there is no edge to write.
-		// Returning here avoids opening a transaction and, crucially, avoids
-		// `#getIdByUrl` inserting a content-less placeholder row for a destination
-		// that may not have been written yet.
-		if (sources.length === 0) {
-			return;
-		}
-
-		const destUrlObject = parseUrl(destUrl);
-
-		if (!destUrlObject) {
-			// A malformed redirect target should not abort the whole crawl (this
-			// runs inside the WriteQueue, whose rejection aborts the run). Recording
-			// a single redirect edge is best-effort, so skip it and move on. Unlike
-			// `updatePage`, there is no page content at stake here.
-			dbLog('recordRedirect: skip malformed destination URL: %s', destUrl);
-			return;
-		}
-
-		await this.#instance.transaction(async (trx) => {
-			// Pass the caller-supplied `source` straight through so a
-			// brand-new destination row INSERTed here picks up the
-			// inventory lineage (instead of the DB DEFAULT `'crawled'`)
-			// when the caller is in the inventory chain — closes the
-			// hole where `recordRedirect` was previously laundering
-			// inventory lineage to `'crawled'` for js-redirect rescue /
-			// #73 convergence destinations that had not yet been
-			// rendered.
-			const destId = await this.#getIdByUrl(
-				destUrlObject.withoutHashAndAuth,
-				undefined,
-				trx,
-				source,
-			);
-			// Chain lineage propagates FROM the originating URL
-			// (`page.url`), NOT from the destination. The originating
-			// URL is what initiated the redirect chain, so its lineage
-			// is what every intermediate hop transitively inherits.
-			// Reading from the destination would mis-propagate in
-			// "inventory-seed → ... → existing crawled dest" chains:
-			// the intermediates are reached only via the inventory
-			// chain, so they belong to the inventory chain even though
-			// the chain happens to land on a crawled URL. The
-			// `'crawled'` fallback arms the crawled-wins downgrade for
-			// existing `'inventory-*'` intermediates that a crawled
-			// chain reaches.
-			const [originatingRow] = await trx
-				.select('source')
-				.from<DB_Page>('pages')
-				.where('url', page.url.withoutHashAndAuth);
-			const originatingSource = originatingRow?.source ?? source;
-			const chainLineageSource = deriveLineageFromParent(originatingSource, 'crawled');
-			await this.#linkRedirectSources(
-				trx,
-				sources,
-				destId,
-				destUrlObject.withoutHashAndAuth,
-				page.isExternal,
-				chainLineageSource,
-			);
-		});
 	}
 	/**
 	 * Promote previously-external pages whose URL falls under any of the new scope
@@ -1432,82 +1682,87 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param options - URL parsing options forwarded to {@link findScopeEntry}.
 	 * @returns The URLs of the pages that were promoted.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async repromoteExternalPages(
 		scopes: ReadonlyMap<string, readonly ExURL[]>,
 		options?: ParseURLOptions,
 	): Promise<string[]> {
-		if (scopes.size === 0) {
-			return [];
-		}
-		const candidates = await this.#instance
-			.select('id', 'url')
-			.from<DB_Page>('pages')
-			.where('isExternal', 1);
+		return emitErrorAndRetry(
+			this,
+			'Database.repromoteExternalPages',
+			async () => {
+				if (scopes.size === 0) {
+					return [];
+				}
+				const candidates = await this.#instance
+					.select('id', 'url')
+					.from<DB_Page>('pages')
+					.where('isExternal', 1);
 
-		const promotedIds: number[] = [];
-		const promotedUrls: string[] = [];
-		for (const row of candidates) {
-			const parsed = parseUrl(row.url, options);
-			if (!parsed) {
-				continue;
-			}
-			if (findScopeEntry(parsed, scopes, options) === null) {
-				continue;
-			}
-			promotedIds.push(row.id);
-			promotedUrls.push(row.url);
-		}
-		if (promotedIds.length === 0) {
-			return [];
-		}
+				const promotedIds: number[] = [];
+				const promotedUrls: string[] = [];
+				for (const row of candidates) {
+					const parsed = parseUrl(row.url, options);
+					if (!parsed) {
+						continue;
+					}
+					if (findScopeEntry(parsed, scopes, options) === null) {
+						continue;
+					}
+					promotedIds.push(row.id);
+					promotedUrls.push(row.url);
+				}
+				if (promotedIds.length === 0) {
+					return [];
+				}
 
-		const chunkSize = 500;
-		const metaReset = makeMetaResetPayload();
-		for (let i = 0; i < promotedIds.length; i += chunkSize) {
-			const chunk = promotedIds.slice(i, i + chunkSize);
-			await this.#instance<DB_Page>('pages')
-				.whereIn('id', chunk)
-				.update({
-					scraped: 0,
-					isExternal: 0,
-					isSkipped: 0,
-					skipReason: null,
-					status: null,
-					statusText: null,
-					contentType: null,
-					contentLength: null,
-					responseHeaders: '{}',
-					redirectDestId: null,
-					// Null every flat meta column + denormalised aggregates +
-					// meta_extras. `firstCrawledAt` / `lastCrawledAt` are
-					// deliberately omitted from META_NULLABLE_COLUMNS — the
-					// last-success timestamp survives the demotion.
-					...metaReset,
-				});
-			// Clear the prior crawl's data for the repromoted pages. `updatePage`
-			// also replaces anchors/images/tags/jsonld when it re-scrapes them, but
-			// only when the new scrape is non-empty — so this pre-clear is still
-			// load-bearing for pages that get repromoted but then re-scrape to
-			// nothing (or are never reached again), and it is the only place
-			// `resources-referrers` is cleared. The HTML body ref is also cleared
-			// so a repromoted page whose re-scrape ends up degraded does not keep
-			// its old external-render snapshot. `page_tags` / `page_jsonld` are
-			// cleared explicitly even though both tables also carry ON DELETE
-			// CASCADE — we keep the existing pattern of explicit chunked DELETEs
-			// rather than relying on CASCADE indirectly (and would not cascade
-			// anyway: the parent `pages` row is updated, not deleted). Orphan
-			// blobs in `page_html_blobs` are left behind; #23 will add GC.
-			await this.#instance('anchors').whereIn('pageId', chunk).delete();
-			await this.#instance('images').whereIn('pageId', chunk).delete();
-			await this.#instance('resources-referrers').whereIn('pageId', chunk).delete();
-			await this.#instance('page_html_ref').whereIn('page_id', chunk).delete();
-			await this.#instance('page_tags').whereIn('pageId', chunk).delete();
-			await this.#instance('page_jsonld').whereIn('pageId', chunk).delete();
-		}
-		dbLog('Repromoted %d external pages back to pending', promotedUrls.length);
-		return promotedUrls;
+				const chunkSize = 500;
+				const metaReset = makeMetaResetPayload();
+				for (let i = 0; i < promotedIds.length; i += chunkSize) {
+					const chunk = promotedIds.slice(i, i + chunkSize);
+					await this.#instance<DB_Page>('pages')
+						.whereIn('id', chunk)
+						.update({
+							scraped: 0,
+							isExternal: 0,
+							isSkipped: 0,
+							skipReason: null,
+							status: null,
+							statusText: null,
+							contentType: null,
+							contentLength: null,
+							responseHeaders: '{}',
+							redirectDestId: null,
+							// Null every flat meta column + denormalised aggregates +
+							// meta_extras. `firstCrawledAt` / `lastCrawledAt` are
+							// deliberately omitted from META_NULLABLE_COLUMNS — the
+							// last-success timestamp survives the demotion.
+							...metaReset,
+						});
+					// Clear the prior crawl's data for the repromoted pages. `updatePage`
+					// also replaces anchors/images/tags/jsonld when it re-scrapes them, but
+					// only when the new scrape is non-empty — so this pre-clear is still
+					// load-bearing for pages that get repromoted but then re-scrape to
+					// nothing (or are never reached again), and it is the only place
+					// `resources-referrers` is cleared. The HTML body ref is also cleared
+					// so a repromoted page whose re-scrape ends up degraded does not keep
+					// its old external-render snapshot. `page_tags` / `page_jsonld` are
+					// cleared explicitly even though both tables also carry ON DELETE
+					// CASCADE — we keep the existing pattern of explicit chunked DELETEs
+					// rather than relying on CASCADE indirectly (and would not cascade
+					// anyway: the parent `pages` row is updated, not deleted). Orphan
+					// blobs in `page_html_blobs` are left behind; #23 will add GC.
+					await this.#instance('anchors').whereIn('pageId', chunk).delete();
+					await this.#instance('images').whereIn('pageId', chunk).delete();
+					await this.#instance('resources-referrers').whereIn('pageId', chunk).delete();
+					await this.#instance('page_html_ref').whereIn('page_id', chunk).delete();
+					await this.#instance('page_tags').whereIn('pageId', chunk).delete();
+					await this.#instance('page_jsonld').whereIn('pageId', chunk).delete();
+				}
+				dbLog('Repromoted %d external pages back to pending', promotedUrls.length);
+				return promotedUrls;
+			},
+			retrySetting,
+		);
 	}
 
 	/**
@@ -1551,96 +1806,101 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * `SQLITE_LIMIT_VARIABLE_NUMBER`.
 	 * @returns The URLs of the pages that were reset to pending.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async resetFailedPages(): Promise<string[]> {
-		const candidates = await this.#instance
-			.select('id', 'url')
-			.from<DB_Page>('pages')
-			.where('scraped', 1)
-			.whereNull('redirectDestId')
-			.where((qb) => {
-				qb.where('isSkipped', 0).orWhereNull('isSkipped');
-			})
-			.where((qb) => {
-				qb.whereNull('status')
-					.orWhere('status', -1)
-					.orWhereNull('contentType')
-					.orWhereBetween('status', [500, 599]);
-			});
+		return emitErrorAndRetry(
+			this,
+			'Database.resetFailedPages',
+			async () => {
+				const candidates = await this.#instance
+					.select('id', 'url')
+					.from<DB_Page>('pages')
+					.where('scraped', 1)
+					.whereNull('redirectDestId')
+					.where((qb) => {
+						qb.where('isSkipped', 0).orWhereNull('isSkipped');
+					})
+					.where((qb) => {
+						qb.whereNull('status')
+							.orWhere('status', -1)
+							.orWhereNull('contentType')
+							.orWhereBetween('status', [500, 599]);
+					});
 
-		if (candidates.length === 0) {
-			return [];
-		}
+				if (candidates.length === 0) {
+					return [];
+				}
 
-		const candidateIds = candidates.map((row) => row.id);
-		const candidateUrls = candidates.map((row) => row.url);
-		const messages = await getFailedPageMessages(
-			this.#instance,
-			candidateIds,
-			candidateUrls,
-		);
-		// Drop candidates whose latest recorded message classifies as permanent.
-		// An empty/absent message stays in the retry pool — we keep retrying when
-		// we don't know it's permanent, erring on the side of investigation.
-		const retryable = candidates.filter((row) => {
-			const message = messages.get(row.id) ?? '';
-			if (message === '') {
-				return true;
-			}
-			return !PERMANENT_ERROR_KINDS.has(classifyErrorKind(message));
-		});
-		const excludedCount = candidates.length - retryable.length;
-		if (excludedCount > 0) {
-			dbLog(
-				'Excluded %d page(s) from retry — permanent failure kinds (dns/tls/client-blocked/parse-error/connection-refused)',
-				excludedCount,
-			);
-		}
-		if (retryable.length === 0) {
-			return [];
-		}
-
-		const ids = retryable.map((row) => row.id);
-		const urls = retryable.map((row) => row.url);
-
-		const chunkSize = 500;
-		const metaReset = makeMetaResetPayload();
-		for (let i = 0; i < ids.length; i += chunkSize) {
-			const chunk = ids.slice(i, i + chunkSize);
-			await this.#instance<DB_Page>('pages')
-				.whereIn('id', chunk)
-				.update({
-					scraped: 0,
-					status: null,
-					statusText: null,
-					contentType: null,
-					contentLength: null,
-					responseHeaders: '{}',
-					// Null every flat meta column + denormalised aggregates +
-					// meta_extras. `firstCrawledAt` / `lastCrawledAt` are
-					// deliberately omitted from META_NULLABLE_COLUMNS so the
-					// last-success timestamp records survive the demotion (the
-					// within-archive observation axis for #11/#17/#19).
-					...metaReset,
+				const candidateIds = candidates.map((row) => row.id);
+				const candidateUrls = candidates.map((row) => row.url);
+				const messages = await getFailedPageMessages(
+					this.#instance,
+					candidateIds,
+					candidateUrls,
+				);
+				// Drop candidates whose latest recorded message classifies as permanent.
+				// An empty/absent message stays in the retry pool — we keep retrying when
+				// we don't know it's permanent, erring on the side of investigation.
+				const retryable = candidates.filter((row) => {
+					const message = messages.get(row.id) ?? '';
+					if (message === '') {
+						return true;
+					}
+					return !PERMANENT_ERROR_KINDS.has(classifyErrorKind(message));
 				});
-			// Clear the prior crawl's per-page data so the re-scrape starts clean.
-			// `updatePage` only replaces anchors/images/tags/jsonld when the new
-			// scrape is non-empty, so this pre-clear is load-bearing for pages that
-			// reset but then fail again (or are never reached), and it is the only
-			// place `resources-referrers` and `page_errors` are cleared. The HTML
-			// body ref is also cleared so a previously-rendered page that now fails
-			// to re-scrape does not keep its old snapshot.
-			await this.#instance('anchors').whereIn('pageId', chunk).delete();
-			await this.#instance('images').whereIn('pageId', chunk).delete();
-			await this.#instance('resources-referrers').whereIn('pageId', chunk).delete();
-			await this.#instance('page_errors').whereIn('pageId', chunk).delete();
-			await this.#instance('page_html_ref').whereIn('page_id', chunk).delete();
-			await this.#instance('page_tags').whereIn('pageId', chunk).delete();
-			await this.#instance('page_jsonld').whereIn('pageId', chunk).delete();
-		}
-		dbLog('Reset %d failed pages back to pending', urls.length);
-		return urls;
+				const excludedCount = candidates.length - retryable.length;
+				if (excludedCount > 0) {
+					dbLog(
+						'Excluded %d page(s) from retry — permanent failure kinds (dns/tls/client-blocked/parse-error/connection-refused)',
+						excludedCount,
+					);
+				}
+				if (retryable.length === 0) {
+					return [];
+				}
+
+				const ids = retryable.map((row) => row.id);
+				const urls = retryable.map((row) => row.url);
+
+				const chunkSize = 500;
+				const metaReset = makeMetaResetPayload();
+				for (let i = 0; i < ids.length; i += chunkSize) {
+					const chunk = ids.slice(i, i + chunkSize);
+					await this.#instance<DB_Page>('pages')
+						.whereIn('id', chunk)
+						.update({
+							scraped: 0,
+							status: null,
+							statusText: null,
+							contentType: null,
+							contentLength: null,
+							responseHeaders: '{}',
+							// Null every flat meta column + denormalised aggregates +
+							// meta_extras. `firstCrawledAt` / `lastCrawledAt` are
+							// deliberately omitted from META_NULLABLE_COLUMNS so the
+							// last-success timestamp records survive the demotion (the
+							// within-archive observation axis for #11/#17/#19).
+							...metaReset,
+						});
+					// Clear the prior crawl's per-page data so the re-scrape starts clean.
+					// `updatePage` only replaces anchors/images/tags/jsonld when the new
+					// scrape is non-empty, so this pre-clear is load-bearing for pages that
+					// reset but then fail again (or are never reached), and it is the only
+					// place `resources-referrers` and `page_errors` are cleared. The HTML
+					// body ref is also cleared so a previously-rendered page that now fails
+					// to re-scrape does not keep its old snapshot.
+					await this.#instance('anchors').whereIn('pageId', chunk).delete();
+					await this.#instance('images').whereIn('pageId', chunk).delete();
+					await this.#instance('resources-referrers').whereIn('pageId', chunk).delete();
+					await this.#instance('page_errors').whereIn('pageId', chunk).delete();
+					await this.#instance('page_html_ref').whereIn('page_id', chunk).delete();
+					await this.#instance('page_tags').whereIn('pageId', chunk).delete();
+					await this.#instance('page_jsonld').whereIn('pageId', chunk).delete();
+				}
+				dbLog('Reset %d failed pages back to pending', urls.length);
+				return urls;
+			},
+			retrySetting,
+		);
 	}
 	/**
 	 * Stores the crawl configuration in the `info` table.
@@ -1650,17 +1910,22 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * are serialized via `JSON.stringify`.
 	 * @param config - The {@link Config} object to store.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async setConfig(config: Config) {
-		const payload: Record<string, unknown> = {};
-		for (const [key, value] of Object.entries(config)) {
-			if (!INFO_COLUMN_ALLOWLIST.has(key)) {
-				continue;
-			}
-			payload[key] = INFO_JSON_COLUMNS.has(key) ? JSON.stringify(value) : value;
-		}
-		return this.#instance.from<Config>('info').insert(payload);
+		return emitErrorAndRetry(
+			this,
+			'Database.setConfig',
+			async () => {
+				const payload: Record<string, unknown> = {};
+				for (const [key, value] of Object.entries(config)) {
+					if (!INFO_COLUMN_ALLOWLIST.has(key)) {
+						continue;
+					}
+					payload[key] = INFO_JSON_COLUMNS.has(key) ? JSON.stringify(value) : value;
+				}
+				return this.#instance.from<Config>('info').insert(payload);
+			},
+			retrySetting,
+		);
 	}
 
 	/**
@@ -1670,18 +1935,23 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param reason - The reason the page was skipped.
 	 * @param isExternal - Whether the page is on an external domain. Defaults to `false`.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async setSkippedPage(url: string, reason: string, isExternal = false) {
-		const pageId = await this.#getIdByUrl(url, isExternal ? 1 : 0);
-		await this.#instance<DB_Page>('pages')
-			.where('id', pageId)
-			.update({
-				scraped: 1,
-				isExternal: isExternal ? 1 : 0,
-				isSkipped: 1,
-				skipReason: reason,
-			});
+		return emitErrorAndRetry(
+			this,
+			'Database.setSkippedPage',
+			async () => {
+				const pageId = await this.#getIdByUrl(url, isExternal ? 1 : 0);
+				await this.#instance<DB_Page>('pages')
+					.where('id', pageId)
+					.update({
+						scraped: 1,
+						isExternal: isExternal ? 1 : 0,
+						isSkipped: 1,
+						skipReason: reason,
+					});
+			},
+			retrySetting,
+		);
 	}
 
 	/**
@@ -1728,27 +1998,32 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * cannot accidentally trigger a "no such column" SQL error.
 	 * @param patch - Partial {@link Config} fields to overwrite. `undefined` values are skipped.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async updateConfig(patch: Partial<Config>): Promise<void> {
-		const payload: Record<string, unknown> = {};
-		for (const [key, value] of Object.entries(patch)) {
-			if (value === undefined) {
-				continue;
-			}
-			if (!INFO_COLUMN_ALLOWLIST.has(key)) {
-				continue;
-			}
-			if (INFO_JSON_COLUMNS.has(key)) {
-				payload[key] = JSON.stringify(value);
-				continue;
-			}
-			payload[key] = value;
-		}
-		if (Object.keys(payload).length === 0) {
-			return;
-		}
-		await this.#instance.from<Config>('info').update(payload);
+		return emitErrorAndRetry(
+			this,
+			'Database.updateConfig',
+			async () => {
+				const payload: Record<string, unknown> = {};
+				for (const [key, value] of Object.entries(patch)) {
+					if (value === undefined) {
+						continue;
+					}
+					if (!INFO_COLUMN_ALLOWLIST.has(key)) {
+						continue;
+					}
+					if (INFO_JSON_COLUMNS.has(key)) {
+						payload[key] = JSON.stringify(value);
+						continue;
+					}
+					payload[key] = value;
+				}
+				if (Object.keys(payload).length === 0) {
+					return;
+				}
+				await this.#instance.from<Config>('info').update(payload);
+			},
+			retrySetting,
+		);
 	}
 
 	/**
@@ -1771,188 +2046,199 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 *   that was discovered earlier).
 	 * @returns The database `pageId` of the inserted/updated row.
 	 */
-	@ErrorEmitter()
-	@retry(retrySetting)
 	async updatePage(
 		page: PageData,
 		writeHtml: boolean,
 		isTarget: boolean,
 		source?: PageSource,
 	): Promise<number> {
-		const { destUrl, sources } = resolveRedirectChain(
-			page.url.withoutHashAndAuth,
-			page.redirectPaths,
-		);
+		return emitErrorAndRetry(
+			this,
+			'Database.updatePage',
+			async () => {
+				const { destUrl, sources } = resolveRedirectChain(
+					page.url.withoutHashAndAuth,
+					page.redirectPaths,
+				);
 
-		const destUrlObject = parseUrl(destUrl);
+				const destUrlObject = parseUrl(destUrl);
 
-		if (!destUrlObject) {
-			throw new Error(`Failed to parse URL: ${destUrl}`);
-		}
+				if (!destUrlObject) {
+					throw new Error(`Failed to parse URL: ${destUrl}`);
+				}
 
-		return await this.#instance.transaction(async (trx) => {
-			const pageId = await this.#insertPage(
-				{
-					...page,
-					url: destUrlObject,
-				},
-				isTarget,
-				trx,
-				source,
-			);
-
-			// Wappalyzer tag detection is HTML-body independent (relies on
-			// `<script src>` / `<iframe src>` / window globals / response
-			// headers) so it runs for every page including external /
-			// metadata-only. JSON-LD on the other hand lives inside the
-			// rendered HTML body, so we only write it when there is HTML to
-			// scrape — see the same `writeHtml` gate as `#writePageHtmlBlob`
-			// below.
-			await this.#insertTags(pageId, page.meta, trx);
-			if (writeHtml) {
-				await this.#insertJsonLd(pageId, page.meta, trx);
-			}
-
-			// Chain lineage propagates FROM the originating URL
-			// (`page.url`), NOT from the destination. See the matching
-			// rationale in `recordRedirect` above: intermediates are
-			// reached transitively from the originating URL's render,
-			// so they inherit its lineage. The `source` argument is the
-			// authoritative origin label when inventoryMode is live;
-			// fall through to a DB lookup of `page.url` for the resume
-			// / retry-failed path where the call-site has no source.
-			let originatingSource: PageSource | undefined = source;
-			if (originatingSource === undefined) {
-				const [originatingRow] = await trx
-					.select('source')
-					.from<DB_Page>('pages')
-					.where('url', page.url.withoutHashAndAuth);
-				originatingSource = originatingRow?.source;
-			}
-			const chainLineageSource = deriveLineageFromParent(originatingSource, 'crawled');
-			await this.#linkRedirectSources(
-				trx,
-				sources,
-				pageId,
-				destUrlObject.withoutHashAndAuth,
-				page.isExternal,
-				chainLineageSource,
-			);
-			// Only insert a snapshot blob when there is actual HTML to write.
-			// `page.html.length > 0` is the precise signal: the scraper returns
-			// `html: ''` for everything that is not a rendered `text/html` document
-			// (non-HTML responses, metadata-only, external, degraded renders), so a
-			// non-empty `html` is exactly "a rendered HTML body exists". Gating on
-			// `isTarget` alone would store an empty body for every internal non-HTML
-			// resource — PDF / zip / images are isTarget=1 (#72).
-			//
-			// `isTarget` is intentionally NOT part of this condition: it is implied by
-			// `html.length > 0` (only in-scope target pages are browser-rendered into a
-			// non-empty body; metadata-only and external pages carry `html: ''`), so the
-			// content check alone expresses the intent without a redundant term.
-			if (writeHtml && page.html.length > 0) {
-				await this.#writePageHtmlBlob(pageId, page.html, trx);
-			} else if (
-				writeHtml &&
-				page.contentType !== null &&
-				!isHtmlContentType(page.contentType)
-			) {
-				// The page is now a *known* non-HTML type. If a previous scrape stored
-				// an HTML body for this URL (e.g. it served HTML then was replaced by
-				// a PDF across `crawl --resume` / `--append`), drop the stale ref so
-				// `page_html_ref` never contradicts `contentType`. A degraded HTML
-				// re-scrape (text/html or unknown content type with empty html) is NOT
-				// cleared — the last good snapshot is preserved, mirroring the
-				// anchors / images empty-guard below. Gated on `writeHtml` because a
-				// stale ref can only have been written by a snapshot-capable call
-				// (`setPage`); `setExternalPage` passes `writeHtml = false` and never
-				// sets `html`, so it has nothing to clear.
-				await trx('page_html_ref').where('page_id', pageId).delete();
-			}
-			// Re-scrape semantics: the same URL can be scraped more than once
-			// (e.g. `crawl --resume`, re-visits, `--append` re-promotion). The
-			// `anchors` / `images` tables have no uniqueness constraint, so
-			// re-inserting without clearing would accumulate a full duplicate set
-			// on every re-scrape (the bug fixed in #70). So we delete-then-insert
-			// to *replace* the previous rows.
-			//
-			// The delete is paired with — and guarded by — a non-empty new list:
-			// a degraded re-scrape (navigation timeout / partial render) can return
-			// an empty `anchorList` for a page that previously had links, and
-			// wiping the prior good data in that case would be destructive. We
-			// cannot tell a transient empty result apart from a page that has
-			// legitimately lost all its links, so we err on the side of keeping
-			// what we already had. The accepted trade-off is that a page which
-			// genuinely dropped to zero links keeps its stale rows until the next
-			// non-empty re-scrape replaces them.
-			//
-			// (A DB-level unique constraint + `onConflict` would also prevent
-			// duplication, but multiple distinct anchors can share the same
-			// hrefId/hash/textContent legitimately, so there is no natural unique
-			// key to enforce — replace-on-write is the correct mechanism here.)
-			// Lineage propagation: read the current page's merged source
-			// (post-UPDATE by `#insertPage`) so anchor placeholder rows
-			// inherit a label that reflects the parent's chain. A
-			// `'crawled'`-lineage parent passes `'crawled'` explicitly so the
-			// crawled-wins downgrade in `#getIdByUrl` fires when an anchor
-			// hits an existing `'inventory-*'` row. An inventory-lineage
-			// parent passes `'inventory-discovered'` to label transitively-
-			// reached URLs correctly without the orchestrator needing to
-			// rehydrate `inventoryMode` from disk.
-			//
-			// Cost: one extra SELECT on `pages` per scraped page (the
-			// `id` is a PK index lookup so it is sub-millisecond even at
-			// 1M-row scale). The alternative — passing `mergedSource`
-			// through from the UPDATE result — would require RETURNING
-			// support that knex's SQLite dialect handles inconsistently;
-			// the small per-page round-trip is the cheaper trade.
-			const [parentRow] = await trx
-				.select('source')
-				.from<DB_Page>('pages')
-				.where('id', pageId);
-			// `deriveLineageFromParent` collapses the three call sites
-			// (anchor / redirect intermediate × updatePage / recordRedirect)
-			// onto the same rule. `'crawled'` fallback (vs `undefined`)
-			// arms the crawled-wins downgrade in `#getIdByUrl` for
-			// existing `'inventory-*'` rows reached from a crawled
-			// parent — see `isInventorySource` for the membership rule.
-			const anchorLineageSource = deriveLineageFromParent(parentRow?.source, 'crawled');
-			const anchors = await Promise.all(
-				page.anchorList.map(async (anchor) => {
-					const hrefId = await this.#getIdByUrl(
-						anchor.href.withoutHashAndAuth,
-						anchor.isExternal ? 1 : 0,
+				return await this.#instance.transaction(async (trx) => {
+					const pageId = await this.#insertPage(
+						{
+							...page,
+							url: destUrlObject,
+						},
+						isTarget,
 						trx,
-						anchorLineageSource,
+						source,
 					);
-					return {
+
+					// Wappalyzer tag detection is HTML-body independent (relies on
+					// `<script src>` / `<iframe src>` / window globals / response
+					// headers) so it runs for every page including external /
+					// metadata-only. JSON-LD on the other hand lives inside the
+					// rendered HTML body, so we only write it when there is HTML to
+					// scrape — see the same `writeHtml` gate as `#writePageHtmlBlob`
+					// below.
+					await this.#insertTags(pageId, page.meta, trx);
+					if (writeHtml) {
+						await this.#insertJsonLd(pageId, page.meta, trx);
+					}
+
+					// Chain lineage propagates FROM the originating URL
+					// (`page.url`), NOT from the destination. See the matching
+					// rationale in `recordRedirect` above: intermediates are
+					// reached transitively from the originating URL's render,
+					// so they inherit its lineage. The `source` argument is the
+					// authoritative origin label when inventoryMode is live;
+					// fall through to a DB lookup of `page.url` for the resume
+					// / retry-failed path where the call-site has no source.
+					let originatingSource: PageSource | undefined = source;
+					if (originatingSource === undefined) {
+						const [originatingRow] = await trx
+							.select('source')
+							.from<DB_Page>('pages')
+							.where('url', page.url.withoutHashAndAuth);
+						originatingSource = originatingRow?.source;
+					}
+					const chainLineageSource = deriveLineageFromParent(
+						originatingSource,
+						'crawled',
+					);
+					await this.#linkRedirectSources(
+						trx,
+						sources,
 						pageId,
-						hrefId,
-						hash: anchor.href.hash,
-						textContent: anchor.textContent,
-					};
-				}),
-			);
-			dbLog('Insert anchors.length: %d', anchors.length);
-			if (anchors.length > 0) {
-				await trx('anchors').where('pageId', pageId).delete();
-				await eachSplitted(anchors, 100, async (_anchors) => {
-					await trx('anchors').insert(_anchors);
+						destUrlObject.withoutHashAndAuth,
+						page.isExternal,
+						chainLineageSource,
+					);
+					// Only insert a snapshot blob when there is actual HTML to write.
+					// `page.html.length > 0` is the precise signal: the scraper returns
+					// `html: ''` for everything that is not a rendered `text/html` document
+					// (non-HTML responses, metadata-only, external, degraded renders), so a
+					// non-empty `html` is exactly "a rendered HTML body exists". Gating on
+					// `isTarget` alone would store an empty body for every internal non-HTML
+					// resource — PDF / zip / images are isTarget=1 (#72).
+					//
+					// `isTarget` is intentionally NOT part of this condition: it is implied by
+					// `html.length > 0` (only in-scope target pages are browser-rendered into a
+					// non-empty body; metadata-only and external pages carry `html: ''`), so the
+					// content check alone expresses the intent without a redundant term.
+					if (writeHtml && page.html.length > 0) {
+						await this.#writePageHtmlBlob(pageId, page.html, trx);
+					} else if (
+						writeHtml &&
+						page.contentType !== null &&
+						!isHtmlContentType(page.contentType)
+					) {
+						// The page is now a *known* non-HTML type. If a previous scrape stored
+						// an HTML body for this URL (e.g. it served HTML then was replaced by
+						// a PDF across `crawl --resume` / `--append`), drop the stale ref so
+						// `page_html_ref` never contradicts `contentType`. A degraded HTML
+						// re-scrape (text/html or unknown content type with empty html) is NOT
+						// cleared — the last good snapshot is preserved, mirroring the
+						// anchors / images empty-guard below. Gated on `writeHtml` because a
+						// stale ref can only have been written by a snapshot-capable call
+						// (`setPage`); `setExternalPage` passes `writeHtml = false` and never
+						// sets `html`, so it has nothing to clear.
+						await trx('page_html_ref').where('page_id', pageId).delete();
+					}
+					// Re-scrape semantics: the same URL can be scraped more than once
+					// (e.g. `crawl --resume`, re-visits, `--append` re-promotion). The
+					// `anchors` / `images` tables have no uniqueness constraint, so
+					// re-inserting without clearing would accumulate a full duplicate set
+					// on every re-scrape (the bug fixed in #70). So we delete-then-insert
+					// to *replace* the previous rows.
+					//
+					// The delete is paired with — and guarded by — a non-empty new list:
+					// a degraded re-scrape (navigation timeout / partial render) can return
+					// an empty `anchorList` for a page that previously had links, and
+					// wiping the prior good data in that case would be destructive. We
+					// cannot tell a transient empty result apart from a page that has
+					// legitimately lost all its links, so we err on the side of keeping
+					// what we already had. The accepted trade-off is that a page which
+					// genuinely dropped to zero links keeps its stale rows until the next
+					// non-empty re-scrape replaces them.
+					//
+					// (A DB-level unique constraint + `onConflict` would also prevent
+					// duplication, but multiple distinct anchors can share the same
+					// hrefId/hash/textContent legitimately, so there is no natural unique
+					// key to enforce — replace-on-write is the correct mechanism here.)
+					// Lineage propagation: read the current page's merged source
+					// (post-UPDATE by `#insertPage`) so anchor placeholder rows
+					// inherit a label that reflects the parent's chain. A
+					// `'crawled'`-lineage parent passes `'crawled'` explicitly so the
+					// crawled-wins downgrade in `#getIdByUrl` fires when an anchor
+					// hits an existing `'inventory-*'` row. An inventory-lineage
+					// parent passes `'inventory-discovered'` to label transitively-
+					// reached URLs correctly without the orchestrator needing to
+					// rehydrate `inventoryMode` from disk.
+					//
+					// Cost: one extra SELECT on `pages` per scraped page (the
+					// `id` is a PK index lookup so it is sub-millisecond even at
+					// 1M-row scale). The alternative — passing `mergedSource`
+					// through from the UPDATE result — would require RETURNING
+					// support that knex's SQLite dialect handles inconsistently;
+					// the small per-page round-trip is the cheaper trade.
+					const [parentRow] = await trx
+						.select('source')
+						.from<DB_Page>('pages')
+						.where('id', pageId);
+					// `deriveLineageFromParent` collapses the three call sites
+					// (anchor / redirect intermediate × updatePage / recordRedirect)
+					// onto the same rule. `'crawled'` fallback (vs `undefined`)
+					// arms the crawled-wins downgrade in `#getIdByUrl` for
+					// existing `'inventory-*'` rows reached from a crawled
+					// parent — see `isInventorySource` for the membership rule.
+					const anchorLineageSource = deriveLineageFromParent(
+						parentRow?.source,
+						'crawled',
+					);
+					const anchors = await Promise.all(
+						page.anchorList.map(async (anchor) => {
+							const hrefId = await this.#getIdByUrl(
+								anchor.href.withoutHashAndAuth,
+								anchor.isExternal ? 1 : 0,
+								trx,
+								anchorLineageSource,
+							);
+							return {
+								pageId,
+								hrefId,
+								hash: anchor.href.hash,
+								textContent: anchor.textContent,
+							};
+						}),
+					);
+					dbLog('Insert anchors.length: %d', anchors.length);
+					if (anchors.length > 0) {
+						await trx('anchors').where('pageId', pageId).delete();
+						await eachSplitted(anchors, 100, async (_anchors) => {
+							await trx('anchors').insert(_anchors);
+						});
+					}
+					const images = page.imageList.map((image) => ({
+						pageId,
+						...image,
+					}));
+					dbLog('Insert images.length: %d', images.length);
+					if (images.length > 0) {
+						await trx('images').where('pageId', pageId).delete();
+						await eachSplitted(images, 100, async (_images) => {
+							await trx('images').insert(_images);
+						});
+					}
+					return pageId;
 				});
-			}
-			const images = page.imageList.map((image) => ({
-				pageId,
-				...image,
-			}));
-			dbLog('Insert images.length: %d', images.length);
-			if (images.length > 0) {
-				await trx('images').where('pageId', pageId).delete();
-				await eachSplitted(images, 100, async (_images) => {
-					await trx('images').insert(_images);
-				});
-			}
-			return pageId;
-		});
+			},
+			retrySetting,
+		);
 	}
 
 	/**

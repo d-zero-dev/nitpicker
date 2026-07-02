@@ -2,6 +2,7 @@ import type { GetIsolatedClusterOptions, IsolatedClusterDetail } from './types.j
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { computeIsolatedClusters } from './compute-isolated-clusters.js';
+import { sortArrayItems } from './sort-array-items.js';
 
 /**
  * Fetch the full member list for a single **孤立集合** identified by its
@@ -52,16 +53,46 @@ export async function getIsolatedCluster(
 		// Strip the internal `id` field from each member: the public DTO
 		// does not expose database row ids — consumers identify members
 		// by URL, the only stable identifier.
-		const members = component.members.map((m) => ({
-			url: m.url,
-			title: m.title,
-			status: m.status,
-			source: m.source,
-		}));
+		const allMembers = component.members
+			.map((m) => ({
+				url: m.url,
+				title: m.title,
+				status: m.status,
+				source: m.source,
+			}))
+			.filter((member) => {
+				if (
+					options.urlPattern &&
+					!member.url.includes(options.urlPattern.replaceAll('%', ''))
+				) {
+					return false;
+				}
+				if (options.source && member.source !== options.source) {
+					return false;
+				}
+				if (options.status != null && member.status !== options.status) {
+					return false;
+				}
+				return true;
+			});
+		const sorted = sortArrayItems(
+			allMembers,
+			options.sortBy ?? 'url',
+			options.sortOrder,
+			{
+				url: { getValue: (item) => item.url, type: 'url' },
+				title: { getValue: (item) => item.title },
+				status: { getValue: (item) => item.status },
+				source: { getValue: (item) => item.source },
+			},
+		);
+		const offset = options.offset ?? 0;
+		const limit = options.limit ?? sorted.length;
+		const members = sorted.slice(offset, offset + limit);
 		return {
 			representativeUrl: component.representativeUrl,
 			members,
-			size: component.size,
+			size: sorted.length,
 		};
 	}
 	return null;

@@ -27,6 +27,15 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 		const accessor = context.manager.get(context.archiveId);
 		const precomputedComponents = await getCachedIsolatedClusters(context);
 		const result = await listIsolatedClusters(accessor, {
+			urlPattern: c.req.query('urlPattern'),
+			status: toNumber(c.req.query('status')),
+			sortBy: c.req.query('sortBy') as
+				| 'representativeUrl'
+				| 'representativeTitle'
+				| 'representativeStatus'
+				| 'size'
+				| undefined,
+			sortOrder: c.req.query('sortOrder') as 'asc' | 'desc' | undefined,
 			limit: toNumber(c.req.query('limit')),
 			offset: toNumber(c.req.query('offset')),
 			precomputedComponents,
@@ -39,6 +48,17 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 		const representativeUrl = c.req.param('representativeUrl');
 		const precomputedComponents = await getCachedIsolatedClusters(context);
 		const result = await getIsolatedCluster(accessor, representativeUrl, {
+			urlPattern: c.req.query('urlPattern'),
+			status: toNumber(c.req.query('status')),
+			source: c.req.query('source') as
+				| 'crawled'
+				| 'inventory-seed'
+				| 'inventory-discovered'
+				| undefined,
+			sortBy: c.req.query('sortBy') as 'url' | 'title' | 'status' | 'source' | undefined,
+			sortOrder: c.req.query('sortOrder') as 'asc' | 'desc' | undefined,
+			limit: toNumber(c.req.query('limit')),
+			offset: toNumber(c.req.query('offset')),
 			precomputedComponents,
 		});
 		if (result === null) {

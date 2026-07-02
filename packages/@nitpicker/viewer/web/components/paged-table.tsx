@@ -1,13 +1,42 @@
 import type { PageSize } from '../types.js';
 import type { ColumnDef } from '@tanstack/react-table';
+import type { CSSProperties } from 'react';
 
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { useI18n } from '../i18n/use-i18n.js';
 
 import { Pager } from './pager.js';
 import { toAccessibleHeaderLabel } from './to-accessible-header-label.js';
+
+export type TableSortOrder = 'asc' | 'desc';
+
+export interface TableSortControl {
+	active: boolean;
+	order?: TableSortOrder;
+	onChange: (next: TableSortOrder | undefined) => void;
+}
+
+export interface TableFilterOption {
+	value: string;
+	label: string;
+	checked: boolean;
+}
+
+export interface TableFilterControl {
+	label: string;
+	kind: 'radio' | 'checklist' | 'text';
+	value?: string;
+	options?: TableFilterOption[];
+	onApply: (next: string | string[] | undefined) => void;
+}
+
+export interface TableColumnControls {
+	sort?: Record<string, TableSortControl | undefined>;
+	filter?: Record<string, TableFilterControl | undefined>;
+}
 
 /** Props for {@link PagedTable}. */
 export interface PagedTableProps<T> {
@@ -31,6 +60,8 @@ export interface PagedTableProps<T> {
 	isLoading?: boolean;
 	/** Fixed row height in pixels. Defaults to 36. */
 	rowHeight?: number;
+	/** Optional sort/filter header controls keyed by column id. */
+	columnControls?: TableColumnControls;
 }
 
 /** Number of placeholder rows shown while the initial load is pending. */
@@ -38,6 +69,247 @@ const SKELETON_ROWS = 12;
 
 /** Upper bound (px) a column may be resized to; also the resizer's `aria-valuemax`. */
 const MAX_COLUMN_WIDTH = 1000;
+
+/**
+ * Renders column-local controls without changing the resize affordance.
+ * @param props - Header control lookup props.
+ * @param props.columnId
+ * @param props.controls
+ */
+function HeaderControls(props: { columnId: string; controls?: TableColumnControls }) {
+	const sort = props.controls?.sort?.[props.columnId];
+	const filter = props.controls?.filter?.[props.columnId];
+	const filterKey = useMemo(
+		() =>
+			filter
+				? [
+						filter.kind,
+						filter.value ?? '',
+						...(filter.options?.map((option) => `${option.value}:${option.checked}`) ??
+							[]),
+					].join('|')
+				: '',
+		[filter],
+	);
+	if (!sort && !filter) return null;
+	return (
+		<span className="pt-header-controls">
+			{sort && <SortButton control={sort} />}
+			{filter && <FilterButton key={filterKey} control={filter} />}
+		</span>
+	);
+}
+
+/**
+ * Advances the column sort cycle: ascending, descending, off.
+ * @param props - Sort control props.
+ * @param props.control
+ */
+function SortButton({ control }: { control: TableSortControl }) {
+	const { t } = useI18n();
+	const order = control.order ?? 'asc';
+	const next: TableSortOrder | undefined = control.active
+		? order === 'asc'
+			? 'desc'
+			: undefined
+		: 'asc';
+	return (
+		<button
+			type="button"
+			className={`pt-header-button${control.active ? ' is-active' : ''}`}
+			aria-label={t('tableControls.sort')}
+			onClick={() => {
+				control.onChange(next);
+			}}>
+			{control.active ? (order === 'asc' ? '^' : 'v') : 'S'}
+		</button>
+	);
+}
+
+const POPOVER_GAP = 6;
+const POPOVER_VIEWPORT_MARGIN = 8;
+const POPOVER_WIDTH = 320;
+const POPOVER_MAX_HEIGHT = 320;
+
+/**
+ * Extracts selected filter option values from the current URL-backed control.
+ * @param control - Filter control definition.
+ * @returns Selected option values.
+ */
+function selectedValues(control: TableFilterControl) {
+	return new Set(
+		control.options?.filter((option) => option.checked).map((option) => option.value),
+	);
+}
+
+/**
+ * Keep a popover coordinate inside the current viewport bounds.
+ * @param value - Preferred coordinate.
+ * @param min - Lower bound.
+ * @param max - Upper bound.
+ * @returns Clamped coordinate.
+ */
+function clamp(value: number, min: number, max: number) {
+	return Math.min(Math.max(value, min), max);
+}
+
+/**
+ * Popover editor for a column filter; changes are committed only on Apply.
+ * @param props - Filter control props.
+ * @param props.control
+ */
+function FilterButton({ control }: { control: TableFilterControl }) {
+	const { t } = useI18n();
+	const [isOpen, setIsOpen] = useState(false);
+	const [popoverStyle, setPopoverStyle] = useState<CSSProperties>();
+	const [textValue, setTextValue] = useState(control.value ?? '');
+	const [selected, setSelected] = useState(() => selectedValues(control));
+	const active =
+		control.kind === 'text'
+			? (control.value?.length ?? 0) > 0
+			: (control.options?.some((option) => option.checked) ?? false);
+	const popover =
+		isOpen && popoverStyle ? (
+			<div
+				className="pt-filter-popover"
+				role="dialog"
+				aria-label={control.label}
+				style={popoverStyle}>
+				{control.kind === 'text' ? (
+					<input
+						className="pt-filter-input"
+						aria-label={control.label}
+						value={textValue}
+						onChange={(event) => {
+							setTextValue(event.target.value);
+						}}
+						onKeyDown={(event) => {
+							if (event.key === 'Enter') {
+								control.onApply(textValue || undefined);
+								setIsOpen(false);
+							}
+						}}
+					/>
+				) : (
+					<>
+						{control.kind === 'checklist' && (
+							<div className="pt-filter-actions">
+								<button
+									type="button"
+									onClick={() => {
+										setSelected(new Set(control.options?.map((option) => option.value)));
+									}}>
+									{t('tableControls.selectAll')}
+								</button>
+								<button
+									type="button"
+									onClick={() => {
+										setSelected(new Set());
+									}}>
+									{t('tableControls.selectNone')}
+								</button>
+							</div>
+						)}
+						<div className="pt-filter-list">
+							{control.options?.map((option) => (
+								<label key={option.value} className="pt-filter-option">
+									<input
+										type={control.kind === 'radio' ? 'radio' : 'checkbox'}
+										checked={selected.has(option.value)}
+										onChange={(event) => {
+											if (control.kind === 'radio') {
+												setSelected(new Set([option.value]));
+												return;
+											}
+											const next = new Set(selected);
+											if (event.target.checked) {
+												next.add(option.value);
+											} else {
+												next.delete(option.value);
+											}
+											setSelected(next);
+										}}
+									/>
+									<span>{option.label}</span>
+								</label>
+							))}
+						</div>
+					</>
+				)}
+				<div className="pt-filter-actions">
+					<button
+						type="button"
+						onClick={() => {
+							control.onApply();
+							setIsOpen(false);
+						}}>
+						{t('tableControls.reset')}
+					</button>
+					<button
+						type="button"
+						onClick={() => {
+							if (control.kind === 'text') {
+								control.onApply(textValue || undefined);
+							} else if (control.kind === 'radio') {
+								control.onApply([...selected][0]);
+							} else {
+								control.onApply([...selected]);
+							}
+							setIsOpen(false);
+						}}>
+						{t('tableControls.apply')}
+					</button>
+				</div>
+			</div>
+		) : null;
+	return (
+		<span className="pt-filter">
+			<button
+				type="button"
+				className={`pt-header-button${active ? ' is-active' : ''}`}
+				aria-label={control.label}
+				aria-haspopup="dialog"
+				aria-expanded={isOpen}
+				onClick={(event) => {
+					const willOpen = !isOpen;
+					if (willOpen) {
+						setTextValue(control.value ?? '');
+						setSelected(selectedValues(control));
+					}
+					const rect = event.currentTarget.getBoundingClientRect();
+					const popoverWidth = Math.min(
+						POPOVER_WIDTH,
+						window.innerWidth - POPOVER_VIEWPORT_MARGIN * 2,
+					);
+					const maxInlineStart = Math.max(
+						POPOVER_VIEWPORT_MARGIN,
+						window.innerWidth - popoverWidth - POPOVER_VIEWPORT_MARGIN,
+					);
+					const blockStartBelow = rect.bottom + POPOVER_GAP;
+					const blockStartAbove = rect.top - POPOVER_GAP - POPOVER_MAX_HEIGHT;
+					const hasRoomBelow =
+						blockStartBelow + POPOVER_MAX_HEIGHT <=
+						window.innerHeight - POPOVER_VIEWPORT_MARGIN;
+					setPopoverStyle({
+						insetBlockStart: hasRoomBelow
+							? blockStartBelow
+							: Math.max(POPOVER_VIEWPORT_MARGIN, blockStartAbove),
+						insetInlineStart: clamp(
+							rect.right - popoverWidth,
+							POPOVER_VIEWPORT_MARGIN,
+							maxInlineStart,
+						),
+					});
+					setIsOpen(willOpen);
+				}}>
+				F
+			</button>
+			{popover && typeof document !== 'undefined'
+				? createPortal(popover, document.body)
+				: null}
+		</span>
+	);
+}
 
 /**
  * A classic per-page table for MPA pagination — the same ARIA / column-
@@ -68,6 +340,7 @@ export function PagedTable<T>(props: PagedTableProps<T>) {
 		isFetching,
 		isLoading = false,
 		rowHeight = 36,
+		columnControls,
 	} = props;
 	const { t } = useI18n();
 
@@ -148,7 +421,18 @@ export function PagedTable<T>(props: PagedTableProps<T>) {
 											aria-colindex={columnIndex + 1}
 											aria-label={headerLabel}
 											style={{ width: header.getSize() }}>
-											{flexRender(header.column.columnDef.header, header.getContext())}
+											<span className="pt-header-content">
+												<span className="pt-header-label">
+													{flexRender(
+														header.column.columnDef.header,
+														header.getContext(),
+													)}
+												</span>
+												<HeaderControls
+													columnId={header.column.id}
+													controls={columnControls}
+												/>
+											</span>
 											{header.column.getCanResize() && (
 												// The resizer is intentionally a focusable, keyboard-operable
 												// `<div role="separator">` — same trade-off as virtual-table.tsx.

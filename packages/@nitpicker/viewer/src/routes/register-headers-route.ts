@@ -16,8 +16,20 @@ export function registerHeadersRoute(app: Hono, context: ArchiveContext): void {
 		const accessor = context.manager.get(context.archiveId);
 		const result = await checkHeaders(accessor, {
 			missingOnly: toBoolean(c.req.query('missingOnly')),
+			hasCSP: toBoolean(c.req.query('hasCSP')),
+			hasXFrameOptions: toBoolean(c.req.query('hasXFrameOptions')),
+			hasXContentTypeOptions: toBoolean(c.req.query('hasXContentTypeOptions')),
+			hasHSTS: toBoolean(c.req.query('hasHSTS')),
 			limit: toNumber(c.req.query('limit')),
 			offset: toNumber(c.req.query('offset')),
+			sortBy: c.req.query('sortBy') as
+				| 'url'
+				| 'hasCSP'
+				| 'hasXFrameOptions'
+				| 'hasXContentTypeOptions'
+				| 'hasHSTS'
+				| undefined,
+			sortOrder: c.req.query('sortOrder') as 'asc' | 'desc' | undefined,
 		});
 		return c.json(result);
 	});

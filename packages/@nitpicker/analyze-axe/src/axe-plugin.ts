@@ -53,7 +53,7 @@ export default definePlugin(async (options: Options) => {
 	if (options.lang) {
 		try {
 			const mod = await import(`axe-core/locales/${options.lang}.json`, {
-				assert: { type: 'json' },
+				with: { type: 'json' },
 			});
 			locale = mod.default;
 		} catch {

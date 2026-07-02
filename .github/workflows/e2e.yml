@@ -1,7 +1,10 @@
 name: E2E
 
-# Full E2E suite (~15 min locally, serial maxWorkers:1, Puppeteer-driven).
-# It is too heavy to block every PR, so it runs:
+# Full E2E suite (Puppeteer-driven, maxWorkers:1). Sequential local: ~22 min.
+# Split into 4 matrix shards balanced by LPT (longest-processing-time-first)
+# to land the wall-clock at ~6-8 min while keeping the test bodies untouched.
+#
+# Triggers:
 #   - nightly via cron (catch regressions on the default branch)
 #   - on demand via workflow_dispatch
 #   - on PRs that touch the crawler / CLI / test-server (path filter)
@@ -23,23 +26,121 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.3
       - run: corepack enable
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6.4.0
         with:
-          node-version: 24
+          node-version: 24.18.0
           cache: yarn
-      # Puppeteer's browser download is a silent no-op on this runner (it creates an
-      # empty cache folder without the binary), so skip it and drive the Chrome that
-      # ubuntu-latest ships pre-installed via PUPPETEER_EXECUTABLE_PATH instead.
       - run: yarn install --immutable
         env:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
       - run: yarn build
+      # Cache the build output keyed by commit SHA. A re-run of the same SHA
+      # (e.g. retry after a flaky shard) reuses this cache and skips the ~2 min
+      # build. hashFiles-based keys are tempting for cross-commit reuse but
+      # caused build/e2e key mismatch when the build step generated *.d.ts
+      # files that flipped `hashFiles('packages/**/*.ts')` between save & restore.
+      - uses: actions/cache/save@v6.0.0
+        with:
+          path: packages/**/lib
+          key: e2e-build-node24-${{ github.sha }}
+          enableCrossOsArchive: true
+
+  verify-shards:
+    # Runs in parallel with `build`. Just a checkout + a grep diff; ~5 s.
+    # Catches the "added an e2e file but forgot to add it to the matrix below"
+    # mistake — that file would otherwise silently never run in CI.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - name: Verify shard manifest covers all e2e files
+        run: |
+          expected=$(find packages/test-server/src/__tests__/e2e -name '*.e2e.ts' -printf '%f\n' | sort)
+          declared=$(grep -oE '[a-z][a-z0-9-]*\.e2e\.ts' .github/workflows/e2e.yml | sort -u)
+          if ! diff <(echo "$expected") <(echo "$declared"); then
+            echo "::error::e2e shard manifest in .github/workflows/e2e.yml is out of sync with packages/test-server/src/__tests__/e2e/*.e2e.ts"
+            exit 1
+          fi
+
+  e2e:
+    needs: [build, verify-shards]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # fail-fast: false — surface every failing shard in one run so a single
+    # review/fix cycle can address them all (vs. fix-one → wait-for-CI →
+    # find-next). ~1.6x CI credit cost is acceptable for a public repo, and
+    # flaky failures would require re-running anyway.
+    strategy:
+      fail-fast: false
+      # LPT-balanced as of 2026-06-26 measurement (1340 s total, target 335 s/shard).
+      # If a shard starts overshooting in the Actions UI, redo the bin-packing
+      # by hand from a recent run's per-file timings.
+      matrix:
+        shard:
+          - id: redirect-meta
+            files:
+              [
+                redirect.e2e.ts,
+                meta.e2e.ts,
+                scope.e2e.ts,
+                multi-root.e2e.ts,
+                output-path.e2e.ts,
+                single-page.e2e.ts,
+              ]
+          - id: inventory-snapshot
+            files:
+              [
+                inventory.e2e.ts,
+                snapshot.e2e.ts,
+                options.e2e.ts,
+                pagination.e2e.ts,
+                config-persistence.e2e.ts,
+                scope-auth-leak.e2e.ts,
+              ]
+          - id: retry-exclude
+            files:
+              [
+                retry-failed.e2e.ts,
+                exclude.e2e.ts,
+                recursive.e2e.ts,
+                resource-reuse.e2e.ts,
+                archive-pipeline.e2e.ts,
+                scroll-jack.e2e.ts,
+              ]
+          - id: append-pipeline
+            files:
+              [
+                append.e2e.ts,
+                parallel-and-interval.e2e.ts,
+                analyze-pipeline.e2e.ts,
+                error-status.e2e.ts,
+                js-redirect.e2e.ts,
+                cli-process-exit.e2e.ts,
+                cli-version.e2e.ts,
+              ]
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - run: corepack enable
+      - uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24.18.0
+          cache: yarn
+      - run: yarn install --immutable
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+      - uses: actions/cache/restore@v6.0.0
+        with:
+          path: packages/**/lib
+          key: e2e-build-node24-${{ github.sha }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
+      # Puppeteer's browser download is a silent no-op on this runner (it creates an
+      # empty cache folder without the binary), so skip it and drive the Chrome that
+      # ubuntu-latest ships pre-installed via PUPPETEER_EXECUTABLE_PATH instead.
       - name: Use the runner's pre-installed Chrome
         run: |
           CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium-browser || command -v chromium)"
@@ -51,4 +152,12 @@ jobs:
       # still start — this keeps the sandbox enabled rather than passing --no-sandbox.
       - name: Allow Chromium sandbox (unprivileged userns)
         run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
-      - run: yarn vitest run --config vitest.e2e.config.ts
+      - name: Run shard ${{ matrix.shard.id }}
+        env:
+          SHARD_FILES: ${{ join(matrix.shard.files, ' ') }}
+        run: |
+          paths=()
+          for f in $SHARD_FILES; do
+            paths+=("packages/test-server/src/__tests__/e2e/$f")
+          done
+          yarn vitest run --config vitest.e2e.config.ts "${paths[@]}"

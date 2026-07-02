@@ -90,8 +90,8 @@ describe('listPageLinks', () => {
 			redirectPaths: [],
 			isExternal: false,
 			isTarget: true,
-			status: 200,
-			statusText: 'OK',
+			status: 404,
+			statusText: 'Not Found',
 			contentType: 'text/html',
 			contentLength: 100,
 			responseHeaders: {},
@@ -136,6 +136,12 @@ describe('listPageLinks', () => {
 		const about = result.items.find((i) => i.url === 'https://example.com/about');
 		expect(home?.hasResponseHeaders).toBe(true);
 		expect(about?.hasResponseHeaders).toBe(false);
+	});
+
+	it('status でフィルタする', async () => {
+		const result = await listPageLinks(archive, { status: 404 });
+		expect(result.total).toBe(1);
+		expect(result.items[0]?.url).toBe('https://example.com/about');
 	});
 
 	it('precomputedReferrerCounts を渡すと SQL 経由ではなく Map lookup で referrerCount を埋める', async () => {

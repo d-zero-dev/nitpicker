@@ -28,6 +28,7 @@
 	/* z-index scale. Raw integer z-index values are linted against; reach for
 	   one of these slots when stacking. */
 	--z-table-header: 1;
+	--z-popover: 10;
 	--z-skip-link: 100;
 	font-family:
 		system-ui,
@@ -507,7 +508,7 @@ h2 {
 	position: relative;
 	flex-shrink: 0;
 	padding-block: 8px;
-	padding-inline: 10px;
+	padding-inline: 10px 16px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	font-size: var(--font-size-sm);
@@ -516,6 +517,124 @@ h2 {
 	text-align: start;
 	white-space: nowrap;
 	border-block-end: 1px solid var(--border);
+}
+
+.pt-header-content {
+	display: block flex;
+	gap: 6px;
+	align-items: center;
+	min-inline-size: 0;
+}
+
+.pt-header-label {
+	min-inline-size: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.pt-header-controls {
+	position: relative;
+	display: block flex;
+	flex: 0 0 auto;
+	gap: 3px;
+	align-items: center;
+	margin-inline-start: auto;
+}
+
+.pt-header-button {
+	display: block flex;
+	align-items: center;
+	justify-content: center;
+	inline-size: 22px;
+	block-size: 22px;
+	padding: 0;
+	font-size: var(--font-size-xs);
+	font-weight: bold;
+	color: var(--text-dim);
+	cursor: pointer;
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
+.pt-header-button:hover,
+.pt-header-button:focus-visible,
+.pt-header-button.is-active {
+	color: #fff;
+	background: var(--accent);
+	border-color: var(--accent);
+}
+
+.pt-filter {
+	position: relative;
+	display: block flow;
+}
+
+.pt-filter-popover {
+	position: fixed;
+	z-index: var(--z-popover);
+	inline-size: min(320px, calc(100dvw - 16px));
+	min-inline-size: min(220px, calc(100dvw - 16px));
+	max-block-size: calc(100dvh - 16px);
+	padding: 8px;
+	overflow: auto;
+	color: var(--text);
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+}
+
+.pt-filter-input {
+	box-sizing: border-box;
+	inline-size: 100%;
+	padding-block: 5px;
+	padding-inline: 8px;
+	color: var(--text);
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
+.pt-filter-list {
+	display: block flex;
+	flex-direction: column;
+	gap: 6px;
+	max-block-size: 240px;
+	overflow: auto;
+}
+
+.pt-filter-option {
+	display: block flex;
+	gap: 6px;
+	align-items: center;
+	font-size: var(--font-size-sm);
+	font-weight: normal;
+	color: var(--text);
+	white-space: nowrap;
+}
+
+.pt-filter-option span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.pt-filter-actions {
+	display: block flex;
+	gap: 6px;
+	justify-content: flex-end;
+	margin-block-start: 8px;
+}
+
+.pt-filter-actions button {
+	padding-block: 4px;
+	padding-inline: 8px;
+	font-size: var(--font-size-sm);
+	color: var(--text);
+	cursor: pointer;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 4px;
 }
 
 .pt-resizer {

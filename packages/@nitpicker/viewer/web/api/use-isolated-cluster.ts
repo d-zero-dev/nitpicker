@@ -4,6 +4,16 @@ import { useQuery } from '@tanstack/react-query';
 
 import { apiGet } from './api-client.js';
 
+export interface UseIsolatedClusterOptions {
+	limit?: number;
+	offset?: number;
+	urlPattern?: string;
+	status?: number;
+	source?: string;
+	sortBy?: string;
+	sortOrder?: string;
+}
+
 /**
  * Fetches the full member list of one **孤立集合** cluster from
  * `GET /api/isolated-clusters/:representativeUrl`.
@@ -21,16 +31,20 @@ import { apiGet } from './api-client.js';
  * rather than after three retries — the cluster does not come back into
  * existence on its own, so retrying would just delay the UI feedback.
  * @param representativeUrl - The cluster identifier (from `useIsolatedClustersInfinite`).
+ * @param options
  * @returns The TanStack Query result for the cluster detail; check `isError` for the 404 / collapsed case.
  */
-export function useIsolatedCluster(representativeUrl: string) {
+export function useIsolatedCluster(
+	representativeUrl: string,
+	options: UseIsolatedClusterOptions = {},
+) {
 	return useQuery({
-		queryKey: ['isolated-cluster', representativeUrl],
+		queryKey: ['isolated-cluster', representativeUrl, options],
 		enabled: representativeUrl.length > 0,
 		retry: false,
 		queryFn: async () => {
 			const path = `/api/isolated-clusters/${encodeURIComponent(representativeUrl)}`;
-			return apiGet<IsolatedClusterDetail>(path);
+			return apiGet<IsolatedClusterDetail>(path, options);
 		},
 	});
 }

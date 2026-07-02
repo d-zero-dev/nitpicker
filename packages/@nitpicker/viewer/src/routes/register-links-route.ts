@@ -37,6 +37,16 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 			limit: toNumber(c.req.query('limit')),
 			offset: toNumber(c.req.query('offset')),
 			includeRedirectSources,
+			urlPattern: c.req.query('urlPattern'),
+			status: toNumber(c.req.query('status')),
+			sortBy: c.req.query('sortBy') as
+				| 'sourceUrl'
+				| 'destUrl'
+				| 'status'
+				| 'isExternal'
+				| 'textContent'
+				| undefined,
+			sortOrder: c.req.query('sortOrder') as 'asc' | 'desc' | undefined,
 		});
 		return c.json(result);
 	});

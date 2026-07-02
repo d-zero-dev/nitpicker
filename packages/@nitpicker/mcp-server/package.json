@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/mcp-server",
-	"version": "0.11.0",
+	"version": "0.12.0",
 	"description": "MCP server for querying .nitpicker archive files via AI assistants",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
@@ -31,8 +31,8 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@modelcontextprotocol/sdk": "1.12.1",
-		"@nitpicker/query": "0.11.0"
+		"@modelcontextprotocol/sdk": "1.29.0",
+		"@nitpicker/query": "0.12.0"
 	},
 	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
 }

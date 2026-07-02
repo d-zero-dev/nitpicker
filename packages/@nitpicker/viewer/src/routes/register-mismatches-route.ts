@@ -28,8 +28,13 @@ export function registerMismatchesRoute(app: Hono, context: ArchiveContext): voi
 		const result = await findMismatches(
 			accessor,
 			type as (typeof VALID_MISMATCH_TYPES)[number],
-			toNumber(c.req.query('limit')),
-			toNumber(c.req.query('offset')),
+			{
+				limit: toNumber(c.req.query('limit')),
+				offset: toNumber(c.req.query('offset')),
+				urlPattern: c.req.query('urlPattern'),
+				sortBy: c.req.query('sortBy') as 'url' | 'actual' | 'expected' | undefined,
+				sortOrder: c.req.query('sortOrder') as 'asc' | 'desc' | undefined,
+			},
 		);
 		return c.json(result);
 	});

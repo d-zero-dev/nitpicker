@@ -1,5 +1,5 @@
 import type { PagesFilter } from '../types.js';
-import type { PageListItem } from '@nitpicker/query';
+import type { PageListFacets, PageListItem } from '@nitpicker/query';
 import type { ContentTypeCategory } from '@nitpicker/query/categories';
 import type { CellContext, ColumnDef } from '@tanstack/react-table';
 
@@ -9,8 +9,13 @@ import { useNavigate } from 'react-router';
 
 import { usePagedQuery } from '../api/use-paged-query.js';
 import { usePagesInfinite } from '../api/use-pages-infinite.js';
+import {
+	addRadioFilter,
+	addSort,
+	addTextFilter,
+	createTableControls,
+} from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
-import { FilterBar } from '../components/filter-bar.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
@@ -33,12 +38,14 @@ function textCell(info: CellContext<PageListItem, unknown>) {
  * @returns The pages view element.
  */
 export function PagesView() {
-	const { params, update } = useUrlFilter();
+	const { params, updateMany } = useUrlFilter();
 	const navigate = useNavigate();
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 
-	const includeExternal = params.get('includeExternal') === 'true';
+	const scope = params.get('isExternal') ?? 'false';
+	const status = params.get('status');
+	const statusValue = status == null ? undefined : Number(status);
 	const contentTypeParam = params.get('contentTypeCategory');
 	const contentTypeCategory: ContentTypeCategory | undefined =
 		contentTypeParam &&
@@ -47,15 +54,17 @@ export function PagesView() {
 			: undefined;
 	const filter: PagesFilter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
-		isExternal: includeExternal ? undefined : false,
+		status: Number.isFinite(statusValue) ? statusValue : undefined,
+		isExternal: scope === 'all' ? undefined : scope === 'true',
+		lang: params.get('lang') ?? undefined,
 		contentTypeCategory,
 		missingTitle: params.get('missingTitle') === 'true' ? true : undefined,
-		sortBy: (params.get('sortBy') as PagesFilter['sortBy']) || undefined,
-		sortOrder: (params.get('sortOrder') as PagesFilter['sortOrder']) || undefined,
+		sortBy: (params.get('sortBy') as PagesFilter['sortBy']) || 'url',
+		sortOrder: (params.get('sortOrder') as PagesFilter['sortOrder']) || 'asc',
 	};
 
 	const offset = (currentPage - 1) * pageSize;
-	const paged = usePagedQuery<PageListItem>(
+	const paged = usePagedQuery<PageListItem, PageListFacets>(
 		'/api/pages',
 		{ ...filter, limit: pageSize, offset },
 		['pages-paged', filter, pageSize, currentPage],
@@ -69,6 +78,7 @@ export function PagesView() {
 	);
 	const pagedTotal = paged.data?.total ?? 0;
 	const infiniteTotal = infinite.data?.pages[0]?.total ?? 0;
+	const facets = paged.data?.facets;
 
 	const columns = useMemo<ColumnDef<PageListItem>[]>(() => {
 		const boolCell = (info: CellContext<PageListItem, unknown>) =>
@@ -102,6 +112,13 @@ export function PagesView() {
 				header: t('views.pages.colStatus'),
 				size: 80,
 				cell: textCell,
+			},
+			{
+				id: 'isExternal',
+				header: 'Scope',
+				size: 90,
+				accessorFn: (row) =>
+					row.isExternal ? t('common.external') : t('common.internal'),
 			},
 			{ accessorKey: 'lang', header: t('views.pages.colLang'), size: 80, cell: textCell },
 			{ accessorKey: 'description', header: 'description', size: 280, cell: textCell },
@@ -152,78 +169,131 @@ export function PagesView() {
 			{ accessorKey: 'jsonldCount', header: '# JSON-LD', size: 80, cell: textCell },
 		];
 	}, [navigate, t]);
+	const columnControls = useMemo(() => {
+		const controls = createTableControls({ params, updateMany });
+		for (const key of [
+			'title',
+			'status',
+			'contentType',
+			'lang',
+			'description',
+			'keywords',
+			'noindex',
+			'nofollow',
+			'noarchive',
+			'canonical',
+			'tagCount',
+			'jsonldCount',
+		]) {
+			addSort(controls, { params, updateMany }, key, key);
+		}
+		addSort(controls, { params, updateMany }, 'url', 'url', 'asc');
+		addTextFilter(
+			controls,
+			{ params, updateMany },
+			'url',
+			'urlPattern',
+			t('views.pages.filterUrlPattern'),
+		);
+		addRadioFilter(
+			controls,
+			{ params, updateMany },
+			'status',
+			'status',
+			t('views.pages.colStatus'),
+			[
+				{ value: '', label: t('common.all'), checked: !status },
+				...(facets?.statuses ?? []).map((value) => ({
+					value: String(value),
+					label: String(value),
+					checked: status === String(value),
+				})),
+			],
+		);
+		addRadioFilter(
+			controls,
+			{ params, updateMany },
+			'isExternal',
+			'isExternal',
+			'Scope',
+			[
+				{ value: 'all', label: t('common.all'), checked: scope === 'all' },
+				...(facets?.types ?? []).map((value) => ({
+					value: String(value),
+					label: value ? t('common.external') : t('common.internal'),
+					checked:
+						(scope !== 'all' && scope !== 'true' && !value) || scope === String(value),
+				})),
+			],
+		);
+		addRadioFilter(
+			controls,
+			{ params, updateMany },
+			'lang',
+			'lang',
+			t('views.pages.colLang'),
+			[
+				{ value: '', label: t('common.all'), checked: !filter.lang },
+				...(facets?.langs ?? []).map((value) => ({
+					value,
+					label: value,
+					checked: filter.lang === value,
+				})),
+			],
+		);
+		addRadioFilter(
+			controls,
+			{ params, updateMany },
+			'contentType',
+			'contentTypeCategory',
+			t('views.pages.filterContentType'),
+			[
+				{ value: '', label: t('common.all'), checked: !contentTypeCategory },
+				...CONTENT_TYPE_CATEGORIES.map((category) => ({
+					value: category,
+					label: t(`views.contentType.${category}` as const),
+					checked: contentTypeCategory === category,
+				})),
+			],
+		);
+		addRadioFilter(
+			controls,
+			{ params, updateMany },
+			'title',
+			'missingTitle',
+			t('views.pages.filterMissingTitle'),
+			[
+				{ value: '', label: t('common.all'), checked: !filter.missingTitle },
+				{
+					value: 'true',
+					label: t('views.pages.filterMissingTitle'),
+					checked: !!filter.missingTitle,
+				},
+			],
+		);
+		return controls;
+	}, [
+		contentTypeCategory,
+		facets?.langs,
+		facets?.statuses,
+		facets?.types,
+		filter.lang,
+		filter.missingTitle,
+		params,
+		scope,
+		status,
+		t,
+		updateMany,
+	]);
 
 	return (
 		<div className="view">
 			<ViewHeader titleKey="views.pages.title" descriptionKey="views.pages.description" />
-			<FilterBar>
-				<input
-					aria-label={t('views.pages.filterUrlPattern')}
-					placeholder={t('views.pages.filterUrlPattern')}
-					defaultValue={filter.urlPattern ?? ''}
-					onBlur={(e) => {
-						update('urlPattern', e.target.value);
-					}}
-				/>
-				<label>
-					<input
-						type="checkbox"
-						checked={includeExternal}
-						onChange={(e) => {
-							update('includeExternal', e.target.checked ? 'true' : '');
-						}}
-					/>
-					{t('common.includeExternal')}
-				</label>
-				<label>
-					<input
-						type="checkbox"
-						checked={filter.missingTitle ?? false}
-						onChange={(e) => {
-							update('missingTitle', e.target.checked ? 'true' : '');
-						}}
-					/>
-					{t('views.pages.filterMissingTitle')}
-				</label>
-				<select
-					aria-label={t('views.pages.filterContentType')}
-					value={contentTypeCategory ?? ''}
-					onChange={(e) => {
-						update('contentTypeCategory', e.target.value);
-					}}>
-					<option value="">{t('views.pages.filterContentType')}</option>
-					{CONTENT_TYPE_CATEGORIES.map((category) => (
-						<option key={category} value={category}>
-							{t(`views.contentType.${category}` as const)}
-						</option>
-					))}
-				</select>
-				<select
-					aria-label={t('common.sort')}
-					value={params.get('sortBy') ?? ''}
-					onChange={(e) => {
-						update('sortBy', e.target.value);
-					}}>
-					<option value="">{t('common.sort')}</option>
-					<option value="url">{t('views.pages.colUrl')}</option>
-					<option value="status">{t('views.pages.colStatus')}</option>
-					<option value="title">{t('views.pages.colTitle')}</option>
-				</select>
-				<select
-					aria-label={t('common.order')}
-					value={params.get('sortOrder') ?? ''}
-					onChange={(e) => {
-						update('sortOrder', e.target.value);
-					}}>
-					<option value="">{t('common.order')}</option>
-					<option value="asc">{t('common.asc')}</option>
-					<option value="desc">{t('common.desc')}</option>
-				</select>
-			</FilterBar>
 			{mode === 'mpa' ? (
 				<DataTable
 					mode="mpa"
 					columns={columns}
+					columnControls={columnControls}
 					data={paged.data?.items ?? []}
 					total={pagedTotal}
 					currentPage={currentPage}
