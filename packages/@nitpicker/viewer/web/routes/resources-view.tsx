@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 
 import { usePagedQuery } from '../api/use-paged-query.js';
 import { useResourcesInfinite } from '../api/use-resources-infinite.js';
+import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
 import {
 	addRadioFilter,
 	addSort,
@@ -28,7 +29,11 @@ export function ResourcesView() {
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const scope = params.get('isExternal') ?? 'false';
+	const status = params.get('status');
+	const statusValue = status == null ? undefined : Number(status);
 	const filter = {
+		urlPattern: params.get('urlPattern') ?? undefined,
+		status: Number.isFinite(statusValue) ? statusValue : undefined,
 		contentType: params.get('contentType') ?? undefined,
 		isExternal: scope === 'all' ? undefined : scope === 'true',
 		sortBy: params.get('sortBy') ?? undefined,
@@ -101,7 +106,6 @@ export function ResourcesView() {
 		const context = { params, updateMany };
 		const controls = createTableControls(context);
 		for (const key of [
-			'url',
 			'status',
 			'statusText',
 			'contentType',
@@ -111,12 +115,26 @@ export function ResourcesView() {
 		]) {
 			addSort(controls, context, key, key);
 		}
+		addSort(controls, context, 'url', 'url', 'asc');
 		addTextFilter(
 			controls,
 			context,
 			'url',
 			'urlPattern',
 			t('views.pages.filterUrlPattern'),
+		);
+		addRadioFilter(
+			controls,
+			context,
+			'status',
+			'status',
+			t('views.resources.colStatus'),
+			buildStatusFilterOptions(
+				paged.data?.items,
+				(item) => item.status,
+				status,
+				t('common.all'),
+			),
 		);
 		addTextFilter(
 			controls,
@@ -126,12 +144,12 @@ export function ResourcesView() {
 			t('views.resources.filterContentType'),
 		);
 		addRadioFilter(controls, context, 'isExternal', 'isExternal', t('common.type'), [
-			{ value: 'all', label: t('common.all'), checked: false },
-			{ value: 'false', label: t('common.internal'), checked: false },
-			{ value: 'true', label: t('common.external'), checked: false },
+			{ value: 'all', label: t('common.all'), checked: scope === 'all' },
+			{ value: 'false', label: t('common.internal'), checked: scope === 'false' },
+			{ value: 'true', label: t('common.external'), checked: scope === 'true' },
 		]);
 		return controls;
-	}, [params, t, updateMany]);
+	}, [paged.data?.items, params, scope, status, t, updateMany]);
 
 	return (
 		<div className="view">

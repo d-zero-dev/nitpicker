@@ -28,6 +28,7 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 		const precomputedComponents = await getCachedIsolatedClusters(context);
 		const result = await listIsolatedClusters(accessor, {
 			urlPattern: c.req.query('urlPattern'),
+			status: toNumber(c.req.query('status')),
 			sortBy: c.req.query('sortBy') as
 				| 'representativeUrl'
 				| 'representativeTitle'
@@ -48,6 +49,7 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 		const precomputedComponents = await getCachedIsolatedClusters(context);
 		const result = await getIsolatedCluster(accessor, representativeUrl, {
 			urlPattern: c.req.query('urlPattern'),
+			status: toNumber(c.req.query('status')),
 			source: c.req.query('source') as
 				| 'crawled'
 				| 'inventory-seed'

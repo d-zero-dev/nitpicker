@@ -54,6 +54,9 @@ export async function listPageLinks(
 	if (options.urlPattern) {
 		baseQuery.where('url', 'like', options.urlPattern);
 	}
+	if (options.status != null) {
+		baseQuery.where('status', options.status);
+	}
 	if (options.contentType) {
 		baseQuery.where('contentType', 'like', `${options.contentType}%`);
 	}

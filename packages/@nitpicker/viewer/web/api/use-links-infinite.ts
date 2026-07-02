@@ -17,6 +17,17 @@ export type LinkType = 'broken' | 'external';
 /** A link analysis row. */
 export type LinkRow = LinkEntry;
 
+export interface LinksFilter {
+	/** URL pattern applied to source or destination URL. */
+	urlPattern?: string;
+	/** Filter by destination HTTP status. */
+	status?: number;
+	/** Sort field. */
+	sortBy?: string;
+	/** Sort direction. */
+	sortOrder?: string;
+}
+
 /** Paginated link analysis response shape. */
 interface LinksPage {
 	/** Rows for this page. */
@@ -28,16 +39,22 @@ interface LinksPage {
 /**
  * Infinite-scrolling link analysis (broken / external).
  * @param type - The link analysis type.
+ * @param filter
  * @param options - Optional flags (`enabled`).
  * @returns The TanStack infinite-query result.
  */
-export function useLinksInfinite(type: LinkType, options?: InfiniteQueryOptions) {
+export function useLinksInfinite(
+	type: LinkType,
+	filter: LinksFilter,
+	options?: InfiniteQueryOptions,
+) {
 	return useInfiniteQuery({
-		queryKey: ['links', type],
+		queryKey: ['links', type, filter],
 		initialPageParam: 0,
 		queryFn: ({ pageParam }) =>
 			apiGet<LinksPage>('/api/links', {
 				type,
+				...filter,
 				limit: PAGE_SIZE,
 				offset: pageParam,
 			}),

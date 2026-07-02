@@ -4,6 +4,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useMemo } from 'react';
 
 import { usePagedQuery } from '../api/use-paged-query.js';
+import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
 import {
 	addRadioFilter,
 	addSort,
@@ -29,8 +30,11 @@ export function UnusedResourcesView() {
 	const { t } = useI18n();
 	const { params, updateMany } = useUrlFilter();
 	const { pageSize, currentPage, setPage, setPageSize } = useListPagination();
+	const status = params.get('status');
+	const statusValue = status == null ? undefined : Number(status);
 	const filter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
+		status: Number.isFinite(statusValue) ? statusValue : undefined,
 		contentType: params.get('contentType') ?? undefined,
 		source: params.get('source') ?? undefined,
 		sortBy: params.get('sortBy') ?? undefined,
@@ -90,6 +94,19 @@ export function UnusedResourcesView() {
 			'urlPattern',
 			t('views.pages.filterUrlPattern'),
 		);
+		addRadioFilter(
+			controls,
+			context,
+			'status',
+			'status',
+			t('views.unusedResources.status'),
+			buildStatusFilterOptions(
+				paged.data?.items,
+				(item) => item.status,
+				status,
+				t('common.all'),
+			),
+		);
 		addTextFilter(
 			controls,
 			context,
@@ -103,7 +120,7 @@ export function UnusedResourcesView() {
 			{ value: 'inventory-seed', label: 'inventory-seed', checked: false },
 		]);
 		return controls;
-	}, [params, t, updateMany]);
+	}, [paged.data?.items, params, status, t, updateMany]);
 
 	return (
 		<div className="view">

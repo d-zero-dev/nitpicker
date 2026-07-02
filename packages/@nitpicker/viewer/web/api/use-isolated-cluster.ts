@@ -8,6 +8,7 @@ export interface UseIsolatedClusterOptions {
 	limit?: number;
 	offset?: number;
 	urlPattern?: string;
+	status?: number;
 	source?: string;
 	sortBy?: string;
 	sortOrder?: string;

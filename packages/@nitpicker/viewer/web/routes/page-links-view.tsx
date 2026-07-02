@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router';
 
 import { usePageLinksInfinite } from '../api/use-page-links-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
+import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
 import {
 	addRadioFilter,
 	addSort,
@@ -30,9 +31,12 @@ export function PageLinksView() {
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const scope = params.get('isExternal') ?? 'false';
+	const status = params.get('status');
+	const statusValue = status == null ? undefined : Number(status);
 	const filter = {
 		isExternal: scope === 'all' ? undefined : scope === 'true',
 		urlPattern: params.get('urlPattern') ?? undefined,
+		status: Number.isFinite(statusValue) ? statusValue : undefined,
 		contentType: params.get('contentType') ?? undefined,
 		hasResponseHeaders:
 			params.get('hasResponseHeaders') == null
@@ -157,6 +161,19 @@ export function PageLinksView() {
 			'urlPattern',
 			t('views.pageLinks.filterUrlPattern'),
 		);
+		addRadioFilter(
+			controls,
+			context,
+			'status',
+			'status',
+			t('views.pageLinks.colStatus'),
+			buildStatusFilterOptions(
+				paged.data?.items,
+				(item) => item.status,
+				status,
+				t('common.all'),
+			),
+		);
 		addTextFilter(
 			controls,
 			context,
@@ -190,7 +207,7 @@ export function PageLinksView() {
 			],
 		);
 		return controls;
-	}, [params, t, updateMany]);
+	}, [paged.data?.items, params, status, t, updateMany]);
 
 	return (
 		<div className="view">

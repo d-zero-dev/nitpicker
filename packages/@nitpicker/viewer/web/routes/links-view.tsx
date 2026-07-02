@@ -5,6 +5,7 @@ import { useEffect, useMemo } from 'react';
 
 import { useLinksInfinite } from '../api/use-links-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
+import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
 import {
 	addRadioFilter,
 	addSort,
@@ -48,6 +49,14 @@ export function LinksView() {
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const rawType = params.get('type') as LinkType | null;
 	const type: LinkType = rawType !== null && LINK_TYPES.has(rawType) ? rawType : 'broken';
+	const status = params.get('status');
+	const statusValue = status == null ? undefined : Number(status);
+	const filter = {
+		urlPattern: params.get('urlPattern') ?? undefined,
+		status: Number.isFinite(statusValue) ? statusValue : undefined,
+		sortBy: params.get('sortBy') ?? undefined,
+		sortOrder: params.get('sortOrder') ?? undefined,
+	};
 
 	// If the URL was visited with a now-removed `type` (e.g. a bookmarked
 	// `?type=orphaned` from before the retirement of that filter), surface
@@ -67,16 +76,14 @@ export function LinksView() {
 		'/api/links',
 		{
 			type,
-			urlPattern: params.get('urlPattern') ?? undefined,
-			sortBy: params.get('sortBy') ?? undefined,
-			sortOrder: params.get('sortOrder') ?? undefined,
+			...filter,
 			limit: pageSize,
 			offset,
 		},
 		['links-paged', type, params.toString(), pageSize, currentPage],
 		{ enabled: mode === 'mpa' },
 	);
-	const infinite = useLinksInfinite(type, { enabled: mode === 'virtual' });
+	const infinite = useLinksInfinite(type, filter, { enabled: mode === 'virtual' });
 	const infiniteRows = useMemo(
 		() => infinite.data?.pages.flatMap((page) => page.items) ?? [],
 		[infinite.data],
@@ -137,6 +144,19 @@ export function LinksView() {
 			'urlPattern',
 			t('views.pages.filterUrlPattern'),
 		);
+		addRadioFilter(
+			controls,
+			context,
+			'status',
+			'status',
+			t('views.links.colStatus'),
+			buildStatusFilterOptions(
+				paged.data?.items,
+				(item) => item.status,
+				status,
+				t('common.all'),
+			),
+		);
 		addTextFilter(
 			controls,
 			context,
@@ -145,7 +165,7 @@ export function LinksView() {
 			t('views.pages.filterUrlPattern'),
 		);
 		return controls;
-	}, [params, t, updateMany]);
+	}, [paged.data?.items, params, status, t, updateMany]);
 
 	return (
 		<div className="view">
