@@ -1,6 +1,8 @@
 import type { GetViolationsOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { sortArrayItems } from './sort-array-items.js';
+
 /**
  * Violation entry from analysis results stored in the archive.
  */
@@ -69,9 +71,22 @@ export async function getViolations(
 	if (options.rule) {
 		filtered = filtered.filter((v) => v.rule === options.rule);
 	}
+	if (options.urlPattern) {
+		filtered = filtered.filter((v) =>
+			v.url.includes(options.urlPattern!.replaceAll('%', '')),
+		);
+	}
 
-	const total = filtered.length;
-	const items: ViolationEntry[] = filtered.slice(offset, offset + limit).map((v) => ({
+	const sorted = sortArrayItems(filtered, options.sortBy ?? 'url', options.sortOrder, {
+		url: { getValue: (item) => item.url, type: 'url' },
+		validator: { getValue: (item) => item.validator },
+		severity: { getValue: (item) => item.severity },
+		rule: { getValue: (item) => item.rule },
+		message: { getValue: (item) => item.message },
+		code: { getValue: (item) => item.code ?? '' },
+	});
+	const total = sorted.length;
+	const items: ViolationEntry[] = sorted.slice(offset, offset + limit).map((v) => ({
 		url: v.url,
 		validator: v.validator,
 		severity: v.severity,

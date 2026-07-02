@@ -1,14 +1,53 @@
 import type {
 	ListPagesOptions,
+	PageListFacets,
 	PageListItem,
 	PageListRow,
 	PaginatedPageList,
 } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { applyListOrder } from './apply-list-order.js';
 import { applyCategoryFilter } from './content-type-rules.js';
 import { mapPageRowToListItem, PAGE_LIST_COLUMNS } from './map-page-row-to-list-item.js';
 import { paginateQuery } from './paginate-query.js';
+import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
+
+type PageFacetRow = {
+	status: number | null;
+	lang: string | null;
+	isExternal: 0 | 1;
+};
+
+/**
+ * Narrows nullable SQL values before building distinct facet arrays.
+ * @param value - Candidate value.
+ * @returns Whether the value is non-nullish.
+ */
+function isPresent<T>(value: T | null | undefined): value is T {
+	return value != null;
+}
+
+/**
+ * Builds the base Pages universe before user-facing filters are applied.
+ * @param knex - Knex instance.
+ * @param contentTypeCategory - Optional category override.
+ * @returns Query builder scoped to page-list rows.
+ */
+function createPageListBaseQuery(
+	knex: ReturnType<ArchiveAccessor['getKnex']>,
+	contentTypeCategory?: ListPagesOptions['contentTypeCategory'],
+) {
+	const baseQuery = knex('pages').where('scraped', 1).whereNull('redirectDestId');
+	if (contentTypeCategory) {
+		applyCategoryFilter(baseQuery, contentTypeCategory);
+	} else {
+		baseQuery.where((qb) => {
+			qb.whereNull('contentType').orWhere('contentType', 'text/html');
+		});
+	}
+	return baseQuery;
+}
 
 /**
  * Lists pages from the archive with filtering, sorting, and pagination.
@@ -45,14 +84,7 @@ export async function listPages(
 	// rule-table SQL matcher is used instead — the user has explicitly asked to
 	// browse a non-HTML category (PDFs, images...) that the Pages view normally
 	// hides.
-	const baseQuery = knex('pages').where('scraped', 1).whereNull('redirectDestId');
-	if (options.contentTypeCategory) {
-		applyCategoryFilter(baseQuery, options.contentTypeCategory);
-	} else {
-		baseQuery.where((qb) => {
-			qb.whereNull('contentType').orWhere('contentType', 'text/html');
-		});
-	}
+	const baseQuery = createPageListBaseQuery(knex, options.contentTypeCategory);
 
 	if (options.status != null) {
 		baseQuery.where('status', options.status);
@@ -65,6 +97,9 @@ export async function listPages(
 	}
 	if (options.isExternal != null) {
 		baseQuery.where('isExternal', options.isExternal ? 1 : 0);
+	}
+	if (options.lang) {
+		baseQuery.where('lang', options.lang);
 	}
 	if (options.missingTitle) {
 		baseQuery.where((qb) => {
@@ -91,13 +126,83 @@ export async function listPages(
 
 	const sortBy = options.sortBy ?? 'url';
 	const sortOrder = options.sortOrder ?? 'asc';
+	const useUrlSort = sortBy === 'url';
+	if (useUrlSort) {
+		await ensureUrlSortTempTable(accessor);
+	}
 
-	return paginateQuery<PageListRow, PageListItem>({
-		baseQuery,
-		countColumn: 'id',
-		applySelect: (q) => q.select(...PAGE_LIST_COLUMNS).orderBy(sortBy, sortOrder),
-		limit,
-		offset,
-		mapRow: mapPageRowToListItem,
-	});
+	const [result, facets] = await Promise.all([
+		paginateQuery<PageListRow, PageListItem>({
+			baseQuery,
+			countColumn: 'id',
+			applySelect: (q) =>
+				applyListOrder(q.select(...PAGE_LIST_COLUMNS), knex, sortBy, sortOrder, {
+					url: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
+					status: { column: '"pages"."status"' },
+					title: { column: '"pages"."title"' },
+					contentType: { column: '"pages"."contentType"' },
+					isExternal: { column: '"pages"."isExternal"' },
+					lang: { column: '"pages"."lang"' },
+					description: { column: '"pages"."description"' },
+					keywords: { column: '"pages"."keywords"' },
+					noindex: { column: '"pages"."robots_noindex"' },
+					nofollow: { column: '"pages"."robots_nofollow"' },
+					noarchive: { column: '"pages"."robots_noarchive"' },
+					canonical: { column: '"pages"."canonical"', type: 'url' },
+					twitterCard: { column: '"pages"."twitter_card"' },
+					ogSiteName: { column: '"pages"."og_site_name"' },
+					ogUrl: { column: '"pages"."og_url"', type: 'url' },
+					ogTitle: { column: '"pages"."og_title"' },
+					ogDescription: { column: '"pages"."og_description"' },
+					ogType: { column: '"pages"."og_type"' },
+					ogImage: { column: '"pages"."og_image"', type: 'url' },
+					ogImageAlt: { column: '"pages"."og_image_alt"' },
+					ogLocale: { column: '"pages"."og_locale"' },
+					ogArticlePublishedTime: {
+						column: '"pages"."og_article_published_time"',
+					},
+					twitterSite: { column: '"pages"."twitter_site"' },
+					twitterCreator: { column: '"pages"."twitter_creator"' },
+					twitterImage: { column: '"pages"."twitter_image"', type: 'url' },
+					charset: { column: '"pages"."charset"' },
+					themeColor: { column: '"pages"."themeColor"' },
+					manifest: { column: '"pages"."manifest"', type: 'url' },
+					robotsRaw: { column: '"pages"."robots_raw"' },
+					tagCount: { column: '"pages"."tag_count"' },
+					tagsProvidersCsv: { column: '"pages"."tags_providers_csv"' },
+					jsonldCount: { column: '"pages"."jsonld_count"' },
+				}),
+			limit,
+			offset,
+			mapRow: mapPageRowToListItem,
+		}),
+		getPageListFacets(knex, options.contentTypeCategory),
+	]);
+	return { ...result, facets };
+}
+
+/**
+ * Lists dynamic enum filter candidates for the Pages table.
+ * @param knex - Knex instance.
+ * @param contentTypeCategory - Optional category override.
+ * @returns Facet candidates.
+ */
+async function getPageListFacets(
+	knex: ReturnType<ArchiveAccessor['getKnex']>,
+	contentTypeCategory?: ListPagesOptions['contentTypeCategory'],
+): Promise<PageListFacets> {
+	const rows = (await createPageListBaseQuery(knex, contentTypeCategory)
+		.clone()
+		.distinct('status', 'lang', 'isExternal')) as PageFacetRow[];
+	return {
+		statuses: [...new Set(rows.map((row) => row.status).filter(isPresent))].toSorted(
+			(a, b) => a - b,
+		),
+		langs: [...new Set(rows.map((row) => row.lang).filter(isPresent))].toSorted((a, b) =>
+			a.localeCompare(b),
+		),
+		types: [...new Set(rows.map((row) => Boolean(row.isExternal)))].toSorted(
+			(a, b) => Number(a) - Number(b),
+		),
+	};
 }

@@ -21,6 +21,8 @@ export function registerImagesRoute(app: Hono, context: ArchiveContext): void {
 			missingDimensions: toBoolean(q.missingDimensions),
 			oversizedThreshold: toNumber(q.oversizedThreshold),
 			urlPattern: q.urlPattern,
+			sortBy: q.sortBy as ListImagesOptions['sortBy'],
+			sortOrder: q.sortOrder as ListImagesOptions['sortOrder'],
 			limit: toNumber(q.limit),
 			offset: toNumber(q.offset),
 		};

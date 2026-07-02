@@ -6,6 +6,12 @@ import { useMemo } from 'react';
 import { useIsolatedCluster } from '../api/use-isolated-cluster.js';
 import { useIsolatedClustersInfinite } from '../api/use-isolated-clusters-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
+import {
+	addRadioFilter,
+	addSort,
+	addTextFilter,
+	createTableControls,
+} from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
 import { SourceBadge } from '../components/source-badge.js';
 import { ViewHeader } from '../components/view-header.js';
@@ -58,13 +64,19 @@ function ClusterListPane({
 	onSelectCluster: (representativeUrl: string) => void;
 }) {
 	const { t } = useI18n();
+	const { params, updateMany } = useUrlFilter();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
+	const filter = {
+		urlPattern: params.get('urlPattern') ?? undefined,
+		sortBy: params.get('sortBy') ?? undefined,
+		sortOrder: params.get('sortOrder') ?? undefined,
+	};
 
 	const offset = (currentPage - 1) * pageSize;
 	const paged = usePagedQuery<IsolatedClusterSummary>(
 		'/api/isolated-clusters',
-		{ limit: pageSize, offset },
-		['isolated-clusters-paged', pageSize, currentPage],
+		{ ...filter, limit: pageSize, offset },
+		['isolated-clusters-paged', filter, pageSize, currentPage],
 		{ enabled: mode === 'mpa' },
 	);
 	const infinite = useIsolatedClustersInfinite({ enabled: mode === 'virtual' });
@@ -114,6 +126,26 @@ function ClusterListPane({
 		],
 		[t, onSelectCluster],
 	);
+	const columnControls = useMemo(() => {
+		const context = { params, updateMany };
+		const controls = createTableControls(context);
+		for (const key of [
+			'representativeUrl',
+			'size',
+			'representativeTitle',
+			'representativeStatus',
+		]) {
+			addSort(controls, context, key, key);
+		}
+		addTextFilter(
+			controls,
+			context,
+			'representativeUrl',
+			'urlPattern',
+			t('views.pages.filterUrlPattern'),
+		);
+		return controls;
+	}, [params, t, updateMany]);
 
 	return (
 		<div className="view">
@@ -135,6 +167,7 @@ function ClusterListPane({
 					isLoading={paged.isLoading}
 					isError={paged.isError}
 					error={paged.error}
+					columnControls={columnControls}
 				/>
 			) : (
 				<DataTable
@@ -174,8 +207,21 @@ function ClusterDetailPane({
 	onBack: () => void;
 }) {
 	const { t } = useI18n();
+	const { params, updateMany } = useUrlFilter();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
-	const { data, isLoading, isError, error } = useIsolatedCluster(representativeUrl);
+	const offset = (currentPage - 1) * pageSize;
+	const filter = {
+		urlPattern: params.get('urlPattern') ?? undefined,
+		source: params.get('source') ?? undefined,
+		sortBy: params.get('sortBy') ?? undefined,
+		sortOrder: params.get('sortOrder') ?? undefined,
+		limit: mode === 'mpa' ? pageSize : undefined,
+		offset: mode === 'mpa' ? offset : undefined,
+	};
+	const { data, isLoading, isError, error } = useIsolatedCluster(
+		representativeUrl,
+		filter,
+	);
 
 	const columns = useMemo<ColumnDef<IsolatedClusterMember>[]>(
 		() => [
@@ -210,11 +256,30 @@ function ClusterDetailPane({
 		],
 		[t],
 	);
+	const columnControls = useMemo(() => {
+		const context = { params, updateMany };
+		const controls = createTableControls(context);
+		for (const key of ['url', 'title', 'status', 'source']) {
+			addSort(controls, context, key, key);
+		}
+		addTextFilter(
+			controls,
+			context,
+			'url',
+			'urlPattern',
+			t('views.pages.filterUrlPattern'),
+		);
+		addRadioFilter(controls, context, 'source', 'source', t('common.source'), [
+			{ value: '', label: t('common.all'), checked: false },
+			{ value: 'crawled', label: 'crawled', checked: false },
+			{ value: 'inventory-seed', label: 'inventory-seed', checked: false },
+			{ value: 'inventory-discovered', label: 'inventory-discovered', checked: false },
+		]);
+		return controls;
+	}, [params, t, updateMany]);
 
 	const members = data?.members ?? [];
 	const total = data?.size ?? members.length;
-	const offset = (currentPage - 1) * pageSize;
-	const pageSlice = mode === 'mpa' ? members.slice(offset, offset + pageSize) : members;
 
 	return (
 		<div className="view">
@@ -233,7 +298,7 @@ function ClusterDetailPane({
 				<DataTable
 					mode="mpa"
 					columns={columns}
-					data={pageSlice}
+					data={members}
 					total={total}
 					currentPage={currentPage}
 					pageSize={pageSize}
@@ -243,12 +308,13 @@ function ClusterDetailPane({
 					isLoading={isLoading}
 					isError={isError}
 					error={error}
+					columnControls={columnControls}
 				/>
 			) : (
 				<DataTable
 					mode="virtual"
 					columns={columns}
-					data={pageSlice}
+					data={members}
 					total={total}
 					hasNextPage={false}
 					isFetching={false}

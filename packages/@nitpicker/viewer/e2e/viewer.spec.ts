@@ -1,3 +1,5 @@
+import type { Page } from '@playwright/test';
+
 import { expect, test } from '@playwright/test';
 
 /**
@@ -5,6 +7,24 @@ import { expect, test } from '@playwright/test';
  * default — the `infinite scroll (virtual mode)` describe block at the
  * bottom flips the preference via localStorage to cover the opt-in path.
  */
+
+/**
+ * Asserts that the active filter popover is visible and fully inside viewport.
+ * @param page - Playwright page.
+ */
+async function expectPopoverInViewport(page: Page) {
+	const popover = page.locator('.pt-filter-popover');
+	await expect(popover).toBeVisible();
+	const box = await popover.boundingBox();
+	const viewport = page.viewportSize();
+	expect(box).not.toBeNull();
+	expect(box?.width).toBeGreaterThan(0);
+	expect(box?.height).toBeGreaterThan(0);
+	expect(box?.x).toBeGreaterThanOrEqual(0);
+	expect(box?.y).toBeGreaterThanOrEqual(0);
+	expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(viewport?.width ?? 0);
+	expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(viewport?.height ?? 0);
+}
 
 test.describe('Nitpicker Viewer', () => {
 	test('サマリーダッシュボードが表示される', async ({ page }) => {
@@ -119,10 +139,131 @@ test.describe('MPA ページネーション', () => {
 	test('フィルタを変えると ?page= が消える', async ({ page }) => {
 		await page.goto('/pages?page=2');
 		await expect(page.locator('.pt-row').first()).toBeVisible();
+		await page.getByRole('button', { name: 'URL pattern (%foo%)' }).click();
 		const urlInput = page.getByRole('textbox', { name: 'URL pattern (%foo%)' });
 		await urlInput.fill('%does-not-match%');
-		await urlInput.blur();
+		await page.getByRole('button', { name: 'Apply' }).click();
 		await expect(page).not.toHaveURL(/[?&]page=/);
+	});
+
+	test('フィルタの再オープン時に URL state から draft を同期する', async ({ page }) => {
+		await page.goto('/pages?urlPattern=%25page-1%25');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+
+		await page.getByRole('button', { name: 'URL pattern (%foo%)' }).click();
+		await expect(page.getByRole('textbox', { name: 'URL pattern (%foo%)' })).toHaveValue(
+			'%page-1%',
+		);
+		await page.getByRole('button', { name: 'Reset' }).click();
+		await expect(page).not.toHaveURL(/[?&]urlPattern=/);
+
+		await page.getByRole('button', { name: 'URL pattern (%foo%)' }).click();
+		await expect(page.getByRole('textbox', { name: 'URL pattern (%foo%)' })).toHaveValue(
+			'',
+		);
+	});
+
+	test('不正な sortBy query でも API が 500 にならない', async ({ page }) => {
+		const response = await page.request.get('/api/pages?sortBy=not-a-column');
+		expect(response.status()).toBe(200);
+		const payload = (await response.json()) as { items: unknown[]; total: number };
+		expect(payload.total).toBeGreaterThan(0);
+		expect(payload.items.length).toBeGreaterThan(0);
+	});
+
+	test('Pages API は URL 昇順をデフォルトにして動的 enum facets を返す', async ({
+		page,
+	}) => {
+		const response = await page.request.get('/api/pages?limit=25');
+		expect(response.status()).toBe(200);
+		const payload = (await response.json()) as {
+			items: Array<{ url: string }>;
+			facets?: {
+				statuses?: number[];
+				langs?: string[];
+				types?: boolean[];
+			};
+		};
+		const explicitResponse = await page.request.get(
+			'/api/pages?limit=25&sortBy=url&sortOrder=asc',
+		);
+		expect(explicitResponse.status()).toBe(200);
+		const explicitPayload = (await explicitResponse.json()) as {
+			items: Array<{ url: string }>;
+		};
+		expect(payload.items.map((item) => item.url)).toEqual(
+			explicitPayload.items.map((item) => item.url),
+		);
+		expect(payload.facets?.statuses).toContain(200);
+		expect(payload.facets?.langs).toContain('ja');
+		expect(payload.facets?.types).toContain(false);
+	});
+
+	test('ステータス・言語・種別フィルタは動的 enum ラジオとして表示される', async ({
+		page,
+	}) => {
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+
+		for (const target of [
+			{ button: 'Status', option: '200' },
+			{ button: 'Language', option: 'ja' },
+			{ button: 'Scope', option: 'Internal' },
+		]) {
+			await page.getByRole('button', { name: target.button }).click();
+			const dialog = page.getByRole('dialog', { name: target.button });
+			await expect(dialog.getByRole('radio', { name: target.option })).toBeVisible();
+			await expect(dialog.getByRole('checkbox')).toHaveCount(0);
+			await dialog.getByRole('button', { name: 'Apply' }).click();
+		}
+	});
+
+	test('Pages の URL ソートは初期表示で昇順 active になる', async ({ page }) => {
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		const urlHeader = page.getByRole('columnheader', { name: 'URL' });
+		const sortButton = urlHeader.getByRole('button', { name: 'Sort' });
+		await expect(sortButton).toHaveClass(/is-active/);
+		await expect(sortButton).toHaveText('^');
+	});
+
+	test('フィルタポップオーバーは body 直下に表示される', async ({ page }) => {
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		await page.getByRole('button', { name: 'URL pattern (%foo%)' }).click();
+
+		const popover = page.locator('.pt-filter-popover');
+		await expect(popover).toBeVisible();
+		await expect
+			.poll(async () =>
+				popover.evaluate((element) => element.parentElement?.tagName.toLowerCase()),
+			)
+			.toBe('body');
+		await expect(popover.locator('xpath=ancestor::span')).toHaveCount(0);
+		await expectPopoverInViewport(page);
+	});
+
+	test('狭い画面でもフィルタポップオーバーが viewport 内に収まる', async ({ page }) => {
+		await page.setViewportSize({ width: 360, height: 480 });
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		await page.getByRole('button', { name: 'URL pattern (%foo%)' }).click();
+		await expectPopoverInViewport(page);
+	});
+
+	test('代表DataTableビューでフィルタポップオーバーが viewport 内に収まる', async ({
+		page,
+	}) => {
+		for (const target of [
+			{ path: '/pages', filter: 'URL pattern (%foo%)' },
+			{ path: '/page-links', filter: 'URL pattern (%foo%)' },
+			{ path: '/headers', filter: 'hasCSP' },
+		]) {
+			await page.goto(target.path);
+			await expect(page.locator('.pt-row').first()).toBeVisible();
+			await page.getByRole('button', { name: target.filter }).click();
+			await expectPopoverInViewport(page);
+		}
 	});
 
 	test('ページサイズ select を変えると ?pageSize= が URL に乗り localStorage にも保存される', async ({
@@ -242,14 +383,14 @@ test.describe('アクセシビリティ', () => {
 		await expect(page.getByRole('cell').first()).toBeVisible();
 	});
 
-	test('ソート用 select にアクセシブルネームがある', async ({ page }) => {
+	test('ソートボタンにアクセシブルネームがある', async ({ page }) => {
 		await page.goto('/pages');
-		await expect(page.getByRole('combobox', { name: 'Sort…' })).toBeVisible();
-		await expect(page.getByRole('combobox', { name: 'Order' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Sort' }).first()).toBeVisible();
 	});
 
-	test('フィルタ入力にアクセシブルネームがある', async ({ page }) => {
+	test('フィルタポップオーバーの入力にアクセシブルネームがある', async ({ page }) => {
 		await page.goto('/pages');
+		await page.getByRole('button', { name: 'URL pattern (%foo%)' }).click();
 		await expect(
 			page.getByRole('textbox', { name: 'URL pattern (%foo%)' }),
 		).toBeVisible();

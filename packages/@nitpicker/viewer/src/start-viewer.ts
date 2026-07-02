@@ -3,6 +3,7 @@ import type { ViewerOptions } from './types.js';
 import path from 'node:path';
 
 import { serve } from '@hono/node-server';
+import { prepareUrlSortTempTable } from '@nitpicker/query';
 
 import { createArchiveContext } from './archive-context.js';
 import { createApp } from './create-app.js';
@@ -30,6 +31,7 @@ export async function startViewer(options: ViewerOptions): Promise<void> {
 	// instead of a post-banner `EADDRINUSE` crash.
 	const port = await findFreePort(options.port ?? DEFAULT_PORT, host);
 	const context = await createArchiveContext(filePath);
+	await prepareUrlSortTempTable(context.manager.get(context.archiveId));
 	const publicDir = path.resolve(import.meta.dirname, 'public');
 	const app = createApp({ context, publicDir });
 

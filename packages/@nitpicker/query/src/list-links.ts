@@ -1,6 +1,8 @@
 import type { LinkAnalysisResult, LinkEntry, ListLinksOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { applyListOrder } from './apply-list-order.js';
+
 /**
  * Analyse links in the archive: **broken** (4xx/5xx or no status) or
  * **external** (anchors leaving the in-scope hostname).
@@ -50,6 +52,9 @@ export async function listLinks(
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 	const includeRedirectSources = options.includeRedirectSources ?? false;
+	const sortBy = options.sortBy ?? 'sourceUrl';
+	const sortOrder = options.sortOrder ?? 'asc';
+	const useUrlSort = options.sortBy != null;
 
 	// `COALESCE` resolves `dest.redirectDestId → canonical` so the reported
 	// dest URL / status / isExternal reflect the final canonical destination
@@ -74,6 +79,9 @@ export async function listLinks(
 	const isExternalCol = includeRedirectSources
 		? knex.raw('"dest"."isExternal" as "isExternal"')
 		: knex.raw('COALESCE("canonical"."isExternal", "dest"."isExternal") as "isExternal"');
+	const destUrlExpression = includeRedirectSources
+		? '"dest"."url"'
+		: 'COALESCE("canonical"."url", "dest"."url")';
 
 	baseQuery.select(
 		'source.url as sourceUrl',
@@ -96,6 +104,15 @@ export async function listLinks(
 			: `COALESCE("canonical"."isExternal", "dest"."isExternal") = 1`;
 		baseQuery.whereRaw(externalCondition);
 	}
+	if (options.urlPattern) {
+		const urlPattern = options.urlPattern;
+		baseQuery.where((qb) => {
+			qb.where('source.url', 'like', urlPattern).orWhereRaw(
+				`${destUrlExpression} like ?`,
+				[urlPattern],
+			);
+		});
+	}
 
 	const countResult = (await baseQuery
 		.clone()
@@ -103,7 +120,27 @@ export async function listLinks(
 		.count('anchors.id as total')) as { total: number }[];
 	const total = countResult[0]?.total ?? 0;
 
-	const rows = (await baseQuery.clone().limit(limit).offset(offset)) as {
+	const dataQuery = baseQuery.clone();
+	applyListOrder(dataQuery, knex, sortBy, sortOrder, {
+		sourceUrl: { column: '"source"."url"', type: useUrlSort ? 'url' : 'plain' },
+		destUrl: {
+			column: destUrlExpression,
+			type: 'url',
+		},
+		status: {
+			column: includeRedirectSources
+				? '"dest"."status"'
+				: 'COALESCE("canonical"."status", "dest"."status")',
+		},
+		isExternal: {
+			column: includeRedirectSources
+				? '"dest"."isExternal"'
+				: 'COALESCE("canonical"."isExternal", "dest"."isExternal")',
+		},
+		textContent: { column: '"anchors"."textContent"' },
+	});
+
+	const rows = (await dataQuery.limit(limit).offset(offset)) as {
 		sourceUrl: string;
 		destUrl: string;
 		status: number | null;

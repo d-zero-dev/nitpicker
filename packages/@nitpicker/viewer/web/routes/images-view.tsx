@@ -5,8 +5,13 @@ import { useMemo } from 'react';
 
 import { useImagesInfinite } from '../api/use-images-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
+import {
+	addRadioFilter,
+	addSort,
+	addTextFilter,
+	createTableControls,
+} from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
-import { FilterBar } from '../components/filter-bar.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
@@ -19,13 +24,15 @@ import { useI18n } from '../i18n/use-i18n.js';
  * @returns The images view element.
  */
 export function ImagesView() {
-	const { params, update } = useUrlFilter();
+	const { params, updateMany } = useUrlFilter();
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const filter = {
 		missingAlt: params.get('missingAlt') === 'true' ? true : undefined,
 		missingDimensions: params.get('missingDimensions') === 'true' ? true : undefined,
 		urlPattern: params.get('urlPattern') ?? undefined,
+		sortBy: params.get('sortBy') ?? undefined,
+		sortOrder: params.get('sortOrder') ?? undefined,
 	};
 
 	const offset = (currentPage - 1) * pageSize;
@@ -85,6 +92,48 @@ export function ImagesView() {
 		],
 		[t],
 	);
+	const columnControls = useMemo(() => {
+		const context = { params, updateMany };
+		const controls = createTableControls(context);
+		for (const key of ['src', 'alt', 'pageUrl']) {
+			addSort(controls, context, key, key);
+		}
+		addSort(controls, context, 'natural', 'naturalWidth');
+		addTextFilter(
+			controls,
+			context,
+			'src',
+			'urlPattern',
+			t('views.images.filterUrlPattern'),
+		);
+		addRadioFilter(
+			controls,
+			context,
+			'alt',
+			'missingAlt',
+			t('views.images.filterMissingAlt'),
+			[
+				{ value: '', label: t('common.all'), checked: false },
+				{ value: 'true', label: t('views.images.filterMissingAlt'), checked: false },
+			],
+		);
+		addRadioFilter(
+			controls,
+			context,
+			'natural',
+			'missingDimensions',
+			t('views.images.filterMissingDimensions'),
+			[
+				{ value: '', label: t('common.all'), checked: false },
+				{
+					value: 'true',
+					label: t('views.images.filterMissingDimensions'),
+					checked: false,
+				},
+			],
+		);
+		return controls;
+	}, [params, t, updateMany]);
 
 	return (
 		<div className="view">
@@ -92,36 +141,6 @@ export function ImagesView() {
 				titleKey="views.images.title"
 				descriptionKey="views.images.description"
 			/>
-			<FilterBar>
-				<label>
-					<input
-						type="checkbox"
-						checked={filter.missingAlt ?? false}
-						onChange={(e) => {
-							update('missingAlt', e.target.checked ? 'true' : '');
-						}}
-					/>
-					{t('views.images.filterMissingAlt')}
-				</label>
-				<label>
-					<input
-						type="checkbox"
-						checked={filter.missingDimensions ?? false}
-						onChange={(e) => {
-							update('missingDimensions', e.target.checked ? 'true' : '');
-						}}
-					/>
-					{t('views.images.filterMissingDimensions')}
-				</label>
-				<input
-					aria-label={t('views.images.filterUrlPattern')}
-					placeholder={t('views.images.filterUrlPattern')}
-					defaultValue={filter.urlPattern ?? ''}
-					onBlur={(e) => {
-						update('urlPattern', e.target.value);
-					}}
-				/>
-			</FilterBar>
 			{mode === 'mpa' ? (
 				<DataTable
 					mode="mpa"
@@ -136,6 +155,7 @@ export function ImagesView() {
 					isLoading={paged.isLoading}
 					isError={paged.isError}
 					error={paged.error}
+					columnControls={columnControls}
 				/>
 			) : (
 				<DataTable

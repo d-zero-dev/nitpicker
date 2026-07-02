@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { applyFilterUpdate } from './apply-filter-update.js';
+import { PAGE_QUERY_KEY } from './use-current-page.js';
 
 /** Options for {@link UrlFilter.update}. */
 export interface UrlFilterUpdateOptions {
@@ -24,6 +25,11 @@ export interface UrlFilter {
 	 * side effect, any non-`page` update clears the `?page=` cursor.
 	 */
 	update: (key: string, value: string, options?: UrlFilterUpdateOptions) => void;
+	/** Applies multiple search-param updates in one navigation. */
+	updateMany: (
+		updates: ReadonlyArray<readonly [key: string, value: string | readonly string[]]>,
+		options?: UrlFilterUpdateOptions,
+	) => void;
 }
 
 /**
@@ -67,5 +73,42 @@ export function useUrlFilter(): UrlFilter {
 		},
 		[setParams],
 	);
-	return { params, update };
+	const updateMany = useCallback(
+		(
+			updates: ReadonlyArray<readonly [key: string, value: string | readonly string[]]>,
+			options?: UrlFilterUpdateOptions,
+		) => {
+			setParams(
+				(prev) => {
+					const next = new URLSearchParams(prev);
+					let changed = false;
+					let shouldResetPage = false;
+					for (const [key, value] of updates) {
+						const values = Array.isArray(value)
+							? value.filter(Boolean)
+							: [value].filter(Boolean);
+						const currentValues = next.getAll(key);
+						if (
+							currentValues.length === values.length &&
+							currentValues.every((current, index) => current === values[index])
+						) {
+							continue;
+						}
+						next.delete(key);
+						for (const item of values) {
+							next.append(key, item);
+						}
+						changed = true;
+						if (key !== PAGE_QUERY_KEY) shouldResetPage = true;
+					}
+					if (!changed) return prev;
+					if (shouldResetPage) next.delete(PAGE_QUERY_KEY);
+					return next;
+				},
+				options?.replace === true ? { replace: true } : undefined,
+			);
+		},
+		[setParams],
+	);
+	return { params, update, updateMany };
 }
