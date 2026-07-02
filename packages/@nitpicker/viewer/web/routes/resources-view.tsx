@@ -5,8 +5,13 @@ import { useMemo } from 'react';
 
 import { usePagedQuery } from '../api/use-paged-query.js';
 import { useResourcesInfinite } from '../api/use-resources-infinite.js';
+import {
+	addRadioFilter,
+	addSort,
+	addTextFilter,
+	createTableControls,
+} from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
-import { FilterBar } from '../components/filter-bar.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
@@ -19,13 +24,15 @@ import { useI18n } from '../i18n/use-i18n.js';
  * @returns The resources view element.
  */
 export function ResourcesView() {
-	const { params, update } = useUrlFilter();
+	const { params, updateMany } = useUrlFilter();
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
-	const includeExternal = params.get('includeExternal') === 'true';
+	const scope = params.get('isExternal') ?? 'false';
 	const filter = {
 		contentType: params.get('contentType') ?? undefined,
-		isExternal: includeExternal ? undefined : false,
+		isExternal: scope === 'all' ? undefined : scope === 'true',
+		sortBy: params.get('sortBy') ?? undefined,
+		sortOrder: params.get('sortOrder') ?? undefined,
 	};
 
 	const offset = (currentPage - 1) * pageSize;
@@ -49,6 +56,13 @@ export function ResourcesView() {
 				header: t('views.resources.colUrl'),
 				size: 420,
 				cell: (i) => i.getValue<string>(),
+			},
+			{
+				accessorKey: 'isExternal',
+				header: t('common.type'),
+				size: 90,
+				cell: (i) =>
+					i.getValue<boolean>() ? t('common.external') : t('common.internal'),
 			},
 			{
 				accessorKey: 'status',
@@ -83,6 +97,41 @@ export function ResourcesView() {
 		],
 		[t],
 	);
+	const columnControls = useMemo(() => {
+		const context = { params, updateMany };
+		const controls = createTableControls(context);
+		for (const key of [
+			'url',
+			'status',
+			'statusText',
+			'contentType',
+			'contentLength',
+			'isExternal',
+			'referrerCount',
+		]) {
+			addSort(controls, context, key, key);
+		}
+		addTextFilter(
+			controls,
+			context,
+			'url',
+			'urlPattern',
+			t('views.pages.filterUrlPattern'),
+		);
+		addTextFilter(
+			controls,
+			context,
+			'contentType',
+			'contentType',
+			t('views.resources.filterContentType'),
+		);
+		addRadioFilter(controls, context, 'isExternal', 'isExternal', t('common.type'), [
+			{ value: 'all', label: t('common.all'), checked: false },
+			{ value: 'false', label: t('common.internal'), checked: false },
+			{ value: 'true', label: t('common.external'), checked: false },
+		]);
+		return controls;
+	}, [params, t, updateMany]);
 
 	return (
 		<div className="view">
@@ -90,26 +139,6 @@ export function ResourcesView() {
 				titleKey="views.resources.title"
 				descriptionKey="views.resources.description"
 			/>
-			<FilterBar>
-				<input
-					aria-label={t('views.resources.filterContentType')}
-					placeholder={t('views.resources.filterContentType')}
-					defaultValue={filter.contentType ?? ''}
-					onBlur={(e) => {
-						update('contentType', e.target.value);
-					}}
-				/>
-				<label>
-					<input
-						type="checkbox"
-						checked={includeExternal}
-						onChange={(e) => {
-							update('includeExternal', e.target.checked ? 'true' : '');
-						}}
-					/>
-					{t('common.includeExternal')}
-				</label>
-			</FilterBar>
 			{mode === 'mpa' ? (
 				<DataTable
 					mode="mpa"
@@ -124,6 +153,7 @@ export function ResourcesView() {
 					isLoading={paged.isLoading}
 					isError={paged.isError}
 					error={paged.error}
+					columnControls={columnControls}
 				/>
 			) : (
 				<DataTable

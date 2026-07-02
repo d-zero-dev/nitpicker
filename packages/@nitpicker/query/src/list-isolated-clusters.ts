@@ -2,6 +2,7 @@ import type { IsolatedClusterSummary, ListIsolatedClustersOptions } from './type
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { computeIsolatedClusters } from './compute-isolated-clusters.js';
+import { sortArrayItems } from './sort-array-items.js';
 
 /**
  * List **孤立集合** — connected components of the inventory-* subgraph with
@@ -61,17 +62,26 @@ export async function listIsolatedClusters(
 		});
 	}
 
-	clusters.sort((a, b) => {
-		if (a.size !== b.size) {
-			return b.size - a.size;
-		}
-		return a.representativeUrl < b.representativeUrl
-			? -1
-			: a.representativeUrl > b.representativeUrl
-				? 1
-				: 0;
-	});
+	const filtered = options.urlPattern
+		? clusters.filter((item) =>
+				item.representativeUrl.includes(options.urlPattern!.replaceAll('%', '')),
+			)
+		: clusters;
+	const sorted = sortArrayItems(
+		filtered,
+		options.sortBy ?? 'size',
+		options.sortOrder ?? 'desc',
+		{
+			representativeUrl: {
+				getValue: (item) => item.representativeUrl,
+				type: 'url',
+			},
+			representativeTitle: { getValue: (item) => item.representativeTitle },
+			representativeStatus: { getValue: (item) => item.representativeStatus },
+			size: { getValue: (item) => item.size },
+		},
+	);
 
-	const items = clusters.slice(offset, offset + limit);
-	return { items, total: clusters.length };
+	const items = sorted.slice(offset, offset + limit);
+	return { items, total: sorted.length };
 }

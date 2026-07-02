@@ -14,7 +14,7 @@ export type ArchiveMode = 'archive' | 'stub';
 // packages for the same enums. crawler needs ErrorKind for its DNS-burned
 // host cache and cannot depend on query.
 export type { PageSource, ErrorKind } from '@nitpicker/crawler';
-import type { ErrorKind } from '@nitpicker/crawler';
+import type { ErrorKind, PageSource } from '@nitpicker/crawler';
 
 /**
  * One row of {@link listIsolatedPages} output — a **完全孤立** (singleton)
@@ -44,6 +44,14 @@ export interface IsolatedPageEntry {
  * Pagination options for {@link listIsolatedPages}.
  */
 export interface ListIsolatedPagesOptions {
+	/** URL pattern to search (SQL LIKE-ish substring for computed results). */
+	urlPattern?: string;
+	/** Filter by source. */
+	source?: PageSource;
+	/** Field to sort results by. */
+	sortBy?: 'url' | 'title' | 'status' | 'source';
+	/** Sort direction. */
+	sortOrder?: SortOrder;
 	/** Maximum rows to return. Defaults to 100. */
 	limit?: number;
 	/** Rows to skip from the start. Defaults to 0. */
@@ -125,6 +133,12 @@ export interface IsolatedComponent {
  * Pagination options for {@link listIsolatedClusters}.
  */
 export interface ListIsolatedClustersOptions {
+	/** URL pattern to search representative URLs. */
+	urlPattern?: string;
+	/** Field to sort results by. */
+	sortBy?: 'representativeUrl' | 'representativeTitle' | 'representativeStatus' | 'size';
+	/** Sort direction. */
+	sortOrder?: SortOrder;
 	/** Maximum clusters to return. Defaults to 100. */
 	limit?: number;
 	/** Clusters to skip from the start. Defaults to 0. */
@@ -141,6 +155,18 @@ export interface ListIsolatedClustersOptions {
  * Options for {@link import('./get-isolated-cluster.js').getIsolatedCluster}.
  */
 export interface GetIsolatedClusterOptions {
+	/** URL pattern to search member URLs. */
+	urlPattern?: string;
+	/** Filter by source. */
+	source?: PageSource;
+	/** Field to sort results by. */
+	sortBy?: 'url' | 'title' | 'status' | 'source';
+	/** Sort direction. */
+	sortOrder?: SortOrder;
+	/** Maximum members to return. */
+	limit?: number;
+	/** Members to skip. */
+	offset?: number;
 	/**
 	 * Pre-computed `computeIsolatedClusters` output. See
 	 * {@link ListIsolatedPagesOptions.precomputedComponents} for the
@@ -170,6 +196,16 @@ export interface UnusedResourceEntry {
  * Pagination options for {@link listUnusedResources}.
  */
 export interface ListUnusedResourcesOptions {
+	/** URL pattern to search. */
+	urlPattern?: string;
+	/** Filter by content type prefix. */
+	contentType?: string;
+	/** Filter by source. */
+	source?: PageSource;
+	/** Field to sort results by. */
+	sortBy?: 'url' | 'status' | 'contentType' | 'contentLength' | 'source';
+	/** Sort direction. */
+	sortOrder?: SortOrder;
 	/** Maximum rows to return. Defaults to 100. */
 	limit?: number;
 	/** Rows to skip from the start. Defaults to 0. */
@@ -386,6 +422,9 @@ export interface MetadataFulfillment {
 	ogImage: number;
 }
 
+/** Sort direction for paginated list queries. */
+export type SortOrder = 'asc' | 'desc';
+
 /**
  * Filter and pagination options for listing pages.
  */
@@ -398,6 +437,8 @@ export interface ListPagesOptions {
 	statusMax?: number;
 	/** Filter by external (true) or internal (false) pages. */
 	isExternal?: boolean;
+	/** Filter by document language. */
+	lang?: string;
 	/**
 	 * Restrict results to a single {@link ContentTypeCategory}. When set, the
 	 * default HTML-or-null base restriction is RELAXED — passing `'pdf'` shows
@@ -416,9 +457,41 @@ export interface ListPagesOptions {
 	/** Directory path prefix to filter by. */
 	directory?: string;
 	/** Field to sort results by. */
-	sortBy?: 'url' | 'status' | 'title';
+	sortBy?:
+		| 'url'
+		| 'status'
+		| 'title'
+		| 'contentType'
+		| 'isExternal'
+		| 'lang'
+		| 'description'
+		| 'keywords'
+		| 'noindex'
+		| 'nofollow'
+		| 'noarchive'
+		| 'canonical'
+		| 'twitterCard'
+		| 'ogSiteName'
+		| 'ogUrl'
+		| 'ogTitle'
+		| 'ogDescription'
+		| 'ogType'
+		| 'ogImage'
+		| 'ogImageAlt'
+		| 'ogLocale'
+		| 'ogArticlePublishedTime'
+		| 'twitterSite'
+		| 'twitterCreator'
+		| 'twitterImage'
+		| 'charset'
+		| 'themeColor'
+		| 'manifest'
+		| 'robotsRaw'
+		| 'tagCount'
+		| 'tagsProvidersCsv'
+		| 'jsonldCount';
 	/** Sort direction. */
-	sortOrder?: 'asc' | 'desc';
+	sortOrder?: SortOrder;
 	/** Maximum number of results to return. Defaults to 100. */
 	limit?: number;
 	/** Number of results to skip. Defaults to 0. */
@@ -562,6 +635,18 @@ export interface PaginatedPageList {
 	offset: number;
 	/** Current limit. */
 	limit: number;
+	/** Dynamic enum candidates for table filters, computed from all page rows. */
+	facets?: PageListFacets;
+}
+
+/** Dynamic enum candidates for Pages table filters. */
+export interface PageListFacets {
+	/** Distinct HTTP statuses present in the page-list universe. */
+	statuses: number[];
+	/** Distinct language values present in the page-list universe. */
+	langs: string[];
+	/** Distinct internal/external flags present in the page-list universe. */
+	types: boolean[];
 }
 
 /**
@@ -890,6 +975,12 @@ export interface ListLinksOptions {
 	 * addition to the default canonical-destination view. Default `false`.
 	 */
 	includeRedirectSources?: boolean;
+	/** URL pattern to search source or destination URLs. */
+	urlPattern?: string;
+	/** Field to sort results by. */
+	sortBy?: 'sourceUrl' | 'destUrl' | 'status' | 'isExternal' | 'textContent';
+	/** Sort direction. */
+	sortOrder?: SortOrder;
 }
 
 /**
@@ -922,10 +1013,25 @@ export interface LinkAnalysisResult {
  * Filter options for listing resources.
  */
 export interface ListResourcesOptions {
+	/** URL pattern to filter resource URLs. */
+	urlPattern?: string;
 	/** Filter by content type prefix (e.g., "text/css", "application/javascript"). */
 	contentType?: string;
 	/** Filter by external (true) or internal (false) resources. */
 	isExternal?: boolean;
+	/** Field to sort results by. */
+	sortBy?:
+		| 'url'
+		| 'status'
+		| 'statusText'
+		| 'contentType'
+		| 'contentLength'
+		| 'isExternal'
+		| 'referrerCount'
+		| 'compress'
+		| 'cdn';
+	/** Sort direction. */
+	sortOrder?: SortOrder;
 	/** Maximum number of results. */
 	limit?: number;
 	/** Number of results to skip. */
@@ -982,6 +1088,18 @@ export interface ListImagesOptions {
 	oversizedThreshold?: number;
 	/** URL pattern to filter source URLs. */
 	urlPattern?: string;
+	/** Field to sort results by. */
+	sortBy?:
+		| 'pageUrl'
+		| 'src'
+		| 'alt'
+		| 'width'
+		| 'height'
+		| 'naturalWidth'
+		| 'naturalHeight'
+		| 'isLazy';
+	/** Sort direction. */
+	sortOrder?: SortOrder;
 	/** Maximum number of results. */
 	limit?: number;
 	/** Number of results to skip. */
@@ -1034,6 +1152,12 @@ export interface GetViolationsOptions {
 	severity?: string;
 	/** Filter by rule ID. */
 	rule?: string;
+	/** URL pattern to filter page URLs. */
+	urlPattern?: string;
+	/** Field to sort results by. */
+	sortBy?: 'url' | 'validator' | 'severity' | 'rule' | 'message' | 'code';
+	/** Sort direction. */
+	sortOrder?: SortOrder;
 	/** Maximum number of results. */
 	limit?: number;
 	/** Number of results to skip. */
@@ -1160,6 +1284,8 @@ export interface PageLinkEntry {
 	statusText: string | null;
 	/** Content type. */
 	contentType: string | null;
+	/** Whether the page is external. */
+	isExternal: boolean;
 	/** Number of pages that redirect to this page. */
 	redirectFromCount: number;
 	/** Number of pages linking to this page (incoming links). */
@@ -1192,6 +1318,24 @@ export interface ListPageLinksOptions {
 	isExternal?: boolean;
 	/** URL pattern to search (SQL LIKE pattern). */
 	urlPattern?: string;
+	/** Filter by content type prefix. */
+	contentType?: string;
+	/** Filter to rows with or without response headers. */
+	hasResponseHeaders?: boolean;
+	/** Field to sort results by. */
+	sortBy?:
+		| 'url'
+		| 'title'
+		| 'status'
+		| 'statusText'
+		| 'contentType'
+		| 'redirectFromCount'
+		| 'referrerCount'
+		| 'hasResponseHeaders'
+		| 'skipReason'
+		| 'isExternal';
+	/** Sort direction. */
+	sortOrder?: SortOrder;
 	/** Maximum number of results. */
 	limit?: number;
 	/** Number of results to skip. */

@@ -5,10 +5,17 @@ import { useMemo } from 'react';
 
 import { useIsolatedPagesInfinite } from '../api/use-isolated-pages-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
+import {
+	addRadioFilter,
+	addSort,
+	addTextFilter,
+	createTableControls,
+} from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
 import { SourceBadge } from '../components/source-badge.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
+import { useUrlFilter } from '../hooks/use-url-filter.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 /**
@@ -20,13 +27,20 @@ import { useI18n } from '../i18n/use-i18n.js';
  */
 export function IsolatedPagesView() {
 	const { t } = useI18n();
+	const { params, updateMany } = useUrlFilter();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
+	const filter = {
+		urlPattern: params.get('urlPattern') ?? undefined,
+		source: params.get('source') ?? undefined,
+		sortBy: params.get('sortBy') ?? undefined,
+		sortOrder: params.get('sortOrder') ?? undefined,
+	};
 
 	const offset = (currentPage - 1) * pageSize;
 	const paged = usePagedQuery<IsolatedPageEntry>(
 		'/api/isolated-pages',
-		{ limit: pageSize, offset },
-		['isolated-pages-paged', pageSize, currentPage],
+		{ ...filter, limit: pageSize, offset },
+		['isolated-pages-paged', filter, pageSize, currentPage],
 		{ enabled: mode === 'mpa' },
 	);
 	const infinite = useIsolatedPagesInfinite({ enabled: mode === 'virtual' });
@@ -69,6 +83,27 @@ export function IsolatedPagesView() {
 		],
 		[t],
 	);
+	const columnControls = useMemo(() => {
+		const context = { params, updateMany };
+		const controls = createTableControls(context);
+		for (const key of ['url', 'title', 'status', 'source']) {
+			addSort(controls, context, key, key);
+		}
+		addTextFilter(
+			controls,
+			context,
+			'url',
+			'urlPattern',
+			t('views.pages.filterUrlPattern'),
+		);
+		addRadioFilter(controls, context, 'source', 'source', t('common.source'), [
+			{ value: '', label: t('common.all'), checked: false },
+			{ value: 'crawled', label: 'crawled', checked: false },
+			{ value: 'inventory-seed', label: 'inventory-seed', checked: false },
+			{ value: 'inventory-discovered', label: 'inventory-discovered', checked: false },
+		]);
+		return controls;
+	}, [params, t, updateMany]);
 
 	return (
 		<div className="view">
@@ -90,6 +125,7 @@ export function IsolatedPagesView() {
 					isLoading={paged.isLoading}
 					isError={paged.isError}
 					error={paged.error}
+					columnControls={columnControls}
 				/>
 			) : (
 				<DataTable

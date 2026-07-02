@@ -22,6 +22,7 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 			statusMin: toNumber(q.statusMin),
 			statusMax: toNumber(q.statusMax),
 			isExternal: toBoolean(q.isExternal),
+			lang: q.lang,
 			contentTypeCategory: toContentTypeCategory(q.contentTypeCategory),
 			missingTitle: toBoolean(q.missingTitle),
 			missingDescription: toBoolean(q.missingDescription),

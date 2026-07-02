@@ -19,6 +19,9 @@ export function registerViolationsRoute(app: Hono, context: ArchiveContext): voi
 			validator: q.validator,
 			severity: q.severity,
 			rule: q.rule,
+			urlPattern: q.urlPattern,
+			sortBy: q.sortBy as GetViolationsOptions['sortBy'],
+			sortOrder: q.sortOrder as GetViolationsOptions['sortOrder'],
 			limit: toNumber(q.limit),
 			offset: toNumber(q.offset),
 		};

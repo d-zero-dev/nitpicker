@@ -2,6 +2,7 @@ import type { IsolatedPageEntry, ListIsolatedPagesOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { computeIsolatedClusters } from './compute-isolated-clusters.js';
+import { sortArrayItems } from './sort-array-items.js';
 
 /**
  * List **完全孤立** — inventory-* HTML pages that have NO resolved-anchor
@@ -69,8 +70,25 @@ export async function listIsolatedPages(
 		});
 	}
 
-	singletons.sort((a, b) => (a.url < b.url ? -1 : a.url > b.url ? 1 : 0));
+	const filtered = singletons.filter((item) => {
+		if (
+			options.urlPattern &&
+			!item.url.includes(options.urlPattern.replaceAll('%', ''))
+		) {
+			return false;
+		}
+		if (options.source && item.source !== options.source) {
+			return false;
+		}
+		return true;
+	});
+	const sorted = sortArrayItems(filtered, options.sortBy ?? 'url', options.sortOrder, {
+		url: { getValue: (item) => item.url, type: 'url' },
+		title: { getValue: (item) => item.title },
+		status: { getValue: (item) => item.status },
+		source: { getValue: (item) => item.source },
+	});
 
-	const items = singletons.slice(offset, offset + limit);
-	return { items, total: singletons.length };
+	const items = sorted.slice(offset, offset + limit);
+	return { items, total: sorted.length };
 }

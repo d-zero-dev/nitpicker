@@ -5,8 +5,13 @@ import { useMemo } from 'react';
 
 import { usePagedQuery } from '../api/use-paged-query.js';
 import { useViolationsInfinite } from '../api/use-violations-infinite.js';
+import {
+	addRadioFilter,
+	addSort,
+	addTextFilter,
+	createTableControls,
+} from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
-import { FilterBar } from '../components/filter-bar.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
@@ -19,13 +24,16 @@ import { useI18n } from '../i18n/use-i18n.js';
  * @returns The violations view element.
  */
 export function ViolationsView() {
-	const { params, update } = useUrlFilter();
+	const { params, updateMany } = useUrlFilter();
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const filter = {
 		validator: params.get('validator') ?? undefined,
 		severity: params.get('severity') ?? undefined,
 		rule: params.get('rule') ?? undefined,
+		urlPattern: params.get('urlPattern') ?? undefined,
+		sortBy: params.get('sortBy') ?? undefined,
+		sortOrder: params.get('sortOrder') ?? undefined,
 	};
 
 	const offset = (currentPage - 1) * pageSize;
@@ -77,6 +85,46 @@ export function ViolationsView() {
 		],
 		[t],
 	);
+	const columnControls = useMemo(() => {
+		const context = { params, updateMany };
+		const controls = createTableControls(context);
+		for (const key of ['severity', 'validator', 'rule', 'message', 'url']) {
+			addSort(controls, context, key, key);
+		}
+		addRadioFilter(
+			controls,
+			context,
+			'severity',
+			'severity',
+			t('views.violations.filterSeverity'),
+			[
+				{ value: '', label: t('common.all'), checked: false },
+				{ value: 'error', label: 'error', checked: false },
+				{ value: 'warning', label: 'warning', checked: false },
+				{ value: 'info', label: 'info', checked: false },
+				{ value: 'minor', label: 'minor', checked: false },
+				{ value: 'moderate', label: 'moderate', checked: false },
+				{ value: 'serious', label: 'serious', checked: false },
+				{ value: 'critical', label: 'critical', checked: false },
+			],
+		);
+		addTextFilter(
+			controls,
+			context,
+			'validator',
+			'validator',
+			t('views.violations.filterValidator'),
+		);
+		addTextFilter(controls, context, 'rule', 'rule', t('views.violations.colRule'));
+		addTextFilter(
+			controls,
+			context,
+			'url',
+			'urlPattern',
+			t('views.pages.filterUrlPattern'),
+		);
+		return controls;
+	}, [params, t, updateMany]);
 
 	return (
 		<div className="view">
@@ -84,24 +132,6 @@ export function ViolationsView() {
 				titleKey="views.violations.title"
 				descriptionKey="views.violations.description"
 			/>
-			<FilterBar>
-				<input
-					aria-label={t('views.violations.filterValidator')}
-					placeholder={t('views.violations.filterValidator')}
-					defaultValue={filter.validator ?? ''}
-					onBlur={(e) => {
-						update('validator', e.target.value);
-					}}
-				/>
-				<input
-					aria-label={t('views.violations.filterSeverity')}
-					placeholder={t('views.violations.filterSeverity')}
-					defaultValue={filter.severity ?? ''}
-					onBlur={(e) => {
-						update('severity', e.target.value);
-					}}
-				/>
-			</FilterBar>
 			{mode === 'mpa' ? (
 				<DataTable
 					mode="mpa"
@@ -116,6 +146,7 @@ export function ViolationsView() {
 					isLoading={paged.isLoading}
 					isError={paged.isError}
 					error={paged.error}
+					columnControls={columnControls}
 				/>
 			) : (
 				<DataTable

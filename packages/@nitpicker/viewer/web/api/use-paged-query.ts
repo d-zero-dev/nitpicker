@@ -24,11 +24,13 @@ export interface UsePagedQueryOptions {
 }
 
 /** The minimal paginated payload shape expected from `/api/*` list endpoints. */
-export interface PagedResponse<T> {
+export interface PagedResponse<T, TFacets = unknown> {
 	/** The rows on the requested page. */
 	items: T[];
 	/** Total matching rows on the server. */
 	total: number;
+	/** Optional dynamic enum candidates for table filters. */
+	facets?: TFacets;
 }
 
 /**
@@ -48,15 +50,15 @@ export interface PagedResponse<T> {
  * @param options - Optional flags (`enabled`, `keepPreviousData`).
  * @returns The TanStack Query result for the page.
  */
-export function usePagedQuery<T>(
+export function usePagedQuery<T, TFacets = unknown>(
 	path: string,
 	params: Record<string, ParamValue>,
 	queryKey: QueryKey,
 	options?: UsePagedQueryOptions,
 ) {
-	return useQuery<PagedResponse<T>>({
+	return useQuery<PagedResponse<T, TFacets>>({
 		queryKey,
-		queryFn: () => apiGet<PagedResponse<T>>(path, params),
+		queryFn: () => apiGet<PagedResponse<T, TFacets>>(path, params),
 		enabled: options?.enabled ?? true,
 		placeholderData: (previous) =>
 			(options?.keepPreviousData ?? true) ? previous : undefined,
