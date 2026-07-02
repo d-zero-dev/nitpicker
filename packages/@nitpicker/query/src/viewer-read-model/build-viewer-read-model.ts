@@ -1,7 +1,5 @@
-import type { PageSource } from '../types.js';
+import type { BuildViewerReadModelOptions, PageSource } from '../types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
-
-import { eachSplitted } from '@nitpicker/crawler';
 
 import { classifyContentType } from '../classify-content-type.js';
 import { excludeSkippedPages } from '../exclude-skipped-pages.js';
@@ -224,12 +222,19 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
  *   writable (`accessor.readOnly === false`) — typically an `Archive`
  *   returned by `Archive.create`/`Archive.open`, not `Archive.connect`/
  *   `Archive.openCached` (always read-only) or a stub-mode accessor.
+ * @param options - Build options.
+ * @param options.onProgress - Called after each insert chunk completes —
+ *   see {@link BuildViewerReadModelOptions.onProgress}. Omit for a silent
+ *   build (the default; e.g. tests and small archives).
  * @throws {Error} When `accessor.readOnly` is `true`.
  * @example
  * // Typically called once, right after a crawl finishes writing `pages`:
  * await buildViewerReadModel(archive);
  */
-export async function buildViewerReadModel(accessor: ArchiveAccessor): Promise<void> {
+export async function buildViewerReadModel(
+	accessor: ArchiveAccessor,
+	options: BuildViewerReadModelOptions = {},
+): Promise<void> {
 	if (accessor.readOnly) {
 		throw new Error(
 			'buildViewerReadModel: cannot build the viewer read model on a read-only ' +
@@ -239,6 +244,7 @@ export async function buildViewerReadModel(accessor: ArchiveAccessor): Promise<v
 		);
 	}
 
+	const { onProgress } = options;
 	const knex = accessor.getKnex();
 	await knex.transaction(async (trx) => {
 		await dropViewerReadModelTables(trx);
@@ -264,12 +270,23 @@ export async function buildViewerReadModel(accessor: ArchiveAccessor): Promise<v
 			);
 
 		const insertRows = sourceRows.map(toViewerPageInsertRow);
+		const totalRows = insertRows.length;
+		let insertedRows = 0;
 
-		await eachSplitted(insertRows, INSERT_CHUNK_SIZE, async (chunk) => {
-			if (chunk.length > 0) {
-				await trx('viewer_pages').insert(chunk);
-			}
-		});
+		// Sequential, not `eachSplitted`'s concurrent `Promise.all` — SQLite
+		// serializes writes on this single transaction's connection anyway,
+		// so concurrency buys no throughput here, only two real costs: all
+		// ~800 chunk arrays (400k-row archive) live in memory simultaneously
+		// instead of one at a time, and `onProgress` (below) would report
+		// `insertedRows` in whichever order chunks happened to resolve
+		// rather than monotonically — exactly the "must show real progress"
+		// property issue #112 exists to guarantee.
+		for (let start = 0; start < insertRows.length; start += INSERT_CHUNK_SIZE) {
+			const chunk = insertRows.slice(start, start + INSERT_CHUNK_SIZE);
+			await trx('viewer_pages').insert(chunk);
+			insertedRows += chunk.length;
+			onProgress?.({ insertedRows, totalRows });
+		}
 
 		const total = insertRows.length;
 		await trx('viewer_query_profiles').insert({

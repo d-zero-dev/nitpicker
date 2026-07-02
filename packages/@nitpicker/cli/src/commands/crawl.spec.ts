@@ -47,6 +47,12 @@ vi.mock('../crawl/diff.js', () => ({
 	diff: mockDiff,
 }));
 
+const mockEnsureViewerReadModelQuietly = vi.fn().mockResolvedValue();
+
+vi.mock('../crawl/ensure-viewer-read-model-quietly.js', () => ({
+	ensureViewerReadModelQuietly: mockEnsureViewerReadModelQuietly,
+}));
+
 const mockReadList = vi.fn().mockResolvedValue(['https://example.com/from-file']);
 
 vi.mock('@d-zero/readtext/list', () => ({
@@ -262,6 +268,19 @@ describe('startCrawl', () => {
 		expect(closeOrder!).toBeLessThan(gcOrder!);
 	});
 
+	it('builds the viewer read model against orchestrator.archive before write() tars it (issue #112)', async () => {
+		const fake = setupFakeOrchestrator();
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(['https://example.com'], createFlags());
+
+		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(fake.archive);
+
+		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
+		const buildOrder = mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0];
+		const writeOrder = writeMock.mock.invocationCallOrder[0];
+		expect(buildOrder!).toBeLessThan(writeOrder!);
+	});
+
 	it('write() が失敗しても archive.close() と garbageCollect() が呼ばれる', async () => {
 		const fake = setupFakeOrchestrator();
 		(fake.write as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
@@ -385,6 +404,7 @@ describe('crawl', () => {
 	});
 
 	it('crawl <archive> --append <URL> で CrawlerOrchestrator.append が呼ばれる', async () => {
+		const fake = setupFakeOrchestrator();
 		const { crawl } = await import('./crawl.js');
 		await crawl(
 			['/tmp/existing.nitpicker'],
@@ -396,6 +416,11 @@ describe('crawl', () => {
 		expect(archivePath).toBe('/tmp/existing.nitpicker');
 		expect(urls).toEqual(['https://sample-b.example.com/']);
 		expect(mockCrawling).not.toHaveBeenCalled();
+		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(fake.archive);
+		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
+		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
+			writeMock.mock.invocationCallOrder[0]!,
+		);
 	});
 
 	it('--append を複数回指定すると複数 URL が渡される', async () => {
@@ -488,6 +513,7 @@ describe('crawl', () => {
 	});
 
 	it('crawl <archive> --retry-failed で CrawlerOrchestrator.retryFailed が呼ばれる', async () => {
+		const fake = setupFakeOrchestrator();
 		const { crawl } = await import('./crawl.js');
 		await crawl(['/tmp/existing.nitpicker'], createFlags({ retryFailed: true }));
 
@@ -496,6 +522,11 @@ describe('crawl', () => {
 		expect(archivePath).toBe('/tmp/existing.nitpicker');
 		expect(mockCrawling).not.toHaveBeenCalled();
 		expect(mockAppend).not.toHaveBeenCalled();
+		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(fake.archive);
+		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
+		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
+			writeMock.mock.invocationCallOrder[0]!,
+		);
 	});
 
 	it('--retry-failed を指定したのに位置引数が無いとエラー', async () => {
@@ -581,6 +612,7 @@ describe('crawl', () => {
 	});
 
 	it('--resume に絶対パスを指定した場合、そのまま渡す', async () => {
+		const fake = setupFakeOrchestrator();
 		const { crawl } = await import('./crawl.js');
 		await crawl([], createFlags({ resume: '/absolute/stub' }));
 
@@ -590,6 +622,11 @@ describe('crawl', () => {
 			expect.any(Function),
 		);
 		expect(mockCrawling).not.toHaveBeenCalled();
+		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(fake.archive);
+		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
+		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
+			writeMock.mock.invocationCallOrder[0]!,
+		);
 	});
 
 	it('--resume に相対パスを指定した場合、resolve して渡す', async () => {
@@ -764,6 +801,7 @@ describe('crawl', () => {
 	});
 
 	it('--inventory フラグでアーカイブと URL リストを CrawlerOrchestrator.inventory に渡す', async () => {
+		const fake = setupFakeOrchestrator();
 		mockReadList.mockResolvedValueOnce(['https://example.com/hidden']);
 		const { crawl } = await import('./crawl.js');
 
@@ -786,6 +824,11 @@ describe('crawl', () => {
 		// path), not bypassed it.
 		expect(mockComputeFileSha256).toHaveBeenCalledWith(
 			expect.stringMatching(/urls\.txt$/),
+		);
+		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(fake.archive);
+		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
+		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
+			writeMock.mock.invocationCallOrder[0]!,
 		);
 	});
 

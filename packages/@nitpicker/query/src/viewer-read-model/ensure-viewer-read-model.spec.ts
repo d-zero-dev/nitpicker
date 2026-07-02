@@ -86,6 +86,31 @@ describe('ensureViewerReadModel', () => {
 		expect(marker).toBeUndefined();
 	});
 
+	it('forwards onProgress to buildViewerReadModel when a build is actually needed', async () => {
+		const knex = archive.getKnex();
+		// This fixture archive never called setPage(), so `pages` is empty
+		// and a rebuild would insert zero rows (onProgress never fires). A
+		// bare raw insert gives buildViewerReadModel one row to report
+		// progress on without depending on another spec's page fixtures.
+		await knex('pages').insert({
+			url: 'https://example.com/progress-row',
+			scraped: 1,
+			isTarget: 1,
+		});
+		await knex('viewer_read_model_meta').where('id', 1).update({ schema_version: 0 });
+
+		const calls: unknown[] = [];
+		await ensureViewerReadModel(archive, { onProgress: (p) => calls.push(p) });
+
+		expect(calls.length).toBeGreaterThan(0);
+	});
+
+	it('never invokes onProgress on the already-current no-op path', async () => {
+		const calls: unknown[] = [];
+		await ensureViewerReadModel(archive, { onProgress: (p) => calls.push(p) });
+		expect(calls).toHaveLength(0);
+	});
+
 	it('does not throw on a read-only accessor that is already current', async () => {
 		const readOnlyAccessor = await Archive.connect(archive.tmpDir);
 		try {

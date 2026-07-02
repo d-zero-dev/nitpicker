@@ -1,3 +1,4 @@
+import type { BuildViewerReadModelOptions } from '../types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { buildViewerReadModel } from './build-viewer-read-model.js';
@@ -6,9 +7,9 @@ import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model-schema-ver
 
 /**
  * Builds the viewer read model if it is missing or stale (schema version
- * mismatch), otherwise does nothing. The idempotent entry point intended
- * for a future crawl-completion build trigger and any other on-demand
- * caller that just wants "make sure this is current."
+ * mismatch), otherwise does nothing. The idempotent entry point used by the
+ * crawl-completion build hook (issue #112) and any other on-demand caller
+ * that just wants "make sure this is current."
  *
  * When the read model is already current, this function returns without
  * ever inspecting `accessor.readOnly` — a read-only caller polling an
@@ -17,15 +18,20 @@ import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model-schema-ver
  *   (`accessor.readOnly === false`) whenever a build actually turns out to
  *   be necessary — see {@link buildViewerReadModel}'s guard, which this
  *   function inherits by delegating to it.
+ * @param options - Forwarded to {@link buildViewerReadModel} when a build is
+ *   actually needed; ignored on the already-current no-op path.
  * @throws {Error} When a build is needed and `accessor.readOnly` is `true`.
  * @example
  * // After a crawl completes, against the writable Archive that just wrote it:
  * await ensureViewerReadModel(archive);
  */
-export async function ensureViewerReadModel(accessor: ArchiveAccessor): Promise<void> {
+export async function ensureViewerReadModel(
+	accessor: ArchiveAccessor,
+	options: BuildViewerReadModelOptions = {},
+): Promise<void> {
 	const version = await getViewerReadModelVersion(accessor);
 	if (version === VIEWER_READ_MODEL_SCHEMA_VERSION) {
 		return;
 	}
-	await buildViewerReadModel(accessor);
+	await buildViewerReadModel(accessor, options);
 }

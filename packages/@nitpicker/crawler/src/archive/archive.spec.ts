@@ -193,6 +193,67 @@ describe('open: rename-safe', () => {
 	});
 });
 
+describe('connect: readOnly option', () => {
+	// `releaseHandle()` deliberately leaves `tmpDir` on disk (that's the
+	// point — simulating an already-extracted tar-cache dir a second
+	// connection attaches to), so each test uses its own archive path and
+	// rm's its own tmpDir directly; unlike the other describe blocks here,
+	// `archive.close()`/`write()` never run to do that cleanup implicitly.
+	const tmpDirs: string[] = [];
+
+	afterAll(() => {
+		for (const tmpDir of tmpDirs) {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it('defaults to a read-only accessor that rejects writes', async () => {
+		const archiveFilePath = path.resolve(
+			workingDir,
+			'connect-readonly-default.nitpicker',
+		);
+		const archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		const tmpDir = archive.tmpDir;
+		tmpDirs.push(tmpDir);
+		await archive.releaseHandle();
+
+		const accessor = await Archive.connect(tmpDir);
+		try {
+			expect(accessor.readOnly).toBe(true);
+		} finally {
+			await accessor.close();
+		}
+	});
+
+	it('opens a writable accessor against the same tmpDir when readOnly: false', async () => {
+		// Simulates issue #112's on-open build: a second connection to a
+		// tmpDir that another (read-only) accessor already has open, used to
+		// build the viewer read model without touching the caller's
+		// live/interrupted crawl tmpDir (which must never take this path).
+		const archiveFilePath = path.resolve(
+			workingDir,
+			'connect-readonly-writable.nitpicker',
+		);
+		const archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		const tmpDir = archive.tmpDir;
+		tmpDirs.push(tmpDir);
+		await archive.setPage(makePageData('/writable-connect', '<html></html>'));
+		await archive.releaseHandle();
+
+		const writable = await Archive.connect(tmpDir, null, { readOnly: false });
+		try {
+			expect(writable.readOnly).toBe(false);
+			await expect(
+				writable
+					.getKnex()('pages')
+					.insert({ url: 'https://example.com/extra', scraped: 0, isTarget: 1 }),
+			).resolves.toBeDefined();
+		} finally {
+			await writable.close();
+		}
+	});
+});
+
 describe('write: append', () => {
 	const archiveFilePath = path.resolve(workingDir, 'append-merge-test.nitpicker');
 

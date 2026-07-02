@@ -7,6 +7,7 @@ import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ArchiveManager } from './archive-manager.js';
+import { hasViewerReadModel } from './viewer-read-model/has-viewer-read-model.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -178,5 +179,63 @@ describe('ArchiveManager cache-mode (archive opens go through Archive.openCached
 		// Identical key (size + mtime + ctime unchanged) → identical
 		// cache directory → no second untar happened.
 		expect(cacheDir2).toBe(cacheDir1);
+	});
+});
+
+describe('ArchiveManager cache-mode: on-open viewer read model build (issue #112)', () => {
+	// A separate archive (not the shared `archiveFilePath` above) so the
+	// "missing → built on first open" assertion below isn't racing an
+	// earlier test in this file that already opened — and thus already
+	// built the read model into — the shared fixture's cache directory.
+	const archiveFilePath = path.resolve(workingDir, 'on-open-build.nitpicker');
+
+	beforeAll(async () => {
+		mkdirSync(workingDir, { recursive: true });
+		// Written the same way `crawl` produced archives before issue #112:
+		// no `ensureViewerReadModel` call, so the persistent read model is
+		// absent — exactly the legacy-archive case this feature targets.
+		const archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setPage({
+			url: parseUrl('https://example.com/')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { title: 'on-open-build' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.write();
+		await archive.close();
+	});
+
+	afterAll(() => {
+		rmSync(archiveFilePath, { force: true });
+	});
+
+	it('builds the read model automatically on first open of a legacy (pre-#112) archive', async () => {
+		const manager = new ArchiveManager();
+		const { accessor } = await manager.open(archiveFilePath);
+		try {
+			expect(await hasViewerReadModel(accessor)).toBe(true);
+		} finally {
+			await manager.closeAll();
+		}
+	});
+
+	it('reuses the already-built read model on a subsequent open (no rebuild needed)', async () => {
+		const manager = new ArchiveManager();
+		const { accessor } = await manager.open(archiveFilePath);
+		try {
+			expect(await hasViewerReadModel(accessor)).toBe(true);
+		} finally {
+			await manager.closeAll();
+		}
 	});
 });
