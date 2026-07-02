@@ -1,3 +1,4 @@
+import type { PageSource } from '../types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { eachSplitted } from '@nitpicker/crawler';
@@ -11,6 +12,27 @@ import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model-schema-ver
 
 /** Number of rows written per `INSERT` statement while populating `viewer_pages`. */
 const INSERT_CHUNK_SIZE = 500;
+
+/**
+ * Sentinel `status_sort_key` value substituted for `null` status (errored /
+ * not-yet-classified rows). Chosen smaller than any real HTTP status code
+ * (100-599) so unknown-status rows keep sorting first in ascending order —
+ * matching `listPages`'s prior behavior of ordering directly on the nullable
+ * `status` column, where SQLite treats `NULL` as smaller than any value.
+ *
+ * Deliberately distinct from `-1`, which `Database.resetFailedPages` already
+ * uses as the "hard failure" HTTP status sentinel (see that function's docs)
+ * — reusing `-1` here would conflate two different populations of rows in
+ * `status_sort_key` ordering and in any future `status = -1` equality filter.
+ *
+ * Keyset cursor comparisons need a NEVER-`null` sort-key column: SQL's
+ * three-valued logic makes `NULL > x` / `NULL < x` always evaluate to
+ * `NULL` (never true), which would silently break tuple comparisons like
+ * `(status_sort_key, url_sort_key, page_id) > (?, ?, ?)` for rows whose
+ * status is unknown. Substituting a sentinel keeps every row on this column
+ * strictly orderable.
+ */
+const NULL_STATUS_SENTINEL = -32_768;
 
 /**
  * Row shape read from the write-model `pages` table while populating
@@ -49,6 +71,8 @@ interface PagesSourceRow {
 	tag_count: number | null;
 	/** Denormalised count of JSON-LD / SpeculationRules entries on the page. */
 	jsonld_count: number | null;
+	/** Provenance label — see {@link PageSource}. Always non-null (`NOT NULL DEFAULT 'crawled'` in `init-schema.ts`). */
+	source: PageSource;
 }
 
 /** One row to insert into `viewer_pages`, derived from a {@link PagesSourceRow}. */
@@ -61,6 +85,21 @@ interface ViewerPageInsertRow {
 	title: string | null;
 	/** Copied from `PagesSourceRow.status`. */
 	status: number | null;
+	/**
+	 * Ascending sort key for `sort=status:asc` — `status`, or
+	 * {@link NULL_STATUS_SENTINEL} when `status` is `null`. Never `null`
+	 * itself (see {@link NULL_STATUS_SENTINEL}'s docs for why).
+	 */
+	status_sort_key: number;
+	/**
+	 * Ascending sort key for `sort=status:desc` — the negation of
+	 * `status_sort_key` (`docs/viewer-sql-query-plan.md`'s "Stable Ordering"
+	 * normalized-descending-key pattern, e.g. `status_desc_key = -status`).
+	 * Walking this column ascending yields status descending while keeping
+	 * the tie-breaker columns (`url_sort_key`, `page_id`) in a uniform
+	 * ascending tuple comparison for keyset cursoring.
+	 */
+	status_desc_key: number;
 	/** `classifyContentType(PagesSourceRow.contentType)`. */
 	content_category: string;
 	/** Normalised `0`/`1` form of `PagesSourceRow.isExternal`. */
@@ -73,6 +112,8 @@ interface ViewerPageInsertRow {
 	has_og_title: number;
 	/** Normalised `0`/`1` form of `PagesSourceRow.robots_noindex`. */
 	robots_noindex: number;
+	/** Copied from `PagesSourceRow.source` — see {@link PageSource}. */
+	source: PageSource;
 	/** `PagesSourceRow.tag_count`, defaulted to `0` when `null`. */
 	tag_count: number;
 	/** `PagesSourceRow.jsonld_count`, defaulted to `0` when `null`. */
@@ -85,8 +126,17 @@ interface ViewerPageInsertRow {
 	 * `/api/pages` sorting).
 	 */
 	url_sort_key: string;
-	/** Case-preserving sort key for title ordering — `title` verbatim. */
-	title_sort_key: string | null;
+	/**
+	 * Case-preserving sort key for title ordering — `title`, or `''` when
+	 * `title` is `null`. Never `null` itself, for the same keyset-cursor
+	 * reason as {@link NULL_STATUS_SENTINEL}: SQL's three-valued `NULL`
+	 * comparison logic would silently break tuple comparisons against a
+	 * nullable sort-key column. `''` sorts before any non-empty title in
+	 * ascending order, matching `listPages`'s prior behavior of ordering
+	 * directly on the nullable `title` column (SQLite treats `NULL` as
+	 * smaller than any value).
+	 */
+	title_sort_key: string;
 	/**
 	 * The URL's path component, for directory-prefix range scans (per
 	 * `docs/viewer-sql-query-plan.md`'s `/api/pages` directory filter
@@ -120,21 +170,25 @@ function derivePathSortKey(url: string): string {
  * @returns The corresponding `viewer_pages` insert row.
  */
 function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
+	const statusSortKey = row.status ?? NULL_STATUS_SENTINEL;
 	return {
 		page_id: row.id,
 		url: row.url,
 		title: row.title,
 		status: row.status,
+		status_sort_key: statusSortKey,
+		status_desc_key: -statusSortKey,
 		content_category: classifyContentType(row.contentType),
 		is_external: row.isExternal ? 1 : 0,
 		has_title: row.title != null && row.title !== '' ? 1 : 0,
 		has_description: row.description != null && row.description !== '' ? 1 : 0,
 		has_og_title: row.og_title != null && row.og_title !== '' ? 1 : 0,
 		robots_noindex: row.robots_noindex ? 1 : 0,
+		source: row.source,
 		tag_count: row.tag_count ?? 0,
 		jsonld_count: row.jsonld_count ?? 0,
 		url_sort_key: row.url,
-		title_sort_key: row.title,
+		title_sort_key: row.title ?? '',
 		path_sort_key: derivePathSortKey(row.url),
 	};
 }
@@ -204,6 +258,7 @@ export async function buildViewerReadModel(accessor: ArchiveAccessor): Promise<v
 				'description',
 				'og_title',
 				'robots_noindex',
+				'source',
 				'tag_count',
 				'jsonld_count',
 			);
