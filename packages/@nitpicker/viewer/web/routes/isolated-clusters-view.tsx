@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { useIsolatedCluster } from '../api/use-isolated-cluster.js';
 import { useIsolatedClustersInfinite } from '../api/use-isolated-clusters-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
+import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
 import {
 	addRadioFilter,
 	addSort,
@@ -66,8 +67,11 @@ function ClusterListPane({
 	const { t } = useI18n();
 	const { params, updateMany } = useUrlFilter();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
+	const status = params.get('status');
+	const statusValue = status == null ? undefined : Number(status);
 	const filter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
+		status: Number.isFinite(statusValue) ? statusValue : undefined,
 		sortBy: params.get('sortBy') ?? undefined,
 		sortOrder: params.get('sortOrder') ?? undefined,
 	};
@@ -79,7 +83,7 @@ function ClusterListPane({
 		['isolated-clusters-paged', filter, pageSize, currentPage],
 		{ enabled: mode === 'mpa' },
 	);
-	const infinite = useIsolatedClustersInfinite({ enabled: mode === 'virtual' });
+	const infinite = useIsolatedClustersInfinite(filter, { enabled: mode === 'virtual' });
 	const infiniteRows = useMemo(
 		() => infinite.data?.pages.flatMap((page) => page.items) ?? [],
 		[infinite.data],
@@ -144,8 +148,21 @@ function ClusterListPane({
 			'urlPattern',
 			t('views.pages.filterUrlPattern'),
 		);
+		addRadioFilter(
+			controls,
+			context,
+			'representativeStatus',
+			'status',
+			t('views.isolatedClusters.status'),
+			buildStatusFilterOptions(
+				paged.data?.items,
+				(item) => item.representativeStatus,
+				status,
+				t('common.all'),
+			),
+		);
 		return controls;
-	}, [params, t, updateMany]);
+	}, [paged.data?.items, params, status, t, updateMany]);
 
 	return (
 		<div className="view">
@@ -210,8 +227,11 @@ function ClusterDetailPane({
 	const { params, updateMany } = useUrlFilter();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const offset = (currentPage - 1) * pageSize;
+	const status = params.get('status');
+	const statusValue = status == null ? undefined : Number(status);
 	const filter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
+		status: Number.isFinite(statusValue) ? statusValue : undefined,
 		source: params.get('source') ?? undefined,
 		sortBy: params.get('sortBy') ?? undefined,
 		sortOrder: params.get('sortOrder') ?? undefined,
@@ -269,6 +289,19 @@ function ClusterDetailPane({
 			'urlPattern',
 			t('views.pages.filterUrlPattern'),
 		);
+		addRadioFilter(
+			controls,
+			context,
+			'status',
+			'status',
+			t('views.isolatedClusters.status'),
+			buildStatusFilterOptions(
+				data?.members,
+				(item) => item.status,
+				status,
+				t('common.all'),
+			),
+		);
 		addRadioFilter(controls, context, 'source', 'source', t('common.source'), [
 			{ value: '', label: t('common.all'), checked: false },
 			{ value: 'crawled', label: 'crawled', checked: false },
@@ -276,7 +309,7 @@ function ClusterDetailPane({
 			{ value: 'inventory-discovered', label: 'inventory-discovered', checked: false },
 		]);
 		return controls;
-	}, [params, t, updateMany]);
+	}, [data?.members, params, status, t, updateMany]);
 
 	const members = data?.members ?? [];
 	const total = data?.size ?? members.length;

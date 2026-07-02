@@ -17,6 +17,7 @@ export function registerUnusedResourcesRoute(app: Hono, context: ArchiveContext)
 		const accessor = context.manager.get(context.archiveId);
 		const result = await listUnusedResources(accessor, {
 			urlPattern: c.req.query('urlPattern'),
+			status: toNumber(c.req.query('status')),
 			contentType: c.req.query('contentType'),
 			source: c.req.query('source') as
 				| 'crawled'

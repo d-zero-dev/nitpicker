@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 
 import { useIsolatedPagesInfinite } from '../api/use-isolated-pages-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
+import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
 import {
 	addRadioFilter,
 	addSort,
@@ -29,8 +30,11 @@ export function IsolatedPagesView() {
 	const { t } = useI18n();
 	const { params, updateMany } = useUrlFilter();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
+	const status = params.get('status');
+	const statusValue = status == null ? undefined : Number(status);
 	const filter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
+		status: Number.isFinite(statusValue) ? statusValue : undefined,
 		source: params.get('source') ?? undefined,
 		sortBy: params.get('sortBy') ?? undefined,
 		sortOrder: params.get('sortOrder') ?? undefined,
@@ -43,7 +47,7 @@ export function IsolatedPagesView() {
 		['isolated-pages-paged', filter, pageSize, currentPage],
 		{ enabled: mode === 'mpa' },
 	);
-	const infinite = useIsolatedPagesInfinite({ enabled: mode === 'virtual' });
+	const infinite = useIsolatedPagesInfinite(filter, { enabled: mode === 'virtual' });
 	const infiniteRows = useMemo(
 		() => infinite.data?.pages.flatMap((page) => page.items) ?? [],
 		[infinite.data],
@@ -96,6 +100,19 @@ export function IsolatedPagesView() {
 			'urlPattern',
 			t('views.pages.filterUrlPattern'),
 		);
+		addRadioFilter(
+			controls,
+			context,
+			'status',
+			'status',
+			t('views.isolatedPages.status'),
+			buildStatusFilterOptions(
+				paged.data?.items,
+				(item) => item.status,
+				status,
+				t('common.all'),
+			),
+		);
 		addRadioFilter(controls, context, 'source', 'source', t('common.source'), [
 			{ value: '', label: t('common.all'), checked: false },
 			{ value: 'crawled', label: 'crawled', checked: false },
@@ -103,7 +120,7 @@ export function IsolatedPagesView() {
 			{ value: 'inventory-discovered', label: 'inventory-discovered', checked: false },
 		]);
 		return controls;
-	}, [params, t, updateMany]);
+	}, [paged.data?.items, params, status, t, updateMany]);
 
 	return (
 		<div className="view">

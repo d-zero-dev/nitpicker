@@ -29,6 +29,7 @@ export function registerPageLinksRoute(app: Hono, context: ArchiveContext): void
 		const options: ListPageLinksOptions = {
 			isExternal: toBoolean(q.isExternal),
 			urlPattern: q.urlPattern,
+			status: toNumber(q.status),
 			contentType: q.contentType,
 			hasResponseHeaders: toBoolean(q.hasResponseHeaders),
 			sortBy: q.sortBy as ListPageLinksOptions['sortBy'],
