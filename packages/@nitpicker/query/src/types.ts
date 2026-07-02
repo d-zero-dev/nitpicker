@@ -1335,3 +1335,43 @@ export interface ErrorKindsResult {
 	/** Groups sorted by `count`, most failures first. */
 	groups: ErrorKindGroup[];
 }
+
+/**
+ * Progress snapshot reported while {@link buildViewerReadModel} populates
+ * `viewer_pages`. Issued after each insert chunk completes, so callers can
+ * render a percentage or row count for archives large enough (issue #112:
+ * 400k pages take minutes) that a build must not look hung.
+ */
+export interface ViewerReadModelBuildProgress {
+	/** Rows inserted into `viewer_pages` so far, including this chunk. */
+	insertedRows: number;
+	/** Total rows that will be inserted, known upfront (single-pass build). */
+	totalRows: number;
+}
+
+/**
+ * Options for {@link buildViewerReadModel} and {@link ensureViewerReadModel}.
+ */
+export interface BuildViewerReadModelOptions {
+	/**
+	 * Called after each `viewer_pages` insert chunk completes. Omit to build
+	 * silently (the default for callers that don't need progress, e.g. tests).
+	 * @param progress - The current insert progress.
+	 */
+	onProgress?: (progress: ViewerReadModelBuildProgress) => void;
+}
+
+/**
+ * Options for {@link ensureViewerReadModelOpportunistically}.
+ */
+export interface EnsureViewerReadModelOpportunisticallyOptions extends BuildViewerReadModelOptions {
+	/**
+	 * Warning sink invoked when the build is skipped (another process/tab
+	 * already holds the build lock) or fails outright. Defaults to a no-op —
+	 * callers that want the message surfaced (viewer, MCP, query CLI) should
+	 * pass their own sink, mirroring {@link ArchiveManagerWarn}. Never called
+	 * for the common case (read model already current, nothing to build).
+	 * @param message - A human-readable description of what was skipped or failed.
+	 */
+	onWarn?: (message: string) => void;
+}

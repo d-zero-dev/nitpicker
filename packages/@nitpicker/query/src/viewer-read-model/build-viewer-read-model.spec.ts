@@ -528,6 +528,118 @@ describe('buildViewerReadModel', () => {
 		});
 	});
 
+	describe('onProgress', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_progress__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'progress-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+			await archive.setPage({
+				url: parseUrl('https://example.com/')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: { ...META, title: 'Home' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('reports the final chunk with insertedRows equal to totalRows', async () => {
+			const calls: { insertedRows: number; totalRows: number }[] = [];
+			await buildViewerReadModel(archive, { onProgress: (p) => calls.push(p) });
+
+			expect(calls.length).toBeGreaterThan(0);
+			const last = calls.at(-1)!;
+			expect(last.insertedRows).toBe(last.totalRows);
+			expect(last.totalRows).toBe(1);
+		});
+
+		it('defaults to no progress reporting when onProgress is omitted', async () => {
+			await expect(buildViewerReadModel(archive)).resolves.toBeUndefined();
+		});
+	});
+
+	describe('onProgress: multiple chunks', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_progress_multi_chunk__',
+		);
+		const archiveFilePath = path.resolve(
+			workingDir,
+			'progress-multi-chunk-test.nitpicker',
+		);
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			// 750 rows spans two 500-row buildViewerReadModel chunks. A bulk
+			// raw insert (not 750 sequential setPage() calls) both keeps the
+			// test fast and matches the "legacy rows" fixture technique used
+			// elsewhere in this file for rows that don't need full
+			// setPage() semantics. An isolated archive (rather than reusing
+			// another describe block's fixture) keeps the expected totals
+			// round numbers, independent of sibling test execution order.
+			//
+			// Inserted in 2 sub-batches of ≤500 rows each — unrelated to
+			// buildViewerReadModel's own 500-row INSERT_CHUNK_SIZE — because
+			// SQLite's compound-SELECT term limit (default 500) rejects a
+			// single `.insert()` call carrying all 750 rows at once.
+			const knex = archive.getKnex();
+			const rows = Array.from({ length: 750 }, (_, i) => ({
+				url: `https://example.com/multi-chunk-${i}`,
+				scraped: 1,
+				isTarget: 1,
+			}));
+			await knex('pages').insert(rows.slice(0, 400));
+			await knex('pages').insert(rows.slice(400));
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('reports insertedRows strictly monotonically across multiple chunks, in order', async () => {
+			const calls: { insertedRows: number; totalRows: number }[] = [];
+			await buildViewerReadModel(archive, { onProgress: (p) => calls.push(p) });
+
+			expect(calls).toEqual([
+				{ insertedRows: 500, totalRows: 750 },
+				{ insertedRows: 750, totalRows: 750 },
+			]);
+		});
+	});
+
 	describe('empty archive', () => {
 		const workingDir = path.resolve(
 			__dirname,
