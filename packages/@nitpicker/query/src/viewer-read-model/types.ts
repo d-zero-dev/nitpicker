@@ -17,3 +17,45 @@ export interface ViewerReadModelMetaRow {
 	/** Number of rows written to `viewer_pages` during this build. */
 	source_row_count: number;
 }
+
+/**
+ * Minimal row shape `computePageFacetBuckets` needs from each `pages` row to
+ * tally dynamic Pages-list filter enum candidates (status / lang /
+ * is_external) per content-type category. A structural subset of
+ * `build-viewer-read-model.ts`'s private `PagesSourceRow` — kept separate so
+ * the facet tally logic doesn't need to import the whole build module.
+ */
+export interface FacetSourceRow {
+	/** HTTP status code, or `null` for not-yet-classified/errored rows. */
+	status: number | null;
+	/** Raw `Content-Type` response header value, or `null`. */
+	contentType: string | null;
+	/**
+	 * `1`/`0` when known, `null` on legacy rows written before this column
+	 * was backfilled.
+	 */
+	isExternal: number | null;
+	/** `<html lang>` tag value, or `null`/`''` when absent. */
+	lang: string | null;
+}
+
+/**
+ * One row to insert into `viewer_count_buckets` for a precomputed Pages-list
+ * facet value — see `computePageFacetBuckets`.
+ */
+export interface FacetBucketRow {
+	/** Always `'pages'` for Pages-list facets. */
+	scope: 'pages';
+	/**
+	 * `facet:<dimension>:content_category=<category>` where `dimension` is
+	 * `'status'` / `'lang'` / `'is_external'` and `category` is either a real
+	 * {@link ContentTypeCategory} or the literal `'default'` (the `'html'` ∪
+	 * `'unknown'` view `listViewerPages` resolves to when its
+	 * `contentTypeCategory` option is omitted).
+	 */
+	key: string;
+	/** The stringified facet value (`status` code, `lang` tag, or `'0'`/`'1'`). */
+	value: string;
+	/** Number of `viewer_pages` rows in this build carrying `value` for this key. */
+	count: number;
+}

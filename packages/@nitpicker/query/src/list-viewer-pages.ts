@@ -1,4 +1,8 @@
-import type { CursorPaginatedPageList, ListViewerPagesOptions } from './types.js';
+import type {
+	CursorPaginatedPageList,
+	ListViewerPagesOptions,
+	PageListFacets,
+} from './types.js';
 import type {
 	ViewerPagesKeysetRow,
 	ViewerPagesSortSpec,
@@ -9,6 +13,7 @@ import type { Knex } from 'knex';
 import { applyViewerPagesFilters } from './apply-viewer-pages-filters.js';
 import { countViewerPagesTotal } from './count-viewer-pages-total.js';
 import { joinViewerPageIdsToListItems } from './join-viewer-page-ids-to-list-items.js';
+import { readViewerPageFacets } from './read-viewer-page-facets.js';
 import { buildViewerPagesFilterKey } from './viewer-pages-cursor/build-viewer-pages-filter-key.js';
 import { decodeViewerPagesCursor } from './viewer-pages-cursor/decode-viewer-pages-cursor.js';
 import { encodeViewerPagesCursor } from './viewer-pages-cursor/encode-viewer-pages-cursor.js';
@@ -95,6 +100,8 @@ async function readViewerPagesWindow(
  * @param context.sortBy - The effective sort field.
  * @param context.sortOrder - The effective sort direction.
  * @param context.total - The total matching row count.
+ * @param context.facets - Dynamic filter enum candidates — see
+ *   `readViewerPageFacets`.
  * @param context.limit - The effective page size.
  * @param context.offset - The effective `offset` to echo in the response.
  * @param context.hasMoreAfter - Whether a subsequent page exists.
@@ -110,6 +117,7 @@ async function buildCursorPaginatedResult(
 		sortBy: 'url' | 'status' | 'title';
 		sortOrder: 'asc' | 'desc';
 		total: number;
+		facets: PageListFacets;
 		limit: number;
 		offset: number;
 		hasMoreAfter: boolean;
@@ -122,6 +130,7 @@ async function buildCursorPaginatedResult(
 		sortBy,
 		sortOrder,
 		total,
+		facets,
 		limit,
 		offset,
 		hasMoreAfter,
@@ -153,7 +162,7 @@ async function buildCursorPaginatedResult(
 					values: extractSortValues(spec, firstRow),
 				})
 			: null;
-	return { items, total, offset, limit, nextCursor, prevCursor };
+	return { items, total, facets, offset, limit, nextCursor, prevCursor };
 }
 
 /**
@@ -201,7 +210,10 @@ export async function listViewerPages(
 	const spec = getViewerPagesSortSpec(sortBy, sortOrder);
 	const filterKey = buildViewerPagesFilterKey(options);
 
-	const total = await countViewerPagesTotal(knex, options);
+	const [total, facets] = await Promise.all([
+		countViewerPagesTotal(knex, options),
+		readViewerPageFacets(knex, options.contentTypeCategory),
+	]);
 
 	if (options.cursor) {
 		const decoded = decodeViewerPagesCursor(options.cursor, {
@@ -231,6 +243,7 @@ export async function listViewerPages(
 				sortBy,
 				sortOrder,
 				total,
+				facets,
 				limit,
 				offset: options.offset ?? 0,
 				hasMoreAfter: true,
@@ -254,6 +267,7 @@ export async function listViewerPages(
 			sortBy,
 			sortOrder,
 			total,
+			facets,
 			limit,
 			offset: options.offset ?? 0,
 			hasMoreAfter,
@@ -279,6 +293,7 @@ export async function listViewerPages(
 		sortBy,
 		sortOrder,
 		total,
+		facets,
 		limit,
 		offset,
 		hasMoreAfter,
