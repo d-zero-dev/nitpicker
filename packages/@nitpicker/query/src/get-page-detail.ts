@@ -122,11 +122,22 @@ export async function getPageDetail(
 	// `http`/`https` pair (#71). `redirectDestId` is pre-flattened to the final
 	// destination, so `COALESCE(target.redirectDestId, target.id)` is a single hop
 	// (same semantics as crawler's `redirectTable()`).
-	const inboundRows = await knex('anchors')
-		.select('referrer.url', 'anchors.textContent')
+	//
+	// Grouped by referrer.id (not just selected distinct) so a referrer with
+	// multiple anchors to this page still yields exactly one row — this must stay
+	// in lockstep with listExternalLinks's `COUNT(DISTINCT source.id)`, otherwise
+	// the External Links table's referrer count and this page's inbound-link list
+	// disagree on how many pages actually link here.
+	const inboundRows = (await knex('anchors')
+		.select('referrer.url')
+		.min('anchors.textContent as textContent')
 		.join('pages as referrer', 'anchors.pageId', '=', 'referrer.id')
 		.join('pages as target', 'anchors.hrefId', '=', 'target.id')
-		.whereRaw('coalesce("target"."redirectDestId", "target"."id") = ?', [page.id]);
+		.whereRaw('coalesce("target"."redirectDestId", "target"."id") = ?', [page.id])
+		.groupBy('referrer.id', 'referrer.url')) as {
+		url: string;
+		textContent: string | null;
+	}[];
 
 	const inboundLinks = inboundRows.map(
 		(row: { url: string; textContent: string | null }) => ({
