@@ -201,10 +201,10 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			externalLinks: {
 				title: 'External Links',
 				description:
-					'Anchors leaving the in-scope hostname. Anchor destinations are redirect-resolved to their canonical target.',
-				colSource: 'Source',
+					'Unique external destinations reached from the site, deduplicated by canonical (redirect-resolved) target. Each row is one destination with a referrer count — click the destination to see the full list of referring internal pages on its Page Detail view.',
 				colDest: 'Destination',
 				colStatus: 'Status',
+				colReferrers: 'Referrers',
 			},
 			violations: {
 				title: 'Violations',
@@ -489,10 +489,10 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			externalLinks: {
 				title: '外部リンク',
 				description:
-					'クロール対象外のホスト名へ向かうリンク。リダイレクト先は canonical destination に解決されます。',
-				colSource: 'リンク元',
+					'サイトから到達する外部リンク先を、正規化後(リダイレクト解決後)の宛先ごとに重複排除して1行にまとめています。各行は宛先と参照元カウントを表示し、宛先をクリックするとページ詳細ビューで参照元の内部ページ一覧を確認できます。',
 				colDest: 'リンク先',
 				colStatus: 'ステータス',
+				colReferrers: '参照元数',
 			},
 			violations: {
 				title: '違反',

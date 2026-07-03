@@ -69,6 +69,38 @@ test.describe('Nitpicker Viewer', () => {
 		await expect(page.locator('.view-header .view-description')).toBeVisible();
 	});
 
+	test('外部リンクは宛先ごとに1行へ集約され、参照元数が正しく表示される', async ({
+		page,
+	}) => {
+		await page.goto('/external-links');
+		await expect(
+			page.getByRole('heading', { name: 'External Links', level: 1 }),
+		).toBeVisible();
+		// The fixture has two internal pages linking to the same external
+		// destination — this must render as ONE row, not two.
+		await expect(page.locator('.pt-row')).toHaveCount(1);
+		await expect(page.locator('.pt-row').first()).toContainText('external.example.com');
+		await expect(page.locator('.pt-row').first()).toContainText('2');
+	});
+
+	test('外部リンクの宛先をクリックすると Page Detail で参照元ページ一覧が確認できる', async ({
+		page,
+	}) => {
+		await page.goto('/external-links');
+		await page.locator('.pt-row .link-button').first().click();
+		await expect(
+			page.getByRole('heading', { name: 'Page detail', level: 1 }),
+		).toBeVisible();
+		// Two internal pages link to this external destination.
+		await expect(
+			page.getByRole('heading', { name: /Inbound links \(2\)/ }),
+		).toBeVisible();
+		// External pages are never scraped — the HTML snapshot / outbound
+		// links sections are not meaningful and must not render.
+		await expect(page.getByRole('heading', { name: /Outbound links/ })).toHaveCount(0);
+		await expect(page.getByRole('heading', { name: 'HTML snapshot' })).toHaveCount(0);
+	});
+
 	test('テーマを切り替えられる', async ({ page }) => {
 		await page.goto('/');
 		const html = page.locator('html');
