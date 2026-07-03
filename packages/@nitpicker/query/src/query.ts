@@ -21,6 +21,7 @@ export { dropViewerReadModel } from './viewer-read-model/drop-viewer-read-model.
 export { ensureViewerReadModel } from './viewer-read-model/ensure-viewer-read-model.js';
 export { findDuplicates } from './find-duplicates.js';
 export { findMismatches } from './find-mismatches.js';
+export { getDirectoryTree } from './get-directory-tree.js';
 export { getErrorKinds } from './get-error-kinds.js';
 export { getLinkGraph } from './get-link-graph.js';
 export { getPageDetail } from './get-page-detail.js';
@@ -36,6 +37,8 @@ export { getViewerReadModelVersion } from './viewer-read-model/get-viewer-read-m
 export { getViolations } from './get-violations.js';
 export { hasViewerReadModel } from './viewer-read-model/has-viewer-read-model.js';
 export { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
+export { listDirectoryChildren } from './list-directory-children.js';
+export { listDirectoryPages } from './list-directory-pages.js';
 export { listImages } from './list-images.js';
 export { listInventoryRuns } from './list-inventory-runs.js';
 export { listIsolatedClusters } from './list-isolated-clusters.js';

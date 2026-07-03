@@ -59,3 +59,101 @@ export interface FacetBucketRow {
 	/** Number of `viewer_pages` rows in this build carrying `value` for this key. */
 	count: number;
 }
+
+/**
+ * Minimal shape `buildDirectoryTreeRows` needs from each listable `pages`
+ * row. A structural subset of `build-viewer-read-model.ts`'s private
+ * `PagesSourceRow` — the same `sourceRows` array already loaded for
+ * `viewer_pages` is reused here, so no second `pages` SELECT is issued.
+ */
+export interface DirectoryTreeSourceRow {
+	/** `pages.id` — becomes `viewer_directory_pages.page_id`. */
+	id: number;
+	/** The page's absolute URL. */
+	url: string;
+	/**
+	 * `1`/`0` when known, `null` on legacy rows written before this column
+	 * was backfilled — normalised the same way `toViewerPageInsertRow` does
+	 * (`null` counts as internal).
+	 */
+	isExternal: number | null;
+}
+
+/**
+ * One row to insert into `viewer_directory_nodes` — a single directory (or
+ * the depth-0 root standing for a host's `/`) within one host's directory
+ * tree, produced by `buildDirectoryTreeRows`.
+ */
+export interface DirectoryNodeInsertRow {
+	/**
+	 * Sequential integer id assigned by `buildDirectoryTreeRows` itself, in
+	 * tree-build order, and inserted verbatim as `viewer_directory_nodes`'s
+	 * `INTEGER PRIMARY KEY` — SQLite accepts an explicit primary-key value on
+	 * insert exactly like a `rowid`, so `parent_node_id` links can reference
+	 * sibling rows in this same insert batch without a round-trip.
+	 */
+	node_id: number;
+	/** The parent directory's `node_id`, or `null` for the depth-0 root node of a host's tree. */
+	parent_node_id: number | null;
+	/** The page URL's `host` (hostname:port) that this tree belongs to. */
+	root_key: string;
+	/** `0` for the root (path `/`), incrementing by 1 per path segment. */
+	depth: number;
+	/** This directory's own segment name (e.g. `"2024"` for `/blog/2024/`), or `''` for the depth-0 root. */
+	name: string;
+	/** This directory's full path from the root, always starting and ending with `/` (e.g. `/blog/2024/`, or `/` for the root). */
+	path: string;
+	/**
+	 * Sort key for `name` — currently `name` verbatim. Kept as a separate
+	 * column (rather than sorting on `name` directly) for the same reason
+	 * `viewer_pages.url_sort_key`/`title_sort_key` are separate from their
+	 * base columns: it is the index target, and future normalisation (e.g.
+	 * case-folding) must not require an index rename.
+	 */
+	name_sort_key: string;
+	/** Sort key for `path` — currently `path` verbatim, see {@link DirectoryNodeInsertRow.name_sort_key}. */
+	path_sort_key: string;
+	/** Count of immediate child directory nodes (not pages) under this node. */
+	direct_child_dir_count: number;
+	/** Count of pages attached directly to this node (its own boundary/index pages). */
+	direct_page_count: number;
+	/** Total pages in this node's entire subtree, including its own `direct_page_count`. */
+	descendant_page_count: number;
+	/** Subset of `descendant_page_count` where the page's `isExternal` is falsy. */
+	internal_descendant_page_count: number;
+	/** Subset of `descendant_page_count` where the page's `isExternal` is truthy. */
+	external_descendant_page_count: number;
+	/**
+	 * `1` iff `direct_child_dir_count > 0`, `0` otherwise — whether this node
+	 * has child DIRECTORIES to expand via `/api/directory-tree/children`.
+	 * Deliberately excludes `direct_page_count`: direct pages are a separate
+	 * `/api/directory-tree/pages` panel, not additional tree rows, and every
+	 * node this builder creates already has at least one page or child
+	 * directory, so including `direct_page_count` here would make this
+	 * always `1` (see `propagateDescendantCounts`'s docs in
+	 * `build-directory-tree-rows.ts`).
+	 */
+	has_children: number;
+}
+
+/**
+ * One row to insert into `viewer_directory_pages` — one page attached
+ * directly to a directory node (never a descendant further down the tree),
+ * produced by `buildDirectoryTreeRows`.
+ */
+export interface DirectoryPageInsertRow {
+	/** The owning directory's `node_id` — a {@link DirectoryNodeInsertRow.node_id}. */
+	node_id: number;
+	/** The write-model `pages.id` this row represents. */
+	page_id: number;
+	/** Sort key for this page's URL within its directory — currently the page's full URL verbatim. */
+	page_url_sort_key: string;
+}
+
+/** Return shape of `buildDirectoryTreeRows`. */
+export interface DirectoryTreeBuildResult {
+	/** Every directory node across every eligible host's tree. */
+	nodes: DirectoryNodeInsertRow[];
+	/** Every direct page-to-node membership row. */
+	pages: DirectoryPageInsertRow[];
+}

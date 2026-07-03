@@ -1533,3 +1533,103 @@ export interface EnsureViewerReadModelOpportunisticallyOptions extends BuildView
 	 */
 	onWarn?: (message: string) => void;
 }
+
+/**
+ * One flat node in a directory tree, as returned by {@link getDirectoryTree}
+ * and {@link listDirectoryChildren}. `parentNodeId` is the only structural
+ * link — callers reconstruct the nested UI tree client-side from this flat
+ * list, since neither endpoint recurses server-side.
+ */
+export interface DirectoryTreeNode {
+	/** This node's unique id — stable across `getDirectoryTree`/`listDirectoryChildren` calls. */
+	nodeId: number;
+	/** The parent directory's `nodeId`, or `null` for a host's root node. */
+	parentNodeId: number | null;
+	/** This node's own path segment (e.g. `"2024"` for `/blog/2024/`), or `''` for a host's root node. */
+	name: string;
+	/** This node's full path from the root (e.g. `/blog/2024/`, or `/` for a root node). */
+	path: string;
+	/** This node's depth — a host's root node is `0`, incrementing by 1 per path segment. */
+	depth: number;
+	/** Count of immediate child directory nodes (not pages) under this node. */
+	directChildDirCount: number;
+	/** Count of pages attached directly to this node. */
+	directPageCount: number;
+	/**
+	 * `directChildDirCount + directPageCount`. The two addends are
+	 * precomputed at read-model build time; the sum itself is a trivial O(1)
+	 * SQL addition over those two already-fetched columns at query time —
+	 * never a `COUNT`/`GROUP BY` scan over `viewer_directory_nodes` or
+	 * `viewer_directory_pages`.
+	 */
+	childCount: number;
+	/** Total pages in this node's entire subtree, including its own `directPageCount`. */
+	descendantPageCount: number;
+	/** Subset of `descendantPageCount` that is internal (in-scope). */
+	internalDescendantPageCount: number;
+	/** Subset of `descendantPageCount` that is external (out-of-scope). */
+	externalDescendantPageCount: number;
+	/**
+	 * `true` iff `directChildDirCount > 0` — whether this node has child
+	 * directories to expand via `listDirectoryChildren`/
+	 * `/api/directory-tree/children`. Deliberately excludes `directPageCount`
+	 * — direct pages surface via the separate `/api/directory-tree/pages`
+	 * panel, not as additional expandable tree rows.
+	 */
+	hasChildren: boolean;
+}
+
+/** One host's worth of initial (depth ≤ 3) directory-tree nodes — see {@link getDirectoryTree}. */
+export interface DirectoryTreeRoot {
+	/** The host (hostname:port) this tree belongs to. */
+	rootKey: string;
+	/** This root's flat, depth ≤ 3 node list, ordered by path. */
+	nodes: DirectoryTreeNode[];
+}
+
+/** Options for {@link listDirectoryChildren}. */
+export interface ListDirectoryChildrenOptions {
+	/** The parent node whose direct child directories to list. */
+	nodeId: number;
+	/** Defensive cap on returned rows. Defaults to 1000 — not a pagination contract, a directory realistically never has more child directories than this. */
+	limit?: number;
+}
+
+/** One directory-tree page-list entry, joined against `viewer_pages` for display — see {@link listDirectoryPages}. */
+export interface DirectoryPageListItem {
+	/** The page's id. */
+	pageId: number;
+	/** The page's absolute URL. */
+	url: string;
+	/** The page's `<title>` text, or `null` when absent. */
+	title: string | null;
+	/** HTTP status code, or `null` for not-yet-classified/errored rows. */
+	status: number | null;
+	/** The page's {@link ContentTypeCategory}. */
+	contentCategory: string;
+}
+
+/** Options for {@link listDirectoryPages}. */
+export interface ListDirectoryPagesOptions {
+	/** The directory node whose direct pages to list (never its descendants). */
+	nodeId: number;
+	/**
+	 * Opaque cursor from a previous {@link CursorPaginatedDirectoryPageList}'s
+	 * `nextCursor`. Omit for the first page.
+	 */
+	cursor?: string;
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+}
+
+/**
+ * Cursor-paginated result of {@link listDirectoryPages}. Forward-only (no
+ * `prevCursor`) — unlike {@link CursorPaginatedPageList}, this endpoint has
+ * no virtual-scroll-upward requirement to support.
+ */
+export interface CursorPaginatedDirectoryPageList {
+	/** The page-list items for this page. */
+	items: DirectoryPageListItem[];
+	/** Opaque cursor to fetch the next page, or `null` when this is the last page. */
+	nextCursor: string | null;
+}

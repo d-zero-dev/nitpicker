@@ -30,7 +30,7 @@ describe('createViewerReadModelTables', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('creates all 5 tables and the named viewer_pages indexes', async () => {
+	it('creates all 7 tables and the named viewer_pages indexes', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 
@@ -40,6 +40,8 @@ describe('createViewerReadModelTables', () => {
 			'viewer_query_profiles',
 			'viewer_count_buckets',
 			'viewer_page_anchors',
+			'viewer_directory_nodes',
+			'viewer_directory_pages',
 		]) {
 			expect(await knex.schema.hasTable(table)).toBe(true);
 		}
@@ -84,5 +86,40 @@ describe('createViewerReadModelTables', () => {
 			.select('profile_key')
 			.orderBy('profile_key');
 		expect(rows.map((r) => r.profile_key)).toEqual(['a', 'b']);
+	});
+
+	it('viewer_directory_nodes enforces a unique (root_key, path) constraint', async () => {
+		const knex = archive.getKnex();
+		const baseNode = {
+			parent_node_id: null,
+			root_key: 'example.com',
+			depth: 0,
+			name: '',
+			path: '/',
+			name_sort_key: '',
+			path_sort_key: '/',
+			direct_child_dir_count: 0,
+			direct_page_count: 0,
+			descendant_page_count: 0,
+			internal_descendant_page_count: 0,
+			external_descendant_page_count: 0,
+			has_children: 0,
+		};
+		await knex('viewer_directory_nodes').insert({ node_id: 1, ...baseNode });
+		await expect(
+			knex('viewer_directory_nodes').insert({ node_id: 2, ...baseNode }),
+		).rejects.toThrow();
+	});
+
+	it('viewer_directory_pages enforces a composite (node_id, page_id) key, not a single-column rowid', async () => {
+		const knex = archive.getKnex();
+		await knex('viewer_directory_pages').insert([
+			{ node_id: 1, page_id: 1, page_url_sort_key: 'https://example.com/a' },
+			{ node_id: 1, page_id: 2, page_url_sort_key: 'https://example.com/b' },
+		]);
+		const rows = await knex('viewer_directory_pages')
+			.select('page_id')
+			.orderBy('page_id');
+		expect(rows.map((r) => r.page_id)).toEqual([1, 2]);
 	});
 });

@@ -702,4 +702,357 @@ describe('buildViewerReadModel', () => {
 			expect(meta).toMatchObject({ source_row_count: 0 });
 		});
 	});
+
+	describe('directory tree population', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_directory_tree__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'directory-tree-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			// Root index page — attaches directly to the depth-0 root node.
+			await archive.setPage({
+				url: parseUrl('https://example.com/')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// No trailing slash: attaches to directory /blog/2024/.
+			await archive.setPage({
+				url: parseUrl('https://example.com/blog/2024/post-1')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// Trailing slash: same directory node /blog/2024/ as an index page —
+			// proves the boundary rule's second branch lands on the SAME node.
+			await archive.setPage({
+				url: parseUrl('https://example.com/blog/2024/')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// Bare directory index at /blog/ itself.
+			await archive.setPage({
+				url: parseUrl('https://example.com/blog/')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// Same host, out-of-scope subpath (isExternal: true) — must still
+			// belong to example.com's tree, counted as external.
+			await archive.setPage({
+				url: parseUrl('https://example.com/legacy/old.html')!,
+				redirectPaths: [],
+				isExternal: true,
+				isTarget: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// A different same-host subtree (simulates a second multi-root crawl
+			// origin sharing the same host, e.g. `crawl .../blog/ .../news/`) —
+			// must become a sibling of /blog/, not a separate tree.
+			await archive.setPage({
+				url: parseUrl('https://example.com/news/announcement')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// 4 levels deep — proves the build itself does not cap depth (only
+			// the /api/directory-tree endpoint caps its initial read at depth<=3).
+			await archive.setPage({
+				url: parseUrl('https://example.com/a/b/c/d/page')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// A host with ZERO internal pages — must be excluded from the
+			// directory tree entirely (no nodes, no pages), even though it
+			// remains a normal viewer_pages row.
+			await archive.setPage({
+				url: parseUrl('https://twitter.com/someaccount')!,
+				redirectPaths: [],
+				isExternal: true,
+				isTarget: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// An unparseable URL (raw insert, bypassing setPage, same technique
+			// as the "legacy rows" describe block above) — must be skipped from
+			// the directory tree (no host to group by) while remaining a normal
+			// viewer_pages row.
+			await archive.getKnex()('pages').insert({
+				url: 'not a valid url',
+				scraped: 1,
+				isTarget: 1,
+				isExternal: 0,
+			});
+
+			await buildViewerReadModel(archive);
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		/**
+		 * Fetches one `viewer_directory_nodes` row by its `path` within
+		 * `example.com`'s tree, throwing if it's missing — assertion helper
+		 * only, not exported.
+		 * @param path - The node's full path (e.g. `/blog/2024/`).
+		 * @returns The matching row.
+		 */
+		async function getNodeByPath(path: string) {
+			const row = await archive
+				.getKnex()('viewer_directory_nodes')
+				.where({ root_key: 'example.com', path })
+				.first();
+			if (!row) {
+				throw new Error(`no viewer_directory_nodes row for path ${path}`);
+			}
+			return row;
+		}
+
+		it('creates a root node (depth 0, path "/") with 4 direct child directories and 1 direct page', async () => {
+			const root = await getNodeByPath('/');
+			expect(root).toMatchObject({
+				depth: 0,
+				parent_node_id: null,
+				direct_child_dir_count: 4,
+				direct_page_count: 1,
+				has_children: 1,
+			});
+		});
+
+		it("sums the whole tree's internal/external pages onto the root's descendant counts", async () => {
+			const root = await getNodeByPath('/');
+			expect(root).toMatchObject({
+				internal_descendant_page_count: 6,
+				external_descendant_page_count: 1,
+				descendant_page_count: 7,
+			});
+		});
+
+		it('lands both the no-trailing-slash page and the trailing-slash index page on the same /blog/2024/ node', async () => {
+			const node = await getNodeByPath('/blog/2024/');
+			expect(node).toMatchObject({
+				depth: 2,
+				direct_child_dir_count: 0,
+				direct_page_count: 2,
+				internal_descendant_page_count: 2,
+				external_descendant_page_count: 0,
+				descendant_page_count: 2,
+				// No child DIRECTORIES (only 2 direct pages) — nothing to expand
+				// via listDirectoryChildren.
+				has_children: 0,
+			});
+			const pages = await archive
+				.getKnex()('viewer_directory_pages')
+				.where('node_id', node.node_id)
+				.select('page_url_sort_key');
+			expect(pages.map((p) => p.page_url_sort_key).toSorted()).toEqual(
+				[
+					'https://example.com/blog/2024/',
+					'https://example.com/blog/2024/post-1',
+				].toSorted(),
+			);
+		});
+
+		it('folds descendant counts up through /blog/ (own index page + the /blog/2024/ subtree)', async () => {
+			const node = await getNodeByPath('/blog/');
+			expect(node).toMatchObject({
+				depth: 1,
+				direct_child_dir_count: 1,
+				direct_page_count: 1,
+				internal_descendant_page_count: 3,
+				external_descendant_page_count: 0,
+				descendant_page_count: 3,
+			});
+		});
+
+		it('counts a same-host, out-of-scope page as external on its own directory node', async () => {
+			const node = await getNodeByPath('/legacy/');
+			expect(node).toMatchObject({
+				depth: 1,
+				direct_page_count: 1,
+				internal_descendant_page_count: 0,
+				external_descendant_page_count: 1,
+				descendant_page_count: 1,
+			});
+		});
+
+		it('creates a sibling /news/ node under the same root rather than a separate tree', async () => {
+			const news = await getNodeByPath('/news/');
+			const root = await getNodeByPath('/');
+			expect(news).toMatchObject({ depth: 1, parent_node_id: root.node_id });
+		});
+
+		it('creates every intermediate directory down to depth 4 with zero direct pages except the leaf', async () => {
+			const a = await getNodeByPath('/a/');
+			const ab = await getNodeByPath('/a/b/');
+			const abc = await getNodeByPath('/a/b/c/');
+			const abcd = await getNodeByPath('/a/b/c/d/');
+			expect(a).toMatchObject({ depth: 1, direct_page_count: 0, has_children: 1 });
+			expect(ab).toMatchObject({ depth: 2, direct_page_count: 0, has_children: 1 });
+			expect(abc).toMatchObject({ depth: 3, direct_page_count: 0, has_children: 1 });
+			// The leaf has a direct page but no child directories of its own.
+			expect(abcd).toMatchObject({ depth: 4, direct_page_count: 1, has_children: 0 });
+		});
+
+		it('excludes a host with zero internal pages entirely (no nodes, no pages)', async () => {
+			const knex = archive.getKnex();
+			const nodes = await knex('viewer_directory_nodes')
+				.where('root_key', 'twitter.com')
+				.select('*');
+			expect(nodes).toHaveLength(0);
+		});
+
+		it('skips a row with an unparseable URL from the directory tree without throwing', async () => {
+			const knex = archive.getKnex();
+			const pages = await knex('viewer_pages')
+				.where('url', 'not a valid url')
+				.select('*');
+			expect(pages).toHaveLength(1);
+
+			const total = await knex('viewer_directory_pages').count<{ count: string }[]>({
+				count: '*',
+			});
+			// 7 attached pages: root, blog x1, blog/2024 x2, legacy, news, a/b/c/d —
+			// the unparseable-URL row and the twitter.com row contribute none.
+			expect(Number(total[0]?.count)).toBe(7);
+		});
+
+		it('rebuilds the directory tree idempotently — a second build leaves the same node/page counts and root counts', async () => {
+			const knex = archive.getKnex();
+			const nodesBefore = await knex('viewer_directory_nodes').count<{ count: string }[]>(
+				{
+					count: '*',
+				},
+			);
+			const pagesBefore = await knex('viewer_directory_pages').count<{ count: string }[]>(
+				{
+					count: '*',
+				},
+			);
+			const rootBefore = await getNodeByPath('/');
+
+			await buildViewerReadModel(archive);
+
+			const nodesAfter = await knex('viewer_directory_nodes').count<{ count: string }[]>({
+				count: '*',
+			});
+			const pagesAfter = await knex('viewer_directory_pages').count<{ count: string }[]>({
+				count: '*',
+			});
+			const rootAfter = await getNodeByPath('/');
+
+			expect(nodesAfter[0]?.count).toBe(nodesBefore[0]?.count);
+			expect(pagesAfter[0]?.count).toBe(pagesBefore[0]?.count);
+			expect(rootAfter).toMatchObject({
+				direct_child_dir_count: rootBefore.direct_child_dir_count,
+				direct_page_count: rootBefore.direct_page_count,
+				descendant_page_count: rootBefore.descendant_page_count,
+			});
+			// twitter.com must still be excluded after a rebuild, not accumulate
+			// duplicate/orphaned rows from the dropped-and-recreated tables.
+			expect(
+				await knex('viewer_directory_nodes').where('root_key', 'twitter.com').select('*'),
+			).toEqual([]);
+		});
+	});
 });
