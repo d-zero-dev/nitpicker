@@ -24,13 +24,12 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			pages: 'Pages',
 			resources: 'Resources',
 			images: 'Images',
-			links: 'Links',
+			brokenLinks: 'Broken Links',
+			externalLinks: 'External Links',
 			violations: 'Violations',
 			duplicates: 'Duplicates',
 			mismatches: 'Mismatches',
-			headers: 'Headers',
 			graph: 'Graph',
-			pageLinks: 'Page Links',
 			errors: 'Errors',
 			isolatedPages: 'Isolated Pages',
 			isolatedClusters: 'Isolated Clusters',
@@ -149,6 +148,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				title: 'Page detail',
 				description:
 					'Full metadata, inbound/outbound links, redirects, and the stored HTML snapshot for one page.',
+				skipReason: 'Skipped (reason)',
 				status: 'Status',
 				contentType: 'Content-Type',
 				title2: 'Title',
@@ -190,17 +190,21 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				filterMissingDimensions: 'Missing dimensions',
 				filterUrlPattern: 'URL pattern',
 			},
-			links: {
-				title: 'Links',
+			brokenLinks: {
+				title: 'Broken Links',
 				description:
-					'Link analysis: broken links (4xx/5xx destinations) and external links. Anchor destinations are redirect-resolved to their canonical target. For orphan pages use the Isolated Pages / Isolated Clusters views.',
-				broken: 'broken',
-				external: 'external',
+					'Anchors whose canonical destination resolves to HTTP 404 Not Found. 403 (access denied), 5xx (server error), and destinations excluded from crawling are not treated as broken. Anchor destinations are redirect-resolved to their canonical target. For orphan pages use the Isolated Pages / Isolated Clusters views.',
 				colSource: 'Source',
 				colDest: 'Destination',
 				colStatus: 'Status',
-				colUrl: 'URL',
-				colTitle: 'Title',
+			},
+			externalLinks: {
+				title: 'External Links',
+				description:
+					'Unique external destinations reached from the site, deduplicated by canonical (redirect-resolved) target. Each row is one destination with a referrer count — click the destination to see the full list of referring internal pages on its Page Detail view.',
+				colDest: 'Destination',
+				colStatus: 'Status',
+				colReferrers: 'Referrers',
 			},
 			violations: {
 				title: 'Violations',
@@ -229,13 +233,6 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				expected: 'Expected',
 				empty: 'No mismatches found.',
 			},
-			headers: {
-				title: 'Security headers',
-				description:
-					'Presence of key security response headers (CSP, X-Frame-Options, X-Content-Type-Options, HSTS) per page.',
-				colUrl: 'URL',
-				filterMissingOnly: 'Missing only',
-			},
 			graph: {
 				title: 'Network Graph',
 				description:
@@ -244,22 +241,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				truncated:
 					'Showing the top {nodes} pages by in-degree — larger graphs are capped so the JSON response fits in V8 string limits and the layout stays usable. Pass `?limit=0` in the URL to opt out.',
 				ariaLabel:
-					'Network graph of internal pages (visual representation). The same link data is available as an accessible table on the Page Links view.',
-			},
-			pageLinks: {
-				title: 'Page Links',
-				description:
-					'Per-page network info — one row per page: status, redirects, incoming links, and response headers (mirrors the report Links sheet).',
-				colUrl: 'URL',
-				colTitle: 'Title',
-				colStatus: 'Status',
-				colStatusText: 'Status Text',
-				colType: 'Content Type',
-				colRedirectFrom: 'Redirect From',
-				colReferrers: 'Referrers',
-				colHeaders: 'Headers',
-				colRemarks: 'Remarks',
-				filterUrlPattern: 'URL pattern (%foo%)',
+					'Network graph of internal pages (visual representation). For an accessible, tabular view of a specific page’s inbound and outbound links, open that page from the Pages view and see its Page Detail.',
 			},
 			errors: {
 				title: 'Errors',
@@ -330,13 +312,12 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			pages: 'ページ',
 			resources: 'リソース',
 			images: '画像',
-			links: 'リンク',
+			brokenLinks: 'リンク切れ',
+			externalLinks: '外部リンク',
 			violations: '違反',
 			duplicates: '重複',
 			mismatches: '不一致',
-			headers: 'ヘッダー',
 			graph: 'グラフ',
-			pageLinks: 'ページリンク',
 			errors: 'エラー',
 			isolatedPages: '孤立ページ',
 			isolatedClusters: '孤立集合',
@@ -455,6 +436,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				title: 'ページ詳細',
 				description:
 					'1 ページの全メタデータ、内部・外部リンク、リダイレクト、保存された HTML スナップショットを表示します。',
+				skipReason: '除外理由',
 				status: 'ステータス',
 				contentType: 'Content-Type',
 				title2: 'タイトル',
@@ -496,17 +478,21 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				filterMissingDimensions: '寸法欠損',
 				filterUrlPattern: 'URL パターン',
 			},
-			links: {
-				title: 'リンク',
+			brokenLinks: {
+				title: 'リンク切れ',
 				description:
-					'リンク分析：リンク切れ（4xx/5xx 先）と外部リンク。リダイレクト先は canonical destination に解決されます。孤立ページは「孤立ページ」「孤立集合」タブを参照。',
-				broken: 'リンク切れ',
-				external: '外部',
+					'リダイレクト解決後の canonical destination が HTTP 404（Not Found）を返すリンク。403（アクセス拒否）・5xx（サーバーエラー）・クロール対象外として除外されたページはリンク切れとして扱いません。孤立ページは「孤立ページ」「孤立集合」タブを参照。',
 				colSource: 'リンク元',
 				colDest: 'リンク先',
 				colStatus: 'ステータス',
-				colUrl: 'URL',
-				colTitle: 'タイトル',
+			},
+			externalLinks: {
+				title: '外部リンク',
+				description:
+					'サイトから到達する外部リンク先を、正規化後(リダイレクト解決後)の宛先ごとに重複排除して1行にまとめています。各行は宛先と参照元カウントを表示し、宛先をクリックするとページ詳細ビューで参照元の内部ページ一覧を確認できます。',
+				colDest: 'リンク先',
+				colStatus: 'ステータス',
+				colReferrers: '参照元数',
 			},
 			violations: {
 				title: '違反',
@@ -535,13 +521,6 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				expected: '期待値',
 				empty: '不一致は見つかりませんでした。',
 			},
-			headers: {
-				title: 'セキュリティヘッダー',
-				description:
-					'主要なセキュリティレスポンスヘッダー（CSP・X-Frame-Options・X-Content-Type-Options・HSTS）のページごとの有無。',
-				colUrl: 'URL',
-				filterMissingOnly: '欠損のみ',
-			},
 			graph: {
 				title: 'ネットワークグラフ',
 				description:
@@ -550,22 +529,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				truncated:
 					'被リンク数の多い上位 {nodes} 件のみ表示しています。これより大きなグラフは JSON レスポンスの V8 文字列上限とレイアウトの可読性を保つために打ち切られます。URL に `?limit=0` を付けると上限を解除できます。',
 				ariaLabel:
-					'内部ページのネットワークグラフ（視覚表現）。同じリンクデータはページリンク画面のテーブルでアクセシブルに参照できます。',
-			},
-			pageLinks: {
-				title: 'ページリンク',
-				description:
-					'ページごとのネットワーク情報。1 ページ 1 行で、ステータス・リダイレクト・被リンク・レスポンスヘッダーを表示（レポートの Links シート相当）。',
-				colUrl: 'URL',
-				colTitle: 'タイトル',
-				colStatus: 'ステータス',
-				colStatusText: 'ステータステキスト',
-				colType: 'Content Type',
-				colRedirectFrom: 'リダイレクト元',
-				colReferrers: '被リンク',
-				colHeaders: 'ヘッダー',
-				colRemarks: '備考',
-				filterUrlPattern: 'URL パターン（%foo%）',
+					'内部ページのネットワークグラフ（視覚表現）。特定ページの被リンク・発リンクを表形式でアクセシブルに確認するには、ページ一覧から該当ページを開きページ詳細を参照してください。',
 			},
 			errors: {
 				title: 'エラー',

@@ -6,17 +6,16 @@ import { NavSidebar } from './components/nav-sidebar.js';
 import { MAIN_CONTENT_ID, SkipLink } from './components/skip-link.js';
 import { TopBar } from './components/top-bar.js';
 import { I18nProvider } from './i18n/i18n-provider.js';
+import { BrokenLinksView } from './routes/broken-links-view.js';
 import { DuplicatesView } from './routes/duplicates-view.js';
 import { ErrorsView } from './routes/errors-view.js';
+import { ExternalLinksView } from './routes/external-links-view.js';
 import { GraphView } from './routes/graph-view.js';
-import { HeadersView } from './routes/headers-view.js';
 import { ImagesView } from './routes/images-view.js';
 import { IsolatedClustersView } from './routes/isolated-clusters-view.js';
 import { IsolatedPagesView } from './routes/isolated-pages-view.js';
-import { LinksView } from './routes/links-view.js';
 import { MismatchesView } from './routes/mismatches-view.js';
 import { PageDetailView } from './routes/page-detail-view.js';
-import { PageLinksView } from './routes/page-links-view.js';
 import { PagesView } from './routes/pages-view.js';
 import { ResourcesView } from './routes/resources-view.js';
 import { SummaryView } from './routes/summary-view.js';
@@ -59,13 +58,12 @@ export function App() {
 									<Route path="/pages/detail" element={<PageDetailView />} />
 									<Route path="/resources" element={<ResourcesView />} />
 									<Route path="/images" element={<ImagesView />} />
-									<Route path="/links" element={<LinksView />} />
-									<Route path="/page-links" element={<PageLinksView />} />
+									<Route path="/broken-links" element={<BrokenLinksView />} />
+									<Route path="/external-links" element={<ExternalLinksView />} />
 									<Route path="/graph" element={<GraphView />} />
 									<Route path="/violations" element={<ViolationsView />} />
 									<Route path="/duplicates" element={<DuplicatesView />} />
 									<Route path="/mismatches" element={<MismatchesView />} />
-									<Route path="/headers" element={<HeadersView />} />
 									<Route path="/errors" element={<ErrorsView />} />
 									<Route path="/isolated-pages" element={<IsolatedPagesView />} />
 									<Route path="/isolated-clusters" element={<IsolatedClustersView />} />

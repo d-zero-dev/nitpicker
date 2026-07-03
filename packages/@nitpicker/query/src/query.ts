@@ -39,12 +39,12 @@ export { hasViewerReadModel } from './viewer-read-model/has-viewer-read-model.js
 export { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
 export { listDirectoryChildren } from './list-directory-children.js';
 export { listDirectoryPages } from './list-directory-pages.js';
+export { listExternalLinks } from './list-external-links.js';
 export { listImages } from './list-images.js';
 export { listInventoryRuns } from './list-inventory-runs.js';
 export { listIsolatedClusters } from './list-isolated-clusters.js';
 export { listIsolatedPages } from './list-isolated-pages.js';
 export { listLinks } from './list-links.js';
-export { listPageLinks } from './list-page-links.js';
 export { listPages } from './list-pages.js';
 export { listPagesByJsonLdType } from './list-pages-by-jsonld-type.js';
 export { listPagesByTag } from './list-pages-by-tag.js';

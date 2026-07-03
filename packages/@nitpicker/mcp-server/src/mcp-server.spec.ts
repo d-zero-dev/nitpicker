@@ -281,6 +281,15 @@ describe('createServer', () => {
 		expect(data.items.length).toBe(2);
 	});
 
+	it('list_pages は hasCSP でフィルタする', async () => {
+		const result = await callTool(server, 'list_pages', { archiveId, hasCSP: true });
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.items).toHaveLength(1);
+		expect(data.items[0].url).toBe('https://example.com');
+		expect(data.items[0].hasCSP).toBe(true);
+	});
+
 	it('get_page_detail でページ詳細を取得する', async () => {
 		const result = await callTool(server, 'get_page_detail', {
 			archiveId,

@@ -1,9 +1,11 @@
 import type { PagesFilter } from '../types.js';
 import type { PageListFacets, PageListItem } from '@nitpicker/query';
 import type { ContentTypeCategory } from '@nitpicker/query/categories';
+import type { HeaderPresence } from '@nitpicker/query/header-presence';
 import type { CellContext, ColumnDef } from '@tanstack/react-table';
 
 import { CONTENT_TYPE_CATEGORIES } from '@nitpicker/query/categories';
+import { HEADER_PRESENCE_KEYS } from '@nitpicker/query/header-presence';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -29,6 +31,30 @@ import { useI18n } from '../i18n/use-i18n.js';
 function textCell(info: CellContext<PageListItem, unknown>) {
 	return info.getValue<string | number | null>() ?? '—';
 }
+
+/**
+ * Parses a `?hasCSP=` style URL param into a filter value.
+ * @param value - The raw URL query param value.
+ * @returns `true`/`false` for `'true'`/`'false'`, `undefined` otherwise (no filter).
+ */
+function parseHeaderFilterParam(value: string | null): boolean | undefined {
+	if (value === 'true') return true;
+	if (value === 'false') return false;
+	return undefined;
+}
+
+/**
+ * Human-readable labels for the tracked security headers, keyed by
+ * {@link HeaderPresence} field name. These are the conventional protocol
+ * names (not translated) — the same convention already used for these
+ * headers' column headers in this table.
+ */
+const HEADER_PRESENCE_LABELS: Record<keyof HeaderPresence, string> = {
+	hasCSP: 'CSP',
+	hasXFrameOptions: 'X-Frame-Options',
+	hasXContentTypeOptions: 'X-Content-Type-Options',
+	hasHSTS: 'HSTS',
+};
 
 /**
  * The page list: a filterable, sortable table backed by the user's chosen
@@ -59,6 +85,10 @@ export function PagesView() {
 		lang: params.get('lang') ?? undefined,
 		contentTypeCategory,
 		missingTitle: params.get('missingTitle') === 'true' ? true : undefined,
+		hasCSP: parseHeaderFilterParam(params.get('hasCSP')),
+		hasXFrameOptions: parseHeaderFilterParam(params.get('hasXFrameOptions')),
+		hasXContentTypeOptions: parseHeaderFilterParam(params.get('hasXContentTypeOptions')),
+		hasHSTS: parseHeaderFilterParam(params.get('hasHSTS')),
 		sortBy: (params.get('sortBy') as PagesFilter['sortBy']) || 'url',
 		sortOrder: (params.get('sortOrder') as PagesFilter['sortOrder']) || 'asc',
 	};
@@ -167,6 +197,20 @@ export function PagesView() {
 				cell: textCell,
 			},
 			{ accessorKey: 'jsonldCount', header: '# JSON-LD', size: 80, cell: textCell },
+			{ accessorKey: 'hasCSP', header: 'CSP', size: 70, cell: boolCell },
+			{
+				accessorKey: 'hasXFrameOptions',
+				header: 'X-Frame-Options',
+				size: 130,
+				cell: boolCell,
+			},
+			{
+				accessorKey: 'hasXContentTypeOptions',
+				header: 'X-Content-Type-Options',
+				size: 170,
+				cell: boolCell,
+			},
+			{ accessorKey: 'hasHSTS', header: 'HSTS', size: 70, cell: boolCell },
 		];
 	}, [navigate, t]);
 	const columnControls = useMemo(() => {
@@ -271,12 +315,31 @@ export function PagesView() {
 				},
 			],
 		);
+		for (const key of HEADER_PRESENCE_KEYS) {
+			addSort(controls, { params, updateMany }, key, key);
+			addRadioFilter(
+				controls,
+				{ params, updateMany },
+				key,
+				key,
+				HEADER_PRESENCE_LABELS[key],
+				[
+					{ value: '', label: t('common.all'), checked: filter[key] == null },
+					{ value: 'true', label: t('common.yes'), checked: filter[key] === true },
+					{ value: 'false', label: t('common.none'), checked: filter[key] === false },
+				],
+			);
+		}
 		return controls;
 	}, [
 		contentTypeCategory,
 		facets?.langs,
 		facets?.statuses,
 		facets?.types,
+		filter.hasCSP,
+		filter.hasHSTS,
+		filter.hasXContentTypeOptions,
+		filter.hasXFrameOptions,
 		filter.lang,
 		filter.missingTitle,
 		params,

@@ -44,6 +44,10 @@ function makeRow(overrides: Partial<PageListRow> = {}): PageListRow {
 		tags_providers_csv: null,
 		firstCrawledAt: null,
 		lastCrawledAt: null,
+		hasCSP: 0,
+		hasXFrameOptions: 0,
+		hasXContentTypeOptions: 0,
+		hasHSTS: 0,
 		...overrides,
 	};
 }
@@ -86,10 +90,28 @@ describe('mapPageRowToListItem', () => {
 		expect(out.hasDescription).toBe(false);
 	});
 
-	it('PAGE_LIST_COLUMNS matches the row interface keys', () => {
+	it('PAGE_LIST_COLUMNS plus the SQL-computed header columns match the row interface keys', () => {
+		// hasCSP/hasXFrameOptions/hasXContentTypeOptions/hasHSTS are NOT plain
+		// `pages` columns — they're computed via `buildHeaderPresenceSelects`
+		// (SQL CASE WHEN expressions aliased to these names), so they're absent
+		// from PAGE_LIST_COLUMNS but still present on the row shape.
 		const row = makeRow();
 		const rowKeys = Object.keys(row).toSorted();
-		const cols = [...PAGE_LIST_COLUMNS].toSorted();
+		const cols = [
+			...PAGE_LIST_COLUMNS,
+			'hasCSP',
+			'hasXFrameOptions',
+			'hasXContentTypeOptions',
+			'hasHSTS',
+		].toSorted();
 		expect(cols).toEqual(rowKeys);
+	});
+
+	it('converts SQL-computed header presence columns to booleans', () => {
+		const out = mapPageRowToListItem(makeRow({ hasCSP: 1, hasHSTS: 1 }));
+		expect(out.hasCSP).toBe(true);
+		expect(out.hasXFrameOptions).toBe(false);
+		expect(out.hasXContentTypeOptions).toBe(false);
+		expect(out.hasHSTS).toBe(true);
 	});
 });
