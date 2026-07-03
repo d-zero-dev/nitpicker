@@ -151,6 +151,8 @@ export async function getPageDetail(
 		contentType: page.contentType,
 		contentLength: page.contentLength,
 		isExternal: !!page.isExternal,
+		isSkipped: !!page.isSkipped,
+		skipReason: page.skipReason,
 		title: page.title,
 		description: page.description,
 		keywords: page.keywords,

@@ -460,6 +460,14 @@ export interface ListPagesOptions {
 	missingDescription?: boolean;
 	/** Filter to pages with noindex set. */
 	noindex?: boolean;
+	/** Filter by Content-Security-Policy header presence. */
+	hasCSP?: boolean;
+	/** Filter by X-Frame-Options header presence. */
+	hasXFrameOptions?: boolean;
+	/** Filter by X-Content-Type-Options header presence. */
+	hasXContentTypeOptions?: boolean;
+	/** Filter by Strict-Transport-Security header presence. */
+	hasHSTS?: boolean;
 	/** URL pattern to search (SQL LIKE pattern). */
 	urlPattern?: string;
 	/** Directory path prefix to filter by. */
@@ -497,7 +505,11 @@ export interface ListPagesOptions {
 		| 'robotsRaw'
 		| 'tagCount'
 		| 'tagsProvidersCsv'
-		| 'jsonldCount';
+		| 'jsonldCount'
+		| 'hasCSP'
+		| 'hasXFrameOptions'
+		| 'hasXContentTypeOptions'
+		| 'hasHSTS';
 	/** Sort direction. */
 	sortOrder?: SortOrder;
 	/** Maximum number of results to return. Defaults to 100. */
@@ -547,6 +559,10 @@ export interface PageListRow {
 	tags_providers_csv: string | null;
 	firstCrawledAt: number | null;
 	lastCrawledAt: number | null;
+	hasCSP: 0 | 1;
+	hasXFrameOptions: 0 | 1;
+	hasXContentTypeOptions: 0 | 1;
+	hasHSTS: 0 | 1;
 }
 
 /**
@@ -629,6 +645,14 @@ export interface PageListItem {
 	firstCrawledAt: number | null;
 	/** Most-recent-success UNIX ms (within-archive). */
 	lastCrawledAt: number | null;
+	/** Whether Content-Security-Policy header is present. */
+	hasCSP: boolean;
+	/** Whether X-Frame-Options header is present. */
+	hasXFrameOptions: boolean;
+	/** Whether X-Content-Type-Options header is present. */
+	hasXContentTypeOptions: boolean;
+	/** Whether Strict-Transport-Security header is present. */
+	hasHSTS: boolean;
 }
 
 /**
@@ -679,6 +703,15 @@ export interface PageDetail {
 	contentLength: number | null;
 	/** Whether the page is external. */
 	isExternal: boolean;
+	/**
+	 * Whether the crawler skipped this URL (robots.txt / `excludeUrls` /
+	 * `excludeKeywords`) instead of fetching it. When `true`, the metadata
+	 * fields above are unpopulated — {@link PageDetail.skipReason} is the
+	 * only field describing this row.
+	 */
+	isSkipped: boolean;
+	/** Why the crawler skipped this URL, or `null` if it was not skipped. */
+	skipReason: string | null;
 
 	/** The page title. */
 	title: string | null;
@@ -1205,6 +1238,22 @@ export interface MismatchEntry {
 }
 
 /**
+ * Presence flags for the four security-related HTTP response headers tracked
+ * by {@link checkHeaders} / `listPages`, computed in SQL via
+ * `headerPresenceExpression`.
+ */
+export interface HeaderPresence {
+	/** Whether Content-Security-Policy header is present. */
+	hasCSP: boolean;
+	/** Whether X-Frame-Options header is present. */
+	hasXFrameOptions: boolean;
+	/** Whether X-Content-Type-Options header is present. */
+	hasXContentTypeOptions: boolean;
+	/** Whether Strict-Transport-Security header is present. */
+	hasHSTS: boolean;
+}
+
+/**
  * Security header check result for a page.
  */
 export interface HeaderCheckEntry {
@@ -1279,91 +1328,6 @@ export interface GetLinkGraphOptions {
 	 * Omit for all internal pages.
 	 */
 	limit?: number;
-}
-
-/**
- * A page-level network entry — one row per page — mirroring the
- * google-sheets "Links" sheet: status, redirects, referrer count, and headers.
- */
-export interface PageLinkEntry {
-	/** The page URL. */
-	url: string;
-	/** The page title. */
-	title: string | null;
-	/** HTTP status code. */
-	status: number | null;
-	/** HTTP status text. */
-	statusText: string | null;
-	/** Content type. */
-	contentType: string | null;
-	/** Whether the page is external. */
-	isExternal: boolean;
-	/** Number of pages that redirect to this page. */
-	redirectFromCount: number;
-	/** Number of pages linking to this page (incoming links). */
-	referrerCount: number;
-	/** Whether the page has stored response headers. */
-	hasResponseHeaders: boolean;
-	/** Skip reason if the page was skipped during crawling. */
-	skipReason: string | null;
-}
-
-/**
- * Paginated result for the page-level link/network list.
- */
-export interface PaginatedPageLinkList {
-	/** Page link entries. */
-	items: PageLinkEntry[];
-	/** Total matching pages. */
-	total: number;
-	/** Current offset. */
-	offset: number;
-	/** Current limit. */
-	limit: number;
-}
-
-/**
- * Filter and pagination options for {@link PageLinkEntry} listing.
- */
-export interface ListPageLinksOptions {
-	/** Filter by external (true) or internal (false). */
-	isExternal?: boolean;
-	/** URL pattern to search (SQL LIKE pattern). */
-	urlPattern?: string;
-	/** Filter by HTTP status. */
-	status?: number;
-	/** Filter by content type prefix. */
-	contentType?: string;
-	/** Filter to rows with or without response headers. */
-	hasResponseHeaders?: boolean;
-	/** Field to sort results by. */
-	sortBy?:
-		| 'url'
-		| 'title'
-		| 'status'
-		| 'statusText'
-		| 'contentType'
-		| 'redirectFromCount'
-		| 'referrerCount'
-		| 'hasResponseHeaders'
-		| 'skipReason'
-		| 'isExternal';
-	/** Sort direction. */
-	sortOrder?: SortOrder;
-	/** Maximum number of results. */
-	limit?: number;
-	/** Number of results to skip. */
-	offset?: number;
-	/**
-	 * Pre-computed `Map<pageId, referrerCount>` built once per archive at
-	 * the consumer layer (the viewer caches it). When provided, the per-
-	 * row correlated referrer subquery is skipped and the count is filled
-	 * in from the map after fetch — turning a ~33 s query on a 10 GB
-	 * archive into a sub-second one. The CLI / MCP path omits this and
-	 * keeps the original subquery shape so they don't pay the upfront
-	 * precompute cost for a single one-shot query.
-	 */
-	precomputedReferrerCounts?: Map<number, number>;
 }
 
 /**

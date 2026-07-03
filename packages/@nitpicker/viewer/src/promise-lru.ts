@@ -32,7 +32,7 @@ export interface PromiseLru<K, V> {
  * Build a generic LRU cache of in-flight / settled Promises.
  *
  * Centralises the cache discipline that the viewer's
- * `isolated-clusters-cache` and `referrer-count-cache` both want:
+ * `isolated-clusters-cache` and `graph-cache` both want:
  *
  * - **In-flight dedup**: concurrent `getOrLoad(k, …)` calls with the
  *   same key share one underlying load.

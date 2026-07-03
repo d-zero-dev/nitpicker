@@ -43,6 +43,12 @@ export function PageDetailView() {
 			<dl className="detail-grid">
 				<dt>URL</dt>
 				<dd>{data.url}</dd>
+				{data.isSkipped && (
+					<>
+						<dt>{t('views.pageDetail.skipReason')}</dt>
+						<dd>{data.skipReason ?? '—'}</dd>
+					</>
+				)}
 				<dt>{t('views.pageDetail.status')}</dt>
 				<dd>
 					{data.status ?? '—'} {data.statusText ?? ''}

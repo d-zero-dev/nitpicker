@@ -58,9 +58,9 @@ test.describe('Nitpicker Viewer', () => {
 		await expect(
 			page.getByRole('heading', { name: 'Resources', level: 1 }),
 		).toBeVisible();
-		await page.getByRole('link', { name: 'Headers' }).click();
+		await page.getByRole('link', { name: 'Broken Links' }).click();
 		await expect(
-			page.getByRole('heading', { name: 'Security headers', level: 1 }),
+			page.getByRole('heading', { name: 'Broken Links', level: 1 }),
 		).toBeVisible();
 	});
 
@@ -97,14 +97,6 @@ test.describe('Nitpicker Viewer', () => {
 	test('フッターにアーカイブの絶対パスが表示される', async ({ page }) => {
 		await page.goto('/');
 		await expect(page.locator('.footer-path')).toContainText('.nitpicker');
-	});
-
-	test('Page Links ビューが全ページを表示する', async ({ page }) => {
-		await page.goto('/page-links');
-		await expect(
-			page.getByRole('heading', { name: 'Page Links', level: 1 }),
-		).toBeVisible();
-		await expect(page.locator('.pt-row').first()).toBeVisible();
 	});
 
 	test('Errors ビューに遷移して見出しと解説が表示される', async ({ page }) => {
@@ -256,12 +248,15 @@ test.describe('MPA ページネーション', () => {
 	}) => {
 		for (const target of [
 			{ path: '/pages', filter: 'URL pattern (%foo%)' },
-			{ path: '/page-links', filter: 'URL pattern (%foo%)' },
-			{ path: '/headers', filter: 'hasCSP' },
+			{ path: '/broken-links', filter: 'URL pattern (%foo%)' },
 		]) {
 			await page.goto(target.path);
 			await expect(page.locator('.pt-row').first()).toBeVisible();
-			await page.getByRole('button', { name: target.filter }).click();
+			// `.first()`: `/broken-links` has both a Source and a Destination
+			// column sharing the same "URL pattern (%foo%)" filter label, so
+			// the role query resolves to two buttons — either one is fine for
+			// this generic "does the popover fit in viewport" smoke check.
+			await page.getByRole('button', { name: target.filter }).first().click();
 			await expectPopoverInViewport(page);
 		}
 	});
@@ -330,10 +325,10 @@ test.describe('infinite scroll (virtual mode)', () => {
 		await expect(page.locator('.vt-meta')).toContainText('rows');
 	});
 
-	test('Page Links ビューが全ページを表示する', async ({ page }) => {
-		await page.goto('/page-links');
+	test('Broken Links ビューが仮想スクロールで表示される', async ({ page }) => {
+		await page.goto('/broken-links');
 		await expect(
-			page.getByRole('heading', { name: 'Page Links', level: 1 }),
+			page.getByRole('heading', { name: 'Broken Links', level: 1 }),
 		).toBeVisible();
 		await expect(page.locator('.vt-row').first()).toBeVisible();
 	});
@@ -429,8 +424,8 @@ const VIEW_PATHS = [
 	'/pages',
 	'/resources',
 	'/images',
-	'/links',
-	'/page-links',
+	'/broken-links',
+	'/external-links',
 	'/violations',
 	'/duplicates',
 	'/mismatches',

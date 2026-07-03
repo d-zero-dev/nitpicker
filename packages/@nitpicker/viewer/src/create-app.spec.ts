@@ -44,8 +44,9 @@ describe('createApp', () => {
 		});
 
 		const pages = [
-			{ url: 'https://example.com/', status: 200, title: 'Home' },
-			{ url: 'https://example.com/contact', status: 404, title: null },
+			{ url: 'https://example.com/', status: 200, title: 'Home', hasCsp: false },
+			{ url: 'https://example.com/contact', status: 404, title: null, hasCsp: false },
+			{ url: 'https://example.com/secure', status: 200, title: 'Secure', hasCsp: true },
 		];
 		for (const p of pages) {
 			await archive.setPage({
@@ -57,7 +58,9 @@ describe('createApp', () => {
 				statusText: p.status === 200 ? 'OK' : 'Not Found',
 				contentType: 'text/html',
 				contentLength: 100,
-				responseHeaders: {},
+				responseHeaders: p.hasCsp
+					? { 'Content-Security-Policy': "default-src 'self'" }
+					: {},
 				html: `<html><head><title>${p.title ?? ''}</title></head></html>`,
 				meta: {
 					title: p.title ?? '',
@@ -231,30 +234,40 @@ describe('createApp', () => {
 		expect(body.crawlerPid).toBeNull();
 	});
 
-	it('GET /api/page-links は全ページ一覧を返す', async () => {
-		const res = await app.request('/api/page-links');
-		expect(res.status).toBe(200);
-		const body = (await res.json()) as { items: unknown[]; total: number };
-		expect(Array.isArray(body.items)).toBe(true);
-		expect(body.total).toBeGreaterThanOrEqual(2);
-	});
-
-	it('GET /api/page-links は precomputed referrer-count cache を経由しても referrerCount を埋める', async () => {
-		// The viewer's referrer-count cache builds a GROUP BY map and
-		// hands it to `listPageLinks`; the SQL path collapses to a Map
-		// lookup. This assertion checks the full route → cache → query
-		// pipeline produces a numeric `referrerCount` (not undefined, not
-		// NaN, not "0 for every row because of a bigint/Number mismatch")
-		// — the exact failure mode the QA review flagged as ghost code.
-		const res = await app.request('/api/page-links');
+	it('GET /api/pages はセキュリティヘッダーの有無を各行に含める', async () => {
+		const res = await app.request('/api/pages');
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as {
-			items: Array<{ url: string; referrerCount: number }>;
+			items: Array<{
+				hasCSP: boolean;
+				hasXFrameOptions: boolean;
+				hasXContentTypeOptions: boolean;
+				hasHSTS: boolean;
+			}>;
 		};
+		expect(body.items.length).toBeGreaterThan(0);
 		for (const item of body.items) {
-			expect(typeof item.referrerCount).toBe('number');
-			expect(Number.isFinite(item.referrerCount)).toBe(true);
+			expect(typeof item.hasCSP).toBe('boolean');
+			expect(typeof item.hasXFrameOptions).toBe('boolean');
+			expect(typeof item.hasXContentTypeOptions).toBe('boolean');
+			expect(typeof item.hasHSTS).toBe('boolean');
 		}
+	});
+
+	it('GET /api/pages?hasCSP=true はヘッダーフィルタをクエリパラメータから listPages まで転送する', async () => {
+		// Regression test for a route/frontend mismatch: pages-view.tsx sends
+		// `?hasCSP=`/`hasXFrameOptions=`/etc., but registerPagesRoute's
+		// `options` literal must actually read them into ListPagesOptions —
+		// calling `listPages()` directly (as list-pages.spec.ts does) can't
+		// catch a route that silently drops the query param.
+		const res = await app.request('/api/pages?hasCSP=true');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { items: Array<{ url: string; hasCSP: boolean }> };
+		expect(body.items.length).toBeGreaterThan(0);
+		expect(body.items.every((item) => item.hasCSP)).toBe(true);
+		expect(body.items.some((item) => item.url === 'https://example.com/secure')).toBe(
+			true,
+		);
 	});
 
 	it('GET /api/isolated-pages は precomputed components 経由で動く', async () => {
