@@ -186,6 +186,7 @@ crawler/src/
 - **`findDuplicates`**: 重複タイトル・説明の検出
 - **`findMismatches`**: メタデータ不一致の検出（canonical, og:title, og:description）
 - **`getResourceReferrers`**: リソースを参照しているページの特定
+- **`getDirectoryTree`** / **`listDirectoryChildren`** / **`listDirectoryPages`**: URL パスをディレクトリツリーとして閲覧するための read-model 専用 API（`viewer_directory_nodes` / `viewer_directory_pages`）。GET 時に URL 文字列の split/prefix 集計を一切行わない（下記「設計注意」参照）
 - **`checkHeaders`**: セキュリティヘッダーチェック（CSP, X-Frame-Options, X-Content-Type-Options, HSTS）
 - **`classifyContentType`**: 生 MIME を 18 個の `ContentTypeCategory`（`html`/`pdf`/`csv`/`word`/`excel`/`powerpoint`/`image`/`css`/`javascript`/`json`/`xml`/`font`/`audio`/`video`/`archive`/`text`/`other`/`unknown`）に正規化する純関数。`getSummary` の `contentTypeDistribution` 集計と `listPages` の `contentTypeCategory` フィルタが同じカテゴリ境界を共有する単一の源泉。**カテゴリ統合**: `csv` は CSV + TSV、`word` は .doc + .docx、`excel` は .xls + .xlsx、`powerpoint` は .ppt + .pptx、`json` は JSON + YAML、`text` は .txt + .md を 1 カテゴリにまとめる（拡張子別の分散を避け、ユーザーが「文書ファイル」「データファイル」をまとめて評価できるようにする設計判断）
 - **`applyCategoryFilter`**: `ContentTypeCategory` を Knex query に適用する SQL マッチャ。後述の「Content-Type ルール表」から派生し、JS classifier の優先順位を SQL に正確に投影する
@@ -238,7 +239,7 @@ SQL マッチャ側はこの優先順位を「目的カテゴリの positive 節
 
 **構成（単一パッケージ、backend + frontend 同居）:**
 
-- **backend（`src/` → `tsc` → `lib/`）**: Hono アプリ。`start-viewer.ts`（サーバ起動 + ブラウザオープン + SIGINT graceful shutdown）、`create-app.ts`（全ルート登録 + `serveStatic` + エラーハンドラ）、`archive-context.ts`（`ArchiveManager` で 1 アーカイブを常駐保持）、`routes/register-*-route.ts`（query 関数 1:1 の 12 ルート）
+- **backend（`src/` → `tsc` → `lib/`）**: Hono アプリ。`start-viewer.ts`（サーバ起動 + ブラウザオープン + SIGINT graceful shutdown）、`create-app.ts`（全ルート登録 + `serveStatic` + エラーハンドラ）、`archive-context.ts`（`ArchiveManager` で 1 アーカイブを常駐保持）、`routes/register-*-route.ts`（query 関数 1:1 の 22 ルート）
 - **frontend（`web/` → `vite build` → `lib/public/`）**: React 19 SPA。`@tanstack/react-query` + `@tanstack/react-table` をベースに、**ページネーションモードを TopBar から切替**できる（`PagedTable` = MPA、`VirtualTable` = `@tanstack/react-virtual` 経由の仮想スクロール、`DataTable` がモードで dispatch）。BrowserRouter（History API、未マッチ GET は Hono が index.html を返す SPA フォールバック）ルーティング、`@nitpicker/query` の型を DTO として再利用。ダーク/ライトテーマ切替（`data-theme` + localStorage、`web/theme/`）、i18n（en/ja、`web/i18n/` の自前辞書 + Context）、列リサイズ（マウス + 矢印キー）、ローディングスケルトン + `aria-busy` + グローバル進捗バー、画像サムネイルプレビュー、Mismatches の赤緑文字差分（`web/utils/diff-text.ts`）を備える。アクセシビリティ（WCAG 2.1 AA）対応として、`PagedTable` / `VirtualTable` 両方への明示的 ARIA グリッドロール、スキップリンク（`web/components/skip-link.tsx`）、フォームコントロールのアクセシブルネーム、ライブリージョン、`prefers-reduced-motion`、AA コントラストを実装（README「アクセシビリティ」節 + 下記「設計注意」参照）
 
 **データフロー:**
@@ -252,7 +253,7 @@ nitpicker viewer <file>
   → SIGINT/SIGTERM: manager.closeAll() → server.close() → resolve（CLI が exit）
 ```
 
-**REST API（アーカイブは起動時固定なので archiveId 不要）:** `GET /api/summary`, `/api/pages`, `/api/pages/detail?url=`, `/api/pages/html?url=`, `/api/links?type=`, `/api/resources`, `/api/resources/referrers?resourceUrl=`, `/api/images`, `/api/violations`, `/api/duplicates`, `/api/mismatches`, `/api/headers`, `/api/graph`（内部ページのリンクグラフ、`getLinkGraph`）, `/api/page-links`（全ページの status/referrers/headers 一覧、google-sheets「Links」シート相当、`listPageLinks`）, `/api/info`（開いているアーカイブの絶対パス、フッター表示用）。クエリパラメータ → query options 変換は `query-params/to-number.ts` / `to-boolean.ts`、エラーは `sanitize-error-message.ts` で絶対パスを伏せて JSON 返却（mcp-server と同方針）。
+**REST API（アーカイブは起動時固定なので archiveId 不要）:** `GET /api/summary`, `/api/pages`, `/api/pages/detail?url=`, `/api/pages/html?url=`, `/api/links?type=`, `/api/resources`, `/api/resources/referrers?resourceUrl=`, `/api/images`, `/api/violations`, `/api/duplicates`, `/api/mismatches`, `/api/headers`, `/api/graph`（内部ページのリンクグラフ、`getLinkGraph`）, `/api/page-links`（全ページの status/referrers/headers 一覧、google-sheets「Links」シート相当、`listPageLinks`）, `/api/directory-tree`（全 root の初期 3 depth ツリー、`getDirectoryTree`）, `/api/directory-tree/children?nodeId=`（1 ノード直下の子ディレクトリ、`listDirectoryChildren`）, `/api/directory-tree/pages?nodeId=&cursor=&limit=`（1 ディレクトリ直下ページの cursor 一覧、`listDirectoryPages`）, `/api/info`（開いているアーカイブの絶対パス、フッター表示用）。クエリパラメータ → query options 変換は `query-params/to-number.ts` / `to-boolean.ts`、エラーは `sanitize-error-message.ts` で絶対パスを伏せて JSON 返却（mcp-server と同方針）。
 
 **バイナリ:** なし（CLI の `viewer` サブコマンド経由で起動）
 
@@ -325,6 +326,20 @@ nitpicker viewer <file>
 > **設計注意（`/api/pages` fast path のベンチマーク、issue #106）:** `scripts/bench-viewer-pages-read-model.mjs` が実顧客データ・実アーカイブを一切使わず、knex 直接 INSERT で `pages` 相当の合成行を作り、`buildViewerReadModel` → 実 Hono app (`createApp`) 経由の `/api/pages` HTTP round-trip、という一連を計測する（`scripts/bench-list-pages.mjs` の合成データ生成パターンを踏襲）。**40万行 synthetic archive 計測値**: read model build time 11.9s、追加 DB サイズ 260 MiB。`/api/pages` は default / `isExternal` / `contentTypeCategory` / `status` 完全一致 / `statusMin`-`statusMax` 範囲 / `missingTitle` / `missingDescription` / `noindex` / `source` / `status`・`title` ソートのいずれも **warm p50 40-70ms、p95 45-82ms** で、`docs/viewer-sql-query-plan.md` の target (20-80ms) 内〜ごく僅かに超過（1 件のみ p95 82.5ms、直後の p50 は 56ms でノイズの範囲）。
 >
 > **見つかった構造的な制約（今回は追加対応せず）**: `EXPLAIN QUERY PLAN` を見ると、全ての filter/sort 組み合わせで `USE TEMP B-TREE FOR ORDER BY` が付く。原因は default view の `content_category IN ('html', 'unknown')` — 2 値の `IN` は、たとえ最適な `vp_default` を `INDEXED BY` で強制しても（`SEARCH ... USING COVERING INDEX vp_default (is_external=? AND content_category=?)` は出るが `USE TEMP B-TREE FOR ORDER BY` は消えない）解消しない。SQLite が `IN` の各値ごとに別々の index range を辿るため、結合後の `url_sort_key` 順を保証できず明示的な merge sort が必要になる（単一値の `content_category = 'html'` に絞ると同じ `vp_default` で温存ソート自体が消えることを確認済み）。**追加 index では解決しない**種類の制約であり、40万行規模でも target 内に収まっているため本 PR では対応を見送る。将来 archive 規模がさらに増える、または default view の latency を追い込む必要が出た場合は、「default view 専用の合成カラム（`is_default_category` のような boolean）で `IN` を等価条件に落とす」または「`html` 用と `unknown` 用の 2 range scan を明示的に UNION ALL + merge する」が候補。**検索キーワード**: 「facet 空」「動的フィルタ 空」「Pages facet」「USE TEMP B-TREE FOR ORDER BY」「viewer_pages ベンチマーク」「/api/pages ベンチマーク」。
+
+> **設計注意（ディレクトリツリー read model、issue #107）:** `viewer_directory_nodes` / `viewer_directory_pages` は `viewer_pages` と同じ denormalized 生カラム方式（`url_refs`/`text_refs` 等の ref 化テーブルは issue #139 で別途未着手のため使わない）。`buildDirectoryTreeRows`（`viewer-read-model/build-directory-tree-rows.ts`）が `buildViewerReadModel` 内で `viewer_pages` と同じ `sourceRows`（二重 SELECT なし）から純粋関数としてツリー全体をメモリ上に構築し、`node_id` もこの時点で連番採番して bulk insert する（SQLite の `INTEGER PRIMARY KEY` は `rowid` 同様に明示値 insert を受け付ける）。
+>
+> **root_key はホスト単位、ただし internal ページを 1 件も持たないホストは除外する**: crawl scope は `(hostname, port, path)` トリプル（`find-scope-entry.ts`）なので、同一ホストの scope 外パスは `isExternal=1` でも同じツリーに属するのが正しく、`internal_descendant_page_count` / `external_descendant_page_count` を分けて持つ理由もここにある。一方、外部リンク先のみのホスト（twitter.com 等）を無条件にツリー化すると大規模サイトでは無意味な 1 ページツリーが大量発生するため、internal ページを 1 件も持たないホストは `viewer_directory_nodes` に一切現れない（`viewer_pages`/Pages 一覧には引き続き表示される）。
+>
+> **ディレクトリ/ページの境界は末尾スラッシュで判定する**: `pathname` が `/` で終わらない場合は最後のセグメントをページのファイル名、それ以外を親ディレクトリチェーンとする。`/` で終わる場合（またはルート）は全セグメントがディレクトリチェーンとなり、そのディレクトリ自身に index ページとして直接ページが付く。`/blog/2024/post-1` と `/blog/2024/` は同じ `/blog/2024/` ノードに着地する。
+>
+> **`has_children` は `direct_child_dir_count > 0` のみで判定し、`direct_page_count` を含めない**: `buildDirectoryTreeRows` の構築ロジック上、生成されるノードは必ず直下ページか子ディレクトリのどちらかを最低 1 つ持つため、両者の合計で判定すると理論上絶対に `false` にならない（デッドコード化する）。ツリー UI の展開矢印は `listDirectoryChildren` で取得できる子ディレクトリの有無だけを気にすればよく（直下ページは別の `/api/directory-tree/pages` パネルで表示される）、この定義であればリーフディレクトリ（ページのみ）とサブディレクトリを持つディレクトリを正しく区別できる。
+>
+> **`getDirectoryTree` は `rootKey` パラメータを取らない**: アーカイブ自身が root 情報を知っているため、呼び出し側に事前指定を要求するのは無駄という判断（複数ホストがあれば `{ roots: [...] }` で一括返却）。`listDirectoryChildren` / `listDirectoryPages` も `nodeId` が一意にツリーを特定するため `rootKey` 不要。
+>
+> **read model 未構築時は空応答（legacy フォールバックは存在しない）**: `/api/pages` の `listViewerPages` とは異なり、この機能には旧テーブルへの fallback 経路がそもそも無いため、3 関数とも `hasViewerReadModel` ではなく `isViewerReadModelCurrent` を guard に使う。バージョン不問の `hasViewerReadModel` だけを見ると、v3 以前（`viewer_directory_nodes` が存在しないスキーマ）の read model を掴んだ際に `no such table` の 500 になる。スキーマ変更を伴うため `VIEWER_READ_MODEL_SCHEMA_VERSION` を 3→4 に bump し、旧バージョンの read model は自動再ビルド対象にした。
+>
+> **`getDirectoryTree` の ORDER BY は `path_sort_key` 単独、`root_key` を含めない**: 全 root を 1 クエリで返す設計上、`root_key` の等価フィルタが存在しないため、`vdn_root_depth_path (root_key, depth, path_sort_key, node_id)` のような `root_key` 先頭 index は `depth <= 3` という range 条件との組み合わせで一切活用できず、`EXPLAIN QUERY PLAN` で実測すると `USE TEMP B-TREE FOR LAST TERM OF ORDER BY` が付く（PR #96 の `idx_pages_listfilter` column 順ミスと同型の教訓）。`path_sort_key` を先頭に置いた `vdn_path_depth (path_sort_key, depth, node_id)` に張り替え、`ORDER BY path_sort_key` のみに変更することで `SCAN ... USING INDEX vdn_path_depth`（sort 無し、`depth` は残差フィルタ）に収まることを確認済み。root_key を ORDER BY から外しても、grouping は JS 側で `Map` に振り分けるだけなので各 root 内の相対順序（`path_sort_key` 昇順）は保たれる。**検索キーワード**: 「directory-tree」「ディレクトリツリー」「has_children」「vdn_path_depth」「USE TEMP B-TREE」。
 
 ### @nitpicker/cli
 
