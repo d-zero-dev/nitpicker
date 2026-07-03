@@ -60,6 +60,9 @@
 		"typescript": "6.0.3",
 		"vitest": "4.1.9"
 	},
+	"resolutions": {
+		"google-auth-library": "10.9.0"
+	},
 	"packageManager": "yarn@4.17.0",
 	"volta": {
 		"node": "24.18.0",

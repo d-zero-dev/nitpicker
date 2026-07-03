@@ -27,7 +27,7 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@d-zero/shared": "0.22.1",
+		"@d-zero/shared": "0.22.2",
 		"@nitpicker/core": "0.12.0",
 		"@nitpicker/crawler": "0.12.0",
 		"@nitpicker/types": "0.12.0",
