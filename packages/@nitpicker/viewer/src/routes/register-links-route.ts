@@ -1,7 +1,12 @@
 import type { ArchiveContext } from '../types.js';
 import type { Hono } from 'hono';
 
-import { listExternalLinks, listLinks } from '@nitpicker/query';
+import {
+	isViewerReadModelCurrent,
+	listExternalLinks,
+	listLinks,
+	listViewerExternalLinks,
+} from '@nitpicker/query';
 
 import { toNumber } from '../query-params/to-number.js';
 
@@ -16,11 +21,22 @@ const VALID_LINK_TYPES = ['broken', 'external'] as const;
  * `/api/isolated-clusters`. `broken` stays anchor-level (one row per `<a>`
  * tag, resolved through `pages.redirectDestId` to the canonical final
  * destination unless `includeRedirectSources=true`) via `listLinks`.
- * `external` is deduplicated by canonical destination via
- * `listExternalLinks` — one row per unique destination with a
- * `referrerCount` — so its response shape and query params differ (no
- * `includeRedirectSources`, no `sourceUrl`/`isExternal`/`textContent`
- * sort keys, an added `referrerCount` sort key).
+ * `external` is deduplicated by canonical destination — one row per unique
+ * destination with a `referrerCount` — so its response shape and query
+ * params differ (no `includeRedirectSources`, no
+ * `sourceUrl`/`isExternal`/`textContent` sort keys, an added
+ * `referrerCount` sort key).
+ *
+ * `external` dispatches to one of two backends per request, the same
+ * two-layer pattern `register-pages-route.ts` uses for `/api/pages`:
+ *
+ * - `listViewerExternalLinks` (the `viewer_external_links` read-model fast
+ *   path) when the read model is built and current. Unlike `/api/pages`,
+ *   there is no filter that forces a legacy fallback: `urlPattern`/`status`
+ *   both map directly onto `viewer_external_links` columns.
+ * - `listExternalLinks` (the legacy live `anchors` JOIN + `GROUP BY` query)
+ *   otherwise — covers archives predating the read model. Both share the
+ *   same options/response shape, so callers see no difference beyond speed.
  * @param app - The Hono application.
  * @param context - The opened archive context.
  */
@@ -43,7 +59,7 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 		const sortOrder = c.req.query('sortOrder') as 'asc' | 'desc' | undefined;
 
 		if (type === 'external') {
-			const result = await listExternalLinks(accessor, {
+			const params = {
 				limit,
 				offset,
 				urlPattern,
@@ -54,7 +70,10 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 					| 'referrerCount'
 					| undefined,
 				sortOrder,
-			});
+			};
+			const result = (await isViewerReadModelCurrent(accessor))
+				? await listViewerExternalLinks(accessor, params)
+				: await listExternalLinks(accessor, params);
 			return c.json(result);
 		}
 
