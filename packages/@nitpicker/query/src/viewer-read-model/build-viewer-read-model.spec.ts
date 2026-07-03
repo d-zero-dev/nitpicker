@@ -1055,4 +1055,121 @@ describe('buildViewerReadModel', () => {
 			).toEqual([]);
 		});
 	});
+
+	describe('external links population', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_external_links__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'external-links-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			// Two anchors on the same page to the same destination — must count
+			// as one referrer in viewer_external_links, not two.
+			await archive.setPage({
+				url: parseUrl('https://example.com/page-a')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [
+					{
+						href: parseUrl('https://ads.example.com/')!,
+						isExternal: true,
+						title: null,
+						textContent: 'Ad banner',
+					},
+					{
+						href: parseUrl('https://ads.example.com/')!,
+						isExternal: true,
+						title: null,
+						textContent: 'Ad footer',
+					},
+				],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// A second, distinct referring page to the same destination.
+			await archive.setPage({
+				url: parseUrl('https://example.com/page-b')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [
+					{
+						href: parseUrl('https://ads.example.com/')!,
+						isExternal: true,
+						title: null,
+						textContent: 'Ad sidebar',
+					},
+				],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			await archive.setPage({
+				url: parseUrl('https://ads.example.com/')!,
+				redirectPaths: [],
+				isExternal: true,
+				isTarget: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			await buildViewerReadModel(archive);
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('populates viewer_external_links with one row per unique canonical destination', async () => {
+			const rows = await archive.getKnex()('viewer_external_links').select('*');
+			expect(rows).toHaveLength(1);
+			expect(rows[0]).toMatchObject({
+				dest_url: 'https://ads.example.com',
+				status: 200,
+				referrer_count: 2,
+			});
+		});
+
+		it('rebuilds viewer_external_links idempotently — a second build leaves the same row count', async () => {
+			await buildViewerReadModel(archive);
+			const rows = await archive.getKnex()('viewer_external_links').select('*');
+			expect(rows).toHaveLength(1);
+			expect(rows[0]).toMatchObject({ referrer_count: 2 });
+		});
+	});
 });

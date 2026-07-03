@@ -157,3 +157,24 @@ export interface DirectoryTreeBuildResult {
 	/** Every direct page-to-node membership row. */
 	pages: DirectoryPageInsertRow[];
 }
+
+/**
+ * One row to insert into `viewer_external_links`, one per unique canonical
+ * (redirect-resolved) external destination. Produced by
+ * `computeExternalLinkRows`.
+ */
+export interface ExternalLinkInsertRow {
+	/** `COALESCE(canonical.id, dest.id)` — the canonical destination's `pages.id`. */
+	dest_page_id: number;
+	/** `COALESCE(canonical.url, dest.url)` — the canonical destination URL, verbatim. */
+	dest_url: string;
+	/** `COALESCE(canonical.status, dest.status)` — the canonical destination's HTTP status, or `null` if unknown. */
+	status: number | null;
+	/**
+	 * `COUNT(DISTINCT source.id)` — the number of distinct internal pages
+	 * linking to this destination. Must stay in the same counting grain as
+	 * `getPageDetail.inboundLinks` (see that function's docs, #71) —
+	 * multiple anchors from the same page count once.
+	 */
+	referrer_count: number;
+}

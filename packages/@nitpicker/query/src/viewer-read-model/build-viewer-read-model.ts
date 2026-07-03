@@ -5,6 +5,7 @@ import { classifyContentType } from '../classify-content-type.js';
 import { excludeSkippedPages } from '../exclude-skipped-pages.js';
 
 import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
+import { computeExternalLinkRows } from './compute-external-link-rows.js';
 import { computePageFacetBuckets } from './compute-page-facet-buckets.js';
 import { createViewerReadModelTables } from './create-viewer-read-model-tables.js';
 import { dropViewerReadModelTables } from './drop-viewer-read-model-tables.js';
@@ -200,11 +201,14 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
 }
 
 /**
- * Performs a full rebuild of the viewer read model: drops all 7 tables if
+ * Performs a full rebuild of the viewer read model: drops all 8 tables if
  * present, recreates them, populates `viewer_pages` from the current
  * `pages` write-model table, populates `viewer_directory_nodes`/
  * `viewer_directory_pages` from that same page set (see
- * `buildDirectoryTreeRows` for the tree-building rules), seeds one
+ * `buildDirectoryTreeRows` for the tree-building rules), populates
+ * `viewer_external_links` from a dedicated `anchors` aggregation query (see
+ * `computeExternalLinkRows` — unlike the directory tree, this cannot reuse
+ * `sourceRows`, since link data lives on `anchors`, not `pages`), seeds one
  * smoke-test row into `viewer_query_profiles`, writes the
  * `viewer_count_buckets` totals row plus one row per distinct Pages-list
  * facet value (see `computePageFacetBuckets`), and writes the
@@ -316,6 +320,18 @@ export async function buildViewerReadModel(
 		for (let start = 0; start < directoryPages.length; start += INSERT_CHUNK_SIZE) {
 			await trx('viewer_directory_pages').insert(
 				directoryPages.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
+
+		// Unlike `viewer_pages`/the directory tree, this needs its own `anchors`
+		// query — `sourceRows` (loaded from `pages` only) has no anchor/link
+		// data. Runs once, here, instead of on every `/api/links?type=external`
+		// request — see `computeExternalLinkRows`'s docs for the SQLite
+		// performance rationale.
+		const externalLinkRows = await computeExternalLinkRows(trx);
+		for (let start = 0; start < externalLinkRows.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_external_links').insert(
+				externalLinkRows.slice(start, start + INSERT_CHUNK_SIZE),
 			);
 		}
 

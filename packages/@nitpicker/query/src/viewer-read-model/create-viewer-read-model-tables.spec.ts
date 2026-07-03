@@ -30,7 +30,7 @@ describe('createViewerReadModelTables', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('creates all 7 tables and the named viewer_pages indexes', async () => {
+	it('creates all 8 tables and the named viewer_pages indexes', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 
@@ -42,6 +42,7 @@ describe('createViewerReadModelTables', () => {
 			'viewer_page_anchors',
 			'viewer_directory_nodes',
 			'viewer_directory_pages',
+			'viewer_external_links',
 		]) {
 			expect(await knex.schema.hasTable(table)).toBe(true);
 		}
@@ -61,6 +62,14 @@ describe('createViewerReadModelTables', () => {
 			'vp_source',
 		]) {
 			expect(indexNames.has(indexName)).toBe(true);
+		}
+
+		const externalLinkIndexRows: Array<{ name: string }> = await knex('sqlite_master')
+			.where({ type: 'index', tbl_name: 'viewer_external_links' })
+			.select('name');
+		const externalLinkIndexNames = new Set(externalLinkIndexRows.map((r) => r.name));
+		for (const indexName of ['vel_url', 'vel_status', 'vel_referrer_count']) {
+			expect(externalLinkIndexNames.has(indexName)).toBe(true);
 		}
 	});
 
@@ -121,5 +130,23 @@ describe('createViewerReadModelTables', () => {
 			.select('page_id')
 			.orderBy('page_id');
 		expect(rows.map((r) => r.page_id)).toEqual([1, 2]);
+	});
+
+	it('viewer_external_links rejects a duplicate dest_page_id', async () => {
+		const knex = archive.getKnex();
+		await knex('viewer_external_links').insert({
+			dest_page_id: 1,
+			dest_url: 'https://ads.example.com/',
+			status: 200,
+			referrer_count: 1,
+		});
+		await expect(
+			knex('viewer_external_links').insert({
+				dest_page_id: 1,
+				dest_url: 'https://ads.example.com/duplicate',
+				status: 200,
+				referrer_count: 2,
+			}),
+		).rejects.toThrow();
 	});
 });
