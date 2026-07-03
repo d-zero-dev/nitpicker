@@ -4,7 +4,7 @@ import type { CrawlerError, PageData } from './utils/types/types.js';
  * Aggregate counts captured during a `--inventory` invocation, forwarded to
  * `#writeInventoryRunRow` so the audit log row is consistent between the
  * HTML-seed branch and the non-HTML-only branch of
- * {@link CrawlerOrchestrator.inventory}.
+ * `CrawlerOrchestrator.inventory`.
  *
  * Spelled out here (not inlined at the call site) so a new field added to
  * the audit row has a single edit point and so each field's semantics are

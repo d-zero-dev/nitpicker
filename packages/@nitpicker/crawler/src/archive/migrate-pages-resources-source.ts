@@ -10,7 +10,7 @@ import type { Knex } from 'knex';
  * every existing row at column-add time, so no explicit `UPDATE` is needed
  * to backfill — pre-existing rows become `'crawled'` automatically.
  *
- * Runs only on writer-side {@link Database.connect}; read-only viewer
+ * Runs only on writer-side `Database.connect`; read-only viewer
  * attaches skip this so the user's tmpDir is never rewritten.
  * @param instance - The Knex query builder instance connected to the database.
  */

@@ -81,13 +81,13 @@ const FLAT_META_COLUMNS = [
  * Represents a crawled page stored in the archive.
  *
  * Provides typed getters for the most-used meta columns (title, canonical,
- * og:*, twitter_card, robots flags, lang), plus {@link metaFlat} as an
- * iterable view over all ~47 flat meta columns and {@link metaExtras} for
+ * og:*, twitter_card, robots flags, lang), plus {@link Page.metaFlat} as an
+ * iterable view over all ~47 flat meta columns and {@link Page.metaExtras} for
  * the JSON catch-all of nested sub-objects not flattened to columns.
  *
  * JSON-LD entries and Wappalyzer tag rows live in dedicated tables and are
- * fetched on demand via {@link jsonLd} / {@link tags} (lazy reads, same
- * pattern as {@link getAnchors}).
+ * fetched on demand via {@link Page.getJsonLd} / {@link Page.getTags} (lazy reads, same
+ * pattern as {@link Page.getAnchors}).
  *
  * Instances are created by {@link ArchiveAccessor.getPages} or
  * {@link ArchiveAccessor.getPagesWithRefs}.
@@ -357,7 +357,7 @@ export default class Page {
 	/**
 	 * Sorted unique Wappalyzer provider names, comma-separated, empty string
 	 * when no tags. Denormalised aggregate; for the structured form fetch
-	 * {@link tags} (lazy).
+	 * {@link Page.getTags} (lazy).
 	 */
 	get tagsProvidersCsv() {
 		return this.#raw.tags_providers_csv ?? '';

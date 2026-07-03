@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import { remove } from './remove.js';
 
 /**
- * Checks whether a value is a {@link NodeJS.ErrnoException}.
+ * Checks whether a value is a `NodeJS.ErrnoException`.
  * @param error - The value to check.
  * @returns `true` if the value has a `code` property of type `string`.
  */
