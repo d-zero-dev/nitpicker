@@ -74,7 +74,7 @@ describe('joinViewerPageIdsToListItems', () => {
 			statusText: 'OK',
 			contentType: 'text/html',
 			contentLength: 100,
-			responseHeaders: {},
+			responseHeaders: { 'content-security-policy': "default-src 'self'" },
 			html: '<html></html>',
 			meta: { ...META, title: 'A', og: { title: 'OG A' } },
 			anchorList: [],
@@ -125,5 +125,17 @@ describe('joinViewerPageIdsToListItems', () => {
 			'https://example.com/a',
 		]);
 		expect(items[1]).toMatchObject({ title: 'A', ogTitle: 'OG A' });
+	});
+
+	it('computes header-presence flags on the joined row, not just the write-model columns', async () => {
+		const knex = archive.getKnex();
+		const items = await joinViewerPageIdsToListItems(knex, [idA, idB]);
+		expect(items[0]).toMatchObject({
+			hasCSP: true,
+			hasXFrameOptions: false,
+			hasXContentTypeOptions: false,
+			hasHSTS: false,
+		});
+		expect(items[1]).toMatchObject({ hasCSP: false });
 	});
 });

@@ -27,16 +27,21 @@ const DEFAULT_LIMIT = 100;
  *
  * - `listViewerPages` (the `viewer_pages` read-model fast path) when the
  *   read model is built and current AND the request uses none of the
- *   LIKE-based filters (`urlPattern` / `directory`) that
- *   `docs/viewer-sql-query-plan.md` explicitly excludes from the 100ms
- *   contract.
+ *   filters that only the wide `pages` table can evaluate: the LIKE-based
+ *   `urlPattern` / `directory` that `docs/viewer-sql-query-plan.md`
+ *   explicitly excludes from the 100ms contract, and the header-presence
+ *   filters (`hasCSP` / `hasXFrameOptions` / `hasXContentTypeOptions` /
+ *   `hasHSTS`) computed from `pages.responseHeaders` — `viewer_pages` has no
+ *   equivalent column, and evaluating them only after the narrow-table
+ *   id-limiting stage would corrupt `total`/pagination.
  * - `listPages` (the legacy, offset-only, write-model path) otherwise —
  *   covers archives predating the read model (issue #112's build-timing
- *   work is tracked separately) and the LIKE-filter case. Its `cursor` is a
- *   plain decimal offset string (see `buildLegacyPagesCursors`), not the
- *   fast path's opaque keyset token, but exposes the same `nextCursor`-only
- *   contract so `usePagesInfinite`'s virtual scroll keeps paginating past
- *   the first page regardless of which backend served it.
+ *   work is tracked separately) and the excluded-filter cases above. Its
+ *   `cursor` is a plain decimal offset string (see
+ *   `buildLegacyPagesCursors`), not the fast path's opaque keyset token, but
+ *   exposes the same `nextCursor`-only contract so `usePagesInfinite`'s
+ *   virtual scroll keeps paginating past the first page regardless of which
+ *   backend served it.
  * @param app - The Hono application.
  * @param context - The opened archive context.
  */
@@ -45,8 +50,15 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 		const q = c.req.query();
 		const accessor = context.manager.get(context.archiveId);
 
-		const usesLikeFilter = Boolean(q.urlPattern || q.directory);
-		if (!usesLikeFilter && (await isViewerReadModelCurrent(accessor))) {
+		const usesWideTableOnlyFilter = Boolean(
+			q.urlPattern ||
+			q.directory ||
+			q.hasCSP ||
+			q.hasXFrameOptions ||
+			q.hasXContentTypeOptions ||
+			q.hasHSTS,
+		);
+		if (!usesWideTableOnlyFilter && (await isViewerReadModelCurrent(accessor))) {
 			const options: ListViewerPagesOptions = {
 				isExternal: toBoolean(q.isExternal),
 				contentTypeCategory: toContentTypeCategory(q.contentTypeCategory),
@@ -79,6 +91,10 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 			missingTitle: toBoolean(q.missingTitle),
 			missingDescription: toBoolean(q.missingDescription),
 			noindex: toBoolean(q.noindex),
+			hasCSP: toBoolean(q.hasCSP),
+			hasXFrameOptions: toBoolean(q.hasXFrameOptions),
+			hasXContentTypeOptions: toBoolean(q.hasXContentTypeOptions),
+			hasHSTS: toBoolean(q.hasHSTS),
 			urlPattern: q.urlPattern,
 			directory: q.directory,
 			sortBy: toPageSortBy(q.sortBy),

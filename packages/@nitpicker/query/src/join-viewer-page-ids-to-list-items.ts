@@ -1,6 +1,7 @@
 import type { PageListItem, PageListRow } from './types.js';
 import type { Knex } from 'knex';
 
+import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
 import { mapPageRowToListItem, PAGE_LIST_COLUMNS } from './map-page-row-to-list-item.js';
 
 /**
@@ -26,7 +27,7 @@ export async function joinViewerPageIdsToListItems(
 	}
 	const rows: (PageListRow & { id: number })[] = await knex('pages')
 		.whereIn('id', pageIds)
-		.select('id', ...PAGE_LIST_COLUMNS);
+		.select('id', ...PAGE_LIST_COLUMNS, ...buildHeaderPresenceSelects(knex));
 	const rowsById = new Map(rows.map((row) => [row.id, row]));
 	return pageIds
 		.map((id) => rowsById.get(id))

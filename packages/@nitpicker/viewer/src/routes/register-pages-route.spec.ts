@@ -60,10 +60,16 @@ const META = {
  * @param withReadModel - Whether to build the `viewer_pages` read model
  *   before opening read-only (exercises the fast path) or leave it unbuilt
  *   (exercises the legacy fallback path).
+ * @param responseHeadersByLetter - Optional per-page response headers,
+ *   keyed by the page's letter suffix. Defaults to no headers on every page.
  * @returns The app, archive, and manager — callers must close both in
  *   `afterAll`.
  */
-async function buildFixture(workingDir: string, withReadModel: boolean) {
+async function buildFixture(
+	workingDir: string,
+	withReadModel: boolean,
+	responseHeadersByLetter: Record<string, Record<string, string>> = {},
+) {
 	const { mkdirSync } = await import('node:fs');
 	mkdirSync(workingDir, { recursive: true });
 	const archive = await Archive.create({
@@ -81,7 +87,7 @@ async function buildFixture(workingDir: string, withReadModel: boolean) {
 			statusText: 'OK',
 			contentType: 'text/html',
 			contentLength: 100,
-			responseHeaders: {},
+			responseHeaders: responseHeadersByLetter[letter] ?? {},
 			html: '<html></html>',
 			meta: { ...META, title: letter.toUpperCase() },
 			anchorList: [],
@@ -233,6 +239,60 @@ describe('registerPagesRoute (integration)', () => {
 				'https://example.com/d',
 				'https://example.com/e',
 			]);
+		});
+	});
+
+	describe('header-presence filter (hasCSP) forces legacy path even though a read model exists', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_register_pages_route_header_filter__',
+		);
+		let fixture: Awaited<ReturnType<typeof buildFixture>>;
+
+		beforeAll(async () => {
+			fixture = await buildFixture(workingDir, true, {
+				a: { 'content-security-policy': "default-src 'self'" },
+			});
+		});
+
+		afterAll(async () => {
+			await fixture.manager.closeAll();
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('returns only the page with the CSP header, not the whole unfiltered set', async () => {
+			const res = await fixture.app.request('/api/pages?hasCSP=true');
+			const body = (await res.json()) as { items: { url: string }[] };
+			expect(body.items.map((i) => i.url)).toEqual(['https://example.com/a']);
+		});
+	});
+
+	describe('fast path (viewer_pages read model built, no header filter)', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_register_pages_route_header_display__',
+		);
+		let fixture: Awaited<ReturnType<typeof buildFixture>>;
+
+		beforeAll(async () => {
+			fixture = await buildFixture(workingDir, true, {
+				a: { 'content-security-policy': "default-src 'self'" },
+			});
+		});
+
+		afterAll(async () => {
+			await fixture.manager.closeAll();
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('reports hasCSP correctly per page instead of always false (regression: fast path join dropped header columns)', async () => {
+			const res = await fixture.app.request('/api/pages');
+			const body = (await res.json()) as { items: { url: string; hasCSP: boolean }[] };
+			const byUrl = new Map(body.items.map((i) => [i.url, i.hasCSP]));
+			expect(byUrl.get('https://example.com/a')).toBe(true);
+			expect(byUrl.get('https://example.com/b')).toBe(false);
 		});
 	});
 });
