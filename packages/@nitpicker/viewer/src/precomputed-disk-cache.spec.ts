@@ -128,10 +128,9 @@ describe('getOrComputeOnDisk', () => {
 	});
 
 	it('reconstructs round-tripped Map shapes when callers serialise via entries arrays', async () => {
-		// Map<K, V> is not natively JSON-serialisable; the
-		// referrer-count-cache uses [[k,v],...] entries. Verify the
-		// disk layer treats arbitrary JSON values opaquely so this
-		// pattern works.
+		// Map<K, V> is not natively JSON-serialisable; callers that cache a
+		// Map serialise it as [[k,v],...] entries. Verify the disk layer
+		// treats arbitrary JSON values opaquely so this pattern works.
 		const cacheDir = path.join(baseDir, 'map');
 		await fs.mkdir(cacheDir, { recursive: true });
 		const entries: Array<[number, number]> = [

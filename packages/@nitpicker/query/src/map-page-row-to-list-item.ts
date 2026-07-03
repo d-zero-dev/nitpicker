@@ -89,5 +89,9 @@ export function mapPageRowToListItem(row: PageListRow): PageListItem {
 		tagsProvidersCsv: row.tags_providers_csv,
 		firstCrawledAt: row.firstCrawledAt,
 		lastCrawledAt: row.lastCrawledAt,
+		hasCSP: !!row.hasCSP,
+		hasXFrameOptions: !!row.hasXFrameOptions,
+		hasXContentTypeOptions: !!row.hasXContentTypeOptions,
+		hasHSTS: !!row.hasHSTS,
 	};
 }

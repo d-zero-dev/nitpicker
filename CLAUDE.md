@@ -55,14 +55,15 @@ packages/
 > - `idx_resources_internal_url`: listUnusedResources 66s → 7.5s (8.8x)
 > - `idx_images_covering`: listImages 32s → 16s (2.0x)
 >
-> 加えて `find-duplicates` を N+1 SQL から `GROUP_CONCAT` 一発に書換 (414s → 8s, 49.6x)、`get-link-graph` を Promise.all parallel に。**重要: `.nitpicker` archive に `ANALYZE` を絶対に走らせない** — 統計が出ると planner が `idx_pages_listfilter` を JOIN paths にも流用して `listLinks` / `getLinkGraph` / `listPageLinks` を 15s → 500s に回帰させる (33x worse)。既存 archive 適用は `scripts/add-perf-indexes.mjs` (PR #96 の `add-pages-listfilter-index.mjs` をリネーム + 拡張、3 index 一括)。詳細は ARCHITECTURE.md の「設計注意 (ANALYZE を走らせない)」を正とする。
+> 加えて `find-duplicates` を N+1 SQL から `GROUP_CONCAT` 一発に書換 (414s → 8s, 49.6x)、`get-link-graph` を Promise.all parallel に。**重要: `.nitpicker` archive に `ANALYZE` を絶対に走らせない** — 統計が出ると planner が `idx_pages_listfilter` を JOIN paths にも流用して `listLinks` / `getLinkGraph` を 15s → 500s に回帰させる (33x worse)。既存 archive 適用は `scripts/add-perf-indexes.mjs` (PR #96 の `add-pages-listfilter-index.mjs` をリネーム + 拡張、3 index 一括)。詳細は ARCHITECTURE.md の「設計注意 (ANALYZE を走らせない)」を正とする。
 
-> **Note (viewer プロセス側 precompute cache)**: 10 GB scale archive で **isolated-\* (20-30s)** と **page-links (~33s)** を schema 不変で詰めた経路。実 HTTP 計測値:
+> **Note (viewer プロセス側 precompute cache)**: 10 GB scale archive で **isolated-\* (20-30s)** を schema 不変で詰めた経路。実 HTTP 計測値:
 >
 > - `packages/@nitpicker/viewer/src/isolated-clusters-cache.ts` が `computeIsolatedClusters` 結果を archive 単位で memoise、3 つの isolated-\* endpoint が共有して **初回 25s (cache miss、union-find は速くなっていない) → 2 回目以降 1-7 ms** — この PR の最大の実効果
-> - `packages/@nitpicker/viewer/src/referrer-count-cache.ts` が `Map<pageId, referrerCount>` を 1 回の `GROUP BY` で構築、`/api/page-links` の per-row correlated subquery を Map lookup に置換して **初回 32s → 2 回目以降 12-13s (2.5x)** — Map 化で subquery は消えるが outer SELECT が listfilter index を踏めず full scan に倒れている残コスト
 >
-> in-process `app.request()` bench (`scripts/bench-viewer-endpoints.mjs`) では page-links 459ms と出るが、SQLite page cache が異常 warm な環境の数字なので実運用との乖離あり、信用しない。実 HTTP curl で再現できる数字だけを正とする。両 cache とも max 4 entry LRU、Promise 単位 cache で concurrent 初回 request 共有、rejected promise は cache から落として retry 可能に。query API には `precomputedComponents` / `precomputedReferrerCounts` option を追加し、viewer route が cache から供給する。CLI / MCP は option を渡さず従来の SQL 経路を使う（一回呼び切りで precompute payback できないため意図通り）。
+> in-process `app.request()` bench (`scripts/bench-viewer-endpoints.mjs`) の数字は SQLite page cache が異常 warm な環境の数字なので実運用との乖離あり、信用しない。実 HTTP curl で再現できる数字だけを正とする。max 4 entry LRU、Promise 単位 cache で concurrent 初回 request 共有、rejected promise は cache から落として retry 可能に。query API には `precomputedComponents` option を追加し、viewer route が cache から供給する。CLI / MCP は option を渡さず従来の SQL 経路を使う（一回呼び切りで precompute payback できないため意図通り）。
+>
+> （旧 `referrer-count-cache.ts` / `/api/page-links` は「ページリンク」ビューの廃止に伴い削除。per-page の被リンク数・リダイレクト元数は Page Detail ビューの inbound/outbound/redirectedFrom セクションで個別ページ単位に確認する。）
 
 > **Note (`getSummary` viewer プロセス cache + perf indexes)**: 10 GB archive 計測で **/api/summary cold 45s → 14s / warm 24s → 1 ms (13800x)** を達成。viewer は read-only / archive 不変なので `getSummary` 結果を archive 単位で memoise すれば SQLite に再入する必要がない (`packages/@nitpicker/viewer/src/summary-cache.ts` で `createPromiseLru` を共有)。stub mode (live crawl) は cache を bypass (writer が pages 列を追記中なので snapshot は永久 stale になる)。
 >

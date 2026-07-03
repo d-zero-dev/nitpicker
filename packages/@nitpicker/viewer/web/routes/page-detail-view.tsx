@@ -16,7 +16,12 @@ export function PageDetailView() {
 	const { t } = useI18n();
 	const url = params.get('url') ?? '';
 	const { data, isLoading, error } = usePageDetail(url);
-	const html = usePageHtml(url);
+	// External pages are (normally) never scraped, so they never have a stored
+	// HTML snapshot — skip the fetch entirely instead of always resolving to
+	// "no snapshot". Gate on `data` being loaded (not just `!data?.isExternal`)
+	// so the fetch isn't fired speculatively during the loading window, when
+	// `data` is still undefined and its eventual `isExternal` value is unknown.
+	const html = usePageHtml(data && !data.isExternal ? url : '');
 
 	if (!url) {
 		return <div className="state">{t('views.pageDetail.noPage')}</div>;
@@ -43,6 +48,12 @@ export function PageDetailView() {
 			<dl className="detail-grid">
 				<dt>URL</dt>
 				<dd>{data.url}</dd>
+				{data.isSkipped && (
+					<>
+						<dt>{t('views.pageDetail.skipReason')}</dt>
+						<dd>{data.skipReason ?? '—'}</dd>
+					</>
+				)}
 				<dt>{t('views.pageDetail.status')}</dt>
 				<dd>
 					{data.status ?? '—'} {data.statusText ?? ''}
@@ -142,19 +153,23 @@ export function PageDetailView() {
 				)}
 			</dl>
 
-			<h2>
-				{t('views.pageDetail.outbound')} ({data.outboundLinks.length})
-			</h2>
-			<ul>
-				{data.outboundLinks.slice(0, 200).map((link, index) => (
-					<li key={`${link.url}-${index}`}>
-						<Link to={`/pages/detail?url=${encodeURIComponent(link.url)}`}>
-							{link.url}
-						</Link>{' '}
-						{link.status != null && <span className="state">[{link.status}]</span>}
-					</li>
-				))}
-			</ul>
+			{data.outboundLinks.length > 0 && (
+				<>
+					<h2>
+						{t('views.pageDetail.outbound')} ({data.outboundLinks.length})
+					</h2>
+					<ul>
+						{data.outboundLinks.slice(0, 200).map((link, index) => (
+							<li key={`${link.url}-${index}`}>
+								<Link to={`/pages/detail?url=${encodeURIComponent(link.url)}`}>
+									{link.url}
+								</Link>{' '}
+								{link.status != null && <span className="state">[{link.status}]</span>}
+							</li>
+						))}
+					</ul>
+				</>
+			)}
 
 			<h2>
 				{t('views.pageDetail.inbound')} ({data.inboundLinks.length})
@@ -182,14 +197,32 @@ export function PageDetailView() {
 				</>
 			)}
 
-			<h2>{t('views.pageDetail.htmlSnapshot')}</h2>
-			{html.isLoading && (
-				<div className="state">{t('views.pageDetail.loadingSnapshot')}</div>
-			)}
-			{html.data ? (
-				<HtmlPreview html={html.data.html} truncated={html.data.truncated} />
-			) : (
-				!html.isLoading && <div className="state">{t('views.pageDetail.noSnapshot')}</div>
+			{/*
+			 * Known limitation: gating on `isExternal` (rather than "does a
+			 * snapshot actually exist") means a page reclassified external after
+			 * having been scraped under an old scope, or migrated via
+			 * `scripts/migrate-to-0.10.mjs`'s Step A (which copies every
+			 * non-empty legacy `pages.html` row into the BLOB store regardless of
+			 * `isExternal`), can have a real stored snapshot that this section
+			 * never fetches or shows. Accepted for 0.x: the common case (an
+			 * external page has no snapshot) is overwhelmingly more frequent than
+			 * this edge case, and avoiding a wasted fetch for the common case is
+			 * the point of this gate.
+			 */}
+			{!data.isExternal && (
+				<>
+					<h2>{t('views.pageDetail.htmlSnapshot')}</h2>
+					{html.isLoading && (
+						<div className="state">{t('views.pageDetail.loadingSnapshot')}</div>
+					)}
+					{html.data ? (
+						<HtmlPreview html={html.data.html} truncated={html.data.truncated} />
+					) : (
+						!html.isLoading && (
+							<div className="state">{t('views.pageDetail.noSnapshot')}</div>
+						)
+					)}
+				</>
 			)}
 		</div>
 	);
