@@ -1,14 +1,14 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 8 viewer-read-model tables (and `viewer_pages`'s named
+ * Creates all 9 viewer-read-model tables (and `viewer_pages`'s named
  * indexes) against the given connection. Assumes none of the tables
  * currently exist — callers (`buildViewerReadModel`) are responsible for
  * dropping any prior version first, inside the same transaction, so this
  * function is not itself idempotent.
  *
  * Every statement runs via `raw()` rather than knex's chainable schema
- * builder: 5 of the 8 tables need `WITHOUT ROWID` / a composite primary key
+ * builder: 5 of the 9 tables need `WITHOUT ROWID` / a composite primary key
  * / a `CHECK` constraint / a table-level `UNIQUE` constraint, none of which
  * the chainable builder can express (the same reason `page_html_blobs` /
  * `page_html_ref` drop to `raw()` in `@nitpicker/crawler`'s
@@ -159,14 +159,16 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	);
 
 	// Pre-aggregated, deduplicated-by-canonical-destination external link
-	// list — see `computeExternalLinkRows`'s docs for why this needs its own
-	// `anchors` query rather than reusing `viewer_pages`'s `sourceRows` (the
-	// aggregation joins `anchors` at build time instead of on every read,
-	// see ARCHITECTURE.md「設計注意（外部リンク read model）」for the
-	// SQLite COUNT(DISTINCT)/GROUP BY performance rationale). No
+	// summary — derived in memory from `viewer_anchor_facts` rows (see
+	// `deriveExternalLinkSummaryRows`'s docs) rather than its own `anchors`
+	// scan, so building this table costs no extra JOIN over the one
+	// `computeAnchorFactRows` already does. See ARCHITECTURE.md「設計注意
+	// （viewer_anchor_facts read model、issue #114）」for the SQLite
+	// COUNT(DISTINCT)/GROUP BY performance rationale this sidesteps. No
 	// `_desc_key` columns like `viewer_pages` needs: pagination here is
-	// plain offset-based (via `paginateQuery`), not keyset-cursor, so a
-	// single ascending index scanned backward is enough for DESC.
+	// plain offset-based (via
+	// `paginateQuery`), not keyset-cursor, so a single ascending index
+	// scanned backward is enough for DESC.
 	await trx.raw(`
 		CREATE TABLE viewer_external_links (
 			dest_page_id integer primary key,
@@ -182,4 +184,58 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	await trx.raw(
 		'CREATE INDEX vel_referrer_count ON viewer_external_links(referrer_count, dest_url, dest_page_id)',
 	);
+
+	// Edge-level (one row per unique (source_page_id, dest_page_id) pair,
+	// with `count` absorbing duplicate anchor observations between the same
+	// pair) fact table backing broken-link listing. Deliberately has no
+	// `url_refs`/`content_items` ref-table indirection (issue #139 — not
+	// landed, and #103's own execution order places it after this table):
+	// `source_url_sort_key`/`dest_url_sort_key` are inline text, copied at
+	// build time exactly like `viewer_pages.url_sort_key`, so indexed
+	// `ORDER BY` works without a pre-join. Full URL text for the OTHER
+	// (non-sort-key) display columns is resolved by joining back to `pages`
+	// only after the id set is limit-bounded (same limit-before-join
+	// pattern as `joinViewerPageIdsToListItems`). `is_external_link` is
+	// stored (SQLite INTEGER 0/1 costs ~0 bytes) but intentionally has no
+	// index: nothing reads this table filtered by it — it exists only for
+	// `deriveExternalLinkSummaryRows`'s in-memory pass over the full row
+	// set at build time. `status_desc_key` mirrors `viewer_pages`'s same
+	// column for the same reason: `docs/viewer-sql-query-plan.md`'s Stable
+	// Ordering rule keeps the `source_url_sort_key`/`edge_id` tie-breakers
+	// ascending even when the primary sort is `status desc` — a row-value
+	// keyset tuple comparison can't mix per-column directions, so the
+	// primary column is negated and walked ascending instead. See
+	// ARCHITECTURE.md「設計注意（viewer_anchor_facts read model、issue
+	// #114）」for the full read/write/storage rationale.
+	await trx.raw(`
+		CREATE TABLE viewer_anchor_facts (
+			edge_id integer primary key,
+			source_page_id integer not null,
+			dest_page_id integer not null,
+			source_url_sort_key text not null,
+			dest_url_sort_key text not null,
+			status integer,
+			status_sort_key integer not null,
+			status_desc_key integer not null,
+			count integer not null,
+			is_broken integer not null,
+			is_external_link integer not null
+		)
+	`);
+	await trx.raw(
+		'CREATE INDEX vaf_broken_source ON viewer_anchor_facts(is_broken, source_url_sort_key, edge_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vaf_broken_dest ON viewer_anchor_facts(is_broken, dest_url_sort_key, edge_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vaf_broken_status ON viewer_anchor_facts(is_broken, status_sort_key, source_url_sort_key, edge_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vaf_broken_status_desc ON viewer_anchor_facts(is_broken, status_desc_key, source_url_sort_key, edge_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vaf_source ON viewer_anchor_facts(source_page_id, edge_id)',
+	);
+	await trx.raw('CREATE INDEX vaf_dest ON viewer_anchor_facts(dest_page_id, edge_id)');
 }

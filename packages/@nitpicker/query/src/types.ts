@@ -1130,6 +1130,63 @@ export interface LinkAnalysisResult {
 }
 
 /**
+ * Filter/sort/pagination options for {@link listViewerBrokenLinks} — the
+ * `viewer_anchor_facts` read-model fast path for broken-link listing.
+ *
+ * `urlPattern` and `includeRedirectSources` are deliberately absent:
+ * `urlPattern` matches source OR destination across two columns
+ * (`ListLinksOptions`'s semantics), which no single index on
+ * `viewer_anchor_facts` can satisfy, so callers with a `urlPattern` set
+ * must use `listLinks` instead (see `register-links-route.ts`).
+ * `includeRedirectSources` has no equivalent here: `viewer_anchor_facts`
+ * only ever stores the canonical (redirect-resolved) destination.
+ */
+export interface ListViewerBrokenLinksOptions {
+	/** Filter by destination HTTP status. Broken links are always `404`, so this is effectively a no-op unless set to a non-`404` value (which then matches nothing). */
+	status?: number;
+	/** Field to sort results by. Defaults to `'sourceUrl'`. */
+	sortBy?: 'sourceUrl' | 'destUrl' | 'status';
+	/** Sort direction. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedLinkList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result wrapper for {@link listViewerBrokenLinks} —
+ * {@link LinkAnalysisResult} plus keyset cursors for virtual-scroll
+ * continuation.
+ */
+export interface CursorPaginatedLinkList extends LinkAnalysisResult {
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the previous page in the current sort order, or
+	 * `null` when this is already the first page.
+	 */
+	prevCursor: string | null;
+}
+
+/**
  * Filter/sort/pagination options for {@link listExternalLinks}.
  *
  * Unlike {@link ListLinksOptions}, there is no `includeRedirectSources` flag

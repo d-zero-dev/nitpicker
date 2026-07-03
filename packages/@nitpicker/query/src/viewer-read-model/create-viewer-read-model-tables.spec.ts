@@ -30,7 +30,7 @@ describe('createViewerReadModelTables', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('creates all 8 tables and the named viewer_pages indexes', async () => {
+	it('creates all 9 tables and the named viewer_pages indexes', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 
@@ -43,6 +43,7 @@ describe('createViewerReadModelTables', () => {
 			'viewer_directory_nodes',
 			'viewer_directory_pages',
 			'viewer_external_links',
+			'viewer_anchor_facts',
 		]) {
 			expect(await knex.schema.hasTable(table)).toBe(true);
 		}
@@ -70,6 +71,21 @@ describe('createViewerReadModelTables', () => {
 		const externalLinkIndexNames = new Set(externalLinkIndexRows.map((r) => r.name));
 		for (const indexName of ['vel_url', 'vel_status', 'vel_referrer_count']) {
 			expect(externalLinkIndexNames.has(indexName)).toBe(true);
+		}
+
+		const anchorFactIndexRows: Array<{ name: string }> = await knex('sqlite_master')
+			.where({ type: 'index', tbl_name: 'viewer_anchor_facts' })
+			.select('name');
+		const anchorFactIndexNames = new Set(anchorFactIndexRows.map((r) => r.name));
+		for (const indexName of [
+			'vaf_broken_source',
+			'vaf_broken_dest',
+			'vaf_broken_status',
+			'vaf_broken_status_desc',
+			'vaf_source',
+			'vaf_dest',
+		]) {
+			expect(anchorFactIndexNames.has(indexName)).toBe(true);
 		}
 	});
 

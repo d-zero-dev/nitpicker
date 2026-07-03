@@ -161,7 +161,8 @@ export interface DirectoryTreeBuildResult {
 /**
  * One row to insert into `viewer_external_links`, one per unique canonical
  * (redirect-resolved) external destination. Produced by
- * `computeExternalLinkRows`.
+ * `deriveExternalLinkSummaryRows` from the already-computed
+ * {@link AnchorFactInsertRow} set — no separate `anchors` scan.
  */
 export interface ExternalLinkInsertRow {
 	/** `COALESCE(canonical.id, dest.id)` — the canonical destination's `pages.id`. */
@@ -171,10 +172,55 @@ export interface ExternalLinkInsertRow {
 	/** `COALESCE(canonical.status, dest.status)` — the canonical destination's HTTP status, or `null` if unknown. */
 	status: number | null;
 	/**
-	 * `COUNT(DISTINCT source.id)` — the number of distinct internal pages
-	 * linking to this destination. Must stay in the same counting grain as
-	 * `getPageDetail.inboundLinks` (see that function's docs, #71) —
-	 * multiple anchors from the same page count once.
+	 * The number of distinct internal pages linking to this destination —
+	 * the count of {@link AnchorFactInsertRow} rows sharing this
+	 * `dest_page_id`, since those rows are already deduplicated one-per-
+	 * `(source_page_id, dest_page_id)` pair. Must stay in the same counting
+	 * grain as `getPageDetail.inboundLinks` (see that function's docs, #71)
+	 * — multiple anchors from the same page count once.
 	 */
 	referrer_count: number;
+}
+
+/**
+ * One row to insert into `viewer_anchor_facts`, one per unique
+ * `(source_page_id, dest_page_id)` pair — duplicate anchor observations
+ * between the same pair collapse into a single row via `count`. Produced by
+ * `computeAnchorFactRows`.
+ */
+export interface AnchorFactInsertRow {
+	/** `anchors.pageId` — the referring page's `pages.id`. */
+	source_page_id: number;
+	/** `COALESCE(canonical.id, dest.id)` — the canonical destination's `pages.id`. */
+	dest_page_id: number;
+	/**
+	 * The referring page's URL, verbatim — copied at build time so indexed
+	 * `ORDER BY`/keyset comparisons don't need a pre-join, the same
+	 * rationale as `viewer_pages.url_sort_key`.
+	 */
+	source_url_sort_key: string;
+	/** `COALESCE(canonical.url, dest.url)`, verbatim — same rationale as {@link source_url_sort_key}. */
+	dest_url_sort_key: string;
+	/** `COALESCE(canonical.status, dest.status)` — the canonical destination's HTTP status, or `null` if unknown. */
+	status: number | null;
+	/** `status`, or `NULL_STATUS_SENTINEL` when `status` is `null` — see that constant's docs. */
+	status_sort_key: number;
+	/**
+	 * The negation of {@link status_sort_key} — walking this column
+	 * ascending yields `status desc` display order while keeping the
+	 * `source_url_sort_key`/`edge_id` tie-breakers ascending too, the same
+	 * `viewer_pages.status_desc_key` rationale (a row-value keyset tuple
+	 * comparison can't mix per-column directions).
+	 */
+	status_desc_key: number;
+	/** Number of raw anchor observations collapsed into this `(source_page_id, dest_page_id)` row. */
+	count: number;
+	/** `1` iff the canonical destination's status is `404` (see `list-links.ts`'s broken-link scope note — 403/5xx/unknown never count). */
+	is_broken: number;
+	/**
+	 * `1` iff the canonical destination is external. Not indexed — consumed
+	 * only by `deriveExternalLinkSummaryRows`'s in-memory pass at build
+	 * time, never by an indexed read query.
+	 */
+	is_external_link: number;
 }

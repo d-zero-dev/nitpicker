@@ -7,4 +7,4 @@
  * `viewer_read_model_meta.schema_version` to decide whether a rebuild is
  * needed.
  */
-export const VIEWER_READ_MODEL_SCHEMA_VERSION = 5;
+export const VIEWER_READ_MODEL_SCHEMA_VERSION = 6;
