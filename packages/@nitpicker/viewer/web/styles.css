@@ -560,7 +560,7 @@ h2 {
 .pt-header-button:hover,
 .pt-header-button:focus-visible,
 .pt-header-button.is-active {
-	color: #fff;
+	color: var(--text-on-accent);
 	background: var(--accent);
 	border-color: var(--accent);
 }
@@ -751,7 +751,7 @@ h2 {
 }
 
 .pager-number.is-current {
-	color: #fff;
+	color: var(--text-on-accent);
 	cursor: default;
 	background: var(--accent);
 	border-color: var(--accent);
@@ -785,7 +785,7 @@ h2 {
 }
 
 .pager-jump input {
-	inline-size: 6ch;
+	inline-size: 3.5em;
 	padding-block: 3px;
 	padding-inline: 6px;
 	color: var(--text);
@@ -927,7 +927,7 @@ button.bar-row:hover {
 }
 
 .bar-segment {
-	display: block;
+	display: block flow;
 
 	/* Floor + final-width guarantee for stacked-bar segments. The JS sends
 	   each segment its raw proportional width (`count / grandTotal`); when

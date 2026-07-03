@@ -13,7 +13,7 @@ import { CONTENT_TYPE_CATEGORIES } from '@nitpicker/query/categories';
  * unlike the bar itself where a 0%-width segment carries no signal and
  * would only be confusing under the CSS `min-inline-size: 4px` floor.
  *
- * Pure — split from {@link buildStackedBarRows} so the "what's in the bar"
+ * Pure — split from {@link import('./build-stacked-bar-rows.js').buildStackedBarRows} so the "what's in the bar"
  * and "what's in the legend" contracts are independently asserted.
  * @param entries - Per-category counts (from `SummaryResult.contentTypeDistribution`).
  * @returns One {@link StackedBarRow} per known category, in `CONTENT_TYPE_CATEGORIES` order.

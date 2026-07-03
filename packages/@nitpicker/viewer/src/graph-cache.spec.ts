@@ -1,4 +1,5 @@
 import type { ArchiveContext } from './types.js';
+import type * as NitpickerQuery from '@nitpicker/query';
 import type { ArchiveAccessor, ArchiveManager, LinkGraph } from '@nitpicker/query';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -6,8 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getCachedLinkGraph } from './graph-cache.js';
 
 vi.mock('@nitpicker/query', async () => {
-	const actual =
-		await vi.importActual<typeof import('@nitpicker/query')>('@nitpicker/query');
+	const actual = await vi.importActual<typeof NitpickerQuery>('@nitpicker/query');
 	return {
 		...actual,
 		getLinkGraph: vi.fn(),
