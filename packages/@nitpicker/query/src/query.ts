@@ -30,6 +30,7 @@ export { getSummary } from './get-summary.js';
 export { getTagInventory } from './get-tag-inventory.js';
 export { getIsolatedCluster } from './get-isolated-cluster.js';
 export { getViolations } from './get-violations.js';
+export { listExternalLinks } from './list-external-links.js';
 export { listImages } from './list-images.js';
 export { listInventoryRuns } from './list-inventory-runs.js';
 export { listIsolatedClusters } from './list-isolated-clusters.js';

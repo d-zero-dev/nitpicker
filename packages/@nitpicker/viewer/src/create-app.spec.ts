@@ -44,9 +44,34 @@ describe('createApp', () => {
 		});
 
 		const pages = [
-			{ url: 'https://example.com/', status: 200, title: 'Home', hasCsp: false },
-			{ url: 'https://example.com/contact', status: 404, title: null, hasCsp: false },
-			{ url: 'https://example.com/secure', status: 200, title: 'Secure', hasCsp: true },
+			{
+				url: 'https://example.com/',
+				status: 200,
+				title: 'Home',
+				hasCsp: false,
+				anchorList: [
+					{
+						href: parseUrl('https://external.example.com/')!,
+						isExternal: true,
+						title: null,
+						textContent: 'External',
+					},
+				],
+			},
+			{
+				url: 'https://example.com/contact',
+				status: 404,
+				title: null,
+				hasCsp: false,
+				anchorList: [],
+			},
+			{
+				url: 'https://example.com/secure',
+				status: 200,
+				title: 'Secure',
+				hasCsp: true,
+				anchorList: [],
+			},
 		];
 		for (const p of pages) {
 			await archive.setPage({
@@ -79,11 +104,44 @@ describe('createApp', () => {
 					},
 					originTrial: [],
 				},
-				anchorList: [],
+				anchorList: p.anchorList,
 				imageList: [],
 				isSkipped: false,
 			});
 		}
+
+		await archive.setPage({
+			url: parseUrl('https://external.example.com/')!,
+			redirectPaths: [],
+			isExternal: true,
+			isTarget: false,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: {
+				title: '',
+				lang: null,
+				jsonLd: [],
+				speculationRules: [],
+				tags: { detected: {}, entries: [] },
+				others: {
+					meta: {},
+					property: {},
+					httpEquiv: {},
+					itemprop: {},
+					link: [],
+					script: [],
+					iframe: [],
+				},
+				originTrial: [],
+			},
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
 
 		const context: ArchiveContext = {
 			manager: { get: () => archive } as unknown as ArchiveManager,
@@ -150,6 +208,22 @@ describe('createApp', () => {
 	it('GET /api/links は不正な type で 400 を返す', async () => {
 		const res = await app.request('/api/links?type=bogus');
 		expect(res.status).toBe(400);
+	});
+
+	it('GET /api/links?type=external は listExternalLinks の宛先集約シェイプを返す', async () => {
+		// Regression test for the route dispatching to the wrong query
+		// function: the response must have `referrerCount`, not the old
+		// per-anchor `sourceUrl`/`textContent` shape from `listLinks`.
+		const res = await app.request('/api/links?type=external');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			items: Array<{ destUrl: string; status: number | null; referrerCount: number }>;
+		};
+		expect(body.items).toHaveLength(1);
+		expect(body.items[0]).toMatchObject({
+			destUrl: 'https://external.example.com',
+			referrerCount: 1,
+		});
 	});
 
 	it('GET /api/resources は一覧を返す', async () => {

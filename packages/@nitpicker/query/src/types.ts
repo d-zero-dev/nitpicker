@@ -1053,6 +1053,68 @@ export interface LinkAnalysisResult {
 }
 
 /**
+ * Filter/sort/pagination options for {@link listExternalLinks}.
+ *
+ * Unlike {@link ListLinksOptions}, there is no `includeRedirectSources` flag
+ * here: this listing's whole premise is "one row per canonical destination",
+ * so exposing literal (unresolved) redirect-source destinations would
+ * contradict the dedup itself.
+ */
+export interface ListExternalLinksOptions {
+	/**
+	 * URL pattern to filter the destination URL (SQL LIKE). There is no
+	 * source-URL matching — a row is one destination, not one anchor, so
+	 * there is no single "source" to match against. This is a deliberate
+	 * behavior change from {@link listLinks}'s `type: 'external'` mode, which
+	 * matched source OR destination: the External Links view no longer has a
+	 * source-URL column to filter on, so matching only the destination is the
+	 * correct semantics for this shape, not an oversight.
+	 */
+	urlPattern?: string;
+	/** Filter by destination HTTP status. */
+	status?: number;
+	/** Field to sort results by. */
+	sortBy?: 'destUrl' | 'status' | 'referrerCount';
+	/** Sort direction. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results. */
+	limit?: number;
+	/** Number of results to skip. */
+	offset?: number;
+}
+
+/**
+ * One unique external destination, deduplicated by canonical (redirect-
+ * resolved) target across every anchor that leads to it.
+ */
+export interface ExternalLinkEntry {
+	/** The canonical (redirect-resolved) destination URL. */
+	destUrl: string;
+	/** HTTP status of the canonical destination. */
+	status: number | null;
+	/**
+	 * Count of distinct internal pages linking to this destination. Counts
+	 * pages, not anchor tags — two `<a>` tags on the same page pointing at
+	 * the same destination count once.
+	 */
+	referrerCount: number;
+}
+
+/**
+ * Paginated result for {@link listExternalLinks}.
+ */
+export interface PaginatedExternalLinkList {
+	/** External destination entries. */
+	items: ExternalLinkEntry[];
+	/** Total matching destinations (distinct count, not anchor count). */
+	total: number;
+	/** Current offset. */
+	offset: number;
+	/** Page size used. */
+	limit: number;
+}
+
+/**
  * Filter options for listing resources.
  */
 export interface ListResourcesOptions {

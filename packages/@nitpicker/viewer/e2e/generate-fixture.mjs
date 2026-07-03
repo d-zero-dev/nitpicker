@@ -100,6 +100,20 @@ for (let i = 0; i < PAGE_COUNT; i++) {
 								title: null,
 								textContent: 'Next',
 							},
+							// A second internal referrer to the same external
+							// destination as page 0, so the External Links
+							// view's dedup + referrerCount is exercised
+							// meaningfully (2 referrers, not 1).
+							...(i === 1
+								? [
+										{
+											href: parseUrl('https://external.example.com/'),
+											isExternal: true,
+											title: null,
+											textContent: 'External site (again)',
+										},
+									]
+								: []),
 						]
 					: [],
 		imageList: [],

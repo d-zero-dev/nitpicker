@@ -100,6 +100,38 @@ describe('getPageDetail', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+
+		// A referrer with two separate <a> tags to the same target (e.g. a nav
+		// link and a footer link) — must count as one inbound link, not two.
+		await archive.setPage({
+			url: parseUrl('https://example.com/duplicate-linker')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 300,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: makeBeholderMeta({ lang: 'ja', title: 'Duplicate linker' }),
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/about')!,
+					isExternal: false,
+					title: null,
+					textContent: 'About (nav)',
+				},
+				{
+					href: parseUrl('https://example.com/about')!,
+					isExternal: false,
+					title: null,
+					textContent: 'About (footer)',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
 	});
 
 	afterAll(async () => {
@@ -149,8 +181,19 @@ describe('getPageDetail', () => {
 
 	it('インバウンドリンクを返す', async () => {
 		const result = await getPageDetail(archive, 'https://example.com/about');
-		expect(result!.inboundLinks).toHaveLength(1);
-		expect(result!.inboundLinks[0]!.url).toContain('example.com');
+		const inboundUrls = result!.inboundLinks.map((l) => l.url).toSorted();
+		expect(inboundUrls).toEqual([
+			'https://example.com',
+			'https://example.com/duplicate-linker',
+		]);
+	});
+
+	it('同一ページから同じ宛先への複数アンカーは1件の被リンクに集約される', async () => {
+		const result = await getPageDetail(archive, 'https://example.com/about');
+		const fromDuplicateLinker = result!.inboundLinks.filter(
+			(l) => l.url === 'https://example.com/duplicate-linker',
+		);
+		expect(fromDuplicateLinker).toHaveLength(1);
 	});
 
 	it('存在しないページは null を返す', async () => {

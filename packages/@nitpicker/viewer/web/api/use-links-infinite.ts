@@ -8,17 +8,21 @@ import { getNextOffset } from './get-next-offset.js';
 import { PAGE_SIZE } from './page-size.js';
 
 /**
- * Link analysis type. `'orphaned'` was retired: complete singletons live in
- * the **孤立ページ** view (`useIsolatedPagesInfinite`) and interconnected
- * orphan groups live in the **孤立集合** view (`useIsolatedClustersInfinite`).
+ * Link analysis type. Only `'broken'` remains: `'orphaned'` was retired
+ * (complete singletons live in the **孤立ページ** view
+ * (`useIsolatedPagesInfinite`), interconnected orphan groups in the
+ * **孤立集合** view (`useIsolatedClustersInfinite`)), and `'external'` moved
+ * to the dedicated `useExternalLinksInfinite` (different response shape —
+ * deduplicated by destination with a `referrerCount`, not one row per
+ * anchor).
  */
-export type LinkType = 'broken' | 'external';
+export type LinkType = 'broken';
 
 /** A link analysis row. */
 export type LinkRow = LinkEntry;
 
 export interface LinksFilter {
-	/** URL pattern applied to source or destination URL. */
+	/** URL pattern applied to the source or destination URL. */
 	urlPattern?: string;
 	/** Filter by destination HTTP status. */
 	status?: number;
@@ -37,7 +41,7 @@ interface LinksPage {
 }
 
 /**
- * Infinite-scrolling link analysis (broken / external).
+ * Infinite-scrolling broken-link analysis.
  * @param type - The link analysis type.
  * @param filter
  * @param options - Optional flags (`enabled`).
