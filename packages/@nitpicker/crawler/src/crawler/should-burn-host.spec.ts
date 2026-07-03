@@ -1,3 +1,5 @@
+import type { ErrorKind } from '../types.js';
+
 import { describe, it, expect } from 'vitest';
 
 import { shouldBurnHost } from './should-burn-host.js';
@@ -43,7 +45,7 @@ describe('shouldBurnHost', () => {
 			'timeout',
 			'protocol',
 			'unknown',
-		] as const satisfies Exclude<import('../types.js').ErrorKind, 'dns'>[];
+		] as const satisfies Exclude<ErrorKind, 'dns'>[];
 		for (const errorKind of nonDnsKinds) {
 			const result = shouldBurnHost({
 				errorKind,

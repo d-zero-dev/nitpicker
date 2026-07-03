@@ -5,7 +5,7 @@ import type { ErrorKind } from './types.js';
  * (without changing the network, the certificate, the destination host, or the
  * browser's block-list state) will almost certainly produce the same failure.
  *
- * Used by {@link resetFailedPages} to exclude pages whose latest recorded error
+ * Used by `resetFailedPages` to exclude pages whose latest recorded error
  * falls in this set, so `--retry-failed` actually converges: without the
  * exclusion, NXDOMAIN / TLS mismatch / `ERR_BLOCKED_BY_CLIENT` /
  * `ECONNREFUSED` / HTTP parse-error pages would be reset to pending on every

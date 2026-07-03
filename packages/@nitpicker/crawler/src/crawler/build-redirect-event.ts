@@ -17,7 +17,7 @@ import { derivePageSource } from './derive-page-source.js';
  *
  * The originating URL passed in `pageUrlWithoutHashAndAuth` must be the
  * URL the redirect chain STARTS from (the page being scraped), not the
- * destination — see {@link Database.recordRedirect} JSDoc for why
+ * destination — see `Database.recordRedirect` JSDoc for why
  * lineage propagates from origin, not from the destination.
  * @param pageData - HEAD-resolved page data carrying the redirect chain.
  * @param inventoryMode - Inventory-mode config from `CrawlerOptions.inventoryMode`, or `null` outside `--inventory`.

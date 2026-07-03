@@ -535,7 +535,7 @@ export async function initSchema(instance: Knex) {
 	// row-by-row filters status, costing ~5 s. The 3-column form
 	// `(scraped, status, redirectDestId)` is fully covering for
 	// `SELECT id` and gives a 5113 ms → 14 ms (~365x) reduction
-	// verified by `scripts/prototype-summary-indexes.mjs`.
+	// (verified with a one-off benchmark script, since deleted).
 	//
 	// Note the column order: `status` comes second so the `(scraped=1
 	// AND status=-1)` 2-column equality seek lands directly in the

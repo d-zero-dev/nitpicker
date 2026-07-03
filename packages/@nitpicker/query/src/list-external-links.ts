@@ -13,7 +13,7 @@ import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
  * canonical (redirect-resolved) target, with a per-destination referrer
  * count.
  *
- * Shares {@link listLinks}'s redirect-resolution pattern (`LEFT JOIN
+ * Shares {@link import('./list-links.js').listLinks}'s redirect-resolution pattern (`LEFT JOIN
  * canonical ON dest.redirectDestId = canonical.id`, `COALESCE(canonical.*,
  * dest.*)`) so a 301 intermediate never produces a destination distinct from
  * its final target — but where `listLinks` returns one row per anchor,

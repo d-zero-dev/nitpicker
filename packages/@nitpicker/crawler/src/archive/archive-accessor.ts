@@ -45,7 +45,7 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	 * Promise tracking an in-progress (or completed) close. `null` means the
 	 * accessor is open and idle; a settled promise means we are closed (the
 	 * accessor stays "closed" even if `db.destroy()` rejected, because there
-	 * is nothing safe to retry — see {@link close}).
+	 * is nothing safe to retry — see {@link ArchiveAccessor.close}).
 	 */
 	#closeOnce: Promise<void> | null = null;
 	/** The SQLite database instance for querying archived data. */
@@ -116,7 +116,7 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	 * tmpDir), where touching the filesystem would race with — or destroy —
 	 * the live crawler's working state.
 	 *
-	 * Subclasses that own the archive's lifecycle (notably {@link Archive})
+	 * Subclasses that own the archive's lifecycle (notably `Archive`)
 	 * override this to add write/cleanup steps.
 	 *
 	 * **Idempotent and concurrent-safe**: the first invocation captures the

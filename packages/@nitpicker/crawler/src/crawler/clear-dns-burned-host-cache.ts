@@ -3,7 +3,7 @@ import { dnsBurnedHostShortCircuitCounter } from './dns-burned-host-short-circui
 
 /**
  * Clears the DNS-burned host cache and resets the short-circuit counter.
- * Called between crawl sessions, alongside {@link clearDestinationCache}, to
+ * Called between crawl sessions, alongside `clearDestinationCache`, to
  * avoid leaking state from a previous session into a fresh one.
  */
 export function clearDnsBurnedHostCache() {

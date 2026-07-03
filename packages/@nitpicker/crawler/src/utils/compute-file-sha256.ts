@@ -7,7 +7,7 @@ import { crawlerLog } from '../debug.js';
  * Compute the SHA-256 digest of a file's bytes, streaming so memory stays
  * O(1) regardless of file size.
  *
- * Used by {@link CrawlerOrchestrator.inventory} to fingerprint the source
+ * Used by `CrawlerOrchestrator.inventory` to fingerprint the source
  * URL list `.txt` and store the digest on the `inventory_runs` row.
  * Phase 3 (`--refresh`) will key dedupe on this column; Phase 1 just
  * records it for operator audit.

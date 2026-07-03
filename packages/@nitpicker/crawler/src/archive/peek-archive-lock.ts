@@ -27,13 +27,13 @@ export interface ArchiveLockHolder {
 /**
  * Probe `<tmpDir>.lock/pid.txt` without acquiring the lock.
  *
- * Mirror of the alive-check inside {@link acquireArchiveLock}, exposed for
+ * Mirror of the alive-check inside `acquireArchiveLock`, exposed for
  * read-only consumers so they can detect (and surface) a concurrent crawler
  * without competing for the lock. Returns `null` when no lock directory is
  * present or the pid file is missing/malformed — callers should treat that
  * as "no detectable crawler" rather than as an error.
  *
- * Co-located with {@link acquireArchiveLock} so the writer side and the
+ * Co-located with `acquireArchiveLock` so the writer side and the
  * read-only probe stay in lockstep when the lock format evolves (e.g.
  * adding a hostname/timestamp field).
  * @param tmpDir - The archive's temporary working directory whose

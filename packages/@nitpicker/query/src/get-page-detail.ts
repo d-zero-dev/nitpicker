@@ -75,6 +75,7 @@ export async function getPageDetail(
 			responseHeaders = JSON.parse(page.responseHeaders);
 		}
 	} catch (error) {
+		// eslint-disable-next-line no-console -- surfaces DB data-integrity issues that would otherwise fail silently
 		console.warn(`Failed to parse responseHeaders for ${url}:`, error);
 	}
 
@@ -87,6 +88,7 @@ export async function getPageDetail(
 			}
 		}
 	} catch (error) {
+		// eslint-disable-next-line no-console -- surfaces DB data-integrity issues that would otherwise fail silently
 		console.warn(`Failed to parse meta_extras for ${url}:`, error);
 	}
 

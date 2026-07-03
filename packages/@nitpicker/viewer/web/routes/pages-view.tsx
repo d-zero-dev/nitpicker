@@ -315,6 +315,12 @@ export function PagesView() {
 				},
 			],
 		);
+		const headerPresenceFilter: Record<keyof HeaderPresence, boolean | undefined> = {
+			hasCSP: filter.hasCSP,
+			hasXFrameOptions: filter.hasXFrameOptions,
+			hasXContentTypeOptions: filter.hasXContentTypeOptions,
+			hasHSTS: filter.hasHSTS,
+		};
 		for (const key of HEADER_PRESENCE_KEYS) {
 			addSort(controls, { params, updateMany }, key, key);
 			addRadioFilter(
@@ -324,9 +330,21 @@ export function PagesView() {
 				key,
 				HEADER_PRESENCE_LABELS[key],
 				[
-					{ value: '', label: t('common.all'), checked: filter[key] == null },
-					{ value: 'true', label: t('common.yes'), checked: filter[key] === true },
-					{ value: 'false', label: t('common.none'), checked: filter[key] === false },
+					{
+						value: '',
+						label: t('common.all'),
+						checked: headerPresenceFilter[key] == null,
+					},
+					{
+						value: 'true',
+						label: t('common.yes'),
+						checked: headerPresenceFilter[key] === true,
+					},
+					{
+						value: 'false',
+						label: t('common.none'),
+						checked: headerPresenceFilter[key] === false,
+					},
 				],
 			);
 		}

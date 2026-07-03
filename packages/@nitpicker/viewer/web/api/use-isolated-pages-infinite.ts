@@ -35,7 +35,7 @@ export interface IsolatedPagesPage {
 /**
  * Infinite-scrolling **完全孤立** page list. Fetches `PAGE_SIZE` rows per
  * request and advances the offset until all matching rows (`total`) are
- * loaded — replaces the previous fixed-100-row {@link useIsolatedPages}
+ * loaded — replaces the previous fixed-100-row `useIsolatedPages`
  * hook so the rendered list count matches the displayed total at every
  * scroll position.
  * @param filter - The active filter state.
