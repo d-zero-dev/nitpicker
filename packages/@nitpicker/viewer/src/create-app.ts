@@ -4,6 +4,9 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 
 import { registerArchiveInfoRoute } from './routes/register-archive-info-route.js';
+import { registerDirectoryTreeChildrenRoute } from './routes/register-directory-tree-children-route.js';
+import { registerDirectoryTreePagesRoute } from './routes/register-directory-tree-pages-route.js';
+import { registerDirectoryTreeRoute } from './routes/register-directory-tree-route.js';
 import { registerDuplicatesRoute } from './routes/register-duplicates-route.js';
 import { registerErrorKindsRoute } from './routes/register-error-kinds-route.js';
 import { registerGraphRoute } from './routes/register-graph-route.js';
@@ -47,6 +50,9 @@ export function createApp(options: CreateAppOptions): Hono {
 	registerPagesRoute(app, context);
 	registerPageDetailRoute(app, context);
 	registerPageHtmlRoute(app, context);
+	registerDirectoryTreeRoute(app, context);
+	registerDirectoryTreeChildrenRoute(app, context);
+	registerDirectoryTreePagesRoute(app, context);
 	registerLinksRoute(app, context);
 	registerResourcesRoute(app, context);
 	registerResourceReferrersRoute(app, context);

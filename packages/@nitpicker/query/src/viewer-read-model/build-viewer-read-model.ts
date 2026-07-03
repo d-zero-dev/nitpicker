@@ -4,6 +4,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import { classifyContentType } from '../classify-content-type.js';
 import { excludeSkippedPages } from '../exclude-skipped-pages.js';
 
+import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
 import { computePageFacetBuckets } from './compute-page-facet-buckets.js';
 import { createViewerReadModelTables } from './create-viewer-read-model-tables.js';
 import { dropViewerReadModelTables } from './drop-viewer-read-model-tables.js';
@@ -199,14 +200,17 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
 }
 
 /**
- * Performs a full rebuild of the viewer read model: drops all 5 tables if
+ * Performs a full rebuild of the viewer read model: drops all 7 tables if
  * present, recreates them, populates `viewer_pages` from the current
- * `pages` write-model table, seeds one smoke-test row into
- * `viewer_query_profiles`, writes the `viewer_count_buckets` totals row plus
- * one row per distinct Pages-list facet value (see
- * `computePageFacetBuckets`), and writes the `viewer_read_model_meta` row —
- * all inside one transaction, so a mid-build failure leaves the previous
- * read model (or no read model) intact, never a partially-built one.
+ * `pages` write-model table, populates `viewer_directory_nodes`/
+ * `viewer_directory_pages` from that same page set (see
+ * `buildDirectoryTreeRows` for the tree-building rules), seeds one
+ * smoke-test row into `viewer_query_profiles`, writes the
+ * `viewer_count_buckets` totals row plus one row per distinct Pages-list
+ * facet value (see `computePageFacetBuckets`), and writes the
+ * `viewer_read_model_meta` row — all inside one transaction, so a mid-build
+ * failure leaves the previous read model (or no read model) intact, never a
+ * partially-built one.
  *
  * `viewer_pages` includes every listable page regardless of content-type
  * category (`scraped = 1 AND redirectDestId IS NULL`, plus excluding
@@ -295,6 +299,24 @@ export async function buildViewerReadModel(
 			await trx('viewer_pages').insert(chunk);
 			insertedRows += chunk.length;
 			onProgress?.({ insertedRows, totalRows });
+		}
+
+		// Reuses `sourceRows` (already loaded above for `viewer_pages`) instead
+		// of issuing a second `pages` SELECT — see `buildDirectoryTreeRows`'s
+		// docs for the tree-building rules (host eligibility, trailing-slash
+		// directory/page boundary, count propagation).
+		const { nodes: directoryNodes, pages: directoryPages } = buildDirectoryTreeRows(
+			sourceRows.map((row) => ({ id: row.id, url: row.url, isExternal: row.isExternal })),
+		);
+		for (let start = 0; start < directoryNodes.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_directory_nodes').insert(
+				directoryNodes.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
+		for (let start = 0; start < directoryPages.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_directory_pages').insert(
+				directoryPages.slice(start, start + INSERT_CHUNK_SIZE),
+			);
 		}
 
 		const total = insertRows.length;

@@ -1,19 +1,19 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 5 viewer-read-model tables (and `viewer_pages`'s named
+ * Creates all 7 viewer-read-model tables (and `viewer_pages`'s named
  * indexes) against the given connection. Assumes none of the tables
  * currently exist — callers (`buildViewerReadModel`) are responsible for
  * dropping any prior version first, inside the same transaction, so this
  * function is not itself idempotent.
  *
  * Every statement runs via `raw()` rather than knex's chainable schema
- * builder: 4 of the 5 tables need `WITHOUT ROWID` / a composite primary key
- * / a `CHECK` constraint, none of which the chainable builder can express
- * (the same reason `page_html_blobs` / `page_html_ref` drop to `raw()` in
- * `@nitpicker/crawler`'s `init-schema.ts`). Using `raw()` for the 5th table
- * (`viewer_pages`) too keeps this function a single uniform style instead
- * of mixing two schema-definition APIs.
+ * builder: 5 of the 7 tables need `WITHOUT ROWID` / a composite primary key
+ * / a `CHECK` constraint / a table-level `UNIQUE` constraint, none of which
+ * the chainable builder can express (the same reason `page_html_blobs` /
+ * `page_html_ref` drop to `raw()` in `@nitpicker/crawler`'s
+ * `init-schema.ts`). Using `raw()` for every table keeps this function a
+ * single uniform style instead of mixing two schema-definition APIs.
  * @param trx - An open Knex transaction (a plain `Knex` instance also works,
  *   e.g. in tests that don't need transactional rollback).
  */
@@ -108,4 +108,53 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			primary key(scope, profile_key, page_size, page_index)
 		) WITHOUT ROWID
 	`);
+
+	await trx.raw(`
+		CREATE TABLE viewer_directory_nodes (
+			node_id integer primary key,
+			parent_node_id integer,
+			root_key text not null,
+			depth integer not null,
+			name text not null,
+			path text not null,
+			name_sort_key text not null,
+			path_sort_key text not null,
+			direct_child_dir_count integer not null,
+			direct_page_count integer not null,
+			descendant_page_count integer not null,
+			internal_descendant_page_count integer not null,
+			external_descendant_page_count integer not null,
+			has_children integer not null,
+			unique(root_key, path)
+		)
+	`);
+	// `getDirectoryTree` filters `depth <= 3` (a range, not an equality) and
+	// orders by `path_sort_key` alone (grouping into per-root_key buckets
+	// happens in JS afterward — see that function's docs). Leading the index
+	// with `path_sort_key` lets SQLite satisfy the `ORDER BY` via a plain
+	// ascending index scan with `depth` checked as a cheap residual filter,
+	// instead of falling back to `USE TEMP B-TREE FOR ORDER BY`. Leading with
+	// `root_key`/`depth` instead (as `docs/viewer-sql-query-plan.md`'s
+	// aspirational single-root-per-request index does) would not help here:
+	// a range condition on a non-leading column can't be used to avoid a sort
+	// on a column that comes after it — the same index-column-order pitfall
+	// `idx_pages_listfilter` hit (see ARCHITECTURE.md).
+	await trx.raw(
+		'CREATE INDEX vdn_path_depth ON viewer_directory_nodes(path_sort_key, depth, node_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vdn_parent_name ON viewer_directory_nodes(parent_node_id, name_sort_key, node_id)',
+	);
+
+	await trx.raw(`
+		CREATE TABLE viewer_directory_pages (
+			node_id integer not null,
+			page_id integer not null,
+			page_url_sort_key text not null,
+			primary key(node_id, page_id)
+		) WITHOUT ROWID
+	`);
+	await trx.raw(
+		'CREATE INDEX vdp_node_url ON viewer_directory_pages(node_id, page_url_sort_key, page_id)',
+	);
 }

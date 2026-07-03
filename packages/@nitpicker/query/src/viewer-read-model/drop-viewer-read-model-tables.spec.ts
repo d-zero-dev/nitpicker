@@ -37,7 +37,7 @@ describe('dropViewerReadModelTables', () => {
 		).resolves.toBeUndefined();
 	});
 
-	it('drops all 5 tables after they were created', async () => {
+	it('drops all 7 tables after they were created', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 		for (const table of [
@@ -46,6 +46,8 @@ describe('dropViewerReadModelTables', () => {
 			'viewer_query_profiles',
 			'viewer_count_buckets',
 			'viewer_page_anchors',
+			'viewer_directory_nodes',
+			'viewer_directory_pages',
 		]) {
 			expect(await knex.schema.hasTable(table)).toBe(true);
 		}
@@ -57,6 +59,8 @@ describe('dropViewerReadModelTables', () => {
 			'viewer_query_profiles',
 			'viewer_count_buckets',
 			'viewer_page_anchors',
+			'viewer_directory_nodes',
+			'viewer_directory_pages',
 		]) {
 			expect(await knex.schema.hasTable(table)).toBe(false);
 		}

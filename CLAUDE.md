@@ -79,6 +79,8 @@ packages/
 
 > **Note (`/api/pages` の viewer_pages fast path)**: `/api/pages` は `urlPattern`/`directory` 未指定 かつ `viewer_pages` read model が最新の場合のみ `listViewerPages`（narrow indexed read model + keyset cursor）を使い、それ以外は従来の `listPages`（wide table + offset）にフォールバックする。read model のビルドタイミング（issue #112）は3経路: (1) crawl完了時（`CrawlerOrchestrator.write()` 直前、CLI層の `ensureViewerReadModelQuietly` 経由）に persistent read model を自動ビルド、(2) `nitpicker viewer-build <archive> [--force]` による明示ビルド（既存アーカイブの事前永続化用）、(3) `Archive.openCached` 経由の read-only open（viewer/MCP/query CLI 共通）で read model が無い/古い場合の on-open opportunistic build（タールキャッシュ dir にのみ書き込み、元の `.nitpicker` は不変。専用ロックで多重ビルドを防止、失敗時は warn して legacy fallback）。stub mode は常にビルド対象外。legacy 経路も offset を素の文字列 cursor として返すことで、フロントの `nextCursor`-only 継続契約（仮想スクロール）をどちらの経路でも満たす。詳細は ARCHITECTURE.md の `@nitpicker/viewer` 節「設計注意（`/api/pages` の viewer_pages fast path...）」を正とする。
 
+> **Note (ディレクトリツリー read model、issue #107)**: `viewer_directory_nodes` / `viewer_directory_pages` は `viewer_pages` を返す `sourceRows` を再利用し `buildDirectoryTreeRows` が純粋関数としてメモリ上に構築する。**root_key はホスト単位、ただし internal ページを 1 件も持たないホストは除外**（外部リンク先ドメインの無意味な 1 ページツリーを防ぐ）。**ディレクトリ/ページ境界は末尾スラッシュで判定**（`/blog/2024/post-1` と `/blog/2024/` は同じ `/blog/2024/` ノードに着地）。**`has_children` は `direct_child_dir_count > 0` のみ**（`direct_page_count` を含めると構築ロジック上絶対に `false` にならないため、UI の展開矢印が意味を持つよう子ディレクトリの有無だけを見る）。この機能に legacy フォールバックは存在しないため、3関数（`getDirectoryTree`/`listDirectoryChildren`/`listDirectoryPages`）とも `hasViewerReadModel` ではなく `isViewerReadModelCurrent` を guard に使う。詳細は ARCHITECTURE.md の `@nitpicker/viewer` 節「設計注意（ディレクトリツリー read model...）」を正とする。
+
 ## CLI コマンド
 
 ```sh
