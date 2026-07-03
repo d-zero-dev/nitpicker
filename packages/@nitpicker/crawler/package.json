@@ -37,7 +37,7 @@
 		"fs-extra": "11.3.5",
 		"knex": "3.2.10",
 		"libsql": "0.5.29",
-		"puppeteer": "24.37.5",
+		"puppeteer": "25.2.1",
 		"robots-parser": "3.0.1",
 		"tar": "7.5.17"
 	},

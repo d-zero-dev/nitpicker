@@ -2977,7 +2977,7 @@ __metadata:
     fs-extra: "npm:11.3.5"
     knex: "npm:3.2.10"
     libsql: "npm:0.5.29"
-    puppeteer: "npm:24.37.5"
+    puppeteer: "npm:25.2.1"
     robots-parser: "npm:3.0.1"
     tar: "npm:7.5.17"
   languageName: unknown
@@ -12960,6 +12960,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"lilconfig@npm:^3.1.3":
+  version: 3.1.3
+  resolution: "lilconfig@npm:3.1.3"
+  checksum: 10c0/f5604e7240c5c275743561442fbc5abf2a84ad94da0f5adc71d25e31fa8483048de3dcedcb7a44112a942fed305fd75841cdf6c9681c7f640c63f1049e9a5dcc
+  languageName: node
+  linkType: hard
+
 "lines-and-columns@npm:2.0.3":
   version: 2.0.3
   resolution: "lines-and-columns@npm:2.0.3"
@@ -15959,6 +15966,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"puppeteer-core@npm:25.2.1":
+  version: 25.2.1
+  resolution: "puppeteer-core@npm:25.2.1"
+  dependencies:
+    "@puppeteer/browsers": "npm:3.0.5"
+    chromium-bidi: "npm:16.0.1"
+    devtools-protocol: "npm:0.0.1638949"
+    typed-query-selector: "npm:^2.12.2"
+    webdriver-bidi-protocol: "npm:0.4.2"
+    ws: "npm:^8.21.0"
+  checksum: 10c0/6b220927c1e1e1818a508d6c58be7695bb61064ca0126d6f8bfb49524cce2c32e75860f46c42135938482d95989d2b0c051f7cc0a5d562ddd7b2fcb6101715b0
+  languageName: node
+  linkType: hard
+
 "puppeteer-core@npm:^25.0.2":
   version: 25.2.0
   resolution: "puppeteer-core@npm:25.2.0"
@@ -15986,6 +16007,22 @@ __metadata:
   bin:
     puppeteer: lib/cjs/puppeteer/node/cli.js
   checksum: 10c0/28f1e72ca44ba5df9a8913f987aabb929dce004f98f7a245ce9ddb33ce31bd42e385a63a5b6b9d30eefbd7b2c2bf6e89c9704771182b3fcee7dd106bf911e18c
+  languageName: node
+  linkType: hard
+
+"puppeteer@npm:25.2.1":
+  version: 25.2.1
+  resolution: "puppeteer@npm:25.2.1"
+  dependencies:
+    "@puppeteer/browsers": "npm:3.0.5"
+    chromium-bidi: "npm:16.0.1"
+    devtools-protocol: "npm:0.0.1638949"
+    lilconfig: "npm:^3.1.3"
+    puppeteer-core: "npm:25.2.1"
+    typed-query-selector: "npm:^2.12.2"
+  bin:
+    puppeteer: lib/puppeteer/node/cli.js
+  checksum: 10c0/c7a8cfcb3e6cd37033e718c95fc04d24df703093f83a0e443401aea4243587ded01d5e6e2940aa442a393b428b83c2b1f61d1d7e7509b96ab018c06e4104b707
   languageName: node
   linkType: hard
 
