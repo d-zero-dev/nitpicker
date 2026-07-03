@@ -107,13 +107,18 @@ test.describe('Nitpicker Viewer', () => {
 		await expect(page.locator('.pt-row').first()).toBeVisible();
 	});
 
-	test('Errors ビューに遷移して見出しと解説が表示される', async ({ page }) => {
+	test('Connection Failures ビューに遷移して見出しと解説が表示される', async ({
+		page,
+	}) => {
 		await page.goto('/');
-		await page.getByRole('link', { name: 'Errors' }).click();
-		await expect(page.getByRole('heading', { name: 'Errors', level: 1 })).toBeVisible();
-		// The fixture crawls a healthy local site, so the view renders its empty
-		// state rather than failure groups — asserting it confirms the route,
-		// nav link, API wiring, and render path all resolve.
+		await page.getByRole('link', { name: 'Connection Failures' }).click();
+		await expect(
+			page.getByRole('heading', { name: 'Connection Failures', level: 1 }),
+		).toBeVisible();
+		// The fixture crawls a healthy local site, so the view renders a
+		// zero-row table rather than any host×kind rows — asserting the
+		// description confirms the route, nav link, API wiring, and render
+		// path all resolve.
 		await expect(page.locator('.view-header .view-description')).toBeVisible();
 	});
 });

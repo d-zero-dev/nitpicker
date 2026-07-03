@@ -1,125 +1,263 @@
-import type { ErrorKind } from '@nitpicker/query';
+import type { ErrorKind, ErrorKindEntry } from '@nitpicker/query';
+import type { ColumnDef } from '@tanstack/react-table';
 
-import { useState } from 'react';
+import { useMemo } from 'react';
 
 import { useErrorKinds } from '../api/use-error-kinds.js';
+import {
+	addRadioFilter,
+	addSort,
+	createTableControls,
+} from '../components/create-table-controls.js';
+import { DataTable } from '../components/data-table.js';
 import { ViewHeader } from '../components/view-header.js';
+import { useListPagination } from '../hooks/use-list-pagination.js';
+import { useUrlFilter } from '../hooks/use-url-filter.js';
 import { getErrorKindLabel } from '../i18n/get-error-kind-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
-import { computeRatio } from '../utils/compute-ratio.js';
-import { formatPercent } from '../utils/format-percent.js';
 
 /**
- * Errors dashboard: crawl failures grouped by classified cause.
- *
- * Each kind renders as a selectable bar (share of all failure records). The
- * selected kind expands into a per-host breakdown and a list of sample URLs so
- * the user can tell, say, a handful of DNS failures apart from a flood of slow
- * pages that merely timed out — the distinction the raw archive blurs into one
- * "timeout / unknown" bucket. The cause is derived on read, so this works on
- * archives crawled before structured error capture existed.
+ * Every {@link ErrorKind} value, used to populate the list's kind filter.
+ * Declared as a `Record` (rather than a plain array) so adding a member to
+ * the `ErrorKind` union owned by `@nitpicker/crawler` without updating this
+ * map is a compile error, not a silently-incomplete filter.
+ */
+const ERROR_KIND_KEYS: Record<ErrorKind, true> = {
+	dns: true,
+	'dns-transient': true,
+	'connection-refused': true,
+	'connection-reset': true,
+	'connection-timeout': true,
+	tls: true,
+	'local-network': true,
+	'parse-error': true,
+	'client-blocked': true,
+	timeout: true,
+	protocol: true,
+	unknown: true,
+};
+const ERROR_KINDS = Object.keys(ERROR_KIND_KEYS) as ErrorKind[];
+
+/**
+ * Connection-failures master-detail view: hosts that never returned an HTTP
+ * response (DNS / TLS / connection / timeout failures), one row per
+ * host×kind pair. The list mode (no `?host=`/`?kind=` params, or `kind` alone
+ * as a column filter) shows the host×kind rows; selecting a row sets both
+ * params and switches to the detail mode listing that pair's sample URLs.
  * @returns The errors view element.
  */
 export function ErrorsView() {
-	const { t } = useI18n();
-	const { data, isLoading, error } = useErrorKinds();
-	const [selected, setSelected] = useState<ErrorKind | null>(null);
+	const { params, updateMany } = useUrlFilter();
+	const host = params.get('host');
+	const kind = params.get('kind');
 
-	if (isLoading) {
-		return <div className="state">{t('common.loading')}</div>;
-	}
-	if (error) {
-		return <div className="state state-error">{error.message}</div>;
-	}
-	if (!data) {
-		return null;
-	}
-
-	if (data.total === 0) {
+	if (host !== null && host.length > 0 && kind !== null && kind.length > 0) {
 		return (
-			<div>
-				<ViewHeader
-					titleKey="views.errors.title"
-					descriptionKey="views.errors.description"
-				/>
-				<div className="state">{t('views.errors.empty')}</div>
-			</div>
+			<ErrorDetailPane
+				// Remounts on every host/kind change (e.g. browser back/forward
+				// between two detail URLs) so the previous pair's data never
+				// lingers under the new header via usePagedQuery's keepPreviousData.
+				key={`${host}\t${kind}`}
+				host={host}
+				kind={kind as ErrorKind}
+				onBack={() =>
+					updateMany([
+						['host', ''],
+						['kind', ''],
+					])
+				}
+			/>
 		);
 	}
+	return (
+		<ErrorListPane
+			onSelectRow={(rowHost, rowKind) => {
+				updateMany([
+					['host', rowHost],
+					['kind', rowKind],
+				]);
+			}}
+		/>
+	);
+}
 
-	// Default the drill-down to the largest kind so the view is never empty, and
-	// fall back to it if a previously-selected kind is absent from the current
-	// data (e.g. after a refetch) so the detail panel never silently disappears.
-	const activeGroup = data.groups.find((g) => g.kind === selected) ?? data.groups[0];
-	const activeKind = activeGroup?.kind ?? null;
+/**
+ * Renders the paginated list of host×kind rows. Each host cell is a button
+ * so the operator can drill into that pair's sample URLs without a mouse.
+ * @param props - Component props.
+ * @param props.onSelectRow - Called with the row's host and kind when the operator drills in.
+ * @returns The list pane element.
+ */
+function ErrorListPane({
+	onSelectRow,
+}: {
+	onSelectRow: (host: string, kind: ErrorKind) => void;
+}) {
+	const { t } = useI18n();
+	const { params, updateMany } = useUrlFilter();
+	const { pageSize, currentPage, setPage, setPageSize } = useListPagination();
+	const filter = {
+		host: params.get('host') ?? undefined,
+		kind: (params.get('kind') ?? undefined) as ErrorKind | undefined,
+		sortBy: (params.get('sortBy') ?? undefined) as 'host' | 'kind' | 'count' | undefined,
+		sortOrder: (params.get('sortOrder') ?? undefined) as 'asc' | 'desc' | undefined,
+	};
+	const offset = (currentPage - 1) * pageSize;
+	const { data, isFetching, isLoading, isError, error } = useErrorKinds({
+		...filter,
+		limit: pageSize,
+		offset,
+	});
+
+	const columns = useMemo<ColumnDef<ErrorKindEntry>[]>(
+		() => [
+			{
+				id: 'host',
+				header: t('views.errors.host'),
+				size: 320,
+				accessorFn: (r) => r.host,
+				cell: (info) => {
+					const row = info.row.original;
+					return (
+						<button
+							type="button"
+							className="link-button"
+							onClick={() => onSelectRow(row.host, row.kind)}>
+							<code>{row.host}</code>
+						</button>
+					);
+				},
+			},
+			{
+				id: 'kind',
+				header: t('views.errors.kind'),
+				size: 200,
+				accessorFn: (r) => r.kind,
+				cell: (info) => getErrorKindLabel(info.getValue<ErrorKind>(), t),
+			},
+			{
+				id: 'count',
+				header: t('views.errors.count'),
+				size: 100,
+				accessorFn: (r) => r.count,
+			},
+		],
+		[t, onSelectRow],
+	);
+	const columnControls = useMemo(() => {
+		const context = { params, updateMany };
+		const controls = createTableControls(context);
+		addSort(controls, context, 'host', 'host');
+		addSort(controls, context, 'kind', 'kind');
+		addSort(controls, context, 'count', 'count', 'desc');
+		addRadioFilter(controls, context, 'kind', 'kind', t('views.errors.filterKind'), [
+			{ value: '', label: t('common.all'), checked: false },
+			...ERROR_KINDS.map((value) => ({
+				value,
+				label: getErrorKindLabel(value, t),
+				checked: false,
+			})),
+		]);
+		return controls;
+	}, [params, t, updateMany]);
 
 	return (
-		<div>
+		<div className="view">
 			<ViewHeader
 				titleKey="views.errors.title"
 				descriptionKey="views.errors.description"
 			/>
-			<p className="state">
-				{t('views.errors.total', { total: data.total })}
-				{data.channelSource !== 'none' && (
-					<>
-						{' · '}
-						{t('views.errors.channelSource', { source: data.channelSource })}
-					</>
-				)}
+			{data && (
+				<p className="state">
+					{t('views.errors.total', { total: data.facets.totalRecords })}
+					{data.facets.channelSource !== 'none' && (
+						<>
+							{' · '}
+							{t('views.errors.channelSource', { source: data.facets.channelSource })}
+						</>
+					)}
+				</p>
+			)}
+			<DataTable
+				mode="mpa"
+				columns={columns}
+				data={data?.items ?? []}
+				total={data?.total ?? 0}
+				currentPage={currentPage}
+				pageSize={pageSize}
+				onPageChange={setPage}
+				onPageSizeChange={setPageSize}
+				isFetching={isFetching}
+				isLoading={isLoading}
+				isError={isError}
+				error={error}
+				columnControls={columnControls}
+			/>
+		</div>
+	);
+}
+
+/**
+ * Renders a single host×kind pair's sample URLs. `getErrorKinds` returns at
+ * most one row for an exact (host, kind) pair, so `items[0]` is the whole
+ * answer — no further pagination is needed.
+ * @param props - Component props.
+ * @param props.host - The host to look up.
+ * @param props.kind - The classified cause to look up.
+ * @param props.onBack - Called when the operator navigates back to the host list.
+ * @returns The detail pane element.
+ */
+function ErrorDetailPane({
+	host,
+	kind,
+	onBack,
+}: {
+	host: string;
+	kind: ErrorKind;
+	onBack: () => void;
+}) {
+	const { t } = useI18n();
+	const { data, isLoading, isError, error } = useErrorKinds({ host, kind });
+	const entry = data?.items[0];
+
+	return (
+		<div className="view">
+			<button type="button" className="link-button" onClick={onBack}>
+				{t('views.errors.back')}
+			</button>
+			<ViewHeader
+				titleKey="views.errors.detailTitle"
+				descriptionKey="views.errors.description"
+			/>
+			<p>
+				<code>{host}</code> — {getErrorKindLabel(kind, t)}
+				{entry && ` (${entry.count.toLocaleString()})`}
 			</p>
-
-			<div className="bars">
-				{data.groups.map((group) => {
-					const ratio = computeRatio(group.count, data.total);
-					const isActive = group.kind === activeKind;
-					return (
-						<button
-							type="button"
-							key={group.kind}
-							className={isActive ? 'bar-row bar-row-active' : 'bar-row'}
-							aria-pressed={isActive}
-							onClick={() => setSelected(group.kind)}>
-							<span style={{ width: 160, textAlign: 'left' }}>
-								{getErrorKindLabel(group.kind, t)}
-							</span>
-							<span className="bar-track">
-								<span className="bar-fill" style={{ width: `${ratio * 100}%` }} />
-							</span>
-							<span>
-								{group.count.toLocaleString()} <small>({formatPercent(ratio)})</small>
-							</span>
-						</button>
-					);
-				})}
-			</div>
-
-			{activeGroup && (
-				<div className="error-detail">
-					<h2>
-						{getErrorKindLabel(activeGroup.kind, t)} — {t('views.errors.hosts')}
-					</h2>
-					<div className="bars">
-						{activeGroup.hosts.map((host) => (
-							<div key={host.host} className="bar-row">
-								<span style={{ width: 240, textAlign: 'left' }}>{host.host}</span>
-								<span>{host.count.toLocaleString()}</span>
-							</div>
-						))}
-					</div>
-
-					<h2>{t('views.errors.sampleUrls')}</h2>
-					{/* Plain, selectable text rather than links: these URLs failed to
-					    crawl (DNS failure, refused, cert error, …), so a link would just
-					    open a dead tab. They exist to be read and copied for diagnosis. */}
-					<ul className="url-list">
-						{activeGroup.sampleUrls.map((url, index) => (
-							<li key={`${url}-${index}`}>
-								<code>{url}</code>
-							</li>
-						))}
-					</ul>
-				</div>
+			{isLoading && <div className="state">{t('common.loading')}</div>}
+			{isError && (
+				<p className="error" role="alert">
+					{error?.message ?? 'Error'}
+				</p>
+			)}
+			{!isLoading && !isError && entry == null && (
+				<p className="state">{t('views.errors.notFound')}</p>
+			)}
+			{!isLoading && !isError && entry != null && (
+				// Plain, selectable text rather than links: these URLs failed to
+				// crawl (DNS failure, refused, cert error, …), so a link would just
+				// open a dead tab. They exist to be read and copied for diagnosis.
+				<ul className="url-list">
+					{entry.sampleUrls.map((url, index) => (
+						<li key={`${url}-${index}`}>
+							<code>{url}</code>
+						</li>
+					))}
+				</ul>
+			)}
+			{entry != null && entry.overflowedCount > 0 && (
+				<p className="state">
+					{t('views.errors.overflowed', { count: entry.overflowedCount })}
+				</p>
 			)}
 		</div>
 	);

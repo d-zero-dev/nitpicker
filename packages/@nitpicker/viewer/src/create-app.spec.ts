@@ -82,6 +82,14 @@ describe('createApp', () => {
 			});
 		}
 
+		await archive.addError({
+			pid: 1,
+			isMainProcess: true,
+			url: 'https://dead.example.net/',
+			isExternal: true,
+			error: new Error('getaddrinfo ENOTFOUND dead.example.net'),
+		});
+
 		const context: ArchiveContext = {
 			manager: { get: () => archive } as unknown as ArchiveManager,
 			archiveId: 'test',
@@ -147,6 +155,40 @@ describe('createApp', () => {
 	it('GET /api/links は不正な type で 400 を返す', async () => {
 		const res = await app.request('/api/links?type=bogus');
 		expect(res.status).toBe(400);
+	});
+
+	it('GET /api/error-kinds は host×kind 行の一覧を返す', async () => {
+		const res = await app.request('/api/error-kinds');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			items: { host: string; kind: string; count: number }[];
+			total: number;
+			facets: { totalRecords: number; channelSource: string };
+		};
+		expect(body.items).toContainEqual(
+			expect.objectContaining({ host: 'dead.example.net', kind: 'dns', count: 1 }),
+		);
+		expect(body.facets.totalRecords).toBeGreaterThanOrEqual(1);
+	});
+
+	it('GET /api/error-kinds?host= はその host の行だけに絞り込む', async () => {
+		const res = await app.request(
+			`/api/error-kinds?host=${encodeURIComponent('dead.example.net')}`,
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { items: { host: string }[] };
+		expect(body.items.length).toBeGreaterThanOrEqual(1);
+		expect(body.items.every((item) => item.host === 'dead.example.net')).toBe(true);
+	});
+
+	it('GET /api/error-kinds は不正な sortBy でも 500 にならず count 降順にフォールバックする', async () => {
+		// Unlike /api/links (400 on a bad `type`), an unrecognized `sortBy`
+		// here degrades to the default sort rather than rejecting the
+		// request — a hand-edited or stale bookmark should not 500.
+		const res = await app.request('/api/error-kinds?sortBy=bogus');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { items: unknown[] };
+		expect(Array.isArray(body.items)).toBe(true);
 	});
 
 	it('GET /api/resources は一覧を返す', async () => {
