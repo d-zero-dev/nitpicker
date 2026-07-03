@@ -1,14 +1,14 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 7 viewer-read-model tables (and `viewer_pages`'s named
+ * Creates all 8 viewer-read-model tables (and `viewer_pages`'s named
  * indexes) against the given connection. Assumes none of the tables
  * currently exist — callers (`buildViewerReadModel`) are responsible for
  * dropping any prior version first, inside the same transaction, so this
  * function is not itself idempotent.
  *
  * Every statement runs via `raw()` rather than knex's chainable schema
- * builder: 5 of the 7 tables need `WITHOUT ROWID` / a composite primary key
+ * builder: 5 of the 8 tables need `WITHOUT ROWID` / a composite primary key
  * / a `CHECK` constraint / a table-level `UNIQUE` constraint, none of which
  * the chainable builder can express (the same reason `page_html_blobs` /
  * `page_html_ref` drop to `raw()` in `@nitpicker/crawler`'s
@@ -156,5 +156,30 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	`);
 	await trx.raw(
 		'CREATE INDEX vdp_node_url ON viewer_directory_pages(node_id, page_url_sort_key, page_id)',
+	);
+
+	// Pre-aggregated, deduplicated-by-canonical-destination external link
+	// list — see `computeExternalLinkRows`'s docs for why this needs its own
+	// `anchors` query rather than reusing `viewer_pages`'s `sourceRows` (the
+	// aggregation joins `anchors` at build time instead of on every read,
+	// see ARCHITECTURE.md「設計注意（外部リンク read model）」for the
+	// SQLite COUNT(DISTINCT)/GROUP BY performance rationale). No
+	// `_desc_key` columns like `viewer_pages` needs: pagination here is
+	// plain offset-based (via `paginateQuery`), not keyset-cursor, so a
+	// single ascending index scanned backward is enough for DESC.
+	await trx.raw(`
+		CREATE TABLE viewer_external_links (
+			dest_page_id integer primary key,
+			dest_url text not null,
+			status integer,
+			referrer_count integer not null
+		)
+	`);
+	await trx.raw('CREATE INDEX vel_url ON viewer_external_links(dest_url, dest_page_id)');
+	await trx.raw(
+		'CREATE INDEX vel_status ON viewer_external_links(status, dest_url, dest_page_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vel_referrer_count ON viewer_external_links(referrer_count, dest_url, dest_page_id)',
 	);
 }
