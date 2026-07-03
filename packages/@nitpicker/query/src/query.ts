@@ -50,6 +50,7 @@ export { listPagesByJsonLdType } from './list-pages-by-jsonld-type.js';
 export { listPagesByTag } from './list-pages-by-tag.js';
 export { listResources } from './list-resources.js';
 export { listUnusedResources } from './list-unused-resources.js';
+export { listViewerBrokenLinks } from './list-viewer-broken-links.js';
 export { listViewerExternalLinks } from './list-viewer-external-links.js';
 export { listViewerPages } from './list-viewer-pages.js';
 export { prepareUrlSortTempTable } from './url-sort-temp-table.js';

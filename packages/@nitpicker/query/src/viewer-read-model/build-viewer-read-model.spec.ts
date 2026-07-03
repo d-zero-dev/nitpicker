@@ -1102,7 +1102,9 @@ describe('buildViewerReadModel', () => {
 				isSkipped: false,
 			});
 
-			// A second, distinct referring page to the same destination.
+			// A second, distinct referring page to the same destination, plus two
+			// duplicate anchors to a broken destination — must collapse to one
+			// viewer_anchor_facts row with count=2, not two rows.
 			await archive.setPage({
 				url: parseUrl('https://example.com/page-b')!,
 				redirectPaths: [],
@@ -1122,6 +1124,18 @@ describe('buildViewerReadModel', () => {
 						title: null,
 						textContent: 'Ad sidebar',
 					},
+					{
+						href: parseUrl('https://example.com/broken')!,
+						isExternal: false,
+						title: null,
+						textContent: 'Broken link 1',
+					},
+					{
+						href: parseUrl('https://example.com/broken')!,
+						isExternal: false,
+						title: null,
+						textContent: 'Broken link 2',
+					},
 				],
 				imageList: [],
 				isSkipped: false,
@@ -1136,6 +1150,22 @@ describe('buildViewerReadModel', () => {
 				statusText: 'OK',
 				contentType: 'text/html',
 				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+			await archive.setPage({
+				url: parseUrl('https://example.com/broken')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 404,
+				statusText: 'Not Found',
+				contentType: 'text/html',
+				contentLength: 0,
 				responseHeaders: {},
 				html: '',
 				meta: META,
@@ -1170,6 +1200,33 @@ describe('buildViewerReadModel', () => {
 			const rows = await archive.getKnex()('viewer_external_links').select('*');
 			expect(rows).toHaveLength(1);
 			expect(rows[0]).toMatchObject({ referrer_count: 2 });
+		});
+
+		it('populates viewer_anchor_facts with one row per unique (source,dest) pair, collapsing duplicate anchors via count', async () => {
+			const rows = await archive
+				.getKnex()('viewer_anchor_facts')
+				.where('dest_url_sort_key', 'https://example.com/broken')
+				.select('*');
+			expect(rows).toHaveLength(1);
+			expect(rows[0]).toMatchObject({ count: 2, is_broken: 1, is_external_link: 0 });
+		});
+
+		it('flags the external-destination edges as is_external_link without indexing them for read (no vaf_external_* index exists)', async () => {
+			const rows = await archive
+				.getKnex()('viewer_anchor_facts')
+				.where('dest_url_sort_key', 'https://ads.example.com')
+				.select('*');
+			expect(rows).toHaveLength(2);
+			for (const row of rows) {
+				expect(row).toMatchObject({ is_broken: 0, is_external_link: 1 });
+			}
+		});
+
+		it('rebuilds viewer_anchor_facts idempotently — a second build leaves the same row count', async () => {
+			await buildViewerReadModel(archive);
+			const rows = await archive.getKnex()('viewer_anchor_facts').select('*');
+			// 2 edges to ads.example.com (page-a, page-b) + 1 edge to /broken (page-b).
+			expect(rows).toHaveLength(3);
 		});
 	});
 });

@@ -1,10 +1,9 @@
 import type { InfiniteQueryOptions } from './infinite-query-options.js';
-import type { LinkEntry } from '@nitpicker/query';
+import type { CursorPaginatedLinkList, LinkEntry } from '@nitpicker/query';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
 
 import { apiGet } from './api-client.js';
-import { getNextOffset } from './get-next-offset.js';
 import { PAGE_SIZE } from './page-size.js';
 
 /**
@@ -32,16 +31,15 @@ export interface LinksFilter {
 	sortOrder?: string;
 }
 
-/** Paginated link analysis response shape. */
-interface LinksPage {
-	/** Rows for this page. */
-	items: LinkRow[];
-	/** Total matching rows. */
-	total: number;
-}
-
 /**
- * Infinite-scrolling broken-link analysis.
+ * Infinite-scrolling broken-link analysis. Fetches `PAGE_SIZE` rows per
+ * request and advances via the server-issued `nextCursor` (keyset
+ * pagination) rather than a growing `offset` — the same contract
+ * `usePagesInfinite` uses for `/api/pages`. `/api/links?type=broken` serves
+ * this from the `viewer_anchor_facts` read model when available, falling
+ * back to the legacy anchor-scan path (whose `nextCursor` is a plain
+ * offset-as-string, per `buildLegacyPagesCursors`) otherwise — this hook
+ * never needs to know which backend served a given page.
  * @param type - The link analysis type.
  * @param filter
  * @param options - Optional flags (`enabled`).
@@ -54,16 +52,15 @@ export function useLinksInfinite(
 ) {
 	return useInfiniteQuery({
 		queryKey: ['links', type, filter],
-		initialPageParam: 0,
+		initialPageParam: null as string | null,
 		queryFn: ({ pageParam }) =>
-			apiGet<LinksPage>('/api/links', {
+			apiGet<CursorPaginatedLinkList>('/api/links', {
 				type,
 				...filter,
 				limit: PAGE_SIZE,
-				offset: pageParam,
+				cursor: pageParam ?? undefined,
 			}),
-		getNextPageParam: (lastPage, _allPages, lastPageParam) =>
-			getNextOffset(lastPage, lastPageParam),
+		getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
 		enabled: options?.enabled ?? true,
 	});
 }

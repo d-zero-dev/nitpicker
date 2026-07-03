@@ -5,35 +5,16 @@ import { classifyContentType } from '../classify-content-type.js';
 import { excludeSkippedPages } from '../exclude-skipped-pages.js';
 
 import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
-import { computeExternalLinkRows } from './compute-external-link-rows.js';
+import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
 import { computePageFacetBuckets } from './compute-page-facet-buckets.js';
 import { createViewerReadModelTables } from './create-viewer-read-model-tables.js';
+import { deriveExternalLinkSummaryRows } from './derive-external-link-summary-rows.js';
 import { dropViewerReadModelTables } from './drop-viewer-read-model-tables.js';
+import { NULL_STATUS_SENTINEL } from './null-status-sentinel.js';
 import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model-schema-version.js';
 
 /** Number of rows written per `INSERT` statement while populating `viewer_pages`. */
 const INSERT_CHUNK_SIZE = 500;
-
-/**
- * Sentinel `status_sort_key` value substituted for `null` status (errored /
- * not-yet-classified rows). Chosen smaller than any real HTTP status code
- * (100-599) so unknown-status rows keep sorting first in ascending order —
- * matching `listPages`'s prior behavior of ordering directly on the nullable
- * `status` column, where SQLite treats `NULL` as smaller than any value.
- *
- * Deliberately distinct from `-1`, which `Database.resetFailedPages` already
- * uses as the "hard failure" HTTP status sentinel (see that function's docs)
- * — reusing `-1` here would conflate two different populations of rows in
- * `status_sort_key` ordering and in any future `status = -1` equality filter.
- *
- * Keyset cursor comparisons need a NEVER-`null` sort-key column: SQL's
- * three-valued logic makes `NULL > x` / `NULL < x` always evaluate to
- * `NULL` (never true), which would silently break tuple comparisons like
- * `(status_sort_key, url_sort_key, page_id) > (?, ?, ?)` for rows whose
- * status is unknown. Substituting a sentinel keeps every row on this column
- * strictly orderable.
- */
-const NULL_STATUS_SENTINEL = -32_768;
 
 /**
  * Row shape read from the write-model `pages` table while populating
@@ -201,14 +182,16 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
 }
 
 /**
- * Performs a full rebuild of the viewer read model: drops all 8 tables if
+ * Performs a full rebuild of the viewer read model: drops all 9 tables if
  * present, recreates them, populates `viewer_pages` from the current
  * `pages` write-model table, populates `viewer_directory_nodes`/
  * `viewer_directory_pages` from that same page set (see
  * `buildDirectoryTreeRows` for the tree-building rules), populates
- * `viewer_external_links` from a dedicated `anchors` aggregation query (see
- * `computeExternalLinkRows` — unlike the directory tree, this cannot reuse
- * `sourceRows`, since link data lives on `anchors`, not `pages`), seeds one
+ * `viewer_anchor_facts` from a single `anchors` aggregation query (see
+ * `computeAnchorFactRows` — unlike the directory tree, this cannot reuse
+ * `sourceRows`, since link data lives on `anchors`, not `pages`) and derives
+ * `viewer_external_links` from those same in-memory rows with no second
+ * `anchors` scan (see `deriveExternalLinkSummaryRows`), seeds one
  * smoke-test row into `viewer_query_profiles`, writes the
  * `viewer_count_buckets` totals row plus one row per distinct Pages-list
  * facet value (see `computePageFacetBuckets`), and writes the
@@ -325,10 +308,19 @@ export async function buildViewerReadModel(
 
 		// Unlike `viewer_pages`/the directory tree, this needs its own `anchors`
 		// query — `sourceRows` (loaded from `pages` only) has no anchor/link
-		// data. Runs once, here, instead of on every `/api/links?type=external`
-		// request — see `computeExternalLinkRows`'s docs for the SQLite
+		// data. Runs once, here, instead of on every `/api/links?type=broken`
+		// request — see `computeAnchorFactRows`'s docs for the SQLite
 		// performance rationale.
-		const externalLinkRows = await computeExternalLinkRows(trx);
+		const anchorFactRows = await computeAnchorFactRows(trx);
+		for (let start = 0; start < anchorFactRows.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_anchor_facts').insert(
+				anchorFactRows.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
+
+		// Derived in memory from the anchor-fact rows already computed above —
+		// no second `anchors` scan (see `deriveExternalLinkSummaryRows`'s docs).
+		const externalLinkRows = deriveExternalLinkSummaryRows(anchorFactRows);
 		for (let start = 0; start < externalLinkRows.length; start += INSERT_CHUNK_SIZE) {
 			await trx('viewer_external_links').insert(
 				externalLinkRows.slice(start, start + INSERT_CHUNK_SIZE),

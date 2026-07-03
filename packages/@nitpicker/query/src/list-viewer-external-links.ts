@@ -9,7 +9,7 @@ import { paginateQuery } from './paginate-query.js';
  * model — the fast-path counterpart of {@link listExternalLinks}, backed by
  * a table pre-aggregated once at read-model build time instead of a live
  * `anchors` JOIN + `GROUP BY` per request (see
- * ARCHITECTURE.md「設計注意（外部リンク read model）」for why the live
+ * ARCHITECTURE.md「設計注意（viewer_anchor_facts read model、issue #114）」for why the live
  * version's `GROUP BY` + `COUNT(DISTINCT ...)` combination is a known
  * SQLite performance pitfall).
  *
