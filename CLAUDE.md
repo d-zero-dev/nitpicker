@@ -76,6 +76,10 @@ packages/
 >
 > **scope-out**: `/api/links?type=broken` 20s / `/api/duplicates` 12s / `/api/images` 14s は本 PR で改善せず accept、denorm 列 (`canonicalId` / pre-aggregate) 無しでは詰まらない別 issue 候補。`/api/summary` cold 26s も I/O bound (10GB DB に対して 64MB cache)、index でこれ以上は詰まらない。
 
+> **Note (viewer 起動時 URL ソートの外部マージソート化)**: 11 GB / 約 157 万 URL 規模のアーカイブで viewer 起動時に JS ヒープ不足クラッシュ（起動時ソートが全 URL を `ExURL` としてメモリ展開していたことが原因）。`packages/@nitpicker/query/src/external-url-sort.ts` の外部マージソート（`pages`/`resources` を id キーセットページネーションでチャンク読み込み → チャンクごとに軽量な `UrlSortKey` へパース・ソートし一時ファイルへ spill → K-way マージで統合）に置き換え、ピークメモリをチャンクサイズに抑える（処理時間は伸びるがメモリを優先）。K-way マージの重複排除が `original` 文字列の完全一致を使う理由（`compareUrlSortKeys(...) === 0` ではない — 別 URL でも 0 を返しうる natural-sort comparator の特性で誤って握り潰すため）と、`viewer_url_sort_keys` への INSERT が `onConflict('url').ignore()` を使う理由（同 comparator が推移律を保証しないことへの fail-safe）は `merge-sorted-url-chunks.ts` / `url-sort-temp-table.ts` の JSDoc を正とする。
+>
+> ソート結果は archive の tar-cache ディレクトリ配下 `precomputed/url-sort-ranks.jsonl` に JSON Lines でストリーミング永続化し、Ctrl-C / viewer 再起動後の再ソートを避ける（`packages/@nitpicker/viewer/src/url-sort-cache.ts`）。既存の `getOrComputeOnDisk`（一括 JSON 化、summary / isolated-clusters cache が使用）を流用しない理由（157 万件規模では読み書き時に再度全展開しメモリ効率化の意味が薄れるため専用にストリーミング実装）、stub mode での bypass 方針は同ファイルの JSDoc を正とする。起動時進捗は `@d-zero/dealer` の `Lanes` で表示し、`pages`+`resources` の総行数を事前 `COUNT(*)` して読み込み・マージ両フェーズで % 表示する。
+
 > **Note (ページネーションモード)**: リスト系ビューは MPA ページネーション（`PagedTable` + `?page=` + `?pageSize=`、デフォルト）と仮想スクロール（`VirtualTable` + `useInfiniteQuery`、opt-in）の 2 モードを TopBar のトグルで切替えられる。`DataTable` がモードに応じて dispatch し、`usePagedQuery` / `use-*-infinite` を `enabled` フラグで切替えるため backend は無改修。**page と pageSize は URL クエリが正**（deep-link / 共有が成立するため両方が URL に乗らないと意味がない、`?pageSize=` 無しで `?page=5` を共有しても受け手の窓サイズが違うと別の行が見える）。デフォルト値（page=1, pageSize=100）は URL から省略してクリーンに保つ。localStorage は `nitpicker-pagination-mode`（モード本体）と `nitpicker-page-size`（**新規タブ初回の hint**）のみ。MPA がデフォルトな理由は deep-link / URL 共有 / 戻る進むが効くため。仮想スクロールは 10 万行規模の探索性が要るとき opt-in。詳細は ARCHITECTURE.md の `@nitpicker/viewer` 節「設計注意（ページネーション...）」を正とする。
 
 ## CLI コマンド
