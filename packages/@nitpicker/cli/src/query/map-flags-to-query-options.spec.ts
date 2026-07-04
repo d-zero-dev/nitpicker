@@ -211,6 +211,20 @@ describe('mapFlagsToQueryOptions', () => {
 		});
 	});
 
+	it('returns url/limit/cursor for resource-referrers', () => {
+		expect(
+			mapFlagsToQueryOptions('resource-referrers', {
+				url: 'https://example.com/style.css',
+				limit: 10,
+				cursor: '5',
+			}),
+		).toEqual({
+			url: 'https://example.com/style.css',
+			limit: 10,
+			cursor: '5',
+		});
+	});
+
 	it('returns limit/offset only for isolated-pages (no required filters)', () => {
 		expect(mapFlagsToQueryOptions('isolated-pages', { limit: 50, offset: 10 })).toEqual({
 			limit: 50,

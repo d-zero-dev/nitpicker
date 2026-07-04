@@ -120,8 +120,16 @@ export async function dispatchQuery(
 			);
 		}
 		case 'resource-referrers': {
-			const { url } = options as { url: string };
-			const result = await getResourceReferrers(accessor, url);
+			const { url, limit, cursor } = options as {
+				url: string;
+				limit?: number;
+				cursor?: string;
+			};
+			const result = await getResourceReferrers(accessor, {
+				resourceUrl: url,
+				limit,
+				cursor,
+			});
 			if (!result) {
 				throw new Error(`Resource not found: ${url}`);
 			}

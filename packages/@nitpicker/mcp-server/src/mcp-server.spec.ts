@@ -209,6 +209,14 @@ describe('createServer', () => {
 			cdn: false,
 			headers: null,
 		});
+		await archive.setResourcesReferrers({
+			url: 'https://example.com',
+			src: 'https://example.com/style.css',
+		});
+		await archive.setResourcesReferrers({
+			url: 'https://example.com/about',
+			src: 'https://example.com/style.css',
+		});
 
 		await archive.write();
 		await archive.close();
@@ -338,6 +346,40 @@ describe('createServer', () => {
 		const data = JSON.parse(result.content[0]!.text);
 		expect(Array.isArray(data.items)).toBe(true);
 		expect(data.items.length).toBe(1);
+	});
+
+	it('get_resource_referrers でリソースの参照元ページを返す', async () => {
+		const result = await callTool(server, 'get_resource_referrers', {
+			archiveId,
+			resourceUrl: 'https://example.com/style.css',
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.total).toBe(2);
+		expect(data.pageUrls).toHaveLength(2);
+		expect(data.nextCursor).toBeNull();
+	});
+
+	it('get_resource_referrers は limit/cursor で bound/継続できる', async () => {
+		const first = await callTool(server, 'get_resource_referrers', {
+			archiveId,
+			resourceUrl: 'https://example.com/style.css',
+			limit: 1,
+		});
+		const firstData = JSON.parse(first.content[0]!.text);
+		expect(firstData.pageUrls).toHaveLength(1);
+		expect(firstData.total).toBe(2);
+		expect(firstData.nextCursor).not.toBeNull();
+
+		const second = await callTool(server, 'get_resource_referrers', {
+			archiveId,
+			resourceUrl: 'https://example.com/style.css',
+			limit: 1,
+			cursor: firstData.nextCursor,
+		});
+		const secondData = JSON.parse(second.content[0]!.text);
+		expect(secondData.pageUrls).toHaveLength(1);
+		expect(secondData.nextCursor).toBeNull();
 	});
 
 	it('list_images で画像をリストする', async () => {

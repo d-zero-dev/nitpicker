@@ -173,7 +173,7 @@ export function mapFlagsToQueryOptions(
 			if (!flags.url) {
 				throw new Error('--url is required for the resource-referrers sub-command.');
 			}
-			return { url: flags.url };
+			return { url: flags.url, limit: flags.limit, cursor: flags.cursor };
 		}
 		case 'error-kinds': {
 			// No options: the aggregation always covers the whole archive.

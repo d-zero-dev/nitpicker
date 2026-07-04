@@ -1,7 +1,7 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 12 viewer-read-model tables (and `viewer_pages`'s named
+ * Creates all 14 viewer-read-model tables (and `viewer_pages`'s named
  * indexes) against the given connection. Assumes none of the tables
  * currently exist — callers (`buildViewerReadModel`) are responsible for
  * dropping any prior version first, inside the same transaction, so this
@@ -319,6 +319,92 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			id integer primary key check (id = 1),
 			total_records integer not null,
 			channel_source text not null
+		)
+	`);
+
+	// Resource-list read model (issue #110). `status_sort_key`/`status_desc_key`
+	// reuse `viewer_pages`/`viewer_anchor_facts`'s `NULL_STATUS_SENTINEL`
+	// convention, and `url_sort_key` is the URL copied verbatim — same
+	// rationale as `viewer_pages.url_sort_key` (kept as its own column so a
+	// future normalisation change doesn't require renaming the index). Fast
+	// path listing only supports `sortBy` in `url`/`status` (resources) or
+	// `url`/`status`/`source` (unused-resources) — the remaining
+	// `ListResourcesOptions.sortBy` values (`statusText`/`contentType`/
+	// `isExternal`/`referrerCount`/`compress`/`cdn`) fall back to the legacy
+	// query rather than gaining dedicated indexes here, following #106's
+	// evidence-before-indexing precedent. No `content_category` column
+	// (unlike `viewer_pages`): neither `ListViewerResourcesOptions` nor
+	// `ListViewerUnusedResourcesOptions` filters on it — `ListResourcesOptions.
+	// contentType` is a raw MIME prefix the read model doesn't classify, and
+	// bails to legacy regardless (see `register-resources-route.ts`). `is_unused`
+	// is duplicated onto this table (rather than living only in
+	// `viewer_resource_stats`) because `/api/unused-resources` needs it as a
+	// pre-limit filter column, exactly like `viewer_anchor_facts.is_broken`.
+	//
+	// Both an `is_external`-prefixed AND a bare `url_sort_key`-first index
+	// exist for `url`/`status` order: `bench-viewer-resources-read-model.mjs`
+	// measured the unfiltered default view (no `isExternal` filter — the
+	// common case) falling back to `SCAN … | USE TEMP B-TREE FOR ORDER BY`
+	// with only the `is_external`-prefixed indexes present (400k-row archive:
+	// 29.5ms fast path vs 26.3ms legacy — a regression, not an improvement),
+	// because a composite index whose leading column is unconstrained can't
+	// satisfy an `ORDER BY` on a later column without an extra sort step. The
+	// `_order`-suffixed indexes below (no `is_external` prefix) give the
+	// unfiltered case a direct index-order scan; the planner still picks the
+	// `is_external`-prefixed index when that filter IS supplied.
+	await trx.raw(`
+		CREATE TABLE viewer_resources (
+			resource_id integer primary key,
+			is_external integer not null,
+			status integer,
+			status_sort_key integer not null,
+			status_desc_key integer not null,
+			source text not null,
+			is_unused integer not null,
+			url_sort_key text not null
+		)
+	`);
+	await trx.raw(
+		'CREATE INDEX vr_default ON viewer_resources(is_external, url_sort_key, resource_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vr_url_order ON viewer_resources(url_sort_key, resource_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vr_status ON viewer_resources(is_external, status_sort_key, url_sort_key, resource_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vr_status_desc ON viewer_resources(is_external, status_desc_key, url_sort_key, resource_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vr_status_order ON viewer_resources(status_sort_key, url_sort_key, resource_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vr_status_desc_order ON viewer_resources(status_desc_key, url_sort_key, resource_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vr_unused ON viewer_resources(is_unused, url_sort_key, resource_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vr_unused_status ON viewer_resources(is_unused, status_sort_key, url_sort_key, resource_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vr_unused_status_desc ON viewer_resources(is_unused, status_desc_key, url_sort_key, resource_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vr_unused_source ON viewer_resources(is_unused, source, url_sort_key, resource_id)',
+	);
+
+	// Split from `viewer_resources` (rather than a `referrer_count` column on
+	// it) to match issue #110's TO-BE table naming verbatim. No dedicated
+	// index: it is only ever joined by `resource_id` after `viewer_resources`
+	// has already limited the id set (see `joinViewerResourceIdsToListItems`),
+	// and no fast path currently sorts by `referrer_count` (see the comment
+	// above `viewer_resources`).
+	await trx.raw(`
+		CREATE TABLE viewer_resource_stats (
+			resource_id integer primary key,
+			referrer_count integer not null
 		)
 	`);
 }

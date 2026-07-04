@@ -54,8 +54,13 @@ export async function listResources(
 			contentType: string | null;
 			contentLength: number | null;
 			isExternal: 0 | 1;
-			compress: string | 0;
-			cdn: string | 0;
+			// `resources.compress`/`.cdn` are TEXT-affinity columns; `insertResource`
+			// writes the JS number `0` for a falsy `Resource.compress`/`.cdn`
+			// (`resource.compress || 0`), and SQLite's TEXT affinity casts that
+			// REAL `0` to the string `'0.0'` on write — never the bare number
+			// `0` — so both sentinels are checked below for safety.
+			compress: string | 0 | '0.0';
+			cdn: string | 0 | '0.0';
 			referrerCount: number;
 		},
 		ResourceEntry
@@ -98,8 +103,8 @@ export async function listResources(
 			contentLength: row.contentLength,
 			isExternal: !!row.isExternal,
 			referrerCount: Number(row.referrerCount),
-			compress: row.compress === 0 ? null : row.compress,
-			cdn: row.cdn === 0 ? null : row.cdn,
+			compress: row.compress === 0 || row.compress === '0.0' ? null : row.compress,
+			cdn: row.cdn === 0 || row.cdn === '0.0' ? null : row.cdn,
 		}),
 	});
 }

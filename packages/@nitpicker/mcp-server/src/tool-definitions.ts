@@ -341,7 +341,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'get_resource_referrers',
 		description:
-			'Find which pages reference a specific resource (CSS, JS, image). Useful for impact analysis when considering removal or updates of a resource.',
+			'Find which pages reference a specific resource (CSS, JS, image). Useful for impact analysis when considering removal or updates of a resource. Results are bounded and cursor-paginated (default 100 per call) — pass the returned `nextCursor` back in to fetch the rest for a resource referenced by many pages.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -352,6 +352,11 @@ export const toolDefinitions: Tool[] = [
 				resourceUrl: {
 					type: 'string',
 					description: 'The exact URL of the resource to look up',
+				},
+				limit: { type: 'number', description: 'Max referring pages (default: 100)' },
+				cursor: {
+					type: 'string',
+					description: 'Opaque cursor from a previous call, taken from its `nextCursor`',
 				},
 			},
 			required: ['archiveId', 'resourceUrl'],

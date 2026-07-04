@@ -98,6 +98,24 @@ function optionalBoolean(
 	throw new TypeError(`Invalid boolean for argument: ${key}`);
 }
 
+/**
+ * Extracts an optional string argument with validation.
+ * @param args - The arguments object.
+ * @param key - The argument key.
+ * @returns The string value, or `undefined` if not present.
+ * @throws {TypeError} If the value is present but not a string.
+ */
+function optionalString(args: Record<string, unknown>, key: string): string | undefined {
+	const value = args[key];
+	if (value == null) {
+		return undefined;
+	}
+	if (typeof value !== 'string') {
+		throw new TypeError(`Invalid string for argument: ${key}`);
+	}
+	return value;
+}
+
 /** Valid link analysis types. */
 const VALID_LINK_TYPES = ['broken', 'external'] as const;
 
@@ -294,7 +312,11 @@ export function createServer() {
 					case 'get_resource_referrers': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						const resourceUrl = requireString(args, 'resourceUrl');
-						const result = await getResourceReferrers(accessor, resourceUrl);
+						const result = await getResourceReferrers(accessor, {
+							resourceUrl,
+							limit: optionalNumber(args, 'limit'),
+							cursor: optionalString(args, 'cursor'),
+						});
 						if (!result) {
 							return textResult('Resource not found.');
 						}

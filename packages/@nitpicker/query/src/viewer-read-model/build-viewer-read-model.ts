@@ -10,6 +10,7 @@ import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
 import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
 import { computeErrorKindInsertRows } from './compute-error-kind-insert-rows.js';
 import { computePageFacetBuckets } from './compute-page-facet-buckets.js';
+import { computeResourceInsertRows } from './compute-resource-rows.js';
 import { createViewerReadModelTables } from './create-viewer-read-model-tables.js';
 import { deriveExternalLinkSummaryRows } from './derive-external-link-summary-rows.js';
 import { dropViewerReadModelTables } from './drop-viewer-read-model-tables.js';
@@ -187,7 +188,7 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
 /**
  * Performs a full rebuild of the viewer read model: computes a `getSummary`
  * snapshot (see below for why this happens outside the transaction), then
- * drops all 10 tables if present, recreates them, populates `viewer_pages`
+ * drops all 14 tables if present, recreates them, populates `viewer_pages`
  * from the current `pages` write-model table, populates
  * `viewer_directory_nodes`/`viewer_directory_pages` from that same page set
  * (see `buildDirectoryTreeRows` for the tree-building rules), populates
@@ -195,7 +196,11 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
  * `computeAnchorFactRows` — unlike the directory tree, this cannot reuse
  * `sourceRows`, since link data lives on `anchors`, not `pages`) and derives
  * `viewer_external_links` from those same in-memory rows with no second
- * `anchors` scan (see `deriveExternalLinkSummaryRows`), seeds one
+ * `anchors` scan (see `deriveExternalLinkSummaryRows`), populates
+ * `viewer_resources`/`viewer_resource_stats` from a single
+ * `resources`/`resources-referrers` aggregation query (see
+ * `computeResourceInsertRows` — issue #110, independent of `pages`/`anchors`
+ * so its position in this function has no ordering constraint), seeds one
  * smoke-test row into `viewer_query_profiles`, writes the
  * `viewer_count_buckets` totals row plus one row per distinct Pages-list
  * facet value (see `computePageFacetBuckets`), writes the pre-computed
@@ -366,6 +371,23 @@ export async function buildViewerReadModel(
 		for (let start = 0; start < externalLinkRows.length; start += INSERT_CHUNK_SIZE) {
 			await trx('viewer_external_links').insert(
 				externalLinkRows.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
+
+		// Independent of `pages`/`anchors` — reads `resources` +
+		// `resources-referrers` in one scan (see `computeResourceInsertRows`'s
+		// docs for the "one scan, two tables" pattern, the same technique as
+		// `viewer_anchor_facts`/`viewer_external_links` above).
+		const { resources: resourceRows, stats: resourceStatsRows } =
+			await computeResourceInsertRows(trx);
+		for (let start = 0; start < resourceRows.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_resources').insert(
+				resourceRows.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
+		for (let start = 0; start < resourceStatsRows.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_resource_stats').insert(
+				resourceStatsRows.slice(start, start + INSERT_CHUNK_SIZE),
 			);
 		}
 

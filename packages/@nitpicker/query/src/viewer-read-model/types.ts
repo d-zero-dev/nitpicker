@@ -1,3 +1,4 @@
+import type { PageSource } from '../types.js';
 import type { ErrorKind } from '@nitpicker/crawler';
 
 /**
@@ -51,7 +52,7 @@ export interface FacetBucketRow {
 	/**
 	 * `facet:<dimension>:content_category=<category>` where `dimension` is
 	 * `'status'` / `'lang'` / `'is_external'` and `category` is either a real
-	 * {@link ContentTypeCategory} or the literal `'default'` (the `'html'` ∪
+	 * `ContentTypeCategory` or the literal `'default'` (the `'html'` ∪
 	 * `'unknown'` view `listViewerPages` resolves to when its
 	 * `contentTypeCategory` option is omitted).
 	 */
@@ -269,4 +270,64 @@ export interface ErrorKindInsertRows {
 	entries: ErrorKindEntryInsertRow[];
 	/** The single row for `viewer_error_kind_meta`. */
 	meta: ErrorKindMetaInsertRow;
+}
+
+/**
+ * One row to insert into `viewer_resources` — one row per `resources` row,
+ * produced by `computeResourceInsertRows`.
+ */
+export interface ResourceInsertRow {
+	/** `resources.id`. */
+	resource_id: number;
+	/** `resources.isExternal`, normalised to `1`/`0`. */
+	is_external: number;
+	/** `resources.status`, verbatim. */
+	status: number | null;
+	/** `status`, or `NULL_STATUS_SENTINEL` when `status` is `null` — see that constant's docs. */
+	status_sort_key: number;
+	/**
+	 * The negation of {@link status_sort_key} — same
+	 * `viewer_pages.status_desc_key`/`viewer_anchor_facts.status_desc_key`
+	 * rationale (a row-value keyset tuple comparison can't mix per-column
+	 * directions).
+	 */
+	status_desc_key: number;
+	/** `resources.source`, verbatim. */
+	source: PageSource;
+	/**
+	 * `1` iff `is_external` is falsy and this resource has zero rows in
+	 * `resources-referrers` — the same definition `listUnusedResources` uses
+	 * (external resources are never "unused" candidates, see that function's
+	 * docs).
+	 */
+	is_unused: number;
+	/**
+	 * The resource's URL, verbatim — copied at build time so indexed
+	 * `ORDER BY`/keyset comparisons don't need a pre-join, the same
+	 * rationale as `viewer_pages.url_sort_key`.
+	 */
+	url_sort_key: string;
+}
+
+/**
+ * One row to insert into `viewer_resource_stats` — one row per `resources`
+ * row, produced by `computeResourceInsertRows` from the same scan that
+ * produces {@link ResourceInsertRow}.
+ */
+export interface ResourceStatsInsertRow {
+	/** `resources.id` — a {@link ResourceInsertRow.resource_id}. */
+	resource_id: number;
+	/** Count of distinct `resources-referrers` rows for this resource. */
+	referrer_count: number;
+}
+
+/**
+ * Combined insert rows for both resource read-model tables, produced by
+ * `computeResourceInsertRows` from a single `resources` scan.
+ */
+export interface ResourceInsertRows {
+	/** Rows for `viewer_resources`. */
+	resources: ResourceInsertRow[];
+	/** Rows for `viewer_resource_stats`. */
+	stats: ResourceStatsInsertRow[];
 }

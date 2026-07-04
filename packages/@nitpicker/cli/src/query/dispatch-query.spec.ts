@@ -226,10 +226,25 @@ describe('dispatchQuery', () => {
 			pageUrls: [],
 			total: 0,
 		});
-		expect(getResourceReferrers).toHaveBeenCalledWith(
-			mockAccessor,
-			'https://example.com/style.css',
-		);
+		expect(getResourceReferrers).toHaveBeenCalledWith(mockAccessor, {
+			resourceUrl: 'https://example.com/style.css',
+			limit: undefined,
+			cursor: undefined,
+		});
+	});
+
+	it('dispatches resource-referrers sub-command with limit and cursor', async () => {
+		const { getResourceReferrers } = await import('@nitpicker/query');
+		await dispatchQuery(mockAccessor, 'resource-referrers', {
+			url: 'https://example.com/style.css',
+			limit: 10,
+			cursor: '5',
+		} as never);
+		expect(getResourceReferrers).toHaveBeenCalledWith(mockAccessor, {
+			resourceUrl: 'https://example.com/style.css',
+			limit: 10,
+			cursor: '5',
+		});
 	});
 
 	it('throws when resource-referrers returns null', async () => {
