@@ -90,6 +90,7 @@ jobs:
                 multi-root.e2e.ts,
                 output-path.e2e.ts,
                 single-page.e2e.ts,
+                viewer-read-model-build.e2e.ts,
               ]
           - id: inventory-snapshot
             files:
