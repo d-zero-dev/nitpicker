@@ -1904,3 +1904,34 @@ export interface CursorPaginatedDirectoryPageList {
 	/** Opaque cursor to fetch the next page, or `null` when this is the last page. */
 	nextCursor: string | null;
 }
+
+/**
+ * The subset of {@link import('@d-zero/shared/parse-url').ExURL} fields that
+ * {@link import('./compare-url-sort-keys.js').compareUrlSortKeys} needs,
+ * extracted immediately after parsing so the full `ExURL` (which carries
+ * several fields the comparator never reads, e.g. `username`/`password`/
+ * `port`/`depth`/`dirname`/`stem`) is not retained for every URL in a
+ * large archive.
+ */
+export interface UrlSortKey {
+	/** The original input URL string, used for the equal-`href` tiebreak and for the final `url` → rank lookup. */
+	original: string;
+	/** {@link import('@d-zero/shared/parse-url').ExURL.href}. */
+	href: string;
+	/** {@link import('@d-zero/shared/parse-url').ExURL.hostname}. */
+	hostname: string;
+	/** {@link import('@d-zero/shared/parse-url').ExURL.paths}. */
+	paths: string[];
+	/** {@link import('@d-zero/shared/parse-url').ExURL.basename}, defaulted to `''`. */
+	basename: string;
+	/** {@link import('@d-zero/shared/parse-url').ExURL.isIndex}. */
+	isIndex: boolean;
+	/** {@link import('@d-zero/shared/parse-url').ExURL.extname}, defaulted to `''`. */
+	extname: string;
+	/** {@link import('@d-zero/shared/parse-url').ExURL.query}, defaulted to `''`. */
+	search: string;
+	/** {@link import('@d-zero/shared/parse-url').ExURL.hash}, defaulted to `''`. */
+	hash: string;
+	/** {@link import('@d-zero/shared/parse-url').ExURL.protocol}. */
+	protocol: string;
+}
