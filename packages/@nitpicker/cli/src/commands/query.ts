@@ -26,6 +26,10 @@ export const commandDef = {
 			shortFlag: 'o',
 			desc: 'Number of results to skip',
 		},
+		cursor: {
+			type: 'string',
+			desc: 'Opaque pagination cursor from a previous result (resource-referrers)',
+		},
 		url: {
 			type: 'string',
 			desc: 'Target URL for page-detail, html, or resource-referrers queries',
