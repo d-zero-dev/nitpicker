@@ -1,3 +1,4 @@
+import type { CreateSheet } from '../sheets/types.js';
 import type { Sheet } from '@d-zero/google-sheets';
 import type { Page } from '@nitpicker/crawler';
 import type { Report } from '@nitpicker/types';
@@ -104,7 +105,7 @@ function cellNote(cell: { provide: (n?: number) => { note?: string } }) {
 
 describe('createPageList', () => {
 	// Reset modules before each test to clear module-scope state (indexTitles, indexRefs)
-	let createPageList: import('../sheets/types.js').CreateSheet;
+	let createPageList: CreateSheet;
 
 	beforeEach(async () => {
 		vi.resetModules();

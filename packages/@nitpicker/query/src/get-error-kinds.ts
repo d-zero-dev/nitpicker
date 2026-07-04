@@ -1,24 +1,23 @@
-import type { ErrorKindGroup, ErrorKindsResult } from './types.js';
-import type { ArchiveAccessor, ErrorKind } from '@nitpicker/crawler';
+import type { ErrorKindEntry, ErrorKindsResult, GetErrorKindsOptions } from './types.js';
+import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { classifyErrorKind } from '@nitpicker/crawler';
 
 import { readCrawlErrors } from './read-crawl-errors.js';
 import { readErrorLog } from './read-error-log.js';
 import { readPageErrors } from './read-page-errors.js';
+import { sortArrayItems } from './sort-array-items.js';
 
-/** Upper bound on representative URLs kept per {@link ErrorKindGroup}. */
+/** Upper bound on representative URLs kept per {@link ErrorKindEntry}. */
 const MAX_SAMPLE_URLS = 50;
 
-/** Mutable accumulator for a single {@link ErrorKind} while aggregating. */
-interface KindAccumulator {
-	/** Total records classified into this kind. */
-	count: number;
-	/** host → count. */
-	hosts: Map<string, number>;
-	/** Capped representative URLs. */
-	sampleUrls: string[];
-}
+/**
+ * Valid values for {@link GetErrorKindsOptions.sortBy}. An out-of-range value
+ * from an untyped caller (e.g. a hand-edited `?sortBy=` query string) falls
+ * back to `'count'` rather than reaching `sortArrayItems` with a key its
+ * config does not define.
+ */
+const SORT_FIELDS = ['host', 'kind', 'count'] as const;
 
 /**
  * Extract the hostname from a URL string, or a sentinel when it is absent or
@@ -38,7 +37,8 @@ function hostOf(url: string | null): string {
 }
 
 /**
- * Classify and aggregate every recorded crawl failure by cause.
+ * Classify and aggregate every recorded crawl failure by cause, normalized to
+ * one row per host×kind pair.
  *
  * Merges two sources: scrape-path failures (`page_errors`), and the
  * crawler-level `error` channel taken from `crawl_errors` when it has rows, or
@@ -53,20 +53,24 @@ function hostOf(url: string | null): string {
  * original run's `error`-channel entries (still only in `error.log`) are not
  * merged. Scrape-path (`page_errors`) history is unaffected.
  *
- * Counts are per failure record (a URL that failed on several presets or phases
- * contributes multiple records); use the per-host breakdown and sample URLs to
- * drill into a kind.
+ * A single host is normally classified into exactly one kind, but the row is
+ * keyed by (host, kind) rather than by host alone — a retried request can in
+ * principle fail with a different cause on a later attempt, and normalizing
+ * up front keeps that case from silently merging two distinct causes into one
+ * row.
  * @param accessor - The opened archive accessor.
- * @returns Per-kind counts, host breakdown, and sample URLs, sorted by count.
+ * @param options - Filter, sort, and pagination options.
+ * @returns Host×kind rows for the requested page, the matching row count, and
+ *   archive-wide totals in `facets`.
  * @example
  * ```ts
- * const { groups } = await getErrorKinds(accessor);
- * const dns = groups.find((g) => g.kind === 'dns');
- * console.log(dns?.count, dns?.hosts);
+ * const { items } = await getErrorKinds(accessor, { kind: 'dns', sortBy: 'count', sortOrder: 'desc' });
+ * console.log(items[0]?.host, items[0]?.count);
  * ```
  */
 export async function getErrorKinds(
 	accessor: ArchiveAccessor,
+	options: GetErrorKindsOptions = {},
 ): Promise<ErrorKindsResult> {
 	const knex = accessor.getKnex();
 	const hasCrawlErrors = await knex.schema.hasTable('crawl_errors');
@@ -82,7 +86,7 @@ export async function getErrorKinds(
 	// and error.log is not re-read, so freshly captured errors are never
 	// double-counted against their own error.log entries.)
 	let channelRecords = hasCrawlErrors ? await readCrawlErrors(accessor) : [];
-	let channelSource: ErrorKindsResult['channelSource'] =
+	let channelSource: ErrorKindsResult['facets']['channelSource'] =
 		channelRecords.length > 0 ? 'crawl_errors' : 'none';
 	if (channelRecords.length === 0) {
 		const logRecords = await readErrorLog(accessor.tmpDir);
@@ -92,34 +96,53 @@ export async function getErrorKinds(
 		}
 	}
 
-	const accumulators = new Map<ErrorKind, KindAccumulator>();
-	let total = 0;
+	const accumulators = new Map<string, ErrorKindEntry>();
+	let totalRecords = 0;
 	for (const { url, message } of [...pageRecords, ...channelRecords]) {
 		const kind = classifyErrorKind(message);
-		let acc = accumulators.get(kind);
+		const host = hostOf(url);
+		const key = `${host} ${kind}`;
+		let acc = accumulators.get(key);
 		if (!acc) {
-			acc = { count: 0, hosts: new Map(), sampleUrls: [] };
-			accumulators.set(kind, acc);
+			acc = { host, kind, count: 0, sampleUrls: [], overflowedCount: 0 };
+			accumulators.set(key, acc);
 		}
 		acc.count++;
-		total++;
-		const host = hostOf(url);
-		acc.hosts.set(host, (acc.hosts.get(host) ?? 0) + 1);
-		if (url && acc.sampleUrls.length < MAX_SAMPLE_URLS) {
-			acc.sampleUrls.push(url);
+		totalRecords++;
+		if (url) {
+			if (acc.sampleUrls.length < MAX_SAMPLE_URLS) {
+				acc.sampleUrls.push(url);
+			} else {
+				acc.overflowedCount++;
+			}
 		}
 	}
 
-	const groups: ErrorKindGroup[] = [...accumulators.entries()]
-		.map(([kind, acc]) => ({
-			kind,
-			count: acc.count,
-			hosts: [...acc.hosts.entries()]
-				.map(([host, count]) => ({ host, count }))
-				.toSorted((a, b) => b.count - a.count),
-			sampleUrls: acc.sampleUrls,
-		}))
-		.toSorted((a, b) => b.count - a.count);
+	let items = [...accumulators.values()];
+	if (options.host) {
+		items = items.filter((item) => item.host === options.host);
+	}
+	if (options.kind) {
+		items = items.filter((item) => item.kind === options.kind);
+	}
 
-	return { total, channelSource, groups };
+	const sortBy = SORT_FIELDS.includes(options.sortBy as (typeof SORT_FIELDS)[number])
+		? (options.sortBy as (typeof SORT_FIELDS)[number])
+		: 'count';
+	const sortOrder = options.sortOrder ?? (sortBy === 'count' ? 'desc' : 'asc');
+	items = sortArrayItems(items, sortBy, sortOrder, {
+		host: { getValue: (item) => item.host },
+		kind: { getValue: (item) => item.kind },
+		count: { getValue: (item) => item.count },
+	});
+
+	const total = items.length;
+	const offset = options.offset ?? 0;
+	const limit = options.limit ?? items.length;
+
+	return {
+		items: items.slice(offset, offset + limit),
+		total,
+		facets: { totalRecords, channelSource },
+	};
 }

@@ -237,7 +237,7 @@ VALUES
 
 ### `error-kinds`: クロール失敗の原因分類
 
-クロール失敗を原因別に集計する。kind の網羅集合は `@nitpicker/crawler` の `ErrorKind` union（`packages/@nitpicker/crawler/src/types.ts`）が正で、現在は `dns` / `dns-transient` / `connection-refused` / `connection-reset` / `connection-timeout` / `tls` / `local-network` / `parse-error` / `client-blocked` / `timeout` / `protocol` / `unknown` の 12 種。DNS 解決失敗や Chromium のブロック判定、HTTP パースエラーが、ただの「タイムアウト/不明」に埋もれず区別できる。kind 別件数 + ホスト別内訳 + サンプル URL を JSON で返す。
+クロール失敗を原因別に集計する。kind の網羅集合は `@nitpicker/crawler` の `ErrorKind` union（`packages/@nitpicker/crawler/src/types.ts`）が正で、現在は `dns` / `dns-transient` / `connection-refused` / `connection-reset` / `connection-timeout` / `tls` / `local-network` / `parse-error` / `client-blocked` / `timeout` / `protocol` / `unknown` の 12 種。DNS 解決失敗や Chromium のブロック判定、HTTP パースエラーが、ただの「タイムアウト/不明」に埋もれず区別できる。host×kind 単位（1 host × 1 kind = 1 行）で件数・サンプル URL を JSON で返す（`sampleUrls` は上限を超えると `overflowedCount` に繰り込む）。
 
 原因の判定（`classifyErrorKind`）は **保存された値ではなく `message` から読み取り時に行う**ため、この機能より前に作成した既存アーカイブもそのまま分類できる。失敗の取得元は 2 系統: スクレイプ経路の失敗は `page_errors`、DNS/接続/TLS など crawler レベルの失敗は構造化テーブル `crawl_errors`（無い古いアーカイブでは `error.log` を読んでフォールバック）。応答しないページが per-property の累積タイムアウトで `timeout` に倒れる現象は beholder 側の既知課題（`getMeta` の逐次取得）。
 
@@ -287,9 +287,9 @@ npx @nitpicker/cli viewer-build <archive.nitpicker> [--force]
 
 モード本体は localStorage（`nitpicker-pagination-mode`）。ページサイズも localStorage（`nitpicker-page-size`）に保存されるが、これは新規タブ・直 URL 訪問時の hint であり、URL の `?pageSize=` が常に優先される。両モードとも同じ REST エンドポイントを叩くが、継続方法はビュー次第: MPA は常に `?page=`/`?pageSize=` から `limit`/`offset` を組み立てる一方、仮想スクロールは Pages / Broken Links では read model のキーセット `nextCursor` を、それ以外のビューでは `limit`/`offset` を使う。
 
-### Errors ビュー
+### Connection Failures ビュー
 
-`query error-kinds` と同じ集計をブラウザで表示する。kind 別のバーを選ぶと、その原因で失敗したホスト内訳とサンプル URL にドリルダウンできる。サンプル URL は（解決失敗・接続拒否など本来開けない URL なので）リンクではなく診断用のテキストとして表示する。
+`query error-kinds` と同じ集計をブラウザで表示する。他の一覧ビュー（Pages / Resources / Isolated Clusters 等）と同じ DataTable 一覧＋詳細ページの構成で、host×kind（1 host × 1 kind = 1 行）の一覧をソート・kind 列フィルタでき、行を選ぶとその host×kind のサンプル URL 詳細にドリルダウンする。「違反」「重複」「不一致」（いずれもクロールに成功したページの中身・メタデータの問題）とは異なり、このビューは HTTP レスポンス自体が得られなかった失敗（DNS 未解決・TLS 失敗・接続拒否・タイムアウト）だけを扱う。サンプル URL 自体は（解決失敗・接続拒否など本来開けない URL なので）直接開けないが、Page Detail 画面（`/pages/detail?url=`）へのリンクになっており、そのURLへの被リンク元（inbound links）を確認できる。ルーティング（`/errors`）と API（`/api/error-kinds`）は互換性のため変更していない。
 
 ### HTML スナップショットプレビュー
 

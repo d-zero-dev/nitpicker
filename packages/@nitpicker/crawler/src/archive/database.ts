@@ -1225,7 +1225,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * (`SQLITE_MAX_VARIABLE_NUMBER`, default 999) cannot be hit even on a
 	 * tens-of-thousands inventory list.
 	 *
-	 * Called by {@link CrawlerOrchestrator.inventory} during the
+	 * Called by `CrawlerOrchestrator.inventory` during the
 	 * `.bak`-protected ingestion phase, so any failure here aborts the run
 	 * and restores from backup — the operator reruns from scratch.
 	 * @param urls - URL strings already in `withoutHashAndAuth` form.
@@ -1516,7 +1516,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	/**
 	 * Appends one row to the `inventory_runs` audit log.
 	 *
-	 * Called by {@link CrawlerOrchestrator.inventory} on every successful
+	 * Called by `CrawlerOrchestrator.inventory` on every successful
 	 * `--inventory <list>` invocation so the archive carries a durable
 	 * record of which deploy list was applied when and at what scale —
 	 * the operational question "did we apply last month's list" the

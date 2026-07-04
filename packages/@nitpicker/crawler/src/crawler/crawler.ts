@@ -560,31 +560,6 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		}
 	}
 	/**
-	 * Launches a fresh Puppeteer browser, runs the beholder scraper, and cleans up.
-	 *
-	 * WHY per-URL browser: Each URL gets its own browser instance to ensure
-	 * complete isolation (cookies, cache, service workers). The browser is always
-	 * closed in the `finally` block, even on error.
-	 * @param url - Target URL to scrape
-	 * @param update - Callback for progress messages
-	 * @param isExternal - Whether the URL is external to the crawl scope
-	 * @param metadataOnly - When true, only extract title metadata
-	 * @param headCheckResult - Optional HEAD result to pass to the scraper, avoiding a redundant request
-	 * @returns The scrape result from beholder
-	 */
-	/**
-	 * @param url
-	 * @param update
-	 * @param isExternal
-	 * @param metadataOnly
-	 * @param headCheckResult
-	 * @internal
-	 * cascade-guard contract for the puppeteer-fallback success / skipped
-	 * branches can be exercised via `vi.spyOn(Crawler.prototype,
-	 * '_launchBrowserAndScrape')` in unit tests. There is no production
-	 * consumer outside this class.
-	 */
-	/**
 	 * Resolve the source label of the page being scraped so sub-resources
 	 * captured during its render can inherit the correct lineage label
 	 * (`'inventory-discovered'` when the parent is in the inventory chain,
@@ -1518,6 +1493,25 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			},
 		);
 	}
+	/**
+	 * Launches a fresh Puppeteer browser, runs the beholder scraper, and cleans up.
+	 *
+	 * WHY per-URL browser: Each URL gets its own browser instance to ensure
+	 * complete isolation (cookies, cache, service workers). The browser is always
+	 * closed in the `finally` block, even on error.
+	 *
+	 * The cascade-guard contract for the puppeteer-fallback success / skipped
+	 * branches can be exercised via `vi.spyOn(Crawler.prototype,
+	 * '_launchBrowserAndScrape')` in unit tests. There is no production
+	 * consumer outside this class.
+	 * @internal
+	 * @param url - Target URL to scrape
+	 * @param update - Callback for progress messages
+	 * @param isExternal - Whether the URL is external to the crawl scope
+	 * @param metadataOnly - When true, only extract title metadata
+	 * @param headCheckResult - Optional HEAD result to pass to the scraper, avoiding a redundant request
+	 * @returns The scrape result from beholder
+	 */
 	// eslint-disable-next-line no-restricted-syntax -- intentional `private` (vs `#`) so tests can spyOn the prototype to drive the puppeteer-fallback cascade-guard branches without a full browser mock; see JSDoc above.
 	private async _launchBrowserAndScrape(
 		url: ExURL,

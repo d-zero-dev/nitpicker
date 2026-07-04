@@ -85,7 +85,7 @@ export type BrowserScrapeResult = ScrapeResult & {
 	 * exactly that.
 	 *
 	 * Consumers should also confirm the URL is meaningful via
-	 * {@link deriveJsRedirectTarget} — `about:blank`, identity values,
+	 * `deriveJsRedirectTarget` — `about:blank`, identity values,
 	 * case-only or trailing-slash variants are all filtered there, not
 	 * here.
 	 */
@@ -217,7 +217,7 @@ export type ResourceLookup = (
  * that has not been INSERTed yet) so the caller can fall through to its
  * default behaviour.
  *
- * Used by {@link Crawler} during sub-resource lineage propagation:
+ * Used by `Crawler` during sub-resource lineage propagation:
  * `#scrapePage` consults this once per page to resolve the parent's
  * lineage when the in-memory `inventoryMode` is unavailable (i.e. on
  * `--resume` / `--retry-failed` sessions where inventory state lives only
@@ -289,7 +289,7 @@ export interface CrawlerEventTypes {
 	externalPage: {
 		/** The scraped page data for the external page. */
 		result: PageData;
-		/** Inventory provenance for new rows — see {@link CrawlerEventTypes.page.source}. */
+		/** Inventory provenance for new rows — see `CrawlerEventTypes.page.source`. */
 		source?: PageSource;
 	};
 

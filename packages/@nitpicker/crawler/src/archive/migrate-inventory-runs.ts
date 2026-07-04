@@ -13,7 +13,7 @@ import type { Knex } from 'knex';
  * table is the durable provenance record.
  *
  * Schema details (column semantics, NULL policy, index) live in
- * {@link initSchema} — this migration only re-creates the table shape
+ * `initSchema` — this migration only re-creates the table shape
  * on legacy archives so the rest of the codebase can treat the table
  * as always-present once a writer connection has opened the file.
  *

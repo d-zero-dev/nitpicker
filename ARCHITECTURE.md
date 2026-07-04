@@ -193,10 +193,11 @@ crawler/src/
 - **`checkHeaders`**: セキュリティヘッダーチェック（CSP, X-Frame-Options, X-Content-Type-Options, HSTS）
 - **`classifyContentType`**: 生 MIME を 18 個の `ContentTypeCategory`（`html`/`pdf`/`csv`/`word`/`excel`/`powerpoint`/`image`/`css`/`javascript`/`json`/`xml`/`font`/`audio`/`video`/`archive`/`text`/`other`/`unknown`）に正規化する純関数。`getSummary` の `contentTypeDistribution` 集計と `listPages` の `contentTypeCategory` フィルタが同じカテゴリ境界を共有する単一の源泉。**カテゴリ統合**: `csv` は CSV + TSV、`word` は .doc + .docx、`excel` は .xls + .xlsx、`powerpoint` は .ppt + .pptx、`json` は JSON + YAML、`text` は .txt + .md を 1 カテゴリにまとめる（拡張子別の分散を避け、ユーザーが「文書ファイル」「データファイル」をまとめて評価できるようにする設計判断）
 - **`applyCategoryFilter`**: `ContentTypeCategory` を Knex query に適用する SQL マッチャ。後述の「Content-Type ルール表」から派生し、JS classifier の優先順位を SQL に正確に投影する
+- 上記以外にも `classifyErrorKind` / `getErrorKinds` / `getLinkGraph` / `computeIsolatedClusters` / `listUnusedResources` / `listInventoryRuns` / `listPagesByTag` / `countPagesByTag` / `listPagesByJsonLdType` / `countPagesByJsonLdType` / `getTagInventory` / `getPageTags` / `getPageJsonLd` / `getPageJsonLdOverview` / `prepareUrlSortTempTable` 等の関数がある。**全関数の正は `packages/@nitpicker/query/src/query.ts`（バレルファイル）の re-export 一覧**であり、上記は代表例に留める（機能追加のたびここを手動更新すると陳腐化するため網羅列挙はしない）
 
 **サブエクスポート:**
 
-- `@nitpicker/query/categories` — `ContentTypeCategory` 型と `CONTENT_TYPE_CATEGORIES` 値だけを再エクスポートする browser-safe な leaf モジュール。`knex` 等の Node-only ランタイムを含まないため、viewer の React 側が Vite バンドルから安全にインポートできる
+- `@nitpicker/query/categories` — `ContentTypeCategory` 型、`CONTENT_TYPE_CATEGORIES` 値、`classifyContentType` 関数、`ContentTypeCount` 型を再エクスポートする browser-safe な leaf モジュール。`knex` 等の Node-only ランタイムを含まないため、viewer の React 側が Vite バンドルから安全にインポートできる
 
 **依存:** `@nitpicker/crawler`（`Archive`, `ArchiveAccessor` を使用）
 
@@ -225,12 +226,12 @@ SQL マッチャ側はこの優先順位を「目的カテゴリの positive 節
 
 ### @nitpicker/mcp-server
 
-[Model Context Protocol](https://modelcontextprotocol.io/) サーバー。AI アシスタント（Claude 等）から `.nitpicker` アーカイブを直接クエリするための 14 ツールを提供。
+[Model Context Protocol](https://modelcontextprotocol.io/) サーバー。AI アシスタント（Claude 等）から `.nitpicker` アーカイブを直接クエリするためのツールを提供（ツール数・一覧は `tool-definitions.ts` を正とする。増減が頻繁なためここでは数値を固定しない）。
 
 **構成:**
 
 - **`mcp-server.ts`**: `createServer()` で MCP Server インスタンスを構築。低レベル `Server` API を使用（`McpServer` + Zod スキーマの深い型インスタンス化問題を回避）
-- **`tool-definitions.ts`**: 14 ツールの JSON Schema 定義
+- **`tool-definitions.ts`**: 全ツールの JSON Schema 定義（数・一覧の正）
 
 **バイナリ:** `nitpicker-mcp`（stdio トランスポート）
 
@@ -242,7 +243,7 @@ SQL マッチャ側はこの優先順位を「目的カテゴリの positive 節
 
 **構成（単一パッケージ、backend + frontend 同居）:**
 
-- **backend（`src/` → `tsc` → `lib/`）**: Hono アプリ。`start-viewer.ts`（サーバ起動 + ブラウザオープン + SIGINT graceful shutdown）、`create-app.ts`（全ルート登録 + `serveStatic` + エラーハンドラ）、`archive-context.ts`（`ArchiveManager` で 1 アーカイブを常駐保持）、`routes/register-*-route.ts`（query 関数 1:1 の 22 ルート）
+- **backend（`src/` → `tsc` → `lib/`）**: Hono アプリ。`start-viewer.ts`（サーバ起動 + ブラウザオープン + SIGINT graceful shutdown）、`create-app.ts`（全ルート登録 + `serveStatic` + エラーハンドラ）、`archive-context.ts`（`ArchiveManager` で 1 アーカイブを常駐保持）、`routes/register-*-route.ts`（`@nitpicker/query` の関数 1:1 のルート群、数・一覧は `create-app.ts` のルート登録箇所を正とする）
 - **frontend（`web/` → `vite build` → `lib/public/`）**: React 19 SPA。`@tanstack/react-query` + `@tanstack/react-table` をベースに、**ページネーションモードを TopBar から切替**できる（`PagedTable` = MPA、`VirtualTable` = `@tanstack/react-virtual` 経由の仮想スクロール、`DataTable` がモードで dispatch）。BrowserRouter（History API、未マッチ GET は Hono が index.html を返す SPA フォールバック）ルーティング、`@nitpicker/query` の型を DTO として再利用。ダーク/ライトテーマ切替（`data-theme` + localStorage、`web/theme/`）、i18n（en/ja、`web/i18n/` の自前辞書 + Context）、列リサイズ（マウス + 矢印キー）、ローディングスケルトン + `aria-busy` + グローバル進捗バー、画像サムネイルプレビュー、Mismatches の赤緑文字差分（`web/utils/diff-text.ts`）を備える。アクセシビリティ（WCAG 2.1 AA）対応として、`PagedTable` / `VirtualTable` 両方への明示的 ARIA グリッドロール、スキップリンク（`web/components/skip-link.tsx`）、フォームコントロールのアクセシブルネーム、ライブリージョン、`prefers-reduced-motion`、AA コントラストを実装（README「アクセシビリティ」節 + 下記「設計注意」参照）
 
 **データフロー:**
@@ -386,7 +387,7 @@ nitpicker viewer <file>
 - **`npx @nitpicker/cli analyze <file>`**: `.nitpicker` ファイルに対して analyze プラグインを実行。`--search-keywords`, `--axe-lang` 等のフラグで設定ファイルのプラグイン設定を上書き可能（`buildPluginOverrides()` → `Nitpicker.setPluginOverrides()` 経由）
 - **`npx @nitpicker/cli report <file>`**: `.nitpicker` ファイルから Google Sheets レポートを生成
 - **`npx @nitpicker/cli pipeline <URL>`**: crawl → analyze → report を直列実行。`startCrawl()` でアーカイブパスを取得し、そのパスを `analyze()` と `report()` に引き渡す。`--sheet` 指定時のみ report ステップを実行
-- **`npx @nitpicker/cli query <file> <sub-command>`**: `.nitpicker` ファイルに対してクエリを実行し、結果を JSON で出力。`@nitpicker/query` の全関数を CLI から利用可能。12 のサブコマンド（`summary`, `pages`, `page-detail`, `html`, `links`, `resources`, `images`, `violations`, `duplicates`, `mismatches`, `headers`, `resource-referrers`）を提供
+- **`npx @nitpicker/cli query <file> <sub-command>`**: `.nitpicker` ファイルに対してクエリを実行し、結果を JSON で出力。`@nitpicker/query` の全関数を CLI から利用可能。サブコマンド一覧は README または `--help` を正とする（`@nitpicker/query` に関数が増えるたびここを手動更新するのは陳腐化しやすいため、列挙はしない）
 - **`npx @nitpicker/cli viewer <file>`**: `.nitpicker` ファイルをローカルブラウザで閲覧する Web ビューアを起動（`@nitpicker/viewer`）。常駐サーバなので `Ctrl-C` まで動き続ける（詳細は `@nitpicker/viewer` セクション）
 - **`npx @nitpicker/cli viewer-build <archive> [--force]`**: `.nitpicker` アーカイブの永続 viewer read model を明示的に(再)ビルド（issue #112）。`.bak` バックアップ→失敗時ロールバックのパターンは `crawl --append`/`--retry-failed` と同じ。既存アーカイブを事前に永続化したい場合や、強制リビルドしたい場合に使う
 
@@ -803,10 +804,12 @@ beholder 3.0.0 アップグレードで pages のメタカラムは ~47 列の f
 | `idx_pages_listfilter` — `pages(isExternal, scraped, redirectDestId, url, contentType)` (PR #96 では 4 列、本 PR で先頭に `isExternal` を追加。詳細下記) | `listPages`           | 15s    | 45ms (368x) |
 | `idx_resources_internal_url` — `resources(isExternal, url)` covering                                                                                     | `listUnusedResources` | 66s    | 7.5s (8.8x) |
 | `idx_images_covering` — `images(pageId, src, alt, width, height, naturalWidth, naturalHeight, isLazy)` covering                                          | `listImages`          | 32s    | 16s (2.0x)  |
+| `idx_pages_summary_contenttype` — `pages(scraped, redirectDestId, contentType, isExternal, isSkipped)` covering                                          | `getSummary` Q2/Q3    | —      | 38% 改善    |
+| `idx_pages_summary_failed` — `pages(scraped, status, redirectDestId)`                                                                                    | `getSummary` Q4       | 5113ms | 14ms (365x) |
 
 加えて `find-duplicates` を N+1 SQL (代表値ごとに別 `SELECT url` ループ) から `GROUP_CONCAT(url, X'1F')` の単発 query に書換 (414s → 8s, 49.6x、`scripts/bench-find-duplicates.mjs`)。`get-link-graph` の `pageRows` + `edgeRows` を `Promise.all` に統合 (sequential 38s → parallel 30s ish、JS aggregation はそのまま — SQL push-down を試した結果 10x 悪化したため不採用、根拠は `get-link-graph.ts` の JSDoc)。
 
-> **設計注意（`idx_pages_listfilter` の column 順は `isExternal` 先頭）:** PR #96 では 4 列 `(scraped, redirectDestId, url, contentType)` だったが、本 PR で先頭に `isExternal` を追加した。Pages view のデフォルト「Include external 無し」フィルタは WHERE に `isExternal=0` を入れ、これは paginate-query の COUNT と SELECT の両方に効く。**SELECT は `ORDER BY url` のおかげで listfilter index が選ばれていたが、COUNT には ORDER BY が無いので planner が単一列 `pages_isexternal_index` を選んで scan + per-row filter に倒れ、165k internal page archive で COUNT だけで ~8.7 秒消費していた**。`isExternal` を先頭に置くと COUNT も SELECT も同じ covering 構成で完結し、COUNT は ~33ms に短縮 (264x)。確認スクリプト: `scripts/try-isexternal-first-index.mjs`。**Include external を ON にした場合は依然 8s 級** (`pages_scraped_index` への fallback、partial index で別途解決可能)。既存 archive 側は `scripts/add-perf-indexes.mjs` が `DROP INDEX IF EXISTS` 経由で 4 列版を 5 列版に張り替える。
+> **設計注意（`idx_pages_listfilter` の column 順は `isExternal` 先頭）:** PR #96 では 4 列 `(scraped, redirectDestId, url, contentType)` だったが、本 PR で先頭に `isExternal` を追加した。Pages view のデフォルト「Include external 無し」フィルタは WHERE に `isExternal=0` を入れ、これは paginate-query の COUNT と SELECT の両方に効く。**SELECT は `ORDER BY url` のおかげで listfilter index が選ばれていたが、COUNT には ORDER BY が無いので planner が単一列 `pages_isexternal_index` を選んで scan + per-row filter に倒れ、165k internal page archive で COUNT だけで ~8.7 秒消費していた**。`isExternal` を先頭に置くと COUNT も SELECT も同じ covering 構成で完結し、COUNT は ~33ms に短縮 (264x)。確認に使ったベンチマークスクリプトは調査後に削除済み（再現する場合は `EXPLAIN QUERY PLAN` を該当 SQL に対して直接実行すればよい）。**Include external を ON にした場合は依然 8s 級** (`pages_scraped_index` への fallback、partial index で別途解決可能)。既存 archive 側は `scripts/add-perf-indexes.mjs` が `DROP INDEX IF EXISTS` 経由で 4 列版を 5 列版に張り替える。
 
 > **設計注意（.nitpicker archive に `ANALYZE` を絶対に走らせない）:** `idx_pages_listfilter` は SQLite の planner heuristics に依存して動作する。`ANALYZE` で per-index 統計が生成されると、planner は同 index を `listLinks` / `getLinkGraph` の JOIN paths でも source/dest seek に流用しはじめ、これらが ~15s → ~500s (33x worse) に回帰する。実証: `scripts/bench-partial-listfilter.mjs` の no-ANALYZE / +ANALYZE pass 比較。crawler / viewer / MCP / migration の**いかなる経路でも** `ANALYZE` / `PRAGMA optimize` を実行しないこと。既存 archive への手動適用は `scripts/add-perf-indexes.mjs` で行う (このスクリプトも ANALYZE しない、3 index 一括追加)。
 
@@ -888,11 +891,11 @@ updatePage(pageData) の処理:
 
 **読み取り経路間の一貫性:** 以下はすべて同じ規則で解決する。
 
-| 関数                                                    | パッケージ | 用途                                             |
-| ------------------------------------------------------- | ---------- | ------------------------------------------------ |
-| `getPagesWithRels`（`redirect.from`/`fromId` = 経由元） | crawler    | report（Google Sheets）                          |
-| `getReferrersOfPage`（`through`/`throughId` = 経由元）  | crawler    | `Page.getReferrers`/`getRequests` フォールバック |
-| `getPageDetail.inboundLinks`                            | query      | viewer / mcp / cli                               |
+| 関数                                                                                                       | パッケージ | 用途                                             |
+| ---------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------ |
+| `ArchiveAccessor.getPagesWithRefs`（内部で `#getPagesWithRels` を使用、`redirect.from`/`fromId` = 経由元） | crawler    | report（Google Sheets）                          |
+| `getReferrersOfPage`（`through`/`throughId` = 経由元）                                                     | crawler    | `Page.getReferrers`/`getRequests` フォールバック |
+| `getPageDetail.inboundLinks`                                                                               | query      | viewer / mcp / cli                               |
 
 `through` / `throughId` は「アンカーが実際に指した URL（= リダイレクト元）」で、report の `[REDIRECTED FROM]` 注記に使う。
 
@@ -1255,7 +1258,7 @@ flowchart TD
 
 ## 10. URL 処理の重要な仕様
 
-> 実装詳細は `crawler/utils/url/` 配下の各関数の JSDoc を参照。
+> 実装詳細は各関数自身の JSDoc を参照（`parseUrl` は `@d-zero/shared/parse-url` からのエイリアス import、`pathMatch` は `crawler/should-skip-url.ts`、`isLowerLayer` は `crawler/find-scope-entry.ts`、`normalizeToArray` は `normalize-to-array.ts` に実装がある）。
 
 ### findScopeEntry（スコープ判定の単一エントリポイント）
 
