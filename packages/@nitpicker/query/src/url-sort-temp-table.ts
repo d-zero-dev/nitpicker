@@ -84,16 +84,12 @@ export function orderByUrlRank(
 }
 
 /**
- *
+ * Parses and sorts `urls` exactly once (a large archive can carry hundreds of
+ * thousands of URLs, so calling `sortUrl` — a full parse + natural sort — a
+ * second time here previously doubled the peak memory this function needed).
  * @param urls
  */
 function buildUrlRanks(urls: readonly string[]): { url: string; rank: number }[] {
-	const parsedByCandidate = new Map<string, string>();
-	for (const parsed of sortUrl([...urls])) {
-		parsedByCandidate.set(parsed.href, parsed.href);
-		parsedByCandidate.set(parsed.withoutHashAndAuth, parsed.href);
-	}
-
 	const sorted = sortUrl([...urls]);
 	const rankByUrl = new Map<string, number>();
 	for (const [rank, parsed] of sorted.entries()) {
@@ -107,9 +103,6 @@ function buildUrlRanks(urls: readonly string[]): { url: string; rank: number }[]
 
 	return urls.map((url, fallbackRank) => ({
 		url,
-		rank:
-			rankByUrl.get(url) ??
-			rankByUrl.get(parsedByCandidate.get(url) ?? '') ??
-			fallbackRank,
+		rank: rankByUrl.get(url) ?? fallbackRank,
 	}));
 }
