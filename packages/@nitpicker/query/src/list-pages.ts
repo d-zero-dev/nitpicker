@@ -8,7 +8,9 @@ import type {
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { applyListOrder } from './apply-list-order.js';
+import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
 import { applyCategoryFilter } from './content-type-rules.js';
+import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presence-sql.js';
 import { mapPageRowToListItem, PAGE_LIST_COLUMNS } from './map-page-row-to-list-item.js';
 import { paginateQuery } from './paginate-query.js';
 import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
@@ -61,7 +63,8 @@ function createPageListBaseQuery(
  * `getPageDetail(url)` when extras are needed.
  *
  * Per-page link/referrer counts are still omitted here (they require anchor
- * aggregation); see `listPageLinks` for those.
+ * aggregation) — see `getPageDetail(url)`'s inbound/outbound/redirectFrom
+ * sections for that information on a single page.
  * @param accessor - The archive accessor to query.
  * @param options - Filter, sort, and pagination options.
  * @returns A paginated list of page entries with metadata.
@@ -123,6 +126,12 @@ export async function listPages(
 			: `${options.directory}/`;
 		baseQuery.where('url', 'like', `%${dir}%`);
 	}
+	for (const key of HEADER_PRESENCE_KEYS) {
+		const expected = options[key];
+		if (expected != null) {
+			baseQuery.whereRaw(`${headerPresenceExpression(key)} = ?`, [expected ? 1 : 0]);
+		}
+	}
 
 	const sortBy = options.sortBy ?? 'url';
 	const sortOrder = options.sortOrder ?? 'asc';
@@ -136,42 +145,54 @@ export async function listPages(
 			baseQuery,
 			countColumn: 'id',
 			applySelect: (q) =>
-				applyListOrder(q.select(...PAGE_LIST_COLUMNS), knex, sortBy, sortOrder, {
-					url: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
-					status: { column: '"pages"."status"' },
-					title: { column: '"pages"."title"' },
-					contentType: { column: '"pages"."contentType"' },
-					isExternal: { column: '"pages"."isExternal"' },
-					lang: { column: '"pages"."lang"' },
-					description: { column: '"pages"."description"' },
-					keywords: { column: '"pages"."keywords"' },
-					noindex: { column: '"pages"."robots_noindex"' },
-					nofollow: { column: '"pages"."robots_nofollow"' },
-					noarchive: { column: '"pages"."robots_noarchive"' },
-					canonical: { column: '"pages"."canonical"', type: 'url' },
-					twitterCard: { column: '"pages"."twitter_card"' },
-					ogSiteName: { column: '"pages"."og_site_name"' },
-					ogUrl: { column: '"pages"."og_url"', type: 'url' },
-					ogTitle: { column: '"pages"."og_title"' },
-					ogDescription: { column: '"pages"."og_description"' },
-					ogType: { column: '"pages"."og_type"' },
-					ogImage: { column: '"pages"."og_image"', type: 'url' },
-					ogImageAlt: { column: '"pages"."og_image_alt"' },
-					ogLocale: { column: '"pages"."og_locale"' },
-					ogArticlePublishedTime: {
-						column: '"pages"."og_article_published_time"',
+				applyListOrder(
+					q.select(...PAGE_LIST_COLUMNS, ...buildHeaderPresenceSelects(knex)),
+					knex,
+					sortBy,
+					sortOrder,
+					{
+						url: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
+						status: { column: '"pages"."status"' },
+						title: { column: '"pages"."title"' },
+						contentType: { column: '"pages"."contentType"' },
+						isExternal: { column: '"pages"."isExternal"' },
+						lang: { column: '"pages"."lang"' },
+						description: { column: '"pages"."description"' },
+						keywords: { column: '"pages"."keywords"' },
+						noindex: { column: '"pages"."robots_noindex"' },
+						nofollow: { column: '"pages"."robots_nofollow"' },
+						noarchive: { column: '"pages"."robots_noarchive"' },
+						canonical: { column: '"pages"."canonical"', type: 'url' },
+						twitterCard: { column: '"pages"."twitter_card"' },
+						ogSiteName: { column: '"pages"."og_site_name"' },
+						ogUrl: { column: '"pages"."og_url"', type: 'url' },
+						ogTitle: { column: '"pages"."og_title"' },
+						ogDescription: { column: '"pages"."og_description"' },
+						ogType: { column: '"pages"."og_type"' },
+						ogImage: { column: '"pages"."og_image"', type: 'url' },
+						ogImageAlt: { column: '"pages"."og_image_alt"' },
+						ogLocale: { column: '"pages"."og_locale"' },
+						ogArticlePublishedTime: {
+							column: '"pages"."og_article_published_time"',
+						},
+						twitterSite: { column: '"pages"."twitter_site"' },
+						twitterCreator: { column: '"pages"."twitter_creator"' },
+						twitterImage: { column: '"pages"."twitter_image"', type: 'url' },
+						charset: { column: '"pages"."charset"' },
+						themeColor: { column: '"pages"."themeColor"' },
+						manifest: { column: '"pages"."manifest"', type: 'url' },
+						robotsRaw: { column: '"pages"."robots_raw"' },
+						tagCount: { column: '"pages"."tag_count"' },
+						tagsProvidersCsv: { column: '"pages"."tags_providers_csv"' },
+						jsonldCount: { column: '"pages"."jsonld_count"' },
+						hasCSP: { column: headerPresenceExpression('hasCSP') },
+						hasXFrameOptions: { column: headerPresenceExpression('hasXFrameOptions') },
+						hasXContentTypeOptions: {
+							column: headerPresenceExpression('hasXContentTypeOptions'),
+						},
+						hasHSTS: { column: headerPresenceExpression('hasHSTS') },
 					},
-					twitterSite: { column: '"pages"."twitter_site"' },
-					twitterCreator: { column: '"pages"."twitter_creator"' },
-					twitterImage: { column: '"pages"."twitter_image"', type: 'url' },
-					charset: { column: '"pages"."charset"' },
-					themeColor: { column: '"pages"."themeColor"' },
-					manifest: { column: '"pages"."manifest"', type: 'url' },
-					robotsRaw: { column: '"pages"."robots_raw"' },
-					tagCount: { column: '"pages"."tag_count"' },
-					tagsProvidersCsv: { column: '"pages"."tags_providers_csv"' },
-					jsonldCount: { column: '"pages"."jsonld_count"' },
-				}),
+				),
 			limit,
 			offset,
 			mapRow: mapPageRowToListItem,

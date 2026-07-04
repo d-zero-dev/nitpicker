@@ -4,15 +4,15 @@ import type { ErrorKind } from '../types.js';
  * In-memory set of hostnames known to be unreachable due to DNS errors
  * (e.g. `getaddrinfo ENOTFOUND`).
  *
- * Lives for one crawl session — cleared by {@link clearDnsBurnedHostCache} at
- * the same four orchestrator sites as {@link destinationCache}. Hosts are
+ * Lives for one crawl session — cleared by `clearDnsBurnedHostCache` at
+ * the same four orchestrator sites as `destinationCache`. Hosts are
  * marked in two ways:
  *
  * - **Session learning**: the `onGiveUp` callback of `#sendHeadRequest`
  *   classifies the final retry error and stores `'dns'` when the matcher
  *   fires. The next URL on the same hostname short-circuits before retry.
  * - **Session preload**: re-open paths (`append` / `inventory` / `retryFailed`
- *   / `resume`) call {@link Archive.listDnsBurnedHostCandidates} and seed the
+ *   / `resume`) call `Archive.listDnsBurnedHostCandidates` and seed the
  *   map from `crawl_errors`, so previously-burned hosts cost zero retries on
  *   the next crawl.
  *

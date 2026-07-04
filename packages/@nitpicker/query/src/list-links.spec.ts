@@ -88,6 +88,24 @@ describe('listLinks', () => {
 					textContent: 'Broken link',
 				},
 				{
+					href: parseUrl('https://example.com/forbidden')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Forbidden link',
+				},
+				{
+					href: parseUrl('https://example.com/server-error')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Server error link',
+				},
+				{
+					href: parseUrl('https://example.com/excluded')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Excluded link',
+				},
+				{
 					href: parseUrl('https://example.net/')!,
 					isExternal: true,
 					title: null,
@@ -168,6 +186,80 @@ describe('listLinks', () => {
 			isSkipped: false,
 		});
 
+		// Forbidden page (403) — access denied, not a broken link.
+		await archive.setPage({
+			url: parseUrl('https://example.com/forbidden')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 403,
+			statusText: 'Forbidden',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: {
+				lang: null,
+				title: null,
+				description: null,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': null,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// Server error page (500) — infra concern, tracked separately from broken links.
+		await archive.setPage({
+			url: parseUrl('https://example.com/server-error')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 500,
+			statusText: 'Internal Server Error',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: {
+				lang: null,
+				title: null,
+				description: null,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': null,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// Excluded page (robots.txt / excludeUrls) — never fetched, status stays
+		// NULL. Must not be misreported as a broken link.
+		await archive.setSkippedPage('https://example.com/excluded', 'excluded', false);
+
 		// External page
 		await archive.setPage({
 			url: parseUrl('https://example.net/')!,
@@ -212,7 +304,7 @@ describe('listLinks', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('broken リンクを検出する', async () => {
+	it('404 の broken リンクのみを検出する', async () => {
 		const result = await listLinks(archive, { type: 'broken' });
 		expect(result.items.length).toBe(1);
 		const broken = result.items[0];
@@ -223,6 +315,27 @@ describe('listLinks', () => {
 		});
 	});
 
+	it('403 (Forbidden) は broken リンクとして扱わない', async () => {
+		const result = await listLinks(archive, { type: 'broken' });
+		expect(
+			result.items.some((item) => item.destUrl === 'https://example.com/forbidden'),
+		).toBe(false);
+	});
+
+	it('5xx (サーバーエラー) は broken リンクとして扱わない', async () => {
+		const result = await listLinks(archive, { type: 'broken' });
+		expect(
+			result.items.some((item) => item.destUrl === 'https://example.com/server-error'),
+		).toBe(false);
+	});
+
+	it('除外 (isSkipped) された未取得ページは broken リンクとして扱わない', async () => {
+		const result = await listLinks(archive, { type: 'broken' });
+		expect(
+			result.items.some((item) => item.destUrl === 'https://example.com/excluded'),
+		).toBe(false);
+	});
+
 	it('external リンクを検出する', async () => {
 		const result = await listLinks(archive, { type: 'external' });
 		expect(result.items.length).toBe(1);
@@ -231,6 +344,12 @@ describe('listLinks', () => {
 			sourceUrl: 'https://example.com',
 			isExternal: true,
 		});
+	});
+
+	it('status でリンク先をフィルタする', async () => {
+		const result = await listLinks(archive, { type: 'external', status: 404 });
+		expect(result.items).toHaveLength(0);
+		expect(result.total).toBe(0);
 	});
 
 	it('ページネーションが機能する', async () => {

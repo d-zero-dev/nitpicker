@@ -58,15 +58,47 @@ test.describe('Nitpicker Viewer', () => {
 		await expect(
 			page.getByRole('heading', { name: 'Resources', level: 1 }),
 		).toBeVisible();
-		await page.getByRole('link', { name: 'Headers' }).click();
+		await page.getByRole('link', { name: 'Broken Links' }).click();
 		await expect(
-			page.getByRole('heading', { name: 'Security headers', level: 1 }),
+			page.getByRole('heading', { name: 'Broken Links', level: 1 }),
 		).toBeVisible();
 	});
 
 	test('各ビューに解説文が見出し直後に表示される', async ({ page }) => {
 		await page.goto('/pages');
 		await expect(page.locator('.view-header .view-description')).toBeVisible();
+	});
+
+	test('外部リンクは宛先ごとに1行へ集約され、参照元数が正しく表示される', async ({
+		page,
+	}) => {
+		await page.goto('/external-links');
+		await expect(
+			page.getByRole('heading', { name: 'External Links', level: 1 }),
+		).toBeVisible();
+		// The fixture has two internal pages linking to the same external
+		// destination — this must render as ONE row, not two.
+		await expect(page.locator('.pt-row')).toHaveCount(1);
+		await expect(page.locator('.pt-row').first()).toContainText('external.example.com');
+		await expect(page.locator('.pt-row').first()).toContainText('2');
+	});
+
+	test('外部リンクの宛先をクリックすると Page Detail で参照元ページ一覧が確認できる', async ({
+		page,
+	}) => {
+		await page.goto('/external-links');
+		await page.locator('.pt-row .link-button').first().click();
+		await expect(
+			page.getByRole('heading', { name: 'Page detail', level: 1 }),
+		).toBeVisible();
+		// Two internal pages link to this external destination.
+		await expect(
+			page.getByRole('heading', { name: /Inbound links \(2\)/ }),
+		).toBeVisible();
+		// External pages are never scraped — the HTML snapshot / outbound
+		// links sections are not meaningful and must not render.
+		await expect(page.getByRole('heading', { name: /Outbound links/ })).toHaveCount(0);
+		await expect(page.getByRole('heading', { name: 'HTML snapshot' })).toHaveCount(0);
 	});
 
 	test('テーマを切り替えられる', async ({ page }) => {
@@ -97,14 +129,6 @@ test.describe('Nitpicker Viewer', () => {
 	test('フッターにアーカイブの絶対パスが表示される', async ({ page }) => {
 		await page.goto('/');
 		await expect(page.locator('.footer-path')).toContainText('.nitpicker');
-	});
-
-	test('Page Links ビューが全ページを表示する', async ({ page }) => {
-		await page.goto('/page-links');
-		await expect(
-			page.getByRole('heading', { name: 'Page Links', level: 1 }),
-		).toBeVisible();
-		await expect(page.locator('.pt-row').first()).toBeVisible();
 	});
 
 	test('Connection Failures ビューに遷移して見出しと解説が表示される', async ({
@@ -261,12 +285,15 @@ test.describe('MPA ページネーション', () => {
 	}) => {
 		for (const target of [
 			{ path: '/pages', filter: 'URL pattern (%foo%)' },
-			{ path: '/page-links', filter: 'URL pattern (%foo%)' },
-			{ path: '/headers', filter: 'hasCSP' },
+			{ path: '/broken-links', filter: 'URL pattern (%foo%)' },
 		]) {
 			await page.goto(target.path);
 			await expect(page.locator('.pt-row').first()).toBeVisible();
-			await page.getByRole('button', { name: target.filter }).click();
+			// `.first()`: `/broken-links` has both a Source and a Destination
+			// column sharing the same "URL pattern (%foo%)" filter label, so
+			// the role query resolves to two buttons — either one is fine for
+			// this generic "does the popover fit in viewport" smoke check.
+			await page.getByRole('button', { name: target.filter }).first().click();
 			await expectPopoverInViewport(page);
 		}
 	});
@@ -335,10 +362,10 @@ test.describe('infinite scroll (virtual mode)', () => {
 		await expect(page.locator('.vt-meta')).toContainText('rows');
 	});
 
-	test('Page Links ビューが全ページを表示する', async ({ page }) => {
-		await page.goto('/page-links');
+	test('Broken Links ビューが仮想スクロールで表示される', async ({ page }) => {
+		await page.goto('/broken-links');
 		await expect(
-			page.getByRole('heading', { name: 'Page Links', level: 1 }),
+			page.getByRole('heading', { name: 'Broken Links', level: 1 }),
 		).toBeVisible();
 		await expect(page.locator('.vt-row').first()).toBeVisible();
 	});
@@ -434,8 +461,8 @@ const VIEW_PATHS = [
 	'/pages',
 	'/resources',
 	'/images',
-	'/links',
-	'/page-links',
+	'/broken-links',
+	'/external-links',
 	'/violations',
 	'/duplicates',
 	'/mismatches',

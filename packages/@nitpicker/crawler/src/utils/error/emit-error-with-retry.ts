@@ -35,7 +35,7 @@ interface Emitter {
  * derived automatically by the `@retry` decorator via
  * `ClassMethodDecoratorContext.name`).
  *
- * Inlined try/catch rather than composing {@link emitError} with a
+ * Inlined try/catch rather than composing `emitError` with a
  * `() => retryCall(...)` closure to keep the per-invocation closure count
  * at 1 — this method is called on the DB write hot path (`updatePage`,
  * `insertResource`), where wrapping decorators previously ran with zero

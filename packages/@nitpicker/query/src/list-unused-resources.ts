@@ -53,6 +53,9 @@ export async function listUnusedResources(
 		if (options.urlPattern) {
 			query.where('resources.url', 'like', options.urlPattern);
 		}
+		if (options.status != null) {
+			query.where('resources.status', options.status);
+		}
 		if (options.contentType) {
 			query.where('resources.contentType', 'like', `${options.contentType}%`);
 		}

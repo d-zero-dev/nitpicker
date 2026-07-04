@@ -1,5 +1,5 @@
 /**
- * The opened-archive kind reported by {@link ArchiveManager}.
+ * The opened-archive kind reported by {@link import('./archive-manager.js').ArchiveManager}.
  *
  * - `'archive'` — a finished `.nitpicker` tar file on disk, opened by
  *   extracting it into a fresh tmpDir.
@@ -17,7 +17,7 @@ export type { PageSource, ErrorKind } from '@nitpicker/crawler';
 import type { ErrorKind, PageSource } from '@nitpicker/crawler';
 
 /**
- * One row of {@link listIsolatedPages} output — a **完全孤立** (singleton)
+ * One row of {@link import('./list-isolated-pages.js').listIsolatedPages} output — a **完全孤立** (singleton)
  * inventory-* HTML page with no resolved-anchor inbound from any other
  * inventory-* node.
  *
@@ -27,7 +27,7 @@ import type { ErrorKind, PageSource } from '@nitpicker/crawler';
  * here if the crawled-wins downgrade later demoted its discoverer (the
  * discoverer became `'crawled'`, breaking the inventory-subgraph edge
  * even though the anchor row still exists in `anchors`). Both source
- * labels are valid and shown via the same {@link SourceBadge} UI.
+ * labels are valid and shown via the same `SourceBadge` UI.
  */
 export interface IsolatedPageEntry {
 	/** Page URL. */
@@ -37,15 +37,17 @@ export interface IsolatedPageEntry {
 	/** HTTP status of the page, or `null` if not yet known. */
 	status: number | null;
 	/** Provenance label — see {@link PageSource}. Either `'inventory-seed'` or `'inventory-discovered'`. */
-	source: import('@nitpicker/crawler').PageSource;
+	source: PageSource;
 }
 
 /**
- * Pagination options for {@link listIsolatedPages}.
+ * Pagination options for {@link import('./list-isolated-pages.js').listIsolatedPages}.
  */
 export interface ListIsolatedPagesOptions {
 	/** URL pattern to search (SQL LIKE-ish substring for computed results). */
 	urlPattern?: string;
+	/** Filter by HTTP status. */
+	status?: number;
 	/** Filter by source. */
 	source?: PageSource;
 	/** Field to sort results by. */
@@ -69,12 +71,12 @@ export interface ListIsolatedPagesOptions {
 }
 
 /**
- * One row of {@link listIsolatedClusters} output — a connected component of
+ * One row of {@link import('./list-isolated-clusters.js').listIsolatedClusters} output — a connected component of
  * the inventory-* subgraph with size ≥ 2 (= **孤立集合**).
  *
  * The cluster is identified by `representativeUrl` (the lexicographically
  * smallest member URL). The viewer / CLI / MCP all use this URL as the
- * cluster key when requesting member details via {@link getIsolatedCluster}.
+ * cluster key when requesting member details via {@link import('./get-isolated-cluster.js').getIsolatedCluster}.
  */
 export interface IsolatedClusterSummary {
 	/** Lexicographically smallest member URL — the cluster's stable identifier. */
@@ -88,7 +90,7 @@ export interface IsolatedClusterSummary {
 }
 
 /**
- * Result of {@link getIsolatedCluster} — full member list for a single
+ * Result of {@link import('./get-isolated-cluster.js').getIsolatedCluster} — full member list for a single
  * isolated cluster, identified by its representative URL.
  */
 export interface IsolatedClusterDetail {
@@ -111,13 +113,13 @@ export interface IsolatedClusterMember {
 	/** HTTP status of the member, or `null` if not yet known. */
 	status: number | null;
 	/** Provenance label — see {@link PageSource}. Either `'inventory-seed'` or `'inventory-discovered'`. */
-	source: import('@nitpicker/crawler').PageSource;
+	source: PageSource;
 }
 
 /**
  * Connected component of the inventory-* subgraph as computed by
- * `computeIsolatedClusters`. Both {@link listIsolatedClusters} (size ≥ 2)
- * and {@link listIsolatedPages} (singletons, size === 1) consume this
+ * `computeIsolatedClusters`. Both {@link import('./list-isolated-clusters.js').listIsolatedClusters} (size ≥ 2)
+ * and {@link import('./list-isolated-pages.js').listIsolatedPages} (singletons, size === 1) consume this
  * shared result.
  */
 export interface IsolatedComponent {
@@ -130,11 +132,13 @@ export interface IsolatedComponent {
 }
 
 /**
- * Pagination options for {@link listIsolatedClusters}.
+ * Pagination options for {@link import('./list-isolated-clusters.js').listIsolatedClusters}.
  */
 export interface ListIsolatedClustersOptions {
 	/** URL pattern to search representative URLs. */
 	urlPattern?: string;
+	/** Filter by representative member status. */
+	status?: number;
 	/** Field to sort results by. */
 	sortBy?: 'representativeUrl' | 'representativeTitle' | 'representativeStatus' | 'size';
 	/** Sort direction. */
@@ -157,6 +161,8 @@ export interface ListIsolatedClustersOptions {
 export interface GetIsolatedClusterOptions {
 	/** URL pattern to search member URLs. */
 	urlPattern?: string;
+	/** Filter by HTTP status. */
+	status?: number;
 	/** Filter by source. */
 	source?: PageSource;
 	/** Field to sort results by. */
@@ -176,7 +182,7 @@ export interface GetIsolatedClusterOptions {
 }
 
 /**
- * One row of {@link listUnusedResources} output — an internal sub-resource
+ * One row of {@link import('./list-unused-resources.js').listUnusedResources} output — an internal sub-resource
  * with zero referrers.
  */
 export interface UnusedResourceEntry {
@@ -189,15 +195,17 @@ export interface UnusedResourceEntry {
 	/** Content-Length header value in bytes, or `null` if unknown. */
 	contentLength: number | null;
 	/** Provenance label — see {@link PageSource}. Shown as a viewer badge. */
-	source: import('@nitpicker/crawler').PageSource;
+	source: PageSource;
 }
 
 /**
- * Pagination options for {@link listUnusedResources}.
+ * Pagination options for {@link import('./list-unused-resources.js').listUnusedResources}.
  */
 export interface ListUnusedResourcesOptions {
 	/** URL pattern to search. */
 	urlPattern?: string;
+	/** Filter by HTTP status. */
+	status?: number;
 	/** Filter by content type prefix. */
 	contentType?: string;
 	/** Filter by source. */
@@ -213,7 +221,7 @@ export interface ListUnusedResourcesOptions {
 }
 
 /**
- * One row of {@link listInventoryRuns} output — one record per successful
+ * One row of {@link import('./list-inventory-runs.js').listInventoryRuns} output — one record per successful
  * `--inventory <list>` invocation against the archive.
  *
  * Schema-mirror of the `inventory_runs` table. All NULL semantics, the
@@ -244,7 +252,7 @@ export interface InventoryRunEntry {
 }
 
 /**
- * Pagination options for {@link listInventoryRuns}.
+ * Pagination options for {@link import('./list-inventory-runs.js').listInventoryRuns}.
  */
 export interface ListInventoryRunsOptions {
 	/** Maximum rows to return. Defaults to 100. */
@@ -329,8 +337,8 @@ export interface SummaryResult {
 	 * PDFs / images / archives don't inflate it. Kept on the API for
 	 * backward compatibility (CLI / MCP consumers may surface it
 	 * directly); the viewer dashboard now prefers
-	 * {@link internalPages} / {@link internalContents} /
-	 * {@link externalContents} for clearer reads.
+	 * {@link SummaryResult.internalPages} / {@link SummaryResult.internalContents} /
+	 * {@link SummaryResult.externalContents} for clearer reads.
 	 */
 	totalPages: number;
 	/**
@@ -343,7 +351,7 @@ export interface SummaryResult {
 	/**
 	 * Number of external HTML pages (`isExternal = 1` AND HTML-or-null).
 	 * Kept for backward compatibility; the viewer now prefers
-	 * {@link externalContents} which counts every external link
+	 * {@link SummaryResult.externalContents} which counts every external link
 	 * regardless of MIME.
 	 */
 	externalPages: number;
@@ -383,7 +391,7 @@ export interface StatusCount {
 	count: number;
 	/**
 	 * Per-cause breakdown of the `status === -1` bucket, classified by
-	 * {@link classifyErrorKind} on the underlying message.
+	 * {@link import('@nitpicker/crawler').classifyErrorKind} on the underlying message.
 	 *
 	 * Present only on the `status === -1` row (the hard-failure sentinel). The
 	 * sum of `errorKindBreakdown[*].count` is always equal to the parent
@@ -452,6 +460,14 @@ export interface ListPagesOptions {
 	missingDescription?: boolean;
 	/** Filter to pages with noindex set. */
 	noindex?: boolean;
+	/** Filter by Content-Security-Policy header presence. */
+	hasCSP?: boolean;
+	/** Filter by X-Frame-Options header presence. */
+	hasXFrameOptions?: boolean;
+	/** Filter by X-Content-Type-Options header presence. */
+	hasXContentTypeOptions?: boolean;
+	/** Filter by Strict-Transport-Security header presence. */
+	hasHSTS?: boolean;
 	/** URL pattern to search (SQL LIKE pattern). */
 	urlPattern?: string;
 	/** Directory path prefix to filter by. */
@@ -489,7 +505,11 @@ export interface ListPagesOptions {
 		| 'robotsRaw'
 		| 'tagCount'
 		| 'tagsProvidersCsv'
-		| 'jsonldCount';
+		| 'jsonldCount'
+		| 'hasCSP'
+		| 'hasXFrameOptions'
+		| 'hasXContentTypeOptions'
+		| 'hasHSTS';
 	/** Sort direction. */
 	sortOrder?: SortOrder;
 	/** Maximum number of results to return. Defaults to 100. */
@@ -539,6 +559,10 @@ export interface PageListRow {
 	tags_providers_csv: string | null;
 	firstCrawledAt: number | null;
 	lastCrawledAt: number | null;
+	hasCSP: 0 | 1;
+	hasXFrameOptions: 0 | 1;
+	hasXContentTypeOptions: 0 | 1;
+	hasHSTS: 0 | 1;
 }
 
 /**
@@ -621,6 +645,14 @@ export interface PageListItem {
 	firstCrawledAt: number | null;
 	/** Most-recent-success UNIX ms (within-archive). */
 	lastCrawledAt: number | null;
+	/** Whether Content-Security-Policy header is present. */
+	hasCSP: boolean;
+	/** Whether X-Frame-Options header is present. */
+	hasXFrameOptions: boolean;
+	/** Whether X-Content-Type-Options header is present. */
+	hasXContentTypeOptions: boolean;
+	/** Whether Strict-Transport-Security header is present. */
+	hasHSTS: boolean;
 }
 
 /**
@@ -671,6 +703,15 @@ export interface PageDetail {
 	contentLength: number | null;
 	/** Whether the page is external. */
 	isExternal: boolean;
+	/**
+	 * Whether the crawler skipped this URL (robots.txt / `excludeUrls` /
+	 * `excludeKeywords`) instead of fetching it. When `true`, the metadata
+	 * fields above are unpopulated — {@link PageDetail.skipReason} is the
+	 * only field describing this row.
+	 */
+	isSkipped: boolean;
+	/** Why the crawler skipped this URL, or `null` if it was not skipped. */
+	skipReason: string | null;
 
 	/** The page title. */
 	title: string | null;
@@ -798,7 +839,7 @@ export interface PageDetail {
 }
 
 /**
- * DTO mirror of {@link import('@nitpicker/crawler/...').JsonLdSummary}.
+ * DTO mirror of {@link import('@nitpicker/crawler').JsonLdSummary}.
  *
  * Re-declared in query types so the public DTO does not leak crawler
  * internals; same shape so callers can pass it straight through.
@@ -813,7 +854,7 @@ export interface JsonLdSummaryDto {
 }
 
 /**
- * DTO mirror of {@link import('@nitpicker/crawler/...').TagsSummary}.
+ * DTO mirror of {@link import('@nitpicker/crawler').TagsSummary}.
  */
 export interface TagsSummaryDto {
 	/** Total tag rows for the page. */
@@ -955,8 +996,8 @@ export interface InboundLink {
  * Filter options for listing links.
  *
  * `'orphaned'` was removed: its semantics collapsed into
- * {@link listIsolatedPages} (singleton inventory-* pages) and the new
- * {@link listIsolatedClusters} (cluster-shaped orphans). The remaining
+ * {@link import('./list-isolated-pages.js').listIsolatedPages} (singleton inventory-* pages) and the new
+ * {@link import('./list-isolated-clusters.js').listIsolatedClusters} (cluster-shaped orphans). The remaining
  * `'broken'` / `'external'` types report links where the anchor's resolved
  * final destination matches the criterion — redirect-source rows are
  * walked through `pages.redirectDestId` to the canonical destination before
@@ -977,6 +1018,8 @@ export interface ListLinksOptions {
 	includeRedirectSources?: boolean;
 	/** URL pattern to search source or destination URLs. */
 	urlPattern?: string;
+	/** Filter by destination HTTP status. */
+	status?: number;
 	/** Field to sort results by. */
 	sortBy?: 'sourceUrl' | 'destUrl' | 'status' | 'isExternal' | 'textContent';
 	/** Sort direction. */
@@ -1010,11 +1053,75 @@ export interface LinkAnalysisResult {
 }
 
 /**
+ * Filter/sort/pagination options for {@link import('./list-external-links.js').listExternalLinks}.
+ *
+ * Unlike {@link ListLinksOptions}, there is no `includeRedirectSources` flag
+ * here: this listing's whole premise is "one row per canonical destination",
+ * so exposing literal (unresolved) redirect-source destinations would
+ * contradict the dedup itself.
+ */
+export interface ListExternalLinksOptions {
+	/**
+	 * URL pattern to filter the destination URL (SQL LIKE). There is no
+	 * source-URL matching — a row is one destination, not one anchor, so
+	 * there is no single "source" to match against. This is a deliberate
+	 * behavior change from {@link import('./list-links.js').listLinks}'s `type: 'external'` mode, which
+	 * matched source OR destination: the External Links view no longer has a
+	 * source-URL column to filter on, so matching only the destination is the
+	 * correct semantics for this shape, not an oversight.
+	 */
+	urlPattern?: string;
+	/** Filter by destination HTTP status. */
+	status?: number;
+	/** Field to sort results by. */
+	sortBy?: 'destUrl' | 'status' | 'referrerCount';
+	/** Sort direction. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results. */
+	limit?: number;
+	/** Number of results to skip. */
+	offset?: number;
+}
+
+/**
+ * One unique external destination, deduplicated by canonical (redirect-
+ * resolved) target across every anchor that leads to it.
+ */
+export interface ExternalLinkEntry {
+	/** The canonical (redirect-resolved) destination URL. */
+	destUrl: string;
+	/** HTTP status of the canonical destination. */
+	status: number | null;
+	/**
+	 * Count of distinct internal pages linking to this destination. Counts
+	 * pages, not anchor tags — two `<a>` tags on the same page pointing at
+	 * the same destination count once.
+	 */
+	referrerCount: number;
+}
+
+/**
+ * Paginated result for {@link import('./list-external-links.js').listExternalLinks}.
+ */
+export interface PaginatedExternalLinkList {
+	/** External destination entries. */
+	items: ExternalLinkEntry[];
+	/** Total matching destinations (distinct count, not anchor count). */
+	total: number;
+	/** Current offset. */
+	offset: number;
+	/** Page size used. */
+	limit: number;
+}
+
+/**
  * Filter options for listing resources.
  */
 export interface ListResourcesOptions {
 	/** URL pattern to filter resource URLs. */
 	urlPattern?: string;
+	/** Filter by HTTP status. */
+	status?: number;
 	/** Filter by content type prefix (e.g., "text/css", "application/javascript"). */
 	contentType?: string;
 	/** Filter by external (true) or internal (false) resources. */
@@ -1193,6 +1300,22 @@ export interface MismatchEntry {
 }
 
 /**
+ * Presence flags for the four security-related HTTP response headers tracked
+ * by {@link import('./check-headers.js').checkHeaders} / `listPages`, computed in SQL via
+ * `headerPresenceExpression`.
+ */
+export interface HeaderPresence {
+	/** Whether Content-Security-Policy header is present. */
+	hasCSP: boolean;
+	/** Whether X-Frame-Options header is present. */
+	hasXFrameOptions: boolean;
+	/** Whether X-Content-Type-Options header is present. */
+	hasXContentTypeOptions: boolean;
+	/** Whether Strict-Transport-Security header is present. */
+	hasHSTS: boolean;
+}
+
+/**
  * Security header check result for a page.
  */
 export interface HeaderCheckEntry {
@@ -1267,89 +1390,6 @@ export interface GetLinkGraphOptions {
 	 * Omit for all internal pages.
 	 */
 	limit?: number;
-}
-
-/**
- * A page-level network entry — one row per page — mirroring the
- * google-sheets "Links" sheet: status, redirects, referrer count, and headers.
- */
-export interface PageLinkEntry {
-	/** The page URL. */
-	url: string;
-	/** The page title. */
-	title: string | null;
-	/** HTTP status code. */
-	status: number | null;
-	/** HTTP status text. */
-	statusText: string | null;
-	/** Content type. */
-	contentType: string | null;
-	/** Whether the page is external. */
-	isExternal: boolean;
-	/** Number of pages that redirect to this page. */
-	redirectFromCount: number;
-	/** Number of pages linking to this page (incoming links). */
-	referrerCount: number;
-	/** Whether the page has stored response headers. */
-	hasResponseHeaders: boolean;
-	/** Skip reason if the page was skipped during crawling. */
-	skipReason: string | null;
-}
-
-/**
- * Paginated result for the page-level link/network list.
- */
-export interface PaginatedPageLinkList {
-	/** Page link entries. */
-	items: PageLinkEntry[];
-	/** Total matching pages. */
-	total: number;
-	/** Current offset. */
-	offset: number;
-	/** Current limit. */
-	limit: number;
-}
-
-/**
- * Filter and pagination options for {@link PageLinkEntry} listing.
- */
-export interface ListPageLinksOptions {
-	/** Filter by external (true) or internal (false). */
-	isExternal?: boolean;
-	/** URL pattern to search (SQL LIKE pattern). */
-	urlPattern?: string;
-	/** Filter by content type prefix. */
-	contentType?: string;
-	/** Filter to rows with or without response headers. */
-	hasResponseHeaders?: boolean;
-	/** Field to sort results by. */
-	sortBy?:
-		| 'url'
-		| 'title'
-		| 'status'
-		| 'statusText'
-		| 'contentType'
-		| 'redirectFromCount'
-		| 'referrerCount'
-		| 'hasResponseHeaders'
-		| 'skipReason'
-		| 'isExternal';
-	/** Sort direction. */
-	sortOrder?: SortOrder;
-	/** Maximum number of results. */
-	limit?: number;
-	/** Number of results to skip. */
-	offset?: number;
-	/**
-	 * Pre-computed `Map<pageId, referrerCount>` built once per archive at
-	 * the consumer layer (the viewer caches it). When provided, the per-
-	 * row correlated referrer subquery is skipped and the count is filled
-	 * in from the map after fetch — turning a ~33 s query on a 10 GB
-	 * archive into a sub-second one. The CLI / MCP path omits this and
-	 * keeps the original subquery shape so they don't pay the upfront
-	 * precompute cost for a single one-shot query.
-	 */
-	precomputedReferrerCounts?: Map<number, number>;
 }
 
 /**

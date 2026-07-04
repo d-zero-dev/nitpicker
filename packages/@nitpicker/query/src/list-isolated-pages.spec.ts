@@ -183,8 +183,8 @@ describe('listIsolatedPages', () => {
 				redirectPaths: [],
 				isExternal: false,
 				isTarget: true,
-				status: 200,
-				statusText: 'OK',
+				status: 404,
+				statusText: 'Not Found',
 				contentType: 'text/html',
 				contentLength: 100,
 				responseHeaders: {},
@@ -267,6 +267,12 @@ describe('listIsolatedPages', () => {
 		const third = await listIsolatedPages(archive, { limit: 1, offset: 2 });
 		expect(third.items).toHaveLength(0);
 		expect(third.total).toBe(2);
+	});
+
+	it('filters singletons by status', async () => {
+		const result = await listIsolatedPages(archive, { status: 404 });
+		expect(result.total).toBe(1);
+		expect(result.items[0]?.url).toBe('https://example.com/outbound-to-crawled');
 	});
 
 	it('uses precomputedComponents when supplied so the union-find pass is skipped', async () => {

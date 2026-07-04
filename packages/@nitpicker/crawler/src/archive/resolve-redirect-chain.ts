@@ -5,7 +5,7 @@ export interface RedirectChain {
 	/** The final destination URL the chain lands on (normalised). */
 	destUrl: string;
 	/**
-	 * The source URLs that redirect to {@link destUrl}: the originally requested
+	 * The source URLs that redirect to {@link RedirectChain.destUrl}: the originally requested
 	 * URL followed by every intermediate hop. Empty when the page was not
 	 * redirected at all.
 	 */
@@ -23,8 +23,8 @@ export interface RedirectChain {
  * every intermediate hop are the sources. When the page was not redirected,
  * the destination is the page URL itself and there are no sources.
  *
- * Used by both {@link Database.updatePage} (which renders and stores the
- * destination) and {@link Database.recordRedirect} (the #73 convergence
+ * Used by both `Database.updatePage` (which renders and stores the
+ * destination) and `Database.recordRedirect` (the #73 convergence
  * optimisation, which records the edge for a destination already rendered
  * elsewhere without touching its content).
  * @param pageUrl - The originally requested URL (normalised, without hash/auth).

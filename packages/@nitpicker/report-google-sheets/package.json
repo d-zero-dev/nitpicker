@@ -27,10 +27,10 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@d-zero/dealer": "1.9.3",
-		"@d-zero/google-auth": "0.7.4",
-		"@d-zero/google-sheets": "0.9.3",
-		"@d-zero/shared": "0.22.1",
+		"@d-zero/dealer": "1.9.4",
+		"@d-zero/google-auth": "0.7.5",
+		"@d-zero/google-sheets": "0.9.4",
+		"@d-zero/shared": "0.22.2",
 		"@nitpicker/crawler": "0.12.0",
 		"@nitpicker/types": "0.12.0",
 		"ansi-colors": "4.1.3",

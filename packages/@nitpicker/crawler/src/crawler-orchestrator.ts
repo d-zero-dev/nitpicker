@@ -656,6 +656,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// enough — the inventory pass continues and the crawled-wins
 				// source priority keeps stale labels stable even if some of
 				// the strict-pending rows happen to land on inventory seeds.
+				// eslint-disable-next-line no-console -- operator-facing warning, must be visible regardless of DEBUG filters
 				console.warn(
 					`inventory: archive has ${pending.length} pending URLs from a previous crawl. Proceeding — crawled-wins priority keeps their labels stable. Consider \`--resume\` first if you want the prior work finalized.`,
 				);

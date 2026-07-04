@@ -230,6 +230,137 @@ describe('listPages', () => {
 	});
 });
 
+describe('listPages: セキュリティヘッダーの有無', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_list_pages_headers__');
+	const archiveFilePath = path.resolve(dir, 'list-pages-headers-test.nitpicker');
+
+	const META = {
+		lang: null,
+		title: null,
+		description: null,
+		keywords: null,
+		noindex: false,
+		nofollow: false,
+		noarchive: false,
+		canonical: null,
+		alternate: null,
+		'og:type': null,
+		'og:title': null,
+		'og:site_name': null,
+		'og:description': null,
+		'og:url': null,
+		'og:image': null,
+		'twitter:card': null,
+	};
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.10.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/with-csp')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: { 'Content-Security-Policy': "default-src 'self'" },
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/no-headers')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		// `responseHeaders: null` is a real shape the crawler writes (e.g. the
+		// JS-redirect-rescue path); it must not crash the SQL-computed
+		// header-presence columns, which never JSON.parse the stored value.
+		await archive.setPage({
+			url: parseUrl('https://example.com/null-headers')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: null,
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('does not throw when a page has responseHeaders: null', async () => {
+		await expect(listPages(archive)).resolves.toBeDefined();
+	});
+
+	it('reports hasCSP per page and treats null responseHeaders as false', async () => {
+		const result = await listPages(archive);
+		const withCsp = result.items.find((p) => p.url.endsWith('/with-csp'));
+		const noHeaders = result.items.find((p) => p.url.endsWith('/no-headers'));
+		const nullHeaders = result.items.find((p) => p.url.endsWith('/null-headers'));
+		expect(withCsp?.hasCSP).toBe(true);
+		expect(noHeaders?.hasCSP).toBe(false);
+		expect(nullHeaders?.hasCSP).toBe(false);
+	});
+
+	it('filters by hasCSP', async () => {
+		const result = await listPages(archive, { hasCSP: true });
+		expect(result.total).toBe(1);
+		expect(result.items[0]?.url).toBe('https://example.com/with-csp');
+	});
+});
+
 describe('listPages: ページ性は content-type（エラーページは残し、リソースだけ除外）', () => {
 	let archive: InstanceType<typeof Archive>;
 	const dir = path.resolve(__dirname, '__test_fixtures_list_pages_errored__');

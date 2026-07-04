@@ -80,6 +80,9 @@ export async function listIsolatedPages(
 		if (options.source && item.source !== options.source) {
 			return false;
 		}
+		if (options.status != null && item.status !== options.status) {
+			return false;
+		}
 		return true;
 	});
 	const sorted = sortArrayItems(filtered, options.sortBy ?? 'url', options.sortOrder, {

@@ -9,10 +9,18 @@ import { PAGE_SIZE } from './page-size.js';
 
 /** Filter state for the resources view. */
 export interface ResourcesFilter {
+	/** URL pattern (SQL LIKE). */
+	urlPattern?: string;
+	/** Filter by HTTP status. */
+	status?: number;
 	/** Filter by content-type prefix. */
 	contentType?: string;
 	/** Filter by external/internal. */
 	isExternal?: boolean;
+	/** Sort field. */
+	sortBy?: string;
+	/** Sort direction. */
+	sortOrder?: string;
 }
 
 /**

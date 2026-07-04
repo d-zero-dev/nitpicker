@@ -1,3 +1,4 @@
 {
-	"extends": ["@d-zero/tsconfig"]
+	"extends": ["@d-zero/tsconfig"],
+	"exclude": ["node_modules", "**/*.d.ts"]
 }

@@ -7,7 +7,7 @@
  * normalization, so `Text/HTML` or `text/html ` can otherwise reach the
  * database. Storing the canonical (trimmed, lower-cased) form lets the exact
  * SQL page-ness predicate (`WHERE contentType = 'text/html'`) agree with the
- * code-level {@link isHtmlContentType} check, which trims and lower-cases.
+ * code-level `isHtmlContentType` check, which trims and lower-cases.
  * @param contentType - The raw media type, or `null` when unknown.
  * @returns The trimmed, lower-cased media type, or `null` when unknown/blank.
  */

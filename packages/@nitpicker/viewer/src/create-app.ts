@@ -7,7 +7,6 @@ import { registerArchiveInfoRoute } from './routes/register-archive-info-route.j
 import { registerDuplicatesRoute } from './routes/register-duplicates-route.js';
 import { registerErrorKindsRoute } from './routes/register-error-kinds-route.js';
 import { registerGraphRoute } from './routes/register-graph-route.js';
-import { registerHeadersRoute } from './routes/register-headers-route.js';
 import { registerImagesRoute } from './routes/register-images-route.js';
 import { registerIsolatedClustersRoute } from './routes/register-isolated-clusters-route.js';
 import { registerIsolatedPagesRoute } from './routes/register-isolated-pages-route.js';
@@ -15,7 +14,6 @@ import { registerLinksRoute } from './routes/register-links-route.js';
 import { registerMismatchesRoute } from './routes/register-mismatches-route.js';
 import { registerPageDetailRoute } from './routes/register-page-detail-route.js';
 import { registerPageHtmlRoute } from './routes/register-page-html-route.js';
-import { registerPageLinksRoute } from './routes/register-page-links-route.js';
 import { registerPagesRoute } from './routes/register-pages-route.js';
 import { registerResourceReferrersRoute } from './routes/register-resource-referrers-route.js';
 import { registerResourcesRoute } from './routes/register-resources-route.js';
@@ -54,9 +52,7 @@ export function createApp(options: CreateAppOptions): Hono {
 	registerViolationsRoute(app, context);
 	registerDuplicatesRoute(app, context);
 	registerMismatchesRoute(app, context);
-	registerHeadersRoute(app, context);
 	registerGraphRoute(app, context);
-	registerPageLinksRoute(app, context);
 	registerArchiveInfoRoute(app, context);
 	registerErrorKindsRoute(app, context);
 	registerIsolatedPagesRoute(app, context);
