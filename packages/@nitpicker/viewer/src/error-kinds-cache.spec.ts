@@ -267,6 +267,39 @@ describe('getCachedErrorKinds', () => {
 			]);
 		});
 
+		it('tie-breaks by kind ascending when sortBy=host ties on host, matching getViewerErrorKinds() — regression test', async () => {
+			// Regression test: an earlier version sorted with no secondary key,
+			// so same-host ties (a.example.com/dns count=5, a.example.com/timeout
+			// count=1) kept whatever order the cached count-desc snapshot
+			// happened to hold them in (dns before timeout, since dns has the
+			// higher count) instead of the deterministic kind-ascending
+			// tie-break getViewerErrorKinds applies in SQL.
+			vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(FULL);
+			const context = makeContext('archive_opts_sort_host_tiebreak');
+
+			const asc = await getCachedErrorKinds(context, {
+				sortBy: 'host',
+				sortOrder: 'asc',
+			});
+			const aExampleComEntries = asc.items.filter((i) => i.host === 'a.example.com');
+			expect(aExampleComEntries.map((i) => i.kind)).toEqual(['dns', 'timeout']);
+		});
+
+		it('falls back to count-desc for an out-of-range sortBy instead of silently no-op sorting — regression test', async () => {
+			// Regression test: an earlier version indexed items by the raw,
+			// unvalidated sortBy (`item['bogus']`), which is undefined on every
+			// entry, making the sort a no-op that returned the cached snapshot's
+			// own order regardless of the (also wrongly-defaulted) sortOrder.
+			vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(FULL);
+			const context = makeContext('archive_opts_sort_bogus');
+
+			const result = await getCachedErrorKinds(context, {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any -- simulating an out-of-range value from an untyped caller (e.g. a raw query string).
+				sortBy: 'bogus' as any,
+			});
+			expect(result.items.map((i) => i.count)).toEqual([5, 3, 1]);
+		});
+
 		it('paginates with limit/offset, and returns every row when limit is omitted', async () => {
 			vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(FULL);
 			const context = makeContext('archive_opts_paginate');

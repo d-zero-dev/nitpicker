@@ -1,7 +1,16 @@
 import type { ArchiveContext } from './types.js';
-import type { ErrorKindsResult, GetErrorKindsOptions } from '@nitpicker/query';
+import type {
+	ErrorKindEntry,
+	ErrorKindsResult,
+	GetErrorKindsOptions,
+} from '@nitpicker/query';
 
-import { getErrorKinds, getErrorKindsFastPath } from '@nitpicker/query';
+import {
+	getErrorKinds,
+	getErrorKindsFastPath,
+	resolveErrorKindsSort,
+	sortArrayItems,
+} from '@nitpicker/query';
 
 import { getOrComputeOnDisk } from './precomputed-disk-cache.js';
 import { createPromiseLru } from './promise-lru.js';
@@ -25,17 +34,36 @@ const MAX_ENTRIES = 4;
  */
 const lru = createPromiseLru<string, ErrorKindsResult>({ maxEntries: MAX_ENTRIES });
 
+/** Per-field value accessors {@link sortArrayItems} needs for `ErrorKindEntry`. */
+const SORT_FIELD_CONFIG = {
+	host: { getValue: (item: ErrorKindEntry) => item.host },
+	kind: { getValue: (item: ErrorKindEntry) => item.kind },
+	count: { getValue: (item: ErrorKindEntry) => item.count },
+};
+
 /**
- * Compares two same-typed sort-field values (`host`/`kind` strings or
- * `count` numbers) for {@link applyErrorKindsOptions}'s in-memory re-sort.
- * @param a - The first value.
- * @param b - The second value.
- * @returns Negative/zero/positive per the usual `Array.prototype.sort` contract.
+ * Sorts `items` by `sortBy`/`sortOrder`, tie-breaking every ordering with
+ * `host` then `kind` ascending — the same tie-break `getViewerErrorKinds`
+ * applies in SQL (`ORDER BY <col>, host, kind`), reproduced here via stable
+ * sort composition (`Array.prototype.toSorted` is spec-guaranteed stable):
+ * pre-sorting by the tie-break keys first means the final pass's ties keep
+ * that relative order. Without this, {@link applyErrorKindsOptions} would
+ * leave same-`sortBy`-value rows in whatever order the cached snapshot
+ * happened to hold them, which can visibly differ from what the SQL fast
+ * path returns for the identical request.
+ * @param items - The rows to sort.
+ * @param sortBy - The validated primary sort field.
+ * @param sortOrder - The primary sort direction.
+ * @returns A new, sorted array.
  */
-function compareEntryField(a: string | number, b: string | number): number {
-	return typeof a === 'number' && typeof b === 'number'
-		? a - b
-		: String(a).localeCompare(String(b));
+function sortErrorKindEntries(
+	items: ErrorKindEntry[],
+	sortBy: 'host' | 'kind' | 'count',
+	sortOrder: 'asc' | 'desc',
+): ErrorKindEntry[] {
+	let sorted = sortArrayItems(items, 'kind', 'asc', SORT_FIELD_CONFIG);
+	sorted = sortArrayItems(sorted, 'host', 'asc', SORT_FIELD_CONFIG);
+	return sortArrayItems(sorted, sortBy, sortOrder, SORT_FIELD_CONFIG);
 }
 
 /**
@@ -45,6 +73,9 @@ function compareEntryField(a: string | number, b: string | number): number {
  * that function's docs) in plain JS, so `getCachedErrorKinds` can serve any
  * request's parameters from one cached "whole archive" snapshot without
  * re-running the expensive classify-and-aggregate pass per request.
+ * `sortBy`/`sortOrder` are resolved via the same `resolveErrorKindsSort`
+ * `getErrorKinds` and `getViewerErrorKinds` use, so an out-of-range `sortBy`
+ * can't silently pick the wrong default direction here either.
  * @param full - The unfiltered result (computed with `options: {}`) to slice.
  * @param options - The caller's actual filter/sort/pagination options.
  * @returns The filtered/sorted/paginated result. `facets` is copied through
@@ -62,10 +93,8 @@ function applyErrorKindsOptions(
 		items = items.filter((item) => item.kind === options.kind);
 	}
 
-	const sortBy = options.sortBy ?? 'count';
-	const sortOrder = options.sortOrder ?? (sortBy === 'count' ? 'desc' : 'asc');
-	const direction = sortOrder === 'desc' ? -1 : 1;
-	items = items.toSorted((a, b) => compareEntryField(a[sortBy], b[sortBy]) * direction);
+	const { sortBy, sortOrder } = resolveErrorKindsSort(options);
+	items = sortErrorKindEntries(items, sortBy, sortOrder);
 
 	const total = items.length;
 	const offset = options.offset ?? 0;
