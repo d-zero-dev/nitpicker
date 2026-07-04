@@ -25,6 +25,28 @@ describe('ensureViewerReadModelOpportunistically', () => {
 	beforeAll(async () => {
 		mkdirSync(workingDir, { recursive: true });
 		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		// `buildViewerReadModel` also computes a `getSummary` snapshot, which
+		// requires `accessor.getConfig()` to resolve.
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.10.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
 		await archive.setPage({
 			url: parseUrl('https://example.com/')!,
 			redirectPaths: [],

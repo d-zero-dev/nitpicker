@@ -1,19 +1,20 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 9 viewer-read-model tables (and `viewer_pages`'s named
+ * Creates all 10 viewer-read-model tables (and `viewer_pages`'s named
  * indexes) against the given connection. Assumes none of the tables
  * currently exist — callers (`buildViewerReadModel`) are responsible for
  * dropping any prior version first, inside the same transaction, so this
  * function is not itself idempotent.
  *
  * Every statement runs via `raw()` rather than knex's chainable schema
- * builder: 5 of the 9 tables need `WITHOUT ROWID` / a composite primary key
- * / a `CHECK` constraint / a table-level `UNIQUE` constraint, none of which
- * the chainable builder can express (the same reason `page_html_blobs` /
- * `page_html_ref` drop to `raw()` in `@nitpicker/crawler`'s
- * `init-schema.ts`). Using `raw()` for every table keeps this function a
- * single uniform style instead of mixing two schema-definition APIs.
+ * builder: 5 of the 9 non-`viewer_summary` tables need `WITHOUT ROWID` / a
+ * composite primary key / a `CHECK` constraint / a table-level `UNIQUE`
+ * constraint, none of which the chainable builder can express (the same
+ * reason `page_html_blobs` / `page_html_ref` drop to `raw()` in
+ * `@nitpicker/crawler`'s `init-schema.ts`). Using `raw()` for every table
+ * keeps this function a single uniform style instead of mixing two
+ * schema-definition APIs.
  * @param trx - An open Knex transaction (a plain `Knex` instance also works,
  *   e.g. in tests that don't need transactional rollback).
  */
@@ -24,6 +25,31 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			schema_version integer not null,
 			built_at integer not null,
 			source_row_count integer not null
+		)
+	`);
+
+	// Single-row site-wide summary statistics, mirroring `SummaryResult`
+	// minus `baseUrl`/`roots` (those come from `accessor.getConfig()`,
+	// independent of `pages` aggregation — see `getViewerSummary`'s docs).
+	// JSON columns store `JSON.stringify`d arrays/objects verbatim; no
+	// `url_refs`/`content_items` ref-table indirection, matching this
+	// codebase's `pages`-direct convention rather than
+	// `docs/viewer-sql-query-plan.md`'s aspirational design — same
+	// rationale as `viewer_anchor_facts` below. `/api/error-kinds`'
+	// `viewer_error_kind_*` tables are a separate endpoint/issue; the
+	// `status=-1` error-kind breakdown here stays embedded inside
+	// `status_json` instead.
+	await trx.raw(`
+		CREATE TABLE viewer_summary (
+			id integer primary key check (id = 1),
+			total_pages integer not null,
+			internal_pages integer not null,
+			external_pages integer not null,
+			internal_contents integer not null,
+			external_contents integer not null,
+			status_json text not null,
+			content_type_json text not null,
+			metadata_json text not null
 		)
 	`);
 
