@@ -30,7 +30,7 @@ describe('createViewerReadModelTables', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('creates all 12 tables and the named viewer_pages indexes', async () => {
+	it('creates all 14 tables and the named viewer_pages indexes', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 
@@ -47,6 +47,8 @@ describe('createViewerReadModelTables', () => {
 			'viewer_anchor_facts',
 			'viewer_error_kind_entries',
 			'viewer_error_kind_meta',
+			'viewer_resources',
+			'viewer_resource_stats',
 		]) {
 			expect(await knex.schema.hasTable(table)).toBe(true);
 		}
@@ -97,6 +99,25 @@ describe('createViewerReadModelTables', () => {
 		expect(new Set(errorKindEntryIndexRows.map((r) => r.name)).has('vee_count')).toBe(
 			true,
 		);
+
+		const resourceIndexRows: Array<{ name: string }> = await knex('sqlite_master')
+			.where({ type: 'index', tbl_name: 'viewer_resources' })
+			.select('name');
+		const resourceIndexNames = new Set(resourceIndexRows.map((r) => r.name));
+		for (const indexName of [
+			'vr_default',
+			'vr_url_order',
+			'vr_status',
+			'vr_status_desc',
+			'vr_status_order',
+			'vr_status_desc_order',
+			'vr_unused',
+			'vr_unused_status',
+			'vr_unused_status_desc',
+			'vr_unused_source',
+		]) {
+			expect(resourceIndexNames.has(indexName)).toBe(true);
+		}
 	});
 
 	it('viewer_query_profiles enforces a composite (scope, profile_key) key, not a single-column rowid', async () => {
@@ -219,6 +240,40 @@ describe('createViewerReadModelTables', () => {
 				kind: 'dns',
 				...baseRow,
 			}),
+		).rejects.toThrow();
+	});
+
+	it('viewer_resources rejects a duplicate resource_id', async () => {
+		const knex = archive.getKnex();
+		await knex('viewer_resources').insert({
+			resource_id: 1,
+			is_external: 0,
+			status: 200,
+			status_sort_key: 200,
+			status_desc_key: -200,
+			source: 'crawled',
+			is_unused: 0,
+			url_sort_key: 'https://example.com/a.css',
+		});
+		await expect(
+			knex('viewer_resources').insert({
+				resource_id: 1,
+				is_external: 0,
+				status: 200,
+				status_sort_key: 200,
+				status_desc_key: -200,
+				source: 'crawled',
+				is_unused: 0,
+				url_sort_key: 'https://example.com/duplicate.css',
+			}),
+		).rejects.toThrow();
+	});
+
+	it('viewer_resource_stats rejects a duplicate resource_id', async () => {
+		const knex = archive.getKnex();
+		await knex('viewer_resource_stats').insert({ resource_id: 1, referrer_count: 1 });
+		await expect(
+			knex('viewer_resource_stats').insert({ resource_id: 1, referrer_count: 2 }),
 		).rejects.toThrow();
 	});
 

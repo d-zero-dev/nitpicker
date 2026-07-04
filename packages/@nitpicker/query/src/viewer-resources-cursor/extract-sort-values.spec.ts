@@ -1,0 +1,33 @@
+import { describe, expect, it } from 'vitest';
+
+import { extractSortValues } from './extract-sort-values.js';
+
+describe('extractSortValues', () => {
+	it('extracts values in the spec columns order, ignoring extra row fields', () => {
+		const spec = {
+			columns: ['status_sort_key', 'url_sort_key', 'resource_id'],
+			scanDirection: 'asc',
+		} as const;
+		const row = {
+			resource_id: 42,
+			url_sort_key: 'https://example.com/a.css',
+			status_sort_key: 200,
+			status_desc_key: -200,
+		};
+		expect(extractSortValues(spec, row)).toEqual([200, 'https://example.com/a.css', 42]);
+	});
+
+	it('extracts a single-column tuple for url sort', () => {
+		const spec = {
+			columns: ['url_sort_key', 'resource_id'],
+			scanDirection: 'desc',
+		} as const;
+		const row = {
+			resource_id: 7,
+			url_sort_key: 'https://example.com/z.js',
+			status_sort_key: 200,
+			status_desc_key: -200,
+		};
+		expect(extractSortValues(spec, row)).toEqual(['https://example.com/z.js', 7]);
+	});
+});

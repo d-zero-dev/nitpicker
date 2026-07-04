@@ -221,6 +221,73 @@ export interface ListUnusedResourcesOptions {
 }
 
 /**
+ * Paginated result wrapper for {@link import('./list-unused-resources.js').listUnusedResources}.
+ */
+export interface PaginatedUnusedResourceList {
+	/** Unused-resource entries. */
+	items: UnusedResourceEntry[];
+	/** Total matching unused resources. */
+	total: number;
+}
+
+/**
+ * Filter and pagination options for {@link import('./list-viewer-unused-resources.js').listViewerUnusedResources}
+ * — the `viewer_resources` read-model-backed counterpart of
+ * {@link ListUnusedResourcesOptions}.
+ *
+ * Deliberately narrower than {@link ListUnusedResourcesOptions}: `urlPattern`
+ * (LIKE-based) and `contentType` (raw MIME prefix, not the classified
+ * `content_category` the read model stores) are excluded — callers that need
+ * those fall back to `listUnusedResources` instead.
+ */
+export interface ListViewerUnusedResourcesOptions {
+	/** Filter by exact HTTP status code. */
+	status?: number;
+	/** Filter by provenance — see {@link PageSource}. */
+	source?: PageSource;
+	/** Field to sort results by. Defaults to `'url'`. */
+	sortBy?: 'url' | 'status' | 'source';
+	/** Sort direction. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedUnusedResourceList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result wrapper for {@link import('./list-viewer-unused-resources.js').listViewerUnusedResources}
+ * — {@link PaginatedUnusedResourceList} plus keyset cursors for
+ * virtual-scroll continuation.
+ */
+export interface CursorPaginatedUnusedResourceList extends PaginatedUnusedResourceList {
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
+}
+
+/**
  * One row of {@link import('./list-inventory-runs.js').listInventoryRuns} output — one record per successful
  * `--inventory <list>` invocation against the archive.
  *
@@ -1315,6 +1382,100 @@ export interface PaginatedResourceList {
 	offset: number;
 	/** Current limit. */
 	limit: number;
+}
+
+/**
+ * Filter and pagination options for {@link import('./list-viewer-resources.js').listViewerResources}
+ * — the `viewer_resources` read-model-backed counterpart of
+ * {@link ListResourcesOptions}.
+ *
+ * Deliberately narrower than {@link ListResourcesOptions}: `urlPattern`
+ * (LIKE-based) and `contentType` (raw MIME prefix, not the classified
+ * `content_category` the read model stores) are excluded, and `sortBy` is
+ * restricted to the two columns the read model indexes — callers that need
+ * anything else fall back to `listResources` instead.
+ */
+export interface ListViewerResourcesOptions {
+	/** Filter by external (true) or internal (false) resources. */
+	isExternal?: boolean;
+	/** Filter by exact HTTP status code. */
+	status?: number;
+	/** Field to sort results by. Defaults to `'url'`. */
+	sortBy?: 'url' | 'status';
+	/** Sort direction. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedResourceList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result wrapper for {@link import('./list-viewer-resources.js').listViewerResources}
+ * — {@link PaginatedResourceList} plus keyset cursors for virtual-scroll
+ * continuation.
+ */
+export interface CursorPaginatedResourceList extends PaginatedResourceList {
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
+}
+
+/**
+ * Options for {@link import('./get-resource-referrers.js').getResourceReferrers}.
+ */
+export interface GetResourceReferrersOptions {
+	/** The exact URL of the resource to look up. */
+	resourceUrl: string;
+	/** Maximum number of referencing pages to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque cursor from a previous result's `nextCursor`. Forward-only
+	 * (there is no `prevCursor`): the referrer detail list has no "jump to
+	 * page N" or "scroll up" requirement, unlike the MPA-paginated list
+	 * views.
+	 */
+	cursor?: string;
+}
+
+/**
+ * Result of {@link import('./get-resource-referrers.js').getResourceReferrers} —
+ * a bounded, cursor-paginated window of pages referencing a resource.
+ */
+export interface ResourceReferrerResult {
+	/** The resource URL. */
+	resourceUrl: string;
+	/** The page URLs referencing this resource in this window, bounded to at most `limit`. */
+	pageUrls: string[];
+	/**
+	 * Total number of referencing pages — a `COUNT(*)` scoped to this
+	 * resource's `resourceId` (index-covered, always cheap regardless of
+	 * archive size), independent of `pageUrls`' window length.
+	 */
+	total: number;
+	/** Opaque cursor to fetch the next window, or `null` when this is the last one. */
+	nextCursor: string | null;
 }
 
 /**

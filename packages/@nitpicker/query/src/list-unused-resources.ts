@@ -1,6 +1,7 @@
 import type {
 	ListUnusedResourcesOptions,
 	PageSource,
+	PaginatedUnusedResourceList,
 	UnusedResourceEntry,
 } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
@@ -32,7 +33,7 @@ import { applyListOrder } from './apply-list-order.js';
 export async function listUnusedResources(
 	accessor: ArchiveAccessor,
 	options: ListUnusedResourcesOptions = {},
-): Promise<{ items: UnusedResourceEntry[]; total: number }> {
+): Promise<PaginatedUnusedResourceList> {
 	const knex = accessor.getKnex();
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
