@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { dispatchQuery } from './dispatch-query.js';
 
 vi.mock('@nitpicker/query', () => ({
-	getSummary: vi
+	getSummaryFastPath: vi
 		.fn()
 		.mockResolvedValue({ baseUrl: 'https://example.com', totalPages: 10 }),
 	listPages: vi.fn().mockResolvedValue({ items: [], total: 0, offset: 0, limit: 100 }),
@@ -45,10 +45,10 @@ describe('dispatchQuery', () => {
 	});
 
 	it('dispatches summary sub-command', async () => {
-		const { getSummary } = await import('@nitpicker/query');
+		const { getSummaryFastPath } = await import('@nitpicker/query');
 		const result = await dispatchQuery(mockAccessor, 'summary', emptyFlags);
 		expect(result).toEqual({ baseUrl: 'https://example.com', totalPages: 10 });
-		expect(getSummary).toHaveBeenCalledWith(mockAccessor);
+		expect(getSummaryFastPath).toHaveBeenCalledWith(mockAccessor);
 	});
 
 	it('dispatches pages sub-command', async () => {
