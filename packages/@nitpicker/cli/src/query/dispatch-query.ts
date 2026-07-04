@@ -24,7 +24,7 @@ import {
 	getPageJsonLdOverview,
 	getPageTags,
 	getResourceReferrers,
-	getSummary,
+	getSummaryFastPath,
 	getTagInventory,
 	getViolations,
 	listImages,
@@ -65,7 +65,7 @@ export async function dispatchQuery(
 
 	switch (subCommand) {
 		case 'summary': {
-			return getSummary(accessor);
+			return getSummaryFastPath(accessor);
 		}
 		case 'pages': {
 			return listPages(accessor, options as ListPagesOptions);

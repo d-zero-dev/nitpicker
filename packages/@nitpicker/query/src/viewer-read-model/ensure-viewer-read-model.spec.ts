@@ -10,6 +10,28 @@ const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
 const workingDir = path.resolve(__dirname, '__test_fixtures_ensure_viewer_read_model__');
 
+/** Minimal config — `buildViewerReadModel` now also computes a `getSummary` snapshot, which requires `accessor.getConfig()` to resolve. */
+const BASE_CONFIG = {
+	baseUrl: 'https://example.com',
+	name: 'test',
+	version: '0.10.0',
+	recursive: true,
+	interval: 0,
+	image: true,
+	fetchExternal: false,
+	parallels: 1,
+	roots: ['https://example.com'],
+	excludes: [],
+	excludeKeywords: [],
+	excludeUrls: [],
+	maxExcludedDepth: 0,
+	retry: 3,
+	fromList: false,
+	disableQueries: false,
+	userAgent: 'test',
+	ignoreRobots: false,
+};
+
 describe('ensureViewerReadModel', () => {
 	let archive: InstanceType<typeof Archive>;
 	const archiveFilePath = path.resolve(workingDir, 'ensure-test.nitpicker');
@@ -18,6 +40,7 @@ describe('ensureViewerReadModel', () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
 		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
 	});
 
 	afterAll(async () => {

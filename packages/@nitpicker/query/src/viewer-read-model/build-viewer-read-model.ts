@@ -3,6 +3,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { classifyContentType } from '../classify-content-type.js';
 import { excludeSkippedPages } from '../exclude-skipped-pages.js';
+import { getSummary } from '../get-summary.js';
 
 import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
 import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
@@ -182,11 +183,12 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
 }
 
 /**
- * Performs a full rebuild of the viewer read model: drops all 9 tables if
- * present, recreates them, populates `viewer_pages` from the current
- * `pages` write-model table, populates `viewer_directory_nodes`/
- * `viewer_directory_pages` from that same page set (see
- * `buildDirectoryTreeRows` for the tree-building rules), populates
+ * Performs a full rebuild of the viewer read model: computes a `getSummary`
+ * snapshot (see below for why this happens outside the transaction), then
+ * drops all 10 tables if present, recreates them, populates `viewer_pages`
+ * from the current `pages` write-model table, populates
+ * `viewer_directory_nodes`/`viewer_directory_pages` from that same page set
+ * (see `buildDirectoryTreeRows` for the tree-building rules), populates
  * `viewer_anchor_facts` from a single `anchors` aggregation query (see
  * `computeAnchorFactRows` — unlike the directory tree, this cannot reuse
  * `sourceRows`, since link data lives on `anchors`, not `pages`) and derives
@@ -194,10 +196,39 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
  * `anchors` scan (see `deriveExternalLinkSummaryRows`), seeds one
  * smoke-test row into `viewer_query_profiles`, writes the
  * `viewer_count_buckets` totals row plus one row per distinct Pages-list
- * facet value (see `computePageFacetBuckets`), and writes the
- * `viewer_read_model_meta` row — all inside one transaction, so a mid-build
- * failure leaves the previous read model (or no read model) intact, never a
- * partially-built one.
+ * facet value (see `computePageFacetBuckets`), writes the pre-computed
+ * `viewer_summary` row from the `getSummary` snapshot taken before the
+ * transaction began, and writes the `viewer_read_model_meta` row — all
+ * inside one transaction, so a mid-build failure leaves the previous read
+ * model (or no read model) intact, never a partially-built one.
+ *
+ * The `getSummary(accessor)` call for `viewer_summary` runs **before** the
+ * transaction starts, unlike `viewer_anchor_facts`/`viewer_pages` which read
+ * inside it. Those tables reuse `sourceRows`/`anchors` rows to avoid a
+ * second scan of the same source — `getSummary` has no such shared rows to
+ * reuse, so there is no performance reason to nest it in the transaction.
+ * Computing it first also means a `getSummary` failure aborts before
+ * `dropViewerReadModelTables` ever runs, leaving the previous read model
+ * untouched instead of rolling back a transaction that already dropped
+ * tables. This pre-transaction read is only safe because every source
+ * `getSummary` touches — not just `pages`, but also `page_errors` /
+ * `crawl_errors` (for the `status=-1` `errorKindBreakdown`) and, as a
+ * fallback, `error.log` — is write-once-during-crawl and never touched by a
+ * read-model build itself; none of the three call sites
+ * (`ensureViewerReadModelQuietly` at crawl completion, `viewer-build`, the
+ * on-open opportunistic build) ever run concurrently with an active
+ * scraper writing to the same archive.
+ *
+ * `getSummary` also requires `accessor.getConfig()` to resolve, a
+ * precondition this function did not previously have. Every archive that
+ * went through a real crawl has this guaranteed: `CrawlerOrchestrator`
+ * always calls `archive.setConfig(...)` before `crawling()` starts, and all
+ * three call sites above only ever operate on archives that already
+ * finished (or are resuming) a real crawl. `Archive.create`'s `initSchema`
+ * does not itself seed a default `info` row, so a `.nitpicker` file that
+ * was hand-crafted or corrupted before `setConfig` ever ran would make this
+ * function throw where it previously wouldn't — an accepted trade-off, not
+ * a scenario any of the three call sites are expected to hit in practice.
  *
  * `viewer_pages` includes every listable page regardless of content-type
  * category (`scraped = 1 AND redirectDestId IS NULL`, plus excluding
@@ -245,6 +276,7 @@ export async function buildViewerReadModel(
 
 	const { onProgress } = options;
 	const knex = accessor.getKnex();
+	const summary = await getSummary(accessor);
 	await knex.transaction(async (trx) => {
 		await dropViewerReadModelTables(trx);
 		await createViewerReadModelTables(trx);
@@ -347,6 +379,18 @@ export async function buildViewerReadModel(
 				facetBuckets.slice(start, start + INSERT_CHUNK_SIZE),
 			);
 		}
+
+		await trx('viewer_summary').insert({
+			id: 1,
+			total_pages: summary.totalPages,
+			internal_pages: summary.internalPages,
+			external_pages: summary.externalPages,
+			internal_contents: summary.internalContents,
+			external_contents: summary.externalContents,
+			status_json: JSON.stringify(summary.statusDistribution),
+			content_type_json: JSON.stringify(summary.contentTypeDistribution),
+			metadata_json: JSON.stringify(summary.metadataFulfillment),
+		});
 
 		await trx('viewer_read_model_meta').insert({
 			id: 1,

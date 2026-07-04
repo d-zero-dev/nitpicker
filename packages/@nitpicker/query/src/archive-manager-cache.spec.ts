@@ -195,6 +195,28 @@ describe('ArchiveManager cache-mode: on-open viewer read model build (issue #112
 		// no `ensureViewerReadModel` call, so the persistent read model is
 		// absent — exactly the legacy-archive case this feature targets.
 		const archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		// `buildViewerReadModel` also computes a `getSummary` snapshot, which
+		// requires `accessor.getConfig()` to resolve.
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'on-open-build-test',
+			version: '0.10.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
 		await archive.setPage({
 			url: parseUrl('https://example.com/')!,
 			redirectPaths: [],

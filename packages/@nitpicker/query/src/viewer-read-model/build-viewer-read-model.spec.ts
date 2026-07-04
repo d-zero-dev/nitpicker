@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { getSummary } from '../get-summary.js';
 import { listPages } from '../list-pages.js';
 
 import { buildViewerReadModel } from './build-viewer-read-model.js';
@@ -1227,6 +1228,184 @@ describe('buildViewerReadModel', () => {
 			const rows = await archive.getKnex()('viewer_anchor_facts').select('*');
 			// 2 edges to ads.example.com (page-a, page-b) + 1 edge to /broken (page-b).
 			expect(rows).toHaveLength(3);
+		});
+	});
+
+	describe('viewer_summary population', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_summary__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'summary-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			await archive.setPage({
+				url: parseUrl('https://example.com/')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: { ...META, title: 'Home', description: 'Home description' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			await archive.setPage({
+				url: parseUrl('https://example.net/')!,
+				redirectPaths: [],
+				isExternal: true,
+				isTarget: false,
+				status: 404,
+				statusText: 'Not Found',
+				contentType: 'text/html',
+				contentLength: 0,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// status=-1 (hard failure) — the only shape that makes getSummary()
+			// attach an `errorKindBreakdown` array onto the `-1` StatusCount
+			// entry. Exercises that nested array surviving the JSON.stringify /
+			// JSON.parse round-trip through viewer_summary.status_json, which a
+			// fixture with only 200/404 pages (both empty errorKindBreakdown)
+			// would never catch if a future change to the serialisation broke it.
+			await archive.setPage({
+				url: parseUrl('https://example.com/broken')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: -1,
+				statusText: 'ERR_NAME_NOT_RESOLVED',
+				contentType: null,
+				contentLength: null,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('writes a single viewer_summary row matching a getSummary() snapshot of the same archive', async () => {
+			const expected = await getSummary(archive);
+			await buildViewerReadModel(archive);
+
+			const knex = archive.getKnex();
+			const rows = await knex('viewer_summary').select('*');
+			expect(rows).toHaveLength(1);
+			const row = rows[0]!;
+			expect(row).toMatchObject({
+				id: 1,
+				total_pages: expected.totalPages,
+				internal_pages: expected.internalPages,
+				external_pages: expected.externalPages,
+				internal_contents: expected.internalContents,
+				external_contents: expected.externalContents,
+			});
+			expect(JSON.parse(row.status_json as string)).toEqual(expected.statusDistribution);
+			expect(JSON.parse(row.content_type_json as string)).toEqual(
+				expected.contentTypeDistribution,
+			);
+			expect(JSON.parse(row.metadata_json as string)).toEqual(
+				expected.metadataFulfillment,
+			);
+		});
+
+		it("computes the fixture's counts/distributions independently of getSummary() (hardcoded expectations)", async () => {
+			// Cross-checking against a live getSummary() call (the test above)
+			// proves the two implementations agree, but would not catch a bug
+			// shared by both. These hardcoded literals — derived by hand from
+			// the 3-page fixture above (home: 200/internal/html/full-metadata,
+			// example.net: 404/external/html, broken: -1/internal/null-contentType)
+			// — pin the actual expected values independently.
+			await buildViewerReadModel(archive);
+			const row = await archive.getKnex()('viewer_summary').where('id', 1).first();
+
+			expect(row).toMatchObject({
+				total_pages: 3,
+				internal_pages: 2,
+				external_pages: 1,
+				internal_contents: 2,
+				external_contents: 1,
+			});
+
+			const statusDistribution: { status: number | null; count: number }[] = JSON.parse(
+				row.status_json as string,
+			);
+			expect(
+				statusDistribution.map((e) => ({ status: e.status, count: e.count })),
+			).toEqual([
+				{ status: -1, count: 1 },
+				{ status: 200, count: 1 },
+				{ status: 404, count: 1 },
+			]);
+
+			const contentTypeDistribution: {
+				category: string;
+				internal: number;
+				external: number;
+			}[] = JSON.parse(row.content_type_json as string);
+			expect(contentTypeDistribution).toEqual([
+				{ category: 'html', internal: 1, external: 1 },
+				{ category: 'unknown', internal: 1, external: 0 },
+			]);
+
+			// Only the internal text/html page ("home") counts toward metadata
+			// fulfillment; it has a title and description but no og:title.
+			expect(JSON.parse(row.metadata_json as string)).toEqual({
+				title: 1,
+				description: 1,
+				keywords: 0,
+				ogTitle: 0,
+				ogDescription: 0,
+				ogImage: 0,
+			});
+		});
+
+		it("round-trips the status=-1 entry's errorKindBreakdown through status_json intact", async () => {
+			const expected = await getSummary(archive);
+			const minusOne = expected.statusDistribution.find((e) => e.status === -1);
+			expect(minusOne?.errorKindBreakdown?.length).toBeGreaterThan(0);
+
+			await buildViewerReadModel(archive);
+			const row = await archive.getKnex()('viewer_summary').where('id', 1).first();
+			const statusDistribution: typeof expected.statusDistribution = JSON.parse(
+				row.status_json as string,
+			);
+			const roundTripped = statusDistribution.find((e) => e.status === -1);
+			expect(roundTripped).toEqual(minusOne);
+		});
+
+		it('rebuilds viewer_summary idempotently — a second build leaves exactly one row', async () => {
+			await buildViewerReadModel(archive);
+			await buildViewerReadModel(archive);
+			const rows = await archive.getKnex()('viewer_summary').select('*');
+			expect(rows).toHaveLength(1);
 		});
 	});
 });

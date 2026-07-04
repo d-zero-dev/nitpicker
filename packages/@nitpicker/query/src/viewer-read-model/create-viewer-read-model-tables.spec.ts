@@ -30,12 +30,13 @@ describe('createViewerReadModelTables', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('creates all 9 tables and the named viewer_pages indexes', async () => {
+	it('creates all 10 tables and the named viewer_pages indexes', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 
 		for (const table of [
 			'viewer_read_model_meta',
+			'viewer_summary',
 			'viewer_pages',
 			'viewer_query_profiles',
 			'viewer_count_buckets',
@@ -146,6 +147,23 @@ describe('createViewerReadModelTables', () => {
 			.select('page_id')
 			.orderBy('page_id');
 		expect(rows.map((r) => r.page_id)).toEqual([1, 2]);
+	});
+
+	it('viewer_summary rejects any id other than 1', async () => {
+		const knex = archive.getKnex();
+		await expect(
+			knex('viewer_summary').insert({
+				id: 2,
+				total_pages: 0,
+				internal_pages: 0,
+				external_pages: 0,
+				internal_contents: 0,
+				external_contents: 0,
+				status_json: '[]',
+				content_type_json: '[]',
+				metadata_json: '{}',
+			}),
+		).rejects.toThrow();
 	});
 
 	it('viewer_external_links rejects a duplicate dest_page_id', async () => {
