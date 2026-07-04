@@ -156,6 +156,96 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 		]);
 	});
 
+	it('survives a duplicate URL insert against the already-prepared table without throwing', async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({
+			filePath: path.resolve(workingDir, 'dup-insert.nitpicker'),
+			cwd: workingDir,
+		});
+		await archive.setConfig(baseConfig());
+		await addPage(archive, 'https://example.com/page');
+
+		await prepareUrlSortTempTable(archive);
+
+		// Reproduces the crash observed on an 11 GB / ~1.5M-URL archive: the
+		// natural-sort comparator behind the external merge sort
+		// (`@d-zero/shared`'s `numericalComparator`) is not guaranteed
+		// transitive, which can occasionally let the same URL reach this
+		// insert twice with different ranks. `onConflict('url').ignore()` in
+		// `prepareUrlSortTempTable` must turn that into a no-op, not a
+		// `UNIQUE constraint failed` crash — this exercises the exact insert
+		// shape it uses against the exact table it built.
+		const knex = archive.getKnex();
+		const existing = await knex(URL_SORT_TEMP_TABLE).select('url', 'rank').first();
+		await expect(
+			knex(URL_SORT_TEMP_TABLE)
+				.insert([{ url: existing.url, rank: existing.rank + 999 }])
+				.onConflict('url')
+				.ignore(),
+		).resolves.not.toThrow();
+
+		const row = await knex(URL_SORT_TEMP_TABLE).where({ url: existing.url }).first();
+		expect(row.rank).toBe(existing.rank);
+	});
+
+	it('onRanked reports every row externalSortUrls ranks, in the same order as the insert', async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({
+			filePath: path.resolve(workingDir, 'on-ranked.nitpicker'),
+			cwd: workingDir,
+		});
+		await archive.setConfig(baseConfig());
+		await addPage(archive, 'https://example.com/image-10.jpg');
+		await addPage(archive, 'https://example.com/image-2.jpg');
+
+		const ranked: { url: string; rank: number }[] = [];
+		await prepareUrlSortTempTable(archive, {
+			onRanked: (url, rank) => ranked.push({ url, rank }),
+		});
+
+		expect(ranked).toEqual([
+			{ url: 'https://example.com/image-2.jpg', rank: 0 },
+			{ url: 'https://example.com/image-10.jpg', rank: 1 },
+		]);
+	});
+
+	it('rankedUrls replays a caller-supplied source instead of running externalSortUrls', async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({
+			filePath: path.resolve(workingDir, 'ranked-urls-source.nitpicker'),
+			cwd: workingDir,
+		});
+		await archive.setConfig(baseConfig());
+		// Not sorted, and not even a real URL under this archive — proves the
+		// replay path trusts the supplied source verbatim rather than falling
+		// back to (or cross-checking against) `pages`/`resources`.
+		/**
+		 * Fixture ranked-URL source. Must be an async generator to satisfy
+		 * `rankedUrls: AsyncIterable<...>`, even though the fixture data is
+		 * available synchronously.
+		 * @yields {{url: string, rank: number}} A fixed, out-of-natural-order pair.
+		 */
+		// eslint-disable-next-line @typescript-eslint/require-await -- async generator required by the AsyncIterable type; fixture body is synchronous.
+		async function* source() {
+			yield { url: 'https://cached.example.com/b', rank: 0 };
+			yield { url: 'https://cached.example.com/a', rank: 1 };
+		}
+
+		await prepareUrlSortTempTable(archive, { rankedUrls: source() });
+
+		const rows = await archive
+			.getKnex()(URL_SORT_TEMP_TABLE)
+			.select('url', 'rank')
+			.orderBy('rank', 'asc');
+		expect(rows).toEqual([
+			{ url: 'https://cached.example.com/b', rank: 0 },
+			{ url: 'https://cached.example.com/a', rank: 1 },
+		]);
+	});
+
 	it('ensureUrlSortTempTable only prepares the table once per connection', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
