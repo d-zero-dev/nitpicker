@@ -18,7 +18,7 @@ import {
 	getPageJsonLdOverview,
 	getPageTags,
 	getResourceReferrers,
-	getSummary,
+	getSummaryFastPath,
 	getTagInventory,
 	getViolations,
 	listImages,
@@ -188,7 +188,7 @@ export function createServer() {
 						const filePath = requireString(args, 'filePath');
 						const { archiveId, accessor, mode, crawlerLockHolder } =
 							await manager.open(filePath);
-						const summary = await getSummary(accessor);
+						const summary = await getSummaryFastPath(accessor);
 						return jsonResult({
 							archiveId,
 							baseUrl: summary.baseUrl,
@@ -210,7 +210,7 @@ export function createServer() {
 					}
 					case 'get_summary': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						return jsonResult(await getSummary(accessor));
+						return jsonResult(await getSummaryFastPath(accessor));
 					}
 					case 'list_pages': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
