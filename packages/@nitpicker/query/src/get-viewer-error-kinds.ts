@@ -1,6 +1,8 @@
 import type { ErrorKindEntry, ErrorKindsResult, GetErrorKindsOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { resolveErrorKindsSort } from './resolve-error-kinds-sort.js';
+
 /**
  * Retrieves the crawl-failure breakdown from the precomputed
  * `viewer_error_kind_*` read-model tables — an indexed/filtered `SELECT`
@@ -52,13 +54,12 @@ export async function getViewerErrorKinds(
 		.count<{ count: string | number }[]>({ count: '*' });
 	const total = Number(totalRow[0]?.count ?? 0);
 
-	const sortBy = options.sortBy ?? 'count';
-	const sortOrder = options.sortOrder ?? (sortBy === 'count' ? 'desc' : 'asc');
-	const sortColumn =
-		sortBy === 'host' ? 'host_sort_key' : sortBy === 'kind' ? 'kind_sort_key' : 'count';
-	// host_sort_key/kind_sort_key tie-break every ordering so results are
-	// deterministic across repeated reads regardless of which field the
-	// caller actually sorted by.
+	const { sortBy, sortOrder } = resolveErrorKindsSort(options);
+	// host/kind tie-break every ordering so results are deterministic across
+	// repeated reads regardless of which field the caller actually sorted
+	// by. No separate `*_sort_key` columns are needed for this: `host`/`kind`
+	// are never case-folded or otherwise transformed anywhere in this
+	// codebase, so ordering on them directly is exactly as correct.
 	const rows: {
 		host: string;
 		kind: ErrorKindEntry['kind'];
@@ -67,9 +68,9 @@ export async function getViewerErrorKinds(
 		overflowed_count: number;
 	}[] = await query
 		.orderBy([
-			{ column: sortColumn, order: sortOrder },
-			{ column: 'host_sort_key' },
-			{ column: 'kind_sort_key' },
+			{ column: sortBy, order: sortOrder },
+			{ column: 'host' },
+			{ column: 'kind' },
 		])
 		.limit(options.limit ?? -1)
 		.offset(options.offset ?? 0)

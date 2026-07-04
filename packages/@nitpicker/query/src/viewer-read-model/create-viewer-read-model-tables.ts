@@ -290,7 +290,13 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// scan+sort for the `host`/`kind` text sorts is already sub-millisecond
 	// in SQLite. Only `count` (the default sort, most-failures-first) gets a
 	// dedicated index; add more if a real benchmark ever shows otherwise
-	// (see issue #106's evidence-before-indexing precedent).
+	// (see issue #106's evidence-before-indexing precedent). No separate
+	// `host_sort_key`/`kind_sort_key` columns either (unlike
+	// `viewer_pages.url_sort_key`): those exist elsewhere to isolate a future
+	// case-folding/normalisation change from the base column, but `host`/
+	// `kind` are never transformed anywhere in this codebase, so `ORDER BY
+	// host`/`ORDER BY kind` directly is exactly as correct and needs no
+	// extra columns to stay that way.
 	await trx.raw(`
 		CREATE TABLE viewer_error_kind_entries (
 			host text not null,
@@ -298,8 +304,6 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			count integer not null,
 			sample_urls_json text not null,
 			overflowed_count integer not null,
-			host_sort_key text not null,
-			kind_sort_key text not null,
 			primary key(host, kind)
 		) WITHOUT ROWID
 	`);

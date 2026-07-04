@@ -30,7 +30,7 @@ describe('computeErrorKindInsertRows', () => {
 		});
 	});
 
-	it('maps one entries row per host×kind item, deriving sort keys from host/kind verbatim', () => {
+	it('maps one entries row per host×kind item verbatim', () => {
 		const rows = computeErrorKindInsertRows(
 			makeResult({
 				total: 2,
@@ -59,8 +59,6 @@ describe('computeErrorKindInsertRows', () => {
 				count: 2,
 				sample_urls_json: '[]',
 				overflowed_count: 0,
-				host_sort_key: 'a.example.com',
-				kind_sort_key: 'dns',
 			},
 			{
 				host: 'b.example.com',
@@ -68,8 +66,6 @@ describe('computeErrorKindInsertRows', () => {
 				count: 1,
 				sample_urls_json: '[]',
 				overflowed_count: 0,
-				host_sort_key: 'b.example.com',
-				kind_sort_key: 'timeout',
 			},
 		]);
 	});

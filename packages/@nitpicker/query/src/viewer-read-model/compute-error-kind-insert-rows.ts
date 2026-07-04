@@ -23,8 +23,6 @@ export function computeErrorKindInsertRows(
 		count: item.count,
 		sample_urls_json: JSON.stringify(item.sampleUrls),
 		overflowed_count: item.overflowedCount,
-		host_sort_key: item.host,
-		kind_sort_key: item.kind,
 	}));
 
 	return {

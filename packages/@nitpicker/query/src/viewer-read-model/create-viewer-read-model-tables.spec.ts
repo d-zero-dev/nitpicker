@@ -199,8 +199,6 @@ describe('createViewerReadModelTables', () => {
 			count: 1,
 			sample_urls_json: '[]',
 			overflowed_count: 0,
-			host_sort_key: 'a.example.com',
-			kind_sort_key: 'dns',
 		};
 		await knex('viewer_error_kind_entries').insert({
 			host: 'a.example.com',
@@ -211,8 +209,6 @@ describe('createViewerReadModelTables', () => {
 			host: 'b.example.com',
 			kind: 'timeout',
 			...baseRow,
-			host_sort_key: 'b.example.com',
-			kind_sort_key: 'timeout',
 		});
 		const rows = await knex('viewer_error_kind_entries').select('host').orderBy('host');
 		expect(rows.map((r) => r.host)).toEqual(['a.example.com', 'b.example.com']);

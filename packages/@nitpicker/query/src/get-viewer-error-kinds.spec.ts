@@ -225,6 +225,40 @@ describe('getViewerErrorKinds', () => {
 			});
 		});
 
+		it('falls back to count-desc for an out-of-range sortBy, matching getErrorKinds() — regression test', async () => {
+			// Regression test: an earlier version computed the default sortOrder
+			// from the raw, unvalidated sortBy instead of the clamped column
+			// selection, so an invalid sortBy silently returned count-ascending
+			// instead of matching getErrorKinds()'s count-descending fallback.
+			const [viewerResult, legacyResult] = await Promise.all([
+				getViewerErrorKinds(archive, {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any -- simulating an out-of-range value from an untyped caller.
+					sortBy: 'bogus' as any,
+				}),
+				getErrorKinds(archive, {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any -- simulating an out-of-range value from an untyped caller.
+					sortBy: 'bogus' as any,
+				}),
+			]);
+			// The count=2 entry must sort first under either a correct 'desc'
+			// default or an incorrect 'asc' one — assert the two count=1 ties
+			// (which is where an 'asc' regression would actually surface: they'd
+			// flip to the end) land last, sorted by host+kind for the same
+			// tie-break-is-unspecified reason as the snapshot-match test above.
+			const sortByHostKind = (r: typeof legacyResult) => ({
+				...r,
+				items: r.items.toSorted(
+					(a, b) => a.host.localeCompare(b.host) || a.kind.localeCompare(b.kind),
+				),
+			});
+			expect(viewerResult.items[0]).toMatchObject({
+				host: 'ext.example.net',
+				kind: 'dns',
+				count: 2,
+			});
+			expect(sortByHostKind(viewerResult)).toEqual(sortByHostKind(legacyResult));
+		});
+
 		it('filters by exact host and kind, matching getErrorKinds()', async () => {
 			const [viewerByHost, legacyByHost] = await Promise.all([
 				getViewerErrorKinds(archive, { host: 'ext.example.net' }),

@@ -245,10 +245,6 @@ export interface ErrorKindEntryInsertRow {
 	sample_urls_json: string;
 	/** Failure records for this pair beyond the sample cap; `0` means none were dropped. */
 	overflowed_count: number;
-	/** Sort key for `host` ordering — currently `host` verbatim, same rationale as `viewer_pages.url_sort_key`. */
-	host_sort_key: string;
-	/** Sort key for `kind` ordering — currently `kind` verbatim. */
-	kind_sort_key: string;
 }
 
 /**
