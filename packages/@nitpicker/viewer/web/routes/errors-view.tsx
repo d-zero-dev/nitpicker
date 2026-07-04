@@ -2,6 +2,7 @@ import type { ErrorKind, ErrorKindEntry } from '@nitpicker/query';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { useMemo } from 'react';
+import { Link } from 'react-router';
 
 import { useErrorKinds } from '../api/use-error-kinds.js';
 import {
@@ -243,13 +244,22 @@ function ErrorDetailPane({
 				<p className="state">{t('views.errors.notFound')}</p>
 			)}
 			{!isLoading && !isError && entry != null && (
-				// Plain, selectable text rather than links: these URLs failed to
-				// crawl (DNS failure, refused, cert error, …), so a link would just
-				// open a dead tab. They exist to be read and copied for diagnosis.
+				// The failing URL itself can't be opened (that's the whole point of
+				// this view), but a `<Link>` — a real `<a>` element, unlike a
+				// `<button>` — still lets the URL text be selected/copied for manual
+				// diagnosis (curl, dig, …) while also navigating to Page Detail on
+				// click. Most of these URLs have a `pages` row (anchor discovery
+				// pre-inserts a stub before the anchor row is written), so this
+				// usually surfaces who links to the failing URL; a URL with no
+				// matching row (e.g. one carrying a hash fragment or userinfo, which
+				// isn't preserved in `pages.url`) falls through to Page Detail's
+				// "Page not found" state instead of failing silently.
 				<ul className="url-list">
 					{entry.sampleUrls.map((url, index) => (
 						<li key={`${url}-${index}`}>
-							<code>{url}</code>
+							<Link to={`/pages/detail?url=${encodeURIComponent(url)}`}>
+								<code>{url}</code>
+							</Link>
 						</li>
 					))}
 				</ul>
