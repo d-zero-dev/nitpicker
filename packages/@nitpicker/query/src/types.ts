@@ -1408,30 +1408,49 @@ export interface ErrorRecord {
 	message: string;
 }
 
-/** A single host's failure count within an {@link ErrorKindGroup}. */
-export interface ErrorKindHost {
-	/** Hostname extracted from the failing URL, or `(unknown)` when the URL is absent/unparsable. */
+/**
+ * Options for {@link import('./get-error-kinds.js').getErrorKinds}.
+ */
+export interface GetErrorKindsOptions {
+	/** Exact host to filter to — used by the detail pane's host×kind lookup. */
+	host?: string;
+	/** Exact kind to filter to — the list's kind column filter, or half of the detail pane's lookup key. */
+	kind?: ErrorKind;
+	/** Field to sort results by. */
+	sortBy?: 'host' | 'kind' | 'count';
+	/** Sort direction. Defaults to `desc` when sorting by `count`, `asc` otherwise. */
+	sortOrder?: SortOrder;
+	/** Maximum rows to return. Omit to return every matching row (the CLI's whole-archive contract). */
+	limit?: number;
+	/** Rows to skip from the start. Defaults to 0. */
+	offset?: number;
+}
+
+/**
+ * One host×kind row — every distinct (host, kind) pair present in the
+ * archive's failure records gets exactly one row.
+ */
+export interface ErrorKindEntry {
+	/** Hostname extracted from the failing URL, or `(unknown)` / `(invalid)` sentinels. */
 	host: string;
-	/** Number of failures of the group's kind on this host. */
-	count: number;
-}
-
-/** Aggregated failures sharing one {@link ErrorKind}. */
-export interface ErrorKindGroup {
-	/** The classified cause. */
+	/** The classified cause shared by every failure in this row. */
 	kind: ErrorKind;
-	/** Total failure records classified into this kind. */
+	/** Total failure records for this host×kind pair. */
 	count: number;
-	/** Per-host breakdown, most failures first. */
-	hosts: ErrorKindHost[];
-	/** Up to a capped number of representative failing URLs. */
+	/** Up to a capped number of representative failing URLs for this pair (see `getErrorKinds`). */
 	sampleUrls: string[];
+	/** Failure records for this pair beyond the `sampleUrls` cap; `0` means none were dropped. */
+	overflowedCount: number;
 }
 
-/** Result of {@link import('./get-error-kinds.js').getErrorKinds}. */
-export interface ErrorKindsResult {
-	/** Total failure records across all kinds. */
-	total: number;
+/**
+ * Archive-wide totals accompanying {@link ErrorKindsResult.items} — computed
+ * before the `host`/`kind` filters are applied, so the summary line above the
+ * list stays stable while the user filters.
+ */
+export interface ErrorKindFacets {
+	/** Total failure records across the whole archive, ignoring `host`/`kind` filters. */
+	totalRecords: number;
 	/**
 	 * Where the error-channel (DNS/connection/TLS) records came from:
 	 * `crawl_errors` for archives crawled after structured capture landed,
@@ -1439,6 +1458,14 @@ export interface ErrorKindsResult {
 	 * yielded rows. `page_errors` (scrape-path) is always merged in regardless.
 	 */
 	channelSource: 'crawl_errors' | 'error.log' | 'none';
-	/** Groups sorted by `count`, most failures first. */
-	groups: ErrorKindGroup[];
+}
+
+/** Result of {@link import('./get-error-kinds.js').getErrorKinds}. */
+export interface ErrorKindsResult {
+	/** Matching host×kind rows for the requested page. */
+	items: ErrorKindEntry[];
+	/** Total matching rows before `limit`/`offset` slicing (drives the list's pagination). */
+	total: number;
+	/** Archive-wide totals, unaffected by `host`/`kind` filters. */
+	facets: ErrorKindFacets;
 }
