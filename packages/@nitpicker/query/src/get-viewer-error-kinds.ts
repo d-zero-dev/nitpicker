@@ -1,42 +1,34 @@
-import type { ErrorKindGroup, ErrorKindHost, ErrorKindsResult } from './types.js';
-import type { ArchiveAccessor, ErrorKind } from '@nitpicker/crawler';
+import type { ErrorKindEntry, ErrorKindsResult, GetErrorKindsOptions } from './types.js';
+import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 /**
  * Retrieves the crawl-failure breakdown from the precomputed
- * `viewer_error_kind_*` read-model tables — four small `SELECT`s ordered
- * entirely by their own indexes/primary keys, replacing `getErrorKinds`'s
- * `page_errors`/`crawl_errors`/`error.log` scan-and-classify pass on
- * archives where the read model is current.
+ * `viewer_error_kind_*` read-model tables — an indexed/filtered `SELECT`
+ * plus a `COUNT(*)`, replacing `getErrorKinds`'s `page_errors`/
+ * `crawl_errors`/`error.log` scan-and-classify pass on archives where the
+ * read model is current. Filtering, sorting, and pagination all happen in
+ * SQL, so the cost of any `options` combination is the same small query —
+ * unlike the legacy path, which always re-scans and reclassifies before
+ * filtering in memory.
  *
  * Callers are responsible for guarding with `isViewerReadModelCurrent`
  * first, the same convention `getViewerSummary` uses — this function does
  * not itself check staleness and throws if the meta row is missing.
- *
- * **Tie-break order is unspecified across backends**: both this function and
- * `getErrorKinds` sort `groups` by `count` descending and each group's
- * `hosts` by `count` descending, but neither documents (or needs to agree
- * on) a tie-break for equal counts. `getErrorKinds` ties break by `Map`
- * insertion order (an accident of `page_errors`/`crawl_errors` processing
- * order); this function ties break by `kind`/`host` ascending (an accident
- * of `ORDER BY` + `WITHOUT ROWID` clustering). A caller that flips between
- * this function and `getErrorKinds` across requests (as
- * `getErrorKindsFastPath` does whenever the read model's staleness changes)
- * can therefore see a tied group's/host's position change with no
- * underlying data change. Callers that need a stable order must sort by an
- * additional key themselves.
  * @param accessor - The archive accessor to query.
+ * @param options - The same filter/sort/pagination options `getErrorKinds` accepts.
  * @returns The error-kind breakdown, reconstructed from the read model.
  * @throws {Error} If `viewer_error_kind_meta` has no row (the caller
- *   failed to guard with `isViewerReadModelCurrent`, or the read model is
+ *   failed to guard with `isViewerReadModelCurrent()`, or the read model is
  *   absent).
  * @example
  * if (await isViewerReadModelCurrent(accessor)) {
- *   return getViewerErrorKinds(accessor);
+ *   return getViewerErrorKinds(accessor, { kind: 'dns', sortBy: 'count' });
  * }
- * return getErrorKinds(accessor); // legacy fallback
+ * return getErrorKinds(accessor, options); // legacy fallback
  */
 export async function getViewerErrorKinds(
 	accessor: ArchiveAccessor,
+	options: GetErrorKindsOptions = {},
 ): Promise<ErrorKindsResult> {
 	const knex = accessor.getKnex();
 	const meta = await knex('viewer_error_kind_meta').where('id', 1).first();
@@ -47,54 +39,56 @@ export async function getViewerErrorKinds(
 		);
 	}
 
-	// `kind`/`host` ascending is an explicit tie-break for equal counts, kept
-	// only so this function's own output is deterministic across repeated
-	// reads — it does NOT make ties agree with `getErrorKinds`'s Map-insertion-
-	// order tie-break (see this function's docs).
-	const groupRows: { kind: ErrorKind; count: number }[] = await knex(
-		'viewer_error_kind_groups',
-	)
-		.select('kind', 'count')
-		.orderBy([{ column: 'count', order: 'desc' }, { column: 'kind' }]);
+	let query = knex('viewer_error_kind_entries');
+	if (options.host) {
+		query = query.where('host', options.host);
+	}
+	if (options.kind) {
+		query = query.where('kind', options.kind);
+	}
 
-	const hostRows: { kind: ErrorKind; host: string; count: number }[] = await knex(
-		'viewer_error_kind_hosts',
-	)
-		.select('kind', 'host', 'count')
+	const totalRow = await query
+		.clone()
+		.count<{ count: string | number }[]>({ count: '*' });
+	const total = Number(totalRow[0]?.count ?? 0);
+
+	const sortBy = options.sortBy ?? 'count';
+	const sortOrder = options.sortOrder ?? (sortBy === 'count' ? 'desc' : 'asc');
+	const sortColumn =
+		sortBy === 'host' ? 'host_sort_key' : sortBy === 'kind' ? 'kind_sort_key' : 'count';
+	// host_sort_key/kind_sort_key tie-break every ordering so results are
+	// deterministic across repeated reads regardless of which field the
+	// caller actually sorted by.
+	const rows: {
+		host: string;
+		kind: ErrorKindEntry['kind'];
+		count: number;
+		sample_urls_json: string;
+		overflowed_count: number;
+	}[] = await query
 		.orderBy([
-			{ column: 'kind' },
-			{ column: 'count', order: 'desc' },
-			{ column: 'host' },
-		]);
-	const hostsByKind = new Map<ErrorKind, ErrorKindHost[]>();
-	for (const row of hostRows) {
-		const hosts = hostsByKind.get(row.kind) ?? [];
-		hosts.push({ host: row.host, count: Number(row.count) });
-		hostsByKind.set(row.kind, hosts);
-	}
+			{ column: sortColumn, order: sortOrder },
+			{ column: 'host_sort_key' },
+			{ column: 'kind_sort_key' },
+		])
+		.limit(options.limit ?? -1)
+		.offset(options.offset ?? 0)
+		.select('host', 'kind', 'count', 'sample_urls_json', 'overflowed_count');
 
-	const sampleRows: { kind: ErrorKind; url: string }[] = await knex(
-		'viewer_error_kind_samples',
-	)
-		.select('kind', 'url')
-		.orderBy(['kind', 'rank']);
-	const samplesByKind = new Map<ErrorKind, string[]>();
-	for (const row of sampleRows) {
-		const samples = samplesByKind.get(row.kind) ?? [];
-		samples.push(row.url);
-		samplesByKind.set(row.kind, samples);
-	}
-
-	const groups: ErrorKindGroup[] = groupRows.map((row) => ({
+	const items: ErrorKindEntry[] = rows.map((row) => ({
+		host: row.host,
 		kind: row.kind,
 		count: Number(row.count),
-		hosts: hostsByKind.get(row.kind) ?? [],
-		sampleUrls: samplesByKind.get(row.kind) ?? [],
+		sampleUrls: JSON.parse(row.sample_urls_json) as string[],
+		overflowedCount: Number(row.overflowed_count),
 	}));
 
 	return {
-		total: Number(meta.total),
-		channelSource: meta.channel_source as ErrorKindsResult['channelSource'],
-		groups,
+		items,
+		total,
+		facets: {
+			totalRecords: Number(meta.total_records),
+			channelSource: meta.channel_source as ErrorKindsResult['facets']['channelSource'],
+		},
 	};
 }

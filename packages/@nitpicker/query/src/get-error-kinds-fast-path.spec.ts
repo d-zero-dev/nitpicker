@@ -1,4 +1,4 @@
-import type { ErrorKindsResult } from './types.js';
+import type { ErrorKindsResult, GetErrorKindsOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -21,8 +21,10 @@ const { getErrorKindsFastPath } = await import('./get-error-kinds-fast-path.js')
  * @param channelSource - Identifying field to distinguish results across tests.
  * @returns An `ErrorKindsResult`-shaped object.
  */
-function makeResult(channelSource: ErrorKindsResult['channelSource']): ErrorKindsResult {
-	return { total: 0, channelSource, groups: [] };
+function makeResult(
+	channelSource: ErrorKindsResult['facets']['channelSource'],
+): ErrorKindsResult {
+	return { items: [], total: 0, facets: { totalRecords: 0, channelSource } };
 }
 
 const accessor = {} as ArchiveAccessor;
@@ -32,14 +34,14 @@ afterEach(() => {
 });
 
 describe('getErrorKindsFastPath', () => {
-	it('reads from the viewer_error_kind_* read model when it is current', async () => {
+	it('reads from the viewer_error_kind_* read model when it is current, defaulting options to {}', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
 		vi.mocked(getViewerErrorKinds).mockResolvedValue(makeResult('crawl_errors'));
 
 		const result = await getErrorKindsFastPath(accessor);
 
-		expect(result.channelSource).toBe('crawl_errors');
-		expect(getViewerErrorKinds).toHaveBeenCalledWith(accessor);
+		expect(result.facets.channelSource).toBe('crawl_errors');
+		expect(getViewerErrorKinds).toHaveBeenCalledWith(accessor, {});
 		expect(getErrorKinds).not.toHaveBeenCalled();
 	});
 
@@ -49,8 +51,18 @@ describe('getErrorKindsFastPath', () => {
 
 		const result = await getErrorKindsFastPath(accessor);
 
-		expect(result.channelSource).toBe('error.log');
-		expect(getErrorKinds).toHaveBeenCalledWith(accessor);
+		expect(result.facets.channelSource).toBe('error.log');
+		expect(getErrorKinds).toHaveBeenCalledWith(accessor, {});
 		expect(getViewerErrorKinds).not.toHaveBeenCalled();
+	});
+
+	it('passes explicit options through unchanged to whichever backend answers', async () => {
+		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
+		vi.mocked(getViewerErrorKinds).mockResolvedValue(makeResult('crawl_errors'));
+		const options: GetErrorKindsOptions = { kind: 'dns', sortBy: 'host', limit: 10 };
+
+		await getErrorKindsFastPath(accessor, options);
+
+		expect(getViewerErrorKinds).toHaveBeenCalledWith(accessor, options);
 	});
 });

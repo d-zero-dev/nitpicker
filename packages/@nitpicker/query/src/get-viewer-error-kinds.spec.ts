@@ -113,9 +113,13 @@ describe('getViewerErrorKinds', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('returns total 0, channelSource "none", and an empty groups array — the meta row exists even with zero failures', async () => {
+		it('returns total 0, an empty items array, and facets totalRecords 0/channelSource "none" — the meta row exists even with zero failures', async () => {
 			const result = await getViewerErrorKinds(archive);
-			expect(result).toEqual({ total: 0, channelSource: 'none', groups: [] });
+			expect(result).toEqual({
+				items: [],
+				total: 0,
+				facets: { totalRecords: 0, channelSource: 'none' },
+			});
 		});
 	});
 
@@ -179,46 +183,115 @@ describe('getViewerErrorKinds', () => {
 				getViewerErrorKinds(archive),
 				getErrorKinds(archive),
 			]);
-			// Both sort groups by count descending, but neither documents a
-			// tie-break rule for equal counts (the legacy path's tie order is an
-			// accident of `Map` insertion order; the read model's is `ORDER BY
-			// count desc` alone) — sort by kind before comparing so the two
-			// equally-valid tie-break orders don't fail an otherwise-matching
-			// comparison. Two of this fixture's three kinds tie at count 1.
-			const sortByKind = (r: typeof legacyResult) => ({
+			// Both sort by count descending, but neither documents a tie-break
+			// rule for equal counts (legacy ties break by Map insertion order;
+			// the read model ties break by host/kind ascending) — sort by
+			// host+kind before comparing so the two equally-valid tie-break
+			// orders don't fail an otherwise-matching comparison. This
+			// fixture's two count=1 entries (api.example.org/connection-refused,
+			// example.com/timeout) tie.
+			const sortByHostKind = (r: typeof legacyResult) => ({
 				...r,
-				groups: r.groups.toSorted((a, b) => a.kind.localeCompare(b.kind)),
+				items: r.items.toSorted(
+					(a, b) => a.host.localeCompare(b.host) || a.kind.localeCompare(b.kind),
+				),
 			});
-			expect(sortByKind(viewerResult)).toEqual(sortByKind(legacyResult));
+			expect(sortByHostKind(viewerResult)).toEqual(sortByHostKind(legacyResult));
 		});
 
-		it("computes the fixture's counts/hosts/samples independently of getErrorKinds() (hardcoded expectations)", async () => {
+		it("computes the fixture's counts/host breakdown independently of getErrorKinds() (hardcoded expectations)", async () => {
 			const result = await getViewerErrorKinds(archive);
-			expect(result.total).toBe(4);
-			expect(result.channelSource).toBe('crawl_errors');
+			expect(result.total).toBe(3);
+			expect(result.facets).toEqual({ totalRecords: 4, channelSource: 'crawl_errors' });
 
-			const byKind = new Map(result.groups.map((g) => [g.kind, g]));
-			expect(byKind.get('dns')).toMatchObject({
+			const byKey = new Map(
+				result.items.map((item) => [`${item.host} ${item.kind}`, item]),
+			);
+			expect(byKey.get('ext.example.net dns')).toMatchObject({
 				count: 2,
-				hosts: [{ host: 'ext.example.net', count: 2 }],
+				sampleUrls: ['http://ext.example.net/x', 'http://ext.example.net/y'],
+				overflowedCount: 0,
 			});
-			expect(byKind.get('dns')?.sampleUrls).toEqual([
-				'http://ext.example.net/x',
-				'http://ext.example.net/y',
-			]);
-			expect(byKind.get('connection-refused')).toMatchObject({
-				count: 1,
-				hosts: [{ host: 'api.example.org', count: 1 }],
-			});
-			expect(byKind.get('timeout')).toMatchObject({
-				count: 1,
-				hosts: [{ host: 'example.com', count: 1 }],
+			expect(byKey.get('api.example.org connection-refused')).toMatchObject({ count: 1 });
+			expect(byKey.get('example.com timeout')).toMatchObject({ count: 1 });
+		});
+
+		it('orders items by count descending by default', async () => {
+			const result = await getViewerErrorKinds(archive);
+			expect(result.items[0]).toMatchObject({
+				host: 'ext.example.net',
+				kind: 'dns',
+				count: 2,
 			});
 		});
 
-		it('orders groups by count descending', async () => {
+		it('filters by exact host and kind, matching getErrorKinds()', async () => {
+			const [viewerByHost, legacyByHost] = await Promise.all([
+				getViewerErrorKinds(archive, { host: 'ext.example.net' }),
+				getErrorKinds(archive, { host: 'ext.example.net' }),
+			]);
+			expect(viewerByHost).toEqual(legacyByHost);
+			expect(viewerByHost.items).toHaveLength(1);
+			// facets stay archive-wide, unaffected by the host filter.
+			expect(viewerByHost.facets.totalRecords).toBe(4);
+
+			const [viewerByKind, legacyByKind] = await Promise.all([
+				getViewerErrorKinds(archive, { kind: 'connection-refused' }),
+				getErrorKinds(archive, { kind: 'connection-refused' }),
+			]);
+			expect(viewerByKind).toEqual(legacyByKind);
+			expect(viewerByKind.items).toHaveLength(1);
+
+			const both = await getViewerErrorKinds(archive, {
+				host: 'ext.example.net',
+				kind: 'timeout',
+			});
+			expect(both.items).toEqual([]);
+			expect(both.total).toBe(0);
+		});
+
+		it('sorts by host asc/desc, matching getErrorKinds()', async () => {
+			const [viewerAsc, legacyAsc] = await Promise.all([
+				getViewerErrorKinds(archive, { sortBy: 'host', sortOrder: 'asc' }),
+				getErrorKinds(archive, { sortBy: 'host', sortOrder: 'asc' }),
+			]);
+			expect(viewerAsc).toEqual(legacyAsc);
+			expect(viewerAsc.items.map((i) => i.host)).toEqual([
+				'api.example.org',
+				'example.com',
+				'ext.example.net',
+			]);
+
+			const viewerDesc = await getViewerErrorKinds(archive, {
+				sortBy: 'host',
+				sortOrder: 'desc',
+			});
+			expect(viewerDesc.items.map((i) => i.host)).toEqual([
+				'ext.example.net',
+				'example.com',
+				'api.example.org',
+			]);
+		});
+
+		it('paginates with limit/offset, matching getErrorKinds()', async () => {
+			const [viewerPage, legacyPage] = await Promise.all([
+				getViewerErrorKinds(archive, {
+					sortBy: 'host',
+					sortOrder: 'asc',
+					limit: 1,
+					offset: 1,
+				}),
+				getErrorKinds(archive, { sortBy: 'host', sortOrder: 'asc', limit: 1, offset: 1 }),
+			]);
+			expect(viewerPage).toEqual(legacyPage);
+			expect(viewerPage.items).toHaveLength(1);
+			expect(viewerPage.items[0]!.host).toBe('example.com');
+			expect(viewerPage.total).toBe(3);
+		});
+
+		it('returns every row when limit is omitted', async () => {
 			const result = await getViewerErrorKinds(archive);
-			expect(result.groups[0]).toMatchObject({ kind: 'dns', count: 2 });
+			expect(result.items).toHaveLength(3);
 		});
 	});
 });
