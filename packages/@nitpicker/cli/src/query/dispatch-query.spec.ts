@@ -6,6 +6,9 @@ vi.mock('@nitpicker/query', () => ({
 	getSummaryFastPath: vi
 		.fn()
 		.mockResolvedValue({ baseUrl: 'https://example.com', totalPages: 10 }),
+	getErrorKindsFastPath: vi
+		.fn()
+		.mockResolvedValue({ total: 0, channelSource: 'none', groups: [] }),
 	listPages: vi.fn().mockResolvedValue({ items: [], total: 0, offset: 0, limit: 100 }),
 	getPageDetail: vi.fn().mockResolvedValue({ url: 'https://example.com', status: 200 }),
 	getPageHtml: vi.fn().mockResolvedValue({ html: '<html></html>', truncated: false }),
@@ -49,6 +52,13 @@ describe('dispatchQuery', () => {
 		const result = await dispatchQuery(mockAccessor, 'summary', emptyFlags);
 		expect(result).toEqual({ baseUrl: 'https://example.com', totalPages: 10 });
 		expect(getSummaryFastPath).toHaveBeenCalledWith(mockAccessor);
+	});
+
+	it('dispatches error-kinds sub-command through the fast path, not the legacy function directly', async () => {
+		const { getErrorKindsFastPath } = await import('@nitpicker/query');
+		const result = await dispatchQuery(mockAccessor, 'error-kinds', emptyFlags);
+		expect(result).toEqual({ total: 0, channelSource: 'none', groups: [] });
+		expect(getErrorKindsFastPath).toHaveBeenCalledWith(mockAccessor);
 	});
 
 	it('dispatches pages sub-command', async () => {
