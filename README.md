@@ -279,7 +279,7 @@ npx @nitpicker/cli viewer <file-or-stub-dir> [--port 9000] [--no-open]
 
 ### Connection Failures ビュー
 
-`query error-kinds` と同じ集計をブラウザで表示する。他の一覧ビュー（Pages / Resources / Isolated Clusters 等）と同じ DataTable 一覧＋詳細ページの構成で、host×kind（1 host × 1 kind = 1 行）の一覧をソート・kind 列フィルタでき、行を選ぶとその host×kind のサンプル URL 詳細にドリルダウンする。「違反」「重複」「不一致」（いずれもクロールに成功したページの中身・メタデータの問題）とは異なり、このビューは HTTP レスポンス自体が得られなかった失敗（DNS 未解決・TLS 失敗・接続拒否・タイムアウト）だけを扱う。サンプル URL は（解決失敗・接続拒否など本来開けない URL なので）リンクではなく診断用のテキストとして表示する。ルーティング（`/errors`）と API（`/api/error-kinds`）は互換性のため変更していない。
+`query error-kinds` と同じ集計をブラウザで表示する。他の一覧ビュー（Pages / Resources / Isolated Clusters 等）と同じ DataTable 一覧＋詳細ページの構成で、host×kind（1 host × 1 kind = 1 行）の一覧をソート・kind 列フィルタでき、行を選ぶとその host×kind のサンプル URL 詳細にドリルダウンする。「違反」「重複」「不一致」（いずれもクロールに成功したページの中身・メタデータの問題）とは異なり、このビューは HTTP レスポンス自体が得られなかった失敗（DNS 未解決・TLS 失敗・接続拒否・タイムアウト）だけを扱う。サンプル URL 自体は（解決失敗・接続拒否など本来開けない URL なので）直接開けないが、Page Detail 画面（`/pages/detail?url=`）へのリンクになっており、そのURLへの被リンク元（inbound links）を確認できる。ルーティング（`/errors`）と API（`/api/error-kinds`）は互換性のため変更していない。
 
 ### HTML スナップショットプレビュー
 
