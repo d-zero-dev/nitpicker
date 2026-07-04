@@ -18,7 +18,8 @@
  *     before and once after the read model exists — each measured against
  *     its own fresh `archiveId` so the viewer-process LRU is empty for both
  *     "cold" measurements.
- *   - `EXPLAIN QUERY PLAN` for the three `viewer_error_kind_*` reads
+ *   - `EXPLAIN QUERY PLAN` for the default/filtered/detail-lookup shapes of
+ *     the `viewer_error_kind_entries` read
  *
  * "Cold" / "warm" follow the same convention as the summary bench script.
  *
@@ -217,20 +218,20 @@ async function runHttpPhase(label, accessorStub) {
 
 /**
  * Canonicalises an `ErrorKindsResult` for the cross-backend sanity check —
- * only `{kind, count}` pairs sorted by kind, since sub-array (hosts/samples)
- * order under tied counts is not a documented contract either backend
- * promises to agree on bit-for-bit.
+ * only `{host, kind, count}` triples sorted by host+kind, since item order
+ * under tied counts is not a documented contract either backend promises to
+ * agree on bit-for-bit.
  * @param {import('@nitpicker/query').ErrorKindsResult} result - The result to canonicalise.
- * @returns {{total: number, channelSource: string, counts: {kind: string, count: number}[]}}
+ * @returns {{total: number, channelSource: string, entries: {host: string, kind: string, count: number}[]}}
  *   The canonical comparable shape.
  */
 function canonicalize(result) {
 	return {
 		total: result.total,
-		channelSource: result.channelSource,
-		counts: result.groups
-			.map((g) => ({ kind: g.kind, count: g.count }))
-			.toSorted((a, b) => a.kind.localeCompare(b.kind)),
+		channelSource: result.facets.channelSource,
+		entries: result.items
+			.map((item) => ({ host: item.host, kind: item.kind, count: item.count }))
+			.toSorted((a, b) => a.host.localeCompare(b.host) || a.kind.localeCompare(b.kind)),
 	};
 }
 
@@ -282,19 +283,19 @@ for (const n of SIZES) {
 
 		const readModelHttp = await runHttpPhase('read-model', accessorStub);
 
-		const groupsPlan = await db.raw(
-			'EXPLAIN QUERY PLAN select kind, count from viewer_error_kind_groups order by count desc',
+		const defaultPlan = await db.raw(
+			'EXPLAIN QUERY PLAN select host, kind, count, sample_urls_json, overflowed_count from viewer_error_kind_entries order by count desc',
 		);
-		const hostsPlan = await db.raw(
-			'EXPLAIN QUERY PLAN select kind, host, count from viewer_error_kind_hosts order by kind, count desc',
+		const kindFilterPlan = await db.raw(
+			"EXPLAIN QUERY PLAN select host, kind, count, sample_urls_json, overflowed_count from viewer_error_kind_entries where kind = 'dns' order by count desc",
 		);
-		const samplesPlan = await db.raw(
-			"EXPLAIN QUERY PLAN select kind, url from viewer_error_kind_samples where kind = 'dns' order by rank",
+		const hostKindLookupPlan = await db.raw(
+			"EXPLAIN QUERY PLAN select host, kind, count, sample_urls_json, overflowed_count from viewer_error_kind_entries where host = 'host-0.example.net' and kind = 'dns'",
 		);
 		const explain = [
-			`groups: ${groupsPlan.map((row) => row.detail).join(' | ')}`,
-			`hosts: ${hostsPlan.map((row) => row.detail).join(' | ')}`,
-			`samples: ${samplesPlan.map((row) => row.detail).join(' | ')}`,
+			`default (no filter, sort by count): ${defaultPlan.map((row) => row.detail).join(' | ')}`,
+			`kind filter: ${kindFilterPlan.map((row) => row.detail).join(' | ')}`,
+			`host+kind detail lookup (PK): ${hostKindLookupPlan.map((row) => row.detail).join(' | ')}`,
 		].join('\n           ');
 		console.log(`  EXPLAIN:\n           ${explain}`);
 
@@ -305,7 +306,7 @@ for (const n of SIZES) {
 		const fastCanonical = canonicalize(fastResult);
 		if (JSON.stringify(legacyCanonical) !== JSON.stringify(fastCanonical)) {
 			throw new Error(
-				'legacy getErrorKinds() and getViewerErrorKinds() disagree on {kind, count} — investigate before trusting the timings above',
+				'legacy getErrorKinds() and getViewerErrorKinds() disagree on {host, kind, count} — investigate before trusting the timings above',
 			);
 		}
 

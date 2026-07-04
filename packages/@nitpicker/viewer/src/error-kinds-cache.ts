@@ -1,7 +1,16 @@
 import type { ArchiveContext } from './types.js';
-import type { ErrorKindsResult } from '@nitpicker/query';
+import type {
+	ErrorKindEntry,
+	ErrorKindsResult,
+	GetErrorKindsOptions,
+} from '@nitpicker/query';
 
-import { getErrorKinds, getErrorKindsFastPath } from '@nitpicker/query';
+import {
+	getErrorKinds,
+	getErrorKindsFastPath,
+	resolveErrorKindsSort,
+	sortArrayItems,
+} from '@nitpicker/query';
 
 import { getOrComputeOnDisk } from './precomputed-disk-cache.js';
 import { createPromiseLru } from './promise-lru.js';
@@ -15,15 +24,90 @@ import { createPromiseLru } from './promise-lru.js';
 const MAX_ENTRIES = 4;
 
 /**
- * Shared LRU of `getErrorKindsFastPath` promises keyed by `archiveId`. The
- * result is a JSON-serialisable object (bounded by at most 50 sample URLs
- * per kind), so memory cost is negligible.
+ * Shared LRU of unfiltered (`options: {}`) `getErrorKindsFastPath` promises
+ * keyed by `archiveId`. Caching the unfiltered snapshot — not the caller's
+ * actual request — is what lets one cached value serve every `host`/`kind`/
+ * `sortBy`/`sortOrder`/`limit`/`offset` combination (see
+ * {@link applyErrorKindsOptions}); the result is a JSON-serialisable object
+ * (bounded by at most 50 sample URLs per host×kind pair), so memory cost is
+ * negligible.
  */
 const lru = createPromiseLru<string, ErrorKindsResult>({ maxEntries: MAX_ENTRIES });
 
+/** Per-field value accessors {@link sortArrayItems} needs for `ErrorKindEntry`. */
+const SORT_FIELD_CONFIG = {
+	host: { getValue: (item: ErrorKindEntry) => item.host },
+	kind: { getValue: (item: ErrorKindEntry) => item.kind },
+	count: { getValue: (item: ErrorKindEntry) => item.count },
+};
+
 /**
- * Return the (cached) `getErrorKindsFastPath` result for an archive,
- * computing it on first request and reusing it on subsequent ones.
+ * Sorts `items` by `sortBy`/`sortOrder`, tie-breaking every ordering with
+ * `host` then `kind` ascending — the same tie-break `getViewerErrorKinds`
+ * applies in SQL (`ORDER BY <col>, host, kind`), reproduced here via stable
+ * sort composition (`Array.prototype.toSorted` is spec-guaranteed stable):
+ * pre-sorting by the tie-break keys first means the final pass's ties keep
+ * that relative order. Without this, {@link applyErrorKindsOptions} would
+ * leave same-`sortBy`-value rows in whatever order the cached snapshot
+ * happened to hold them, which can visibly differ from what the SQL fast
+ * path returns for the identical request.
+ * @param items - The rows to sort.
+ * @param sortBy - The validated primary sort field.
+ * @param sortOrder - The primary sort direction.
+ * @returns A new, sorted array.
+ */
+function sortErrorKindEntries(
+	items: ErrorKindEntry[],
+	sortBy: 'host' | 'kind' | 'count',
+	sortOrder: 'asc' | 'desc',
+): ErrorKindEntry[] {
+	let sorted = sortArrayItems(items, 'kind', 'asc', SORT_FIELD_CONFIG);
+	sorted = sortArrayItems(sorted, 'host', 'asc', SORT_FIELD_CONFIG);
+	return sortArrayItems(sorted, sortBy, sortOrder, SORT_FIELD_CONFIG);
+}
+
+/**
+ * Applies `host`/`kind` filtering, `sortBy`/`sortOrder` sorting, and
+ * `limit`/`offset` pagination to an already-computed, unfiltered
+ * `ErrorKindsResult` — mirrors `getErrorKinds`'s own options contract (see
+ * that function's docs) in plain JS, so `getCachedErrorKinds` can serve any
+ * request's parameters from one cached "whole archive" snapshot without
+ * re-running the expensive classify-and-aggregate pass per request.
+ * `sortBy`/`sortOrder` are resolved via the same `resolveErrorKindsSort`
+ * `getErrorKinds` and `getViewerErrorKinds` use, so an out-of-range `sortBy`
+ * can't silently pick the wrong default direction here either.
+ * @param full - The unfiltered result (computed with `options: {}`) to slice.
+ * @param options - The caller's actual filter/sort/pagination options.
+ * @returns The filtered/sorted/paginated result. `facets` is copied through
+ *   unchanged — it is archive-wide and unaffected by `host`/`kind` filters.
+ */
+function applyErrorKindsOptions(
+	full: ErrorKindsResult,
+	options: GetErrorKindsOptions,
+): ErrorKindsResult {
+	let items = full.items;
+	if (options.host) {
+		items = items.filter((item) => item.host === options.host);
+	}
+	if (options.kind) {
+		items = items.filter((item) => item.kind === options.kind);
+	}
+
+	const { sortBy, sortOrder } = resolveErrorKindsSort(options);
+	items = sortErrorKindEntries(items, sortBy, sortOrder);
+
+	const total = items.length;
+	const offset = options.offset ?? 0;
+	const limit = options.limit ?? items.length;
+	return { items: items.slice(offset, offset + limit), total, facets: full.facets };
+}
+
+/**
+ * Return the (cached) error-kind breakdown for an archive, computing the
+ * unfiltered snapshot on first request and reusing it on subsequent ones —
+ * `options` is applied fresh per call via {@link applyErrorKindsOptions}, so
+ * different query parameters against the same archive never recompute the
+ * classify-and-aggregate pass.
  *
  * Same "safe to cache" reasoning as `getCachedSummary`: the viewer opens
  * `'archive'`-mode archives read-only and the underlying `db.sqlite` is
@@ -36,27 +120,31 @@ const lru = createPromiseLru<string, ErrorKindsResult>({ maxEntries: MAX_ENTRIES
  * `--retry-failed` reopen that tmpDir as a stub while adding pages), and
  * `isViewerReadModelCurrent` only checks the schema version, not recency.
  * Recomputing every request via `getErrorKinds` directly (never
- * `getErrorKindsFastPath`) keeps the Errors view live during an active crawl.
+ * `getErrorKindsFastPath`, and with the caller's real `options` — no cached
+ * snapshot to slice) keeps the Connection Failures view live during an
+ * active crawl.
  *
  * On computation failure the rejected promise is removed via the shared
  * LRU's reject-eviction so the next request retries cleanly.
  *
  * Read-only — safe against stub-mode archives.
  * @param context - The viewer's per-request archive context.
- * @returns A promise that resolves to the (cached, except in stub mode)
- *   `ErrorKindsResult`.
+ * @param options - Filter, sort, and pagination options for this request.
+ * @returns A promise that resolves to the `ErrorKindsResult` matching `options`.
  */
 export async function getCachedErrorKinds(
 	context: ArchiveContext,
+	options: GetErrorKindsOptions = {},
 ): Promise<ErrorKindsResult> {
 	if (context.mode === 'stub') {
 		const accessor = context.manager.get(context.archiveId);
-		return getErrorKinds(accessor);
+		return getErrorKinds(accessor, options);
 	}
-	return lru.getOrLoad(context.archiveId, () => {
+	const full = await lru.getOrLoad(context.archiveId, () => {
 		const accessor = context.manager.get(context.archiveId);
 		return getOrComputeOnDisk(accessor.tmpDir, 'error-kinds', () =>
-			getErrorKindsFastPath(accessor),
+			getErrorKindsFastPath(accessor, {}),
 		);
 	});
+	return applyErrorKindsOptions(full, options);
 }

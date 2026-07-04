@@ -200,8 +200,8 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
  * `viewer_count_buckets` totals row plus one row per distinct Pages-list
  * facet value (see `computePageFacetBuckets`), writes the pre-computed
  * `viewer_summary` row from the `getSummary` snapshot taken before the
- * transaction began, writes the four `viewer_error_kind_*` tables (issue
- * #118) from a `getErrorKinds` snapshot taken the same way (see
+ * transaction began, writes the two `viewer_error_kind_*` tables (issue
+ * #118) from an unfiltered `getErrorKinds` snapshot taken the same way (see
  * `computeErrorKindInsertRows`), and writes the `viewer_read_model_meta`
  * row — all inside one transaction, so a mid-build failure leaves the
  * previous read model (or no read model) intact, never a partially-built
@@ -403,31 +403,20 @@ export async function buildViewerReadModel(
 		});
 
 		// Normalises the `getErrorKinds` snapshot taken before this
-		// transaction started (see this function's docs) into the four
+		// transaction started (see this function's docs) into the
 		// `viewer_error_kind_*` tables — no second classification pass.
-		// Chunked like every other bulk insert above: `hosts` in particular
-		// has no `MAX_SAMPLE_URLS`-style cap (a real crawl can fail against
-		// thousands of distinct external hosts), so inserting them all as a
-		// single `.insert()` call could exceed the driver's bound-parameter
-		// ceiling and fail the whole build.
+		// Chunked like every other bulk insert above: a real crawl can fail
+		// against many thousands of distinct hosts, so inserting every entry
+		// as a single `.insert()` call could exceed the driver's
+		// bound-parameter ceiling and fail the whole build.
 		const errorKindRows = computeErrorKindInsertRows(errorKinds);
-		for (let start = 0; start < errorKindRows.groups.length; start += INSERT_CHUNK_SIZE) {
-			await trx('viewer_error_kind_groups').insert(
-				errorKindRows.groups.slice(start, start + INSERT_CHUNK_SIZE),
-			);
-		}
-		for (let start = 0; start < errorKindRows.hosts.length; start += INSERT_CHUNK_SIZE) {
-			await trx('viewer_error_kind_hosts').insert(
-				errorKindRows.hosts.slice(start, start + INSERT_CHUNK_SIZE),
-			);
-		}
 		for (
 			let start = 0;
-			start < errorKindRows.samples.length;
+			start < errorKindRows.entries.length;
 			start += INSERT_CHUNK_SIZE
 		) {
-			await trx('viewer_error_kind_samples').insert(
-				errorKindRows.samples.slice(start, start + INSERT_CHUNK_SIZE),
+			await trx('viewer_error_kind_entries').insert(
+				errorKindRows.entries.slice(start, start + INSERT_CHUNK_SIZE),
 			);
 		}
 		await trx('viewer_error_kind_meta').insert({ id: 1, ...errorKindRows.meta });

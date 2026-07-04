@@ -35,7 +35,7 @@
 		"debug": "4.4.3",
 		"follow-redirects": "1.16.0",
 		"fs-extra": "11.3.5",
-		"knex": "3.2.10",
+		"knex": "3.3.0",
 		"libsql": "0.5.29",
 		"puppeteer": "25.2.1",
 		"robots-parser": "3.0.1",

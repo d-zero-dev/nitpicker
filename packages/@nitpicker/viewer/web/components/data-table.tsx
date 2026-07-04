@@ -22,7 +22,7 @@ interface DataTableBaseProps<T> {
 	 * query's error (MPA → `usePagedQuery`, virtual → infinite hook).
 	 */
 	isError?: boolean;
-	/** The error from the active query, when {@link isError} is true. */
+	/** The error from the active query, when {@link DataTableBaseProps.isError} is true. */
 	error?: Error | null;
 }
 

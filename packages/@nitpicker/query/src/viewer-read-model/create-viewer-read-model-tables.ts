@@ -1,14 +1,14 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 14 viewer-read-model tables (and `viewer_pages`'s named
+ * Creates all 12 viewer-read-model tables (and `viewer_pages`'s named
  * indexes) against the given connection. Assumes none of the tables
  * currently exist — callers (`buildViewerReadModel`) are responsible for
  * dropping any prior version first, inside the same transaction, so this
  * function is not itself idempotent.
  *
  * Every statement runs via `raw()` rather than knex's chainable schema
- * builder: 10 of the 13 non-`viewer_summary` tables need `WITHOUT ROWID` / a
+ * builder: 8 of the 11 non-`viewer_summary` tables need `WITHOUT ROWID` / a
  * composite primary key / a `CHECK` constraint / a table-level `UNIQUE`
  * constraint, none of which the chainable builder can express (the same
  * reason `page_html_blobs` / `page_html_ref` drop to `raw()` in
@@ -265,56 +265,59 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	);
 	await trx.raw('CREATE INDEX vaf_dest ON viewer_anchor_facts(dest_page_id, edge_id)');
 
-	// Precomputed `/api/error-kinds` breakdown (issue #118). Populated from
-	// `computeErrorKindInsertRows`'s normalisation of an already-classified
-	// `getErrorKinds` result — `classifyErrorKind` itself runs exactly once,
-	// inside `getErrorKinds`, never a second time here (this codebase's
-	// "don't duplicate classification logic" rule). `viewer_error_kind_samples.url`
-	// is inline text, not a `url_refs` FK: same rationale as
-	// `viewer_anchor_facts` above (issue #139's ref-tables are not
-	// implemented). `viewer_error_kind_meta` holds the two values (`total`,
-	// `channel_source`) that describe the breakdown as a whole rather than
-	// any one kind — the same single-row convention as `viewer_summary`,
-	// kept as its own table rather than extra columns on
-	// `viewer_read_model_meta` because those two values are specific to the
-	// error-kind breakdown, not the read model as a whole.
+	// Precomputed `/api/error-kinds` breakdown (issue #118, reshaped after a
+	// `dev`-side breaking change normalized `getErrorKinds` to one row per
+	// host×kind pair — see this table's docs for why the original
+	// groups/hosts/samples split was replaced by a single entries table).
+	// Populated from `computeErrorKindInsertRows`'s normalisation of an
+	// already-classified `getErrorKinds` result — `classifyErrorKind` itself
+	// runs exactly once, inside `getErrorKinds`, never a second time here
+	// (this codebase's "don't duplicate classification logic" rule).
+	//
+	// One row per unique (host, kind) pair — the same grain `getErrorKinds`
+	// itself aggregates to. `sample_urls_json` is a `JSON.stringify`d array
+	// (matching `viewer_summary`'s JSON-column convention) rather than a
+	// separate samples table: samples are always read together with their
+	// owning row, never filtered/sorted independently, so there is no query
+	// shape that benefits from normalising them out. Deliberately has no
+	// `url_refs` FK for the same reason `viewer_anchor_facts`/`viewer_summary`
+	// don't (issue #139's ref-tables are not implemented).
+	//
+	// Indexing is intentionally minimal: unlike `viewer_pages`/
+	// `viewer_anchor_facts` (hundreds of thousands of rows), this table's
+	// cardinality is bounded by distinct(host)×distinct(kind) — realistically
+	// at most a few thousand rows even on a huge archive — so a full-table
+	// scan+sort for the `host`/`kind` text sorts is already sub-millisecond
+	// in SQLite. Only `count` (the default sort, most-failures-first) gets a
+	// dedicated index; add more if a real benchmark ever shows otherwise
+	// (see issue #106's evidence-before-indexing precedent). No separate
+	// `host_sort_key`/`kind_sort_key` columns either (unlike
+	// `viewer_pages.url_sort_key`): those exist elsewhere to isolate a future
+	// case-folding/normalisation change from the base column, but `host`/
+	// `kind` are never transformed anywhere in this codebase, so `ORDER BY
+	// host`/`ORDER BY kind` directly is exactly as correct and needs no
+	// extra columns to stay that way.
 	await trx.raw(`
-		CREATE TABLE viewer_error_kind_groups (
-			kind text primary key,
-			count integer not null
-		) WITHOUT ROWID
-	`);
-	await trx.raw('CREATE INDEX veg_count ON viewer_error_kind_groups(count desc)');
-
-	await trx.raw(`
-		CREATE TABLE viewer_error_kind_hosts (
-			kind text not null,
+		CREATE TABLE viewer_error_kind_entries (
 			host text not null,
-			count integer not null,
-			primary key(kind, host)
-		) WITHOUT ROWID
-	`);
-	await trx.raw(
-		'CREATE INDEX veh_kind_count ON viewer_error_kind_hosts(kind, count desc)',
-	);
-
-	// No separate index: the `(kind, rank)` primary key on this
-	// `WITHOUT ROWID` table already clusters rows in exactly the order
-	// `select url from viewer_error_kind_samples where kind = ? order by rank`
-	// reads them.
-	await trx.raw(`
-		CREATE TABLE viewer_error_kind_samples (
 			kind text not null,
-			rank integer not null,
-			url text not null,
-			primary key(kind, rank)
+			count integer not null,
+			sample_urls_json text not null,
+			overflowed_count integer not null,
+			primary key(host, kind)
 		) WITHOUT ROWID
 	`);
+	await trx.raw('CREATE INDEX vee_count ON viewer_error_kind_entries(count)');
 
+	// Single-row archive-wide totals (`ErrorKindsResult.facets`), unaffected
+	// by `host`/`kind` filters — the same single-row convention as
+	// `viewer_summary`, kept as its own table rather than extra columns on
+	// `viewer_read_model_meta` because these two values are specific to the
+	// error-kind breakdown, not the read model as a whole.
 	await trx.raw(`
 		CREATE TABLE viewer_error_kind_meta (
 			id integer primary key check (id = 1),
-			total integer not null,
+			total_records integer not null,
 			channel_source text not null
 		)
 	`);

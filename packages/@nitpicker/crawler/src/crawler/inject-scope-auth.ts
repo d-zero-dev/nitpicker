@@ -4,7 +4,7 @@ import type { ExURL } from '@d-zero/shared/parse-url';
  * Copy `username` / `password` from a matched scope URL into the target URL.
  *
  * The matched scope is supplied by the caller (typically the result of a single
- * {@link findScopeEntry} call). This avoids the previous implementation's
+ * `findScopeEntry` call). This avoids the previous implementation's
  * redundant hostname lookup and re-search.
  *
  * Mutates the `url` parameter in place. Only non-empty credentials overwrite

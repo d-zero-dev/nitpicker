@@ -228,69 +228,45 @@ export interface AnchorFactInsertRow {
 }
 
 /**
- * One row to insert into `viewer_error_kind_groups` — the total failure
- * count for one classified {@link ErrorKind}. Produced by
- * `computeErrorKindInsertRows` from an already-computed
- * `ErrorKindsResult` (`getErrorKinds`) — no message reclassification
- * happens in the read-model build itself.
+ * One row to insert into `viewer_error_kind_entries` — one host×kind pair,
+ * the same grain `getErrorKinds` itself aggregates to. Produced by
+ * `computeErrorKindInsertRows` from an already-computed `ErrorKindsResult`
+ * (`getErrorKinds`) — no message reclassification happens in the
+ * read-model build itself.
  */
-export interface ErrorKindGroupInsertRow {
-	/** The classified cause. */
-	kind: ErrorKind;
-	/** Total failure records classified into this kind. */
-	count: number;
-}
-
-/**
- * One row to insert into `viewer_error_kind_hosts` — one host's failure
- * count within a {@link ErrorKindGroupInsertRow}.
- */
-export interface ErrorKindHostInsertRow {
-	/** The classified cause this host breakdown belongs to. */
-	kind: ErrorKind;
+export interface ErrorKindEntryInsertRow {
 	/** Hostname extracted from the failing URL, or `(unknown)`/`(invalid)`. */
 	host: string;
-	/** Number of failures of this kind on this host. */
-	count: number;
-}
-
-/**
- * One row to insert into `viewer_error_kind_samples` — one representative
- * failing URL for a {@link ErrorKindGroupInsertRow}, ranked in the same
- * encounter order `getErrorKinds` capped its `sampleUrls` array at.
- */
-export interface ErrorKindSampleInsertRow {
-	/** The classified cause this sample belongs to. */
+	/** The classified cause shared by every failure in this row. */
 	kind: ErrorKind;
-	/** 0-based position within the kind's capped sample list. */
-	rank: number;
-	/** The representative failing URL. */
-	url: string;
+	/** Total failure records for this host×kind pair. */
+	count: number;
+	/** `JSON.stringify`d array of representative failing URLs for this pair. */
+	sample_urls_json: string;
+	/** Failure records for this pair beyond the sample cap; `0` means none were dropped. */
+	overflowed_count: number;
 }
 
 /**
  * The single row to insert into `viewer_error_kind_meta` — the two
- * read-model-wide values (`total`, `channel_source`) that don't belong to
- * any one kind, mirroring `viewer_summary`'s single-row convention.
+ * archive-wide values (`total_records`, `channel_source`) that describe the
+ * breakdown as a whole rather than any one host×kind pair, mirroring
+ * `viewer_summary`'s single-row convention.
  */
 export interface ErrorKindMetaInsertRow {
-	/** Total failure records across all kinds. */
-	total: number;
-	/** Where the error-channel records came from — see `ErrorKindsResult.channelSource`. */
+	/** Total failure records across every host×kind pair. */
+	total_records: number;
+	/** Where the error-channel records came from — see `ErrorKindsResult.facets.channelSource`. */
 	channel_source: 'crawl_errors' | 'error.log' | 'none';
 }
 
 /**
- * Combined insert rows for all four `viewer_error_kind_*` tables, produced
- * by `computeErrorKindInsertRows`.
+ * Combined insert rows for both `viewer_error_kind_*` tables, produced by
+ * `computeErrorKindInsertRows`.
  */
 export interface ErrorKindInsertRows {
-	/** Rows for `viewer_error_kind_groups`. */
-	groups: ErrorKindGroupInsertRow[];
-	/** Rows for `viewer_error_kind_hosts`. */
-	hosts: ErrorKindHostInsertRow[];
-	/** Rows for `viewer_error_kind_samples`. */
-	samples: ErrorKindSampleInsertRow[];
+	/** Rows for `viewer_error_kind_entries`. */
+	entries: ErrorKindEntryInsertRow[];
 	/** The single row for `viewer_error_kind_meta`. */
 	meta: ErrorKindMetaInsertRow;
 }

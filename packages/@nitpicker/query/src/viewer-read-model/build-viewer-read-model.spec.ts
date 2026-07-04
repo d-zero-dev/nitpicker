@@ -1471,43 +1471,38 @@ describe('buildViewerReadModel', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('writes one viewer_error_kind_groups row per classified kind, matching getErrorKinds()', async () => {
+		it('writes one viewer_error_kind_entries row per host×kind pair, matching getErrorKinds()', async () => {
 			const expected = await getErrorKinds(archive);
 			await buildViewerReadModel(archive);
 
 			const knex = archive.getKnex();
-			// This fixture's 3 kinds all tie at count 1 — sort by kind before
-			// comparing since `ORDER BY count desc` alone leaves ties in an
-			// order that need not match `getErrorKinds`'s Map-insertion-order
-			// tie-break (see `get-viewer-error-kinds.spec.ts` for the same note).
-			const groups = await knex('viewer_error_kind_groups')
-				.select('kind', 'count')
-				.orderBy('kind');
-			expect(groups).toEqual(
-				expected.groups
-					.map((g) => ({ kind: g.kind, count: g.count }))
-					.toSorted((a, b) => a.kind.localeCompare(b.kind)),
+			// This fixture's 3 host×kind pairs all tie at count 1 — sort by
+			// host+kind before comparing since `ORDER BY count` alone leaves
+			// ties in an order that need not match `getErrorKinds`'s
+			// Map-insertion-order tie-break (see `get-viewer-error-kinds.spec.ts`
+			// for the same note).
+			const entries = await knex('viewer_error_kind_entries')
+				.select('host', 'kind', 'count')
+				.orderBy('host');
+			expect(entries).toEqual(
+				expected.items
+					.map((item) => ({ host: item.host, kind: item.kind, count: item.count }))
+					.toSorted((a, b) => a.host.localeCompare(b.host)),
 			);
 		});
 
-		it('writes viewer_error_kind_hosts and viewer_error_kind_samples rows for the timeout kind', async () => {
+		it('writes sample_urls_json/overflowed_count for the example.com/timeout pair', async () => {
 			await buildViewerReadModel(archive);
 			const knex = archive.getKnex();
 
-			const hosts = await knex('viewer_error_kind_hosts')
-				.where('kind', 'timeout')
-				.select('*');
-			expect(hosts).toEqual([{ kind: 'timeout', host: 'example.com', count: 1 }]);
-
-			const samples = await knex('viewer_error_kind_samples')
-				.where('kind', 'timeout')
-				.select('kind', 'rank', 'url');
-			expect(samples).toEqual([
-				{ kind: 'timeout', rank: 0, url: 'https://example.com/slow' },
-			]);
+			const row = await knex('viewer_error_kind_entries')
+				.where({ host: 'example.com', kind: 'timeout' })
+				.first();
+			expect(row).toMatchObject({ count: 1, overflowed_count: 0 });
+			expect(JSON.parse(row.sample_urls_json)).toEqual(['https://example.com/slow']);
 		});
 
-		it('writes a single viewer_error_kind_meta row with the total and channelSource', async () => {
+		it('writes a single viewer_error_kind_meta row with total_records and channel_source', async () => {
 			const expected = await getErrorKinds(archive);
 			await buildViewerReadModel(archive);
 
@@ -1516,8 +1511,8 @@ describe('buildViewerReadModel', () => {
 				.where('id', 1)
 				.first();
 			expect(meta).toMatchObject({
-				total: expected.total,
-				channel_source: expected.channelSource,
+				total_records: expected.facets.totalRecords,
+				channel_source: expected.facets.channelSource,
 			});
 		});
 
@@ -1526,14 +1521,14 @@ describe('buildViewerReadModel', () => {
 			await buildViewerReadModel(archive);
 
 			const knex = archive.getKnex();
-			const groups = await knex('viewer_error_kind_groups').select('*');
+			const entries = await knex('viewer_error_kind_entries').select('*');
 			const meta = await knex('viewer_error_kind_meta').select('*');
-			expect(groups).toHaveLength(3);
+			expect(entries).toHaveLength(3);
 			expect(meta).toHaveLength(1);
 		});
 	});
 
-	describe('viewer_error_kind_hosts chunked insert with many distinct hosts', () => {
+	describe('viewer_error_kind_entries chunked insert with many distinct hosts', () => {
 		const workingDir = path.resolve(
 			__dirname,
 			'__test_fixtures_build_read_model_error_kinds_many_hosts__',
@@ -1545,10 +1540,10 @@ describe('buildViewerReadModel', () => {
 		let archive: InstanceType<typeof Archive>;
 
 		// Exceeds buildViewerReadModel's 500-row INSERT_CHUNK_SIZE so inserting
-		// them all as a single `.insert()` call (the shape the read model used
-		// before this fix) would risk exceeding the SQLite/libsql
-		// bound-parameter ceiling — `getErrorKinds`'s per-kind hosts Map has no
-		// `MAX_SAMPLE_URLS`-style cap, unlike sampleUrls.
+		// them all as a single `.insert()` call could risk exceeding the
+		// SQLite/libsql bound-parameter ceiling — a real crawl can fail
+		// against many thousands of distinct hosts, each becoming its own
+		// `viewer_error_kind_entries` row.
 		const HOST_COUNT = 600;
 
 		beforeAll(async () => {
@@ -1583,15 +1578,15 @@ describe('buildViewerReadModel', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('builds successfully and writes one viewer_error_kind_hosts row per distinct host', async () => {
+		it('builds successfully and writes one viewer_error_kind_entries row per distinct host', async () => {
 			await expect(buildViewerReadModel(archive)).resolves.toBeUndefined();
 			const knex = archive.getKnex();
-			const hosts = await knex('viewer_error_kind_hosts')
+			const entries = await knex('viewer_error_kind_entries')
 				.where('kind', 'dns')
 				.select('*');
-			expect(hosts).toHaveLength(HOST_COUNT);
-			const group = await knex('viewer_error_kind_groups').where('kind', 'dns').first();
-			expect(group).toMatchObject({ count: HOST_COUNT });
+			expect(entries).toHaveLength(HOST_COUNT);
+			const meta = await knex('viewer_error_kind_meta').where('id', 1).first();
+			expect(meta).toMatchObject({ total_records: HOST_COUNT });
 		});
 	});
 
@@ -1618,14 +1613,12 @@ describe('buildViewerReadModel', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('leaves viewer_error_kind_groups/hosts/samples empty and writes a total=0/none meta row, without throwing on the empty-array insert guard', async () => {
+		it('leaves viewer_error_kind_entries empty and writes a total_records=0/none meta row, without throwing on the empty-array insert guard', async () => {
 			await expect(buildViewerReadModel(archive)).resolves.toBeUndefined();
 			const knex = archive.getKnex();
-			expect(await knex('viewer_error_kind_groups').select('*')).toHaveLength(0);
-			expect(await knex('viewer_error_kind_hosts').select('*')).toHaveLength(0);
-			expect(await knex('viewer_error_kind_samples').select('*')).toHaveLength(0);
+			expect(await knex('viewer_error_kind_entries').select('*')).toHaveLength(0);
 			const meta = await knex('viewer_error_kind_meta').where('id', 1).first();
-			expect(meta).toMatchObject({ total: 0, channel_source: 'none' });
+			expect(meta).toMatchObject({ total_records: 0, channel_source: 'none' });
 		});
 	});
 });
