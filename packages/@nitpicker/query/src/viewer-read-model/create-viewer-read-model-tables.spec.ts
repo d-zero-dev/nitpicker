@@ -30,7 +30,7 @@ describe('createViewerReadModelTables', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('creates all 10 tables and the named viewer_pages indexes', async () => {
+	it('creates all 14 tables and the named viewer_pages indexes', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 
@@ -45,6 +45,10 @@ describe('createViewerReadModelTables', () => {
 			'viewer_directory_pages',
 			'viewer_external_links',
 			'viewer_anchor_facts',
+			'viewer_error_kind_groups',
+			'viewer_error_kind_hosts',
+			'viewer_error_kind_samples',
+			'viewer_error_kind_meta',
 		]) {
 			expect(await knex.schema.hasTable(table)).toBe(true);
 		}
@@ -88,6 +92,16 @@ describe('createViewerReadModelTables', () => {
 		]) {
 			expect(anchorFactIndexNames.has(indexName)).toBe(true);
 		}
+
+		const groupsIndexRows: Array<{ name: string }> = await knex('sqlite_master')
+			.where({ type: 'index', tbl_name: 'viewer_error_kind_groups' })
+			.select('name');
+		expect(new Set(groupsIndexRows.map((r) => r.name)).has('veg_count')).toBe(true);
+
+		const hostsIndexRows: Array<{ name: string }> = await knex('sqlite_master')
+			.where({ type: 'index', tbl_name: 'viewer_error_kind_hosts' })
+			.select('name');
+		expect(new Set(hostsIndexRows.map((r) => r.name)).has('veh_kind_count')).toBe(true);
 	});
 
 	it('viewer_query_profiles enforces a composite (scope, profile_key) key, not a single-column rowid', async () => {
@@ -180,6 +194,51 @@ describe('createViewerReadModelTables', () => {
 				dest_url: 'https://ads.example.com/duplicate',
 				status: 200,
 				referrer_count: 2,
+			}),
+		).rejects.toThrow();
+	});
+
+	it('viewer_error_kind_groups rejects a duplicate kind', async () => {
+		const knex = archive.getKnex();
+		await knex('viewer_error_kind_groups').insert({ kind: 'dns', count: 1 });
+		await expect(
+			knex('viewer_error_kind_groups').insert({ kind: 'dns', count: 2 }),
+		).rejects.toThrow();
+	});
+
+	it('viewer_error_kind_hosts enforces a composite (kind, host) key, not a single-column rowid', async () => {
+		const knex = archive.getKnex();
+		await knex('viewer_error_kind_hosts').insert([
+			{ kind: 'dns', host: 'a.example.com', count: 1 },
+			{ kind: 'dns', host: 'b.example.com', count: 2 },
+		]);
+		const rows = await knex('viewer_error_kind_hosts').select('host').orderBy('host');
+		expect(rows.map((r) => r.host)).toEqual(['a.example.com', 'b.example.com']);
+	});
+
+	it('viewer_error_kind_samples enforces a composite (kind, rank) key, rejecting a duplicate rank within the same kind', async () => {
+		const knex = archive.getKnex();
+		await knex('viewer_error_kind_samples').insert({
+			kind: 'dns',
+			rank: 0,
+			url: 'https://a.example.com/',
+		});
+		await expect(
+			knex('viewer_error_kind_samples').insert({
+				kind: 'dns',
+				rank: 0,
+				url: 'https://b.example.com/',
+			}),
+		).rejects.toThrow();
+	});
+
+	it('viewer_error_kind_meta rejects any id other than 1', async () => {
+		const knex = archive.getKnex();
+		await expect(
+			knex('viewer_error_kind_meta').insert({
+				id: 2,
+				total: 0,
+				channel_source: 'none',
 			}),
 		).rejects.toThrow();
 	});

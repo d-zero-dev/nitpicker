@@ -1,9 +1,12 @@
+import type { CrawlerError } from '@nitpicker/crawler';
+
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { getErrorKinds } from '../get-error-kinds.js';
 import { getSummary } from '../get-summary.js';
 import { listPages } from '../list-pages.js';
 
@@ -1406,6 +1409,223 @@ describe('buildViewerReadModel', () => {
 			await buildViewerReadModel(archive);
 			const rows = await archive.getKnex()('viewer_summary').select('*');
 			expect(rows).toHaveLength(1);
+		});
+	});
+
+	describe('viewer_error_kind_* population (issue #118)', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_error_kinds__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'error-kinds-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		/**
+		 * Build a `CrawlerError` for the crawler-level `error` channel.
+		 * @param url - The URL the error is about, or `null` for a process-level error.
+		 * @param message - The raw error message.
+		 * @param isExternal - Whether the URL is external.
+		 * @returns A `CrawlerError` accepted by `Archive.addError`.
+		 */
+		function crawlerError(
+			url: string | null,
+			message: string,
+			isExternal = false,
+		): CrawlerError {
+			return { pid: 1, isMainProcess: true, url, isExternal, error: new Error(message) };
+		}
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			await archive.addPageError(
+				'https://example.com/slow',
+				'retryExhausted',
+				'gave up after 3 retries — Race 180,000ms vs Scraper.#fetchData',
+				false,
+			);
+			await archive.addError(
+				crawlerError(
+					'http://ext.example.net/x',
+					'getaddrinfo ENOTFOUND ext.example.net',
+					true,
+				),
+			);
+			await archive.addError(
+				crawlerError(
+					'https://api.example.org/',
+					'connect ECONNREFUSED 10.0.0.1:443',
+					true,
+				),
+			);
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('writes one viewer_error_kind_groups row per classified kind, matching getErrorKinds()', async () => {
+			const expected = await getErrorKinds(archive);
+			await buildViewerReadModel(archive);
+
+			const knex = archive.getKnex();
+			// This fixture's 3 kinds all tie at count 1 — sort by kind before
+			// comparing since `ORDER BY count desc` alone leaves ties in an
+			// order that need not match `getErrorKinds`'s Map-insertion-order
+			// tie-break (see `get-viewer-error-kinds.spec.ts` for the same note).
+			const groups = await knex('viewer_error_kind_groups')
+				.select('kind', 'count')
+				.orderBy('kind');
+			expect(groups).toEqual(
+				expected.groups
+					.map((g) => ({ kind: g.kind, count: g.count }))
+					.toSorted((a, b) => a.kind.localeCompare(b.kind)),
+			);
+		});
+
+		it('writes viewer_error_kind_hosts and viewer_error_kind_samples rows for the timeout kind', async () => {
+			await buildViewerReadModel(archive);
+			const knex = archive.getKnex();
+
+			const hosts = await knex('viewer_error_kind_hosts')
+				.where('kind', 'timeout')
+				.select('*');
+			expect(hosts).toEqual([{ kind: 'timeout', host: 'example.com', count: 1 }]);
+
+			const samples = await knex('viewer_error_kind_samples')
+				.where('kind', 'timeout')
+				.select('kind', 'rank', 'url');
+			expect(samples).toEqual([
+				{ kind: 'timeout', rank: 0, url: 'https://example.com/slow' },
+			]);
+		});
+
+		it('writes a single viewer_error_kind_meta row with the total and channelSource', async () => {
+			const expected = await getErrorKinds(archive);
+			await buildViewerReadModel(archive);
+
+			const meta = await archive
+				.getKnex()('viewer_error_kind_meta')
+				.where('id', 1)
+				.first();
+			expect(meta).toMatchObject({
+				total: expected.total,
+				channel_source: expected.channelSource,
+			});
+		});
+
+		it('rebuilds idempotently — a second build leaves the same row counts, not duplicates', async () => {
+			await buildViewerReadModel(archive);
+			await buildViewerReadModel(archive);
+
+			const knex = archive.getKnex();
+			const groups = await knex('viewer_error_kind_groups').select('*');
+			const meta = await knex('viewer_error_kind_meta').select('*');
+			expect(groups).toHaveLength(3);
+			expect(meta).toHaveLength(1);
+		});
+	});
+
+	describe('viewer_error_kind_hosts chunked insert with many distinct hosts', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_error_kinds_many_hosts__',
+		);
+		const archiveFilePath = path.resolve(
+			workingDir,
+			'error-kinds-many-hosts-test.nitpicker',
+		);
+		let archive: InstanceType<typeof Archive>;
+
+		// Exceeds buildViewerReadModel's 500-row INSERT_CHUNK_SIZE so inserting
+		// them all as a single `.insert()` call (the shape the read model used
+		// before this fix) would risk exceeding the SQLite/libsql
+		// bound-parameter ceiling — `getErrorKinds`'s per-kind hosts Map has no
+		// `MAX_SAMPLE_URLS`-style cap, unlike sampleUrls.
+		const HOST_COUNT = 600;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			// Bulk raw insert (not HOST_COUNT sequential addError() calls) for
+			// test speed — same technique as this file's other large-fixture
+			// blocks (see "onProgress: multiple chunks" above). Inserted in
+			// sub-batches of ≤500 rows — unrelated to buildViewerReadModel's own
+			// 500-row INSERT_CHUNK_SIZE this test exists to exercise — because
+			// SQLite's compound-SELECT term limit (default 500) rejects a single
+			// `.insert()` call carrying all 600 rows at once.
+			const knex = archive.getKnex();
+			const rows = Array.from({ length: HOST_COUNT }, (_, i) => ({
+				url: `http://ext-${i}.example.net/`,
+				isExternal: 1,
+				message: `getaddrinfo ENOTFOUND ext-${i}.example.net`,
+				createdAt: Date.now(),
+			}));
+			await knex('crawl_errors').insert(rows.slice(0, 400));
+			await knex('crawl_errors').insert(rows.slice(400));
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('builds successfully and writes one viewer_error_kind_hosts row per distinct host', async () => {
+			await expect(buildViewerReadModel(archive)).resolves.toBeUndefined();
+			const knex = archive.getKnex();
+			const hosts = await knex('viewer_error_kind_hosts')
+				.where('kind', 'dns')
+				.select('*');
+			expect(hosts).toHaveLength(HOST_COUNT);
+			const group = await knex('viewer_error_kind_groups').where('kind', 'dns').first();
+			expect(group).toMatchObject({ count: HOST_COUNT });
+		});
+	});
+
+	describe('empty archive: viewer_error_kind_* tables', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_error_kinds_empty__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'error-kinds-empty-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('leaves viewer_error_kind_groups/hosts/samples empty and writes a total=0/none meta row, without throwing on the empty-array insert guard', async () => {
+			await expect(buildViewerReadModel(archive)).resolves.toBeUndefined();
+			const knex = archive.getKnex();
+			expect(await knex('viewer_error_kind_groups').select('*')).toHaveLength(0);
+			expect(await knex('viewer_error_kind_hosts').select('*')).toHaveLength(0);
+			expect(await knex('viewer_error_kind_samples').select('*')).toHaveLength(0);
+			const meta = await knex('viewer_error_kind_meta').where('id', 1).first();
+			expect(meta).toMatchObject({ total: 0, channel_source: 'none' });
 		});
 	});
 });

@@ -3,9 +3,9 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import { dropViewerReadModelTables } from './drop-viewer-read-model-tables.js';
 
 /**
- * Drops all 10 viewer-read-model tables if present. Idempotent — calling
+ * Drops all 14 viewer-read-model tables if present. Idempotent — calling
  * this on an archive with no read model is a no-op, not an error. Only
- * ever touches the 10 `viewer_*` tables; the write-model tables (`pages`,
+ * ever touches the 14 `viewer_*` tables; the write-model tables (`pages`,
  * `anchors`, etc.) are never referenced.
  * @param accessor - The archive accessor to drop from. Must be writable
  *   (`accessor.readOnly === false`).
