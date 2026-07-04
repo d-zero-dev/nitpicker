@@ -1,5 +1,10 @@
 import type { ArchiveContext } from './types.js';
-import type { ArchiveAccessor, ArchiveManager, ErrorKindsResult } from '@nitpicker/query';
+import type {
+	ArchiveAccessor,
+	ArchiveManager,
+	ErrorKindEntry,
+	ErrorKindsResult,
+} from '@nitpicker/query';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -54,18 +59,40 @@ function makeContext(archiveId: string): ArchiveContext {
 }
 
 /**
- * Minimal `ErrorKindsResult` literal — the cache treats the value
- * opaquely, so we only need a sentinel field per test.
- * @param channelSource - Identifying field to distinguish results across tests.
+ * Build a minimal {@link ErrorKindEntry}, overridable per test.
+ * @param overrides - Fields to override.
+ * @returns The constructed entry.
+ */
+function makeEntry(overrides: Partial<ErrorKindEntry> = {}): ErrorKindEntry {
+	return {
+		host: 'a.example.com',
+		kind: 'dns',
+		count: 1,
+		sampleUrls: [],
+		overflowedCount: 0,
+		...overrides,
+	};
+}
+
+/**
+ * Build a minimal `ErrorKindsResult` literal — the cache treats the value
+ * mostly opaquely, so a small default item list plus an identifying facets
+ * field is enough to tell which computed snapshot answered.
+ * @param overrides - Fields to override.
  * @returns An `ErrorKindsResult`-shaped object.
  */
-function makeResult(channelSource: ErrorKindsResult['channelSource']): ErrorKindsResult {
-	return { total: 0, channelSource, groups: [] };
+function makeResult(overrides: Partial<ErrorKindsResult> = {}): ErrorKindsResult {
+	return {
+		items: [makeEntry()],
+		total: 1,
+		facets: { totalRecords: 1, channelSource: 'crawl_errors' },
+		...overrides,
+	};
 }
 
 describe('getCachedErrorKinds', () => {
-	it('computes once per archive id and returns the cached result on every subsequent call', async () => {
-		vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(makeResult('crawl_errors'));
+	it('computes once per archive id and returns the same (options-applied) content on every subsequent call', async () => {
+		vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(makeResult());
 		const context = makeContext('archive_a');
 
 		const a = await getCachedErrorKinds(context);
@@ -73,8 +100,9 @@ describe('getCachedErrorKinds', () => {
 		const c = await getCachedErrorKinds(context);
 
 		expect(getErrorKindsFastPath).toHaveBeenCalledTimes(1);
-		expect(b).toBe(a);
-		expect(c).toBe(a);
+		expect(getErrorKindsFastPath).toHaveBeenCalledWith(expect.anything(), {});
+		expect(b).toEqual(a);
+		expect(c).toEqual(a);
 	});
 
 	it('shares an in-flight computation across concurrent callers', async () => {
@@ -91,15 +119,19 @@ describe('getCachedErrorKinds', () => {
 		const p2 = getCachedErrorKinds(context);
 		const p3 = getCachedErrorKinds(context);
 		expect(getErrorKindsFastPath).toHaveBeenCalledTimes(1);
-		resolveCompute?.(makeResult('crawl_errors'));
+		resolveCompute?.(makeResult());
 		await Promise.all([p1, p2, p3]);
 		expect(getErrorKindsFastPath).toHaveBeenCalledTimes(1);
 	});
 
 	it('bypasses the cache in stub mode so live-crawl updates are visible on every request', async () => {
 		vi.mocked(getErrorKinds)
-			.mockResolvedValueOnce(makeResult('crawl_errors'))
-			.mockResolvedValueOnce(makeResult('error.log'));
+			.mockResolvedValueOnce(
+				makeResult({ facets: { totalRecords: 1, channelSource: 'crawl_errors' } }),
+			)
+			.mockResolvedValueOnce(
+				makeResult({ facets: { totalRecords: 2, channelSource: 'error.log' } }),
+			);
 		const stubContext: ArchiveContext = {
 			...makeContext('archive_stub'),
 			mode: 'stub',
@@ -108,13 +140,28 @@ describe('getCachedErrorKinds', () => {
 		const first = await getCachedErrorKinds(stubContext);
 		const second = await getCachedErrorKinds(stubContext);
 
-		expect(first.channelSource).toBe('crawl_errors');
-		expect(second.channelSource).toBe('error.log');
+		expect(first.facets.channelSource).toBe('crawl_errors');
+		expect(second.facets.channelSource).toBe('error.log');
 		expect(getErrorKinds).toHaveBeenCalledTimes(2);
 	});
 
+	it('passes the caller-supplied options straight through to getErrorKinds in stub mode (no cached snapshot to slice)', async () => {
+		vi.mocked(getErrorKinds).mockResolvedValueOnce(makeResult());
+		const stubContext: ArchiveContext = {
+			...makeContext('archive_stub_opts'),
+			mode: 'stub',
+		};
+
+		await getCachedErrorKinds(stubContext, { kind: 'dns', limit: 5 });
+
+		expect(getErrorKinds).toHaveBeenCalledWith(expect.anything(), {
+			kind: 'dns',
+			limit: 5,
+		});
+	});
+
 	it('never calls getErrorKindsFastPath in stub mode, even when a read model happens to be current in that tmpDir', async () => {
-		vi.mocked(getErrorKinds).mockResolvedValueOnce(makeResult('crawl_errors'));
+		vi.mocked(getErrorKinds).mockResolvedValueOnce(makeResult());
 		const stubContext: ArchiveContext = {
 			...makeContext('archive_stub_2'),
 			mode: 'stub',
@@ -129,14 +176,109 @@ describe('getCachedErrorKinds', () => {
 		const failure = new Error('transient error-kinds failure');
 		vi.mocked(getErrorKindsFastPath)
 			.mockRejectedValueOnce(failure)
-			.mockResolvedValueOnce(makeResult('crawl_errors'));
+			.mockResolvedValueOnce(makeResult());
 		const context = makeContext('archive_retry');
 
 		await expect(getCachedErrorKinds(context)).rejects.toThrow(
 			'transient error-kinds failure',
 		);
 		const recovered = await getCachedErrorKinds(context);
-		expect(recovered.channelSource).toBe('crawl_errors');
+		expect(recovered.facets.channelSource).toBe('crawl_errors');
 		expect(getErrorKindsFastPath).toHaveBeenCalledTimes(2);
+	});
+
+	describe('applying options on top of the cached unfiltered snapshot', () => {
+		const FULL = makeResult({
+			items: [
+				makeEntry({ host: 'a.example.com', kind: 'dns', count: 5 }),
+				makeEntry({ host: 'b.example.com', kind: 'timeout', count: 3 }),
+				makeEntry({ host: 'a.example.com', kind: 'timeout', count: 1 }),
+			],
+			total: 3,
+			facets: { totalRecords: 9, channelSource: 'crawl_errors' },
+		});
+
+		it('computes the unfiltered snapshot only once regardless of differing per-request options', async () => {
+			vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(FULL);
+			const context = makeContext('archive_opts_dedup');
+
+			await getCachedErrorKinds(context, { kind: 'dns' });
+			await getCachedErrorKinds(context, { kind: 'timeout' });
+			await getCachedErrorKinds(context, { sortBy: 'host', sortOrder: 'asc' });
+
+			expect(getErrorKindsFastPath).toHaveBeenCalledTimes(1);
+			expect(getErrorKindsFastPath).toHaveBeenCalledWith(expect.anything(), {});
+		});
+
+		it('filters by host and kind independently and combined', async () => {
+			vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(FULL);
+			const context = makeContext('archive_opts_filter');
+
+			const byHost = await getCachedErrorKinds(context, { host: 'a.example.com' });
+			expect(byHost.items.map((i) => i.kind).toSorted()).toEqual(['dns', 'timeout']);
+			expect(byHost.total).toBe(2);
+			// facets stay archive-wide, unaffected by the filter.
+			expect(byHost.facets.totalRecords).toBe(9);
+
+			const byKind = await getCachedErrorKinds(context, { kind: 'timeout' });
+			expect(byKind.items.map((i) => i.host).toSorted()).toEqual([
+				'a.example.com',
+				'b.example.com',
+			]);
+
+			const byBoth = await getCachedErrorKinds(context, {
+				host: 'a.example.com',
+				kind: 'timeout',
+			});
+			expect(byBoth.items).toHaveLength(1);
+			expect(byBoth.items[0]).toMatchObject({ host: 'a.example.com', kind: 'timeout' });
+		});
+
+		it('sorts by count descending by default', async () => {
+			vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(FULL);
+			const context = makeContext('archive_opts_sort_default');
+
+			const result = await getCachedErrorKinds(context);
+			expect(result.items.map((i) => i.count)).toEqual([5, 3, 1]);
+		});
+
+		it('sorts by host ascending/descending on request', async () => {
+			vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(FULL);
+			const context = makeContext('archive_opts_sort_host');
+
+			const asc = await getCachedErrorKinds(context, {
+				sortBy: 'host',
+				sortOrder: 'asc',
+			});
+			expect(asc.items.map((i) => i.host)).toEqual([
+				'a.example.com',
+				'a.example.com',
+				'b.example.com',
+			]);
+
+			const desc = await getCachedErrorKinds(context, {
+				sortBy: 'host',
+				sortOrder: 'desc',
+			});
+			expect(desc.items.map((i) => i.host)).toEqual([
+				'b.example.com',
+				'a.example.com',
+				'a.example.com',
+			]);
+		});
+
+		it('paginates with limit/offset, and returns every row when limit is omitted', async () => {
+			vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(FULL);
+			const context = makeContext('archive_opts_paginate');
+
+			const all = await getCachedErrorKinds(context);
+			expect(all.items).toHaveLength(3);
+
+			const page = await getCachedErrorKinds(context, { limit: 1, offset: 1 });
+			expect(page.items).toHaveLength(1);
+			expect(page.items[0]).toMatchObject({ host: 'b.example.com', count: 3 });
+			// total reflects the filtered set (no filter here, so all 3), not the page size.
+			expect(page.total).toBe(3);
+		});
 	});
 });

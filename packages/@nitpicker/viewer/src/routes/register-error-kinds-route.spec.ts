@@ -32,6 +32,13 @@ const BASE_CONFIG = {
 	ignoreRobots: false,
 };
 
+/** Response shape of `GET /api/error-kinds`. */
+interface ErrorKindsResponseBody {
+	items: { host: string; kind: string; count: number; sampleUrls: string[] }[];
+	total: number;
+	facets: { totalRecords: number; channelSource: string };
+}
+
 /**
  * Build a `CrawlerError` for the crawler-level `error` channel.
  * @param url - The URL the error is about, or `null` for a process-level error.
@@ -105,16 +112,20 @@ async function buildFixture(workingDir: string, withReadModel: boolean) {
 	return { app, archive, manager };
 }
 
-describe('registerErrorKindsRoute — /api/error-kinds (integration)', () => {
-	describe('fast path (viewer_error_kind_* read model built)', () => {
+describe.each([
+	{ label: 'fast path (viewer_error_kind_* read model built)', withReadModel: true },
+	{ label: 'legacy fallback path (no read model built)', withReadModel: false },
+])(
+	'registerErrorKindsRoute — /api/error-kinds (integration) — $label',
+	({ withReadModel }) => {
 		const workingDir = path.resolve(
 			__dirname,
-			'__test_fixtures_register_error_kinds_route_fast__',
+			`__test_fixtures_register_error_kinds_route_${withReadModel ? 'fast' : 'legacy'}__`,
 		);
 		let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
 		beforeAll(async () => {
-			fixture = await buildFixture(workingDir, true);
+			fixture = await buildFixture(workingDir, withReadModel);
 		});
 
 		afterAll(async () => {
@@ -123,62 +134,57 @@ describe('registerErrorKindsRoute — /api/error-kinds (integration)', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('returns the classified breakdown with per-host counts', async () => {
+		it('returns the classified host×kind breakdown, sorted by count descending by default', async () => {
 			const res = await fixture.app.request('/api/error-kinds');
-			const body = (await res.json()) as {
-				total: number;
-				channelSource: string;
-				groups: {
-					kind: string;
-					count: number;
-					hosts: { host: string; count: number }[];
-				}[];
-			};
-			expect(body.total).toBe(3);
-			expect(body.channelSource).toBe('crawl_errors');
-			const dns = body.groups.find((g) => g.kind === 'dns');
-			expect(dns).toMatchObject({
+			const body = (await res.json()) as ErrorKindsResponseBody;
+			expect(body.total).toBe(2);
+			expect(body.facets).toEqual({ totalRecords: 3, channelSource: 'crawl_errors' });
+			expect(body.items[0]).toMatchObject({
+				host: 'ext.example.net',
+				kind: 'dns',
 				count: 2,
-				hosts: [{ host: 'ext.example.net', count: 2 }],
+				sampleUrls: ['http://ext.example.net/x', 'http://ext.example.net/y'],
+			});
+			expect(body.items[1]).toMatchObject({
+				host: 'api.example.org',
+				kind: 'connection-refused',
+				count: 1,
 			});
 		});
-	});
 
-	describe('legacy fallback path (no read model built)', () => {
-		const workingDir = path.resolve(
-			__dirname,
-			'__test_fixtures_register_error_kinds_route_legacy__',
-		);
-		let fixture: Awaited<ReturnType<typeof buildFixture>>;
-
-		beforeAll(async () => {
-			fixture = await buildFixture(workingDir, false);
+		it('honors the ?kind= query filter', async () => {
+			const res = await fixture.app.request('/api/error-kinds?kind=connection-refused');
+			const body = (await res.json()) as ErrorKindsResponseBody;
+			expect(body.items).toHaveLength(1);
+			expect(body.items[0]).toMatchObject({ host: 'api.example.org' });
+			// facets stay archive-wide, unaffected by the kind filter.
+			expect(body.facets.totalRecords).toBe(3);
 		});
 
-		afterAll(async () => {
-			await fixture.manager.closeAll();
-			const { rmSync } = await import('node:fs');
-			rmSync(workingDir, { recursive: true, force: true });
+		it('honors the ?host= query filter', async () => {
+			const res = await fixture.app.request('/api/error-kinds?host=ext.example.net');
+			const body = (await res.json()) as ErrorKindsResponseBody;
+			expect(body.items).toHaveLength(1);
+			expect(body.items[0]).toMatchObject({ kind: 'dns', count: 2 });
 		});
 
-		it('returns the same classified breakdown via the legacy live query', async () => {
-			const res = await fixture.app.request('/api/error-kinds');
-			const body = (await res.json()) as {
-				total: number;
-				channelSource: string;
-				groups: {
-					kind: string;
-					count: number;
-					hosts: { host: string; count: number }[];
-				}[];
-			};
-			expect(body.total).toBe(3);
-			expect(body.channelSource).toBe('crawl_errors');
-			const dns = body.groups.find((g) => g.kind === 'dns');
-			expect(dns).toMatchObject({
-				count: 2,
-				hosts: [{ host: 'ext.example.net', count: 2 }],
-			});
+		it('honors ?sortBy=host&sortOrder=asc', async () => {
+			const res = await fixture.app.request('/api/error-kinds?sortBy=host&sortOrder=asc');
+			const body = (await res.json()) as ErrorKindsResponseBody;
+			expect(body.items.map((i) => i.host)).toEqual([
+				'api.example.org',
+				'ext.example.net',
+			]);
 		});
-	});
-});
+
+		it('honors ?limit=&?offset=', async () => {
+			const res = await fixture.app.request(
+				'/api/error-kinds?sortBy=host&sortOrder=asc&limit=1&offset=1',
+			);
+			const body = (await res.json()) as ErrorKindsResponseBody;
+			expect(body.items).toHaveLength(1);
+			expect(body.items[0]).toMatchObject({ host: 'ext.example.net' });
+			expect(body.total).toBe(2);
+		});
+	},
+);
