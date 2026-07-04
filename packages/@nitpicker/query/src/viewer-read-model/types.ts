@@ -1,3 +1,5 @@
+import type { ErrorKind } from '@nitpicker/crawler';
+
 /**
  * Row shape of the `viewer_read_model_meta` singleton table (always exactly
  * one row, `id = 1`). Shared between `hasViewerReadModel` and
@@ -223,4 +225,72 @@ export interface AnchorFactInsertRow {
 	 * time, never by an indexed read query.
 	 */
 	is_external_link: number;
+}
+
+/**
+ * One row to insert into `viewer_error_kind_groups` — the total failure
+ * count for one classified {@link ErrorKind}. Produced by
+ * `computeErrorKindInsertRows` from an already-computed
+ * `ErrorKindsResult` (`getErrorKinds`) — no message reclassification
+ * happens in the read-model build itself.
+ */
+export interface ErrorKindGroupInsertRow {
+	/** The classified cause. */
+	kind: ErrorKind;
+	/** Total failure records classified into this kind. */
+	count: number;
+}
+
+/**
+ * One row to insert into `viewer_error_kind_hosts` — one host's failure
+ * count within a {@link ErrorKindGroupInsertRow}.
+ */
+export interface ErrorKindHostInsertRow {
+	/** The classified cause this host breakdown belongs to. */
+	kind: ErrorKind;
+	/** Hostname extracted from the failing URL, or `(unknown)`/`(invalid)`. */
+	host: string;
+	/** Number of failures of this kind on this host. */
+	count: number;
+}
+
+/**
+ * One row to insert into `viewer_error_kind_samples` — one representative
+ * failing URL for a {@link ErrorKindGroupInsertRow}, ranked in the same
+ * encounter order `getErrorKinds` capped its `sampleUrls` array at.
+ */
+export interface ErrorKindSampleInsertRow {
+	/** The classified cause this sample belongs to. */
+	kind: ErrorKind;
+	/** 0-based position within the kind's capped sample list. */
+	rank: number;
+	/** The representative failing URL. */
+	url: string;
+}
+
+/**
+ * The single row to insert into `viewer_error_kind_meta` — the two
+ * read-model-wide values (`total`, `channel_source`) that don't belong to
+ * any one kind, mirroring `viewer_summary`'s single-row convention.
+ */
+export interface ErrorKindMetaInsertRow {
+	/** Total failure records across all kinds. */
+	total: number;
+	/** Where the error-channel records came from — see `ErrorKindsResult.channelSource`. */
+	channel_source: 'crawl_errors' | 'error.log' | 'none';
+}
+
+/**
+ * Combined insert rows for all four `viewer_error_kind_*` tables, produced
+ * by `computeErrorKindInsertRows`.
+ */
+export interface ErrorKindInsertRows {
+	/** Rows for `viewer_error_kind_groups`. */
+	groups: ErrorKindGroupInsertRow[];
+	/** Rows for `viewer_error_kind_hosts`. */
+	hosts: ErrorKindHostInsertRow[];
+	/** Rows for `viewer_error_kind_samples`. */
+	samples: ErrorKindSampleInsertRow[];
+	/** The single row for `viewer_error_kind_meta`. */
+	meta: ErrorKindMetaInsertRow;
 }

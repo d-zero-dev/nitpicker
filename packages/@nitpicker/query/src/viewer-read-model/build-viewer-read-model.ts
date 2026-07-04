@@ -3,10 +3,12 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { classifyContentType } from '../classify-content-type.js';
 import { excludeSkippedPages } from '../exclude-skipped-pages.js';
+import { getErrorKinds } from '../get-error-kinds.js';
 import { getSummary } from '../get-summary.js';
 
 import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
 import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
+import { computeErrorKindInsertRows } from './compute-error-kind-insert-rows.js';
 import { computePageFacetBuckets } from './compute-page-facet-buckets.js';
 import { createViewerReadModelTables } from './create-viewer-read-model-tables.js';
 import { deriveExternalLinkSummaryRows } from './derive-external-link-summary-rows.js';
@@ -198,26 +200,31 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
  * `viewer_count_buckets` totals row plus one row per distinct Pages-list
  * facet value (see `computePageFacetBuckets`), writes the pre-computed
  * `viewer_summary` row from the `getSummary` snapshot taken before the
- * transaction began, and writes the `viewer_read_model_meta` row — all
- * inside one transaction, so a mid-build failure leaves the previous read
- * model (or no read model) intact, never a partially-built one.
+ * transaction began, writes the four `viewer_error_kind_*` tables (issue
+ * #118) from a `getErrorKinds` snapshot taken the same way (see
+ * `computeErrorKindInsertRows`), and writes the `viewer_read_model_meta`
+ * row — all inside one transaction, so a mid-build failure leaves the
+ * previous read model (or no read model) intact, never a partially-built
+ * one.
  *
- * The `getSummary(accessor)` call for `viewer_summary` runs **before** the
- * transaction starts, unlike `viewer_anchor_facts`/`viewer_pages` which read
- * inside it. Those tables reuse `sourceRows`/`anchors` rows to avoid a
- * second scan of the same source — `getSummary` has no such shared rows to
- * reuse, so there is no performance reason to nest it in the transaction.
- * Computing it first also means a `getSummary` failure aborts before
+ * The `getSummary(accessor)`/`getErrorKinds(accessor)` calls run **before**
+ * the transaction starts, unlike `viewer_anchor_facts`/`viewer_pages` which
+ * read inside it. Those tables reuse `sourceRows`/`anchors` rows to avoid a
+ * second scan of the same source — `getSummary`/`getErrorKinds` have no such
+ * shared rows to reuse (the latter reads `page_errors`/`crawl_errors`/
+ * `error.log`, none of which `viewer_pages`'s `sourceRows` touches), so
+ * there is no performance reason to nest either in the transaction.
+ * Computing them first also means either failing aborts before
  * `dropViewerReadModelTables` ever runs, leaving the previous read model
  * untouched instead of rolling back a transaction that already dropped
  * tables. This pre-transaction read is only safe because every source
- * `getSummary` touches — not just `pages`, but also `page_errors` /
- * `crawl_errors` (for the `status=-1` `errorKindBreakdown`) and, as a
- * fallback, `error.log` — is write-once-during-crawl and never touched by a
- * read-model build itself; none of the three call sites
- * (`ensureViewerReadModelQuietly` at crawl completion, `viewer-build`, the
- * on-open opportunistic build) ever run concurrently with an active
- * scraper writing to the same archive.
+ * `getSummary`/`getErrorKinds` touch — not just `pages`, but also
+ * `page_errors` / `crawl_errors` (for the `status=-1` `errorKindBreakdown`
+ * and the error-kind breakdown itself) and, as a fallback, `error.log` — is
+ * write-once-during-crawl and never touched by a read-model build itself;
+ * none of the three call sites (`ensureViewerReadModelQuietly` at crawl
+ * completion, `viewer-build`, the on-open opportunistic build) ever run
+ * concurrently with an active scraper writing to the same archive.
  *
  * `getSummary` also requires `accessor.getConfig()` to resolve, a
  * precondition this function did not previously have. Every archive that
@@ -276,7 +283,10 @@ export async function buildViewerReadModel(
 
 	const { onProgress } = options;
 	const knex = accessor.getKnex();
-	const summary = await getSummary(accessor);
+	const [summary, errorKinds] = await Promise.all([
+		getSummary(accessor),
+		getErrorKinds(accessor),
+	]);
 	await knex.transaction(async (trx) => {
 		await dropViewerReadModelTables(trx);
 		await createViewerReadModelTables(trx);
@@ -391,6 +401,36 @@ export async function buildViewerReadModel(
 			content_type_json: JSON.stringify(summary.contentTypeDistribution),
 			metadata_json: JSON.stringify(summary.metadataFulfillment),
 		});
+
+		// Normalises the `getErrorKinds` snapshot taken before this
+		// transaction started (see this function's docs) into the four
+		// `viewer_error_kind_*` tables — no second classification pass.
+		// Chunked like every other bulk insert above: `hosts` in particular
+		// has no `MAX_SAMPLE_URLS`-style cap (a real crawl can fail against
+		// thousands of distinct external hosts), so inserting them all as a
+		// single `.insert()` call could exceed the driver's bound-parameter
+		// ceiling and fail the whole build.
+		const errorKindRows = computeErrorKindInsertRows(errorKinds);
+		for (let start = 0; start < errorKindRows.groups.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_error_kind_groups').insert(
+				errorKindRows.groups.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
+		for (let start = 0; start < errorKindRows.hosts.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_error_kind_hosts').insert(
+				errorKindRows.hosts.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
+		for (
+			let start = 0;
+			start < errorKindRows.samples.length;
+			start += INSERT_CHUNK_SIZE
+		) {
+			await trx('viewer_error_kind_samples').insert(
+				errorKindRows.samples.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
+		await trx('viewer_error_kind_meta').insert({ id: 1, ...errorKindRows.meta });
 
 		await trx('viewer_read_model_meta').insert({
 			id: 1,

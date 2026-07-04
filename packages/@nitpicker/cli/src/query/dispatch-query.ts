@@ -16,7 +16,7 @@ import {
 	countPagesByTag,
 	findDuplicates,
 	findMismatches,
-	getErrorKinds,
+	getErrorKindsFastPath,
 	getIsolatedCluster,
 	getPageDetail,
 	getPageHtml,
@@ -128,7 +128,7 @@ export async function dispatchQuery(
 			return result;
 		}
 		case 'error-kinds': {
-			return getErrorKinds(accessor);
+			return getErrorKindsFastPath(accessor);
 		}
 		case 'pages-by-tag': {
 			const { provider, externalId, limit, offset } = options as {

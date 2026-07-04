@@ -1,14 +1,14 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 10 viewer-read-model tables (and `viewer_pages`'s named
+ * Creates all 14 viewer-read-model tables (and `viewer_pages`'s named
  * indexes) against the given connection. Assumes none of the tables
  * currently exist — callers (`buildViewerReadModel`) are responsible for
  * dropping any prior version first, inside the same transaction, so this
  * function is not itself idempotent.
  *
  * Every statement runs via `raw()` rather than knex's chainable schema
- * builder: 5 of the 9 non-`viewer_summary` tables need `WITHOUT ROWID` / a
+ * builder: 10 of the 13 non-`viewer_summary` tables need `WITHOUT ROWID` / a
  * composite primary key / a `CHECK` constraint / a table-level `UNIQUE`
  * constraint, none of which the chainable builder can express (the same
  * reason `page_html_blobs` / `page_html_ref` drop to `raw()` in
@@ -264,4 +264,58 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 		'CREATE INDEX vaf_source ON viewer_anchor_facts(source_page_id, edge_id)',
 	);
 	await trx.raw('CREATE INDEX vaf_dest ON viewer_anchor_facts(dest_page_id, edge_id)');
+
+	// Precomputed `/api/error-kinds` breakdown (issue #118). Populated from
+	// `computeErrorKindInsertRows`'s normalisation of an already-classified
+	// `getErrorKinds` result — `classifyErrorKind` itself runs exactly once,
+	// inside `getErrorKinds`, never a second time here (this codebase's
+	// "don't duplicate classification logic" rule). `viewer_error_kind_samples.url`
+	// is inline text, not a `url_refs` FK: same rationale as
+	// `viewer_anchor_facts` above (issue #139's ref-tables are not
+	// implemented). `viewer_error_kind_meta` holds the two values (`total`,
+	// `channel_source`) that describe the breakdown as a whole rather than
+	// any one kind — the same single-row convention as `viewer_summary`,
+	// kept as its own table rather than extra columns on
+	// `viewer_read_model_meta` because those two values are specific to the
+	// error-kind breakdown, not the read model as a whole.
+	await trx.raw(`
+		CREATE TABLE viewer_error_kind_groups (
+			kind text primary key,
+			count integer not null
+		) WITHOUT ROWID
+	`);
+	await trx.raw('CREATE INDEX veg_count ON viewer_error_kind_groups(count desc)');
+
+	await trx.raw(`
+		CREATE TABLE viewer_error_kind_hosts (
+			kind text not null,
+			host text not null,
+			count integer not null,
+			primary key(kind, host)
+		) WITHOUT ROWID
+	`);
+	await trx.raw(
+		'CREATE INDEX veh_kind_count ON viewer_error_kind_hosts(kind, count desc)',
+	);
+
+	// No separate index: the `(kind, rank)` primary key on this
+	// `WITHOUT ROWID` table already clusters rows in exactly the order
+	// `select url from viewer_error_kind_samples where kind = ? order by rank`
+	// reads them.
+	await trx.raw(`
+		CREATE TABLE viewer_error_kind_samples (
+			kind text not null,
+			rank integer not null,
+			url text not null,
+			primary key(kind, rank)
+		) WITHOUT ROWID
+	`);
+
+	await trx.raw(`
+		CREATE TABLE viewer_error_kind_meta (
+			id integer primary key check (id = 1),
+			total integer not null,
+			channel_source text not null
+		)
+	`);
 }
