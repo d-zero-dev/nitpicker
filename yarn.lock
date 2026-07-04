@@ -3034,6 +3034,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/viewer@workspace:packages/@nitpicker/viewer"
   dependencies:
+    "@d-zero/dealer": "npm:1.9.4"
     "@d-zero/shared": "npm:0.22.2"
     "@hono/node-server": "npm:2.0.6"
     "@nitpicker/crawler": "npm:0.12.0"
