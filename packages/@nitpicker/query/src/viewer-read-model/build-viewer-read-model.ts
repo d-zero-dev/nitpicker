@@ -11,10 +11,12 @@ import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
 import { computeErrorKindInsertRows } from './compute-error-kind-insert-rows.js';
 import { computePageFacetBuckets } from './compute-page-facet-buckets.js';
 import { computeResourceInsertRows } from './compute-resource-rows.js';
+import { createViewerReadModelIndexes } from './create-viewer-read-model-indexes.js';
 import { createViewerReadModelTables } from './create-viewer-read-model-tables.js';
 import { deriveExternalLinkSummaryRows } from './derive-external-link-summary-rows.js';
 import { dropViewerReadModelTables } from './drop-viewer-read-model-tables.js';
 import { NULL_STATUS_SENTINEL } from './null-status-sentinel.js';
+import { upsertExternalLinkRows } from './upsert-external-link-rows.js';
 import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model-schema-version.js';
 
 /** Number of rows written per `INSERT` statement while populating `viewer_pages`. */
@@ -357,38 +359,44 @@ export async function buildViewerReadModel(
 		// query — `sourceRows` (loaded from `pages` only) has no anchor/link
 		// data. Runs once, here, instead of on every `/api/links?type=broken`
 		// request — see `computeAnchorFactRows`'s docs for the SQLite
-		// performance rationale.
-		const anchorFactRows = await computeAnchorFactRows(trx);
-		for (let start = 0; start < anchorFactRows.length; start += INSERT_CHUNK_SIZE) {
-			await trx('viewer_anchor_facts').insert(
-				anchorFactRows.slice(start, start + INSERT_CHUNK_SIZE),
-			);
-		}
-
-		// Derived in memory from the anchor-fact rows already computed above —
-		// no second `anchors` scan (see `deriveExternalLinkSummaryRows`'s docs).
-		const externalLinkRows = deriveExternalLinkSummaryRows(anchorFactRows);
-		for (let start = 0; start < externalLinkRows.length; start += INSERT_CHUNK_SIZE) {
-			await trx('viewer_external_links').insert(
-				externalLinkRows.slice(start, start + INSERT_CHUNK_SIZE),
-			);
+		// performance rationale, and for why it yields `source.id`-range
+		// chunks rather than every row at once (a large archive's `anchors`
+		// table can hold millions of edges — materialising them into one
+		// array risks the same OOM class PR #168 fixed for URL sorting).
+		// Each chunk's external-link summary is folded into
+		// `viewer_external_links` via `upsertExternalLinkRows`'s `ON CONFLICT`
+		// upsert, rather than accumulating a running per-destination tally in
+		// JS across the whole build — see `deriveExternalLinkSummaryRows`'s
+		// docs for why an earlier JS-side accumulator defeated this
+		// function's own OOM fix.
+		for await (const anchorFactChunk of computeAnchorFactRows(trx)) {
+			for (let start = 0; start < anchorFactChunk.length; start += INSERT_CHUNK_SIZE) {
+				await trx('viewer_anchor_facts').insert(
+					anchorFactChunk.slice(start, start + INSERT_CHUNK_SIZE),
+				);
+			}
+			await upsertExternalLinkRows(trx, deriveExternalLinkSummaryRows(anchorFactChunk));
 		}
 
 		// Independent of `pages`/`anchors` — reads `resources` +
-		// `resources-referrers` in one scan (see `computeResourceInsertRows`'s
-		// docs for the "one scan, two tables" pattern, the same technique as
+		// `resources-referrers` in bounded chunks (see
+		// `computeResourceInsertRows`'s docs for the "one scan, two tables"
+		// pattern and its chunking rationale, the same technique as
 		// `viewer_anchor_facts`/`viewer_external_links` above).
-		const { resources: resourceRows, stats: resourceStatsRows } =
-			await computeResourceInsertRows(trx);
-		for (let start = 0; start < resourceRows.length; start += INSERT_CHUNK_SIZE) {
-			await trx('viewer_resources').insert(
-				resourceRows.slice(start, start + INSERT_CHUNK_SIZE),
-			);
-		}
-		for (let start = 0; start < resourceStatsRows.length; start += INSERT_CHUNK_SIZE) {
-			await trx('viewer_resource_stats').insert(
-				resourceStatsRows.slice(start, start + INSERT_CHUNK_SIZE),
-			);
+		for await (const {
+			resources: resourceChunk,
+			stats: statsChunk,
+		} of computeResourceInsertRows(trx)) {
+			for (let start = 0; start < resourceChunk.length; start += INSERT_CHUNK_SIZE) {
+				await trx('viewer_resources').insert(
+					resourceChunk.slice(start, start + INSERT_CHUNK_SIZE),
+				);
+			}
+			for (let start = 0; start < statsChunk.length; start += INSERT_CHUNK_SIZE) {
+				await trx('viewer_resource_stats').insert(
+					statsChunk.slice(start, start + INSERT_CHUNK_SIZE),
+				);
+			}
 		}
 
 		const total = insertRows.length;
@@ -442,6 +450,14 @@ export async function buildViewerReadModel(
 			);
 		}
 		await trx('viewer_error_kind_meta').insert({ id: 1, ...errorKindRows.meta });
+
+		// Every table above is now fully populated — build every index in one
+		// pass instead of maintaining them incrementally during the inserts
+		// above. See `createViewerReadModelIndexes`'s docs for the measured
+		// cost of doing this the other way around (a 29-minute-plus
+		// `viewer_anchor_facts` load on an 11 GB archive dropped to well under
+		// 2 minutes once indexing moved here).
+		await createViewerReadModelIndexes(trx);
 
 		await trx('viewer_read_model_meta').insert({
 			id: 1,

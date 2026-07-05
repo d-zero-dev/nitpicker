@@ -1,11 +1,16 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 14 viewer-read-model tables (and `viewer_pages`'s named
- * indexes) against the given connection. Assumes none of the tables
- * currently exist — callers (`buildViewerReadModel`) are responsible for
- * dropping any prior version first, inside the same transaction, so this
- * function is not itself idempotent.
+ * Creates all 14 viewer-read-model tables against the given connection, with
+ * no indexes. Assumes none of the tables currently exist — callers
+ * (`buildViewerReadModel`) are responsible for dropping any prior version
+ * first, inside the same transaction, so this function is not itself
+ * idempotent.
+ *
+ * Indexes are deliberately NOT created here — see
+ * `createViewerReadModelIndexes`'s docs for why building them after each
+ * table's bulk load, rather than up front, is a large, measured win at real
+ * archive scale.
  *
  * Every statement runs via `raw()` rather than knex's chainable schema
  * builder: 8 of the 11 non-`viewer_summary` tables need `WITHOUT ROWID` / a
@@ -75,30 +80,6 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			path_sort_key text not null
 		)
 	`);
-	await trx.raw(
-		'CREATE INDEX vp_default ON viewer_pages(is_external, content_category, url_sort_key, page_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vp_status ON viewer_pages(is_external, content_category, status_sort_key, url_sort_key, page_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vp_status_desc ON viewer_pages(is_external, content_category, status_desc_key, url_sort_key, page_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vp_title ON viewer_pages(is_external, content_category, title_sort_key, url_sort_key, page_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vp_missing_title ON viewer_pages(is_external, content_category, has_title, url_sort_key, page_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vp_missing_description ON viewer_pages(is_external, content_category, has_description, url_sort_key, page_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vp_noindex ON viewer_pages(is_external, content_category, robots_noindex, url_sort_key, page_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vp_source ON viewer_pages(is_external, content_category, source, url_sort_key, page_id)',
-	);
 
 	await trx.raw(`
 		CREATE TABLE viewer_query_profiles (
@@ -154,23 +135,6 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			unique(root_key, path)
 		)
 	`);
-	// `getDirectoryTree` filters `depth <= 3` (a range, not an equality) and
-	// orders by `path_sort_key` alone (grouping into per-root_key buckets
-	// happens in JS afterward — see that function's docs). Leading the index
-	// with `path_sort_key` lets SQLite satisfy the `ORDER BY` via a plain
-	// ascending index scan with `depth` checked as a cheap residual filter,
-	// instead of falling back to `USE TEMP B-TREE FOR ORDER BY`. Leading with
-	// `root_key`/`depth` instead (as `docs/viewer-sql-query-plan.md`'s
-	// aspirational single-root-per-request index does) would not help here:
-	// a range condition on a non-leading column can't be used to avoid a sort
-	// on a column that comes after it — the same index-column-order pitfall
-	// `idx_pages_listfilter` hit (see ARCHITECTURE.md).
-	await trx.raw(
-		'CREATE INDEX vdn_path_depth ON viewer_directory_nodes(path_sort_key, depth, node_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vdn_parent_name ON viewer_directory_nodes(parent_node_id, name_sort_key, node_id)',
-	);
 
 	await trx.raw(`
 		CREATE TABLE viewer_directory_pages (
@@ -180,9 +144,6 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			primary key(node_id, page_id)
 		) WITHOUT ROWID
 	`);
-	await trx.raw(
-		'CREATE INDEX vdp_node_url ON viewer_directory_pages(node_id, page_url_sort_key, page_id)',
-	);
 
 	// Pre-aggregated, deduplicated-by-canonical-destination external link
 	// summary — derived in memory from `viewer_anchor_facts` rows (see
@@ -190,11 +151,7 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// scan, so building this table costs no extra JOIN over the one
 	// `computeAnchorFactRows` already does. See ARCHITECTURE.md「設計注意
 	// （viewer_anchor_facts read model、issue #114）」for the SQLite
-	// COUNT(DISTINCT)/GROUP BY performance rationale this sidesteps. No
-	// `_desc_key` columns like `viewer_pages` needs: pagination here is
-	// plain offset-based (via
-	// `paginateQuery`), not keyset-cursor, so a single ascending index
-	// scanned backward is enough for DESC.
+	// COUNT(DISTINCT)/GROUP BY performance rationale this sidesteps.
 	await trx.raw(`
 		CREATE TABLE viewer_external_links (
 			dest_page_id integer primary key,
@@ -203,13 +160,6 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			referrer_count integer not null
 		)
 	`);
-	await trx.raw('CREATE INDEX vel_url ON viewer_external_links(dest_url, dest_page_id)');
-	await trx.raw(
-		'CREATE INDEX vel_status ON viewer_external_links(status, dest_url, dest_page_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vel_referrer_count ON viewer_external_links(referrer_count, dest_url, dest_page_id)',
-	);
 
 	// Edge-level (one row per unique (source_page_id, dest_page_id) pair,
 	// with `count` absorbing duplicate anchor observations between the same
@@ -248,22 +198,6 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			is_external_link integer not null
 		)
 	`);
-	await trx.raw(
-		'CREATE INDEX vaf_broken_source ON viewer_anchor_facts(is_broken, source_url_sort_key, edge_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vaf_broken_dest ON viewer_anchor_facts(is_broken, dest_url_sort_key, edge_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vaf_broken_status ON viewer_anchor_facts(is_broken, status_sort_key, source_url_sort_key, edge_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vaf_broken_status_desc ON viewer_anchor_facts(is_broken, status_desc_key, source_url_sort_key, edge_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vaf_source ON viewer_anchor_facts(source_page_id, edge_id)',
-	);
-	await trx.raw('CREATE INDEX vaf_dest ON viewer_anchor_facts(dest_page_id, edge_id)');
 
 	// Precomputed `/api/error-kinds` breakdown (issue #118, reshaped after a
 	// `dev`-side breaking change normalized `getErrorKinds` to one row per
@@ -282,21 +216,6 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// shape that benefits from normalising them out. Deliberately has no
 	// `url_refs` FK for the same reason `viewer_anchor_facts`/`viewer_summary`
 	// don't (issue #139's ref-tables are not implemented).
-	//
-	// Indexing is intentionally minimal: unlike `viewer_pages`/
-	// `viewer_anchor_facts` (hundreds of thousands of rows), this table's
-	// cardinality is bounded by distinct(host)×distinct(kind) — realistically
-	// at most a few thousand rows even on a huge archive — so a full-table
-	// scan+sort for the `host`/`kind` text sorts is already sub-millisecond
-	// in SQLite. Only `count` (the default sort, most-failures-first) gets a
-	// dedicated index; add more if a real benchmark ever shows otherwise
-	// (see issue #106's evidence-before-indexing precedent). No separate
-	// `host_sort_key`/`kind_sort_key` columns either (unlike
-	// `viewer_pages.url_sort_key`): those exist elsewhere to isolate a future
-	// case-folding/normalisation change from the base column, but `host`/
-	// `kind` are never transformed anywhere in this codebase, so `ORDER BY
-	// host`/`ORDER BY kind` directly is exactly as correct and needs no
-	// extra columns to stay that way.
 	await trx.raw(`
 		CREATE TABLE viewer_error_kind_entries (
 			host text not null,
@@ -307,7 +226,6 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			primary key(host, kind)
 		) WITHOUT ROWID
 	`);
-	await trx.raw('CREATE INDEX vee_count ON viewer_error_kind_entries(count)');
 
 	// Single-row archive-wide totals (`ErrorKindsResult.facets`), unaffected
 	// by `host`/`kind` filters — the same single-row convention as
@@ -326,32 +244,15 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// reuse `viewer_pages`/`viewer_anchor_facts`'s `NULL_STATUS_SENTINEL`
 	// convention, and `url_sort_key` is the URL copied verbatim — same
 	// rationale as `viewer_pages.url_sort_key` (kept as its own column so a
-	// future normalisation change doesn't require renaming the index). Fast
-	// path listing only supports `sortBy` in `url`/`status` (resources) or
-	// `url`/`status`/`source` (unused-resources) — the remaining
-	// `ListResourcesOptions.sortBy` values (`statusText`/`contentType`/
-	// `isExternal`/`referrerCount`/`compress`/`cdn`) fall back to the legacy
-	// query rather than gaining dedicated indexes here, following #106's
-	// evidence-before-indexing precedent. No `content_category` column
-	// (unlike `viewer_pages`): neither `ListViewerResourcesOptions` nor
-	// `ListViewerUnusedResourcesOptions` filters on it — `ListResourcesOptions.
-	// contentType` is a raw MIME prefix the read model doesn't classify, and
-	// bails to legacy regardless (see `register-resources-route.ts`). `is_unused`
-	// is duplicated onto this table (rather than living only in
-	// `viewer_resource_stats`) because `/api/unused-resources` needs it as a
-	// pre-limit filter column, exactly like `viewer_anchor_facts.is_broken`.
-	//
-	// Both an `is_external`-prefixed AND a bare `url_sort_key`-first index
-	// exist for `url`/`status` order: `bench-viewer-resources-read-model.mjs`
-	// measured the unfiltered default view (no `isExternal` filter — the
-	// common case) falling back to `SCAN … | USE TEMP B-TREE FOR ORDER BY`
-	// with only the `is_external`-prefixed indexes present (400k-row archive:
-	// 29.5ms fast path vs 26.3ms legacy — a regression, not an improvement),
-	// because a composite index whose leading column is unconstrained can't
-	// satisfy an `ORDER BY` on a later column without an extra sort step. The
-	// `_order`-suffixed indexes below (no `is_external` prefix) give the
-	// unfiltered case a direct index-order scan; the planner still picks the
-	// `is_external`-prefixed index when that filter IS supplied.
+	// future normalisation change doesn't require renaming the index). No
+	// `content_category` column (unlike `viewer_pages`): neither
+	// `ListViewerResourcesOptions` nor `ListViewerUnusedResourcesOptions`
+	// filters on it — `ListResourcesOptions.contentType` is a raw MIME prefix
+	// the read model doesn't classify, and bails to legacy regardless (see
+	// `register-resources-route.ts`). `is_unused` is duplicated onto this
+	// table (rather than living only in `viewer_resource_stats`) because
+	// `/api/unused-resources` needs it as a pre-limit filter column, exactly
+	// like `viewer_anchor_facts.is_broken`.
 	await trx.raw(`
 		CREATE TABLE viewer_resources (
 			resource_id integer primary key,
@@ -364,36 +265,6 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			url_sort_key text not null
 		)
 	`);
-	await trx.raw(
-		'CREATE INDEX vr_default ON viewer_resources(is_external, url_sort_key, resource_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vr_url_order ON viewer_resources(url_sort_key, resource_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vr_status ON viewer_resources(is_external, status_sort_key, url_sort_key, resource_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vr_status_desc ON viewer_resources(is_external, status_desc_key, url_sort_key, resource_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vr_status_order ON viewer_resources(status_sort_key, url_sort_key, resource_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vr_status_desc_order ON viewer_resources(status_desc_key, url_sort_key, resource_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vr_unused ON viewer_resources(is_unused, url_sort_key, resource_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vr_unused_status ON viewer_resources(is_unused, status_sort_key, url_sort_key, resource_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vr_unused_status_desc ON viewer_resources(is_unused, status_desc_key, url_sort_key, resource_id)',
-	);
-	await trx.raw(
-		'CREATE INDEX vr_unused_source ON viewer_resources(is_unused, source, url_sort_key, resource_id)',
-	);
 
 	// Split from `viewer_resources` (rather than a `referrer_count` column on
 	// it) to match issue #110's TO-BE table naming verbatim. No dedicated

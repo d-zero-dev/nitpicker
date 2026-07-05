@@ -30,11 +30,11 @@ describe('createViewerReadModelTables', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('creates all 14 tables and the named viewer_pages indexes', async () => {
+	it('creates all 14 tables with no indexes yet (see createViewerReadModelIndexes)', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 
-		for (const table of [
+		const tables = [
 			'viewer_read_model_meta',
 			'viewer_summary',
 			'viewer_pages',
@@ -49,75 +49,19 @@ describe('createViewerReadModelTables', () => {
 			'viewer_error_kind_meta',
 			'viewer_resources',
 			'viewer_resource_stats',
-		]) {
+		];
+		for (const table of tables) {
 			expect(await knex.schema.hasTable(table)).toBe(true);
 		}
 
-		const indexRows: Array<{ name: string }> = await knex('sqlite_master')
-			.where({ type: 'index', tbl_name: 'viewer_pages' })
-			.select('name');
-		const indexNames = new Set(indexRows.map((r) => r.name));
-		for (const indexName of [
-			'vp_default',
-			'vp_status',
-			'vp_status_desc',
-			'vp_title',
-			'vp_missing_title',
-			'vp_missing_description',
-			'vp_noindex',
-			'vp_source',
-		]) {
-			expect(indexNames.has(indexName)).toBe(true);
-		}
-
-		const externalLinkIndexRows: Array<{ name: string }> = await knex('sqlite_master')
-			.where({ type: 'index', tbl_name: 'viewer_external_links' })
-			.select('name');
-		const externalLinkIndexNames = new Set(externalLinkIndexRows.map((r) => r.name));
-		for (const indexName of ['vel_url', 'vel_status', 'vel_referrer_count']) {
-			expect(externalLinkIndexNames.has(indexName)).toBe(true);
-		}
-
-		const anchorFactIndexRows: Array<{ name: string }> = await knex('sqlite_master')
-			.where({ type: 'index', tbl_name: 'viewer_anchor_facts' })
-			.select('name');
-		const anchorFactIndexNames = new Set(anchorFactIndexRows.map((r) => r.name));
-		for (const indexName of [
-			'vaf_broken_source',
-			'vaf_broken_dest',
-			'vaf_broken_status',
-			'vaf_broken_status_desc',
-			'vaf_source',
-			'vaf_dest',
-		]) {
-			expect(anchorFactIndexNames.has(indexName)).toBe(true);
-		}
-
-		const errorKindEntryIndexRows: Array<{ name: string }> = await knex('sqlite_master')
-			.where({ type: 'index', tbl_name: 'viewer_error_kind_entries' })
-			.select('name');
-		expect(new Set(errorKindEntryIndexRows.map((r) => r.name)).has('vee_count')).toBe(
-			true,
-		);
-
-		const resourceIndexRows: Array<{ name: string }> = await knex('sqlite_master')
-			.where({ type: 'index', tbl_name: 'viewer_resources' })
-			.select('name');
-		const resourceIndexNames = new Set(resourceIndexRows.map((r) => r.name));
-		for (const indexName of [
-			'vr_default',
-			'vr_url_order',
-			'vr_status',
-			'vr_status_desc',
-			'vr_status_order',
-			'vr_status_desc_order',
-			'vr_unused',
-			'vr_unused_status',
-			'vr_unused_status_desc',
-			'vr_unused_source',
-		]) {
-			expect(resourceIndexNames.has(indexName)).toBe(true);
-		}
+		const indexRows: Array<{ name: string; tbl_name: string }> = await knex(
+			'sqlite_master',
+		)
+			.where('type', 'index')
+			.whereIn('tbl_name', tables)
+			.andWhere('name', 'not like', 'sqlite_autoindex_%')
+			.select('name', 'tbl_name');
+		expect(indexRows).toEqual([]);
 	});
 
 	it('viewer_query_profiles enforces a composite (scope, profile_key) key, not a single-column rowid', async () => {

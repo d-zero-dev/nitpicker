@@ -1,3 +1,6 @@
+import type { ResourceInsertRows } from './types.js';
+import type { Knex } from 'knex';
+
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -5,6 +8,26 @@ import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { computeResourceInsertRows } from './compute-resource-rows.js';
+
+/**
+ * Drains {@link computeResourceInsertRows}'s chunks into a single
+ * `ResourceInsertRows`, for tests that only care about the full result.
+ * @param trx - An open Knex transaction.
+ * @param chunkSize - Forwarded to {@link computeResourceInsertRows}.
+ * @returns All chunks' `resources`/`stats` rows, concatenated in read order.
+ */
+async function collectResourceInsertRows(
+	trx: Knex,
+	chunkSize?: number,
+): Promise<ResourceInsertRows> {
+	const resources: ResourceInsertRows['resources'] = [];
+	const stats: ResourceInsertRows['stats'] = [];
+	for await (const chunk of computeResourceInsertRows(trx, chunkSize)) {
+		resources.push(...chunk.resources);
+		stats.push(...chunk.stats);
+	}
+	return { resources, stats };
+}
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -188,7 +211,7 @@ describe('computeResourceInsertRows', () => {
 	it('computes referrer_count from resources-referrers, deduplicated by page', async () => {
 		const knex = archive.getKnex();
 		const { resources, stats } = await knex.transaction((trx) =>
-			computeResourceInsertRows(trx),
+			collectResourceInsertRows(trx),
 		);
 		const shared = resources.find(
 			(row) => row.url_sort_key === 'https://example.com/shared.css',
@@ -199,7 +222,7 @@ describe('computeResourceInsertRows', () => {
 
 	it('flags an internal, unreferenced resource as unused', async () => {
 		const knex = archive.getKnex();
-		const { resources } = await knex.transaction((trx) => computeResourceInsertRows(trx));
+		const { resources } = await knex.transaction((trx) => collectResourceInsertRows(trx));
 		const orphan = resources.find(
 			(row) => row.url_sort_key === 'https://example.com/orphan.pdf',
 		);
@@ -208,7 +231,7 @@ describe('computeResourceInsertRows', () => {
 
 	it('never flags an external resource as unused, even with zero referrers', async () => {
 		const knex = archive.getKnex();
-		const { resources } = await knex.transaction((trx) => computeResourceInsertRows(trx));
+		const { resources } = await knex.transaction((trx) => collectResourceInsertRows(trx));
 		const external = resources.find(
 			(row) => row.url_sort_key === 'https://cdn.example.net/external.js',
 		);
@@ -217,7 +240,7 @@ describe('computeResourceInsertRows', () => {
 
 	it('does not flag a referenced resource as unused', async () => {
 		const knex = archive.getKnex();
-		const { resources } = await knex.transaction((trx) => computeResourceInsertRows(trx));
+		const { resources } = await knex.transaction((trx) => collectResourceInsertRows(trx));
 		const shared = resources.find(
 			(row) => row.url_sort_key === 'https://example.com/shared.css',
 		);
@@ -226,7 +249,7 @@ describe('computeResourceInsertRows', () => {
 
 	it('substitutes NULL_STATUS_SENTINEL for a null status and negates it for status_desc_key', async () => {
 		const knex = archive.getKnex();
-		const { resources } = await knex.transaction((trx) => computeResourceInsertRows(trx));
+		const { resources } = await knex.transaction((trx) => collectResourceInsertRows(trx));
 		const timedOut = resources.find(
 			(row) => row.url_sort_key === 'https://example.com/timed-out.gif',
 		)!;
@@ -238,9 +261,32 @@ describe('computeResourceInsertRows', () => {
 	it('produces one viewer_resources row and one viewer_resource_stats row per resource', async () => {
 		const knex = archive.getKnex();
 		const { resources, stats } = await knex.transaction((trx) =>
-			computeResourceInsertRows(trx),
+			collectResourceInsertRows(trx),
 		);
 		expect(resources).toHaveLength(4);
 		expect(stats).toHaveLength(4);
+	});
+
+	it('reads across multiple chunkSize-bounded chunks without losing or duplicating rows', async () => {
+		const knex = archive.getKnex();
+		const baseline = await knex.transaction((trx) => collectResourceInsertRows(trx));
+		// chunkSize=1 forces every one of the 4 fixture resources into its own
+		// chunk — the strongest exercise of the keyset cursor short of an
+		// empty chunkSize.
+		const chunked = await knex.transaction((trx) => collectResourceInsertRows(trx, 1));
+		const byResourceId = (rows: { resource_id: number }[]) =>
+			rows.toSorted((a, b) => a.resource_id - b.resource_id);
+		expect(byResourceId(chunked.resources)).toEqual(byResourceId(baseline.resources));
+		expect(byResourceId(chunked.stats)).toEqual(byResourceId(baseline.stats));
+	});
+
+	it('throws on a non-positive chunkSize instead of silently yielding nothing or looping forever', async () => {
+		const knex = archive.getKnex();
+		await expect(
+			knex.transaction((trx) => collectResourceInsertRows(trx, 0)),
+		).rejects.toThrow(RangeError);
+		await expect(
+			knex.transaction((trx) => collectResourceInsertRows(trx, -1)),
+		).rejects.toThrow(RangeError);
 	});
 });
