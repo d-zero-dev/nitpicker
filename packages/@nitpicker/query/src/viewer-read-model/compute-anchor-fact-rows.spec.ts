@@ -1,3 +1,6 @@
+import type { AnchorFactInsertRow } from './types.js';
+import type { Knex } from 'knex';
+
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -5,6 +8,24 @@ import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
+
+/**
+ * Drains {@link computeAnchorFactRows}'s `source.id`-range chunks into a
+ * single flat array, for tests that only care about the full result.
+ * @param trx - An open Knex transaction.
+ * @param chunkSize - Forwarded to {@link computeAnchorFactRows}.
+ * @returns All chunks' rows, concatenated in range order.
+ */
+async function collectAnchorFactRows(
+	trx: Knex,
+	chunkSize?: number,
+): Promise<AnchorFactInsertRow[]> {
+	const rows: AnchorFactInsertRow[] = [];
+	for await (const chunk of computeAnchorFactRows(trx, chunkSize)) {
+		rows.push(...chunk);
+	}
+	return rows;
+}
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -212,7 +233,7 @@ describe('computeAnchorFactRows', () => {
 
 	it('collapses duplicate anchors between the same (source,dest) pair into one row with count', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => computeAnchorFactRows(trx));
+		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
 		const broken = rows.find(
 			(row) => row.dest_url_sort_key === 'https://example.com/broken',
 		);
@@ -221,7 +242,7 @@ describe('computeAnchorFactRows', () => {
 
 	it('flags only 404 destinations as broken, not 403 or 5xx', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => computeAnchorFactRows(trx));
+		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
 		const forbidden = rows.find(
 			(row) => row.dest_url_sort_key === 'https://example.com/forbidden',
 		);
@@ -234,14 +255,14 @@ describe('computeAnchorFactRows', () => {
 
 	it('flags external destinations via is_external_link, not is_broken', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => computeAnchorFactRows(trx));
+		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
 		const ads = rows.find((row) => row.dest_url_sort_key === 'https://ads.example.com');
 		expect(ads).toMatchObject({ count: 1, is_broken: 0, is_external_link: 1 });
 	});
 
 	it('substitutes NULL_STATUS_SENTINEL only when status is null, never a real status', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => computeAnchorFactRows(trx));
+		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
 		const broken = rows.find(
 			(row) => row.dest_url_sort_key === 'https://example.com/broken',
 		)!;
@@ -250,7 +271,7 @@ describe('computeAnchorFactRows', () => {
 
 	it('sets status_desc_key to the negation of status_sort_key', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => computeAnchorFactRows(trx));
+		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
 		const broken = rows.find(
 			(row) => row.dest_url_sort_key === 'https://example.com/broken',
 		)!;
@@ -376,7 +397,7 @@ describe('computeAnchorFactRows — redirect resolution', () => {
 
 	it('collapses a redirect-source anchor and a direct anchor onto the same canonical dest_page_id, judged broken via the canonical status', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => computeAnchorFactRows(trx));
+		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
 		const targetRows = rows.filter(
 			(row) => row.dest_url_sort_key === 'https://example.com/canonical-target',
 		);
@@ -506,7 +527,7 @@ describe('computeAnchorFactRows — redirect resolution to an external destinati
 
 	it('collapses a redirect-source anchor and a direct anchor onto the same external canonical dest_page_id, flagged external via the canonical page', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => computeAnchorFactRows(trx));
+		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
 		const targetRows = rows.filter(
 			(row) => row.dest_url_sort_key === 'https://external.example.com/target',
 		);
@@ -520,5 +541,118 @@ describe('computeAnchorFactRows — redirect resolution to an external destinati
 				count: 1,
 			});
 		}
+	});
+});
+
+/**
+ * Exercises the `source.id`-range chunking itself: a single page with
+ * several distinct destinations must never have its `(source_page_id,
+ * dest_page_id)` groups split or dropped across chunk boundaries. This is
+ * the property a naive `ORDER BY source.id LIMIT n` keyset cursor (as used
+ * for `computeResourceInsertRows`, where it's safe) would violate for this
+ * function's compound `GROUP BY` — see `compute-anchor-fact-rows.ts`'s docs.
+ */
+describe('computeAnchorFactRows — chunking', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_compute_anchor_fact_rows_chunking__',
+	);
+	let archive: InstanceType<typeof Archive>;
+	const archiveFilePath = path.resolve(
+		workingDir,
+		'compute-anchor-fact-rows-chunking-test.nitpicker',
+	);
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		// One page linking to 3 distinct destinations — under chunkSize=1
+		// (one source.id per range) this page's 3 groups must all surface
+		// from the single range query that covers it, not get truncated.
+		await archive.setPage({
+			url: parseUrl('https://example.com/hub')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: { ...META, title: 'Hub' },
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/dest-1')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Dest 1',
+				},
+				{
+					href: parseUrl('https://example.com/dest-2')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Dest 2',
+				},
+				{
+					href: parseUrl('https://example.com/dest-3')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Dest 3',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		for (const slug of ['dest-1', 'dest-2', 'dest-3']) {
+			await archive.setPage({
+				url: parseUrl(`https://example.com/${slug}`)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('keeps all destination groups for one source page together even with chunkSize=1', async () => {
+		const knex = archive.getKnex();
+		const baseline = await knex.transaction((trx) => collectAnchorFactRows(trx));
+		const chunked = await knex.transaction((trx) => collectAnchorFactRows(trx, 1));
+		const byDest = (rows: AnchorFactInsertRow[]) =>
+			rows.toSorted((a, b) => a.dest_page_id - b.dest_page_id);
+		expect(byDest(chunked)).toEqual(byDest(baseline));
+		expect(chunked).toHaveLength(3);
+	});
+
+	it('throws on a non-positive chunkSize instead of hanging forever', async () => {
+		const knex = archive.getKnex();
+		await expect(
+			knex.transaction((trx) => collectAnchorFactRows(trx, 0)),
+		).rejects.toThrow(RangeError);
+		await expect(
+			knex.transaction((trx) => collectAnchorFactRows(trx, -1)),
+		).rejects.toThrow(RangeError);
 	});
 });
