@@ -160,4 +160,42 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	await trx.raw(
 		'CREATE INDEX vr_unused_source ON viewer_resources(is_unused, source, url_sort_key, resource_id)',
 	);
+
+	// Image-list read model (issue #113). `vi_default` serves the unfiltered
+	// default (`sortBy: 'pageUrl'`) view; `vi_missing_alt`/
+	// `vi_missing_dimensions` serve that same default order once one of the
+	// two boolean filters is applied — unlike `viewer_resources`'s
+	// `is_external`, neither filter is ever the table's implicit default
+	// predicate, so (following #110's "bare AND prefixed" lesson) a
+	// filtered request still needs its own prefixed index rather than
+	// falling back to a full-table scan of the bare `vi_default` index.
+	// `vi_width`/`vi_height`/`vi_natural_width`/`vi_natural_height`/
+	// `vi_is_lazy` serve the five non-default `sortBy` values the fast path
+	// also supports (see `getViewerImagesSortSpec`) — bare, single-column
+	// indexes only, no `missing_alt`/`missing_dimensions`-prefixed variants
+	// for them: these are less-common sort choices than the page-order
+	// default, and #106/#118's evidence-before-indexing precedent argues
+	// against pre-building every filter×sort combination without a
+	// measured need. `oversizedThreshold` deliberately gets NO dedicated
+	// index at all (see `applyViewerImagesFilters`'s docs) — an arbitrary
+	// runtime threshold over `natural_width`/`natural_height` can't be
+	// served by a fixed-value index, and a covering index over a column pair
+	// used only for occasional inequality filters is exactly the "wide
+	// covering index" issue #113 asks to avoid.
+	await trx.raw('CREATE INDEX vi_default ON viewer_images(page_url_rank, image_id)');
+	await trx.raw(
+		'CREATE INDEX vi_missing_alt ON viewer_images(missing_alt, page_url_rank, image_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vi_missing_dimensions ON viewer_images(missing_dimensions, page_url_rank, image_id)',
+	);
+	await trx.raw('CREATE INDEX vi_width ON viewer_images(width, image_id)');
+	await trx.raw('CREATE INDEX vi_height ON viewer_images(height, image_id)');
+	await trx.raw(
+		'CREATE INDEX vi_natural_width ON viewer_images(natural_width, image_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vi_natural_height ON viewer_images(natural_height, image_id)',
+	);
+	await trx.raw('CREATE INDEX vi_is_lazy ON viewer_images(is_lazy, image_id)');
 }

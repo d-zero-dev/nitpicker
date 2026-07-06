@@ -331,3 +331,45 @@ export interface ResourceInsertRows {
 	/** Rows for `viewer_resource_stats`. */
 	stats: ResourceStatsInsertRow[];
 }
+
+/**
+ * One row to insert into `viewer_images` (issue #113) — one row per
+ * `images` row, produced by `computeImageInsertRows`. Deliberately excludes
+ * `src`/`currentSrc`/`alt`/`sourceCode`: those large text columns are never
+ * duplicated onto the read model, and are resolved by joining back to
+ * `images`/`pages` only after the id set is limit-bounded (see
+ * `joinViewerImageIdsToListItems`).
+ */
+export interface ImageInsertRow {
+	/** `images.id`. */
+	image_id: number;
+	/**
+	 * Dense, zero-based rank of `images.pageId` in
+	 * `viewer_pages.url_sort_key` ascending order — see
+	 * `buildPageUrlRankMap`'s docs for why this small integer surrogate
+	 * replaces inlining the page URL text itself. `images.pageId` is not
+	 * itself stored as a column here: no query joins `viewer_images` back to
+	 * `pages` by page (display joins go through `image_id` instead), so
+	 * keeping only its derived rank avoids an otherwise-unread integer
+	 * column across ~9.11M rows.
+	 */
+	page_url_rank: number;
+	/** `1` iff `images.alt` is `null` or `''`. */
+	missing_alt: number;
+	/** `1` iff `images.width` or `images.height` is `0`. */
+	missing_dimensions: number;
+	/** `images.width`, verbatim. */
+	width: number;
+	/** `images.height`, verbatim. */
+	height: number;
+	/** `images.naturalWidth`, verbatim. */
+	natural_width: number;
+	/** `images.naturalHeight`, verbatim. */
+	natural_height: number;
+	/**
+	 * Normalised `0`/`1` form of `images.isLazy` — coerced the same way
+	 * `listImages`'s `mapRow` does (`!!row.isLazy`), so a `null` source value
+	 * becomes `0` rather than requiring a nullable sort column.
+	 */
+	is_lazy: number;
+}

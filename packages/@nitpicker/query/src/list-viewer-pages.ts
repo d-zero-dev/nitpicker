@@ -14,6 +14,7 @@ import { applyViewerPagesFilters } from './apply-viewer-pages-filters.js';
 import { countViewerPagesTotal } from './count-viewer-pages-total.js';
 import { joinViewerPageIdsToListItems } from './join-viewer-page-ids-to-list-items.js';
 import { readViewerPageFacets } from './read-viewer-page-facets.js';
+import { readKeysetWindow } from './viewer-cursor-kit/read-keyset-window.js';
 import { buildViewerPagesFilterKey } from './viewer-pages-cursor/build-viewer-pages-filter-key.js';
 import { decodeViewerPagesCursor } from './viewer-pages-cursor/decode-viewer-pages-cursor.js';
 import { encodeViewerPagesCursor } from './viewer-pages-cursor/encode-viewer-pages-cursor.js';
@@ -22,33 +23,11 @@ import { getViewerPagesSortSpec } from './viewer-pages-cursor/get-viewer-pages-s
 import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model/viewer-read-model-schema-version.js';
 
 /**
- * Adds a keyset comparison tuple as a `WHERE` predicate — `(col1, col2, …)
- * {>|<} (?, ?, …)` — using SQLite's row-value comparison. Column names come
- * from the fixed {@link ViewerPagesSortSpec} column set, never from request
- * input, so interpolating them into the SQL text (rather than parameter
- * binding, which only covers values) carries no injection risk.
- * @param qb - The query builder to constrain.
- * @param columns - The keyset tuple columns, in comparison order.
- * @param operator - `'>'` for a forward (ascending-tuple) seek, `'<'` for a
- *   backward one.
- * @param values - The boundary row's tuple values, in `columns` order.
- */
-function applyKeysetPredicate(
-	qb: Knex.QueryBuilder,
-	columns: readonly string[],
-	operator: '>' | '<',
-	values: readonly (string | number)[],
-): void {
-	const columnList = columns.join(', ');
-	const placeholders = columns.map(() => '?').join(', ');
-	qb.whereRaw(`(${columnList}) ${operator} (${placeholders})`, [...values]);
-}
-
-/**
- * Runs one `viewer_pages` id-resolution read: applies filters, an optional
- * keyset predicate, an `ORDER BY` in `orderDirection`, and `limit + 1` rows
- * (the `+1` lets the caller detect "is there another row past this page"
- * without a second query).
+ * Runs one `viewer_pages` id-resolution read via the shared
+ * {@link readKeysetWindow}: applies filters, an optional keyset predicate,
+ * an `ORDER BY` in `orderDirection`, and `limit + 1` rows (the `+1` lets the
+ * caller detect "is there another row past this page" without a second
+ * query).
  * @param knex - The archive's Knex instance.
  * @param options - The caller's filter options.
  * @param spec - The resolved sort spec (columns to select/order by).
@@ -56,8 +35,6 @@ function applyKeysetPredicate(
  * @param limit - The page size (the read fetches `limit + 1` rows).
  * @param keyset - The keyset predicate to apply, or `undefined` for an
  *   unconstrained (initial / offset) read.
- * @param keyset.operator - `'>'` or `'<'`, per {@link applyKeysetPredicate}.
- * @param keyset.values - The boundary row's tuple values.
  * @param offset - Row offset for a direct `OFFSET` read (page-number jumps).
  *   Ignored when `keyset` is supplied.
  * @returns Up to `limit + 1` rows carrying `page_id` and every sort column.
@@ -71,20 +48,17 @@ async function readViewerPagesWindow(
 	keyset: { operator: '>' | '<'; values: readonly (string | number)[] } | undefined,
 	offset: number,
 ): Promise<ViewerPagesKeysetRow[]> {
-	const qb = knex('viewer_pages');
-	applyViewerPagesFilters(qb, options);
-	if (keyset) {
-		applyKeysetPredicate(qb, spec.columns, keyset.operator, keyset.values);
-	}
-	const selectColumns = [...new Set<string>(['page_id', ...spec.columns])];
-	let query = qb
-		.select(selectColumns)
-		.orderBy(spec.columns.map((column) => ({ column, order: orderDirection })))
-		.limit(limit + 1);
-	if (!keyset && offset > 0) {
-		query = query.offset(offset);
-	}
-	return query;
+	return readKeysetWindow(
+		knex,
+		'viewer_pages',
+		(qb) => applyViewerPagesFilters(qb, options),
+		['page_id'],
+		spec,
+		orderDirection,
+		limit,
+		keyset,
+		offset,
+	);
 }
 
 /**

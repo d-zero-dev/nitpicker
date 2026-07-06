@@ -15,34 +15,8 @@ import { decodeAnchorFactsCursor } from './viewer-anchor-facts-cursor/decode-anc
 import { encodeAnchorFactsCursor } from './viewer-anchor-facts-cursor/encode-anchor-facts-cursor.js';
 import { extractAnchorFactsSortValues } from './viewer-anchor-facts-cursor/extract-anchor-facts-sort-values.js';
 import { getAnchorFactsSortSpec } from './viewer-anchor-facts-cursor/get-anchor-facts-sort-spec.js';
+import { readKeysetWindow } from './viewer-cursor-kit/read-keyset-window.js';
 import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model/viewer-read-model-schema-version.js';
-
-/**
- * Adds a keyset comparison tuple as a `WHERE` predicate — `(col1, col2, …)
- * {>|<} (?, ?, …)` — using SQLite's row-value comparison. Column names come
- * from the fixed {@link AnchorFactsSortSpec} column set, never from request
- * input, so interpolating them into the SQL text (rather than parameter
- * binding, which only covers values) carries no injection risk. Mirrors
- * `list-viewer-pages.ts`'s identical helper — not shared as a common module
- * since the two existing keyset-cursor implementations in this package have
- * never been generalised into one, matching `list-directory-pages.ts`'s
- * independent, table-specific cursor scheme.
- * @param qb - The query builder to constrain.
- * @param columns - The keyset tuple columns, in comparison order.
- * @param operator - `'>'` for a forward (ascending-tuple) seek, `'<'` for a
- *   backward one.
- * @param values - The boundary row's tuple values, in `columns` order.
- */
-function applyKeysetPredicate(
-	qb: Knex.QueryBuilder,
-	columns: readonly string[],
-	operator: '>' | '<',
-	values: readonly (string | number)[],
-): void {
-	const columnList = columns.join(', ');
-	const placeholders = columns.map(() => '?').join(', ');
-	qb.whereRaw(`(${columnList}) ${operator} (${placeholders})`, [...values]);
-}
 
 /**
  * Applies the (currently sole) filter — `status` — on top of the fixed
@@ -77,13 +51,15 @@ async function countAnchorFactsTotal(
 }
 
 /**
- * Runs one `viewer_anchor_facts` read: applies filters, an optional keyset
- * predicate, an `ORDER BY` in `orderDirection`, and `limit + 1` rows (the
- * `+1` lets the caller detect "is there another row past this page"
- * without a second query). Unlike `list-viewer-pages.ts`'s equivalent, no
- * id-then-join step follows: `source_url_sort_key`/`dest_url_sort_key`/
- * `status` are already the exact display values, so this window read IS
- * the final row set.
+ * Runs one `viewer_anchor_facts` read via the shared {@link readKeysetWindow}:
+ * applies filters, an optional keyset predicate, an `ORDER BY` in
+ * `orderDirection`, and `limit + 1` rows (the `+1` lets the caller detect
+ * "is there another row past this page" without a second query). Unlike
+ * `list-viewer-pages.ts`'s equivalent, no id-then-join step follows:
+ * `source_url_sort_key`/`dest_url_sort_key`/`status` are already the exact
+ * display values, so this window read IS the final row set — reflected here
+ * as a wider `extraSelectColumns` list (the full display column set)
+ * instead of just an id column.
  * @param knex - The archive's Knex instance.
  * @param options - The caller's filter options.
  * @param spec - The resolved sort spec (columns to select/order by).
@@ -91,8 +67,6 @@ async function countAnchorFactsTotal(
  * @param limit - The page size (the read fetches `limit + 1` rows).
  * @param keyset - The keyset predicate to apply, or `undefined` for an
  *   unconstrained (initial / offset) read.
- * @param keyset.operator - `'>'` or `'<'`, per {@link applyKeysetPredicate}.
- * @param keyset.values - The boundary row's tuple values.
  * @param offset - Row offset for a direct `OFFSET` read (page-number jumps).
  *   Ignored when `keyset` is supplied.
  * @returns Up to `limit + 1` rows.
@@ -113,13 +87,11 @@ async function readAnchorFactsWindow(
 		is_external_link: number;
 	})[]
 > {
-	const qb = knex('viewer_anchor_facts');
-	applyBrokenLinksFilters(qb, options);
-	if (keyset) {
-		applyKeysetPredicate(qb, spec.columns, keyset.operator, keyset.values);
-	}
-	const selectColumns = [
-		...new Set<string>([
+	return readKeysetWindow(
+		knex,
+		'viewer_anchor_facts',
+		(qb) => applyBrokenLinksFilters(qb, options),
+		[
 			'edge_id',
 			'source_url_sort_key',
 			'dest_url_sort_key',
@@ -127,17 +99,13 @@ async function readAnchorFactsWindow(
 			'status_sort_key',
 			'status_desc_key',
 			'is_external_link',
-			...spec.columns,
-		]),
-	];
-	let query = qb
-		.select(selectColumns)
-		.orderBy(spec.columns.map((column) => ({ column, order: orderDirection })))
-		.limit(limit + 1);
-	if (!keyset && offset > 0) {
-		query = query.offset(offset);
-	}
-	return query;
+		],
+		spec,
+		orderDirection,
+		limit,
+		keyset,
+		offset,
+	);
 }
 
 /**

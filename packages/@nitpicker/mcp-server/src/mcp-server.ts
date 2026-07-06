@@ -11,6 +11,7 @@ import {
 	countPagesByTag,
 	findDuplicates,
 	findMismatches,
+	getImagesFastPath,
 	getIsolatedCluster,
 	getPageDetail,
 	getPageHtml,
@@ -21,7 +22,6 @@ import {
 	getSummaryFastPath,
 	getTagInventory,
 	getViolations,
-	listImages,
 	listIsolatedClusters,
 	listIsolatedPages,
 	listLinks,
@@ -278,7 +278,7 @@ export function createServer() {
 					}
 					case 'list_images': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						return jsonResult(await listImages(accessor, omit(args, 'archiveId')));
+						return jsonResult(await getImagesFastPath(accessor, omit(args, 'archiveId')));
 					}
 					case 'get_violations': {
 						const accessor = manager.get(requireString(args, 'archiveId'));

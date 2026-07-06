@@ -7,8 +7,10 @@ import { getErrorKinds } from '../get-error-kinds.js';
 import { getSummary } from '../get-summary.js';
 
 import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
+import { buildPageUrlRankMap } from './build-page-url-rank-map.js';
 import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
 import { computeErrorKindInsertRows } from './compute-error-kind-insert-rows.js';
+import { computeImageInsertRows } from './compute-image-insert-rows.js';
 import { computePageFacetBuckets } from './compute-page-facet-buckets.js';
 import { computeResourceInsertRows } from './compute-resource-rows.js';
 import { createViewerReadModelIndexes } from './create-viewer-read-model-indexes.js';
@@ -202,7 +204,12 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
  * `viewer_resources`/`viewer_resource_stats` from a single
  * `resources`/`resources-referrers` aggregation query (see
  * `computeResourceInsertRows` — issue #110, independent of `pages`/`anchors`
- * so its position in this function has no ordering constraint), seeds one
+ * so its position in this function has no ordering constraint), populates
+ * `viewer_images` from a chunked `images` scan annotated with a page-order
+ * rank derived from `sourceRows` (see `computeImageInsertRows`/
+ * `buildPageUrlRankMap` — issue #113, must run after `sourceRows` is loaded
+ * but is otherwise independent of the anchor/resource population above),
+ * seeds one
  * smoke-test row into `viewer_query_profiles`, writes the
  * `viewer_count_buckets` totals row plus one row per distinct Pages-list
  * facet value (see `computePageFacetBuckets`), writes the pre-computed
@@ -395,6 +402,24 @@ export async function buildViewerReadModel(
 			for (let start = 0; start < statsChunk.length; start += INSERT_CHUNK_SIZE) {
 				await trx('viewer_resource_stats').insert(
 					statsChunk.slice(start, start + INSERT_CHUNK_SIZE),
+				);
+			}
+		}
+
+		// Image-list read model (issue #113). `pageUrlRankById` reuses
+		// `sourceRows` (already loaded above for `viewer_pages`) rather than a
+		// second `pages` query — see `buildPageUrlRankMap`'s docs for why a
+		// small integer surrogate, not the page URL text itself, is what
+		// `viewer_images` inlines for its page-order sort. `images` is this
+		// codebase's single largest write-model table, so — unlike
+		// `viewer_pages`'s `sourceRows` — it is read in bounded chunks (see
+		// `computeImageInsertRows`'s docs), the same OOM-avoidance pattern as
+		// `viewer_anchor_facts`/`viewer_resources` above.
+		const pageUrlRankById = buildPageUrlRankMap(sourceRows);
+		for await (const imageChunk of computeImageInsertRows(trx, pageUrlRankById)) {
+			for (let start = 0; start < imageChunk.length; start += INSERT_CHUNK_SIZE) {
+				await trx('viewer_images').insert(
+					imageChunk.slice(start, start + INSERT_CHUNK_SIZE),
 				);
 			}
 		}

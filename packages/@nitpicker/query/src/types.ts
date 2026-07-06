@@ -1482,9 +1482,18 @@ export interface ResourceReferrerResult {
  * Filter options for listing images.
  */
 export interface ListImagesOptions {
-	/** Filter to images missing alt attribute. */
+	/**
+	 * Tri-state filter on alt-text presence: `true` restricts to images
+	 * missing alt text, `false` restricts to images that have it, `undefined`
+	 * applies no filter — matching `ListResourcesOptions.isExternal`'s
+	 * `!= null` convention rather than treating `false` as a no-op.
+	 */
 	missingAlt?: boolean;
-	/** Filter to images missing explicit width/height attributes. */
+	/**
+	 * Tri-state filter on explicit width/height presence — see
+	 * {@link ListImagesOptions.missingAlt} for the `true`/`false`/`undefined`
+	 * convention.
+	 */
 	missingDimensions?: boolean;
 	/** Filter to images with naturalWidth or naturalHeight exceeding this threshold. */
 	oversizedThreshold?: number;
@@ -1506,6 +1515,20 @@ export interface ListImagesOptions {
 	limit?: number;
 	/** Number of results to skip. */
 	offset?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedImageList}'s
+	 * `nextCursor`/`prevCursor`, forwarded to `getImagesFastPath`'s
+	 * `viewer_images` fast path when applicable. Mutually exclusive with
+	 * `offset` — when both are supplied, `cursor` wins. Ignored by the legacy
+	 * `listImages` path (offset-only). Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted or the legacy
+	 * path is used.
+	 */
+	direction?: 'next' | 'prev';
 }
 
 /**
@@ -1516,6 +1539,13 @@ export interface ImageEntry {
 	pageUrl: string;
 	/** The src attribute. */
 	src: string | null;
+	/**
+	 * The actual loaded source URL after `srcset`/`sizes`/`picture` resolution
+	 * — distinct from {@link src}, the author-written attribute. `null` when
+	 * the browser never resolved a current source (e.g. the image never
+	 * loaded).
+	 */
+	currentSrc: string | null;
 	/** The alt attribute. */
 	alt: string | null;
 	/** Rendered width. */
@@ -1542,6 +1572,64 @@ export interface PaginatedImageList {
 	offset: number;
 	/** Current limit. */
 	limit: number;
+}
+
+/**
+ * Filter and pagination options for {@link import('./list-viewer-images.js').listViewerImages}
+ * — the `viewer_images` read-model-backed counterpart of {@link ListImagesOptions}.
+ *
+ * Deliberately narrower than {@link ListImagesOptions}: `urlPattern` (LIKE-based
+ * against `images.src`, a large text column the read model never duplicates)
+ * is excluded, and `sortBy` drops `src`/`alt` for the same reason — callers
+ * that need either fall back to `listImages` instead.
+ */
+export interface ListViewerImagesOptions {
+	/** Filter to images missing alt attribute. */
+	missingAlt?: boolean;
+	/** Filter to images missing explicit width/height attributes. */
+	missingDimensions?: boolean;
+	/** Filter to images with naturalWidth or naturalHeight exceeding this threshold. */
+	oversizedThreshold?: number;
+	/** Field to sort results by. Defaults to `'pageUrl'`. */
+	sortBy?: 'pageUrl' | 'width' | 'height' | 'naturalWidth' | 'naturalHeight' | 'isLazy';
+	/** Sort direction. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedImageList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result wrapper for {@link import('./list-viewer-images.js').listViewerImages}
+ * — {@link PaginatedImageList} plus keyset cursors for virtual-scroll
+ * continuation.
+ */
+export interface CursorPaginatedImageList extends PaginatedImageList {
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
 }
 
 /**

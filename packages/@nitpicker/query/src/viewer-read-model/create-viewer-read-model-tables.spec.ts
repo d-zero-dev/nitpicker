@@ -30,7 +30,7 @@ describe('createViewerReadModelTables', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('creates all 14 tables with no indexes yet (see createViewerReadModelIndexes)', async () => {
+	it('creates all 15 tables with no indexes yet (see createViewerReadModelIndexes)', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 
@@ -49,6 +49,7 @@ describe('createViewerReadModelTables', () => {
 			'viewer_error_kind_meta',
 			'viewer_resources',
 			'viewer_resource_stats',
+			'viewer_images',
 		];
 		for (const table of tables) {
 			expect(await knex.schema.hasTable(table)).toBe(true);
@@ -218,6 +219,34 @@ describe('createViewerReadModelTables', () => {
 		await knex('viewer_resource_stats').insert({ resource_id: 1, referrer_count: 1 });
 		await expect(
 			knex('viewer_resource_stats').insert({ resource_id: 1, referrer_count: 2 }),
+		).rejects.toThrow();
+	});
+
+	it('viewer_images rejects a duplicate image_id', async () => {
+		const knex = archive.getKnex();
+		await knex('viewer_images').insert({
+			image_id: 1,
+			page_url_rank: 0,
+			missing_alt: 0,
+			missing_dimensions: 0,
+			width: 100,
+			height: 100,
+			natural_width: 100,
+			natural_height: 100,
+			is_lazy: 0,
+		});
+		await expect(
+			knex('viewer_images').insert({
+				image_id: 1,
+				page_url_rank: 1,
+				missing_alt: 1,
+				missing_dimensions: 1,
+				width: 0,
+				height: 0,
+				natural_width: 0,
+				natural_height: 0,
+				is_lazy: 1,
+			}),
 		).rejects.toThrow();
 	});
 

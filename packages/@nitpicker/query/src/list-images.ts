@@ -21,15 +21,27 @@ export async function listImages(
 
 	const baseQuery = knex('images').join('pages', 'images.pageId', '=', 'pages.id');
 
-	if (options.missingAlt) {
-		baseQuery.where((qb) => {
-			qb.whereNull('images.alt').orWhere('images.alt', '');
-		});
+	if (options.missingAlt != null) {
+		if (options.missingAlt) {
+			baseQuery.where((qb) => {
+				qb.whereNull('images.alt').orWhere('images.alt', '');
+			});
+		} else {
+			baseQuery.where((qb) => {
+				qb.whereNotNull('images.alt').andWhere('images.alt', '!=', '');
+			});
+		}
 	}
-	if (options.missingDimensions) {
-		baseQuery.where((qb) => {
-			qb.where('images.width', 0).orWhere('images.height', 0);
-		});
+	if (options.missingDimensions != null) {
+		if (options.missingDimensions) {
+			baseQuery.where((qb) => {
+				qb.where('images.width', 0).orWhere('images.height', 0);
+			});
+		} else {
+			baseQuery.where((qb) => {
+				qb.where('images.width', '!=', 0).andWhere('images.height', '!=', 0);
+			});
+		}
 	}
 	if (options.oversizedThreshold != null) {
 		const threshold = options.oversizedThreshold;
@@ -52,6 +64,7 @@ export async function listImages(
 		{
 			pageUrl: string;
 			src: string | null;
+			currentSrc: string | null;
 			alt: string | null;
 			width: number;
 			height: number;
@@ -67,6 +80,7 @@ export async function listImages(
 			q.select(
 				'pages.url as pageUrl',
 				'images.src',
+				'images.currentSrc',
 				'images.alt',
 				'images.width',
 				'images.height',
@@ -90,6 +104,7 @@ export async function listImages(
 		mapRow: (row) => ({
 			pageUrl: row.pageUrl,
 			src: row.src,
+			currentSrc: row.currentSrc,
 			alt: row.alt,
 			width: row.width,
 			height: row.height,

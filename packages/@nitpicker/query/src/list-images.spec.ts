@@ -77,7 +77,7 @@ describe('listImages', () => {
 			imageList: [
 				{
 					src: 'https://example.com/logo.png',
-					currentSrc: 'https://example.com/logo.png',
+					currentSrc: 'https://example.com/logo@2x.png',
 					alt: 'Logo',
 					width: 200,
 					height: 100,
@@ -140,5 +140,23 @@ describe('listImages', () => {
 		const result = await listImages(archive, { limit: 1 });
 		expect(result.items).toHaveLength(1);
 		expect(result.limit).toBe(1);
+	});
+
+	it('src と currentSrc を区別して返す — regression test for a dropped currentSrc column', async () => {
+		const result = await listImages(archive);
+		const logo = result.items.find((item) => item.src === 'https://example.com/logo.png');
+		expect(logo?.currentSrc).toBe('https://example.com/logo@2x.png');
+	});
+
+	it('missingAlt: false を alt 有りへの絞り込みとして解釈する — regression test for a false-treated-as-omitted bug', async () => {
+		const result = await listImages(archive, { missingAlt: false });
+		expect(result.total).toBe(1);
+		expect(result.items[0]!.src).toBe('https://example.com/logo.png');
+	});
+
+	it('missingDimensions: false を寸法有りへの絞り込みとして解釈する — regression test for a false-treated-as-omitted bug', async () => {
+		const result = await listImages(archive, { missingDimensions: false });
+		expect(result.total).toBe(1);
+		expect(result.items[0]!.src).toBe('https://example.com/logo.png');
 	});
 });

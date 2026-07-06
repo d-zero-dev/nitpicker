@@ -1,7 +1,7 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 14 viewer-read-model tables against the given connection, with
+ * Creates all 15 viewer-read-model tables against the given connection, with
  * no indexes. Assumes none of the tables currently exist — callers
  * (`buildViewerReadModel`) are responsible for dropping any prior version
  * first, inside the same transaction, so this function is not itself
@@ -276,6 +276,53 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 		CREATE TABLE viewer_resource_stats (
 			resource_id integer primary key,
 			referrer_count integer not null
+		)
+	`);
+
+	// Image-list read model (issue #113). Deliberately a single table (no
+	// `viewer_image_stats`-style split like `viewer_resources` — that split
+	// only existed to match issue #110's own table naming verbatim, and
+	// issue #113's text names just one table). Excludes `src`/`currentSrc`/
+	// `alt`/`sourceCode`: those large text columns are resolved by joining
+	// back to `images`/`pages` only after the id set is limit-bounded (see
+	// `joinViewerImageIdsToListItems`), never duplicated here — the same
+	// "join only after limiting" rule every other table follows, but
+	// stricter here because `images` is this codebase's single largest
+	// write-model table (~9.11M rows / 3.25GB on a real archive).
+	// `page_url_rank` — NOT `page_url_sort_key` text like `viewer_pages`/
+	// `viewer_resources`/`viewer_anchor_facts`/`viewer_directory_pages` all
+	// use — is `viewer_images`'s one deliberate deviation from this read
+	// model's usual "inline the sort key as text" convention:
+	// `docs/viewer-db-redesign-plan.md` explicitly warns against duplicating
+	// `page_url` into this table by name, citing its ~9.11M-row scale as
+	// uniquely dangerous (every other table inlining a text sort key sits at
+	// a much smaller one-row-per-page/resource/edge cardinality). See
+	// `buildPageUrlRankMap`'s docs for the full rationale.
+	// `natural_width`/`natural_height` are stored as raw values (not a
+	// precomputed boolean flag at one hard-coded threshold, unlike
+	// `docs/viewer-sql-query-plan.md`'s `oversized_1000` sketch) because
+	// `listImages`'s `oversizedThreshold` accepts an arbitrary caller-supplied
+	// pixel count — see `applyViewerImagesFilters`'s docs.
+	// No `page_id` column: it exists only transiently while computing
+	// `page_url_rank` at build time (`computeImageInsertRows` looks it up
+	// from the source `images` row, never from this table), and no query
+	// here ever needs to join back to `pages` by page — display joins go
+	// through `image_id` → `images.pageId` → `pages` in
+	// `joinViewerImageIdsToListItems` instead. Storing an unread integer
+	// column across ~9.11M rows would itself be exactly the kind of
+	// unnecessary duplication this table's other design choices go out of
+	// their way to avoid.
+	await trx.raw(`
+		CREATE TABLE viewer_images (
+			image_id integer primary key,
+			page_url_rank integer not null,
+			missing_alt integer not null,
+			missing_dimensions integer not null,
+			width real not null,
+			height real not null,
+			natural_width integer not null,
+			natural_height integer not null,
+			is_lazy integer not null
 		)
 	`);
 }
