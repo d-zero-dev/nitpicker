@@ -2,13 +2,30 @@ import type { ArchiveContext } from '../types.js';
 import type { ListImagesOptions } from '@nitpicker/query';
 import type { Hono } from 'hono';
 
-import { listImages } from '@nitpicker/query';
+import { getImagesFastPath } from '@nitpicker/query';
 
 import { toBoolean } from '../query-params/to-boolean.js';
 import { toNumber } from '../query-params/to-number.js';
+import { toPageSortOrder } from '../query-params/to-page-sort-order.js';
 
 /**
  * Registers `GET /api/images` — paginated, filterable image list.
+ *
+ * Dispatches through `getImagesFastPath`, the same helper the CLI
+ * `query images` sub-command and MCP `list_images` tool use (issue #113):
+ * `viewer_images` (the read-model fast path) when current and the request
+ * doesn't use `urlPattern` or a `src`/`alt` sort (the wide `images` table's
+ * large text columns, never duplicated onto the read model), else the
+ * legacy `listImages` write-model path. Unlike `registerResourcesRoute`, no
+ * separate legacy-cursor shimming is needed here: `getImagesFastPath` always
+ * returns a `CursorPaginatedImageList` (with `nextCursor`/`prevCursor` both
+ * `null` on the legacy branch), so the frontend's existing offset-only
+ * `use-images-infinite.ts` keeps working unchanged either way.
+ *
+ * `cursor`/`direction` are read from the query string and forwarded
+ * verbatim — this is the only production entry point that ever sets them
+ * (CLI/MCP callers only ever pass `offset`), so the fast path's keyset
+ * cursor pagination is reachable outside its own unit tests.
  * @param app - The Hono application.
  * @param context - The opened archive context.
  */
@@ -22,10 +39,12 @@ export function registerImagesRoute(app: Hono, context: ArchiveContext): void {
 			oversizedThreshold: toNumber(q.oversizedThreshold),
 			urlPattern: q.urlPattern,
 			sortBy: q.sortBy as ListImagesOptions['sortBy'],
-			sortOrder: q.sortOrder as ListImagesOptions['sortOrder'],
+			sortOrder: toPageSortOrder(q.sortOrder),
 			limit: toNumber(q.limit),
 			offset: toNumber(q.offset),
+			cursor: q.cursor || undefined,
+			direction: q.direction === 'prev' ? 'prev' : undefined,
 		};
-		return c.json(await listImages(accessor, options));
+		return c.json(await getImagesFastPath(accessor, options));
 	});
 }
