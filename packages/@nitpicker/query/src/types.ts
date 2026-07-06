@@ -14,6 +14,7 @@ export type ArchiveMode = 'archive' | 'stub';
 // packages for the same enums. crawler needs ErrorKind for its DNS-burned
 // host cache and cannot depend on query.
 export type { PageSource, ErrorKind } from '@nitpicker/crawler';
+import type { FindMismatchesOptions } from './find-mismatches.js';
 import type { ErrorKind, PageSource } from '@nitpicker/crawler';
 
 /**
@@ -1680,6 +1681,275 @@ export interface MismatchEntry {
 	actual: string | null;
 	/** The expected or compared value. */
 	expected: string | null;
+}
+
+/**
+ * One duplicate-metadata group from `viewer_duplicate_groups`, with an
+ * inline page-URL sample from `viewer_duplicate_group_pages` — the
+ * `viewer_duplicate_groups`/`viewer_duplicate_group_pages` read-model
+ * counterpart of {@link DuplicateEntry} (issue #115). Unlike `DuplicateEntry`
+ * (whose `urls` is always the group's COMPLETE member list, capped only by
+ * `findDuplicates`'s overall group `limit`), `pages` here is always a
+ * bounded head sample — full pagination through every member page goes
+ * through `/api/duplicates/:groupId/pages` instead of growing this array.
+ */
+export interface ViewerDuplicateGroupEntry {
+	/**
+	 * Sequential id assigned by `computeDuplicateGroupRows` at read-model
+	 * build time — see `viewer_duplicate_groups.group_id`'s table docs for
+	 * why this is a JS-assigned surrogate rather than a derived value.
+	 */
+	groupId: number;
+	/** The field that is duplicated. */
+	field: 'title' | 'description';
+	/** The duplicated value shared by every member page. */
+	value: string;
+	/**
+	 * Total number of pages sharing this value — may exceed `pages.length`
+	 * when the group has more members than `pagesLimit` requested.
+	 */
+	count: number;
+	/**
+	 * First `pagesLimit` member URLs, in `viewer_duplicate_group_pages`
+	 * order. Fetch the remaining member URLs via
+	 * `listViewerDuplicateGroupPages`/`/api/duplicates/:groupId/pages` when
+	 * `count > pages.length`.
+	 */
+	pages: string[];
+}
+
+/**
+ * Filter and pagination options for `listViewerDuplicateGroups` — the
+ * `viewer_duplicate_groups`/`viewer_duplicate_group_pages` read-model
+ * counterpart of `findDuplicates`.
+ */
+export interface ListViewerDuplicateGroupsOptions {
+	/** Which metadata field's duplicate groups to list. Required — `viewer_duplicate_groups` rows for both fields are interleaved by `group_id`, not separable without a filter. */
+	field: 'title' | 'description';
+	/**
+	 * Inline URL sample size per group, read from
+	 * `viewer_duplicate_group_pages`. Defaults to 20.
+	 */
+	pagesLimit?: number;
+	/** Maximum number of groups to return. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous
+	 * {@link CursorPaginatedDuplicateGroupList}'s `nextCursor`/`prevCursor`.
+	 * Mutually exclusive with `offset` — when both are supplied, `cursor`
+	 * wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result for `listViewerDuplicateGroups` — `viewer_duplicate_groups`
+ * ordered by `count_desc_key` (most-duplicated group first), plus keyset
+ * cursors for virtual-scroll continuation.
+ */
+export interface CursorPaginatedDuplicateGroupList {
+	/** Duplicate-group entries. */
+	items: ViewerDuplicateGroupEntry[];
+	/** Total matching groups (for the requested `field`). */
+	total: number;
+	/** Current limit. */
+	limit: number;
+	/** Current offset. */
+	offset: number;
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
+}
+
+/**
+ * Options for `listViewerDuplicateGroupPages` — pages through one group's
+ * COMPLETE member-page list from `viewer_duplicate_group_pages`, the
+ * endpoint `ViewerDuplicateGroupEntry.pages`'s inline sample defers to once
+ * `count > pages.length`.
+ */
+export interface ListViewerDuplicateGroupPagesOptions {
+	/** The `viewer_duplicate_groups.group_id` whose member pages to list. */
+	groupId: number;
+	/** Maximum number of member-page URLs to return. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous
+	 * {@link CursorPaginatedDuplicateGroupPageList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when
+	 * both are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result for `listViewerDuplicateGroupPages` — member-page URLs
+ * from one `viewer_duplicate_groups` row's `viewer_duplicate_group_pages`,
+ * ordered by `url_sort_key`, plus keyset cursors for virtual-scroll
+ * continuation.
+ */
+export interface CursorPaginatedDuplicateGroupPageList {
+	/** Member-page URLs, `url_sort_key` order. */
+	items: string[];
+	/** Total member pages in this group. */
+	total: number;
+	/** Current limit. */
+	limit: number;
+	/** Current offset. */
+	offset: number;
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
+}
+
+/**
+ * Filter and pagination options for `listViewerMismatches` — the
+ * `viewer_mismatches` read-model counterpart of
+ * {@link FindMismatchesOptions}. Omits `sortBy`: `viewer_mismatches` only
+ * indexes `(type, url_sort_key, mismatch_id)` (see `vm_type_url`'s docs), so
+ * a request for `sortBy: 'actual' | 'expected'` is expected to fall back to
+ * the legacy `findMismatches` path before reaching this function — mirroring
+ * `ListViewerHeaderChecksOptions`'s own narrower `sortBy` surface relative to
+ * `CheckHeadersOptions`.
+ */
+export interface ListViewerMismatchesOptions {
+	/** Which mismatch comparison to list. */
+	type: 'canonical' | 'og:title' | 'og:description';
+	/** Sort direction on `url_sort_key`. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results to return. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedMismatchList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result for `listViewerMismatches` — `viewer_mismatches` rows for
+ * one `type`, ordered by `url_sort_key`, plus keyset cursors for
+ * virtual-scroll continuation.
+ */
+export interface CursorPaginatedMismatchList {
+	/** Mismatch entries. */
+	items: MismatchEntry[];
+	/** Total matching rows (for the requested `type`). */
+	total: number;
+	/** Current limit. */
+	limit: number;
+	/** Current offset. */
+	offset: number;
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
+}
+
+/**
+ * `FindMismatchesOptions` (from `find-mismatches.ts`) plus fast-path cursor
+ * fields — the full surface `getMismatchesFastPath` accepts, mirroring
+ * `CheckHeadersOptions`'s own cursor/direction additions over its legacy
+ * base shape.
+ */
+export interface FindMismatchesFastPathOptions extends FindMismatchesOptions {
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedMismatchList}'s
+	 * `nextCursor`/`prevCursor`, forwarded to `getMismatchesFastPath`'s
+	 * `viewer_mismatches` fast path when applicable. Mutually exclusive with
+	 * `offset` — when both are supplied, `cursor` wins. Ignored by the legacy
+	 * `findMismatches` path (offset-only). Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted or the legacy
+	 * path is used.
+	 */
+	direction?: 'next' | 'prev';
+}
+
+/**
+ * Options for `getDuplicatesFastPath` — a fast-path-only surface with no
+ * direct `FindMismatchesFastPathOptions`-style legacy counterpart:
+ * `findDuplicates` takes `field`/`limit` as positional arguments, not an
+ * options object, so this shape is defined fresh here rather than extended
+ * from an existing legacy options type.
+ */
+export interface GetDuplicatesFastPathOptions {
+	/**
+	 * Which metadata field's duplicate groups to list. Defaults to `'title'`
+	 * — the same default `findDuplicates` itself uses.
+	 */
+	field?: 'title' | 'description';
+	/** Maximum number of duplicate groups to return. */
+	limit?: number;
+	/** Inline URL sample size per group. Defaults to 20. */
+	pagesLimit?: number;
+	/**
+	 * Opaque keyset cursor from a previous
+	 * {@link CursorPaginatedDuplicateGroupList}'s `nextCursor`/`prevCursor`.
+	 * Ignored by the legacy `findDuplicates` path (it has no cursor to offer).
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted or the legacy
+	 * path is used.
+	 */
+	direction?: 'next' | 'prev';
+	/** Row offset for page-number jumps. Ignored by the legacy path. */
+	offset?: number;
 }
 
 /**

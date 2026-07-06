@@ -1,16 +1,19 @@
 import type { Knex } from 'knex';
 
 /**
- * Drops all 16 viewer-read-model tables if present, against the given
+ * Drops all 19 viewer-read-model tables if present, against the given
  * connection. Shared by `buildViewerReadModel` (which drops before
  * recreating, inside its own rebuild transaction) and
- * `dropViewerReadModel` (which drops with no recreate), so the 16-table
+ * `dropViewerReadModel` (which drops with no recreate), so the 19-table
  * list only needs to be kept in sync with `createViewerReadModelTables`
  * in one place.
  * @param trx - An open Knex transaction (a plain `Knex` instance also
  *   works, e.g. in tests).
  */
 export async function dropViewerReadModelTables(trx: Knex): Promise<void> {
+	await trx.schema.dropTableIfExists('viewer_mismatches');
+	await trx.schema.dropTableIfExists('viewer_duplicate_group_pages');
+	await trx.schema.dropTableIfExists('viewer_duplicate_groups');
 	await trx.schema.dropTableIfExists('viewer_header_checks');
 	await trx.schema.dropTableIfExists('viewer_images');
 	await trx.schema.dropTableIfExists('viewer_resource_stats');

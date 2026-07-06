@@ -3,6 +3,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type { Knex } from 'knex';
 
 import { applyListOrder } from './apply-list-order.js';
+import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
 
 export interface FindMismatchesOptions {
 	limit?: number;
@@ -50,6 +51,25 @@ export async function findMismatches(
 	const sortBy = options.sortBy ?? 'url';
 	const sortOrder = options.sortOrder ?? 'asc';
 	const useUrlSort = options.sortBy != null;
+	// `useUrlSort` alone is NOT sufficient to gate this: it only means "the
+	// caller passed an explicit `sortBy`", but not every explicit `sortBy`
+	// resolves to a `type: 'url'` column. For `type: 'canonical'`, `url`/
+	// `actual` become `'url'`-typed whenever `useUrlSort` is set, and
+	// `expected` (`canonical`) is unconditionally `'url'`-typed — so ANY
+	// explicit `sortBy` on `canonical` needs the temp table. For `og:title`/
+	// `og:description`, only `url` is ever `'url'`-typed; `actual`/`expected`
+	// (`og_title`/`title`, `og_description`/`description`) are plain text
+	// columns that never need natural URL ordering. So an explicit
+	// `sortBy: 'actual' | 'expected'` on those two types must NOT trigger the
+	// temp table — doing so would pay the full external-merge-sort cost (see
+	// `ensureUrlSortTempTable`'s docs) for a sort that never touches a URL
+	// column. `sortBy` defaults to `'url'` above, so the `sortBy === 'url'`
+	// check below covers both an explicit `'url'` request and (when combined
+	// with `useUrlSort`) is only reachable when `sortBy` was in fact set.
+	const needsUrlSortTempTable = useUrlSort && (type === 'canonical' || sortBy === 'url');
+	if (needsUrlSortTempTable) {
+		await ensureUrlSortTempTable(accessor);
+	}
 
 	const baseQuery = knex('pages')
 		.where({ scraped: 1, isExternal: 0, contentType: 'text/html' })
