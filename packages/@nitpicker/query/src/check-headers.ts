@@ -1,6 +1,7 @@
 import type {
+	CheckHeadersOptions,
 	HeaderCheckEntry,
-	HeaderPresence,
+	HeaderPresenceKey,
 	PaginatedHeaderCheckList,
 } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
@@ -8,20 +9,6 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import { applyListOrder } from './apply-list-order.js';
 import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
 import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presence-sql.js';
-
-type HeaderPresenceKey = keyof HeaderPresence;
-
-type CheckHeadersOptions = {
-	limit?: number;
-	offset?: number;
-	missingOnly?: boolean;
-	hasCSP?: boolean;
-	hasXFrameOptions?: boolean;
-	hasXContentTypeOptions?: boolean;
-	hasHSTS?: boolean;
-	sortBy?: 'url' | HeaderPresenceKey;
-	sortOrder?: 'asc' | 'desc';
-};
 
 /**
  * Checks security-related HTTP response headers for internal pages.

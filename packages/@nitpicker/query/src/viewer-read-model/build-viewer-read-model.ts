@@ -10,6 +10,7 @@ import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
 import { buildPageUrlRankMap } from './build-page-url-rank-map.js';
 import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
 import { computeErrorKindInsertRows } from './compute-error-kind-insert-rows.js';
+import { computeHeaderCheckInsertRows } from './compute-header-check-insert-rows.js';
 import { computeImageInsertRows } from './compute-image-insert-rows.js';
 import { computePageFacetBuckets } from './compute-page-facet-buckets.js';
 import { computeResourceInsertRows } from './compute-resource-rows.js';
@@ -192,7 +193,7 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
 /**
  * Performs a full rebuild of the viewer read model: computes a `getSummary`
  * snapshot (see below for why this happens outside the transaction), then
- * drops all 14 tables if present, recreates them, populates `viewer_pages`
+ * drops all 16 tables if present, recreates them, populates `viewer_pages`
  * from the current `pages` write-model table, populates
  * `viewer_directory_nodes`/`viewer_directory_pages` from that same page set
  * (see `buildDirectoryTreeRows` for the tree-building rules), populates
@@ -209,7 +210,9 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
  * rank derived from `sourceRows` (see `computeImageInsertRows`/
  * `buildPageUrlRankMap` — issue #113, must run after `sourceRows` is loaded
  * but is otherwise independent of the anchor/resource population above),
- * seeds one
+ * populates `viewer_header_checks` from its own filtered `pages` query (see
+ * `computeHeaderCheckInsertRows` — issue #119, independent of every table
+ * above), seeds one
  * smoke-test row into `viewer_query_profiles`, writes the
  * `viewer_count_buckets` totals row plus one row per distinct Pages-list
  * facet value (see `computePageFacetBuckets`), writes the pre-computed
@@ -422,6 +425,20 @@ export async function buildViewerReadModel(
 					imageChunk.slice(start, start + INSERT_CHUNK_SIZE),
 				);
 			}
+		}
+
+		// Header-check read model (issue #119). Its own `pages` query, not a
+		// reuse of `sourceRows`: `checkHeaders`'s filter predicate
+		// (`isExternal = 0 AND contentType = 'text/html'`, no
+		// `excludeSkippedPages`) differs from `viewer_pages`'s broader
+		// unfiltered set, so a shared row set would still need re-filtering —
+		// see `computeHeaderCheckInsertRows`'s docs for why this stays a plain
+		// array rather than a chunked read.
+		const headerCheckRows = await computeHeaderCheckInsertRows(trx);
+		for (let start = 0; start < headerCheckRows.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_header_checks').insert(
+				headerCheckRows.slice(start, start + INSERT_CHUNK_SIZE),
+			);
 		}
 
 		const total = insertRows.length;

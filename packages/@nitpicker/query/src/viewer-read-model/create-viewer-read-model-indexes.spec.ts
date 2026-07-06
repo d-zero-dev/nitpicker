@@ -132,4 +132,11 @@ describe('createViewerReadModelIndexes', () => {
 			expect(indexNames.has(indexName)).toBe(true);
 		}
 	});
+
+	it('creates every viewer_header_checks index', async () => {
+		const indexNames = await indexNamesOn('viewer_header_checks');
+		for (const indexName of ['vh_missing', 'vh_default']) {
+			expect(indexNames.has(indexName)).toBe(true);
+		}
+	});
 });
