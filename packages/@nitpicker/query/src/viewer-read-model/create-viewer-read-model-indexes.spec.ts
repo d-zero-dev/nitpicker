@@ -116,4 +116,20 @@ describe('createViewerReadModelIndexes', () => {
 			expect(indexNames.has(indexName)).toBe(true);
 		}
 	});
+
+	it('creates every viewer_images index', async () => {
+		const indexNames = await indexNamesOn('viewer_images');
+		for (const indexName of [
+			'vi_default',
+			'vi_missing_alt',
+			'vi_missing_dimensions',
+			'vi_width',
+			'vi_height',
+			'vi_natural_width',
+			'vi_natural_height',
+			'vi_is_lazy',
+		]) {
+			expect(indexNames.has(indexName)).toBe(true);
+		}
+	});
 });

@@ -12,6 +12,7 @@ import type { Knex } from 'knex';
 import { applyViewerUnusedResourcesFilters } from './apply-viewer-unused-resources-filters.js';
 import { countViewerUnusedResourcesTotal } from './count-viewer-unused-resources-total.js';
 import { joinViewerUnusedResourceIdsToListItems } from './join-viewer-unused-resource-ids-to-list-items.js';
+import { readKeysetWindow } from './viewer-cursor-kit/read-keyset-window.js';
 import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model/viewer-read-model-schema-version.js';
 import { buildViewerUnusedResourcesFilterKey } from './viewer-unused-resources-cursor/build-viewer-unused-resources-filter-key.js';
 import { decodeViewerUnusedResourcesCursor } from './viewer-unused-resources-cursor/decode-viewer-unused-resources-cursor.js';
@@ -20,34 +21,11 @@ import { extractSortValues } from './viewer-unused-resources-cursor/extract-sort
 import { getViewerUnusedResourcesSortSpec } from './viewer-unused-resources-cursor/get-viewer-unused-resources-sort-spec.js';
 
 /**
- * Adds a keyset comparison tuple as a `WHERE` predicate — `(col1, col2, …)
- * {>|<} (?, ?, …)` — using SQLite's row-value comparison. Column names come
- * from the fixed {@link ViewerUnusedResourcesSortSpec} column set, never from
- * request input, so interpolating them into the SQL text (rather than
- * parameter binding, which only covers values) carries no injection risk.
- * @param qb - The query builder to constrain.
- * @param columns - The keyset tuple columns, in comparison order.
- * @param operator - `'>'` for a forward (ascending-tuple) seek, `'<'` for a
- *   backward one.
- * @param values - The boundary row's tuple values, in `columns` order.
- */
-function applyKeysetPredicate(
-	qb: Knex.QueryBuilder,
-	columns: readonly string[],
-	operator: '>' | '<',
-	values: readonly (string | number)[],
-): void {
-	const columnList = columns.join(', ');
-	const placeholders = columns.map(() => '?').join(', ');
-	qb.whereRaw(`(${columnList}) ${operator} (${placeholders})`, [...values]);
-}
-
-/**
  * Runs one `viewer_resources` id-resolution read (fixed `is_unused = 1`
- * base predicate): applies filters, an optional keyset predicate, an
- * `ORDER BY` in `orderDirection`, and `limit + 1` rows (the `+1` lets the
- * caller detect "is there another row past this page" without a second
- * query).
+ * base predicate) via the shared {@link readKeysetWindow}: applies filters,
+ * an optional keyset predicate, an `ORDER BY` in `orderDirection`, and
+ * `limit + 1` rows (the `+1` lets the caller detect "is there another row
+ * past this page" without a second query).
  * @param knex - The archive's Knex instance.
  * @param options - The caller's filter options.
  * @param spec - The resolved sort spec (columns to select/order by).
@@ -55,8 +33,6 @@ function applyKeysetPredicate(
  * @param limit - The page size (the read fetches `limit + 1` rows).
  * @param keyset - The keyset predicate to apply, or `undefined` for an
  *   unconstrained (initial / offset) read.
- * @param keyset.operator - `'>'` or `'<'`, per {@link applyKeysetPredicate}.
- * @param keyset.values - The boundary row's tuple values.
  * @param offset - Row offset for a direct `OFFSET` read (page-number jumps).
  *   Ignored when `keyset` is supplied.
  * @returns Up to `limit + 1` rows carrying `resource_id` and every sort column.
@@ -70,20 +46,17 @@ async function readViewerUnusedResourcesWindow(
 	keyset: { operator: '>' | '<'; values: readonly (string | number)[] } | undefined,
 	offset: number,
 ): Promise<ViewerUnusedResourcesKeysetRow[]> {
-	const qb = knex('viewer_resources');
-	applyViewerUnusedResourcesFilters(qb, options);
-	if (keyset) {
-		applyKeysetPredicate(qb, spec.columns, keyset.operator, keyset.values);
-	}
-	const selectColumns = [...new Set<string>(['resource_id', ...spec.columns])];
-	let query = qb
-		.select(selectColumns)
-		.orderBy(spec.columns.map((column) => ({ column, order: orderDirection })))
-		.limit(limit + 1);
-	if (!keyset && offset > 0) {
-		query = query.offset(offset);
-	}
-	return query;
+	return readKeysetWindow(
+		knex,
+		'viewer_resources',
+		(qb) => applyViewerUnusedResourcesFilters(qb, options),
+		['resource_id'],
+		spec,
+		orderDirection,
+		limit,
+		keyset,
+		offset,
+	);
 }
 
 /**
