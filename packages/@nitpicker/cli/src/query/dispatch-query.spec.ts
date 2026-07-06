@@ -22,7 +22,9 @@ vi.mock('@nitpicker/query', () => ({
 	getViolations: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	findDuplicates: vi.fn().mockResolvedValue([]),
 	findMismatches: vi.fn().mockResolvedValue([]),
-	checkHeaders: vi.fn().mockResolvedValue({ items: [], total: 0, offset: 0, limit: 100 }),
+	getHeaderChecksFastPath: vi
+		.fn()
+		.mockResolvedValue({ items: [], total: 0, offset: 0, limit: 100 }),
 	getResourceReferrers: vi.fn().mockResolvedValue({
 		resourceUrl: 'https://example.com/style.css',
 		pageUrls: [],
@@ -200,19 +202,22 @@ describe('dispatchQuery', () => {
 	});
 
 	it('dispatches headers sub-command', async () => {
-		const { checkHeaders } = await import('@nitpicker/query');
+		const { getHeaderChecksFastPath } = await import('@nitpicker/query');
 		const result = await dispatchQuery(mockAccessor, 'headers', emptyFlags);
 		expect(result).toEqual({ items: [], total: 0, offset: 0, limit: 100 });
-		expect(checkHeaders).toHaveBeenCalledWith(mockAccessor, expect.any(Object));
+		expect(getHeaderChecksFastPath).toHaveBeenCalledWith(
+			mockAccessor,
+			expect.any(Object),
+		);
 	});
 
 	it('dispatches headers sub-command with missingOnly', async () => {
-		const { checkHeaders } = await import('@nitpicker/query');
+		const { getHeaderChecksFastPath } = await import('@nitpicker/query');
 		await dispatchQuery(mockAccessor, 'headers', {
 			missingOnly: true,
 			limit: 25,
 		} as never);
-		expect(checkHeaders).toHaveBeenCalledWith(
+		expect(getHeaderChecksFastPath).toHaveBeenCalledWith(
 			mockAccessor,
 			expect.objectContaining({ missingOnly: true, limit: 25 }),
 		);

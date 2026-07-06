@@ -11,12 +11,12 @@ import type {
 } from '@nitpicker/query';
 
 import {
-	checkHeaders,
 	countPagesByJsonLdType,
 	countPagesByTag,
 	findDuplicates,
 	findMismatches,
 	getErrorKindsFastPath,
+	getHeaderChecksFastPath,
 	getImagesFastPath,
 	getIsolatedCluster,
 	getPageDetail,
@@ -114,7 +114,7 @@ export async function dispatchQuery(
 			return findMismatches(accessor, type, limit, offset);
 		}
 		case 'headers': {
-			return checkHeaders(
+			return getHeaderChecksFastPath(
 				accessor,
 				options as { limit?: number; offset?: number; missingOnly?: boolean },
 			);
