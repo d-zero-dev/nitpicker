@@ -198,4 +198,25 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 		'CREATE INDEX vi_natural_height ON viewer_images(natural_height, image_id)',
 	);
 	await trx.raw('CREATE INDEX vi_is_lazy ON viewer_images(is_lazy, image_id)');
+
+	// Header-check read model (issue #119). Unlike
+	// `docs/viewer-sql-query-plan.md`'s `/api/headers` sketch (which indexes
+	// the raw `missing_count` tally), `vh_missing` leads with the boolean
+	// `is_missing` flag: `missing_count > 0` is a RANGE predicate, and an
+	// index leading with a range-constrained column cannot also satisfy
+	// `ORDER BY url_sort_key` — SQLite would scan each distinct
+	// `missing_count` value's url-sorted run in turn (1, 2, 3, 4), not one
+	// globally url-sorted pass, forcing `USE TEMP B-TREE FOR ORDER BY`
+	// (confirmed via `EXPLAIN QUERY PLAN` — this is why `viewer_pages` itself
+	// indexes boolean flags like `has_title`, never a count, ahead of a sort
+	// key). `is_missing`'s equality predicate has no such problem. No indexes
+	// for the individual `has_csp`/`has_x_frame_options`/
+	// `has_x_content_type_options`/`has_hsts` equality filters — following
+	// #106/#118's evidence-before-indexing precedent, these are rarer filter
+	// combinations than `missingOnly`, and `getHeaderChecksFastPath` bails to
+	// the legacy path for any explicit `sortBy` regardless.
+	await trx.raw(
+		'CREATE INDEX vh_missing ON viewer_header_checks(is_missing, url_sort_key, page_id)',
+	);
+	await trx.raw('CREATE INDEX vh_default ON viewer_header_checks(url_sort_key, page_id)');
 }

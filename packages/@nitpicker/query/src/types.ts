@@ -1728,6 +1728,108 @@ export interface PaginatedHeaderCheckList {
 	limit: number;
 }
 
+/** The four {@link HeaderPresence} keys, as a type — see `HEADER_PRESENCE_KEYS` for the runtime array. */
+export type HeaderPresenceKey = keyof HeaderPresence;
+
+/**
+ * Filter and pagination options for {@link import('./check-headers.js').checkHeaders}.
+ */
+export interface CheckHeadersOptions {
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/** Number of results to skip. Defaults to 0. */
+	offset?: number;
+	/** Filter to pages missing at least one tracked security header. */
+	missingOnly?: boolean;
+	/** Filter by Content-Security-Policy header presence. */
+	hasCSP?: boolean;
+	/** Filter by X-Frame-Options header presence. */
+	hasXFrameOptions?: boolean;
+	/** Filter by X-Content-Type-Options header presence. */
+	hasXContentTypeOptions?: boolean;
+	/** Filter by Strict-Transport-Security header presence. */
+	hasHSTS?: boolean;
+	/** Field to sort results by. Defaults to `'url'`. */
+	sortBy?: 'url' | HeaderPresenceKey;
+	/** Sort direction. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedHeaderCheckList}'s
+	 * `nextCursor`/`prevCursor`, forwarded to `getHeaderChecksFastPath`'s
+	 * `viewer_header_checks` fast path when applicable. Mutually exclusive
+	 * with `offset` — when both are supplied, `cursor` wins. Ignored by the
+	 * legacy `checkHeaders` path (offset-only). Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted or the legacy
+	 * path is used.
+	 */
+	direction?: 'next' | 'prev';
+}
+
+/**
+ * Filter and pagination options for
+ * {@link import('./list-viewer-header-checks.js').listViewerHeaderChecks} —
+ * the `viewer_header_checks` read-model counterpart of
+ * {@link CheckHeadersOptions}. Omits `sortBy` values other than `'url'`
+ * (the only order `viewer_header_checks` indexes — see
+ * `getHeaderChecksSortSpec`); a request for any other `sortBy` is expected
+ * to fall back to the legacy path before reaching this function.
+ */
+export interface ListViewerHeaderChecksOptions {
+	/** Filter to pages missing at least one tracked security header. */
+	missingOnly?: boolean;
+	/** Filter by Content-Security-Policy header presence. */
+	hasCSP?: boolean;
+	/** Filter by X-Frame-Options header presence. */
+	hasXFrameOptions?: boolean;
+	/** Filter by X-Content-Type-Options header presence. */
+	hasXContentTypeOptions?: boolean;
+	/** Filter by Strict-Transport-Security header presence. */
+	hasHSTS?: boolean;
+	/** Sort direction on `url`. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedHeaderCheckList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result wrapper for
+ * {@link import('./list-viewer-header-checks.js').listViewerHeaderChecks} —
+ * {@link PaginatedHeaderCheckList} plus keyset cursors for virtual-scroll
+ * continuation.
+ */
+export interface CursorPaginatedHeaderCheckList extends PaginatedHeaderCheckList {
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
+}
+
 /**
  * A node in the internal-page link graph (one internal HTML page).
  */

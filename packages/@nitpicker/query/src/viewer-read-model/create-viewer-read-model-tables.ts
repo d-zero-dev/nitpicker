@@ -1,7 +1,7 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 15 viewer-read-model tables against the given connection, with
+ * Creates all 16 viewer-read-model tables against the given connection, with
  * no indexes. Assumes none of the tables currently exist — callers
  * (`buildViewerReadModel`) are responsible for dropping any prior version
  * first, inside the same transaction, so this function is not itself
@@ -323,6 +323,48 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			natural_width integer not null,
 			natural_height integer not null,
 			is_lazy integer not null
+		)
+	`);
+
+	// Header-check read model (issue #119). One row per internal HTML page —
+	// the exact `scraped = 1, isExternal = 0, contentType = 'text/html',
+	// redirectDestId IS NULL` predicate `checkHeaders` itself filters to, NOT
+	// `viewer_pages`'s broader unfiltered set — so this table's row count can
+	// legitimately be smaller than `viewer_pages`'s. `has_csp`/
+	// `has_x_frame_options`/`has_x_content_type_options`/`has_hsts` are
+	// precomputed booleans (never a raw `responseHeaders` JSON blob column):
+	// `computeHeaderCheckInsertRows` derives them at build time via the same
+	// `headerPresenceExpression` LIKE-based SQL `checkHeaders`/`listPages`
+	// already use, so no JSON parsing happens here or at read time either.
+	// `url_sort_key` is `url` copied verbatim — the same "inline the sort key
+	// as text" convention `viewer_resources`/`viewer_anchor_facts` use for
+	// their own one-row-per-entity tables, and cheap here for the same reason
+	// (bounded by page count, not a fan-out table like `viewer_images`).
+	// Unlike every other read-model table, no `url_refs`/`content_items`
+	// ref-table indirection exists to reconstruct full header entries from
+	// (issue #139 is not implemented) — detail/export views instead read the
+	// write-model `pages.responseHeaders` blob directly by `page_id`, which
+	// is unaffected by this table's existence. `missing_count` is a
+	// precomputed 0-4 tally, kept for display/detail use, but is NOT what
+	// `missingOnly` filters on — a range predicate (`missing_count > 0`) on
+	// an index's leading column cannot also satisfy `ORDER BY url_sort_key`
+	// (SQLite would need to visit each `missing_count` bucket's url-sorted
+	// run in turn, which is not a single globally url-sorted scan), so a
+	// dedicated boolean `is_missing` column (`missing_count > 0`, mirroring
+	// `viewer_pages.has_title`'s boolean-flag-not-count convention) backs the
+	// `missingOnly` filter instead — an equality predicate on the leading
+	// index column DOES leave the remaining rows for that value ordered by
+	// the next column, verified via `EXPLAIN QUERY PLAN` during development.
+	await trx.raw(`
+		CREATE TABLE viewer_header_checks (
+			page_id integer primary key,
+			url_sort_key text not null,
+			has_csp integer not null,
+			has_x_frame_options integer not null,
+			has_x_content_type_options integer not null,
+			has_hsts integer not null,
+			missing_count integer not null,
+			is_missing integer not null
 		)
 	`);
 }
