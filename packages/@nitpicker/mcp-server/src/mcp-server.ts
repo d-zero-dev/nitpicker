@@ -6,11 +6,11 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import {
 	ArchiveManager,
-	checkHeaders,
 	countPagesByJsonLdType,
 	countPagesByTag,
 	findDuplicates,
 	findMismatches,
+	getHeaderChecksFastPath,
 	getImagesFastPath,
 	getIsolatedCluster,
 	getPageDetail,
@@ -324,7 +324,9 @@ export function createServer() {
 					}
 					case 'check_headers': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						return jsonResult(await checkHeaders(accessor, omit(args, 'archiveId')));
+						return jsonResult(
+							await getHeaderChecksFastPath(accessor, omit(args, 'archiveId')),
+						);
 					}
 					case 'list_isolated_pages': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
