@@ -35,8 +35,8 @@ describe('buildPageUrlRankMap', () => {
 		// first; SQLite's byte-wise BINARY collation (and thus
 		// `viewer_pages.url_sort_key`) ranks the U+E000 page first, since
 		// 0xEE < 0xF0.
-		const privateUseArea = `https://example.com/${String.fromCodePoint(0xe0_00)}`;
-		const supplementaryPlane = `https://example.com/${String.fromCodePoint(0x1_00_00)}`;
+		const privateUseArea = `https://example.com/${String.fromCodePoint(57_344)}`; // U+E000
+		const supplementaryPlane = `https://example.com/${String.fromCodePoint(65_536)}`; // U+10000
 		const map = buildPageUrlRankMap([
 			{ id: 2, url: supplementaryPlane },
 			{ id: 1, url: privateUseArea },
