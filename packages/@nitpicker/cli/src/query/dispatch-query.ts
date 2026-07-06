@@ -17,6 +17,7 @@ import {
 	findDuplicates,
 	findMismatches,
 	getErrorKindsFastPath,
+	getImagesFastPath,
 	getIsolatedCluster,
 	getPageDetail,
 	getPageHtml,
@@ -27,7 +28,6 @@ import {
 	getSummaryFastPath,
 	getTagInventory,
 	getViolations,
-	listImages,
 	listInventoryRuns,
 	listIsolatedClusters,
 	listIsolatedPages,
@@ -93,7 +93,7 @@ export async function dispatchQuery(
 			return listResources(accessor, options as ListResourcesOptions);
 		}
 		case 'images': {
-			return listImages(accessor, options as ListImagesOptions);
+			return getImagesFastPath(accessor, options as ListImagesOptions);
 		}
 		case 'violations': {
 			return getViolations(accessor, options as GetViolationsOptions);
