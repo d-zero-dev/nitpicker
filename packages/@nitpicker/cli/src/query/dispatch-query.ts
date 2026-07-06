@@ -8,17 +8,19 @@ import type {
 	ListResourcesOptions,
 	ListImagesOptions,
 	GetViolationsOptions,
+	GetDuplicatesFastPathOptions,
+	FindMismatchesFastPathOptions,
 } from '@nitpicker/query';
 
 import {
 	countPagesByJsonLdType,
 	countPagesByTag,
-	findDuplicates,
-	findMismatches,
+	getDuplicatesFastPath,
 	getErrorKindsFastPath,
 	getHeaderChecksFastPath,
 	getImagesFastPath,
 	getIsolatedCluster,
+	getMismatchesFastPath,
 	getPageDetail,
 	getPageHtml,
 	getPageJsonLd,
@@ -99,19 +101,13 @@ export async function dispatchQuery(
 			return getViolations(accessor, options as GetViolationsOptions);
 		}
 		case 'duplicates': {
-			const { field, limit } = options as {
-				field: 'title' | 'description';
-				limit?: number;
-			};
-			return findDuplicates(accessor, field, limit);
+			return getDuplicatesFastPath(accessor, options as GetDuplicatesFastPathOptions);
 		}
 		case 'mismatches': {
-			const { type, limit, offset } = options as {
+			const { type, ...rest } = options as {
 				type: 'canonical' | 'og:title' | 'og:description';
-				limit?: number;
-				offset?: number;
-			};
-			return findMismatches(accessor, type, limit, offset);
+			} & FindMismatchesFastPathOptions;
+			return getMismatchesFastPath(accessor, type, rest);
 		}
 		case 'headers': {
 			return getHeaderChecksFastPath(
