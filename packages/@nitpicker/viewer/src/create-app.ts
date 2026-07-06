@@ -10,6 +10,7 @@ import { registerDirectoryTreeRoute } from './routes/register-directory-tree-rou
 import { registerDuplicatesRoute } from './routes/register-duplicates-route.js';
 import { registerErrorKindsRoute } from './routes/register-error-kinds-route.js';
 import { registerGraphRoute } from './routes/register-graph-route.js';
+import { registerHeaderChecksRoute } from './routes/register-header-checks-route.js';
 import { registerImagesRoute } from './routes/register-images-route.js';
 import { registerIsolatedClustersRoute } from './routes/register-isolated-clusters-route.js';
 import { registerIsolatedPagesRoute } from './routes/register-isolated-pages-route.js';
@@ -55,6 +56,7 @@ export function createApp(options: CreateAppOptions): Hono {
 	registerResourcesRoute(app, context);
 	registerResourceReferrersRoute(app, context);
 	registerImagesRoute(app, context);
+	registerHeaderChecksRoute(app, context);
 	registerViolationsRoute(app, context);
 	registerDuplicatesRoute(app, context);
 	registerMismatchesRoute(app, context);
