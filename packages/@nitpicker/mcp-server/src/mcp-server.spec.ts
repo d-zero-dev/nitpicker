@@ -390,21 +390,27 @@ describe('createServer', () => {
 		expect(data.items.length).toBe(1);
 	});
 
-	it('find_duplicates で重複タイトルを検出する', async () => {
+	it('find_duplicates で重複タイトルを検出する（getDuplicatesFastPath 経由、issue #115）', async () => {
 		const result = await callTool(server, 'find_duplicates', { archiveId });
 		expect(result.isError).toBeUndefined();
 		const data = JSON.parse(result.content[0]!.text);
-		expect(Array.isArray(data)).toBe(true);
+		// getDuplicatesFastPath always normalizes to a CursorPaginatedDuplicateGroupList,
+		// not the bare array the legacy findDuplicates returned.
+		expect(Array.isArray(data.items)).toBe(true);
+		expect(data.total).toBe(0);
 	});
 
-	it('find_mismatches で canonical ミスマッチを検出する', async () => {
+	it('find_mismatches で canonical ミスマッチを検出する（getMismatchesFastPath 経由、issue #115）', async () => {
 		const result = await callTool(server, 'find_mismatches', {
 			archiveId,
 			type: 'canonical',
 		});
 		expect(result.isError).toBeUndefined();
 		const data = JSON.parse(result.content[0]!.text);
-		expect(Array.isArray(data)).toBe(true);
+		// getMismatchesFastPath always normalizes to a CursorPaginatedMismatchList,
+		// not the bare array the legacy findMismatches's positional-args overload returned.
+		expect(Array.isArray(data.items)).toBe(true);
+		expect(data.total).toBe(0);
 	});
 
 	it('check_headers でセキュリティヘッダーを確認する', async () => {
@@ -457,6 +463,25 @@ describe('createServer', () => {
 			archiveId,
 			url: 'https://example.com',
 			maxLength: 'abc',
+		});
+		expect(result.isError).toBe(true);
+		expect(result.content[0]!.text).toContain('Invalid number');
+	});
+
+	it('find_duplicates の不正な limit 引数でエラーを返す（issue #115 の validation 回帰）', async () => {
+		const result = await callTool(server, 'find_duplicates', {
+			archiveId,
+			limit: 'abc',
+		});
+		expect(result.isError).toBe(true);
+		expect(result.content[0]!.text).toContain('Invalid number');
+	});
+
+	it('find_mismatches の不正な offset 引数でエラーを返す（issue #115 の validation 回帰）', async () => {
+		const result = await callTool(server, 'find_mismatches', {
+			archiveId,
+			type: 'canonical',
+			offset: 'abc',
 		});
 		expect(result.isError).toBe(true);
 		expect(result.content[0]!.text).toContain('Invalid number');
