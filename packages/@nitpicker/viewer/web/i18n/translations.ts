@@ -223,6 +223,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				description: 'Groups of pages that share the same title or description.',
 				share: '{count} pages share this {field}:',
 				empty: 'No duplicates found.',
+				moreHidden: '+{count} more pages not shown.',
 			},
 			mismatches: {
 				title: 'Mismatches',
@@ -517,6 +518,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				description: '同じタイトルまたは説明を共有するページのグループ。',
 				share: '{count} 件のページがこの{field}を共有しています：',
 				empty: '重複は見つかりませんでした。',
+				moreHidden: '他 {count} 件は表示されていません。',
 			},
 			mismatches: {
 				title: '不一致',
