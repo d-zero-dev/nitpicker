@@ -182,18 +182,18 @@ describe('ArchiveManager cache-mode (archive opens go through Archive.openCached
 	});
 });
 
-describe('ArchiveManager cache-mode: on-open viewer read model build (issue #112)', () => {
-	// A separate archive (not the shared `archiveFilePath` above) so the
-	// "missing → built on first open" assertion below isn't racing an
-	// earlier test in this file that already opened — and thus already
-	// built the read model into — the shared fixture's cache directory.
+describe('ArchiveManager cache-mode: a read-only open never builds a viewer read model (issue #177, corrects #112)', () => {
+	// A separate archive (not the shared `archiveFilePath` above) so these
+	// assertions aren't racing an earlier test in this file that already
+	// opened the shared fixture's cache directory.
 	const archiveFilePath = path.resolve(workingDir, 'on-open-build.nitpicker');
 
 	beforeAll(async () => {
 		mkdirSync(workingDir, { recursive: true });
-		// Written the same way `crawl` produced archives before issue #112:
-		// no `ensureViewerReadModel` call, so the persistent read model is
-		// absent — exactly the legacy-archive case this feature targets.
+		// Written the way `crawl` produced archives before the read model
+		// existed at all: no `ensureViewerReadModel` call, so the persistent
+		// read model is absent — the legacy-archive case a read-only open
+		// must leave untouched.
 		const archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
 		// `buildViewerReadModel` also computes a `getSummary` snapshot, which
 		// requires `accessor.getConfig()` to resolve.
@@ -241,21 +241,21 @@ describe('ArchiveManager cache-mode: on-open viewer read model build (issue #112
 		rmSync(archiveFilePath, { force: true });
 	});
 
-	it('builds the read model automatically on first open of a legacy (pre-#112) archive', async () => {
+	it('leaves the read model absent on first open of a legacy archive (no on-open build)', async () => {
 		const manager = new ArchiveManager();
 		const { accessor } = await manager.open(archiveFilePath);
 		try {
-			expect(await hasViewerReadModel(accessor)).toBe(true);
+			expect(await hasViewerReadModel(accessor)).toBe(false);
 		} finally {
 			await manager.closeAll();
 		}
 	});
 
-	it('reuses the already-built read model on a subsequent open (no rebuild needed)', async () => {
+	it('still has no read model on a subsequent open (no retry, no auto-build ever happens)', async () => {
 		const manager = new ArchiveManager();
 		const { accessor } = await manager.open(archiveFilePath);
 		try {
-			expect(await hasViewerReadModel(accessor)).toBe(true);
+			expect(await hasViewerReadModel(accessor)).toBe(false);
 		} finally {
 			await manager.closeAll();
 		}

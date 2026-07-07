@@ -251,20 +251,20 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
  * `page_errors` / `crawl_errors` (for the `status=-1` `errorKindBreakdown`
  * and the error-kind breakdown itself) and, as a fallback, `error.log` — is
  * write-once-during-crawl and never touched by a read-model build itself;
- * none of the three call sites (`ensureViewerReadModelQuietly` at crawl
- * completion, `viewer-build`, the on-open opportunistic build) ever run
- * concurrently with an active scraper writing to the same archive.
+ * neither call site (`ensureViewerReadModelQuietly` at crawl completion, or
+ * `viewer-build`) ever runs concurrently with an active scraper writing to
+ * the same archive.
  *
  * `getSummary` also requires `accessor.getConfig()` to resolve, a
  * precondition this function did not previously have. Every archive that
  * went through a real crawl has this guaranteed: `CrawlerOrchestrator`
- * always calls `archive.setConfig(...)` before `crawling()` starts, and all
- * three call sites above only ever operate on archives that already
- * finished (or are resuming) a real crawl. `Archive.create`'s `initSchema`
- * does not itself seed a default `info` row, so a `.nitpicker` file that
- * was hand-crafted or corrupted before `setConfig` ever ran would make this
+ * always calls `archive.setConfig(...)` before `crawling()` starts, and both
+ * call sites above only ever operate on archives that already finished (or
+ * are resuming) a real crawl. `Archive.create`'s `initSchema` does not
+ * itself seed a default `info` row, so a `.nitpicker` file that was
+ * hand-crafted or corrupted before `setConfig` ever ran would make this
  * function throw where it previously wouldn't — an accepted trade-off, not
- * a scenario any of the three call sites are expected to hit in practice.
+ * a scenario either call site is expected to hit in practice.
  *
  * `viewer_pages` includes every listable page regardless of content-type
  * category (`scraped = 1 AND redirectDestId IS NULL`, plus excluding

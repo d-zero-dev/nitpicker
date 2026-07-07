@@ -2251,21 +2251,6 @@ export interface BuildViewerReadModelOptions {
 }
 
 /**
- * Options for {@link ensureViewerReadModelOpportunistically}.
- */
-export interface EnsureViewerReadModelOpportunisticallyOptions extends BuildViewerReadModelOptions {
-	/**
-	 * Warning sink invoked when the build is skipped (another process/tab
-	 * already holds the build lock) or fails outright. Defaults to a no-op —
-	 * callers that want the message surfaced (viewer, MCP, query CLI) should
-	 * pass their own sink, mirroring {@link ArchiveManagerWarn}. Never called
-	 * for the common case (read model already current, nothing to build).
-	 * @param message - A human-readable description of what was skipped or failed.
-	 */
-	onWarn?: (message: string) => void;
-}
-
-/**
  * One flat node in a directory tree, as returned by {@link getDirectoryTree}
  * and {@link listDirectoryChildren}. `parentNodeId` is the only structural
  * link — callers reconstruct the nested UI tree client-side from this flat
