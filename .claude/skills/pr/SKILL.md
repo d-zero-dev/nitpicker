@@ -1,4 +1,5 @@
 ---
+name: pr
 description: プルリクエストの作成とプッシュ
 ---
 
