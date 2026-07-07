@@ -17,9 +17,6 @@ import {
 	peekArchiveLockHolder,
 } from '@nitpicker/crawler';
 
-import { ensureViewerReadModelOpportunistically } from './viewer-read-model/ensure-viewer-read-model-opportunistically.js';
-import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
-
 /** Maximum number of concurrently opened archives to prevent resource exhaustion. */
 const MAX_OPEN_ARCHIVES = 20;
 
@@ -438,22 +435,13 @@ export class ArchiveManager {
 			// (unchanged) archive skips the untar. OS-level temp cleanup
 			// reclaims stale entries — we do not own eviction here.
 			const accessor = await Archive.openCached(realPath);
-			// Issue #112's on-open build: archives crawled before the viewer
-			// read model existed (or whose crawl-completion build failed)
-			// reach here with no current read model. Every cache-backed
-			// opener — viewer, MCP, query CLI — shares the same tar-cache
-			// directory keyed by the source file's content, so whichever one
-			// opens it first pays this build once; everyone after reads the
-			// already-built tables. A concurrent build from another process
-			// is detected via the dedicated lock in
-			// `ensureViewerReadModelOpportunistically` and skipped rather
-			// than duplicated. Never throws: a skip or failure here just
-			// means this (and possibly the next) request falls back to the
-			// legacy `listPages` path, which `isViewerReadModelCurrent`
-			// already gates on independently.
-			if (!(await isViewerReadModelCurrent(accessor))) {
-				await ensureViewerReadModelOpportunistically(accessor, { onWarn: this.#onWarn });
-			}
+			// A read-only open never builds or writes anything (issue #177,
+			// correcting #112's on-open opportunistic build). Archives with a
+			// missing or stale read model simply stay on the legacy query
+			// path — `isViewerReadModelCurrent` is checked independently by
+			// each endpoint's fast-path dispatcher, not here. The only build
+			// paths are the crawl-completion hook and the explicit
+			// `nitpicker viewer-build` command.
 			return {
 				accessor,
 				close: () => accessor.close(),

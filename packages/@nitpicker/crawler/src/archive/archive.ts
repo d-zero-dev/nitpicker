@@ -494,14 +494,17 @@ export default class Archive extends ArchiveAccessor {
 	 * {@link ArchiveAccessor.getHtmlOfPage}) avoid any filesystem mutation
 	 * on the user's tmpDir.
 	 *
-	 * `options.readOnly: false` is the narrow escape hatch for issue #112's
-	 * on-open viewer read-model build: it opens a second, writable
-	 * connection to a `tmpDir` that {@link Archive.openCached} already
-	 * extracted (and migrated) into an OS-temp cache directory — never the
-	 * caller's live/interrupted crawl tmpDir, which must stay read-only.
-	 * Callers opening this way are responsible for their own
-	 * cross-process coordination (see `acquireArchiveLock`); this method
-	 * does not acquire any lock itself.
+	 * `options.readOnly: false` is a narrow escape hatch for opening a
+	 * second, writable connection to a `tmpDir` that {@link Archive.openCached}
+	 * already extracted (and migrated) into an OS-temp cache directory —
+	 * never the caller's live/interrupted crawl tmpDir, which must stay
+	 * read-only. A read-only open (`Archive.openCached`/`ArchiveManager.open`)
+	 * must never take this path itself — see issue #177, which removed the
+	 * only production caller (the on-open opportunistic read-model build
+	 * from issue #112) for blocking/writing during what must be a read-only
+	 * open. This escape hatch has no current production caller; any future
+	 * one is responsible for its own cross-process coordination (see
+	 * `acquireArchiveLock`) — this method does not acquire any lock itself.
 	 * @param tmpDir - The path to the temporary directory containing the database.
 	 * @param namespace - An optional namespace for scoping data access within the archive.
 	 * @param options - Connection options.
