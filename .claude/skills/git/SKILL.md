@@ -1,4 +1,5 @@
 ---
+name: git
 description: Git 操作ルール
 ---
 

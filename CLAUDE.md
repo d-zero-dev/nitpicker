@@ -300,6 +300,10 @@ yarn lint                                          # lint + cspell
 | Product Manager | `.claude/skills/product-manager/SKILL.md` | リポジトリ分析、ドキュメント生成・レビュー、アーキテクチャ評価、PR レビュー |
 | QA Engineer     | `.claude/skills/qa-engineer/SKILL.md`     | コードレビュー、テスト品質チェック、カバレッジ改善、リファクタリング提案    |
 | Impl            | `.claude/skills/impl/SKILL.md`            | 合意済み計画の実装・検証・PR 作成までのオーケストレーション                 |
+| Grill me        | `.claude/skills/grill-me/SKILL.md`        | 計画や設計の前提を掘り下げ、依存関係を順に解いて合意形成する                |
+| Doc             | `.claude/skills/doc/SKILL.md`             | 実装を正としてドキュメントの不足・矛盾を洗い出し、更新方針を適用する        |
+| Git             | `.claude/skills/git/SKILL.md`             | リポジトリのコミット規約に従って差分確認・ステージング・コミットを進める    |
+| PR              | `.claude/skills/pr/SKILL.md`              | プリフライトチェック後に PR 作成と CI 監視まで進める                        |
 
 ## コーディング規約
 
