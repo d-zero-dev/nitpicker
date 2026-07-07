@@ -9,9 +9,12 @@ import { getSummary } from '../get-summary.js';
 import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
 import { buildPageUrlRankMap } from './build-page-url-rank-map.js';
 import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
+import { computeDuplicateGroupPageRows } from './compute-duplicate-group-page-rows.js';
+import { computeDuplicateGroupRows } from './compute-duplicate-group-rows.js';
 import { computeErrorKindInsertRows } from './compute-error-kind-insert-rows.js';
 import { computeHeaderCheckInsertRows } from './compute-header-check-insert-rows.js';
 import { computeImageInsertRows } from './compute-image-insert-rows.js';
+import { computeMismatchInsertRows } from './compute-mismatch-rows.js';
 import { computePageFacetBuckets } from './compute-page-facet-buckets.js';
 import { computeResourceInsertRows } from './compute-resource-rows.js';
 import { createViewerReadModelIndexes } from './create-viewer-read-model-indexes.js';
@@ -193,7 +196,7 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
 /**
  * Performs a full rebuild of the viewer read model: computes a `getSummary`
  * snapshot (see below for why this happens outside the transaction), then
- * drops all 16 tables if present, recreates them, populates `viewer_pages`
+ * drops all 19 tables if present, recreates them, populates `viewer_pages`
  * from the current `pages` write-model table, populates
  * `viewer_directory_nodes`/`viewer_directory_pages` from that same page set
  * (see `buildDirectoryTreeRows` for the tree-building rules), populates
@@ -212,7 +215,16 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
  * but is otherwise independent of the anchor/resource population above),
  * populates `viewer_header_checks` from its own filtered `pages` query (see
  * `computeHeaderCheckInsertRows` — issue #119, independent of every table
- * above), seeds one
+ * above), populates `viewer_duplicate_groups`/`viewer_duplicate_group_pages`
+ * (issue #115) via `computeDuplicateGroupRows` (a `title`/`description`
+ * `GROUP BY ... HAVING COUNT(*) > 1` aggregation that also assigns each
+ * group's `group_id`) followed by `computeDuplicateGroupPageRows` (a second,
+ * chunked `pages` scan that matches every member page back to the group(s)
+ * it belongs to via the `group_id` lookup the first step returned — a page
+ * duplicated on both fields is attached to both groups), populates
+ * `viewer_mismatches` (issue #115) from `computeMismatchInsertRows`'s own
+ * chunked, per-type `pages` scan (independent of every table above), seeds
+ * one
  * smoke-test row into `viewer_query_profiles`, writes the
  * `viewer_count_buckets` totals row plus one row per distinct Pages-list
  * facet value (see `computePageFacetBuckets`), writes the pre-computed
@@ -439,6 +451,54 @@ export async function buildViewerReadModel(
 			await trx('viewer_header_checks').insert(
 				headerCheckRows.slice(start, start + INSERT_CHUNK_SIZE),
 			);
+		}
+
+		// Duplicate-metadata group read model (issue #115). `computeDuplicateGroupRows`
+		// finds every title/description duplicate group and assigns each a
+		// sequential `group_id` (the same `buildDirectoryTreeRows`-style JS id
+		// assignment `viewer_directory_nodes.node_id` uses) — required because
+		// `viewer_duplicate_group_pages` rows must reference a group's id
+		// before either table is inserted. `computeDuplicateGroupPageRows` then
+		// re-scans `pages` in id-keyset-bounded chunks, using the returned
+		// `groupIdByValue` lookup to attach every member page to its group(s)
+		// — a page duplicated on both `title` and `description` is attached to
+		// both.
+		const { groups: duplicateGroupRows, groupIdByValue } =
+			await computeDuplicateGroupRows(trx);
+		for (let start = 0; start < duplicateGroupRows.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_duplicate_groups').insert(
+				duplicateGroupRows.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
+		for await (const duplicateGroupPageChunk of computeDuplicateGroupPageRows(
+			trx,
+			groupIdByValue,
+		)) {
+			for (
+				let start = 0;
+				start < duplicateGroupPageChunk.length;
+				start += INSERT_CHUNK_SIZE
+			) {
+				await trx('viewer_duplicate_group_pages').insert(
+					duplicateGroupPageChunk.slice(start, start + INSERT_CHUNK_SIZE),
+				);
+			}
+		}
+
+		// Metadata-mismatch read model (issue #115). `computeMismatchInsertRows`
+		// scans `pages` once per mismatch type (`canonical`, `og:title`,
+		// `og:description`) in id-keyset-bounded chunks, applying the exact
+		// WHERE predicate `findMismatches` itself uses per type.
+		// `mismatch_id` is left to SQLite's own `AUTOINCREMENT` (the same
+		// `viewer_anchor_facts.edge_id` convention) — unlike
+		// `viewer_duplicate_groups.group_id` above, nothing else references a
+		// mismatch row by id before it is inserted.
+		for await (const mismatchChunk of computeMismatchInsertRows(trx)) {
+			for (let start = 0; start < mismatchChunk.length; start += INSERT_CHUNK_SIZE) {
+				await trx('viewer_mismatches').insert(
+					mismatchChunk.slice(start, start + INSERT_CHUNK_SIZE),
+				);
+			}
 		}
 
 		const total = insertRows.length;

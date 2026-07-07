@@ -139,4 +139,19 @@ describe('createViewerReadModelIndexes', () => {
 			expect(indexNames.has(indexName)).toBe(true);
 		}
 	});
+
+	it('creates the viewer_duplicate_groups field/count index', async () => {
+		const indexNames = await indexNamesOn('viewer_duplicate_groups');
+		expect(indexNames.has('vdg_field_count')).toBe(true);
+	});
+
+	it('creates the viewer_duplicate_group_pages group/url index', async () => {
+		const indexNames = await indexNamesOn('viewer_duplicate_group_pages');
+		expect(indexNames.has('vdgp_group_url')).toBe(true);
+	});
+
+	it('creates the viewer_mismatches type/url index', async () => {
+		const indexNames = await indexNamesOn('viewer_mismatches');
+		expect(indexNames.has('vm_type_url')).toBe(true);
+	});
 });

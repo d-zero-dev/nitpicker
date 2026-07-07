@@ -20,8 +20,22 @@ vi.mock('@nitpicker/query', () => ({
 		.fn()
 		.mockResolvedValue({ items: [], total: 0, offset: 0, limit: 100 }),
 	getViolations: vi.fn().mockResolvedValue({ items: [], total: 0 }),
-	findDuplicates: vi.fn().mockResolvedValue([]),
-	findMismatches: vi.fn().mockResolvedValue([]),
+	getDuplicatesFastPath: vi.fn().mockResolvedValue({
+		items: [],
+		total: 0,
+		limit: 50,
+		offset: 0,
+		nextCursor: null,
+		prevCursor: null,
+	}),
+	getMismatchesFastPath: vi.fn().mockResolvedValue({
+		items: [],
+		total: 0,
+		limit: 100,
+		offset: 0,
+		nextCursor: null,
+		prevCursor: null,
+	}),
 	getHeaderChecksFastPath: vi
 		.fn()
 		.mockResolvedValue({ items: [], total: 0, offset: 0, limit: 100 }),
@@ -159,46 +173,78 @@ describe('dispatchQuery', () => {
 		expect(getViolations).toHaveBeenCalledWith(mockAccessor, expect.any(Object));
 	});
 
-	it('dispatches duplicates sub-command with default field', async () => {
-		const { findDuplicates } = await import('@nitpicker/query');
+	it('dispatches duplicates sub-command with default field through the fast path', async () => {
+		const { getDuplicatesFastPath } = await import('@nitpicker/query');
 		const result = await dispatchQuery(mockAccessor, 'duplicates', emptyFlags);
-		expect(result).toEqual([]);
-		expect(findDuplicates).toHaveBeenCalledWith(mockAccessor, 'title', undefined);
-	});
-
-	it('dispatches duplicates sub-command with custom field and limit', async () => {
-		const { findDuplicates } = await import('@nitpicker/query');
-		const result = await dispatchQuery(mockAccessor, 'duplicates', {
-			field: 'description',
-			limit: 10,
-		} as never);
-		expect(result).toEqual([]);
-		expect(findDuplicates).toHaveBeenCalledWith(mockAccessor, 'description', 10);
-	});
-
-	it('dispatches mismatches sub-command', async () => {
-		const { findMismatches } = await import('@nitpicker/query');
-		const result = await dispatchQuery(mockAccessor, 'mismatches', {
-			type: 'canonical',
-		} as never);
-		expect(result).toEqual([]);
-		expect(findMismatches).toHaveBeenCalledWith(
+		expect(result).toEqual({
+			items: [],
+			total: 0,
+			limit: 50,
+			offset: 0,
+			nextCursor: null,
+			prevCursor: null,
+		});
+		expect(getDuplicatesFastPath).toHaveBeenCalledWith(
 			mockAccessor,
-			'canonical',
-			undefined,
-			undefined,
+			expect.objectContaining({ field: 'title' }),
 		);
 	});
 
-	it('dispatches mismatches sub-command with limit and offset', async () => {
-		const { findMismatches } = await import('@nitpicker/query');
+	it('dispatches duplicates sub-command with custom field, limit, pagesLimit, cursor, direction', async () => {
+		const { getDuplicatesFastPath } = await import('@nitpicker/query');
+		await dispatchQuery(mockAccessor, 'duplicates', {
+			field: 'description',
+			limit: 10,
+			pagesLimit: 5,
+			cursor: 'abc',
+			direction: 'prev',
+		} as never);
+		expect(getDuplicatesFastPath).toHaveBeenCalledWith(mockAccessor, {
+			field: 'description',
+			limit: 10,
+			pagesLimit: 5,
+			cursor: 'abc',
+			direction: 'prev',
+			offset: undefined,
+		});
+	});
+
+	it('dispatches mismatches sub-command through the fast path', async () => {
+		const { getMismatchesFastPath } = await import('@nitpicker/query');
 		const result = await dispatchQuery(mockAccessor, 'mismatches', {
+			type: 'canonical',
+		} as never);
+		expect(result).toEqual({
+			items: [],
+			total: 0,
+			limit: 100,
+			offset: 0,
+			nextCursor: null,
+			prevCursor: null,
+		});
+		expect(getMismatchesFastPath).toHaveBeenCalledWith(mockAccessor, 'canonical', {
+			limit: undefined,
+			offset: undefined,
+			cursor: undefined,
+			direction: undefined,
+		});
+	});
+
+	it('dispatches mismatches sub-command with limit, offset, cursor, direction', async () => {
+		const { getMismatchesFastPath } = await import('@nitpicker/query');
+		await dispatchQuery(mockAccessor, 'mismatches', {
 			type: 'og:title',
 			limit: 5,
 			offset: 10,
+			cursor: 'xyz',
+			direction: 'next',
 		} as never);
-		expect(result).toEqual([]);
-		expect(findMismatches).toHaveBeenCalledWith(mockAccessor, 'og:title', 5, 10);
+		expect(getMismatchesFastPath).toHaveBeenCalledWith(mockAccessor, 'og:title', {
+			limit: 5,
+			offset: 10,
+			cursor: 'xyz',
+			direction: 'next',
+		});
 	});
 
 	it('dispatches headers sub-command', async () => {

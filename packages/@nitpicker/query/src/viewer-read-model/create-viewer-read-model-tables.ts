@@ -1,7 +1,7 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 16 viewer-read-model tables against the given connection, with
+ * Creates all 19 viewer-read-model tables against the given connection, with
  * no indexes. Assumes none of the tables currently exist — callers
  * (`buildViewerReadModel`) are responsible for dropping any prior version
  * first, inside the same transaction, so this function is not itself
@@ -365,6 +365,87 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			has_hsts integer not null,
 			missing_count integer not null,
 			is_missing integer not null
+		)
+	`);
+
+	// Duplicate-metadata group read model (issue #115), split into a
+	// group-level table and a member-page table — the same "one narrow table
+	// per grain" split `viewer_resources`/`viewer_resource_stats` and
+	// `viewer_directory_nodes`/`viewer_directory_pages` already use.
+	// `docs/viewer-db-redesign-plan.md`'s sketch SQL for `/api/duplicates`
+	// orders by a `count_desc_key`-shaped column and filters `viewer_mismatches`
+	// by a `url_sort_key`-shaped column, yet the plan's own CREATE TABLE
+	// examples never define either column — this implementation resolves
+	// that mismatch by following two conventions this read model already
+	// established elsewhere rather than inventing a third: `count_desc_key`
+	// is the negation of `count`, the same "sign-flipped integer for
+	// descending keyset order" idiom as `viewer_anchor_facts.status_desc_key`/
+	// `viewer_pages.status_desc_key`, and `url_sort_key` (on both new tables)
+	// is `pages.url` copied verbatim, the same "inline the sort key as text"
+	// convention `viewer_pages`/`viewer_anchor_facts`/`viewer_resources`/
+	// `viewer_header_checks` all use so indexed `ORDER BY`/keyset comparisons
+	// never need a pre-join back to `pages`.
+	//
+	// Like `viewer_anchor_facts`/`viewer_header_checks`, there is no
+	// `url_refs`/`content_items` ref-table indirection (issue #139 is not
+	// implemented, and landing it is out of scope for #115 specifically, same
+	// as #119's own note) — every value is inlined directly.
+	//
+	// `group_id` is assigned sequentially by `computeDuplicateGroupRows`
+	// itself at build time (JS-side, across both `title` and `description`
+	// groups), not left to SQLite's own `AUTOINCREMENT` — the same
+	// `viewer_directory_nodes.node_id` rationale: `viewer_duplicate_group_pages`
+	// rows reference a group's `group_id` before either table is inserted, so
+	// the id must already be known when both insert-row arrays are built.
+	// `viewer_mismatches.mismatch_id`, by contrast, is left to SQLite's own
+	// `AUTOINCREMENT` (like `viewer_anchor_facts.edge_id`) — nothing else in
+	// this read model needs to reference a mismatch row by id before it is
+	// inserted.
+	//
+	// `viewer_duplicate_group_pages` holds the COMPLETE member-page list for
+	// a group, addressable by `/api/duplicates/:groupId/pages` — the
+	// `/api/duplicates` group-listing endpoint itself reads only the first
+	// few member rows per group from this same table and inlines them onto
+	// the group entry, rather than joining/embedding every member inline for
+	// every group at list time (mirroring `viewer_directory_pages`'s own
+	// "list the parent node cheaply, list its full member-page set via a
+	// separate paginated endpoint" split).
+	await trx.raw(`
+		CREATE TABLE viewer_duplicate_groups (
+			group_id integer primary key,
+			field text not null,
+			value text not null,
+			count integer not null,
+			count_desc_key integer not null
+		)
+	`);
+
+	await trx.raw(`
+		CREATE TABLE viewer_duplicate_group_pages (
+			group_id integer not null,
+			page_id integer not null,
+			url_sort_key text not null,
+			primary key(group_id, page_id)
+		) WITHOUT ROWID
+	`);
+
+	// Metadata-mismatch read model (issue #115): one row per page failing one
+	// of `findMismatches`'s three comparisons (`canonical != url`,
+	// `og_title != title`, `og_description != description`), produced by
+	// `computeMismatchInsertRows`. `actual`/`expected` are nullable — a
+	// mismatch by definition means both sides are non-null/non-empty at
+	// build time (`findMismatches`'s own `whereNotNull`/`whereNot('', ...)`
+	// guards on both compared columns), but the columns themselves stay
+	// nullable rather than `not null` so this table's shape doesn't silently
+	// assume that invariant can never change.
+	await trx.raw(`
+		CREATE TABLE viewer_mismatches (
+			mismatch_id integer primary key,
+			type text not null,
+			page_id integer not null,
+			url_sort_key text not null,
+			actual text,
+			expected text
 		)
 	`);
 }

@@ -156,6 +156,10 @@ describe('mapFlagsToQueryOptions', () => {
 		expect(mapFlagsToQueryOptions('duplicates', {})).toEqual({
 			field: 'title',
 			limit: undefined,
+			pagesLimit: undefined,
+			cursor: undefined,
+			direction: undefined,
+			offset: undefined,
 		});
 	});
 
@@ -163,6 +167,32 @@ describe('mapFlagsToQueryOptions', () => {
 		expect(() => mapFlagsToQueryOptions('duplicates', { field: 'invalid' })).toThrow(
 			'Invalid --field value',
 		);
+	});
+
+	it('throws for invalid duplicates direction', () => {
+		expect(() => mapFlagsToQueryOptions('duplicates', { direction: 'sideways' })).toThrow(
+			'Invalid --direction value',
+		);
+	});
+
+	it('maps duplicates flags correctly, including pagesLimit/cursor/direction', () => {
+		expect(
+			mapFlagsToQueryOptions('duplicates', {
+				field: 'description',
+				limit: 10,
+				pagesLimit: 5,
+				cursor: 'abc',
+				direction: 'prev',
+				offset: 20,
+			}),
+		).toEqual({
+			field: 'description',
+			limit: 10,
+			pagesLimit: 5,
+			cursor: 'abc',
+			direction: 'prev',
+			offset: 20,
+		});
 	});
 
 	it('requires --type for mismatches', () => {
@@ -177,6 +207,12 @@ describe('mapFlagsToQueryOptions', () => {
 		);
 	});
 
+	it('throws for invalid mismatches direction', () => {
+		expect(() =>
+			mapFlagsToQueryOptions('mismatches', { type: 'canonical', direction: 'sideways' }),
+		).toThrow('Invalid --direction value');
+	});
+
 	it('maps mismatches flags correctly', () => {
 		expect(
 			mapFlagsToQueryOptions('mismatches', { type: 'canonical', limit: 50 }),
@@ -184,6 +220,26 @@ describe('mapFlagsToQueryOptions', () => {
 			type: 'canonical',
 			limit: 50,
 			offset: undefined,
+			cursor: undefined,
+			direction: undefined,
+		});
+	});
+
+	it('maps mismatches flags correctly, including cursor/direction', () => {
+		expect(
+			mapFlagsToQueryOptions('mismatches', {
+				type: 'canonical',
+				limit: 10,
+				offset: 5,
+				cursor: 'xyz',
+				direction: 'next',
+			}),
+		).toEqual({
+			type: 'canonical',
+			limit: 10,
+			offset: 5,
+			cursor: 'xyz',
+			direction: 'next',
 		});
 	});
 

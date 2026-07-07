@@ -1621,4 +1621,150 @@ describe('buildViewerReadModel', () => {
 			expect(meta).toMatchObject({ total_records: 0, channel_source: 'none' });
 		});
 	});
+
+	describe('viewer_duplicate_groups / viewer_duplicate_group_pages / viewer_mismatches population (issue #115)', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_duplicates_mismatches__',
+		);
+		const archiveFilePath = path.resolve(
+			workingDir,
+			'duplicates-mismatches-test.nitpicker',
+		);
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			// Title-duplicate group of 2.
+			await archive.setPage({
+				url: parseUrl('https://example.com/dup-a')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: { ...META, title: 'Duplicate Title' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+			await archive.setPage({
+				url: parseUrl('https://example.com/dup-b')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: { ...META, title: 'Duplicate Title' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// Singleton — must not surface as a duplicate group.
+			await archive.setPage({
+				url: parseUrl('https://example.com/unique')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: { ...META, title: 'Unique Title' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// canonical mismatch.
+			await archive.setPage({
+				url: parseUrl('https://example.com/mismatch')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: {
+					...META,
+					title: 'Mismatch',
+					link: { canonical: 'https://example.com/canonical-target' },
+				},
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			await buildViewerReadModel(archive);
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('populates viewer_duplicate_groups with one title-duplicate group, excluding the singleton', async () => {
+			const knex = archive.getKnex();
+			const groups = await knex('viewer_duplicate_groups').select('*');
+			expect(groups).toHaveLength(1);
+			expect(groups[0]).toMatchObject({
+				field: 'title',
+				value: 'Duplicate Title',
+				count: 2,
+				count_desc_key: -2,
+			});
+		});
+
+		it('populates viewer_duplicate_group_pages with both member pages of the duplicate group', async () => {
+			const knex = archive.getKnex();
+			const group = await knex('viewer_duplicate_groups').first();
+			const pages = await knex('viewer_duplicate_group_pages')
+				.where('group_id', group.group_id)
+				.select('url_sort_key');
+			expect(pages.map((p) => p.url_sort_key).toSorted()).toEqual(
+				['https://example.com/dup-a', 'https://example.com/dup-b'].toSorted(),
+			);
+		});
+
+		it('populates viewer_mismatches with the canonical mismatch, and nothing for a page with no mismatches', async () => {
+			const knex = archive.getKnex();
+			const rows = await knex('viewer_mismatches').select('*');
+			expect(rows).toHaveLength(1);
+			expect(rows[0]).toMatchObject({
+				type: 'canonical',
+				url_sort_key: 'https://example.com/mismatch',
+				actual: 'https://example.com/mismatch',
+				expected: 'https://example.com/canonical-target',
+			});
+		});
+
+		it('rebuilds idempotently — a second build leaves the same row counts, not duplicates', async () => {
+			await buildViewerReadModel(archive);
+			const knex = archive.getKnex();
+			expect(await knex('viewer_duplicate_groups').select('*')).toHaveLength(1);
+			expect(await knex('viewer_duplicate_group_pages').select('*')).toHaveLength(2);
+			expect(await knex('viewer_mismatches').select('*')).toHaveLength(1);
+		});
+	});
 });

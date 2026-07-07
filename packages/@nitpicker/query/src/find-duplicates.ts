@@ -29,12 +29,22 @@ const URL_DELIMITER = '';
  * @param accessor - The archive accessor to query.
  * @param field - The metadata field to check for duplicates.
  * @param limit - Maximum number of duplicate groups to return. Defaults to 50.
+ * @param offset - Number of duplicate groups (in `ORDER BY cnt DESC` order)
+ *   to skip before `limit` is applied. Defaults to 0 — added alongside
+ *   `getDuplicatesFastPath`'s legacy-fallback branch (issue #115) so a
+ *   caller can page through every duplicate group on an archive whose
+ *   viewer read model isn't current yet, mirroring `findMismatches`'s own
+ *   `offset` support.
  * @returns An array of duplicate entries with the shared value and matching URLs.
+ * @example
+ * // Second page of 50 duplicate title-groups, most-duplicated first:
+ * const page2 = await findDuplicates(accessor, 'title', 50, 50);
  */
 export async function findDuplicates(
 	accessor: ArchiveAccessor,
 	field: 'title' | 'description' = 'title',
 	limit: number = 50,
+	offset: number = 0,
 ): Promise<DuplicateEntry[]> {
 	const knex = accessor.getKnex();
 	// `field` is constrained to the literal union 'title' | 'description', so
@@ -54,7 +64,8 @@ export async function findDuplicates(
 		.groupBy(column)
 		.having('cnt', '>', 1)
 		.orderBy('cnt', 'desc')
-		.limit(limit)) as { value: string; cnt: number; urls: string }[];
+		.limit(limit)
+		.offset(offset)) as { value: string; cnt: number; urls: string }[];
 
 	return rows.map((row) => ({
 		field,

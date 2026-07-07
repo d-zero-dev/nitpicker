@@ -311,6 +311,11 @@ export const toolDefinitions: Tool[] = [
 					description: 'Metadata field to check for duplicates (default: "title")',
 				},
 				limit: { type: 'number', description: 'Max duplicate groups (default: 50)' },
+				offset: { type: 'number', description: 'Duplicate groups to skip (default: 0)' },
+				pagesLimit: {
+					type: 'number',
+					description: 'Max inline sample URLs per duplicate group (default: 20)',
+				},
 			},
 			required: ['archiveId'],
 		},
@@ -334,6 +339,20 @@ export const toolDefinitions: Tool[] = [
 				},
 				limit: { type: 'number', description: 'Max results (default: 100)' },
 				offset: { type: 'number', description: 'Results to skip (default: 0)' },
+				urlPattern: {
+					type: 'string',
+					description: 'SQL LIKE pattern to filter results by page URL',
+				},
+				sortBy: {
+					type: 'string',
+					enum: ['url', 'actual', 'expected'],
+					description: 'Field to sort results by (default: "url")',
+				},
+				sortOrder: {
+					type: 'string',
+					enum: ['asc', 'desc'],
+					description: 'Sort direction (default: "asc")',
+				},
 			},
 			required: ['archiveId', 'type'],
 		},

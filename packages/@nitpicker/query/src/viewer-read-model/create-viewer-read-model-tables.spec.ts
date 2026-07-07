@@ -30,7 +30,7 @@ describe('createViewerReadModelTables', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('creates all 16 tables with no indexes yet (see createViewerReadModelIndexes)', async () => {
+	it('creates all 19 tables with no indexes yet (see createViewerReadModelIndexes)', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 
@@ -51,6 +51,9 @@ describe('createViewerReadModelTables', () => {
 			'viewer_resource_stats',
 			'viewer_images',
 			'viewer_header_checks',
+			'viewer_duplicate_groups',
+			'viewer_duplicate_group_pages',
+			'viewer_mismatches',
 		];
 		for (const table of tables) {
 			expect(await knex.schema.hasTable(table)).toBe(true);
@@ -260,5 +263,68 @@ describe('createViewerReadModelTables', () => {
 				channel_source: 'none',
 			}),
 		).rejects.toThrow();
+	});
+
+	it('viewer_duplicate_groups rejects a duplicate group_id', async () => {
+		const knex = archive.getKnex();
+		await knex('viewer_duplicate_groups').insert({
+			group_id: 1,
+			field: 'title',
+			value: 'Duplicate Title',
+			count: 2,
+			count_desc_key: -2,
+		});
+		await expect(
+			knex('viewer_duplicate_groups').insert({
+				group_id: 1,
+				field: 'description',
+				value: 'Duplicate Description',
+				count: 3,
+				count_desc_key: -3,
+			}),
+		).rejects.toThrow();
+	});
+
+	it('viewer_duplicate_group_pages enforces a composite (group_id, page_id) key, not a single-column rowid', async () => {
+		const knex = archive.getKnex();
+		await knex('viewer_duplicate_group_pages').insert([
+			{ group_id: 1, page_id: 1, url_sort_key: 'https://example.com/a' },
+			{ group_id: 1, page_id: 2, url_sort_key: 'https://example.com/b' },
+		]);
+		const rows = await knex('viewer_duplicate_group_pages')
+			.select('page_id')
+			.orderBy('page_id');
+		expect(rows.map((r) => r.page_id)).toEqual([1, 2]);
+
+		await expect(
+			knex('viewer_duplicate_group_pages').insert({
+				group_id: 1,
+				page_id: 1,
+				url_sort_key: 'https://example.com/duplicate',
+			}),
+		).rejects.toThrow();
+	});
+
+	it('viewer_mismatches auto-assigns mismatch_id, allowing multiple rows for the same page', async () => {
+		const knex = archive.getKnex();
+		await knex('viewer_mismatches').insert([
+			{
+				type: 'canonical',
+				page_id: 1,
+				url_sort_key: 'https://example.com/a',
+				actual: 'https://example.com/a',
+				expected: 'https://example.com/canonical-a',
+			},
+			{
+				type: 'og:title',
+				page_id: 1,
+				url_sort_key: 'https://example.com/a',
+				actual: 'OG Title',
+				expected: 'Title',
+			},
+		]);
+		const rows = await knex('viewer_mismatches').select('mismatch_id', 'type');
+		expect(rows).toHaveLength(2);
+		expect(new Set(rows.map((r) => r.mismatch_id)).size).toBe(2);
 	});
 });

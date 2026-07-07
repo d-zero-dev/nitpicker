@@ -8,11 +8,11 @@ import {
 	ArchiveManager,
 	countPagesByJsonLdType,
 	countPagesByTag,
-	findDuplicates,
-	findMismatches,
+	getDuplicatesFastPath,
 	getHeaderChecksFastPath,
 	getImagesFastPath,
 	getIsolatedCluster,
+	getMismatchesFastPath,
 	getPageDetail,
 	getPageHtml,
 	getPageJsonLd,
@@ -290,7 +290,13 @@ export function createServer() {
 							? validateEnum(String(args.field), VALID_DUPLICATE_FIELDS, 'field')
 							: undefined;
 						return jsonResult(
-							await findDuplicates(accessor, field, optionalNumber(args, 'limit')),
+							await getDuplicatesFastPath(accessor, {
+								field,
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+								pagesLimit: optionalNumber(args, 'pagesLimit'),
+								cursor: optionalString(args, 'cursor'),
+							}),
 						);
 					}
 					case 'find_mismatches': {
@@ -301,12 +307,21 @@ export function createServer() {
 							'mismatch type',
 						);
 						return jsonResult(
-							await findMismatches(
-								accessor,
-								type,
-								optionalNumber(args, 'limit'),
-								optionalNumber(args, 'offset'),
-							),
+							await getMismatchesFastPath(accessor, type, {
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+								urlPattern: optionalString(args, 'urlPattern'),
+								sortBy: optionalString(args, 'sortBy') as
+									| 'url'
+									| 'actual'
+									| 'expected'
+									| undefined,
+								sortOrder: optionalString(args, 'sortOrder') as
+									| 'asc'
+									| 'desc'
+									| undefined,
+								cursor: optionalString(args, 'cursor'),
+							}),
 						);
 					}
 					case 'get_resource_referrers': {

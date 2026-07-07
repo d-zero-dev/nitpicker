@@ -219,4 +219,55 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 		'CREATE INDEX vh_missing ON viewer_header_checks(is_missing, url_sort_key, page_id)',
 	);
 	await trx.raw('CREATE INDEX vh_default ON viewer_header_checks(url_sort_key, page_id)');
+
+	// Duplicate-metadata group read model (issue #115). `vdg_field_count`
+	// leads with `field` (an equality predicate every read always supplies —
+	// see `ListViewerDuplicateGroupsOptions.field`'s required, not optional,
+	// docs) so the default most-duplicated-first `ORDER BY count_desc_key`
+	// stays a single index-order scan, the same "equality-then-sort-key"
+	// shape as `vh_default`. No dedicated index for `value` (the shared
+	// duplicate text itself): nothing filters or sorts by it — it is only
+	// ever read back as display data after the id set is already
+	// limit-bounded by `count_desc_key`.
+	await trx.raw(
+		'CREATE INDEX vdg_field_count ON viewer_duplicate_groups(field, count_desc_key, group_id)',
+	);
+
+	// `viewer_duplicate_group_pages` DOES need a dedicated index, despite its
+	// `(group_id, page_id)` composite `PRIMARY KEY` on a `WITHOUT ROWID`
+	// table: that primary key clusters by `page_id` within a `group_id`, but
+	// `listViewerDuplicateGroupPages`/`listViewerDuplicateGroups`'s
+	// window-function sample query both order member pages by
+	// `(url_sort_key, page_id)`, not `page_id` alone. `EXPLAIN QUERY PLAN`
+	// against `WHERE group_id = ? ORDER BY url_sort_key, page_id` with only
+	// the primary key present confirms `SEARCH ... USING PRIMARY KEY
+	// (group_id=?)` followed by `USE TEMP B-TREE FOR ORDER BY` — for a
+	// duplicate group with thousands of member pages (common CMS-boilerplate
+	// titles on large sites), every read re-sorts the entire group from
+	// scratch. `vdgp_group_url` fixes this the same "equality-then-sort-key"
+	// way as `vdg_field_count`/`vm_type_url`.
+	await trx.raw(
+		'CREATE INDEX vdgp_group_url ON viewer_duplicate_group_pages(group_id, url_sort_key, page_id)',
+	);
+
+	// Metadata-mismatch read model (issue #115). `vm_type_url` leads with
+	// `type` (an equality predicate every read always supplies — see
+	// `ListViewerMismatchesOptions.type`'s required, not optional, docs), the
+	// same "equality-then-sort-key" shape as `vdg_field_count`/`vh_default`
+	// above. No `status_desc_key`-style descending twin: fast-path listing
+	// only supports `sortBy` on `url_sort_key` (see
+	// `ListViewerMismatchesOptions`'s docs for why `actual`/`expected`
+	// sorting bails to the legacy `findMismatches` path instead), and a
+	// single ascending index scanned backward already serves `sortOrder:
+	// 'desc'` with no separate descending-key column needed — the exact
+	// `vel_*`/`vaf_*` distinction: `viewer_external_links` (offset
+	// pagination, no descending column) versus `viewer_anchor_facts` (keyset
+	// pagination, needs one). `viewer_mismatches` uses keyset pagination too,
+	// but keyset DESC over a single already-monotonic text column doesn't
+	// need a sign-flipped twin the way an INTEGER `status` column does — a
+	// `text` column has no arithmetic negation, so reversing scan direction
+	// (not a negated key) is how SQLite walks it backward.
+	await trx.raw(
+		'CREATE INDEX vm_type_url ON viewer_mismatches(type, url_sort_key, mismatch_id)',
+	);
 }

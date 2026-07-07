@@ -140,9 +140,18 @@ export function mapFlagsToQueryOptions(
 					`Invalid --field value: ${flags.field}. Must be one of: title, description`,
 				);
 			}
+			if (flags.direction != null && !['next', 'prev'].includes(flags.direction)) {
+				throw new Error(
+					`Invalid --direction value: ${flags.direction}. Must be one of: next, prev`,
+				);
+			}
 			return {
 				field: (flags.field as 'title' | 'description' | undefined) ?? 'title',
 				limit: flags.limit,
+				pagesLimit: flags.pagesLimit,
+				cursor: flags.cursor,
+				direction: flags.direction as 'next' | 'prev' | undefined,
+				offset: flags.offset,
 			};
 		}
 		case 'mismatches': {
@@ -156,10 +165,17 @@ export function mapFlagsToQueryOptions(
 					`Invalid --type value: ${flags.type}. Must be one of: canonical, og:title, og:description`,
 				);
 			}
+			if (flags.direction != null && !['next', 'prev'].includes(flags.direction)) {
+				throw new Error(
+					`Invalid --direction value: ${flags.direction}. Must be one of: next, prev`,
+				);
+			}
 			return {
 				type: flags.type as 'canonical' | 'og:title' | 'og:description',
 				limit: flags.limit,
 				offset: flags.offset,
+				cursor: flags.cursor,
+				direction: flags.direction as 'next' | 'prev' | undefined,
 			};
 		}
 		case 'headers': {
