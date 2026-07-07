@@ -2974,12 +2974,12 @@ __metadata:
     ansi-colors: "npm:4.1.3"
     debug: "npm:4.4.3"
     follow-redirects: "npm:1.16.0"
-    fs-extra: "npm:11.3.5"
+    fs-extra: "npm:11.3.6"
     knex: "npm:3.3.0"
     libsql: "npm:0.5.29"
     puppeteer: "npm:25.2.1"
     robots-parser: "npm:3.0.1"
-    tar: "npm:7.5.17"
+    tar: "npm:7.5.19"
   languageName: unknown
   linkType: soft
 
@@ -3040,7 +3040,7 @@ __metadata:
     "@nitpicker/crawler": "npm:0.12.0"
     "@nitpicker/query": "npm:0.12.0"
     "@playwright/test": "npm:1.61.1"
-    "@tanstack/react-query": "npm:5.101.1"
+    "@tanstack/react-query": "npm:5.101.2"
     "@tanstack/react-table": "npm:8.21.3"
     "@tanstack/react-virtual": "npm:3.14.4"
     "@testing-library/dom": "npm:10.4.1"
@@ -3056,7 +3056,7 @@ __metadata:
     jsdom: "npm:29.1.1"
     react: "npm:19.2.7"
     react-dom: "npm:19.2.7"
-    react-router: "npm:8.0.1"
+    react-router: "npm:8.1.0"
     sigma: "npm:3.0.3"
     vite: "npm:8.1.0"
   languageName: unknown
@@ -4340,21 +4340,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@tanstack/query-core@npm:5.101.1":
-  version: 5.101.1
-  resolution: "@tanstack/query-core@npm:5.101.1"
-  checksum: 10c0/d8354b7adab36aca9ddc7bb7c1b404e324808d1ac76ab56243dee7f5a0c1b7fe66f945301924cab0c514fac234cfb2be2668c2147655312a9cf820131d83e315
+"@tanstack/query-core@npm:5.101.2":
+  version: 5.101.2
+  resolution: "@tanstack/query-core@npm:5.101.2"
+  checksum: 10c0/c3288757bfd563ca35cee21bf6ed0edb2f4425a8c92f75d84dcb36a0580a59e48bd97fcdbbc7c8d8e95a4c40376edfc5772b14665b85d183079a0ba7e17793b2
   languageName: node
   linkType: hard
 
-"@tanstack/react-query@npm:5.101.1":
-  version: 5.101.1
-  resolution: "@tanstack/react-query@npm:5.101.1"
+"@tanstack/react-query@npm:5.101.2":
+  version: 5.101.2
+  resolution: "@tanstack/react-query@npm:5.101.2"
   dependencies:
-    "@tanstack/query-core": "npm:5.101.1"
+    "@tanstack/query-core": "npm:5.101.2"
   peerDependencies:
     react: ^18 || ^19
-  checksum: 10c0/8275e7d21fc05304769c1e141f8f04fa3b68871a777f4f30e1d7791abd0ffd164162d8a6d035825e17ef6571fe6380eb8014c82b0d29a39f03b3615eb390ca31
+  checksum: 10c0/076b2db0d85a6dc96d461789715ae0df2e439d9a20a41e629446275f8177a856c3b89d242ad3d31eadaf421f080b9834bcd9f94e5143f4cd7f947a10af9e42b3
   languageName: node
   linkType: hard
 
@@ -9877,14 +9877,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fs-extra@npm:11.3.5":
-  version: 11.3.5
-  resolution: "fs-extra@npm:11.3.5"
+"fs-extra@npm:11.3.6":
+  version: 11.3.6
+  resolution: "fs-extra@npm:11.3.6"
   dependencies:
     graceful-fs: "npm:^4.2.0"
     jsonfile: "npm:^6.0.1"
     universalify: "npm:^2.0.0"
-  checksum: 10c0/33e80bad6b5d17308faa197e5ede99ecba4b6f6cb4aa4645d52745476c75afc57665bdf39ec75b2ebb38b97b7110f634a8dcc0a546e248eb4de059275cf5ac90
+  checksum: 10c0/191c96bf71519fe08595f7920b6e568f6e44b48ed968624f35cb3bb7f4f9b05718b99cd6bf81938c0f7b1daa6d151383c33e0cbfdfe4d95419d7ea121de8e91a
   languageName: node
   linkType: hard
 
@@ -15853,9 +15853,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-router@npm:8.0.1":
-  version: 8.0.1
-  resolution: "react-router@npm:8.0.1"
+"react-router@npm:8.1.0":
+  version: 8.1.0
+  resolution: "react-router@npm:8.1.0"
   dependencies:
     cookie-es: "npm:^3.1.1"
   peerDependencies:
@@ -15864,7 +15864,7 @@ __metadata:
   peerDependenciesMeta:
     react-dom:
       optional: true
-  checksum: 10c0/7ffcac5caf209b6988a0e045fd044f5f8e91e7f677475f707becd514f316f6c2d556f90e371c5a41f6033da891a2d97370b1c5d443ba96991ab0f4f71252c8ba
+  checksum: 10c0/28c336a5c32ad011a305b82fb27ae1abb892a971591618d3dcb4c8ff3fef3440c215e2b9b365217dd43774db4b3d526c4a95e5d3faecacf42ed9356402bab03f
   languageName: node
   linkType: hard
 
@@ -17756,16 +17756,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tar@npm:7.5.17":
-  version: 7.5.17
-  resolution: "tar@npm:7.5.17"
+"tar@npm:7.5.19":
+  version: 7.5.19
+  resolution: "tar@npm:7.5.19"
   dependencies:
     "@isaacs/fs-minipass": "npm:^4.0.0"
     chownr: "npm:^3.0.0"
     minipass: "npm:^7.1.2"
     minizlib: "npm:^3.1.0"
     yallist: "npm:^5.0.0"
-  checksum: 10c0/794e80834d6fa29a526d7c6dc82684cd1d0fbc4b7dd4a86c730946a996314149b60e29f1bff8623936bb1442da7de241890c16ce6268f16cc5ef2aa5b9615953
+  checksum: 10c0/7022e8cb04a8ceccc0689f2c731743fa2aab2e3c3f559f7dbc37b65ef7d5913049b427284eded2ec0765c5db5ff72dd7939fe2ae15785ff422cef2116c95d798
   languageName: node
   linkType: hard
 
