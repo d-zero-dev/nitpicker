@@ -226,10 +226,11 @@ describe('connect: readOnly option', () => {
 	});
 
 	it('opens a writable accessor against the same tmpDir when readOnly: false', async () => {
-		// Simulates issue #112's on-open build: a second connection to a
-		// tmpDir that another (read-only) accessor already has open, used to
-		// build the viewer read model without touching the caller's
-		// live/interrupted crawl tmpDir (which must never take this path).
+		// Simulates the explicit `nitpicker viewer-build` command: a second
+		// connection to a tmpDir that another (read-only) accessor already
+		// has open, used to build the viewer read model without touching the
+		// caller's live/interrupted crawl tmpDir (which must never take this
+		// path).
 		const archiveFilePath = path.resolve(
 			workingDir,
 			'connect-readonly-writable.nitpicker',
