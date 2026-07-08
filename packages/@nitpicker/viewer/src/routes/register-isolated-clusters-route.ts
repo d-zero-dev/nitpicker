@@ -1,7 +1,14 @@
 import type { ArchiveContext } from '../types.js';
 import type { Hono } from 'hono';
 
-import { getIsolatedCluster, listIsolatedClusters } from '@nitpicker/query';
+import {
+	getIsolatedCluster,
+	getIsolatedClusterFastPath,
+	getViewerIsolatedComponentSize,
+	isViewerReadModelCurrent,
+	listIsolatedClusters,
+	listIsolatedClustersFastPath,
+} from '@nitpicker/query';
 
 import { getCachedIsolatedClusters } from '../isolated-clusters-cache.js';
 import { toNumber } from '../query-params/to-number.js';
@@ -25,8 +32,7 @@ import { toNumber } from '../query-params/to-number.js';
 export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext): void {
 	app.get('/api/isolated-clusters', async (c) => {
 		const accessor = context.manager.get(context.archiveId);
-		const precomputedComponents = await getCachedIsolatedClusters(context);
-		const result = await listIsolatedClusters(accessor, {
+		const sharedOptions = {
 			urlPattern: c.req.query('urlPattern'),
 			status: toNumber(c.req.query('status')),
 			sortBy: c.req.query('sortBy') as
@@ -38,16 +44,23 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 			sortOrder: c.req.query('sortOrder') as 'asc' | 'desc' | undefined,
 			limit: toNumber(c.req.query('limit')),
 			offset: toNumber(c.req.query('offset')),
-			precomputedComponents,
-		});
+		};
+		const result =
+			context.mode === 'stub'
+				? await listIsolatedClusters(accessor, {
+						...sharedOptions,
+						precomputedComponents: await getCachedIsolatedClusters(context),
+					})
+				: await listIsolatedClustersFastPath(accessor, sharedOptions);
 		return c.json(result);
 	});
 
 	app.get('/api/isolated-clusters/:representativeUrl', async (c) => {
 		const accessor = context.manager.get(context.archiveId);
 		const representativeUrl = c.req.param('representativeUrl');
-		const precomputedComponents = await getCachedIsolatedClusters(context);
-		const result = await getIsolatedCluster(accessor, representativeUrl, {
+		const usesReadModel =
+			context.mode !== 'stub' && (await isViewerReadModelCurrent(accessor));
+		const sharedOptions = {
 			urlPattern: c.req.query('urlPattern'),
 			status: toNumber(c.req.query('status')),
 			source: c.req.query('source') as
@@ -59,8 +72,14 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 			sortOrder: c.req.query('sortOrder') as 'asc' | 'desc' | undefined,
 			limit: toNumber(c.req.query('limit')),
 			offset: toNumber(c.req.query('offset')),
-			precomputedComponents,
-		});
+		};
+		const result =
+			context.mode === 'stub'
+				? await getIsolatedCluster(accessor, representativeUrl, {
+						...sharedOptions,
+						precomputedComponents: await getCachedIsolatedClusters(context),
+					})
+				: await getIsolatedClusterFastPath(accessor, representativeUrl, sharedOptions);
 		if (result === null) {
 			// Distinguish "the URL maps to a singleton, you wanted
 			// /api/isolated-pages" from "the cluster collapsed". Deep-
@@ -69,10 +88,18 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 			// between the two tables); merging both into the same 404
 			// "collapsed by follow-up crawl" message has been a
 			// recurring source of confused diff-the-archive triage.
-			const isSingleton = precomputedComponents.some(
-				(component) =>
-					component.representativeUrl === representativeUrl && component.size === 1,
-			);
+			let singletonSize: number | null | undefined;
+			if (context.mode === 'stub') {
+				const precomputedComponents = await getCachedIsolatedClusters(context);
+				singletonSize = precomputedComponents.find(
+					(component) => component.representativeUrl === representativeUrl,
+				)?.size;
+			} else if (usesReadModel) {
+				singletonSize = await getViewerIsolatedComponentSize(accessor, representativeUrl);
+			} else {
+				singletonSize = null;
+			}
+			const isSingleton = singletonSize === 1;
 			if (isSingleton) {
 				return c.json(
 					{

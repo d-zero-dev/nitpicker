@@ -1,7 +1,7 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 19 viewer-read-model tables against the given connection, with
+ * Creates all 23 viewer-read-model tables against the given connection, with
  * no indexes. Assumes none of the tables currently exist — callers
  * (`buildViewerReadModel`) are responsible for dropping any prior version
  * first, inside the same transaction, so this function is not itself
@@ -238,6 +238,55 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			total_records integer not null,
 			channel_source text not null
 		)
+	`);
+
+	await trx.raw(`
+		CREATE TABLE viewer_isolated_components (
+			component_id integer primary key,
+			representative_url text not null,
+			representative_title text,
+			representative_status integer,
+			representative_url_sort_key text not null,
+			representative_title_sort_key text not null,
+			representative_status_sort_key integer not null,
+			representative_status_desc_key integer not null,
+			size integer not null,
+			size_desc_key integer not null,
+			unique(representative_url)
+		)
+	`);
+
+	await trx.raw(`
+		CREATE TABLE viewer_isolated_component_pages (
+			component_id integer not null,
+			page_id integer not null,
+			url text not null,
+			title text,
+			status integer,
+			source text not null,
+			url_sort_key text not null,
+			title_sort_key text not null,
+			status_sort_key integer not null,
+			status_desc_key integer not null,
+			primary key(component_id, page_id)
+		) WITHOUT ROWID
+	`);
+
+	await trx.raw(`
+		CREATE TABLE viewer_graph_nodes (
+			page_id integer primary key,
+			url text not null,
+			status integer,
+			indegree integer not null
+		)
+	`);
+
+	await trx.raw(`
+		CREATE TABLE viewer_graph_edges (
+			source_page_id integer not null,
+			target_page_id integer not null,
+			primary key(source_page_id, target_page_id)
+		) WITHOUT ROWID
 	`);
 
 	// Resource-list read model (issue #110). `status_sort_key`/`status_desc_key`

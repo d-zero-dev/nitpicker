@@ -2,16 +2,19 @@ import type { BuildViewerReadModelOptions, PageSource } from '../types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { classifyContentType } from '../classify-content-type.js';
+import { computeIsolatedClusters } from '../compute-isolated-clusters.js';
 import { excludeSkippedPages } from '../exclude-skipped-pages.js';
 import { getErrorKinds } from '../get-error-kinds.js';
 import { getSummary } from '../get-summary.js';
 
 import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
+import { buildIsolatedReadModelRows } from './build-isolated-read-model-rows.js';
 import { buildPageUrlRankMap } from './build-page-url-rank-map.js';
 import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
 import { computeDuplicateGroupPageRows } from './compute-duplicate-group-page-rows.js';
 import { computeDuplicateGroupRows } from './compute-duplicate-group-rows.js';
 import { computeErrorKindInsertRows } from './compute-error-kind-insert-rows.js';
+import { computeGraphReadModelRows } from './compute-graph-read-model-rows.js';
 import { computeHeaderCheckInsertRows } from './compute-header-check-insert-rows.js';
 import { computeImageInsertRows } from './compute-image-insert-rows.js';
 import { computeMismatchInsertRows } from './compute-mismatch-rows.js';
@@ -196,7 +199,7 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
 /**
  * Performs a full rebuild of the viewer read model: computes a `getSummary`
  * snapshot (see below for why this happens outside the transaction), then
- * drops all 19 tables if present, recreates them, populates `viewer_pages`
+ * drops all 23 tables if present, recreates them, populates `viewer_pages`
  * from the current `pages` write-model table, populates
  * `viewer_directory_nodes`/`viewer_directory_pages` from that same page set
  * (see `buildDirectoryTreeRows` for the tree-building rules), populates
@@ -312,9 +315,10 @@ export async function buildViewerReadModel(
 
 	const { onProgress } = options;
 	const knex = accessor.getKnex();
-	const [summary, errorKinds] = await Promise.all([
+	const [summary, errorKinds, isolatedComponents] = await Promise.all([
 		getSummary(accessor),
 		getErrorKinds(accessor),
+		computeIsolatedClusters(accessor),
 	]);
 	await knex.transaction(async (trx) => {
 		await dropViewerReadModelTables(trx);
@@ -341,6 +345,7 @@ export async function buildViewerReadModel(
 			);
 
 		const insertRows = sourceRows.map(toViewerPageInsertRow);
+		const pageIdByUrl = new Map(sourceRows.map((row) => [row.url, row.id]));
 		const totalRows = insertRows.length;
 		let insertedRows = 0;
 
@@ -377,6 +382,22 @@ export async function buildViewerReadModel(
 			);
 		}
 
+		const isolatedRows = buildIsolatedReadModelRows(isolatedComponents, pageIdByUrl);
+		for (
+			let start = 0;
+			start < isolatedRows.components.length;
+			start += INSERT_CHUNK_SIZE
+		) {
+			await trx('viewer_isolated_components').insert(
+				isolatedRows.components.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
+		for (let start = 0; start < isolatedRows.pages.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_isolated_component_pages').insert(
+				isolatedRows.pages.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
+
 		// Unlike `viewer_pages`/the directory tree, this needs its own `anchors`
 		// query — `sourceRows` (loaded from `pages` only) has no anchor/link
 		// data. Runs once, here, instead of on every `/api/links?type=broken`
@@ -398,6 +419,35 @@ export async function buildViewerReadModel(
 				);
 			}
 			await upsertExternalLinkRows(trx, deriveExternalLinkSummaryRows(anchorFactChunk));
+		}
+
+		const graphIndegreeByPageId = new Map<number, number>();
+		for await (const graphEdgeChunk of computeGraphReadModelRows(trx)) {
+			for (const edge of graphEdgeChunk) {
+				graphIndegreeByPageId.set(
+					edge.target_page_id,
+					(graphIndegreeByPageId.get(edge.target_page_id) ?? 0) + 1,
+				);
+			}
+			for (let start = 0; start < graphEdgeChunk.length; start += INSERT_CHUNK_SIZE) {
+				await trx('viewer_graph_edges').insert(
+					graphEdgeChunk.slice(start, start + INSERT_CHUNK_SIZE),
+				);
+			}
+		}
+
+		const graphNodeRows = sourceRows
+			.filter((row) => !row.isExternal && row.contentType === 'text/html')
+			.map((row) => ({
+				page_id: row.id,
+				url: row.url,
+				status: row.status,
+				indegree: graphIndegreeByPageId.get(row.id) ?? 0,
+			}));
+		for (let start = 0; start < graphNodeRows.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_graph_nodes').insert(
+				graphNodeRows.slice(start, start + INSERT_CHUNK_SIZE),
+			);
 		}
 
 		// Independent of `pages`/`anchors` — reads `resources` +

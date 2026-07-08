@@ -273,6 +273,86 @@ export interface ErrorKindInsertRows {
 }
 
 /**
+ * One row to insert into `viewer_isolated_components`, representing a single
+ * connected component of the inventory-* subgraph (singleton or cluster).
+ */
+export interface IsolatedComponentInsertRow {
+	/** Sequential integer id assigned during the build. */
+	component_id: number;
+	/** The component's stable identifier — the lexicographically smallest member URL. */
+	representative_url: string;
+	/** Representative member title, or `null`. */
+	representative_title: string | null;
+	/** Representative member status, or `null`. */
+	representative_status: number | null;
+	/** Sort key mirroring `representative_url`. */
+	representative_url_sort_key: string;
+	/** Sort key mirroring `representative_title`, defaulting `null` to `''`. */
+	representative_title_sort_key: string;
+	/** `representative_status`, or `NULL_STATUS_SENTINEL` when `null`. */
+	representative_status_sort_key: number;
+	/** Negated {@link representative_status_sort_key} for descending order. */
+	representative_status_desc_key: number;
+	/** Component size (`member_count`). */
+	size: number;
+	/** Negated {@link size} for descending order under ascending index scans. */
+	size_desc_key: number;
+}
+
+/**
+ * One row to insert into `viewer_isolated_component_pages`, representing one
+ * member page of a precomputed isolated component.
+ */
+export interface IsolatedComponentPageInsertRow {
+	/** Owning component id — a {@link IsolatedComponentInsertRow.component_id}. */
+	component_id: number;
+	/** The write-model `pages.id` for this member. */
+	page_id: number;
+	/** Member URL. */
+	url: string;
+	/** Member title, or `null`. */
+	title: string | null;
+	/** Member HTTP status, or `null`. */
+	status: number | null;
+	/** Provenance label — see {@link PageSource}. */
+	source: PageSource;
+	/** Sort key mirroring `url`. */
+	url_sort_key: string;
+	/** Sort key mirroring `title`, defaulting `null` to `''`. */
+	title_sort_key: string;
+	/** `status`, or `NULL_STATUS_SENTINEL` when `null`. */
+	status_sort_key: number;
+	/** Negated {@link status_sort_key} for descending order. */
+	status_desc_key: number;
+}
+
+/**
+ * One row to insert into `viewer_graph_nodes`, representing an internal HTML
+ * canonical page in the precomputed link graph.
+ */
+export interface GraphNodeInsertRow {
+	/** The write-model `pages.id` for this node. */
+	page_id: number;
+	/** Page URL. */
+	url: string;
+	/** Page HTTP status, or `null`. */
+	status: number | null;
+	/** Number of incoming internal edges in `viewer_graph_edges`. */
+	indegree: number;
+}
+
+/**
+ * One row to insert into `viewer_graph_edges`, representing one distinct
+ * directed internal link between two `viewer_graph_nodes`.
+ */
+export interface GraphEdgeInsertRow {
+	/** Source page id. */
+	source_page_id: number;
+	/** Target page id. */
+	target_page_id: number;
+}
+
+/**
  * One row to insert into `viewer_resources` — one row per `resources` row,
  * produced by `computeResourceInsertRows`.
  */

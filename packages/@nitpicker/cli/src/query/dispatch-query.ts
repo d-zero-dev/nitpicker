@@ -19,7 +19,7 @@ import {
 	getErrorKindsFastPath,
 	getHeaderChecksFastPath,
 	getImagesFastPath,
-	getIsolatedCluster,
+	getIsolatedClusterFastPath,
 	getMismatchesFastPath,
 	getPageDetail,
 	getPageHtml,
@@ -31,8 +31,8 @@ import {
 	getTagInventory,
 	getViolations,
 	listInventoryRuns,
-	listIsolatedClusters,
-	listIsolatedPages,
+	listIsolatedClustersFastPath,
+	listIsolatedPagesFastPath,
 	listLinks,
 	listPages,
 	listPagesByJsonLdType,
@@ -175,15 +175,15 @@ export async function dispatchQuery(
 		}
 		case 'isolated-pages': {
 			const { limit, offset } = options as { limit?: number; offset?: number };
-			return listIsolatedPages(accessor, { limit, offset });
+			return listIsolatedPagesFastPath(accessor, { limit, offset });
 		}
 		case 'isolated-clusters': {
 			const { limit, offset } = options as { limit?: number; offset?: number };
-			return listIsolatedClusters(accessor, { limit, offset });
+			return listIsolatedClustersFastPath(accessor, { limit, offset });
 		}
 		case 'get-isolated-cluster': {
 			const { representativeUrl } = options as { representativeUrl: string };
-			const result = await getIsolatedCluster(accessor, representativeUrl);
+			const result = await getIsolatedClusterFastPath(accessor, representativeUrl);
 			if (result === null) {
 				throw new Error(
 					`No isolated cluster found for representativeUrl: ${representativeUrl}`,

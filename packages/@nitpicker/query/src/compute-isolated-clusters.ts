@@ -138,7 +138,12 @@ export async function computeIsolatedClusters(
 			pageId: number;
 			hrefId: number | null;
 		}[];
-		anchorRows.push(...rows);
+		// Avoid `push(...rows)`: on large real archives this chunk array can be
+		// large enough to overflow V8's argument-spread limit even though the
+		// underlying data itself fits in memory.
+		for (const row of rows) {
+			anchorRows.push(row);
+		}
 	});
 
 	// 4. Initialise union-find over the candidate set.

@@ -11,7 +11,7 @@ import {
 	getDuplicatesFastPath,
 	getHeaderChecksFastPath,
 	getImagesFastPath,
-	getIsolatedCluster,
+	getIsolatedClusterFastPath,
 	getMismatchesFastPath,
 	getPageDetail,
 	getPageHtml,
@@ -22,8 +22,8 @@ import {
 	getSummaryFastPath,
 	getTagInventory,
 	getViolations,
-	listIsolatedClusters,
-	listIsolatedPages,
+	listIsolatedClustersFastPath,
+	listIsolatedPagesFastPath,
 	listLinks,
 	listPages,
 	listPagesByJsonLdType,
@@ -346,7 +346,7 @@ export function createServer() {
 					case 'list_isolated_pages': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(
-							await listIsolatedPages(accessor, {
+							await listIsolatedPagesFastPath(accessor, {
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
 							}),
@@ -355,7 +355,7 @@ export function createServer() {
 					case 'list_isolated_clusters': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(
-							await listIsolatedClusters(accessor, {
+							await listIsolatedClustersFastPath(accessor, {
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
 							}),
@@ -363,7 +363,7 @@ export function createServer() {
 					}
 					case 'get_isolated_cluster': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						const result = await getIsolatedCluster(
+						const result = await getIsolatedClusterFastPath(
 							accessor,
 							requireString(args, 'representativeUrl'),
 						);
