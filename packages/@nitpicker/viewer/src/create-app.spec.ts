@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
+import { buildViewerReadModel } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createApp } from './create-app.js';
@@ -150,6 +151,7 @@ describe('createApp', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		await buildViewerReadModel(archive);
 
 		const context: ArchiveContext = {
 			manager: { get: () => archive } as unknown as ArchiveManager,
@@ -386,13 +388,7 @@ describe('createApp', () => {
 		);
 	});
 
-	it('GET /api/isolated-pages は precomputed components 経由で動く', async () => {
-		// The fixture has no inventory-* pages, so the response is an
-		// empty list — but the route must still go through
-		// getCachedIsolatedClusters + listIsolatedPages without throwing.
-		// Removing the `precomputedComponents` plumbing in the route or
-		// query function would fail this if anchoring assumed the option
-		// was always present.
+	it('GET /api/isolated-pages は precomputed read model 経由でも動く', async () => {
 		const res = await app.request('/api/isolated-pages');
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { items: unknown[]; total: number };
@@ -400,7 +396,7 @@ describe('createApp', () => {
 		expect(typeof body.total).toBe('number');
 	});
 
-	it('GET /api/isolated-clusters は precomputed components 経由で動く', async () => {
+	it('GET /api/isolated-clusters は precomputed read model 経由でも動く', async () => {
 		const res = await app.request('/api/isolated-clusters');
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { items: unknown[]; total: number };

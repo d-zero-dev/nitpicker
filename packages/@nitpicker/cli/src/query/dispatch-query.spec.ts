@@ -45,7 +45,9 @@ vi.mock('@nitpicker/query', () => ({
 		total: 0,
 	}),
 	listInventoryRuns: vi.fn().mockResolvedValue({ items: [], total: 0 }),
-	listIsolatedPages: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+	listIsolatedPagesFastPath: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+	listIsolatedClustersFastPath: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+	getIsolatedClusterFastPath: vi.fn().mockResolvedValue(null),
 	listUnusedResources: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	ArchiveManager: vi.fn(),
 }));
@@ -312,13 +314,13 @@ describe('dispatchQuery', () => {
 	});
 
 	it('dispatches isolated-pages sub-command with limit and offset', async () => {
-		const { listIsolatedPages } = await import('@nitpicker/query');
+		const { listIsolatedPagesFastPath } = await import('@nitpicker/query');
 		const result = await dispatchQuery(mockAccessor, 'isolated-pages', {
 			limit: 50,
 			offset: 25,
 		} as never);
 		expect(result).toEqual({ items: [], total: 0 });
-		expect(listIsolatedPages).toHaveBeenCalledWith(mockAccessor, {
+		expect(listIsolatedPagesFastPath).toHaveBeenCalledWith(mockAccessor, {
 			limit: 50,
 			offset: 25,
 		});

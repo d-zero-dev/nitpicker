@@ -113,6 +113,29 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	// way.
 	await trx.raw('CREATE INDEX vee_count ON viewer_error_kind_entries(count)');
 
+	await trx.raw(
+		'CREATE INDEX vic_size_url ON viewer_isolated_components(size, representative_url_sort_key, component_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vic_cluster_order ON viewer_isolated_components(size_desc_key, representative_url_sort_key, component_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vic_representative ON viewer_isolated_components(representative_url, component_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vicp_component_page ON viewer_isolated_component_pages(component_id, url_sort_key, page_id)',
+	);
+
+	await trx.raw(
+		'CREATE INDEX vgn_indegree ON viewer_graph_nodes(indegree desc, page_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vge_source_target ON viewer_graph_edges(source_page_id, target_page_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vge_target_source ON viewer_graph_edges(target_page_id, source_page_id)',
+	);
+
 	// Both an `is_external`-prefixed AND a bare `url_sort_key`-first index
 	// exist for `url`/`status` order: `bench-viewer-resources-read-model.mjs`
 	// measured the unfiltered default view (no `isExternal` filter — the
