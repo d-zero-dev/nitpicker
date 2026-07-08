@@ -121,6 +121,7 @@ function createMockArchive() {
 		getUrl: vi.fn().mockResolvedValue('https://example.com'),
 		getPagesWithRefs: vi.fn().mockResolvedValue(),
 		setData: vi.fn().mockResolvedValue(),
+		replaceAnalysisViolations: vi.fn().mockResolvedValue(),
 	} as never;
 }
 
@@ -226,6 +227,7 @@ describe('analyze', () => {
 					},
 				),
 			setData: vi.fn().mockResolvedValue(),
+			replaceAnalysisViolations: vi.fn().mockResolvedValue(),
 		};
 		const config: Config = { analyze: plugins };
 		vi.mocked(loadPluginSettings).mockResolvedValue(config);
@@ -262,7 +264,10 @@ describe('analyze', () => {
 		expect(reportCall).toBeDefined();
 		const report = reportCall![1] as Report;
 		expect(Object.keys(report.pageData.data).length).toBeGreaterThan(0);
-		expect(report.violations.length).toBe(1);
+		expect(report).not.toHaveProperty('violations');
+		expect(archive.replaceAnalysisViolations).toHaveBeenCalledWith(
+			workerResult.violations,
+		);
 	});
 
 	it('continues processing when a single worker task throws', async () => {

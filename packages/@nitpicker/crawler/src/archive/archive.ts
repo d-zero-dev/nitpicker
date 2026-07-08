@@ -259,7 +259,6 @@ export default class Archive extends ArchiveAccessor {
 	async listDnsBurnedHostCandidates(): Promise<string[]> {
 		return this.#db.listDnsBurnedHostCandidates();
 	}
-
 	/**
 	 * Appends one row to the `inventory_runs` audit log.
 	 *
@@ -274,7 +273,6 @@ export default class Archive extends ArchiveAccessor {
 		dbLog('Record inventory run: %s', meta.list_label ?? meta.ran_at);
 		return await this.#db.recordInventoryRun(meta);
 	}
-
 	/**
 	 * Releases the SQLite handle and the advisory lock **without** writing
 	 * the archive or removing `tmpDir`.
@@ -292,6 +290,26 @@ export default class Archive extends ArchiveAccessor {
 		}
 		this.#closeOnce = this.#runReleaseHandle();
 		return this.#closeOnce;
+	}
+	/**
+	 * Replaces the archive's analysis violations with a fresh SQL-backed set.
+	 *
+	 * Thin facade over {@link Database.replaceAnalysisViolations}; kept on
+	 * `Archive` so the analyze pipeline can persist violations without
+	 * reaching into the low-level database class directly.
+	 * @param violations - Flat analyze violations.
+	 */
+	async replaceAnalysisViolations(
+		violations: readonly {
+			validator: string;
+			severity: string;
+			rule: string;
+			code?: string | null;
+			message: string;
+			url: string;
+		}[],
+	): Promise<void> {
+		await this.#db.replaceAnalysisViolations(violations);
 	}
 
 	/**

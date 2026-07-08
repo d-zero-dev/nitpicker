@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -78,47 +78,64 @@ describe('getViolations', () => {
 			isSkipped: false,
 		});
 
-		// Write violations data directly into the archive tmpDir
-		const violationsDir = path.resolve(archive.tmpDir, 'analysis');
-		mkdirSync(violationsDir, { recursive: true });
-		const violations = [
+		const knex = archive.getKnex();
+		const textRows = [
+			{ id: 1, text: 'Insufficient color contrast', sha256: 'a1' },
+			{ id: 2, text: 'Missing alt text', sha256: 'a2' },
+			{ id: 3, text: 'Hard-coded color', sha256: 'a3' },
+			{ id: 4, text: 'Doubled joshi', sha256: 'a4' },
+			{ id: 5, text: '<div>', sha256: 'b1' },
+			{ id: 6, text: '<img>', sha256: 'b2' },
+			{ id: 7, text: '<span style="color:red">', sha256: 'b3' },
+			{ id: 8, text: '', sha256: 'b4' },
+		];
+		await knex('analysis_text_refs').insert(textRows);
+		await knex('analysis_violations').insert([
 			{
+				page_id: 1,
 				validator: 'axe',
 				severity: 'error',
 				rule: 'color-contrast',
-				code: '<div>',
-				message: 'Insufficient color contrast',
-				url: 'https://example.com/',
+				message_text_id: 1,
+				code_text_id: 5,
+				page_url_sort_key: 'https://example.com/',
+				message_sort_key: 'Insufficient color contrast',
+				code_sort_key: '<div>',
 			},
 			{
+				page_id: 1,
 				validator: 'axe',
 				severity: 'warning',
 				rule: 'image-alt',
-				code: '<img>',
-				message: 'Missing alt text',
-				url: 'https://example.com/',
+				message_text_id: 2,
+				code_text_id: 6,
+				page_url_sort_key: 'https://example.com/',
+				message_sort_key: 'Missing alt text',
+				code_sort_key: '<img>',
 			},
 			{
+				page_id: 1,
 				validator: 'markuplint',
 				severity: 'error',
 				rule: 'no-hard-coded-color',
-				code: '<span style="color:red">',
-				message: 'Hard-coded color',
-				url: 'https://example.com/',
+				message_text_id: 3,
+				code_text_id: 7,
+				page_url_sort_key: 'https://example.com/',
+				message_sort_key: 'Hard-coded color',
+				code_sort_key: '<span style="color:red">',
 			},
 			{
+				page_id: 1,
 				validator: 'textlint',
 				severity: 'warning',
 				rule: 'no-doubled-joshi',
-				code: '',
-				message: 'Doubled joshi',
-				url: 'https://example.com/',
+				message_text_id: 4,
+				code_text_id: 8,
+				page_url_sort_key: 'https://example.com/',
+				message_sort_key: 'Doubled joshi',
+				code_sort_key: '',
 			},
-		];
-		writeFileSync(
-			path.join(violationsDir, 'violations.json'),
-			JSON.stringify(violations),
-		);
+		]);
 	});
 
 	afterAll(async () => {
@@ -168,6 +185,21 @@ describe('getViolations', () => {
 		const result = await getViolations(archive, { limit: 2, offset: 2 });
 		expect(result.items).toHaveLength(2);
 		expect(result.total).toBe(4);
+	});
+
+	it('urlPattern でフィルタする', async () => {
+		const result = await getViolations(archive, { urlPattern: '%example.com%' });
+		expect(result.total).toBe(4);
+		expect(result.items.every((v) => v.url.includes('example.com'))).toBe(true);
+	});
+
+	it('sortBy と sortOrder を受け付ける', async () => {
+		const result = await getViolations(archive, {
+			sortBy: 'message',
+			sortOrder: 'desc',
+			limit: 1,
+		});
+		expect(result.items[0]?.message).toBe('Missing alt text');
 	});
 
 	it('違反エントリに必要なフィールドが含まれる', async () => {
@@ -248,7 +280,7 @@ describe('getViolations (analysis未実行)', () => {
 			imageList: [],
 			isSkipped: false,
 		});
-		// Don't write any violations file
+		// Do not seed analysis tables.
 	});
 
 	afterAll(async () => {

@@ -1,118 +1,138 @@
 import type { GetViolationsOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
-import { sortArrayItems } from './sort-array-items.js';
-
 /**
- * Violation entry from analysis results stored in the archive.
+ * Violation entry returned to viewers and CLI/MCP callers.
  */
 interface ViolationEntry {
-	/** The page URL. */
 	url: string;
-	/** The validator that produced this violation. */
 	validator: string;
-	/** The severity level. */
 	severity: string;
-	/** The rule ID. */
 	rule: string;
-	/** The violation message. */
 	message: string;
-	/** The source code snippet or element selector. */
 	code: string;
 }
 
+const SORT_BY_VALUES = [
+	'url',
+	'validator',
+	'severity',
+	'rule',
+	'message',
+	'code',
+] as const;
+
 /**
- * Retrieves analysis violations stored in the archive.
- * Reads the `analysis/violations` data file written by `@nitpicker/core`
- * during the analyze phase. This is a single flat array of all violations
- * across all validators and pages.
- * Supports filtering by validator, severity, and rule.
- * @param accessor - The archive accessor to query.
- * @param options - Filter and pagination options.
- * @returns A list of violation entries with total count.
+ * Normalizes the requested sort field and falls back to `url`.
+ * @param sortBy - The requested sort field.
+ * @returns A supported sort key.
+ */
+function resolveSortBy(
+	sortBy: GetViolationsOptions['sortBy'],
+): (typeof SORT_BY_VALUES)[number] {
+	return SORT_BY_VALUES.includes(sortBy as (typeof SORT_BY_VALUES)[number])
+		? (sortBy as (typeof SORT_BY_VALUES)[number])
+		: 'url';
+}
+
+/**
+ * Normalizes the requested sort direction and falls back to `asc`.
+ * @param sortOrder - The requested sort direction.
+ * @returns A supported sort direction.
+ */
+function resolveSortOrder(sortOrder: GetViolationsOptions['sortOrder']): 'asc' | 'desc' {
+	return sortOrder === 'desc' ? 'desc' : 'asc';
+}
+
+/**
+ * Retrieves analysis violations from the SQL read path.
+ *
+ * The first pass filters/sorts/paginates `analysis_violations` down to ids.
+ * The second pass joins only those ids back to `pages` and
+ * `analysis_text_refs` for display values, keeping URL/text joins out of the
+ * broad scan.
+ * @param accessor
+ * @param options
  */
 export async function getViolations(
 	accessor: ArchiveAccessor,
 	options: GetViolationsOptions = {},
 ): Promise<{ items: ViolationEntry[]; total: number }> {
+	const knex = accessor.getKnex();
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
+	const sortBy = resolveSortBy(options.sortBy);
+	const sortOrder = resolveSortOrder(options.sortOrder);
 
-	let rawViolations: ArchiveViolation[];
-	try {
-		rawViolations = await accessor.getData<ArchiveViolation[]>(
-			'analysis/violations',
-			'json',
-		);
-	} catch (error) {
-		// analysis/violations not found — analyze has not been run yet
-		if (
-			error instanceof Error &&
-			'code' in error &&
-			(error as NodeJS.ErrnoException).code === 'ENOENT'
-		) {
-			return { items: [], total: 0 };
-		}
-		throw error;
-	}
-
-	if (!Array.isArray(rawViolations)) {
-		return { items: [], total: 0 };
-	}
-
-	let filtered = rawViolations;
-
-	if (options.validator) {
-		filtered = filtered.filter((v) => v.validator === options.validator);
-	}
-	if (options.severity) {
-		filtered = filtered.filter((v) => v.severity === options.severity);
-	}
-	if (options.rule) {
-		filtered = filtered.filter((v) => v.rule === options.rule);
-	}
+	const filtered = knex('analysis_violations as v');
+	if (options.validator) filtered.where('v.validator', options.validator);
+	if (options.severity) filtered.where('v.severity', options.severity);
+	if (options.rule) filtered.where('v.rule', options.rule);
 	if (options.urlPattern) {
-		filtered = filtered.filter((v) =>
-			v.url.includes(options.urlPattern!.replaceAll('%', '')),
-		);
+		filtered.where('v.page_url_sort_key', 'like', options.urlPattern);
 	}
 
-	const sorted = sortArrayItems(filtered, options.sortBy ?? 'url', options.sortOrder, {
-		url: { getValue: (item) => item.url, type: 'url' },
-		validator: { getValue: (item) => item.validator },
-		severity: { getValue: (item) => item.severity },
-		rule: { getValue: (item) => item.rule },
-		message: { getValue: (item) => item.message },
-		code: { getValue: (item) => item.code ?? '' },
-	});
-	const total = sorted.length;
-	const items: ViolationEntry[] = sorted.slice(offset, offset + limit).map((v) => ({
-		url: v.url,
-		validator: v.validator,
-		severity: v.severity,
-		rule: v.rule,
-		message: v.message,
-		code: v.code ?? '',
-	}));
+	const totalRow = await filtered
+		.clone()
+		.count<{ count: string }[]>({ count: '*' })
+		.first();
+	const total = Number(totalRow?.count ?? 0);
+
+	const orderColumn = (
+		{
+			url: 'v.page_url_sort_key',
+			validator: 'v.validator',
+			severity: 'v.severity',
+			rule: 'v.rule',
+			message: 'v.message_sort_key',
+			code: 'v.code_sort_key',
+		} as const
+	)[sortBy];
+
+	const idRows = await filtered
+		.clone()
+		.select('v.id')
+		.orderByRaw(`${orderColumn} ${sortOrder}, v.id ${sortOrder}`)
+		.limit(limit)
+		.offset(offset);
+
+	const ids = idRows.map((row) => row.id as number);
+	if (ids.length === 0) {
+		return { items: [], total };
+	}
+
+	const rows = await knex('analysis_violations as v')
+		.join('pages as p', 'p.id', 'v.page_id')
+		.join('analysis_text_refs as msg', 'msg.id', 'v.message_text_id')
+		.leftJoin('analysis_text_refs as code', 'code.id', 'v.code_text_id')
+		.whereIn('v.id', ids)
+		.select([
+			'v.id as id',
+			'v.page_url_sort_key as urlSortKey',
+			'p.url as url',
+			'v.validator as validator',
+			'v.severity as severity',
+			'v.rule as rule',
+			'msg.text as message',
+			'code.text as code',
+		]);
+
+	const rowsById = new Map(
+		rows.map((row) => [
+			row.id as number,
+			{
+				url: row.url as string,
+				validator: row.validator as string,
+				severity: row.severity as string,
+				rule: row.rule as string,
+				message: row.message as string,
+				code: (row.code as string | null) ?? '',
+			},
+		]),
+	);
+	const items = ids
+		.map((id) => rowsById.get(id))
+		.filter((row): row is ViolationEntry => row != null);
 
 	return { items, total };
-}
-
-/**
- * Violation data structure as stored by `@nitpicker/core` in `analysis/violations`.
- * Mirrors the `Violation` interface from `@nitpicker/types`.
- */
-interface ArchiveViolation {
-	/** Name of the validator. */
-	validator: string;
-	/** Severity level. */
-	severity: string;
-	/** Rule identifier. */
-	rule: string;
-	/** Source code snippet or selector. */
-	code?: string;
-	/** Human-readable description. */
-	message: string;
-	/** Page URL. */
-	url: string;
 }

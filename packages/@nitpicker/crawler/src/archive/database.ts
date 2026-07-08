@@ -51,6 +51,7 @@ import { computePageDenormalized } from './meta/compute-page-denormalized.js';
 import { deriveFlatFromMeta } from './meta/derive-flat-from-meta.js';
 import { deriveMetaExtras } from './meta/derive-meta-extras.js';
 import { extractTagsForArchive } from './meta/extract-tags-for-archive.js';
+import { migrateAnalysisViolations } from './migrate-analysis-violations.js';
 import { migrateCrawlErrors } from './migrate-crawl-errors.js';
 import { migrateHtmlBlobTables } from './migrate-html-blob-tables.js';
 import { migrateInfoRoots } from './migrate-info-roots.js';
@@ -1665,6 +1666,116 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		);
 	}
 	/**
+	 * Replaces the stored analysis violations with a freshly generated set.
+	 *
+	 * The method resolves every violation URL to a `pages.id`, deduplicates
+	 * message/code text through `analysis_text_refs`, and rewrites
+	 * `analysis_violations` in one transaction. This is the storage-side
+	 * counterpart of the query-layer `getViolations` read path.
+	 * @param violations - Flat violation list from the analyze phase.
+	 */
+	async replaceAnalysisViolations(
+		violations: readonly {
+			validator: string;
+			severity: string;
+			rule: string;
+			code?: string | null;
+			message: string;
+			url: string;
+		}[],
+	): Promise<void> {
+		return emitErrorAndRetry(
+			this,
+			'Database.replaceAnalysisViolations',
+			async () => {
+				await this.#instance.transaction(async (trx) => {
+					await trx('analysis_violations').delete();
+					await trx('analysis_text_refs').delete();
+					if (violations.length === 0) {
+						return;
+					}
+
+					const urls = [...new Set(violations.map((v) => v.url))];
+					const pageRows = await trx
+						.select('id', 'url')
+						.from<DB_Page>('pages')
+						.whereIn('url', urls);
+					const pageIdByUrl = new Map(pageRows.map((row) => [row.url, row.id]));
+					if (pageIdByUrl.size !== urls.length) {
+						const missing = urls.filter((url) => !pageIdByUrl.has(url));
+						throw new Error(
+							`replaceAnalysisViolations: could not resolve ${missing.length} page URL(s): ${missing[0]}`,
+						);
+					}
+
+					const textByValue = new Map<string, number>();
+					const resolveTextId = async (text: string): Promise<number> => {
+						const cached = textByValue.get(text);
+						if (cached != null) {
+							return cached;
+						}
+						const sha256 = createHash('sha256').update(text).digest('hex');
+						await trx('analysis_text_refs')
+							.insert({ text, sha256 })
+							.onConflict(['sha256', 'text'])
+							.ignore();
+						const [existing] = await trx
+							.select('id')
+							.from<{ id: number }>('analysis_text_refs')
+							.where('sha256', sha256)
+							.where('text', text);
+						if (!existing) {
+							throw new Error(
+								`replaceAnalysisViolations: failed to resolve text ref for ${text}`,
+							);
+						}
+						textByValue.set(text, existing.id);
+						return existing.id;
+					};
+
+					const rows: Array<{
+						page_id: number;
+						validator: string;
+						severity: string;
+						rule: string;
+						message_text_id: number;
+						code_text_id: number | null;
+						page_url_sort_key: string;
+						message_sort_key: string;
+						code_sort_key: string;
+					}> = [];
+					for (const violation of violations) {
+						const pageId = pageIdByUrl.get(violation.url);
+						if (!pageId) {
+							throw new Error(
+								`replaceAnalysisViolations: could not resolve page URL: ${violation.url}`,
+							);
+						}
+						const messageTextId = await resolveTextId(violation.message);
+						const codeValue = violation.code ?? '';
+						const codeTextId = codeValue === '' ? null : await resolveTextId(codeValue);
+						rows.push({
+							page_id: pageId,
+							validator: violation.validator,
+							severity: violation.severity,
+							rule: violation.rule,
+							message_text_id: messageTextId,
+							code_text_id: codeTextId,
+							page_url_sort_key: violation.url,
+							message_sort_key: violation.message,
+							code_sort_key: codeValue,
+						});
+					}
+
+					await eachSplitted(rows, 500, async (chunk) => {
+						await trx('analysis_violations').insert(chunk);
+					});
+				});
+			},
+			retrySetting,
+		);
+	}
+	/**
 	 * Promote previously-external pages whose URL falls under any of the new scope
 	 * entries back to a "needs scraping" state so that the next crawl picks them up
 	 * as full internal pages.
@@ -2333,9 +2444,11 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		await migratePageErrors(this.#instance);
 		await migrateCrawlErrors(this.#instance);
 		await migrateHtmlBlobTables(this.#instance);
+		await migrateAnalysisViolations(this.#instance);
 		await migratePagesResourcesSource(this.#instance);
 		await migrateInventoryRuns(this.#instance);
 	}
+
 	/**
 	 * Replaces the page's JSON-LD / SpeculationRules rows with the freshly
 	 * captured set. Called inside `updatePage`'s transaction.

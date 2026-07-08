@@ -288,6 +288,20 @@ export const toolDefinitions: Tool[] = [
 				},
 				severity: { type: 'string', description: 'Filter by severity level' },
 				rule: { type: 'string', description: 'Filter by rule ID' },
+				urlPattern: {
+					type: 'string',
+					description: 'Filter URLs by SQL LIKE pattern',
+				},
+				sortBy: {
+					type: 'string',
+					enum: ['url', 'validator', 'severity', 'rule', 'message', 'code'],
+					description: 'Sort field',
+				},
+				sortOrder: {
+					type: 'string',
+					enum: ['asc', 'desc'],
+					description: 'Sort direction',
+				},
 				limit: { type: 'number', description: 'Max results (default: 100)' },
 				offset: { type: 'number', description: 'Results to skip (default: 0)' },
 			},

@@ -1437,12 +1437,13 @@ with ids as (
   from analysis_violations
   where validator = :validator
     and severity = :severity
-    and (page_url_sort_key, id) > (:cursor_page_url_sort_key, :cursor_id)
-  order by page_url_sort_key, id
+    and rule = :rule
+  order by page_url_sort_key asc, id asc
   limit :limit
+  offset :offset
 )
 select
-  u.url,
+  p.url,
   v.validator,
   v.severity,
   v.rule,
@@ -1450,17 +1451,18 @@ select
   code.text as code
 from ids
 join analysis_violations v on v.id = ids.id
-join content_items c on c.id = v.page_id
-join url_refs u on u.id = c.url_id
-join text_refs msg on msg.id = v.message_text_id
-left join text_refs code on code.id = v.code_text_id
+join pages p on p.id = v.page_id
+join analysis_text_refs msg on msg.id = v.message_text_id
+left join analysis_text_refs code on code.id = v.code_text_id
 order by v.page_url_sort_key, v.id;
 ```
 
 Indexes:
 
 ```sql
-create index av_filter on analysis_violations(
+create index av_url_order on analysis_violations(page_url_sort_key, id);
+
+create index av_filter_url on analysis_violations(
   validator,
   severity,
   rule,
@@ -1468,12 +1470,35 @@ create index av_filter on analysis_violations(
   id
 );
 
+create index av_validator_url on analysis_violations(validator, page_url_sort_key, id);
+create index av_severity_url on analysis_violations(severity, page_url_sort_key, id);
+create index av_rule_url on analysis_violations(rule, page_url_sort_key, id);
+create index av_message_order on analysis_violations(message_sort_key, id);
+create index av_code_order on analysis_violations(code_sort_key, id);
 create index av_page on analysis_violations(page_id, id);
 ```
 
 Count:
 
-`viewer_count_buckets(scope='violations', key=normalized_filter_key)`.
+`count(*)` on `analysis_violations` with the same filter. Arbitrary filter
+combinations are not stored in `viewer_count_buckets`.
+
+`analysis_text_refs` is intentionally #116-local. It deduplicates `message`
+and `code` without waiting for the later shared `text_refs` / `url_refs`
+redesign. New analyze runs do not write `analysis/violations.json` or
+`analysis/report.violations`; old JSON payloads are only read by viewer-build
+backfill before the read-model transaction.
+
+Synthetic benchmark:
+
+```text
+node scripts/bench-analysis-violations.mjs 50 1000
+replaceAnalysisViolations: 20.24ms
+getViolations default: 1.56ms
+getViolations combined filter: 0.49ms
+default plan: SCAN analysis_violations USING COVERING INDEX av_url_order
+combined filter plan: SEARCH analysis_violations USING COVERING INDEX av_filter_url
+```
 
 ## Build-Time Responsibilities
 

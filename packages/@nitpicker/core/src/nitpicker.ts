@@ -54,7 +54,8 @@ const DEFAULT_CONCURRENCY = Math.max(1, os.cpus().length);
  * Nitpicker opens an existing archive (produced by the crawler), loads the
  * user's plugin configuration via cosmiconfig, then runs each plugin against
  * every page in the archive. Results are stored back into the archive as
- * `analysis/report`, `analysis/table`, and `analysis/violations`.
+ * `analysis/report`, `analysis/table`, and SQL-backed analysis violation
+ * tables via the archive facade.
  *
  * ## Architecture decisions
  *
@@ -146,9 +147,9 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 	 *    that don't need DOM access.
 	 *
 	 * On completion, three data entries are stored in the archive:
-	 * - `analysis/report` - Full {@link Report} with headers, data, and violations
+	 * - `analysis/report` - Full {@link Report} with headers and data
 	 * - `analysis/table` - The raw {@link Table} instance (serialized)
-	 * - `analysis/violations` - Flat array of all {@link Violation} records
+	 * - SQL-backed analysis violation tables - Flat {@link Violation} records
 	 * @param filter - Optional list of plugin module names to run.
 	 *   If omitted, all configured plugins are executed.
 	 * @param options - Optional settings for progress display.
@@ -437,12 +438,11 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 		const report: Report = {
 			name: 'general',
 			pageData: table.toJSON(),
-			violations: allViolations,
 		};
 
 		await this.archive.setData('analysis/report', report);
 		await this.archive.setData('analysis/table', table);
-		await this.archive.setData('analysis/violations', allViolations);
+		await this.archive.replaceAnalysisViolations(allViolations);
 	}
 
 	/**
