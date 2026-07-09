@@ -52,6 +52,21 @@ const ANCHOR_FANOUT = 8;
 /** Repeated warm requests per matrix entry, for p50/p95. */
 const WARM_ITERATIONS = 30;
 
+const CONFIG = {
+	baseUrl: 'https://example.com',
+	roots: ['https://example.com'],
+};
+
+/**
+ * Simulates a missing archive sidecar file for benchmark-only accessor stubs.
+ * @returns Never resolves successfully.
+ */
+async function getMissingData() {
+	const error = new Error('not found');
+	error.code = 'ENOENT';
+	throw error;
+}
+
 /**
  * Sort combinations benchmarked per `broken-links-view.tsx`'s exposed sort
  * controls (`sourceUrl`/`destUrl`/`status`, both directions).
@@ -166,7 +181,12 @@ async function makeDb(n) {
  */
 async function buildReadModel(db, dbFilePath) {
 	const sizeBeforeBytes = statSync(dbFilePath).size;
-	const accessorStub = { readOnly: false, getKnex: () => db };
+	const accessorStub = {
+		readOnly: false,
+		getKnex: () => db,
+		getConfig: async () => CONFIG,
+		getData: getMissingData,
+	};
 	const start = process.hrtime.bigint();
 	await buildViewerReadModel(accessorStub);
 	const buildMs = Number(process.hrtime.bigint() - start) / 1e6;
@@ -219,11 +239,11 @@ async function timeWarmRequests(app, query, iterations) {
 }
 
 const EXPLAIN_ORDER_BY = {
-	'default (sourceUrl asc)': 'source_url_sort_key, edge_id',
-	'sourceUrl desc': 'source_url_sort_key DESC, edge_id DESC',
-	'destUrl asc': 'dest_url_sort_key, edge_id',
-	'status asc': 'status_sort_key, source_url_sort_key, edge_id',
-	'status desc': 'status_desc_key, source_url_sort_key, edge_id',
+	'default (sourceUrl asc)': 'source_url_ref_id, edge_id',
+	'sourceUrl desc': 'source_url_ref_id DESC, edge_id DESC',
+	'destUrl asc': 'dest_url_ref_id, edge_id',
+	'status asc': 'status_sort_key, source_url_ref_id, edge_id',
+	'status desc': 'status_desc_key, source_url_ref_id, edge_id',
 };
 
 /**
@@ -234,7 +254,11 @@ const EXPLAIN_ORDER_BY = {
  * @param {number} n - The page-row count this DB was seeded with (for the report header).
  */
 async function runMatrix(db, n) {
-	const accessorStub = { getKnex: () => db };
+	const accessorStub = {
+		getKnex: () => db,
+		getConfig: async () => CONFIG,
+		getData: getMissingData,
+	};
 	const app = createApp({
 		context: { archiveId: 'bench', manager: { get: () => accessorStub } },
 		publicDir: '/tmp/no-such-dir-bench',

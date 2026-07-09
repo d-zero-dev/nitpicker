@@ -73,25 +73,27 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	// No `_desc_key` columns like `viewer_pages` needs: pagination here is
 	// plain offset-based (via `paginateQuery`), not keyset-cursor, so a
 	// single ascending index scanned backward is enough for DESC.
-	await trx.raw('CREATE INDEX vel_url ON viewer_external_links(dest_url, dest_page_id)');
 	await trx.raw(
-		'CREATE INDEX vel_status ON viewer_external_links(status, dest_url, dest_page_id)',
+		'CREATE INDEX vel_url ON viewer_external_links(dest_url_ref_id, dest_page_id)',
 	);
 	await trx.raw(
-		'CREATE INDEX vel_referrer_count ON viewer_external_links(referrer_count, dest_url, dest_page_id)',
+		'CREATE INDEX vel_status ON viewer_external_links(status, dest_url_ref_id, dest_page_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vel_referrer_count ON viewer_external_links(referrer_count, dest_url_ref_id, dest_page_id)',
 	);
 
 	await trx.raw(
-		'CREATE INDEX vaf_broken_source ON viewer_anchor_facts(is_broken, source_url_sort_key, edge_id)',
+		'CREATE INDEX vaf_broken_source ON viewer_anchor_facts(is_broken, source_url_ref_id, edge_id)',
 	);
 	await trx.raw(
-		'CREATE INDEX vaf_broken_dest ON viewer_anchor_facts(is_broken, dest_url_sort_key, edge_id)',
+		'CREATE INDEX vaf_broken_dest ON viewer_anchor_facts(is_broken, dest_url_ref_id, edge_id)',
 	);
 	await trx.raw(
-		'CREATE INDEX vaf_broken_status ON viewer_anchor_facts(is_broken, status_sort_key, source_url_sort_key, edge_id)',
+		'CREATE INDEX vaf_broken_status ON viewer_anchor_facts(is_broken, status_sort_key, source_url_ref_id, edge_id)',
 	);
 	await trx.raw(
-		'CREATE INDEX vaf_broken_status_desc ON viewer_anchor_facts(is_broken, status_desc_key, source_url_sort_key, edge_id)',
+		'CREATE INDEX vaf_broken_status_desc ON viewer_anchor_facts(is_broken, status_desc_key, source_url_ref_id, edge_id)',
 	);
 	await trx.raw(
 		'CREATE INDEX vaf_source ON viewer_anchor_facts(source_page_id, edge_id)',

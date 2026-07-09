@@ -13,7 +13,7 @@ const PAYLOAD_BASE = {
 
 const EXPECTED = {
 	...PAYLOAD_BASE,
-	columns: ['source_url_sort_key', 'edge_id'] as const,
+	columns: ['source_url_ref_id', 'edge_id'] as const,
 };
 
 describe('decodeAnchorFactsCursor', () => {
@@ -21,12 +21,12 @@ describe('decodeAnchorFactsCursor', () => {
 		const cursor = encodeAnchorFactsCursor({
 			v: VIEWER_READ_MODEL_SCHEMA_VERSION,
 			...PAYLOAD_BASE,
-			values: ['https://example.com/a', 1],
+			values: [10, 1],
 		});
 		expect(decodeAnchorFactsCursor(cursor, EXPECTED)).toEqual({
 			v: VIEWER_READ_MODEL_SCHEMA_VERSION,
 			...PAYLOAD_BASE,
-			values: ['https://example.com/a', 1],
+			values: [10, 1],
 		});
 	});
 
@@ -47,7 +47,7 @@ describe('decodeAnchorFactsCursor', () => {
 		const cursor = encodeAnchorFactsCursor({
 			v: VIEWER_READ_MODEL_SCHEMA_VERSION - 1,
 			...PAYLOAD_BASE,
-			values: ['https://example.com/a', 1],
+			values: [10, 1],
 		});
 		expect(() => decodeAnchorFactsCursor(cursor, EXPECTED)).toThrow(/[Ss]tale/);
 	});
@@ -57,7 +57,7 @@ describe('decodeAnchorFactsCursor', () => {
 			v: VIEWER_READ_MODEL_SCHEMA_VERSION,
 			...PAYLOAD_BASE,
 			filterKey: '{"status":404}',
-			values: ['https://example.com/a', 1],
+			values: [10, 1],
 		});
 		expect(() => decodeAnchorFactsCursor(cursor, EXPECTED)).toThrow(/does not match/);
 	});
@@ -67,7 +67,7 @@ describe('decodeAnchorFactsCursor', () => {
 			v: VIEWER_READ_MODEL_SCHEMA_VERSION,
 			...PAYLOAD_BASE,
 			sortBy: 'status',
-			values: [404, 'https://example.com/a', 1],
+			values: [404, 10, 1],
 		});
 		expect(() => decodeAnchorFactsCursor(cursor, EXPECTED)).toThrow(/does not match/);
 	});
@@ -76,7 +76,7 @@ describe('decodeAnchorFactsCursor', () => {
 		const cursor = encodeAnchorFactsCursor({
 			v: VIEWER_READ_MODEL_SCHEMA_VERSION,
 			...PAYLOAD_BASE,
-			values: ['https://example.com/a'],
+			values: [10],
 		});
 		expect(() => decodeAnchorFactsCursor(cursor, EXPECTED)).toThrow(/keyset value count/);
 	});
@@ -85,17 +85,8 @@ describe('decodeAnchorFactsCursor', () => {
 		const cursor = encodeAnchorFactsCursor({
 			v: VIEWER_READ_MODEL_SCHEMA_VERSION,
 			...PAYLOAD_BASE,
-			values: ['https://example.com/a', 'not-a-number'],
+			values: ['not-a-number', 1],
 		});
 		expect(() => decodeAnchorFactsCursor(cursor, EXPECTED)).toThrow(/must be a number/);
-	});
-
-	it('throws on a text-column position holding a numeric value', () => {
-		const cursor = encodeAnchorFactsCursor({
-			v: VIEWER_READ_MODEL_SCHEMA_VERSION,
-			...PAYLOAD_BASE,
-			values: [123, 1],
-		});
-		expect(() => decodeAnchorFactsCursor(cursor, EXPECTED)).toThrow(/must be a string/);
 	});
 });

@@ -15,17 +15,17 @@ export function getAnchorFactsSortSpec(
 			return {
 				columns: [
 					sortOrder === 'desc' ? 'status_desc_key' : 'status_sort_key',
-					'source_url_sort_key',
+					'source_url_ref_id',
 					'edge_id',
 				],
 				scanDirection: 'asc',
 			};
 		}
 		case 'destUrl': {
-			return { columns: ['dest_url_sort_key', 'edge_id'], scanDirection: sortOrder };
+			return { columns: ['dest_url_ref_id', 'edge_id'], scanDirection: sortOrder };
 		}
 		default: {
-			return { columns: ['source_url_sort_key', 'edge_id'], scanDirection: sortOrder };
+			return { columns: ['source_url_ref_id', 'edge_id'], scanDirection: sortOrder };
 		}
 	}
 }

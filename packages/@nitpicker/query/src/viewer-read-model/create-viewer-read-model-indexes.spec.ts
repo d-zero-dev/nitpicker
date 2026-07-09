@@ -80,6 +80,11 @@ describe('createViewerReadModelIndexes', () => {
 		}
 	});
 
+	it('does not add a duplicate viewer_url_refs URL index', async () => {
+		const indexNames = await indexNamesOn('viewer_url_refs');
+		expect(indexNames.has('vur_url')).toBe(false);
+	});
+
 	it('creates every viewer_anchor_facts index', async () => {
 		const indexNames = await indexNamesOn('viewer_anchor_facts');
 		for (const indexName of [

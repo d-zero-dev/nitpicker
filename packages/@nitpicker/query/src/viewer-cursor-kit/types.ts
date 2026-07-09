@@ -78,10 +78,8 @@ export interface ExpectedCursorEnvelope<SortBy extends string> {
 	expectedValueCount: number;
 	/**
 	 * Optional per-position type check, keyed by tuple index — only
-	 * `viewer-anchor-facts-cursor` supplies this (its keyset tuple mixes
-	 * numeric `edge_id`/`status_sort_key` columns with text
-	 * `source_url_sort_key`/`dest_url_sort_key` columns depending on
-	 * `sortBy`, so a same-length but wrong-typed `values` array could
+	 * `viewer-anchor-facts-cursor` supplies this (its keyset tuple is fully
+	 * numeric after URL refs, and a same-length but wrong-typed `values` array could
 	 * otherwise silently seek to the wrong boundary via SQLite's
 	 * type-affinity comparison rules instead of erroring). Every other table
 	 * omits this — their tuples are homogeneous enough that a length

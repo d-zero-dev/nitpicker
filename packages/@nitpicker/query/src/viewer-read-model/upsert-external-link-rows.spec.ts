@@ -25,6 +25,12 @@ describe('upsertExternalLinkRows', () => {
 		mkdirSync(workingDir, { recursive: true });
 		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
 		await archive.getKnex().transaction((trx) => createViewerReadModelTables(trx));
+		await archive
+			.getKnex()('viewer_url_refs')
+			.insert([
+				{ id: 1, url: 'https://ads.example.com' },
+				{ id: 2, url: 'https://tracking.example.com' },
+			]);
 	});
 
 	afterAll(async () => {
@@ -41,7 +47,7 @@ describe('upsertExternalLinkRows', () => {
 			upsertExternalLinkRows(trx, [
 				{
 					dest_page_id: 1,
-					dest_url: 'https://ads.example.com',
+					dest_url_ref_id: 1,
 					status: 200,
 					referrer_count: 2,
 				},
@@ -51,7 +57,7 @@ describe('upsertExternalLinkRows', () => {
 		expect(rows).toEqual([
 			{
 				dest_page_id: 1,
-				dest_url: 'https://ads.example.com',
+				dest_url_ref_id: 1,
 				status: 200,
 				referrer_count: 2,
 			},
@@ -64,7 +70,7 @@ describe('upsertExternalLinkRows', () => {
 			upsertExternalLinkRows(trx, [
 				{
 					dest_page_id: 2,
-					dest_url: 'https://tracking.example.com',
+					dest_url_ref_id: 2,
 					status: 200,
 					referrer_count: 3,
 				},
@@ -74,7 +80,7 @@ describe('upsertExternalLinkRows', () => {
 			upsertExternalLinkRows(trx, [
 				{
 					dest_page_id: 2,
-					dest_url: 'https://tracking.example.com',
+					dest_url_ref_id: 2,
 					status: 200,
 					referrer_count: 4,
 				},
@@ -88,10 +94,17 @@ describe('upsertExternalLinkRows', () => {
 		const knex = archive.getKnex();
 		const rows = Array.from({ length: 1200 }, (_, index) => ({
 			dest_page_id: 1000 + index,
-			dest_url: `https://ads.example.com/${index}`,
+			dest_url_ref_id: 1000 + index,
 			status: 200,
 			referrer_count: 1,
 		}));
+		const refRows = rows.map((row) => ({
+			id: row.dest_url_ref_id,
+			url: `https://ads.example.com/${row.dest_url_ref_id}`,
+		}));
+		for (let start = 0; start < refRows.length; start += 500) {
+			await knex('viewer_url_refs').insert(refRows.slice(start, start + 500));
+		}
 		await knex.transaction((trx) => upsertExternalLinkRows(trx, rows));
 		const count = await knex('viewer_external_links')
 			.where('dest_page_id', '>=', 1000)

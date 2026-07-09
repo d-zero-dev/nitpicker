@@ -14,8 +14,8 @@ function makeFact(overrides: Partial<AnchorFactInsertRow>): AnchorFactInsertRow 
 	return {
 		source_page_id: 1,
 		dest_page_id: 100,
-		source_url_sort_key: 'https://example.com/page',
-		dest_url_sort_key: 'https://ads.example.com',
+		source_url_ref_id: 1,
+		dest_url_ref_id: 2,
 		status: 200,
 		status_sort_key: 200,
 		status_desc_key: -200,
@@ -40,7 +40,7 @@ describe('deriveExternalLinkSummaryRows', () => {
 		expect(deriveExternalLinkSummaryRows(facts)).toEqual([
 			{
 				dest_page_id: 100,
-				dest_url: 'https://ads.example.com',
+				dest_url_ref_id: 2,
 				status: 200,
 				referrer_count: 1,
 			},
@@ -68,12 +68,12 @@ describe('deriveExternalLinkSummaryRows', () => {
 			makeFact({
 				source_page_id: 1,
 				dest_page_id: 100,
-				dest_url_sort_key: 'https://ads.example.com',
+				dest_url_ref_id: 2,
 			}),
 			makeFact({
 				source_page_id: 1,
 				dest_page_id: 200,
-				dest_url_sort_key: 'https://tracking.example.com',
+				dest_url_ref_id: 3,
 				status: 404,
 			}),
 		];
@@ -83,13 +83,13 @@ describe('deriveExternalLinkSummaryRows', () => {
 			expect.arrayContaining([
 				{
 					dest_page_id: 100,
-					dest_url: 'https://ads.example.com',
+					dest_url_ref_id: 2,
 					status: 200,
 					referrer_count: 1,
 				},
 				{
 					dest_page_id: 200,
-					dest_url: 'https://tracking.example.com',
+					dest_url_ref_id: 3,
 					status: 404,
 					referrer_count: 1,
 				},

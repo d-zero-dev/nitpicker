@@ -20,7 +20,7 @@ const INSERT_CHUNK_SIZE = 500;
  * version of this build kept alive across the whole scan — which grew
  * unboundedly with the number of distinct external destinations (e.g.
  * ad/tracking links whose query strings make every render's target URL
- * unique) and defeated `computeAnchorFactRows`'s own OOM fix. `dest_url`/
+ * unique) and defeated `computeAnchorFactRows`'s own OOM fix. `dest_url_ref_id`/
  * `status` are never updated on conflict: both are properties of the
  * destination page itself, so they're identical across every chunk that
  * observes the same `dest_page_id`.
