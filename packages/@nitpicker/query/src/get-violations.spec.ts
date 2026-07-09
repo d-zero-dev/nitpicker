@@ -187,6 +187,34 @@ describe('getViolations', () => {
 		expect(result.total).toBe(4);
 	});
 
+	it('不正な limit はデフォルトに丸める', async () => {
+		const negative = await getViolations(archive, { limit: -1 });
+		expect(negative.items).toHaveLength(4);
+
+		const fractional = await getViolations(archive, { limit: 1.5 });
+		expect(fractional.items).toHaveLength(4);
+
+		const infinite = await getViolations(archive, { limit: Number.POSITIVE_INFINITY });
+		expect(infinite.items).toHaveLength(4);
+	});
+
+	it('不正な offset は 0 に丸める', async () => {
+		const negative = await getViolations(archive, { limit: 2, offset: -1 });
+		expect(negative.items).toHaveLength(2);
+		expect(negative.items[0]?.message).toBe('Insufficient color contrast');
+
+		const fractional = await getViolations(archive, { limit: 2, offset: 1.5 });
+		expect(fractional.items).toHaveLength(2);
+		expect(fractional.items[0]?.message).toBe('Insufficient color contrast');
+
+		const infinite = await getViolations(archive, {
+			limit: 2,
+			offset: Number.POSITIVE_INFINITY,
+		});
+		expect(infinite.items).toHaveLength(2);
+		expect(infinite.items[0]?.message).toBe('Insufficient color contrast');
+	});
+
 	it('urlPattern でフィルタする', async () => {
 		const result = await getViolations(archive, { urlPattern: '%example.com%' });
 		expect(result.total).toBe(4);

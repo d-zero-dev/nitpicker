@@ -13,6 +13,9 @@ interface ViolationEntry {
 	code: string;
 }
 
+const DEFAULT_LIMIT = 100;
+const DEFAULT_OFFSET = 0;
+
 const SORT_BY_VALUES = [
 	'url',
 	'validator',
@@ -45,6 +48,30 @@ function resolveSortOrder(sortOrder: GetViolationsOptions['sortOrder']): 'asc' |
 }
 
 /**
+ * Normalizes the requested page size and falls back to the default when the
+ * caller passes a negative, non-integer, or non-finite value.
+ * @param limit - The requested page size.
+ * @returns A safe limit for the SQL query.
+ */
+function resolveLimit(limit: GetViolationsOptions['limit']): number {
+	return Number.isInteger(limit) && (limit as number) >= 0
+		? (limit as number)
+		: DEFAULT_LIMIT;
+}
+
+/**
+ * Normalizes the requested offset and falls back to `0` when the caller passes
+ * a negative, non-integer, or non-finite value.
+ * @param offset - The requested row offset.
+ * @returns A safe offset for the SQL query.
+ */
+function resolveOffset(offset: GetViolationsOptions['offset']): number {
+	return Number.isInteger(offset) && (offset as number) >= 0
+		? (offset as number)
+		: DEFAULT_OFFSET;
+}
+
+/**
  * Retrieves analysis violations from the SQL read path.
  *
  * The first pass filters/sorts/paginates `analysis_violations` down to ids.
@@ -59,8 +86,8 @@ export async function getViolations(
 	options: GetViolationsOptions = {},
 ): Promise<{ items: ViolationEntry[]; total: number }> {
 	const knex = accessor.getKnex();
-	const limit = options.limit ?? 100;
-	const offset = options.offset ?? 0;
+	const limit = resolveLimit(options.limit);
+	const offset = resolveOffset(options.offset);
 	const sortBy = resolveSortBy(options.sortBy);
 	const sortOrder = resolveSortOrder(options.sortOrder);
 
