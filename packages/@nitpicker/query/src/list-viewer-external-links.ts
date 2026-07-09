@@ -43,7 +43,14 @@ export async function listViewerExternalLinks(
 
 	const baseQuery = knex('viewer_external_links');
 	if (options.urlPattern) {
-		baseQuery.where('dest_url', 'like', options.urlPattern);
+		baseQuery
+			.join(
+				'viewer_url_refs as filter_url',
+				'viewer_external_links.dest_url_ref_id',
+				'=',
+				'filter_url.id',
+			)
+			.where('filter_url.url', 'like', options.urlPattern);
 	}
 	if (options.status != null) {
 		baseQuery.where('status', options.status);
@@ -51,7 +58,7 @@ export async function listViewerExternalLinks(
 
 	const sortColumns: Record<'destUrl' | 'status' | 'referrerCount', { column: string }> =
 		{
-			destUrl: { column: '"viewer_external_links"."dest_url"' },
+			destUrl: { column: '"viewer_external_links"."dest_url_ref_id"' },
 			status: { column: '"viewer_external_links"."status"' },
 			referrerCount: { column: '"viewer_external_links"."referrer_count"' },
 		};
@@ -63,7 +70,18 @@ export async function listViewerExternalLinks(
 		countColumn: 'dest_page_id',
 		applySelect: (q) =>
 			applyListOrder(
-				q.select('dest_url as destUrl', 'status', 'referrer_count as referrerCount'),
+				q
+					.select(
+						'dest_url.url as destUrl',
+						'viewer_external_links.status',
+						'viewer_external_links.referrer_count as referrerCount',
+					)
+					.leftJoin(
+						'viewer_url_refs as dest_url',
+						'viewer_external_links.dest_url_ref_id',
+						'=',
+						'dest_url.id',
+					),
 				knex,
 				sortBy,
 				sortOrder,
@@ -74,10 +92,21 @@ export async function listViewerExternalLinks(
 			).orderBy('dest_page_id', 'asc'),
 		limit,
 		offset,
-		mapRow: (row: { destUrl: string; status: number | null; referrerCount: number }) => ({
-			destUrl: row.destUrl,
-			status: row.status,
-			referrerCount: Number(row.referrerCount),
-		}),
+		mapRow: (row: {
+			destUrl: string | null;
+			status: number | null;
+			referrerCount: number;
+		}) => {
+			if (row.destUrl == null) {
+				throw new Error(
+					'listViewerExternalLinks: missing viewer_url_refs row for external destination',
+				);
+			}
+			return {
+				destUrl: row.destUrl,
+				status: row.status,
+				referrerCount: Number(row.referrerCount),
+			};
+		},
 	});
 }

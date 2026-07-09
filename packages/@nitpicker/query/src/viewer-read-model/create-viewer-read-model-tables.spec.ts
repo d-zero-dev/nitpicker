@@ -30,7 +30,7 @@ describe('createViewerReadModelTables', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('creates all 23 tables with no indexes yet (see createViewerReadModelIndexes)', async () => {
+	it('creates all 24 tables with no indexes yet (see createViewerReadModelIndexes)', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 
@@ -38,6 +38,7 @@ describe('createViewerReadModelTables', () => {
 			'viewer_read_model_meta',
 			'viewer_summary',
 			'viewer_pages',
+			'viewer_url_refs',
 			'viewer_query_profiles',
 			'viewer_count_buckets',
 			'viewer_page_anchors',
@@ -151,18 +152,33 @@ describe('createViewerReadModelTables', () => {
 
 	it('viewer_external_links rejects a duplicate dest_page_id', async () => {
 		const knex = archive.getKnex();
+		await knex('viewer_url_refs').insert([
+			{ id: 1, url: 'https://ads.example.com/' },
+			{ id: 2, url: 'https://ads.example.com/duplicate' },
+		]);
 		await knex('viewer_external_links').insert({
 			dest_page_id: 1,
-			dest_url: 'https://ads.example.com/',
+			dest_url_ref_id: 1,
 			status: 200,
 			referrer_count: 1,
 		});
 		await expect(
 			knex('viewer_external_links').insert({
 				dest_page_id: 1,
-				dest_url: 'https://ads.example.com/duplicate',
+				dest_url_ref_id: 2,
 				status: 200,
 				referrer_count: 2,
+			}),
+		).rejects.toThrow();
+	});
+
+	it('viewer_url_refs rejects a duplicate URL', async () => {
+		const knex = archive.getKnex();
+		await knex('viewer_url_refs').insert({ id: 10, url: 'https://example.com/ref' });
+		await expect(
+			knex('viewer_url_refs').insert({
+				id: 11,
+				url: 'https://example.com/ref',
 			}),
 		).rejects.toThrow();
 	});

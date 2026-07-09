@@ -796,38 +796,36 @@ with ids as (
   select edge_id
   from viewer_anchor_facts
   where is_broken = 1
-    and (source_url_sort_key, edge_id) > (:cursor_source_url_sort_key, :cursor_edge_id)
-  order by source_url_sort_key, edge_id
+    and (source_url_ref_id, edge_id) > (:cursor_source_url_ref_id, :cursor_edge_id)
+  order by source_url_ref_id, edge_id
   limit :limit
 )
 select
   su.url as source_url,
   du.url as dest_url,
-  d.status as status,
+  f.status as status,
   f.count,
-  txt.text as text_content
+  null as text_content
 from ids
 join viewer_anchor_facts f on f.edge_id = ids.edge_id
-join content_items s on s.id = f.page_id
-join url_refs su on su.id = s.url_id
-join content_items d on d.id = f.resolved_href_page_id
-join url_refs du on du.id = d.url_id
-left join text_refs txt on txt.id = f.first_text_id
-order by f.source_url_sort_key, f.edge_id;
+join viewer_url_refs su on su.id = f.source_url_ref_id
+join viewer_url_refs du on du.id = f.dest_url_ref_id
+order by f.source_url_ref_id, f.edge_id;
 ```
 
 Read external:
 
 ```sql
-with ids as (
-  select edge_id
-  from viewer_anchor_facts
-  where is_external_link = 1
-    and (source_url_sort_key, edge_id) > (:cursor_source_url_sort_key, :cursor_edge_id)
-  order by source_url_sort_key, edge_id
+select
+  u.url as dest_url,
+  e.status,
+  e.referrer_count
+from viewer_external_links e
+join viewer_url_refs u on u.id = e.dest_url_ref_id
+where (:url_pattern is null or u.url like :url_pattern)
+  and (:status is null or e.status = :status)
+order by e.dest_url_ref_id, e.dest_page_id
   limit :limit
-)
-select ...
 ```
 
 Indexes:
@@ -835,18 +833,23 @@ Indexes:
 ```sql
 create index vaf_broken on viewer_anchor_facts(
   is_broken,
-  source_url_sort_key,
+  source_url_ref_id,
   edge_id
 );
 
-create index vaf_external on viewer_anchor_facts(
-  is_external_link,
-  source_url_sort_key,
-  edge_id
+create index vel_url on viewer_external_links(
+  dest_url_ref_id,
+  dest_page_id
 );
 
-create index vaf_source on viewer_anchor_facts(page_id, edge_id);
-create index vaf_dest on viewer_anchor_facts(resolved_href_page_id, edge_id);
+create index vel_status on viewer_external_links(
+  status,
+  dest_url_ref_id,
+  dest_page_id
+);
+
+create index vaf_source on viewer_anchor_facts(source_page_id, edge_id);
+create index vaf_dest on viewer_anchor_facts(dest_page_id, edge_id);
 ```
 
 Count:
@@ -1508,6 +1511,7 @@ The build step after crawl/append/retry must populate:
 viewer_count_buckets
 viewer_summary
 viewer_error_kind_*
+viewer_url_refs
 viewer_pages
 viewer_anchor_facts
 viewer_page_stats

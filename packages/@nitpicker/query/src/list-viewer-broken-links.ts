@@ -56,10 +56,9 @@ async function countAnchorFactsTotal(
  * `orderDirection`, and `limit + 1` rows (the `+1` lets the caller detect
  * "is there another row past this page" without a second query). Unlike
  * `list-viewer-pages.ts`'s equivalent, no id-then-join step follows:
- * `source_url_sort_key`/`dest_url_sort_key`/`status` are already the exact
- * display values, so this window read IS the final row set — reflected here
- * as a wider `extraSelectColumns` list (the full display column set)
- * instead of just an id column.
+ * URL ref ids and status are already sufficient for sorting and cursoring;
+ * full URL strings are resolved from `viewer_url_refs` only after the
+ * window is limit-bounded.
  * @param knex - The archive's Knex instance.
  * @param options - The caller's filter options.
  * @param spec - The resolved sort spec (columns to select/order by).
@@ -81,8 +80,8 @@ async function readAnchorFactsWindow(
 	offset: number,
 ): Promise<
 	(AnchorFactsKeysetRow & {
-		source_url_sort_key: string;
-		dest_url_sort_key: string;
+		source_url_ref_id: number;
+		dest_url_ref_id: number;
 		status: number | null;
 		is_external_link: number;
 	})[]
@@ -93,8 +92,8 @@ async function readAnchorFactsWindow(
 		(qb) => applyBrokenLinksFilters(qb, options),
 		[
 			'edge_id',
-			'source_url_sort_key',
-			'dest_url_sort_key',
+			'source_url_ref_id',
+			'dest_url_ref_id',
 			'status',
 			'status_sort_key',
 			'status_desc_key',
@@ -118,25 +117,59 @@ async function readAnchorFactsWindow(
  * broken and external are independent judgments, so a broken link CAN also
  * be external.
  * @param row - One row from {@link readAnchorFactsWindow}.
- * @param row.source_url_sort_key
- * @param row.dest_url_sort_key
+ * @param row.source_url
+ * @param row.dest_url
  * @param row.status
  * @param row.is_external_link
  * @returns The corresponding {@link LinkEntry}.
  */
 function toLinkEntry(row: {
-	source_url_sort_key: string;
-	dest_url_sort_key: string;
+	source_url: string;
+	dest_url: string;
 	status: number | null;
 	is_external_link?: number;
 }): LinkEntry {
 	return {
-		sourceUrl: row.source_url_sort_key,
-		destUrl: row.dest_url_sort_key,
+		sourceUrl: row.source_url,
+		destUrl: row.dest_url,
 		status: row.status,
 		isExternal: !!row.is_external_link,
 		textContent: null,
 	};
+}
+
+/**
+ * Loads URL strings for the limited broken-link window.
+ * @param knex - Query connection for the opened archive.
+ * @param refIds - URL reference ids selected by the keyset window.
+ * @returns A map from `viewer_url_refs.id` to URL.
+ */
+async function readUrlRefs(
+	knex: Knex,
+	refIds: readonly number[],
+): Promise<Map<number, string>> {
+	if (refIds.length === 0) {
+		return new Map();
+	}
+	const rows: { id: number; url: string }[] = await knex('viewer_url_refs')
+		.whereIn('id', [...new Set(refIds)])
+		.select('id', 'url');
+	return new Map(rows.map((row) => [row.id, row.url]));
+}
+
+/**
+ * Reads one URL from a post-window `viewer_url_refs` lookup result.
+ * @param urlByRefId - Lookup map returned by {@link readUrlRefs}.
+ * @param refId - The URL reference id required by one result row.
+ * @returns The URL string for `refId`.
+ * @throws {Error} If the read model references a missing URL row.
+ */
+function requireUrlRef(urlByRefId: ReadonlyMap<number, string>, refId: number): string {
+	const url = urlByRefId.get(refId);
+	if (url == null) {
+		throw new Error(`listViewerBrokenLinks: missing viewer_url_refs row ${refId}`);
+	}
+	return url;
 }
 
 /**
@@ -145,12 +178,9 @@ function toLinkEntry(row: {
  * that powers `/api/links?type=broken`'s fast path.
  *
  * Filter/sort resolution runs entirely against `viewer_anchor_facts`; there
- * is no id-then-join step (unlike `listViewerPages`) because
- * `source_url_sort_key`/`dest_url_sort_key`/`status` are already the exact
- * display values — see that table's `create-viewer-read-model-tables.ts`
- * docs for why this doesn't reintroduce the URL-duplication cost issue
- * #114 warns about at 13M-edge scale (negligible at this package's actual
- * benchmark scale; see ARCHITECTURE.md).
+ * URL strings are resolved from `viewer_url_refs` after the id window is
+ * limited, so the edge table stays compact without changing the public
+ * `LinkEntry` shape.
  *
  * The initial read (no `cursor`), the forward keyset read, the backward
  * keyset read, and the direct-`offset` read are four separate code paths —
@@ -192,12 +222,23 @@ export async function listViewerBrokenLinks(
 	 * @param hasMoreBefore - Whether a preceding page exists.
 	 * @returns The full paginated result.
 	 */
-	function buildResult(
+	async function buildResult(
 		window: Awaited<ReturnType<typeof readAnchorFactsWindow>>,
 		hasMoreAfter: boolean,
 		hasMoreBefore: boolean,
-	): CursorPaginatedLinkList {
-		const items = window.map((row) => toLinkEntry(row));
+	): Promise<CursorPaginatedLinkList> {
+		const urlByRefId = await readUrlRefs(
+			knex,
+			window.flatMap((row) => [row.source_url_ref_id, row.dest_url_ref_id]),
+		);
+		const items = window.map((row) =>
+			toLinkEntry({
+				source_url: requireUrlRef(urlByRefId, row.source_url_ref_id),
+				dest_url: requireUrlRef(urlByRefId, row.dest_url_ref_id),
+				status: row.status,
+				is_external_link: row.is_external_link,
+			}),
+		);
 		const lastRow = window.at(-1);
 		const firstRow = window[0];
 		const nextCursor =
@@ -243,7 +284,7 @@ export async function listViewerBrokenLinks(
 			);
 			const hasMoreBefore = fetched.length > limit;
 			const window = fetched.slice(0, limit).toReversed();
-			return buildResult(window, true, hasMoreBefore);
+			return await buildResult(window, true, hasMoreBefore);
 		}
 		const fetched = await readAnchorFactsWindow(
 			knex,
@@ -256,7 +297,7 @@ export async function listViewerBrokenLinks(
 		);
 		const hasMoreAfter = fetched.length > limit;
 		const window = fetched.slice(0, limit);
-		return buildResult(window, hasMoreAfter, true);
+		return await buildResult(window, hasMoreAfter, true);
 	}
 
 	const offset = options.offset ?? 0;
@@ -271,5 +312,5 @@ export async function listViewerBrokenLinks(
 	);
 	const hasMoreAfter = fetched.length > limit;
 	const window = fetched.slice(0, limit);
-	return buildResult(window, hasMoreAfter, offset > 0);
+	return await buildResult(window, hasMoreAfter, offset > 0);
 }

@@ -170,8 +170,8 @@ export interface DirectoryTreeBuildResult {
 export interface ExternalLinkInsertRow {
 	/** `COALESCE(canonical.id, dest.id)` — the canonical destination's `pages.id`. */
 	dest_page_id: number;
-	/** `COALESCE(canonical.url, dest.url)` — the canonical destination URL, verbatim. */
-	dest_url: string;
+	/** URL reference for `COALESCE(canonical.url, dest.url)`. */
+	dest_url_ref_id: number;
 	/** `COALESCE(canonical.status, dest.status)` — the canonical destination's HTTP status, or `null` if unknown. */
 	status: number | null;
 	/**
@@ -196,14 +196,10 @@ export interface AnchorFactInsertRow {
 	source_page_id: number;
 	/** `COALESCE(canonical.id, dest.id)` — the canonical destination's `pages.id`. */
 	dest_page_id: number;
-	/**
-	 * The referring page's URL, verbatim — copied at build time so indexed
-	 * `ORDER BY`/keyset comparisons don't need a pre-join, the same
-	 * rationale as `viewer_pages.url_sort_key`.
-	 */
-	source_url_sort_key: string;
-	/** `COALESCE(canonical.url, dest.url)`, verbatim — same rationale as {@link source_url_sort_key}. */
-	dest_url_sort_key: string;
+	/** URL reference for the referring page's URL. */
+	source_url_ref_id: number;
+	/** URL reference for `COALESCE(canonical.url, dest.url)`. */
+	dest_url_ref_id: number;
 	/** `COALESCE(canonical.status, dest.status)` — the canonical destination's HTTP status, or `null` if unknown. */
 	status: number | null;
 	/** `status`, or `NULL_STATUS_SENTINEL` when `status` is `null` — see that constant's docs. */
@@ -211,7 +207,7 @@ export interface AnchorFactInsertRow {
 	/**
 	 * The negation of {@link status_sort_key} — walking this column
 	 * ascending yields `status desc` display order while keeping the
-	 * `source_url_sort_key`/`edge_id` tie-breakers ascending too, the same
+	 * `source_url_ref_id`/`edge_id` tie-breakers ascending too, the same
 	 * `viewer_pages.status_desc_key` rationale (a row-value keyset tuple
 	 * comparison can't mix per-column directions).
 	 */

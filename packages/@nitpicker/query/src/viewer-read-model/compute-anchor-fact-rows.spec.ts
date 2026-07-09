@@ -19,12 +19,47 @@ import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
 async function collectAnchorFactRows(
 	trx: Knex,
 	chunkSize?: number,
-): Promise<AnchorFactInsertRow[]> {
+): Promise<{ rows: AnchorFactInsertRow[]; urlByRefId: Map<number, string> }> {
+	await trx.raw(`
+		CREATE TABLE IF NOT EXISTS viewer_url_refs (
+			id integer primary key,
+			url text not null unique
+		)
+	`);
+	await trx('viewer_url_refs').delete();
+	await trx.raw(`
+		INSERT INTO viewer_url_refs (id, url)
+		SELECT row_number() OVER (ORDER BY url) AS id, url
+		FROM (SELECT DISTINCT url FROM pages)
+		ORDER BY url
+	`);
+	const refRows: { id: number; url: string }[] = await trx('viewer_url_refs')
+		.select('id', 'url')
+		.orderBy('id', 'asc');
+	const urlByRefId = new Map<number, string>();
+	for (const row of refRows) {
+		urlByRefId.set(row.id, row.url);
+	}
 	const rows: AnchorFactInsertRow[] = [];
 	for await (const chunk of computeAnchorFactRows(trx, chunkSize)) {
 		rows.push(...chunk);
 	}
-	return rows;
+	return { rows, urlByRefId };
+}
+
+/**
+ * Finds one computed anchor fact by resolving its destination URL ref id.
+ * @param rows - Computed anchor fact rows.
+ * @param urlByRefId - URL lookup prepared by {@link collectAnchorFactRows}.
+ * @param destUrl - Destination URL to find.
+ * @returns The matching row, if present.
+ */
+function findByDestUrl(
+	rows: readonly AnchorFactInsertRow[],
+	urlByRefId: ReadonlyMap<number, string>,
+	destUrl: string,
+): AnchorFactInsertRow | undefined {
+	return rows.find((row) => urlByRefId.get(row.dest_url_ref_id) === destUrl);
 }
 
 const __filename = new URL(import.meta.url).pathname;
@@ -233,21 +268,23 @@ describe('computeAnchorFactRows', () => {
 
 	it('collapses duplicate anchors between the same (source,dest) pair into one row with count', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
-		const broken = rows.find(
-			(row) => row.dest_url_sort_key === 'https://example.com/broken',
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
 		);
+		const broken = findByDestUrl(rows, urlByRefId, 'https://example.com/broken');
 		expect(broken).toMatchObject({ count: 2, is_broken: 1 });
 	});
 
 	it('flags only 404 destinations as broken, not 403 or 5xx', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
-		const forbidden = rows.find(
-			(row) => row.dest_url_sort_key === 'https://example.com/forbidden',
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
 		);
-		const serverError = rows.find(
-			(row) => row.dest_url_sort_key === 'https://example.com/server-error',
+		const forbidden = findByDestUrl(rows, urlByRefId, 'https://example.com/forbidden');
+		const serverError = findByDestUrl(
+			rows,
+			urlByRefId,
+			'https://example.com/server-error',
 		);
 		expect(forbidden).toMatchObject({ status: 403, is_broken: 0 });
 		expect(serverError).toMatchObject({ status: 500, is_broken: 0 });
@@ -255,26 +292,28 @@ describe('computeAnchorFactRows', () => {
 
 	it('flags external destinations via is_external_link, not is_broken', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
-		const ads = rows.find((row) => row.dest_url_sort_key === 'https://ads.example.com');
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
+		);
+		const ads = findByDestUrl(rows, urlByRefId, 'https://ads.example.com');
 		expect(ads).toMatchObject({ count: 1, is_broken: 0, is_external_link: 1 });
 	});
 
 	it('substitutes NULL_STATUS_SENTINEL only when status is null, never a real status', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
-		const broken = rows.find(
-			(row) => row.dest_url_sort_key === 'https://example.com/broken',
-		)!;
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
+		);
+		const broken = findByDestUrl(rows, urlByRefId, 'https://example.com/broken')!;
 		expect(broken.status_sort_key).toBe(404);
 	});
 
 	it('sets status_desc_key to the negation of status_sort_key', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
-		const broken = rows.find(
-			(row) => row.dest_url_sort_key === 'https://example.com/broken',
-		)!;
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
+		);
+		const broken = findByDestUrl(rows, urlByRefId, 'https://example.com/broken')!;
 		expect(broken.status_desc_key).toBe(-404);
 	});
 });
@@ -397,9 +436,12 @@ describe('computeAnchorFactRows — redirect resolution', () => {
 
 	it('collapses a redirect-source anchor and a direct anchor onto the same canonical dest_page_id, judged broken via the canonical status', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
+		);
 		const targetRows = rows.filter(
-			(row) => row.dest_url_sort_key === 'https://example.com/canonical-target',
+			(row) =>
+				urlByRefId.get(row.dest_url_ref_id) === 'https://example.com/canonical-target',
 		);
 		expect(targetRows).toHaveLength(2);
 		expect(new Set(targetRows.map((row) => row.dest_page_id)).size).toBe(1);
@@ -527,9 +569,12 @@ describe('computeAnchorFactRows — redirect resolution to an external destinati
 
 	it('collapses a redirect-source anchor and a direct anchor onto the same external canonical dest_page_id, flagged external via the canonical page', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex.transaction((trx) => collectAnchorFactRows(trx));
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
+		);
 		const targetRows = rows.filter(
-			(row) => row.dest_url_sort_key === 'https://external.example.com/target',
+			(row) =>
+				urlByRefId.get(row.dest_url_ref_id) === 'https://external.example.com/target',
 		);
 		expect(targetRows).toHaveLength(2);
 		expect(new Set(targetRows.map((row) => row.dest_page_id)).size).toBe(1);
@@ -642,8 +687,8 @@ describe('computeAnchorFactRows — chunking', () => {
 		const chunked = await knex.transaction((trx) => collectAnchorFactRows(trx, 1));
 		const byDest = (rows: AnchorFactInsertRow[]) =>
 			rows.toSorted((a, b) => a.dest_page_id - b.dest_page_id);
-		expect(byDest(chunked)).toEqual(byDest(baseline));
-		expect(chunked).toHaveLength(3);
+		expect(byDest(chunked.rows)).toEqual(byDest(baseline.rows));
+		expect(chunked.rows).toHaveLength(3);
 	});
 
 	it('throws on a non-positive chunkSize instead of hanging forever', async () => {

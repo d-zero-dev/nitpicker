@@ -35,10 +35,10 @@ export interface ExpectedAnchorFactsCursor {
  * changed query would silently seek to a nonsensical position. Thin wrapper
  * over the shared {@link decodeCursorEnvelope}, translating this table's
  * `columns`-shaped `expected` input into the generic
- * `expectedValueCount`/`expectedValueTypeAt` shape — the one table in this
- * family whose keyset tuple mixes numeric and text columns depending on
- * `sortBy`, so it opts into the shared decoder's per-position type check
- * that every other table leaves unused.
+ * `expectedValueCount`/`expectedValueTypeAt` shape. Anchor fact cursors use
+ * numeric URL ref ids plus numeric status/edge keys, so this opts into the
+ * shared decoder's per-position type check to reject stale string URL
+ * cursors clearly.
  * @param cursor - The opaque cursor string from the request.
  * @param expected - The current request's filter key + sort, to validate against.
  * @returns The decoded, validated payload.

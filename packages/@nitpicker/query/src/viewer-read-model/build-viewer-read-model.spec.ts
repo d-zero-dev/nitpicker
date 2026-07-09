@@ -9,6 +9,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getErrorKinds } from '../get-error-kinds.js';
 import { getSummary } from '../get-summary.js';
 import { listPages } from '../list-pages.js';
+import { listViewerBrokenLinks } from '../list-viewer-broken-links.js';
+import { listViewerExternalLinks } from '../list-viewer-external-links.js';
 
 import { buildViewerReadModel } from './build-viewer-read-model.js';
 import { hasViewerReadModel } from './has-viewer-read-model.js';
@@ -1190,7 +1192,14 @@ describe('buildViewerReadModel', () => {
 		});
 
 		it('populates viewer_external_links with one row per unique canonical destination', async () => {
-			const rows = await archive.getKnex()('viewer_external_links').select('*');
+			const rows = await archive
+				.getKnex()('viewer_external_links')
+				.join(
+					'viewer_url_refs',
+					'viewer_external_links.dest_url_ref_id',
+					'viewer_url_refs.id',
+				)
+				.select('viewer_external_links.*', 'viewer_url_refs.url as dest_url');
 			expect(rows).toHaveLength(1);
 			expect(rows[0]).toMatchObject({
 				dest_url: 'https://ads.example.com',
@@ -1209,8 +1218,13 @@ describe('buildViewerReadModel', () => {
 		it('populates viewer_anchor_facts with one row per unique (source,dest) pair, collapsing duplicate anchors via count', async () => {
 			const rows = await archive
 				.getKnex()('viewer_anchor_facts')
-				.where('dest_url_sort_key', 'https://example.com/broken')
-				.select('*');
+				.join(
+					'viewer_url_refs',
+					'viewer_anchor_facts.dest_url_ref_id',
+					'viewer_url_refs.id',
+				)
+				.where('viewer_url_refs.url', 'https://example.com/broken')
+				.select('viewer_anchor_facts.*');
 			expect(rows).toHaveLength(1);
 			expect(rows[0]).toMatchObject({ count: 2, is_broken: 1, is_external_link: 0 });
 		});
@@ -1218,8 +1232,13 @@ describe('buildViewerReadModel', () => {
 		it('flags the external-destination edges as is_external_link without indexing them for read (no vaf_external_* index exists)', async () => {
 			const rows = await archive
 				.getKnex()('viewer_anchor_facts')
-				.where('dest_url_sort_key', 'https://ads.example.com')
-				.select('*');
+				.join(
+					'viewer_url_refs',
+					'viewer_anchor_facts.dest_url_ref_id',
+					'viewer_url_refs.id',
+				)
+				.where('viewer_url_refs.url', 'https://ads.example.com')
+				.select('viewer_anchor_facts.*');
 			expect(rows).toHaveLength(2);
 			for (const row of rows) {
 				expect(row).toMatchObject({ is_broken: 0, is_external_link: 1 });
@@ -1231,6 +1250,121 @@ describe('buildViewerReadModel', () => {
 			const rows = await archive.getKnex()('viewer_anchor_facts').select('*');
 			// 2 edges to ads.example.com (page-a, page-b) + 1 edge to /broken (page-b).
 			expect(rows).toHaveLength(3);
+		});
+	});
+
+	describe('viewer_url_refs scale regression', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_url_refs_scale__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'url-refs-scale-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			await archive.setPage({
+				url: parseUrl('https://example.com/broken-shared')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 404,
+				statusText: 'Not Found',
+				contentType: 'text/html',
+				contentLength: 0,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			for (let index = 0; index < 120; index++) {
+				const padded = String(index).padStart(4, '0');
+				const sourceUrl = `https://example.com/source-${padded}`;
+				const externalUrl = `https://external-${padded}.example.net/landing`;
+				await archive.setPage({
+					url: parseUrl(externalUrl)!,
+					redirectPaths: [],
+					isExternal: true,
+					isTarget: false,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					html: '',
+					meta: META,
+					anchorList: [],
+					imageList: [],
+					isSkipped: false,
+				});
+				await archive.setPage({
+					url: parseUrl(sourceUrl)!,
+					redirectPaths: [],
+					isExternal: false,
+					isTarget: true,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					html: '',
+					meta: { ...META, title: `Source ${padded}` },
+					anchorList: [
+						{
+							href: parseUrl(externalUrl)!,
+							isExternal: true,
+							title: null,
+							textContent: `External ${padded}`,
+						},
+						{
+							href: parseUrl('https://example.com/broken-shared')!,
+							isExternal: false,
+							title: null,
+							textContent: `Broken ${padded}`,
+						},
+					],
+					imageList: [],
+					isSkipped: false,
+				});
+			}
+
+			await buildViewerReadModel(archive);
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('builds URL refs for many distinct URLs and keeps fast-path URL restoration working', async () => {
+			const refCountRows = await archive
+				.getKnex()('viewer_url_refs')
+				.count<{ count: string }[]>({ count: '*' });
+			expect(Number(refCountRows[0]?.count)).toBe(241);
+
+			const external = await listViewerExternalLinks(archive, { limit: 5 });
+			expect(external.total).toBe(120);
+			expect(external.items[0]?.destUrl).toBe(
+				'https://external-0000.example.net/landing',
+			);
+
+			const broken = await listViewerBrokenLinks(archive, { limit: 5 });
+			expect(broken.total).toBe(120);
+			expect(broken.items[0]).toMatchObject({
+				destUrl: 'https://example.com/broken-shared',
+				status: 404,
+				isExternal: false,
+			});
 		});
 	});
 

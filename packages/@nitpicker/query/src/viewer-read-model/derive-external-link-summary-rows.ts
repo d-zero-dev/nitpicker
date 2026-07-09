@@ -46,7 +46,7 @@ export function deriveExternalLinkSummaryRows(
 		} else {
 			summaries.set(fact.dest_page_id, {
 				dest_page_id: fact.dest_page_id,
-				dest_url: fact.dest_url_sort_key,
+				dest_url_ref_id: fact.dest_url_ref_id,
 				status: fact.status,
 				referrer_count: 1,
 			});

@@ -249,7 +249,7 @@ describe('listViewerBrokenLinks', () => {
 
 	it('status ties (every broken link is 404) still paginate without duplicates or gaps, in both directions', async () => {
 		// Every row here has the exact same status_sort_key/status_desc_key —
-		// this is what the source_url_sort_key tie-breaker in the keyset
+		// this is what the source_url_ref_id tie-breaker in the keyset
 		// tuple exists to disambiguate.
 		const [pageAsc0, pageAsc1] = await Promise.all([
 			listViewerBrokenLinks(archive, {

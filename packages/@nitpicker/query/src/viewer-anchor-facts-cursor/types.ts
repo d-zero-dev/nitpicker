@@ -4,8 +4,8 @@
  * `edge_id`, the stable tie-breaker.
  */
 export type AnchorFactsSortColumn =
-	| 'source_url_sort_key'
-	| 'dest_url_sort_key'
+	| 'source_url_ref_id'
+	| 'dest_url_ref_id'
 	| 'status_sort_key'
 	| 'status_desc_key'
 	| 'edge_id';
@@ -16,14 +16,13 @@ export type AnchorFactsSortColumn =
  * scan direction (`asc`/`desc`) reads them in display order.
  *
  * `status` desc uses `status_desc_key` (`= -status_sort_key`) walked
- * ascending, so the `source_url_sort_key`/`edge_id` tie-breakers stay
+ * ascending, so the `source_url_ref_id`/`edge_id` tie-breakers stay
  * ascending too — ties always display in source-URL order regardless of the
  * primary sort direction, mirroring `viewer_pages`'s identical
  * `ViewerPagesSortSpec` rationale (`docs/viewer-sql-query-plan.md`'s "Stable
- * Ordering" section). `sourceUrl`/`destUrl` don't need this negation trick
- * (text has no numeric negation, and their tie-breaker — `edge_id` alone —
- * flips direction together with the primary column, so no per-column
- * direction mixing occurs).
+ * Ordering" section). `sourceUrl`/`destUrl` use numeric URL ref ids, so
+ * their tuple can simply be scanned in the requested direction with
+ * `edge_id` as the stable tie-breaker.
  */
 export interface AnchorFactsSortSpec {
 	/** Keyset tuple columns, in comparison/`ORDER BY` order. */
@@ -47,6 +46,8 @@ export type AnchorFactsKeysetRow = Record<AnchorFactsSortColumn, string | number
  * erroring.
  */
 const NUMERIC_ANCHOR_FACTS_SORT_COLUMNS: ReadonlySet<AnchorFactsSortColumn> = new Set([
+	'source_url_ref_id',
+	'dest_url_ref_id',
 	'status_sort_key',
 	'status_desc_key',
 	'edge_id',
@@ -56,7 +57,7 @@ const NUMERIC_ANCHOR_FACTS_SORT_COLUMNS: ReadonlySet<AnchorFactsSortColumn> = ne
  * Whether `column`'s keyset value is a SQLite INTEGER (`number`) rather
  * than TEXT (`string`).
  * @param column - The sort-spec column to check.
- * @returns `true` for `status_sort_key`/`status_desc_key`/`edge_id`, `false` for the URL sort-key columns.
+ * @returns `true` for every anchor-facts cursor column.
  */
 export function isNumericAnchorFactsSortColumn(column: AnchorFactsSortColumn): boolean {
 	return NUMERIC_ANCHOR_FACTS_SORT_COLUMNS.has(column);

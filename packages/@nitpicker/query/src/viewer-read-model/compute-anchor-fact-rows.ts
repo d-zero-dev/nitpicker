@@ -74,7 +74,6 @@ export async function* computeAnchorFactRows(
 	}
 
 	const destIdExpression = 'COALESCE("canonical"."id", "dest"."id")';
-	const destUrlExpression = 'COALESCE("canonical"."url", "dest"."url")';
 	const statusExpression = 'COALESCE("canonical"."status", "dest"."status")';
 	const isExternalExpression = 'COALESCE("canonical"."isExternal", "dest"."isExternal")';
 
@@ -87,8 +86,8 @@ export async function* computeAnchorFactRows(
 		const rows: {
 			sourcePageId: number;
 			destPageId: number;
-			sourceUrl: string;
-			destUrl: string;
+			sourceUrlRefId: number | null;
+			destUrlRefId: number | null;
 			status: number | null;
 			isExternal: 0 | 1;
 			count: number;
@@ -96,14 +95,18 @@ export async function* computeAnchorFactRows(
 			.join('pages as source', 'anchors.pageId', '=', 'source.id')
 			.join('pages as dest', 'anchors.hrefId', '=', 'dest.id')
 			.leftJoin('pages as canonical', 'dest.redirectDestId', '=', 'canonical.id')
+			.leftJoin('viewer_url_refs as source_ref', 'source.url', '=', 'source_ref.url')
+			.leftJoin('viewer_url_refs as dest_ref', function () {
+				this.on(trx.raw('"dest_ref"."url" = COALESCE("canonical"."url", "dest"."url")'));
+			})
 			.where('source.id', '>', rangeStart)
 			.andWhere('source.id', '<=', rangeEnd)
 			.groupBy('source.id', trx.raw(destIdExpression))
 			.select(
 				'source.id as sourcePageId',
 				trx.raw(`${destIdExpression} as "destPageId"`),
-				'source.url as sourceUrl',
-				trx.raw(`${destUrlExpression} as "destUrl"`),
+				'source_ref.id as sourceUrlRefId',
+				'dest_ref.id as destUrlRefId',
 				trx.raw(`${statusExpression} as "status"`),
 				trx.raw(`${isExternalExpression} as "isExternal"`),
 				trx.raw('count(*) as "count"'),
@@ -115,11 +118,16 @@ export async function* computeAnchorFactRows(
 
 		yield rows.map((row) => {
 			const statusSortKey = row.status ?? NULL_STATUS_SENTINEL;
+			if (row.sourceUrlRefId == null || row.destUrlRefId == null) {
+				throw new Error(
+					`computeAnchorFactRows: missing viewer_url_refs entry for source=${row.sourcePageId}, dest=${row.destPageId}`,
+				);
+			}
 			return {
 				source_page_id: row.sourcePageId,
 				dest_page_id: row.destPageId,
-				source_url_sort_key: row.sourceUrl,
-				dest_url_sort_key: row.destUrl,
+				source_url_ref_id: row.sourceUrlRefId,
+				dest_url_ref_id: row.destUrlRefId,
 				status: row.status,
 				status_sort_key: statusSortKey,
 				status_desc_key: -statusSortKey,

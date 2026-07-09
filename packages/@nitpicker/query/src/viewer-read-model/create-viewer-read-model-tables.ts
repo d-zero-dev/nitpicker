@@ -1,7 +1,7 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 23 viewer-read-model tables against the given connection, with
+ * Creates all 24 viewer-read-model tables against the given connection, with
  * no indexes. Assumes none of the tables currently exist — callers
  * (`buildViewerReadModel`) are responsible for dropping any prior version
  * first, inside the same transaction, so this function is not itself
@@ -82,6 +82,13 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	`);
 
 	await trx.raw(`
+		CREATE TABLE viewer_url_refs (
+			id integer primary key,
+			url text not null unique
+		)
+	`);
+
+	await trx.raw(`
 		CREATE TABLE viewer_query_profiles (
 			scope text not null,
 			profile_key text not null,
@@ -155,7 +162,7 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	await trx.raw(`
 		CREATE TABLE viewer_external_links (
 			dest_page_id integer primary key,
-			dest_url text not null,
+			dest_url_ref_id integer not null references viewer_url_refs(id),
 			status integer,
 			referrer_count integer not null
 		)
@@ -163,21 +170,17 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 
 	// Edge-level (one row per unique (source_page_id, dest_page_id) pair,
 	// with `count` absorbing duplicate anchor observations between the same
-	// pair) fact table backing broken-link listing. Deliberately has no
-	// `url_refs`/`content_items` ref-table indirection (issue #139 — not
-	// landed, and #103's own execution order places it after this table):
-	// `source_url_sort_key`/`dest_url_sort_key` are inline text, copied at
-	// build time exactly like `viewer_pages.url_sort_key`, so indexed
-	// `ORDER BY` works without a pre-join. Full URL text for the OTHER
-	// (non-sort-key) display columns is resolved by joining back to `pages`
-	// only after the id set is limit-bounded (same limit-before-join
-	// pattern as `joinViewerPageIdsToListItems`). `is_external_link` is
+	// pair) fact table backing broken-link listing. URL strings are shared
+	// through `viewer_url_refs` (issue #139), with ids assigned in URL BINARY
+	// order so they act as compact sort keys for keyset pagination. Full URL
+	// text is resolved only after the row window is limit-bounded.
+	// `is_external_link` is
 	// stored (SQLite INTEGER 0/1 costs ~0 bytes) but intentionally has no
 	// index: nothing reads this table filtered by it — it exists only for
 	// `deriveExternalLinkSummaryRows`'s in-memory pass over the full row
 	// set at build time. `status_desc_key` mirrors `viewer_pages`'s same
 	// column for the same reason: `docs/viewer-sql-query-plan.md`'s Stable
-	// Ordering rule keeps the `source_url_sort_key`/`edge_id` tie-breakers
+	// Ordering rule keeps the `source_url_ref_id`/`edge_id` tie-breakers
 	// ascending even when the primary sort is `status desc` — a row-value
 	// keyset tuple comparison can't mix per-column directions, so the
 	// primary column is negated and walked ascending instead. See
@@ -188,8 +191,8 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			edge_id integer primary key,
 			source_page_id integer not null,
 			dest_page_id integer not null,
-			source_url_sort_key text not null,
-			dest_url_sort_key text not null,
+			source_url_ref_id integer not null references viewer_url_refs(id),
+			dest_url_ref_id integer not null references viewer_url_refs(id),
 			status integer,
 			status_sort_key integer not null,
 			status_desc_key integer not null,
