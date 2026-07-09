@@ -1,20 +1,42 @@
 # @nitpicker/cli
 
-Web サイトのクローラー・分析・レポート統合 CLI。
+Web サイトのクロール、分析、Google Sheets レポート、アーカイブクエリ、ローカルビューアを実行する CLI です。
 
-## 概要
+## 実行方法
 
-ヘッドレスブラウザで Web サイトをクロールし、各ページのメタデータ・リンク構造・ネットワークリソース・HTML スナップショットを `.nitpicker` アーカイブに保存します。さらに、アーカイブに対して各種プラグインによる分析を実行し、Google Sheets にレポートを出力できます。
-
-## 使い方
+CLI の呼び出しは `npx @nitpicker/cli` に統一しています。
 
 ```sh
-npx @nitpicker/cli crawl <URL>     # Web サイトをクロール
-npx @nitpicker/cli analyze <file>  # 分析プラグインを実行
-npx @nitpicker/cli report <file>   # Google Sheets レポートを生成
+npx @nitpicker/cli <command> [options]
 ```
 
-詳細なオプションは[ルートの README](../../README.md) を参照してください。
+## コマンド
+
+| コマンド   | 用途                                                        | 詳細                                   |
+| ---------- | ----------------------------------------------------------- | -------------------------------------- |
+| `crawl`    | Webサイトをクロールして `.nitpicker` アーカイブを作成・更新 | [docs/crawl.md](./docs/crawl.md)       |
+| `analyze`  | `.nitpicker` アーカイブに分析プラグインを実行               | [docs/analyze.md](./docs/analyze.md)   |
+| `report`   | `.nitpicker` アーカイブをGoogle Sheetsへ出力                | [docs/report.md](./docs/report.md)     |
+| `pipeline` | `crawl` → `analyze` → `report` を直列実行                   | [docs/pipeline.md](./docs/pipeline.md) |
+| `query`    | `.nitpicker` アーカイブをJSONで問い合わせ                   | [docs/query.md](./docs/query.md)       |
+| `viewer`   | `.nitpicker` アーカイブまたはstubをローカルビューアで開く   | [docs/viewer.md](./docs/viewer.md)     |
+
+## よく使う例
+
+```sh
+npx @nitpicker/cli crawl https://example.com
+npx @nitpicker/cli crawl ./example.com.nitpicker --retry-failed
+npx @nitpicker/cli analyze ./example.com.nitpicker --all
+npx @nitpicker/cli report ./example.com.nitpicker --sheet <Google Sheets URL> --all
+npx @nitpicker/cli query ./example.com.nitpicker summary --pretty
+npx @nitpicker/cli viewer ./example.com.nitpicker
+```
+
+## `.nitpicker` アーカイブ
+
+`.nitpicker` は `crawl` が生成するアーカイブファイルです。保存済みのページ、HTMLスナップショット、リンク、リソース、画像、分析結果を、後続の `analyze` / `report` / `query` / `viewer` で再利用します。
+
+アーカイブ形式や内部スキーマの詳細はリポジトリルートの [ARCHITECTURE.md](../../../ARCHITECTURE.md) を参照してください。
 
 ## ライセンス
 
