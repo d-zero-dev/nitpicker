@@ -1,12 +1,13 @@
 # @nitpicker/analyze-axe
 
-axe-core を使用したアクセシビリティ分析プラグイン。
+axe-core を使ってアクセシビリティ違反を検出する Nitpicker analyze プラグインです。
 
-## 概要
+通常は [@nitpicker/cli](../cli/README.md) の `analyze` コマンドから実行します。
 
-各ページの HTML スナップショットに対して [axe-core](https://github.com/dequelabs/axe-core) によるアクセシビリティ検証を実行し、WCAG 違反を検出します。
+## 関連リンク
 
-このパッケージは [Nitpicker](../../README.md) モノレポの内部パッケージです。単体での利用は想定していません。
+- [Nitpicker README](../../../README.md)
+- [CLI analyze docs](../cli/docs/analyze.md)
 
 ## ライセンス
 

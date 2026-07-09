@@ -1,12 +1,13 @@
 # @nitpicker/analyze-markuplint
 
-markuplint を使用した HTML マークアップ検証プラグイン。
+markuplint を使ってHTMLマークアップを検証する Nitpicker analyze プラグインです。
 
-## 概要
+通常は [@nitpicker/cli](../cli/README.md) の `analyze` コマンドから実行します。
 
-各ページの HTML スナップショットに対して [markuplint](https://markuplint.dev/) による HTML 検証を実行し、マークアップの問題を検出します。
+## 関連リンク
 
-このパッケージは [Nitpicker](../../README.md) モノレポの内部パッケージです。単体での利用は想定していません。
+- [Nitpicker README](../../../README.md)
+- [CLI analyze docs](../cli/docs/analyze.md)
 
 ## ライセンス
 

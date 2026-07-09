@@ -1,12 +1,13 @@
 # @nitpicker/analyze-search
 
-キーワード・CSS セレクタ検索プラグイン。
+キーワードやCSSセレクタでページ内容を検索する Nitpicker analyze プラグインです。
 
-## 概要
+通常は [@nitpicker/cli](../cli/README.md) の `analyze` コマンドから実行します。
 
-各ページの HTML スナップショットに対して、指定したキーワードや CSS セレクタでの検索を実行し、一致箇所を報告します。
+## 関連リンク
 
-このパッケージは [Nitpicker](../../README.md) モノレポの内部パッケージです。単体での利用は想定していません。
+- [Nitpicker README](../../../README.md)
+- [CLI analyze docs](../cli/docs/analyze.md)
 
 ## ライセンス
 

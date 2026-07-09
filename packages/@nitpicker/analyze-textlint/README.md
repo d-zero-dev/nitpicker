@@ -1,12 +1,13 @@
 # @nitpicker/analyze-textlint
 
-textlint を使用した日本語テキスト校正プラグイン。
+textlint を使って日本語文章を校正する Nitpicker analyze プラグインです。
 
-## 概要
+通常は [@nitpicker/cli](../cli/README.md) の `analyze` コマンドから実行します。
 
-各ページのテキストコンテンツに対して [textlint](https://textlint.github.io/) による日本語校正を実行し、表記ゆれ・文法上の問題を検出します。
+## 関連リンク
 
-このパッケージは [Nitpicker](../../README.md) モノレポの内部パッケージです。単体での利用は想定していません。
+- [Nitpicker README](../../../README.md)
+- [CLI analyze docs](../cli/docs/analyze.md)
 
 ## ライセンス
 

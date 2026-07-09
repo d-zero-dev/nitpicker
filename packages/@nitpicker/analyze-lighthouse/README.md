@@ -1,12 +1,13 @@
 # @nitpicker/analyze-lighthouse
 
-Lighthouse を使用したパフォーマンス分析プラグイン。
+Lighthouse を使ってページのパフォーマンス等を分析する Nitpicker analyze プラグインです。
 
-## 概要
+通常は [@nitpicker/cli](../cli/README.md) の `analyze` コマンドから実行します。
 
-各ページに対して [Lighthouse](https://github.com/GoogleChrome/lighthouse) によるパフォーマンス監査を実行し、Core Web Vitals などのスコアを取得します。
+## 関連リンク
 
-このパッケージは [Nitpicker](../../README.md) モノレポの内部パッケージです。単体での利用は想定していません。
+- [Nitpicker README](../../../README.md)
+- [CLI analyze docs](../cli/docs/analyze.md)
 
 ## ライセンス
 

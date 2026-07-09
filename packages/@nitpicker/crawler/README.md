@@ -1,12 +1,14 @@
 # @nitpicker/crawler
 
-ヘッドレスブラウザによる Web クローラーエンジン。
+ヘッドレスブラウザでWebサイトをクロールし、`.nitpicker` アーカイブを生成・更新する内部パッケージです。
 
-## 概要
+通常は [@nitpicker/cli](../cli/README.md) の `crawl` コマンドから利用します。
 
-Puppeteer を使用して Web サイトをクロールし、各ページのメタデータ・リンク構造・ネットワークリソース・レンダリング後 HTML スナップショットを SQLite ベースのアーカイブ（`.nitpicker`）に保存します。
+## 関連リンク
 
-このパッケージは [Nitpicker](../../README.md) モノレポの内部パッケージです。単体での利用は想定していません。
+- [Nitpicker README](../../../README.md)
+- [CLI crawl docs](../cli/docs/crawl.md)
+- [ARCHITECTURE.md](../../../ARCHITECTURE.md)
 
 ## ライセンス
 

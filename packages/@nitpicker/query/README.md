@@ -1,31 +1,14 @@
 # @nitpicker/query
 
-`.nitpicker` アーカイブファイル向けのクエリ API。
+`.nitpicker` アーカイブを開き、ページ、リンク、リソース、分析結果などを問い合わせる関数群です。
 
-## 概要
+通常は [@nitpicker/cli](../cli/README.md) の `query` コマンド、または [@nitpicker/mcp-server](../mcp-server/README.md) 経由で利用します。
 
-`.nitpicker` アーカイブ（SQLite ベース）に対して、SQL レベルのフィルタリング・集計・ページネーションを提供するクエリライブラリです。大規模サイト（10,000 ページ以上、500,000 レコード以上）でも効率的に動作するよう設計されています。
+## 関連リンク
 
-`ArchiveManager` によるアーカイブのライフサイクル管理と、12 のクエリ関数を提供します。
-
-### クエリ関数
-
-| 関数                   | 説明                                                           |
-| ---------------------- | -------------------------------------------------------------- |
-| `getSummary`           | サイト全体の統計情報（ページ数、メタデータ充足率など）         |
-| `listPages`            | ページ一覧（ステータス、メタデータ、ディレクトリでフィルタ）   |
-| `getPageDetail`        | 特定ページの詳細（メタデータ、リンク、リダイレクト、ヘッダー） |
-| `getPageHtml`          | ページの HTML スナップショット取得                             |
-| `listLinks`            | リンク分析（壊れたリンク、外部リンク、孤立ページ）             |
-| `listResources`        | サブリソース一覧（CSS、JS、画像、フォント）                    |
-| `listImages`           | 画像品質チェック（alt 欠落、サイズ欠落、過大画像）             |
-| `getViolations`        | 分析プラグインの違反結果取得                                   |
-| `findDuplicates`       | タイトル・description の重複検出                               |
-| `findMismatches`       | メタデータの不一致検出（canonical、OG タグ）                   |
-| `getResourceReferrers` | 特定リソースを参照しているページの検出                         |
-| `checkHeaders`         | セキュリティヘッダーの確認（CSP、HSTS 等）                     |
-
-このパッケージは [Nitpicker](../../README.md) モノレポの内部パッケージです。単体での利用は想定していません。
+- [Nitpicker README](../../../README.md)
+- [CLI query docs](../cli/docs/query.md)
+- [ARCHITECTURE.md](../../../ARCHITECTURE.md)
 
 ## ライセンス
 
