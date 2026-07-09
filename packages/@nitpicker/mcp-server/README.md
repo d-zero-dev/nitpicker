@@ -1,35 +1,12 @@
 # @nitpicker/mcp-server
 
-`.nitpicker` アーカイブファイルを AI アシスタントから操作するための MCP サーバー。
+`.nitpicker` アーカイブを Model Context Protocol (MCP) 経由で問い合わせるためのサーバーです。
 
-## 概要
-
-[Model Context Protocol (MCP)](https://modelcontextprotocol.io/) を介して、`.nitpicker` アーカイブの内容を AI アシスタント（Claude Desktop 等）から直接クエリできるサーバーです。stdio トランスポートで動作し、14 のツールを提供します。
-
-内部では `@nitpicker/query` パッケージのクエリ関数を呼び出しています。
-
-### 提供ツール
-
-| ツール                   | 説明                                                 |
-| ------------------------ | ---------------------------------------------------- |
-| `open_archive`           | `.nitpicker` ファイルを読み込み、archiveId を返す    |
-| `close_archive`          | アーカイブを閉じてリソースを解放                     |
-| `get_summary`            | サイト全体の概要統計                                 |
-| `list_pages`             | ページ一覧（フィルタ・ソート・ページネーション対応） |
-| `get_page_detail`        | 特定ページの詳細情報                                 |
-| `get_page_html`          | HTML スナップショットの取得                          |
-| `list_links`             | リンク分析（壊れたリンク、外部リンク、孤立ページ）   |
-| `list_resources`         | サブリソース一覧（CSS、JS、画像、フォント）          |
-| `list_images`            | 画像品質チェック（alt 欠落、サイズ欠落、過大画像）   |
-| `get_violations`         | 分析プラグインの違反結果                             |
-| `find_duplicates`        | メタデータ重複検出                                   |
-| `find_mismatches`        | メタデータ不一致検出                                 |
-| `get_resource_referrers` | リソース参照元ページの検出                           |
-| `check_headers`          | セキュリティヘッダー確認                             |
+内部では [@nitpicker/query](../query/README.md) を使い、AIアシスタントなどからアーカイブ内容を参照できるようにします。
 
 ## セットアップ
 
-Claude Desktop の設定ファイルに以下を追加してください。
+Claude Desktop の設定ファイルに以下を追加します。
 
 ```json
 {
@@ -42,7 +19,28 @@ Claude Desktop の設定ファイルに以下を追加してください。
 }
 ```
 
-このパッケージは [Nitpicker](../../README.md) モノレポの内部パッケージです。
+stdio トランスポートで起動し、`.nitpicker` アーカイブを開いてページ、リンク、リソース、分析結果などを問い合わせます。
+
+## 主なツール
+
+| ツール            | 説明                                         |
+| ----------------- | -------------------------------------------- |
+| `open_archive`    | `.nitpicker` ファイルを開き、archiveIdを返す |
+| `close_archive`   | アーカイブを閉じる                           |
+| `get_summary`     | サイト全体の概要統計                         |
+| `list_pages`      | ページ一覧                                   |
+| `get_page_detail` | 指定ページの詳細                             |
+| `get_page_html`   | HTMLスナップショット                         |
+| `list_links`      | リンク一覧                                   |
+| `list_resources`  | リソース一覧                                 |
+| `list_images`     | 画像一覧                                     |
+| `get_violations`  | 分析プラグインの違反結果                     |
+
+## 関連リンク
+
+- [Nitpicker README](../../../README.md)
+- [CLI query docs](../cli/docs/query.md)
+- [ARCHITECTURE.md](../../../ARCHITECTURE.md)
 
 ## ライセンス
 

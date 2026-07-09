@@ -1,12 +1,13 @@
 # @nitpicker/analyze-main-contents
 
-メインコンテンツ検出・抽出プラグイン。
+ページ内のメインコンテンツを検出・抽出する Nitpicker analyze プラグインです。
 
-## 概要
+通常は [@nitpicker/cli](../cli/README.md) の `analyze` コマンドから実行します。
 
-各ページの HTML スナップショットからメインコンテンツ領域を自動検出し、CSS セレクタとともに抽出結果を返します。
+## 関連リンク
 
-このパッケージは [Nitpicker](../../README.md) モノレポの内部パッケージです。単体での利用は想定していません。
+- [Nitpicker README](../../../README.md)
+- [CLI analyze docs](../cli/docs/analyze.md)
 
 ## ライセンス
 

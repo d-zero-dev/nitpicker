@@ -1,12 +1,13 @@
 # test-server
 
-Nitpicker の E2E テスト用サーバー。
+Nitpicker のE2Eテストで使うローカルテストサーバーです。
 
-## 概要
+公開利用を想定したパッケージではなく、リポジトリ内のテスト用途に限定しています。
 
-[Hono](https://hono.dev/) ベースのテストサーバーで、クローラーの E2E テストに必要な各種ルート（リダイレクト、ページネーション、スコープ、エラーステータスなど）を提供します。
+## 関連リンク
 
-このパッケージは [Nitpicker](../../README.md) モノレポの内部パッケージであり、公開されません。
+- [Nitpicker README](../../README.md)
+- [ARCHITECTURE.md](../../ARCHITECTURE.md)
 
 ## ライセンス
 
