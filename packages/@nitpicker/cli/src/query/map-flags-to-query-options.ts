@@ -130,6 +130,16 @@ export function mapFlagsToQueryOptions(
 				validator: flags.validator,
 				severity: flags.severity,
 				rule: flags.rule,
+				urlPattern: flags.urlPattern,
+				sortBy: flags.sortBy as
+					| 'url'
+					| 'validator'
+					| 'severity'
+					| 'rule'
+					| 'message'
+					| 'code'
+					| undefined,
+				sortOrder: flags.sortOrder as 'asc' | 'desc' | undefined,
 				limit: flags.limit,
 				offset: flags.offset,
 			};

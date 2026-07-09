@@ -373,6 +373,29 @@ export async function initSchema(instance: Knex) {
 			t.index('ran_at');
 		});
 
+	await instance.raw(`
+		CREATE TABLE analysis_text_refs (
+			id integer primary key,
+			text text not null,
+			sha256 text not null,
+			unique(sha256, text)
+		)
+	`);
+	await instance.raw(`
+		CREATE TABLE analysis_violations (
+			id integer primary key,
+			page_id integer not null references pages(id),
+			validator text not null,
+			severity text not null,
+			rule text not null,
+			message_text_id integer not null references analysis_text_refs(id),
+			code_text_id integer references analysis_text_refs(id),
+			page_url_sort_key text not null,
+			message_sort_key text not null,
+			code_sort_key text not null
+		)
+	`);
+
 	// ON DELETE CASCADE and compound indexes for the new tables. Knex's
 	// schema builder can't express CASCADE / compound indexes inline in a
 	// way that round-trips through libsql consistently, so we use raw SQL
@@ -384,6 +407,28 @@ export async function initSchema(instance: Knex) {
 		'CREATE INDEX page_tags_provider_pageId ON page_tags(provider, pageId)',
 	);
 	await instance.raw('CREATE INDEX page_jsonld_type_pageId ON page_jsonld(type, pageId)');
+	await instance.raw(
+		'CREATE INDEX av_url_order ON analysis_violations(page_url_sort_key, id)',
+	);
+	await instance.raw(
+		'CREATE INDEX av_filter_url ON analysis_violations(validator, severity, rule, page_url_sort_key, id)',
+	);
+	await instance.raw(
+		'CREATE INDEX av_validator_url ON analysis_violations(validator, page_url_sort_key, id)',
+	);
+	await instance.raw(
+		'CREATE INDEX av_severity_url ON analysis_violations(severity, page_url_sort_key, id)',
+	);
+	await instance.raw(
+		'CREATE INDEX av_rule_url ON analysis_violations(rule, page_url_sort_key, id)',
+	);
+	await instance.raw(
+		'CREATE INDEX av_message_order ON analysis_violations(message_sort_key, id)',
+	);
+	await instance.raw(
+		'CREATE INDEX av_code_order ON analysis_violations(code_sort_key, id)',
+	);
+	await instance.raw('CREATE INDEX av_page ON analysis_violations(page_id, id)');
 
 	// Content-addressable HTML blob storage. Knex's schema builder doesn't
 	// expose a WITHOUT ROWID toggle, so the BLOB tables are created via raw

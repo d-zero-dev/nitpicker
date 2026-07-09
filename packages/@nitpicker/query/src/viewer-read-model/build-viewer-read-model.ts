@@ -7,6 +7,7 @@ import { excludeSkippedPages } from '../exclude-skipped-pages.js';
 import { getErrorKinds } from '../get-error-kinds.js';
 import { getSummary } from '../get-summary.js';
 
+import { backfillAnalysisViolationsFromJson } from './backfill-analysis-violations-from-json.js';
 import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
 import { buildIsolatedReadModelRows } from './build-isolated-read-model-rows.js';
 import { buildPageUrlRankMap } from './build-page-url-rank-map.js';
@@ -315,6 +316,7 @@ export async function buildViewerReadModel(
 
 	const { onProgress } = options;
 	const knex = accessor.getKnex();
+	await backfillAnalysisViolationsFromJson(accessor);
 	const [summary, errorKinds, isolatedComponents] = await Promise.all([
 		getSummary(accessor),
 		getErrorKinds(accessor),

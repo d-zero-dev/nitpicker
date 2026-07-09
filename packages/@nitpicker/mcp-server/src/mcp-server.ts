@@ -282,7 +282,28 @@ export function createServer() {
 					}
 					case 'get_violations': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						return jsonResult(await getViolations(accessor, omit(args, 'archiveId')));
+						return jsonResult(
+							await getViolations(accessor, {
+								validator: optionalString(args, 'validator'),
+								severity: optionalString(args, 'severity'),
+								rule: optionalString(args, 'rule'),
+								urlPattern: optionalString(args, 'urlPattern'),
+								sortBy: optionalString(args, 'sortBy') as
+									| 'url'
+									| 'validator'
+									| 'severity'
+									| 'rule'
+									| 'message'
+									| 'code'
+									| undefined,
+								sortOrder: optionalString(args, 'sortOrder') as
+									| 'asc'
+									| 'desc'
+									| undefined,
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
 					}
 					case 'find_duplicates': {
 						const accessor = manager.get(requireString(args, 'archiveId'));

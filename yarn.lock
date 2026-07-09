@@ -3012,6 +3012,7 @@ __metadata:
     "@d-zero/google-sheets": "npm:0.9.4"
     "@d-zero/shared": "npm:0.22.2"
     "@nitpicker/crawler": "npm:0.12.0"
+    "@nitpicker/query": "npm:0.12.0"
     "@nitpicker/types": "npm:0.12.0"
     "@types/debug": "npm:4.1.13"
     "@types/jsdom": "npm:28.0.3"
