@@ -7,6 +7,7 @@ import path from 'node:path';
 
 import { Nitpicker } from '@nitpicker/core';
 import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
+import { getViolations } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
@@ -56,7 +57,10 @@ describe('Analyze pipeline (crawl → write → analyze)', () => {
 		const report = await nitpicker.archive.getData<Report>('analysis/report');
 		expect(report).toBeDefined();
 		expect(report.pageData).toBeDefined();
-		expect(Array.isArray(report.violations)).toBe(true);
+		expect(report.violations).toBeUndefined();
+
+		const violations = await getViolations(nitpicker.archive);
+		expect(violations).toEqual({ items: [], total: 0 });
 	});
 
 	it('クロールした internal ページが zip スナップショット経由で分析される', async () => {
