@@ -1,5 +1,7 @@
 import type { Knex } from 'knex';
 
+import { createPhase6ARefTables } from './create-phase6a-ref-tables.js';
+
 /**
  * Applies the connection-level PRAGMAs that govern foreign-key enforcement
  * and BLOB-read performance. These are **per-connection** settings (libsql
@@ -69,6 +71,18 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  *   from v1. zstd-compressed BLOBs keyed by SHA-256 for content-addressable
  *   dedup. WITHOUT ROWID via raw SQL because knex's schema builder cannot
  *   express it.
+ * - **Phase 6-A write-model staging tables** (issue #190, part of epic #103):
+ *   `url_refs`, `content_type_refs`, `text_refs`, `json_refs`, `blob_refs`,
+ *   `header_name_refs`, `header_value_refs`, `header_sets`,
+ *   `header_set_entries`, `header_flags`. Additive DDL only — the tables are
+ *   created on every fresh archive but remain **completely unused** by
+ *   current readers and writers. Later Phase 6-B / 6-C / … sub-issues will
+ *   populate them and migrate the consumer code paths. No existing table or
+ *   index is modified by their presence. See
+ *   {@link createPhase6ARefTables} for the DDL, column-level rationale, and
+ *   the reason `blob_refs` uses a regular rowid PK instead of WITHOUT ROWID.
+ *   Existing archives get the same tables added by
+ *   {@link migratePhase6ARefTables} at open time.
  * - **PRAGMA `page_size` and `journal_mode`** are set BEFORE any
  *   `CREATE TABLE` because SQLite only honors `page_size` changes against
  *   an empty database, and `journal_mode = WAL` is persistent. Other
@@ -452,6 +466,13 @@ export async function initSchema(instance: Knex) {
 		) WITHOUT ROWID
 	`);
 	await instance.raw('CREATE INDEX idx_page_html_ref_hash ON page_html_ref(hash)');
+
+	// Phase 6-A ref / header staging tables (issue #190).
+	// DDL + column-level rationale lives in {@link createPhase6ARefTables}
+	// so `migratePhase6ARefTables` can call the same DDL on existing
+	// archives — a divergence between the two paths would silently break
+	// the Phase 6-B population step's UNIQUE / CHECK contract.
+	await createPhase6ARefTables(instance);
 
 	// Composite covering index for the default Pages-view filter + url-ordered
 	// scan. Without it, `listPages` on a 400k-row archive runs ~15s per page

@@ -58,6 +58,7 @@ import { migrateInfoRoots } from './migrate-info-roots.js';
 import { migrateInventoryRuns } from './migrate-inventory-runs.js';
 import { migratePageErrors } from './migrate-page-errors.js';
 import { migratePagesResourcesSource } from './migrate-pages-resources-source.js';
+import { migratePhase6ARefTables } from './migrate-phase6a-ref-tables.js';
 import { redirectTable } from './redirect-table.js';
 import { resolveRedirectChain } from './resolve-redirect-chain.js';
 
@@ -2447,6 +2448,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		await migrateAnalysisViolations(this.#instance);
 		await migratePagesResourcesSource(this.#instance);
 		await migrateInventoryRuns(this.#instance);
+		await migratePhase6ARefTables(this.#instance);
 	}
 
 	/**
