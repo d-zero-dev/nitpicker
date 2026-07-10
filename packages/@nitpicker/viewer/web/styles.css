@@ -1289,6 +1289,32 @@ h2 {
 	border-radius: 6px;
 }
 
+.graph-legend {
+	display: block flex;
+	flex-wrap: wrap;
+	gap: 12px 16px;
+	padding: 0;
+	margin-block: 0 6px;
+	margin-inline: 0;
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+	list-style: none;
+}
+
+.graph-legend-row {
+	display: inline flex;
+	gap: 6px;
+	align-items: center;
+}
+
+.graph-legend-swatch {
+	display: inline flow-root;
+	inline-size: 12px;
+	block-size: 12px;
+	border: 1px solid var(--border);
+	border-radius: 999px;
+}
+
 /* Skip link: visually hidden until focused, then pinned to the top-left. */
 .skip-link {
 	position: absolute;

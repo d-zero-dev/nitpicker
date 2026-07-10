@@ -242,6 +242,11 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 					'Showing the top {nodes} pages by in-degree — larger graphs are capped so the JSON response fits in V8 string limits and the layout stays usable. Pass `?limit=0` in the URL to opt out.',
 				ariaLabel:
 					'Network graph of internal pages (visual representation). For an accessible, tabular view of a specific page’s inbound and outbound links, open that page from the Pages view and see its Page Detail.',
+				legendLabel: 'Node color legend',
+				legendCrawled: 'Crawled',
+				legendInventorySeed: 'Inventory (seed)',
+				legendInventoryDiscovered: 'Inventory (discovered)',
+				legendError: 'Error (4xx/5xx)',
 			},
 			errors: {
 				title: 'Connection Failures',
@@ -536,6 +541,11 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 					'被リンク数の多い上位 {nodes} 件のみ表示しています。これより大きなグラフは JSON レスポンスの V8 文字列上限とレイアウトの可読性を保つために打ち切られます。URL に `?limit=0` を付けると上限を解除できます。',
 				ariaLabel:
 					'内部ページのネットワークグラフ（視覚表現）。特定ページの被リンク・発リンクを表形式でアクセシブルに確認するには、ページ一覧から該当ページを開きページ詳細を参照してください。',
+				legendLabel: 'ノード色の凡例',
+				legendCrawled: 'クロール由来',
+				legendInventorySeed: 'インベントリ (シード)',
+				legendInventoryDiscovered: 'インベントリ (派生)',
+				legendError: 'エラー (4xx/5xx)',
 			},
 			errors: {
 				title: '接続障害',
