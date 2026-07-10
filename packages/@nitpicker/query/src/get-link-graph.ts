@@ -1,5 +1,5 @@
 import type { GetLinkGraphOptions, GraphEdge, GraphNode, LinkGraph } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor, PageSource } from '@nitpicker/crawler';
 
 /** Column filter selecting internal, scraped HTML pages (redirects excluded via a separate `whereNull`). */
 const INTERNAL_PAGE_WHERE = {
@@ -59,7 +59,7 @@ export async function getLinkGraph(
 
 	const [pageRows, edgeRows] = (await Promise.all([
 		knex('pages')
-			.select('url', 'status')
+			.select('url', 'status', 'source')
 			.where(INTERNAL_PAGE_WHERE)
 			.whereNull('redirectDestId'),
 		knex('anchors')
@@ -71,7 +71,10 @@ export async function getLinkGraph(
 			.where(aliasedInternalWhere('dest'))
 			.whereNull('dest.redirectDestId')
 			.whereRaw('anchors.pageId != anchors.hrefId'),
-	])) as [{ url: string; status: number | null }[], { source: string; target: string }[]];
+	])) as [
+		{ url: string; status: number | null; source: PageSource }[],
+		{ source: string; target: string }[],
+	];
 
 	const inDegree = new Map<string, number>();
 	for (const edge of edgeRows) {
@@ -82,6 +85,7 @@ export async function getLinkGraph(
 		url: row.url,
 		status: row.status,
 		inDegree: inDegree.get(row.url) ?? 0,
+		source: row.source,
 	}));
 	let edges: GraphEdge[] = edgeRows.map((edge) => ({
 		source: edge.source,
