@@ -2110,6 +2110,8 @@ export interface GraphNode {
 	status: number | null;
 	/** Number of incoming internal links (used for node sizing). */
 	inDegree: number;
+	/** Provenance label — see {@link PageSource}. Used by the graph view to color nodes by ingestion channel. */
+	source: PageSource;
 }
 
 /**

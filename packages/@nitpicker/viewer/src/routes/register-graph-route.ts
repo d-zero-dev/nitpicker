@@ -17,15 +17,16 @@ import { toNumber } from '../query-params/to-number.js';
  *    Invalid string length` — the client sees `{"error":"Invalid string
  *    length"}` after waiting ~1 min for the SQL to finish.
  * 2. **Visual usability**. Force-directed layouts (sigma.js + graphology
- *    forceAtlas2 in the viewer) become unreadable and CPU-bound past
- *    roughly 1-2 k nodes; bigger graphs render as a blob.
+ *    forceAtlas2 in the viewer) get denser past a few thousand nodes,
+ *    but 50k still renders in a few seconds and shows the full
+ *    inventory-* subgraph on typical audit archives (which is the
+ *    entire point of the source-based node coloring — a 1000-node cap
+ *    truncates every inventory node out because they have inDegree ≈ 0).
  *
- * 1000 is the largest value that comfortably fits both ceilings on
- * representative archives. Callers can override by passing `?limit=`
- * explicitly — `limit=0` is interpreted as "no cap" and accepts the
- * V8 risk knowingly.
+ * Callers can override by passing `?limit=` explicitly — `limit=0` is
+ * interpreted as "no cap" and accepts the V8 risk knowingly.
  */
-const DEFAULT_GRAPH_NODE_LIMIT = 1000;
+const DEFAULT_GRAPH_NODE_LIMIT = 50_000;
 
 /**
  * Registers `GET /api/graph?limit=` — the internal-page link graph (nodes +

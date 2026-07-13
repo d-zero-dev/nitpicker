@@ -14,14 +14,14 @@ import { createPromiseLru } from './promise-lru.js';
  *   on a 10 GB archive (~60 s cold) — even a single cache slot pays
  *   that back enormously on warm hits.
  * - **memory**: each entry's JSON shape is bounded by `limit` —
- *   ~66 MB at `limit=1000` (the route default). At 4 entries the
- *   in-memory ceiling is ~250 MB which fits inside the viewer's
- *   default ~4 GB V8 heap without crowding `summary-cache` /
- *   `isolated-clusters-cache`.
+ *   the route default (50 000 nodes) tops out around a few hundred MB
+ *   on the largest observed archives, so at 4 entries the in-memory
+ *   ceiling is comfortably below the viewer's default ~4 GB V8 heap
+ *   even alongside `summary-cache` / `isolated-clusters-cache`.
  *
  * Distinct `limit` values are treated as distinct entries so an
  * operator passing `?limit=0` (uncapped) never serves a capped result
- * to a different caller that asked for `?limit=1000`.
+ * to a different caller that asked for the default limit.
  */
 const MAX_ENTRIES = 4;
 
@@ -72,8 +72,10 @@ export async function getCachedLinkGraph(
 	return lru.getOrLoad(key, () => {
 		const accessor = context.manager.get(context.archiveId);
 		// The on-disk filename embeds the cap so two callers asking for
-		// different limits cannot share each other's artefact.
-		const fileName = `graph-${limit ?? 'all'}`;
+		// different limits cannot share each other's artefact. The `v2`
+		// prefix invalidates pre-`source`-field artefacts so nodes get
+		// the new provenance-based coloring on already-cached archives.
+		const fileName = `graph-v2-${limit ?? 'all'}`;
 		return getOrComputeOnDisk(accessor.tmpDir, fileName, () =>
 			getLinkGraph(accessor, { limit }),
 		);
