@@ -452,6 +452,7 @@ export async function buildViewerReadModel(
 				url: row.url,
 				status: row.status,
 				indegree: graphIndegreeByPageId.get(row.id) ?? 0,
+				source: row.source,
 			}));
 		for (let start = 0; start < graphNodeRows.length; start += INSERT_CHUNK_SIZE) {
 			await trx('viewer_graph_nodes').insert(

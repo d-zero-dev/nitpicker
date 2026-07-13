@@ -58,7 +58,7 @@
 		"lerna": "9.0.7",
 		"npm-run-all2": "9.0.2",
 		"typescript": "6.0.3",
-		"vitest": "4.1.9"
+		"vitest": "4.1.10"
 	},
 	"resolutions": {
 		"google-auth-library": "10.9.0"

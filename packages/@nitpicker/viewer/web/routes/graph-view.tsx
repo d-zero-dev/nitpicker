@@ -9,6 +9,9 @@ import { useGraph } from '../api/use-graph.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
+import { GraphLegend } from './graph-legend.js';
+import { pickNodeColor } from './pick-node-color.js';
+
 /** Max rendered node radius (in-degree is mapped onto this). */
 const MAX_NODE_SIZE = 18;
 
@@ -40,7 +43,7 @@ export function GraphView() {
 				size: Math.min(MAX_NODE_SIZE, 3 + Math.sqrt(node.inDegree)),
 				x: Math.random(),
 				y: Math.random(),
-				color: node.status != null && node.status >= 400 ? '#ff6b6b' : '#4aa3ff',
+				color: pickNodeColor(node.status, node.source),
 			});
 		}
 		for (const edge of data.edges) {
@@ -91,6 +94,7 @@ export function GraphView() {
 					)}
 				</div>
 			)}
+			<GraphLegend />
 			<div
 				ref={containerRef}
 				className="graph-canvas"

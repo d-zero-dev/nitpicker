@@ -275,12 +275,18 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 		) WITHOUT ROWID
 	`);
 
+	// `source` mirrors `pages.source` so the graph view can color nodes by
+	// ingestion channel (crawled / inventory-seed / inventory-discovered).
+	// See `GraphNode.source` in `../types.ts` — the fast-path read
+	// (`getViewerLinkGraph`) must produce the same shape as the legacy
+	// `getLinkGraph` or the type guard fails.
 	await trx.raw(`
 		CREATE TABLE viewer_graph_nodes (
 			page_id integer primary key,
 			url text not null,
 			status integer,
-			indegree integer not null
+			indegree integer not null,
+			source text not null
 		)
 	`);
 
