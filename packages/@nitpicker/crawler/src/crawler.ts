@@ -46,3 +46,16 @@ export * from './types.js';
 export * from './crawler/types.js';
 export { classifyErrorKind } from './classify-error-kind.js';
 export { computeFileSha256 } from './utils/compute-file-sha256.js';
+
+// Phase 6-B ref-table population (issue #191, epic #103). Exposed as the
+// public seam that a follow-up migration script (`scripts/migrate-to-
+// phase6.mjs` per the plan) drives against an already-connected archive.
+// The individual sub-steps are also exported so the migration script can
+// resume mid-way if the caller decides to split the transaction.
+export { populatePhase6BRefs } from './archive/phase6b/populate-phase6b-refs.js';
+export { populateContentTypeRefs } from './archive/phase6b/populate-content-type-refs.js';
+export { populateUrlRefs } from './archive/phase6b/populate-url-refs.js';
+export { populateTextRefs } from './archive/phase6b/populate-text-refs.js';
+export { populateJsonRefs } from './archive/phase6b/populate-json-refs.js';
+export { populateBlobRefs } from './archive/phase6b/populate-blob-refs.js';
+export { populateHeaderTables } from './archive/phase6b/populate-header-tables.js';
