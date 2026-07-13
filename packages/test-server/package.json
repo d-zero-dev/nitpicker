@@ -8,7 +8,7 @@
 	"type": "module",
 	"dependencies": {
 		"@hono/node-server": "2.0.8",
-		"hono": "4.12.27"
+		"hono": "4.12.28"
 	},
 	"devDependencies": {
 		"@nitpicker/analyze-main-contents": "0.12.0",
