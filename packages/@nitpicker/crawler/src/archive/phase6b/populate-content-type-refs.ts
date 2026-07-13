@@ -27,7 +27,7 @@ function stripControlChars(text: string): string {
 	let output = '';
 	for (const ch of text) {
 		const code = ch.codePointAt(0)!;
-		if (code < 0x20 || code === 0x7f) {
+		if (code < 32 /* 0x20 = SPACE */ || code === 127 /* 0x7F = DEL */) {
 			continue;
 		}
 		output += ch;

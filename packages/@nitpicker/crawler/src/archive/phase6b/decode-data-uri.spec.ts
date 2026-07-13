@@ -40,6 +40,10 @@ describe('decodeDataUri', () => {
 		const uri = 'data:application/octet-stream,%FF%00%C3%A9';
 		const out = decodeDataUri(uri);
 		expect(out).not.toBeNull();
-		expect([...out!.bytes]).toEqual([0xff, 0x00, 0xc3, 0xa9]);
+		// Decimals rather than hex to sidestep the local prettier vs
+		// unicorn/number-literal-case conflict — prettier lowercases hex
+		// letters, unicorn demands uppercase. 255=0xFF, 0=0x00, 195=0xC3,
+		// 169=0xA9.
+		expect([...out!.bytes]).toEqual([255, 0, 195, 169]);
 	});
 });

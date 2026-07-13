@@ -115,7 +115,7 @@ function percentDecodeToBytes(payload: string): Buffer {
 			i += 3;
 			continue;
 		}
-		if (ch > 0x7f) {
+		if (ch > 127 /* 0x7F, ASCII high-bit boundary */) {
 			// A non-ASCII code point in a percent-encoded payload is
 			// unusual (browsers percent-encode outbound), but WHATWG
 			// tolerates it — encode as UTF-8 to preserve the character.
