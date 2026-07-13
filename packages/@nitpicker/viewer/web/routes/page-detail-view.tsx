@@ -6,6 +6,8 @@ import { HtmlPreview } from '../components/html-preview.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
+const MAX_LINKS_DISPLAYED = 200;
+
 /**
  * Full detail for a single page: metadata, inbound/outbound links, redirects,
  * and the stored HTML snapshot. The target URL comes from the `url` query param.
@@ -153,13 +155,34 @@ export function PageDetailView() {
 				)}
 			</dl>
 
+			<h2>
+				{t('views.pageDetail.inbound')} ({data.inboundLinks.length})
+			</h2>
+			<ul>
+				{data.inboundLinks.slice(0, MAX_LINKS_DISPLAYED).map((link, index) => (
+					<li key={`${link.url}-${index}`}>
+						<Link to={`/pages/detail?url=${encodeURIComponent(link.url)}`}>
+							{link.url}
+						</Link>
+					</li>
+				))}
+			</ul>
+			{data.inboundLinks.length > MAX_LINKS_DISPLAYED && (
+				<p className="state">
+					{t('views.pageDetail.linksTruncated', {
+						max: MAX_LINKS_DISPLAYED,
+						total: data.inboundLinks.length,
+					})}
+				</p>
+			)}
+
 			{data.outboundLinks.length > 0 && (
 				<>
 					<h2>
 						{t('views.pageDetail.outbound')} ({data.outboundLinks.length})
 					</h2>
 					<ul>
-						{data.outboundLinks.slice(0, 200).map((link, index) => (
+						{data.outboundLinks.slice(0, MAX_LINKS_DISPLAYED).map((link, index) => (
 							<li key={`${link.url}-${index}`}>
 								<Link to={`/pages/detail?url=${encodeURIComponent(link.url)}`}>
 									{link.url}
@@ -168,21 +191,16 @@ export function PageDetailView() {
 							</li>
 						))}
 					</ul>
+					{data.outboundLinks.length > MAX_LINKS_DISPLAYED && (
+						<p className="state">
+							{t('views.pageDetail.linksTruncated', {
+								max: MAX_LINKS_DISPLAYED,
+								total: data.outboundLinks.length,
+							})}
+						</p>
+					)}
 				</>
 			)}
-
-			<h2>
-				{t('views.pageDetail.inbound')} ({data.inboundLinks.length})
-			</h2>
-			<ul>
-				{data.inboundLinks.slice(0, 200).map((link, index) => (
-					<li key={`${link.url}-${index}`}>
-						<Link to={`/pages/detail?url=${encodeURIComponent(link.url)}`}>
-							{link.url}
-						</Link>
-					</li>
-				))}
-			</ul>
 
 			{data.redirectFrom.length > 0 && (
 				<>
