@@ -335,6 +335,8 @@ export interface GraphNodeInsertRow {
 	status: number | null;
 	/** Number of incoming internal edges in `viewer_graph_edges`. */
 	indegree: number;
+	/** Provenance label copied from `pages.source` — see `PageSource` in the parent `types.ts`. */
+	source: string;
 }
 
 /**

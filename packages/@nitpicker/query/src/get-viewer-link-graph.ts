@@ -1,5 +1,5 @@
 import type { GetLinkGraphOptions, GraphEdge, GraphNode, LinkGraph } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor, PageSource } from '@nitpicker/crawler';
 
 /**
  * Fast-path counterpart of `getLinkGraph`, backed by
@@ -22,7 +22,7 @@ export async function getViewerLinkGraph(
 	const totalNodes = Number(countResult[0]?.total ?? 0);
 
 	const nodeQuery = knex('viewer_graph_nodes')
-		.select('page_id as pageId', 'url', 'status', 'indegree')
+		.select('page_id as pageId', 'url', 'status', 'indegree', 'source')
 		.orderBy('indegree', 'desc')
 		.orderBy('page_id', 'asc');
 	if (requestedLimit != null) {
@@ -34,11 +34,13 @@ export async function getViewerLinkGraph(
 		url: string;
 		status: number | null;
 		indegree: number;
+		source: PageSource;
 	}[];
 	const nodes: GraphNode[] = nodeRows.map((row) => ({
 		url: row.url,
 		status: row.status,
 		inDegree: Number(row.indegree),
+		source: row.source,
 	}));
 	const truncated = requestedLimit != null && totalNodes > requestedLimit;
 
