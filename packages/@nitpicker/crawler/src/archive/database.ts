@@ -59,6 +59,7 @@ import { migrateInventoryRuns } from './migrate-inventory-runs.js';
 import { migratePageErrors } from './migrate-page-errors.js';
 import { migratePagesResourcesSource } from './migrate-pages-resources-source.js';
 import { migratePhase6ARefTables } from './migrate-phase6a-ref-tables.js';
+import { migratePhase6CEntityTables } from './migrate-phase6c-entity-tables.js';
 import { redirectTable } from './redirect-table.js';
 import { resolveRedirectChain } from './resolve-redirect-chain.js';
 
@@ -2449,6 +2450,9 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		await migratePagesResourcesSource(this.#instance);
 		await migrateInventoryRuns(this.#instance);
 		await migratePhase6ARefTables(this.#instance);
+		// MUST run after migratePhase6ARefTables — Phase 6-C tables have
+		// FK references to the Phase 6-A ref tables.
+		await migratePhase6CEntityTables(this.#instance);
 	}
 
 	/**

@@ -1,6 +1,7 @@
 import type { Knex } from 'knex';
 
 import { createPhase6ARefTables } from './create-phase6a-ref-tables.js';
+import { createPhase6CEntityTables } from './create-phase6c-entity-tables.js';
 
 /**
  * Applies the connection-level PRAGMAs that govern foreign-key enforcement
@@ -83,6 +84,17 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  *   the reason `blob_refs` uses a regular rowid PK instead of WITHOUT ROWID.
  *   Existing archives get the same tables added by
  *   {@link migratePhase6ARefTables} at open time.
+ * - **Phase 6-C core entity / edge tables** (issue #192, part of epic #103):
+ *   `content_items`, `page_meta`, `resource_items`, `anchor_edges`,
+ *   `resource_ref_edges`, `image_items`. Additive DDL only. `content_items`
+ *   / `resource_items` / `image_items` reuse the SAME PK values as the
+ *   legacy `pages` / `resources` / `images` tables (Phase 6-D inserts rows
+ *   with explicit IDs), which preserves every existing FK reference without
+ *   any per-row UPDATE. Must run AFTER `createPhase6ARefTables` because
+ *   most entity tables reference ref-table PKs. See
+ *   {@link createPhase6CEntityTables} for column-by-column rationale and
+ *   the anchor_edges dedup shape. Existing archives get the same tables
+ *   added by {@link migratePhase6CEntityTables} at open time.
  * - **PRAGMA `page_size` and `journal_mode`** are set BEFORE any
  *   `CREATE TABLE` because SQLite only honors `page_size` changes against
  *   an empty database, and `journal_mode = WAL` is persistent. Other
@@ -473,6 +485,18 @@ export async function initSchema(instance: Knex) {
 	// archives — a divergence between the two paths would silently break
 	// the Phase 6-B population step's UNIQUE / CHECK contract.
 	await createPhase6ARefTables(instance);
+
+	// Phase 6-C core entity / edge tables (issue #192). MUST run after
+	// {@link createPhase6ARefTables} because `content_items`, `page_meta`,
+	// `resource_items`, `anchor_edges`, and `image_items` all reference
+	// the Phase 6-A ref tables (`url_refs`, `content_type_refs`,
+	// `text_refs`, `json_refs`, `blob_refs`, `header_sets`) via FK
+	// clauses. Additive only — the tables are created on every fresh
+	// archive but remain completely unused until Phase 6-D populates
+	// them and Phase 6-F migrates the reader / writer paths. Existing
+	// archives get the same tables added by
+	// {@link migratePhase6CEntityTables} at open time.
+	await createPhase6CEntityTables(instance);
 
 	// Composite covering index for the default Pages-view filter + url-ordered
 	// scan. Without it, `listPages` on a 400k-row archive runs ~15s per page

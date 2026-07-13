@@ -36,6 +36,15 @@ describe('initSchema', () => {
 			'header_sets',
 			'header_set_entries',
 			'header_flags',
+			// Phase 6-C core entity / edge tables (issue #192). Same
+			// additive-only status as Phase 6-A: created on every fresh
+			// archive but not populated / read until later phases.
+			'content_items',
+			'page_meta',
+			'resource_items',
+			'anchor_edges',
+			'resource_ref_edges',
+			'image_items',
 		];
 		for (const table of tables) {
 			const exists = await db.schema.hasTable(table);
