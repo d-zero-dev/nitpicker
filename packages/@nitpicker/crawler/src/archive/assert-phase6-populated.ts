@@ -1,6 +1,41 @@
 import type { Knex } from 'knex';
 
-import { IncompatibleArchiveError } from './meta/types.js';
+/**
+ * Thrown by {@link assertPhase6Populated} when an archive predates the
+ * Phase 6 write-model refactor (pre-6 `pages`/`anchors`/... rows exist but
+ * the Phase 6-C entity tables are empty). Distinct from
+ * `IncompatibleArchiveError` (which fires on `info.version` mismatches for
+ * the 0.10 format cut) so CLI / viewer boundaries can print a Phase 6-F
+ * specific migration hint.
+ */
+export class Phase6NotMigratedError extends Error {
+	/** @param message - Human-readable explanation including the migration command. */
+	constructor(message: string) {
+		super(message);
+		this.name = 'Phase6NotMigratedError';
+	}
+}
+
+/**
+ * Reads a single-cell count from a Knex `count()` result, tolerating an
+ * empty row array (e.g. drivers that omit the row for aggregates on an
+ * unavailable table) by returning `0`.
+ * @param instance - Knex handle.
+ * @param table - Table to count.
+ * @returns Row count as a JS number.
+ */
+async function countRows(instance: Knex, table: string): Promise<number> {
+	const rows = (await instance(table).count({ count: '*' })) as {
+		count: number | string;
+	}[];
+	return Number(rows[0]?.count ?? 0);
+}
+
+/** Migration-hint message shared by the two throw sites. */
+const MIGRATION_HINT =
+	'This archive predates Phase 6 and has not been migrated. Run ' +
+	'`node scripts/migrate-to-phase6.mjs <archive>` on the .nitpicker file ' +
+	'before opening it with this CLI.';
 
 /**
  * Rejects archives that have `pages` rows but no matching `content_items`
@@ -17,37 +52,25 @@ import { IncompatibleArchiveError } from './meta/types.js';
  * `._nitpicker-*` tmpDirs) also pass through — `assertCompatibleVersion`
  * handles those cases separately upstream.
  * @param instance - The libsql / better-sqlite3-shaped Knex instance.
- * @throws {IncompatibleArchiveError} When `pages` has rows and
- *   `content_items` is empty.
+ * @throws {Phase6NotMigratedError} When `pages` has rows and
+ *   `content_items` is empty (or the table is missing entirely).
  */
 export async function assertPhase6Populated(instance: Knex): Promise<void> {
 	const hasPages = await instance.schema.hasTable('pages');
 	if (!hasPages) {
 		return;
 	}
-	const [{ count: pagesCount }] = (await instance('pages').count({ count: '*' })) as {
-		count: number | string;
-	}[];
-	if (Number(pagesCount ?? 0) === 0) {
+	const pagesCount = await countRows(instance, 'pages');
+	if (pagesCount === 0) {
 		return;
 	}
 	const hasContentItems = await instance.schema.hasTable('content_items');
 	if (!hasContentItems) {
-		throw new IncompatibleArchiveError(
-			'This archive predates Phase 6 and has not been migrated. Run ' +
-				'`node scripts/migrate-to-phase6.mjs <archive>` on the .nitpicker file ' +
-				'before opening it with this CLI.',
-		);
+		throw new Phase6NotMigratedError(MIGRATION_HINT);
 	}
-	const [{ count: contentItemsCount }] = (await instance('content_items').count({
-		count: '*',
-	})) as { count: number | string }[];
-	if (Number(contentItemsCount ?? 0) > 0) {
+	const contentItemsCount = await countRows(instance, 'content_items');
+	if (contentItemsCount > 0) {
 		return;
 	}
-	throw new IncompatibleArchiveError(
-		'This archive predates Phase 6 and has not been migrated. Run ' +
-			'`node scripts/migrate-to-phase6.mjs <archive>` on the .nitpicker file ' +
-			'before opening it with this CLI.',
-	);
+	throw new Phase6NotMigratedError(MIGRATION_HINT);
 }
