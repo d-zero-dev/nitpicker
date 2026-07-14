@@ -310,6 +310,7 @@ describe('getViolations (analysis未実行)', () => {
 			isSkipped: false,
 		});
 		// Do not seed analysis tables.
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

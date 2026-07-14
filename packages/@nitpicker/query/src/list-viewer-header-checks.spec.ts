@@ -249,6 +249,7 @@ describe('listViewerHeaderChecks', () => {
 				};
 			});
 			await knex('viewer_header_checks').insert(rows);
+			await populateMigrationTables(explainArchive);
 		});
 
 		afterAll(async () => {

@@ -460,6 +460,7 @@ describe('listViewerExternalLinks — redirect resolution', () => {
 			isSkipped: false,
 		});
 
+		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 

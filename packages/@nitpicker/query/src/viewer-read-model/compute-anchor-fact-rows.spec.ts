@@ -425,6 +425,7 @@ describe('computeAnchorFactRows — redirect resolution', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -558,6 +559,7 @@ describe('computeAnchorFactRows — redirect resolution to an external destinati
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -672,6 +674,7 @@ describe('computeAnchorFactRows — chunking', () => {
 				isSkipped: false,
 			});
 		}
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

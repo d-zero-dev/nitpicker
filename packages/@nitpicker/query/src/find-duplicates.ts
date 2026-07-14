@@ -7,7 +7,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * other commonly-used delimiter. `\x1F` is illegal in URLs per RFC 3986,
  * so there is no realistic conflict.
  */
-const URL_DELIMITER = '';
+const URL_DELIMITER = '';
 
 /**
  * Finds pages with duplicate title or description metadata.

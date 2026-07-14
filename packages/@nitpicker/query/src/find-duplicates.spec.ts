@@ -248,6 +248,7 @@ describe('findDuplicates — offset', () => {
 				});
 			}
 		}
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

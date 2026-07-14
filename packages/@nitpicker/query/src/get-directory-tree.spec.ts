@@ -116,6 +116,7 @@ describe('getDirectoryTree', () => {
 					isSkipped: false,
 				});
 			}
+			await populateMigrationTables(archive);
 			await buildViewerReadModel(archive);
 		});
 

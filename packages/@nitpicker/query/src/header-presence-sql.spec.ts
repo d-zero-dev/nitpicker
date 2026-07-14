@@ -125,17 +125,21 @@ describe('headerPresenceExpression', () => {
 
 	it('evaluates to 1 when the header key is actually present', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex('pages')
-			.where('url', 'https://example.com/with-csp')
-			.select(knex.raw(`${headerPresenceExpression('hasCSP')} as "hasCSP"`));
+		const rows = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.leftJoin('header_flags as hf', 'hf.header_set_id', 'ci.header_set_id')
+			.where('ur.url', 'https://example.com/with-csp')
+			.select(knex.raw(`${headerPresenceExpression('hasCSP', 'hf')} as "hasCSP"`));
 		expect(Number(rows[0].hasCSP)).toBe(1);
 	});
 
 	it('evaluates to 0 when the header name only appears inside another header value', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex('pages')
-			.where('url', 'https://example.com/mentions-csp-in-value')
-			.select(knex.raw(`${headerPresenceExpression('hasCSP')} as "hasCSP"`));
+		const rows = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.leftJoin('header_flags as hf', 'hf.header_set_id', 'ci.header_set_id')
+			.where('ur.url', 'https://example.com/mentions-csp-in-value')
+			.select(knex.raw(`${headerPresenceExpression('hasCSP', 'hf')} as "hasCSP"`));
 		expect(Number(rows[0].hasCSP)).toBe(0);
 	});
 });

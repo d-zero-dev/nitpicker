@@ -95,8 +95,10 @@ describe('buildHeaderPresenceSelects', () => {
 
 	it('selects all four header-presence columns aliased by name', async () => {
 		const knex = archive.getKnex();
-		const rows = await knex('pages')
-			.select('url', ...buildHeaderPresenceSelects(knex))
+		const rows = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.leftJoin('header_flags as hf', 'hf.header_set_id', 'ci.header_set_id')
+			.select('ur.url as url', ...buildHeaderPresenceSelects(knex))
 			.limit(1);
 		expect(rows).toHaveLength(1);
 		const row = rows[0] as Record<string, unknown>;

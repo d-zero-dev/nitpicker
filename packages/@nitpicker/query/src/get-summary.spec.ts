@@ -437,6 +437,7 @@ describe('getSummary: HTMLページが1つも無い（全てエラー/到達不�
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

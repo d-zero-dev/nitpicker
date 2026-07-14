@@ -234,6 +234,7 @@ describe('ArchiveManager cache-mode: a read-only open never builds a viewer read
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 		await archive.write();
 		await archive.close();
 	});

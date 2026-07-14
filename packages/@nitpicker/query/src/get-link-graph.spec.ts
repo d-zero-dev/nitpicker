@@ -210,7 +210,10 @@ describe('getLinkGraph', () => {
 
 	it('DB 上で source を書き換えた場合、その値がノードに反映される', async () => {
 		// pages テーブルの source を直接書き換えて、`getLinkGraph` の SELECT が
-		// その列を読み出せているか(= source が SELECT 抜けしていないか)を検証する。
+		// その列を読み出せているか (= source が SELECT 抜けしていないか) と、
+		// 0.13 populate が re-run で `pages.source` の変更を `content_items.source`
+		// に反映するか (source-priority upgrade like `crawl --append` /
+		// `--retry-failed` の実運用パス) を同時に検証する。
 		// insertInventorySeeds + setPage を使うと source-priority の CASE WHEN が
 		// 経由してしまい、SELECT 抜けバグを検出できないので直書きで確認する。
 		const knex = archive.getKnex();
@@ -220,6 +223,7 @@ describe('getLinkGraph', () => {
 		await knex('pages')
 			.where('url', 'https://example.com/contact')
 			.update({ source: 'inventory-discovered' });
+		await populateMigrationTables(archive);
 
 		const graph = await getLinkGraph(archive);
 		const about = graph.nodes.find((n) => n.url === 'https://example.com/about');
@@ -233,5 +237,6 @@ describe('getLinkGraph', () => {
 		await knex('pages')
 			.whereIn('url', ['https://example.com/about', 'https://example.com/contact'])
 			.update({ source: 'crawled' });
+		await populateMigrationTables(archive);
 	});
 });

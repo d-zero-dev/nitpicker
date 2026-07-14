@@ -117,6 +117,7 @@ describe('listDirectoryChildren', () => {
 					isSkipped: false,
 				});
 			}
+			await populateMigrationTables(archive);
 			await buildViewerReadModel(archive);
 		});
 

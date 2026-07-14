@@ -450,6 +450,7 @@ describe('listExternalLinks — redirect resolution', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -550,6 +551,7 @@ describe('listExternalLinks — 未知の sortBy 値への耐性', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

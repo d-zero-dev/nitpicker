@@ -475,6 +475,7 @@ describe('listViewerPages', () => {
 				};
 			});
 			await knex('viewer_pages').insert(rows);
+			await populateMigrationTables(explainArchive);
 		});
 
 		afterAll(async () => {

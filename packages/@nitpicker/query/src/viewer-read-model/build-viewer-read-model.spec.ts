@@ -243,6 +243,7 @@ describe('buildViewerReadModel', () => {
 				imageList: [],
 				isSkipped: false,
 			});
+			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {
@@ -475,6 +476,7 @@ describe('buildViewerReadModel', () => {
 				imageList: [],
 				isSkipped: true,
 			});
+			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {
@@ -532,6 +534,7 @@ describe('buildViewerReadModel', () => {
 				tag_count: null,
 				jsonld_count: null,
 			});
+			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {
@@ -594,6 +597,7 @@ describe('buildViewerReadModel', () => {
 				imageList: [],
 				isSkipped: false,
 			});
+			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {
@@ -656,6 +660,7 @@ describe('buildViewerReadModel', () => {
 			}));
 			await knex('pages').insert(rows.slice(0, 400));
 			await knex('pages').insert(rows.slice(400));
+			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {
@@ -886,6 +891,7 @@ describe('buildViewerReadModel', () => {
 				isExternal: 0,
 			});
 
+			await populateMigrationTables(archive);
 			await buildViewerReadModel(archive);
 		});
 
@@ -1181,6 +1187,7 @@ describe('buildViewerReadModel', () => {
 				isSkipped: false,
 			});
 
+			await populateMigrationTables(archive);
 			await buildViewerReadModel(archive);
 		});
 
@@ -1336,6 +1343,7 @@ describe('buildViewerReadModel', () => {
 				});
 			}
 
+			await populateMigrationTables(archive);
 			await buildViewerReadModel(archive);
 		});
 
@@ -1439,6 +1447,7 @@ describe('buildViewerReadModel', () => {
 				imageList: [],
 				isSkipped: false,
 			});
+			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {
@@ -1596,6 +1605,7 @@ describe('buildViewerReadModel', () => {
 					true,
 				),
 			);
+			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {
@@ -1848,6 +1858,7 @@ describe('buildViewerReadModel', () => {
 				isSkipped: false,
 			});
 
+			await populateMigrationTables(archive);
 			await buildViewerReadModel(archive);
 		});
 

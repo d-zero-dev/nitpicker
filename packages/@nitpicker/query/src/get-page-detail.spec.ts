@@ -162,6 +162,7 @@ describe('getPageDetail', () => {
 		// Page Links view (which used to show a Remarks column for every
 		// page regardless of `scraped`) was removed.
 		await archive.setSkippedPage('https://example.com/excluded', 'excluded', false);
+		await populateMigrationTables(archive);
 		const result = await getPageDetail(archive, 'https://example.com/excluded');
 		expect(result).not.toBeNull();
 		expect(result!.isSkipped).toBe(true);
@@ -169,8 +170,11 @@ describe('getPageDetail', () => {
 	});
 
 	it('レスポンスヘッダーをパースして返す', async () => {
+		// 0.13: header names are lower-cased by the ref-table decomposition
+		// step (`decomposeHeaderSet`) — the original casing captured at crawl
+		// time is not preserved.
 		const result = await getPageDetail(archive, 'https://example.com');
-		expect(result!.responseHeaders).toEqual({ 'X-Frame-Options': 'DENY' });
+		expect(result!.responseHeaders).toEqual({ 'x-frame-options': 'DENY' });
 	});
 
 	it('アウトバウンドリンクを返す', async () => {
@@ -341,6 +345,7 @@ describe('getPageDetail: 被リンクを redirect 越しに解決する（http/h
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

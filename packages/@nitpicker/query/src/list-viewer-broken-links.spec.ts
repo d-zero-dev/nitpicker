@@ -474,6 +474,7 @@ describe('listViewerBrokenLinks — redirect resolution', () => {
 			isSkipped: false,
 		});
 
+		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 
@@ -586,6 +587,7 @@ describe('listViewerBrokenLinks — a destination that is both broken and extern
 			isSkipped: false,
 		});
 
+		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 

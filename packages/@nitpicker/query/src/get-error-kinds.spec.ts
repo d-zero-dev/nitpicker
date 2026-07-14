@@ -3,7 +3,7 @@ import type { CrawlerError } from '@nitpicker/crawler';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { Archive } from '@nitpicker/crawler';
+import { Archive, populateMigrationTables } from '@nitpicker/crawler';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { getErrorKinds } from './get-error-kinds.js';
@@ -93,6 +93,7 @@ describe('getErrorKinds', () => {
 		await archive.addError(
 			crawlerError('https://api.example.org/', 'connect ECONNREFUSED 10.0.0.1:443', true),
 		);
+		await populateMigrationTables(archive);
 
 		const result = await getErrorKinds(archive);
 

@@ -485,6 +485,7 @@ describe('listLinks — redirect resolution', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

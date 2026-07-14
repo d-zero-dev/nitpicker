@@ -331,6 +331,7 @@ describe('listPages: セキュリティヘッダーの有無', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -427,6 +428,7 @@ describe('listPages: ページ性は content-type（エラーページは残し�
 		);
 		// Errored / unreachable internal page: contentType null — must STAY listed.
 		await archive.setPage(makePage('https://example.com/broken', -1, null, ''));
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

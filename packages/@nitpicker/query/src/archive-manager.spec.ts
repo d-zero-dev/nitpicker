@@ -389,6 +389,7 @@ describe('ArchiveManager stub mode', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 		// Release the SQLite handle + the .lock sibling WITHOUT writing the
 		// archive or removing the tmpDir — `releaseHandle` is precisely
 		// the exit hatch for fixture-style usage where we want the tmpDir
