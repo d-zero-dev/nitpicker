@@ -34,9 +34,9 @@ function isPresent<T>(value: T | null | undefined): value is T {
 }
 
 /**
- * Phase 6-F: builds the base Pages universe before user-facing filters are
- * applied, using the Phase 6-C `content_items` entity table plus `page_meta`
- * (LEFT JOIN because Phase 6-D populates `page_meta` only for
+ * 0.13: builds the base Pages universe before user-facing filters are
+ * applied, using the 0.13 `content_items` entity table plus `page_meta`
+ * (LEFT JOIN because 0.13 populates `page_meta` only for
  * `scraped = 1` pages), joined to `url_refs`, `content_type_refs`, and
  * `header_flags`. Column projections are wired via
  * {@link PAGE_LIST_SELECT_COLUMNS} so `PageListRow` keeps its pre-6 shape.
@@ -91,10 +91,10 @@ function createPageListBaseQuery(
 /**
  * Lists pages from the archive with filtering, sorting, and pagination.
  *
- * Phase 6-F: reads through Phase 6-C entity tables; every metadata column
+ * 0.13: reads through 0.13 entity tables; every metadata column
  * that previously lived inline on `pages` is now resolved via `page_meta`
  * plus one of `text_refs`/`url_refs` (see {@link createPageListBaseQuery}).
- * Header-presence flags come from Phase 6-A `header_flags`.
+ * Header-presence flags come from 0.13 `header_flags`.
  * @param accessor - The archive accessor to query.
  * @param options - Filter, sort, and pagination options.
  * @returns A paginated list of page entries with metadata.

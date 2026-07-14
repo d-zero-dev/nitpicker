@@ -14,7 +14,7 @@ const workingDir = path.resolve(__dirname, '__test_fixtures_ensure_viewer_read_m
 const BASE_CONFIG = {
 	baseUrl: 'https://example.com',
 	name: 'test',
-	version: '0.10.0',
+	version: '0.13.0',
 	recursive: true,
 	interval: 0,
 	image: true,

@@ -11,7 +11,7 @@ import {
  * Lists pages that have at least one JSON-LD (or SpeculationRules) entry with
  * the given top-level `@type`.
  *
- * Phase 6-F: reads through the Phase 6-C `content_items` + `page_meta`
+ * 0.13: reads through the 0.13 `content_items` + `page_meta`
  * + refs layout via {@link PAGE_LIST_SELECT_COLUMNS}. `page_jsonld` FKs
  * still reference the page id, which `content_items` preserves verbatim.
  * @param accessor - The archive accessor to query.

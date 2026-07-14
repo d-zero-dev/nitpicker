@@ -17,7 +17,7 @@ export interface FindMismatchesOptions {
  * Finds metadata mismatches in the archive: canonical URL != page URL,
  * og:title != title, og:description != description.
  *
- * Phase 6-F: reads through Phase 6-C `content_items` + `page_meta`;
+ * 0.13: reads through 0.13 `content_items` + `page_meta`;
  * comparisons are integer-id equalities (`page_meta.canonical_url_id !=
  * content_items.url_id`, `page_meta.og_title_text_id !=
  * page_meta.title_text_id`, etc.), which are equivalent to the pre-6 string

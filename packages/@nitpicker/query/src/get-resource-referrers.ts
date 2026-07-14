@@ -18,7 +18,7 @@ function parseReferrersCursor(cursor: string | undefined): number {
  * Retrieves which pages reference a specific resource URL — a bounded,
  * cursor-paginated read.
  *
- * Phase 6-F: reads Phase 6-C `resource_ref_edges` (composite PK
+ * 0.13: reads 0.13 `resource_ref_edges` (composite PK
  * `(resource_id, page_id)`) joined to `content_items` + `url_refs` for the
  * referrer page URL, and resolves the resource by URL via
  * `resource_items JOIN url_refs`.

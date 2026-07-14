@@ -2,10 +2,10 @@ import type { HeaderPresence } from './types.js';
 
 /**
  * Mapping from public {@link HeaderPresence} keys to the corresponding
- * pre-computed boolean column in `header_flags` (Phase 6-A). Populated during
- * Phase 6-B by `packages/@nitpicker/crawler/src/archive/phase6b/compute-header-flags.ts`,
+ * pre-computed boolean column in `header_flags` (0.13). Populated during
+ * 0.13 by `packages/@nitpicker/crawler/src/archive/populate-ref-tables/compute-header-flags.ts`,
  * which mirrors the same detection rules the old LIKE-based
- * `pages.responseHeaders` scan used before Phase 6-F.
+ * `pages.responseHeaders` scan used before 0.13.
  */
 const HEADER_FLAG_COLUMN: Record<keyof HeaderPresence, string> = {
 	hasCSP: 'has_csp',
@@ -25,7 +25,7 @@ export const HEADER_PRESENCE_KEYS = Object.keys(
 
 /**
  * Builds the SQL boolean expression (0 or 1) for whether a tracked security
- * header is present, by reading the Phase 6-A `header_flags` pre-computed
+ * header is present, by reading the 0.13 `header_flags` pre-computed
  * bool column. `coalesce(..., 0)` handles rows without a `header_set_id` (no
  * response headers captured — e.g. not-yet-scraped or redirect placeholder pages);
  * treating flag as 0 matches the pre-Phase-6 LIKE-based behaviour that

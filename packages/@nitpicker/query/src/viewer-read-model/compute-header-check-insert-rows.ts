@@ -36,7 +36,7 @@ export interface HeaderCheckInsertRow {
 }
 
 /**
- * Reads internal HTML pages via Phase 6-C entity tables — the exact
+ * Reads internal HTML pages via 0.13 entity tables — the exact
  * `scraped = 1, is_external = 0, content_type='text/html',
  * redirect_dest_id IS NULL` predicate `checkHeaders` itself filters to — and
  * projects each tracked security header's presence directly from

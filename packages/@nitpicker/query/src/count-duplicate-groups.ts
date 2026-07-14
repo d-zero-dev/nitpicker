@@ -3,7 +3,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 /**
  * Counts the total number of duplicate groups for one metadata field.
  *
- * Phase 6-F: reads through the Phase 6-C entity tables (`content_items`
+ * 0.13: reads through the 0.13 entity tables (`content_items`
  * joined to `content_type_refs` for the `text/html` filter and `page_meta`
  * for the deduped text-ref id). Groups on the narrow `text_refs.id`
  * integer key instead of the raw text column.

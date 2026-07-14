@@ -15,10 +15,10 @@ import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
 /**
  * Retrieves site-wide summary statistics from the archive.
  *
- * Phase 6-F: reads Phase 6-C entity tables (`content_items` + `page_meta`
+ * 0.13: reads 0.13 entity tables (`content_items` + `page_meta`
  * + `url_refs` + `content_type_refs`) instead of the legacy `pages` table.
  * Metadata-fulfillment counts inspect the deduped `page_meta.*_text_id`
- * columns directly — Phase 6-B's populate skips empty text, so
+ * columns directly — 0.13's populate skips empty text, so
  * `IS NOT NULL` is sufficient to match the pre-6 `IS NOT NULL AND != ''`
  * behaviour.
  * @param accessor - The archive accessor to query.

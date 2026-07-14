@@ -12,7 +12,7 @@ const URL_DELIMITER = '';
 /**
  * Finds pages with duplicate title or description metadata.
  *
- * Phase 6-F: reads through the Phase 6-C entity tables (`content_items`
+ * 0.13: reads through the 0.13 entity tables (`content_items`
  * joined to `page_meta` for the field's `text_ref` and `url_refs` for the
  * page URL) and groups on the deduped `text_refs.id` — walking a narrow
  * integer key instead of the raw text column. `GROUP_CONCAT(url, X'1F')`

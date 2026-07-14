@@ -17,7 +17,7 @@ interface ResourceJoinRow {
 
 /**
  * Joins an already ID-limited, already-ordered `resource_id` list back to
- * the Phase 6-C `resource_items` write model (plus `viewer_resource_stats`
+ * the 0.13 `resource_items` write model (plus `viewer_resource_stats`
  * for the precomputed `referrerCount`) for full-metadata display.
  * @param knex - The archive's Knex instance.
  * @param resourceIds - The resource IDs to fetch.

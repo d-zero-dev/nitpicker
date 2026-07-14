@@ -39,10 +39,10 @@ interface MismatchSourceRow {
  * `type` — the exact WHERE predicate `findMismatches` itself uses for that
  * type (base `scraped = 1, is_external = 0, content_type='text/html',
  * redirect_dest_id IS NULL` plus the type's own non-null/non-empty `!=`
- * comparison via Phase 6-C `page_meta` ref columns), with columns
+ * comparison via 0.13 `page_meta` ref columns), with columns
  * pre-aliased to `actual`/`expected`.
  *
- * Phase 6-F: integer id comparison replaces the pre-6 string comparison —
+ * 0.13: integer id comparison replaces the pre-6 string comparison —
  * `page_meta.canonical_url_id != content_items.url_id` is equivalent to
  * `pages.canonical != pages.url` because `url_refs` is unique per URL, and
  * `page_meta.og_title_text_id != page_meta.title_text_id` is equivalent to

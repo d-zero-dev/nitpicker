@@ -8,14 +8,14 @@ import { applyListOrder } from './apply-list-order.js';
  * to HTTP 404 Not Found) or **external** (anchors leaving the in-scope
  * hostname).
  *
- * Phase 6-F: reads Phase 6-C `anchor_edges` (already deduped per
+ * 0.13: reads 0.13 `anchor_edges` (already deduped per
  * `(page_id, href_page_id)` pair with a per-pair `count`) instead of the
  * per-row legacy `anchors` table. The `items` array now contains one row
  * per unique `(source, dest)` pair — a page with N duplicate anchors to
  * the same destination collapses into a single row. The `total` count
  * still reports total anchor occurrences via `SUM(anchor_edges.count)` so
  * it matches the pre-Phase-6 `COUNT(anchors.id)` semantics. Anchor text
- * comes from `first_text_id` (Phase 6-D preserves the first anchor's
+ * comes from `first_text_id` (0.13 preserves the first anchor's
  * text as the representative).
  *
  * `broken` is deliberately narrow. 403 Forbidden means the resource exists

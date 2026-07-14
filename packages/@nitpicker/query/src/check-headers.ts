@@ -15,8 +15,8 @@ import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presenc
  * Inspects Content-Security-Policy, X-Frame-Options, X-Content-Type-Options,
  * and Strict-Transport-Security headers.
  *
- * Phase 6-F: reads through the Phase 6-C `content_items` entity table +
- * Phase 6-A `header_flags` pre-computed booleans instead of scanning
+ * 0.13: reads through the 0.13 `content_items` entity table +
+ * 0.13 `header_flags` pre-computed booleans instead of scanning
  * `pages.responseHeaders` with a LIKE predicate. `header_flags` may be
  * missing for pages with no captured headers — the LEFT JOIN +
  * `coalesce(..., 0)` in {@link headerPresenceExpression} preserves the

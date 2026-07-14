@@ -53,13 +53,13 @@ import { deriveMetaExtras } from './meta/derive-meta-extras.js';
 import { extractTagsForArchive } from './meta/extract-tags-for-archive.js';
 import { migrateAnalysisViolations } from './migrate-analysis-violations.js';
 import { migrateCrawlErrors } from './migrate-crawl-errors.js';
+import { migrateEntityTables } from './migrate-entity-tables.js';
 import { migrateHtmlBlobTables } from './migrate-html-blob-tables.js';
 import { migrateInfoRoots } from './migrate-info-roots.js';
 import { migrateInventoryRuns } from './migrate-inventory-runs.js';
 import { migratePageErrors } from './migrate-page-errors.js';
 import { migratePagesResourcesSource } from './migrate-pages-resources-source.js';
-import { migratePhase6ARefTables } from './migrate-phase6a-ref-tables.js';
-import { migratePhase6CEntityTables } from './migrate-phase6c-entity-tables.js';
+import { migrateRefTables } from './migrate-ref-tables.js';
 import { redirectTable } from './redirect-table.js';
 import { resolveRedirectChain } from './resolve-redirect-chain.js';
 
@@ -2449,10 +2449,10 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		await migrateAnalysisViolations(this.#instance);
 		await migratePagesResourcesSource(this.#instance);
 		await migrateInventoryRuns(this.#instance);
-		await migratePhase6ARefTables(this.#instance);
-		// MUST run after migratePhase6ARefTables — Phase 6-C tables have
-		// FK references to the Phase 6-A ref tables.
-		await migratePhase6CEntityTables(this.#instance);
+		await migrateRefTables(this.#instance);
+		// MUST run after migrateRefTables — 0.13 tables have
+		// FK references to the 0.13 ref tables.
+		await migrateEntityTables(this.#instance);
 	}
 
 	/**

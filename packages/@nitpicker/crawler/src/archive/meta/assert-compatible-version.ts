@@ -17,12 +17,12 @@ import { IncompatibleArchiveError } from './types.js';
  * - **0.10.0**: `page_html_blobs` BLOB storage (#75/#84) +
  *   nested-`Meta`-derived flat columns, `meta_extras` JSON, `page_tags` /
  *   `page_jsonld` tables, denormalised aggregates (#85).
- * - **0.13.0**: this build. Phase 6 write-model refactor (#103) —
+ * - **0.13.0**: this build. 0.13 migration write-model refactor (#103) —
  *   `content_items` / `page_meta` / `resource_items` / `anchor_edges` /
  *   `resource_ref_edges` / `image_items` entity tables plus `url_refs` /
  *   `text_refs` / `content_type_refs` / `json_refs` / `blob_refs` /
  *   `header_flags` ref tables. Readers query the new tables exclusively;
- *   pre-6 archives must be upgraded with `scripts/migrate-to-phase6.mjs`
+ *   pre-6 archives must be upgraded with `scripts/migrate-to-0.13.mjs`
  *   which bumps `info.version` to `0.13.0` on completion.
  */
 export const REQUIRED_FORMAT_VERSION = '0.13.0';

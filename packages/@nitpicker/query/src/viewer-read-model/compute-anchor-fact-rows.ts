@@ -18,7 +18,7 @@ const READ_CHUNK_SIZE = 2000;
  * this is the only `anchor_edges` scan the read-model build performs for
  * either table.
  *
- * Phase 6-F: reads Phase 6-C `anchor_edges` (already deduped to distinct
+ * 0.13: reads 0.13 `anchor_edges` (already deduped to distinct
  * `(page_id, href_page_id)` with a per-pair `count` column) instead of the
  * per-row `anchors` legacy table, and resolves URLs through
  * `url_refs` (`content_items.url_id`). Because `anchor_edges` is already

@@ -13,7 +13,7 @@ import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
  * canonical (redirect-resolved) target, with a per-destination referrer
  * count.
  *
- * Phase 6-F: reads Phase 6-C `anchor_edges` joined to `content_items` and
+ * 0.13: reads 0.13 `anchor_edges` joined to `content_items` and
  * `url_refs`. `referrerCount` uses `COUNT(DISTINCT source.id)` (unique
  * referrer pages, not anchor rows) — matches pre-Phase-6 semantics because
  * `anchor_edges` already deduplicates the `(page_id, href_page_id)` pair.

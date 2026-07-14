@@ -39,7 +39,7 @@ describe('ArchiveManager cache-mode (archive opens go through Archive.openCached
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'cache-mode-test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -200,7 +200,7 @@ describe('ArchiveManager cache-mode: a read-only open never builds a viewer read
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'on-open-build-test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,

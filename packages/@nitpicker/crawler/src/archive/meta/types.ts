@@ -250,15 +250,15 @@ export class IncompatibleArchiveError extends Error {
  * Selects the migration script an operator should run to bring
  * `archiveVersion` up to the current {@link IncompatibleArchiveError.requiredVersion}.
  * Chained: pre-0.10 archives run migrate-to-0.10 first, then
- * migrate-to-phase6 — so the message points at the FIRST step, and running
+ * migrate-to-0.13 — so the message points at the FIRST step, and running
  * that then either satisfies the check or produces a new error pointing at
  * the next step.
  * @param archiveVersion - Semver read from `info.version`, or `'unknown'`.
  * @returns Bracketed command string for embedding into the error message.
  */
 function suggestMigrationScript(archiveVersion: string): string {
-	if (archiveVersion === 'unknown' || archiveVersion < '0.10.0') {
-		return '`node scripts/migrate-to-0.10.mjs <path>` (then `node scripts/migrate-to-phase6.mjs <path>`)';
+	if (archiveVersion === 'unknown' || archiveVersion < '0.13.0') {
+		return '`node scripts/migrate-to-0.10.mjs <path>` (then `node scripts/migrate-to-0.13.mjs <path>`)';
 	}
-	return '`node scripts/migrate-to-phase6.mjs <path>`';
+	return '`node scripts/migrate-to-0.13.mjs <path>`';
 }

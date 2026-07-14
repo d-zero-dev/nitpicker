@@ -46,7 +46,7 @@ describe('ArchiveManager', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -338,7 +338,7 @@ describe('ArchiveManager stub mode', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: stubArchiveName,
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -445,7 +445,7 @@ describe('ArchiveManager stub mode', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'finished',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -617,7 +617,7 @@ describe('ArchiveManager lifecycle races and partial-failure recovery', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'race',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -733,7 +733,7 @@ describe('ArchiveManager warning sink (onWarn)', () => {
 			baseUrl: 'https://example.com',
 			roots: ['https://example.com'],
 			name: testName,
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,

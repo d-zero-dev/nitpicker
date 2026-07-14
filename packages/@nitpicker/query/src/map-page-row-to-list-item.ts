@@ -2,7 +2,7 @@ import type { PageListItem, PageListRow } from './types.js';
 
 /**
  * Legacy column-name list retained for pre-Phase-6 fallback callers (kept as
- * a stringified `pages.*` list). Phase 6-F readers should prefer
+ * a stringified `pages.*` list). 0.13 readers should prefer
  * {@link PAGE_LIST_SELECT_COLUMNS} which projects the same shape via aliased
  * `content_items`/`page_meta`/refs joins.
  */
@@ -44,9 +44,9 @@ export const PAGE_LIST_COLUMNS: readonly string[] = [
 ];
 
 /**
- * Phase 6-F: aliased SQL projection list that produces the exact same
+ * 0.13: aliased SQL projection list that produces the exact same
  * {@link PageListRow} column shape as {@link PAGE_LIST_COLUMNS} but sources
- * every column through the Phase 6-C entity tables:
+ * every column through the 0.13 entity tables:
  * `content_items` (`ci`), `page_meta` (`pm`), `url_refs` (`ur` /
  * `canonical_ur` / `og_url_ur` / `og_image_ur` / `twitter_image_ur` /
  * `manifest_ur`), `content_type_refs` (`ctr`), and per-field

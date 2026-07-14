@@ -10,8 +10,8 @@ import type { Knex } from 'knex';
 import { applyListOrder } from './apply-list-order.js';
 
 /**
- * Phase 6-F: list internal sub-resources that no archived page references,
- * reading through Phase 6-C `resource_items` + `resource_ref_edges` (the
+ * 0.13: list internal sub-resources that no archived page references,
+ * reading through 0.13 `resource_items` + `resource_ref_edges` (the
  * write-model replacements for `resources` + `resources-referrers`) joined
  * to `url_refs` / `content_type_refs` for display columns.
  *

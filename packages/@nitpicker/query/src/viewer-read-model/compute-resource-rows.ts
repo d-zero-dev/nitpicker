@@ -10,12 +10,12 @@ const READ_CHUNK_SIZE = 20_000;
  * Computes insert rows for both resource read-model tables
  * (`viewer_resources`, `viewer_resource_stats`).
  *
- * Phase 6-F: reads Phase 6-C `resource_items` LEFT JOIN `resource_ref_edges`
+ * 0.13: reads 0.13 `resource_items` LEFT JOIN `resource_ref_edges`
  * (which already carries a per-`(resource_id, page_id)` `count`) and
  * resolves the URL through `url_refs`. The old code counted
  * `resources-referrers.id` per resource; the new code sums
  * `resource_ref_edges.count` to preserve the same "1 per unique referrer
- * page" semantics — Phase 6-D populates `resource_ref_edges.count = 1` for
+ * page" semantics — 0.13 populates `resource_ref_edges.count = 1` for
  * every distinct `(resource_id, page_id)` pair, so `SUM(count)` collapses to
  * the same value as the old `COUNT(*)`.
  *

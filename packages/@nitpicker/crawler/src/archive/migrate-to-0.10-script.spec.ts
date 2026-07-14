@@ -16,6 +16,7 @@ const __dirname = path.dirname(__filename);
 const workingDir = path.resolve(__dirname, '__test_fixtures_migrate_script__');
 const repoRoot = path.resolve(__dirname, '..', '..', '..', '..', '..');
 const migrateScript = path.resolve(repoRoot, 'scripts', 'migrate-to-0.10.mjs');
+const migrateScript_0_13 = path.resolve(repoRoot, 'scripts', 'migrate-to-0.13.mjs');
 
 /**
  * Builds a minimal pre-#75 `.nitpicker` archive on disk so the migration
@@ -244,8 +245,17 @@ describe('scripts/migrate-to-0.10.mjs (integration)', () => {
 				await inspectKnex.destroy();
 			}
 
+			// The migrate-to-0.10 output is at info.version = 0.10.0, which is
+			// below REQUIRED_FORMAT_VERSION (see `assertCompatibleVersion`).
+			// Chain migrate-to-0.13.mjs to complete the upgrade to the
+			// current format before Archive.open would accept it.
+			const migratedPath_0_13 = path.resolve(workingDir, 'legacy.0.13.nitpicker');
+			execFileSync('node', [migrateScript_0_13, migratedPath, migratedPath_0_13], {
+				cwd: repoRoot,
+				stdio: 'pipe',
+			});
 			const archive = await Archive.open({
-				filePath: migratedPath,
+				filePath: migratedPath_0_13,
 				cwd: workingDir,
 			});
 			try {

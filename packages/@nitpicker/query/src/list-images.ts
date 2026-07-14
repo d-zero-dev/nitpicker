@@ -8,7 +8,7 @@ import { paginateQuery } from './paginate-query.js';
  * Lists images from the archive with filtering for common quality issues:
  * missing alt text, missing dimensions, oversized images, and lazy-loading gaps.
  *
- * Phase 6-F: reads Phase 6-C `image_items` joined to `url_refs` (for
+ * 0.13: reads 0.13 `image_items` joined to `url_refs` (for
  * regular URL-shaped `src`/`currentSrc` — the common case) and
  * `text_refs` (for `alt`). Data-URI `src`/`currentSrc` values (> 512
  * bytes) live on `blob_refs` and are not decoded in SQL — the caller

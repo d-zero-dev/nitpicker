@@ -12,11 +12,11 @@ import { paginateQuery } from './paginate-query.js';
  * Lists sub-resources (CSS, JS, images, fonts, etc.) from the archive
  * with optional filtering by content type and origin.
  *
- * Phase 6-F: reads the Phase 6-C `resource_items` entity table (joined to
+ * 0.13: reads the 0.13 `resource_items` entity table (joined to
  * `url_refs` for the URL and `content_type_refs` for the MIME) instead of
  * the legacy `resources` table. `referrerCount` is computed via a
  * correlated `SUM("count")` subquery over `resource_ref_edges`
- * (Phase 6-D populates one edge row per unique referrer with `count = 1`,
+ * (0.13 populates one edge row per unique referrer with `count = 1`,
  * so the sum equals the pre-Phase-6 `COUNT(*)` over `resources-referrers`).
  * `compress` / `cdn` are inline TEXT-affinity columns on `resource_items`
  * that preserve the `'0.0'` / `0` sentinels the pre-6 writer path emitted.

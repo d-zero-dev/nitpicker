@@ -2,7 +2,7 @@ import type { ContentTypeCategory } from './types.js';
 import type { Knex } from 'knex';
 
 /**
- * Phase 6-F: content-type filters run against `content_type_refs.raw` (the
+ * 0.13: content-type filters run against `content_type_refs.raw` (the
  * deduped MIME dictionary that replaces the legacy inline `pages.contentType`
  * / `resources.contentType` columns). Callers must have joined
  * `content_type_refs as ctr` before invoking any function in this module —

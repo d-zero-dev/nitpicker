@@ -3,7 +3,7 @@ import type { Knex } from 'knex';
 import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presence-sql.js';
 
 /**
- * Default table alias used for `header_flags` in Phase 6-F queries. Chosen
+ * Default table alias used for `header_flags` in 0.13 queries. Chosen
  * short so raw SQL expressions stay readable.
  */
 export const DEFAULT_HEADER_FLAGS_ALIAS = 'hf';

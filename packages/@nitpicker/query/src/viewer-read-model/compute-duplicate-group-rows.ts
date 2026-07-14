@@ -33,9 +33,9 @@ export interface DuplicateGroupInsertRow {
 export type DuplicateGroupIdIndex = Map<DuplicateGroupField, Map<string, number>>;
 
 /**
- * Phase 6-F: reads one `GROUP BY page_meta.<field>_text_id
+ * 0.13: reads one `GROUP BY page_meta.<field>_text_id
  * HAVING COUNT(*) > 1` aggregation per {@link DuplicateGroupField} against
- * the Phase 6-C entity tables. Grouping by the deduped text-ref id (rather
+ * the 0.13 entity tables. Grouping by the deduped text-ref id (rather
  * than the raw text column previously stored inline on `pages`) preserves
  * the same "same value → same group" semantics while letting SQLite work
  * with narrow integer keys. `text_refs.text` is only joined once, after the

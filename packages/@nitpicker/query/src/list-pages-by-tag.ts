@@ -11,10 +11,10 @@ import {
  * Lists pages that have a Wappalyzer-detected tag matching the given provider
  * (and optionally a specific external ID).
  *
- * Phase 6-F: reads through the Phase 6-C `content_items` + `page_meta`
+ * 0.13: reads through the 0.13 `content_items` + `page_meta`
  * + refs layout via {@link PAGE_LIST_SELECT_COLUMNS}. `page_tags` FKs still
  * reference the page id, which `content_items` preserves verbatim from
- * `pages.id` (Phase 6-C guarantees id-equivalence).
+ * `pages.id` (0.13 guarantees id-equivalence).
  * @param accessor - The archive accessor to query.
  * @param options - `provider` (required), optional `externalId`, `limit`, `offset`.
  * @returns Matching page list items, in pageId order.

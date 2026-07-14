@@ -6,7 +6,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * `OFFSET`, so each read is a direct index seek rather than an
  * O(offset) scan.
  *
- * Phase 6-F: reads Phase 6-C entity tables (`content_items` for pages,
+ * 0.13: reads 0.13 entity tables (`content_items` for pages,
  * `resource_items` for resources) joined to `url_refs` for the URL string.
  * @param accessor - The opened archive accessor.
  * @param table - The logical table to read URLs from

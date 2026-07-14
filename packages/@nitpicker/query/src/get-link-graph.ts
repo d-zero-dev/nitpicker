@@ -3,7 +3,7 @@ import type { ArchiveAccessor, PageSource } from '@nitpicker/crawler';
 
 /**
  * Builds the internal-page-filter predicate for an aliased `content_items`
- * (or ref-joined) surface. Phase 6-C stores `is_external` / `scraped` as
+ * (or ref-joined) surface. 0.13 stores `is_external` / `scraped` as
  * snake_case columns and the MIME lives in `content_type_refs.raw`, so
  * callers must have joined `content_type_refs as <alias>_ctr` before
  * applying this filter.
@@ -25,7 +25,7 @@ function aliasedInternalWhere(
 /**
  * Builds the internal-page link graph from the archive.
  *
- * Phase 6-F: nodes come from `content_items` + `url_refs` +
+ * 0.13: nodes come from `content_items` + `url_refs` +
  * `content_type_refs`; edges from `anchor_edges` (which already collapses
  * duplicate anchors between the same page pair). Edges are further deduped
  * to distinct `(source.url, dest.url)` pairs via `DISTINCT` because the

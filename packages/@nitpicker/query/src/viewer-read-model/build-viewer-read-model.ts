@@ -326,7 +326,7 @@ export async function buildViewerReadModel(
 		await dropViewerReadModelTables(trx);
 		await createViewerReadModelTables(trx);
 
-		// Phase 6-F: source `viewer_url_refs` from the Phase 6-C entity
+		// 0.13: source `viewer_url_refs` from the 0.13 entity
 		// tables (`content_items` + `url_refs`) rather than the legacy
 		// `pages.url` column. Byte-identical to the pre-6 shape because
 		// `url_refs` is populated from the same `pages.url` set during Phase
@@ -343,15 +343,15 @@ export async function buildViewerReadModel(
 			ORDER BY url
 		`);
 
-		// Phase 6-F: `sourceRows` reads through Phase 6-C entity tables.
-		// LEFT JOIN `page_meta` because Phase 6-D populates `page_meta`
+		// 0.13: `sourceRows` reads through 0.13 entity tables.
+		// LEFT JOIN `page_meta` because 0.13 populates `page_meta`
 		// only for `scraped = 1` pages — the outer predicate already
 		// restricts to those, so the LEFT JOIN's null-fill path is
 		// defensive (any missing `page_meta` for a scraped row indicates
 		// a pre-6 migration gap and legitimately reads back as null
 		// metadata). `content_type_refs` join is inner because every
 		// scraped/non-scraped `content_items` row has a
-		// `content_type_id` — Phase 6-D routes missing content types
+		// `content_type_id` — 0.13 routes missing content types
 		// through the "unknown" ref.
 		const sourceRows: PagesSourceRow[] = await trx('content_items as ci')
 			.join('url_refs as ur', 'ur.id', 'ci.url_id')

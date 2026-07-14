@@ -9,7 +9,7 @@ import {
 
 /**
  * Joins an already ID-limited, already-ordered `page_id` list back to the
- * Phase 6-C write-model entity graph (`content_items` + `page_meta` + refs)
+ * 0.13 write-model entity graph (`content_items` + `page_meta` + refs)
  * for full-metadata display.
  *
  * The `IN (...)` fetch does not preserve `pageIds`' order (SQLite gives no

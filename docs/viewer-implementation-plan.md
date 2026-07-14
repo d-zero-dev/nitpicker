@@ -197,7 +197,7 @@ stub viewer:
   必要なら別sidecar cacheにread modelを作る
 ```
 
-### Phase 6: Write Model Refactor
+### 0.13 migration: Write Model Refactor
 
 viewer read modelが実測で固まってから、保存用write modelを参照化する。
 

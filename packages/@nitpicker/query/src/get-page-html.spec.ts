@@ -27,7 +27,7 @@ describe('getPageHtml', () => {
 		await createArchive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,

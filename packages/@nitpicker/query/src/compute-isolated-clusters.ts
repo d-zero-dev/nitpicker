@@ -71,7 +71,7 @@ export async function computeIsolatedClusters(
 	const knex = accessor.getKnex();
 
 	// 1. Fetch the candidate node set: inventory-* HTML pages that are
-	//    themselves canonical (not redirect-source rows). Phase 6-F: read
+	//    themselves canonical (not redirect-source rows). 0.13: read
 	//    through `content_items` + `page_meta` (for `title`) +
 	//    `content_type_refs` (for the `text/html` filter) + `url_refs`.
 	const pageRows = (await knex('content_items as ci')

@@ -43,7 +43,7 @@ function summarizeTagRows(rows: readonly TagRow[]): PageDetail['tags'] {
 /**
  * Retrieves detailed information about a single page by URL.
  *
- * Phase 6-F: reads Phase 6-C entity tables (`content_items` + `page_meta`
+ * 0.13: reads 0.13 entity tables (`content_items` + `page_meta`
  * + all ref tables). Response headers are reconstructed from
  * `header_sets` + `header_set_entries` + `header_name_refs` +
  * `header_value_refs`. `meta_extras` is decoded from `json_refs` (zstd or
@@ -169,7 +169,7 @@ export async function getPageDetail(
 		return null;
 	}
 
-	// Reconstruct responseHeaders from Phase 6-A header_set_entries. Multiple
+	// Reconstruct responseHeaders from 0.13 header_set_entries. Multiple
 	// same-name headers (e.g. `Set-Cookie`) collapse into a single
 	// comma-separated value to preserve the pre-Phase-6 JSON shape (a single
 	// key → string value map). Ordering is by `occurrence` to keep the
@@ -196,7 +196,7 @@ export async function getPageDetail(
 		);
 	}
 
-	// Decode meta_extras from json_refs. `codec` is either 'zstd' (Phase 6-B
+	// Decode meta_extras from json_refs. `codec` is either 'zstd' (0.13
 	// compression) or 'none' (raw JSON text). Corrupt bodies fail closed and
 	// return `{}` with a warning, matching the pre-Phase-6 try/catch shape.
 	let metaExtras: Record<string, unknown> = {};
@@ -204,7 +204,7 @@ export async function getPageDetail(
 		try {
 			let jsonText: string;
 			if (page.extras_codec === 'zstd') {
-				// Phase 6-B populates `json_refs.json_text` with
+				// 0.13 populates `json_refs.json_text` with
 				// `node:zlib.zstdCompressSync`; use the matching sync
 				// decompress from the same built-in so no extra
 				// dependency is required.

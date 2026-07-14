@@ -17,7 +17,7 @@ interface ImageJoinRow {
 
 /**
  * Joins an already ID-limited, already-ordered `image_id` list back to the
- * Phase 6-C `image_items` write model (plus `content_items` + `url_refs`
+ * 0.13 `image_items` write model (plus `content_items` + `url_refs`
  * for the display `pageUrl`) for full-metadata display. Data-URI
  * `src`/`currentSrc` values live on `blob_refs` and are not decoded in SQL —
  * callers receive `null` for those (see `list-images.ts`).
