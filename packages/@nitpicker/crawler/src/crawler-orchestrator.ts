@@ -14,6 +14,7 @@ import pkg from '../package.json' with { type: 'json' };
 
 import Archive from './archive/archive.js';
 import { REQUIRED_FORMAT_VERSION } from './archive/meta/assert-compatible-version.js';
+import { populateMigrationTables } from './archive/populate-migration-tables.js';
 import { clearDestinationCache } from './crawler/clear-destination-cache.js';
 import { clearDnsBurnedHostCache } from './crawler/clear-dns-burned-host-cache.js';
 import Crawler from './crawler/crawler.js';
@@ -348,10 +349,18 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	/**
 	 * Write the archive to its configured file path.
 	 *
+	 * Populates the 0.13 entity tables from the still-legacy write path
+	 * BEFORE finalising the archive so any reader that opens the
+	 * `.nitpicker` afterwards sees a populated `content_items` etc.
+	 * (Phase 6-G / #196 will move the crawler write path itself onto the
+	 * new tables and this bridge call becomes a no-op via
+	 * `INSERT OR IGNORE`.)
+	 *
 	 * Emits `writeFileStart` before writing and `writeFileEnd` after
 	 * the write completes successfully.
 	 */
 	async write() {
+		await populateMigrationTables(this.#archive);
 		void this.emit('writeFileStart', { filePath: this.#archive.filePath });
 		await this.#archive.write();
 		void this.emit('writeFileEnd', { filePath: this.#archive.filePath });

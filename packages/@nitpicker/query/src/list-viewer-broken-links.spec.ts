@@ -198,8 +198,8 @@ describe('listViewerBrokenLinks', () => {
 		// list-links.ts's scope note that such rows must never satisfy
 		// `status = 404`.
 
-		await buildViewerReadModel(archive);
 		await populateMigrationTables(archive);
+		await buildViewerReadModel(archive);
 	});
 
 	afterAll(async () => {

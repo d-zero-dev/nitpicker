@@ -73,8 +73,8 @@ describe('countViewerResourcesTotal', () => {
 			headers: {},
 		});
 
-		await buildViewerReadModel(archive);
 		await populateMigrationTables(archive);
+		await buildViewerReadModel(archive);
 	});
 
 	afterAll(async () => {

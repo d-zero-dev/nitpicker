@@ -2,7 +2,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { Archive, populateMigrationTables } from '@nitpicker/crawler';
 
 /**
  * Generate an **un-finalised** crawl stub directory for the viewer's stub-mode
@@ -86,6 +86,12 @@ for (let i = 0; i < PAGE_COUNT; i++) {
 		isSkipped: false,
 	});
 }
+
+// Populate the 0.13 entity tables so the stub fixture is readable by
+// the new phase6 reader paths — the stub-mode viewer opens tmpDir
+// read-only and reads via the same reader functions as a finalised
+// archive.
+await populateMigrationTables(archive);
 
 // Cleanly release the writer's SQLite handle and the advisory lock
 // WITHOUT zipping or removing the tmpDir — that's exactly what

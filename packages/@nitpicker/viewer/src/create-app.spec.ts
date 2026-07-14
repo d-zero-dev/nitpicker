@@ -151,7 +151,7 @@ describe('createApp', () => {
 			imageList: [],
 			isSkipped: false,
 		});
-		await buildViewerReadModel(archive);
+		await populateMigrationTables(archive);
 
 		const context: ArchiveContext = {
 			manager: { get: () => archive } as unknown as ArchiveManager,
@@ -161,7 +161,7 @@ describe('createApp', () => {
 			crawlerLockHolder: null,
 		};
 		app = createApp({ context, publicDir: workingDir });
-		await populateMigrationTables(archive);
+		await buildViewerReadModel(archive);
 	});
 
 	afterAll(async () => {

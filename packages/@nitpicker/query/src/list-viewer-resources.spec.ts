@@ -186,8 +186,8 @@ describe('listViewerResources', () => {
 			src: 'https://example.com/a.css',
 		});
 
-		await buildViewerReadModel(archive);
 		await populateMigrationTables(archive);
+		await buildViewerReadModel(archive);
 	});
 
 	afterAll(async () => {

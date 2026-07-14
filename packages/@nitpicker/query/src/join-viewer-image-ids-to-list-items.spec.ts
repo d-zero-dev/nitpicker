@@ -113,8 +113,8 @@ describe('joinViewerImageIdsToListItems', () => {
 		idA = rows.find((r) => r.src === 'https://example.com/a.png')!.id;
 		idB = rows.find((r) => r.src === 'https://example.com/b.png')!.id;
 
-		await buildViewerReadModel(archive);
 		await populateMigrationTables(archive);
+		await buildViewerReadModel(archive);
 	});
 
 	afterAll(async () => {

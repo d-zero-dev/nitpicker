@@ -148,8 +148,8 @@ describe('viewer isolated read model', () => {
 			'inventory-discovered',
 		);
 
-		await buildViewerReadModel(archive);
 		await populateMigrationTables(archive);
+		await buildViewerReadModel(archive);
 	});
 
 	afterAll(async () => {

@@ -115,8 +115,8 @@ describe('applyViewerUnusedResourcesFilters', () => {
 			src: 'https://example.com/used.css',
 		});
 
-		await buildViewerReadModel(archive);
 		await populateMigrationTables(archive);
+		await buildViewerReadModel(archive);
 	});
 
 	afterAll(async () => {

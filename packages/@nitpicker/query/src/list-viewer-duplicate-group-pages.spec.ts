@@ -109,7 +109,7 @@ describe('listViewerDuplicateGroupPages', () => {
 			});
 		}
 
-		await buildViewerReadModel(archive);
+		await populateMigrationTables(archive);
 
 		const knex = archive.getKnex();
 		const groupARow = await knex('viewer_duplicate_groups')
@@ -120,7 +120,7 @@ describe('listViewerDuplicateGroupPages', () => {
 			.first();
 		groupId = groupARow.group_id;
 		otherGroupId = groupBRow.group_id;
-		await populateMigrationTables(archive);
+		await buildViewerReadModel(archive);
 	});
 
 	afterAll(async () => {

@@ -120,8 +120,8 @@ describe('joinViewerResourceIdsToListItems', () => {
 		idA = rows.find((r) => r.url === 'https://example.com/a.css')!.id;
 		idB = rows.find((r) => r.url === 'https://example.com/b.js')!.id;
 
-		await buildViewerReadModel(archive);
 		await populateMigrationTables(archive);
+		await buildViewerReadModel(archive);
 	});
 
 	afterAll(async () => {

@@ -141,8 +141,8 @@ describe('listViewerPages', () => {
 		// inventory-seed provenance, for the `source` filter.
 		await addPage({ url: 'https://example.com/h', title: 'H', source: 'inventory-seed' });
 
-		await buildViewerReadModel(archive);
 		await populateMigrationTables(archive);
+		await buildViewerReadModel(archive);
 	});
 
 	afterAll(async () => {
