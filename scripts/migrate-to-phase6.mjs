@@ -230,6 +230,13 @@ async function applyPhase6Migrations(dbPath) {
 				`resource_items=${summary.resourceItems}`,
 		);
 
+		// Bump info.version so `assertCompatibleVersion` accepts the archive
+		// on next open. This is the single mechanism the reader-side uses to
+		// detect "archive predates the current format" — no separate assert
+		// per phase.
+		console.log('  [6-F] bump info.version → 0.13.0');
+		await db('info').update({ version: '0.13.0' });
+
 		await db.raw('PRAGMA wal_checkpoint(TRUNCATE)');
 	} finally {
 		await db.destroy();

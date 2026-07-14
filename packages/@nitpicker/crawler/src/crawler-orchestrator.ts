@@ -13,6 +13,7 @@ import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-awa
 import pkg from '../package.json' with { type: 'json' };
 
 import Archive from './archive/archive.js';
+import { REQUIRED_FORMAT_VERSION } from './archive/meta/assert-compatible-version.js';
 import { clearDestinationCache } from './crawler/clear-destination-cache.js';
 import { clearDnsBurnedHostCache } from './crawler/clear-dns-burned-host-cache.js';
 import Crawler from './crawler/crawler.js';
@@ -401,7 +402,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		const rootHrefs = list.map((u) => u.withoutHash);
 
 		await archive.setConfig({
-			version: pkg.version,
+			// `version` is the archive-format version (see
+			// `assertCompatibleVersion`), NOT the npm package version. Decoupled
+			// because format-breaking changes and code-release cadence are
+			// different concerns — a patch release must not silently bump the
+			// format version and reject older archives, and a dev build of an
+			// unreleased breaking change must be able to produce archives the
+			// same build can read back.
+			version: REQUIRED_FORMAT_VERSION,
 			name: fileName,
 			baseUrl: rootHrefs[0]!,
 			roots: rootHrefs,

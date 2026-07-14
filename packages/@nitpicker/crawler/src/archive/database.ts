@@ -37,7 +37,6 @@ import { eachSplitted } from '../utils/array/each-splitted.js';
 import { emitErrorAndRetry } from '../utils/error/emit-error-with-retry.js';
 import { emitError } from '../utils/error/emit-error.js';
 
-import { assertPhase6Populated } from './assert-phase6-populated.js';
 import { dbLog } from './debug.js';
 import { deriveLineageFromParent } from './derive-lineage-from-parent.js';
 import { mkdir } from './filesystem/mkdir.js';
@@ -2440,10 +2439,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		// `initSchema` below.
 		await assertCompatibleVersion(this.#instance);
 		if (readOnly) {
-			// Phase 6-F reader guard also applies to read-only opens (stub
-			// viewer / MCP / CLI query) — otherwise a pre-migration archive
-			// would surface as an empty viewer instead of a clear error.
-			await assertPhase6Populated(this.#instance);
 			return;
 		}
 		await initSchema(this.#instance);
@@ -2458,7 +2453,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		// MUST run after migratePhase6ARefTables — Phase 6-C tables have
 		// FK references to the Phase 6-A ref tables.
 		await migratePhase6CEntityTables(this.#instance);
-		await assertPhase6Populated(this.#instance);
 	}
 
 	/**

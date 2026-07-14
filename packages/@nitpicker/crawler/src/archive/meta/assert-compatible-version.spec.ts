@@ -73,25 +73,25 @@ describe('assertCompatibleVersion', () => {
 
 	it('accepts an archive whose info.version is newer than REQUIRED_FORMAT_VERSION', async () => {
 		const db = await makeDb('assert-version-newer');
-		await seedInfoVersion(db, '0.11.0');
+		await seedInfoVersion(db, '0.14.0');
 		await expect(assertCompatibleVersion(db)).resolves.toBeUndefined();
 	});
 
 	it('throws IncompatibleArchiveError when info.version is older', async () => {
 		const db = await makeDb('assert-version-older');
-		await seedInfoVersion(db, '0.9.0');
+		await seedInfoVersion(db, '0.10.0');
 		await expect(assertCompatibleVersion(db)).rejects.toThrow(IncompatibleArchiveError);
 	});
 
 	it('exposes archiveVersion and requiredVersion on the thrown error', async () => {
 		const db = await makeDb('assert-version-error-fields');
-		await seedInfoVersion(db, '0.9.0');
+		await seedInfoVersion(db, '0.10.0');
 		try {
 			await assertCompatibleVersion(db);
 			throw new Error('Expected throw');
 		} catch (error) {
 			expect(error).toBeInstanceOf(IncompatibleArchiveError);
-			expect((error as IncompatibleArchiveError).archiveVersion).toBe('0.9.0');
+			expect((error as IncompatibleArchiveError).archiveVersion).toBe('0.10.0');
 			expect((error as IncompatibleArchiveError).requiredVersion).toBe(
 				REQUIRED_FORMAT_VERSION,
 			);

@@ -5,18 +5,27 @@ import { IncompatibleArchiveError } from './types.js';
 
 /**
  * Minimum `info.version` this build accepts. Archives older than this must
- * be upgraded with `scripts/migrate-to-0.10.mjs` before they can be opened.
+ * be upgraded by running the matching migration script before they can be
+ * opened (see {@link IncompatibleArchiveError}'s message for the mapping
+ * from archive version to script).
  *
  * History:
  *
  * - **pre-0.10**: HTML snapshots in `snapshot-html.zip` (#75), then
  *   relocated to `page_html_blobs` (#84); pages table has flat `noindex`,
  *   `og:type`-style columns derived from beholder 2.x's flat `Meta`.
- * - **0.10.0**: this build. `page_html_blobs` BLOB storage (#75/#84) +
+ * - **0.10.0**: `page_html_blobs` BLOB storage (#75/#84) +
  *   nested-`Meta`-derived flat columns, `meta_extras` JSON, `page_tags` /
  *   `page_jsonld` tables, denormalised aggregates (#85).
+ * - **0.13.0**: this build. Phase 6 write-model refactor (#103) —
+ *   `content_items` / `page_meta` / `resource_items` / `anchor_edges` /
+ *   `resource_ref_edges` / `image_items` entity tables plus `url_refs` /
+ *   `text_refs` / `content_type_refs` / `json_refs` / `blob_refs` /
+ *   `header_flags` ref tables. Readers query the new tables exclusively;
+ *   pre-6 archives must be upgraded with `scripts/migrate-to-phase6.mjs`
+ *   which bumps `info.version` to `0.13.0` on completion.
  */
-export const REQUIRED_FORMAT_VERSION = '0.10.0';
+export const REQUIRED_FORMAT_VERSION = '0.13.0';
 
 /**
  * Verifies that the archive's on-disk format is compatible with this build.
