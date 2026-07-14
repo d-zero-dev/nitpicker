@@ -1,7 +1,7 @@
 import type { ImageEntry } from './types.js';
 import type { Knex } from 'knex';
 
-/** Row shape read from `images` joined to `pages`. */
+/** Row shape read from `image_items` joined to page + ref tables. */
 interface ImageJoinRow {
 	id: number;
 	pageUrl: string;
@@ -17,20 +17,12 @@ interface ImageJoinRow {
 
 /**
  * Joins an already ID-limited, already-ordered `image_id` list back to the
- * wide write-model `images` table (plus `pages` for the display `pageUrl`)
- * for full-metadata display, per `docs/viewer-sql-query-plan.md`'s golden
- * rule ("URL/text JOINs only after IDs are limited"). `sourceCode` is
- * deliberately never selected here — the issue's Must list requires list
- * responses to never reconstruct it, matching `listImages`'s existing
- * behaviour.
- *
- * The `IN (...)` fetch does not itself preserve `imageIds`' order (SQLite
- * gives no such guarantee), so the result is re-sorted in JS by `imageIds`'
- * order afterward — cheap, since this only ever runs over a
- * `limit`-bounded page (≤ a few hundred rows), never the full archive.
+ * Phase 6-C `image_items` write model (plus `content_items` + `url_refs`
+ * for the display `pageUrl`) for full-metadata display. Data-URI
+ * `src`/`currentSrc` values live on `blob_refs` and are not decoded in SQL —
+ * callers receive `null` for those (see `list-images.ts`).
  * @param knex - The archive's Knex instance.
- * @param imageIds - The image IDs to fetch, already filtered/sorted/limited
- *   by the `viewer_images` query stage.
+ * @param imageIds - The image IDs to fetch.
  * @returns The corresponding {@link ImageEntry} rows, in `imageIds` order.
  */
 export async function joinViewerImageIdsToListItems(
@@ -40,20 +32,24 @@ export async function joinViewerImageIdsToListItems(
 	if (imageIds.length === 0) {
 		return [];
 	}
-	const rows: ImageJoinRow[] = await knex('images')
-		.join('pages', 'images.pageId', '=', 'pages.id')
-		.whereIn('images.id', imageIds)
+	const rows: ImageJoinRow[] = await knex('image_items as ii')
+		.join('content_items as ci', 'ii.page_id', 'ci.id')
+		.join('url_refs as page_ur', 'page_ur.id', 'ci.url_id')
+		.leftJoin('url_refs as src_ur', 'src_ur.id', 'ii.src_url_id')
+		.leftJoin('url_refs as current_src_ur', 'current_src_ur.id', 'ii.current_src_url_id')
+		.leftJoin('text_refs as alt_ref', 'alt_ref.id', 'ii.alt_text_id')
+		.whereIn('ii.id', imageIds)
 		.select(
-			'images.id as id',
-			'pages.url as pageUrl',
-			'images.src as src',
-			'images.currentSrc as currentSrc',
-			'images.alt as alt',
-			'images.width as width',
-			'images.height as height',
-			'images.naturalWidth as naturalWidth',
-			'images.naturalHeight as naturalHeight',
-			'images.isLazy as isLazy',
+			'ii.id as id',
+			'page_ur.url as pageUrl',
+			'src_ur.url as src',
+			'current_src_ur.url as currentSrc',
+			'alt_ref.text as alt',
+			'ii.width as width',
+			'ii.height as height',
+			'ii.natural_width as naturalWidth',
+			'ii.natural_height as naturalHeight',
+			'ii.is_lazy as isLazy',
 		);
 	const rowsById = new Map(rows.map((row) => [row.id, row]));
 	return imageIds

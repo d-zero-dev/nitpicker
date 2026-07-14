@@ -1,14 +1,14 @@
 import type { DuplicateGroupIdIndex } from './compute-duplicate-group-rows.js';
 import type { Knex } from 'knex';
 
-/** Rows read per `pages` id-keyset scan chunk, by default. */
+/** Rows read per `content_items` id-keyset scan chunk, by default. */
 const READ_CHUNK_SIZE = 20_000;
 
 /** One row to insert into `viewer_duplicate_group_pages`, produced by `computeDuplicateGroupPageRows`. */
 export interface DuplicateGroupPageInsertRow {
 	/** The owning group's `group_id` — a `DuplicateGroupInsertRow.group_id`. */
 	group_id: number;
-	/** The write-model `pages.id` this row represents. */
+	/** The write-model page id (== `content_items.id` == legacy `pages.id`) this row represents. */
 	page_id: number;
 	/**
 	 * The member page's URL, verbatim — the same "inline the sort key as
@@ -17,7 +17,7 @@ export interface DuplicateGroupPageInsertRow {
 	url_sort_key: string;
 }
 
-/** One raw `pages` row read per id-keyset scan chunk, before matching against `groupIdByValue`. */
+/** One raw source row read per id-keyset scan chunk, before matching against `groupIdByValue`. */
 interface DuplicateGroupPageSourceRow {
 	id: number;
 	url: string;
@@ -88,17 +88,26 @@ export async function* computeDuplicateGroupPageRows(
 
 	let lastId = 0;
 	for (;;) {
-		const rows: DuplicateGroupPageSourceRow[] = await trx('pages')
-			.where('pages.id', '>', lastId)
-			.where({ scraped: 1, isExternal: 0, contentType: 'text/html' })
-			.whereNull('redirectDestId')
-			.orderBy('pages.id', 'asc')
+		const rows: DuplicateGroupPageSourceRow[] = await trx('content_items as ci')
+			.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+			.join('page_meta as pm', 'pm.page_id', 'ci.id')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.leftJoin('text_refs as title_ref', 'title_ref.id', 'pm.title_text_id')
+			.leftJoin(
+				'text_refs as description_ref',
+				'description_ref.id',
+				'pm.description_text_id',
+			)
+			.where('ci.id', '>', lastId)
+			.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
+			.whereNull('ci.redirect_dest_id')
+			.orderBy('ci.id', 'asc')
 			.limit(chunkSize)
 			.select(
-				'pages.id as id',
-				'pages.url as url',
-				'pages.title as title',
-				'pages.description as description',
+				'ci.id as id',
+				'ur.url as url',
+				'title_ref.text as title',
+				'description_ref.text as description',
 			);
 
 		if (rows.length === 0) {

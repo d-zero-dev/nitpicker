@@ -2,6 +2,15 @@ import type { ContentTypeCategory } from './types.js';
 import type { Knex } from 'knex';
 
 /**
+ * Phase 6-F: content-type filters run against `content_type_refs.raw` (the
+ * deduped MIME dictionary that replaces the legacy inline `pages.contentType`
+ * / `resources.contentType` columns). Callers must have joined
+ * `content_type_refs as ctr` before invoking any function in this module —
+ * see `applyCategoryFilter`'s doc for the assumed JOIN shape.
+ */
+const CONTENT_TYPE_COLUMN = 'ctr.raw';
+
+/**
  * One matcher for a Content-Type rule. Matchers are evaluated against the
  * normalized MIME (lower-cased, parameters stripped).
  *
@@ -220,13 +229,13 @@ function applyPositiveMatcher(
 ): Knex.QueryBuilder {
 	switch (matcher.kind) {
 		case 'exact': {
-			return qb.where('contentType', matcher.value);
+			return qb.where(CONTENT_TYPE_COLUMN, matcher.value);
 		}
 		case 'prefix': {
-			return qb.where('contentType', 'like', `${matcher.value}%`);
+			return qb.where(CONTENT_TYPE_COLUMN, 'like', `${matcher.value}%`);
 		}
 		case 'suffix': {
-			return qb.where('contentType', 'like', `%${matcher.value}`);
+			return qb.where(CONTENT_TYPE_COLUMN, 'like', `%${matcher.value}`);
 		}
 	}
 }
@@ -244,13 +253,13 @@ function applyPositiveMatcherOr(
 ): Knex.QueryBuilder {
 	switch (matcher.kind) {
 		case 'exact': {
-			return qb.orWhere('contentType', matcher.value);
+			return qb.orWhere(CONTENT_TYPE_COLUMN, matcher.value);
 		}
 		case 'prefix': {
-			return qb.orWhere('contentType', 'like', `${matcher.value}%`);
+			return qb.orWhere(CONTENT_TYPE_COLUMN, 'like', `${matcher.value}%`);
 		}
 		case 'suffix': {
-			return qb.orWhere('contentType', 'like', `%${matcher.value}`);
+			return qb.orWhere(CONTENT_TYPE_COLUMN, 'like', `%${matcher.value}`);
 		}
 	}
 }
@@ -269,13 +278,13 @@ function applyNegativeMatcher(
 ): Knex.QueryBuilder {
 	switch (matcher.kind) {
 		case 'exact': {
-			return qb.whereNot('contentType', matcher.value);
+			return qb.whereNot(CONTENT_TYPE_COLUMN, matcher.value);
 		}
 		case 'prefix': {
-			return qb.where('contentType', 'not like', `${matcher.value}%`);
+			return qb.where(CONTENT_TYPE_COLUMN, 'not like', `${matcher.value}%`);
 		}
 		case 'suffix': {
-			return qb.where('contentType', 'not like', `%${matcher.value}`);
+			return qb.where(CONTENT_TYPE_COLUMN, 'not like', `%${matcher.value}`);
 		}
 	}
 }
@@ -334,12 +343,12 @@ export function applyCategoryFilter(
 ): void {
 	if (category === 'unknown') {
 		qb.where((sub) => {
-			sub.whereNull('contentType').orWhere('contentType', '');
+			sub.whereNull(CONTENT_TYPE_COLUMN).orWhere(CONTENT_TYPE_COLUMN, '');
 		});
 		return;
 	}
 	if (category === 'other') {
-		qb.whereNotNull('contentType').whereNot('contentType', '');
+		qb.whereNotNull(CONTENT_TYPE_COLUMN).whereNot(CONTENT_TYPE_COLUMN, '');
 		for (const rule of CONTENT_TYPE_RULES) {
 			applyRuleNegative(qb, rule);
 		}

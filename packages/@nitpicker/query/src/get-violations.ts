@@ -129,14 +129,15 @@ export async function getViolations(
 	}
 
 	const rows = await knex('analysis_violations as v')
-		.join('pages as p', 'p.id', 'v.page_id')
+		.join('content_items as p', 'p.id', 'v.page_id')
+		.join('url_refs as ur', 'ur.id', 'p.url_id')
 		.join('analysis_text_refs as msg', 'msg.id', 'v.message_text_id')
 		.leftJoin('analysis_text_refs as code', 'code.id', 'v.code_text_id')
 		.whereIn('v.id', ids)
 		.select([
 			'v.id as id',
 			'v.page_url_sort_key as urlSortKey',
-			'p.url as url',
+			'ur.url as url',
 			'v.validator as validator',
 			'v.severity as severity',
 			'v.rule as rule',

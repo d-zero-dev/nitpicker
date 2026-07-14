@@ -4,19 +4,19 @@ import type { Knex } from 'knex';
 import { buildHeaderPresenceSelects } from '../build-header-presence-selects.js';
 import { HEADER_PRESENCE_KEYS } from '../header-presence-sql.js';
 
-/** One row read from `pages`, projected to just the columns this computation needs. */
+/** One row projected from `content_items` + refs, just the columns this computation needs. */
 type HeaderCheckSourceRow = Record<HeaderPresenceKey, 0 | 1> & {
-	/** `pages.id` — becomes `viewer_header_checks.page_id`. */
+	/** `content_items.id` — becomes `viewer_header_checks.page_id`. */
 	id: number;
-	/** `pages.url` — becomes `viewer_header_checks.url_sort_key` verbatim. */
+	/** `url_refs.url` (verbatim URL string) — becomes `viewer_header_checks.url_sort_key`. */
 	url: string;
 };
 
 /** One row to insert into `viewer_header_checks`. */
 export interface HeaderCheckInsertRow {
-	/** Copied from `pages.id`. */
+	/** Copied from `content_items.id` (= legacy `pages.id`). */
 	page_id: number;
-	/** Copied from `pages.url` verbatim — see `viewer_header_checks`'s table docs. */
+	/** Copied from `url_refs.url` verbatim — see `viewer_header_checks`'s table docs. */
 	url_sort_key: string;
 	/** Normalised `0`/`1` form of {@link HeaderPresence.hasCSP}. */
 	has_csp: 0 | 1;
@@ -30,38 +30,44 @@ export interface HeaderCheckInsertRow {
 	missing_count: number;
 	/**
 	 * `1` iff `missing_count > 0`, `0` otherwise — the boolean flag
-	 * `listViewerHeaderChecks`'s `missingOnly` filter actually queries (see
-	 * `viewer_header_checks`'s table docs for why `missing_count` itself,
-	 * a range predicate, can't lead an index that also satisfies
-	 * `ORDER BY url_sort_key`).
+	 * `listViewerHeaderChecks`'s `missingOnly` filter actually queries.
 	 */
 	is_missing: 0 | 1;
 }
 
 /**
- * Reads internal HTML pages — the exact `scraped = 1, isExternal = 0,
- * contentType = 'text/html', redirectDestId IS NULL` predicate `checkHeaders`
- * itself filters to — and computes each tracked security header's presence
- * entirely in SQL via `headerPresenceExpression`, the same LIKE-based boolean
- * expression `checkHeaders`/`listPages` already use. The `responseHeaders`
- * JSON blob itself is never selected, so this build step never transfers or
- * parses it — only the four resulting booleans per row.
+ * Reads internal HTML pages via Phase 6-C entity tables — the exact
+ * `scraped = 1, is_external = 0, content_type='text/html',
+ * redirect_dest_id IS NULL` predicate `checkHeaders` itself filters to — and
+ * projects each tracked security header's presence directly from
+ * `header_flags`'s pre-computed booleans. `content_items.header_set_id` may
+ * be NULL for pages with no captured response headers; the LEFT JOIN +
+ * `coalesce(..., 0)` inside {@link buildHeaderPresenceSelects} treats those
+ * as "header absent", matching the pre-Phase-6 LIKE-on-NULL behaviour.
  *
  * Unlike `computeAnchorFactRows`/`computeResourceInsertRows`/
  * `computeImageInsertRows`, this returns a plain array rather than an
- * `AsyncGenerator`: its row count is bounded by `pages`, the same order of
- * magnitude `viewer_pages`'s own non-chunked `sourceRows` read already
- * handles without chunking — there is no OOM risk here to chunk against.
+ * `AsyncGenerator`: its row count is bounded by `content_items`, the same
+ * order of magnitude `viewer_pages`'s own non-chunked `sourceRows` read
+ * already handles without chunking — there is no OOM risk here to chunk
+ * against.
  * @param trx - The archive's Knex instance (typically an open transaction).
  * @returns One row per matching page, ready to insert into `viewer_header_checks`.
  */
 export async function computeHeaderCheckInsertRows(
 	trx: Knex,
 ): Promise<HeaderCheckInsertRow[]> {
-	const rows = (await trx('pages')
-		.where({ scraped: 1, isExternal: 0, contentType: 'text/html' })
-		.whereNull('redirectDestId')
-		.select('id', 'url', ...buildHeaderPresenceSelects(trx))) as HeaderCheckSourceRow[];
+	const rows = (await trx('content_items as ci')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+		.leftJoin('header_flags as hf', 'hf.header_set_id', 'ci.header_set_id')
+		.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
+		.whereNull('ci.redirect_dest_id')
+		.select(
+			'ci.id as id',
+			'ur.url as url',
+			...buildHeaderPresenceSelects(trx, 'hf'),
+		)) as HeaderCheckSourceRow[];
 
 	return rows.map((row) => {
 		const missingCount = HEADER_PRESENCE_KEYS.reduce(

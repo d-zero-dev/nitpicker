@@ -12,10 +12,14 @@ import { paginateQuery } from './paginate-query.js';
  * Lists sub-resources (CSS, JS, images, fonts, etc.) from the archive
  * with optional filtering by content type and origin.
  *
- * Columns mirror the google-sheets "Resources" sheet (URL, Status Code,
- * Status Text, Content Type, Content Length, Referrers). `referrerCount`
- * is computed with a correlated subquery so it does not perturb the
- * pagination COUNT.
+ * Phase 6-F: reads the Phase 6-C `resource_items` entity table (joined to
+ * `url_refs` for the URL and `content_type_refs` for the MIME) instead of
+ * the legacy `resources` table. `referrerCount` is computed via a
+ * correlated `SUM("count")` subquery over `resource_ref_edges`
+ * (Phase 6-D populates one edge row per unique referrer with `count = 1`,
+ * so the sum equals the pre-Phase-6 `COUNT(*)` over `resources-referrers`).
+ * `compress` / `cdn` are inline TEXT-affinity columns on `resource_items`
+ * that preserve the `'0.0'` / `0` sentinels the pre-6 writer path emitted.
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
  * @returns A paginated list of resource entries.
@@ -28,19 +32,21 @@ export async function listResources(
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 
-	const baseQuery = knex('resources');
+	const baseQuery = knex('resource_items as ri')
+		.join('url_refs as ur', 'ur.id', 'ri.url_id')
+		.leftJoin('content_type_refs as ctr', 'ctr.id', 'ri.content_type_id');
 
 	if (options.urlPattern) {
-		baseQuery.where('url', 'like', options.urlPattern);
+		baseQuery.where('ur.url', 'like', options.urlPattern);
 	}
 	if (options.status != null) {
-		baseQuery.where('status', options.status);
+		baseQuery.where('ri.status', options.status);
 	}
 	if (options.contentType) {
-		baseQuery.where('contentType', 'like', `${options.contentType}%`);
+		baseQuery.where('ctr.raw', 'like', `${options.contentType}%`);
 	}
 	if (options.isExternal != null) {
-		baseQuery.where('isExternal', options.isExternal ? 1 : 0);
+		baseQuery.where('ri.is_external', options.isExternal ? 1 : 0);
 	}
 	const sortBy = options.sortBy ?? 'url';
 	const sortOrder = options.sortOrder ?? 'asc';
@@ -54,11 +60,6 @@ export async function listResources(
 			contentType: string | null;
 			contentLength: number | null;
 			isExternal: 0 | 1;
-			// `resources.compress`/`.cdn` are TEXT-affinity columns; `insertResource`
-			// writes the JS number `0` for a falsy `Resource.compress`/`.cdn`
-			// (`resource.compress || 0`), and SQLite's TEXT affinity casts that
-			// REAL `0` to the string `'0.0'` on write — never the bare number
-			// `0` — so both sentinels are checked below for safety.
 			compress: string | 0 | '0.0';
 			cdn: string | 0 | '0.0';
 			referrerCount: number;
@@ -66,31 +67,31 @@ export async function listResources(
 		ResourceEntry
 	>({
 		baseQuery,
-		countColumn: 'id',
+		countColumn: 'ri.id',
 		applySelect: (q) => {
 			q.select(
-				'url',
-				'status',
-				'statusText',
-				'contentType',
-				'contentLength',
-				'isExternal',
-				'compress',
-				'cdn',
+				'ur.url as url',
+				'ri.status as status',
+				'ri.status_text as statusText',
+				'ctr.raw as contentType',
+				'ri.content_length as contentLength',
+				'ri.is_external as isExternal',
+				'ri.compress as compress',
+				'ri.cdn as cdn',
 				knex.raw(
-					'(select count(*) from "resources-referrers" where "resources-referrers"."resourceId" = "resources"."id") as referrerCount',
+					'coalesce((select sum("count") from "resource_ref_edges" where "resource_ref_edges"."resource_id" = "ri"."id"), 0) as referrerCount',
 				),
 			);
 			return applyListOrder(q, knex, sortBy, sortOrder, {
-				url: { column: '"resources"."url"', type: useUrlSort ? 'url' : 'plain' },
-				status: { column: '"resources"."status"' },
-				statusText: { column: '"resources"."statusText"' },
-				contentType: { column: '"resources"."contentType"' },
-				contentLength: { column: '"resources"."contentLength"' },
-				isExternal: { column: '"resources"."isExternal"' },
+				url: { column: '"ur"."url"', type: useUrlSort ? 'url' : 'plain' },
+				status: { column: '"ri"."status"' },
+				statusText: { column: '"ri"."status_text"' },
+				contentType: { column: '"ctr"."raw"' },
+				contentLength: { column: '"ri"."content_length"' },
+				isExternal: { column: '"ri"."is_external"' },
 				referrerCount: { column: '"referrerCount"' },
-				compress: { column: '"resources"."compress"' },
-				cdn: { column: '"resources"."cdn"' },
+				compress: { column: '"ri"."compress"' },
+				cdn: { column: '"ri"."cdn"' },
 			});
 		},
 		limit,

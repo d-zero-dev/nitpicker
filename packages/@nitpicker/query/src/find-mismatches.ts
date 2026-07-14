@@ -16,7 +16,12 @@ export interface FindMismatchesOptions {
 /**
  * Finds metadata mismatches in the archive: canonical URL != page URL,
  * og:title != title, og:description != description.
- * Uses SQL WHERE conditions to detect mismatches at the database level.
+ *
+ * Phase 6-F: reads through Phase 6-C `content_items` + `page_meta`;
+ * comparisons are integer-id equalities (`page_meta.canonical_url_id !=
+ * content_items.url_id`, `page_meta.og_title_text_id !=
+ * page_meta.title_text_id`, etc.), which are equivalent to the pre-6 string
+ * comparisons because `url_refs`/`text_refs` are unique per URL/text.
  * @param accessor - The archive accessor to query.
  * @param type - The type of mismatch to search for.
  * @param limit - Maximum number of results. Defaults to 100.
@@ -51,50 +56,39 @@ export async function findMismatches(
 	const sortBy = options.sortBy ?? 'url';
 	const sortOrder = options.sortOrder ?? 'asc';
 	const useUrlSort = options.sortBy != null;
-	// `useUrlSort` alone is NOT sufficient to gate this: it only means "the
-	// caller passed an explicit `sortBy`", but not every explicit `sortBy`
-	// resolves to a `type: 'url'` column. For `type: 'canonical'`, `url`/
-	// `actual` become `'url'`-typed whenever `useUrlSort` is set, and
-	// `expected` (`canonical`) is unconditionally `'url'`-typed — so ANY
-	// explicit `sortBy` on `canonical` needs the temp table. For `og:title`/
-	// `og:description`, only `url` is ever `'url'`-typed; `actual`/`expected`
-	// (`og_title`/`title`, `og_description`/`description`) are plain text
-	// columns that never need natural URL ordering. So an explicit
-	// `sortBy: 'actual' | 'expected'` on those two types must NOT trigger the
-	// temp table — doing so would pay the full external-merge-sort cost (see
-	// `ensureUrlSortTempTable`'s docs) for a sort that never touches a URL
-	// column. `sortBy` defaults to `'url'` above, so the `sortBy === 'url'`
-	// check below covers both an explicit `'url'` request and (when combined
-	// with `useUrlSort`) is only reachable when `sortBy` was in fact set.
 	const needsUrlSortTempTable = useUrlSort && (type === 'canonical' || sortBy === 'url');
 	if (needsUrlSortTempTable) {
 		await ensureUrlSortTempTable(accessor);
 	}
 
-	const baseQuery = knex('pages')
-		.where({ scraped: 1, isExternal: 0, contentType: 'text/html' })
-		.whereNull('redirectDestId');
+	const baseQuery = knex('content_items as ci')
+		.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+		.join('page_meta as pm', 'pm.page_id', 'ci.id')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
+		.whereNull('ci.redirect_dest_id');
 	if (options.urlPattern) {
-		baseQuery.where('url', 'like', options.urlPattern);
+		baseQuery.where('ur.url', 'like', options.urlPattern);
 	}
 
 	switch (type) {
 		case 'canonical': {
 			const query = baseQuery
 				.clone()
-				.whereNotNull('canonical')
-				.whereNot('canonical', '')
-				.whereRaw('canonical != url');
-			const total = await count(query, 'id');
+				.join('url_refs as canonical_ur', 'canonical_ur.id', 'pm.canonical_url_id')
+				.whereNotNull('pm.canonical_url_id')
+				.whereNot('canonical_ur.url', '')
+				.whereRaw('"pm"."canonical_url_id" != "ci"."url_id"');
+			const total = await count(query, 'ci.id');
 			const rows = await applyListOrder(
-				query.select('url', 'canonical'),
+				query.select('ur.url as url', 'canonical_ur.url as canonical'),
 				knex,
 				sortBy,
 				sortOrder,
 				{
-					url: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
-					actual: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
-					expected: { column: '"pages"."canonical"', type: 'url' },
+					url: { column: '"ur"."url"', type: useUrlSort ? 'url' : 'plain' },
+					actual: { column: '"ur"."url"', type: useUrlSort ? 'url' : 'plain' },
+					expected: { column: '"canonical_ur"."url"', type: 'url' },
 				},
 			)
 				.limit(limit)
@@ -111,21 +105,27 @@ export async function findMismatches(
 		case 'og:title': {
 			const query = baseQuery
 				.clone()
-				.whereNotNull('og_title')
-				.whereNot('og_title', '')
-				.whereNotNull('title')
-				.whereNot('title', '')
-				.whereRaw('og_title != title');
-			const total = await count(query, 'id');
+				.join('text_refs as og_title_ref', 'og_title_ref.id', 'pm.og_title_text_id')
+				.join('text_refs as title_ref', 'title_ref.id', 'pm.title_text_id')
+				.whereNotNull('pm.og_title_text_id')
+				.whereNot('og_title_ref.text', '')
+				.whereNotNull('pm.title_text_id')
+				.whereNot('title_ref.text', '')
+				.whereRaw('"pm"."og_title_text_id" != "pm"."title_text_id"');
+			const total = await count(query, 'ci.id');
 			const rows = await applyListOrder(
-				query.select('url', 'title', 'og_title'),
+				query.select(
+					'ur.url as url',
+					'title_ref.text as title',
+					'og_title_ref.text as og_title',
+				),
 				knex,
 				sortBy,
 				sortOrder,
 				{
-					url: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
-					actual: { column: '"pages"."og_title"' },
-					expected: { column: '"pages"."title"' },
+					url: { column: '"ur"."url"', type: useUrlSort ? 'url' : 'plain' },
+					actual: { column: '"og_title_ref"."text"' },
+					expected: { column: '"title_ref"."text"' },
 				},
 			)
 				.limit(limit)
@@ -144,21 +144,27 @@ export async function findMismatches(
 		case 'og:description': {
 			const query = baseQuery
 				.clone()
-				.whereNotNull('og_description')
-				.whereNot('og_description', '')
-				.whereNotNull('description')
-				.whereNot('description', '')
-				.whereRaw('og_description != description');
-			const total = await count(query, 'id');
+				.join('text_refs as og_desc_ref', 'og_desc_ref.id', 'pm.og_description_text_id')
+				.join('text_refs as desc_ref', 'desc_ref.id', 'pm.description_text_id')
+				.whereNotNull('pm.og_description_text_id')
+				.whereNot('og_desc_ref.text', '')
+				.whereNotNull('pm.description_text_id')
+				.whereNot('desc_ref.text', '')
+				.whereRaw('"pm"."og_description_text_id" != "pm"."description_text_id"');
+			const total = await count(query, 'ci.id');
 			const rows = await applyListOrder(
-				query.select('url', 'description', 'og_description'),
+				query.select(
+					'ur.url as url',
+					'desc_ref.text as description',
+					'og_desc_ref.text as og_description',
+				),
 				knex,
 				sortBy,
 				sortOrder,
 				{
-					url: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
-					actual: { column: '"pages"."og_description"' },
-					expected: { column: '"pages"."description"' },
+					url: { column: '"ur"."url"', type: useUrlSort ? 'url' : 'plain' },
+					actual: { column: '"og_desc_ref"."text"' },
+					expected: { column: '"desc_ref"."text"' },
 				},
 			)
 				.limit(limit)

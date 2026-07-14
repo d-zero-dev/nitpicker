@@ -10,22 +10,15 @@ import type { Knex } from 'knex';
 import { applyListOrder } from './apply-list-order.js';
 
 /**
- * List internal sub-resources that no archived page references — "unused"
- * server-side files (CSS / JS / images / PDFs / fonts / …) that the crawl
- * touched the URL of (or that `crawl --inventory` registered) but no page
- * actually loads.
+ * Phase 6-F: list internal sub-resources that no archived page references,
+ * reading through Phase 6-C `resource_items` + `resource_ref_edges` (the
+ * write-model replacements for `resources` + `resources-referrers`) joined
+ * to `url_refs` / `content_type_refs` for display columns.
  *
- * "Unused" is judged purely by the referrer table:
- * `resources-referrers.resourceId IS NULL` means no `page → resource` edge
- * exists. The `resources.source` value is IGNORED in the WHERE clause and
- * returned only as a per-row badge, so a `'crawled'` resource that has lost
- * all referrers and an `'inventory-seed'` resource that never gained one
- * both surface here equally.
- *
- * External resources are excluded — only files served from the archived
- * scope are inventory candidates for "candidates to delete".
- *
- * Read-only — safe against viewer / stub-mode archives.
+ * "Unused" is judged purely by the presence of any referrer edge:
+ * `resource_ref_edges.resource_id IS NULL` (LEFT JOIN miss) means no
+ * `page → resource` edge exists. `ri.source` is only returned as a
+ * per-row badge, not filtered in the WHERE clause.
  * @param accessor - The archive accessor to query.
  * @param options - Pagination options.
  * @returns Paginated list of unused resources with their `source` badge.
@@ -43,49 +36,46 @@ export async function listUnusedResources(
 
 	const baseWhere = (qb: Knex.QueryBuilder): Knex.QueryBuilder => {
 		const query = qb
-			.leftJoin(
-				'resources-referrers',
-				'resources.id',
-				'=',
-				'resources-referrers.resourceId',
-			)
-			.whereNull('resources-referrers.id')
-			.where('resources.isExternal', 0);
+			.leftJoin('resource_ref_edges as rre', 'ri.id', 'rre.resource_id')
+			.join('url_refs as ur', 'ur.id', 'ri.url_id')
+			.leftJoin('content_type_refs as ctr', 'ctr.id', 'ri.content_type_id')
+			.whereNull('rre.resource_id')
+			.where('ri.is_external', 0);
 		if (options.urlPattern) {
-			query.where('resources.url', 'like', options.urlPattern);
+			query.where('ur.url', 'like', options.urlPattern);
 		}
 		if (options.status != null) {
-			query.where('resources.status', options.status);
+			query.where('ri.status', options.status);
 		}
 		if (options.contentType) {
-			query.where('resources.contentType', 'like', `${options.contentType}%`);
+			query.where('ctr.raw', 'like', `${options.contentType}%`);
 		}
 		if (options.source) {
-			query.where('resources.source', options.source);
+			query.where('ri.source', options.source);
 		}
 		return query;
 	};
 
-	const countResult = (await baseWhere(knex('resources')).count(
-		'resources.id as total',
+	const countResult = (await baseWhere(knex('resource_items as ri')).count(
+		'ri.id as total',
 	)) as {
 		total: number;
 	}[];
 	const total = countResult[0]?.total ?? 0;
 
-	const rowQuery = baseWhere(knex('resources')).select(
-		'resources.url',
-		'resources.status',
-		'resources.contentType',
-		'resources.contentLength',
-		'resources.source',
+	const rowQuery = baseWhere(knex('resource_items as ri')).select(
+		'ur.url as url',
+		'ri.status as status',
+		'ctr.raw as contentType',
+		'ri.content_length as contentLength',
+		'ri.source as source',
 	);
 	applyListOrder(rowQuery, knex, sortBy, sortOrder, {
-		url: { column: '"resources"."url"', type: useUrlSort ? 'url' : 'plain' },
-		status: { column: '"resources"."status"' },
-		contentType: { column: '"resources"."contentType"' },
-		contentLength: { column: '"resources"."contentLength"' },
-		source: { column: '"resources"."source"' },
+		url: { column: '"ur"."url"', type: useUrlSort ? 'url' : 'plain' },
+		status: { column: '"ri"."status"' },
+		contentType: { column: '"ctr"."raw"' },
+		contentLength: { column: '"ri"."content_length"' },
+		source: { column: '"ri"."source"' },
 	});
 	const rows = (await rowQuery.limit(limit).offset(offset)) as {
 		url: string;
@@ -100,8 +90,6 @@ export async function listUnusedResources(
 		status: row.status,
 		contentType: row.contentType,
 		contentLength: row.contentLength,
-		// Tolerate pre-migration archives where the column is absent —
-		// `?? 'crawled'` mirrors the DB DEFAULT.
 		source: (row.source ?? 'crawled') as PageSource,
 	}));
 

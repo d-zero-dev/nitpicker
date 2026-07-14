@@ -22,7 +22,11 @@ export async function getPageJsonLdOverview(
 	url: string,
 ): Promise<PageJsonLdOverviewEntry[]> {
 	const knex = accessor.getKnex();
-	const [page] = await knex('pages').select('id').where('url', url).limit(1);
+	const [page] = await knex('content_items as ci')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.select('ci.id as id')
+		.where('ur.url', url)
+		.limit(1);
 	if (!page) return [];
 	const rows = (await knex('page_jsonld')
 		.select('kind', 'type', knex.raw('length(raw) AS rawByteSize'), 'parseError')

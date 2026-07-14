@@ -7,6 +7,7 @@ import { checkContentItemsCount } from './check-content-items-count.js';
 import { checkContentTypePreservation } from './check-content-type-preservation.js';
 import { checkImageItemsCount } from './check-image-items-count.js';
 import { checkPageMetaCount } from './check-page-meta-count.js';
+import { checkReaderParity } from './check-reader-parity.js';
 import { checkResourceItemsCount } from './check-resource-items-count.js';
 import { checkUrlRoundTrip } from './check-url-round-trip.js';
 import { Phase6VerificationError } from './types.js';
@@ -61,6 +62,10 @@ export async function verifyPhase6Migration(
 		await checkResourceItemsCount(trx);
 		await checkContentTypePreservation(trx);
 		await checkUrlRoundTrip(trx);
+		// Phase 6-F: reader-level parity between the pre-6 tables and the
+		// new entity tables (see `checkReaderParity` for the eight totals
+		// this catches that the row-count checks above miss).
+		await checkReaderParity(trx);
 	} catch (error) {
 		if (error instanceof Phase6VerificationError) {
 			throw error;

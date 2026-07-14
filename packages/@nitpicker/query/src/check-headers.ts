@@ -14,6 +14,13 @@ import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presenc
  * Checks security-related HTTP response headers for internal pages.
  * Inspects Content-Security-Policy, X-Frame-Options, X-Content-Type-Options,
  * and Strict-Transport-Security headers.
+ *
+ * Phase 6-F: reads through the Phase 6-C `content_items` entity table +
+ * Phase 6-A `header_flags` pre-computed booleans instead of scanning
+ * `pages.responseHeaders` with a LIKE predicate. `header_flags` may be
+ * missing for pages with no captured headers — the LEFT JOIN +
+ * `coalesce(..., 0)` in {@link headerPresenceExpression} preserves the
+ * pre-Phase-6 "no headers → not present" behaviour.
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
  * @param options.limit - Maximum number of results. Defaults to 100.
@@ -32,39 +39,45 @@ export async function checkHeaders(
 	const sortOrder = options.sortOrder ?? 'asc';
 	const useUrlSort = options.sortBy != null;
 
-	const baseQuery = knex('pages')
-		.where({ scraped: 1, isExternal: 0, contentType: 'text/html' })
-		.whereNull('redirectDestId');
+	const baseQuery = knex('content_items as ci')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+		.leftJoin('header_flags as hf', 'hf.header_set_id', 'ci.header_set_id')
+		.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
+		.whereNull('ci.redirect_dest_id');
 
 	if (options.missingOnly) {
 		baseQuery.where((qb) => {
 			for (const key of HEADER_PRESENCE_KEYS) {
-				qb.orWhereRaw(`${headerPresenceExpression(key)} = 0`);
+				qb.orWhereRaw(`${headerPresenceExpression(key, 'hf')} = 0`);
 			}
 		});
 	}
 	for (const key of HEADER_PRESENCE_KEYS) {
 		const expected = options[key];
 		if (expected != null) {
-			baseQuery.whereRaw(`${headerPresenceExpression(key)} = ?`, [expected ? 1 : 0]);
+			baseQuery.whereRaw(`${headerPresenceExpression(key, 'hf')} = ?`, [
+				expected ? 1 : 0,
+			]);
 		}
 	}
 
-	const countResult = (await baseQuery.clone().count('id as total')) as {
+	const countResult = (await baseQuery.clone().count('ci.id as total')) as {
 		total: number;
 	}[];
-	// SQL count() always returns exactly one row
 	const totalCount = countResult[0]?.total ?? 0;
 
-	const dataQuery = baseQuery.clone().select('url', ...buildHeaderPresenceSelects(knex));
+	const dataQuery = baseQuery
+		.clone()
+		.select('ur.url as url', ...buildHeaderPresenceSelects(knex, 'hf'));
 	applyListOrder(dataQuery, knex, sortBy, sortOrder, {
-		url: { column: '"pages"."url"', type: useUrlSort ? 'url' : 'plain' },
-		hasCSP: { column: headerPresenceExpression('hasCSP') },
-		hasXFrameOptions: { column: headerPresenceExpression('hasXFrameOptions') },
+		url: { column: '"ur"."url"', type: useUrlSort ? 'url' : 'plain' },
+		hasCSP: { column: headerPresenceExpression('hasCSP', 'hf') },
+		hasXFrameOptions: { column: headerPresenceExpression('hasXFrameOptions', 'hf') },
 		hasXContentTypeOptions: {
-			column: headerPresenceExpression('hasXContentTypeOptions'),
+			column: headerPresenceExpression('hasXContentTypeOptions', 'hf'),
 		},
-		hasHSTS: { column: headerPresenceExpression('hasHSTS') },
+		hasHSTS: { column: headerPresenceExpression('hasHSTS', 'hf') },
 	});
 	const rows = (await dataQuery.limit(limit).offset(offset)) as (Record<
 		HeaderPresenceKey,

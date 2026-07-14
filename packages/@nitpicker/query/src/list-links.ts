@@ -8,48 +8,28 @@ import { applyListOrder } from './apply-list-order.js';
  * to HTTP 404 Not Found) or **external** (anchors leaving the in-scope
  * hostname).
  *
+ * Phase 6-F: reads Phase 6-C `anchor_edges` (already deduped per
+ * `(page_id, href_page_id)` pair with a per-pair `count`) instead of the
+ * per-row legacy `anchors` table. The `items` array now contains one row
+ * per unique `(source, dest)` pair — a page with N duplicate anchors to
+ * the same destination collapses into a single row. The `total` count
+ * still reports total anchor occurrences via `SUM(anchor_edges.count)` so
+ * it matches the pre-Phase-6 `COUNT(anchors.id)` semantics. Anchor text
+ * comes from `first_text_id` (Phase 6-D preserves the first anchor's
+ * text as the representative).
+ *
  * `broken` is deliberately narrow. 403 Forbidden means the resource exists
- * but access is denied (bot blocking, auth-gated) — not a broken link, so
- * it is excluded. 5xx and the `status = -1` hard-failure sentinel are also
- * excluded: they are transient/infra concerns tracked separately (Errors
- * view / `--retry-failed`), not "this link goes nowhere". A destination
- * that was never fetched — genuinely unattempted, or `isSkipped` via
- * robots.txt / `excludeUrls` — has `status IS NULL`, which never satisfies
- * `= 404`, so excluded destinations are never misreported as broken links.
+ * but access is denied — not a broken link. 5xx and the `status = -1`
+ * hard-failure sentinel are also excluded: they are transient/infra
+ * concerns tracked separately (Errors view / `--retry-failed`), not
+ * "this link goes nowhere". A destination that was never fetched has
+ * `status IS NULL`, which never satisfies `= 404`, so excluded destinations
+ * are never misreported as broken links.
  *
- * Anchor destinations are resolved through `pages.redirectDestId` to their
- * canonical final destination before broken / external judgment. The
- * `redirectDestId` column is pre-flattened by the crawler to the final hop
- * (see `Database` comments in `@nitpicker/crawler/src/archive/database.ts`),
- * so a single `LEFT JOIN canonical ON dest.redirectDestId = canonical.id`
- * is sufficient — no SQL recursive CTE / chain walking needed. The
- * displayed `destUrl` / `status` / `isExternal` reflect the canonical row
- * via `COALESCE(canonical.*, dest.*)` so the user sees "this anchor
- * actually leads to <final URL with status N>" rather than the 301
- * intermediate.
- *
- * When `includeRedirectSources: true`, the resolution is skipped: anchors
- * report their **literal** target (dest as recorded), so a 301 intermediate
- * shows up as itself rather than its destination. Useful for diagnostic
- * "where do we still have redirect chains in our anchors?" audits; the
- * default case (`false`) is what end-user link-health reports want.
- *
- * `type: 'orphaned'` was removed in favour of
- * {@link import('./list-isolated-pages.js').listIsolatedPages}
- * (完全孤立 / singletons) and
- * {@link import('./list-isolated-clusters.js').listIsolatedClusters}
- * (孤立集合 / clusters) — two well-separated concepts that the old
- * single-bucket `'orphaned'` filter conflated.
- *
- * **Performance note.** On a 428k-row archive this query is anchor-scan-
- * bound: ~13-16s per page click, dominated by `SCAN anchors → rowid seek
- * source / dest / canonical`. The `idx_pages_listfilter` (PR #96) heuristic
- * keeps the planner on this fast path; switching to source/dest seeks via
- * the listfilter index would balloon the query to ~500s (33x worse — see
- * `idx_pages_listfilter` JSDoc). No JS push-down is possible (the JS side
- * only does `!!row.isExternal` casts), and the SQL `COALESCE` for redirect
- * canonical resolution cannot be denormalised without a `canonicalId`
- * column on pages (schema change, deferred). The current cost is accepted.
+ * Anchor destinations are resolved through `content_items.redirect_dest_id`
+ * to their canonical final destination before broken / external judgment.
+ * When `includeRedirectSources: true`, the resolution is skipped and the
+ * literal dest values are used.
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
  * @returns Link analysis results with entries and total count.
@@ -66,62 +46,46 @@ export async function listLinks(
 	const sortOrder = options.sortOrder ?? 'asc';
 	const useUrlSort = options.sortBy != null;
 
-	// `COALESCE` resolves `dest.redirectDestId → canonical` so the reported
-	// dest URL / status / isExternal reflect the final canonical destination
-	// when one exists. When `includeRedirectSources` is true, the canonical
-	// join is skipped and the literal dest values are used — exposing the
-	// 301 intermediates and any anchors whose recorded target is itself a
-	// redirect-source row.
-	const baseQuery = knex('anchors')
-		.join('pages as source', 'anchors.pageId', '=', 'source.id')
-		.join('pages as dest', 'anchors.hrefId', '=', 'dest.id');
+	const baseQuery = knex('anchor_edges as ae')
+		.join('content_items as source', 'ae.page_id', 'source.id')
+		.join('content_items as dest', 'ae.href_page_id', 'dest.id')
+		.join('url_refs as source_ur', 'source_ur.id', 'source.url_id')
+		.join('url_refs as dest_ur', 'dest_ur.id', 'dest.url_id')
+		.leftJoin('text_refs as text_ref', 'text_ref.id', 'ae.first_text_id');
 
 	if (!includeRedirectSources) {
-		baseQuery.leftJoin('pages as canonical', 'dest.redirectDestId', '=', 'canonical.id');
+		baseQuery
+			.leftJoin('content_items as canonical', 'dest.redirect_dest_id', 'canonical.id')
+			.leftJoin('url_refs as canonical_ur', 'canonical_ur.id', 'canonical.url_id');
 	}
 
-	const destUrlCol = includeRedirectSources
-		? knex.raw('"dest"."url" as "destUrl"')
-		: knex.raw('COALESCE("canonical"."url", "dest"."url") as "destUrl"');
-	const statusCol = includeRedirectSources
-		? knex.raw('"dest"."status" as "status"')
-		: knex.raw('COALESCE("canonical"."status", "dest"."status") as "status"');
-	const isExternalCol = includeRedirectSources
-		? knex.raw('"dest"."isExternal" as "isExternal"')
-		: knex.raw('COALESCE("canonical"."isExternal", "dest"."isExternal") as "isExternal"');
 	const destUrlExpression = includeRedirectSources
-		? '"dest"."url"'
-		: 'COALESCE("canonical"."url", "dest"."url")';
+		? '"dest_ur"."url"'
+		: 'COALESCE("canonical_ur"."url", "dest_ur"."url")';
 	const statusExpression = includeRedirectSources
 		? '"dest"."status"'
 		: 'COALESCE("canonical"."status", "dest"."status")';
+	const isExternalExpression = includeRedirectSources
+		? '"dest"."is_external"'
+		: 'COALESCE("canonical"."is_external", "dest"."is_external")';
 
 	baseQuery.select(
-		'source.url as sourceUrl',
-		destUrlCol,
-		statusCol,
-		isExternalCol,
-		'anchors.textContent',
+		'source_ur.url as sourceUrl',
+		knex.raw(`${destUrlExpression} as "destUrl"`),
+		knex.raw(`${statusExpression} as "status"`),
+		knex.raw(`${isExternalExpression} as "isExternal"`),
+		'text_ref.text as textContent',
 	);
 
 	if (options.type === 'broken') {
-		// `status` here is the COALESCE-ed expression — broken judgment runs
-		// against the canonical destination's status, not the 301 intermediate's.
-		// Strictly `= 404`: see the broken-link scope note in the function JSDoc.
-		const brokenCondition = includeRedirectSources
-			? `"dest"."status" = 404`
-			: `COALESCE("canonical"."status", "dest"."status") = 404`;
-		baseQuery.whereRaw(brokenCondition);
+		baseQuery.whereRaw(`${statusExpression} = 404`);
 	} else {
-		const externalCondition = includeRedirectSources
-			? `"dest"."isExternal" = 1`
-			: `COALESCE("canonical"."isExternal", "dest"."isExternal") = 1`;
-		baseQuery.whereRaw(externalCondition);
+		baseQuery.whereRaw(`${isExternalExpression} = 1`);
 	}
 	if (options.urlPattern) {
 		const urlPattern = options.urlPattern;
 		baseQuery.where((qb) => {
-			qb.where('source.url', 'like', urlPattern).orWhereRaw(
+			qb.where('source_ur.url', 'like', urlPattern).orWhereRaw(
 				`${destUrlExpression} like ?`,
 				[urlPattern],
 			);
@@ -134,12 +98,12 @@ export async function listLinks(
 	const countResult = (await baseQuery
 		.clone()
 		.clearSelect()
-		.count('anchors.id as total')) as { total: number }[];
+		.sum('ae.count as total')) as { total: number | null }[];
 	const total = countResult[0]?.total ?? 0;
 
 	const dataQuery = baseQuery.clone();
 	applyListOrder(dataQuery, knex, sortBy, sortOrder, {
-		sourceUrl: { column: '"source"."url"', type: useUrlSort ? 'url' : 'plain' },
+		sourceUrl: { column: '"source_ur"."url"', type: useUrlSort ? 'url' : 'plain' },
 		destUrl: {
 			column: destUrlExpression,
 			type: 'url',
@@ -148,11 +112,9 @@ export async function listLinks(
 			column: statusExpression,
 		},
 		isExternal: {
-			column: includeRedirectSources
-				? '"dest"."isExternal"'
-				: 'COALESCE("canonical"."isExternal", "dest"."isExternal")',
+			column: isExternalExpression,
 		},
-		textContent: { column: '"anchors"."textContent"' },
+		textContent: { column: '"text_ref"."text"' },
 	});
 
 	const rows = (await dataQuery.limit(limit).offset(offset)) as {
