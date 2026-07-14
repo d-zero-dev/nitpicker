@@ -349,18 +349,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	/**
 	 * Write the archive to its configured file path.
 	 *
-	 * Populates the 0.13 entity tables from the still-legacy write path
-	 * BEFORE finalising the archive so any reader that opens the
-	 * `.nitpicker` afterwards sees a populated `content_items` etc.
-	 * (Phase 6-G / #196 will move the crawler write path itself onto the
-	 * new tables and this bridge call becomes a no-op via
-	 * `INSERT OR IGNORE`.)
+	 * `populateMigrationTables` runs at every crawl-end site inside
+	 * `crawling` / `append` / `resume` / `retryFailed` / `inventory`
+	 * BEFORE this method, so by the time `write()` is called the 0.13
+	 * entity tables are already populated. This method just tars.
 	 *
 	 * Emits `writeFileStart` before writing and `writeFileEnd` after
 	 * the write completes successfully.
 	 */
 	async write() {
-		await populateMigrationTables(this.#archive);
 		void this.emit('writeFileStart', { filePath: this.#archive.filePath });
 		await this.#archive.write();
 		void this.emit('writeFileEnd', { filePath: this.#archive.filePath });
@@ -460,6 +457,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		log('Set order natural URL sort');
 		await archive.setUrlOrder();
 		log('Sorting done');
+		// Bridge the pre-0.13 write path onto the 0.13 entity tables so
+		// every reader that opens this archive afterwards sees populated
+		// `content_items` / `page_meta` / `anchor_edges` / … — the
+		// crawler's own `setPage` / `setResource` calls still target the
+		// legacy tables and #196 will move them onto the new entities
+		// directly, at which point this call becomes an idempotent
+		// `INSERT OR IGNORE` no-op.
+		log('Populate 0.13 migration tables');
+		await populateMigrationTables(archive);
 		return orchestrator;
 	}
 
@@ -559,6 +565,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				await orchestrator.crawling(newParsed);
 				CrawlerOrchestrator.#finalizeCrawlSession();
 				await archive.setUrlOrder();
+				await populateMigrationTables(archive);
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
 			} catch (error) {
@@ -917,6 +924,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await orchestrator.crawling([], { recursive: true });
 					CrawlerOrchestrator.#finalizeCrawlSession();
 					await archive.setUrlOrder();
+					await populateMigrationTables(archive);
 					return orchestrator;
 				}
 
@@ -927,6 +935,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await initializedCallback(orchestrator, baseConfig);
 				}
 				await archive.setUrlOrder();
+				await populateMigrationTables(archive);
 				return orchestrator;
 			} catch (error) {
 				if (ingestionComplete) {
@@ -1062,6 +1071,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				await orchestrator.crawling([], { recursive: config.recursive });
 				CrawlerOrchestrator.#finalizeCrawlSession();
 				await archive.setUrlOrder();
+				await populateMigrationTables(archive);
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
 			} catch (error) {
