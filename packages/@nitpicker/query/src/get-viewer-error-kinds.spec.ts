@@ -2,7 +2,7 @@ import type { CrawlerError } from '@nitpicker/crawler';
 
 import path from 'node:path';
 
-import { Archive } from '@nitpicker/crawler';
+import { Archive, populateMigrationTables } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getErrorKinds } from './get-error-kinds.js';
@@ -20,7 +20,7 @@ function baseConfig() {
 	return {
 		baseUrl: 'https://example.com',
 		name: 'test',
-		version: '0.10.0',
+		version: '0.13.0',
 		recursive: true,
 		interval: 0,
 		image: false,
@@ -167,6 +167,7 @@ describe('getViewerErrorKinds', () => {
 				),
 			);
 
+			await populateMigrationTables(archive);
 			await buildViewerReadModel(archive);
 		});
 

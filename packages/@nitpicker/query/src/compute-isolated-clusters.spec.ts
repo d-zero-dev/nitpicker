@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { computeIsolatedClusters } from './compute-isolated-clusters.js';
@@ -47,7 +47,7 @@ describe('computeIsolatedClusters', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -283,6 +283,7 @@ describe('computeIsolatedClusters', () => {
 			},
 			'inventory-seed',
 		);
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

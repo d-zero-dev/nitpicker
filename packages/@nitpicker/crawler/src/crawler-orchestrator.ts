@@ -13,6 +13,8 @@ import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-awa
 import pkg from '../package.json' with { type: 'json' };
 
 import Archive from './archive/archive.js';
+import { REQUIRED_FORMAT_VERSION } from './archive/meta/assert-compatible-version.js';
+import { populateMigrationTables } from './archive/populate-migration-tables.js';
 import { clearDestinationCache } from './crawler/clear-destination-cache.js';
 import { clearDnsBurnedHostCache } from './crawler/clear-dns-burned-host-cache.js';
 import Crawler from './crawler/crawler.js';
@@ -347,6 +349,11 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	/**
 	 * Write the archive to its configured file path.
 	 *
+	 * `populateMigrationTables` runs at every crawl-end site inside
+	 * `crawling` / `append` / `resume` / `retryFailed` / `inventory`
+	 * BEFORE this method, so by the time `write()` is called the 0.13
+	 * entity tables are already populated. This method just tars.
+	 *
 	 * Emits `writeFileStart` before writing and `writeFileEnd` after
 	 * the write completes successfully.
 	 */
@@ -401,7 +408,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		const rootHrefs = list.map((u) => u.withoutHash);
 
 		await archive.setConfig({
-			version: pkg.version,
+			// `version` is the archive-format version (see
+			// `assertCompatibleVersion`), NOT the npm package version. Decoupled
+			// because format-breaking changes and code-release cadence are
+			// different concerns — a patch release must not silently bump the
+			// format version and reject older archives, and a dev build of an
+			// unreleased breaking change must be able to produce archives the
+			// same build can read back.
+			version: REQUIRED_FORMAT_VERSION,
 			name: fileName,
 			baseUrl: rootHrefs[0]!,
 			roots: rootHrefs,
@@ -443,6 +457,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		log('Set order natural URL sort');
 		await archive.setUrlOrder();
 		log('Sorting done');
+		// Bridge the pre-0.13 write path onto the 0.13 entity tables so
+		// every reader that opens this archive afterwards sees populated
+		// `content_items` / `page_meta` / `anchor_edges` / … — the
+		// crawler's own `setPage` / `setResource` calls still target the
+		// legacy tables and #196 will move them onto the new entities
+		// directly, at which point this call becomes an idempotent
+		// `INSERT OR IGNORE` no-op.
+		log('Populate 0.13 migration tables');
+		await populateMigrationTables(archive);
 		return orchestrator;
 	}
 
@@ -542,6 +565,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				await orchestrator.crawling(newParsed);
 				CrawlerOrchestrator.#finalizeCrawlSession();
 				await archive.setUrlOrder();
+				await populateMigrationTables(archive);
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
 			} catch (error) {
@@ -900,6 +924,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await orchestrator.crawling([], { recursive: true });
 					CrawlerOrchestrator.#finalizeCrawlSession();
 					await archive.setUrlOrder();
+					await populateMigrationTables(archive);
 					return orchestrator;
 				}
 
@@ -910,6 +935,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await initializedCallback(orchestrator, baseConfig);
 				}
 				await archive.setUrlOrder();
+				await populateMigrationTables(archive);
 				return orchestrator;
 			} catch (error) {
 				if (ingestionComplete) {
@@ -1045,6 +1071,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				await orchestrator.crawling([], { recursive: config.recursive });
 				CrawlerOrchestrator.#finalizeCrawlSession();
 				await archive.setUrlOrder();
+				await populateMigrationTables(archive);
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
 			} catch (error) {
@@ -1111,6 +1138,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 		await orchestrator.crawling([url]);
 		CrawlerOrchestrator.#finalizeCrawlSession();
+		await populateMigrationTables(archive);
 		return orchestrator;
 	}
 

@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createServer } from './mcp-server.js';
@@ -89,7 +89,7 @@ describe('createServer', () => {
 			baseUrl: 'https://example.com',
 			roots: ['https://example.com'],
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -218,6 +218,7 @@ describe('createServer', () => {
 			src: 'https://example.com/style.css',
 		});
 
+		await populateMigrationTables(archive);
 		await archive.write();
 		await archive.close();
 
@@ -517,7 +518,7 @@ describe('createServer stub-mode support', () => {
 			baseUrl: 'https://stub.example.com',
 			roots: ['https://stub.example.com'],
 			name: 'mcp-stub',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,

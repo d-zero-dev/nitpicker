@@ -3,43 +3,38 @@ import type { Knex } from 'knex';
 
 import { NULL_STATUS_SENTINEL } from './null-status-sentinel.js';
 
-/** Rows read per `resources`/`resources-referrers` scan chunk, by default. */
+/** Rows read per `resource_items`/`resource_ref_edges` scan chunk, by default. */
 const READ_CHUNK_SIZE = 20_000;
 
 /**
  * Computes insert rows for both resource read-model tables
- * (`viewer_resources`, `viewer_resource_stats`), reading `resources`
- * left-joined with `resources-referrers` in bounded chunks instead of one
- * unbounded `SELECT` — the only `resources`/`resources-referrers` scan the
- * read-model build performs, mirroring `computeAnchorFactRows`'s "one scan,
- * multiple tables" pattern.
+ * (`viewer_resources`, `viewer_resource_stats`).
+ *
+ * 0.13: reads 0.13 `resource_items` LEFT JOIN `resource_ref_edges`
+ * (which already carries a per-`(resource_id, page_id)` `count`) and
+ * resolves the URL through `url_refs`. The old code counted
+ * `resources-referrers.id` per resource; the new code sums
+ * `resource_ref_edges.count` to preserve the same "1 per unique referrer
+ * page" semantics — 0.13 populates `resource_ref_edges.count = 1` for
+ * every distinct `(resource_id, page_id)` pair, so `SUM(count)` collapses to
+ * the same value as the old `COUNT(*)`.
  *
  * Chunking is plain `id`-based keyset pagination
- * (`WHERE resources.id > :last ORDER BY resources.id LIMIT :size`), the same
- * idiom as `readUrlChunks`. This is safe here — unlike
- * `computeAnchorFactRows`'s compound-key aggregation — because the `GROUP
- * BY` key (`resources.id`) is exactly `resources`'s own primary key: one
- * output row always corresponds to exactly one `resources` row, so a
- * `LIMIT` can never stop mid-group.
+ * (`WHERE resource_items.id > :last ORDER BY resource_items.id LIMIT :size`),
+ * safe because the `GROUP BY` key is exactly `resource_items`'s own primary
+ * key: one output row corresponds to exactly one `resource_items` row.
  *
- * `referrer_count` is `COUNT("resources-referrers"."id")` rather than
- * `COUNT(*)`: the `LEFT JOIN` produces one null-referrer row per
- * zero-referrer resource, and `COUNT(*)` would count that phantom row as 1
- * instead of 0.
+ * `referrer_count` uses `SUM(rre.count)` rather than `COUNT(*)`: the LEFT
+ * JOIN produces one null-count row per zero-referrer resource, so
+ * `COUNT(*)` would count that phantom row as 1 instead of 0.
+ * `coalesce(sum, 0)` guards the same null → 0 path.
  *
- * `is_unused` is lifted verbatim from `listUnusedResources`'s definition
- * (external resources are never "unused" candidates, regardless of referrer
- * count — see that function's docs).
+ * `is_unused` preserves `listUnusedResources`'s definition (external
+ * resources are never "unused" candidates).
  * @param trx - An open Knex transaction (a plain `Knex` instance also works,
  *   e.g. in tests).
- * @param chunkSize - Maximum `resources` rows read per chunk. Must be
- *   positive — `.limit(0)` would return zero rows on the very first
- *   iteration (indistinguishable from "no more resources", so the generator
- *   would silently yield nothing instead of throwing), and SQLite treats a
- *   negative `LIMIT` as unlimited (silently reintroducing the unbounded
- *   single-query read this chunking exists to avoid). Defaults to
- *   {@link READ_CHUNK_SIZE}; overridable for tests that need to exercise
- *   chunk boundaries against a small fixture.
+ * @param chunkSize - Maximum `resource_items` rows read per chunk. Must be
+ *   positive.
  * @yields {ResourceInsertRows} One chunk's insert rows for `viewer_resources`
  *   and `viewer_resource_stats`, at most `chunkSize` resources long.
  * @throws {RangeError} If `chunkSize` is not positive.
@@ -66,26 +61,22 @@ export async function* computeResourceInsertRows(
 			status: number | null;
 			source: string;
 			url: string;
-			referrerCount: string | number;
-		}[] = await trx('resources')
-			.leftJoin(
-				'resources-referrers',
-				'resources.id',
-				'=',
-				'resources-referrers.resourceId',
-			)
-			.where('resources.id', '>', lastId)
-			.groupBy('resources.id')
-			.orderBy('resources.id', 'asc')
+			referrerCount: string | number | null;
+		}[] = await trx('resource_items as ri')
+			.join('url_refs as ur', 'ur.id', 'ri.url_id')
+			.leftJoin('resource_ref_edges as rre', 'rre.resource_id', 'ri.id')
+			.where('ri.id', '>', lastId)
+			.groupBy('ri.id')
+			.orderBy('ri.id', 'asc')
 			.limit(chunkSize)
 			.select(
-				'resources.id as id',
-				'resources.isExternal as isExternal',
-				'resources.status as status',
-				'resources.source as source',
-				'resources.url as url',
-			)
-			.count('resources-referrers.id as referrerCount');
+				'ri.id as id',
+				'ri.is_external as isExternal',
+				'ri.status as status',
+				'ri.source as source',
+				'ur.url as url',
+				trx.raw('coalesce(sum("rre"."count"), 0) as "referrerCount"'),
+			);
 
 		if (rows.length === 0) {
 			return;
@@ -94,7 +85,7 @@ export async function* computeResourceInsertRows(
 
 		const resources = rows.map((row) => {
 			const isExternal = row.isExternal ? 1 : 0;
-			const referrerCount = Number(row.referrerCount);
+			const referrerCount = Number(row.referrerCount ?? 0);
 			const statusSortKey = row.status ?? NULL_STATUS_SENTINEL;
 			return {
 				resource_id: row.id,
@@ -110,7 +101,7 @@ export async function* computeResourceInsertRows(
 
 		const stats = rows.map((row) => ({
 			resource_id: row.id,
-			referrer_count: Number(row.referrerCount),
+			referrer_count: Number(row.referrerCount ?? 0),
 		}));
 
 		yield { resources, stats };

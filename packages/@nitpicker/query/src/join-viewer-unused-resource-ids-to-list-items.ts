@@ -1,7 +1,7 @@
 import type { PageSource, UnusedResourceEntry } from './types.js';
 import type { Knex } from 'knex';
 
-/** Row shape read from `resources` for the unused-resources list. */
+/** Row shape read from `resource_items` for the unused-resources list. */
 interface UnusedResourceJoinRow {
 	id: number;
 	url: string;
@@ -13,16 +13,9 @@ interface UnusedResourceJoinRow {
 
 /**
  * Joins an already ID-limited, already-ordered `resource_id` list back to
- * the wide write-model `resources` table for full-metadata display, per
- * `docs/viewer-sql-query-plan.md`'s golden rule ("URL/text JOINs only after
- * IDs are limited"). The `IN (...)` fetch does not itself preserve
- * `resourceIds`' order (SQLite gives no such guarantee), so the result is
- * re-sorted in JS by `resourceIds`' order afterward — cheap, since this only
- * ever runs over a `limit`-bounded page (≤ a few hundred rows), never the
- * full archive.
+ * the 0.13 `resource_items` write model for full-metadata display.
  * @param knex - The archive's Knex instance.
- * @param resourceIds - The resource IDs to fetch, already
- *   filtered/sorted/limited by the `viewer_resources` query stage.
+ * @param resourceIds - The resource IDs to fetch.
  * @returns The corresponding {@link UnusedResourceEntry} rows, in `resourceIds` order.
  */
 export async function joinViewerUnusedResourceIdsToListItems(
@@ -32,9 +25,18 @@ export async function joinViewerUnusedResourceIdsToListItems(
 	if (resourceIds.length === 0) {
 		return [];
 	}
-	const rows: UnusedResourceJoinRow[] = await knex('resources')
-		.whereIn('id', resourceIds)
-		.select('id', 'url', 'status', 'contentType', 'contentLength', 'source');
+	const rows: UnusedResourceJoinRow[] = await knex('resource_items as ri')
+		.join('url_refs as ur', 'ur.id', 'ri.url_id')
+		.leftJoin('content_type_refs as ctr', 'ctr.id', 'ri.content_type_id')
+		.whereIn('ri.id', resourceIds)
+		.select(
+			'ri.id as id',
+			'ur.url as url',
+			'ri.status as status',
+			'ctr.raw as contentType',
+			'ri.content_length as contentLength',
+			'ri.source as source',
+		);
 	const rowsById = new Map(rows.map((row) => [row.id, row]));
 	return resourceIds
 		.map((id) => rowsById.get(id))
@@ -44,8 +46,6 @@ export async function joinViewerUnusedResourceIdsToListItems(
 			status: row.status,
 			contentType: row.contentType,
 			contentLength: row.contentLength,
-			// Tolerate pre-migration archives where the column is absent —
-			// `?? 'crawled'` mirrors the DB DEFAULT (see `listUnusedResources`).
 			source: (row.source ?? 'crawled') as PageSource,
 		}));
 }

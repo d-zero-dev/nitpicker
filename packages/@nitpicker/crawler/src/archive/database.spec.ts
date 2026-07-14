@@ -1351,7 +1351,7 @@ describe('Config', () => {
 		});
 
 		const config: Config = {
-			version: '0.10.0',
+			version: '0.13.0',
 			name: 'test-crawl',
 			baseUrl: 'https://example.com',
 			roots: ['https://example.com'],
@@ -1477,7 +1477,7 @@ describe('Config', () => {
 		// `cwd` is a CrawlConfig-only runtime field with no matching info column.
 		// Splatting a wider object must not throw "no such column: cwd".
 		const wider = {
-			version: '0.10.0',
+			version: '0.13.0',
 			name: 'allowlist-drop',
 			baseUrl: 'https://example.com',
 			roots: ['https://example.com'],
@@ -2709,7 +2709,7 @@ describe('getJSON (getConfig 経由)', () => {
 		});
 
 		const config: Config = {
-			version: '0.10.0',
+			version: '0.13.0',
 			name: 'test',
 			baseUrl: 'https://example.com',
 			roots: ['https://example.com'],

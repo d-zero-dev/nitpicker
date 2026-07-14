@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ArchiveManager } from './archive-manager.js';
@@ -46,7 +46,7 @@ describe('ArchiveManager', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -98,6 +98,7 @@ describe('ArchiveManager', () => {
 			isSkipped: false,
 		});
 
+		await populateMigrationTables(archive);
 		await archive.write();
 		await archive.close();
 	});
@@ -338,7 +339,7 @@ describe('ArchiveManager stub mode', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: stubArchiveName,
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -388,6 +389,7 @@ describe('ArchiveManager stub mode', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 		// Release the SQLite handle + the .lock sibling WITHOUT writing the
 		// archive or removing the tmpDir — `releaseHandle` is precisely
 		// the exit hatch for fixture-style usage where we want the tmpDir
@@ -445,7 +447,7 @@ describe('ArchiveManager stub mode', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'finished',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -617,7 +619,7 @@ describe('ArchiveManager lifecycle races and partial-failure recovery', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'race',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -733,7 +735,7 @@ describe('ArchiveManager warning sink (onWarn)', () => {
 			baseUrl: 'https://example.com',
 			roots: ['https://example.com'],
 			name: testName,
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,

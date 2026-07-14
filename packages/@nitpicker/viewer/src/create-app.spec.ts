@@ -4,7 +4,7 @@ import type { ArchiveManager } from '@nitpicker/query';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { buildViewerReadModel } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -26,7 +26,7 @@ describe('createApp', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -151,7 +151,7 @@ describe('createApp', () => {
 			imageList: [],
 			isSkipped: false,
 		});
-		await buildViewerReadModel(archive);
+		await populateMigrationTables(archive);
 
 		const context: ArchiveContext = {
 			manager: { get: () => archive } as unknown as ArchiveManager,
@@ -161,6 +161,7 @@ describe('createApp', () => {
 			crawlerLockHolder: null,
 		};
 		app = createApp({ context, publicDir: workingDir });
+		await buildViewerReadModel(archive);
 	});
 
 	afterAll(async () => {

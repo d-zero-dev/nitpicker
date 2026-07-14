@@ -8,6 +8,8 @@
  * @module
  */
 
+import { compareSemver } from './compare-semver.js';
+
 /**
  * Flat columns of the `pages` table derived from {@link import('@d-zero/beholder').Meta}.
  *
@@ -232,7 +234,7 @@ export class IncompatibleArchiveError extends Error {
 	 * @param archiveVersion - The `info.version` value read from the archive
 	 *   (or `'unknown'` when the column is missing / null).
 	 * @param requiredVersion - The minimum format version this build accepts
-	 *   (semver string, e.g. `'0.10.0'`).
+	 *   (semver string, e.g. `'0.13.0'`).
 	 */
 	constructor(
 		readonly archiveVersion: string,
@@ -240,8 +242,29 @@ export class IncompatibleArchiveError extends Error {
 	) {
 		super(
 			`Archive uses Nitpicker ${archiveVersion}; this build requires ${requiredVersion} or newer. ` +
-				`Run \`node scripts/migrate-to-0.10.mjs <path>\` to produce an upgraded copy next to it.`,
+				`Run ${suggestMigrationScript(archiveVersion)} to produce an upgraded copy next to it.`,
 		);
 		this.name = 'IncompatibleArchiveError';
 	}
+}
+
+/**
+ * Selects the migration script an operator should run to bring
+ * `archiveVersion` up to the current {@link IncompatibleArchiveError.requiredVersion}.
+ * Chained: pre-0.10 archives run migrate-to-0.10 first, then
+ * migrate-to-0.13 — so the message points at BOTH steps in order.
+ * 0.10.0-through-0.12.x archives only need migrate-to-0.13.
+ *
+ * Uses {@link compareSemver} instead of `<` string comparison: `'0.9.0'`
+ * lexicographically compares GREATER than `'0.10.0'` (because `'9' > '1'`),
+ * which would misroute pre-0.10 archives into the single-step hint and
+ * make the resulting migrator invocation fail with a confusing error.
+ * @param archiveVersion - Semver read from `info.version`, or `'unknown'`.
+ * @returns Bracketed command string for embedding into the error message.
+ */
+function suggestMigrationScript(archiveVersion: string): string {
+	if (archiveVersion === 'unknown' || compareSemver(archiveVersion, '0.10.0') < 0) {
+		return '`node scripts/migrate-to-0.10.mjs <path>` (then `node scripts/migrate-to-0.13.mjs <path>`)';
+	}
+	return '`node scripts/migrate-to-0.13.mjs <path>`';
 }

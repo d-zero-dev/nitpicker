@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { listViewerBrokenLinks } from './list-viewer-broken-links.js';
@@ -45,7 +45,7 @@ describe('listViewerBrokenLinks', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -198,6 +198,7 @@ describe('listViewerBrokenLinks', () => {
 		// list-links.ts's scope note that such rows must never satisfy
 		// `status = 404`.
 
+		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 
@@ -375,7 +376,7 @@ describe('listViewerBrokenLinks — redirect resolution', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -473,6 +474,7 @@ describe('listViewerBrokenLinks — redirect resolution', () => {
 			isSkipped: false,
 		});
 
+		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 
@@ -527,7 +529,7 @@ describe('listViewerBrokenLinks — a destination that is both broken and extern
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -585,6 +587,7 @@ describe('listViewerBrokenLinks — a destination that is both broken and extern
 			isSkipped: false,
 		});
 
+		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 

@@ -71,16 +71,28 @@ export async function computeIsolatedClusters(
 	const knex = accessor.getKnex();
 
 	// 1. Fetch the candidate node set: inventory-* HTML pages that are
-	//    themselves canonical (not redirect-source rows).
-	const pageRows = (await knex('pages')
-		.select('id', 'url', 'title', 'status', 'source')
+	//    themselves canonical (not redirect-source rows). 0.13: read
+	//    through `content_items` + `page_meta` (for `title`) +
+	//    `content_type_refs` (for the `text/html` filter) + `url_refs`.
+	const pageRows = (await knex('content_items as ci')
+		.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
+		.leftJoin('text_refs as title_ref', 'title_ref.id', 'pm.title_text_id')
+		.select(
+			'ci.id as id',
+			'ur.url as url',
+			'title_ref.text as title',
+			'ci.status as status',
+			'ci.source as source',
+		)
 		.where({
-			scraped: 1,
-			isExternal: 0,
-			contentType: 'text/html',
+			'ci.scraped': 1,
+			'ci.is_external': 0,
+			'ctr.raw': 'text/html',
 		})
-		.whereIn('source', ['inventory-seed', 'inventory-discovered'])
-		.whereNull('redirectDestId')) as {
+		.whereIn('ci.source', ['inventory-seed', 'inventory-discovered'])
+		.whereNull('ci.redirect_dest_id')) as {
 		id: number;
 		url: string;
 		title: string | null;
@@ -111,9 +123,9 @@ export async function computeIsolatedClusters(
 
 	// 2. Build the redirect-chain map (pageId → redirectDestId) once, for
 	//    O(chain-length) per-anchor resolution without re-querying SQLite.
-	const redirectRows = (await knex('pages')
-		.select('id', 'redirectDestId')
-		.whereNotNull('redirectDestId')) as {
+	const redirectRows = (await knex('content_items')
+		.select('id', 'redirect_dest_id as redirectDestId')
+		.whereNotNull('redirect_dest_id')) as {
 		id: number;
 		redirectDestId: number;
 	}[];
@@ -132,9 +144,9 @@ export async function computeIsolatedClusters(
 	const candidateIdList = [...candidateIds];
 	const anchorRows: { pageId: number; hrefId: number | null }[] = [];
 	await eachSplitted(candidateIdList, SQLITE_IN_CHUNK, async (chunk) => {
-		const rows = (await knex('anchors')
-			.select('pageId', 'hrefId')
-			.whereIn('pageId', chunk)) as {
+		const rows = (await knex('anchor_edges')
+			.select('page_id as pageId', 'href_page_id as hrefId')
+			.whereIn('page_id', chunk)) as {
 			pageId: number;
 			hrefId: number | null;
 		}[];

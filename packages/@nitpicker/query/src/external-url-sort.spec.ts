@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { pathComparator } from '@d-zero/shared/sort/path';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { externalSortUrls } from './external-url-sort.js';
@@ -39,7 +39,7 @@ function baseConfig() {
 	return {
 		baseUrl: 'https://example.com',
 		name: 'test',
-		version: '0.10.0',
+		version: '0.13.0',
 		recursive: true,
 		interval: 0,
 		image: false,
@@ -124,6 +124,7 @@ describe('externalSortUrls', () => {
 			headers: null,
 		});
 
+		await populateMigrationTables(archive);
 		const results: { url: string; rank: number }[] = [];
 		// chunkSize=1 forces every single row into its own chunk file,
 		// exercising the split + K-way merge path with 4 chunk files.
@@ -169,6 +170,7 @@ describe('externalSortUrls', () => {
 			headers: null,
 		});
 
+		await populateMigrationTables(archive);
 		const results: { url: string; rank: number }[] = [];
 		await externalSortUrls(
 			archive,
@@ -190,6 +192,7 @@ describe('externalSortUrls', () => {
 		});
 		await archive.setConfig(baseConfig());
 
+		await populateMigrationTables(archive);
 		const results: { url: string; rank: number }[] = [];
 		await externalSortUrls(archive, async (url, rank) => {
 			results.push({ url, rank });
@@ -215,6 +218,7 @@ describe('externalSortUrls', () => {
 		});
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/');
+		await populateMigrationTables(archive);
 
 		await expect(
 			externalSortUrls(archive, () => {

@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { joinViewerUnusedResourceIdsToListItems } from './join-viewer-unused-resource-ids-to-list-items.js';
@@ -12,7 +12,7 @@ const __dirname = path.dirname(__filename);
 const BASE_CONFIG = {
 	baseUrl: 'https://example.com',
 	name: 'test',
-	version: '0.10.0',
+	version: '0.13.0',
 	recursive: true,
 	interval: 0,
 	image: true,
@@ -84,6 +84,7 @@ describe('joinViewerUnusedResourceIdsToListItems', () => {
 		);
 		idA = rows.find((r) => r.url === 'https://example.com/orphan-a.pdf')!.id;
 		idB = rows.find((r) => r.url === 'https://example.com/orphan-b.png')!.id;
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

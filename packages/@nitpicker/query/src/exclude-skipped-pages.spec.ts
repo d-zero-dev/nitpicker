@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { Archive } from '@nitpicker/crawler';
+import { Archive, populateMigrationTables } from '@nitpicker/crawler';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { excludeSkippedPages } from './exclude-skipped-pages.js';
@@ -11,15 +11,15 @@ const workingDir = path.resolve(__dirname, '__test_fixtures_exclude_skipped__');
 
 /**
  * Minimal config so `Archive.create` doesn't reject. The values are irrelevant
- * — we never crawl, we just need a writable `pages` table to run the
- * predicate against.
+ * — we never crawl, we just need a writable `pages` table to seed and then
+ * populate into the 0.13 `content_items` entity table.
  * @returns Skeleton `Config` shape.
  */
 function baseConfig() {
 	return {
 		baseUrl: 'https://example.com',
 		name: 'test',
-		version: '0.10.0',
+		version: '0.13.0',
 		recursive: true,
 		interval: 0,
 		image: false,
@@ -36,6 +36,24 @@ function baseConfig() {
 		userAgent: 'test',
 		ignoreRobots: false,
 	};
+}
+
+/**
+ * Runs `excludeSkippedPages` against the 0.13 `content_items` table (using
+ * the `is_skipped` snake_case column) after seeding legacy `pages` rows and
+ * populating the migration tables.
+ * @param knex - Archive Knex instance.
+ * @returns The URLs surviving the exclusion predicate, in stable order.
+ */
+async function urlsSurvivingExclusion(
+	knex: ReturnType<InstanceType<typeof Archive>['getKnex']>,
+): Promise<string[]> {
+	const rows = (await knex('content_items as ci')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
+		.select('ur.url as url')
+		.orderBy('ur.url')) as { url: string }[];
+	return rows.map((r) => r.url);
 }
 
 describe('excludeSkippedPages', () => {
@@ -86,15 +104,13 @@ describe('excludeSkippedPages', () => {
 				isSkipped: 1,
 			},
 		]);
+		await populateMigrationTables(archive);
 
-		const rows = (await knex('pages').where(excludeSkippedPages).select('url')) as {
-			url: string;
-		}[];
-		expect(rows.map((r) => r.url)).toEqual(['https://example.com/scraped']);
+		expect(await urlsSurvivingExclusion(knex)).toEqual(['https://example.com/scraped']);
 	});
 
 	it('keeps `isSkipped IS NULL` rows for backwards compatibility with pre-flag archives', async () => {
-		// The carve-out's `orWhereNull('isSkipped')` exists so an archive
+		// The carve-out's `orWhereNull('is_skipped')` exists so an archive
 		// created before the column was added (where every existing row
 		// carries NULL) still shows up in Summary aggregations. Without
 		// this branch, opening a legacy archive in the viewer would
@@ -134,11 +150,17 @@ describe('excludeSkippedPages', () => {
 				isSkipped: 1,
 			},
 		]);
+		await populateMigrationTables(archive);
+		// Simulate a pre-flag archive by nulling the newly-populated
+		// `content_items.is_skipped` value for the legacy row.
+		await knex('content_items as ci')
+			.update({ is_skipped: null })
+			.whereIn(
+				'ci.url_id',
+				knex('url_refs').select('id').where('url', 'https://example.com/legacy'),
+			);
 
-		const rows = (await knex('pages').where(excludeSkippedPages).select('url')) as {
-			url: string;
-		}[];
-		expect(rows.map((r) => r.url)).toEqual(['https://example.com/legacy']);
+		expect(await urlsSurvivingExclusion(knex)).toEqual(['https://example.com/legacy']);
 	});
 
 	it('returns the empty set when every row is `isSkipped = 1`', async () => {
@@ -177,10 +199,8 @@ describe('excludeSkippedPages', () => {
 				isSkipped: 1,
 			},
 		]);
+		await populateMigrationTables(archive);
 
-		const rows = (await knex('pages').where(excludeSkippedPages).select('url')) as {
-			url: string;
-		}[];
-		expect(rows).toEqual([]);
+		expect(await urlsSurvivingExclusion(knex)).toEqual([]);
 	});
 });

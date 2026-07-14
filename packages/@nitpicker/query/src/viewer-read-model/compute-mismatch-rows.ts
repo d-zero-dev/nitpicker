@@ -1,13 +1,13 @@
 import type { Knex } from 'knex';
 
-/** Rows read per `pages` id-keyset scan chunk, by default. */
+/** Rows read per `content_items` id-keyset scan chunk, by default. */
 const READ_CHUNK_SIZE = 20_000;
 
 /** One row to insert into `viewer_mismatches`, produced by `computeMismatchInsertRows`. */
 export interface MismatchInsertRow {
 	/** Which metadata comparison this row failed. */
 	type: 'canonical' | 'og:title' | 'og:description';
-	/** The write-model `pages.id` this row represents. */
+	/** The write-model page id (== `content_items.id` == legacy `pages.id`) this row represents. */
 	page_id: number;
 	/**
 	 * The page's URL, verbatim — the same "inline the sort key as text"
@@ -26,7 +26,7 @@ export interface MismatchInsertRow {
 	expected: string | null;
 }
 
-/** One raw `pages` row read for one mismatch `type`'s chunk scan, pre-aliased to `actual`/`expected`. */
+/** One raw source row read for one mismatch `type`'s chunk scan, pre-aliased to `actual`/`expected`. */
 interface MismatchSourceRow {
 	id: number;
 	url: string;
@@ -37,78 +37,96 @@ interface MismatchSourceRow {
 /**
  * Builds the filtered (but not yet chunk-bounded) query for one mismatch
  * `type` — the exact WHERE predicate `findMismatches` itself uses for that
- * type (base `scraped = 1, isExternal = 0, contentType = 'text/html',
- * redirectDestId IS NULL` plus the type's own non-null/non-empty `!=`
- * comparison), with columns pre-aliased to `actual`/`expected` so
- * `computeMismatchInsertRows`'s id-keyset scan loop can stay generic across
- * all three types.
+ * type (base `scraped = 1, is_external = 0, content_type='text/html',
+ * redirect_dest_id IS NULL` plus the type's own non-null/non-empty `!=`
+ * comparison via 0.13 `page_meta` ref columns), with columns
+ * pre-aliased to `actual`/`expected`.
+ *
+ * 0.13: integer id comparison replaces the pre-6 string comparison —
+ * `page_meta.canonical_url_id != content_items.url_id` is equivalent to
+ * `pages.canonical != pages.url` because `url_refs` is unique per URL, and
+ * `page_meta.og_title_text_id != page_meta.title_text_id` is equivalent to
+ * `pages.og_title != pages.title` because `text_refs` is unique per text.
  * @param trx - An open Knex transaction.
  * @param type - Which mismatch comparison to build the query for.
- * @returns A `pages` query builder, filtered and column-aliased, but not yet
+ * @returns A source-query builder, filtered and column-aliased, but not yet
  *   bounded by `id`/`limit`/`orderBy` (added by the caller per chunk).
  */
 function buildMismatchSourceQuery(
 	trx: Knex,
 	type: 'canonical' | 'og:title' | 'og:description',
 ): Knex.QueryBuilder {
-	const base = trx('pages')
-		.where({ scraped: 1, isExternal: 0, contentType: 'text/html' })
-		.whereNull('redirectDestId');
+	const base = trx('content_items as ci')
+		.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+		.join('page_meta as pm', 'pm.page_id', 'ci.id')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
+		.whereNull('ci.redirect_dest_id');
 
 	switch (type) {
 		case 'canonical': {
 			return base
-				.whereNotNull('canonical')
-				.whereNot('canonical', '')
-				.whereRaw('canonical != url')
-				.select('id', 'url', 'url as actual', 'canonical as expected');
+				.join('url_refs as canonical_ur', 'canonical_ur.id', 'pm.canonical_url_id')
+				.whereNotNull('pm.canonical_url_id')
+				.whereNot('canonical_ur.url', '')
+				.whereRaw('"pm"."canonical_url_id" != "ci"."url_id"')
+				.select(
+					'ci.id as id',
+					'ur.url as url',
+					'ur.url as actual',
+					'canonical_ur.url as expected',
+				);
 		}
 		case 'og:title': {
 			return base
-				.whereNotNull('og_title')
-				.whereNot('og_title', '')
-				.whereNotNull('title')
-				.whereNot('title', '')
-				.whereRaw('og_title != title')
-				.select('id', 'url', 'og_title as actual', 'title as expected');
+				.join('text_refs as og_tr', 'og_tr.id', 'pm.og_title_text_id')
+				.join('text_refs as title_tr', 'title_tr.id', 'pm.title_text_id')
+				.whereNotNull('pm.og_title_text_id')
+				.whereNot('og_tr.text', '')
+				.whereNotNull('pm.title_text_id')
+				.whereNot('title_tr.text', '')
+				.whereRaw('"pm"."og_title_text_id" != "pm"."title_text_id"')
+				.select(
+					'ci.id as id',
+					'ur.url as url',
+					'og_tr.text as actual',
+					'title_tr.text as expected',
+				);
 		}
 		case 'og:description': {
 			return base
-				.whereNotNull('og_description')
-				.whereNot('og_description', '')
-				.whereNotNull('description')
-				.whereNot('description', '')
-				.whereRaw('og_description != description')
-				.select('id', 'url', 'og_description as actual', 'description as expected');
+				.join('text_refs as og_tr', 'og_tr.id', 'pm.og_description_text_id')
+				.join('text_refs as desc_tr', 'desc_tr.id', 'pm.description_text_id')
+				.whereNotNull('pm.og_description_text_id')
+				.whereNot('og_tr.text', '')
+				.whereNotNull('pm.description_text_id')
+				.whereNot('desc_tr.text', '')
+				.whereRaw('"pm"."og_description_text_id" != "pm"."description_text_id"')
+				.select(
+					'ci.id as id',
+					'ur.url as url',
+					'og_tr.text as actual',
+					'desc_tr.text as expected',
+				);
 		}
 	}
 }
 
 /**
- * Scans `pages` once per mismatch type — `canonical`, then `og:title`, then
- * `og:description`, in that order — in `id`-keyset-bounded chunks (the same
- * `WHERE pages.id > :last ORDER BY pages.id LIMIT :size` idiom
- * `computeResourceInsertRows`/`computeDuplicateGroupPageRows` use), applying
- * the exact WHERE predicate `findMismatches` itself uses per type (see
- * `buildMismatchSourceQuery`).
+ * Scans `content_items` once per mismatch type — `canonical`, then
+ * `og:title`, then `og:description`, in that order — in `id`-keyset-bounded
+ * chunks. Applies the exact WHERE predicate `findMismatches` itself uses
+ * per type (see {@link buildMismatchSourceQuery}).
  *
  * `mismatch_id` is left unassigned in every yielded row — SQLite's own
- * `AUTOINCREMENT` fills it in on insert, the same `viewer_anchor_facts.edge_id`
- * convention, since nothing in this read model needs to reference a mismatch
- * row by id before it is inserted (unlike `viewer_duplicate_groups.group_id`,
- * which `viewer_duplicate_group_pages` rows must reference up front).
+ * `AUTOINCREMENT` fills it in on insert.
  * @param trx - An open Knex transaction (a plain `Knex` instance also works,
  *   e.g. in tests that don't need transactional rollback).
- * @param chunkSize - Maximum `pages` rows read per chunk, per type. Must be
- *   positive — see `computeResourceInsertRows`'s docs for why. Defaults to
- *   {@link READ_CHUNK_SIZE}.
+ * @param chunkSize - Maximum rows read per chunk, per type. Must be
+ *   positive.
  * @yields {MismatchInsertRow[]} One chunk's insert rows for
  *   `viewer_mismatches`, at most `chunkSize` long, for one `type` at a time.
  * @throws {RangeError} If `chunkSize` is not positive.
- * @example
- * for await (const chunk of computeMismatchInsertRows(trx)) {
- *   await trx('viewer_mismatches').insert(chunk);
- * }
  */
 export async function* computeMismatchInsertRows(
 	trx: Knex,
@@ -125,8 +143,8 @@ export async function* computeMismatchInsertRows(
 		let lastId = 0;
 		for (;;) {
 			const rows: MismatchSourceRow[] = await buildMismatchSourceQuery(trx, type)
-				.where('pages.id', '>', lastId)
-				.orderBy('pages.id', 'asc')
+				.where('ci.id', '>', lastId)
+				.orderBy('ci.id', 'asc')
 				.limit(chunkSize);
 
 			if (rows.length === 0) {

@@ -26,7 +26,11 @@ export async function getPageHtml(
 ): Promise<{ html: string; truncated: boolean } | null> {
 	const knex = accessor.getKnex();
 
-	const [page] = await knex('pages').select('id').where('url', url).limit(1);
+	const [page] = await knex('content_items as ci')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.select('ci.id as id')
+		.where('ur.url', url)
+		.limit(1);
 	if (!page) {
 		return null;
 	}

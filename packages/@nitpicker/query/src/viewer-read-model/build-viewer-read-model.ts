@@ -326,31 +326,61 @@ export async function buildViewerReadModel(
 		await dropViewerReadModelTables(trx);
 		await createViewerReadModelTables(trx);
 
+		// 0.13: source `viewer_url_refs` from the 0.13 entity
+		// tables (`content_items` + `url_refs`) rather than the legacy
+		// `pages.url` column. Byte-identical to the pre-6 shape because
+		// `url_refs` is populated from the same `pages.url` set during Phase
+		// ref populate — every distinct URL that used to appear in `pages.url` still
+		// appears once via `content_items.url_id -> url_refs.url`.
 		await trx.raw(`
 			INSERT INTO viewer_url_refs (id, url)
 			SELECT row_number() OVER (ORDER BY url) AS id, url
-			FROM (SELECT DISTINCT url FROM pages)
+			FROM (
+				SELECT DISTINCT ur.url AS url
+				FROM content_items AS ci
+				JOIN url_refs AS ur ON ur.id = ci.url_id
+			)
 			ORDER BY url
 		`);
 
-		const sourceRows: PagesSourceRow[] = await trx('pages')
-			.where('scraped', 1)
-			.whereNull('redirectDestId')
-			.where((qb) => excludeSkippedPages(qb))
+		// 0.13: `sourceRows` reads through 0.13 entity tables.
+		// LEFT JOIN `page_meta` because 0.13 populates `page_meta`
+		// only for `scraped = 1` pages — the outer predicate already
+		// restricts to those, so the LEFT JOIN's null-fill path is
+		// defensive (any missing `page_meta` for a scraped row indicates
+		// a pre-6 migration gap and legitimately reads back as null
+		// metadata). `content_type_refs` join is inner because every
+		// scraped/non-scraped `content_items` row has a
+		// `content_type_id` — 0.13 routes missing content types
+		// through the "unknown" ref.
+		const sourceRows: PagesSourceRow[] = await trx('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+			.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
+			.leftJoin('text_refs as title_ref', 'title_ref.id', 'pm.title_text_id')
+			.leftJoin(
+				'text_refs as description_ref',
+				'description_ref.id',
+				'pm.description_text_id',
+			)
+			.leftJoin('text_refs as og_title_ref', 'og_title_ref.id', 'pm.og_title_text_id')
+			.where('ci.scraped', 1)
+			.whereNull('ci.redirect_dest_id')
+			.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
 			.select(
-				'id',
-				'url',
-				'title',
-				'status',
-				'contentType',
-				'isExternal',
-				'description',
-				'og_title',
-				'robots_noindex',
-				'source',
-				'tag_count',
-				'jsonld_count',
-				'lang',
+				'ci.id as id',
+				'ur.url as url',
+				'title_ref.text as title',
+				'ci.status as status',
+				'ctr.raw as contentType',
+				'ci.is_external as isExternal',
+				'description_ref.text as description',
+				'og_title_ref.text as og_title',
+				'pm.robots_noindex as robots_noindex',
+				'ci.source as source',
+				'pm.tag_count as tag_count',
+				'pm.jsonld_count as jsonld_count',
+				'pm.lang as lang',
 			);
 
 		const insertRows = sourceRows.map(toViewerPageInsertRow);

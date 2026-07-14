@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { listPages } from './list-pages.js';
@@ -26,7 +26,7 @@ describe('listPages', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -136,6 +136,7 @@ describe('listPages', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -261,7 +262,7 @@ describe('listPages: セキュリティヘッダーの有無', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -330,6 +331,7 @@ describe('listPages: セキュリティヘッダーの有無', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -426,6 +428,7 @@ describe('listPages: ページ性は content-type（エラーページは残し�
 		);
 		// Errored / unreachable internal page: contentType null — must STAY listed.
 		await archive.setPage(makePage('https://example.com/broken', -1, null, ''));
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

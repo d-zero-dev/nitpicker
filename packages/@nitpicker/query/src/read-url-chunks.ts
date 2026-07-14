@@ -1,22 +1,19 @@
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 /**
- * Reads a table's `url` column in fixed-size chunks using `id`-based keyset
+ * Reads a table's URL column in fixed-size chunks using `id`-based keyset
  * pagination (`WHERE id > :last ORDER BY id LIMIT :size`) instead of
  * `OFFSET`, so each read is a direct index seek rather than an
  * O(offset) scan.
  *
- * Both `pages` and `resources` use `t.increments('id')` as their primary
- * key, which SQLite implements as a `rowid` alias — a plain integer
- * comparison, no extra index needed.
+ * 0.13: reads 0.13 entity tables (`content_items` for pages,
+ * `resource_items` for resources) joined to `url_refs` for the URL string.
  * @param accessor - The opened archive accessor.
- * @param table - The table to read URLs from.
+ * @param table - The logical table to read URLs from
+ *   (`pages`/`resources` — mapped internally to `content_items` /
+ *   `resource_items`).
  * @param chunkSize - Maximum rows per chunk.
- * @yields {string[]} Each chunk's `url` column values, at most `chunkSize` long.
- * @example
- * for await (const urls of readUrlChunks(accessor, 'pages', 50_000)) {
- *   // urls.length <= 50_000
- * }
+ * @yields {string[]} Each chunk's URL values, at most `chunkSize` long.
  */
 export async function* readUrlChunks(
 	accessor: ArchiveAccessor,
@@ -24,12 +21,14 @@ export async function* readUrlChunks(
 	chunkSize: number,
 ): AsyncGenerator<string[]> {
 	const knex = accessor.getKnex();
+	const entityTable = table === 'pages' ? 'content_items' : 'resource_items';
 	let lastId = 0;
 	for (;;) {
-		const rows = (await knex(table)
-			.select('id', 'url')
-			.where('id', '>', lastId)
-			.orderBy('id', 'asc')
+		const rows = (await knex(`${entityTable} as ei`)
+			.join('url_refs as ur', 'ur.id', 'ei.url_id')
+			.select('ei.id as id', 'ur.url as url')
+			.where('ei.id', '>', lastId)
+			.orderBy('ei.id', 'asc')
 			.limit(chunkSize)) as { id: number; url: string }[];
 		if (rows.length === 0) {
 			return;

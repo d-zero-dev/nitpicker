@@ -1145,7 +1145,7 @@ GETはほぼ1行SELECTになる。
 
 `idx_pages_listfilter` はviewer pages用の主indexではなくなる。残す場合はcrawler/resume/CLI query用途を根拠にする。
 
-### Phase 6: isolated / graph
+### 0.13 migration: isolated / graph
 
 - `viewer_isolated_components`
 - `viewer_isolated_component_pages`

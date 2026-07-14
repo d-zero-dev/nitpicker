@@ -2,7 +2,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { Archive, populateMigrationTables } from '@nitpicker/crawler';
 
 const dirname = import.meta.dirname;
 const FIXTURE_PATH = path.resolve(dirname, '.fixture.nitpicker');
@@ -21,7 +21,7 @@ const archive = await Archive.create({ filePath: FIXTURE_PATH, cwd: FIXTURE_CWD 
 await archive.setConfig({
 	baseUrl: 'https://example.com',
 	name: 'e2e-fixture',
-	version: '0.10.0',
+	version: '0.13.0',
 	recursive: true,
 	interval: 0,
 	image: true,
@@ -190,6 +190,10 @@ await archive.setPage({
 	isSkipped: false,
 });
 
+// Populate the 0.13 entity tables so the E2E fixture is readable by the
+// new phase6 reader paths (the crawler's write path still targets the
+// legacy tables; #196 will move it to the new entities).
+await populateMigrationTables(archive);
 await archive.write();
 await archive.close();
 // eslint-disable-next-line no-console

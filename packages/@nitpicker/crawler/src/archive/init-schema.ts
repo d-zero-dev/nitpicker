@@ -1,7 +1,7 @@
 import type { Knex } from 'knex';
 
-import { createPhase6ARefTables } from './create-phase6a-ref-tables.js';
-import { createPhase6CEntityTables } from './create-phase6c-entity-tables.js';
+import { createEntityTables } from './create-entity-tables.js';
+import { createRefTables } from './create-ref-tables.js';
 
 /**
  * Applies the connection-level PRAGMAs that govern foreign-key enforcement
@@ -72,29 +72,29 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  *   from v1. zstd-compressed BLOBs keyed by SHA-256 for content-addressable
  *   dedup. WITHOUT ROWID via raw SQL because knex's schema builder cannot
  *   express it.
- * - **Phase 6-A write-model staging tables** (issue #190, part of epic #103):
+ * - **0.13 write-model staging tables** (issue #190, part of epic #103):
  *   `url_refs`, `content_type_refs`, `text_refs`, `json_refs`, `blob_refs`,
  *   `header_name_refs`, `header_value_refs`, `header_sets`,
  *   `header_set_entries`, `header_flags`. Additive DDL only — the tables are
  *   created on every fresh archive but remain **completely unused** by
- *   current readers and writers. Later Phase 6-B / 6-C / … sub-issues will
+ *   current readers and writers. Later 0.13 sub-issues will
  *   populate them and migrate the consumer code paths. No existing table or
  *   index is modified by their presence. See
- *   {@link createPhase6ARefTables} for the DDL, column-level rationale, and
+ *   {@link createRefTables} for the DDL, column-level rationale, and
  *   the reason `blob_refs` uses a regular rowid PK instead of WITHOUT ROWID.
  *   Existing archives get the same tables added by
- *   {@link migratePhase6ARefTables} at open time.
- * - **Phase 6-C core entity / edge tables** (issue #192, part of epic #103):
+ *   {@link migrateRefTables} at open time.
+ * - **0.13 core entity / edge tables** (issue #192, part of epic #103):
  *   `content_items`, `page_meta`, `resource_items`, `anchor_edges`,
  *   `resource_ref_edges`, `image_items`. Additive DDL only. `content_items`
  *   / `resource_items` / `image_items` reuse the SAME PK values as the
- *   legacy `pages` / `resources` / `images` tables (Phase 6-D inserts rows
+ *   legacy `pages` / `resources` / `images` tables (0.13 inserts rows
  *   with explicit IDs), which preserves every existing FK reference without
- *   any per-row UPDATE. Must run AFTER `createPhase6ARefTables` because
+ *   any per-row UPDATE. Must run AFTER `createRefTables` because
  *   most entity tables reference ref-table PKs. See
- *   {@link createPhase6CEntityTables} for column-by-column rationale and
+ *   {@link createEntityTables} for column-by-column rationale and
  *   the anchor_edges dedup shape. Existing archives get the same tables
- *   added by {@link migratePhase6CEntityTables} at open time.
+ *   added by {@link migrateEntityTables} at open time.
  * - **PRAGMA `page_size` and `journal_mode`** are set BEFORE any
  *   `CREATE TABLE` because SQLite only honors `page_size` changes against
  *   an empty database, and `journal_mode = WAL` is persistent. Other
@@ -479,24 +479,24 @@ export async function initSchema(instance: Knex) {
 	`);
 	await instance.raw('CREATE INDEX idx_page_html_ref_hash ON page_html_ref(hash)');
 
-	// Phase 6-A ref / header staging tables (issue #190).
-	// DDL + column-level rationale lives in {@link createPhase6ARefTables}
-	// so `migratePhase6ARefTables` can call the same DDL on existing
+	// 0.13 ref / header staging tables (issue #190).
+	// DDL + column-level rationale lives in {@link createRefTables}
+	// so `migrateRefTables` can call the same DDL on existing
 	// archives — a divergence between the two paths would silently break
-	// the Phase 6-B population step's UNIQUE / CHECK contract.
-	await createPhase6ARefTables(instance);
+	// the 0.13 population step's UNIQUE / CHECK contract.
+	await createRefTables(instance);
 
-	// Phase 6-C core entity / edge tables (issue #192). MUST run after
-	// {@link createPhase6ARefTables} because `content_items`, `page_meta`,
+	// 0.13 core entity / edge tables (issue #192). MUST run after
+	// {@link createRefTables} because `content_items`, `page_meta`,
 	// `resource_items`, `anchor_edges`, and `image_items` all reference
-	// the Phase 6-A ref tables (`url_refs`, `content_type_refs`,
+	// the 0.13 ref tables (`url_refs`, `content_type_refs`,
 	// `text_refs`, `json_refs`, `blob_refs`, `header_sets`) via FK
 	// clauses. Additive only — the tables are created on every fresh
-	// archive but remain completely unused until Phase 6-D populates
-	// them and Phase 6-F migrates the reader / writer paths. Existing
+	// archive but remain completely unused until 0.13 populates
+	// them and 0.13 migrates the reader / writer paths. Existing
 	// archives get the same tables added by
-	// {@link migratePhase6CEntityTables} at open time.
-	await createPhase6CEntityTables(instance);
+	// {@link migrateEntityTables} at open time.
+	await createEntityTables(instance);
 
 	// Composite covering index for the default Pages-view filter + url-ordered
 	// scan. Without it, `listPages` on a 400k-row archive runs ~15s per page

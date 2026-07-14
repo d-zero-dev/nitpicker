@@ -47,15 +47,18 @@ export * from './crawler/types.js';
 export { classifyErrorKind } from './classify-error-kind.js';
 export { computeFileSha256 } from './utils/compute-file-sha256.js';
 
-// Phase 6-B ref-table population (issue #191, epic #103). Exposed as the
+// 0.13 ref-table population (issue #191, epic #103). Exposed as the
 // public seam that a follow-up migration script (`scripts/migrate-to-
-// phase6.mjs` per the plan) drives against an already-connected archive.
+// migrate-to-0.13.mjs` per the plan) drives against an already-connected archive.
 // The individual sub-steps are also exported so the migration script can
 // resume mid-way if the caller decides to split the transaction.
-export { populatePhase6BRefs } from './archive/phase6b/populate-phase6b-refs.js';
-export { populateContentTypeRefs } from './archive/phase6b/populate-content-type-refs.js';
-export { populateUrlRefs } from './archive/phase6b/populate-url-refs.js';
-export { populateTextRefs } from './archive/phase6b/populate-text-refs.js';
-export { populateJsonRefs } from './archive/phase6b/populate-json-refs.js';
-export { populateBlobRefs } from './archive/phase6b/populate-blob-refs.js';
-export { populateHeaderTables } from './archive/phase6b/populate-header-tables.js';
+export { populateEntityTables } from './archive/populate-entity-tables/populate-entities.js';
+export type { PageDomPathResolver } from './archive/populate-entity-tables/populate-image-items.js';
+export { populateMigrationTables } from './archive/populate-migration-tables.js';
+export { populateRefTables } from './archive/populate-ref-tables/populate-refs.js';
+export { populateContentTypeRefs } from './archive/populate-ref-tables/populate-content-type-refs.js';
+export { populateUrlRefs } from './archive/populate-ref-tables/populate-url-refs.js';
+export { populateTextRefs } from './archive/populate-ref-tables/populate-text-refs.js';
+export { populateJsonRefs } from './archive/populate-ref-tables/populate-json-refs.js';
+export { populateBlobRefs } from './archive/populate-ref-tables/populate-blob-refs.js';
+export { populateHeaderTables } from './archive/populate-ref-tables/populate-header-tables.js';

@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { Archive } from '@nitpicker/crawler';
+import { Archive, populateMigrationTables } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ensureViewerReadModel } from './ensure-viewer-read-model.js';
@@ -14,7 +14,7 @@ const workingDir = path.resolve(__dirname, '__test_fixtures_ensure_viewer_read_m
 const BASE_CONFIG = {
 	baseUrl: 'https://example.com',
 	name: 'test',
-	version: '0.10.0',
+	version: '0.13.0',
 	recursive: true,
 	interval: 0,
 	image: true,
@@ -120,6 +120,7 @@ describe('ensureViewerReadModel', () => {
 			scraped: 1,
 			isTarget: 1,
 		});
+		await populateMigrationTables(archive);
 		await knex('viewer_read_model_meta').where('id', 1).update({ schema_version: 0 });
 
 		const calls: unknown[] = [];

@@ -1,44 +1,35 @@
 import type { ImageInsertRow } from './types.js';
 import type { Knex } from 'knex';
 
-/** Rows read per `images` scan chunk, by default. */
+/** Rows read per `image_items` scan chunk, by default. */
 const READ_CHUNK_SIZE = 20_000;
 
-/** Sentinel rank for an image whose `pageId` is absent from the page-rank map (defensive only — see docs below). */
+/** Sentinel rank for an image whose `page_id` is absent from the page-rank map (defensive only — see docs below). */
 const MISSING_PAGE_RANK_SENTINEL = Number.MAX_SAFE_INTEGER;
 
 /**
- * Computes insert rows for `viewer_images` (issue #113), reading `images` in
- * bounded chunks instead of one unbounded `SELECT` — mirroring
- * `computeResourceInsertRows`'s chunking pattern. `images` is the largest
- * write-model table (measured at ~9.11M rows / 3.25GB on a real archive —
- * see `docs/viewer-db-redesign-plan.md`), so an unbounded single-query read
- * here risks the same OOM class PR #168/#172 fixed for URL sorting and the
- * anchor-facts/resources read-model builds.
+ * Computes insert rows for `viewer_images` (issue #113).
+ *
+ * 0.13: reads 0.13 `image_items` (which replaces the legacy
+ * `images` table) and resolves `alt_text_id` through `text_refs`. Every
+ * image_items row carries either `src_url_id` XOR `src_blob_id` — those are
+ * not consumed here (viewer_images only records the presence-of-alt /
+ * missing-dimensions flags plus width/height/lazy), so we do not join
+ * `url_refs`/`blob_refs`.
  *
  * Chunking is plain `id`-based keyset pagination
- * (`WHERE images.id > :last ORDER BY images.id LIMIT :size`), the same
- * idiom as `computeResourceInsertRows` — safe here because `viewer_images`
- * has exactly one output row per `images` row (no `GROUP BY` aggregation
- * that a `LIMIT` could split mid-group).
+ * (`WHERE image_items.id > :last ORDER BY image_items.id LIMIT :size`), the
+ * same idiom as `computeResourceInsertRows` — safe here because
+ * `viewer_images` has exactly one output row per `image_items` row (no
+ * `GROUP BY` aggregation that a `LIMIT` could split mid-group).
  * @param trx - An open Knex transaction (a plain `Knex` instance also works,
  *   e.g. in tests).
  * @param pageUrlRankById - Every listable page's URL-ascending rank, from
- *   `buildPageUrlRankMap`. An image whose `pageId` is absent (defensive
- *   only — every image is written against a page that was scraped in the
- *   same crawl, so this should not be reachable in practice) gets
- *   {@link MISSING_PAGE_RANK_SENTINEL} instead of throwing, sorting such
- *   images last rather than failing the whole read-model build.
- * @param chunkSize - Maximum `images` rows read per chunk. Must be
- *   positive — `.limit(0)` would return zero rows on the very first
- *   iteration (indistinguishable from "no more images", so the generator
- *   would silently yield nothing instead of throwing), and SQLite treats a
- *   negative `LIMIT` as unlimited (silently reintroducing the unbounded
- *   single-query read this chunking exists to avoid). Defaults to
- *   {@link READ_CHUNK_SIZE}; overridable for tests that need to exercise
- *   chunk boundaries against a small fixture.
- * @yields {ImageInsertRow[]} One chunk's insert rows for `viewer_images`, at
- *   most `chunkSize` images long.
+ *   `buildPageUrlRankMap`. An image whose `page_id` is absent (defensive
+ *   only) gets {@link MISSING_PAGE_RANK_SENTINEL}.
+ * @param chunkSize - Maximum `image_items` rows read per chunk. Must be
+ *   positive.
+ * @yields {ImageInsertRow[]} One chunk's insert rows for `viewer_images`.
  * @throws {RangeError} If `chunkSize` is not positive.
  * @example
  * const pageUrlRankById = buildPageUrlRankMap(sourceRows);
@@ -68,19 +59,20 @@ export async function* computeImageInsertRows(
 			naturalWidth: number;
 			naturalHeight: number;
 			isLazy: number | null;
-		}[] = await trx('images')
-			.where('images.id', '>', lastId)
-			.orderBy('images.id', 'asc')
+		}[] = await trx('image_items as ii')
+			.leftJoin('text_refs as alt_ref', 'alt_ref.id', 'ii.alt_text_id')
+			.where('ii.id', '>', lastId)
+			.orderBy('ii.id', 'asc')
 			.limit(chunkSize)
 			.select(
-				'images.id as id',
-				'images.pageId as pageId',
-				'images.alt as alt',
-				'images.width as width',
-				'images.height as height',
-				'images.naturalWidth as naturalWidth',
-				'images.naturalHeight as naturalHeight',
-				'images.isLazy as isLazy',
+				'ii.id as id',
+				'ii.page_id as pageId',
+				'alt_ref.text as alt',
+				'ii.width as width',
+				'ii.height as height',
+				'ii.natural_width as naturalWidth',
+				'ii.natural_height as naturalHeight',
+				'ii.is_lazy as isLazy',
 			);
 
 		if (rows.length === 0) {

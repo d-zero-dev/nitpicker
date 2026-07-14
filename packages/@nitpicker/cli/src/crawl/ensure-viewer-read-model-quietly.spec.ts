@@ -3,9 +3,13 @@ import type { Archive } from '@nitpicker/crawler';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 const mockEnsureViewerReadModel = vi.fn();
+const mockPopulateMigrationTables = vi.fn();
 
 vi.mock('@nitpicker/query', () => ({
 	ensureViewerReadModel: mockEnsureViewerReadModel,
+}));
+vi.mock('@nitpicker/crawler', () => ({
+	populateMigrationTables: mockPopulateMigrationTables,
 }));
 
 const fakeArchive = {} as Archive;
@@ -17,6 +21,7 @@ describe('ensureViewerReadModelQuietly', () => {
 	});
 
 	it('delegates to ensureViewerReadModel with an onProgress callback', async () => {
+		mockPopulateMigrationTables.mockResolvedValue();
 		mockEnsureViewerReadModel.mockResolvedValue();
 		const { ensureViewerReadModelQuietly } =
 			await import('./ensure-viewer-read-model-quietly.js');
@@ -30,6 +35,7 @@ describe('ensureViewerReadModelQuietly', () => {
 	});
 
 	it('logs each progress callback to stderr', async () => {
+		mockPopulateMigrationTables.mockResolvedValue();
 		mockEnsureViewerReadModel.mockImplementation((_archive, options) => {
 			options.onProgress({ insertedRows: 50, totalRows: 100 });
 			return Promise.resolve();
@@ -44,6 +50,7 @@ describe('ensureViewerReadModelQuietly', () => {
 	});
 
 	it('swallows a build failure and logs a warning instead of throwing', async () => {
+		mockPopulateMigrationTables.mockResolvedValue();
 		mockEnsureViewerReadModel.mockRejectedValue(new Error('disk full'));
 		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const { ensureViewerReadModelQuietly } =

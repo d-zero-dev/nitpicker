@@ -23,9 +23,9 @@ describe('initSchema', () => {
 			'resources-referrers',
 			'page_html_blobs',
 			'page_html_ref',
-			// Phase 6-A staging tables (issue #190). Additive only —
+			// 0.13 staging tables (issue #190). Additive only —
 			// present on every fresh archive but not read/written by
-			// any consumer until later Phase 6 sub-issues land.
+			// any consumer until later 0.13 migration sub-issues land.
 			'url_refs',
 			'content_type_refs',
 			'text_refs',
@@ -36,8 +36,8 @@ describe('initSchema', () => {
 			'header_sets',
 			'header_set_entries',
 			'header_flags',
-			// Phase 6-C core entity / edge tables (issue #192). Same
-			// additive-only status as Phase 6-A: created on every fresh
+			// 0.13 core entity / edge tables (issue #192). Same
+			// additive-only status as 0.13: created on every fresh
 			// archive but not populated / read until later phases.
 			'content_items',
 			'page_meta',
@@ -464,7 +464,7 @@ describe('initSchema', () => {
 
 		await initSchema(db);
 
-		// Sanity check the Phase 6-A DDL did not accidentally re-declare
+		// Sanity check the 0.13 DDL did not accidentally re-declare
 		// any column on the legacy write-model tables. The exact column
 		// lists here are pinned so a future accidental additive edit
 		// (dropping a column, renaming, changing null-ability by

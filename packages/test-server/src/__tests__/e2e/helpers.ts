@@ -5,7 +5,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
+import {
+	Archive,
+	CrawlerOrchestrator,
+	populateMigrationTables,
+} from '@nitpicker/crawler';
 
 /**
  * Result object returned by the E2E crawl helper.
@@ -55,6 +59,13 @@ export async function crawl(
 		},
 	);
 
+	// Populate the 0.13 entity tables from the crawler's still-legacy
+	// write path so `Archive.connect` below opens onto a populated
+	// archive; every reader assertion downstream reads from
+	// `content_items` / `page_meta` / … . #196 will move the crawler
+	// write path onto the new tables and this call becomes an
+	// idempotent `INSERT OR IGNORE` no-op.
+	await populateMigrationTables(orchestrator.archive);
 	const tmpDir = orchestrator.archive.tmpDir;
 	const filePath = orchestrator.archive.filePath;
 	const accessor = await Archive.connect(tmpDir);

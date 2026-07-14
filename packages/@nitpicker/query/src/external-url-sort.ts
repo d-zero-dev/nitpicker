@@ -84,8 +84,8 @@ export async function externalSortUrls(
 		// a raw counter with no sense of how much work remains.
 		const knex = accessor.getKnex();
 		const [pagesCount, resourcesCount] = await Promise.all([
-			knex('pages').count<{ count: number }[]>({ count: '*' }),
-			knex('resources').count<{ count: number }[]>({ count: '*' }),
+			knex('content_items').count<{ count: number }[]>({ count: '*' }),
+			knex('resource_items').count<{ count: number }[]>({ count: '*' }),
 		]);
 		const totalRows =
 			Number(pagesCount[0]?.count ?? 0) + Number(resourcesCount[0]?.count ?? 0);

@@ -3,7 +3,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
+import {
+	Archive,
+	CrawlerOrchestrator,
+	populateMigrationTables,
+} from '@nitpicker/crawler';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -29,6 +33,7 @@ async function crawlAndPersist(
 		...options,
 	});
 	const filePath = orchestrator.archive.filePath;
+	await populateMigrationTables(orchestrator.archive);
 	await orchestrator.write();
 	await orchestrator.archive.close();
 	orchestrator.garbageCollect();
@@ -57,6 +62,7 @@ describe('Append crawl', () => {
 			['http://localhost:8010/scope/docs/'],
 			{ cwd, fetchExternal: true },
 		);
+		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
@@ -233,6 +239,7 @@ describe('Append crawl: list-mode rejection', () => {
 		// `Archive.open` in the next step.
 		const archive = await Archive.open({ filePath, cwd });
 		await archive.updateConfig({ fromList: true });
+		await populateMigrationTables(archive);
 		await archive.write();
 		await archive.close();
 	}, 120_000);
