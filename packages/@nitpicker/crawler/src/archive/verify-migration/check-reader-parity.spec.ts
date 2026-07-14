@@ -112,17 +112,21 @@ describe('checkReaderParity', () => {
 	});
 
 	it('reports the compared-check count so a silent skip is auditable', async () => {
-		// Populate a single pair so exactly one check (listPages default)
-		// has non-zero totals — that check should be the only one counted.
+		// Populate a matched pair so the listPages check has non-zero
+		// totals on both sides — then add an EXTRA `pages` row with no
+		// matching `content_items` row so listPages mismatches
+		// legacy=2 vs current=1. `checkContentItemsCount` (invariant #1)
+		// would catch this too in the full verify chain, but this spec
+		// exercises only checkReaderParity in isolation.
 		await seedMatchingRows(db);
-		// Introduce a mismatch on a DIFFERENT check by adding an anchor
-		// row on the legacy side only. `anchor_edges` is still empty so
-		// the listLinks broken-count check trips.
-		await db('anchors').insert({
-			id: 1,
-			pageId: 1,
-			hrefId: 1,
-			textContent: null,
+		await db('pages').insert({
+			id: 2,
+			url: 'https://example.com/b',
+			scraped: 1,
+			isTarget: 1,
+			isExternal: 0,
+			contentType: 'text/html',
+			isSkipped: 0,
 		});
 		try {
 			await checkReaderParity(db);

@@ -107,6 +107,8 @@ async function buildFixture(workingDir: string, withReadModel: boolean) {
 		isSkipped: false,
 	});
 
+	await populateMigrationTables(archive);
+
 	if (withReadModel) {
 		await buildViewerReadModel(archive);
 	}
@@ -136,7 +138,6 @@ describe('registerHeaderChecksRoute — /api/headers (integration)', () => {
 
 		beforeAll(async () => {
 			fixture = await buildFixture(workingDir, true);
-			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {

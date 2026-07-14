@@ -83,6 +83,8 @@ async function buildFixture(workingDir: string) {
 			isSkipped: false,
 		});
 	}
+	await populateMigrationTables(archive);
+
 	await buildViewerReadModel(archive);
 
 	const manager = new ArchiveManager();
@@ -109,7 +111,6 @@ describe('registerDirectoryTreeChildrenRoute (integration)', () => {
 
 	beforeAll(async () => {
 		fixture = await buildFixture(workingDir);
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

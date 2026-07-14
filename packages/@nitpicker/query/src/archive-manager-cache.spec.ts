@@ -89,9 +89,9 @@ describe('ArchiveManager cache-mode (archive opens go through Archive.openCached
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 		await archive.write();
 		await archive.close();
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(() => {

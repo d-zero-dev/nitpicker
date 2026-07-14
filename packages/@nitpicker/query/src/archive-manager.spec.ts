@@ -98,9 +98,9 @@ describe('ArchiveManager', () => {
 			isSkipped: false,
 		});
 
+		await populateMigrationTables(archive);
 		await archive.write();
 		await archive.close();
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(() => {

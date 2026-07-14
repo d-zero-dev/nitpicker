@@ -218,11 +218,11 @@ describe('createServer', () => {
 			src: 'https://example.com/style.css',
 		});
 
+		await populateMigrationTables(archive);
 		await archive.write();
 		await archive.close();
 
 		server = createServer();
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

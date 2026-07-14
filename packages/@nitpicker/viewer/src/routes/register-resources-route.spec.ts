@@ -126,6 +126,8 @@ async function buildFixture(workingDir: string, withReadModel: boolean) {
 		src: 'https://example.com/a.css',
 	});
 
+	await populateMigrationTables(archive);
+
 	if (withReadModel) {
 		await buildViewerReadModel(archive);
 	}
@@ -155,7 +157,6 @@ describe('registerResourcesRoute — /api/resources (integration)', () => {
 
 		beforeAll(async () => {
 			fixture = await buildFixture(workingDir, true);
-			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {

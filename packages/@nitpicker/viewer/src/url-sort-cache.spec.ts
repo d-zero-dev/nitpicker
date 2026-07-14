@@ -165,6 +165,7 @@ describe('prepareCachedUrlSortTempTable', () => {
 		});
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/a');
+		await populateMigrationTables(archive);
 
 		const context = makeContext(archive, 'stub');
 		await prepareCachedUrlSortTempTable(context);
@@ -173,6 +174,7 @@ describe('prepareCachedUrlSortTempTable', () => {
 		expect(existsSync(cacheFile)).toBe(false);
 
 		await addPage(archive, 'https://example.com/b');
+		await populateMigrationTables(archive);
 		await prepareCachedUrlSortTempTable(context);
 
 		const { items } = await listPages(archive, {});
@@ -191,6 +193,7 @@ describe('prepareCachedUrlSortTempTable', () => {
 		});
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/a');
+		await populateMigrationTables(archive);
 
 		const messages: string[] = [];
 		await prepareCachedUrlSortTempTable(makeContext(archive), (message) => {
@@ -234,6 +237,7 @@ describe('prepareCachedUrlSortTempTable', () => {
 		});
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/a');
+		await populateMigrationTables(archive);
 
 		// Make the cache directory read-only so `createWriteStream` inside
 		// `sortAndCache` fails with EACCES — the fail-safe this exercises

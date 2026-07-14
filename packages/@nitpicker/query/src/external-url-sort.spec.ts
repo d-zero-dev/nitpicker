@@ -218,6 +218,7 @@ describe('externalSortUrls', () => {
 		});
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/');
+		await populateMigrationTables(archive);
 
 		await expect(
 			externalSortUrls(archive, () => {

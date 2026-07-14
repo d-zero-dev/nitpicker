@@ -202,6 +202,7 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/image-10.jpg');
 		await addPage(archive, 'https://example.com/image-2.jpg');
+		await populateMigrationTables(archive);
 
 		const ranked: { url: string; rank: number }[] = [];
 		await prepareUrlSortTempTable(archive, {
@@ -258,12 +259,14 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 		});
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/');
+		await populateMigrationTables(archive);
 
 		await ensureUrlSortTempTable(archive);
 		// A page added after the first prepare must NOT appear once the
 		// connection is already marked prepared — otherwise every list query
 		// would silently re-pay the full scan-and-sort cost on every call.
 		await addPage(archive, 'https://example.com/late');
+		await populateMigrationTables(archive);
 		await ensureUrlSortTempTable(archive);
 
 		const rows = await archive.getKnex()(URL_SORT_TEMP_TABLE).select('url');
