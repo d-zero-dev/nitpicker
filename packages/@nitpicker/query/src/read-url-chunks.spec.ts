@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { readUrlChunks } from './read-url-chunks.js';
 
 const __filename = new URL(import.meta.url).pathname;
@@ -100,6 +101,7 @@ describe('readUrlChunks', () => {
 				isSkipped: false,
 			});
 		}
+		await populateMigrationTables(archive);
 
 		const chunks: string[][] = [];
 		for await (const chunk of readUrlChunks(archive, 'pages', 2)) {

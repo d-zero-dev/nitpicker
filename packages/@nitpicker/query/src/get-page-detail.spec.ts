@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { getPageDetail } from './get-page-detail.js';
 import { makeBeholderMeta } from './test-helpers/make-beholder-meta.js';
 
@@ -132,6 +133,7 @@ describe('getPageDetail', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

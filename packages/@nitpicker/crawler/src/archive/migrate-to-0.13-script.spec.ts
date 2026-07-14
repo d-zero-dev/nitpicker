@@ -175,6 +175,16 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 				expect(Number(contentItemsCount[0]!.n)).toBe(Number(pagesCount[0]!.n));
 				const edgesCount = await db('anchor_edges').count<{ n: number }[]>({ n: '*' });
 				expect(Number(edgesCount[0]!.n)).toBeGreaterThan(0);
+				// The migrator's [6-F] step bumps `info.version` so a
+				// subsequent CLI open passes `assertCompatibleVersion`. Pin
+				// that assertion — a bump-that-forgets-to-bump would
+				// otherwise surface only as a downstream IncompatibleArchiveError
+				// on next open, not here.
+				const infoRows = await db('info').select('version');
+				expect(infoRows.length).toBeGreaterThan(0);
+				for (const row of infoRows) {
+					expect(row.version).toBe('0.13.0');
+				}
 			} finally {
 				await db.destroy();
 			}

@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { getLinkGraph } from './get-link-graph.js';
 
 const dirname = path.dirname(new URL(import.meta.url).pathname);
@@ -138,6 +139,7 @@ describe('getLinkGraph', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { joinViewerUnusedResourceIdsToListItems } from './join-viewer-unused-resource-ids-to-list-items.js';
 
 const __filename = new URL(import.meta.url).pathname;
@@ -84,6 +85,7 @@ describe('joinViewerUnusedResourceIdsToListItems', () => {
 		);
 		idA = rows.find((r) => r.url === 'https://example.com/orphan-a.pdf')!.id;
 		idB = rows.find((r) => r.url === 'https://example.com/orphan-b.png')!.id;
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

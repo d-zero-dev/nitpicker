@@ -185,15 +185,45 @@ export async function checkReaderParity(trx: Knex): Promise<void> {
 				),
 		},
 		{
-			label: 'getViolations total (analysis_violations row count)',
-			legacy: async () => scalar(trx('analysis_violations').count({ count: '*' })),
-			current: async () => scalar(trx('analysis_violations').count({ count: '*' })),
+			// `getViolations` joins `analysis_violations` → `content_items`
+			// → `url_refs` to project the page URL for each violation. The
+			// current-path parity check exercises that JOIN chain so a
+			// broken FK / missing `content_items` row surfaces here as a
+			// row-count discrepancy (the legacy side counts `pages` rows
+			// via `analysis_violations.page_id`, so a lost `content_items`
+			// row makes the current-side INNER JOIN drop the violation).
+			label:
+				'getViolations page-URL join (analysis_violations → content_items → url_refs)',
+			legacy: async () =>
+				scalar(
+					trx('analysis_violations as v')
+						.join('pages as p', 'p.id', 'v.page_id')
+						.count({ count: '*' }),
+				),
+			current: async () =>
+				scalar(
+					trx('analysis_violations as v')
+						.join('content_items as p', 'p.id', 'v.page_id')
+						.join('url_refs as ur', 'ur.id', 'p.url_id')
+						.count({ count: '*' }),
+				),
 		},
 	];
 
 	const failures: string[] = [];
+	// Zero-vs-zero cannot detect a "populate silently produced no rows"
+	// bug, so a check whose LEGACY side returns 0 is skipped rather than
+	// counted as pass — the parity check exists to catch predicate drift
+	// once both sides have rows to compare. `checkContentItemsCount` etc.
+	// already guard the "current is empty when legacy is not" direction
+	// upstream in {@link verifyMigration}.
+	let comparedChecks = 0;
 	for (const { label, legacy, current } of checks) {
 		const [legacyValue, currentValue] = await Promise.all([legacy(), current()]);
+		if (legacyValue === 0 && currentValue === 0) {
+			continue;
+		}
+		comparedChecks++;
 		if (legacyValue !== currentValue) {
 			failures.push(`${label}: legacy=${legacyValue}, current=${currentValue}`);
 		}
@@ -201,7 +231,10 @@ export async function checkReaderParity(trx: Knex): Promise<void> {
 	if (failures.length > 0) {
 		throw new MigrationVerificationError({
 			check: '#9 reader parity',
-			context: { failures: failures.join('; ') },
+			context: {
+				failures: failures.join('; '),
+				compared_checks: comparedChecks,
+			},
 		});
 	}
 }

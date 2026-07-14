@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { getViewerIsolatedCluster } from './get-viewer-isolated-cluster.js';
 import { listViewerIsolatedClusters } from './list-viewer-isolated-clusters.js';
 import { listViewerIsolatedPages } from './list-viewer-isolated-pages.js';
@@ -149,6 +150,7 @@ describe('viewer isolated read model', () => {
 		);
 
 		await buildViewerReadModel(archive);
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

@@ -156,4 +156,27 @@ describe('verifyMigration', () => {
 			expect((error as MigrationVerificationError).details.check).toContain('#7');
 		}
 	});
+
+	it('reports check #9 when reader parity fails after every row-count invariant passes', async () => {
+		await seedValidArchive(db);
+		// Every invariant #1–#8 passes on the seeded archive. Introduce a
+		// current-side-only mismatch by silently switching a
+		// `content_items.content_type_id` from the html ref to the
+		// javascript ref — the row count stays intact (check #7 already
+		// runs and passes because the legacy `pages.contentType` and the
+		// new `content_type_refs.raw` still both are non-null), but the
+		// listPages parity check drops the row on the current side, so
+		// #9 trips only after the earlier checks green-light.
+		const ctJs = await db('content_type_refs')
+			.where('raw', 'application/javascript')
+			.first();
+		await db('content_items').where('id', 1).update({ content_type_id: ctJs!.id });
+		try {
+			await verifyMigration(db);
+			expect.unreachable('expected MigrationVerificationError');
+		} catch (error) {
+			expect(error).toBeInstanceOf(MigrationVerificationError);
+			expect((error as MigrationVerificationError).details.check).toContain('#9');
+		}
+	});
 });

@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { getDirectoryTree } from './get-directory-tree.js';
 import { listDirectoryPages } from './list-directory-pages.js';
 import { buildViewerReadModel } from './viewer-read-model/build-viewer-read-model.js';
@@ -96,6 +97,7 @@ describe('listDirectoryPages', () => {
 			mkdirSync(workingDir, { recursive: true });
 			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
 			await archive.setConfig(BASE_CONFIG);
+			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {

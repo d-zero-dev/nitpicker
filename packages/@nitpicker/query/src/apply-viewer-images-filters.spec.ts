@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { applyViewerImagesFilters } from './apply-viewer-images-filters.js';
 import { buildViewerReadModel } from './viewer-read-model/build-viewer-read-model.js';
 
@@ -131,6 +132,7 @@ describe('applyViewerImagesFilters', () => {
 		});
 
 		await buildViewerReadModel(archive);
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import {
 	ensureUrlSortTempTable,
 	orderByUrlRank,
@@ -123,6 +124,7 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 			headers: null,
 		});
 
+		await populateMigrationTables(archive);
 		await prepareUrlSortTempTable(archive);
 
 		const rows = await archive
@@ -147,6 +149,7 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 		await addPage(archive, 'https://example.com/image-10.jpg');
 		await addPage(archive, 'https://example.com/image-2.jpg');
 
+		await populateMigrationTables(archive);
 		await prepareUrlSortTempTable(archive);
 		const knex = archive.getKnex();
 		const rows = await orderByUrlRank(knex('pages').select('url'), knex, '"pages"."url"');
@@ -166,6 +169,7 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/page');
 
+		await populateMigrationTables(archive);
 		await prepareUrlSortTempTable(archive);
 
 		// Reproduces the crash observed on an 11 GB / ~1.5M-URL archive: the

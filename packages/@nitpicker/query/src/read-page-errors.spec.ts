@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { readPageErrors } from './read-page-errors.js';
 
 const __filename = new URL(import.meta.url).pathname;
@@ -89,6 +90,7 @@ describe('readPageErrors', () => {
 			'retryExhausted',
 			'Navigation timeout of 60000 ms',
 		);
+		await populateMigrationTables(archive);
 
 		const records = await readPageErrors(archive);
 		expect(records).toHaveLength(1);

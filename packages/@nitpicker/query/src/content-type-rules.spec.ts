@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { classifyContentType } from './classify-content-type.js';
 import { applyCategoryFilter, CONTENT_TYPE_RULES } from './content-type-rules.js';
 
@@ -179,6 +180,7 @@ describe('applyCategoryFilter spot-checks (hardcoded expected URLs for known-ove
 				isSkipped: false,
 			});
 		}
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
 
 const __filename = new URL(import.meta.url).pathname;
@@ -111,6 +112,7 @@ describe('resolveFailedPageMessages', () => {
 			error: new Error('getaddrinfo ENOTFOUND example.com'),
 		});
 
+		await populateMigrationTables(archive);
 		const messages = await resolveFailedPageMessages(archive, [id]);
 		expect(messages.get(id)).toBe('Navigation timeout of 60000 ms');
 	});
@@ -133,6 +135,7 @@ describe('resolveFailedPageMessages', () => {
 			error: new Error('getaddrinfo ENOTFOUND example.com'),
 		});
 
+		await populateMigrationTables(archive);
 		const messages = await resolveFailedPageMessages(archive, [id]);
 		expect(messages.get(id)).toBe('getaddrinfo ENOTFOUND example.com');
 	});
@@ -148,6 +151,7 @@ describe('resolveFailedPageMessages', () => {
 
 		const id = await insertFailedPage(archive, 'https://example.com/orphan');
 
+		await populateMigrationTables(archive);
 		const messages = await resolveFailedPageMessages(archive, [id]);
 		expect(messages.has(id)).toBe(false);
 	});

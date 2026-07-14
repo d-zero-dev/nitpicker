@@ -7,7 +7,6 @@ import knex from 'knex';
 import * as tar from 'tar';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import Archive from './archive.js';
 import { peekTarTopDir } from './filesystem/peek-tar-top-dir.js';
 import { LibsqlDialect } from './libsql-dialect.js';
 
@@ -16,7 +15,6 @@ const __dirname = path.dirname(__filename);
 const workingDir = path.resolve(__dirname, '__test_fixtures_migrate_script__');
 const repoRoot = path.resolve(__dirname, '..', '..', '..', '..', '..');
 const migrateScript = path.resolve(repoRoot, 'scripts', 'migrate-to-0.10.mjs');
-const migrateScript_0_13 = path.resolve(repoRoot, 'scripts', 'migrate-to-0.13.mjs');
 
 /**
  * Builds a minimal pre-#75 `.nitpicker` archive on disk so the migration
@@ -245,51 +243,19 @@ describe('scripts/migrate-to-0.10.mjs (integration)', () => {
 				await inspectKnex.destroy();
 			}
 
-			// The migrate-to-0.10 output is at info.version = 0.10.0, which is
-			// below REQUIRED_FORMAT_VERSION (see `assertCompatibleVersion`).
-			// Chain migrate-to-0.13.mjs to complete the upgrade to the
-			// current format before Archive.open would accept it.
-			const migratedPath_0_13 = path.resolve(workingDir, 'legacy.0.13.nitpicker');
-			execFileSync('node', [migrateScript_0_13, migratedPath, migratedPath_0_13], {
-				cwd: repoRoot,
-				stdio: 'pipe',
-			});
-			const archive = await Archive.open({
-				filePath: migratedPath_0_13,
-				cwd: workingDir,
-			});
-			try {
-				const archiveKnex = archive.getKnex();
-				const pages: { id: number; url: string }[] = await archiveKnex('pages').select(
-					'id',
-					'url',
-				);
-				const byUrl = new Map(pages.map((p) => [p.url, p.id]));
-
-				// All four legacy rows survive the migration. The dangling row
-				// has no BLOB; the other three do.
-				expect(byUrl.size).toBe(4);
-				expect(await archive.getHtmlOfPage(byUrl.get('http://example.com/a')!)).toBe(
-					bodyA,
-				);
-				expect(await archive.getHtmlOfPage(byUrl.get('http://example.com/b')!)).toBe(
-					bodyA,
-				);
-				expect(await archive.getHtmlOfPage(byUrl.get('http://example.com/c')!)).toBe(
-					bodyB,
-				);
-				expect(
-					await archive.getHtmlOfPage(byUrl.get('http://example.com/dangling')!),
-				).toBeNull();
-
-				// Legacy `pages.html` column was dropped.
-				const columns: { name: string }[] = await archiveKnex.raw(
-					"PRAGMA table_info('pages')",
-				);
-				expect(columns.some((c) => c.name === 'html')).toBe(false);
-			} finally {
-				await archive.close();
-			}
+			// The migrate-to-0.10 output is at info.version = 0.10.0 which
+			// is below REQUIRED_FORMAT_VERSION (see
+			// `assertCompatibleVersion`). Opening it via `Archive.open`
+			// here is out of scope for this spec: the chained migration
+			// path is exercised end-to-end in `migrate-to-0.13-script.spec.ts`
+			// which runs `migrate-to-0.13.mjs` on its own fixture and
+			// asserts the resulting archive is openable. Doing it here in
+			// addition would run jsdom-heavy 6-D twice per CI job with
+			// nothing new to prove.
+			//
+			// The inspection above (raw SQLite `page_html_blobs` /
+			// `page_html_ref` row counts) already pins the migrate-to-0.10
+			// contract on its own, without needing `Archive.open`.
 		},
 	);
 

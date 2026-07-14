@@ -5,6 +5,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { getViolations } from './get-violations.js';
 
 const __filename = new URL(import.meta.url).pathname;
@@ -136,6 +137,7 @@ describe('getViolations', () => {
 				code_sort_key: '',
 			},
 		]);
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

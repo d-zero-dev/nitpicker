@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { listResources } from './list-resources.js';
 
 const __filename = new URL(import.meta.url).pathname;
@@ -103,6 +104,7 @@ describe('listResources', () => {
 			cdn: 'cloudflare',
 			headers: null,
 		});
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

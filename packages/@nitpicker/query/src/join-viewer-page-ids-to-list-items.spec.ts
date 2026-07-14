@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { joinViewerPageIdsToListItems } from './join-viewer-page-ids-to-list-items.js';
 
 const __filename = new URL(import.meta.url).pathname;
@@ -102,6 +103,7 @@ describe('joinViewerPageIdsToListItems', () => {
 		const rows: { id: number; url: string }[] = await knex('pages').select('id', 'url');
 		idA = rows.find((r) => r.url === 'https://example.com/a')!.id;
 		idB = rows.find((r) => r.url === 'https://example.com/b')!.id;
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
