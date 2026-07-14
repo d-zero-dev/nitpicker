@@ -27,12 +27,14 @@
  *    resource_ref_edges, image_items). All six run inside a single
  *    knex transaction so a failure aborts the whole step; SQLite's WAL
  *    rollback returns the DB to the pre-migration state.
- * 4. **Acceptance verification** — asserts the four row-count invariants
- *    from issue #193's acceptance criteria:
- *    - `count(content_items) == count(pages)`
- *    - `count(page_meta) == count(pages WHERE scraped=1)`
- *    - `sum(anchor_edges.count) == count(anchors)`
- *    - `count(image_items) == count(images)`
+ * 4. **Acceptance verification (Phase 6-E)** — runs all eight invariant
+ *    checks from issue #194 against the post-6-D archive. The check
+ *    functions live in `packages/@nitpicker/crawler/src/archive/phase6e/`
+ *    and the orchestrator `verifyPhase6Migration` chains them in the
+ *    order documented there. Verification runs **inside** the same
+ *    `knex.transaction()` block that ran the Phase 6-D populate step so
+ *    a `Phase6VerificationError` rolls back every 6-D INSERT; ref tables
+ *    populated in 6-B stay committed but are additive.
  * 5. **Re-tar** the work dir to the output path.
  *
  * DOM-PATH DERIVATION
@@ -77,6 +79,7 @@ import { migratePhase6CEntityTables } from '../packages/@nitpicker/crawler/lib/a
 import { populatePhase6BRefs } from '../packages/@nitpicker/crawler/lib/archive/phase6b/populate-phase6b-refs.js';
 import { matchImagesToDomPaths } from '../packages/@nitpicker/crawler/lib/archive/phase6d/match-images-to-dom-paths.js';
 import { populatePhase6DEntities } from '../packages/@nitpicker/crawler/lib/archive/phase6d/populate-phase6d-entities.js';
+import { verifyPhase6Migration } from '../packages/@nitpicker/crawler/lib/archive/phase6e/verify-phase6-migration.js';
 
 const SQLITE_DB_FILE_NAME = 'db.sqlite';
 
@@ -213,12 +216,19 @@ async function applyPhase6Migrations(dbPath) {
 		console.log('  [6-D] populate entity tables');
 		const domPathResolver = createJsdomDomPathResolver();
 		const getPageHtml = createHtmlGetter(db);
+		/** @type {import('../packages/@nitpicker/crawler/lib/archive/phase6e/types.js').Phase6VerificationSummary} */
+		let summary;
 		await db.transaction(async (trx) => {
 			await populatePhase6DEntities(trx, domPathResolver, getPageHtml);
+			console.log('  [6-E] verify 8 acceptance invariants');
+			summary = await verifyPhase6Migration(trx);
 		});
-
-		console.log('  [verify] acceptance counts');
-		await verifyAcceptanceCounts(db);
+		console.log(
+			`  [6-E] verification passed — content_items=${summary.contentItems}, ` +
+				`page_meta=${summary.pageMeta}, anchor_edges=${summary.anchorEdges} ` +
+				`(sum count=${summary.anchorEdgesSum}), image_items=${summary.imageItems}, ` +
+				`resource_items=${summary.resourceItems}`,
+		);
 
 		await db.raw('PRAGMA wal_checkpoint(TRUNCATE)');
 	} finally {
@@ -333,59 +343,6 @@ function decodeStoredBlob(body, codec) {
 		return buffer.toString('utf8');
 	}
 	throw new Error(`Unknown page_html_blobs.codec: ${codec}`);
-}
-
-/**
- * Asserts the four row-count invariants from issue #193's acceptance
- * criteria. Throws on any mismatch so the caller can surface the failure
- * to the operator.
- * @param {import('knex').Knex} db
- */
-async function verifyAcceptanceCounts(db) {
-	const contentItemsCount = await countRows(db, 'content_items');
-	const pagesCount = await countRows(db, 'pages');
-	if (contentItemsCount !== pagesCount) {
-		throw new Error(
-			`Acceptance failed: count(content_items)=${contentItemsCount} != count(pages)=${pagesCount}`,
-		);
-	}
-	const pageMetaCount = await countRows(db, 'page_meta');
-	const scrapedRows = await db('pages').where('scraped', true).count({ n: 'id' });
-	const scrapedPagesCount = Number(scrapedRows[0].n);
-	if (pageMetaCount !== scrapedPagesCount) {
-		throw new Error(
-			`Acceptance failed: count(page_meta)=${pageMetaCount} != count(pages WHERE scraped=1)=${scrapedPagesCount}`,
-		);
-	}
-	const anchorEdgesSumRows = await db('anchor_edges').sum({ n: 'count' });
-	const anchorEdgesSum = Number(anchorEdgesSumRows[0].n ?? 0);
-	const anchorsCount = await countRows(db, 'anchors');
-	if (anchorEdgesSum !== anchorsCount) {
-		throw new Error(
-			`Acceptance failed: SUM(anchor_edges.count)=${anchorEdgesSum} != count(anchors)=${anchorsCount}`,
-		);
-	}
-	const imageItemsCount = await countRows(db, 'image_items');
-	const imagesCount = await countRows(db, 'images');
-	if (imageItemsCount !== imagesCount) {
-		throw new Error(
-			`Acceptance failed: count(image_items)=${imageItemsCount} != count(images)=${imagesCount}`,
-		);
-	}
-	console.log(
-		`  [verify] OK — content_items=${contentItemsCount}, page_meta=${pageMetaCount}, anchor_edges(sum count)=${anchorEdgesSum}, image_items=${imageItemsCount}`,
-	);
-}
-
-/**
- * Runs `SELECT count(*) FROM <table>` via knex and returns the count as
- * a plain JS number.
- * @param {import('knex').Knex} db
- * @param {string} table
- */
-async function countRows(db, table) {
-	const rows = await db(table).count({ n: '*' });
-	return Number(rows[0].n);
 }
 
 try {
