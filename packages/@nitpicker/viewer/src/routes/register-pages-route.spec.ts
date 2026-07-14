@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { ArchiveManager, buildViewerReadModel } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -160,6 +160,7 @@ describe('registerPagesRoute (integration)', () => {
 
 		beforeAll(async () => {
 			fixture = await buildFixture(workingDir, true);
+			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {

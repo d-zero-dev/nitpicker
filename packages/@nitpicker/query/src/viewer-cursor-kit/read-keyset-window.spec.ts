@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildViewerReadModel } from '../viewer-read-model/build-viewer-read-model.js';
@@ -60,6 +60,7 @@ describe('readKeysetWindow', () => {
 			});
 		}
 		await buildViewerReadModel(archive);
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

@@ -4,7 +4,7 @@ import type { Knex } from 'knex';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { computeDuplicateGroupPageRows } from './compute-duplicate-group-page-rows.js';
@@ -125,6 +125,7 @@ describe('computeDuplicateGroupPageRows', () => {
 				isSkipped: false,
 			});
 		}
+		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

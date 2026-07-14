@@ -1,10 +1,9 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { findMismatches } from './find-mismatches.js';
 import { makeBeholderMeta } from './test-helpers/make-beholder-meta.js';
 

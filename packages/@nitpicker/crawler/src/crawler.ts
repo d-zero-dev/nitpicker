@@ -54,6 +54,7 @@ export { computeFileSha256 } from './utils/compute-file-sha256.js';
 // resume mid-way if the caller decides to split the transaction.
 export { populateEntityTables } from './archive/populate-entity-tables/populate-entities.js';
 export type { PageDomPathResolver } from './archive/populate-entity-tables/populate-image-items.js';
+export { populateMigrationTables } from './archive/populate-migration-tables.js';
 export { populateRefTables } from './archive/populate-ref-tables/populate-refs.js';
 export { populateContentTypeRefs } from './archive/populate-ref-tables/populate-content-type-refs.js';
 export { populateUrlRefs } from './archive/populate-ref-tables/populate-url-refs.js';

@@ -2,10 +2,9 @@ import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { populateMigrationTables } from './__test-utils__/populate-migration-tables.js';
 import { ArchiveManager } from './archive-manager.js';
 
 // These tests were written against the historical writer path

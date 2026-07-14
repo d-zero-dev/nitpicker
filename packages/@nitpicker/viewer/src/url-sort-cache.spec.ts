@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { populateMigrationTables, Archive } from '@nitpicker/crawler';
 import { listPages } from '@nitpicker/query';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -131,6 +131,7 @@ describe('prepareCachedUrlSortTempTable', () => {
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/a');
 
+		await populateMigrationTables(archive);
 		const context = makeContext(archive);
 		await prepareCachedUrlSortTempTable(context);
 
@@ -209,6 +210,7 @@ describe('prepareCachedUrlSortTempTable', () => {
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/a');
 
+		await populateMigrationTables(archive);
 		const context = makeContext(archive);
 		await prepareCachedUrlSortTempTable(context);
 
