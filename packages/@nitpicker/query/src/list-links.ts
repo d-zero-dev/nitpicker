@@ -14,7 +14,7 @@ import { applyListOrder } from './apply-list-order.js';
  * per unique `(source, dest)` pair — a page with N duplicate anchors to
  * the same destination collapses into a single row. The `total` count
  * still reports total anchor occurrences via `SUM(anchor_edges.count)` so
- * it matches the pre-Phase-6 `COUNT(anchors.id)` semantics. Anchor text
+ * it matches the pre-0.13 `COUNT(anchors.id)` semantics. Anchor text
  * comes from `first_text_id` (0.13 preserves the first anchor's
  * text as the representative).
  *

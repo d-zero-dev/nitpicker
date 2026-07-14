@@ -101,7 +101,7 @@ describe('verifyMigration', () => {
 		await db.destroy();
 	});
 
-	it('passes on a valid post-6-D archive and returns the row-count summary', async () => {
+	it('passes on a valid populated archive and returns the row-count summary', async () => {
 		await seedValidArchive(db);
 		const summary = await verifyMigration(db);
 		expect(summary.contentItems).toBe(2);

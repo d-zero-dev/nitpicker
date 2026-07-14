@@ -4,7 +4,7 @@ import type { Knex } from 'knex';
  * Creates the 10 0.13 staging tables (issue #190) and their index.
  *
  * These are the ref / header dictionary tables that will become the durable
- * write-model under 0.13/6-C/…: `url_refs`, `content_type_refs`,
+ * write-model under 0.13: `url_refs`, `content_type_refs`,
  * `text_refs`, `json_refs`, `blob_refs`, `header_name_refs`,
  * `header_value_refs`, `header_sets` (+ `idx_header_sets_stable`),
  * `header_set_entries`, `header_flags`.
@@ -70,7 +70,7 @@ export async function createRefTables(instance: Knex): Promise<void> {
 	// mirrors `analysis_text_refs` so lookups prefix-seek on `hash`. The
 	// two dictionaries stay separate because merging would require
 	// re-keying every existing `analysis_violations` row (out of Phase
-	// 6-A scope; revisit in a later cleanup pass).
+	// 0.13 migration scope; revisit in a later cleanup pass).
 	await instance.raw(`
 		CREATE TABLE text_refs (
 			id   INTEGER PRIMARY KEY,

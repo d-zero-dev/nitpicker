@@ -14,20 +14,20 @@ import { populateResourceRefEdges } from './populate-resource-ref-edges.js';
  *
  * Order rationale:
  *
- * 1. **`content_items`** (6-D-1) — every downstream step's FKs reference
+ * 1. **`content_items`** (step 1) — every downstream step's FKs reference
  *    `content_items(id)`. Must land first so the FKs are valid at
  *    COMMIT time. `redirect_dest_id` is `DEFERRABLE INITIALLY DEFERRED`
  *    (see {@link ../create-entity-tables.ts}) so a redirect
  *    source inserted before its destination is validated only at
  *    COMMIT — the intra-step insert order within this step is not
  *    load-bearing.
- * 2. **`page_meta`** (6-D-2) — FK to `content_items(id)`.
- * 3. **`resource_items`** (6-D-3) — required before `resource_ref_edges`.
- * 4. **`anchor_edges`** (6-D-4) — FKs to `content_items(id)` on both
+ * 2. **`page_meta`** (step 2) — FK to `content_items(id)`.
+ * 3. **`resource_items`** (step 3) — required before `resource_ref_edges`.
+ * 4. **`anchor_edges`** (step 4) — FKs to `content_items(id)` on both
  *    sides.
- * 5. **`resource_ref_edges`** (6-D-5) — FKs to `resource_items(id)` and
+ * 5. **`resource_ref_edges`** (step 5) — FKs to `resource_items(id)` and
  *    `content_items(id)`.
- * 6. **`image_items`** (6-D-6) — FK to `content_items(id)`; the
+ * 6. **`image_items`** (step 6) — FK to `content_items(id)`; the
  *    dom-path text_refs upsert is scoped to this step so re-runs are
  *    self-contained.
  *

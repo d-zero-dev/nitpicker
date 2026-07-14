@@ -2,7 +2,7 @@ import type { AnchorEdgeRowInProgress, AnchorInputRow } from './types.js';
 
 /**
  * Collapses consecutive `anchors`-shaped rows into `anchor_edges` rows by
- * `(pageId, hrefId)` (issue #193 step 6-D-4).
+ * `(pageId, hrefId)` (issue #193 step entity populate step 4).
  *
  * **Input contract**: `rows` MUST be sorted by `(pageId, hrefId, id)`
  * ascending. The caller (`populate-anchor-edges.ts`) achieves this via a

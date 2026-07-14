@@ -18,7 +18,7 @@ const LOOKUP_CHUNK_SIZE = 800;
 
 /**
  * Upserts a set of text strings into `text_refs` and returns their ids
- * (issue #193 step 6-D-6).
+ * (issue #193 entity populate step 6).
  *
  * Unlike {@link ./resolve-text-refs.ts}, which only reads, this helper
  * inserts every missing string first. It exists specifically for

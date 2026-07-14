@@ -30,7 +30,7 @@ import { MigrationVerificationError } from './types.js';
  * `anchor_edges`, so both counts being zero passes; a non-zero `anchor_edges`
  * with a zero `anchors` still throws — that would mean rows appeared from
  * nowhere.
- * @param trx - Knex instance or transaction connected to the post-6-D archive.
+ * @param trx - Knex instance or transaction connected to the populated archive.
  * @throws {MigrationVerificationError} when the invariant is violated.
  */
 export async function checkAnchorEdgesCount(trx: Knex): Promise<void> {

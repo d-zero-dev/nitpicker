@@ -6,7 +6,7 @@ import { LibsqlDialect } from './libsql-dialect.js';
 import { migrateEntityTables } from './migrate-entity-tables.js';
 
 /**
- * Simulates the shape of a pre-Phase-6C archive: the write-model tables that
+ * Simulates the shape of a pre-0.13C archive: the write-model tables that
  * predate this branch exist, and the 0.13 ref tables have already been
  * migrated in (the migration ordering in `Database.connect` runs
  * `migrateRefTables` before `migrateEntityTables`).
@@ -30,7 +30,7 @@ describe('migrateEntityTables', () => {
 		'image_items',
 	];
 
-	it('creates all 6 0.13 tables on a pre-Phase-6C archive', async () => {
+	it('creates all 6 0.13 tables on a pre-0.13C archive', async () => {
 		const db = knex({
 			client: LibsqlDialect,
 			connection: { filename: ':memory:' },

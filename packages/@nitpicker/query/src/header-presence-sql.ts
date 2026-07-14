@@ -28,7 +28,7 @@ export const HEADER_PRESENCE_KEYS = Object.keys(
  * header is present, by reading the 0.13 `header_flags` pre-computed
  * bool column. `coalesce(..., 0)` handles rows without a `header_set_id` (no
  * response headers captured — e.g. not-yet-scraped or redirect placeholder pages);
- * treating flag as 0 matches the pre-Phase-6 LIKE-based behaviour that
+ * treating flag as 0 matches the pre-0.13 LIKE-based behaviour that
  * returned 0 when `pages.responseHeaders` was NULL.
  * @param key - Header presence field to evaluate.
  * @param flagsAlias - table alias used for `header_flags` in the surrounding

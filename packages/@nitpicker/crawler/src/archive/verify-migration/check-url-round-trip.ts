@@ -42,7 +42,7 @@ const SAMPLE_SIZE = 1000;
  * (LEFT JOINs may return `null` sides but never fewer rows than the
  * driving `content_items` set — a shortfall means SQLite silently
  * dropped rows we intended to inspect).
- * @param trx - Knex instance or transaction connected to the post-6-D archive.
+ * @param trx - Knex instance or transaction connected to the populated archive.
  * @throws {MigrationVerificationError} when at least one sampled URL does not round-trip.
  */
 export async function checkUrlRoundTrip(trx: Knex): Promise<void> {

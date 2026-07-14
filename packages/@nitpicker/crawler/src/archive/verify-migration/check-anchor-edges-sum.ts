@@ -10,7 +10,7 @@ import { MigrationVerificationError } from './types.js';
  * single edge with `count = N`; the invariant re-establishes the identity
  * `sum(count) = number of source rows`. Together with invariant #3 this
  * proves the dedup is exact (no rows lost, no rows double-counted).
- * @param trx - Knex instance or transaction connected to the post-6-D archive.
+ * @param trx - Knex instance or transaction connected to the populated archive.
  * @throws {MigrationVerificationError} when the sum diverges from the anchors row count.
  */
 export async function checkAnchorEdgesSum(trx: Knex): Promise<void> {

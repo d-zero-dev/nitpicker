@@ -15,7 +15,7 @@ import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
  *
  * 0.13: reads 0.13 `anchor_edges` joined to `content_items` and
  * `url_refs`. `referrerCount` uses `COUNT(DISTINCT source.id)` (unique
- * referrer pages, not anchor rows) — matches pre-Phase-6 semantics because
+ * referrer pages, not anchor rows) — matches pre-0.13 semantics because
  * `anchor_edges` already deduplicates the `(page_id, href_page_id)` pair.
  * @param accessor - The archive accessor to query.
  * @param options - Filter, sort, and pagination options.

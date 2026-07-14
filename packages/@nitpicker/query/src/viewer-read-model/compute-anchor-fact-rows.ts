@@ -25,7 +25,7 @@ const READ_CHUNK_SIZE = 2000;
  * grouped per `(page_id, href_page_id)`, the count is `SUM(ae.count)`
  * across the resolved-canonical destinations (multiple distinct dest pages
  * that redirect to the same canonical still collapse in the output row and
- * their counts must add — this preserves the pre-Phase-6 semantics where
+ * their counts must add — this preserves the pre-0.13 semantics where
  * `count(*)` on the per-row `anchors` table produced the summed occurrence
  * count).
  *

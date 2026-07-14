@@ -7,7 +7,7 @@ import { createRefTables } from './create-ref-tables.js';
  * this branch shipped.
  *
  * These are the 10 ref / header dictionary tables that will become the
- * durable write-model under 0.13/6-C/…. Fresh archives get them via
+ * durable write-model under 0.13. Fresh archives get them via
  * `initSchema`; this migration handles the "existing archive re-opened by
  * `crawl --append` / `--retry-failed` / analyze" path — the same pattern used
  * by `migrateCrawlErrors`, `migrateHtmlBlobTables`, etc.

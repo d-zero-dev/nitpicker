@@ -56,7 +56,7 @@ export interface ImageRowForResolver {
 }
 
 /**
- * Populates `image_items` from `images` (issue #193 step 6-D-6).
+ * Populates `image_items` from `images` (issue #193 entity populate step 6).
  *
  * The outer loop iterates **pages**, not images. Each page's images are
  * processed as one whole unit — dom-path derivation, HTML BLOB fetch,

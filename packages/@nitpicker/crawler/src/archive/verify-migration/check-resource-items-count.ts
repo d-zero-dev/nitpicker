@@ -13,7 +13,7 @@ import { MigrationVerificationError } from './types.js';
  * is left unchecked here because issue #194's spec list stops at the
  * six enumerated checks, and `resource_ref_edges` populate is a straight
  * `INSERT … SELECT` (no dedup, no resolution) with negligible failure surface.
- * @param trx - Knex instance or transaction connected to the post-6-D archive.
+ * @param trx - Knex instance or transaction connected to the populated archive.
  * @throws {MigrationVerificationError} when the row counts diverge.
  */
 export async function checkResourceItemsCount(trx: Knex): Promise<void> {

@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /**
- * Upgrades a 0.10-format `.nitpicker` archive to the 0.13 migration write model
- * (issue #103 epic, sub-issue #193). The migration script mirrors the
- * shape of `scripts/migrate-to-0.10.mjs`: extract input → mutate
- * `db.sqlite` inside a work dir → re-tar to a new output path. The
- * original input file is never touched.
+ * Upgrades a pre-0.13 `.nitpicker` archive (`info.version >= 0.10.0`)
+ * to the 0.13 write model. The migration mirrors the shape of
+ * `scripts/migrate-to-0.10.mjs`: extract input → mutate `db.sqlite`
+ * inside a work dir → re-tar to a new output path. The original input
+ * file is never touched. Archives older than 0.10.0 must be run through
+ * `migrate-to-0.10.mjs` first — `IncompatibleArchiveError`'s message on
+ * archive open names the correct order.
  *
  * USAGE
  * -----
@@ -17,25 +19,30 @@
  * WHAT IT DOES
  * ------------
  *
- * 1. **0.13/6-C schema catch-up** — creates the ref / header /
- *    entity tables if they are absent. Idempotent via `CREATE TABLE IF
- *    NOT EXISTS`.
- * 2. **0.13 populate** — populates every ref table (url_refs,
- *    text_refs, json_refs, blob_refs, content_type_refs, header_*).
- * 3. **0.13 populate** — populates the six entity / edge tables
- *    (content_items, page_meta, resource_items, anchor_edges,
- *    resource_ref_edges, image_items). All six run inside a single
- *    knex transaction so a failure aborts the whole step; SQLite's WAL
- *    rollback returns the DB to the pre-migration state.
- * 4. **Acceptance verification (0.13)** — runs all eight invariant
- *    checks from issue #194 against the post-6-D archive. The check
- *    functions live in `packages/@nitpicker/crawler/src/archive/verify-migration/`
- *    and the orchestrator `verifyMigration` chains them in the
- *    order documented there. Verification runs **inside** the same
- *    `knex.transaction()` block that ran the 0.13 populate step so
- *    a `MigrationVerificationError` rolls back every 6-D INSERT; ref tables
- *    populated in 6-B stay committed but are additive.
- * 5. **Re-tar** the work dir to the output path.
+ * 1. **Schema catch-up** — creates the ref / header / entity tables
+ *    if they are absent (`content_items`, `page_meta`, `resource_items`,
+ *    `anchor_edges`, `resource_ref_edges`, `image_items` plus the
+ *    ref tables). Idempotent via `CREATE TABLE IF NOT EXISTS`.
+ * 2. **Ref-table populate** — populates every ref table (`url_refs`,
+ *    `text_refs`, `json_refs`, `blob_refs`, `content_type_refs`,
+ *    `header_*`) from the still-present pre-0.13 tables.
+ * 3. **Entity-table populate** — populates the six entity / edge
+ *    tables. All six run inside a single knex transaction so a failure
+ *    aborts the whole step; SQLite's WAL rollback returns the DB to
+ *    the pre-migration state.
+ * 4. **Verification** — runs invariant checks against the populated
+ *    archive. The check functions live in
+ *    `packages/@nitpicker/crawler/src/archive/verify-migration/` and
+ *    the orchestrator `verifyMigration` chains them in the order
+ *    documented there. Verification runs **inside** the same
+ *    `knex.transaction()` block that ran the entity-populate step so
+ *    a `MigrationVerificationError` rolls back every entity INSERT;
+ *    ref tables populated earlier stay committed but are additive.
+ * 5. **info.version bump** — writes `info.version = 0.13.0` so a
+ *    subsequent CLI open passes `assertCompatibleVersion`. This is
+ *    the single mechanism the reader side uses to detect "archive
+ *    predates the current format" — no separate per-migration assert.
+ * 6. **Re-tar** the work dir to the output path.
  *
  * DOM-PATH DERIVATION
  * -------------------
@@ -188,9 +195,10 @@ function findInnerDir(workDir) {
 
 /**
  * Opens the extracted `db.sqlite` and applies every 0.13 migration step:
- * schema catch-up (6-A, 6-C), populate refs (6-B), populate entities
- * (6-D). 0.13 runs inside a single knex transaction so the whole
- * batch either commits or rolls back.
+ * schema catch-up, populate refs, populate entities, verify invariants,
+ * and finally bump `info.version` to `0.13.0`. Populate + verify run
+ * inside a single knex transaction so the whole batch either commits or
+ * rolls back on failure.
  * @param {string} dbPath - Path to the extracted `db.sqlite`.
  */
 async function applyMigrations(dbPath) {
@@ -203,28 +211,28 @@ async function applyMigrations(dbPath) {
 		await db.raw('PRAGMA journal_mode = WAL');
 		await db.raw('PRAGMA foreign_keys = ON');
 
-		console.log('  [6-A] ensure ref tables');
+		console.log('  ensure ref tables');
 		await migrateRefTables(db);
-		console.log('  [6-C] ensure entity tables');
+		console.log('  ensure entity tables');
 		await migrateEntityTables(db);
 
-		console.log('  [6-B] populate ref tables');
+		console.log('  populate ref tables');
 		await db.transaction(async (trx) => {
 			await populateRefTables(trx);
 		});
 
-		console.log('  [6-D] populate entity tables');
+		console.log('  populate entity tables');
 		const domPathResolver = createJsdomDomPathResolver();
 		const getPageHtml = createHtmlGetter(db);
 		/** @type {import('../packages/@nitpicker/crawler/lib/archive/verify-migration/types.js').MigrationVerificationSummary} */
 		let summary;
 		await db.transaction(async (trx) => {
 			await populateEntityTables(trx, domPathResolver, getPageHtml);
-			console.log('  [6-E] verify 8 acceptance invariants');
+			console.log('  verify migration invariants');
 			summary = await verifyMigration(trx);
 		});
 		console.log(
-			`  [6-E] verification passed — content_items=${summary.contentItems}, ` +
+			`  verification passed — content_items=${summary.contentItems}, ` +
 				`page_meta=${summary.pageMeta}, anchor_edges=${summary.anchorEdges} ` +
 				`(sum count=${summary.anchorEdgesSum}), image_items=${summary.imageItems}, ` +
 				`resource_items=${summary.resourceItems}`,
@@ -233,8 +241,8 @@ async function applyMigrations(dbPath) {
 		// Bump info.version so `assertCompatibleVersion` accepts the archive
 		// on next open. This is the single mechanism the reader-side uses to
 		// detect "archive predates the current format" — no separate assert
-		// per phase.
-		console.log('  [6-F] bump info.version → 0.13.0');
+		// per migration.
+		console.log('  bump info.version → 0.13.0');
 		await db('info').update({ version: '0.13.0' });
 
 		await db.raw('PRAGMA wal_checkpoint(TRUNCATE)');

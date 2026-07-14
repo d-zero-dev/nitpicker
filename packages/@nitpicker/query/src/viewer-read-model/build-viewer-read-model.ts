@@ -330,7 +330,7 @@ export async function buildViewerReadModel(
 		// tables (`content_items` + `url_refs`) rather than the legacy
 		// `pages.url` column. Byte-identical to the pre-6 shape because
 		// `url_refs` is populated from the same `pages.url` set during Phase
-		// 6-B — every distinct URL that used to appear in `pages.url` still
+		// ref populate — every distinct URL that used to appear in `pages.url` still
 		// appears once via `content_items.url_id -> url_refs.url`.
 		await trx.raw(`
 			INSERT INTO viewer_url_refs (id, url)

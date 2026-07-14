@@ -11,12 +11,12 @@ import { populateUrlRefs } from './populate-url-refs.js';
  * Runs the six 0.13 sub-steps (issue #191) in the plan-specified
  * order against an already-connected archive:
  *
- * 1. `content_type_refs` — 6-B-0 (must precede 6-D-1 / 6-D-3 JOINs).
- * 2. `url_refs` — 6-B-1.
- * 3. `text_refs` — 6-B-2.
- * 4. `json_refs` — 6-B-3.
- * 5. `blob_refs` — 6-B-4.
- * 6. Header tables — 6-B-5 (name / value / set / entries / flags).
+ * 1. `content_type_refs` — ref populate step 0 (must precede entity populate step 1 / entity populate step 3 JOINs).
+ * 2. `url_refs` — ref populate step 1.
+ * 3. `text_refs` — ref populate step 2.
+ * 4. `json_refs` — ref populate step 3.
+ * 5. `blob_refs` — ref populate step 4.
+ * 6. Header tables — ref populate step 5 (name / value / set / entries / flags).
  *
  * The order is not arbitrary: `content_type_refs` before 0.13
  * JOINs, and `url_refs` before 0.13's `url_refs.id` lookups. Within

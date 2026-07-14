@@ -54,7 +54,7 @@ const URL_COLUMN_MAP: readonly { source: string; target: string }[] = [
 ];
 
 /**
- * Populates `page_meta` from `pages WHERE scraped = 1` (issue #193 step 6-D-2).
+ * Populates `page_meta` from `pages WHERE scraped = 1` (issue #193 step entity populate step 2).
  *
  * Pages that were never scraped contribute no meta rows — they have no rendered title,
  * description, or JSON-LD to preserve, so filtering at the SELECT keeps

@@ -175,7 +175,7 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 				expect(Number(contentItemsCount[0]!.n)).toBe(Number(pagesCount[0]!.n));
 				const edgesCount = await db('anchor_edges').count<{ n: number }[]>({ n: '*' });
 				expect(Number(edgesCount[0]!.n)).toBeGreaterThan(0);
-				// The migrator's [6-F] step bumps `info.version` so a
+				// The migrator's version-bump step bumps `info.version` so a
 				// subsequent CLI open passes `assertCompatibleVersion`. Pin
 				// that assertion — a bump-that-forgets-to-bump would
 				// otherwise surface only as a downstream IncompatibleArchiveError
@@ -200,10 +200,10 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 			await buildFixtureArchive(inputPath);
 			await mutateFixture(inputPath, async (db) => {
 				// Fresh archives from `Archive.create` already include the
-				// 0.13/6-C tables (initSchema calls their creators).
+				// 0.13 entity tables (initSchema calls their creators).
 				// Insert a phantom `url_refs` + `content_items` pair so the
-				// migration's 6-D `INSERT OR IGNORE` leaves it untouched;
-				// `count(content_items) > count(pages)` after 6-D → check #1
+				// migration's entity populate 'INSERT OR IGNORE' leaves it untouched;
+				// `count(content_items) > count(pages)` after entity populate → check #1
 				// fires.
 				await db('url_refs').insert({
 					id: 999,

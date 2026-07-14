@@ -24,9 +24,9 @@ const READ_CHUNK_SIZE = 5000;
  * pages scans and multiplied migration wall-clock accordingly.
  *
  * `dom_path` is intentionally absent: derivation happens later in Phase
- * 6-G/6-H (see §dom_path Derivation in the plan) and depends on the HTML
+ * write-path refactor (see §dom_path Derivation in the plan) and depends on the HTML
  * blob, not the current write-model. Migrating dom_path into `text_refs`
- * is the job of the image-items population step, not 6-B-2.
+ * is the job of the image-items population step, not ref populate step 2.
  */
 const TEXT_SOURCES: readonly {
 	table: 'anchors' | 'images' | 'pages';
@@ -51,7 +51,7 @@ const TEXT_SOURCES: readonly {
 
 /**
  * Populates `text_refs` from every text-shaped column across `anchors`,
- * `images`, and `pages` (issue #191 step 6-B-2).
+ * `images`, and `pages` (issue #191 step ref populate step 2).
  *
  * Rules:
  *

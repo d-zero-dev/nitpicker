@@ -21,7 +21,7 @@ const READ_CHUNK_SIZE = 500;
 const INSERT_CHUNK_SIZE = 300;
 
 /**
- * Populates `content_items` from `pages` (issue #193 step 6-D-1).
+ * Populates `content_items` from `pages` (issue #193 step entity populate step 1).
  *
  * Strategy per chunk:
  *

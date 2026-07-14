@@ -55,7 +55,7 @@ export interface MigrationVerificationErrorDetails {
  * Error thrown by any 0.13 check when an invariant does not hold. The
  * migration script catches this at the top level and aborts with a non-zero
  * exit code; the enclosing transaction rolls back so the archive returns to
- * its pre-Phase-6-D state (ref tables from 6-B stay populated but are
+ * its pre-populate state (ref tables from ref populate stay populated but are
  * additive).
  *
  * Prefer a single error class with a structured {@link details} payload over

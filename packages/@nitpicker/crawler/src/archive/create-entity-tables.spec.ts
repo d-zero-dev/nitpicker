@@ -33,7 +33,7 @@ async function openDbWithEntityTables(
 /**
  * Inserts one `url_refs` row and returns its id, so downstream FK-bearing
  * INSERTs have a legal target.
- * @param db - Knex instance connected to a fresh DB with 6-A + 6-C DDL applied.
+ * @param db - Knex instance connected to a fresh DB with ref + entity DDL applied.
  * @param url - URL to insert; must be unique per db.
  * @returns The rowid of the inserted `url_refs` row.
  */
@@ -45,7 +45,7 @@ async function insertUrl(db: ReturnType<typeof knex>, url: string): Promise<numb
 /**
  * Inserts one `text_refs` row for use as an FK target (image_items.dom_path_text_id
  * is NOT NULL and page_meta text FKs are exercised in some tests).
- * @param db - Knex instance connected to a fresh DB with 6-A + 6-C DDL applied.
+ * @param db - Knex instance connected to a fresh DB with ref + entity DDL applied.
  * @param hash - 16-byte hash placeholder.
  * @param text - Text body.
  * @returns The rowid of the inserted `text_refs` row.

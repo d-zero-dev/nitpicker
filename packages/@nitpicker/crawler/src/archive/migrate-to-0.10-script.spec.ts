@@ -250,7 +250,7 @@ describe('scripts/migrate-to-0.10.mjs (integration)', () => {
 			// path is exercised end-to-end in `migrate-to-0.13-script.spec.ts`
 			// which runs `migrate-to-0.13.mjs` on its own fixture and
 			// asserts the resulting archive is openable. Doing it here in
-			// addition would run jsdom-heavy 6-D twice per CI job with
+			// addition would run jsdom-heavy entity populate twice per CI job with
 			// nothing new to prove.
 			//
 			// The inspection above (raw SQLite `page_html_blobs` /

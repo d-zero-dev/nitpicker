@@ -13,12 +13,12 @@ import { checkUrlRoundTrip } from './check-url-round-trip.js';
 import { MigrationVerificationError } from './types.js';
 
 /**
- * Runs every 0.13 acceptance invariant against a post-6-D archive and
+ * Runs every 0.13 migration acceptance invariant against a populated archive and
  * returns the verified row-count summary on success. The migration script
  * (`scripts/migrate-to-0.13.mjs`) calls this **inside** the same
  * `knex.transaction()` block that ran `populateEntityTables` so a thrown
- * {@link MigrationVerificationError} rolls back the entire 6-D populate — ref
- * tables from 6-B stay committed because they live in a separate, additive
+ * {@link MigrationVerificationError} rolls back the entire entity populate — ref
+ * tables from ref populate stay committed because they live in a separate, additive
  * transaction and never lose facts on re-run.
  *
  * The returned {@link MigrationVerificationSummary} is echoed to stdout by the
@@ -42,7 +42,7 @@ import { MigrationVerificationError } from './types.js';
  * uniform failure surface — otherwise operators grepping stderr for
  * `migration verification failed` would miss driver-side errors.
  * @param trx - Knex instance or transaction connected to the archive
- *   **after** every 0.13 populate step has run. Must be a transaction
+ *   **after** every 0.13 migration populate step has run. Must be a transaction
  *   in production so ref counts, JOIN samples, and error rollback see the
  *   same snapshot; non-transactional callers (unit tests) work but do not
  *   get snapshot isolation.

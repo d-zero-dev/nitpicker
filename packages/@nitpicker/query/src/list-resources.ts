@@ -17,7 +17,7 @@ import { paginateQuery } from './paginate-query.js';
  * the legacy `resources` table. `referrerCount` is computed via a
  * correlated `SUM("count")` subquery over `resource_ref_edges`
  * (0.13 populates one edge row per unique referrer with `count = 1`,
- * so the sum equals the pre-Phase-6 `COUNT(*)` over `resources-referrers`).
+ * so the sum equals the pre-0.13 `COUNT(*)` over `resources-referrers`).
  * `compress` / `cdn` are inline TEXT-affinity columns on `resource_items`
  * that preserve the `'0.0'` / `0` sentinels the pre-6 writer path emitted.
  * @param accessor - The archive accessor to query.

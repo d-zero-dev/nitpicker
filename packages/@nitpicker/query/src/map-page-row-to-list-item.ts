@@ -1,7 +1,7 @@
 import type { PageListItem, PageListRow } from './types.js';
 
 /**
- * Legacy column-name list retained for pre-Phase-6 fallback callers (kept as
+ * Legacy column-name list retained for pre-0.13 fallback callers (kept as
  * a stringified `pages.*` list). 0.13 readers should prefer
  * {@link PAGE_LIST_SELECT_COLUMNS} which projects the same shape via aliased
  * `content_items`/`page_meta`/refs joins.

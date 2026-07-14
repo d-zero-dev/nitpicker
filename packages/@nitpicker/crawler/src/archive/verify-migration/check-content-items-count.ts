@@ -13,7 +13,7 @@ import { MigrationVerificationError } from './types.js';
  * fewer rows than expected" (extra rows would be impossible via the natural
  * PK). We still emit both counts in the error context so operators can see
  * the direction of the discrepancy at a glance.
- * @param trx - Knex instance or transaction connected to the post-6-D archive.
+ * @param trx - Knex instance or transaction connected to the populated archive.
  * @throws {MigrationVerificationError} when the row counts diverge.
  */
 export async function checkContentItemsCount(trx: Knex): Promise<void> {

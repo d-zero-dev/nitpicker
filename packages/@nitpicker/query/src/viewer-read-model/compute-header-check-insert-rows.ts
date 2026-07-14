@@ -43,7 +43,7 @@ export interface HeaderCheckInsertRow {
  * `header_flags`'s pre-computed booleans. `content_items.header_set_id` may
  * be NULL for pages with no captured response headers; the LEFT JOIN +
  * `coalesce(..., 0)` inside {@link buildHeaderPresenceSelects} treats those
- * as "header absent", matching the pre-Phase-6 LIKE-on-NULL behaviour.
+ * as "header absent", matching the pre-0.13 LIKE-on-NULL behaviour.
  *
  * Unlike `computeAnchorFactRows`/`computeResourceInsertRows`/
  * `computeImageInsertRows`, this returns a plain array rather than an

@@ -50,7 +50,7 @@ interface HeaderTableCaches {
  * Populates the five header decomposition tables (`header_name_refs`,
  * `header_value_refs`, `header_sets`, `header_set_entries`,
  * `header_flags`) from every `pages.responseHeaders` and
- * `resources.responseHeaders` JSON blob (issue #191 step 6-B-5).
+ * `resources.responseHeaders` JSON blob (issue #191 step ref populate step 5).
  *
  * Strategy:
  *

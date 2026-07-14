@@ -1,6 +1,6 @@
 /**
  * Computes the `dom_path` string for one DOM element as required by
- * `image_items.dom_path_text_id` (issue #193 step 6-D-6).
+ * `image_items.dom_path_text_id` (issue #193 entity populate step 6).
  *
  * Format: slash-joined ancestor tags starting at `<html>`, each tag
  * followed by a 1-based sibling ordinal counting **same-tag** siblings

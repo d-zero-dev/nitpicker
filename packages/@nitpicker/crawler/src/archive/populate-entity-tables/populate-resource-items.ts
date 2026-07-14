@@ -22,14 +22,14 @@ const READ_CHUNK_SIZE = 800;
 const INSERT_CHUNK_SIZE = 500;
 
 /**
- * Populates `resource_items` from `resources` (issue #193 step 6-D-3).
+ * Populates `resource_items` from `resources` (issue #193 step entity populate step 3).
  *
  * Structurally analogous to {@link ./populate-content-items.ts}: for each
  * `resources` chunk, batch-resolve `url_refs.id`, `content_type_refs.id`,
  * and `header_sets.id`, then bulk-INSERT with explicit `id = resources.id`.
  * Reusing the legacy PK preserves the `resources-referrers.resourceId`
  * FK reference (which becomes `resource_ref_edges.resource_id` in Phase
- * 6-D-5) without any per-row UPDATE.
+ * entity populate step 5) without any per-row UPDATE.
  *
  * `INSERT OR IGNORE` on `id` makes the step idempotent.
  * @param trx - Knex instance or transaction connected to the archive DB.

@@ -24,7 +24,7 @@ const READ_CHUNK_SIZE = 5000;
  * Source table + its URL-shaped columns. Each column is scanned in
  * lock-step per row, then filtered through
  * {@link routeDataUriAwayFromUrlRefs} so large data URIs skip `url_refs`
- * and route to `blob_refs` in step 6-B-4 instead.
+ * and route to `blob_refs` in step ref populate step 4 instead.
  *
  * The filter is applied to EVERY URL column (not just image columns):
  * `og:image`, `icon_href`, `apple-touch-icon`, `twitter:image`, and even
@@ -58,7 +58,7 @@ const URL_SOURCES: readonly {
  * Predicate applied to every URL column value: keep the value in the
  * `url_refs` stream unless it is a data URI larger than
  * {@link DATA_URI_URL_REFS_LIMIT}. Large data URIs route to `blob_refs`
- * in step 6-B-4 (via {@link ./populate-blob-refs.ts}).
+ * in step ref populate step 4 (via {@link ./populate-blob-refs.ts}).
  * @param value - Raw column value (non-null, non-empty by contract).
  * @returns `true` if the value belongs in `url_refs`.
  */
@@ -71,7 +71,7 @@ function routeDataUriAwayFromUrlRefs(value: string): boolean {
 
 /**
  * Populates `url_refs` from every URL-shaped column across `pages`,
- * `resources`, and `images` (issue #191 step 6-B-1).
+ * `resources`, and `images` (issue #191 step ref populate step 1).
  *
  * Runs two passes per source table:
  *

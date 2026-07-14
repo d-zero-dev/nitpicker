@@ -53,7 +53,7 @@ function normalizeMime(raw: string): string {
 
 /**
  * Populates `content_type_refs` from every distinct `contentType` value
- * currently stored in `pages` and `resources` (issue #191 step 6-B-0).
+ * currently stored in `pages` and `resources` (issue #191 step ref populate step 0).
  *
  * Two independent DISTINCT SELECTs (one per table) are merged in JS
  * rather than via SQL `UNION` — the cardinality is small in practice and

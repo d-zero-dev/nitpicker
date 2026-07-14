@@ -12,7 +12,7 @@ import { MigrationVerificationError } from './types.js';
  * scraped page whose meta resolution failed silently (e.g. a text ref that
  * did not deduplicate), in which case the archive would be missing meta for
  * an otherwise valid page.
- * @param trx - Knex instance or transaction connected to the post-6-D archive.
+ * @param trx - Knex instance or transaction connected to the populated archive.
  * @throws {MigrationVerificationError} when the row counts diverge.
  */
 export async function checkPageMetaCount(trx: Knex): Promise<void> {

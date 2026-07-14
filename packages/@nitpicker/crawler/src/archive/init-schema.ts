@@ -77,7 +77,7 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  *   `header_name_refs`, `header_value_refs`, `header_sets`,
  *   `header_set_entries`, `header_flags`. Additive DDL only — the tables are
  *   created on every fresh archive but remain **completely unused** by
- *   current readers and writers. Later 0.13 / 6-C / … sub-issues will
+ *   current readers and writers. Later 0.13 sub-issues will
  *   populate them and migrate the consumer code paths. No existing table or
  *   index is modified by their presence. See
  *   {@link createRefTables} for the DDL, column-level rationale, and

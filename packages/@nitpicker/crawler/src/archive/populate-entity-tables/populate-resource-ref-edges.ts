@@ -2,7 +2,7 @@ import type { Knex } from 'knex';
 
 /**
  * Populates `resource_ref_edges` from `resources-referrers`
- * (issue #193 step 6-D-5).
+ * (issue #193 step entity populate step 5).
  *
  * The transformation is a **direct SQL `INSERT ... SELECT`** — no ref
  * lookups, no per-row JS work. Legacy `resources-referrers` already

@@ -12,7 +12,7 @@ import { setupMigrationDb } from './test-utils/setup-entities-db.js';
 /**
  * Inserts N pages so `anchor_edges` FKs resolve. `populateRefTables`
  * is intentionally NOT called here — the caller inserts anchors first
- * and then runs the phase-6-B populate, matching the real migration
+ * and then runs the phase-ref populate, matching the real migration
  * ordering where anchor textContent has already been ingested into
  * `text_refs` by the time `populateAnchorEdges` runs.
  * @param db - Test DB instance.

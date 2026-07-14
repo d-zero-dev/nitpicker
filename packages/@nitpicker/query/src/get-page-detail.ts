@@ -171,7 +171,7 @@ export async function getPageDetail(
 
 	// Reconstruct responseHeaders from 0.13 header_set_entries. Multiple
 	// same-name headers (e.g. `Set-Cookie`) collapse into a single
-	// comma-separated value to preserve the pre-Phase-6 JSON shape (a single
+	// comma-separated value to preserve the pre-0.13 JSON shape (a single
 	// key → string value map). Ordering is by `occurrence` to keep the
 	// concatenation deterministic.
 	let responseHeaders: Record<string, string> = {};
@@ -198,7 +198,7 @@ export async function getPageDetail(
 
 	// Decode meta_extras from json_refs. `codec` is either 'zstd' (0.13
 	// compression) or 'none' (raw JSON text). Corrupt bodies fail closed and
-	// return `{}` with a warning, matching the pre-Phase-6 try/catch shape.
+	// return `{}` with a warning, matching the pre-0.13 try/catch shape.
 	let metaExtras: Record<string, unknown> = {};
 	if (page.extras_body != null) {
 		try {

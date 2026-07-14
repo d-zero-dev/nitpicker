@@ -5,7 +5,7 @@ import { LibsqlDialect } from './libsql-dialect.js';
 import { migrateRefTables } from './migrate-ref-tables.js';
 
 /**
- * Simulates the shape of a pre-Phase-6A archive: only the write-model
+ * Simulates the shape of a pre-0.13A archive: only the write-model
  * tables that predate this branch exist. Kept minimal — the migration
  * only checks for `pages`, not the full legacy schema.
  * @param db - Knex instance already connected to an empty in-memory DB.

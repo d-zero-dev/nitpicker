@@ -22,7 +22,7 @@ const READ_CHUNK_SIZE = 1000;
 
 /**
  * Populates `json_refs` from every non-null `pages.meta_extras` value
- * (issue #191 step 6-B-3).
+ * (issue #191 step ref populate step 3).
  *
  * Each value is:
  *

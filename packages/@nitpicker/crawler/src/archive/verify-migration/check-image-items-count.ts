@@ -9,7 +9,7 @@ import { MigrationVerificationError } from './types.js';
  * 0.13-6 populates `image_items` with the same PK as `images.id` (see
  * `populate-image-items.ts`); the invariant is broken only if the populate
  * loop skipped rows during URL/blob routing or dom-path derivation.
- * @param trx - Knex instance or transaction connected to the post-6-D archive.
+ * @param trx - Knex instance or transaction connected to the populated archive.
  * @throws {MigrationVerificationError} when the row counts diverge.
  */
 export async function checkImageItemsCount(trx: Knex): Promise<void> {

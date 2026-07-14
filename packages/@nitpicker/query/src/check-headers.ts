@@ -20,7 +20,7 @@ import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presenc
  * `pages.responseHeaders` with a LIKE predicate. `header_flags` may be
  * missing for pages with no captured headers — the LEFT JOIN +
  * `coalesce(..., 0)` in {@link headerPresenceExpression} preserves the
- * pre-Phase-6 "no headers → not present" behaviour.
+ * pre-0.13 "no headers → not present" behaviour.
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
  * @param options.limit - Maximum number of results. Defaults to 100.

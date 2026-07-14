@@ -9,7 +9,7 @@ import { countRows } from './test-utils/count-rows.js';
 
 /**
  * Sets up an in-memory archive with the write-model tables that Phase
- * 6-B reads (`pages`, `resources`, `anchors`, `images`) plus every
+ * ref populate reads (`pages`, `resources`, `anchors`, `images`) plus every
  * 0.13 ref/header table. Rows are inserted by the test bodies.
  * @returns The connected Knex instance; the caller destroys it.
  */

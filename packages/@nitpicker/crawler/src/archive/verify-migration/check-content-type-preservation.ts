@@ -19,7 +19,7 @@ import { MigrationVerificationError } from './types.js';
  * error context surfaces that one sample for the operator. A separate
  * `COUNT(*)` would only add cost without adding information — the presence
  * of a single row already means the invariant fails.
- * @param trx - Knex instance or transaction connected to the post-6-D archive.
+ * @param trx - Knex instance or transaction connected to the populated archive.
  * @throws {MigrationVerificationError} when any content-type is silently dropped.
  */
 export async function checkContentTypePreservation(trx: Knex): Promise<void> {
