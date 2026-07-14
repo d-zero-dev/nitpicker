@@ -1138,6 +1138,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 		await orchestrator.crawling([url]);
 		CrawlerOrchestrator.#finalizeCrawlSession();
+		await populateMigrationTables(archive);
 		return orchestrator;
 	}
 
