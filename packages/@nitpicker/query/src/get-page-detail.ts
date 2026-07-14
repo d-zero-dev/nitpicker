@@ -204,8 +204,12 @@ export async function getPageDetail(
 		try {
 			let jsonText: string;
 			if (page.extras_codec === 'zstd') {
-				const { decompress } = await import('@mongodb-js/zstd');
-				const decompressed = await decompress(page.extras_body as Buffer);
+				// Phase 6-B populates `json_refs.json_text` with
+				// `node:zlib.zstdCompressSync`; use the matching sync
+				// decompress from the same built-in so no extra
+				// dependency is required.
+				const { zstdDecompressSync } = await import('node:zlib');
+				const decompressed = zstdDecompressSync(page.extras_body as Buffer);
 				jsonText = decompressed.toString('utf8');
 			} else {
 				jsonText =
