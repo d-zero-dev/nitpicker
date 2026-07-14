@@ -3,7 +3,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
+import {
+	Archive,
+	CrawlerOrchestrator,
+	populateMigrationTables,
+} from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
@@ -28,6 +32,7 @@ async function crawlAndPersist(
 		...options,
 	});
 	const filePath = orchestrator.archive.filePath;
+	await populateMigrationTables(orchestrator.archive);
 	await orchestrator.write();
 	await orchestrator.archive.close();
 	orchestrator.garbageCollect();
@@ -67,6 +72,7 @@ describe('Retry failed crawl (recursive, default)', () => {
 		//    reset, re-fetched as a 200, and its newly-exposed child is crawled.
 		await setFlakyState('heal');
 		const orchestrator = await CrawlerOrchestrator.retryFailed(filePath, { cwd });
+		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
@@ -127,6 +133,7 @@ describe('Retry failed crawl (--no-recursive)', () => {
 			cwd,
 			recursive: false,
 		});
+		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
@@ -215,6 +222,7 @@ describe('Retry failed crawl: permanent-kind exclusion converges across iteratio
 		await setFlakyState('heal');
 		for (let pass = 0; pass < 2; pass++) {
 			const orchestrator = await CrawlerOrchestrator.retryFailed(filePath, { cwd });
+			await populateMigrationTables(orchestrator.archive);
 			await orchestrator.write();
 			await orchestrator.archive.close();
 			orchestrator.garbageCollect();

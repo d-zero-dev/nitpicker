@@ -3,7 +3,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
+import {
+	Archive,
+	CrawlerOrchestrator,
+	populateMigrationTables,
+} from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 describe('Archive pipeline (.nitpicker write → reopen)', () => {
@@ -56,6 +60,7 @@ describe('Archive pipeline (.nitpicker write → reopen)', () => {
 	});
 
 	it('.nitpicker ファイルの書き出し', async () => {
+		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 
 		const filePath = orchestrator.archive.filePath;

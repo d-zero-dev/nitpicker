@@ -416,6 +416,7 @@ describe('registerLinksRoute — /api/links?type=broken (integration)', () => {
 				publicDir: '/tmp/no-such-dir-register-links-route-spec',
 			});
 			fixture = { app, archive, manager };
+			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {

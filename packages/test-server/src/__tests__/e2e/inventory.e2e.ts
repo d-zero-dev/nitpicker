@@ -3,7 +3,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Archive, computeFileSha256, CrawlerOrchestrator } from '@nitpicker/crawler';
+import {
+	Archive,
+	CrawlerOrchestrator,
+	computeFileSha256,
+	populateMigrationTables,
+} from '@nitpicker/crawler';
 import { listInventoryRuns, listUnusedResources } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -29,6 +34,7 @@ async function crawlAndPersist(
 		fetchExternal: false,
 	});
 	const filePath = orchestrator.archive.filePath;
+	await populateMigrationTables(orchestrator.archive);
 	await orchestrator.write();
 	await orchestrator.archive.close();
 	orchestrator.garbageCollect();
@@ -60,6 +66,7 @@ describe('Inventory crawl', () => {
 			],
 			{ cwd },
 		);
+		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
@@ -243,6 +250,7 @@ describe('Inventory crawl run-audit fingerprint (with source file sha256)', () =
 			undefined,
 			sourceFileSha256,
 		);
+		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
@@ -319,6 +327,7 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 				orch.abort();
 			},
 		);
+		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
@@ -525,6 +534,7 @@ describe('Inventory http/https dedup keeps a single inventory-seed row per origi
 				orch.abort();
 			},
 		);
+		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
@@ -575,6 +585,7 @@ describe('Inventory crawl noop run (all URLs already in archive)', () => {
 			['http://localhost:8010/'],
 			{ cwd },
 		);
+		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();

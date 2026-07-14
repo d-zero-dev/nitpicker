@@ -4,7 +4,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
+import {
+	Archive,
+	CrawlerOrchestrator,
+	populateMigrationTables,
+} from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 describe('Output path (filePath option)', () => {
@@ -43,6 +47,7 @@ describe('Output path (filePath option)', () => {
 	});
 
 	it('指定したパスにアーカイブが書き出される', async () => {
+		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 
 		expect(existsSync(outputPath)).toBe(true);
@@ -109,6 +114,7 @@ describe('Output path without extension', () => {
 	});
 
 	it('拡張子なしの指定でも .nitpicker が自動付与される', async () => {
+		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 
 		const expectedPath = path.join(cwd, 'my-report.nitpicker');
