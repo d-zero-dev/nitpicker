@@ -20,7 +20,7 @@ import type { Knex } from 'knex';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { zstdCompressSync, zstdDecompressSync } from 'node:zlib';
+import { zstdCompressSync } from 'node:zlib';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { retryCall } from '@d-zero/shared/retry';
@@ -38,6 +38,7 @@ import { emitErrorAndRetry } from '../utils/error/emit-error-with-retry.js';
 import { emitError } from '../utils/error/emit-error.js';
 
 import { dbLog } from './debug.js';
+import { decodeStoredBlob } from './decode-html-blob.js';
 import { deriveLineageFromParent } from './derive-lineage-from-parent.js';
 import { mkdir } from './filesystem/mkdir.js';
 import { getFailedPageMessages } from './get-failed-page-messages.js';
@@ -69,18 +70,6 @@ const retrySetting: RetryCallOptions = {
 };
 
 /**
- * Decodes a stored HTML body BLOB according to its codec marker. The codec
- * column on `page_html_blobs` exists so individual rows can be migrated to
- * a future encoder without rewriting the whole table; readers must dispatch
- * on it. The body is typed `Uint8Array` (not `Buffer`) because libsql
- * returns BLOB columns as bare `Uint8Array`; `Buffer.from` wraps it
- * zero-copy.
- * @param body - Raw bytes as stored in `page_html_blobs.body`.
- * @param codec - The `codec` column value (e.g. `'zstd'`, `'none'`).
- * @returns UTF-8 decoded HTML string.
- * @throws {Error} If the codec is not recognised.
- */
-/**
  * Parses a JSON column value, returning `null` on parse failure rather than
  * throwing. JSON columns in `page_jsonld` (`parsed`) and `page_tags`
  * (`categories`, `sources`) are written by `JSON.stringify` and round-trip
@@ -95,25 +84,6 @@ function safeParseJson(value: string): unknown {
 	} catch {
 		return null;
 	}
-}
-
-/**
- *
- * @param body
- * @param codec
- */
-function decodeStoredBlob(body: Uint8Array, codec: string): string {
-	// `Buffer.from(buffer)` accepts Uint8Array, Buffer, and array-like
-	// shapes uniformly; libsql may hand back any of these for a BLOB
-	// column depending on the row encoding.
-	const buffer = Buffer.from(body);
-	if (codec === 'zstd') {
-		return zstdDecompressSync(buffer).toString('utf8');
-	}
-	if (codec === 'none') {
-		return buffer.toString('utf8');
-	}
-	throw new Error(`Unknown page_html_blobs.codec: ${codec}`);
 }
 
 /**

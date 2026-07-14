@@ -30,6 +30,26 @@ const migrateScript = path.resolve(repoRoot, 'scripts', 'migrate-to-0.13.mjs');
 async function buildFixtureArchive(filePath: string): Promise<void> {
 	const archive = await Archive.create({ filePath, cwd: workingDir });
 	try {
+		await archive.setConfig({
+			baseUrl: 'http://localhost',
+			name: 'fixture',
+			version: '0.10.0',
+			recursive: true,
+			interval: 0,
+			image: false,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['http://localhost'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
 		await archive.setPage({
 			url: parseUrl('http://localhost/a')!,
 			redirectPaths: [],
@@ -199,23 +219,24 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 			const outputPath = path.resolve(workingDir, 'input.0.13.nitpicker');
 			await buildFixtureArchive(inputPath);
 			await mutateFixture(inputPath, async (db) => {
-				// Fresh archives from `Archive.create` already include the
-				// 0.13 entity tables (initSchema calls their creators).
-				// Insert a phantom `url_refs` + `content_items` pair so the
-				// migration's entity populate 'INSERT OR IGNORE' leaves it untouched;
-				// `count(content_items) > count(pages)` after entity populate → check #1
-				// fires.
-				await db('url_refs').insert({
-					id: 999,
-					url: 'http://localhost/phantom',
-				});
-				await db('content_items').insert({
-					id: 999,
-					url_id: 999,
-					is_external: 0,
-					scraped: 1,
-					is_target: 1,
-					source: 'crawled',
+				// Point one `anchors` row at a non-existent page. `pageId` is
+				// still a real page (so the source-side content_items exists),
+				// but `hrefId=99999` has no matching content_items row after
+				// populate — `populate-anchor-edges`' INSERT into
+				// `anchor_edges(href_page_id)` fails the FK to
+				// `content_items(id)` and the whole populate transaction
+				// rolls back. The migrator surfaces this to stderr with a
+				// non-zero exit, and the output tar must never be produced.
+				// (Note: entity tables are TRUNCATEd at the start of every
+				// populate run, so directly injecting a phantom `content_items`
+				// row would be wiped before verification could see it —
+				// injection must land in a legacy table the truncate does
+				// not touch, and the mismatch must survive re-populate.)
+				await db('anchors').insert({
+					pageId: 1,
+					hrefId: 99_999,
+					hash: 'phantom-anchor',
+					textContent: 'phantom link',
 				});
 			});
 			const inputHashBefore = sha256File(inputPath);
@@ -233,13 +254,54 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 			const stderr = (
 				(thrown as unknown as { stderr?: Buffer }).stderr ?? Buffer.from('')
 			).toString();
-			expect(stderr).toContain('migration verification failed');
-			expect(stderr).toContain('#1');
+			// The FK failure inside populate-anchor-edges surfaces as a
+			// libsql SQLITE_CONSTRAINT error that the outer script catches
+			// and re-throws; the message is enough to detect the abort.
+			expect(stderr).toMatch(/FOREIGN KEY constraint failed|SQLITE_CONSTRAINT/);
 
 			// Output tar was either never created, or created and then cleaned up.
 			expect(existsSync(outputPath)).toBe(false);
 
 			// Input tar bytes unchanged — the effective ".bak restore" clause.
+			expect(sha256File(inputPath)).toBe(inputHashBefore);
+		},
+	);
+
+	it(
+		'empty-info abort: refuses to migrate an archive whose `info` table has no rows (would otherwise produce an unreadable output)',
+		{ timeout: 60_000 },
+		async () => {
+			const inputPath = path.resolve(workingDir, 'empty-info.nitpicker');
+			const outputPath = path.resolve(workingDir, 'empty-info.0.13.nitpicker');
+			await buildFixtureArchive(inputPath);
+			// Simulate an interrupted crawl that reached `Archive.create` but
+			// never got as far as `setConfig` — the `info` table exists but
+			// has zero rows. A bare `UPDATE info SET version = ...` would
+			// silently affect zero rows and the repacked archive would be
+			// unopenable (`assertCompatibleVersion` would throw on missing
+			// `info.version`). The migrator must detect and refuse this
+			// before repacking.
+			await mutateFixture(inputPath, async (db) => {
+				await db('info').delete();
+			});
+			const inputHashBefore = sha256File(inputPath);
+
+			let thrown: Error | null = null;
+			try {
+				execFileSync('node', [migrateScript, inputPath, outputPath], {
+					cwd: repoRoot,
+					stdio: 'pipe',
+				});
+			} catch (error) {
+				thrown = error as Error;
+			}
+			expect(thrown).not.toBeNull();
+			const stderr = (
+				(thrown as unknown as { stderr?: Buffer }).stderr ?? Buffer.from('')
+			).toString();
+			expect(stderr).toContain('`info` table is empty');
+
+			expect(existsSync(outputPath)).toBe(false);
 			expect(sha256File(inputPath)).toBe(inputHashBefore);
 		},
 	);

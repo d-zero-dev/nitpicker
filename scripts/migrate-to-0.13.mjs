@@ -74,7 +74,6 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { zstdDecompressSync } from 'node:zlib';
 
 import { JSDOM, VirtualConsole } from 'jsdom';
 import knex from 'knex';
@@ -223,11 +222,10 @@ async function applyMigrations(dbPath) {
 
 		console.log('  populate entity tables');
 		const domPathResolver = createJsdomDomPathResolver();
-		const getPageHtml = createHtmlGetter(db);
 		/** @type {import('../packages/@nitpicker/crawler/lib/archive/verify-migration/types.js').MigrationVerificationSummary} */
 		let summary;
 		await db.transaction(async (trx) => {
-			await populateEntityTables(trx, domPathResolver, getPageHtml);
+			await populateEntityTables(trx, domPathResolver);
 			console.log('  verify migration invariants');
 			summary = await verifyMigration(trx);
 		});
@@ -242,7 +240,23 @@ async function applyMigrations(dbPath) {
 		// on next open. This is the single mechanism the reader-side uses to
 		// detect "archive predates the current format" — no separate assert
 		// per migration.
+		//
+		// An archive whose `info` table is empty (interrupted crawl that
+		// never reached `setConfig`, or a hand-crafted db) would silently
+		// pass a bare `UPDATE ... SET version = ...` — the UPDATE
+		// affects zero rows and reports success, and the reader path then
+		// blows up with `IncompatibleArchiveError` because `info.version`
+		// is missing. Read back the row count and abort with a clear
+		// error before the archive is repacked (still under `.bak`
+		// protection, so the input archive stays intact).
 		console.log('  bump info.version → 0.13.0');
+		const infoRowsBefore = await db('info').count({ n: '*' });
+		const infoRowCount = Number(infoRowsBefore[0]?.n ?? 0);
+		if (infoRowCount === 0) {
+			throw new Error(
+				`migrate-to-0.13: refusing to migrate an archive whose \`info\` table is empty — no \`info.version\` row exists to bump. This typically happens when a crawl was interrupted before \`setConfig\` ran and the archive is not consumable in the first place. Re-crawl the target instead of migrating the empty stub.`,
+			);
+		}
 		await db('info').update({ version: '0.13.0' });
 
 		await db.raw('PRAGMA wal_checkpoint(TRUNCATE)');
@@ -318,46 +332,6 @@ function fallbackAllUnknown(images, pageId, reason) {
 		);
 	}
 	return map;
-}
-
-/**
- * Builds a `(pageId) => Promise<string | null>` getter that reads the
- * archived HTML BLOB via the `page_html_ref` + `page_html_blobs` join
- * and decompresses via zstd. Analogous to
- * `Database.getHtmlOfPageById` but implemented directly against knex
- * so the migration script does not need to instantiate the full
- * `Database` class (which is a private constructor).
- * @param {import('knex').Knex} db
- */
-function createHtmlGetter(db) {
-	return async (pageId) => {
-		const row = await db('page_html_ref')
-			.join('page_html_blobs', 'page_html_ref.hash', '=', 'page_html_blobs.hash')
-			.select('page_html_blobs.body as body', 'page_html_blobs.codec as codec')
-			.where('page_html_ref.page_id', pageId)
-			.first();
-		if (!row) return null;
-		return decodeStoredBlob(row.body, row.codec);
-	};
-}
-
-/**
- * Decompresses one `page_html_blobs.body` value into UTF-8 text.
- * Mirrors the `codec` union from `init-schema.ts` — only `zstd` and
- * `none` are valid; anything else is a corrupt archive.
- * @param {Uint8Array} body
- * @param {string} codec
- * @returns {string}
- */
-function decodeStoredBlob(body, codec) {
-	const buffer = Buffer.isBuffer(body) ? body : Buffer.from(body);
-	if (codec === 'zstd') {
-		return zstdDecompressSync(buffer).toString('utf8');
-	}
-	if (codec === 'none') {
-		return buffer.toString('utf8');
-	}
-	throw new Error(`Unknown page_html_blobs.codec: ${codec}`);
 }
 
 try {

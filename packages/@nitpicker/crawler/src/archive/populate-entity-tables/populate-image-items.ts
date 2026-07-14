@@ -1,6 +1,7 @@
 import type { DomPathResult } from './types.js';
 import type { Knex } from 'knex';
 
+import { decodeStoredBlob } from '../decode-html-blob.js';
 import { DATA_URI_URL_REFS_LIMIT } from '../populate-ref-tables/data-uri-url-refs-limit.js';
 
 import { resolveBlobRefs } from './resolve-blob-refs.js';
@@ -96,22 +97,26 @@ export interface ImageRowForResolver {
  * 5. **Bulk INSERT** with explicit `id = images.id`.
  *
  * `INSERT OR IGNORE` on the natural PK makes the step idempotent.
+ *
+ * HTML BLOBs are read inline via the same `trx` handle rather than
+ * through a caller-supplied `getPageHtml` callback: a callback that
+ * queried `Database.getHtmlOfPageById` (which uses the non-transactional
+ * Knex instance) would re-enter the pool from inside this writer
+ * transaction and deadlock on libsql's single writer connection. Reading
+ * `page_html_ref` + `page_html_blobs` via `trx` keeps every read on the
+ * same connection the outer trx already owns.
  * @param trx - Knex instance or transaction connected to the archive DB.
  * @param resolvePageDomPaths - Callback that returns dom_path strings
  *   for one page's images (see {@link PageDomPathResolver}).
- * @param getPageHtml - Callback returning the HTML string for one
- *   `pages.id` (typically wraps `getHtmlOfPageById`). Returns `null`
- *   when the page has no stored snapshot.
  * @example
  * const jsdomResolver = createJsdomResolver();
  * await knex.transaction(async (trx) => {
- *   await populateImageItems(trx, jsdomResolver, (pid) => db.getHtmlOfPageById(pid));
+ *   await populateImageItems(trx, jsdomResolver);
  * });
  */
 export async function populateImageItems(
 	trx: Knex,
 	resolvePageDomPaths: PageDomPathResolver,
-	getPageHtml: (pageId: number) => Promise<string | null>,
 ): Promise<void> {
 	let cursorPageId = 0;
 	while (true) {
@@ -162,7 +167,7 @@ export async function populateImageItems(
 
 		const domPaths = new Map<number, DomPathResult>();
 		for (const [pageId, pageImages] of byPage) {
-			const html = await getPageHtml(pageId);
+			const html = await readPageHtmlInTrx(trx, pageId);
 			const resolved = await resolvePageDomPaths(pageId, html, pageImages);
 			for (const [imageId, entry] of resolved) {
 				domPaths.set(imageId, entry);
@@ -244,6 +249,29 @@ export async function populateImageItems(
 			await trx('image_items').insert(chunk).onConflict('id').ignore();
 		}
 	}
+}
+
+/**
+ * Reads the stored HTML snapshot for one legacy page id, via the same
+ * `trx` handle that the outer populate transaction owns. Mirrors
+ * `Database.getHtmlOfPageById` but keeps every read on the trx
+ * connection so the populate step does not re-enter the pool from
+ * inside its own writer transaction (see {@link populateImageItems}'s
+ * doc for the deadlock this avoids).
+ * @param trx - The open migration transaction.
+ * @param pageId - `pages.id` (== `content_items.id`) to read HTML for.
+ * @returns Decoded HTML string, or `null` when no snapshot is stored.
+ */
+async function readPageHtmlInTrx(trx: Knex, pageId: number): Promise<string | null> {
+	const row = (await trx('page_html_ref')
+		.join('page_html_blobs', 'page_html_ref.hash', '=', 'page_html_blobs.hash')
+		.select('page_html_blobs.body as body', 'page_html_blobs.codec as codec')
+		.where('page_html_ref.page_id', pageId)
+		.first()) as { body: Uint8Array; codec: string } | undefined;
+	if (!row) {
+		return null;
+	}
+	return decodeStoredBlob(row.body, row.codec);
 }
 
 /**

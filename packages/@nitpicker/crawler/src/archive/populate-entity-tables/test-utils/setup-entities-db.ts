@@ -140,6 +140,40 @@ export async function setupMigrationDb(): Promise<ReturnType<typeof knex>> {
 		t.integer('pageId').notNullable();
 		t.unique(['resourceId', 'pageId']);
 	});
+	// `analysis_violations` is populated by analyze plugins downstream of
+	// crawl; the migration itself does not create rows here, but
+	// `checkReaderParity` joins it to `pages` / `content_items` so the
+	// table must exist so the parity SELECTs return 0-vs-0 (which the
+	// parity check legitimately skips).
+	await db.schema.createTable('analysis_violations', (t) => {
+		t.increments('id');
+		t.integer('page_id').notNullable();
+		t.string('rule').notNullable();
+		t.string('severity').notNullable();
+		t.text('message');
+	});
+	// `populate-image-items.ts` reads HTML BLOBs via the same trx that
+	// owns the outer populate transaction (see that file's JSDoc for the
+	// deadlock the inline read avoids). Provide the two tables so specs
+	// can seed rows or leave them empty (the reader returns `null` on a
+	// missing row, matching the `getHtmlOfPageById` contract). Raw SQL
+	// so the schema mirrors `init-schema.ts` exactly (`WITHOUT ROWID`,
+	// `size_raw` + `size_stored`, `codec` CHECK).
+	await db.raw(`
+		CREATE TABLE page_html_blobs (
+			hash         BLOB PRIMARY KEY,
+			body         BLOB NOT NULL,
+			codec        TEXT NOT NULL CHECK(codec IN ('zstd', 'none')),
+			size_raw     INTEGER NOT NULL,
+			size_stored  INTEGER NOT NULL
+		) WITHOUT ROWID
+	`);
+	await db.raw(`
+		CREATE TABLE page_html_ref (
+			page_id  INTEGER PRIMARY KEY,
+			hash     BLOB NOT NULL REFERENCES page_html_blobs(hash)
+		) WITHOUT ROWID
+	`);
 	await createRefTables(db);
 	await createEntityTables(db);
 	return db;

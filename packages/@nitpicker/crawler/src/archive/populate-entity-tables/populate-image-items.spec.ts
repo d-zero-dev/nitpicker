@@ -1,6 +1,9 @@
 import type { DomPathResult } from './types.js';
 import type knex from 'knex';
 
+import { createHash } from 'node:crypto';
+import { zstdCompressSync } from 'node:zlib';
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { populateRefTables } from '../populate-ref-tables/populate-refs.js';
@@ -76,11 +79,7 @@ describe('populateImageItems', () => {
 		]);
 		await populateRefTables(db);
 		await populateContentItems(db);
-		await populateImageItems(
-			db,
-			(_pageId, _html, images) => unknownResolver(images),
-			() => Promise.resolve(null),
-		);
+		await populateImageItems(db, (_pageId, _html, images) => unknownResolver(images));
 		const rows = await db('image_items').select().orderBy('id');
 		expect(rows).toHaveLength(2);
 		expect(rows[0]!.id).toBe(10);
@@ -127,7 +126,7 @@ describe('populateImageItems', () => {
 			}
 			return Promise.resolve(map);
 		};
-		await populateImageItems(db, singleMatchResolver, () => Promise.resolve(null));
+		await populateImageItems(db, singleMatchResolver);
 		const row = await db('image_items').where('id', 5).first();
 		const domPathText = await db('text_refs').where('id', row.dom_path_text_id).first();
 		expect(domPathText.text).toBe('html/body[1]/main[1]/img[1]');
@@ -185,7 +184,7 @@ describe('populateImageItems', () => {
 			}
 			return Promise.resolve(map);
 		};
-		await populateImageItems(db, resolver, () => Promise.resolve(null));
+		await populateImageItems(db, resolver);
 		// Each pageId visited exactly once.
 		expect(resolverCalls.toSorted()).toEqual([1, 2]);
 		expect(await countRows(db, 'image_items')).toBe(21);
@@ -217,11 +216,7 @@ describe('populateImageItems', () => {
 		]);
 		await populateRefTables(db);
 		await populateContentItems(db);
-		await populateImageItems(
-			db,
-			(_pageId, _html, images) => unknownResolver(images),
-			() => Promise.resolve(null),
-		);
+		await populateImageItems(db, (_pageId, _html, images) => unknownResolver(images));
 		// The data URI must land in blob_refs, not url_refs. `url_refs`
 		// should not contain the data URI (populateUrlRefs already
 		// filtered it out; this just guards against a future regression
@@ -259,8 +254,106 @@ describe('populateImageItems', () => {
 			_html: string | null,
 			images: readonly { id: number }[],
 		): Promise<ReadonlyMap<number, DomPathResult>> => unknownResolver(images);
-		await populateImageItems(db, resolver, () => Promise.resolve(null));
-		await populateImageItems(db, resolver, () => Promise.resolve(null));
+		await populateImageItems(db, resolver);
+		await populateImageItems(db, resolver);
 		expect(await countRows(db, 'image_items')).toBe(1);
+	});
+
+	it('passes the decoded HTML snapshot from `page_html_ref` + `page_html_blobs` to the resolver (deadlock-fix path — the trx-scoped read replaced the outer-Knex `getPageHtml` callback)', async () => {
+		// End-to-end coverage for `readPageHtmlInTrx`. Seed a zstd-encoded
+		// HTML BLOB via the same shape `Database.setPage` would write, then
+		// inject a resolver that CAPTURES the `html` string it receives.
+		// If populate re-entered the outer Knex instance for the HTML read
+		// (the pre-fix path) the trx would deadlock and this test would
+		// hang; if it read via trx but decoded incorrectly the captured
+		// string would not match the seed. Either failure mode is a
+		// regression the assertion below catches.
+		const rawHtml = '<html><body>hello dom_path</body></html>';
+		const rawBytes = Buffer.from(rawHtml, 'utf8');
+		// Mirror `Database.#writePageHtmlBlob` exactly: hash is SHA-256 of
+		// the RAW bytes (not the compressed body). The join key semantics
+		// are content-addressable-by-source; hashing the encoded output
+		// would break any future integrity assertion that decodes and
+		// re-hashes to check corruption.
+		const hash = createHash('sha256').update(rawBytes).digest();
+		const encoded = zstdCompressSync(rawBytes);
+		await db('pages').insert([
+			{ id: 1, url: 'https://example.com/a', scraped: 1, isTarget: 1 },
+		]);
+		await db('page_html_blobs').insert({
+			hash,
+			body: encoded,
+			codec: 'zstd',
+			size_raw: rawBytes.byteLength,
+			size_stored: encoded.byteLength,
+		});
+		await db('page_html_ref').insert({ page_id: 1, hash });
+		await db('images').insert([
+			{
+				id: 1,
+				pageId: 1,
+				src: 'https://example.com/img.png',
+				alt: null,
+				width: 1,
+				height: 1,
+				naturalWidth: 1,
+				naturalHeight: 1,
+				isLazy: 0,
+				viewportWidth: 1,
+				sourceCode: '<img src="https://example.com/img.png">',
+			},
+		]);
+		await populateRefTables(db);
+		await populateContentItems(db);
+
+		const capturedHtml: (string | null)[] = [];
+		const captureResolver = (
+			_pageId: number,
+			html: string | null,
+			images: readonly { id: number }[],
+		): Promise<ReadonlyMap<number, DomPathResult>> => {
+			capturedHtml.push(html);
+			return unknownResolver(images);
+		};
+		await populateImageItems(db, captureResolver);
+
+		expect(capturedHtml).toEqual([rawHtml]);
+	});
+
+	it('passes `null` to the resolver when a page has no HTML snapshot (page_html_ref absent) — matches the pre-0.13 `getHtmlOfPageById` contract', async () => {
+		await db('pages').insert([
+			{ id: 1, url: 'https://example.com/a', scraped: 1, isTarget: 1 },
+		]);
+		// No page_html_ref / page_html_blobs rows for page 1.
+		await db('images').insert([
+			{
+				id: 1,
+				pageId: 1,
+				src: 'https://example.com/img.png',
+				alt: null,
+				width: 1,
+				height: 1,
+				naturalWidth: 1,
+				naturalHeight: 1,
+				isLazy: 0,
+				viewportWidth: 1,
+				sourceCode: null,
+			},
+		]);
+		await populateRefTables(db);
+		await populateContentItems(db);
+
+		const capturedHtml: (string | null)[] = [];
+		const captureResolver = (
+			_pageId: number,
+			html: string | null,
+			images: readonly { id: number }[],
+		): Promise<ReadonlyMap<number, DomPathResult>> => {
+			capturedHtml.push(html);
+			return unknownResolver(images);
+		};
+		await populateImageItems(db, captureResolver);
+
+		expect(capturedHtml).toEqual([null]);
 	});
 });

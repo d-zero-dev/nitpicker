@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setupMigrationDb } from '../populate-entity-tables/test-utils/setup-entities-db.js';
 import { populateRefTables } from '../populate-ref-tables/populate-refs.js';
 
+import { captureRejection } from './capture-rejection.js';
 import { MigrationVerificationError } from './types.js';
 import { verifyMigration } from './verify-migration.js';
 
@@ -25,7 +26,7 @@ async function seedValidArchive(db: ReturnType<typeof knex>): Promise<void> {
 			scraped: 1,
 			isTarget: 1,
 			isExternal: 0,
-			contentType: 'text/html; charset=utf-8',
+			contentType: 'text/html',
 		},
 		{
 			id: 2,
@@ -33,7 +34,7 @@ async function seedValidArchive(db: ReturnType<typeof knex>): Promise<void> {
 			scraped: 1,
 			isTarget: 1,
 			isExternal: 0,
-			contentType: 'text/html; charset=utf-8',
+			contentType: 'text/html',
 		},
 	]);
 	await db('resources').insert({
@@ -53,9 +54,7 @@ async function seedValidArchive(db: ReturnType<typeof knex>): Promise<void> {
 	const urlCdn = await db('url_refs')
 		.where('url', 'https://cdn.example.com/x.js')
 		.first();
-	const ctHtml = await db('content_type_refs')
-		.where('raw', 'text/html; charset=utf-8')
-		.first();
+	const ctHtml = await db('content_type_refs').where('raw', 'text/html').first();
 	const ctJs = await db('content_type_refs')
 		.where('raw', 'application/javascript')
 		.first();
@@ -116,14 +115,10 @@ describe('verifyMigration', () => {
 		// SqliteError. The wrapped error must still carry the
 		// "migration verification failed" prefix operators grep for.
 		await db.raw('DROP TABLE content_items');
-		try {
-			await verifyMigration(db);
-			expect.unreachable('expected MigrationVerificationError');
-		} catch (error) {
-			expect(error).toBeInstanceOf(MigrationVerificationError);
-			expect((error as Error).message).toContain('migration verification failed');
-			expect((error as MigrationVerificationError).details.check).toBe('runtime');
-		}
+		const error = await captureRejection(verifyMigration(db));
+		expect(error).toBeInstanceOf(MigrationVerificationError);
+		expect((error as Error).message).toContain('migration verification failed');
+		expect((error as MigrationVerificationError).details.check).toBe('runtime');
 	});
 
 	it('throws MigrationVerificationError from the first check that fails', async () => {
@@ -134,13 +129,9 @@ describe('verifyMigration', () => {
 		// mismatch we want to inspect.
 		await db.raw('PRAGMA foreign_keys = OFF');
 		await db('content_items').where('id', 2).delete();
-		try {
-			await verifyMigration(db);
-			expect.unreachable('expected MigrationVerificationError');
-		} catch (error) {
-			expect(error).toBeInstanceOf(MigrationVerificationError);
-			expect((error as MigrationVerificationError).details.check).toContain('#1');
-		}
+		const error = await captureRejection(verifyMigration(db));
+		expect(error).toBeInstanceOf(MigrationVerificationError);
+		expect((error as MigrationVerificationError).details.check).toContain('#1');
 	});
 
 	it('reports check #7 when only content-type preservation is broken', async () => {
@@ -148,13 +139,9 @@ describe('verifyMigration', () => {
 		// Break invariant #7 by wiping one content_type_id even though the
 		// legacy pages row has a real contentType.
 		await db('content_items').where('id', 1).update({ content_type_id: null });
-		try {
-			await verifyMigration(db);
-			expect.unreachable('expected MigrationVerificationError');
-		} catch (error) {
-			expect(error).toBeInstanceOf(MigrationVerificationError);
-			expect((error as MigrationVerificationError).details.check).toContain('#7');
-		}
+		const error = await captureRejection(verifyMigration(db));
+		expect(error).toBeInstanceOf(MigrationVerificationError);
+		expect((error as MigrationVerificationError).details.check).toContain('#7');
 	});
 
 	it('reports check #9 when reader parity fails after every row-count invariant passes', async () => {
@@ -171,12 +158,8 @@ describe('verifyMigration', () => {
 			.where('raw', 'application/javascript')
 			.first();
 		await db('content_items').where('id', 1).update({ content_type_id: ctJs!.id });
-		try {
-			await verifyMigration(db);
-			expect.unreachable('expected MigrationVerificationError');
-		} catch (error) {
-			expect(error).toBeInstanceOf(MigrationVerificationError);
-			expect((error as MigrationVerificationError).details.check).toContain('#9');
-		}
+		const error = await captureRejection(verifyMigration(db));
+		expect(error).toBeInstanceOf(MigrationVerificationError);
+		expect((error as MigrationVerificationError).details.check).toContain('#9');
 	});
 });

@@ -32,8 +32,22 @@ import { populateResourceRefEdges } from './populate-resource-ref-edges.js';
  *    self-contained.
  *
  * Every sub-step is independently idempotent via `INSERT OR IGNORE` on
- * its natural key or PK. Running this orchestrator twice on the same
- * archive produces the same rows — no phase marker table is used.
+ * its natural key or PK. On a **re-crawl** (`crawl --append` /
+ * `--retry-failed` / `--inventory` all UPDATE existing `pages` /
+ * `resources` rows in place, and `#insertPage` deletes + re-inserts
+ * `anchors` / `images` per page), running populate again against the
+ * previously-populated archive would leave `content_items` / `page_meta`
+ * / `resource_items` at their FIRST-crawl values (source-priority
+ * upgrades, refreshed status, changed metadata never propagate) and
+ * `anchor_edges` / `image_items` / `resource_ref_edges` would keep stale
+ * rows keyed by the now-deleted legacy ids. To keep the reader-side
+ * view of the archive faithful to `pages` / `resources` on re-crawl,
+ * every entity + edge table is TRUNCATEd (in child-first order so no FK
+ * check trips) at the top of this function before the six sub-steps
+ * re-insert from the current legacy state. Ref tables (`url_refs`,
+ * `text_refs`, `content_type_refs`, `header_*`) are NOT truncated —
+ * they are content-addressable and additive; re-inserting the same
+ * value hits `INSERT OR IGNORE` and is a no-op.
  *
  * The whole invocation is expected to run inside one writer transaction
  * with `.bak` protection at the caller level (matching the plan's
@@ -51,34 +65,53 @@ import { populateResourceRefEdges } from './populate-resource-ref-edges.js';
  * (deferrable FK enforcement at COMMIT) is silently broken. The
  * migration script sets the pragma explicitly; any other caller must do
  * the same.
+ * HTML BLOB reads happen inline inside {@link populateImageItems} against
+ * the same `trx` — no `getPageHtml` callback here — because a callback
+ * that routed through `Database.getHtmlOfPageById` would re-enter the
+ * connection pool from inside this writer transaction and deadlock on
+ * libsql's single writer connection. See `./populate-image-items.ts` for
+ * the detailed rationale.
  * @param trx - Knex instance or transaction connected to the archive DB.
  * @param resolvePageDomPaths - Callback that returns dom_path strings
  *   for one page's images. Injected rather than hard-coded so
  *   `@nitpicker/crawler` does not become a jsdom consumer at runtime.
- * @param getPageHtml - Callback returning the HTML string for one
- *   `pages.id`. Typically wraps `Database.getHtmlOfPageById`.
  * @example
  * const archive = await Archive.open(archivePath);
  * const knex = archive.getKnex();
- * const db = archive.getDatabase();
  * await knex.transaction(async (trx) => {
- *   await populateEntityTables(
- *     trx,
- *     jsdomResolver,
- *     (pageId) => db.getHtmlOfPageById(pageId),
- *   );
+ *   await populateEntityTables(trx, jsdomResolver);
  * });
  * await archive.write();
  */
 export async function populateEntityTables(
 	trx: Knex,
 	resolvePageDomPaths: PageDomPathResolver,
-	getPageHtml: (pageId: number) => Promise<string | null>,
 ): Promise<void> {
+	// Truncate child-first so no outgoing FK check ever sees a broken
+	// reference mid-delete. Order is: leaf edge/entity tables that have
+	// no incoming FKs (`image_items`, `anchor_edges`, `resource_ref_edges`),
+	// then the parent entities they referenced (`page_meta` and
+	// `resource_items`; `page_meta` references `content_items` so it
+	// must be dropped before `content_items`; `resource_items` was
+	// pointed at by `resource_ref_edges` which is now empty), and
+	// finally `content_items` itself — the only remaining incoming
+	// reference is its own DEFERRABLE INITIALLY DEFERRED
+	// `redirect_dest_id`, which is validated at COMMIT so a mid-trx
+	// wipe-and-refill is legal. No external table has an enforced FK
+	// into `content_items` (viewer read-model tables and
+	// `analysis_violations` reference `pages(id)` or hold logical-only
+	// pointers), so the truncation stops here.
+	await trx('image_items').delete();
+	await trx('anchor_edges').delete();
+	await trx('resource_ref_edges').delete();
+	await trx('page_meta').delete();
+	await trx('resource_items').delete();
+	await trx('content_items').delete();
+
 	await populateContentItems(trx);
 	await populatePageMeta(trx);
 	await populateResourceItems(trx);
 	await populateAnchorEdges(trx);
 	await populateResourceRefEdges(trx);
-	await populateImageItems(trx, resolvePageDomPaths, getPageHtml);
+	await populateImageItems(trx, resolvePageDomPaths);
 }

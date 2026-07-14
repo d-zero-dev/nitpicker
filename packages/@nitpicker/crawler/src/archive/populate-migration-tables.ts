@@ -22,10 +22,10 @@ import { populateRefTables } from './populate-ref-tables/populate-refs.js';
  * @param accessor - Writable archive accessor whose legacy tables have
  *   already been seeded by the caller (`archive.setPage(...)` etc.).
  * @param options - Optional overrides. `resolvePageDomPaths` defaults to
- *   a no-op resolver returning an empty map for every page — most reader
- *   specs do not exercise `image_items.dom_path_text_id`, so avoiding a
- *   jsdom dependency here keeps the test surface narrow. Specs that
- *   depend on dom-path resolution can inject a real resolver.
+ *   an `unknown/<image-id>` fallback resolver so specs that do not
+ *   exercise `image_items.dom_path_text_id` avoid a jsdom dependency.
+ *   Specs that depend on real dom-path resolution inject the
+ *   jsdom-backed resolver used by the migrator instead.
  * @param options.resolvePageDomPaths - Optional DOM-path resolver.
  * @example
  * beforeAll(async () => {
@@ -42,12 +42,19 @@ export async function populateMigrationTables(
 ): Promise<void> {
 	const knex = accessor.getKnex();
 	const resolvePageDomPaths: PageDomPathResolver =
-		options.resolvePageDomPaths ?? (() => Promise.resolve(new Map()));
-	const getPageHtml = (pageId: number): Promise<string | null> =>
-		accessor.getHtmlOfPage(pageId);
+		options.resolvePageDomPaths ??
+		((_pageId, _html, images) =>
+			Promise.resolve(
+				new Map(
+					images.map((img) => [
+						img.id,
+						{ path: `unknown/${img.id}`, case: 'unknown' as const },
+					]),
+				),
+			));
 	await knex.raw('PRAGMA foreign_keys = ON');
 	await knex.transaction(async (trx) => {
 		await populateRefTables(trx);
-		await populateEntityTables(trx, resolvePageDomPaths, getPageHtml);
+		await populateEntityTables(trx, resolvePageDomPaths);
 	});
 }
