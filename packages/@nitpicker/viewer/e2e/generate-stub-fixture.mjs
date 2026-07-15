@@ -88,7 +88,7 @@ for (let i = 0; i < PAGE_COUNT; i++) {
 }
 
 // Populate the 0.13 entity tables so the stub fixture is readable by
-// the new phase6 reader paths — the stub-mode viewer opens tmpDir
+// the entity-table reader paths — the stub-mode viewer opens tmpDir
 // read-only and reads via the same reader functions as a finalised
 // archive.
 await populateMigrationTables(archive);

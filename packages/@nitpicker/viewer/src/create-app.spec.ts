@@ -183,12 +183,12 @@ describe('createApp', () => {
 			externalContents: number;
 		};
 		expect(body.totalPages).toBeGreaterThanOrEqual(2);
-		/* The two new fields (added in the Summary-cards redesign) must
-		   pass through the API boundary unchanged. Refactoring the route
-		   to `pick()` a subset of SummaryResult would silently drop them
-		   without this assertion. The `>=` form keeps the test robust to
-		   fixture changes — what's pinned is the invariant
-		   `contents ≥ pages` documented in the SummaryResult JSDoc. */
+		/* `internalContents`/`externalContents` must pass through the API
+		   boundary unchanged. Refactoring the route to `pick()` a subset
+		   of SummaryResult would silently drop them without this
+		   assertion. The `>=` form keeps the test robust to fixture
+		   changes — what's pinned is the invariant `contents ≥ pages`
+		   documented in the SummaryResult JSDoc. */
 		expect(body.internalContents).toBeGreaterThanOrEqual(body.internalPages);
 		expect(body.externalContents).toBeGreaterThanOrEqual(body.externalPages);
 	});
@@ -257,7 +257,7 @@ describe('createApp', () => {
 
 	it('GET /api/links?type=external は listExternalLinks の宛先集約シェイプを返す', async () => {
 		// Regression test for the route dispatching to the wrong query
-		// function: the response must have `referrerCount`, not the old
+		// function: the response must have `referrerCount`, not the
 		// per-anchor `sourceUrl`/`textContent` shape from `listLinks`.
 		const res = await app.request('/api/links?type=external');
 		expect(res.status).toBe(200);
@@ -405,7 +405,6 @@ describe('createApp', () => {
 	});
 
 	it('GET /api/isolated-clusters/:representativeUrl は 404 で "use isolated-pages" メッセージを返す（singleton-vs-collapsed の差別化）', async () => {
-		// The QA review specifically called out this branch as untested.
 		// Without the singleton differentiation in the route, both cases
 		// would return the same "collapsed by follow-up crawl" message —
 		// which misleads operators who deep-linked a singleton URL into

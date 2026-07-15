@@ -36,9 +36,9 @@ const BROKEN_LINKS_FAST_PATH_SORT_KEYS = new Set(['sourceUrl', 'destUrl', 'statu
 /**
  * Registers `GET /api/links?type=broken|external` — link analysis.
  *
- * `orphaned` was retired: completely isolated inventory-* pages are reported
- * by `/api/isolated-pages`, and interconnected orphan clusters by
- * `/api/isolated-clusters`. `broken` stays anchor-level (one row per `<a>`
+ * There is no `orphaned` type: completely isolated inventory-* pages are
+ * reported by `/api/isolated-pages`, and interconnected orphan clusters by
+ * `/api/isolated-clusters`. `broken` is anchor-level (one row per `<a>`
  * tag, resolved through `pages.redirectDestId` to the canonical final
  * destination unless `includeRedirectSources=true`) via `listLinks`.
  * `external` is deduplicated by canonical destination — one row per unique

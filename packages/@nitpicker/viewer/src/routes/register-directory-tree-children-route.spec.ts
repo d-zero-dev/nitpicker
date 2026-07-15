@@ -143,7 +143,7 @@ describe('registerDirectoryTreeChildrenRoute (integration)', () => {
 		});
 	});
 
-	it('returns an empty array for a node with no child directories', async () => {
+	it('returns a nodes array for the queried node', async () => {
 		const accessor = fixture.manager.get(fixture.archiveId);
 		const [firstRoot] = await getDirectoryTree(accessor);
 		const root = firstRoot!.nodes.find((n) => n.path === '/')!;

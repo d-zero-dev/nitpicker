@@ -7,7 +7,7 @@ import { Archive, populateMigrationTables } from '@nitpicker/crawler';
 const dirname = import.meta.dirname;
 const FIXTURE_PATH = path.resolve(dirname, '.fixture.nitpicker');
 const FIXTURE_CWD = path.resolve(dirname, '.fixture-tmp');
-// Bumped from 50 → 120 so the default MPA `pageSize=100` paginates (Next
+// Must exceed the default MPA `pageSize=100` so the fixture paginates (Next
 // button enables, `?page=2` lands on the second page). Smaller fixtures
 // collapse to one page and the pagination smoke tests can't actually
 // observe a page-change event.
@@ -191,8 +191,8 @@ await archive.setPage({
 });
 
 // Populate the 0.13 entity tables so the E2E fixture is readable by the
-// new phase6 reader paths (the crawler's write path still targets the
-// legacy tables; #196 will move it to the new entities).
+// entity-table reader paths (the crawler's write path still targets the
+// legacy tables; moving it to the new entities is tracked by #196).
 await populateMigrationTables(archive);
 await archive.write();
 await archive.close();

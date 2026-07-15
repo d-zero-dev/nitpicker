@@ -12,7 +12,9 @@ import { PAGE_SIZE } from './page-size.js';
  * advances via the server-issued `nextCursor` (keyset pagination) rather
  * than a growing `offset` — `/api/pages` serves this from the `viewer_pages`
  * read model when available, falling back to the legacy offset-only path
- * (with `nextCursor: null`, which correctly stops pagination) otherwise.
+ * (whose `nextCursor` is a plain offset-as-string, per
+ * `buildLegacyPagesCursors`) otherwise — this hook never needs to know
+ * which backend served a given page.
  * @param filter - The active filter/sort state (forms part of the query key).
  * @param options - Optional flags (`enabled`).
  * @returns The TanStack infinite-query result.

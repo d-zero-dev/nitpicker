@@ -199,7 +199,7 @@ describe('registerPagesRoute (integration)', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('still paginates to completion via nextCursor using the offset-based pseudo-cursor (regression: previously stuck at page 1)', async () => {
+		it('still paginates to completion via nextCursor using the offset-based pseudo-cursor (regression: without it, pagination sticks at page 1)', async () => {
 			const urls = await paginateAllViaNextCursor(fixture.app, '', 2);
 			expect(urls).toEqual([
 				'https://example.com/a',
@@ -228,7 +228,7 @@ describe('registerPagesRoute (integration)', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('still paginates to completion via nextCursor (regression: previously stuck at page 1)', async () => {
+		it('still paginates to completion via nextCursor (regression: without the pseudo-cursor, pagination sticks at page 1)', async () => {
 			const urls = await paginateAllViaNextCursor(
 				fixture.app,
 				`&urlPattern=${encodeURIComponent('%example.com%')}`,
@@ -289,7 +289,7 @@ describe('registerPagesRoute (integration)', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('reports hasCSP correctly per page instead of always false (regression: fast path join dropped header columns)', async () => {
+		it('reports hasCSP correctly per page instead of always false (regression: a fast-path join that drops header columns reports all-false)', async () => {
 			const res = await fixture.app.request('/api/pages');
 			const body = (await res.json()) as { items: { url: string; hasCSP: boolean }[] };
 			const byUrl = new Map(body.items.map((i) => [i.url, i.hasCSP]));

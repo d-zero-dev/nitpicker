@@ -268,10 +268,10 @@ describe('getCachedErrorKinds', () => {
 		});
 
 		it('tie-breaks by kind ascending when sortBy=host ties on host, matching getViewerErrorKinds() — regression test', async () => {
-			// Regression test: an earlier version sorted with no secondary key,
-			// so same-host ties (a.example.com/dns count=5, a.example.com/timeout
-			// count=1) kept whatever order the cached count-desc snapshot
-			// happened to hold them in (dns before timeout, since dns has the
+			// Regression test: sorting with no secondary key would leave
+			// same-host ties (a.example.com/dns count=5, a.example.com/timeout
+			// count=1) in whatever order the cached count-desc snapshot
+			// happens to hold them (dns before timeout, since dns has the
 			// higher count) instead of the deterministic kind-ascending
 			// tie-break getViewerErrorKinds applies in SQL.
 			vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(FULL);
@@ -286,10 +286,10 @@ describe('getCachedErrorKinds', () => {
 		});
 
 		it('falls back to count-desc for an out-of-range sortBy instead of silently no-op sorting — regression test', async () => {
-			// Regression test: an earlier version indexed items by the raw,
-			// unvalidated sortBy (`item['bogus']`), which is undefined on every
-			// entry, making the sort a no-op that returned the cached snapshot's
-			// own order regardless of the (also wrongly-defaulted) sortOrder.
+			// Regression test: indexing items by the raw, unvalidated sortBy
+			// (`item['bogus']`) yields undefined on every entry, making the
+			// sort a no-op that returns the cached snapshot's own order
+			// regardless of the (also wrongly-defaulted) sortOrder.
 			vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(FULL);
 			const context = makeContext('archive_opts_sort_bogus');
 

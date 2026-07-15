@@ -7,11 +7,11 @@ import { apiGet } from './api-client.js';
 import { PAGE_SIZE } from './page-size.js';
 
 /**
- * Link analysis type. Only `'broken'` remains: `'orphaned'` was retired
- * (complete singletons live in the **孤立ページ** view
+ * Link analysis type. `'broken'` is the only value: there is no
+ * `'orphaned'` type (complete singletons live in the **孤立ページ** view
  * (`useIsolatedPagesInfinite`), interconnected orphan groups in the
- * **孤立集合** view (`useIsolatedClustersInfinite`)), and `'external'` moved
- * to the dedicated `useExternalLinksInfinite` (different response shape —
+ * **孤立集合** view (`useIsolatedClustersInfinite`)), and external links
+ * have the dedicated `useExternalLinksInfinite` (different response shape —
  * deduplicated by destination with a `referrerCount`, not one row per
  * anchor).
  */
@@ -41,7 +41,7 @@ export interface LinksFilter {
  * offset-as-string, per `buildLegacyPagesCursors`) otherwise — this hook
  * never needs to know which backend served a given page.
  * @param type - The link analysis type.
- * @param filter
+ * @param filter - The active filter/sort state (forms part of the query key).
  * @param options - Optional flags (`enabled`).
  * @returns The TanStack infinite-query result.
  */
