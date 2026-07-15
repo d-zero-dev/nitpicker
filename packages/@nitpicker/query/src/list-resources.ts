@@ -17,12 +17,20 @@ import { paginateQuery } from './paginate-query.js';
  * the legacy `resources` table. `referrerCount` is computed via a
  * correlated `SUM("count")` subquery over `resource_ref_edges`
  * (0.13 populates one edge row per unique referrer with `count = 1`,
- * so the sum equals the pre-0.13 `COUNT(*)` over `resources-referrers`).
- * `compress` / `cdn` are inline TEXT-affinity columns on `resource_items`
- * that preserve the `'0.0'` / `0` sentinels the pre-6 writer path emitted.
+ * so the sum equals the number of unique referrer pages).
+ * `compress` / `cdn` are inline TEXT-affinity columns on `resource_items`;
+ * the writer emits `'0.0'` / `0` sentinels for "absent", which are
+ * normalised to `null` in the returned entries.
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
  * @returns A paginated list of resource entries.
+ * @example
+ * // All JavaScript resources, most-referenced first:
+ * const { items, total } = await listResources(accessor, {
+ *   contentType: 'application/javascript',
+ *   sortBy: 'referrerCount',
+ *   sortOrder: 'desc',
+ * });
  */
 export async function listResources(
 	accessor: ArchiveAccessor,

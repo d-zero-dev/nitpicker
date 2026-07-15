@@ -10,13 +10,13 @@ import { applyListOrder } from './apply-list-order.js';
  *
  * 0.13: reads 0.13 `anchor_edges` (already deduped per
  * `(page_id, href_page_id)` pair with a per-pair `count`) instead of the
- * per-row legacy `anchors` table. The `items` array now contains one row
+ * per-row legacy `anchors` table. The `items` array contains one row
  * per unique `(source, dest)` pair — a page with N duplicate anchors to
  * the same destination collapses into a single row. The `total` count
- * still reports total anchor occurrences via `SUM(anchor_edges.count)` so
- * it matches the pre-0.13 `COUNT(anchors.id)` semantics. Anchor text
- * comes from `first_text_id` (0.13 preserves the first anchor's
- * text as the representative).
+ * reports total anchor occurrences via `SUM(anchor_edges.count)` — it
+ * counts anchors, not deduped rows, so `total` can exceed the number of
+ * listable items. Anchor text comes from `first_text_id` (0.13 preserves
+ * the first anchor's text as the representative).
  *
  * `broken` is deliberately narrow. 403 Forbidden means the resource exists
  * but access is denied — not a broken link. 5xx and the `status = -1`
@@ -33,6 +33,11 @@ import { applyListOrder } from './apply-list-order.js';
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
  * @returns Link analysis results with entries and total count.
+ * @example
+ * const { items, total } = await listLinks(accessor, { type: 'broken', limit: 100 });
+ * for (const link of items) {
+ *   console.log(`${link.sourceUrl} → ${link.destUrl} (${link.status})`);
+ * }
  */
 export async function listLinks(
 	accessor: ArchiveAccessor,

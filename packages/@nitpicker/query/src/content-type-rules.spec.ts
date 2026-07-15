@@ -95,8 +95,9 @@ describe('CONTENT_TYPE_RULES is the single source of truth', () => {
 	});
 
 	it('overlap-prone MIMEs route by precedence (image+svg wins over xml; xhtml wins over xml; text+xml wins over text)', () => {
-		// These are the exact bugs the review flagged. classifyContentType MUST
-		// agree with the SQL matcher (asserted by the integration tests below).
+		// The highest-risk precedence overlaps in the rule table.
+		// classifyContentType MUST agree with the SQL matcher (asserted by
+		// the integration tests below).
 		expect(classifyContentType('image/svg+xml')).toBe('image');
 		expect(classifyContentType('application/xhtml+xml')).toBe('html');
 		expect(classifyContentType('text/calendar+xml')).toBe('xml');

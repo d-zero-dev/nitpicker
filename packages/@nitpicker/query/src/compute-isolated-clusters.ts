@@ -49,7 +49,7 @@ const SQLITE_IN_CHUNK = 500;
  * WHERE redirectDestId IS NOT NULL` so per-anchor resolution stays
  * memory-resident — no extra SQLite round-trips.
  *
- * **Why this stays JS-heavy even after the SQL-first sweep.** A SQL push-
+ * **Why this stays JS-heavy instead of a SQL push-down.** A SQL push-
  * down variant was benchmarked (`scripts/bench-isolated.mjs`): a CTE that
  * filters anchors to inventory-* edges via 3 JOINs + LEFT JOIN redirect
  * resolution returned 1,216 edges (vs 5.1M for the chunked path on a 66k-
@@ -64,6 +64,10 @@ const SQLITE_IN_CHUNK = 500;
  * on the `pageRows.length === 0` early return below.
  * @param accessor - The archive accessor to query.
  * @returns Every connected component of the inventory-* subgraph, including singletons.
+ * @example
+ * const components = await computeIsolatedClusters(accessor);
+ * const clusters = components.filter((c) => c.size >= 2);
+ * const singletons = components.filter((c) => c.size === 1);
  */
 export async function computeIsolatedClusters(
 	accessor: ArchiveAccessor,

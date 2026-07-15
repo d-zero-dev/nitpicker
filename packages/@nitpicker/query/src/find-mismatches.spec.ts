@@ -141,9 +141,9 @@ describe('findMismatches', () => {
 	it('canonical type で明示的な sortBy を指定してもクラッシュしない', async () => {
 		// Regression test: an explicit `sortBy` routes the `canonical` type's
 		// `url`/`actual`/`expected` columns through the natural-URL-sort TEMP
-		// table (`viewer_url_sort_keys`). Before this fix, `findMismatches`
-		// never called `ensureUrlSortTempTable`, so any explicit `sortBy` on
-		// this type crashed with `no such table: viewer_url_sort_keys`.
+		// table (`viewer_url_sort_keys`). If `findMismatches` skips
+		// `ensureUrlSortTempTable`, any explicit `sortBy` on this type
+		// crashes with `no such table: viewer_url_sort_keys`.
 		const byActual = await findMismatches(archive, 'canonical', {
 			sortBy: 'actual',
 			sortOrder: 'desc',
@@ -158,8 +158,8 @@ describe('findMismatches', () => {
 	});
 
 	it('does not build the URL-sort temp table for og:title/og:description sorted by actual/expected', async () => {
-		// Regression test: `useUrlSort` alone (any explicit `sortBy`) used to
-		// gate `ensureUrlSortTempTable`, which unnecessarily paid the full
+		// Regression test: gating `ensureUrlSortTempTable` on `useUrlSort`
+		// alone (any explicit `sortBy`) would pay the full
 		// external-merge-sort setup cost even for `actual`/`expected` sorts on
 		// `og:title`/`og:description` — columns that are never URL-typed.
 		vi.mocked(ensureUrlSortTempTable).mockClear();

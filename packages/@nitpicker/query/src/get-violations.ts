@@ -5,17 +5,26 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * Violation entry returned to viewers and CLI/MCP callers.
  */
 interface ViolationEntry {
+	/** The page URL the violation was reported against. */
 	url: string;
+	/** Reporting validator name (e.g. "axe", "markuplint"). */
 	validator: string;
+	/** Severity label as reported by the validator. */
 	severity: string;
+	/** Rule identifier within the validator. */
 	rule: string;
+	/** Human-readable violation message. */
 	message: string;
+	/** Offending code snippet, or `''` when the validator reported none. */
 	code: string;
 }
 
+/** Default page size when `options.limit` is absent or invalid. */
 const DEFAULT_LIMIT = 100;
+/** Default row offset when `options.offset` is absent or invalid. */
 const DEFAULT_OFFSET = 0;
 
+/** Sort fields accepted by {@link getViolations}. */
 const SORT_BY_VALUES = [
 	'url',
 	'validator',
@@ -75,11 +84,20 @@ function resolveOffset(offset: GetViolationsOptions['offset']): number {
  * Retrieves analysis violations from the SQL read path.
  *
  * The first pass filters/sorts/paginates `analysis_violations` down to ids.
- * The second pass joins only those ids back to `pages` and
+ * The second pass joins only those ids back to `content_items` and
  * `analysis_text_refs` for display values, keeping URL/text joins out of the
  * broad scan.
- * @param accessor
- * @param options
+ * @param accessor - The archive accessor to query.
+ * @param options - Filter, sort, and pagination options.
+ * @returns The matching violations for the requested page plus the total
+ *   matching count (before pagination).
+ * @example
+ * const { items, total } = await getViolations(accessor, {
+ *   validator: 'axe',
+ *   severity: 'critical',
+ *   limit: 50,
+ * });
+ * console.log(`${total} critical axe violations`, items[0]?.rule);
  */
 export async function getViolations(
 	accessor: ArchiveAccessor,

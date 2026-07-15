@@ -18,6 +18,12 @@ import {
  * @param accessor - The archive accessor to query.
  * @param options - `provider` (required), optional `externalId`, `limit`, `offset`.
  * @returns Matching page list items, in pageId order.
+ * @example
+ * // Every page carrying a specific GTM container:
+ * const pages = await listPagesByTag(accessor, {
+ *   provider: 'Google Tag Manager',
+ *   externalId: 'GTM-XXXX',
+ * });
  */
 export async function listPagesByTag(
 	accessor: ArchiveAccessor,

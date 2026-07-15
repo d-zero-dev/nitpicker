@@ -10,8 +10,8 @@ const MISSING_PAGE_RANK_SENTINEL = Number.MAX_SAFE_INTEGER;
 /**
  * Computes insert rows for `viewer_images` (issue #113).
  *
- * 0.13: reads 0.13 `image_items` (which replaces the legacy
- * `images` table) and resolves `alt_text_id` through `text_refs`. Every
+ * Reads the 0.13 `image_items` table (the legacy `images` table's
+ * replacement) and resolves `alt_text_id` through `text_refs`. Every
  * image_items row carries either `src_url_id` XOR `src_blob_id` — those are
  * not consumed here (viewer_images only records the presence-of-alt /
  * missing-dimensions flags plus width/height/lazy), so we do not join

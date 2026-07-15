@@ -18,16 +18,15 @@ const READ_CHUNK_SIZE = 2000;
  * this is the only `anchor_edges` scan the read-model build performs for
  * either table.
  *
- * 0.13: reads 0.13 `anchor_edges` (already deduped to distinct
- * `(page_id, href_page_id)` with a per-pair `count` column) instead of the
- * per-row `anchors` legacy table, and resolves URLs through
- * `url_refs` (`content_items.url_id`). Because `anchor_edges` is already
- * grouped per `(page_id, href_page_id)`, the count is `SUM(ae.count)`
- * across the resolved-canonical destinations (multiple distinct dest pages
- * that redirect to the same canonical still collapse in the output row and
- * their counts must add — this preserves the pre-0.13 semantics where
- * `count(*)` on the per-row `anchors` table produced the summed occurrence
- * count).
+ * Reads the 0.13 `anchor_edges` table (already deduped to distinct
+ * `(page_id, href_page_id)` with a per-pair `count` column) rather than the
+ * per-row legacy `anchors` table, and resolves URLs through `url_refs`
+ * (`content_items.url_id`). Because `anchor_edges` is already grouped per
+ * `(page_id, href_page_id)`, the output count is `SUM(ae.count)` across the
+ * resolved-canonical destinations: multiple distinct dest pages that
+ * redirect to the same canonical collapse into one output row and their
+ * counts must add — the same summed occurrence count a `count(*)` over
+ * per-row anchor rows yields.
  *
  * Reads `anchor_edges` in bounded chunks by partitioning `source.id`
  * (`content_items.id`) into non-overlapping ranges

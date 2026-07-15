@@ -10,14 +10,13 @@ const READ_CHUNK_SIZE = 20_000;
  * Computes insert rows for both resource read-model tables
  * (`viewer_resources`, `viewer_resource_stats`).
  *
- * 0.13: reads 0.13 `resource_items` LEFT JOIN `resource_ref_edges`
+ * Reads the 0.13 `resource_items` table LEFT JOIN `resource_ref_edges`
  * (which already carries a per-`(resource_id, page_id)` `count`) and
- * resolves the URL through `url_refs`. The old code counted
- * `resources-referrers.id` per resource; the new code sums
- * `resource_ref_edges.count` to preserve the same "1 per unique referrer
- * page" semantics — 0.13 populates `resource_ref_edges.count = 1` for
- * every distinct `(resource_id, page_id)` pair, so `SUM(count)` collapses to
- * the same value as the old `COUNT(*)`.
+ * resolves the URL through `url_refs`. Summing `resource_ref_edges.count`
+ * yields the "1 per unique referrer page" semantics — the 0.13 format
+ * populates `resource_ref_edges.count = 1` for every distinct
+ * `(resource_id, page_id)` pair, so `SUM(count)` equals a `COUNT(*)` over
+ * per-referrer rows.
  *
  * Chunking is plain `id`-based keyset pagination
  * (`WHERE resource_items.id > :last ORDER BY resource_items.id LIMIT :size`),

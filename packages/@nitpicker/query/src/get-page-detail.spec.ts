@@ -157,10 +157,9 @@ describe('getPageDetail', () => {
 	});
 
 	it('除外 (isSkipped) されたページは skipReason を返す', async () => {
-		// The only remaining way to discover *why* a URL was excluded from
-		// crawling (robots.txt / excludeUrls / excludeKeywords) after the
-		// Page Links view (which used to show a Remarks column for every
-		// page regardless of `scraped`) was removed.
+		// getPageDetail is the only surface that reports *why* a URL was
+		// excluded from crawling (robots.txt / excludeUrls /
+		// excludeKeywords) — no list view exposes skip reasons.
 		await archive.setSkippedPage('https://example.com/excluded', 'excluded', false);
 		await populateMigrationTables(archive);
 		const result = await getPageDetail(archive, 'https://example.com/excluded');

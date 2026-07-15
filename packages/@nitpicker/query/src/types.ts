@@ -1140,9 +1140,9 @@ export interface InboundLink {
 /**
  * Filter options for listing links.
  *
- * `'orphaned'` was removed: its semantics collapsed into
- * {@link import('./list-isolated-pages.js').listIsolatedPages} (singleton inventory-* pages) and the new
- * {@link import('./list-isolated-clusters.js').listIsolatedClusters} (cluster-shaped orphans). The remaining
+ * There is no `'orphaned'` type: orphan detection lives in
+ * {@link import('./list-isolated-pages.js').listIsolatedPages} (singleton inventory-* pages) and
+ * {@link import('./list-isolated-clusters.js').listIsolatedClusters} (cluster-shaped orphans). The
  * `'broken'` / `'external'` types report links where the anchor's resolved
  * final destination matches the criterion — redirect-source rows are
  * walked through `pages.redirectDestId` to the canonical destination before

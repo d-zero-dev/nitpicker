@@ -13,10 +13,10 @@ import type { Knex } from 'knex';
  * archive scale.
  *
  * Every statement runs via `raw()` rather than knex's chainable schema
- * builder: 8 of the 11 non-`viewer_summary` tables need `WITHOUT ROWID` / a
- * composite primary key / a `CHECK` constraint / a table-level `UNIQUE`
- * constraint, none of which the chainable builder can express (the same
- * reason `page_html_blobs` / `page_html_ref` drop to `raw()` in
+ * builder: over half of these tables need `WITHOUT ROWID` / a composite
+ * primary key / a `CHECK` constraint / a table-level `UNIQUE` constraint,
+ * none of which the chainable builder can express (the same reason
+ * `page_html_blobs` / `page_html_ref` drop to `raw()` in
  * `@nitpicker/crawler`'s `init-schema.ts`). Using `raw()` for every table
  * keeps this function a single uniform style instead of mixing two
  * schema-definition APIs.
@@ -36,10 +36,9 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// Single-row site-wide summary statistics, mirroring `SummaryResult`
 	// minus `baseUrl`/`roots` (those come from `accessor.getConfig()`,
 	// independent of `pages` aggregation — see `getViewerSummary`'s docs).
-	// JSON columns store `JSON.stringify`d arrays/objects verbatim; no
-	// `url_refs`/`content_items` ref-table indirection, matching this
-	// codebase's `pages`-direct convention — same
-	// rationale as `viewer_anchor_facts` below. `/api/error-kinds`'
+	// JSON columns store `JSON.stringify`d arrays/objects verbatim with no
+	// ref-table indirection: the single row is always read whole, never
+	// filtered or joined by these values. `/api/error-kinds`'
 	// `viewer_error_kind_*` tables are a separate endpoint/issue; the
 	// `status=-1` error-kind breakdown here stays embedded inside
 	// `status_json` instead.
@@ -201,10 +200,10 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 		)
 	`);
 
-	// Precomputed `/api/error-kinds` breakdown (issue #118, reshaped after a
-	// `dev`-side breaking change normalized `getErrorKinds` to one row per
-	// host×kind pair — see this table's docs for why the original
-	// groups/hosts/samples split was replaced by a single entries table).
+	// Precomputed `/api/error-kinds` breakdown (issue #118). A single entries
+	// table rather than a groups/hosts/samples split: `getErrorKinds` already
+	// returns exactly this flat one-row-per-host×kind shape, so any further
+	// normalisation would only be re-flattened on every read.
 	// Populated from `computeErrorKindInsertRows`'s normalisation of an
 	// already-classified `getErrorKinds` result — `classifyErrorKind` itself
 	// runs exactly once, inside `getErrorKinds`, never a second time here
@@ -216,8 +215,9 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// separate samples table: samples are always read together with their
 	// owning row, never filtered/sorted independently, so there is no query
 	// shape that benefits from normalising them out. Deliberately has no
-	// `url_refs` FK for the same reason `viewer_anchor_facts`/`viewer_summary`
-	// don't (issue #139's ref-tables are not implemented).
+	// `viewer_url_refs` FK either — sample URLs are opaque display data,
+	// never joined or keyset-paginated the way `viewer_anchor_facts`'s URLs
+	// are.
 	await trx.raw(`
 		CREATE TABLE viewer_error_kind_entries (
 			host text not null,
@@ -396,11 +396,10 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// as text" convention `viewer_resources`/`viewer_anchor_facts` use for
 	// their own one-row-per-entity tables, and cheap here for the same reason
 	// (bounded by page count, not a fan-out table like `viewer_images`).
-	// Unlike every other read-model table, no `url_refs`/`content_items`
-	// ref-table indirection exists to reconstruct full header entries from
-	// (issue #139 is not implemented) — detail/export views instead read the
-	// write-model `pages.responseHeaders` blob directly by `page_id`, which
-	// is unaffected by this table's existence. `missing_count` is a
+	// No ref-table indirection exists to reconstruct full header entries
+	// from — detail/export views instead read the write-model
+	// `pages.responseHeaders` blob directly by `page_id`, which is
+	// unaffected by this table's existence. `missing_count` is a
 	// precomputed 0-4 tally, kept for display/detail use, but is NOT what
 	// `missingOnly` filters on — a range predicate (`missing_count > 0`) on
 	// an index's leading column cannot also satisfy `ORDER BY url_sort_key`
@@ -410,7 +409,7 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// `viewer_pages.has_title`'s boolean-flag-not-count convention) backs the
 	// `missingOnly` filter instead — an equality predicate on the leading
 	// index column DOES leave the remaining rows for that value ordered by
-	// the next column, verified via `EXPLAIN QUERY PLAN` during development.
+	// the next column (verifiable via `EXPLAIN QUERY PLAN`).
 	await trx.raw(`
 		CREATE TABLE viewer_header_checks (
 			page_id integer primary key,
@@ -440,10 +439,8 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// `viewer_header_checks` all use so indexed `ORDER BY`/keyset comparisons
 	// never need a pre-join back to `pages`.
 	//
-	// Like `viewer_anchor_facts`/`viewer_header_checks`, there is no
-	// `url_refs`/`content_items` ref-table indirection (issue #139 is not
-	// implemented, and landing it is out of scope for #115 specifically, same
-	// as #119's own note) — every value is inlined directly.
+	// Like `viewer_header_checks`, there is no ref-table indirection —
+	// every value is inlined directly.
 	//
 	// `group_id` is assigned sequentially by `computeDuplicateGroupRows`
 	// itself at build time (JS-side, across both `title` and `description`

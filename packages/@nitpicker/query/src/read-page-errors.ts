@@ -2,7 +2,8 @@ import type { ErrorRecord } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 /**
- * Read scrape-path failures from `page_errors`, joined to `pages` for the URL.
+ * Read scrape-path failures from `page_errors`, joined to
+ * `content_items`/`url_refs` for the URL.
  *
  * Older archives may predate the table, so existence is checked first and an
  * empty array is returned in that case — keeps the helper safe to call on any

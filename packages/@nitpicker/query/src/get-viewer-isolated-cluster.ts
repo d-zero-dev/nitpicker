@@ -7,10 +7,15 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type { Knex } from 'knex';
 
 /**
- *
- * @param query
- * @param sortBy
- * @param sortOrder
+ * Applies the `ORDER BY` clauses for cluster-member rows. `status` ordering
+ * uses the direction-specific sentinel columns (`status_sort_key` /
+ * `status_desc_key`) so null-status members stay strictly orderable in
+ * either direction (see `NULL_STATUS_SENTINEL`'s docs); `page_id` is
+ * appended as the final key to keep the order total and pagination stable.
+ * @param query - A Knex query builder scoped to `viewer_isolated_component_pages`.
+ * @param sortBy - The member column to order by; defaults to `url`.
+ * @param sortOrder - `asc` (default) or `desc`.
+ * @returns The same builder, for chaining.
  */
 function applyIsolatedClusterMemberOrder(
 	query: Knex.QueryBuilder,
@@ -45,6 +50,15 @@ function applyIsolatedClusterMemberOrder(
  * @param representativeUrl - Cluster identifier from `listViewerIsolatedClusters`.
  * @param options - Member filters and pagination.
  * @returns Matching cluster detail, or `null` when missing or collapsed to a singleton.
+ * @example
+ * const cluster = await getViewerIsolatedCluster(
+ *   accessor,
+ *   'https://example.com/orphan/',
+ *   { sortBy: 'status', limit: 50 },
+ * );
+ * if (cluster) {
+ *   console.log(cluster.size, cluster.members.length);
+ * }
  */
 export async function getViewerIsolatedCluster(
 	accessor: ArchiveAccessor,

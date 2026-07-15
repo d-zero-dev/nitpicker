@@ -17,7 +17,7 @@ describe('extractSortValues', () => {
 		expect(extractSortValues(spec, row)).toEqual([200, 'https://example.com/a.css', 42]);
 	});
 
-	it('extracts a single-column tuple for url sort', () => {
+	it("extracts the url sort's two-column tuple", () => {
 		const spec = {
 			columns: ['url_sort_key', 'resource_id'],
 			scanDirection: 'desc',

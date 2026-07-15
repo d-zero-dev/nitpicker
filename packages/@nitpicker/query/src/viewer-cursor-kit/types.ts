@@ -8,12 +8,12 @@
  * Shared by every `viewer_*` read-model table's keyset-cursor module
  * (`viewer-pages-cursor`, `viewer-resources-cursor`,
  * `viewer-unused-resources-cursor`, `viewer-anchor-facts-cursor`,
- * `viewer-images-cursor`) — before this module existed, each table
- * hand-rolled a structurally identical `{columns, scanDirection}` interface
- * under its own name (`ViewerResourcesSortSpec`, `ViewerImagesSortSpec`,
- * etc.); see `read-keyset-window.ts`'s docs for why the mechanical
- * filter/keyset/order/limit query shape those spread across is also shared
- * from here now.
+ * `viewer-images-cursor`) — the tables' sort plans are structurally
+ * identical, differing only in their column unions, so they share this one
+ * generic shape rather than each declaring its own `{columns, scanDirection}`
+ * interface under a table-specific name. The mechanical
+ * filter/keyset/order/limit query shape built on top of it is likewise
+ * shared; see `read-keyset-window.ts`.
  */
 export interface KeysetSortSpec<Column extends string> {
 	/** Keyset tuple columns, in comparison/`ORDER BY` order. */

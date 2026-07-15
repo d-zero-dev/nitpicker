@@ -6,8 +6,8 @@
  * Shared by every `viewer_*` table's keyset-cursor module; callers pass
  * their own fixed-shape object literal (e.g.
  * `{ isExternal: options.isExternal, status: options.status }`) so the key
- * order — and therefore the exact string produced — matches what each
- * table's cursor module produced before this helper existed.
+ * order — and therefore the exact string produced — is fixed per table
+ * rather than dependent on which options a given request happened to set.
  * @param filters - The filter-affecting subset of the caller's options, as a
  *   plain object literal in the desired key order.
  * @returns A canonical JSON string uniquely identifying the filter set.

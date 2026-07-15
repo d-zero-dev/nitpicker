@@ -33,20 +33,20 @@ export interface DuplicateGroupInsertRow {
 export type DuplicateGroupIdIndex = Map<DuplicateGroupField, Map<string, number>>;
 
 /**
- * 0.13: reads one `GROUP BY page_meta.<field>_text_id
+ * Reads one `GROUP BY page_meta.<field>_text_id
  * HAVING COUNT(*) > 1` aggregation per {@link DuplicateGroupField} against
- * the 0.13 entity tables. Grouping by the deduped text-ref id (rather
- * than the raw text column previously stored inline on `pages`) preserves
- * the same "same value → same group" semantics while letting SQLite work
- * with narrow integer keys. `text_refs.text` is only joined once, after the
- * group aggregation, to project the display value.
+ * the 0.13 entity tables. Grouping by the deduped text-ref id — equivalent
+ * to grouping by the raw text, since `text_refs` stores each distinct text
+ * exactly once — keeps the "same value → same group" semantics while
+ * letting SQLite work with narrow integer keys. `text_refs.text` is only
+ * joined once, after the group aggregation, to project the display value.
  *
  * The predicate matches `findDuplicates`'s scope
  * (`scraped = 1, is_external = 0, content_type='text/html',
- * redirect_dest_id IS NULL, text_id IS NOT NULL, text != ''`) — the pre-6
- * `.whereNot(field, '')` filter still applies because `text_refs.text` is
- * the same raw text that used to live inline in `pages.title` /
- * `pages.description`.
+ * redirect_dest_id IS NULL, text_id IS NOT NULL, text != ''`) — the
+ * `.whereNot('tr.text', '')` guard applies to the same raw text the legacy
+ * inline `pages.title` / `pages.description` columns hold, so empty-string
+ * metadata is excluded exactly as `findDuplicates` excludes it.
  *
  * Assigns each group a sequential, 1-based `group_id` across both fields;
  * `viewer_duplicate_group_pages` rows need this id to reference before

@@ -42,11 +42,12 @@ interface MismatchSourceRow {
  * comparison via 0.13 `page_meta` ref columns), with columns
  * pre-aliased to `actual`/`expected`.
  *
- * 0.13: integer id comparison replaces the pre-6 string comparison —
- * `page_meta.canonical_url_id != content_items.url_id` is equivalent to
- * `pages.canonical != pages.url` because `url_refs` is unique per URL, and
- * `page_meta.og_title_text_id != page_meta.title_text_id` is equivalent to
- * `pages.og_title != pages.title` because `text_refs` is unique per text.
+ * The comparisons run on integer ref ids rather than the strings they
+ * dedupe: `page_meta.canonical_url_id != content_items.url_id` is
+ * equivalent to `pages.canonical != pages.url` because `url_refs` is unique
+ * per URL, and `page_meta.og_title_text_id != page_meta.title_text_id` is
+ * equivalent to `pages.og_title != pages.title` because `text_refs` is
+ * unique per text.
  * @param trx - An open Knex transaction.
  * @param type - Which mismatch comparison to build the query for.
  * @returns A source-query builder, filtered and column-aliased, but not yet

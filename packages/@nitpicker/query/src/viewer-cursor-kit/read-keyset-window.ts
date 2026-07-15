@@ -10,10 +10,9 @@ import { applyKeysetPredicate } from './apply-keyset-predicate.js';
  * "is there another row past this page" without a second query). Shared by
  * every `viewer_*` table's keyset-cursor orchestrator
  * (`listViewerPages`/`listViewerResources`/`listViewerUnusedResources`/
- * `listViewerBrokenLinks`/`listViewerImages`) — before this function
- * existed, each one hand-rolled a structurally identical
- * `readViewerXWindow` around the same filter/keyset/order/limit/offset
- * shape, differing only in the table name, the filter predicate, and which
+ * `listViewerBrokenLinks`/`listViewerImages`) — the orchestrators all issue
+ * the same filter/keyset/order/limit/offset query shape, differing only in
+ * the table name, the filter predicate, and which
  * extra columns to select (id-then-join tables like resources/images select
  * just their id column here and join the wide table afterward;
  * `viewer_anchor_facts` has no join stage and selects its full display

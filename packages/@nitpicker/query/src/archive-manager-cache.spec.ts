@@ -104,9 +104,9 @@ describe('ArchiveManager cache-mode (archive opens go through Archive.openCached
 		const { accessor, archive, mode } = await manager.open(archiveFilePath);
 
 		// The cache path returns an `ArchiveAccessor` only; the writer-
-		// path `Archive` instance is intentionally absent. Callers that
-		// previously reached for `result.archive` must not be the
-		// viewer / MCP / query CLI (they only need the accessor).
+		// path `Archive` instance is intentionally absent. The viewer /
+		// MCP / query CLI only ever need the accessor — a writer handle
+		// here would invite accidental finalisation of a shared cache dir.
 		expect(archive).toBeUndefined();
 		expect(mode).toBe('archive');
 
@@ -117,7 +117,7 @@ describe('ArchiveManager cache-mode (archive opens go through Archive.openCached
 	});
 
 	it('keeps the cache directory alive after close so the next reader can skip the untar', async () => {
-		// The whole point of this PR: closing a viewer must NOT discard
+		// The cache's core contract: closing a viewer must NOT discard
 		// the extracted state, so the next viewer open is instant.
 		const manager = new ArchiveManager();
 		const { accessor } = await manager.open(archiveFilePath);
@@ -183,7 +183,7 @@ describe('ArchiveManager cache-mode (archive opens go through Archive.openCached
 	});
 });
 
-describe('ArchiveManager cache-mode: a read-only open never builds a viewer read model (issue #177, corrects #112)', () => {
+describe('ArchiveManager cache-mode: a read-only open never builds a viewer read model (issue #177)', () => {
 	// A separate archive (not the shared `archiveFilePath` above) so these
 	// assertions aren't racing an earlier test in this file that already
 	// opened the shared fixture's cache directory.

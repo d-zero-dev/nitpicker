@@ -20,7 +20,7 @@ describe('extractSortValues', () => {
 		expect(extractSortValues(spec, row)).toEqual([3, 42]);
 	});
 
-	it('extracts a single-column tuple for a non-default sort field', () => {
+	it("extracts a non-default sort field's two-column tuple", () => {
 		const spec = {
 			columns: ['natural_width', 'image_id'],
 			scanDirection: 'desc',

@@ -14,12 +14,19 @@ import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
  * count.
  *
  * 0.13: reads 0.13 `anchor_edges` joined to `content_items` and
- * `url_refs`. `referrerCount` uses `COUNT(DISTINCT source.id)` (unique
- * referrer pages, not anchor rows) — matches pre-0.13 semantics because
- * `anchor_edges` already deduplicates the `(page_id, href_page_id)` pair.
+ * `url_refs`. `referrerCount` uses `COUNT(DISTINCT source.id)` — unique
+ * referrer pages, not anchor rows (`anchor_edges` already deduplicates
+ * the `(page_id, href_page_id)` pair).
  * @param accessor - The archive accessor to query.
  * @param options - Filter, sort, and pagination options.
  * @returns A paginated list of unique external destinations.
+ * @example
+ * const { items, total } = await listExternalLinks(accessor, {
+ *   sortBy: 'referrerCount',
+ *   sortOrder: 'desc',
+ *   limit: 20,
+ * });
+ * // items[0] is the external destination linked from the most pages.
  */
 export async function listExternalLinks(
 	accessor: ArchiveAccessor,

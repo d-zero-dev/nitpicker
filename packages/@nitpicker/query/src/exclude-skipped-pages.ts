@@ -23,8 +23,8 @@ import type { Knex } from 'knex';
  *   constrain. Mutated in place — pass the inner builder from a `.where`
  *   callback, not the outer query.
  * @param columnName - Fully-qualified column name (e.g. `ci.is_skipped`).
- *   REQUIRED (no default) since 0.13: the pre-6 legacy `pages` table
- *   used `isSkipped` (camelCase) while the 0.13 `content_items`
+ *   REQUIRED (no default): the legacy `pages` table (pre-0.13) used
+ *   `isSkipped` (camelCase) while the 0.13 `content_items`
  *   replacement uses `is_skipped` (snake_case). Forcing every caller to
  *   name the column at the callsite turns any missed migration into a
  *   TypeScript error rather than a silent SQL failure.

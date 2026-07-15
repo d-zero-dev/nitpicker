@@ -3,10 +3,17 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type { Knex } from 'knex';
 
 /**
- *
- * @param query
- * @param sortBy
- * @param sortOrder
+ * Applies the `ORDER BY` clauses for cluster-summary rows. Descending
+ * `size` / `representativeStatus` ordering goes through the precomputed
+ * negated-key columns (`size_desc_key`, `representative_status_desc_key`)
+ * with a plain `asc` scan, so both directions read the same-shaped index and
+ * null-status rows stay strictly orderable (see `NULL_STATUS_SENTINEL`'s
+ * docs); `representative_url_sort_key` + `component_id` are appended as
+ * final keys to keep the order total and pagination stable.
+ * @param query - A Knex query builder scoped to `viewer_isolated_components`.
+ * @param sortBy - The summary column to order by; defaults to `size`.
+ * @param sortOrder - `asc` or `desc`; defaults to `size` descending.
+ * @returns The same builder, for chaining.
  */
 function applyIsolatedClusterOrder(
 	query: Knex.QueryBuilder,
@@ -50,6 +57,11 @@ function applyIsolatedClusterOrder(
  * @param accessor - Archive accessor whose read model is current.
  * @param options - Filters and offset pagination.
  * @returns Cluster summaries with the same public shape as `listIsolatedClusters`.
+ * @example
+ * const { items, total } = await listViewerIsolatedClusters(accessor, {
+ *   sortBy: 'size',
+ *   limit: 50,
+ * });
  */
 export async function listViewerIsolatedClusters(
 	accessor: ArchiveAccessor,

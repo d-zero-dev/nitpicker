@@ -227,9 +227,9 @@ describe('getViewerErrorKinds', () => {
 		});
 
 		it('falls back to count-desc for an out-of-range sortBy, matching getErrorKinds() — regression test', async () => {
-			// Regression test: an earlier version computed the default sortOrder
-			// from the raw, unvalidated sortBy instead of the clamped column
-			// selection, so an invalid sortBy silently returned count-ascending
+			// The default sortOrder must be derived from the clamped column
+			// selection, not the raw, unvalidated sortBy — deriving it from the
+			// raw value makes an invalid sortBy silently return count-ascending
 			// instead of matching getErrorKinds()'s count-descending fallback.
 			const [viewerResult, legacyResult] = await Promise.all([
 				getViewerErrorKinds(archive, {

@@ -21,7 +21,7 @@ describe('buildViewerImagesFilterKey', () => {
 		);
 	});
 
-	it('produces a different key for a different oversizedThreshold value — regression test for a stale-cursor-across-threshold-change bug', () => {
+	it('produces a different key for a different oversizedThreshold value, so a cursor cannot be replayed across a threshold change', () => {
 		expect(buildViewerImagesFilterKey({ oversizedThreshold: 1000 })).not.toBe(
 			buildViewerImagesFilterKey({ oversizedThreshold: 2000 }),
 		);

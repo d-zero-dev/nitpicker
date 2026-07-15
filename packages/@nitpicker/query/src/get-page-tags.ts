@@ -14,6 +14,10 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * @param accessor - The archive accessor to query.
  * @param url - The page URL.
  * @returns Ordered tag entries, or `[]` when the page has no tags.
+ * @example
+ * const tags = await getPageTags(accessor, 'https://example.com/');
+ * const gtm = tags.find((t) => t.provider === 'Google Tag Manager');
+ * console.log(gtm?.externalId); // e.g. 'GTM-XXXX'
  */
 export async function getPageTags(
 	accessor: ArchiveAccessor,

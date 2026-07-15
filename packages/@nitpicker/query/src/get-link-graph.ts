@@ -33,6 +33,9 @@ function aliasedInternalWhere(
  * @param accessor - The archive accessor to query.
  * @param options - Optional node cap.
  * @returns The link graph (nodes + edges + truncated flag).
+ * @example
+ * // Cap to the 500 highest in-degree pages for a renderable graph:
+ * const { nodes, edges, truncated } = await getLinkGraph(accessor, { limit: 500 });
  */
 export async function getLinkGraph(
 	accessor: ArchiveAccessor,

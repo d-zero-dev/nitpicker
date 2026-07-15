@@ -27,6 +27,11 @@ import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presenc
  * @param options.offset - Number of results to skip. Defaults to 0.
  * @param options.missingOnly - When true, only returns pages missing at least one security header.
  * @returns A paginated list of header check results.
+ * @example
+ * const { items, total } = await checkHeaders(accessor, { missingOnly: true, limit: 50 });
+ * for (const page of items) {
+ *   if (!page.hasCSP) console.log(`${page.url} has no Content-Security-Policy`);
+ * }
  */
 export async function checkHeaders(
 	accessor: ArchiveAccessor,

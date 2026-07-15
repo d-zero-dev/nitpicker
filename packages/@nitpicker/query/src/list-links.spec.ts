@@ -362,9 +362,8 @@ describe('listLinks', () => {
 /**
  * Separate describe with a dedicated fixture: an anchor that points at a
  * redirect-source URL whose canonical destination is broken (404). This
- * pins the redirect-resolved broken/external judgment introduced when
- * `'orphaned'` was removed and listLinks switched to canonical-folded
- * destinations by default.
+ * pins the redirect-resolved broken/external judgment — listLinks folds
+ * anchors to their canonical (redirect-resolved) destination by default.
  */
 describe('listLinks — redirect resolution', () => {
 	let archive: InstanceType<typeof Archive>;

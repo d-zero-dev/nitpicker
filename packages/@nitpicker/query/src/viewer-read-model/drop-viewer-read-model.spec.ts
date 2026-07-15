@@ -89,7 +89,7 @@ describe('dropViewerReadModel', () => {
 		expect(await hasViewerReadModel(archive)).toBe(false);
 	});
 
-	it('drops all 5 tables after a build, leaving the write model untouched', async () => {
+	it('drops the read-model tables after a build, leaving the write model untouched', async () => {
 		await buildViewerReadModel(archive);
 		expect(await hasViewerReadModel(archive)).toBe(true);
 

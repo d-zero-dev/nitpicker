@@ -8,6 +8,9 @@ import type { ArchiveAccessor, PageSource } from '@nitpicker/crawler';
  * @param options - Optional node cap; `0` preserves the legacy "empty graph"
  *   semantics of `getLinkGraph({ limit: 0 })`.
  * @returns The internal link graph.
+ * @example
+ * const graph = await getViewerLinkGraph(accessor, { limit: 500 });
+ * console.log(graph.nodes.length, graph.edges.length, graph.truncated);
  */
 export async function getViewerLinkGraph(
 	accessor: ArchiveAccessor,

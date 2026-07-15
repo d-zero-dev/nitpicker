@@ -16,6 +16,10 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * @param accessor - The archive accessor to query.
  * @param url - The page URL.
  * @returns Per-entry overview, or `[]` when the page has no JSON-LD.
+ * @example
+ * const entries = await getPageJsonLdOverview(accessor, 'https://example.com/');
+ * const totalBytes = entries.reduce((sum, e) => sum + e.rawByteSize, 0);
+ * // Decide whether getPageJsonLd(accessor, url, false) fits the budget.
  */
 export async function getPageJsonLdOverview(
 	accessor: ArchiveAccessor,

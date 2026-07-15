@@ -3,10 +3,16 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type { Knex } from 'knex';
 
 /**
- *
- * @param query
- * @param sortBy
- * @param sortOrder
+ * Applies the `ORDER BY` clauses for singleton isolated-page rows. `status`
+ * ordering uses the direction-specific sentinel columns (`status_sort_key` /
+ * `status_desc_key`) so null-status pages stay strictly orderable in either
+ * direction (see `NULL_STATUS_SENTINEL`'s docs); `page_id` is appended as
+ * the final key to keep the order total and pagination stable.
+ * @param query - A Knex query builder joining `viewer_isolated_components`
+ *   to `viewer_isolated_component_pages` (aliased `pages`).
+ * @param sortBy - The page column to order by; defaults to `url`.
+ * @param sortOrder - `asc` (default) or `desc`.
+ * @returns The same builder, for chaining.
  */
 function applyIsolatedPageOrder(
 	query: Knex.QueryBuilder,
@@ -48,6 +54,11 @@ function applyIsolatedPageOrder(
  * @param accessor - Archive accessor whose read model is current.
  * @param options - Filters and offset pagination.
  * @returns Singleton isolated pages with the same public shape as `listIsolatedPages`.
+ * @example
+ * const { items, total } = await listViewerIsolatedPages(accessor, {
+ *   status: 200,
+ *   limit: 50,
+ * });
  */
 export async function listViewerIsolatedPages(
 	accessor: ArchiveAccessor,

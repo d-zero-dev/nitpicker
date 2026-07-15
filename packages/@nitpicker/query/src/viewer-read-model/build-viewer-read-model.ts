@@ -136,18 +136,18 @@ interface ViewerPageInsertRow {
 	 * reason as {@link NULL_STATUS_SENTINEL}: SQL's three-valued `NULL`
 	 * comparison logic would silently break tuple comparisons against a
 	 * nullable sort-key column. `''` sorts before any non-empty title in
-	 * ascending order, matching `listPages`'s prior behavior of ordering
-	 * directly on the nullable `title` column (SQLite treats `NULL` as
-	 * smaller than any value).
+	 * ascending order, matching the order produced by sorting directly on
+	 * the nullable `title` column (SQLite treats `NULL` as smaller than any
+	 * value).
 	 */
 	title_sort_key: string;
 	/**
 	 * The URL's path component, for directory-prefix range scans (so a
 	 * future `/api/pages` directory filter can seek an index range instead
-	 * of running LIKE). Stored now but intentionally has no index and no
-	 * reader yet in #108 — like `viewer_page_anchors`, wiring the actual directory
-	 * filter query/index is out of scope here and belongs to whichever
-	 * issue implements `/api/pages`'s directory filter.
+	 * of running LIKE). Stored ahead of use: intentionally has no index and
+	 * no reader yet — like `viewer_page_anchors`, wiring the actual
+	 * directory-filter query/index belongs to whichever issue implements
+	 * `/api/pages`'s directory filter.
 	 */
 	path_sort_key: string;
 }
@@ -200,7 +200,7 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
 /**
  * Performs a full rebuild of the viewer read model: computes a `getSummary`
  * snapshot (see below for why this happens outside the transaction), then
- * drops all 23 tables if present, recreates them, populates `viewer_pages`
+ * drops all 24 tables if present, recreates them, populates `viewer_pages`
  * from the current `pages` write-model table, populates
  * `viewer_directory_nodes`/`viewer_directory_pages` from that same page set
  * (see `buildDirectoryTreeRows` for the tree-building rules), populates
@@ -259,16 +259,16 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
  * `viewer-build`) ever runs concurrently with an active scraper writing to
  * the same archive.
  *
- * `getSummary` also requires `accessor.getConfig()` to resolve, a
- * precondition this function did not previously have. Every archive that
- * went through a real crawl has this guaranteed: `CrawlerOrchestrator`
- * always calls `archive.setConfig(...)` before `crawling()` starts, and both
- * call sites above only ever operate on archives that already finished (or
- * are resuming) a real crawl. `Archive.create`'s `initSchema` does not
- * itself seed a default `info` row, so a `.nitpicker` file that was
- * hand-crafted or corrupted before `setConfig` ever ran would make this
- * function throw where it previously wouldn't — an accepted trade-off, not
- * a scenario either call site is expected to hit in practice.
+ * `getSummary` also requires `accessor.getConfig()` to resolve, making that
+ * a precondition of this function too. Every archive that went through a
+ * real crawl has this guaranteed: `CrawlerOrchestrator` always calls
+ * `archive.setConfig(...)` before `crawling()` starts, and both call sites
+ * above only ever operate on archives that already finished (or are
+ * resuming) a real crawl. `Archive.create`'s `initSchema` does not itself
+ * seed a default `info` row, so this function throws on a `.nitpicker` file
+ * that was hand-crafted or corrupted before `setConfig` ever ran — an
+ * accepted trade-off, not a scenario either call site is expected to hit in
+ * practice.
  *
  * `viewer_pages` includes every listable page regardless of content-type
  * category (`scraped = 1 AND redirectDestId IS NULL`, plus excluding
@@ -326,12 +326,11 @@ export async function buildViewerReadModel(
 		await dropViewerReadModelTables(trx);
 		await createViewerReadModelTables(trx);
 
-		// 0.13: source `viewer_url_refs` from the 0.13 entity
-		// tables (`content_items` + `url_refs`) rather than the legacy
-		// `pages.url` column. Byte-identical to the pre-6 shape because
-		// `url_refs` is populated from the same `pages.url` set during Phase
-		// ref populate — every distinct URL that used to appear in `pages.url` still
-		// appears once via `content_items.url_id -> url_refs.url`.
+		// Sources `viewer_url_refs` from the 0.13 entity tables
+		// (`content_items` + `url_refs`) rather than the legacy `pages.url`
+		// column. The output shape is unchanged: `url_refs` holds the same
+		// URL set the legacy `pages.url` column did, so every distinct page
+		// URL appears exactly once via `content_items.url_id -> url_refs.url`.
 		await trx.raw(`
 			INSERT INTO viewer_url_refs (id, url)
 			SELECT row_number() OVER (ORDER BY url) AS id, url
@@ -343,15 +342,15 @@ export async function buildViewerReadModel(
 			ORDER BY url
 		`);
 
-		// 0.13: `sourceRows` reads through 0.13 entity tables.
-		// LEFT JOIN `page_meta` because 0.13 populates `page_meta`
-		// only for `scraped = 1` pages — the outer predicate already
-		// restricts to those, so the LEFT JOIN's null-fill path is
-		// defensive (any missing `page_meta` for a scraped row indicates
-		// a pre-6 migration gap and legitimately reads back as null
+		// `sourceRows` reads through the 0.13 entity tables.
+		// LEFT JOIN `page_meta` because the 0.13 format populates
+		// `page_meta` only for `scraped = 1` pages — the outer predicate
+		// already restricts to those, so the LEFT JOIN's null-fill path is
+		// defensive (a missing `page_meta` for a scraped row indicates an
+		// incomplete legacy migration and legitimately reads back as null
 		// metadata). `content_type_refs` join is inner because every
 		// scraped/non-scraped `content_items` row has a
-		// `content_type_id` — 0.13 routes missing content types
+		// `content_type_id` — the 0.13 format routes missing content types
 		// through the "unknown" ref.
 		const sourceRows: PagesSourceRow[] = await trx('content_items as ci')
 			.join('url_refs as ur', 'ur.id', 'ci.url_id')
@@ -449,8 +448,8 @@ export async function buildViewerReadModel(
 		// `viewer_external_links` via `upsertExternalLinkRows`'s `ON CONFLICT`
 		// upsert, rather than accumulating a running per-destination tally in
 		// JS across the whole build — see `deriveExternalLinkSummaryRows`'s
-		// docs for why an earlier JS-side accumulator defeated this
-		// function's own OOM fix.
+		// docs for why a whole-build JS-side accumulator would defeat the
+		// bounded-memory guarantee the chunked read exists to provide.
 		for await (const anchorFactChunk of computeAnchorFactRows(trx)) {
 			for (let start = 0; start < anchorFactChunk.length; start += INSERT_CHUNK_SIZE) {
 				await trx('viewer_anchor_facts').insert(
@@ -646,9 +645,10 @@ export async function buildViewerReadModel(
 		// Every table above is now fully populated — build every index in one
 		// pass instead of maintaining them incrementally during the inserts
 		// above. See `createViewerReadModelIndexes`'s docs for the measured
-		// cost of doing this the other way around (a 29-minute-plus
-		// `viewer_anchor_facts` load on an 11 GB archive dropped to well under
-		// 2 minutes once indexing moved here).
+		// cost of doing this the other way around (on an 11 GB archive,
+		// maintaining indexes during the inserts puts the `viewer_anchor_facts`
+		// load at 29+ minutes, vs. well under 2 minutes with post-load
+		// indexing).
 		await createViewerReadModelIndexes(trx);
 
 		await trx('viewer_read_model_meta').insert({

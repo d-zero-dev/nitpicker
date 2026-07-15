@@ -5,11 +5,20 @@ import type { Knex } from 'knex';
 import { applyListOrder } from './apply-list-order.js';
 import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
 
+/**
+ * Filter, sort, and pagination options for the paged overload of
+ * {@link findMismatches}.
+ */
 export interface FindMismatchesOptions {
+	/** Maximum number of results to return. Defaults to 100. */
 	limit?: number;
+	/** Number of results to skip. Defaults to 0. */
 	offset?: number;
+	/** URL pattern to filter page URLs (SQL LIKE pattern). */
 	urlPattern?: string;
+	/** Field to sort results by. Defaults to `'url'`. */
 	sortBy?: 'url' | 'actual' | 'expected';
+	/** Sort direction. Defaults to `'asc'`. */
 	sortOrder?: 'asc' | 'desc';
 }
 
@@ -20,13 +29,22 @@ export interface FindMismatchesOptions {
  * 0.13: reads through 0.13 `content_items` + `page_meta`;
  * comparisons are integer-id equalities (`page_meta.canonical_url_id !=
  * content_items.url_id`, `page_meta.og_title_text_id !=
- * page_meta.title_text_id`, etc.), which are equivalent to the pre-6 string
- * comparisons because `url_refs`/`text_refs` are unique per URL/text.
+ * page_meta.title_text_id`, etc.), which are equivalent to comparing the
+ * raw strings because `url_refs`/`text_refs` are unique per URL/text.
  * @param accessor - The archive accessor to query.
  * @param type - The type of mismatch to search for.
  * @param limit - Maximum number of results. Defaults to 100.
  * @param offset - Number of results to skip. Defaults to 0.
- * @returns An array of mismatch entries.
+ * @returns An array of mismatch entries (simple overload), or a paged result
+ *   with `items`/`total`/`limit`/`offset` when an options object is passed.
+ * @example
+ * // Simple overload — first 100 canonical mismatches:
+ * const entries = await findMismatches(accessor, 'canonical');
+ * // Paged overload — sorted, with a total for pagination UIs:
+ * const { items, total } = await findMismatches(accessor, 'og:title', {
+ *   sortBy: 'url',
+ *   limit: 50,
+ * });
  */
 export async function findMismatches(
 	accessor: ArchiveAccessor,

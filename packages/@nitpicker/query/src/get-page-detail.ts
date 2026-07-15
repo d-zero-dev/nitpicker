@@ -3,7 +3,7 @@ import type { ArchiveAccessor, JsonLdRow, TagRow } from '@nitpicker/crawler';
 
 /**
  * Summarises JSON-LD rows for the page-detail response.
- * @param rows
+ * @param rows - The page's `page_jsonld` rows.
  */
 function summarizeJsonLdRows(rows: readonly JsonLdRow[]): PageDetail['jsonLd'] {
 	const types = new Set<string>();
@@ -21,7 +21,7 @@ function summarizeJsonLdRows(rows: readonly JsonLdRow[]): PageDetail['jsonLd'] {
 
 /**
  * Summarises tag rows for the page-detail response.
- * @param rows
+ * @param rows - The page's `page_tags` rows.
  */
 function summarizeTagRows(rows: readonly TagRow[]): PageDetail['tags'] {
 	const providerIds: Record<string, Set<string>> = {};
@@ -51,6 +51,11 @@ function summarizeTagRows(rows: readonly TagRow[]): PageDetail['tags'] {
  * @param accessor - The archive accessor to query.
  * @param url - The URL of the page to retrieve.
  * @returns Detailed page information, or null if the page is not found.
+ * @example
+ * const detail = await getPageDetail(accessor, 'https://example.com/');
+ * if (detail) {
+ *   console.log(detail.title, detail.status, detail.inboundLinks.length);
+ * }
  */
 export async function getPageDetail(
 	accessor: ArchiveAccessor,

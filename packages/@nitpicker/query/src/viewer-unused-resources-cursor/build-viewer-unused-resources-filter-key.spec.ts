@@ -15,7 +15,7 @@ describe('buildViewerUnusedResourcesFilterKey', () => {
 		);
 	});
 
-	it('produces a different key for a different status value — regression test for a stale-cursor-across-status-change bug', () => {
+	it('produces a different key for a different status value, so a cursor cannot be replayed across a status filter change', () => {
 		expect(buildViewerUnusedResourcesFilterKey({ status: 200 })).not.toBe(
 			buildViewerUnusedResourcesFilterKey({ status: 404 }),
 		);

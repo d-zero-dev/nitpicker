@@ -37,8 +37,8 @@ export interface ExpectedAnchorFactsCursor {
  * `columns`-shaped `expected` input into the generic
  * `expectedValueCount`/`expectedValueTypeAt` shape. Anchor fact cursors use
  * numeric URL ref ids plus numeric status/edge keys, so this opts into the
- * shared decoder's per-position type check to reject stale string URL
- * cursors clearly.
+ * shared decoder's per-position type check to reject a wrong-typed `values`
+ * array (e.g. a URL string where a numeric ref id belongs) clearly.
  * @param cursor - The opaque cursor string from the request.
  * @param expected - The current request's filter key + sort, to validate against.
  * @returns The decoded, validated payload.

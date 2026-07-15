@@ -2,9 +2,9 @@
  * Sentinel `status_sort_key` value substituted for `null` status (errored /
  * not-yet-classified rows, or destinations never fetched). Chosen smaller
  * than any real HTTP status code (100-599) so unknown-status rows keep
- * sorting first in ascending order — matching the legacy write-model
- * queries' prior behavior of ordering directly on the nullable `status`
- * column, where SQLite treats `NULL` as smaller than any value.
+ * sorting first in ascending order — the same order the legacy write-model
+ * queries produce by ordering directly on the nullable `status` column,
+ * where SQLite treats `NULL` as smaller than any value.
  *
  * Deliberately distinct from `-1`, which `Database.resetFailedPages` already
  * uses as the "hard failure" HTTP status sentinel (see that function's docs)

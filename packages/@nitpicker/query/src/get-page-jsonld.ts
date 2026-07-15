@@ -21,6 +21,13 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * @param url - The page URL.
  * @param slim - Omit `raw` / `parsed` (default `true`).
  * @returns Ordered entries, or `[]` when the page has no JSON-LD.
+ * @example
+ * // Inspect structure first (slim), then drill into the full payload:
+ * const overview = await getPageJsonLd(accessor, 'https://example.com/product');
+ * if (overview.some((e) => e.type === 'Product')) {
+ *   const full = await getPageJsonLd(accessor, 'https://example.com/product', false);
+ *   console.log(full[0]?.parsed);
+ * }
  */
 export async function getPageJsonLd(
 	accessor: ArchiveAccessor,

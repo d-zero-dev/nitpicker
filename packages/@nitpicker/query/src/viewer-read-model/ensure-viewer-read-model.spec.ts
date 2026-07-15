@@ -10,7 +10,7 @@ const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
 const workingDir = path.resolve(__dirname, '__test_fixtures_ensure_viewer_read_model__');
 
-/** Minimal config — `buildViewerReadModel` now also computes a `getSummary` snapshot, which requires `accessor.getConfig()` to resolve. */
+/** Minimal config — `buildViewerReadModel` computes a `getSummary` snapshot, which requires `accessor.getConfig()` to resolve. */
 const BASE_CONFIG = {
 	baseUrl: 'https://example.com',
 	name: 'test',

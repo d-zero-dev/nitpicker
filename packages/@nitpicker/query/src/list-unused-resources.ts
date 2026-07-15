@@ -22,6 +22,13 @@ import { applyListOrder } from './apply-list-order.js';
  * @param accessor - The archive accessor to query.
  * @param options - Pagination options.
  * @returns Paginated list of unused resources with their `source` badge.
+ * @example
+ * // Candidates for deletion after an `--inventory` ingest:
+ * const { items, total } = await listUnusedResources(accessor, {
+ *   source: 'inventory-seed',
+ *   sortBy: 'contentLength',
+ *   sortOrder: 'desc',
+ * });
  */
 export async function listUnusedResources(
 	accessor: ArchiveAccessor,

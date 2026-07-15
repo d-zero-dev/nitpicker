@@ -74,7 +74,7 @@ export function isNumericAnchorFactsSortColumn(column: AnchorFactsSortColumn): b
  * (`list-links.ts`'s semantics), which no single index here can satisfy, so
  * the caller (`register-links-route.ts`) forces the legacy fallback instead
  * of ever reaching this cursor machinery with a `urlPattern` set — the same
- * precedent `register-pages-route.ts` already established for `/api/pages`.
+ * fallback `register-pages-route.ts` uses for `/api/pages`.
  */
 export interface AnchorFactsCursorFilterKeyInput {
 	/** See `ListViewerBrokenLinksOptions.status`. */

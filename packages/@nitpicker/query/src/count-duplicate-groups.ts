@@ -10,6 +10,9 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * @param accessor - The archive accessor to query.
  * @param field - The metadata field to check for duplicates.
  * @returns The total number of duplicate groups for `field`.
+ * @example
+ * const totalGroups = await countDuplicateGroups(accessor, 'title');
+ * // Pair with findDuplicates(accessor, 'title', limit, offset) for pagination.
  */
 export async function countDuplicateGroups(
 	accessor: ArchiveAccessor,

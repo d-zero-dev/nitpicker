@@ -18,9 +18,13 @@ import {
 import { paginateQuery } from './paginate-query.js';
 import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
 
+/** One DISTINCT row read for facet computation — see {@link getPageListFacets}. */
 type PageFacetRow = {
+	/** HTTP status, or `null` for not-yet-classified/errored rows. */
 	status: number | null;
+	/** Document language, or `null` when absent. */
 	lang: string | null;
+	/** SQLite boolean: `1` for external pages, `0` for internal. */
 	isExternal: 0 | 1;
 };
 
@@ -39,7 +43,8 @@ function isPresent<T>(value: T | null | undefined): value is T {
  * (LEFT JOIN because 0.13 populates `page_meta` only for
  * `scraped = 1` pages), joined to `url_refs`, `content_type_refs`, and
  * `header_flags`. Column projections are wired via
- * {@link PAGE_LIST_SELECT_COLUMNS} so `PageListRow` keeps its pre-6 shape.
+ * {@link PAGE_LIST_SELECT_COLUMNS} so every page-list query emits the same
+ * `PageListRow` shape.
  * @param knex - Knex instance.
  * @param contentTypeCategory - Optional category override.
  * @returns Query builder scoped to page-list rows.
@@ -92,12 +97,19 @@ function createPageListBaseQuery(
  * Lists pages from the archive with filtering, sorting, and pagination.
  *
  * 0.13: reads through 0.13 entity tables; every metadata column
- * that previously lived inline on `pages` is now resolved via `page_meta`
- * plus one of `text_refs`/`url_refs` (see {@link createPageListBaseQuery}).
- * Header-presence flags come from 0.13 `header_flags`.
+ * is resolved via `page_meta` plus one of `text_refs`/`url_refs`
+ * (see {@link createPageListBaseQuery}). Header-presence flags come from
+ * 0.13 `header_flags`.
  * @param accessor - The archive accessor to query.
  * @param options - Filter, sort, and pagination options.
  * @returns A paginated list of page entries with metadata.
+ * @example
+ * // SEO sweep: internal pages with no description, 100 at a time.
+ * const { items, total, facets } = await listPages(accessor, {
+ *   isExternal: false,
+ *   missingDescription: true,
+ *   sortBy: 'url',
+ * });
  */
 export async function listPages(
 	accessor: ArchiveAccessor,

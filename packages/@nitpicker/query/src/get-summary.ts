@@ -18,12 +18,17 @@ import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
  * 0.13: reads 0.13 entity tables (`content_items` + `page_meta`
  * + `url_refs` + `content_type_refs`) instead of the legacy `pages` table.
  * Metadata-fulfillment counts inspect the deduped `page_meta.*_text_id`
- * columns directly — 0.13's populate skips empty text, so
- * `IS NOT NULL` is sufficient to match the pre-6 `IS NOT NULL AND != ''`
- * behaviour.
+ * columns directly — the 0.13 populate step skips empty text, so
+ * `IS NOT NULL` on the id column is equivalent to
+ * `IS NOT NULL AND != ''` on the raw text.
  * @param accessor - The archive accessor to query.
  * @returns Summary statistics including page counts, status distribution,
  *   metadata rates, and content-type distribution.
+ * @example
+ * const summary = await getSummary(accessor);
+ * console.log(`${summary.internalPages} internal HTML pages`);
+ * const failed = summary.statusDistribution.find((s) => s.status === -1);
+ * console.log(failed?.errorKindBreakdown); // per-cause counts, if any failures
  */
 export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResult> {
 	const knex = accessor.getKnex();

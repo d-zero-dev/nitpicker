@@ -26,6 +26,18 @@ function parseReferrersCursor(cursor: string | undefined): number {
  * @param options - The resource URL to look up, plus pagination options.
  * @returns The resource URL and a bounded window of pages that reference
  *   it, or `null` if the resource URL is not found.
+ * @example
+ * let cursor: string | undefined;
+ * do {
+ *   const result = await getResourceReferrers(accessor, {
+ *     resourceUrl: 'https://example.com/style.css',
+ *     limit: 100,
+ *     cursor,
+ *   });
+ *   if (!result) break; // unknown resource URL
+ *   console.log(result.pageUrls);
+ *   cursor = result.nextCursor ?? undefined;
+ * } while (cursor);
  */
 export async function getResourceReferrers(
 	accessor: ArchiveAccessor,

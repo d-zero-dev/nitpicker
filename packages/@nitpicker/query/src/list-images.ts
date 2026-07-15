@@ -12,12 +12,18 @@ import { paginateQuery } from './paginate-query.js';
  * regular URL-shaped `src`/`currentSrc` — the common case) and
  * `text_refs` (for `alt`). Data-URI `src`/`currentSrc` values (> 512
  * bytes) live on `blob_refs` and are not decoded in SQL — the caller
- * receives `null` for those, matching the pre-6 shape where the writer
- * previously stored the data-URI inline. A follow-up can add
- * zstd-decompression in JS if callers need the raw data URI back.
+ * receives `null` for those. Recovering the raw data URI would require
+ * zstd-decompression in JS, which no current caller needs.
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
  * @returns A paginated list of image entries.
+ * @example
+ * // Accessibility sweep: images with no alt text, largest first.
+ * const { items, total } = await listImages(accessor, {
+ *   missingAlt: true,
+ *   sortBy: 'naturalWidth',
+ *   sortOrder: 'desc',
+ * });
  */
 export async function listImages(
 	accessor: ArchiveAccessor,

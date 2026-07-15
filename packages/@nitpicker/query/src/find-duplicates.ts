@@ -16,9 +16,9 @@ const URL_DELIMITER = '';
  * joined to `page_meta` for the field's `text_ref` and `url_refs` for the
  * page URL) and groups on the deduped `text_refs.id` — walking a narrow
  * integer key instead of the raw text column. `GROUP_CONCAT(url, X'1F')`
- * still materialises the URL list for each group inside the same query,
- * preserving the single-pass optimisation (~50× faster than the pre-6
- * N+1 implementation).
+ * materialises the URL list for each group inside the same query, keeping
+ * the read single-pass — a per-group N+1 URL lookup is ~50× slower on
+ * large archives.
  *
  * The URL delimiter is ASCII Unit Separator (`\x1F`), which is illegal in
  * URLs per RFC 3986. This keeps the JS split unambiguous without escaping.
@@ -28,6 +28,11 @@ const URL_DELIMITER = '';
  * @param offset - Number of duplicate groups (in `ORDER BY cnt DESC` order)
  *   to skip before `limit` is applied. Defaults to 0.
  * @returns An array of duplicate entries with the shared value and matching URLs.
+ * @example
+ * const groups = await findDuplicates(accessor, 'title', 20);
+ * for (const group of groups) {
+ *   console.log(`"${group.value}" is shared by ${group.count} pages`, group.urls);
+ * }
  */
 export async function findDuplicates(
 	accessor: ArchiveAccessor,

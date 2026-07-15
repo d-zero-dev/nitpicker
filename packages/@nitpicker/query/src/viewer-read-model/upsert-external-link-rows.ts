@@ -16,11 +16,11 @@ const INSERT_CHUNK_SIZE = 500;
  * contain referrers of the same external `dest_page_id`, the running total
  * has to accumulate somewhere. Doing it here via `ON CONFLICT (dest_page_id)
  * DO UPDATE SET referrer_count = referrer_count + excluded.referrer_count`
- * keeps that accumulation in SQLite instead of a JS `Map` that an earlier
- * version of this build kept alive across the whole scan — which grew
- * unboundedly with the number of distinct external destinations (e.g.
- * ad/tracking links whose query strings make every render's target URL
- * unique) and defeated `computeAnchorFactRows`'s own OOM fix. `dest_url_ref_id`/
+ * keeps that accumulation in SQLite instead of a JS `Map` held alive across
+ * the whole scan — such a map grows unboundedly with the number of distinct
+ * external destinations (e.g. ad/tracking links whose query strings make
+ * every render's target URL unique), defeating `computeAnchorFactRows`'s
+ * bounded-memory chunking. `dest_url_ref_id`/
  * `status` are never updated on conflict: both are properties of the
  * destination page itself, so they're identical across every chunk that
  * observes the same `dest_page_id`.

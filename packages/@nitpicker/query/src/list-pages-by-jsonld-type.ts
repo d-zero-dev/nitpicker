@@ -17,6 +17,9 @@ import {
  * @param accessor - The archive accessor to query.
  * @param options - `type` (required), `limit`, `offset`.
  * @returns Matching page list items, in pageId order.
+ * @example
+ * const pages = await listPagesByJsonLdType(accessor, { type: 'Product', limit: 100 });
+ * console.log(pages.map((p) => p.url));
  */
 export async function listPagesByJsonLdType(
 	accessor: ArchiveAccessor,
