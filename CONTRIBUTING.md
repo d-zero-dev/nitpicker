@@ -102,7 +102,7 @@ docs: update README with new CLI options
 - **行送信は library 任せ**: `createSheets()` は `sheet.appendRow(...data)` で行を都度送る。チャンク化（2500 行ごとの自動 flush）と遅延セル検出は `@d-zero/google-sheets` の `Sheet` が内部で処理するため、新規シート側で意識する必要はない
 - **遅延セル (`createCellData(() => ...)`) は使ってよい**: `appendRow()` は遅延セルを含む行を検出すると自動的に buffered モードに切り替わり、明示的な `flush()` まで送信を保留する。Page List の「Internal Referrers」列がこの仕組みに乗っている
 - **テストでガード**: 各 `create-*.spec.ts` には「`eachPage`／`eachResource` が返すセルが `Cell.prototype.provide` に揃っているか（=eager のみ）」を検証するアサーションがある。streaming 経路の高速性を維持するため、遅延セルを使う必要のないシートでは引き続き eager のみで実装すること。Page List 側の spec は逆向きで、少なくとも 1 つの遅延セルが含まれることをアサートしている
-- 詳細は `ARCHITECTURE.md` の Report 章を参照
+- 詳細は `sheets/create-sheets.ts` / `sheets/run-finalize-resources.ts` の JSDoc と ARCHITECTURE.md の「不変条件・負の知識」を参照
 
 ## 互換性ポリシー
 
