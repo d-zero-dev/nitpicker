@@ -23,10 +23,11 @@ const READ_CHUNK_SIZE = 5000;
  * relevant column — the per-column-scan variant used to run 8 separate
  * pages scans and multiplied migration wall-clock accordingly.
  *
- * `dom_path` is intentionally absent: derivation happens later in Phase
- * write-path refactor (see §dom_path Derivation in the plan) and depends on the HTML
- * blob, not the current write-model. Migrating dom_path into `text_refs`
- * is the job of the image-items population step, not ref populate step 2.
+ * `dom_path` is intentionally absent: dom_path strings are derived from
+ * the stored HTML blob, not from any column of the current write-model,
+ * so this scan has nothing to read. Upserting dom_path strings into
+ * `text_refs` is the job of the image-items populate
+ * (`populate-entity-tables/populate-image-items.ts`), not this pass.
  */
 const TEXT_SOURCES: readonly {
 	table: 'anchors' | 'images' | 'pages';
@@ -51,14 +52,14 @@ const TEXT_SOURCES: readonly {
 
 /**
  * Populates `text_refs` from every text-shaped column across `anchors`,
- * `images`, and `pages` (issue #191 step ref populate step 2).
+ * `images`, and `pages` (issue #191).
  *
  * Rules:
  *
  * - **Content-hash dedup contract**: identical text produces one row. The
  *   hash is derived by {@link computeContentHash} (currently SHA-256,
  *   matching `page_html_blobs.hash`; see that function's docs for the
- *   plan-vs-implementation rationale).
+ *   algorithm-choice rationale).
  * - **Empty and null are skipped** — an empty `<a>` tag adds no text to
  *   the dictionary. Anchors with no text still get an `anchor_edges` row
  *   in 0.13, just with `first_text_id = NULL`.

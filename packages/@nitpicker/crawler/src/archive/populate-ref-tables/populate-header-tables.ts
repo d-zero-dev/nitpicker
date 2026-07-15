@@ -50,7 +50,7 @@ interface HeaderTableCaches {
  * Populates the five header decomposition tables (`header_name_refs`,
  * `header_value_refs`, `header_sets`, `header_set_entries`,
  * `header_flags`) from every `pages.responseHeaders` and
- * `resources.responseHeaders` JSON blob (issue #191 step ref populate step 5).
+ * `resources.responseHeaders` JSON blob (issue #191).
  *
  * Strategy:
  *
@@ -106,7 +106,7 @@ export async function populateHeaderTables(trx: Knex): Promise<void> {
 
 /**
  * Loads every row of `header_name_refs` into `name → id`. Called once at
- * the start of the populate step so subsequent lookups skip the DB.
+ * the start of {@link populateHeaderTables} so subsequent lookups skip the DB.
  * @param trx - Knex instance.
  * @returns Map keyed by lower-cased header name.
  */

@@ -17,7 +17,7 @@ const LOOKUP_CHUNK_SIZE = 800;
  * The `text_refs` UNIQUE constraint is on `(hash, text)` so lookups
  * prefix-seek on `hash`. Each caller-supplied text is hashed in JS via
  * {@link ../populate-ref-tables/compute-content-hash.ts} (32-byte SHA-256, matching
- * how `populateTextRefs` inserted the rows in 0.13-2) before the
+ * how `populateTextRefs` inserted the rows) before the
  * SQL query; providing the hash lets SQLite's index seek in O(log n)
  * without a full table scan.
  *
@@ -32,7 +32,7 @@ const LOOKUP_CHUNK_SIZE = 800;
  * @param texts - Iterable of raw text strings to resolve.
  * @returns Map keyed by the raw text; missing entries indicate the text
  *   is not present in `text_refs` (which should not happen after
- *   0.13-2 completes but does happen mid-migration when a caller
+ *   `populateTextRefs` completes but does happen mid-migration when a caller
  *   passes texts that were never inserted).
  * @example
  * const idMap = await resolveTextRefs(trx, ['My Page Title', 'Alt text']);

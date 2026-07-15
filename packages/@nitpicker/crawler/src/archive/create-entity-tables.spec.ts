@@ -415,9 +415,9 @@ describe('createEntityTables', () => {
 	});
 
 	it('permits image_items dimensional columns to be NULL', async () => {
-		// The plan doc (`docs/viewer-db-redesign-plan.md`) intentionally
-		// makes width / height / natural_width / natural_height /
-		// viewport_width nullable, a divergence from legacy `images`
+		// width / height / natural_width / natural_height /
+		// viewport_width are intentionally nullable — a deliberate
+		// divergence from legacy `images`,
 		// which declared them `.notNullable()`. Documenting the
 		// divergence with a passing NULL insert prevents a future
 		// "restore the legacy NOT NULL contract" edit from silently

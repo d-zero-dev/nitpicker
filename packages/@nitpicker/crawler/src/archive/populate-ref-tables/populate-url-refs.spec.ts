@@ -9,7 +9,7 @@ import { countRows } from './test-utils/count-rows.js';
 
 /**
  * Sets up a minimal in-memory archive with the source tables (pages,
- * resources, images) that 0.13-1 scans, plus the 0.13 ref
+ * resources, images) that `populateUrlRefs` scans, plus the 0.13 ref
  * tables. Column set is a strict subset of the real schema — only the
  * columns `populateUrlRefs` looks at.
  * @returns The connected Knex instance; the caller destroys it.

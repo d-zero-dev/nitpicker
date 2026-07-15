@@ -6,8 +6,8 @@ import { MigrationVerificationError } from './types.js';
  * Verifies 0.13 invariant #4: the sum of `anchor_edges.count` equals the
  * total number of legacy `anchors` rows.
  *
- * 0.13-4 collapses N `anchors` rows per `(pageId, hrefId)` pair into a
- * single edge with `count = N`; the invariant re-establishes the identity
+ * `populateAnchorEdges` collapses N `anchors` rows per `(pageId, hrefId)`
+ * pair into a single edge with `count = N`; the invariant re-establishes the identity
  * `sum(count) = number of source rows`. Together with invariant #3 this
  * proves the dedup is exact (no rows lost, no rows double-counted).
  * @param trx - Knex instance or transaction connected to the populated archive.

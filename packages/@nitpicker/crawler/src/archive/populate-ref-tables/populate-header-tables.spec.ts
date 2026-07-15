@@ -8,8 +8,8 @@ import { populateHeaderTables } from './populate-header-tables.js';
 import { countRows } from './test-utils/count-rows.js';
 
 /**
- * Minimal archive with the two source tables that 0.13-5 scans, plus
- * the 0.13 ref tables (including the five header tables).
+ * Minimal archive with the two source tables that `populateHeaderTables`
+ * scans, plus the 0.13 ref tables (including the five header tables).
  * @returns The connected Knex instance; the caller destroys it.
  */
 async function setup(): Promise<ReturnType<typeof knex>> {

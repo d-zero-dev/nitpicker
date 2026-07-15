@@ -19,7 +19,7 @@ const INSERT_CHUNK_SIZE = 100;
 /**
  * Populates `blob_refs` from every `images.src` / `images.currentSrc`
  * value that is a data URI longer than {@link DATA_URI_URL_REFS_LIMIT}
- * bytes (issue #191 step ref populate step 4).
+ * bytes (issue #191).
  *
  * For each such value:
  *

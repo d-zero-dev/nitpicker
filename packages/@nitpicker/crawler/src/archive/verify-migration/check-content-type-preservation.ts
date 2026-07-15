@@ -4,7 +4,7 @@ import { MigrationVerificationError } from './types.js';
 
 /**
  * Verifies 0.13 invariant #7: no page loses its content-type across the
- * 0.13-1 populate.
+ * `content_items` populate.
  *
  * `populate-content-items.ts` sets `content_type_id = null` whenever the
  * legacy `pages.contentType` is null OR the empty string (the empty string

@@ -98,7 +98,7 @@ describe('populatePageMeta', () => {
 		await populateContentItems(db);
 		await populatePageMeta(db);
 		const row = await db('page_meta').where('page_id', 1).first();
-		// og_image points at a large data URI that 0.13-1 routed to
+		// og_image points at a large data URI that `populateUrlRefs` routed to
 		// blob_refs, which page_meta cannot reference (no *_blob_id
 		// column). The URL is dropped with a warning; the row still exists.
 		expect(row.og_image_url_id).toBeNull();

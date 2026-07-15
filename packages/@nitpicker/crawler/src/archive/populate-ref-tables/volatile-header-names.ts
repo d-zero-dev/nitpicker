@@ -5,12 +5,10 @@
  * stable set.
  *
  * `set-cookie` sits here because per-session cookies rotate constantly on
- * authenticated sites — the plan's §Stable / Volatile Classification
- * table treats it as volatile even though it is technically a stable
- * security signal.
+ * authenticated sites — it is deliberately classified as volatile even
+ * though it is technically a stable security signal.
  *
- * Kept in lock-step with the plan (`docs/write-model-refactor-plan.md`
- * §Stable / Volatile Classification). Any header not in this set is
+ * Any header not in this set is
  * treated as **stable** by {@link ./header-stability.ts:isVolatileHeader}
  * — the safer default because miscounting a genuinely volatile header as
  * stable only loses dedup; miscounting a stable one as volatile could

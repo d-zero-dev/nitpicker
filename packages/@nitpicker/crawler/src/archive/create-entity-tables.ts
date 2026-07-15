@@ -54,10 +54,10 @@ import type { Knex } from 'knex';
  * `url_refs` and each entity references `url_refs.id` via `url_id` —
  * but `url_refs.url UNIQUE` only guarantees "one URL string → one
  * ref id", it does NOT prevent two entity rows from claiming the same
- * ref id. `UNIQUE(url_id)` re-establishes that guarantee at the entity
- * level, matching `docs/viewer-db-redesign-plan.md` and
- * `docs/viewer-sql-query-plan.md` (both specify `unique` on
- * `content_items.url_id` and `resource_items.url_id`). The UNIQUE
+ * ref id. `UNIQUE(url_id)` on both `content_items` and `resource_items`
+ * re-establishes that guarantee at the entity level — without it a
+ * populate bug could attach two entity rows to the same URL, and every
+ * by-URL reader would silently return an arbitrary one. The UNIQUE
  * constraint's auto-index also serves the by-URL seek path, so no
  * separate `CREATE INDEX ... ON content_items(url_id)` is needed.
  *
@@ -105,7 +105,7 @@ import type { Knex } from 'knex';
  * resolve to a `text_refs` entry describing its DOM position. 0.13
  * derives the path from `images.sourceCode` (the stored `outerHTML`); an
  * image whose `sourceCode` is empty falls back to the synthetic label
- * `img[unknown]` (via the populate step) so the FK is never violated.
+ * `img[unknown]` (via the image-items populate) so the FK is never violated.
  *
  * **`image_items` src / blob mutual-exclusion CHECK.** `src_url_id` and
  * `src_blob_id` (and their `current_src_*` mirror) are separate nullable
@@ -124,9 +124,9 @@ import type { Knex } from 'knex';
  * `redirect_dest_id` (for the Page Detail inbound-redirect list),
  * `content_type_id`, `crawl_order`, and `source` — all present on
  * legacy `pages`. `page_meta` gets `og_type` and `robots_noindex`
- * because both were indexed on legacy `pages` for Phase 1 analytics
- * queries; after the split those readers land on `page_meta` and need
- * the indexes to remain sub-second. `resource_items` gets `url_id`
+ * because both were indexed on legacy `pages` for the noindex /
+ * og:type filter hot paths; after the split those readers land on
+ * `page_meta` and need the indexes to remain sub-second. `resource_items` gets `url_id`
  * (via `UNIQUE` auto-index) and `source`. `anchor_edges` gets one
  * reverse-direction index (`idx_anchor_edges_href`); the UNIQUE
  * auto-index covers the forward direction. `resource_ref_edges` needs

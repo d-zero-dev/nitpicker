@@ -1,10 +1,10 @@
 /**
  * Computes the `dom_path` string for one DOM element as required by
- * `image_items.dom_path_text_id` (issue #193 entity populate step 6).
+ * `image_items.dom_path_text_id` (issue #193).
  *
  * Format: slash-joined ancestor tags starting at `<html>`, each tag
  * followed by a 1-based sibling ordinal counting **same-tag** siblings
- * only (identical to the spec's example
+ * only (e.g.
  * `html/body[1]/main[1]/section[2]/picture[1]/img[1]`). The `<html>`
  * root has no bracketed ordinal because there is only one document
  * root per page.
@@ -18,12 +18,11 @@
  * (available in the crawler's TS lib config) so it does not force
  * jsdom into the crawler runtime — the migration script and unit tests
  * inject jsdom-backed elements, while a future crawler-side wrapper
- * (0.13) can pass puppeteer's DOM handles through the same code.
+ * can pass puppeteer's DOM handles through the same code.
  *
  * Detached elements (`element.parentElement === null` before reaching
- * `<html>`) return the tag chain from wherever the walk terminates.
- * This matches the plan's "walk the DOM ancestor chain from the
- * `<img>` element to `<html>`" — a legally detached image (rare, but
+ * `<html>`) return the tag chain from wherever the walk terminates —
+ * a legally detached image (rare, but
  * technically possible during scripted mutations) yields e.g.
  * `img[1]` alone instead of throwing.
  * @param element - The DOM element to derive the path for. Typically an

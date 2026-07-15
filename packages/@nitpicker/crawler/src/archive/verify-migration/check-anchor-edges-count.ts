@@ -6,8 +6,9 @@ import { MigrationVerificationError } from './types.js';
  * Verifies 0.13 invariant #3: the `anchor_edges` dedup does not
  * eliminate rows and does not create phantom rows.
  *
- * 0.13-4 collapses N `anchors` rows per `(pageId, hrefId)` pair into a
- * single `anchor_edges` row with `count = N`. Two ways it could go wrong:
+ * `populateAnchorEdges` collapses N `anchors` rows per `(pageId, hrefId)`
+ * pair into a single `anchor_edges` row with `count = N`. Two ways it
+ * could go wrong:
  *
  * - `count(anchor_edges) == 0 && count(anchors) > 0` — dedup annihilated
  *   the graph. A populate bug or a group-by mis-key would trip this.

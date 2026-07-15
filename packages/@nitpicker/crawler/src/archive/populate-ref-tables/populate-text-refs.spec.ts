@@ -10,7 +10,7 @@ import { countRows } from './test-utils/count-rows.js';
 
 /**
  * Sets up the source tables (anchors / images / pages) with the specific
- * text-shaped columns 0.13-2 harvests, plus every 0.13 ref
+ * text-shaped columns `populateTextRefs` harvests, plus every 0.13 ref
  * table. Column set is a strict subset of the real schema.
  * @returns The connected Knex instance; the caller destroys it.
  */

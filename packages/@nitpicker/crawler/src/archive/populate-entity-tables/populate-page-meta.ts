@@ -54,11 +54,11 @@ const URL_COLUMN_MAP: readonly { source: string; target: string }[] = [
 ];
 
 /**
- * Populates `page_meta` from `pages WHERE scraped = 1` (issue #193 step entity populate step 2).
+ * Populates `page_meta` from `pages WHERE scraped = 1` (issue #193).
  *
  * Pages that were never scraped contribute no meta rows — they have no rendered title,
  * description, or JSON-LD to preserve, so filtering at the SELECT keeps
- * the reader working set narrow and matches the 0.13 check
+ * the reader working set narrow and matches the migration acceptance check
  * `count(*) FROM page_meta = count(*) FROM pages WHERE scraped = 1`.
  *
  * Per chunk:
@@ -67,9 +67,9 @@ const URL_COLUMN_MAP: readonly { source: string; target: string }[] = [
  * 2. **Batch-resolve** all text / URL / JSON ref ids for every value in
  *    the chunk — three resolvers, one round-trip per ref table.
  * 3. **Bulk INSERT** with `page_id = pages.id`. `page_id` is both PK and
- *    FK on `content_items(id)`; 0.13-1 must have already inserted
- *    the corresponding `content_items` row for the FK to be valid at
- *    COMMIT time.
+ *    FK on `content_items(id)`; `populateContentItems` must have already
+ *    inserted the corresponding `content_items` row for the FK to be
+ *    valid at COMMIT time.
  *
  * `INSERT OR IGNORE` on the `page_id` PK makes the step idempotent so
  * partial-failure re-runs are safe.
@@ -214,9 +214,10 @@ export async function populatePageMeta(trx: Knex): Promise<void> {
 
 /**
  * Returns `true` when `value` is a `data:` URI larger than the routing
- * threshold — i.e. one that 0.13-1 sent to `blob_refs` instead of
- * `url_refs`. `page_meta` has no `*_blob_id` companion columns for its
- * URL slots (see plan §page_meta schema), so we skip these values from
+ * threshold — i.e. one that the `url_refs` populate
+ * (`populate-ref-tables/populate-url-refs.ts`) sent to `blob_refs` instead
+ * of `url_refs`. `page_meta` deliberately has no `*_blob_id` companion
+ * columns for its URL slots, so we skip these values from
  * the `url_refs` lookup rather than issue a doomed `WHERE url IN (?)`
  * that would burn a chunk slot per multi-KB URI. The resulting
  * `*_url_id` is null with a `console.warn` breadcrumb; the operator
@@ -235,7 +236,8 @@ function isLargeDataUri(value: string): boolean {
  * corruption would still let the count-based acceptance invariant pass
  * while individual `page_meta` rows lose their meta text).
  * @param value - Raw column value from the source `pages` row.
- * @param textIds - Map from 0.13-2's populate step.
+ * @param textIds - `text → text_refs.id` map batch-resolved for the
+ *   current chunk (see {@link ./resolve-text-refs.ts}).
  * @param pageId - Owning page id (for the error message).
  * @param column - Source column name (for the error message).
  */
@@ -260,11 +262,12 @@ function resolveOptionalTextId(
 /**
  * Resolves `url_refs.id` for a `page_meta.<name>_url_id` slot, throws
  * on a missing lookup for a regular URL, and returns `null` (with a
- * warning) for large data URIs that 0.13-1 routed to `blob_refs`
- * — those cannot land in `page_meta` because the schema has no
- * `*_blob_id` companion columns.
+ * warning) for large data URIs that the `url_refs` populate routed to
+ * `blob_refs` — those cannot land in `page_meta` because the schema has
+ * no `*_blob_id` companion columns.
  * @param value - Raw column value from the source `pages` row.
- * @param urlIds - Map from 0.13-1's populate step.
+ * @param urlIds - `url → url_refs.id` map batch-resolved for the
+ *   current chunk (see {@link ./resolve-url-refs.ts}).
  * @param pageId - Owning page id (for the error message).
  * @param column - Source column name (for the error message).
  */
@@ -298,7 +301,8 @@ function resolveOptionalUrlId(
  * when the source `meta_extras` string has no matching `json_refs` row
  * (parity with the text/url branches above).
  * @param value - Raw `meta_extras` value from the source `pages` row.
- * @param jsonIds - Map from 0.13-3's populate step.
+ * @param jsonIds - `JSON string → json_refs.id` map batch-resolved for
+ *   the current chunk (see {@link ./resolve-json-refs.ts}).
  * @param pageId - Owning page id (for the error message).
  */
 function resolveOptionalJsonId(

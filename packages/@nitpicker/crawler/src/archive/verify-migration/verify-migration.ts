@@ -42,7 +42,7 @@ import { MigrationVerificationError } from './types.js';
  * uniform failure surface — otherwise operators grepping stderr for
  * `migration verification failed` would miss driver-side errors.
  * @param trx - Knex instance or transaction connected to the archive
- *   **after** every 0.13 migration populate step has run. Must be a transaction
+ *   **after** every 0.13 migration populate has run. Must be a transaction
  *   in production so ref counts, JOIN samples, and error rollback see the
  *   same snapshot; non-transactional callers (unit tests) work but do not
  *   get snapshot isolation.

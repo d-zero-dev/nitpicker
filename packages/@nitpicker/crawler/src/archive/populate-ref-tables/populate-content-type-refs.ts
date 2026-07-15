@@ -53,7 +53,7 @@ function normalizeMime(raw: string): string {
 
 /**
  * Populates `content_type_refs` from every distinct `contentType` value
- * currently stored in `pages` and `resources` (issue #191 step ref populate step 0).
+ * currently stored in `pages` and `resources` (issue #191).
  *
  * Two independent DISTINCT SELECTs (one per table) are merged in JS
  * rather than via SQL `UNION` — the cardinality is small in practice and
@@ -68,7 +68,7 @@ function normalizeMime(raw: string): string {
  * expression.
  *
  * `INSERT OR IGNORE` on the natural key `raw` makes this idempotent —
- * re-running the populate step after a partial failure never duplicates
+ * re-running this populate after a partial failure never duplicates
  * rows, only appends the new ones.
  * @param trx - Knex instance or transaction connected to the archive DB.
  * @example

@@ -6,7 +6,7 @@ import { MigrationVerificationError } from './types.js';
  * Verifies 0.13 invariant #1: every legacy `pages` row is mirrored by
  * one row in `content_items`.
  *
- * 0.13-1 populates `content_items` with `id = pages.id` for every page
+ * `populateContentItems` fills `content_items` with `id = pages.id` for every page
  * (see `populate-content-items.ts`); the invariant is broken only if the
  * populate loop skipped or double-inserted rows. `INSERT OR IGNORE` on the
  * PK collapses duplicates, so a mismatch always means "populate wrote

@@ -18,13 +18,15 @@ const LOOKUP_CHUNK_SIZE = 800;
 
 /**
  * Upserts a set of text strings into `text_refs` and returns their ids
- * (issue #193 entity populate step 6).
+ * (issue #193).
  *
  * Unlike {@link ./resolve-text-refs.ts}, which only reads, this helper
  * inserts every missing string first. It exists specifically for
- * `dom_path` strings, which are synthesised during 0.13-6 and were
- * not among the 0.13-2 sources — the caller cannot rely on the
- * dictionary already containing them.
+ * `dom_path` strings, which are synthesised by the image-items populate
+ * ({@link ./populate-image-items.ts}) and are not among the columns the
+ * `text_refs` populate scans
+ * ({@link ../populate-ref-tables/populate-text-refs.ts}) — the caller
+ * cannot rely on the dictionary already containing them.
  *
  * Strategy:
  *

@@ -9,7 +9,7 @@ import { LibsqlDialect } from '../../libsql-dialect.js';
  *
  * - A minimal subset of the legacy write model (`pages`, `resources`,
  *   `anchors`, `images`, `resources-referrers`, `page_html_ref`,
- *   `page_html_blobs`) — only the columns the 0.13 populate steps
+ *   `page_html_blobs`) — only the columns the 0.13 populates
  *   actually read.
  * - The 0.13 ref / header tables (via {@link createRefTables}).
  * - The 0.13 entity tables (via {@link createEntityTables}).

@@ -43,7 +43,7 @@ describe('resolveHeaderSets', () => {
 	});
 
 	it('falls back to raw_hash lookup when JSON key ordering differs but decoded content matches', async () => {
-		// Regression guard for the PdM finding: 0.13-5 stores exactly
+		// Regression guard for the PdM finding: `populateHeaderTables` stores exactly
 		// one `raw_json_hash` per `raw_hash` equivalence class. A second
 		// variant with identical decoded content but different key
 		// ordering never has its `raw_json_hash` persisted — the primary

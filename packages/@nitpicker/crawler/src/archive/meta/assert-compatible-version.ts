@@ -9,6 +9,11 @@ import { IncompatibleArchiveError } from './types.js';
  * opened (see {@link IncompatibleArchiveError}'s message for the mapping
  * from archive version to script).
  *
+ * This value tracks the **archive format cut**, not the npm `pkg.version`:
+ * a format-breaking change bumps it ahead of the corresponding release,
+ * and releases that do not cut the format leave it unchanged. The crawler
+ * writes this exact value into every new archive's `info.version`.
+ *
  * History:
  *
  * - **pre-0.10**: HTML snapshots in `snapshot-html.zip` (#75), then

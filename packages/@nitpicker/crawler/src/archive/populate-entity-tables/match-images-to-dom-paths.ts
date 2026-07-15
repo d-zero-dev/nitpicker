@@ -20,7 +20,7 @@ interface ImageRowForMatching {
 
 /**
  * Matches a page's legacy `images` rows to their DOM-path strings using
- * the plan's 3-case algorithm (issue #193 entity populate step 6).
+ * a 3-case algorithm (issue #193).
  *
  * The three cases:
  *

@@ -7,7 +7,7 @@ import { MigrationVerificationError } from './types.js';
  * entity tables exclusively) against equivalent inline SQL against the
  * still-present pre-6 write-model tables (`pages` / `anchors` / `images` /
  * `resources` / `resources-referrers`). A mismatch here means either the
- * 0.13 populate step lost rows or one of the new reader implementations
+ * 0.13 populates lost rows or one of the new reader implementations
  * has a filter/predicate off-by-one relative to its pre-6 counterpart.
  *
  * This is deliberately lighter than the "byte-identical items array"

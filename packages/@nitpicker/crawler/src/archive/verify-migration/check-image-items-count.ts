@@ -6,7 +6,7 @@ import { MigrationVerificationError } from './types.js';
  * Verifies 0.13 invariant #5: every legacy `images` row is mirrored by
  * one row in `image_items`.
  *
- * 0.13-6 populates `image_items` with the same PK as `images.id` (see
+ * `populateImageItems` fills `image_items` with the same PK as `images.id` (see
  * `populate-image-items.ts`); the invariant is broken only if the populate
  * loop skipped rows during URL/blob routing or dom-path derivation.
  * @param trx - Knex instance or transaction connected to the populated archive.

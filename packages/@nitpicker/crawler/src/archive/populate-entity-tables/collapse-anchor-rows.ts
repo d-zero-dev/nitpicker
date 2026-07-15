@@ -2,13 +2,13 @@ import type { AnchorEdgeRowInProgress, AnchorInputRow } from './types.js';
 
 /**
  * Collapses consecutive `anchors`-shaped rows into `anchor_edges` rows by
- * `(pageId, hrefId)` (issue #193 step entity populate step 4).
+ * `(pageId, hrefId)` (issue #193).
  *
  * **Input contract**: `rows` MUST be sorted by `(pageId, hrefId, id)`
  * ascending. The caller (`populate-anchor-edges.ts`) achieves this via a
  * single keyset scan `ORDER BY pageId, hrefId, id` over `anchors`.
  *
- * The `id`-then-key sort matters because the plan's dedup rule is
+ * The `id`-then-key sort matters because the dedup rule is
  * "first instance wins": the smallest `anchors.id` for a given
  * `(pageId, hrefId)` pair contributes its `hash` and `textContent` to
  * the edge; every subsequent duplicate is counted but its body is

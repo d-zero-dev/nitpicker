@@ -3,9 +3,9 @@ import { createHash } from 'node:crypto';
 /**
  * Computes a 32-byte content hash for a UTF-8 string or raw byte buffer.
  *
- * The 0.13 migration plan (`docs/write-model-refactor-plan.md`) refers to the hash
- * columns on `text_refs`, `json_refs`, `blob_refs`, `header_value_refs`, and
- * `header_sets` as "BLAKE3" hashes. This implementation uses **SHA-256** for
+ * BLAKE3 was the original candidate for the hash columns on `text_refs`,
+ * `json_refs`, `blob_refs`, `header_value_refs`, and `header_sets`. This
+ * implementation deliberately uses **SHA-256** instead, for
  * three reasons:
  *
  * 1. **No new dependency**. `@nitpicker/crawler`'s dependency list is small

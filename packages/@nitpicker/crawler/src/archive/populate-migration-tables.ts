@@ -5,7 +5,7 @@ import { populateEntityTables } from './populate-entity-tables/populate-entities
 import { populateRefTables } from './populate-ref-tables/populate-refs.js';
 
 /**
- * Runs the 0.13 populate steps (`populateRefTables` + `populateEntityTables`)
+ * Runs the 0.13 populates (`populateRefTables` + `populateEntityTables`)
  * in-place against an archive that has been seeded via the pre-0.13 write
  * path (`archive.setPage` / `archive.setResource` / ...). Reader specs
  * across `@nitpicker/query`, `@nitpicker/viewer`, and `@nitpicker/mcp-server`

@@ -3,7 +3,7 @@
  *
  * 0.13 adds the acceptance-invariant checks that `scripts/migrate-to-0.13.mjs`
  * runs at the end of the migration to confirm that the 0.13 entity /
- * edge populate step produced a consistent archive. Each check is one file
+ * edge populates produced a consistent archive. Each check is one file
  * under `verify-migration/` and throws {@link MigrationVerificationError} on mismatch;
  * the orchestrator {@link ./verify-migration.ts} chains them in the
  * order defined by issue #194.

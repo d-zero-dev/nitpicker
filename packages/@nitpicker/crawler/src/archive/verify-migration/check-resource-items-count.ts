@@ -6,7 +6,8 @@ import { MigrationVerificationError } from './types.js';
  * Verifies 0.13 invariant #6: every legacy `resources` row is mirrored
  * by one row in `resource_items`.
  *
- * 0.13-3 populates `resource_items` with the same PK as `resources.id`
+ * `populateResourceItems` fills `resource_items` with the same PK as
+ * `resources.id`
  * (see `populate-resource-items.ts`); the invariant is broken only if the
  * populate loop skipped rows during URL / header-set / content-type
  * resolution. The paired invariant `resource_ref_edges = "resources-referrers"`

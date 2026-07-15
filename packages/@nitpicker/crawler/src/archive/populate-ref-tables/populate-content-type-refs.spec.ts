@@ -8,7 +8,8 @@ import { populateContentTypeRefs } from './populate-content-type-refs.js';
 import { countRows } from './test-utils/count-rows.js';
 
 /**
- * Sets up a minimal in-memory archive: the two source tables 0.13-0
+ * Sets up a minimal in-memory archive: the two source tables
+ * `populateContentTypeRefs`
  * scans, plus every 0.13 ref table (so `content_type_refs` exists as
  * the INSERT target). Full crawler schema is not needed — the populate
  * function only touches `pages.contentType`, `resources.contentType`, and

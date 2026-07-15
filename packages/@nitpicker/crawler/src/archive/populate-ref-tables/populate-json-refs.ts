@@ -22,12 +22,12 @@ const READ_CHUNK_SIZE = 1000;
 
 /**
  * Populates `json_refs` from every non-null `pages.meta_extras` value
- * (issue #191 step ref populate step 3).
+ * (issue #191).
  *
  * Each value is:
  *
  * 1. Hashed with {@link computeContentHash} (32-byte SHA-256; see that
- *    function's docs for the plan-vs-implementation rationale).
+ *    function's docs for the algorithm-choice rationale).
  * 2. Compressed with `zstdCompressSync` (`codec='zstd'`) — same encoder
  *    used by `page_html_blobs`.
  * 3. Deduplicated by hash — identical raw JSON strings produce one row.

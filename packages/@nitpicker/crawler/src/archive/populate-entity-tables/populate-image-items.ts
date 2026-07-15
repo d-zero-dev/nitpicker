@@ -34,7 +34,7 @@ const INSERT_CHUNK_SIZE = 300;
  * become a jsdom consumer at runtime — the migration script
  * (`scripts/migrate-to-0.13.mjs`) wires a jsdom-backed
  * implementation, while unit tests inject stubs. A future crawler-time
- * DOM-path capture (0.13) can use the same signature with
+ * DOM-path capture can use the same signature with
  * puppeteer-backed elements.
  */
 export type PageDomPathResolver = (
@@ -57,7 +57,7 @@ export interface ImageRowForResolver {
 }
 
 /**
- * Populates `image_items` from `images` (issue #193 entity populate step 6).
+ * Populates `image_items` from `images` (issue #193).
  *
  * The outer loop iterates **pages**, not images. Each page's images are
  * processed as one whole unit — dom-path derivation, HTML BLOB fetch,
@@ -200,8 +200,9 @@ export async function populateImageItems(
 		const urlIds = await resolveUrlRefs(trx, urls);
 		const blobIds = await resolveBlobRefs(trx, dataUris);
 		const altIds = await resolveTextRefs(trx, alts);
-		// `dom_path` strings are synthesised at 0.13-6 and were not
-		// among the 0.13-2 text sources — insert every distinct
+		// `dom_path` strings are synthesised right here and were not
+		// among the columns the `text_refs` populate scanned
+		// (`populate-ref-tables/populate-text-refs.ts`) — insert every distinct
 		// derived path (including `unknown/<id>` fallbacks) before
 		// resolving its id. The upsert is idempotent so re-runs across
 		// partial failures do not duplicate rows.
@@ -255,7 +256,7 @@ export async function populateImageItems(
  * Reads the stored HTML snapshot for one legacy page id, via the same
  * `trx` handle that the outer populate transaction owns. Mirrors
  * `Database.getHtmlOfPageById` but keeps every read on the trx
- * connection so the populate step does not re-enter the pool from
+ * connection so the populate does not re-enter the pool from
  * inside its own writer transaction (see {@link populateImageItems}'s
  * doc for the deadlock this avoids).
  * @param trx - The open migration transaction.
@@ -275,7 +276,8 @@ async function readPageHtmlInTrx(trx: Knex, pageId: number): Promise<string | nu
 }
 
 /**
- * Predicate matching 0.13-1's routing rule: a `data:` URI whose
+ * Predicate matching the `url_refs` populate's routing rule
+ * (`populate-ref-tables/populate-url-refs.ts`): a `data:` URI whose
  * length exceeds {@link DATA_URI_URL_REFS_LIMIT} lands in `blob_refs`;
  * anything else (regular URL or short data URI) lands in `url_refs`.
  * @param value - Raw `src` / `currentSrc` column value.
@@ -286,7 +288,9 @@ function isBlobRefValue(value: string): boolean {
 
 /**
  * Routes one legacy `src` / `currentSrc` value to either `url_refs` or
- * `blob_refs` per the plan's data-URI threshold rule. Exactly one of
+ * `blob_refs` per the {@link DATA_URI_URL_REFS_LIMIT} threshold rule
+ * (large data URIs live in `blob_refs`, everything else in `url_refs`).
+ * Exactly one of
  * `url` / `blob` is non-null; both may be `null` when the value is null
  * or fails to resolve (e.g. the `blob_refs` row is missing because the
  * data URI was malformed and skipped by `populateBlobRefs`).

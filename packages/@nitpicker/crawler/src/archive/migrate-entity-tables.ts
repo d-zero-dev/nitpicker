@@ -15,7 +15,8 @@ import { createEntityTables } from './create-entity-tables.js';
  *
  * The migration is intentionally table-only. It does not back-fill any data
  * from `pages` / `resources` / `anchors` / `images` — that is the job of the
- * 0.13 populate step, which reads from the legacy tables and writes
+ * 0.13 populates (`populateRefTables` + `populateEntityTables`), which
+ * read from the legacy tables and write
  * the entity rows in a single WAL transaction with `.bak` protection. This
  * migration only guarantees the empty tables exist so 0.13 can
  * INSERT into them without hitting `SQLITE_ERROR: no such table:

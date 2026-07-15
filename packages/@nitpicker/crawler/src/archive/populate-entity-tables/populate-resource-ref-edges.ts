@@ -2,7 +2,7 @@ import type { Knex } from 'knex';
 
 /**
  * Populates `resource_ref_edges` from `resources-referrers`
- * (issue #193 step entity populate step 5).
+ * (issue #193).
  *
  * The transformation is a **direct SQL `INSERT ... SELECT`** — no ref
  * lookups, no per-row JS work. Legacy `resources-referrers` already
@@ -19,7 +19,8 @@ import type { Knex } from 'knex';
  * preserved from `resources.id` / `pages.id`, so no per-row translation
  * is required — the FKs `resource_items(id)` and `content_items(id)`
  * declared in `resource_ref_edges` are already satisfied for every
- * source row by the earlier 0.13 steps.
+ * source row by `populateContentItems` / `populateResourceItems`, which
+ * run before this function in `populateEntityTables`.
  * @param trx - Knex instance or transaction connected to the archive DB.
  * @example
  * await knex.transaction(async (trx) => {

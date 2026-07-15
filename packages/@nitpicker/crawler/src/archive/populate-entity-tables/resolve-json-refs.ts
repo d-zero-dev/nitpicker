@@ -16,7 +16,7 @@ const LOOKUP_CHUNK_SIZE = 500;
  * strings (issue #193).
  *
  * The lookup goes through `json_refs.hash`, the SHA-256 hash of the raw
- * JSON string stored by 0.13-3 (see
+ * JSON string stored by `populateJsonRefs` (see
  * {@link ../populate-ref-tables/populate-json-refs.ts}). Hashes are computed in JS
  * for the same reason as {@link ./resolve-header-sets.ts}: SQLite has no
  * built-in hash function.

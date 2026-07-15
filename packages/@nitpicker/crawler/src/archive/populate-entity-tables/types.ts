@@ -14,8 +14,8 @@
  * Mapping from `url_refs.url` (the natural key) to `url_refs.id`. Populated
  * on demand from the DB by {@link ./resolve-url-refs.ts}. `null` on values
  * that are stored in {@link ./resolve-blob-refs.ts} instead (large data
- * URIs, see §image `src` / `currentSrc` — URL vs `blob_refs` Routing in
- * the plan) or on lookup miss.
+ * URIs — see the routing rule in
+ * {@link ../populate-ref-tables/populate-url-refs.ts}) or on lookup miss.
  */
 export interface UrlRefResolution {
 	/** `url_refs.id` when the URL string is present in the dictionary. */
@@ -54,7 +54,8 @@ export type BlobRefIdMap = ReadonlyMap<string, number>;
  * header values. Keyed by the raw value exactly as stored in
  * `pages.contentType` / `resources.contentType`; missing entries mean
  * the content type is null or absent from the dictionary (which should
- * not happen after 0.13-0 populates every distinct value).
+ * not happen after `populateContentTypeRefs` populates every distinct
+ * value).
  */
 export type ContentTypeRefIdMap = ReadonlyMap<string, number>;
 
@@ -134,7 +135,7 @@ export interface AnchorEdgeRowInProgress {
 /**
  * Case discriminator for {@link ./derive-dom-path.ts}: which of the three
  * resolution paths produced the returned `dom_path` string. Used by the
- * populate step to emit a diagnostic warning log for `unknown` fallbacks
+ * image-items populate to emit a diagnostic warning log for `unknown` fallbacks
  * so operators can audit reconstruction fidelity.
  */
 export type DomPathDerivationCase = 'single-match' | 'ordinal-match' | 'unknown';

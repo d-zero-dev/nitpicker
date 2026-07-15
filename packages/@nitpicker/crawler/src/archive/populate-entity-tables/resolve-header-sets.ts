@@ -38,7 +38,7 @@ const LOOKUP_CHUNK_SIZE = 500;
  * SHA-256 (see {@link ../populate-ref-tables/compute-content-hash.ts} for the
  * algorithm choice). The `raw_hash` fallback re-decomposes each miss via
  * {@link ../populate-ref-tables/decompose-header-set.ts} so the canonicalisation
- * matches the one 0.13-5 used at insert time.
+ * matches the one `populateHeaderTables` used at insert time.
  *
  * Empty / null values and the sentinel `'{}'` / `'null'` strings are
  * skipped — those responses were decomposed to `null` by

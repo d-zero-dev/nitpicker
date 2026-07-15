@@ -23,7 +23,7 @@ const READ_CHUNK_SIZE = 5000;
 const INSERT_CHUNK_SIZE = 1000;
 
 /**
- * Populates `anchor_edges` from `anchors` (issue #193 step entity populate step 4).
+ * Populates `anchor_edges` from `anchors` (issue #193).
  *
  * The algorithm is a **single keyset-paginated scan** over `anchors`
  * ordered by `(pageId, hrefId, id)`. Each chunk feeds

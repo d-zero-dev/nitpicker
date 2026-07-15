@@ -9,29 +9,29 @@ import { populateResourceItems } from './populate-resource-items.js';
 import { populateResourceRefEdges } from './populate-resource-ref-edges.js';
 
 /**
- * Runs the six 0.13 sub-steps (issue #193) in the plan-specified
+ * Runs the six 0.13 entity/edge populates (issue #193) in dependency
  * order against an already-connected archive.
  *
  * Order rationale:
  *
- * 1. **`content_items`** (step 1) — every downstream step's FKs reference
+ * 1. **`content_items`** — every downstream populate's FKs reference
  *    `content_items(id)`. Must land first so the FKs are valid at
  *    COMMIT time. `redirect_dest_id` is `DEFERRABLE INITIALLY DEFERRED`
  *    (see {@link ../create-entity-tables.ts}) so a redirect
  *    source inserted before its destination is validated only at
- *    COMMIT — the intra-step insert order within this step is not
+ *    COMMIT — the insert order within this populate is not
  *    load-bearing.
- * 2. **`page_meta`** (step 2) — FK to `content_items(id)`.
- * 3. **`resource_items`** (step 3) — required before `resource_ref_edges`.
- * 4. **`anchor_edges`** (step 4) — FKs to `content_items(id)` on both
+ * 2. **`page_meta`** — FK to `content_items(id)`.
+ * 3. **`resource_items`** — required before `resource_ref_edges`.
+ * 4. **`anchor_edges`** — FKs to `content_items(id)` on both
  *    sides.
- * 5. **`resource_ref_edges`** (step 5) — FKs to `resource_items(id)` and
+ * 5. **`resource_ref_edges`** — FKs to `resource_items(id)` and
  *    `content_items(id)`.
- * 6. **`image_items`** (step 6) — FK to `content_items(id)`; the
- *    dom-path text_refs upsert is scoped to this step so re-runs are
+ * 6. **`image_items`** — FK to `content_items(id)`; the
+ *    dom-path text_refs upsert is scoped to this populate so re-runs are
  *    self-contained.
  *
- * Every sub-step is independently idempotent via `INSERT OR IGNORE` on
+ * Every sub-populate is independently idempotent via `INSERT OR IGNORE` on
  * its natural key or PK. On a **re-crawl** (`crawl --append` /
  * `--retry-failed` / `--inventory` all UPDATE existing `pages` /
  * `resources` rows in place, and `#insertPage` deletes + re-inserts
@@ -43,16 +43,16 @@ import { populateResourceRefEdges } from './populate-resource-ref-edges.js';
  * rows keyed by the now-deleted legacy ids. To keep the reader-side
  * view of the archive faithful to `pages` / `resources` on re-crawl,
  * every entity + edge table is TRUNCATEd (in child-first order so no FK
- * check trips) at the top of this function before the six sub-steps
+ * check trips) at the top of this function before the six sub-populates
  * re-insert from the current legacy state. Ref tables (`url_refs`,
  * `text_refs`, `content_type_refs`, `header_*`) are NOT truncated —
  * they are content-addressable and additive; re-inserting the same
  * value hits `INSERT OR IGNORE` and is a no-op.
  *
  * The whole invocation is expected to run inside one writer transaction
- * with `.bak` protection at the caller level (matching the plan's
- * "All steps run inside a single WAL transaction with `.bak` rollback
- * on failure"); this function does not open its own transaction so the
+ * with `.bak` protection at the caller level (a single WAL transaction
+ * with `.bak` rollback on failure);
+ * this function does not open its own transaction so the
  * caller controls the boundary — see {@link
  * ../populate-ref-tables/populate-refs.ts} for the same convention.
  *
@@ -61,8 +61,8 @@ import { populateResourceRefEdges } from './populate-resource-ref-edges.js';
  * is `DEFERRABLE INITIALLY DEFERRED` (see
  * {@link ../create-entity-tables.ts}); without foreign-key
  * enforcement libsql commits `content_items` rows whose `redirect_dest_id`
- * points at a non-existent page and the invariant the plan calls out
- * (deferrable FK enforcement at COMMIT) is silently broken. The
+ * points at a non-existent page and the deferrable-FK-enforcement-at-COMMIT
+ * invariant is silently broken. The
  * migration script sets the pragma explicitly; any other caller must do
  * the same.
  * HTML BLOB reads happen inline inside {@link populateImageItems} against

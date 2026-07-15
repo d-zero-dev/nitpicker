@@ -12,7 +12,7 @@ const LOOKUP_CHUNK_SIZE = 800;
 /**
  * Batch-resolves `url_refs.id` for a set of URL strings (issue #193).
  *
- * Called by every 0.13 populate step that needs to translate a
+ * Called by every entity populate helper that needs to translate a
  * legacy URL string column into a `url_id` FK. Rather than open a
  * separate SELECT per row (which multiplies migration wall-clock by
  * chunk size × URL column count) the resolver collects the distinct
