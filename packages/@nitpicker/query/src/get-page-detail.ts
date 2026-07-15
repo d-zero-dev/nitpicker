@@ -97,7 +97,7 @@ export async function getPageDetail(
 	// `http://x` that 301s to `https://x` is reported as pointing at `http://x`.
 	// This preserves the audit signal "this page links to a redirecting URL".
 	// Inbound is the opposite: it merges backlinks onto the canonical destination
-	// (#71). See ARCHITECTURE.md「被リンク/参照の redirect 透過解決（#71）」.
+	// (#71). See the redirect pre-flattening JSDoc in crawler's database.ts.
 	const outboundRows = await knex('anchors')
 		.select('pages.url', 'anchors.textContent', 'pages.status', 'pages.isExternal')
 		.join('pages', 'anchors.hrefId', '=', 'pages.id')

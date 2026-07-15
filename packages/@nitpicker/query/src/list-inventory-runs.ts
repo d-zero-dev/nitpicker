@@ -7,12 +7,12 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * Surfaces the `inventory_runs` table created by every successful
  * `--inventory <list>` invocation so the CLI / MCP / viewer can answer
  * "when did we apply which deploy list" without touching external
- * bookkeeping. The table is append-only at Phase 1 — see
+ * bookkeeping. The table is append-only — see
  * {@link import('@nitpicker/crawler').InventoryRunMeta} for the write-side
  * contract and the rationale behind the NULL-tolerant column shape.
  *
- * Tolerates a missing `inventory_runs` table: pre-Phase-1 archives and
- * read-only `stub` connections (`Archive.connect({ readOnly: true })`
+ * Tolerates a missing `inventory_runs` table: archives that predate the
+ * table and read-only `stub` connections (`Archive.connect({ readOnly: true })`
  * skips migrations) both arrive here with no table. Returns
  * `{ items: [], total: 0 }` in that case rather than throwing — clients
  * call this unconditionally and a "no such table" exception would break
@@ -29,11 +29,11 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * // `items.length === 0 && total === 0` covers TWO legitimate scenarios
  * // — they are indistinguishable on purpose:
  * //   1. The archive has never been through `--inventory` (empty table).
- * //   2. The archive predates Phase 1 / the connection is read-only
+ * //   2. The archive predates the table / the connection is read-only
  * //      (table absent, `hasTable` fallback returned `[]`).
  * // Callers that need to distinguish must probe `accessor.getKnex()
- * // .schema.hasTable('inventory_runs')` themselves — Phase 1 keeps the
- * // public surface uniform.
+ * // .schema.hasTable('inventory_runs')` themselves — the public surface
+ * // is deliberately kept uniform.
  *
  * for (const run of items) {
  *   console.log(`${run.ran_at}: ${run.list_label} (${run.total_lines} URLs)`);
@@ -48,8 +48,8 @@ export async function listInventoryRuns(
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 
-	// Pre-Phase-1 archives and read-only stub connections both arrive
-	// here without the table. Bail out with an empty result instead of
+	// Archives that predate the table and read-only stub connections both
+	// arrive here without it. Bail out with an empty result instead of
 	// letting knex raise "no such table: inventory_runs".
 	const hasTable = await knex.schema.hasTable('inventory_runs');
 	if (!hasTable) {
