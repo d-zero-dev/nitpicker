@@ -164,7 +164,7 @@ describe('Inventory crawl', () => {
 	});
 
 	it('records one inventory_runs row per successful --inventory invocation with the expected aggregate counts', async () => {
-		// Phase 1 audit-log contract. The beforeAll inventory pass above
+		// Audit-log contract. The beforeAll inventory pass above
 		// fed two URLs (1 HTML seed + 1 non-HTML resource) into the same
 		// archive; the orchestrator MUST have written one `inventory_runs`
 		// row with matching aggregates so client conversations of the
@@ -589,8 +589,8 @@ describe('Inventory crawl noop run (all URLs already in archive)', () => {
 		await fs.rm(cwd, { recursive: true, force: true });
 	});
 
-	it('does NOT write an inventory_runs row on the noop early-return path (Phase 1 caveat pin)', async () => {
-		// Phase 1 trade-off: the noop branch doesn't take a `.bak`, so a
+	it('does NOT write an inventory_runs row on the noop early-return path (known caveat pin)', async () => {
+		// Deliberate trade-off: the noop branch doesn't take a `.bak`, so a
 		// DB write here would risk tar-rewrite corruption on interrupt.
 		// We skip the audit row entirely instead. Pinned so a future
 		// change that adds `.bak` to the noop path can lift this and

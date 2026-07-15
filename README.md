@@ -5,7 +5,7 @@
 
 Nitpicker は、Web サイトをクロールしてページ情報・リンク・リソース・HTML スナップショットを `.nitpicker` アーカイブに保存し、分析やレポート出力まで行うツールキットです。
 
-ヘッドレスブラウザでページをレンダリングし、遅延読み込みされるコンテンツも取得対象にします。詳細な設計、データフロー、DB スキーマは [ARCHITECTURE.md](./ARCHITECTURE.md) を参照してください。
+ヘッドレスブラウザでページをレンダリングし、遅延読み込みされるコンテンツも取得対象にします。アーキテクチャの索引（全体地図・境界・依存方向・不変条件・Reading paths）は [ARCHITECTURE.md](./ARCHITECTURE.md)、実装詳細は各ソースの JSDoc を参照してください。
 
 ## 基本ワークフロー
 
@@ -28,7 +28,7 @@ CLI の詳細な使い方と全オプションは [@nitpicker/cli README](./pack
 
 `.nitpicker` は `crawl` が生成するアーカイブファイルです。クロール結果、レンダリング後の HTML スナップショット、リンク、ネットワークリソース、画像情報、分析結果などを保存します。
 
-このファイルは `analyze` / `report` / `query` / `viewer` の入力になります。保存形式やスキーマの詳細は [ARCHITECTURE.md](./ARCHITECTURE.md) を参照してください。
+このファイルは `analyze` / `report` / `query` / `viewer` の入力になります。保存形式やスキーマの概要は [ARCHITECTURE.md](./ARCHITECTURE.md) の「アーカイブ（DB スキーマ概要）」、定義の正は `packages/@nitpicker/crawler/src/archive/init-schema.ts` を参照してください。
 
 ## パッケージ
 

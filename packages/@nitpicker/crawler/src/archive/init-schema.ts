@@ -57,8 +57,8 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  * - **`page_tags`** (Wappalyzer): per-provider × external-id row shape, plus
  *   `categories`/`sources` JSON columns. Compound indexes
  *   `(provider, externalId)` / `(provider, pageId)` are pre-built for the
- *   Phase 2+ "find duplicate IDs across pages" and "list pages using
- *   provider X" hot paths — Phase 1 read perf > storage cost trade-off.
+ *   "find duplicate IDs across pages" and "list pages using provider X"
+ *   hot paths — read perf is favoured over storage cost.
  * - **`page_jsonld`** (JSON-LD / SpeculationRules): one row per
  *   `<script type="application/ld+json">` or `<script type="speculationrules">`.
  *   `raw` is stored uncompressed (SQLite overflow pages handle large rows);
@@ -217,11 +217,10 @@ export async function initSchema(instance: Knex) {
 			t.index('scraped');
 			t.index('redirectDestId');
 			t.index('order');
-			// Phase 1: noindex filter (list_pages) and og:type filter
-			// (analytics) are the only new flat-column filters with enough
-			// selectivity to benefit from an index. `lang` has cardinality 1
-			// on mono-language sites (D-Zero's typical customer) so it is
-			// skipped.
+			// The noindex filter (list_pages) and og:type filter (analytics)
+			// are the only flat-column filters with enough selectivity to
+			// benefit from an index. `lang` has cardinality 1 on
+			// mono-language sites so it is skipped.
 			t.index('robots_noindex');
 			t.index('og_type');
 			t.index('source');

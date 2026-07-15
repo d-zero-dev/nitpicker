@@ -8,9 +8,10 @@ import { crawlerLog } from '../debug.js';
  * O(1) regardless of file size.
  *
  * Used by `CrawlerOrchestrator.inventory` to fingerprint the source
- * URL list `.txt` and store the digest on the `inventory_runs` row.
- * Phase 3 (`--refresh`) will key dedupe on this column; Phase 1 just
- * records it for operator audit.
+ * URL list `.txt` and store the digest on the `inventory_runs` row. The
+ * digest is the content-identity key for "was this exact list applied
+ * before" — recorded for operator audit; nothing dedupes on it at write
+ * time.
  *
  * Returns `null` instead of throwing when the file cannot be read (e.g.
  * vanished mid-run, permissions issue) so the inventory run's audit row
