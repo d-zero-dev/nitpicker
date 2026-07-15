@@ -48,8 +48,8 @@ export { classifyErrorKind } from './classify-error-kind.js';
 export { computeFileSha256 } from './utils/compute-file-sha256.js';
 
 // 0.13 ref-table population (issue #191, epic #103). Exposed as the
-// public seam that a follow-up migration script (`scripts/migrate-to-
-// migrate-to-0.13.mjs` per the plan) drives against an already-connected archive.
+// public seam that the migration script (`scripts/migrate-to-0.13.mjs`)
+// drives against an already-connected archive.
 // The individual sub-steps are also exported so the migration script can
 // resume mid-way if the caller decides to split the transaction.
 export { populateEntityTables } from './archive/populate-entity-tables/populate-entities.js';

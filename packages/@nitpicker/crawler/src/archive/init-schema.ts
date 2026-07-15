@@ -51,7 +51,7 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  * - **Denormalised aggregates** (`tag_count`, `jsonld_count`,
  *   `tags_providers_csv`): computed at write time from `meta.tags` /
  *   `meta.jsonLd` to avoid N+1 GROUP BY at Sheets-render / page-detail time.
- *   Plan: "ファイルサイズが多少増えてもいいから取り出しパフォーマンスを優先".
+ *   取り出しパフォーマンスをファイルサイズ増より優先する設計判断。
  * - **Per-page timestamps** (`firstCrawledAt`, `lastCrawledAt`): UNIX ms.
  *   Written by `#insertPage` on INSERT (`first = last = now`) and UPDATE
  *   (`last = now`, `first` preserved). `resetFailedPages` deliberately
@@ -77,8 +77,8 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  *   `header_name_refs`, `header_value_refs`, `header_sets`,
  *   `header_set_entries`, `header_flags`. Additive DDL only — the tables are
  *   created on every fresh archive but remain **completely unused** by
- *   current readers and writers. Later 0.13 sub-issues will
- *   populate them and migrate the consumer code paths. No existing table or
+ *   the legacy readers and writers; the 0.13 population step
+ *   (`populateRefTables` / `populateHeaderTables`) fills them. No existing table or
  *   index is modified by their presence. See
  *   {@link createRefTables} for the DDL, column-level rationale, and
  *   the reason `blob_refs` uses a regular rowid PK instead of WITHOUT ROWID.
@@ -88,8 +88,8 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  *   `content_items`, `page_meta`, `resource_items`, `anchor_edges`,
  *   `resource_ref_edges`, `image_items`. Additive DDL only. `content_items`
  *   / `resource_items` / `image_items` reuse the SAME PK values as the
- *   legacy `pages` / `resources` / `images` tables (0.13 inserts rows
- *   with explicit IDs), which preserves every existing FK reference without
+ *   legacy `pages` / `resources` / `images` tables (the populate step
+ *   inserts rows with explicit IDs), which preserves every existing FK reference without
  *   any per-row UPDATE. Must run AFTER `createRefTables` because
  *   most entity tables reference ref-table PKs. See
  *   {@link createEntityTables} for column-by-column rationale and
@@ -491,8 +491,8 @@ export async function initSchema(instance: Knex) {
 	// the 0.13 ref tables (`url_refs`, `content_type_refs`,
 	// `text_refs`, `json_refs`, `blob_refs`, `header_sets`) via FK
 	// clauses. Additive only — the tables are created on every fresh
-	// archive but remain completely unused until 0.13 populates
-	// them and 0.13 migrates the reader / writer paths. Existing
+	// archive but remain completely unused until the populate step
+	// fills them and the reader / writer paths are migrated. Existing
 	// archives get the same tables added by
 	// {@link migrateEntityTables} at open time.
 	await createEntityTables(instance);
@@ -508,10 +508,10 @@ export async function initSchema(instance: Knex) {
 	// **Column order: `(isExternal, scraped, redirectDestId, url, contentType)`.**
 	// The leading `isExternal` is critical: the Pages view's default
 	// "external excluded" filter adds `WHERE isExternal = 0` to both the
-	// SELECT and the paginate-query COUNT. A previous version of this index
-	// (`(scraped, redirectDestId, url, contentType)`) shipped without
-	// `isExternal`, and the SELECT picked it up (`ORDER BY url` forced the
-	// match) while the COUNT — having no `ORDER BY` — fell back to the
+	// SELECT and the paginate-query COUNT. With a 4-column shape lacking
+	// `isExternal` (`(scraped, redirectDestId, url, contentType)`), the
+	// SELECT picks it up (`ORDER BY url` forces the
+	// match) while the COUNT — having no `ORDER BY` — falls back to the
 	// single-column `pages_isexternal_index` + scan + per-row WHERE filter,
 	// costing ~8.7s for the COUNT alone on a 165k-internal-page archive.
 	// Putting `isExternal` first makes both shapes pick this index as a

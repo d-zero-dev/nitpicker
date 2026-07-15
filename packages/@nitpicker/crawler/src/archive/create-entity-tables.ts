@@ -1,13 +1,13 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates the 6 0.13 core entity and edge tables (issue #192).
+ * Creates the 6 core entity and edge tables of the 0.13 format (issue #192).
  *
- * These are the normalised entity / edge tables that will replace the legacy
+ * These are the normalised entity / edge tables that replace the legacy
  * write model (`pages`, `anchors`, `images`, `resources`, `resources-referrers`)
- * under 0.13. This migration is purely additive DDL — no existing table
- * is modified and no row is inserted; 0.13 populates the tables from the
- * legacy sources.
+ * in the 0.13 format. This migration is purely additive DDL — no existing table
+ * is modified and no row is inserted; the populate step
+ * (`populateEntityTables`) fills the tables from the legacy sources.
  *
  * Tables created:
  *
@@ -29,15 +29,15 @@ import type { Knex } from 'knex';
  *   and every column is small — the same reasoning as `page_html_blobs`.
  * - `image_items` — replaces `images`. `src` / `currentSrc` split into
  *   `*_url_id` (regular URLs) vs `*_blob_id` (large `data:` URIs, routed
- *   via `blob_refs`); `sourceCode` is replaced by `dom_path_text_id`
- *   populated by 0.13 from the `outerHTML` string.
+ *   via `blob_refs`); `sourceCode` is replaced by `dom_path_text_id`,
+ *   which the populate step derives from the `outerHTML` string.
  *
  * ### Key invariants
  *
  * **Same PK values as legacy.** `content_items.id`, `resource_items.id`,
  * and `image_items.id` reuse the exact PK values from `pages.id`,
- * `resources.id`, and `images.id` respectively. 0.13 inserts rows
- * with explicit IDs so every existing FK reference in `page_errors`,
+ * `resources.id`, and `images.id` respectively. The populate step inserts
+ * rows with explicit IDs so every existing FK reference in `page_errors`,
  * `page_tags`, `page_jsonld`, `page_html_ref`, and `resources-referrers`
  * (before it becomes `resource_ref_edges`) survives the switch without
  * any per-row UPDATE. `AUTOINCREMENT` is nevertheless applied on all four
@@ -68,7 +68,7 @@ import type { Knex } from 'knex';
  * discovered as an anchor (assigned a low `pages.id`) BEFORE its
  * destination is crawled (higher `pages.id`), so a straight
  * `ORDER BY id ASC` populate would violate the FK on the source row.
- * Making the FK deferred lets 0.13 commit all `content_items`
+ * Making the FK deferred lets the populate step commit all `content_items`
  * inserts inside one transaction without any per-row ordering
  * discipline — SQLite validates the constraint only at COMMIT time.
  *
@@ -85,7 +85,7 @@ import type { Knex } from 'knex';
  * `NOT NULL DEFAULT 'crawled'`, and multiple existing writer paths rely
  * on the default (redirect-source insert, per-chunk resource insert, and
  * `markBrowserScrape`). Preserving the default keeps those callsites
- * working when 0.13 re-points them at the new tables — dropping
+ * working when the 0.13 write path re-points them at the new tables — dropping
  * the default would turn a routine crawl into an immediate hard failure
  * the first time a callsite omits `source`.
  *
@@ -102,8 +102,9 @@ import type { Knex } from 'knex';
  * `idx_anchor_edges_href` on `href_page_id` alone is added.
  *
  * **`image_items.dom_path_text_id NOT NULL`.** Every image row must
- * resolve to a `text_refs` entry describing its DOM position. 0.13
- * derives the path from `images.sourceCode` (the stored `outerHTML`); an
+ * resolve to a `text_refs` entry describing its DOM position. The
+ * image-items populate derives the path from `images.sourceCode` (the
+ * stored `outerHTML`); an
  * image whose `sourceCode` is empty falls back to the synthetic label
  * `img[unknown]` (via the image-items populate) so the FK is never violated.
  *
@@ -134,9 +135,9 @@ import type { Knex } from 'knex';
  * composite PK `(resource_id, page_id)` only satisfies the `resource_id`-
  * first prefix; the legacy `resources-referrers` table had exactly
  * this reverse-direction index. `image_items` gets one index on
- * `page_id`. No summary / listfilter compound indexes yet; 0.13
- * will add them once the new viewer read model builds directly against
- * these tables.
+ * `page_id`. No summary / listfilter compound indexes are created here —
+ * they belong to the viewer read model built directly against these
+ * tables.
  *
  * ### Idempotency
  *

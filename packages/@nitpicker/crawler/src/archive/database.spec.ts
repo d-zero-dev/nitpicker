@@ -942,9 +942,9 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 	});
 
 	it('複数の異なる URL が同じ宛先にリダイレクトしても宛先アンカーは1セットに収束する（#70 の実機構）', async () => {
-		// 実アーカイブの真の重複バグ: N 個の旧 URL が同じ宛先 D に 301 し、クローラが
-		// ソースごとに D を取得して D のアンカーを N 回保存していた。delete-then-insert
-		// で D のアンカーは常に最新 1 セットに収束する。
+		// 実アーカイブで重複が膨張する経路: N 個の旧 URL が同じ宛先 D に 301 すると、
+		// クローラがソースごとに D を取得して D のアンカーを N 回保存し得る。
+		// delete-then-insert で D のアンカーは常に最新 1 セットに収束する。
 		const dbPath = path.resolve(workingDir, 'rescrape-redirect-converge.sqlite');
 		const db = await Database.connect({ filename: dbPath });
 		const dest = 'http://localhost/archive-index';
@@ -985,7 +985,7 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 				.where('pageId', destPage.id)
 				.count({ c: '*' });
 
-			// 3 回集約しても D のアンカーは 1 セット(2)。修正前は 6 に膨張していた。
+			// 3 回集約しても D のアンカーは 1 セット(2)。accumulation すると 6 に膨張する。
 			expect(Number(row.c)).toBe(2);
 		} finally {
 			await db.destroy();
@@ -2218,11 +2218,11 @@ describe('resetFailedPages', () => {
 		// Pins the `retryable.length === 0` short-circuit in
 		// `resetFailedPages`: when every SQL candidate's latest message
 		// classifies into `PERMANENT_ERROR_KINDS`, no row should be
-		// demoted. The previous implementation would have called the
-		// chunked UPDATE / DELETE with empty `whereIn` arrays — knex
-		// renders that as `WHERE 0 = 1` so it happened not to corrupt
-		// data, but a refactor removing the early return would silently
-		// regress. Locking the no-op behavior in a test prevents that.
+		// demoted. Without the early return, the chunked UPDATE / DELETE
+		// would run with empty `whereIn` arrays — knex renders that as
+		// `WHERE 0 = 1`, which happens not to corrupt data, but a refactor
+		// relying on that accident would silently regress. Locking the
+		// no-op behavior in a test prevents that.
 		const { rmSync } = await import('node:fs');
 		rmSync(resetDbPath, { force: true });
 		const db = await Database.connect({ filename: resetDbPath });
@@ -2268,10 +2268,10 @@ describe('resetFailedPages', () => {
 	it('also excludes the [Retried N times] wrapped DNS error form (retryCall prefix)', async () => {
 		// `@d-zero/shared/retry` prepends `[Retried N times] ` to the
 		// surviving error message. The substring match for `ENOTFOUND` /
-		// `getaddrinfo` already catches the wrapped form, but no test
-		// previously pinned it — a future regex-tightening change that
-		// anchored to `^getaddrinfo` would silently let wrapped DNS
-		// failures rejoin the retry pool every `--retry-failed` pass.
+		// `getaddrinfo` catches the wrapped form; this pins it so a future
+		// regex-tightening change that anchored to `^getaddrinfo` cannot
+		// silently let wrapped DNS failures rejoin the retry pool every
+		// `--retry-failed` pass.
 		const { rmSync } = await import('node:fs');
 		rmSync(resetDbPath, { force: true });
 		const db = await Database.connect({ filename: resetDbPath });
@@ -2551,7 +2551,7 @@ describe('getHtmlOfPageById', () => {
 		}
 	});
 
-	it('Throws when a page_html_ref row points at a missing blob (archive corruption)', async () => {
+	it('Returns an empty string when the referenced blob body is empty (archive corruption shape)', async () => {
 		// `getHtmlOfPageById` JOINs ref → blobs; if a ref row references a
 		// hash that does not exist in `page_html_blobs` the read must
 		// produce a null result rather than crashing — current behaviour
@@ -3974,13 +3974,13 @@ describe('redirect chain intermediate lineage propagation', () => {
 	});
 
 	it('records redirect chain intermediates as `inventory-discovered` when the originating page is `inventory-seed`', async () => {
-		// Dogfooding repro: an inventory-seed URL that redirects through
-		// a previously-unknown intermediate URL on its way to a final
+		// Scenario: an inventory-seed URL that redirects through a
+		// previously-unknown intermediate URL on its way to a final
 		// destination. The intermediate is created inside
-		// `#linkRedirectSources` via `#getIdByUrl(..., undefined)` and
-		// ended up labelled `'crawled'` because the lineage propagation
-		// only covered the anchor path. Fix the gap: the intermediate
-		// must inherit `'inventory-discovered'` from the inventory chain.
+		// `#linkRedirectSources` via `#getIdByUrl(..., undefined)`; if
+		// lineage propagation covered only the anchor path, it would be
+		// labelled `'crawled'`. The intermediate must instead inherit
+		// `'inventory-discovered'` from the inventory chain.
 		const dbPath = path.resolve(workingDir, 'redirect-chain-lineage-inventory.sqlite');
 		await removeIfExists(dbPath);
 		const db = await Database.connect({ filename: dbPath });
@@ -4041,11 +4041,11 @@ describe('redirect chain intermediate lineage propagation', () => {
 		//      (`'inventory-discovered'`, set by step 1's anchor INSERT)
 		//      and propagate `'inventory-discovered'` to C.
 		//
-		// The previous shape of this test passed `'inventory-discovered'`
-		// directly as the `updatePage` source argument, which short-
-		// circuits the propagation by setting B's source from the call
-		// arg rather than from the prior anchor-lineage write. This
-		// version reproduces the actual production flow.
+		// Passing `'inventory-discovered'` directly as the `updatePage`
+		// source argument would short-circuit the propagation by setting
+		// B's source from the call arg rather than from the prior
+		// anchor-lineage write — so this test deliberately omits it and
+		// reproduces the actual production flow.
 		const dbPath = path.resolve(workingDir, 'redirect-chain-lineage-transitive.sqlite');
 		await removeIfExists(dbPath);
 		const db = await Database.connect({ filename: dbPath });
@@ -4145,14 +4145,13 @@ describe('redirect chain intermediate lineage propagation', () => {
 		// F3: `Archive.setRedirect` → `Database.recordRedirect` is the
 		// edge-only path (e.g. #73 redirect-convergence when the dest
 		// was already rendered this session, or the js-redirect rescue
-		// after puppeteer.goto returns null). The previous shape called
-		// `#getIdByUrl(destUrl, undefined, trx)` and then read back the
-		// destination's source — but when the destination row did NOT
-		// yet exist, the INSERT defaulted to `'crawled'` and the SELECT
-		// laundered the inventory lineage of the whole chain to
-		// `'crawled'`. The fix threads `source` through `recordRedirect`
-		// so the caller (Crawler emit path) can pass the source it
-		// already knows.
+		// after puppeteer.goto returns null). Without threading `source`
+		// through `recordRedirect`, a `#getIdByUrl(destUrl, undefined,
+		// trx)` call followed by a read-back of the destination's source
+		// would default a brand-new destination row to `'crawled'` and
+		// launder the inventory lineage of the whole chain. The `source`
+		// parameter lets the caller (Crawler emit path) pass the source
+		// it already knows.
 		const dbPath = path.resolve(
 			workingDir,
 			'redirect-chain-lineage-recordRedirect.sqlite',
@@ -4204,13 +4203,13 @@ describe('redirect chain intermediate lineage propagation', () => {
 	});
 
 	it('downgrades an existing `inventory-discovered` intermediate to `crawled` when a crawled redirect chain reaches it (crawled-wins symmetry with anchor lineage)', async () => {
-		// F1: the original `chainLineageSource` derivation passed
-		// `undefined` for crawled destinations, which meant the
-		// crawled-wins downgrade inside `#getIdByUrl` (which fires only
-		// when incoming source is `'crawled'`) never ran for redirect
-		// intermediates. The anchor branch was already symmetric (it
-		// passes `'crawled'` explicitly). This test asserts the
-		// previously-missing direction: an inventory-discovered
+		// F1: if the `chainLineageSource` derivation passed `undefined`
+		// for crawled destinations, the crawled-wins downgrade inside
+		// `#getIdByUrl` (which fires only when incoming source is
+		// `'crawled'`) would never run for redirect intermediates — the
+		// anchor branch passes `'crawled'` explicitly and must stay
+		// symmetric. This test asserts that direction: an
+		// inventory-discovered
 		// intermediate must be DOWNGRADED to `'crawled'` once a
 		// crawled redirect chain traverses it — the URL is now
 		// reachable from the crawl graph, so it is NOT an orphan.
@@ -4262,8 +4261,8 @@ describe('redirect chain intermediate lineage propagation', () => {
 				.select('source')
 				.where('url', 'http://example.com/shared-hop.html');
 			// The inventory-discovered label must give way to the
-			// stronger crawled-graph evidence. Without the fix
-			// (`: undefined` instead of `: 'crawled'`), this stayed
+			// stronger crawled-graph evidence. With `: undefined` instead
+			// of `: 'crawled'` in the derivation, this would stay
 			// `'inventory-discovered'` forever.
 			expect(after?.source).toBe('crawled');
 		} finally {
@@ -4357,8 +4356,8 @@ describe('redirect chain intermediate lineage propagation', () => {
 		// convergence is "originating URL was already INSERTed by a
 		// prior pass (anchor lineage), then later the edge-only
 		// `recordRedirect` fires with `source = undefined` because the
-		// orchestrator is in resume mode". The fix's value lives in
-		// the DB lookup branch — without it, the chain laundered to
+		// orchestrator is in resume mode". The DB lookup branch is
+		// load-bearing — without it, the chain lineage launders to
 		// `'crawled'`. Pin the branch directly: mutate the production
 		// code to drop the lookup and this test must fail.
 		const dbPath = path.resolve(
@@ -4584,7 +4583,7 @@ describe('inventory run audit log', () => {
 	});
 
 	it('treats optional fields as NULL when omitted (backfill UX)', async () => {
-		// Pinned for the post-merge raw-SQL backfill path: minimal call
+		// Pinned for the raw-SQL backfill path: minimal call
 		// with just `ran_at` (the only non-nullable column) must succeed
 		// so a one-off `sqlite3` INSERT with absent summary stats is
 		// retroactively expressible.
@@ -4721,10 +4720,10 @@ describe('Database read-only mode', () => {
 });
 
 describe("Database.emit('error')", () => {
-	// Guards the decorator-to-HOF migration: the deleted `@ErrorEmitter()`
-	// decorator was invoked at Database method entry — the new
-	// `emitError` / `emitErrorAndRetry` HOFs must preserve that contract so
-	// downstream `error` listeners (crawler orchestrator abort path) keep
+	// Pins the `error`-event contract of the `emitError` /
+	// `emitErrorAndRetry` HOFs (the decorator-free replacement for
+	// `@ErrorEmitter()` — decorators are banned repo-wide): downstream
+	// `error` listeners (crawler orchestrator abort path) must keep
 	// firing on real Errors.
 	it("emits an 'error' event with the caught Error and re-throws when a wrapped method fails", async () => {
 		const dbPath = path.resolve(workingDir, 'emit-error-integration.sqlite');

@@ -35,6 +35,9 @@ import { WriteQueue } from './write-queue.js';
  * Default list of external URL prefixes excluded from crawling.
  * Includes social media sharing endpoints that are commonly linked
  * but provide no useful crawl data.
+ * @example
+ * // Merged ahead of user-supplied excludeUrls when a crawl starts:
+ * const excludeUrls = [...DEFAULT_EXCLUDED_EXTERNAL_URLS, 'https://ads.example.com'];
  */
 export const DEFAULT_EXCLUDED_EXTERNAL_URLS = [
 	'https://social-plugins.line.me',
@@ -205,8 +208,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			// back to the DB DEFAULT `'crawled'` and lose their
 			// `'inventory-discovered'` provenance.
 			lookupPageSource: async (url) => this.#archive.getPageSourceByUrl(url),
-			// Inventory mode is opted into by `CrawlerOrchestrator.inventory`
-			// (see T3); the default crawl path stays in normal mode so new
+			// Inventory mode is opted into by `CrawlerOrchestrator.inventory`;
+			// the default crawl path stays in normal mode so new
 			// rows continue to land in pages/resources with the DB DEFAULT
 			// `'crawled'` provenance label.
 			inventoryMode: options?.inventoryMode ?? null,
@@ -673,10 +676,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// anchor-referenced, `scraped=0` rows. Predicted-discard leaks
 				// and external anomalies are filtered out at the reader, so a
 				// non-empty pending here means the previous session genuinely
-				// stopped with interrupted in-scope work. The original hard
-				// rejection blocked legitimate inventory runs in practice
-				// because leak rows polluted the count; with the strict
-				// reader those false positives are gone, so a warning is
+				// stopped with interrupted in-scope work. A hard rejection is
+				// still not warranted (with a looser reader it would block
+				// legitimate inventory runs whenever leak rows polluted the
+				// count), so a warning is
 				// enough — the inventory pass continues and the crawled-wins
 				// source priority keeps stale labels stable even if some of
 				// the strict-pending rows happen to land on inventory seeds.
@@ -823,8 +826,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					htmlSeeds.push(url);
 				}
 				// Bulk-record non-HTML novel URLs in `resources` as
-				// `source='inventory-seed'` placeholders. The previous
-				// per-URL `await setResources(...)` loop spent minutes
+				// `source='inventory-seed'` placeholders. A
+				// per-URL `await setResources(...)` loop would spend minutes
 				// inside the `.bak`-protected window on large inventory
 				// lists; the chunked bulk path collapses N round-trips
 				// to N/500.
@@ -832,7 +835,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// Pre-insert HTML seeds as `scraped = 0`,
 				// `source = 'inventory-seed'` placeholders *before* the
 				// scrape phase, so a Ctrl+C between here and `setPage`
-				// no longer loses the URL. The strict-pending set picks
+				// cannot lose the URL. The strict-pending set picks
 				// these rows up on the next `--resume` via the
 				// `OR p.source != 'crawled'` clause.
 				await archive.insertInventorySeeds(htmlSeeds);
@@ -845,9 +848,9 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// hiccup or transient lock on the INSERT aborts the ingestion
 				// and the `.bak` restore wipes the pre-inserted seeds too,
 				// so "either the whole run took or none of it did" holds at
-				// the ingestion boundary. Past behaviour swallowed the
-				// failure post-scrape; the new boundary makes restore safe
-				// and useful, so the swallow is gone (see
+				// the ingestion boundary. Audit failures are deliberately
+				// NOT swallowed — inside the `.bak` window a restore is
+				// safe and useful (see
 				// {@link CrawlerOrchestrator.#writeInventoryRunRow}).
 				await CrawlerOrchestrator.#writeInventoryRunRow(archive, {
 					inventoryUrlsCount: inventoryUrls.length,
@@ -1172,8 +1175,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * static helper because the audit-row shape (timestamp stamping + label
 	 * auto-gen + the privacy-driven path elision documented below) is a
 	 * cohesive concern that benefits from staying outside the long
-	 * `inventory()` body even though only one caller remains after the
-	 * ingestion-phase consolidation.
+	 * `inventory()` body even though it has a single caller.
 	 *
 	 * `ran_at` is stamped now (ingestion-completion timestamp; the scrape
 	 * phase that may follow is treated as separate). `list_label` is
@@ -1186,10 +1188,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * the absolute path — see {@link InventoryRunAggregates} for the
 	 * privacy rationale.
 	 *
-	 * **Audit-write failures abort the ingestion phase.** The earlier
-	 * implementation swallowed them because the audit was the last write
-	 * after* the scrape, so re-throwing would have wiped a completed crawl;
-	 * with audit now lifted into the `.bak`-protected ingestion phase the
+	 * **Audit-write failures abort the ingestion phase.** Swallowing them
+	 * would only be justified if the audit were the last write after the
+	 * scrape (re-throwing there would wipe a completed crawl); inside the
+	 * `.bak`-protected ingestion phase the
 	 * trade-off flips. A failed audit row is restorable: the outer catch
 	 * copies `.bak` back over the archive and the operator reruns the
 	 * (short) ingestion from scratch. That keeps `inventory_runs` honest
@@ -1219,10 +1221,9 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 	/**
 	 * Tears down session-scoped crawler caches and prints a short-circuit
-	 * summary if any URL fetches were skipped. Invoked at the four
-	 * crawl-session boundaries (`crawling` / `append` / `inventory` /
-	 * `retryFailed` / `resume`) where the previous `clearDestinationCache`
-	 * call already lived.
+	 * summary if any URL fetches were skipped. Invoked at every
+	 * crawl-session boundary (`crawling` / `append` / `inventory` /
+	 * `retryFailed` / `resume`).
 	 */
 	static #finalizeCrawlSession(): void {
 		const skipped = dnsBurnedHostShortCircuitCounter.count;

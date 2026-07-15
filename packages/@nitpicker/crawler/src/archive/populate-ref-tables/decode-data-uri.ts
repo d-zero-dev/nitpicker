@@ -95,8 +95,8 @@ function isValidBase64(payload: string): boolean {
  * inverse.
  * @param payload - Raw payload text (everything after the `,`).
  * @returns Payload bytes.
- * @throws {URIError} If a `%` escape is malformed (via `URIError`
- *   propagation from `Buffer.from(hex, 'hex')`); caller catches.
+ * @throws {URIError} If a `%` escape is truncated or not two hex
+ *   digits; the caller's try/catch maps this to a `null` return.
  */
 function percentDecodeToBytes(payload: string): Buffer {
 	const chunks: Buffer[] = [];

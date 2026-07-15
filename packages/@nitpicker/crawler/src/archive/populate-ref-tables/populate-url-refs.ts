@@ -15,8 +15,8 @@ const INSERT_CHUNK_SIZE = 500;
  * Rows scanned per keyset-paginated `SELECT` chunk. One SELECT reads all
  * URL columns for the source table's chunk simultaneously so the pages
  * table is scanned exactly once per populate call, not N-times-once-
- * per-URL-column — the previous per-column-scan implementation multiplied
- * migration wall-clock by the count of URL-shaped columns.
+ * per-URL-column — a per-column scan would multiply migration wall-clock
+ * by the count of URL-shaped columns.
  */
 const READ_CHUNK_SIZE = 5000;
 

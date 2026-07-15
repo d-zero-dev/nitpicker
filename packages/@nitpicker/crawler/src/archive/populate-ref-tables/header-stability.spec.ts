@@ -35,7 +35,7 @@ describe('VOLATILE_HEADER_NAMES', () => {
 		}
 	});
 
-	it('includes the plan-mandated volatile headers', () => {
+	it('includes the core per-response volatile headers (timestamps / request IDs / cache telemetry)', () => {
 		const expected = [
 			'date',
 			'expires',

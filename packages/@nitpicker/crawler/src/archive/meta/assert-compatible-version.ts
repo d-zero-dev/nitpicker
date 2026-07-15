@@ -22,13 +22,20 @@ import { IncompatibleArchiveError } from './types.js';
  * - **0.10.0**: `page_html_blobs` BLOB storage (#75/#84) +
  *   nested-`Meta`-derived flat columns, `meta_extras` JSON, `page_tags` /
  *   `page_jsonld` tables, denormalised aggregates (#85).
- * - **0.13.0**: this build. 0.13 migration write-model refactor (#103) —
+ * - **0.13.0**: this build. Write-model refactor (epic #103) —
  *   `content_items` / `page_meta` / `resource_items` / `anchor_edges` /
  *   `resource_ref_edges` / `image_items` entity tables plus `url_refs` /
  *   `text_refs` / `content_type_refs` / `json_refs` / `blob_refs` /
  *   `header_flags` ref tables. Readers query the new tables exclusively;
- *   pre-6 archives must be upgraded with `scripts/migrate-to-0.13.mjs`
+ *   pre-0.13 archives must be upgraded with `scripts/migrate-to-0.13.mjs`
  *   which bumps `info.version` to `0.13.0` on completion.
+ * @example
+ * import { REQUIRED_FORMAT_VERSION } from '@nitpicker/crawler';
+ *
+ * // Warn an operator before attempting to open an old archive:
+ * if (compareSemver(archiveInfo.version, REQUIRED_FORMAT_VERSION) < 0) {
+ *   console.error(`Archive needs migration to format ${REQUIRED_FORMAT_VERSION}`);
+ * }
  */
 export const REQUIRED_FORMAT_VERSION = '0.13.0';
 

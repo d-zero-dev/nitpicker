@@ -33,6 +33,15 @@ import { untar } from './filesystem/untar.js';
  * Use the static factory methods ({@link Archive.create}, {@link Archive.open},
  * {@link Archive.resume}, {@link Archive.connect}) to obtain instances.
  * The constructor is private.
+ * @example
+ * const archive = await Archive.create({ filePath: '/path/to/site.nitpicker' });
+ * try {
+ *   await archive.setConfig(config);
+ *   const pageId = await archive.setPage(pageData);
+ * } finally {
+ *   // Writes the `.nitpicker` tar (if absent), removes tmpDir, releases the lock.
+ *   await archive.close();
+ * }
  */
 export default class Archive extends ArchiveAccessor {
 	/**
@@ -204,11 +213,10 @@ export default class Archive extends ArchiveAccessor {
 	/**
 	 * Pre-insert inventory non-HTML URLs as `source='inventory-seed'`
 	 * placeholders in the `resources` table — the non-HTML counterpart of
-	 * {@link Archive.insertInventorySeeds}. Replaces the previous per-URL
-	 * `setResources` loop in `CrawlerOrchestrator.inventory` so the
-	 * ingestion phase commits all non-HTML rows in one chunked round-trip
-	 * per 500 (a 50k-URL inventory list dropped from minutes-inside-`.bak`
-	 * to seconds).
+	 * {@link Archive.insertInventorySeeds}. Rows are committed in chunked
+	 * bulk inserts (500 per round-trip) rather than per-URL awaits — a
+	 * per-URL loop would keep a 50k-URL inventory list inside the `.bak`
+	 * window for minutes instead of seconds.
 	 *
 	 * Thin facade over {@link Database.insertInventoryResources}.
 	 * `ExURL.href` is the storage key for `resources.url` (matches what
@@ -517,10 +525,9 @@ export default class Archive extends ArchiveAccessor {
 	 * already extracted (and migrated) into an OS-temp cache directory —
 	 * never the caller's live/interrupted crawl tmpDir, which must stay
 	 * read-only. A read-only open (`Archive.openCached`/`ArchiveManager.open`)
-	 * must never take this path itself — see issue #177, which removed the
-	 * only production caller (the on-open opportunistic read-model build
-	 * from issue #112) for blocking/writing during what must be a read-only
-	 * open. This escape hatch has no current production caller; any future
+	 * must never take this path itself — blocking or writing during what
+	 * must be a read-only open is forbidden (issue #177). This escape
+	 * hatch has no current production caller; any future
 	 * one is responsible for its own cross-process coordination (see
 	 * `acquireArchiveLock`) — this method does not acquire any lock itself.
 	 * @param tmpDir - The path to the temporary directory containing the database.

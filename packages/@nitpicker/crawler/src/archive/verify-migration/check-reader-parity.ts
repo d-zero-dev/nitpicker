@@ -5,10 +5,10 @@ import { MigrationVerificationError } from './types.js';
 /**
  * Compares totals reported by 0.13 readers (which query the 0.13
  * entity tables exclusively) against equivalent inline SQL against the
- * still-present pre-6 write-model tables (`pages` / `anchors` / `images` /
+ * still-present legacy write-model tables (`pages` / `anchors` / `images` /
  * `resources` / `resources-referrers`). A mismatch here means either the
  * 0.13 populates lost rows or one of the new reader implementations
- * has a filter/predicate off-by-one relative to its pre-6 counterpart.
+ * has a filter/predicate off-by-one relative to its legacy counterpart.
  *
  * This is deliberately lighter than the "byte-identical items array"
  * verification issue #195 acceptance references — running every reader on

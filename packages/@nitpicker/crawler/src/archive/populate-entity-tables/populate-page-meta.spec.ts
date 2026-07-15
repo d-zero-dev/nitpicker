@@ -74,7 +74,7 @@ describe('populatePageMeta', () => {
 		expect(await countRows(db, 'page_meta', 'page_id')).toBe(1);
 	});
 
-	it('throws when a text_refs.id is not resolvable (0.13-2 not run)', async () => {
+	it('throws when a text_refs.id is not resolvable (text_refs not populated)', async () => {
 		await db('pages').insert([
 			{ url: 'https://example.com/a', scraped: 1, isTarget: 1, title: 'Missing text' },
 		]);

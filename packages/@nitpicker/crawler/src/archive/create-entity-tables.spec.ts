@@ -6,8 +6,8 @@ import { createRefTables } from './create-ref-tables.js';
 import { LibsqlDialect } from './libsql-dialect.js';
 
 /**
- * Creates the 0.13 ref tables that 0.13 references, then runs the
- * 0.13 DDL against a fresh in-memory database.
+ * Creates the 0.13 ref tables that the entity tables reference, then runs
+ * the entity-table DDL against a fresh in-memory database.
  * @param options - `foreignKeys: true` enables `PRAGMA foreign_keys = ON`
  *   before the caller runs INSERTs (required for any test that exercises
  *   FK / CASCADE / DEFERRABLE / CHECK behaviour).

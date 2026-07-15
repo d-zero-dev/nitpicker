@@ -32,9 +32,9 @@ const READ_CHUNK_SIZE = 1000;
  *    used by `page_html_blobs`.
  * 3. Deduplicated by hash — identical raw JSON strings produce one row.
  *
- * `sizeRaw` records the uncompressed byte length (UTF-8) and `sizeStored`
- * records the compressed byte length; consumers can estimate compression
- * savings without decompressing.
+ * `size_raw` records the uncompressed byte length (UTF-8) and
+ * `size_stored` records the compressed byte length; consumers can
+ * estimate compression savings without decompressing.
  *
  * `INSERT OR IGNORE` on `hash` makes the step idempotent across partial-
  * failure restarts.

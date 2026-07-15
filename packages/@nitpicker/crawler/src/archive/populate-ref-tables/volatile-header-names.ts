@@ -10,9 +10,12 @@
  *
  * Any header not in this set is
  * treated as **stable** by {@link ./header-stability.ts:isVolatileHeader}
- * — the safer default because miscounting a genuinely volatile header as
- * stable only loses dedup; miscounting a stable one as volatile could
- * split the same logical header set into multiple `header_sets` rows.
+ * — the safer default because a genuinely volatile header misclassified
+ * as stable only weakens dedup (its per-response values fork
+ * otherwise-identical stable profiles into separate `stable_hash`
+ * clusters), while a stable header misclassified as volatile would drop
+ * a meaningful signal from `stable_hash` and falsely cluster distinct
+ * header configurations together.
  */
 export const VOLATILE_HEADER_NAMES: ReadonlySet<string> = new Set([
 	'date',

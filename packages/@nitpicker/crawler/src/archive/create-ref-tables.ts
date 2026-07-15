@@ -1,18 +1,18 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates the 10 0.13 staging tables (issue #190) and their index.
+ * Creates the 10 dictionary tables of the 0.13 format (issue #190) and their index.
  *
- * These are the ref / header dictionary tables that will become the durable
- * write-model under 0.13: `url_refs`, `content_type_refs`,
+ * These are the ref / header dictionary tables that form the durable
+ * write-model of the 0.13 format: `url_refs`, `content_type_refs`,
  * `text_refs`, `json_refs`, `blob_refs`, `header_name_refs`,
  * `header_value_refs`, `header_sets` (+ `idx_header_sets_stable`),
  * `header_set_entries`, `header_flags`.
  *
  * The DDL is shared between fresh-archive provisioning ({@link initSchema}
  * calls this on a brand new DB) and the lazy migration path
- * ({@link migrateRefTables} calls it on archives created before this
- * branch shipped). Keeping the schema in one function guarantees that both
+ * ({@link migrateRefTables} calls it on archives created before the
+ * 0.13 format). Keeping the schema in one function guarantees that both
  * origin points produce byte-identical tables — a divergence would silently
  * break the 0.13 population step, which relies on the exact UNIQUE
  * constraints and CHECK clauses declared here.
@@ -28,8 +28,9 @@ import type { Knex } from 'knex';
  * every column is small — the same reasoning as `page_html_blobs`.
  *
  * `header_sets.raw_json_hash` is a temporary column used only by the
- * 0.13 for lookups against the legacy `responseHeaders` JSON;
- * a follow-up cleanup migration drops it after 0.13 merges.
+ * legacy-to-0.13 population step for lookups against the legacy
+ * `responseHeaders` JSON; a follow-up cleanup migration is expected to
+ * drop it.
  * @param instance - The Knex query builder instance connected to the database.
  */
 export async function createRefTables(instance: Knex): Promise<void> {
@@ -69,8 +70,8 @@ export async function createRefTables(instance: Knex): Promise<void> {
 	// meta strings, and dom_path. The `(hash, text)` composite UNIQUE
 	// mirrors `analysis_text_refs` so lookups prefix-seek on `hash`. The
 	// two dictionaries stay separate because merging would require
-	// re-keying every existing `analysis_violations` row (out of Phase
-	// 0.13 migration scope; revisit in a later cleanup pass).
+	// re-keying every existing `analysis_violations` row (out of scope
+	// for the 0.13 migration; revisit in a later cleanup pass).
 	await instance.raw(`
 		CREATE TABLE text_refs (
 			id   INTEGER PRIMARY KEY,
@@ -139,7 +140,7 @@ export async function createRefTables(instance: Knex): Promise<void> {
 	// exactly as stored in the old tables — kept only so the 0.13
 	// migration can look up an existing `header_sets.id` without calling
 	// any SQL function (SQLite has no built-in BLAKE3). Scheduled for drop
-	// in a follow-up cleanup migration after 0.13.
+	// in a follow-up cleanup migration.
 	// `raw_hash` is BLAKE3 of the sorted `name=value` pairs of every
 	// header (stable + volatile); `stable_hash` is BLAKE3 of the sorted
 	// `name=value` pairs of stable headers only.

@@ -1,7 +1,7 @@
 /**
- * Shared type definitions for 0.13 verification.
+ * Shared type definitions for 0.13 migration verification.
  *
- * 0.13 adds the acceptance-invariant checks that `scripts/migrate-to-0.13.mjs`
+ * These are the acceptance-invariant checks that `scripts/migrate-to-0.13.mjs`
  * runs at the end of the migration to confirm that the 0.13 entity /
  * edge populates produced a consistent archive. Each check is one file
  * under `verify-migration/` and throws {@link MigrationVerificationError} on mismatch;

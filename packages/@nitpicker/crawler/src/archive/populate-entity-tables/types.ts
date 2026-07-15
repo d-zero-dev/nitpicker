@@ -133,10 +133,10 @@ export interface AnchorEdgeRowInProgress {
 }
 
 /**
- * Case discriminator for {@link ./derive-dom-path.ts}: which of the three
- * resolution paths produced the returned `dom_path` string. Used by the
- * image-items populate to emit a diagnostic warning log for `unknown` fallbacks
- * so operators can audit reconstruction fidelity.
+ * Case discriminator for {@link ./match-images-to-dom-paths.ts}: which of
+ * the three resolution paths produced the returned `dom_path` string. The
+ * migration script's jsdom resolver emits a diagnostic warning log for
+ * `unknown` fallbacks so operators can audit reconstruction fidelity.
  */
 export type DomPathDerivationCase = 'single-match' | 'ordinal-match' | 'unknown';
 

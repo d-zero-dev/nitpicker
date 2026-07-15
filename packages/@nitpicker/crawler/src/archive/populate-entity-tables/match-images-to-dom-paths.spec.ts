@@ -77,8 +77,8 @@ describe('matchImagesToDomPaths (dom-path-derivation, all 3 cases)', () => {
 	});
 
 	it('falls back to unknown when more images share sourceCode than DOM candidates', () => {
-		// Regression guard: an earlier fallback (`candidates.at(-1)`)
-		// silently mapped every overflow row to the same last DOM
+		// Regression guard: reusing the last candidate (`candidates.at(-1)`)
+		// would silently map every overflow row to the same last DOM
 		// element. Overflow rows must each keep a unique `unknown/<id>`
 		// marker so they stay distinguishable in the archive.
 		const elements = imgs(

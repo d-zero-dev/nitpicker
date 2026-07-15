@@ -102,10 +102,10 @@ export function matchImagesToDomPaths(
 		const chosen = candidates[cursor];
 		if (chosen === undefined) {
 			// More `images` rows share this outerHTML than the archived HTML
-			// has matching `<img>` elements — the earlier fallback
-			// (`candidates.at(-1)`) silently mapped every overflow row to
-			// the last matched element, producing multiple `image_items`
-			// rows with the same `dom_path_text_id`. Falling back to
+			// has matching `<img>` elements. Reusing the last candidate
+			// (`candidates.at(-1)`) would silently map every overflow row
+			// to the same element, producing multiple `image_items` rows
+			// with the same `dom_path_text_id`. Falling back to
 			// `unknown/<id>` keeps overflow rows individually
 			// distinguishable in the archive.
 			result.set(image.id, { path: `unknown/${image.id}`, case: 'unknown' });
@@ -120,12 +120,11 @@ export function matchImagesToDomPaths(
 }
 
 /**
- * Caches {@link deriveDomPath} results against `element` identity. Duplicate
- * `<img>` outerHTML values in the same document can point the ordinal
- * cursor at the same element more than once (when the ordinal exceeds
- * the candidate list length — a defensive fallback via `candidates.at(-1)`);
- * caching keeps the DOM walk cost O(unique elements) rather than
- * O(matches).
+ * Caches {@link deriveDomPath} results against `element` identity.
+ * Multiple `images` rows can resolve to the same element (e.g. several
+ * rows sharing one outerHTML that matches exactly one `<img>` all take
+ * the single-match branch); caching keeps the DOM walk cost
+ * O(unique elements) rather than O(matches).
  * @param element - The DOM element to derive against.
  * @param cache - The memo cache used across one page's match pass.
  * @returns Derived `dom_path` string.

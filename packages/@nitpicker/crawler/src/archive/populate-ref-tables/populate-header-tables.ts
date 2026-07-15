@@ -338,11 +338,12 @@ async function resolveNameIds(
  * values into `header_value_refs` as needed. Values are hashed once and
  * deduped by `(hash, value)` per the 0.13 UNIQUE constraint.
  *
- * The read-back after INSERT uses `.whereIn('hash')` + `.whereIn('value')`
- * to constrain the round-trip result set to exactly the values we just
- * wrote (a Buffer[] hash-only IN would return the correct rows in
- * theory but leans on a driver detail — narrowing on `value` too
- * defends against any BLOB-parameter round-trip quirk in libsql).
+ * The read-back after INSERT narrows on `.whereIn('value', ...)` — the
+ * string values just written — instead of binding the Buffer hashes into
+ * a `WHERE hash IN (...)`: a Buffer[] IN would return the correct rows
+ * in theory but leans on libsql's BLOB-parameter round-trip behaviour,
+ * while string values compare reliably. The cache key still includes the
+ * hash, so hash-distinct entries stay disambiguated.
  * @param trx - Knex instance.
  * @param entries - Decomposed entries.
  * @param cache - `hexHash|value → id` cache; mutated in place.

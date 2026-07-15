@@ -105,11 +105,11 @@ export function decomposeHeaderSet(rawJson: string | null): DecomposedHeaderSet 
 		return a.occurrence - b.occurrence;
 	});
 
-	// Canonicalize every entry exactly once, then partition the strings —
-	// prior version canonicalized each stable entry twice (once in the
-	// all-entries pass, once in the stable pass) and each volatile entry
-	// twice likewise, which becomes measurable on large archives where a
-	// single response can carry a couple of dozen entries.
+	// Canonicalize every entry exactly once, then partition the strings.
+	// Canonicalizing per hash pass instead (once in the all-entries pass,
+	// again in the stable / volatile passes) would serialize each entry
+	// twice, which becomes measurable on large archives where a single
+	// response can carry a couple of dozen entries.
 	const canonicalStrings = entries.map(canonicalize);
 	const stableCanonical: string[] = [];
 	const volatileCanonical: string[] = [];

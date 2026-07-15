@@ -133,11 +133,12 @@ describe('populateImageItems', () => {
 	});
 
 	it('processes each page as one unit — dom-path resolver is called once per page', async () => {
-		// Regression guard for the earlier image-chunked implementation
-		// that reset `matchImagesToDomPaths`' ordinal cursor at each
-		// READ_CHUNK_SIZE boundary and duplicated dom_paths.
-		// Iterating by pageId means the resolver sees every image of a
-		// page in one call regardless of how many rows the page has.
+		// Regression guard: an image-chunked loop (paginating over image
+		// rows instead of pages) would reset `matchImagesToDomPaths`'
+		// ordinal cursor at each READ_CHUNK_SIZE boundary and duplicate
+		// dom_paths. Iterating by pageId means the resolver sees every
+		// image of a page in one call regardless of how many rows the
+		// page has.
 		await db('pages').insert([
 			{ id: 1, url: 'https://example.com/a', scraped: 1, isTarget: 1 },
 			{ id: 2, url: 'https://example.com/b', scraped: 1, isTarget: 1 },
@@ -191,10 +192,10 @@ describe('populateImageItems', () => {
 	});
 
 	it('does not send data URIs into url_refs lookups (routing partition)', async () => {
-		// Regression guard for the earlier bug that added every value to
-		// both `urls` and `dataUris` sets — large data URIs must never
-		// reach `resolveUrlRefs`' `WHERE url IN (?)` because they can
-		// blow past SQLITE_MAX_SQL_LENGTH.
+		// Regression guard: adding a value to both the `urls` and
+		// `dataUris` sets would leak large data URIs into
+		// `resolveUrlRefs`' `WHERE url IN (?)`, which can blow past
+		// SQLITE_MAX_SQL_LENGTH. The partition must be exclusive.
 		const longDataUri = 'data:image/png;base64,' + 'A'.repeat(600);
 		await db('pages').insert([
 			{ id: 1, url: 'https://example.com/a', scraped: 1, isTarget: 1 },
@@ -259,12 +260,12 @@ describe('populateImageItems', () => {
 		expect(await countRows(db, 'image_items')).toBe(1);
 	});
 
-	it('passes the decoded HTML snapshot from `page_html_ref` + `page_html_blobs` to the resolver (deadlock-fix path — the trx-scoped read replaced the outer-Knex `getPageHtml` callback)', async () => {
+	it('passes the decoded HTML snapshot from `page_html_ref` + `page_html_blobs` to the resolver via the trx-scoped read (no outer-Knex `getPageHtml` callback)', async () => {
 		// End-to-end coverage for `readPageHtmlInTrx`. Seed a zstd-encoded
 		// HTML BLOB via the same shape `Database.setPage` would write, then
 		// inject a resolver that CAPTURES the `html` string it receives.
 		// If populate re-entered the outer Knex instance for the HTML read
-		// (the pre-fix path) the trx would deadlock and this test would
+		// the trx would deadlock and this test would
 		// hang; if it read via trx but decoded incorrectly the captured
 		// string would not match the seed. Either failure mode is a
 		// regression the assertion below catches.

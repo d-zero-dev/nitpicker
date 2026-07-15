@@ -104,7 +104,7 @@ describe('populateContentItems', () => {
 		expect(await countRows(db, 'content_items')).toBe(1);
 	});
 
-	it('throws when url_refs.id is not resolvable (0.13-1 not run)', async () => {
+	it('throws when url_refs.id is not resolvable (populateRefTables not run)', async () => {
 		await db('pages').insert([{ url: 'https://example.com/a', scraped: 1, isTarget: 1 }]);
 		// Deliberately skip populateRefTables — url_refs stays empty.
 		await expect(populateContentItems(db)).rejects.toThrow(/url_refs\.id not resolved/);

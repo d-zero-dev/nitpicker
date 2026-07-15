@@ -3,10 +3,9 @@ import { createHash } from 'node:crypto';
 /**
  * Computes a 32-byte content hash for a UTF-8 string or raw byte buffer.
  *
- * BLAKE3 was the original candidate for the hash columns on `text_refs`,
- * `json_refs`, `blob_refs`, `header_value_refs`, and `header_sets`. This
- * implementation deliberately uses **SHA-256** instead, for
- * three reasons:
+ * The hash columns on `text_refs`, `json_refs`, `blob_refs`,
+ * `header_value_refs`, and `header_sets` use **SHA-256** rather than a
+ * faster candidate such as BLAKE3, for three reasons:
  *
  * 1. **No new dependency**. `@nitpicker/crawler`'s dependency list is small
  *    and CLAUDE.md's supply-chain rules discourage adding a hash-only lib.

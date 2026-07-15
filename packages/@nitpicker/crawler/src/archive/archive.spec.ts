@@ -97,8 +97,8 @@ describe('setPage', () => {
 	});
 
 	it('Non-HTML (PDF) setPage does not insert a page_html_ref row (#72)', async () => {
-		// Issue #72: previously a PDF with isTarget=1 wrote a 0-byte snapshot.
-		// With BLOB storage, the same intent is "no page_html_ref row for
+		// Issue #72: a PDF with isTarget=1 must not leave an empty body
+		// record. With BLOB storage that means "no page_html_ref row for
 		// non-HTML responses": the writer must skip the body INSERT when
 		// `html.length === 0`.
 		const filePath = path.resolve(workingDir, 'setpage-pdf-test.nitpicker');

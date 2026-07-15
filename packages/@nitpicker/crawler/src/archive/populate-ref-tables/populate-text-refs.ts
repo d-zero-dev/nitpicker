@@ -20,8 +20,8 @@ const READ_CHUNK_SIZE = 5000;
 /**
  * Source table + its text-shaped columns. Groups by table so each table
  * is scanned exactly once with a single SELECT that covers every
- * relevant column — the per-column-scan variant used to run 8 separate
- * pages scans and multiplied migration wall-clock accordingly.
+ * relevant column — a per-column scan would run 8 separate `pages`
+ * scans and multiply migration wall-clock accordingly.
  *
  * `dom_path` is intentionally absent: dom_path strings are derived from
  * the stored HTML blob, not from any column of the current write-model,

@@ -24,7 +24,7 @@ import { MigrationVerificationError } from './types.js';
  * The returned {@link MigrationVerificationSummary} is echoed to stdout by the
  * migration script so operators can eyeball migration outcomes (`did we lose
  * rows silently within the invariant window?`) from batch pipeline logs
- * without re-opening the archive. Called must run this inside a `db.transaction()`
+ * without re-opening the archive. Callers must run this inside a `db.transaction()`
  * for the counts and the JOIN-based checks (#7 / #8) to see a consistent
  * snapshot of the archive.
  *
@@ -60,7 +60,7 @@ export async function verifyMigration(trx: Knex): Promise<MigrationVerificationS
 		await checkResourceItemsCount(trx);
 		await checkContentTypePreservation(trx);
 		await checkUrlRoundTrip(trx);
-		// 0.13: reader-level parity between the pre-6 tables and the
+		// Reader-level parity between the legacy tables and the
 		// new entity tables (see `checkReaderParity` for the eight totals
 		// this catches that the row-count checks above miss).
 		await checkReaderParity(trx);

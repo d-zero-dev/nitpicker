@@ -3,11 +3,11 @@ import type { Knex } from 'knex';
 import { createRefTables } from './create-ref-tables.js';
 
 /**
- * Adds the 0.13 staging tables (issue #190) to archives created before
- * this branch shipped.
+ * Adds the 0.13 dictionary tables (issue #190) to archives created before
+ * the 0.13 format.
  *
- * These are the 10 ref / header dictionary tables that will become the
- * durable write-model under 0.13. Fresh archives get them via
+ * These are the 10 ref / header dictionary tables that form the
+ * durable write-model of the 0.13 format. Fresh archives get them via
  * `initSchema`; this migration handles the "existing archive re-opened by
  * `crawl --append` / `--retry-failed` / analyze" path — the same pattern used
  * by `migrateCrawlErrors`, `migrateHtmlBlobTables`, etc.
@@ -19,7 +19,7 @@ import { createRefTables } from './create-ref-tables.js';
  * protection. This migration only guarantees the empty tables exist so
  * consumers don't crash with `SQLITE_ERROR: no such table: url_refs`.
  *
- * Idempotent: presence of `url_refs` is used as the phase marker (all 10
+ * Idempotent: presence of `url_refs` is used as the sentinel (all 10
  * tables are created together, so any one of them can serve as the sentinel).
  * On read-only connections the migration is skipped upstream, so this
  * function only ever runs against writer connections.

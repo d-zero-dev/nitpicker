@@ -1127,9 +1127,9 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * non-HTML counterpart of {@link Database.insertInventorySeeds}. Used by
 	 * `CrawlerOrchestrator.inventory` so the ingestion phase commits all of
 	 * its non-HTML URLs in one chunked round-trip per 500 instead of N
-	 * sequential `insertResource` awaits. On a 50k-URL inventory list the
-	 * old per-URL loop spent minutes inside the `.bak`-protected window;
-	 * the bulk path finishes in seconds.
+	 * sequential `insertResource` awaits — a per-URL loop would spend
+	 * minutes inside the `.bak`-protected window on a 50k-URL inventory
+	 * list, where the bulk path finishes in seconds.
 	 *
 	 * Idempotent: `onConflict('url').ignore()` leaves existing rows untouched
 	 * (the orchestrator's `getExistingResourceUrls` filter is what keeps a
@@ -1178,10 +1178,11 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * `source = 'inventory-seed'` placeholders so the URL's existence in the
 	 * archive is **durable before the scrape phase starts**.
 	 *
-	 * Why this is the linchpin of `--inventory` Ctrl+C tolerance: HTML seeds
-	 * used to live only in the Crawler's in-memory `LinkList` until the
-	 * dealer eventually called `setPage`. A Ctrl+C / crash before that point
-	 * lost the seed without trace, and `--resume` could not recover it
+	 * Why this is the linchpin of `--inventory` Ctrl+C tolerance: without
+	 * pre-insertion, HTML seeds live only in the Crawler's in-memory
+	 * `LinkList` until the dealer eventually calls `setPage`. A Ctrl+C /
+	 * crash before that point loses the seed without trace, and `--resume`
+	 * cannot recover it
 	 * because `getCrawlingState`'s strict pending set requires a `pages` row.
 	 * Pre-inserting fills exactly that gap: the strict pending set picks
 	 * these rows up via its `OR p.source != 'crawled'` clause, so
@@ -1269,8 +1270,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 *
 	 * The `source` provenance label is written ONLY on insert; an
 	 * `ON CONFLICT IGNORE` collision leaves an existing row's source untouched
-	 * (this is what makes a second `crawl --inventory` non-destructive — see
-	 * the inventory plan).
+	 * (this is what makes a second `crawl --inventory` non-destructive).
 	 * @param resource - The resource data to insert.
 	 * @param source - Provenance label for new rows. `undefined` leaves the DB DEFAULT (`'crawled'`).
 	 */
@@ -1592,11 +1592,10 @@ export class Database extends EventEmitter<DatabaseEvent> {
 					// Pass the caller-supplied `source` straight through so a
 					// brand-new destination row INSERTed here picks up the
 					// inventory lineage (instead of the DB DEFAULT `'crawled'`)
-					// when the caller is in the inventory chain — closes the
-					// hole where `recordRedirect` was previously laundering
-					// inventory lineage to `'crawled'` for js-redirect rescue /
-					// #73 convergence destinations that had not yet been
-					// rendered.
+					// when the caller is in the inventory chain — without the
+					// pass-through, inventory lineage would be laundered to
+					// `'crawled'` for js-redirect rescue / #73 convergence
+					// destinations that have not yet been rendered.
 					const destId = await this.#getIdByUrl(
 						destUrlObject.withoutHashAndAuth,
 						undefined,
@@ -2236,7 +2235,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 					// (e.g. `crawl --resume`, re-visits, `--append` re-promotion). The
 					// `anchors` / `images` tables have no uniqueness constraint, so
 					// re-inserting without clearing would accumulate a full duplicate set
-					// on every re-scrape (the bug fixed in #70). So we delete-then-insert
+					// on every re-scrape (#70). So we delete-then-insert
 					// to *replace* the previous rows.
 					//
 					// The delete is paired with — and guarded by — a non-empty new list:

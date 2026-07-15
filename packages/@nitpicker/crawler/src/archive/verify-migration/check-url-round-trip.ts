@@ -3,8 +3,8 @@ import type { Knex } from 'knex';
 import { MigrationVerificationError } from './types.js';
 
 /**
- * Sample size for the URL round-trip smoke test. Documented in issue #194
- * and `docs/write-model-refactor-plan.md` §0.13 as a 1,000-row sample.
+ * Sample size for the URL round-trip smoke test — a 1,000-row sample per
+ * issue #194.
  * Not statistical coverage — URL normalisation bugs tend to be systematic
  * (all rows with a particular scheme or host), so a modest evenly-spread
  * sample catches them reliably.

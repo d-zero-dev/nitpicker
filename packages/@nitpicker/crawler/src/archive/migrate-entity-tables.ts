@@ -4,21 +4,21 @@ import { createEntityTables } from './create-entity-tables.js';
 
 /**
  * Adds the 0.13 entity / edge tables (issue #192) to archives created
- * before this branch shipped.
+ * before the 0.13 format.
  *
  * These are the 6 core normalised tables (`content_items`, `page_meta`,
  * `resource_items`, `anchor_edges`, `resource_ref_edges`, `image_items`) that
- * will replace the legacy write model under 0.13. Fresh archives get
+ * replace the legacy write model in the 0.13 format. Fresh archives get
  * them via `initSchema`; this migration handles the "existing archive
  * re-opened by `crawl --append` / `--retry-failed` / analyze" path — the same
  * pattern used by `migrateCrawlErrors`, `migrateRefTables`, etc.
  *
  * The migration is intentionally table-only. It does not back-fill any data
  * from `pages` / `resources` / `anchors` / `images` — that is the job of the
- * 0.13 populates (`populateRefTables` + `populateEntityTables`), which
+ * population steps (`populateRefTables` + `populateEntityTables`), which
  * read from the legacy tables and write
  * the entity rows in a single WAL transaction with `.bak` protection. This
- * migration only guarantees the empty tables exist so 0.13 can
+ * migration only guarantees the empty tables exist so the populate step can
  * INSERT into them without hitting `SQLITE_ERROR: no such table:
  * content_items`.
  *

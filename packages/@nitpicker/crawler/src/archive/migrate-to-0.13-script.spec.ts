@@ -115,8 +115,8 @@ function sha256File(filePath: string): string {
 
 /**
  * Repacks a fixture archive after opening its inner `db.sqlite` for a
- * caller-supplied mutation. Used to pre-populate 0.13 migration tables with a
- * phantom row so the migration's 0.13 verification fails.
+ * caller-supplied mutation. Used to inject fixture corruption (phantom rows
+ * / deleted rows) so the migration script's verification or preflight fails.
  *
  * The mutation runs under `PRAGMA foreign_keys = OFF` so the caller can
  * insert rows referencing ids that will be created (or not) later by

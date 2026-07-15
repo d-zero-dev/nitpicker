@@ -23,9 +23,9 @@ describe('initSchema', () => {
 			'resources-referrers',
 			'page_html_blobs',
 			'page_html_ref',
-			// 0.13 staging tables (issue #190). Additive only —
+			// 0.13 ref / dictionary tables (issue #190). Additive only —
 			// present on every fresh archive but not read/written by
-			// any consumer until later 0.13 migration sub-issues land.
+			// the legacy consumers; the 0.13 population step fills them.
 			'url_refs',
 			'content_type_refs',
 			'text_refs',
@@ -37,8 +37,8 @@ describe('initSchema', () => {
 			'header_set_entries',
 			'header_flags',
 			// 0.13 core entity / edge tables (issue #192). Same
-			// additive-only status as 0.13: created on every fresh
-			// archive but not populated / read until later phases.
+			// additive-only status as the ref tables above: created on
+			// every fresh archive; the populate step fills them.
 			'content_items',
 			'page_meta',
 			'resource_items',

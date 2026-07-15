@@ -2,6 +2,10 @@ import type { ParseURLOptions } from '@d-zero/shared/parse-url';
 
 /**
  * Event map for database-related events emitted by the Database and ArchiveAccessor classes.
+ * @example
+ * archive.on('error', (error) => {
+ *   console.error('database failure:', error.message);
+ * });
  */
 export interface DatabaseEvent {
 	/** An error that occurred during a database operation. */
@@ -11,6 +15,9 @@ export interface DatabaseEvent {
 /**
  * Configuration stored in the archive database's `info` table.
  * Represents all crawling options that were used for the crawl session.
+ * @example
+ * const config = await archive.getConfig();
+ * console.log(config.roots, config.userAgent, config.parallels);
  */
 export interface Config extends Required<Pick<ParseURLOptions, 'disableQueries'>> {
 	/** The starting URL for the crawl. Stored as a denormalised mirror of `roots[0]` so summary consumers can read a single URL without parsing the array. */
@@ -71,6 +78,10 @@ export interface Config extends Required<Pick<ParseURLOptions, 'disableQueries'>
  * Isolation queries (`listIsolatedPages` / `listUnusedResources`) judge
  * orphans by `referrer = 0`, NOT by this value — `source` only labels
  * the row.
+ * @example
+ * if (page.source !== 'crawled') {
+ *   // Row was introduced by a `crawl --inventory` pass.
+ * }
  */
 export type PageSource = 'crawled' | 'inventory-seed' | 'inventory-discovered';
 
@@ -79,9 +90,9 @@ export type PageSource = 'crawled' | 'inventory-seed' | 'inventory-discovered';
  * `--inventory <list>` invocation.
  *
  * Schema-mirror interface: every column on `inventory_runs` is represented
- * here. Only `ran_at` is required — every other field is nullable so the
- * post-merge raw-SQL backfill path (a one-off `sqlite3 INSERT` for the
- * initial inventory pass that predated this table) can omit summary
+ * here. Only `ran_at` is required — every other field is nullable so a
+ * raw-SQL backfill (a one-off `sqlite3 INSERT` recording an inventory
+ * pass that predates this table) can omit summary
  * stats it cannot reconstruct.
  *
  * The audit log is append-only: there is intentionally no UPDATE path,
@@ -89,6 +100,15 @@ export type PageSource = 'crawled' | 'inventory-seed' | 'inventory-discovered';
  * resources — re-applying the same list yields a second row. Duplicate
  * detection is a read-side concern; `source_file_sha256` is recorded as
  * the content-identity key it would use.
+ * @example
+ * await archive.recordInventoryRun({
+ *   ran_at: new Date().toISOString(),
+ *   list_label: 'prod-2026-06',
+ *   total_lines: 113_268,
+ *   new_pages: 1234,
+ *   new_resources: 56,
+ *   scope_skipped: 7,
+ * });
  */
 export interface InventoryRunMeta {
 	/** ISO 8601 timestamp at which the run completed (e.g. `'2026-06-21T11:30:00+09:00'`). */
@@ -119,6 +139,8 @@ export interface InventoryRunMeta {
  * - `'no-page'` - Non-HTML resources (e.g., images, PDFs)
  * - `'external-no-page'` - External non-HTML resources
  * - `'internal-no-page'` - Internal non-HTML resources
+ * @example
+ * const internalHtmlPages = await accessor.getPages('internal-page');
  */
 export type PageFilter =
 	| 'page'
@@ -137,6 +159,11 @@ export type PageFilter =
  * via `archive/meta/derive-flat-from-meta.ts` and are stored as plain
  * scalars for SQL-level filter / projection. The catch-all `meta_extras`
  * JSON column preserves nested sub-objects not flattened above.
+ * @example
+ * const pages = await accessor.getPages('page');
+ * for (const page of pages) {
+ *   console.log(page.url, page.status, page.title);
+ * }
  */
 export interface DB_Page {
 	/** Auto-incremented primary key. */
@@ -298,6 +325,12 @@ export interface DB_Page {
 /**
  * Raw database row representing a redirect relationship.
  * Maps a source page to its redirect destination.
+ * @example
+ * const redirect: DB_Redirect = {
+ *   pageId: 9, // destination page id
+ *   from: 'http://example.com/old',
+ *   fromId: 3,
+ * };
  */
 export interface DB_Redirect {
 	/** The ID of the destination page after redirect. */
@@ -311,6 +344,9 @@ export interface DB_Redirect {
 /**
  * Raw database row representing an anchor (link) found on a page.
  * Combines data from the `anchors` table and the linked `pages` table.
+ * @example
+ * const anchors = await accessor.getAnchorsOnPage(pageId);
+ * const brokenLinks = anchors.filter((a) => a.status === 404);
  */
 export interface DB_Anchor {
 	/** The ID of the page that contains this anchor. */
@@ -338,6 +374,10 @@ export interface DB_Anchor {
 /**
  * Raw database row representing a referrer relationship.
  * Indicates which page links to which other page, potentially through redirects.
+ * @example
+ * const referrers = await accessor.getReferrersOfPage(pageId);
+ * // `through` differs from the destination URL when the link passed
+ * // through a redirect source.
  */
 export interface DB_Referrer {
 	/** The ID of the page being referred to. */
@@ -356,6 +396,9 @@ export interface DB_Referrer {
 
 /**
  * Raw database row representing an image element found on a page in the `images` table.
+ * @example
+ * const images: DB_Image[] = await accessor.getKnex()('images').where('pageId', pageId);
+ * const missingAlt = images.filter((img) => img.alt === null);
  */
 export interface DB_Image {
 	/** Auto-incremented primary key. */
@@ -386,6 +429,14 @@ export interface DB_Image {
 
 /**
  * Represents a page that links to another page (an incoming link).
+ * @example
+ * const referrer: Referrer = {
+ *   url: 'https://example.com/from',
+ *   through: 'https://example.com/old',
+ *   throughId: 3,
+ *   hash: null,
+ *   textContent: 'Link text',
+ * };
  */
 export interface Referrer {
 	/** The URL of the referring page. */
@@ -402,6 +453,18 @@ export interface Referrer {
 
 /**
  * Represents an outgoing link (anchor element) found on a page.
+ * @example
+ * const anchor: Anchor = {
+ *   url: 'https://example.com/about',
+ *   href: '/about',
+ *   isExternal: false,
+ *   title: null,
+ *   status: 200,
+ *   statusText: 'OK',
+ *   contentType: 'text/html',
+ *   hash: null,
+ *   textContent: 'About us',
+ * };
  */
 export interface Anchor {
 	/** The resolved destination URL of the anchor. */
@@ -426,6 +489,8 @@ export interface Anchor {
 
 /**
  * Represents a page that redirects to this page.
+ * @example
+ * const redirect: Redirect = { url: 'http://example.com/old', pageId: 3 };
  */
 export interface Redirect {
 	/** The URL of the redirect source page. */
@@ -436,6 +501,9 @@ export interface Redirect {
 
 /**
  * Raw database row representing a sub-resource (CSS, JS, image, etc.) in the `resources` table.
+ * @example
+ * const resources = await accessor.getResources();
+ * const notFound = resources.filter((r) => r.status === 404);
  */
 export interface DB_Resource {
 	/** Auto-incremented primary key. */
@@ -464,6 +532,11 @@ export interface DB_Resource {
 
 /**
  * Connection options for the archive's libsql-backed database.
+ * @example
+ * const db = await Database.connect({
+ *   filename: '/path/to/._nitpicker-site/db.sqlite',
+ *   readOnly: true,
+ * });
  */
 export interface DatabaseOption {
 	/** The absolute file path to the SQLite database file. */

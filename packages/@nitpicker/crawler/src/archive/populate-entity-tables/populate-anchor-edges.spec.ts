@@ -12,7 +12,7 @@ import { setupMigrationDb } from './test-utils/setup-entities-db.js';
 /**
  * Inserts N pages so `anchor_edges` FKs resolve. `populateRefTables`
  * is intentionally NOT called here — the caller inserts anchors first
- * and then runs the phase-ref populate, matching the real migration
+ * and then runs `populateRefTables`, matching the real migration
  * ordering where anchor textContent has already been ingested into
  * `text_refs` by the time `populateAnchorEdges` runs.
  * @param db - Test DB instance.
@@ -29,7 +29,7 @@ async function seedPages(db: ReturnType<typeof knex>, count: number): Promise<vo
 }
 
 /**
- * Runs 0.13 populate + 0.13 content_items so anchor_edges'
+ * Runs `populateRefTables` + `populateContentItems` so anchor_edges'
  * `text_refs` lookup and `content_items(id)` FKs both succeed at
  * insert time. Called after every test's anchor seed data so the
  * required refs land in text_refs.

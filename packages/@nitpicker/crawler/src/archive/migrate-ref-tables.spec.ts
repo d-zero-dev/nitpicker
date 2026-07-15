@@ -5,8 +5,8 @@ import { LibsqlDialect } from './libsql-dialect.js';
 import { migrateRefTables } from './migrate-ref-tables.js';
 
 /**
- * Simulates the shape of a pre-0.13A archive: only the write-model
- * tables that predate this branch exist. Kept minimal — the migration
+ * Simulates the shape of a pre-0.13 archive: only the legacy write-model
+ * tables exist. Kept minimal — the migration
  * only checks for `pages`, not the full legacy schema.
  * @param db - Knex instance already connected to an empty in-memory DB.
  */
@@ -31,7 +31,7 @@ describe('migrateRefTables', () => {
 		'header_flags',
 	];
 
-	it('creates all 10 0.13 tables on a legacy archive', async () => {
+	it('creates all 10 ref/header tables on a legacy archive', async () => {
 		const db = knex({
 			client: LibsqlDialect,
 			connection: { filename: ':memory:' },
