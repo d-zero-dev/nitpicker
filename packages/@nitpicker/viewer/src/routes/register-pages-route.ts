@@ -28,8 +28,8 @@ const DEFAULT_LIMIT = 100;
  * - `listViewerPages` (the `viewer_pages` read-model fast path) when the
  *   read model is built and current AND the request uses none of the
  *   filters that only the wide `pages` table can evaluate: the LIKE-based
- *   `urlPattern` / `directory` that `docs/viewer-sql-query-plan.md`
- *   explicitly excludes from the 100ms contract, and the header-presence
+ *   `urlPattern` / `directory` (a LIKE predicate can't seek an index, so it
+ *   is deliberately excluded from the fast path), and the header-presence
  *   filters (`hasCSP` / `hasXFrameOptions` / `hasXContentTypeOptions` /
  *   `hasHSTS`) computed from `pages.responseHeaders` — `viewer_pages` has no
  *   equivalent column, and evaluating them only after the narrow-table

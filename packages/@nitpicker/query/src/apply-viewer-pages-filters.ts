@@ -7,9 +7,9 @@ import type { Knex } from 'knex';
  * the total-count query so both see exactly the same row set.
  *
  * Every predicate here targets an indexed `viewer_pages` column (never the
- * wide write-model `pages` table), per `docs/viewer-sql-query-plan.md`'s
- * "join only after limiting" golden rule — this function runs BEFORE any
- * join, on the narrow read model only.
+ * wide write-model `pages` table) — this function runs BEFORE any join, on
+ * the narrow read model only; the wide table is joined in only after LIMIT,
+ * once the row set is small, so the wide read stays bounded.
  * @param qb - A Knex query builder scoped to `viewer_pages` (or a subquery
  *   selecting from it).
  * @param options - The filter options to apply.

@@ -97,8 +97,8 @@ interface ViewerPageInsertRow {
 	status_sort_key: number;
 	/**
 	 * Ascending sort key for `sort=status:desc` — the negation of
-	 * `status_sort_key` (`docs/viewer-sql-query-plan.md`'s "Stable Ordering"
-	 * normalized-descending-key pattern, e.g. `status_desc_key = -status`).
+	 * `status_sort_key` (the normalized-descending-key pattern, e.g.
+	 * `status_desc_key = -status`, that keeps keyset ordering stable).
 	 * Walking this column ascending yields status descending while keeping
 	 * the tie-breaker columns (`url_sort_key`, `page_id`) in a uniform
 	 * ascending tuple comparison for keyset cursoring.
@@ -142,10 +142,10 @@ interface ViewerPageInsertRow {
 	 */
 	title_sort_key: string;
 	/**
-	 * The URL's path component, for directory-prefix range scans (per
-	 * `docs/viewer-sql-query-plan.md`'s `/api/pages` directory filter
-	 * notes). Stored now but intentionally has no index and no reader yet
-	 * in #108 — like `viewer_page_anchors`, wiring the actual directory
+	 * The URL's path component, for directory-prefix range scans (so a
+	 * future `/api/pages` directory filter can seek an index range instead
+	 * of running LIKE). Stored now but intentionally has no index and no
+	 * reader yet in #108 — like `viewer_page_anchors`, wiring the actual directory
 	 * filter query/index is out of scope here and belongs to whichever
 	 * issue implements `/api/pages`'s directory filter.
 	 */

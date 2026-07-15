@@ -1,10 +1,11 @@
 /**
  * The only keyset tuple this cursor family supports: `(url_sort_key,
  * page_id)`. `getHeaderChecksFastPath` bails to the legacy path for any
- * `sortBy` other than `'url'` (the only order `viewer_header_checks`
- * indexes — see `docs/viewer-sql-query-plan.md`'s `/api/headers` index
- * pair), so unlike `viewer-anchor-facts-cursor`/`viewer-images-cursor` there
- * is no `sortBy`-dependent column switch here.
+ * `sortBy` other than `'url'` — URL order is the only order
+ * `viewer_header_checks` indexes (`vh_default`/`vh_missing`, see
+ * `createViewerReadModelIndexes`) — so unlike
+ * `viewer-anchor-facts-cursor`/`viewer-images-cursor` there is no
+ * `sortBy`-dependent column switch here.
  */
 export interface HeaderChecksSortSpec {
 	/** Keyset tuple columns, in comparison/`ORDER BY` order. */

@@ -13,9 +13,9 @@ export interface PageUrlRankSourceRow {
  * tie-breaker).
  *
  * `viewer_images` needs a page-order sort key for its default `/api/images`
- * sort, but must NOT inline the page URL text itself:
- * `docs/viewer-db-redesign-plan.md` explicitly warns against duplicating
- * `page_url` into `viewer_images` at its ~9.11M-row scale (every other
+ * sort, but must NOT inline the page URL text itself: at `viewer_images`'s
+ * ~9.11M-row scale, duplicating the URL string onto every image row would
+ * dominate the read model's storage (every other
  * read-model table that inlines a `url_sort_key` — `viewer_pages`,
  * `viewer_resources`, `viewer_anchor_facts`, `viewer_directory_pages` — sits
  * at a much smaller row count, one row per page/resource/edge rather than

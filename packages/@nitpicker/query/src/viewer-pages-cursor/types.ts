@@ -18,7 +18,8 @@ export type ViewerPagesSortColumn =
  * `status` desc uses `status_desc_key` (`= -status_sort_key`) walked
  * ascending, so the tie-breakers (`url_sort_key`, `page_id`) stay ascending
  * too — ties always display in URL order regardless of the primary sort
- * direction (`docs/viewer-sql-query-plan.md`'s "Stable Ordering" section).
+ * direction, and the keyset comparison stays a uniform single-direction
+ * row-value tuple (which can't mix per-column directions).
  * `url`/`title` can't use this negation trick (text has no numeric negation),
  * so their tie-breakers simply follow the same direction as the primary
  * column.

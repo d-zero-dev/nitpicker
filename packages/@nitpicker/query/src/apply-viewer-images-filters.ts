@@ -8,16 +8,17 @@ import type { Knex } from 'knex';
  *
  * Every predicate here targets an indexed or plain `viewer_images` column
  * (never the wide write-model `images` table, and never a large text
- * column like `src`/`alt`/`sourceCode`), per
- * `docs/viewer-sql-query-plan.md`'s "join only after limiting" golden rule
- * — this function runs BEFORE any join, on the narrow read model only.
+ * column like `src`/`alt`/`sourceCode`) — this function runs BEFORE any
+ * join, on the narrow read model only; the wide table's large text columns
+ * are joined in only after LIMIT, once the row set is small, so the wide
+ * read stays bounded.
  *
  * `oversizedThreshold` is evaluated at request time against the raw
  * `natural_width`/`natural_height` columns rather than a precomputed
- * boolean flag at a single hard-coded threshold (unlike the query plan
- * doc's `oversized_1000` sketch) — `listImages`'s `oversizedThreshold`
- * accepts an arbitrary caller-supplied pixel count, and the fast path must
- * preserve that flexibility rather than narrowing it. There is
+ * boolean flag at a single hard-coded threshold — `listImages`'s
+ * `oversizedThreshold` accepts an arbitrary caller-supplied pixel count,
+ * and the fast path must preserve that flexibility rather than narrowing
+ * it. There is
  * deliberately no dedicated covering index for this filter (see
  * `createViewerReadModelIndexes`'s docs) — it is a residual OR scan with no
  * index to assist it, over a table with no large text columns, still far

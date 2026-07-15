@@ -272,7 +272,7 @@ describe('listViewerHeaderChecks', () => {
 			expect(details).not.toMatch(/TEMP B-TREE/);
 		});
 
-		it('uses vh_missing (not a temp b-tree sort) for the missingOnly query — regression test for issue #119 xhigh review finding', async () => {
+		it('uses vh_missing (not a temp b-tree sort) for the missingOnly query — regression test for issue #119', async () => {
 			const knex = explainArchive.getKnex();
 			const plan: { detail: string }[] = await knex.raw(
 				'EXPLAIN QUERY PLAN ' +

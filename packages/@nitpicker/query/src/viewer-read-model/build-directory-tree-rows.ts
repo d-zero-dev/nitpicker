@@ -240,7 +240,8 @@ function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): vo
  * full directory-tree forest — one root per eligible host — plus the
  * direct-page memberships, computing every count column in-memory so the
  * viewer's GET endpoints never split URLs or count children/descendants at
- * request time (`docs/viewer-sql-query-plan.md`'s Golden Rules).
+ * request time — all derivation cost is paid once at build time, keeping
+ * reads to plain indexed SELECTs.
  *
  * A host is included in the output ONLY if at least one of its rows has
  * `isExternal` falsy (an "internal" page) — hosts that exist purely as
@@ -263,8 +264,8 @@ function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): vo
  * Memory profile: the entire forest is built in memory before returning
  * (no streaming/chunked variant) — the same tradeoff `buildViewerReadModel`
  * already accepts for `viewer_pages`'s insert-row array, consistent with
- * this read model's documented "minutes, not milliseconds" build-time
- * budget (`docs/viewer-db-redesign-plan.md`).
+ * this read model's build-time budget: builds run once at crawl end and may
+ * take minutes, not milliseconds — only reads have a latency contract.
  * @param rows - Every listable page row — the same `sourceRows` array
  *   `buildViewerReadModel` already loads to populate `viewer_pages`.
  * @returns The directory nodes and direct-page-membership rows to bulk-insert

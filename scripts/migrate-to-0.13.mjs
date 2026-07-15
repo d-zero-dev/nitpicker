@@ -49,7 +49,7 @@
  *
  * `image_items.dom_path_text_id` is derived from `images.sourceCode`
  * against the archived HTML snapshot by parsing each page's HTML with
- * jsdom and applying the 3-case match algorithm from the plan:
+ * jsdom and applying a 3-case match algorithm:
  *
  * - single match — exact `outerHTML` match in the DOM.
  * - ordinal match — multiple identical `<img>` outerHTML on one page,
@@ -281,9 +281,9 @@ function createJsdomDomPathResolver() {
 	virtualConsole.on('jsdomError', () => {});
 	return async (pageId, htmlString, images) => {
 		if (htmlString === null) {
-			// Every image on this page falls back — the plan requires a
-			// per-image warning so operators can audit reconstruction
-			// fidelity, not just a single "no HTML for page X" line.
+			// Every image on this page falls back — emit a per-image
+			// warning so operators can audit reconstruction fidelity,
+			// not just a single "no HTML for page X" line.
 			return fallbackAllUnknown(images, pageId, 'no HTML snapshot stored');
 		}
 		let dom;
@@ -316,8 +316,9 @@ function createJsdomDomPathResolver() {
 /**
  * Returns a `Map<imageId, DomPathResult>` where every image resolves to
  * the `unknown/<id>` fallback and emits one warning line per image so
- * the audit log satisfies the plan's "record a warning log for every
- * unknown/* fallback" contract. Used when jsdom cannot parse the page
+ * the audit log records a warning for every `unknown/*` fallback —
+ * the contract operators rely on to audit reconstruction fidelity.
+ * Used when jsdom cannot parse the page
  * OR when the page has no stored HTML snapshot at all.
  * @param {readonly { id: number }[]} images
  * @param {number} pageId

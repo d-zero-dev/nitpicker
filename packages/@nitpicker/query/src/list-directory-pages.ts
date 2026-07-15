@@ -37,7 +37,8 @@ interface ViewerPageDisplayRow {
 
 /**
  * Joins an already ID-limited, already-ordered `page_id` window back to
- * `viewer_pages` for display fields — limit-then-join, the same golden rule
+ * `viewer_pages` for display fields — display columns are read only after
+ * the id window is limit-bounded, the same limit-then-join pattern
  * `joinViewerPageIdsToListItems` follows for `/api/pages`.
  * @param accessor - The archive accessor to query.
  * @param pageIds - The page IDs to fetch, already filtered/sorted/limited by
@@ -70,8 +71,9 @@ async function joinDirectoryPageIdsToListItems(
 
 /**
  * Lists the pages attached directly to one directory node — NEVER its
- * descendants further down the tree (`/api/directory-tree/pages` never
- * returns subtree pages, per `docs/viewer-sql-query-plan.md`). Cursor-paginated
+ * descendants further down the tree (`/api/directory-tree/pages` returns
+ * direct memberships only; subtree listing is not part of its contract, so
+ * no recursive traversal happens at request time). Cursor-paginated
  * on `viewer_directory_pages`'s one fixed sort (`page_url_sort_key` ascending,
  * `page_id` tie-breaker) — forward-only, unlike `listViewerPages`'s
  * bidirectional keyset, since this endpoint has no virtual-scroll-upward

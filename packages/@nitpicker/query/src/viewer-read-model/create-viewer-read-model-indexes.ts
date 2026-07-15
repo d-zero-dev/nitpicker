@@ -54,8 +54,8 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	// with `path_sort_key` lets SQLite satisfy the `ORDER BY` via a plain
 	// ascending index scan with `depth` checked as a cheap residual filter,
 	// instead of falling back to `USE TEMP B-TREE FOR ORDER BY`. Leading with
-	// `root_key`/`depth` instead (as `docs/viewer-sql-query-plan.md`'s
-	// aspirational single-root-per-request index does) would not help here:
+	// `root_key`/`depth` instead (the natural shape for a
+	// single-root-per-request query) would not help here:
 	// a range condition on a non-leading column can't be used to avoid a sort
 	// on a column that comes after it — the same index-column-order pitfall
 	// `idx_pages_listfilter` hit (see ARCHITECTURE.md).
@@ -224,10 +224,9 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	);
 	await trx.raw('CREATE INDEX vi_is_lazy ON viewer_images(is_lazy, image_id)');
 
-	// Header-check read model (issue #119). Unlike
-	// `docs/viewer-sql-query-plan.md`'s `/api/headers` sketch (which indexes
-	// the raw `missing_count` tally), `vh_missing` leads with the boolean
-	// `is_missing` flag: `missing_count > 0` is a RANGE predicate, and an
+	// Header-check read model (issue #119). `vh_missing` deliberately leads
+	// with the boolean `is_missing` flag rather than the raw `missing_count`
+	// tally: `missing_count > 0` is a RANGE predicate, and an
 	// index leading with a range-constrained column cannot also satisfy
 	// `ORDER BY url_sort_key` — SQLite would scan each distinct
 	// `missing_count` value's url-sorted run in turn (1, 2, 3, 4), not one

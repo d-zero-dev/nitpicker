@@ -3,7 +3,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
 
-/** Maximum depth included in the initial tree load — see `docs/viewer-sql-query-plan.md`'s `/api/directory-tree`. */
+/** Maximum depth included in the initial tree load — deeper levels are expanded on demand via `listDirectoryChildren`. */
 const INITIAL_DEPTH = 3;
 
 /** Row shape read from `viewer_directory_nodes` by {@link getDirectoryTree}. */
@@ -62,9 +62,9 @@ function toDirectoryTreeNode(row: DirectoryNodeRow): DirectoryTreeNode {
  * Reads the initial directory tree for every root (host) present in the
  * archive's `viewer_directory_nodes` read model — depth ≤ 3 per host, flat
  * (parent links only, no server-side nested tree construction), ordered by
- * `path_sort_key`. Implements `docs/viewer-sql-query-plan.md`'s
- * `/api/directory-tree` contract: one SELECT total (grouped by `root_key` in
- * JS afterward), no recursive CTE, no GET-time counting.
+ * `path_sort_key`. The `/api/directory-tree` contract this implements: one
+ * SELECT total (grouped by `root_key` in JS afterward), no recursive CTE, no
+ * GET-time counting — every count column is precomputed at build time.
  *
  * Takes no `rootKey` parameter by design — the archive already knows which
  * hosts it crawled, so requiring a caller to guess or discover one first

@@ -19,9 +19,10 @@ export type AnchorFactsSortColumn =
  * ascending, so the `source_url_ref_id`/`edge_id` tie-breakers stay
  * ascending too — ties always display in source-URL order regardless of the
  * primary sort direction, mirroring `viewer_pages`'s identical
- * `ViewerPagesSortSpec` rationale (`docs/viewer-sql-query-plan.md`'s "Stable
- * Ordering" section). `sourceUrl`/`destUrl` use numeric URL ref ids, so
- * their tuple can simply be scanned in the requested direction with
+ * `ViewerPagesSortSpec` rationale (a row-value keyset tuple comparison
+ * can't mix per-column directions, so the descending primary column is
+ * negated and walked ascending). `sourceUrl`/`destUrl` use numeric URL ref
+ * ids, so their tuple can simply be scanned in the requested direction with
  * `edge_id` as the stable tie-breaker.
  */
 export interface AnchorFactsSortSpec {

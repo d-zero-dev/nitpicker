@@ -16,8 +16,9 @@ export type ViewerResourcesSortColumn =
  *
  * `status` desc uses `status_desc_key` (`= -status_sort_key`) walked
  * ascending, so the `url_sort_key`/`resource_id` tie-breakers stay ascending
- * too — same `viewer_pages`/`viewer_anchor_facts` "Stable Ordering" rationale
- * (a row-value keyset tuple comparison can't mix per-column directions).
+ * too — the same stable-ordering rationale as `viewer_pages`/
+ * `viewer_anchor_facts` (a row-value keyset tuple comparison can't mix
+ * per-column directions).
  */
 export interface ViewerResourcesSortSpec {
 	/** Keyset tuple columns, in comparison/`ORDER BY` order. */

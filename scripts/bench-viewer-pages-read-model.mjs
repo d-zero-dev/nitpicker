@@ -53,9 +53,9 @@ const SIZES = process.env.BENCH_SIZES
 const WARM_ITERATIONS = 30;
 
 /**
- * Filter/sort combinations benchmarked per
- * `docs/viewer-sql-query-plan.md`'s `/api/pages` "Supported fast filters"
- * list. `query` is the literal `/api/pages` query string; `options` is the
+ * Filter/sort combinations benchmarked — every filter/sort combination the
+ * `/api/pages` read-model fast path supports (see `ListViewerPagesOptions`).
+ * `query` is the literal `/api/pages` query string; `options` is the
  * equivalent `ListViewerPagesOptions` used for the direct (non-HTTP)
  * function-level EXPLAIN construction.
  */

@@ -7,9 +7,9 @@ import type { Knex } from 'knex';
  * query and the total-count query so both see exactly the same row set.
  *
  * Every predicate here targets an indexed `viewer_resources` column (never
- * the wide write-model `resources` table), per `docs/viewer-sql-query-plan.md`'s
- * "join only after limiting" golden rule — this function runs BEFORE any
- * join, on the narrow read model only.
+ * the wide write-model `resources` table) — this function runs BEFORE any
+ * join, on the narrow read model only; the wide table is joined in only
+ * after LIMIT, once the row set is small, so the wide read stays bounded.
  * @param qb - A Knex query builder scoped to `viewer_resources` (or a
  *   subquery selecting from it).
  * @param options - The filter options to apply.

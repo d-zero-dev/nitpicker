@@ -58,8 +58,8 @@ function toDirectoryTreeNode(row: DirectoryNodeRow): DirectoryTreeNode {
 
 /**
  * Reads the direct child directory nodes of one node — a single SELECT keyed
- * by `parent_node_id`, no recursive CTE. Implements
- * `docs/viewer-sql-query-plan.md`'s `/api/directory-tree/children` contract,
+ * by `parent_node_id`, no recursive CTE, no GET-time counting (every count
+ * column is precomputed at build time). Backs `/api/directory-tree/children`,
  * used to expand directories beyond the initial depth ≤ 3 load returned by
  * {@link getDirectoryTree}.
  *

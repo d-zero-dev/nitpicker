@@ -754,9 +754,9 @@ export interface PageListFacets {
  * `viewer_pages` read-model-backed counterpart of {@link ListPagesOptions}.
  *
  * Deliberately narrower than {@link ListPagesOptions}: `urlPattern` /
- * `directory` (LIKE-based) are excluded per `docs/viewer-sql-query-plan.md`'s
- * "Don't make LIKE part of the 100ms contract" — callers that need those
- * fall back to `listPages` instead. `source` is new (not on
+ * `directory` (LIKE-based) are excluded — a LIKE predicate can't seek an
+ * index, so it cannot be part of the fast path's 100ms contract. Callers
+ * that need those fall back to `listPages` instead. `source` is new (not on
  * {@link ListPagesOptions}, which has no equivalent contract to preserve).
  */
 export interface ListViewerPagesOptions {

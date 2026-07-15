@@ -38,8 +38,7 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// independent of `pages` aggregation — see `getViewerSummary`'s docs).
 	// JSON columns store `JSON.stringify`d arrays/objects verbatim; no
 	// `url_refs`/`content_items` ref-table indirection, matching this
-	// codebase's `pages`-direct convention rather than
-	// `docs/viewer-sql-query-plan.md`'s aspirational design — same
+	// codebase's `pages`-direct convention — same
 	// rationale as `viewer_anchor_facts` below. `/api/error-kinds`'
 	// `viewer_error_kind_*` tables are a separate endpoint/issue; the
 	// `status=-1` error-kind breakdown here stays embedded inside
@@ -179,9 +178,9 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// index: nothing reads this table filtered by it — it exists only for
 	// `deriveExternalLinkSummaryRows`'s in-memory pass over the full row
 	// set at build time. `status_desc_key` mirrors `viewer_pages`'s same
-	// column for the same reason: `docs/viewer-sql-query-plan.md`'s Stable
-	// Ordering rule keeps the `source_url_ref_id`/`edge_id` tie-breakers
-	// ascending even when the primary sort is `status desc` — a row-value
+	// column for the same reason: keeping the `source_url_ref_id`/`edge_id`
+	// tie-breakers ascending even when the primary sort is `status desc` so
+	// ordering stays stable across pages — a row-value
 	// keyset tuple comparison can't mix per-column directions, so the
 	// primary column is negated and walked ascending instead. See
 	// ARCHITECTURE.md「設計注意（viewer_anchor_facts read model、issue
@@ -350,15 +349,14 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// `page_url_rank` — NOT `page_url_sort_key` text like `viewer_pages`/
 	// `viewer_resources`/`viewer_anchor_facts`/`viewer_directory_pages` all
 	// use — is `viewer_images`'s one deliberate deviation from this read
-	// model's usual "inline the sort key as text" convention:
-	// `docs/viewer-db-redesign-plan.md` explicitly warns against duplicating
-	// `page_url` into this table by name, citing its ~9.11M-row scale as
-	// uniquely dangerous (every other table inlining a text sort key sits at
-	// a much smaller one-row-per-page/resource/edge cardinality). See
+	// model's usual "inline the sort key as text" convention: page URL text
+	// is deliberately NOT duplicated into this table, because at its
+	// ~9.11M-row scale the URL copies (60-150+ bytes each) would dominate
+	// storage (every other table inlining a text sort key sits at a much
+	// smaller one-row-per-page/resource/edge cardinality). See
 	// `buildPageUrlRankMap`'s docs for the full rationale.
 	// `natural_width`/`natural_height` are stored as raw values (not a
-	// precomputed boolean flag at one hard-coded threshold, unlike
-	// `docs/viewer-sql-query-plan.md`'s `oversized_1000` sketch) because
+	// precomputed boolean flag at one hard-coded threshold) because
 	// `listImages`'s `oversizedThreshold` accepts an arbitrary caller-supplied
 	// pixel count — see `applyViewerImagesFilters`'s docs.
 	// No `page_id` column: it exists only transiently while computing
@@ -430,11 +428,9 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// group-level table and a member-page table — the same "one narrow table
 	// per grain" split `viewer_resources`/`viewer_resource_stats` and
 	// `viewer_directory_nodes`/`viewer_directory_pages` already use.
-	// `docs/viewer-db-redesign-plan.md`'s sketch SQL for `/api/duplicates`
-	// orders by a `count_desc_key`-shaped column and filters `viewer_mismatches`
-	// by a `url_sort_key`-shaped column, yet the plan's own CREATE TABLE
-	// examples never define either column — this implementation resolves
-	// that mismatch by following two conventions this read model already
+	// `/api/duplicates` orders groups by descending count and filters
+	// `viewer_mismatches` by URL; the sort/filter columns backing that
+	// follow two conventions this read model already
 	// established elsewhere rather than inventing a third: `count_desc_key`
 	// is the negation of `count`, the same "sign-flipped integer for
 	// descending keyset order" idiom as `viewer_anchor_facts.status_desc_key`/

@@ -143,10 +143,10 @@ async function buildCursorPaginatedResult(
  * Lists pages from `viewer_pages` — the read-model-backed, cursor-paginated
  * counterpart of `listPages` that powers `/api/pages`'s fast path.
  *
- * Implements `docs/viewer-sql-query-plan.md`'s `/api/pages` contract:
- * filter/sort resolution runs entirely against the narrow, indexed
- * `viewer_pages` table; the wide write-model `pages` table is joined only
- * after the id set is `limit`-bounded (see `joinViewerPageIdsToListItems`).
+ * The contract: filter/sort resolution runs entirely against the narrow,
+ * indexed `viewer_pages` table; the wide write-model `pages` table is joined
+ * only after the id set is `limit`-bounded (see
+ * `joinViewerPageIdsToListItems`), so the wide read stays bounded.
  * The initial read (no `cursor`), the forward keyset read, the backward
  * keyset read, and the direct-`offset` read are four separate code paths —
  * no `(:cursor IS NULL OR …)`-style nullable predicate ties them together.
