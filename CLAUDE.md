@@ -79,13 +79,13 @@ yarn lint                                          # lint + prettier + cspell
 
 ## スキル
 
-| スキル          | パス                                      | 用途                                                    |
-| --------------- | ----------------------------------------- | ------------------------------------------------------- |
-| Product Manager | `.claude/skills/product-manager/SKILL.md` | リポジトリ分析、ドキュメント整合チェック、PR レビュー   |
-| QA Engineer     | `.claude/skills/qa-engineer/SKILL.md`     | コードレビュー、テスト品質チェック                      |
-| Impl            | `.claude/skills/impl/SKILL.md`            | 合意済み計画の実装・検証・PR 作成のオーケストレーション |
-| Grill me        | `.claude/skills/grill-me/SKILL.md`        | 計画・設計の前提を掘り下げて合意形成する                |
-| Git             | `.claude/skills/git/SKILL.md`             | コミット規約・コミット前コンテンツチェック              |
+| スキル          | パス                                      | 用途                                                     |
+| --------------- | ----------------------------------------- | -------------------------------------------------------- |
+| Product Manager | `.claude/skills/product-manager/SKILL.md` | リポジトリ分析、ドキュメント整合チェック、PR レビュー    |
+| QA Engineer     | `.claude/skills/qa-engineer/SKILL.md`     | コードレビュー、テスト品質チェック                       |
+| Impl            | `.claude/skills/impl/SKILL.md`            | 合意済み計画の実装・検証・PR 作成のオーケストレーション  |
+| Grill me        | `.claude/skills/grill-me/SKILL.md`        | 計画・設計の前提を掘り下げて合意形成する                 |
+| Git             | `.claude/skills/git/SKILL.md`             | コミット規約・コミット前コンテンツチェック               |
 | PR              | `.claude/skills/pr/SKILL.md`              | PR 作成フロー（base 追従・push はユーザー実行・CI 監視） |
 
 ## AI 操作プロトコル
