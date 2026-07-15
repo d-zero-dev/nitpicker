@@ -4,7 +4,7 @@
  * #104) on a synthetic archive with hundreds of thousands of content
  * records — no real customer archive is ever read or referenced.
  *
- * Records, per `docs/viewer-implementation-plan.md`'s Benchmark Contract:
+ * Records:
  *
  *   - row count / read-model build time / added DB size
  *   - `getSummary` (legacy, before) vs `getViewerSummary` (read-model, after)

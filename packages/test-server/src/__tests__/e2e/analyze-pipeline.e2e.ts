@@ -17,9 +17,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 /**
  * crawl → write → analyze のクロスパッケージ統合テスト。
  *
- * crawler が書いた .nitpicker アーカイブ（zip 化された HTML スナップショット）を
- * core の Nitpicker が開き、analyze プラグインの WorkerPool が
- * `page.getHtml()`（zip ストリーミング読み取り）経由で全ページの HTML を
+ * crawler が書いた .nitpicker アーカイブ（SQLite BLOB として保存された
+ * HTML スナップショット）を core の Nitpicker が開き、analyze プラグインの
+ * WorkerPool が `page.getHtml()` 経由で全ページの HTML を
  * 取得できることをエンドツーエンドで検証する。
  */
 describe('Analyze pipeline (crawl → write → analyze)', () => {
@@ -31,7 +31,7 @@ describe('Analyze pipeline (crawl → write → analyze)', () => {
 		cwd = path.join(os.tmpdir(), `nitpicker-analyze-e2e-${crypto.randomUUID()}`);
 		await fs.mkdir(cwd, { recursive: true });
 
-		// 1) クロールして .nitpicker を書き出す（スナップショットは zip 化される）
+		// 1) クロールして .nitpicker を書き出す（スナップショットは SQLite BLOB として保存される）
 		const orchestrator = await CrawlerOrchestrator.crawling(
 			['http://localhost:8010/meta/'],
 			{
@@ -68,7 +68,7 @@ describe('Analyze pipeline (crawl → write → analyze)', () => {
 		expect(violations).toEqual({ items: [], total: 0 });
 	});
 
-	it('クロールした internal ページが zip スナップショット経由で分析される', async () => {
+	it('クロールした internal ページが HTML スナップショット経由で分析される', async () => {
 		const report = await nitpicker.archive.getData<Report>('analysis/report');
 		const analyzedUrls = Object.keys(report.pageData!.data);
 		// /meta/ 配下の internal ページの HTML が WorkerPool に渡り、

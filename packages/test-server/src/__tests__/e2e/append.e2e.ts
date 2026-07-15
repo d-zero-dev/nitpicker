@@ -98,7 +98,7 @@ describe('Append crawl', () => {
 		]);
 	});
 
-	it('appended pages keep their HTML snapshots after write() (zip merge)', async () => {
+	it('appended pages keep their HTML snapshots after write()', async () => {
 		const internalPages = await accessor.getPages('internal-page');
 		// 追記クロールで取得されたページのスナップショットが write() で失われていない
 		const docsPage = internalPages.find((p) => p.url.pathname === '/scope/docs/');

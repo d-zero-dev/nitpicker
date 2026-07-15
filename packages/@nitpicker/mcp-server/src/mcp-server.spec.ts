@@ -230,7 +230,7 @@ describe('createServer', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('ListTools で26個のツールが返される (v3: + list_isolated_clusters + get_isolated_cluster)', async () => {
+	it('ListTools で26個のツールが返される', async () => {
 		const result = await listTools(server);
 		expect(result.tools).toHaveLength(26);
 		const names = result.tools.map((t) => t.name);
@@ -239,7 +239,6 @@ describe('createServer', () => {
 		expect(names).toContain('get_summary');
 		expect(names).toContain('list_isolated_clusters');
 		expect(names).toContain('get_isolated_cluster');
-		// New in v2:
 		expect(names).toContain('list_pages_by_tag');
 		expect(names).toContain('list_pages_by_jsonld_type');
 		expect(names).toContain('get_tag_inventory');
@@ -248,7 +247,6 @@ describe('createServer', () => {
 		expect(names).toContain('count_pages_by_tag');
 		expect(names).toContain('count_pages_by_jsonld_type');
 		expect(names).toContain('get_page_jsonld_overview');
-		// New in inventory feature:
 		expect(names).toContain('list_isolated_pages');
 		expect(names).toContain('list_unused_resources');
 	});
@@ -268,7 +266,7 @@ describe('createServer', () => {
 		expect(data.baseUrl).toBe('https://example.com');
 		expect(data.roots).toEqual(['https://example.com']);
 		expect(data.totalPages).toBe(2);
-		// New fields contracted with LLM callers: source kind and crawler liveness.
+		// Fields contracted with LLM callers: source kind and crawler liveness.
 		expect(data.mode).toBe('archive');
 		expect(data.crawlerPid).toBeNull();
 		archiveId = data.archiveId;

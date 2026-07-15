@@ -4,7 +4,7 @@
  * fast path (issue #114) on a synthetic archive with hundreds of thousands
  * of anchor records — no real customer archive is ever read or referenced.
  *
- * Records, per `docs/viewer-implementation-plan.md`'s Benchmark Contract:
+ * Records:
  *
  *   - page/anchor row counts, read-model build time, added DB size
  *   - `/api/links?type=broken` cold (first request after the just-built

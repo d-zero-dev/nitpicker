@@ -471,11 +471,15 @@ function validateUrls(urls: readonly string[]) {
 /**
  * Main entry point for the `crawl` CLI command.
  *
- * Dispatches to one of four modes based on the flags:
+ * Dispatches to one of the following modes based on the flags
+ * (mutually-exclusive flag combinations are rejected up front):
  * 1. `--diff` mode: Compares two archive files and outputs URL lists
  * 2. `--resume` mode: Resumes a previously interrupted crawl
- * 3. `--list-file` / `--list` mode: Crawls a pre-defined URL list (non-recursive)
- * 4. Default mode: Crawls from a single root URL
+ * 3. `--inventory` mode: Imports URLs from a list file that an existing archive does not yet track
+ * 4. `--append` mode: Adds new recursive roots to an existing archive
+ * 5. `--retry-failed` mode: Re-fetches failed pages in an existing archive
+ * 6. `--list-file` / `--list` mode: Crawls a pre-defined URL list (non-recursive)
+ * 7. Default mode: Crawls from one or more root URLs
  * @param args - Positional arguments (typically one or two URLs/file paths)
  * @param flags - Parsed CLI flags from the `crawl` command
  * @returns A promise that resolves when the dispatched mode completes.

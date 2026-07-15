@@ -247,8 +247,8 @@ async function applyMigrations(dbPath) {
 		// affects zero rows and reports success, and the reader path then
 		// blows up with `IncompatibleArchiveError` because `info.version`
 		// is missing. Read back the row count and abort with a clear
-		// error before the archive is repacked (still under `.bak`
-		// protection, so the input archive stays intact).
+		// error before the archive is repacked (mutation happens only in
+		// the extracted work dir, so the input archive stays intact).
 		console.log('  bump info.version → 0.13.0');
 		const infoRowsBefore = await db('info').count({ n: '*' });
 		const infoRowCount = Number(infoRowsBefore[0]?.n ?? 0);

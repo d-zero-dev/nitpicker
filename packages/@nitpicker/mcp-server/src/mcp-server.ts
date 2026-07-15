@@ -166,7 +166,15 @@ function omit(args: Record<string, unknown>, ...keys: string[]): Record<string, 
  * Creates and configures the Nitpicker MCP server with all tools registered.
  * Uses the low-level Server API to avoid deep type instantiation issues
  * with McpServer + Zod schemas.
- * @returns The configured Server instance.
+ * @returns The configured Server instance. Connect it to a transport to start serving.
+ * @example
+ * ```ts
+ * import { createServer } from '@nitpicker/mcp-server';
+ * import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+ *
+ * const server = createServer();
+ * await server.connect(new StdioServerTransport());
+ * ```
  */
 export function createServer() {
 	// Route ArchiveManager warnings to stderr explicitly via process.stderr.write
@@ -482,6 +490,14 @@ export function createServer() {
 /**
  * Starts the MCP server using stdio transport.
  * This is the entry point for the `nitpicker-mcp` binary.
+ * @returns Resolves once the stdio transport is connected; the server then
+ *   keeps serving requests until the process exits.
+ * @example
+ * ```ts
+ * import { startServer } from '@nitpicker/mcp-server';
+ *
+ * await startServer();
+ * ```
  */
 export async function startServer() {
 	const server = createServer();

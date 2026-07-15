@@ -88,7 +88,7 @@ describe('Inventory crawl', () => {
 	it('labels the URL-list HTML page as inventory-seed', async () => {
 		// hidden-lp anchors to inner-link (which itself becomes
 		// inventory-discovered), so the two form a size-2 cluster — NOT a
-		// singleton — under the new `listIsolatedPages` definition.
+		// singleton — under `listIsolatedPages`'s definition.
 		// Probe the raw `pages.source` column directly to pin the
 		// inventory-seed label that `derivePageSource` writes for URLs
 		// supplied via `--inventory`. The orphan-set behaviour is covered
@@ -130,14 +130,14 @@ describe('Inventory crawl', () => {
 		);
 		expect(orphan, 'orphan.pdf must be present in unused resources').toBeDefined();
 		expect(orphan?.source).toBe('inventory-seed');
-		// New behaviour: the orchestrator no longer fires a HEAD pre-flight per
-		// URL, so non-HTML inventory entries land with NULL metadata. The
-		// extension-based classification is the contract here — `query
-		// unused-resources` still surfaces the row by referrer-count = 0, and a
-		// downstream `--retry-failed` (or a re-`--inventory`) can populate
+		// The orchestrator fires no HEAD pre-flight per URL, so non-HTML
+		// inventory entries land with NULL metadata. The extension-based
+		// classification is the contract here — `query unused-resources`
+		// still surfaces the row by referrer-count = 0, and a downstream
+		// `--retry-failed` (or a re-`--inventory`) can populate
 		// status / contentType later if needed. Asserting `null` pins the
-		// regression: if we ever restore HEAD-based metadata, this test must
-		// be updated deliberately.
+		// contract: introducing HEAD-based metadata would have to update
+		// this test deliberately.
 		expect(orphan?.contentType).toBeNull();
 		expect(orphan?.status).toBeNull();
 	});
@@ -399,8 +399,8 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 });
 
 describe('Inventory scrape-phase failure persists ingested state (#121 recovery path)', () => {
-	// Regression test for the post-ingestion recovery branch (the F1 path
-	// in the code review): when scrape phase throws *after* ingestion
+	// Regression test for the post-ingestion recovery branch:
+	// when scrape phase throws *after* ingestion
 	// completes (`.bak` is gone), the orchestrator must persist `tmpDir`
 	// to the `.nitpicker` tar via `archive.write()` before unwinding —
 	// otherwise the outer catch's `archive.close()` would see the original
@@ -451,7 +451,7 @@ describe('Inventory scrape-phase failure persists ingested state (#121 recovery 
 		// into the `.nitpicker` file. If that call were missing (or if the
 		// `ingestionComplete=true` guard fell through to the `.bak` restore
 		// branch), re-opening the archive would show zero `inventory-seed`
-		// rows. The previous-fix coverage E2E only exercises the abort
+		// rows. The pre-insert durability E2E above only exercises the abort
 		// path, which short-circuits before reaching this branch.
 		const accessor = await Archive.open({ filePath, cwd });
 		try {
@@ -501,7 +501,7 @@ describe('Inventory scrape-phase failure persists ingested state (#121 recovery 
 	});
 });
 
-describe('Inventory http/https dedup keeps a single inventory-seed row per origin (#121 review F6)', () => {
+describe('Inventory http/https dedup keeps a single inventory-seed row per origin (#121)', () => {
 	// Edge-case pin for the dedup boundary added in `inventory()` —
 	// `protocolAgnosticKey` is the only thing that keeps an inventory
 	// list with cross-scheme duplicates from creating an orphan

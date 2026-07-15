@@ -45,8 +45,8 @@ const config = {
 };
 
 /**
- *
- * @param url
+ * Builds a minimal `setPage` payload for the given URL.
+ * @param url - Absolute page URL to record.
  */
 function createPage(url) {
 	return {
@@ -85,17 +85,17 @@ function createPage(url) {
 }
 
 /**
- *
- * @param rows
+ * Flattens `EXPLAIN QUERY PLAN` rows into a single `|`-joined line.
+ * @param rows - Plan rows returned by `knex.raw`.
  */
 function formatPlan(rows) {
 	return rows.map((row) => row.detail).join(' | ');
 }
 
 /**
- *
- * @param label
- * @param fn
+ * Runs an async function and logs its wall-clock duration.
+ * @param label - Prefix printed before the timing.
+ * @param fn - Async workload to measure.
  */
 async function time(label, fn) {
 	const start = process.hrtime.bigint();
