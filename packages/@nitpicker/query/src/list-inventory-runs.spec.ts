@@ -116,15 +116,16 @@ describe('listInventoryRuns', () => {
 			notes: 'first applied list',
 		});
 		expect(typeof result.items[0]?.id).toBe('number');
-		// Privacy: `source_file_path` is no longer persisted post-Phase-1.
+		// Privacy: `source_file_path` is deliberately not persisted.
 		// Pin the read shape so a regression that reintroduces SELECT of
 		// the orphan column on legacy archives gets caught here.
 		expect(result.items[0]).not.toHaveProperty('source_file_path');
 	});
 
-	it('returns an empty result when `inventory_runs` is missing (Phase 1 pre-migration archive fallback)', async () => {
+	it('returns an empty result when `inventory_runs` is missing (read-only / legacy archive fallback)', async () => {
 		// Simulate an archive opened in a context where the migration
-		// did not run (read-only stub mode, or a pre-Phase-1 file). The
+		// did not run (read-only stub mode, or a file that predates the
+		// table). The
 		// helper MUST tolerate the missing table — clients (`query`
 		// CLI, viewer, MCP) call this unconditionally and a thrown
 		// "no such table: inventory_runs" would break those flows.

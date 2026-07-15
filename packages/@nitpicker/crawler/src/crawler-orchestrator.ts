@@ -1177,8 +1177,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 *
 	 * `ran_at` is stamped now (ingestion-completion timestamp; the scrape
 	 * phase that may follow is treated as separate). `list_label` is
-	 * auto-generated from `ran_at` when the CLI did not pass one — Phase 1
-	 * has no `--label` flag, so this is always the auto form.
+	 * auto-generated from `ran_at` when the CLI did not pass one — there is
+	 * no `--label` flag, so this is always the auto form.
 	 * `source_file_sha256` arrives pre-computed via
 	 * `aggregates.sourceFileSha256` (the CLI's `inventoryCrawl` ran
 	 * `computeFileSha256` against the input txt before the orchestrator
@@ -1195,8 +1195,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * (short) ingestion from scratch. That keeps `inventory_runs` honest
 	 * (no "ran but unrecorded" rows) at the cost of one rerun.
 	 *
-	 * Forward-compat: when Phase 2 introduces an explicit `--label` flag,
-	 * thread `labelOverride` through {@link inventory} into the `aggregates`
+	 * Forward-compat: if an explicit `--label` flag is ever added, thread
+	 * `labelOverride` through {@link inventory} into the `aggregates`
 	 * shape so the auto-name can be overridden.
 	 * @param archive - The opened archive to write the audit row into.
 	 * @param aggregates - The counts captured during the inventory pass; see {@link InventoryRunAggregates}.

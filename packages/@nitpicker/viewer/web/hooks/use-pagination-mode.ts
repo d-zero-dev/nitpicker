@@ -93,7 +93,12 @@ export interface UsePaginationModeResult {
  * in the TopBar instantly re-renders every list view consumer in the same
  * tab. localStorage `storage` events propagate changes across tabs.
  *
- * The default is `'mpa'` (URL-driven per-page table); `'virtual'` is opt-in.
+ * The default is `'mpa'` (URL-driven per-page table) because deep links,
+ * shared URLs, and browser back/forward only work when pagination state
+ * lives in the URL; `'virtual'` is an opt-in for 100k-row exploration.
+ * The mode itself deliberately stays out of the URL (localStorage only) —
+ * it is a viewing style, not part of the addressed resource, so a shared
+ * link must not force the sender's mode onto the recipient.
  * @returns The current mode plus mutators.
  */
 export function usePaginationMode(): UsePaginationModeResult {

@@ -84,10 +84,11 @@ export type PageSource = 'crawled' | 'inventory-seed' | 'inventory-discovered';
  * initial inventory pass that predated this table) can omit summary
  * stats it cannot reconstruct.
  *
- * The audit log is append-only at Phase 1: there is no UPDATE path, no
- * UNIQUE constraint on `source_file_sha256`, and no FK to pages /
- * resources. Phase 2 (`inventory_memberships`) introduces the M:N link
- * to URLs; Phase 3 (`--refresh`) uses `source_file_sha256` for dedupe.
+ * The audit log is append-only: there is intentionally no UPDATE path,
+ * no UNIQUE constraint on `source_file_sha256`, and no FK to pages /
+ * resources — re-applying the same list yields a second row. Duplicate
+ * detection is a read-side concern; `source_file_sha256` is recorded as
+ * the content-identity key it would use.
  */
 export interface InventoryRunMeta {
 	/** ISO 8601 timestamp at which the run completed (e.g. `'2026-06-21T11:30:00+09:00'`). */

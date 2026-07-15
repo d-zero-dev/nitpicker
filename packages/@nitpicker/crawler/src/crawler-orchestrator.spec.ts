@@ -652,9 +652,8 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 		const addErrorMock = vi.mocked(fakeArchive.addError);
 		expect(addErrorMock).not.toHaveBeenCalled();
 
-		// Phase 1 audit log: the non-HTML-only success branch MUST
-		// still write one `inventory_runs` row with the correct
-		// aggregate counts.
+		// Audit log: the non-HTML-only success branch MUST still write
+		// one `inventory_runs` row with the correct aggregate counts.
 		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
 		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
 		const [meta] = recordInventoryRunMock.mock.calls[0]!;
