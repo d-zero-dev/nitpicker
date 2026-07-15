@@ -2,7 +2,7 @@ import type { Knex } from 'knex';
 
 /**
  * Adds the `inventory_runs` audit-log table to archives created before
- * Phase 1 of inventory run tracking shipped.
+ * inventory run tracking shipped.
  *
  * `inventory_runs` records one row per successful `--inventory <list>`
  * invocation, capturing which deploy list was applied when and what
@@ -22,7 +22,7 @@ import type { Knex } from 'knex';
  * fires **only** on the first run against a legacy archive, matching
  * the established pattern of `migrate-page-errors.ts` /
  * `migrate-crawl-errors.ts`. Operators can rely on the log line as a
- * stable "first time this archive saw Phase 1 schema" event marker.
+ * stable "first time this archive saw the inventory_runs schema" marker.
  * Empty archives (no `pages` table) are skipped entirely; the regular
  * `initSchema` path provisions them at first crawl.
  * @param instance - The Knex query builder instance connected to the database.

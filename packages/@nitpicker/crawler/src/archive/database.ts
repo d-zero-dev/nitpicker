@@ -1522,11 +1522,11 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * the operational question "did we apply last month's list" the
 	 * archive itself can answer without consulting external bookkeeping.
 	 *
-	 * Append-only at Phase 1. There is intentionally no UPDATE path and
-	 * no UNIQUE constraint on `source_file_sha256`; two applies of the
-	 * same list each get their own row, and `Phase 3 --refresh` is where
-	 * dedupe / pre-flight against the hash will land. Field-level NULL
-	 * semantics live on {@link InventoryRunMeta}.
+	 * Append-only. There is intentionally no UPDATE path and no UNIQUE
+	 * constraint on `source_file_sha256`; two applies of the same list
+	 * each get their own row. Duplicate detection is left to readers —
+	 * the hash is recorded as the content-identity key they would use.
+	 * Field-level NULL semantics live on {@link InventoryRunMeta}.
 	 * @param meta - The run metadata to record. Only `ran_at` is required.
 	 * @returns The autoincremented `id` of the newly-inserted row.
 	 */

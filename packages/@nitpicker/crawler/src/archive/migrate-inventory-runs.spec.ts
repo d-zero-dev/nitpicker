@@ -70,7 +70,7 @@ describe('migrateInventoryRuns', () => {
 	});
 
 	it('does NOT create a `source_file_path` column (privacy regression guard)', async () => {
-		// `source_file_path` was dropped post-Phase-1 because absolute
+		// `source_file_path` is deliberately not persisted because absolute
 		// paths leak user-home / OS structure when archives are shared.
 		// Pinning the column's absence here prevents an accidental re-
 		// introduction via `migrate-inventory-runs.ts` (the legacy-

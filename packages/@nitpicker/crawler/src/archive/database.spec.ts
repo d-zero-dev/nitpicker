@@ -4510,7 +4510,7 @@ describe('redirect chain intermediate lineage propagation', () => {
 
 describe('inventory run audit log', () => {
 	it('initSchema does NOT create a `source_file_path` column (privacy regression guard, symmetric to migrate-inventory-runs.spec.ts)', async () => {
-		// `source_file_path` was dropped post-Phase-1 because absolute
+		// `source_file_path` is deliberately not persisted because absolute
 		// paths leak user-home / OS structure when archives are shared.
 		// `migrate-inventory-runs.spec.ts` pins the legacy bring-up
 		// path; this asserts the FRESH-archive path (`initSchema`) is
@@ -4657,13 +4657,12 @@ describe('inventory run audit log', () => {
 		}
 	});
 
-	it('allows the same `source_file_sha256` across multiple runs (Phase 1 records; Phase 3 dedupes)', async () => {
-		// Phase 1 contract: the audit log is append-only and DOES NOT
+	it('allows the same `source_file_sha256` across multiple runs (append-only, no UNIQUE constraint)', async () => {
+		// Storage contract: the audit log is append-only and DOES NOT
 		// enforce uniqueness on the file hash. Two consecutive applies
-		// of the SAME list each produce a new row. Phase 3 (`--refresh`)
-		// is where dedupe / pre-flight against this column would land —
-		// pin the current shape so accidentally adding a UNIQUE index
-		// here is caught.
+		// of the SAME list each produce a new row; duplicate detection is
+		// a read-side concern keyed on this column. Pin the current shape
+		// so accidentally adding a UNIQUE index here is caught.
 		const dbPath = path.resolve(workingDir, 'inventory-runs-same-sha.sqlite');
 		await removeIfExists(dbPath);
 		const db = await Database.connect({ filename: dbPath });
