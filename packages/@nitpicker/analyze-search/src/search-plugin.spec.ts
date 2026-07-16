@@ -1,13 +1,18 @@
+import type createSearchPlugin from './search-plugin.js';
+
 import { JSDOM } from 'jsdom';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-let pluginFactory: typeof import('./search-plugin.js').default;
+let pluginFactory: typeof createSearchPlugin;
+const pluginModulePromise = import('./search-plugin.js');
 
-beforeEach(async () => {
+beforeAll(async () => {
+	const pluginModule = await pluginModulePromise;
+	pluginFactory = pluginModule.default;
+}, 30_000);
+
+beforeEach(() => {
 	vi.clearAllMocks();
-	const mod = await import('./search-plugin.js');
-	pluginFactory = mod.default;
 });
 
 /**

@@ -155,8 +155,18 @@ async function buildLegacyArchive(
 				isSkipped: 0,
 			},
 		]);
+		// Keep the legacy fixture deterministic: flush WAL contents into the
+		// main db.sqlite before teardown so the subsequent tar step never races
+		// libsql's asynchronous sidecar cleanup.
+		await db.raw('PRAGMA wal_checkpoint(TRUNCATE)');
 	} finally {
 		await db.destroy();
+	}
+
+	for (const sidecar of [`${dbPath}-wal`, `${dbPath}-shm`]) {
+		if (existsSync(sidecar)) {
+			rmSync(sidecar, { force: true });
+		}
 	}
 
 	// Write bodies. Pages 1 and 2 share a body so dedup is observable;
