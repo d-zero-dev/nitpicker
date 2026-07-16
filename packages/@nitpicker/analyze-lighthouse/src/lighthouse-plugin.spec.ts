@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type createLighthousePlugin from './lighthouse-plugin.js';
+
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 const killMock = vi.fn();
 const launchMock = vi.fn();
@@ -27,14 +29,17 @@ vi.mock('lighthouse/report/renderer/report-utils.js', () => ({
 	},
 }));
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-let pluginFactory: typeof import('./lighthouse-plugin.js').default;
+let pluginFactory: typeof createLighthousePlugin;
+const pluginModulePromise = import('./lighthouse-plugin.js');
 
-beforeEach(async () => {
+beforeAll(async () => {
+	const pluginModule = await pluginModulePromise;
+	pluginFactory = pluginModule.default;
+}, 30_000);
+
+beforeEach(() => {
 	vi.clearAllMocks();
 	launchMock.mockResolvedValue({ port: 9222, kill: killMock });
-	const mod = await import('./lighthouse-plugin.js');
-	pluginFactory = mod.default;
 });
 
 describe('analyze-lighthouse plugin', () => {

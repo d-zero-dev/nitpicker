@@ -1,17 +1,22 @@
+import type createMainContentsPlugin from './main-contents-plugin.js';
+
 import { JSDOM } from 'jsdom';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 vi.mock('@medv/finder', () => ({
 	finder: vi.fn(() => 'main'),
 }));
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-let pluginFactory: typeof import('./main-contents-plugin.js').default;
+let pluginFactory: typeof createMainContentsPlugin;
+const pluginModulePromise = import('./main-contents-plugin.js');
 
-beforeEach(async () => {
+beforeAll(async () => {
+	const pluginModule = await pluginModulePromise;
+	pluginFactory = pluginModule.default;
+}, 30_000);
+
+beforeEach(() => {
 	vi.clearAllMocks();
-	const mod = await import('./main-contents-plugin.js');
-	pluginFactory = mod.default;
 });
 
 /**

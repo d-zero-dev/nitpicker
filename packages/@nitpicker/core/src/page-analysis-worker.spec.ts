@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type pageAnalysisWorker from './page-analysis-worker.js';
+
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 import { UrlEventBus } from './url-event-bus.js';
 
@@ -10,15 +12,17 @@ const { importModules } = await import('./import-modules.js');
 const mockedImportModules = vi.mocked(importModules);
 
 const { parseUrl } = await import('@d-zero/shared/parse-url');
+let workerFn: typeof pageAnalysisWorker;
+const workerModulePromise = import('./page-analysis-worker.js');
 
 describe('page-analysis-worker', () => {
-	// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-	let workerFn: typeof import('./page-analysis-worker.js').default;
+	beforeAll(async () => {
+		const workerModule = await workerModulePromise;
+		workerFn = workerModule.default;
+	}, 30_000);
 
-	beforeEach(async () => {
+	beforeEach(() => {
 		vi.clearAllMocks();
-		const mod = await import('./page-analysis-worker.js');
-		workerFn = mod.default;
 	});
 
 	it('returns null when plugin has no eachPage', async () => {
