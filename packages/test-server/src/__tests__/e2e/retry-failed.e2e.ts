@@ -3,11 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import {
-	Archive,
-	CrawlerOrchestrator,
-	populateMigrationTables,
-} from '@nitpicker/crawler';
+import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
@@ -32,7 +28,6 @@ async function crawlAndPersist(
 		...options,
 	});
 	const filePath = orchestrator.archive.filePath;
-	await populateMigrationTables(orchestrator.archive);
 	await orchestrator.write();
 	await orchestrator.archive.close();
 	orchestrator.garbageCollect();
@@ -72,7 +67,6 @@ describe('Retry failed crawl (recursive, default)', () => {
 		//    reset, re-fetched as a 200, and its newly-exposed child is crawled.
 		await setFlakyState('heal');
 		const orchestrator = await CrawlerOrchestrator.retryFailed(filePath, { cwd });
-		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
@@ -133,7 +127,6 @@ describe('Retry failed crawl (--no-recursive)', () => {
 			cwd,
 			recursive: false,
 		});
-		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
@@ -193,10 +186,11 @@ describe('Retry failed crawl: permanent-kind exclusion converges across iteratio
 		expect(recoverable).toBeDefined();
 		expect(recoverable!.status).toBe(500);
 		// `Page` does not expose a public `id` getter — fetch it via the
-		// `pages.url` lookup so the `page_errors` foreign key is real.
-		const recoverableRow = (await knex('pages')
-			.select('id')
-			.where('url', 'http://localhost:8010/flaky/recoverable')
+		// `content_items`/`url_refs` join so the `page_errors` foreign key is real.
+		const recoverableRow = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ci.url_id', 'ur.id')
+			.select('ci.id as id')
+			.where('ur.url', 'http://localhost:8010/flaky/recoverable')
 			.first()) as { id: number } | undefined;
 		expect(recoverableRow).toBeDefined();
 		await knex('page_errors').insert({
@@ -222,7 +216,6 @@ describe('Retry failed crawl: permanent-kind exclusion converges across iteratio
 		await setFlakyState('heal');
 		for (let pass = 0; pass < 2; pass++) {
 			const orchestrator = await CrawlerOrchestrator.retryFailed(filePath, { cwd });
-			await populateMigrationTables(orchestrator.archive);
 			await orchestrator.write();
 			await orchestrator.archive.close();
 			orchestrator.garbageCollect();

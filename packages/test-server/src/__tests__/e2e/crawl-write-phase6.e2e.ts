@@ -1,3 +1,5 @@
+import type { Knex } from 'knex';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
@@ -28,7 +30,7 @@ const ENTITY_TABLES = [
  * @param table - The table name to count.
  * @returns The row count.
  */
-async function countRows(knex: import('knex').Knex, table: string): Promise<number> {
+async function countRows(knex: Knex, table: string): Promise<number> {
 	const row = await knex(table).count<{ c: number }>({ c: '*' }).first();
 	return Number(row?.c ?? 0);
 }
