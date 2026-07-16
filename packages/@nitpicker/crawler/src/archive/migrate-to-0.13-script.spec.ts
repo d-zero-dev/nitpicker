@@ -144,8 +144,17 @@ async function mutateFixture(
 		try {
 			await db.raw('PRAGMA foreign_keys = OFF');
 			await mutate(db);
+			// Keep the repacked fixture deterministic: flush WAL contents into
+			// the main db.sqlite before teardown so tar never races libsql's
+			// asynchronous sidecar cleanup.
+			await db.raw('PRAGMA wal_checkpoint(TRUNCATE)');
 		} finally {
 			await db.destroy();
+		}
+		for (const sidecar of [`${dbPath}-wal`, `${dbPath}-shm`]) {
+			if (existsSync(sidecar)) {
+				rmSync(sidecar, { force: true });
+			}
 		}
 		rmSync(filePath, { force: true });
 		await tar.c({ file: filePath, cwd: stageDir, portable: true }, [innerDirName]);
