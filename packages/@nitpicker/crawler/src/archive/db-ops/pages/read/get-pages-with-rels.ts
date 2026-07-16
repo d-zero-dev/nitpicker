@@ -22,9 +22,11 @@ import { reconstructPageRows } from './reconstruct-page-rows.js';
  * (like the legacy `anchors.hrefId` it replaces) is resolved by URL only at
  * write time (`resolveContentItemId`), with no redirect-chain following —
  * an anchor's target may itself become a redirect source discovered later
- * in the crawl. `redirectTable()` resolves the chain at read time so
- * `anchors[].url` reflects the final destination while `anchors[].href`
- * keeps the immediate (pre-redirect) target URL.
+ * in the crawl. `redirectTable()` joins the single `redirect_dest_id` hop
+ * at read time so `anchors[].url` reflects the final destination while
+ * `anchors[].href` keeps the immediate (pre-redirect) target URL; one hop
+ * suffices only because `linkRedirectSources` pre-flattens every hop's
+ * `redirect_dest_id` to the final destination at write time.
  *
  * **Deduped anchor identity.** `anchor_edges` collapses repeated
  * `(page_id, href_page_id)` instances into one row with a `count`; `hash` /

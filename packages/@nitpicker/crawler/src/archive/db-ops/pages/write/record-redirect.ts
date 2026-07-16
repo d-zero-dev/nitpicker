@@ -8,6 +8,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { dbLog } from '../../../debug.js';
 import { deriveLineageFromParent } from '../../../derive-lineage-from-parent.js';
 import { resolveRedirectChain } from '../../../resolve-redirect-chain.js';
+import { clearWriteRefCaches } from '../../_shared/clear-write-ref-caches.js';
 import { resolveContentItemId } from '../../_shared/resolve-content-item-id.js';
 
 import { linkRedirectSources } from './link-redirect-sources.js';
@@ -73,49 +74,60 @@ export async function recordRedirect(
 		return;
 	}
 
-	await knex.transaction(async (trx) => {
-		// Pass the caller-supplied `source` straight through so a brand-new
-		// destination row INSERTed here picks up the inventory lineage
-		// (instead of the DB DEFAULT `'crawled'`) when the caller is in the
-		// inventory chain — without the pass-through, inventory lineage
-		// would be laundered to `'crawled'` for js-redirect rescue / #73
-		// convergence destinations that have not yet been rendered.
-		const destId = await resolveContentItemId(
-			trx,
-			caches,
-			destUrlObject.withoutHashAndAuth,
-			undefined,
-			source,
-		);
-		// Chain lineage propagates FROM the originating URL (`page.url`),
-		// NOT from the destination. The originating URL is what initiated
-		// the redirect chain, so its lineage is what every intermediate hop
-		// transitively inherits. Reading from the destination would
-		// mis-propagate in "inventory-seed → ... → existing crawled dest"
-		// chains: the intermediates are reached only via the inventory
-		// chain, so they belong to the inventory chain even though the
-		// chain happens to land on a crawled URL. The `'crawled'` fallback
-		// arms the crawled-wins downgrade for existing `'inventory-*'`
-		// intermediates that a crawled chain reaches.
-		const cachedOriginating = caches.contentItems.get(page.url.withoutHashAndAuth);
-		let originatingSource: PageSource | undefined = cachedOriginating?.source;
-		if (originatingSource === undefined) {
-			const [originatingRow] = (await trx
-				.select('ci.source')
-				.from('content_items as ci')
-				.join('url_refs as ur', 'ur.id', 'ci.url_id')
-				.where('ur.url', page.url.withoutHashAndAuth)) as { source: PageSource }[];
-			originatingSource = originatingRow?.source ?? source;
-		}
-		const chainLineageSource = deriveLineageFromParent(originatingSource, 'crawled');
-		await linkRedirectSources(
-			trx,
-			caches,
-			sources,
-			destId,
-			destUrlObject.withoutHashAndAuth,
-			page.isExternal,
-			chainLineageSource,
-		);
-	});
+	try {
+		await knex.transaction(async (trx) => {
+			// Pass the caller-supplied `source` straight through so a brand-new
+			// destination row INSERTed here picks up the inventory lineage
+			// (instead of the DB DEFAULT `'crawled'`) when the caller is in the
+			// inventory chain — without the pass-through, inventory lineage
+			// would be laundered to `'crawled'` for js-redirect rescue / #73
+			// convergence destinations that have not yet been rendered.
+			const destId = await resolveContentItemId(
+				trx,
+				caches,
+				destUrlObject.withoutHashAndAuth,
+				undefined,
+				source,
+			);
+			// Chain lineage propagates FROM the originating URL (`page.url`),
+			// NOT from the destination. The originating URL is what initiated
+			// the redirect chain, so its lineage is what every intermediate hop
+			// transitively inherits. Reading from the destination would
+			// mis-propagate in "inventory-seed → ... → existing crawled dest"
+			// chains: the intermediates are reached only via the inventory
+			// chain, so they belong to the inventory chain even though the
+			// chain happens to land on a crawled URL. The `'crawled'` fallback
+			// arms the crawled-wins downgrade for existing `'inventory-*'`
+			// intermediates that a crawled chain reaches.
+			const cachedOriginating = caches.contentItems.get(page.url.withoutHashAndAuth);
+			let originatingSource: PageSource | undefined = cachedOriginating?.source;
+			if (originatingSource === undefined) {
+				const [originatingRow] = (await trx
+					.select('ci.source')
+					.from('content_items as ci')
+					.join('url_refs as ur', 'ur.id', 'ci.url_id')
+					.where('ur.url', page.url.withoutHashAndAuth)) as { source: PageSource }[];
+				originatingSource = originatingRow?.source ?? source;
+			}
+			const chainLineageSource = deriveLineageFromParent(originatingSource, 'crawled');
+			await linkRedirectSources(
+				trx,
+				caches,
+				sources,
+				destId,
+				destUrlObject.withoutHashAndAuth,
+				page.isExternal,
+				chainLineageSource,
+			);
+		});
+	} catch (error) {
+		// A rolled-back transaction can leave ids cached that no longer
+		// correspond to any row (AUTOINCREMENT never rewinds) — see
+		// `clearWriteRefCaches` for why a full clear, not a partial one, is
+		// required. `emitErrorAndRetry` may retry this whole call, so the
+		// cache must be clean before the next attempt (same guard as
+		// `updatePage`).
+		clearWriteRefCaches(caches);
+		throw error;
+	}
 }

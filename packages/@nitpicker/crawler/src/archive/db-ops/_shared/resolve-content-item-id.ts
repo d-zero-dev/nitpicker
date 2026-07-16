@@ -27,14 +27,20 @@ import { upsertUrlRef } from './upsert-url-ref.js';
  * later hit does not re-issue the UPDATE.
  *
  * **Cache poisoning on rollback.** Entries cached inside a transaction
- * that later rolls back would point at ids that no longer exist. The
- * owner of the cache bundle (the `Database` instance) discards the whole
- * bundle when a write transaction fails, before any retry — see
- * `Database.updatePage` / `Database.recordRedirect`.
+ * that later rolls back would point at ids that no longer exist. Every
+ * write op that opens a multi-statement transaction around this function
+ * must discard the whole cache bundle when that transaction fails,
+ * before any retry — see the try/catch + `clearWriteRefCaches` wrappers
+ * in `update-page.ts` and `record-redirect.ts`.
  *
- * **Race-condition safety.** `onConflict('url_id').ignore()` returns 0
- * rows inserted when a concurrent transaction won the race. In that case
- * the row is re-SELECTed to recover its id rather than throw.
+ * **Race-condition safety.** The INSERT uses `ON CONFLICT(url_id) DO
+ * UPDATE SET url_id = url_id RETURNING id, source` — the same no-op
+ * -update idiom as `upsertUrlRef` — so when a concurrent transaction
+ * wins the insert race, the statement still returns the existing row's
+ * id and source in one round trip. `onConflict().ignore()` without
+ * `RETURNING` must NOT be used here: knex's sqlite-family dialects
+ * report the connection's stale `lastInsertRowid` for a conflict-ignored
+ * insert, which reads as a valid id belonging to an unrelated row.
  * @param qb - Knex instance OR a transaction, used verbatim for every
  *   statement this function issues. Pass the `trx` when running inside a
  *   transaction so reads see uncommitted writes from that transaction.
@@ -50,9 +56,8 @@ import { upsertUrlRef } from './upsert-url-ref.js';
  *   Pass `'crawled'` to arm the crawled-wins downgrade on existing
  *   inventory-labelled rows.
  * @returns The `content_items.id` of the existing or newly inserted row.
- * @throws When `onConflict.ignore()` inserts 0 rows and the follow-up
- *   SELECT also fails to locate the URL — should not happen, so it
- *   surfaces as a hard error.
+ * @throws {Error} When the upsert's `RETURNING` yields no row — should
+ *   not happen, so it surfaces as a hard error.
  * @example
  * const pageId = await resolveContentItemId(trx, caches, anchor.href, 1, 'crawled');
  */
@@ -81,31 +86,28 @@ export async function resolveContentItemId(
 		return entry.id;
 	}
 
-	const insertedRows = await qb('content_items')
-		.insert({
-			url_id: urlId,
-			scraped: 0,
-			is_target: 0,
-			is_external: isExternal ?? 0,
-			...(source === undefined ? {} : { source }),
-		})
-		.onConflict('url_id')
-		.ignore();
-	const [insertedId] = insertedRows;
-	if (!insertedId) {
-		// onConflict.ignore() returns 0 on race condition — re-select
-		const [existing] = (await qb
-			.select('id', 'source')
-			.from('content_items')
-			.where('url_id', urlId)) as { id: number; source: PageSource }[];
-		if (existing?.id) {
-			caches.contentItems.set(url, { id: existing.id, source: existing.source });
-			return existing.id;
-		}
+	const insertedRows: { id: number; source: PageSource }[] = await qb.raw(
+		`INSERT INTO content_items (url_id, scraped, is_target, is_external${source === undefined ? '' : ', source'})
+		 VALUES (?, 0, 0, ?${source === undefined ? '' : ', ?'})
+		 ON CONFLICT(url_id) DO UPDATE SET url_id = url_id
+		 RETURNING id, source`,
+		source === undefined ? [urlId, isExternal ?? 0] : [urlId, isExternal ?? 0, source],
+	);
+	const inserted = insertedRows[0];
+	if (inserted === undefined) {
 		throw new Error(`Failed to insert a new content item: ${url}`);
 	}
-	caches.contentItems.set(url, { id: insertedId, source: source ?? 'crawled' });
-	return insertedId;
+	const insertedEntry: ContentItemCacheEntry = {
+		id: inserted.id,
+		source: inserted.source,
+	};
+	// A conflict means a concurrent writer created the row between this
+	// function's SELECT miss and the INSERT — the returned `source` is that
+	// row's value, so the downgrade must be evaluated exactly as on the
+	// SELECT-hit path.
+	await applyCrawledWinsDowngrade(qb, insertedEntry, source);
+	caches.contentItems.set(url, insertedEntry);
+	return insertedEntry.id;
 }
 
 /**

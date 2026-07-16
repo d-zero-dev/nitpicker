@@ -1,6 +1,7 @@
 import type { Knex } from 'knex';
 
 import { classifyContentType } from './classify-content-type.js';
+import { normalizeMime } from './normalize-mime.js';
 
 /**
  * Distinct-`contentType` rows are collected from `pages` + `resources` in
@@ -10,46 +11,6 @@ import { classifyContentType } from './classify-content-type.js';
  * bounds worst-case parameter counts on `INSERT ... VALUES ...`.
  */
 const INSERT_CHUNK_SIZE = 500;
-
-/**
- * Drops every C0 control character (`0x00`..`0x1F`) and DEL (`0x7F`)
- * from `text`. `jsdom` / lax parsers occasionally emit these inside a
- * raw Content-Type header (e.g. `text/html\r`); leaving them in
- * `content_type_refs.normalized` would fork two rows for the "same"
- * content-type into different normalized values.
- *
- * Implemented character-by-character rather than as a regex literal so
- * the source file carries no non-printing bytes and stays tool-friendly.
- * @param text - Input string.
- * @returns `text` with C0 controls and DEL stripped.
- */
-function stripControlChars(text: string): string {
-	let output = '';
-	for (const ch of text) {
-		const code = ch.codePointAt(0)!;
-		if (code < 32 /* 0x20 = SPACE */ || code === 127 /* 0x7F = DEL */) {
-			continue;
-		}
-		output += ch;
-	}
-	return output;
-}
-
-/**
- * Normalises a raw Content-Type header value to a canonical MIME
- * (control-char stripped, trimmed, lower-cased, parameters removed).
- * Duplicated once here instead of shared with {@link classifyContentType}
- * — that function must accept the raw value verbatim so it can also
- * handle `null` / `''` cases, whereas the migration insert wants the
- * pre-normalised form to write into `content_type_refs.normalized`.
- * @param raw - Raw Content-Type header, guaranteed non-null non-empty.
- * @returns Lower-cased MIME with parameters and control chars stripped.
- */
-function normalizeMime(raw: string): string {
-	const semi = raw.indexOf(';');
-	const head = semi === -1 ? raw : raw.slice(0, semi);
-	return stripControlChars(head).trim().toLowerCase();
-}
 
 /**
  * Populates `content_type_refs` from every distinct `contentType` value

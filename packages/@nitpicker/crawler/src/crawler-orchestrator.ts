@@ -709,7 +709,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 			// Drop URLs that are already represented in the archive (either
 			// as pages or resources). Comparison key is `withoutHashAndAuth`
-			// to mirror what `#getIdByUrl` / `insertResource` actually store.
+			// to mirror what `resolveContentItemId` / `insertResource` actually store.
 			// Two independent reads — Promise.all halves the wait on large
 			// archives where each `WHERE url IN (?)` chunk costs real I/O.
 			const candidateUrls = inScope.map((u) => u.withoutHashAndAuth);

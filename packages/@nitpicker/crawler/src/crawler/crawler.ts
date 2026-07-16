@@ -5,7 +5,7 @@ import type {
 	ResourceLookupResult,
 	ScrapeOutcome,
 } from './types.js';
-import type { PageSource } from '../archive/types.js';
+import type { PageDataWithDomPaths, PageSource } from '../archive/types.js';
 import type {
 	ChangePhaseEvent,
 	PageData,
@@ -32,6 +32,7 @@ import { crawlerLog } from '../debug.js';
 
 import { buildJsRedirectEdge } from './build-js-redirect-edge.js';
 import { buildRedirectEvent } from './build-redirect-event.js';
+import { captureImageDomPaths } from './capture-image-dom-paths.js';
 import { createChangePhaseHandler } from './create-change-phase-handler.js';
 import { derivePageSource } from './derive-page-source.js';
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
@@ -1352,7 +1353,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		// - the source is not committed via `setPage`/`updatePage` on this
 		//   path (the redirect-edge handler in `#runDeal` only calls
 		//   `linkList.done` + `emit('redirect', ...)` → `Archive.setRedirect`),
-		//   so `recordRedirect` → `#getIdByUrl` creates a NULL-status
+		//   so `recordRedirect` → `resolveContentItemId` creates a NULL-status
 		//   placeholder row for the source if it did not already exist;
 		// - `#linkRedirectSources` then stamps `status = 301
 		//   statusText='Moved Permanently'` because NULL satisfies its
@@ -1617,6 +1618,28 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				retries: this.#options.retry,
 				headCheckResult,
 			});
+
+			// Image dom-path capture runs here — after the scrape completed but
+			// while `page` is still alive — because beholder's image metadata
+			// carries each element's `outerHTML` with no positional
+			// information. The captured candidates ride on the page data into
+			// `image_items.dom_path_text_id` resolution at write time; a
+			// capture failure (or a page with no images) falls back to the
+			// synthetic `unknown/<n>` markers, so this stays best-effort.
+			if (
+				result.type === 'success' &&
+				result.pageData &&
+				result.pageData.imageList.length > 0
+			) {
+				const imageDomPaths = await captureImageDomPaths(page);
+				if (imageDomPaths !== undefined) {
+					const withDomPaths: PageDataWithDomPaths = {
+						...result.pageData,
+						imageDomPaths,
+					};
+					result.pageData = withDomPaths;
+				}
+			}
 
 			update('Closing browser%dots%');
 			// JS-redirect rescue capture: when `scrapeStart` catches a

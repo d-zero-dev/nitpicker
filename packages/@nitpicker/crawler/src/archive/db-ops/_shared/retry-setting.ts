@@ -10,7 +10,7 @@ import type { RetryCallOptions } from '@d-zero/shared/retry';
  *
  * Two ops deliberately do NOT use these settings and instead wrap
  * `retryCall` themselves so they can override `label` (`getResourceByUrl`)
- * or opt out entirely (`checkpoint`, `destroy`, `getKnex`, `addOrderField`,
+ * or opt out entirely (`checkpoint`, `destroy`, `getKnex`,
  * `setUrlOrder`, the `constructor`, and `Database.connect`). See the
  * corresponding op files for the reasoning at each site.
  */

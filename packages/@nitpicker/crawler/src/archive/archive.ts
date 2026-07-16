@@ -239,7 +239,7 @@ export default class Archive extends ArchiveAccessor {
 	 * Ctrl+C-tolerance rationale and the `getCrawlingState` interaction.
 	 *
 	 * `ExURL` inputs are normalised to `withoutHashAndAuth` here so the storage
-	 * key matches what `#getIdByUrl` writes for crawled rows, keeping the
+	 * key matches what `resolveContentItemId` writes for crawled rows, keeping the
 	 * crawled-wins downgrade and the existing-URL filter (`getExistingPageUrls`)
 	 * lookups consistent.
 	 * @param urls - HTML seed URLs to pre-insert. No-op when empty.

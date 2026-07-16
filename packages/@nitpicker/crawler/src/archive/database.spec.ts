@@ -615,6 +615,68 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 		}
 	});
 
+	it('同一宛先へテキストの異なる複数アンカーは first-wins で 1 行に集約される', async () => {
+		// anchor_edges は UNIQUE(page_id, href_page_id) で集約し、
+		// textContent / hash は最初に観測されたインスタンスの値だけを保持
+		// する（2 件目以降は count のインクリメントのみ）。この first-wins
+		// が読み取り（getAnchorsOnPage）まで一貫して届くことをピン留めする。
+		const dbPath = path.resolve(workingDir, 'first-wins.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const pageUrl = 'http://localhost/first-wins-source';
+		try {
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [] as string[],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'First wins source' },
+					anchorList: [
+						{
+							href: parseUrl('http://localhost/dest')!,
+							textContent: 'first label',
+							isExternal: false,
+						},
+						{
+							href: parseUrl('http://localhost/dest')!,
+							textContent: 'second label',
+							isExternal: false,
+						},
+					],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				true,
+				true,
+			);
+
+			const knex = db.getKnex();
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id')
+				.where('url_refs.url', pageUrl);
+			const edges = await knex
+				.from('anchor_edges')
+				.where('page_id', page.id)
+				.select('count');
+			expect(edges).toHaveLength(1);
+			expect(edges[0]!.count).toBe(2);
+
+			const anchors = await db.getAnchorsOnPage(page.id);
+			expect(anchors).toHaveLength(1);
+			expect(anchors[0]!.textContent).toBe('first label');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
 	it('劣化した再スクレイプ（空 anchorList / imageList）は以前の良データを消さない', async () => {
 		const dbPath = path.resolve(workingDir, 'rescrape-empty.sqlite');
 		const db = await Database.connect({ filename: dbPath });
@@ -1241,7 +1303,7 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 	});
 
 	it('stamps a NULL-status placeholder row with 301 (redirect-only URL never directly scraped)', async () => {
-		// `#getIdByUrl` materialises a placeholder row when a URL is
+		// `resolveContentItemId` materialises a placeholder row when a URL is
 		// reached only as a redirect source — `status` is NULL on that
 		// row. recordRedirect should stamp it 301 so the row is visible
 		// as a redirect source on the Summary distribution.
@@ -1938,10 +2000,11 @@ describe('resetFailedPages', () => {
 				.returning('id');
 			contentTypeId = ctRef.id;
 		}
+		const scraped = row.scraped ?? 1;
 		const [inserted] = await knex('content_items')
 			.insert({
 				url_id: urlRef.id,
-				scraped: row.scraped ?? 1,
+				scraped,
 				is_target: row.isTarget ?? 1,
 				is_external: row.isExternal ?? 0,
 				status: row.status === undefined ? 200 : row.status,
@@ -1950,6 +2013,10 @@ describe('resetFailedPages', () => {
 				content_length: 100,
 				is_skipped: row.isSkipped ?? 0,
 				redirect_dest_id: row.redirectDestId ?? null,
+				// scraped=1 な行は実 writer では必ずタイムスタンプを持つ
+				// （insert-page.ts の COALESCE）— fixture も同じ形に揃える。
+				first_crawled_at: scraped ? 1_700_000_000_000 : null,
+				last_crawled_at: scraped ? 1_700_000_000_000 : null,
 			})
 			.returning('id');
 		const pageId = Number(
@@ -2765,29 +2832,14 @@ describe('getHtmlOfPageById', () => {
 	});
 });
 
-describe('addOrderField', () => {
+describe('DB_Page.order の再構築', () => {
 	const addOrderDbPath = path.resolve(workingDir, 'add-order-test.sqlite');
 
 	afterAll(async () => {
 		await remove(addOrderDbPath);
 	});
 
-	// TODO(v2): depends on the v1-schema `mock.sqlite` fixture; regenerate
-	// before re-enabling.
-	it.skip('order カラムが既に存在する場合でもエラーにならない', async () => {
-		const db = await Database.connect({
-			filename: path.resolve(workingDir, 'mock.sqlite'),
-		});
-
-		// 2回連続で呼んでも例外が発生しない
-		await db.addOrderField();
-		await db.addOrderField();
-
-		const pages = await db.getPages();
-		expect(pages[0]).toHaveProperty('order');
-	});
-
-	it('order カラムが存在しない場合に追加される', async () => {
+	it('setUrlOrder 前のページは order を null として返す', async () => {
 		const db = await Database.connect({
 			filename: addOrderDbPath,
 		});
@@ -3509,8 +3561,8 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 		}
 	});
 
-	it('inventory-discovered is downgraded to crawled when reached from a crawled anchor (#getIdByUrl path)', async () => {
-		// The crawled-wins downgrade fires inside `#getIdByUrl` when an
+	it('inventory-discovered is downgraded to crawled when reached from a crawled anchor (resolveContentItemId path)', async () => {
+		// The crawled-wins downgrade fires inside `resolveContentItemId` when an
 		// anchor lineage SELECT lands on an existing `inventory-*` row and
 		// the anchor's parent page is `crawled`. The lineage propagation in
 		// `updatePage` passes `'crawled'` explicitly for crawled parents so
@@ -3528,7 +3580,7 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 			);
 
 			// Step 2: a crawled page anchors to /dest. The anchor stores a
-			// hrefId via `#getIdByUrl(href, ..., trx, 'crawled')`, which
+			// hrefId via `resolveContentItemId(href, ..., trx, 'crawled')`, which
 			// triggers the downgrade UPDATE on the existing /dest row.
 			await db.updatePage(
 				{
@@ -3609,12 +3661,12 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 		// `inventory-seed` parent that anchors to it. This is the
 		// orphan-detection contract — "reachable from the crawl graph"
 		// dominates "listed in inventory". The crawled-wins downgrade in
-		// `#getIdByUrl` only fires when incoming source IS `'crawled'`;
+		// `resolveContentItemId` only fires when incoming source IS `'crawled'`;
 		// for incoming `'inventory-discovered'` (the anchor lineage from
 		// an inventory-seed parent), the SELECT path returns the
 		// existing pageId without updating the row, so the existing
 		// `'crawled'` stays. Pin this directly so a refactor of
-		// `#getIdByUrl`'s downgrade clause that accidentally inverts the
+		// `resolveContentItemId`'s downgrade clause that accidentally inverts the
 		// condition is caught here.
 		const dbPath = path.resolve(
 			workingDir,
@@ -3629,7 +3681,7 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 
 			// Step 2: a later inventory-seed parent renders and emits
 			// an anchor to /existing-page. The anchor lineage source is
-			// `'inventory-discovered'`, fed through `#getIdByUrl` for
+			// `'inventory-discovered'`, fed through `resolveContentItemId` for
 			// the existing row.
 			await db.updatePage(
 				{
@@ -3664,22 +3716,22 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 		}
 	});
 
-	it('round-trips the full source-priority lattice across `setPage`, `#getIdByUrl`, and the downgrade clause', async () => {
+	it('round-trips the full source-priority lattice across `setPage`, `resolveContentItemId`, and the downgrade clause', async () => {
 		// F9: the source-priority and lineage tests above exercise the
-		// `setPage` UPDATE CASE and the `#getIdByUrl` downgrade
+		// `setPage` UPDATE CASE and the `resolveContentItemId` downgrade
 		// SEPARATELY. This case pins them as a coherent lattice in one
 		// flow:
 		//
 		//   1. Start with /shared as `'crawled'` (UPDATE CASE: incoming
 		//      undefined, existing absent → DB DEFAULT).
 		//   2. Render an inventory-seed parent that anchors to /shared
-		//      (#getIdByUrl SELECT path: incoming
+		//      (resolveContentItemId SELECT path: incoming
 		//      `'inventory-discovered'`, existing `'crawled'` — no
 		//      change, crawled stays).
 		//   3. setPage /shared again with source=undefined (UPDATE CASE
 		//      sourceUpdate empty → crawled stays).
 		//   4. Render /shared as part of a fresh crawled parent's anchor
-		//      list (#getIdByUrl SELECT: incoming `'crawled'`, existing
+		//      list (resolveContentItemId SELECT: incoming `'crawled'`, existing
 		//      `'crawled'` — no-op).
 		//
 		// At every step the row must remain `'crawled'`. A mutation in
@@ -3771,7 +3823,7 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 		const db = await Database.connect({ filename: dbPath });
 		try {
 			// Parent is inventory-seed and anchors to /child. The anchor
-			// placeholder row for /child is created via `#getIdByUrl` with
+			// placeholder row for /child is created via `resolveContentItemId` with
 			// lineage `'inventory-discovered'` (parent is inventory-*).
 			await db.updatePage(
 				{
@@ -4160,7 +4212,7 @@ describe('redirect chain intermediate lineage propagation', () => {
 		// Scenario: an inventory-seed URL that redirects through a
 		// previously-unknown intermediate URL on its way to a final
 		// destination. The intermediate is created inside
-		// `#linkRedirectSources` via `#getIdByUrl(..., undefined)`; if
+		// `#linkRedirectSources` via `resolveContentItemId(..., undefined)`; if
 		// lineage propagation covered only the anchor path, it would be
 		// labelled `'crawled'`. The intermediate must instead inherit
 		// `'inventory-discovered'` from the inventory chain.
@@ -4338,7 +4390,7 @@ describe('redirect chain intermediate lineage propagation', () => {
 		// edge-only path (e.g. #73 redirect-convergence when the dest
 		// was already rendered this session, or the js-redirect rescue
 		// after puppeteer.goto returns null). Without threading `source`
-		// through `recordRedirect`, a `#getIdByUrl(destUrl, undefined,
+		// through `recordRedirect`, a `resolveContentItemId(destUrl, undefined,
 		// trx)` call followed by a read-back of the destination's source
 		// would default a brand-new destination row to `'crawled'` and
 		// launder the inventory lineage of the whole chain. The `source`
@@ -4399,7 +4451,7 @@ describe('redirect chain intermediate lineage propagation', () => {
 	it('downgrades an existing `inventory-discovered` intermediate to `crawled` when a crawled redirect chain reaches it (crawled-wins symmetry with anchor lineage)', async () => {
 		// F1: if the `chainLineageSource` derivation passed `undefined`
 		// for crawled destinations, the crawled-wins downgrade inside
-		// `#getIdByUrl` (which fires only when incoming source is
+		// `resolveContentItemId` (which fires only when incoming source is
 		// `'crawled'`) would never run for redirect intermediates — the
 		// anchor branch passes `'crawled'` explicitly and must stay
 		// symmetric. This test asserts that direction: an
@@ -4474,7 +4526,7 @@ describe('redirect chain intermediate lineage propagation', () => {
 		// Crawled-wins in the redirect-chain context, NO-OP direction:
 		// an intermediate URL already in the archive as `'crawled'` must
 		// stay `'crawled'` when a later inventory-seed chain passes
-		// through it. `#getIdByUrl` returns the existing row's id with
+		// through it. `resolveContentItemId` returns the existing row's id with
 		// NO source UPDATE because the downgrade clause only fires on
 		// incoming `'crawled'` — incoming `'inventory-discovered'`
 		// (which is what an inventory-seed parent propagates) is a
@@ -4625,7 +4677,7 @@ describe('redirect chain intermediate lineage propagation', () => {
 
 	it('propagates `inventory-discovered` to an EXTERNAL intermediate when the originating page is `inventory-seed` (lineage applies regardless of scope)', async () => {
 		// S2: lineage propagation is scope-agnostic — the
-		// `isExternal=1` rows go through the same `#getIdByUrl` path
+		// `isExternal=1` rows go through the same `resolveContentItemId` path
 		// as internal rows. Pin the contract so a future refactor that
 		// skips lineage for externals (e.g. on the assumption that
 		// external rows are not orphan-relevant) gets caught.

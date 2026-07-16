@@ -152,15 +152,22 @@ async function resolveNameIds(
 		}
 	}
 	if (missing.size > 0) {
-		await trx('header_name_refs')
-			.insert([...missing].map((name) => ({ name })))
-			.onConflict('name')
-			.ignore();
-		const inserted: { id: number; name: string }[] = await trx('header_name_refs')
-			.select('id', 'name')
-			.whereIn('name', [...missing]);
-		for (const row of inserted) {
-			cache.set(row.name, row.id);
+		const missingNames = [...missing];
+		// Chunked like the entries insert below: knex compiles a multi-row
+		// insert-with-onConflict into a compound SELECT, and SQLite rejects
+		// more than 500 compound terms per statement.
+		for (let index = 0; index < missingNames.length; index += ENTRY_INSERT_CHUNK_SIZE) {
+			const chunk = missingNames.slice(index, index + ENTRY_INSERT_CHUNK_SIZE);
+			await trx('header_name_refs')
+				.insert(chunk.map((name) => ({ name })))
+				.onConflict('name')
+				.ignore();
+			const inserted: { id: number; name: string }[] = await trx('header_name_refs')
+				.select('id', 'name')
+				.whereIn('name', chunk);
+			for (const row of inserted) {
+				cache.set(row.name, row.id);
+			}
 		}
 	}
 	return entries.map((entry) => {
@@ -206,9 +213,13 @@ async function resolveValueIds(
 			missingKeys.add(key);
 		}
 	}
-	if (missing.length > 0) {
+	// Chunked like the entries insert: knex compiles a multi-row
+	// insert-with-onConflict into a compound SELECT, and SQLite rejects
+	// more than 500 compound terms per statement.
+	for (let index = 0; index < missing.length; index += ENTRY_INSERT_CHUNK_SIZE) {
+		const chunk = missing.slice(index, index + ENTRY_INSERT_CHUNK_SIZE);
 		await trx('header_value_refs')
-			.insert(missing.map(({ hash, value }) => ({ hash, value })))
+			.insert(chunk.map(({ hash, value }) => ({ hash, value })))
 			.onConflict(['hash', 'value'])
 			.ignore();
 		const inserted: { id: number; hash: Uint8Array; value: string }[] = await trx(
@@ -217,7 +228,7 @@ async function resolveValueIds(
 			.select('id', 'hash', 'value')
 			.whereIn(
 				'value',
-				missing.map((m) => m.value),
+				chunk.map((m) => m.value),
 			);
 		for (const row of inserted) {
 			cache.set(headerValueCacheKey(Buffer.from(row.hash), row.value), row.id);

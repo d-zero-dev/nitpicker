@@ -11,6 +11,7 @@ import { normalizeContentType } from '../../../../crawler/normalize-content-type
 import { computePageDenormalized } from '../../../meta/compute-page-denormalized.js';
 import { deriveFlatFromMeta } from '../../../meta/derive-flat-from-meta.js';
 import { deriveMetaExtras } from '../../../meta/derive-meta-extras.js';
+import { PAGE_META_COLUMN_MAPS } from '../../../page-meta-column-maps.js';
 import { upsertTextRefs } from '../../../populate-entity-tables/upsert-text-refs.js';
 import { DATA_URI_URL_REFS_LIMIT } from '../../../populate-ref-tables/data-uri-url-refs-limit.js';
 import { resolveContentItemId } from '../../_shared/resolve-content-item-id.js';
@@ -18,39 +19,6 @@ import { upsertContentTypeRef } from '../../_shared/upsert-content-type-ref.js';
 import { upsertJsonRef } from '../../_shared/upsert-json-ref.js';
 import { upsertResponseHeaders } from '../../_shared/upsert-response-headers.js';
 import { upsertUrlRef } from '../../_shared/upsert-url-ref.js';
-
-/**
- * Text-shaped flat meta columns mapped 1:1 to `<name>_text_id` FKs on
- * `page_meta`. Mirrors the mapping used when migrating an existing
- * archive (`populate-entity-tables/populate-page-meta.ts`) so live and
- * migrated rows agree column-for-column.
- */
-const TEXT_COLUMN_MAP: readonly { source: keyof FlatPageMetaColumns; target: string }[] =
-	[
-		{ source: 'title', target: 'title_text_id' },
-		{ source: 'description', target: 'description_text_id' },
-		{ source: 'keywords', target: 'keywords_text_id' },
-		{ source: 'robots_raw', target: 'robots_raw_text_id' },
-		{ source: 'og_title', target: 'og_title_text_id' },
-		{ source: 'og_description', target: 'og_description_text_id' },
-		{ source: 'twitter_title', target: 'twitter_title_text_id' },
-		{ source: 'twitter_description', target: 'twitter_description_text_id' },
-	];
-
-/**
- * URL-shaped flat meta columns mapped 1:1 to `<name>_url_id` FKs on
- * `page_meta`.
- */
-const URL_COLUMN_MAP: readonly { source: keyof FlatPageMetaColumns; target: string }[] = [
-	{ source: 'canonical', target: 'canonical_url_id' },
-	{ source: 'amphtml', target: 'amphtml_url_id' },
-	{ source: 'manifest', target: 'manifest_url_id' },
-	{ source: 'icon_href', target: 'icon_url_id' },
-	{ source: 'appleTouchIcon_href', target: 'apple_touch_icon_url_id' },
-	{ source: 'og_url', target: 'og_url_id' },
-	{ source: 'og_image', target: 'og_image_url_id' },
-	{ source: 'twitter_image', target: 'twitter_image_url_id' },
-];
 
 /**
  * Upserts page data into `content_items` + `page_meta` (inserts the
@@ -197,7 +165,7 @@ async function upsertPageMeta(
 	extras: Record<string, unknown>,
 ): Promise<void> {
 	const texts = new Set<string>();
-	for (const { source } of TEXT_COLUMN_MAP) {
+	for (const { source } of PAGE_META_COLUMN_MAPS.text) {
 		const value = flat[source];
 		if (typeof value === 'string' && value !== '') {
 			texts.add(value);
@@ -244,12 +212,12 @@ async function upsertPageMeta(
 		jsonld_count: denorm.jsonld_count,
 		tags_providers_csv: denorm.tags_providers_csv,
 	};
-	for (const { source, target } of TEXT_COLUMN_MAP) {
+	for (const { source, target } of PAGE_META_COLUMN_MAPS.text) {
 		const value = flat[source];
 		row[target] =
 			typeof value === 'string' && value !== '' ? (textIds.get(value) ?? null) : null;
 	}
-	for (const { source, target } of URL_COLUMN_MAP) {
+	for (const { source, target } of PAGE_META_COLUMN_MAPS.url) {
 		const value = flat[source];
 		if (typeof value !== 'string' || value === '' || isLargeDataUri(value)) {
 			// `page_meta` has no `*_blob_id` companion columns, so a large

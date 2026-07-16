@@ -1,5 +1,6 @@
 import type { Knex } from 'knex';
 
+import { PAGE_META_COLUMN_MAPS } from '../page-meta-column-maps.js';
 import { DATA_URI_URL_REFS_LIMIT } from '../populate-ref-tables/data-uri-url-refs-limit.js';
 
 import { resolveJsonRefs } from './resolve-json-refs.js';
@@ -21,37 +22,6 @@ const READ_CHUNK_SIZE = 400;
  * 9 400 params — safely under SQLite's default variable limit.
  */
 const INSERT_CHUNK_SIZE = 200;
-
-/**
- * Text-shaped columns on `pages` mapped 1:1 to `<name>_text_id` FKs on
- * `page_meta`. `robots_raw` is grouped here despite the different suffix
- * — it maps to `robots_raw_text_id`, still a `text_refs` FK.
- */
-const TEXT_COLUMN_MAP: readonly { source: string; target: string }[] = [
-	{ source: 'title', target: 'title_text_id' },
-	{ source: 'description', target: 'description_text_id' },
-	{ source: 'keywords', target: 'keywords_text_id' },
-	{ source: 'robots_raw', target: 'robots_raw_text_id' },
-	{ source: 'og_title', target: 'og_title_text_id' },
-	{ source: 'og_description', target: 'og_description_text_id' },
-	{ source: 'twitter_title', target: 'twitter_title_text_id' },
-	{ source: 'twitter_description', target: 'twitter_description_text_id' },
-];
-
-/**
- * URL-shaped columns on `pages` mapped 1:1 to `<name>_url_id` FKs on
- * `page_meta`.
- */
-const URL_COLUMN_MAP: readonly { source: string; target: string }[] = [
-	{ source: 'canonical', target: 'canonical_url_id' },
-	{ source: 'amphtml', target: 'amphtml_url_id' },
-	{ source: 'manifest', target: 'manifest_url_id' },
-	{ source: 'icon_href', target: 'icon_url_id' },
-	{ source: 'appleTouchIcon_href', target: 'apple_touch_icon_url_id' },
-	{ source: 'og_url', target: 'og_url_id' },
-	{ source: 'og_image', target: 'og_image_url_id' },
-	{ source: 'twitter_image', target: 'twitter_image_url_id' },
-];
 
 /**
  * Populates `page_meta` from `pages WHERE scraped = 1` (issue #193).
@@ -81,8 +51,8 @@ const URL_COLUMN_MAP: readonly { source: string; target: string }[] = [
  * });
  */
 export async function populatePageMeta(trx: Knex): Promise<void> {
-	const textColumns = TEXT_COLUMN_MAP.map((entry) => entry.source);
-	const urlColumns = URL_COLUMN_MAP.map((entry) => entry.source);
+	const textColumns = PAGE_META_COLUMN_MAPS.text.map((entry) => entry.source);
+	const urlColumns = PAGE_META_COLUMN_MAPS.url.map((entry) => entry.source);
 	const plainColumns = [
 		'id',
 		'lang',
@@ -196,10 +166,10 @@ export async function populatePageMeta(trx: Knex): Promise<void> {
 				tags_providers_csv: row.tags_providers_csv ?? null,
 				meta_extras_json_id: resolveOptionalJsonId(row.meta_extras, jsonIds, rowId),
 			};
-			for (const { source, target } of TEXT_COLUMN_MAP) {
+			for (const { source, target } of PAGE_META_COLUMN_MAPS.text) {
 				insert[target] = resolveOptionalTextId(row[source], textIds, rowId, source);
 			}
-			for (const { source, target } of URL_COLUMN_MAP) {
+			for (const { source, target } of PAGE_META_COLUMN_MAPS.url) {
 				insert[target] = resolveOptionalUrlId(row[source], urlIds, rowId, source);
 			}
 			return insert;

@@ -24,7 +24,7 @@ describe('deriveLineageFromParent', () => {
 	it('returns the `crawled` fallback when the parent is `crawled` (anchor / redirect call sites)', () => {
 		// Anchor lineage and redirect chain intermediates both pass
 		// `'crawled'` as fallback so the crawled-wins downgrade inside
-		// `#getIdByUrl` fires on an existing `'inventory-*'` row.
+		// `resolveContentItemId` fires on an existing `'inventory-*'` row.
 		expect(deriveLineageFromParent('crawled', 'crawled')).toBe('crawled');
 	});
 

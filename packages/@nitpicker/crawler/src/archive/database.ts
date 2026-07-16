@@ -42,7 +42,6 @@ import { destroy as destroyOp } from './db-ops/lifecycle/destroy.js';
 import { init as initOp } from './db-ops/lifecycle/init.js';
 import { getJsonLdOfPage as getJsonLdOfPageOp } from './db-ops/meta/get-jsonld-of-page.js';
 import { getTagsOfPage as getTagsOfPageOp } from './db-ops/meta/get-tags-of-page.js';
-import { addOrderField as addOrderFieldOp } from './db-ops/pages/order/add-order-field.js';
 import { setUrlOrder as setUrlOrderOp } from './db-ops/pages/order/set-url-order.js';
 import { getCrawlingState as getCrawlingStateOp } from './db-ops/pages/read/get-crawling-state.js';
 import { getExistingPageUrls as getExistingPageUrlsOp } from './db-ops/pages/read/get-existing-page-urls.js';
@@ -126,15 +125,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		});
 	}
 
-	/**
-	 * Adds the `order` column to the `pages` table for URL sort ordering.
-	 * Delegates to {@link addOrderFieldOp}.
-	 * @deprecated Since v0.1.x. The column is now created during table initialization.
-	 * @returns The result of the schema alteration, or void if the column already exists.
-	 */
-	async addOrderField() {
-		return await addOrderFieldOp(this.#instance);
-	}
 	/**
 	 * Forces a WAL checkpoint, writing all pending WAL data back to the main
 	 * database file. Delegates to {@link checkpointOp}.
