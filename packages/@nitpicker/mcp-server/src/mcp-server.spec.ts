@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createServer } from './mcp-server.js';
@@ -218,7 +218,6 @@ describe('createServer', () => {
 			src: 'https://example.com/style.css',
 		});
 
-		await populateMigrationTables(archive);
 		await archive.write();
 		await archive.close();
 
