@@ -4,7 +4,7 @@ import type { Knex } from 'knex';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { computeResourceInsertRows } from './compute-resource-rows.js';
@@ -198,7 +198,6 @@ describe('computeResourceInsertRows', () => {
 			cdn: false,
 			headers: {},
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

@@ -151,3 +151,19 @@ export interface DomPathResult {
 	/** Which branch produced the string. */
 	case: DomPathDerivationCase;
 }
+
+/**
+ * One `<img>` observed in a rendered / parsed document, in document
+ * order: its `outerHTML` (the matching key against the crawler's stored
+ * `sourceCode`) and its pre-derived `dom_path` string. Produced either
+ * by a jsdom walk over an archived HTML snapshot (migration script) or
+ * by an in-browser walk over the live page (crawler write path) — both
+ * feed {@link ./match-images-to-dom-paths.ts}, which is DOM-free and
+ * only compares these strings.
+ */
+export interface DomPathCandidate {
+	/** The element's `outerHTML`, verbatim. */
+	outerHTML: string;
+	/** The element's derived `dom_path` (see {@link ./derive-dom-path.ts}). */
+	path: string;
+}

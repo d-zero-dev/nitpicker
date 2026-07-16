@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { Archive, populateMigrationTables } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { excludeSkippedPages } from './exclude-skipped-pages.js';
@@ -40,8 +40,8 @@ function baseConfig() {
 
 /**
  * Runs `excludeSkippedPages` against the 0.13 `content_items` table (using
- * the `is_skipped` snake_case column) after seeding legacy `pages` rows and
- * populating the migration tables.
+ * the `is_skipped` snake_case column) after seeding `content_items` rows
+ * directly.
  * @param knex - Archive Knex instance.
  * @returns The URLs surviving the exclusion predicate, in stable order.
  */
@@ -54,6 +54,33 @@ async function urlsSurvivingExclusion(
 		.select('ur.url as url')
 		.orderBy('ur.url')) as { url: string }[];
 	return rows.map((r) => r.url);
+}
+
+/**
+ * Directly inserts a `content_items` row (via `url_refs`) for this spec's
+ * fixtures.
+ * @param knex - Archive Knex instance.
+ * @param row - The page fields to insert.
+ * @param row.url
+ * @param row.isSkipped
+ */
+async function insertPage(
+	knex: ReturnType<InstanceType<typeof Archive>['getKnex']>,
+	row: { url: string; isSkipped: number | null },
+): Promise<void> {
+	const [urlRef] = await knex('url_refs').insert({ url: row.url }).returning('id');
+	await knex('content_items').insert({
+		url_id: urlRef.id,
+		scraped: 1,
+		is_target: 1,
+		is_external: 0,
+		is_skipped: row.isSkipped,
+		// A scraped=1 row always carries crawl timestamps in real archives
+		// (insert-page.ts COALESCEs first_crawled_at on first scrape) — the
+		// fixture matches that shape so it never exercises impossible states.
+		first_crawled_at: 1_700_000_000_000,
+		last_crawled_at: 1_700_000_000_000,
+	});
 }
 
 describe('excludeSkippedPages', () => {
@@ -78,33 +105,8 @@ describe('excludeSkippedPages', () => {
 		await archive.setConfig(baseConfig());
 		const knex = archive.getKnex();
 
-		await knex('pages').insert([
-			{
-				url: 'https://example.com/scraped',
-				scraped: 1,
-				isTarget: 1,
-				isExternal: 0,
-				status: 200,
-				statusText: 'OK',
-				contentType: 'text/html',
-				contentLength: 100,
-				responseHeaders: '{}',
-				isSkipped: 0,
-			},
-			{
-				url: 'https://example.com/skipped',
-				scraped: 1,
-				isTarget: 1,
-				isExternal: 0,
-				status: null,
-				statusText: null,
-				contentType: null,
-				contentLength: null,
-				responseHeaders: '{}',
-				isSkipped: 1,
-			},
-		]);
-		await populateMigrationTables(archive);
+		await insertPage(knex, { url: 'https://example.com/scraped', isSkipped: 0 });
+		await insertPage(knex, { url: 'https://example.com/skipped', isSkipped: 1 });
 
 		expect(await urlsSurvivingExclusion(knex)).toEqual(['https://example.com/scraped']);
 	});
@@ -124,41 +126,8 @@ describe('excludeSkippedPages', () => {
 		await archive.setConfig(baseConfig());
 		const knex = archive.getKnex();
 
-		await knex('pages').insert([
-			{
-				url: 'https://example.com/legacy',
-				scraped: 1,
-				isTarget: 1,
-				isExternal: 0,
-				status: 200,
-				statusText: 'OK',
-				contentType: 'text/html',
-				contentLength: 100,
-				responseHeaders: '{}',
-				isSkipped: null,
-			},
-			{
-				url: 'https://example.com/skipped',
-				scraped: 1,
-				isTarget: 1,
-				isExternal: 0,
-				status: null,
-				statusText: null,
-				contentType: null,
-				contentLength: null,
-				responseHeaders: '{}',
-				isSkipped: 1,
-			},
-		]);
-		await populateMigrationTables(archive);
-		// Simulate a pre-flag archive by nulling the newly-populated
-		// `content_items.is_skipped` value for the legacy row.
-		await knex('content_items as ci')
-			.update({ is_skipped: null })
-			.whereIn(
-				'ci.url_id',
-				knex('url_refs').select('id').where('url', 'https://example.com/legacy'),
-			);
+		await insertPage(knex, { url: 'https://example.com/legacy', isSkipped: null });
+		await insertPage(knex, { url: 'https://example.com/skipped', isSkipped: 1 });
 
 		expect(await urlsSurvivingExclusion(knex)).toEqual(['https://example.com/legacy']);
 	});
@@ -173,33 +142,8 @@ describe('excludeSkippedPages', () => {
 		await archive.setConfig(baseConfig());
 		const knex = archive.getKnex();
 
-		await knex('pages').insert([
-			{
-				url: 'https://example.com/skipped-a',
-				scraped: 1,
-				isTarget: 1,
-				isExternal: 0,
-				status: null,
-				statusText: null,
-				contentType: null,
-				contentLength: null,
-				responseHeaders: '{}',
-				isSkipped: 1,
-			},
-			{
-				url: 'https://example.com/skipped-b',
-				scraped: 1,
-				isTarget: 1,
-				isExternal: 0,
-				status: null,
-				statusText: null,
-				contentType: null,
-				contentLength: null,
-				responseHeaders: '{}',
-				isSkipped: 1,
-			},
-		]);
-		await populateMigrationTables(archive);
+		await insertPage(knex, { url: 'https://example.com/skipped-a', isSkipped: 1 });
+		await insertPage(knex, { url: 'https://example.com/skipped-b', isSkipped: 1 });
 
 		expect(await urlsSurvivingExclusion(knex)).toEqual([]);
 	});

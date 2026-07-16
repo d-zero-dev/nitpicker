@@ -2,7 +2,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive, populateMigrationTables } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 
 const dirname = import.meta.dirname;
 const FIXTURE_PATH = path.resolve(dirname, '.fixture.nitpicker');
@@ -190,10 +190,6 @@ await archive.setPage({
 	isSkipped: false,
 });
 
-// Populate the 0.13 entity tables so the E2E fixture is readable by the
-// entity-table reader paths (the crawler's write path still targets the
-// legacy tables; moving it to the new entities is tracked by #196).
-await populateMigrationTables(archive);
 await archive.write();
 await archive.close();
 // eslint-disable-next-line no-console

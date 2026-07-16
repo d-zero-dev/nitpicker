@@ -4,7 +4,7 @@ import type { Knex } from 'knex';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
@@ -30,7 +30,7 @@ async function collectAnchorFactRows(
 	await trx.raw(`
 		INSERT INTO viewer_url_refs (id, url)
 		SELECT row_number() OVER (ORDER BY url) AS id, url
-		FROM (SELECT DISTINCT url FROM pages)
+		FROM (SELECT DISTINCT url FROM url_refs)
 		ORDER BY url
 	`);
 	const refRows: { id: number; url: string }[] = await trx('viewer_url_refs')
@@ -256,7 +256,6 @@ describe('computeAnchorFactRows', () => {
 			imageList: [],
 			isSkipped: false,
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -425,7 +424,6 @@ describe('computeAnchorFactRows — redirect resolution', () => {
 			imageList: [],
 			isSkipped: false,
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -559,7 +557,6 @@ describe('computeAnchorFactRows — redirect resolution to an external destinati
 			imageList: [],
 			isSkipped: false,
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -674,7 +671,6 @@ describe('computeAnchorFactRows — chunking', () => {
 				isSkipped: false,
 			});
 		}
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

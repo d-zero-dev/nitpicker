@@ -4,7 +4,7 @@ import type { Knex } from 'knex';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildPageUrlRankMap } from './build-page-url-rank-map.js';
@@ -128,7 +128,6 @@ describe('computeImageInsertRows', () => {
 			],
 			isSkipped: false,
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -141,7 +140,11 @@ describe('computeImageInsertRows', () => {
 
 	it('flags missing_alt for a null or empty alt attribute', async () => {
 		const knex = archive.getKnex();
-		const rankById = buildPageUrlRankMap(await knex('pages').select('id', 'url'));
+		const rankById = buildPageUrlRankMap(
+			await knex('content_items as ci')
+				.join('url_refs as ur', 'ci.url_id', 'ur.id')
+				.select('ci.id as id', 'ur.url as url'),
+		);
 		const rows = await knex.transaction((trx) => collectImageInsertRows(trx, rankById));
 		const a = rows.find((r) => r.width === 100)!;
 		const b = rows.find((r) => r.width === 0)!;
@@ -151,7 +154,11 @@ describe('computeImageInsertRows', () => {
 
 	it('flags missing_dimensions when width or height is 0', async () => {
 		const knex = archive.getKnex();
-		const rankById = buildPageUrlRankMap(await knex('pages').select('id', 'url'));
+		const rankById = buildPageUrlRankMap(
+			await knex('content_items as ci')
+				.join('url_refs as ur', 'ci.url_id', 'ur.id')
+				.select('ci.id as id', 'ur.url as url'),
+		);
 		const rows = await knex.transaction((trx) => collectImageInsertRows(trx, rankById));
 		const a = rows.find((r) => r.width === 100)!;
 		const b = rows.find((r) => r.width === 0)!;
@@ -161,7 +168,11 @@ describe('computeImageInsertRows', () => {
 
 	it('coerces isLazy to 0/1, treating a falsy source value as 0', async () => {
 		const knex = archive.getKnex();
-		const rankById = buildPageUrlRankMap(await knex('pages').select('id', 'url'));
+		const rankById = buildPageUrlRankMap(
+			await knex('content_items as ci')
+				.join('url_refs as ur', 'ci.url_id', 'ur.id')
+				.select('ci.id as id', 'ur.url as url'),
+		);
 		const rows = await knex.transaction((trx) => collectImageInsertRows(trx, rankById));
 		const a = rows.find((r) => r.width === 100)!;
 		const b = rows.find((r) => r.width === 0)!;
@@ -171,7 +182,11 @@ describe('computeImageInsertRows', () => {
 
 	it('copies natural_width/natural_height verbatim', async () => {
 		const knex = archive.getKnex();
-		const rankById = buildPageUrlRankMap(await knex('pages').select('id', 'url'));
+		const rankById = buildPageUrlRankMap(
+			await knex('content_items as ci')
+				.join('url_refs as ur', 'ci.url_id', 'ur.id')
+				.select('ci.id as id', 'ur.url as url'),
+		);
 		const rows = await knex.transaction((trx) => collectImageInsertRows(trx, rankById));
 		const b = rows.find((r) => r.width === 0)!;
 		expect(b.natural_width).toBe(50);
@@ -180,10 +195,9 @@ describe('computeImageInsertRows', () => {
 
 	it('applies the resolved page_url_rank from the supplied map', async () => {
 		const knex = archive.getKnex();
-		const pageRows: { id: number; url: string }[] = await knex('pages').select(
-			'id',
-			'url',
-		);
+		const pageRows: { id: number; url: string }[] = await knex('content_items as ci')
+			.join('url_refs as ur', 'ci.url_id', 'ur.id')
+			.select('ci.id as id', 'ur.url as url');
 		const rankById = buildPageUrlRankMap(pageRows);
 		const rows = await knex.transaction((trx) => collectImageInsertRows(trx, rankById));
 		const expectedRank = rankById.get(pageRows[0]!.id);
@@ -198,14 +212,22 @@ describe('computeImageInsertRows', () => {
 
 	it('produces one row per images row', async () => {
 		const knex = archive.getKnex();
-		const rankById = buildPageUrlRankMap(await knex('pages').select('id', 'url'));
+		const rankById = buildPageUrlRankMap(
+			await knex('content_items as ci')
+				.join('url_refs as ur', 'ci.url_id', 'ur.id')
+				.select('ci.id as id', 'ur.url as url'),
+		);
 		const rows = await knex.transaction((trx) => collectImageInsertRows(trx, rankById));
 		expect(rows).toHaveLength(2);
 	});
 
 	it('reads across multiple chunkSize-bounded chunks without losing or duplicating rows', async () => {
 		const knex = archive.getKnex();
-		const rankById = buildPageUrlRankMap(await knex('pages').select('id', 'url'));
+		const rankById = buildPageUrlRankMap(
+			await knex('content_items as ci')
+				.join('url_refs as ur', 'ci.url_id', 'ur.id')
+				.select('ci.id as id', 'ur.url as url'),
+		);
 		const baseline = await knex.transaction((trx) =>
 			collectImageInsertRows(trx, rankById),
 		);

@@ -295,10 +295,10 @@ describe('snapshot 付与: 非HTML / 空html にスナップショットを作�
 	});
 
 	/**
-	 * Looks up `page_html_ref` for the given URL via a join on `pages`.
-	 * Returns the ref row (with hash buffer) or `undefined` when no body
-	 * is stored for that URL — the data-layer equivalent of "snapshot
-	 * absent" in the pre-#75 file-backed world.
+	 * Looks up `page_html_ref` for the given URL via a join on
+	 * `content_items` + `url_refs`. Returns the ref row (with hash buffer)
+	 * or `undefined` when no body is stored for that URL — the data-layer
+	 * equivalent of "snapshot absent" in the pre-#75 file-backed world.
 	 * @param db
 	 * @param url
 	 */
@@ -306,9 +306,10 @@ describe('snapshot 付与: 非HTML / 空html にスナップショットを作�
 		await db
 			.getKnex()
 			.from('page_html_ref')
-			.join('pages', 'page_html_ref.page_id', '=', 'pages.id')
+			.join('content_items', 'page_html_ref.page_id', '=', 'content_items.id')
+			.join('url_refs', 'content_items.url_id', '=', 'url_refs.id')
 			.select('page_html_ref.hash as hash')
-			.where('pages.url', url)
+			.where('url_refs.url', url)
 			.first();
 
 	it('Non-HTML (application/pdf with empty html) does not write a page_html_ref row', async () => {
@@ -446,9 +447,15 @@ describe('content-type の正規化（#72）', () => {
 
 			const [row] = await db
 				.getKnex()
-				.from('pages')
-				.select('contentType')
-				.where('url', url);
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.join(
+					'content_type_refs',
+					'content_items.content_type_id',
+					'content_type_refs.id',
+				)
+				.select('content_type_refs.raw as contentType')
+				.where('url_refs.url', url);
 			expect(row.contentType).toBe('text/html');
 
 			const pages = await db.getPages('page');
@@ -523,17 +530,22 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			await db.updatePage(makeData(), true, true);
 
 			const knex = db.getKnex();
-			const [page] = await knex.from('pages').select('id').where('url', pageUrl);
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id')
+				.where('url_refs.url', pageUrl);
 			const [anchorRow] = await knex
-				.from('anchors')
-				.where('pageId', page.id)
+				.from('anchor_edges')
+				.where('page_id', page.id)
 				.count({ c: '*' });
 			const [imageRow] = await knex
-				.from('images')
-				.where('pageId', page.id)
+				.from('image_items')
+				.where('page_id', page.id)
 				.count({ c: '*' });
 
 			// 再スクレイプは「置き換え」なので、2 セット積み増さず 1 セットだけが残る。
+			// target-a / target-b は別 href なので anchor_edges は 2 行のまま。
 			expect(Number(anchorRow.c)).toBe(2);
 			expect(Number(imageRow.c)).toBe(1);
 		} finally {
@@ -576,22 +588,89 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			await db.updatePage(makeData(['target-a', 'target-c']), true, true);
 
 			const knex = db.getKnex();
-			const [page] = await knex.from('pages').select('id').where('url', pageUrl);
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id')
+				.where('url_refs.url', pageUrl);
 			const anchorRows = await knex
-				.from('anchors')
-				.where('pageId', page.id)
-				.select('hrefId');
+				.from('anchor_edges')
+				.where('page_id', page.id)
+				.select('href_page_id as hrefId');
 			const targetPages = await knex
-				.from('pages')
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
 				.whereIn(
-					'id',
+					'content_items.id',
 					anchorRows.map((r) => r.hrefId),
 				)
-				.select('url');
+				.select('url_refs.url as url');
 			const hrefs = targetPages.map((p) => p.url).toSorted();
 
 			// 古い target-b は消え、最新の {target-a, target-c} だけが残る。
 			expect(hrefs).toEqual(['http://localhost/target-a', 'http://localhost/target-c']);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('同一宛先へテキストの異なる複数アンカーは first-wins で 1 行に集約される', async () => {
+		// anchor_edges は UNIQUE(page_id, href_page_id) で集約し、
+		// textContent / hash は最初に観測されたインスタンスの値だけを保持
+		// する（2 件目以降は count のインクリメントのみ）。この first-wins
+		// が読み取り（getAnchorsOnPage）まで一貫して届くことをピン留めする。
+		const dbPath = path.resolve(workingDir, 'first-wins.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const pageUrl = 'http://localhost/first-wins-source';
+		try {
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [] as string[],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'First wins source' },
+					anchorList: [
+						{
+							href: parseUrl('http://localhost/dest')!,
+							textContent: 'first label',
+							isExternal: false,
+						},
+						{
+							href: parseUrl('http://localhost/dest')!,
+							textContent: 'second label',
+							isExternal: false,
+						},
+					],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				true,
+				true,
+			);
+
+			const knex = db.getKnex();
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id')
+				.where('url_refs.url', pageUrl);
+			const edges = await knex
+				.from('anchor_edges')
+				.where('page_id', page.id)
+				.select('count');
+			expect(edges).toHaveLength(1);
+			expect(edges[0]!.count).toBe(2);
+
+			const anchors = await db.getAnchorsOnPage(page.id);
+			expect(anchors).toHaveLength(1);
+			expect(anchors[0]!.textContent).toBe('first label');
 		} finally {
 			await db.destroy();
 			await removeIfExists(dbPath);
@@ -650,14 +729,18 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			await db.updatePage({ ...full, anchorList: [], imageList: [] }, true, true);
 
 			const knex = db.getKnex();
-			const [page] = await knex.from('pages').select('id').where('url', pageUrl);
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id')
+				.where('url_refs.url', pageUrl);
 			const [anchorRow] = await knex
-				.from('anchors')
-				.where('pageId', page.id)
+				.from('anchor_edges')
+				.where('page_id', page.id)
 				.count({ c: '*' });
 			const [imageRow] = await knex
-				.from('images')
-				.where('pageId', page.id)
+				.from('image_items')
+				.where('page_id', page.id)
 				.count({ c: '*' });
 
 			// 空の再スクレイプでは置き換えず据え置く（#70 修正のデータ損失リグレッション回帰）。
@@ -703,14 +786,18 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			);
 
 			const knex = db.getKnex();
-			const [oldPage] = await knex.from('pages').select('id').where('url', oldUrl);
-			const [staleTarget] = await knex
-				.from('pages')
-				.select('id')
-				.where('url', 'http://localhost/stale-x');
+			const pageIdByUrl = (url: string) =>
+				knex
+					.from('content_items')
+					.join('url_refs', 'content_items.url_id', 'url_refs.id')
+					.select('content_items.id as id')
+					.where('url_refs.url', url)
+					.first();
+			const oldPage = await pageIdByUrl(oldUrl);
+			const staleTarget = await pageIdByUrl('http://localhost/stale-x');
 			const [before] = await knex
-				.from('anchors')
-				.where('pageId', oldPage.id)
+				.from('anchor_edges')
+				.where('page_id', oldPage.id)
 				.count({ c: '*' });
 			expect(Number(before.c)).toBe(1);
 			// 症状側の確認: この時点では /old-content は /stale-x の正当な被リンク元。
@@ -746,8 +833,8 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 
 			// /old-content はリダイレクト元になったので旧アンカー(stale-x)は消える。
 			const [after] = await knex
-				.from('anchors')
-				.where('pageId', oldPage.id)
+				.from('anchor_edges')
+				.where('page_id', oldPage.id)
 				.count({ c: '*' });
 			expect(Number(after.c)).toBe(0);
 			// 症状側の回帰: /stale-x の被リンクから幽霊 /old-content が消えていること
@@ -854,7 +941,14 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			);
 
 			const knex = db.getKnex();
-			const [dest] = await knex.from('pages').select('id').where('url', destUrl);
+			const pageIdByUrl = (url: string) =>
+				knex
+					.from('content_items')
+					.join('url_refs', 'content_items.url_id', 'url_refs.id')
+					.select('content_items.id as id')
+					.where('url_refs.url', url)
+					.first();
+			const dest = await pageIdByUrl(destUrl);
 
 			// 両リンクが宛先の被リンクに合算される（http/https で分裂しない）。
 			const refs = await db.getReferrersOfPage(dest.id);
@@ -871,7 +965,7 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			expect(direct!.through).toBe(destUrl);
 
 			// 元(http)ページ側の被リンクは空（宛先に付け替わるため二重計上しない）。
-			const [src] = await knex.from('pages').select('id').where('url', srcUrl);
+			const src = await pageIdByUrl(srcUrl);
 			const srcRefs = await db.getReferrersOfPage(src.id);
 			expect(srcRefs).toHaveLength(0);
 		} finally {
@@ -880,10 +974,11 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 		}
 	});
 
-	it('ページ内に正当な同一リンク（ヘッダー/フッター重複）がある場合、再スクレイプでも件数を保持する', async () => {
+	it('ページ内に正当な同一リンク（ヘッダー/フッター重複）がある場合、再スクレイプでも count に集約される', async () => {
 		// 実アーカイブの「重複」の大半は、全ページのヘッダー/フッターに同じリンクが
-		// 並ぶ正当なページ内重複。delete-then-insert は anchorList をそのまま入れ直す
-		// ので、この正当な重複を潰さず（tuple-dedup しない）、かつ再スクレイプで増やさない。
+		// 並ぶ正当なページ内重複。anchor_edges は (page_id, href_page_id) で dedup し、
+		// 重複回数は count 列に集約する（行を複製しない）。再スクレイプでも
+		// count は「観測された重複回数」を表し続け、積み増されない。
 		const dbPath = path.resolve(workingDir, 'rescrape-intrapage-dup.sqlite');
 		const db = await Database.connect({ filename: dbPath });
 		const pageUrl = 'http://localhost/intra-dup-source';
@@ -929,12 +1024,24 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			await db.updatePage(makeData(), true, true);
 
 			const knex = db.getKnex();
-			const [page] = await knex.from('pages').select('id').where('url', pageUrl);
-			const [row] = await knex.from('anchors').where('pageId', page.id).count({ c: '*' });
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id')
+				.where('url_refs.url', pageUrl);
+			const edges = await knex
+				.from('anchor_edges')
+				.join('content_items as href', 'anchor_edges.href_page_id', 'href.id')
+				.join('url_refs as href_url', 'href.url_id', 'href_url.id')
+				.where('anchor_edges.page_id', page.id)
+				.select('href_url.url as href', 'anchor_edges.count as count');
 
-			// 正当なページ内重複(2) + 別リンク(1) = 3 を保持。
-			// tuple-dedup なら 2 に減り、accumulation バグなら 6 に増える。
-			expect(Number(row.c)).toBe(3);
+			// 別 href(2件) を保持し、/ir の重複(2件)は count に集約される。
+			// tuple-dedup なら count が常に1になり、accumulation バグなら
+			// 再スクレイプごとに count が増え続ける。
+			expect(edges).toHaveLength(2);
+			expect(edges.find((e) => e.href === 'http://localhost/ir')?.count).toBe(2);
+			expect(edges.find((e) => e.href === 'http://localhost/other')?.count).toBe(1);
 		} finally {
 			await db.destroy();
 			await removeIfExists(dbPath);
@@ -979,10 +1086,14 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			await db.updatePage(makeData('http://localhost/old-3'), true, true);
 
 			const knex = db.getKnex();
-			const [destPage] = await knex.from('pages').select('id').where('url', dest);
+			const [destPage] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id')
+				.where('url_refs.url', dest);
 			const [row] = await knex
-				.from('anchors')
-				.where('pageId', destPage.id)
+				.from('anchor_edges')
+				.where('page_id', destPage.id)
 				.count({ c: '*' });
 
 			// 3 回集約しても D のアンカーは 1 セット(2)。accumulation すると 6 に膨張する。
@@ -1058,16 +1169,20 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 
 			const knex = db.getKnex();
 			const [destPage] = await knex
-				.from('pages')
-				.select('id', 'title')
-				.where('url', dest);
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.join('page_meta', 'page_meta.page_id', 'content_items.id')
+				.join('text_refs', 'text_refs.id', 'page_meta.title_text_id')
+				.select('content_items.id as id', 'text_refs.text as title')
+				.where('url_refs.url', dest);
 			const [sourcePage] = await knex
-				.from('pages')
-				.select('id', 'scraped', 'redirectDestId')
-				.where('url', source);
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id', 'scraped', 'redirect_dest_id as redirectDestId')
+				.where('url_refs.url', source);
 			const [anchorCount] = await knex
-				.from('anchors')
-				.where('pageId', destPage.id)
+				.from('anchor_edges')
+				.where('page_id', destPage.id)
 				.count({ c: '*' });
 
 			// 宛先の本文は HEAD の空データで潰されず、そのまま残る。
@@ -1100,25 +1215,30 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 		try {
 			await db.updatePage(makeDest(dest, 'Dest'), true, true);
 			const knex = db.getKnex();
-			await knex('pages').insert({
-				url: source,
+			const [urlRef] = await knex('url_refs').insert({ url: source }).returning('id');
+			await knex('content_items').insert({
+				url_id: urlRef.id,
 				scraped: 1,
-				isTarget: 1,
-				isExternal: 0,
+				is_target: 1,
+				is_external: 0,
 				status: -1,
-				statusText: 'UnknownError',
-				contentType: null,
-				contentLength: null,
-				responseHeaders: '{}',
-				isSkipped: 0,
+				status_text: 'UnknownError',
+				content_type_id: null,
+				content_length: null,
+				is_skipped: 0,
 			});
 
 			await db.recordRedirect(makeSource(source, dest));
 
 			const [sourcePage] = (await knex
-				.from('pages')
-				.select('status', 'statusText', 'redirectDestId')
-				.where('url', source)) as {
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'status',
+					'status_text as statusText',
+					'redirect_dest_id as redirectDestId',
+				)
+				.where('url_refs.url', source)) as {
 				status: number | null;
 				statusText: string | null;
 				redirectDestId: number | null;
@@ -1145,25 +1265,30 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 		try {
 			await db.updatePage(makeDest(dest, 'Dest'), true, true);
 			const knex = db.getKnex();
-			await knex('pages').insert({
-				url: source,
+			const [urlRef] = await knex('url_refs').insert({ url: source }).returning('id');
+			await knex('content_items').insert({
+				url_id: urlRef.id,
 				scraped: 1,
-				isTarget: 1,
-				isExternal: 0,
+				is_target: 1,
+				is_external: 0,
 				status: 302,
-				statusText: 'Found',
-				contentType: null,
-				contentLength: null,
-				responseHeaders: '{}',
-				isSkipped: 0,
+				status_text: 'Found',
+				content_type_id: null,
+				content_length: null,
+				is_skipped: 0,
 			});
 
 			await db.recordRedirect(makeSource(source, dest));
 
 			const [sourcePage] = (await knex
-				.from('pages')
-				.select('status', 'statusText', 'redirectDestId')
-				.where('url', source)) as {
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'status',
+					'status_text as statusText',
+					'redirect_dest_id as redirectDestId',
+				)
+				.where('url_refs.url', source)) as {
 				status: number | null;
 				statusText: string | null;
 				redirectDestId: number | null;
@@ -1178,7 +1303,7 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 	});
 
 	it('stamps a NULL-status placeholder row with 301 (redirect-only URL never directly scraped)', async () => {
-		// `#getIdByUrl` materialises a placeholder row when a URL is
+		// `resolveContentItemId` materialises a placeholder row when a URL is
 		// reached only as a redirect source — `status` is NULL on that
 		// row. recordRedirect should stamp it 301 so the row is visible
 		// as a redirect source on the Summary distribution.
@@ -1193,9 +1318,14 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 
 			const knex = db.getKnex();
 			const [sourcePage] = (await knex
-				.from('pages')
-				.select('status', 'statusText', 'redirectDestId')
-				.where('url', source)) as {
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'status',
+					'status_text as statusText',
+					'redirect_dest_id as redirectDestId',
+				)
+				.where('url_refs.url', source)) as {
 				status: number | null;
 				statusText: string | null;
 				redirectDestId: number | null;
@@ -1220,7 +1350,11 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 			await db.recordRedirect(makeSource(url, url));
 
 			const knex = db.getKnex();
-			const [page] = await knex.from('pages').select('redirectDestId').where('url', url);
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('redirect_dest_id as redirectDestId')
+				.where('url_refs.url', url);
 			expect(page.redirectDestId).toBeNull();
 		} finally {
 			await db.destroy();
@@ -1242,15 +1376,23 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 			});
 
 			const knex = db.getKnex();
-			const [destPage] = await knex.from('pages').select('id').where('url', dest);
-			const [start] = await knex
-				.from('pages')
-				.select('redirectDestId')
-				.where('url', 'http://localhost/start');
-			const [middle] = await knex
-				.from('pages')
-				.select('redirectDestId')
-				.where('url', 'http://localhost/middle');
+			const pageIdByUrl = (u: string) =>
+				knex
+					.from('content_items')
+					.join('url_refs', 'content_items.url_id', 'url_refs.id')
+					.select('content_items.id as id')
+					.where('url_refs.url', u)
+					.first();
+			const redirectDestIdByUrl = (u: string) =>
+				knex
+					.from('content_items')
+					.join('url_refs', 'content_items.url_id', 'url_refs.id')
+					.select('redirect_dest_id as redirectDestId')
+					.where('url_refs.url', u)
+					.first();
+			const destPage = await pageIdByUrl(dest);
+			const start = await redirectDestIdByUrl('http://localhost/start');
+			const middle = await redirectDestIdByUrl('http://localhost/middle');
 
 			expect(start.redirectDestId).toBe(destPage.id);
 			expect(middle.redirectDestId).toBe(destPage.id);
@@ -1272,10 +1414,14 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 			await db.updatePage(makeDest(source, 'Was content'), true, true);
 
 			const knex = db.getKnex();
-			const [sourcePage] = await knex.from('pages').select('id').where('url', source);
+			const [sourcePage] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id')
+				.where('url_refs.url', source);
 			const [before] = await knex
-				.from('anchors')
-				.where('pageId', sourcePage.id)
+				.from('anchor_edges')
+				.where('page_id', sourcePage.id)
 				.count({ c: '*' });
 			expect(Number(before.c)).toBe(2);
 
@@ -1283,8 +1429,8 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 			await db.recordRedirect(makeSource(source, dest));
 
 			const [after] = await knex
-				.from('anchors')
-				.where('pageId', sourcePage.id)
+				.from('anchor_edges')
+				.where('page_id', sourcePage.id)
 				.count({ c: '*' });
 			expect(Number(after.c)).toBe(0);
 		} finally {
@@ -1671,49 +1817,57 @@ describe('repromoteExternalPages', () => {
 		)!.id;
 
 		// 関連テーブルに直接 INSERT して repromote 対象 page と非対象 page の両方に
-		// anchors / images / resources-referrers の行があることを保証する
+		// anchor_edges / image_items / resource_ref_edges の行があることを保証する
 		const knex = db.getKnex();
-		await knex('anchors').insert([
-			{ pageId: blogId, hrefId: marketingId, hash: null, textContent: 'to marketing' },
-			{ pageId: marketingId, hrefId: blogId, hash: null, textContent: 'to blog' },
+		await knex('anchor_edges').insert([
+			{ page_id: blogId, href_page_id: marketingId, count: 1, first_hash: null },
+			{ page_id: marketingId, href_page_id: blogId, count: 1, first_hash: null },
 		]);
-		await knex('images').insert([
+		const [blogImgUrlRef] = await knex('url_refs')
+			.insert({ url: 'https://example.com/blog/img.png' })
+			.returning('id');
+		const [marketingImgUrlRef] = await knex('url_refs')
+			.insert({ url: 'https://example.com/marketing/img.png' })
+			.returning('id');
+		const [domPathText] = await knex('text_refs')
+			.insert({ hash: Buffer.from('dom-path-stub'), text: 'unknown/0' })
+			.returning('id');
+		await knex('image_items').insert([
 			{
-				pageId: blogId,
-				src: 'https://example.com/blog/img.png',
-				currentSrc: null,
-				alt: null,
+				page_id: blogId,
+				src_url_id: blogImgUrlRef.id,
 				width: 100,
 				height: 100,
-				naturalWidth: 100,
-				naturalHeight: 100,
-				isLazy: 0,
-				viewportWidth: 1024,
-				sourceCode: null,
+				natural_width: 100,
+				natural_height: 100,
+				is_lazy: 0,
+				viewport_width: 1024,
+				dom_path_text_id: domPathText.id,
 			},
 			{
-				pageId: marketingId,
-				src: 'https://example.com/marketing/img.png',
-				currentSrc: null,
-				alt: null,
+				page_id: marketingId,
+				src_url_id: marketingImgUrlRef.id,
 				width: 100,
 				height: 100,
-				naturalWidth: 100,
-				naturalHeight: 100,
-				isLazy: 0,
-				viewportWidth: 1024,
-				sourceCode: null,
+				natural_width: 100,
+				natural_height: 100,
+				is_lazy: 0,
+				viewport_width: 1024,
+				dom_path_text_id: domPathText.id,
 			},
 		]);
-		const [resourceId] = await knex('resources')
-			.insert({ url: 'https://cdn.example.com/x.css', isExternal: 1 })
+		const [cdnUrlRef] = await knex('url_refs')
+			.insert({ url: 'https://cdn.example.com/x.css' })
+			.returning('id');
+		const [resourceId] = await knex('resource_items')
+			.insert({ url_id: cdnUrlRef.id, is_external: 1 })
 			.returning('id');
 		const rid = Number(
 			typeof resourceId === 'object' ? (resourceId as { id: number }).id : resourceId,
 		);
-		await knex('resources-referrers').insert([
-			{ resourceId: rid, pageId: blogId },
-			{ resourceId: rid, pageId: marketingId },
+		await knex('resource_ref_edges').insert([
+			{ resource_id: rid, page_id: blogId, count: 1 },
+			{ resource_id: rid, page_id: marketingId, count: 1 },
 		]);
 
 		// scope: /blog/ 下のみ
@@ -1722,20 +1876,20 @@ describe('repromoteExternalPages', () => {
 		expect(promoted).toEqual(['https://example.com/blog/post-1']);
 
 		// repromote 対象 (blog) の関連行は全削除
-		const anchorsForBlog = await knex('anchors').where('pageId', blogId);
+		const anchorsForBlog = await knex('anchor_edges').where('page_id', blogId);
 		expect(anchorsForBlog).toEqual([]);
-		const imagesForBlog = await knex('images').where('pageId', blogId);
+		const imagesForBlog = await knex('image_items').where('page_id', blogId);
 		expect(imagesForBlog).toEqual([]);
-		const referrersForBlog = await knex('resources-referrers').where('pageId', blogId);
+		const referrersForBlog = await knex('resource_ref_edges').where('page_id', blogId);
 		expect(referrersForBlog).toEqual([]);
 
 		// 非対象 (marketing) の関連行はそのまま残る
-		const anchorsForMarketing = await knex('anchors').where('pageId', marketingId);
+		const anchorsForMarketing = await knex('anchor_edges').where('page_id', marketingId);
 		expect(anchorsForMarketing).toHaveLength(1);
-		const imagesForMarketing = await knex('images').where('pageId', marketingId);
+		const imagesForMarketing = await knex('image_items').where('page_id', marketingId);
 		expect(imagesForMarketing).toHaveLength(1);
-		const referrersForMarketing = await knex('resources-referrers').where(
-			'pageId',
+		const referrersForMarketing = await knex('resource_ref_edges').where(
+			'page_id',
 			marketingId,
 		);
 		expect(referrersForMarketing).toHaveLength(1);
@@ -1835,19 +1989,34 @@ describe('resetFailedPages', () => {
 		},
 	): Promise<number> {
 		const knex = db.getKnex();
-		const [inserted] = await knex('pages')
+		const [urlRef] = await knex('url_refs').insert({ url: row.url }).returning('id');
+		const contentType = row.contentType === undefined ? 'text/html' : row.contentType;
+		let contentTypeId: number | null = null;
+		if (contentType !== null) {
+			const [ctRef] = await knex('content_type_refs')
+				.insert({ raw: contentType, normalized: contentType, category: 'other' })
+				.onConflict('raw')
+				.merge({ raw: contentType })
+				.returning('id');
+			contentTypeId = ctRef.id;
+		}
+		const scraped = row.scraped ?? 1;
+		const [inserted] = await knex('content_items')
 			.insert({
-				url: row.url,
-				scraped: row.scraped ?? 1,
-				isTarget: row.isTarget ?? 1,
-				isExternal: row.isExternal ?? 0,
+				url_id: urlRef.id,
+				scraped,
+				is_target: row.isTarget ?? 1,
+				is_external: row.isExternal ?? 0,
 				status: row.status === undefined ? 200 : row.status,
-				statusText: 'OK',
-				contentType: row.contentType === undefined ? 'text/html' : row.contentType,
-				contentLength: 100,
-				responseHeaders: '{}',
-				isSkipped: row.isSkipped ?? 0,
-				redirectDestId: row.redirectDestId ?? null,
+				status_text: 'OK',
+				content_type_id: contentTypeId,
+				content_length: 100,
+				is_skipped: row.isSkipped ?? 0,
+				redirect_dest_id: row.redirectDestId ?? null,
+				// scraped=1 な行は実 writer では必ずタイムスタンプを持つ
+				// （insert-page.ts の COALESCE）— fixture も同じ形に揃える。
+				first_crawled_at: scraped ? 1_700_000_000_000 : null,
+				last_crawled_at: scraped ? 1_700_000_000_000 : null,
 			})
 			.returning('id');
 		const pageId = Number(
@@ -2002,47 +2171,55 @@ describe('resetFailedPages', () => {
 		const keepId = await insertPage(db, { url: 'https://example.com/keep', status: 200 });
 
 		const knex = db.getKnex();
-		await knex('anchors').insert([
-			{ pageId: failId, hrefId: keepId, hash: null, textContent: 'to keep' },
-			{ pageId: keepId, hrefId: failId, hash: null, textContent: 'to fail' },
+		await knex('anchor_edges').insert([
+			{ page_id: failId, href_page_id: keepId, count: 1, first_hash: null },
+			{ page_id: keepId, href_page_id: failId, count: 1, first_hash: null },
 		]);
-		await knex('images').insert([
+		const [failImgUrlRef] = await knex('url_refs')
+			.insert({ url: 'https://example.com/fail.png' })
+			.returning('id');
+		const [keepImgUrlRef] = await knex('url_refs')
+			.insert({ url: 'https://example.com/keep.png' })
+			.returning('id');
+		const [domPathText] = await knex('text_refs')
+			.insert({ hash: Buffer.from('dom-path-stub'), text: 'unknown/0' })
+			.returning('id');
+		await knex('image_items').insert([
 			{
-				pageId: failId,
-				src: 'https://example.com/fail.png',
-				currentSrc: null,
-				alt: null,
+				page_id: failId,
+				src_url_id: failImgUrlRef.id,
 				width: 1,
 				height: 1,
-				naturalWidth: 1,
-				naturalHeight: 1,
-				isLazy: 0,
-				viewportWidth: 1024,
-				sourceCode: null,
+				natural_width: 1,
+				natural_height: 1,
+				is_lazy: 0,
+				viewport_width: 1024,
+				dom_path_text_id: domPathText.id,
 			},
 			{
-				pageId: keepId,
-				src: 'https://example.com/keep.png',
-				currentSrc: null,
-				alt: null,
+				page_id: keepId,
+				src_url_id: keepImgUrlRef.id,
 				width: 1,
 				height: 1,
-				naturalWidth: 1,
-				naturalHeight: 1,
-				isLazy: 0,
-				viewportWidth: 1024,
-				sourceCode: null,
+				natural_width: 1,
+				natural_height: 1,
+				is_lazy: 0,
+				viewport_width: 1024,
+				dom_path_text_id: domPathText.id,
 			},
 		]);
-		const [resourceId] = await knex('resources')
-			.insert({ url: 'https://cdn.example.com/x.css', isExternal: 1 })
+		const [cdnUrlRef] = await knex('url_refs')
+			.insert({ url: 'https://cdn.example.com/x.css' })
+			.returning('id');
+		const [resourceId] = await knex('resource_items')
+			.insert({ url_id: cdnUrlRef.id, is_external: 1 })
 			.returning('id');
 		const rid = Number(
 			typeof resourceId === 'object' ? (resourceId as { id: number }).id : resourceId,
 		);
-		await knex('resources-referrers').insert([
-			{ resourceId: rid, pageId: failId },
-			{ resourceId: rid, pageId: keepId },
+		await knex('resource_ref_edges').insert([
+			{ resource_id: rid, page_id: failId, count: 1 },
+			{ resource_id: rid, page_id: keepId, count: 1 },
 		]);
 		await knex('page_errors').insert([
 			{ pageId: failId, phase: 'render', message: 'boom', createdAt: 1_700_000_000_000 },
@@ -2051,15 +2228,15 @@ describe('resetFailedPages', () => {
 
 		await db.resetFailedPages();
 
-		expect(await knex('anchors').where('pageId', failId)).toEqual([]);
-		expect(await knex('images').where('pageId', failId)).toEqual([]);
-		expect(await knex('resources-referrers').where('pageId', failId)).toEqual([]);
+		expect(await knex('anchor_edges').where('page_id', failId)).toEqual([]);
+		expect(await knex('image_items').where('page_id', failId)).toEqual([]);
+		expect(await knex('resource_ref_edges').where('page_id', failId)).toEqual([]);
 		expect(await knex('page_errors').where('pageId', failId)).toEqual([]);
 
 		// The non-failed page keeps all of its related rows.
-		expect(await knex('anchors').where('pageId', keepId)).toHaveLength(1);
-		expect(await knex('images').where('pageId', keepId)).toHaveLength(1);
-		expect(await knex('resources-referrers').where('pageId', keepId)).toHaveLength(1);
+		expect(await knex('anchor_edges').where('page_id', keepId)).toHaveLength(1);
+		expect(await knex('image_items').where('page_id', keepId)).toHaveLength(1);
+		expect(await knex('resource_ref_edges').where('page_id', keepId)).toHaveLength(1);
 		expect(await knex('page_errors').where('pageId', keepId)).toHaveLength(1);
 
 		await db.destroy();
@@ -2170,7 +2347,10 @@ describe('resetFailedPages', () => {
 			'https://waf.example.com/',
 			'https://closed.example.com/',
 		]) {
-			const row = await knex('pages').where('url', url).first();
+			const row = await knex('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.where('url_refs.url', url)
+				.first();
 			expect(row.scraped).toBe(1);
 			expect(row.status).toBe(-1);
 		}
@@ -2257,9 +2437,10 @@ describe('resetFailedPages', () => {
 
 		// Both permanent candidates are still `scraped = 1` with their
 		// original `status = -1`, NOT demoted to pending.
-		const remaining = await knex('pages')
-			.select('url', 'scraped', 'status')
+		const remaining = await knex('content_items')
+			.select('url_id', 'scraped', 'status')
 			.whereIn('id', [dnsId, tlsId]);
+		expect(remaining).toHaveLength(2);
 		expect(remaining.every((r) => r.scraped === 1 && r.status === -1)).toBe(true);
 
 		await db.destroy();
@@ -2537,7 +2718,7 @@ describe('getHtmlOfPageById', () => {
 				.first();
 			expect(before).toBeDefined();
 
-			await db.getKnex().from('pages').where('id', pageId).delete();
+			await db.getKnex().from('content_items').where('id', pageId).delete();
 
 			const after = await db
 				.getKnex()
@@ -2564,16 +2745,20 @@ describe('getHtmlOfPageById', () => {
 		try {
 			// Insert a page row directly (writing a real page_html_blob would
 			// satisfy the FK, defeating the point of this test).
-			await db.getKnex().from('pages').insert({
-				url: 'http://localhost/orphan',
+			const knex = db.getKnex();
+			const [urlRef] = await knex('url_refs')
+				.insert({ url: 'http://localhost/orphan' })
+				.returning('id');
+			await knex('content_items').insert({
+				url_id: urlRef.id,
 				scraped: 1,
-				isTarget: 1,
+				is_target: 1,
+				is_external: 0,
 			});
-			const [{ id: pageId }] = await db
-				.getKnex()
-				.from('pages')
-				.select('id')
-				.where('url', 'http://localhost/orphan');
+			const [{ id: pageId }] = await knex('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id')
+				.where('url_refs.url', 'http://localhost/orphan');
 			// page_html_ref → page_html_blobs has a FK; a missing-blob
 			// scenario is only reachable in real archives via a partial
 			// migration. Insert a referenced (zero-byte) blob then DELETE
@@ -2614,16 +2799,20 @@ describe('getHtmlOfPageById', () => {
 		rmSync(noneDbPath, { force: true });
 		const db = await Database.connect({ filename: noneDbPath });
 		try {
-			await db.getKnex().from('pages').insert({
-				url: 'http://localhost/none-codec',
+			const knex = db.getKnex();
+			const [urlRef] = await knex('url_refs')
+				.insert({ url: 'http://localhost/none-codec' })
+				.returning('id');
+			await knex('content_items').insert({
+				url_id: urlRef.id,
 				scraped: 1,
-				isTarget: 1,
+				is_target: 1,
+				is_external: 0,
 			});
-			const [{ id: pageId }] = await db
-				.getKnex()
-				.from('pages')
-				.select('id')
-				.where('url', 'http://localhost/none-codec');
+			const [{ id: pageId }] = await knex('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id')
+				.where('url_refs.url', 'http://localhost/none-codec');
 			const body = Buffer.from('<p>uncompressed body</p>', 'utf8');
 			const hash = Buffer.alloc(32, 2);
 			await db.getKnex().from('page_html_blobs').insert({
@@ -2643,29 +2832,14 @@ describe('getHtmlOfPageById', () => {
 	});
 });
 
-describe('addOrderField', () => {
+describe('DB_Page.order の再構築', () => {
 	const addOrderDbPath = path.resolve(workingDir, 'add-order-test.sqlite');
 
 	afterAll(async () => {
 		await remove(addOrderDbPath);
 	});
 
-	// TODO(v2): depends on the v1-schema `mock.sqlite` fixture; regenerate
-	// before re-enabling.
-	it.skip('order カラムが既に存在する場合でもエラーにならない', async () => {
-		const db = await Database.connect({
-			filename: path.resolve(workingDir, 'mock.sqlite'),
-		});
-
-		// 2回連続で呼んでも例外が発生しない
-		await db.addOrderField();
-		await db.addOrderField();
-
-		const pages = await db.getPages();
-		expect(pages[0]).toHaveProperty('order');
-	});
-
-	it('order カラムが存在しない場合に追加される', async () => {
+	it('setUrlOrder 前のページは order を null として返す', async () => {
 		const db = await Database.connect({
 			filename: addOrderDbPath,
 		});
@@ -2782,7 +2956,9 @@ describe('insertPageError', () => {
 			},
 		]);
 
-		const pages = await knex('pages').select('url', 'scraped');
+		const pages = await knex('content_items')
+			.join('url_refs', 'content_items.url_id', 'url_refs.id')
+			.select('url_refs.url as url', 'content_items.scraped as scraped');
 		expect(pages).toEqual([{ url: 'https://example.com/wedged-viewport', scraped: 0 }]);
 	});
 
@@ -2819,9 +2995,10 @@ describe('insertPageError', () => {
 		);
 
 		const knex = db.getKnex();
-		const [row] = await knex('pages')
-			.where('url', 'https://external.example.com/oops')
-			.select('isExternal');
+		const [row] = await knex('content_items')
+			.join('url_refs', 'content_items.url_id', 'url_refs.id')
+			.where('url_refs.url', 'https://external.example.com/oops')
+			.select('content_items.is_external as isExternal');
 		expect(row.isExternal).toBe(1);
 	});
 });
@@ -2890,9 +3067,15 @@ describe('getResourceByUrl', () => {
 			});
 			const [row] = await db
 				.getKnex()
-				.from('resources')
-				.select('contentType')
-				.where('url', 'https://example.com/asset.PNG');
+				.from('resource_items')
+				.join('url_refs', 'resource_items.url_id', 'url_refs.id')
+				.join(
+					'content_type_refs',
+					'resource_items.content_type_id',
+					'content_type_refs.id',
+				)
+				.select('content_type_refs.raw as contentType')
+				.where('url_refs.url', 'https://example.com/asset.PNG');
 			expect(row.contentType).toBe('image/png');
 		} finally {
 			await db.destroy();
@@ -3309,9 +3492,10 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 			await db.updatePage(makePage('http://localhost/p'), true, true, 'inventory-seed');
 			const [row] = await db
 				.getKnex()
-				.from('pages')
-				.select('source')
-				.where('url', 'http://localhost/p');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://localhost/p');
 			expect(row.source).toBe('crawled');
 		} finally {
 			await db.destroy();
@@ -3337,9 +3521,10 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 			await db.updatePage(makePage('http://localhost/p'), true, true, 'inventory-seed');
 			const [row] = await db
 				.getKnex()
-				.from('pages')
-				.select('source')
-				.where('url', 'http://localhost/p');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://localhost/p');
 			expect(row.source).toBe('inventory-seed');
 		} finally {
 			await db.destroy();
@@ -3365,9 +3550,10 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 			);
 			const [row] = await db
 				.getKnex()
-				.from('pages')
-				.select('source')
-				.where('url', 'http://localhost/p');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://localhost/p');
 			expect(row.source).toBe('inventory-seed');
 		} finally {
 			await db.destroy();
@@ -3375,8 +3561,8 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 		}
 	});
 
-	it('inventory-discovered is downgraded to crawled when reached from a crawled anchor (#getIdByUrl path)', async () => {
-		// The crawled-wins downgrade fires inside `#getIdByUrl` when an
+	it('inventory-discovered is downgraded to crawled when reached from a crawled anchor (resolveContentItemId path)', async () => {
+		// The crawled-wins downgrade fires inside `resolveContentItemId` when an
 		// anchor lineage SELECT lands on an existing `inventory-*` row and
 		// the anchor's parent page is `crawled`. The lineage propagation in
 		// `updatePage` passes `'crawled'` explicitly for crawled parents so
@@ -3394,7 +3580,7 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 			);
 
 			// Step 2: a crawled page anchors to /dest. The anchor stores a
-			// hrefId via `#getIdByUrl(href, ..., trx, 'crawled')`, which
+			// hrefId via `resolveContentItemId(href, ..., trx, 'crawled')`, which
 			// triggers the downgrade UPDATE on the existing /dest row.
 			await db.updatePage(
 				{
@@ -3413,9 +3599,10 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 
 			const [row] = await db
 				.getKnex()
-				.from('pages')
-				.select('source')
-				.where('url', 'http://localhost/dest');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://localhost/dest');
 			expect(row.source).toBe('crawled');
 		} finally {
 			await db.destroy();
@@ -3456,9 +3643,10 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 
 			const [row] = await db
 				.getKnex()
-				.from('pages')
-				.select('source', 'scraped')
-				.where('url', 'http://localhost/grandchild');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source', 'content_items.scraped as scraped')
+				.where('url_refs.url', 'http://localhost/grandchild');
 			expect(row.source).toBe('inventory-discovered');
 			expect(Number(row.scraped)).toBe(0);
 		} finally {
@@ -3473,12 +3661,12 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 		// `inventory-seed` parent that anchors to it. This is the
 		// orphan-detection contract — "reachable from the crawl graph"
 		// dominates "listed in inventory". The crawled-wins downgrade in
-		// `#getIdByUrl` only fires when incoming source IS `'crawled'`;
+		// `resolveContentItemId` only fires when incoming source IS `'crawled'`;
 		// for incoming `'inventory-discovered'` (the anchor lineage from
 		// an inventory-seed parent), the SELECT path returns the
 		// existing pageId without updating the row, so the existing
 		// `'crawled'` stays. Pin this directly so a refactor of
-		// `#getIdByUrl`'s downgrade clause that accidentally inverts the
+		// `resolveContentItemId`'s downgrade clause that accidentally inverts the
 		// condition is caught here.
 		const dbPath = path.resolve(
 			workingDir,
@@ -3493,7 +3681,7 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 
 			// Step 2: a later inventory-seed parent renders and emits
 			// an anchor to /existing-page. The anchor lineage source is
-			// `'inventory-discovered'`, fed through `#getIdByUrl` for
+			// `'inventory-discovered'`, fed through `resolveContentItemId` for
 			// the existing row.
 			await db.updatePage(
 				{
@@ -3513,9 +3701,10 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 
 			const [row] = await db
 				.getKnex()
-				.from('pages')
-				.select('source')
-				.where('url', 'http://localhost/existing-page');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://localhost/existing-page');
 			// The existing crawled label must survive — even though an
 			// inventory-seed parent now anchors to this URL, it is
 			// still reachable from the original crawl graph and the
@@ -3527,22 +3716,22 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 		}
 	});
 
-	it('round-trips the full source-priority lattice across `setPage`, `#getIdByUrl`, and the downgrade clause', async () => {
+	it('round-trips the full source-priority lattice across `setPage`, `resolveContentItemId`, and the downgrade clause', async () => {
 		// F9: the source-priority and lineage tests above exercise the
-		// `setPage` UPDATE CASE and the `#getIdByUrl` downgrade
+		// `setPage` UPDATE CASE and the `resolveContentItemId` downgrade
 		// SEPARATELY. This case pins them as a coherent lattice in one
 		// flow:
 		//
 		//   1. Start with /shared as `'crawled'` (UPDATE CASE: incoming
 		//      undefined, existing absent → DB DEFAULT).
 		//   2. Render an inventory-seed parent that anchors to /shared
-		//      (#getIdByUrl SELECT path: incoming
+		//      (resolveContentItemId SELECT path: incoming
 		//      `'inventory-discovered'`, existing `'crawled'` — no
 		//      change, crawled stays).
 		//   3. setPage /shared again with source=undefined (UPDATE CASE
 		//      sourceUpdate empty → crawled stays).
 		//   4. Render /shared as part of a fresh crawled parent's anchor
-		//      list (#getIdByUrl SELECT: incoming `'crawled'`, existing
+		//      list (resolveContentItemId SELECT: incoming `'crawled'`, existing
 		//      `'crawled'` — no-op).
 		//
 		// At every step the row must remain `'crawled'`. A mutation in
@@ -3557,9 +3746,10 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 			// (1) Initial crawled scrape.
 			await db.updatePage(makePage('http://localhost/shared'), true, true);
 			let [row] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'http://localhost/shared');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://localhost/shared');
 			expect(row.source).toBe('crawled');
 
 			// (2) Inventory-seed parent anchors to /shared.
@@ -3579,17 +3769,19 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 				'inventory-seed',
 			);
 			[row] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'http://localhost/shared');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://localhost/shared');
 			expect(row.source).toBe('crawled');
 
 			// (3) Re-scrape /shared without an explicit source.
 			await db.updatePage(makePage('http://localhost/shared'), true, true);
 			[row] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'http://localhost/shared');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://localhost/shared');
 			expect(row.source).toBe('crawled');
 
 			// (4) Crawled parent anchors to /shared again.
@@ -3608,9 +3800,10 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 				true,
 			);
 			[row] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'http://localhost/shared');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://localhost/shared');
 			expect(row.source).toBe('crawled');
 		} finally {
 			await db.destroy();
@@ -3630,7 +3823,7 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 		const db = await Database.connect({ filename: dbPath });
 		try {
 			// Parent is inventory-seed and anchors to /child. The anchor
-			// placeholder row for /child is created via `#getIdByUrl` with
+			// placeholder row for /child is created via `resolveContentItemId` with
 			// lineage `'inventory-discovered'` (parent is inventory-*).
 			await db.updatePage(
 				{
@@ -3650,9 +3843,10 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 
 			const [row] = await db
 				.getKnex()
-				.from('pages')
-				.select('source', 'scraped')
-				.where('url', 'http://localhost/child');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source', 'content_items.scraped as scraped')
+				.where('url_refs.url', 'http://localhost/child');
 			expect(row.source).toBe('inventory-discovered');
 			// Anchor placeholder row, never visited yet.
 			expect(Number(row.scraped)).toBe(0);
@@ -3665,11 +3859,50 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 
 describe('getCrawlingState: strict pending filter', () => {
 	/**
+	 * Directly inserts a `content_items` row (via `url_refs`) to simulate
+	 * placeholder / leak states that the public API does not let us produce
+	 * cleanly.
+	 * @param db - The connected database.
+	 * @param row - The page fields to insert.
+	 * @param row.url
+	 * @param row.scraped
+	 * @param row.isTarget
+	 * @param row.isExternal
+	 * @param row.source
+	 * @returns The inserted `content_items.id`.
+	 */
+	async function insertRawPage(
+		db: Database,
+		row: {
+			url: string;
+			scraped: number;
+			isTarget: number;
+			isExternal: number;
+			source?: string;
+		},
+	): Promise<number> {
+		const knex = db.getKnex();
+		const [urlRef] = await knex('url_refs').insert({ url: row.url }).returning('id');
+		const [inserted] = await knex('content_items')
+			.insert({
+				url_id: urlRef.id,
+				scraped: row.scraped,
+				is_target: row.isTarget,
+				is_external: row.isExternal,
+				...(row.source === undefined ? {} : { source: row.source }),
+			})
+			.returning('id');
+		return Number(
+			typeof inserted === 'object' ? (inserted as { id: number }).id : inserted,
+		);
+	}
+
+	/**
 	 * Minimal page-data factory for these tests. Every `pending` candidate
 	 * scenario is set up by either calling `updatePage` (which lands at
-	 * `scraped = 1`) or by directly inserting a `pages` row via knex (to
-	 * simulate placeholder / leak states that the public API does not let
-	 * us produce cleanly).
+	 * `scraped = 1`) or by directly inserting a `content_items` row via
+	 * {@link insertRawPage} (to simulate placeholder / leak states that the
+	 * public API does not let us produce cleanly).
 	 * @param url - The URL of the page being scraped.
 	 * @returns Page data accepted by `Database.updatePage`.
 	 */
@@ -3729,8 +3962,7 @@ describe('getCrawlingState: strict pending filter', () => {
 		await removeIfExists(dbPath);
 		const db = await Database.connect({ filename: dbPath });
 		try {
-			const knex = db.getKnex();
-			await knex('pages').insert({
+			await insertRawPage(db, {
 				url: 'http://localhost/orphan-predicted',
 				scraped: 0,
 				isTarget: 0,
@@ -3781,14 +4013,19 @@ describe('getCrawlingState: strict pending filter', () => {
 			// for the wrong reason. Pin both halves of the precondition
 			// before exercising the filter.
 			const knex = db.getKnex();
-			const [extRow] = await knex('pages')
-				.select('id', 'scraped', 'isExternal')
-				.where('url', 'https://external.example/asset');
+			const [extRow] = await knex('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'content_items.id as id',
+					'content_items.scraped as scraped',
+					'content_items.is_external as isExternal',
+				)
+				.where('url_refs.url', 'https://external.example/asset');
 			expect(extRow, 'external anchor must create a placeholder row').toBeDefined();
 			expect(Number(extRow.scraped)).toBe(0);
 			expect(Number(extRow.isExternal)).toBe(1);
-			const [{ c: anchorCount }] = await knex('anchors')
-				.where('hrefId', extRow.id)
+			const [{ c: anchorCount }] = await knex('anchor_edges')
+				.where('href_page_id', extRow.id)
 				.count({ c: '*' });
 			expect(Number(anchorCount)).toBeGreaterThan(0);
 
@@ -3851,8 +4088,7 @@ describe('getCrawlingState: strict pending filter', () => {
 			// page row that was setPage'd then reset to scraped=0. No
 			// anchor referrer exists — the URL came from the operator's
 			// list, not from a rendered parent.
-			const knex = db.getKnex();
-			await knex('pages').insert({
+			await insertRawPage(db, {
 				url: 'http://localhost/inventory-seed-page',
 				scraped: 0,
 				isTarget: 1,
@@ -3921,8 +4157,7 @@ describe('getCrawlingState: strict pending filter', () => {
 			// (b) leak placeholder: a synthesised orphan row with no
 			// anchor referrer and source='crawled' (predicted-discard
 			// leak surrogate).
-			const knex = db.getKnex();
-			await knex('pages').insert({
+			await insertRawPage(db, {
 				url: 'http://localhost/leak-orphan',
 				scraped: 0,
 				isTarget: 0,
@@ -3931,7 +4166,7 @@ describe('getCrawlingState: strict pending filter', () => {
 			// (c) inventory-seed leak: an inventory-seed row reset by
 			// `--retry-failed` (no anchor referrer, but source !=
 			// 'crawled' so the strict filter keeps it).
-			await knex('pages').insert({
+			await insertRawPage(db, {
 				url: 'http://localhost/inventory-stuck',
 				scraped: 0,
 				isTarget: 1,
@@ -3977,7 +4212,7 @@ describe('redirect chain intermediate lineage propagation', () => {
 		// Scenario: an inventory-seed URL that redirects through a
 		// previously-unknown intermediate URL on its way to a final
 		// destination. The intermediate is created inside
-		// `#linkRedirectSources` via `#getIdByUrl(..., undefined)`; if
+		// `#linkRedirectSources` via `resolveContentItemId(..., undefined)`; if
 		// lineage propagation covered only the anchor path, it would be
 		// labelled `'crawled'`. The intermediate must instead inherit
 		// `'inventory-discovered'` from the inventory chain.
@@ -4008,14 +4243,20 @@ describe('redirect chain intermediate lineage propagation', () => {
 
 			const knex = db.getKnex();
 			const [finalDest] = await knex
-				.from('pages')
-				.select('id')
-				.where('url', 'https://example.com/seed/index.html');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id')
+				.where('url_refs.url', 'https://example.com/seed/index.html');
 			expect(finalDest, 'final destination row must exist').toBeDefined();
 			const [intermediate] = await knex
-				.from('pages')
-				.select('source', 'status', 'redirectDestId')
-				.where('url', 'http://example.com/seed/index.html');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'content_items.source as source',
+					'content_items.status as status',
+					'content_items.redirect_dest_id as redirectDestId',
+				)
+				.where('url_refs.url', 'http://example.com/seed/index.html');
 			expect(intermediate, 'intermediate hop must be recorded').toBeDefined();
 			expect(intermediate.source).toBe('inventory-discovered');
 			expect(intermediate.status).toBe(301);
@@ -4073,9 +4314,10 @@ describe('redirect chain intermediate lineage propagation', () => {
 			// propagation.
 			const knex = db.getKnex();
 			const [bAfterAnchor] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'https://example.com/discovered-b/');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'https://example.com/discovered-b/');
 			expect(bAfterAnchor?.source).toBe('inventory-discovered');
 
 			// Step 2: B is scraped (no explicit `source` argument —
@@ -4098,9 +4340,10 @@ describe('redirect chain intermediate lineage propagation', () => {
 			// Step 3: the intermediate hop C inherits inventory-discovered
 			// even though B was scraped with `source = undefined`.
 			const [intermediate] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'http://example.com/discovered-b/index.html');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://example.com/discovered-b/index.html');
 			expect(intermediate?.source).toBe('inventory-discovered');
 		} finally {
 			await db.destroy();
@@ -4131,9 +4374,10 @@ describe('redirect chain intermediate lineage propagation', () => {
 
 			const knex = db.getKnex();
 			const [intermediate] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'http://example.com/crawled-source/index.html');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://example.com/crawled-source/index.html');
 			expect(intermediate.source).toBe('crawled');
 		} finally {
 			await db.destroy();
@@ -4146,7 +4390,7 @@ describe('redirect chain intermediate lineage propagation', () => {
 		// edge-only path (e.g. #73 redirect-convergence when the dest
 		// was already rendered this session, or the js-redirect rescue
 		// after puppeteer.goto returns null). Without threading `source`
-		// through `recordRedirect`, a `#getIdByUrl(destUrl, undefined,
+		// through `recordRedirect`, a `resolveContentItemId(destUrl, undefined,
 		// trx)` call followed by a read-back of the destination's source
 		// would default a brand-new destination row to `'crawled'` and
 		// launder the inventory lineage of the whole chain. The `source`
@@ -4187,14 +4431,16 @@ describe('redirect chain intermediate lineage propagation', () => {
 
 			const knex = db.getKnex();
 			const [intermediate] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'http://example.com/seed-via-record/index.html');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://example.com/seed-via-record/index.html');
 			expect(intermediate?.source).toBe('inventory-discovered');
 			const [destination] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'https://example.com/seed-via-record/index.html');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'https://example.com/seed-via-record/index.html');
 			expect(destination?.source).toBe('inventory-seed');
 		} finally {
 			await db.destroy();
@@ -4205,7 +4451,7 @@ describe('redirect chain intermediate lineage propagation', () => {
 	it('downgrades an existing `inventory-discovered` intermediate to `crawled` when a crawled redirect chain reaches it (crawled-wins symmetry with anchor lineage)', async () => {
 		// F1: if the `chainLineageSource` derivation passed `undefined`
 		// for crawled destinations, the crawled-wins downgrade inside
-		// `#getIdByUrl` (which fires only when incoming source is
+		// `resolveContentItemId` (which fires only when incoming source is
 		// `'crawled'`) would never run for redirect intermediates — the
 		// anchor branch passes `'crawled'` explicitly and must stay
 		// symmetric. This test asserts that direction: an
@@ -4224,20 +4470,24 @@ describe('redirect chain intermediate lineage propagation', () => {
 			// `'inventory-discovered'` (anchor-lineage from an
 			// inventory-seed parent).
 			const knex = db.getKnex();
-			await knex('pages').insert({
-				url: 'http://example.com/shared-hop.html',
+			const [urlRef] = await knex('url_refs')
+				.insert({ url: 'http://example.com/shared-hop.html' })
+				.returning('id');
+			await knex('content_items').insert({
+				url_id: urlRef.id,
 				scraped: 0,
-				isTarget: 0,
-				isExternal: 0,
+				is_target: 0,
+				is_external: 0,
 				source: 'inventory-discovered',
 			});
 			// Pre-condition pin: row really exists with the inventory
 			// label so the test cannot accidentally pass by hitting a
 			// brand-new INSERT path.
 			const [before] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'http://example.com/shared-hop.html');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://example.com/shared-hop.html');
 			expect(before?.source).toBe('inventory-discovered');
 
 			// Step 2: a normal crawl renders /crawled-source/ which
@@ -4257,9 +4507,10 @@ describe('redirect chain intermediate lineage propagation', () => {
 			);
 
 			const [after] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'http://example.com/shared-hop.html');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://example.com/shared-hop.html');
 			// The inventory-discovered label must give way to the
 			// stronger crawled-graph evidence. With `: undefined` instead
 			// of `: 'crawled'` in the derivation, this would stay
@@ -4275,7 +4526,7 @@ describe('redirect chain intermediate lineage propagation', () => {
 		// Crawled-wins in the redirect-chain context, NO-OP direction:
 		// an intermediate URL already in the archive as `'crawled'` must
 		// stay `'crawled'` when a later inventory-seed chain passes
-		// through it. `#getIdByUrl` returns the existing row's id with
+		// through it. `resolveContentItemId` returns the existing row's id with
 		// NO source UPDATE because the downgrade clause only fires on
 		// incoming `'crawled'` — incoming `'inventory-discovered'`
 		// (which is what an inventory-seed parent propagates) is a
@@ -4305,14 +4556,16 @@ describe('redirect chain intermediate lineage propagation', () => {
 			// DEFAULT, not the crawled-wins guard.
 			const knex = db.getKnex();
 			const [preSeed] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'http://example.com/known-intermediate.html');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://example.com/known-intermediate.html');
 			expect(preSeed, 'pre-seed must exist').toBeDefined();
 			expect(preSeed.source).toBe('crawled');
 			const [{ c: preCount }] = await knex
-				.from('pages')
-				.where('url', 'http://example.com/known-intermediate.html')
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.where('url_refs.url', 'http://example.com/known-intermediate.html')
 				.count({ c: '*' });
 			expect(Number(preCount)).toBe(1);
 
@@ -4332,17 +4585,19 @@ describe('redirect chain intermediate lineage propagation', () => {
 			);
 
 			const [intermediate] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'http://example.com/known-intermediate.html');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://example.com/known-intermediate.html');
 			expect(intermediate.source).toBe('crawled');
 			// Verify row identity is preserved (same single row, no
 			// duplicate INSERT) so the assertion above is really
 			// "the SAME row stayed crawled" rather than "some row
 			// happens to be crawled".
 			const [{ c: postCount }] = await knex
-				.from('pages')
-				.where('url', 'http://example.com/known-intermediate.html')
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.where('url_refs.url', 'http://example.com/known-intermediate.html')
 				.count({ c: '*' });
 			expect(Number(postCount)).toBe(1);
 		} finally {
@@ -4372,11 +4627,14 @@ describe('redirect chain intermediate lineage propagation', () => {
 			// (anchor-lineage INSERT from a prior pass). The row has no
 			// content yet — `recordRedirect` is about to add the
 			// redirect chain edges.
-			await knex('pages').insert({
-				url: 'https://example.com/origin-prebuilt/',
+			const [originUrlRef] = await knex('url_refs')
+				.insert({ url: 'https://example.com/origin-prebuilt/' })
+				.returning('id');
+			await knex('content_items').insert({
+				url_id: originUrlRef.id,
 				scraped: 0,
-				isTarget: 0,
-				isExternal: 0,
+				is_target: 0,
+				is_external: 0,
 				source: 'inventory-discovered',
 			});
 
@@ -4403,9 +4661,10 @@ describe('redirect chain intermediate lineage propagation', () => {
 			});
 
 			const [intermediate] = await knex
-				.from('pages')
-				.select('source')
-				.where('url', 'http://example.com/origin-prebuilt/index.html');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.source as source')
+				.where('url_refs.url', 'http://example.com/origin-prebuilt/index.html');
 			// The intermediate inherits the originating row's
 			// `'inventory-discovered'` via the DB lookup — NOT the
 			// `source` arg (which was undefined).
@@ -4418,7 +4677,7 @@ describe('redirect chain intermediate lineage propagation', () => {
 
 	it('propagates `inventory-discovered` to an EXTERNAL intermediate when the originating page is `inventory-seed` (lineage applies regardless of scope)', async () => {
 		// S2: lineage propagation is scope-agnostic — the
-		// `isExternal=1` rows go through the same `#getIdByUrl` path
+		// `isExternal=1` rows go through the same `resolveContentItemId` path
 		// as internal rows. Pin the contract so a future refactor that
 		// skips lineage for externals (e.g. on the assumption that
 		// external rows are not orphan-relevant) gets caught.
@@ -4442,9 +4701,13 @@ describe('redirect chain intermediate lineage propagation', () => {
 
 			const knex = db.getKnex();
 			const [intermediate] = await knex
-				.from('pages')
-				.select('source', 'isExternal')
-				.where('url', 'http://external.invalid/seed/index.html');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'content_items.source as source',
+					'content_items.is_external as isExternal',
+				)
+				.where('url_refs.url', 'http://external.invalid/seed/index.html');
 			expect(intermediate?.source).toBe('inventory-discovered');
 			expect(intermediate?.isExternal).toBe(1);
 		} finally {
@@ -4486,9 +4749,13 @@ describe('redirect chain intermediate lineage propagation', () => {
 
 			const knex = db.getKnex();
 			const rows = await knex
-				.from('pages')
-				.select('source', 'redirectDestId')
-				.where('url', 'https://example.com/self/');
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'content_items.source as source',
+					'content_items.redirect_dest_id as redirectDestId',
+				)
+				.where('url_refs.url', 'https://example.com/self/');
 			// Exactly one row for the URL — no duplicate INSERT from
 			// `#linkRedirectSources` taking the redirect-source path
 			// despite the URL equality.

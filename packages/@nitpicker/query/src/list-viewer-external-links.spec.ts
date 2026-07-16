@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { listViewerExternalLinks } from './list-viewer-external-links.js';
@@ -222,7 +222,6 @@ describe('listViewerExternalLinks', () => {
 			isSkipped: false,
 		});
 
-		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 
@@ -460,7 +459,6 @@ describe('listViewerExternalLinks — redirect resolution', () => {
 			isSkipped: false,
 		});
 
-		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 

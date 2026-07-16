@@ -1,4 +1,20 @@
+import type { DomPathCandidate } from './populate-entity-tables/types.js';
+import type { PageData } from '../utils/types/types.js';
 import type { ParseURLOptions } from '@d-zero/shared/parse-url';
+
+/**
+ * A scraped page payload optionally enriched with the in-browser
+ * dom-path capture (`crawler/capture-image-dom-paths.ts`): every `<img>`
+ * of the rendered document as `{ outerHTML, path }` pairs in document
+ * order. The write path matches these against `imageList[].sourceCode`
+ * to resolve `image_items.dom_path_text_id`; when absent (capture
+ * failed, metadata-only scrape, or a caller that never renders), every
+ * image falls back to the synthetic `unknown/<n>` marker.
+ */
+export type PageDataWithDomPaths = PageData & {
+	/** In-browser dom-path capture for the rendered document's images. */
+	imageDomPaths?: readonly DomPathCandidate[];
+};
 
 /**
  * Event map for database-related events emitted by the Database and ArchiveAccessor classes.

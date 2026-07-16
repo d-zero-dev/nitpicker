@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getResourceReferrers } from './get-resource-referrers.js';
@@ -137,7 +137,6 @@ describe('getResourceReferrers', () => {
 			url: 'https://example.com/about',
 			src: 'https://example.com/style.css',
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

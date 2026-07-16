@@ -3,12 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import {
-	Archive,
-	CrawlerOrchestrator,
-	computeFileSha256,
-	populateMigrationTables,
-} from '@nitpicker/crawler';
+import { Archive, CrawlerOrchestrator, computeFileSha256 } from '@nitpicker/crawler';
 import { listInventoryRuns, listUnusedResources } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -34,7 +29,6 @@ async function crawlAndPersist(
 		fetchExternal: false,
 	});
 	const filePath = orchestrator.archive.filePath;
-	await populateMigrationTables(orchestrator.archive);
 	await orchestrator.write();
 	await orchestrator.archive.close();
 	orchestrator.garbageCollect();
@@ -66,7 +60,6 @@ describe('Inventory crawl', () => {
 			],
 			{ cwd },
 		);
-		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
@@ -94,9 +87,10 @@ describe('Inventory crawl', () => {
 		// supplied via `--inventory`. The orphan-set behaviour is covered
 		// separately by `compute-isolated-clusters.spec.ts`.
 		const knex = accessor.getKnex();
-		const [row] = (await knex('pages')
-			.select('source')
-			.where('url', 'http://localhost:8010/inventory/hidden-lp')) as {
+		const [row] = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ci.url_id', 'ur.id')
+			.select('ci.source as source')
+			.where('ur.url', 'http://localhost:8010/inventory/hidden-lp')) as {
 			source: string;
 		}[];
 		expect(row, 'hidden-lp must have been inserted by --inventory').toBeDefined();
@@ -111,9 +105,10 @@ describe('Inventory crawl', () => {
 		// `derivePageSource` → `Archive.setPage` → DB INSERT path for the
 		// inventory-discovered case.
 		const knex = accessor.getKnex();
-		const [row] = (await knex('pages')
-			.select('source')
-			.where('url', 'http://localhost:8010/inventory/inner-link')) as {
+		const [row] = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ci.url_id', 'ur.id')
+			.select('ci.source as source')
+			.where('ur.url', 'http://localhost:8010/inventory/inner-link')) as {
 			source: string;
 		}[];
 		expect(
@@ -144,8 +139,8 @@ describe('Inventory crawl', () => {
 
 	// Note: a "second inventory pass keeps the existing source label"
 	// scenario is intentionally left out here. The non-destructive property
-	// is enforced at the SQL layer — `#getIdByUrl`'s `ON CONFLICT IGNORE`
-	// path is exercised by the migration / database specs, and the
+	// is enforced at the SQL layer — `resolveContentItemId`'s insert-only
+	// `source` semantics are exercised by the migration / database specs, and the
 	// existing-URL filter (`getExistingPageUrls`) keeps the second pass
 	// from even reaching the INSERT — so an E2E re-pass would only retest
 	// what those unit tests already cover, at the cost of running a full
@@ -250,7 +245,6 @@ describe('Inventory crawl run-audit fingerprint (with source file sha256)', () =
 			undefined,
 			sourceFileSha256,
 		);
-		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
@@ -327,7 +321,6 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 				orch.abort();
 			},
 		);
-		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
@@ -347,13 +340,14 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 		// single seed, every URL is durably tracked as an `inventory-seed`
 		// placeholder in `pages`. Pre-#121, these rows would not exist.
 		const knex = accessor.getKnex();
-		const rows = (await knex('pages')
-			.select('url', 'source', 'scraped')
-			.whereIn('url', [
+		const rows = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ci.url_id', 'ur.id')
+			.select('ur.url as url', 'ci.source as source', 'ci.scraped as scraped')
+			.whereIn('ur.url', [
 				'http://localhost:8010/inventory/hidden-lp',
 				'http://localhost:8010/inventory/inner-link',
 			])
-			.orderBy('url')) as Array<{
+			.orderBy('ur.url')) as Array<{
 			url: string;
 			source: string;
 			scraped: number;
@@ -456,13 +450,14 @@ describe('Inventory scrape-phase failure persists ingested state (#121 recovery 
 		const accessor = await Archive.open({ filePath, cwd });
 		try {
 			const knex = accessor.getKnex();
-			const rows = (await knex('pages')
-				.select('url', 'source', 'scraped')
-				.whereIn('url', [
+			const rows = (await knex('content_items as ci')
+				.join('url_refs as ur', 'ci.url_id', 'ur.id')
+				.select('ur.url as url', 'ci.source as source', 'ci.scraped as scraped')
+				.whereIn('ur.url', [
 					'http://localhost:8010/inventory/hidden-lp',
 					'http://localhost:8010/inventory/inner-link',
 				])
-				.orderBy('url')) as Array<{
+				.orderBy('ur.url')) as Array<{
 				url: string;
 				source: string;
 				scraped: number;
@@ -534,7 +529,6 @@ describe('Inventory http/https dedup keeps a single inventory-seed row per origi
 				orch.abort();
 			},
 		);
-		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
@@ -551,9 +545,10 @@ describe('Inventory http/https dedup keeps a single inventory-seed row per origi
 
 	it('creates exactly one inventory-seed row across http/https duplicates', async () => {
 		const knex = accessor.getKnex();
-		const rows = (await knex('pages')
-			.select('url', 'source')
-			.whereIn('url', [
+		const rows = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ci.url_id', 'ur.id')
+			.select('ur.url as url', 'ci.source as source')
+			.whereIn('ur.url', [
 				'http://localhost:8010/inventory/hidden-lp',
 				'https://localhost:8010/inventory/hidden-lp',
 			])) as Array<{ url: string; source: string }>;
@@ -585,7 +580,6 @@ describe('Inventory crawl noop run (all URLs already in archive)', () => {
 			['http://localhost:8010/'],
 			{ cwd },
 		);
-		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();

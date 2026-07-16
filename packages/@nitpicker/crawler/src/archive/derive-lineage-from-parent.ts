@@ -21,7 +21,7 @@ import { isInventorySource } from './is-inventory-source.js';
  *    by call site:
  *
  *    - Anchor lineage passes `'crawled'` explicitly so the crawled-wins
- *      downgrade inside `#getIdByUrl` fires when the anchor reaches an
+ *      downgrade inside `resolveContentItemId` fires when the anchor reaches an
  *      existing `'inventory-*'` row.
  *    - Sub-resource emit passes `undefined` so the DB DEFAULT
  *      `'crawled'` lands on the freshly INSERTed `resources` row (the

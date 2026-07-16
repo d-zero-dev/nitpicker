@@ -54,7 +54,6 @@ export { computeFileSha256 } from './utils/compute-file-sha256.js';
 // resume mid-way if the caller decides to split the transaction.
 export { populateEntityTables } from './archive/populate-entity-tables/populate-entities.js';
 export type { PageDomPathResolver } from './archive/populate-entity-tables/populate-image-items.js';
-export { populateMigrationTables } from './archive/populate-migration-tables.js';
 export { populateRefTables } from './archive/populate-ref-tables/populate-refs.js';
 export { populateContentTypeRefs } from './archive/populate-ref-tables/populate-content-type-refs.js';
 export { populateUrlRefs } from './archive/populate-ref-tables/populate-url-refs.js';
@@ -62,3 +61,11 @@ export { populateTextRefs } from './archive/populate-ref-tables/populate-text-re
 export { populateJsonRefs } from './archive/populate-ref-tables/populate-json-refs.js';
 export { populateBlobRefs } from './archive/populate-ref-tables/populate-blob-refs.js';
 export { populateHeaderTables } from './archive/populate-ref-tables/populate-header-tables.js';
+
+// 0.13 read-side reconstruction primitives. Exported so downstream
+// readers (`@nitpicker/query`'s page-detail view) reconstruct
+// `responseHeaders` / json_refs payloads with the exact same merge and
+// decode semantics as the crawler's own read paths — one implementation,
+// no cross-package drift.
+export { loadResponseHeadersBySetIds } from './archive/db-ops/_shared/load-response-headers-by-set-ids.js';
+export { decodeJsonRef } from './archive/db-ops/_shared/decode-json-ref.js';

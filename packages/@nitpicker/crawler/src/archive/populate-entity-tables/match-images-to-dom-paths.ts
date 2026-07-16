@@ -1,80 +1,80 @@
-import type { DomPathResult } from './types.js';
-
-import { deriveDomPath } from './derive-dom-path.js';
+import type { DomPathCandidate, DomPathResult } from './types.js';
 
 /**
- * One legacy `images` row projected onto the fields the matcher needs.
- * Restricted to `id` (used to build the returned Map) and `sourceCode`
- * (the outerHTML string to match against DOM candidates).
+ * One image record projected onto the fields the matcher needs:
+ * `id` (used to build the returned Map) and `sourceCode` (the outerHTML
+ * string to match against document candidates). `id` may be a real
+ * `images.id` (migration) or a synthetic per-page index (crawler write
+ * path) — the matcher only requires ids to be unique within one call and
+ * ordered in crawler insertion order.
  */
 interface ImageRowForMatching {
-	/** Legacy `images.id`. */
+	/** Unique-within-call id, in crawler insertion order. */
 	id: number;
 	/**
-	 * Legacy `images.sourceCode` — the `<img>` element's `outerHTML` as
-	 * stored by the crawler. `null` when the crawler failed to capture
-	 * the source (a null blob or a puppeteer serialisation edge case).
+	 * The `<img>` element's `outerHTML` as captured by the crawler.
+	 * `null` when the crawler failed to capture the source (a null blob
+	 * or a puppeteer serialisation edge case).
 	 */
 	sourceCode: string | null;
 }
 
 /**
- * Matches a page's legacy `images` rows to their DOM-path strings using
- * a 3-case algorithm (issue #193).
+ * Matches image records to their DOM-path strings using a 3-case
+ * algorithm (issue #193).
  *
  * The three cases:
  *
  * 1. **Single match** — `image.sourceCode` matches exactly one `<img>`
- *    outerHTML in the document. Assign that element's `dom_path`.
+ *    outerHTML in the document. Assign that candidate's `dom_path`.
  * 2. **Ordinal match** — multiple `<img>` elements share the same
  *    outerHTML (identical `src` / `alt` / attributes on the same page).
- *    Assign paths in `images.id` order, matching the crawler's
- *    insertion order which is expected to correspond to DOM order.
+ *    Assign paths in `id` order, matching the crawler's insertion order
+ *    which is expected to correspond to DOM order.
  * 3. **Unknown** — `sourceCode` is null OR no matching `<img>` exists
  *    in the document (crawler-side rewriting drift). Fall back to the
  *    synthetic `unknown/<id>` marker so the `dom_path_text_id NOT NULL`
  *    constraint is still satisfied.
  *
- * The function is pure and does not touch the DB. Callers pre-parse the
- * page's HTML with jsdom (or any DOM implementation), pass the resulting
- * `<img>` NodeList / array plus the `images` rows filtered to that page,
- * and receive one `DomPathResult` per input row.
+ * The function is pure — no DB, no DOM. Callers produce the candidate
+ * list from whatever DOM they have: jsdom over an archived HTML snapshot
+ * (migration script) or an in-browser walk over the live page (crawler
+ * write path). See {@link ./types.ts}'s `DomPathCandidate`.
  *
- * `imgElementsInDocumentOrder` MUST already be in document order — the
- * matcher does not sort. jsdom's `document.querySelectorAll('img')`
- * satisfies this contract; ordering after the call is the caller's
- * responsibility.
+ * `candidatesInDocumentOrder` MUST already be in document order — the
+ * matcher does not sort. `document.querySelectorAll('img')` satisfies
+ * this contract; ordering is the caller's responsibility.
  *
  * `images` MUST already be sorted by `id` ascending for the ordinal-
  * match case to reproduce the crawler's insertion order deterministically.
  * A minor deviation from this ordering only affects the ordinal-match
  * branch — single-match and unknown branches are order-independent.
- * @param images - The page's `images` rows in `id` order.
- * @param imgElementsInDocumentOrder - `<img>` elements from the parsed
- *   HTML, in document order.
- * @returns Map keyed by `images.id`; every input row gets one entry.
+ * @param images - The page's image records in `id` order.
+ * @param candidatesInDocumentOrder - `<img>` outerHTML + dom_path pairs
+ *   from the document, in document order.
+ * @returns Map keyed by `images[].id`; every input row gets one entry.
  * @example
  * const jsdom = new JSDOM(html);
- * const imgs = [...jsdom.window.document.querySelectorAll('img')];
+ * const candidates = [...jsdom.window.document.querySelectorAll('img')].map(
+ *   (img) => ({ outerHTML: img.outerHTML, path: deriveDomPath(img) }),
+ * );
  * const result = matchImagesToDomPaths(
  *   [{ id: 1, sourceCode: '<img src="a.png">' }],
- *   imgs,
+ *   candidates,
  * );
  * result.get(1); // { path: 'html/body[1]/img[1]', case: 'single-match' }
  */
 export function matchImagesToDomPaths(
 	images: readonly ImageRowForMatching[],
-	imgElementsInDocumentOrder: readonly Element[],
+	candidatesInDocumentOrder: readonly DomPathCandidate[],
 ): ReadonlyMap<number, DomPathResult> {
-	const byOuterHtml = new Map<string, Element[]>();
-	const domPathByElement = new WeakMap<Element, string>();
-	for (const img of imgElementsInDocumentOrder) {
-		const outerHtml = img.outerHTML;
-		const bucket = byOuterHtml.get(outerHtml);
+	const byOuterHtml = new Map<string, DomPathCandidate[]>();
+	for (const candidate of candidatesInDocumentOrder) {
+		const bucket = byOuterHtml.get(candidate.outerHTML);
 		if (bucket === undefined) {
-			byOuterHtml.set(outerHtml, [img]);
+			byOuterHtml.set(candidate.outerHTML, [candidate]);
 		} else {
-			bucket.push(img);
+			bucket.push(candidate);
 		}
 	}
 
@@ -92,7 +92,7 @@ export function matchImagesToDomPaths(
 		}
 		if (candidates.length === 1) {
 			result.set(image.id, {
-				path: getOrDeriveDomPath(candidates[0]!, domPathByElement),
+				path: candidates[0]!.path,
 				case: 'single-match',
 			});
 			continue;
@@ -101,7 +101,7 @@ export function matchImagesToDomPaths(
 		cursorByOuterHtml.set(image.sourceCode, cursor + 1);
 		const chosen = candidates[cursor];
 		if (chosen === undefined) {
-			// More `images` rows share this outerHTML than the archived HTML
+			// More image records share this outerHTML than the document
 			// has matching `<img>` elements. Reusing the last candidate
 			// (`candidates.at(-1)`) would silently map every overflow row
 			// to the same element, producing multiple `image_items` rows
@@ -112,29 +112,9 @@ export function matchImagesToDomPaths(
 			continue;
 		}
 		result.set(image.id, {
-			path: getOrDeriveDomPath(chosen, domPathByElement),
+			path: chosen.path,
 			case: 'ordinal-match',
 		});
 	}
 	return result;
-}
-
-/**
- * Caches {@link deriveDomPath} results against `element` identity.
- * Multiple `images` rows can resolve to the same element (e.g. several
- * rows sharing one outerHTML that matches exactly one `<img>` all take
- * the single-match branch); caching keeps the DOM walk cost
- * O(unique elements) rather than O(matches).
- * @param element - The DOM element to derive against.
- * @param cache - The memo cache used across one page's match pass.
- * @returns Derived `dom_path` string.
- */
-function getOrDeriveDomPath(element: Element, cache: WeakMap<Element, string>): string {
-	const cached = cache.get(element);
-	if (cached !== undefined) {
-		return cached;
-	}
-	const path = deriveDomPath(element);
-	cache.set(element, path);
-	return path;
 }

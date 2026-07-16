@@ -14,7 +14,6 @@ import pkg from '../package.json' with { type: 'json' };
 
 import Archive from './archive/archive.js';
 import { REQUIRED_FORMAT_VERSION } from './archive/meta/assert-compatible-version.js';
-import { populateMigrationTables } from './archive/populate-migration-tables.js';
 import { clearDestinationCache } from './crawler/clear-destination-cache.js';
 import { clearDnsBurnedHostCache } from './crawler/clear-dns-burned-host-cache.js';
 import Crawler from './crawler/crawler.js';
@@ -352,10 +351,11 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	/**
 	 * Write the archive to its configured file path.
 	 *
-	 * `populateMigrationTables` runs at every crawl-end site inside
-	 * `crawling` / `append` / `resume` / `retryFailed` / `inventory`
-	 * BEFORE this method, so by the time `write()` is called the 0.13
-	 * entity tables are already populated. This method just tars.
+	 * The crawler's write path inserts directly into the 0.13 entity
+	 * tables (`content_items` / `page_meta` / `anchor_edges` / …) during
+	 * `crawling` / `append` / `resume` / `retryFailed` / `inventory`, so by
+	 * the time `write()` is called those tables are already populated.
+	 * This method just tars.
 	 *
 	 * Emits `writeFileStart` before writing and `writeFileEnd` after
 	 * the write completes successfully.
@@ -460,15 +460,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		log('Set order natural URL sort');
 		await archive.setUrlOrder();
 		log('Sorting done');
-		// Bridge the pre-0.13 write path onto the 0.13 entity tables so
-		// every reader that opens this archive afterwards sees populated
-		// `content_items` / `page_meta` / `anchor_edges` / … — the
-		// crawler's own `setPage` / `setResource` calls still target the
-		// legacy tables and #196 will move them onto the new entities
-		// directly, at which point this call becomes an idempotent
-		// `INSERT OR IGNORE` no-op.
-		log('Populate 0.13 migration tables');
-		await populateMigrationTables(archive);
 		return orchestrator;
 	}
 
@@ -568,7 +559,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				await orchestrator.crawling(newParsed);
 				CrawlerOrchestrator.#finalizeCrawlSession();
 				await archive.setUrlOrder();
-				await populateMigrationTables(archive);
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
 			} catch (error) {
@@ -719,7 +709,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 			// Drop URLs that are already represented in the archive (either
 			// as pages or resources). Comparison key is `withoutHashAndAuth`
-			// to mirror what `#getIdByUrl` / `insertResource` actually store.
+			// to mirror what `resolveContentItemId` / `insertResource` actually store.
 			// Two independent reads — Promise.all halves the wait on large
 			// archives where each `WHERE url IN (?)` chunk costs real I/O.
 			const candidateUrls = inScope.map((u) => u.withoutHashAndAuth);
@@ -927,7 +917,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await orchestrator.crawling([], { recursive: true });
 					CrawlerOrchestrator.#finalizeCrawlSession();
 					await archive.setUrlOrder();
-					await populateMigrationTables(archive);
 					return orchestrator;
 				}
 
@@ -938,7 +927,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await initializedCallback(orchestrator, baseConfig);
 				}
 				await archive.setUrlOrder();
-				await populateMigrationTables(archive);
 				return orchestrator;
 			} catch (error) {
 				if (ingestionComplete) {
@@ -1074,7 +1062,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				await orchestrator.crawling([], { recursive: config.recursive });
 				CrawlerOrchestrator.#finalizeCrawlSession();
 				await archive.setUrlOrder();
-				await populateMigrationTables(archive);
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
 			} catch (error) {
@@ -1141,7 +1128,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 		await orchestrator.crawling([url]);
 		CrawlerOrchestrator.#finalizeCrawlSession();
-		await populateMigrationTables(archive);
 		return orchestrator;
 	}
 

@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { listPages } from '@nitpicker/query';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -131,7 +131,6 @@ describe('prepareCachedUrlSortTempTable', () => {
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/a');
 
-		await populateMigrationTables(archive);
 		const context = makeContext(archive);
 		await prepareCachedUrlSortTempTable(context);
 
@@ -165,7 +164,6 @@ describe('prepareCachedUrlSortTempTable', () => {
 		});
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/a');
-		await populateMigrationTables(archive);
 
 		const context = makeContext(archive, 'stub');
 		await prepareCachedUrlSortTempTable(context);
@@ -174,7 +172,6 @@ describe('prepareCachedUrlSortTempTable', () => {
 		expect(existsSync(cacheFile)).toBe(false);
 
 		await addPage(archive, 'https://example.com/b');
-		await populateMigrationTables(archive);
 		await prepareCachedUrlSortTempTable(context);
 
 		const { items } = await listPages(archive, {});
@@ -193,7 +190,6 @@ describe('prepareCachedUrlSortTempTable', () => {
 		});
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/a');
-		await populateMigrationTables(archive);
 
 		const messages: string[] = [];
 		await prepareCachedUrlSortTempTable(makeContext(archive), (message) => {
@@ -213,7 +209,6 @@ describe('prepareCachedUrlSortTempTable', () => {
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/a');
 
-		await populateMigrationTables(archive);
 		const context = makeContext(archive);
 		await prepareCachedUrlSortTempTable(context);
 
@@ -237,7 +232,6 @@ describe('prepareCachedUrlSortTempTable', () => {
 		});
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/a');
-		await populateMigrationTables(archive);
 
 		// Make the cache directory read-only so `createWriteStream` inside
 		// `sortAndCache` fails with EACCES — the fail-safe this exercises

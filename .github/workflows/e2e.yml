@@ -111,6 +111,7 @@ jobs:
                 resource-reuse.e2e.ts,
                 archive-pipeline.e2e.ts,
                 scroll-jack.e2e.ts,
+                crawl-write-phase6.e2e.ts,
               ]
           - id: append-pipeline
             files:

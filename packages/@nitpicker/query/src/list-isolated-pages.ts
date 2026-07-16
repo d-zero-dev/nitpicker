@@ -15,7 +15,7 @@ import { sortArrayItems } from './sort-array-items.js';
  *   technically — but discovered rows always carry the discoverer's anchor
  *   inbound, so they are excluded here in practice). `'crawled'` rows CANNOT
  *   be isolated by definition: the `crawled-wins` downgrade in
- *   `Database.#getIdByUrl` guarantees that any inventory-* page reached
+ *   `resolveContentItemId` guarantees that any inventory-* page reached
  *   through the crawled chain has been demoted to `'crawled'` already, so
  *   `source = 'crawled'` is an assertive "this page was reached by the
  *   recursive crawl" label. A `'crawled'` orphan would indicate a recording

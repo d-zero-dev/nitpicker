@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { ArchiveManager, buildViewerReadModel } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -162,8 +162,6 @@ async function buildFixture(workingDir: string, withReadModel: boolean) {
 		imageList: [],
 		isSkipped: false,
 	});
-
-	await populateMigrationTables(archive);
 
 	if (withReadModel) {
 		await buildViewerReadModel(archive);
@@ -416,7 +414,6 @@ describe('registerLinksRoute — /api/links?type=broken (integration)', () => {
 				publicDir: '/tmp/no-such-dir-register-links-route-spec',
 			});
 			fixture = { app, archive, manager };
-			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {

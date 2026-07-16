@@ -313,7 +313,7 @@ export async function initSchema(instance: Knex) {
 			// considered successfully scraped, but image capture or another
 			// secondary step failed for at least one device preset.
 			t.increments('id');
-			t.integer('pageId').notNullable().unsigned().references('pages.id');
+			t.integer('pageId').notNullable().unsigned().references('content_items.id');
 			t.string('phase').notNullable();
 			t.text('message').notNullable();
 			t.integer('createdAt').notNullable();
@@ -344,7 +344,7 @@ export async function initSchema(instance: Knex) {
 			t.integer('pageId')
 				.notNullable()
 				.unsigned()
-				.references('pages.id')
+				.references('content_items.id')
 				.onDelete('CASCADE');
 			t.string('provider').notNullable();
 			t.string('category');
@@ -369,7 +369,7 @@ export async function initSchema(instance: Knex) {
 			t.integer('pageId')
 				.notNullable()
 				.unsigned()
-				.references('pages.id')
+				.references('content_items.id')
 				.onDelete('CASCADE');
 			t.string('kind').notNullable();
 			t.string('type');
@@ -409,7 +409,7 @@ export async function initSchema(instance: Knex) {
 	await instance.raw(`
 		CREATE TABLE analysis_violations (
 			id integer primary key,
-			page_id integer not null references pages(id),
+			page_id integer not null references content_items(id),
 			validator text not null,
 			severity text not null,
 			rule text not null,
@@ -472,7 +472,7 @@ export async function initSchema(instance: Knex) {
 	`);
 	await instance.raw(`
 		CREATE TABLE page_html_ref (
-			page_id  INTEGER PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
+			page_id  INTEGER PRIMARY KEY REFERENCES content_items(id) ON DELETE CASCADE,
 			hash     BLOB NOT NULL REFERENCES page_html_blobs(hash)
 		) WITHOUT ROWID
 	`);

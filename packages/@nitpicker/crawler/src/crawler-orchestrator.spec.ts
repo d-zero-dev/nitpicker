@@ -8,19 +8,6 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import { CrawlerOrchestrator } from './crawler-orchestrator.js';
 
-// Every `crawling` / `append` / `resume` / `retryFailed` / `inventory`
-// call-site ends with a `populateMigrationTables(archive)` step in
-// production so every reader path sees populated 0.13 entity tables.
-// These orchestrator unit tests use bare `as unknown as Archive` mocks
-// that intentionally omit `getKnex` and the full writer surface —
-// running the real populate against them would blow up with
-// `accessor.getKnex is not a function`, which is unrelated to the
-// event-wiring behaviour the tests exercise. Stub it here at the
-// module boundary so the mocks stay minimal.
-vi.mock('./archive/populate-migration-tables.js', () => ({
-	populateMigrationTables: vi.fn(() => Promise.resolve()),
-}));
-
 vi.mock('./crawler/crawler.js', () => {
 	/**
 	 * A minimal Crawler stand-in: records event handlers and, on `start()`,

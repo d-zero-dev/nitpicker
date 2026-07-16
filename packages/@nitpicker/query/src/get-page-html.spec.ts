@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive, populateMigrationTables } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getPageHtml } from './get-page-html.js';
@@ -79,7 +79,6 @@ describe('getPageHtml', () => {
 			isSkipped: false,
 		});
 
-		await populateMigrationTables(createArchive);
 		// Write to .nitpicker file and reopen so HTML snapshots are zipped/accessible
 		await createArchive.write();
 		await createArchive.close();

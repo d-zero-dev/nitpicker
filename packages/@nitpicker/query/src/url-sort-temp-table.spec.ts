@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -123,7 +123,6 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 			headers: null,
 		});
 
-		await populateMigrationTables(archive);
 		await prepareUrlSortTempTable(archive);
 
 		const rows = await archive
@@ -148,10 +147,15 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 		await addPage(archive, 'https://example.com/image-10.jpg');
 		await addPage(archive, 'https://example.com/image-2.jpg');
 
-		await populateMigrationTables(archive);
 		await prepareUrlSortTempTable(archive);
 		const knex = archive.getKnex();
-		const rows = await orderByUrlRank(knex('pages').select('url'), knex, '"pages"."url"');
+		const rows = await orderByUrlRank(
+			knex('content_items as ci')
+				.join('url_refs as ur', 'ur.id', 'ci.url_id')
+				.select('ur.url as url'),
+			knex,
+			'"ur"."url"',
+		);
 		expect(rows.map((r: { url: string }) => r.url)).toEqual([
 			'https://example.com/image-2.jpg',
 			'https://example.com/image-10.jpg',
@@ -168,7 +172,6 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/page');
 
-		await populateMigrationTables(archive);
 		await prepareUrlSortTempTable(archive);
 
 		// Reproduces the crash observed on an 11 GB / ~1.5M-URL archive: the
@@ -202,7 +205,6 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/image-10.jpg');
 		await addPage(archive, 'https://example.com/image-2.jpg');
-		await populateMigrationTables(archive);
 
 		const ranked: { url: string; rank: number }[] = [];
 		await prepareUrlSortTempTable(archive, {
@@ -259,14 +261,12 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 		});
 		await archive.setConfig(baseConfig());
 		await addPage(archive, 'https://example.com/');
-		await populateMigrationTables(archive);
 
 		await ensureUrlSortTempTable(archive);
 		// A page added after the first prepare must NOT appear once the
 		// connection is already marked prepared — otherwise every list query
 		// would silently re-pay the full scan-and-sort cost on every call.
 		await addPage(archive, 'https://example.com/late');
-		await populateMigrationTables(archive);
 		await ensureUrlSortTempTable(archive);
 
 		const rows = await archive.getKnex()(URL_SORT_TEMP_TABLE).select('url');

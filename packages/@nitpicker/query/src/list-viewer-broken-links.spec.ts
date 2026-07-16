@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { listViewerBrokenLinks } from './list-viewer-broken-links.js';
@@ -198,7 +198,6 @@ describe('listViewerBrokenLinks', () => {
 		// list-links.ts's scope note that such rows must never satisfy
 		// `status = 404`.
 
-		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 
@@ -474,7 +473,6 @@ describe('listViewerBrokenLinks — redirect resolution', () => {
 			isSkipped: false,
 		});
 
-		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 
@@ -587,7 +585,6 @@ describe('listViewerBrokenLinks — a destination that is both broken and extern
 			isSkipped: false,
 		});
 
-		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 

@@ -5,11 +5,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import {
-	Archive,
-	CrawlerOrchestrator,
-	populateMigrationTables,
-} from '@nitpicker/crawler';
+import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
 
 /**
  * Result object returned by the E2E crawl helper.
@@ -17,6 +13,12 @@ import {
 export interface CrawlResult {
 	/** Read-only accessor for querying the crawled archive data. */
 	accessor: ArchiveAccessor;
+	/**
+	 * The orchestrator's writable archive handle, still open on `tmpDir`.
+	 * For assertions that need a write-capable accessor (e.g. building the
+	 * viewer read model); most tests should use `accessor` instead.
+	 */
+	archive: Archive;
 	/** Path to the temporary directory containing the raw archive (SQLite DB). */
 	tmpDir: string;
 	/** Path to the working directory created for this crawl session. */
@@ -59,18 +61,11 @@ export async function crawl(
 		},
 	);
 
-	// Populate the 0.13 entity tables from the crawler's still-legacy
-	// write path so `Archive.connect` below opens onto a populated
-	// archive; every reader assertion downstream reads from
-	// `content_items` / `page_meta` / … . #196 will move the crawler
-	// write path onto the new tables and this call becomes an
-	// idempotent `INSERT OR IGNORE` no-op.
-	await populateMigrationTables(orchestrator.archive);
 	const tmpDir = orchestrator.archive.tmpDir;
 	const filePath = orchestrator.archive.filePath;
 	const accessor = await Archive.connect(tmpDir);
 
-	return { accessor, tmpDir, cwd, filePath };
+	return { accessor, archive: orchestrator.archive, tmpDir, cwd, filePath };
 }
 
 /**

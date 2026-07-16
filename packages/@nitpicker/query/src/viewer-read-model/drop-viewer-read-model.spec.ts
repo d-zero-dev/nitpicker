@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildViewerReadModel } from './build-viewer-read-model.js';
@@ -73,7 +73,6 @@ describe('dropViewerReadModel', () => {
 			imageList: [],
 			isSkipped: false,
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -94,7 +93,9 @@ describe('dropViewerReadModel', () => {
 		expect(await hasViewerReadModel(archive)).toBe(true);
 
 		const knex = archive.getKnex();
-		const pagesBefore = await knex('pages').count<{ count: string }[]>({ count: '*' });
+		const pagesBefore = await knex('content_items').count<{ count: string }[]>({
+			count: '*',
+		});
 
 		await dropViewerReadModel(archive);
 
@@ -108,7 +109,9 @@ describe('dropViewerReadModel', () => {
 			expect(await knex.schema.hasTable(table)).toBe(false);
 		}
 
-		const pagesAfter = await knex('pages').count<{ count: string }[]>({ count: '*' });
+		const pagesAfter = await knex('content_items').count<{ count: string }[]>({
+			count: '*',
+		});
 		expect(pagesAfter[0]?.count).toBe(pagesBefore[0]?.count);
 	});
 

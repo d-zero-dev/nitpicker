@@ -30,16 +30,17 @@ describe('Scroll-jack page (viewport-dependent redirect)', () => {
 		expect(page).toBeDefined();
 
 		const knex = result.accessor.getKnex();
-		const images = await knex('images')
-			.join('pages', 'images.pageId', 'pages.id')
-			.where('pages.url', page!.url.href)
-			.select('images.*');
+		const images = await knex('image_items')
+			.join('content_items', 'image_items.page_id', 'content_items.id')
+			.join('url_refs', 'content_items.url_id', 'url_refs.id')
+			.where('url_refs.url', page!.url.href)
+			.select('image_items.*');
 
 		// クロールが正常完了し、少なくともデスクトップ分の画像が取得される。
 		expect(images.length).toBeGreaterThanOrEqual(1);
 
 		const desktopImages = images.filter(
-			(img: { viewportWidth: number }) => img.viewportWidth === 1280,
+			(img: { viewport_width: number }) => img.viewport_width === 1280,
 		);
 		expect(desktopImages.length).toBeGreaterThanOrEqual(1);
 	});

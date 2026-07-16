@@ -2,7 +2,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getViolations } from './get-violations.js';
@@ -136,7 +136,6 @@ describe('getViolations', () => {
 				code_sort_key: '',
 			},
 		]);
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -310,7 +309,6 @@ describe('getViolations (analysis未実行)', () => {
 			isSkipped: false,
 		});
 		// Do not seed analysis tables.
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

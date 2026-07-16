@@ -23,6 +23,7 @@ import knex from 'knex';
 import { emitErrorAndRetry } from '../utils/error/emit-error-with-retry.js';
 import { emitError } from '../utils/error/emit-error.js';
 
+import { createWriteRefCaches } from './db-ops/_shared/create-write-ref-caches.js';
 import { retrySetting } from './db-ops/_shared/retry-setting.js';
 import { replaceAnalysisViolations as replaceAnalysisViolationsOp } from './db-ops/analysis/replace-analysis-violations.js';
 import { getAnchorsOnPage as getAnchorsOnPageOp } from './db-ops/anchors/get-anchors-on-page.js';
@@ -41,7 +42,6 @@ import { destroy as destroyOp } from './db-ops/lifecycle/destroy.js';
 import { init as initOp } from './db-ops/lifecycle/init.js';
 import { getJsonLdOfPage as getJsonLdOfPageOp } from './db-ops/meta/get-jsonld-of-page.js';
 import { getTagsOfPage as getTagsOfPageOp } from './db-ops/meta/get-tags-of-page.js';
-import { addOrderField as addOrderFieldOp } from './db-ops/pages/order/add-order-field.js';
 import { setUrlOrder as setUrlOrderOp } from './db-ops/pages/order/set-url-order.js';
 import { getCrawlingState as getCrawlingStateOp } from './db-ops/pages/read/get-crawling-state.js';
 import { getExistingPageUrls as getExistingPageUrlsOp } from './db-ops/pages/read/get-existing-page-urls.js';
@@ -94,6 +94,8 @@ import { LibsqlDialect } from './libsql-dialect.js';
 export class Database extends EventEmitter<DatabaseEvent> {
 	/** The Knex query builder instance connected to the SQLite database. */
 	#instance: Knex;
+	/** Connection-scoped write-side id caches for entity/ref upserts. */
+	#writeRefCaches = createWriteRefCaches();
 	// eslint-disable-next-line no-restricted-syntax
 	private constructor(options: DatabaseOption) {
 		super();
@@ -123,15 +125,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		});
 	}
 
-	/**
-	 * Adds the `order` column to the `pages` table for URL sort ordering.
-	 * Delegates to {@link addOrderFieldOp}.
-	 * @deprecated Since v0.1.x. The column is now created during table initialization.
-	 * @returns The result of the schema alteration, or void if the column already exists.
-	 */
-	async addOrderField() {
-		return await addOrderFieldOp(this.#instance);
-	}
 	/**
 	 * Forces a WAL checkpoint, writing all pending WAL data back to the main
 	 * database file. Delegates to {@link checkpointOp}.
@@ -474,7 +467,8 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.insertInventoryResources',
-			async () => await insertInventoryResourcesOp(this.#instance, urls),
+			async () =>
+				await insertInventoryResourcesOp(this.#instance, this.#writeRefCaches, urls),
 			retrySetting,
 		);
 	}
@@ -490,7 +484,8 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.insertInventorySeeds',
-			async () => await insertInventorySeedsOp(this.#instance, urls),
+			async () =>
+				await insertInventorySeedsOp(this.#instance, this.#writeRefCaches, urls),
 			retrySetting,
 		);
 	}
@@ -508,7 +503,14 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			this,
 			'Database.insertPageError',
 			async () =>
-				await insertPageErrorOp(this.#instance, url, phase, message, isExternal),
+				await insertPageErrorOp(
+					this.#instance,
+					this.#writeRefCaches,
+					url,
+					phase,
+					message,
+					isExternal,
+				),
 			retrySetting,
 		);
 	}
@@ -523,7 +525,8 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.insertResource',
-			async () => await insertResourceOp(this.#instance, resource, source),
+			async () =>
+				await insertResourceOp(this.#instance, this.#writeRefCaches, resource, source),
 			retrySetting,
 		);
 	}
@@ -538,7 +541,13 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.insertResourceReferrers',
-			async () => await insertResourceReferrersOp(this.#instance, src, pageUrl),
+			async () =>
+				await insertResourceReferrersOp(
+					this.#instance,
+					this.#writeRefCaches,
+					src,
+					pageUrl,
+				),
 			retrySetting,
 		);
 	}
@@ -585,7 +594,8 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.recordRedirect',
-			async () => await recordRedirectOp(this.#instance, page, source),
+			async () =>
+				await recordRedirectOp(this.#instance, this.#writeRefCaches, page, source),
 			retrySetting,
 		);
 	}
@@ -671,7 +681,14 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.setSkippedPage',
-			async () => await setSkippedPageOp(this.#instance, url, reason, isExternal),
+			async () =>
+				await setSkippedPageOp(
+					this.#instance,
+					this.#writeRefCaches,
+					url,
+					reason,
+					isExternal,
+				),
 			retrySetting,
 		);
 	}
@@ -720,7 +737,15 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.updatePage',
-			async () => await updatePageOp(this.#instance, page, writeHtml, isTarget, source),
+			async () =>
+				await updatePageOp(
+					this.#instance,
+					this.#writeRefCaches,
+					page,
+					writeHtml,
+					isTarget,
+					source,
+				),
 			retrySetting,
 		);
 	}

@@ -82,6 +82,7 @@ import * as tar from 'tar';
 import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
 import { migrateEntityTables } from '../packages/@nitpicker/crawler/lib/archive/migrate-entity-tables.js';
 import { migrateRefTables } from '../packages/@nitpicker/crawler/lib/archive/migrate-ref-tables.js';
+import { deriveDomPath } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/derive-dom-path.js';
 import { matchImagesToDomPaths } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/match-images-to-dom-paths.js';
 import { populateEntityTables } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/populate-entities.js';
 import { populateRefTables } from '../packages/@nitpicker/crawler/lib/archive/populate-ref-tables/populate-refs.js';
@@ -297,8 +298,11 @@ function createJsdomDomPathResolver() {
 			);
 		}
 		try {
-			const imgElements = [...dom.window.document.querySelectorAll('img')];
-			const result = matchImagesToDomPaths(images, imgElements);
+			const candidates = [...dom.window.document.querySelectorAll('img')].map((img) => ({
+				outerHTML: img.outerHTML,
+				path: deriveDomPath(img),
+			}));
+			const result = matchImagesToDomPaths(images, candidates);
 			for (const [imageId, entry] of result) {
 				if (entry.case === 'unknown') {
 					console.warn(

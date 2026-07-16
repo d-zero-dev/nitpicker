@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getDirectoryTree } from './get-directory-tree.js';
@@ -64,7 +64,6 @@ describe('getDirectoryTree', () => {
 			mkdirSync(workingDir, { recursive: true });
 			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
 			await archive.setConfig(BASE_CONFIG);
-			await populateMigrationTables(archive);
 		});
 
 		afterAll(async () => {
@@ -116,7 +115,6 @@ describe('getDirectoryTree', () => {
 					isSkipped: false,
 				});
 			}
-			await populateMigrationTables(archive);
 			await buildViewerReadModel(archive);
 		});
 

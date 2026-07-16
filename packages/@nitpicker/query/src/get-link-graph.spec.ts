@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getLinkGraph } from './get-link-graph.js';
@@ -138,7 +138,6 @@ describe('getLinkGraph', () => {
 			imageList: [],
 			isSkipped: false,
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -209,21 +208,18 @@ describe('getLinkGraph', () => {
 	});
 
 	it('DB 上で source を書き換えた場合、その値がノードに反映される', async () => {
-		// pages テーブルの source を直接書き換えて、`getLinkGraph` の SELECT が
-		// その列を読み出せているか (= source が SELECT 抜けしていないか) と、
-		// 0.13 populate が re-run で `pages.source` の変更を `content_items.source`
-		// に反映するか (source-priority upgrade like `crawl --append` /
-		// `--retry-failed` の実運用パス) を同時に検証する。
-		// insertInventorySeeds + setPage を使うと source-priority の CASE WHEN が
-		// 経由してしまい、SELECT 抜けバグを検出できないので直書きで確認する。
+		// content_items テーブルの source を直接書き換えて、`getLinkGraph` の
+		// SELECT がその列を読み出せているか (= source が SELECT 抜けしていない
+		// か) を検証する。insertInventorySeeds + setPage を使うと
+		// source-priority の CASE WHEN が経由してしまい、SELECT 抜けバグを
+		// 検出できないので直書きで確認する。
 		const knex = archive.getKnex();
-		await knex('pages')
-			.where('url', 'https://example.com/about')
-			.update({ source: 'inventory-seed' });
-		await knex('pages')
-			.where('url', 'https://example.com/contact')
-			.update({ source: 'inventory-discovered' });
-		await populateMigrationTables(archive);
+		const updateSourceByUrl = (url: string, source: string) =>
+			knex('content_items')
+				.whereIn('url_id', knex('url_refs').select('id').where('url', url))
+				.update({ source });
+		await updateSourceByUrl('https://example.com/about', 'inventory-seed');
+		await updateSourceByUrl('https://example.com/contact', 'inventory-discovered');
 
 		const graph = await getLinkGraph(archive);
 		const about = graph.nodes.find((n) => n.url === 'https://example.com/about');
@@ -234,9 +230,7 @@ describe('getLinkGraph', () => {
 		expect(home?.source).toBe('crawled');
 
 		// テスト間の独立性を保つため元に戻す。
-		await knex('pages')
-			.whereIn('url', ['https://example.com/about', 'https://example.com/contact'])
-			.update({ source: 'crawled' });
-		await populateMigrationTables(archive);
+		await updateSourceByUrl('https://example.com/about', 'crawled');
+		await updateSourceByUrl('https://example.com/contact', 'crawled');
 	});
 });

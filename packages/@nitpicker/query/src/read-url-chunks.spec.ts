@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { readUrlChunks } from './read-url-chunks.js';
@@ -100,7 +100,6 @@ describe('readUrlChunks', () => {
 				isSkipped: false,
 			});
 		}
-		await populateMigrationTables(archive);
 
 		const chunks: string[][] = [];
 		for await (const chunk of readUrlChunks(archive, 'pages', 2)) {

@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { Archive, populateMigrationTables } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ensureViewerReadModel } from './ensure-viewer-read-model.js';
@@ -111,16 +111,20 @@ describe('ensureViewerReadModel', () => {
 
 	it('forwards onProgress to buildViewerReadModel when a build is actually needed', async () => {
 		const knex = archive.getKnex();
-		// This fixture archive never called setPage(), so `pages` is empty
-		// and a rebuild would insert zero rows (onProgress never fires). A
-		// bare raw insert gives buildViewerReadModel one row to report
-		// progress on without depending on another spec's page fixtures.
-		await knex('pages').insert({
-			url: 'https://example.com/progress-row',
+		// This fixture archive never called setPage(), so `content_items` is
+		// empty and a rebuild would insert zero rows (onProgress never
+		// fires). A bare raw insert gives buildViewerReadModel one row to
+		// report progress on without depending on another spec's page
+		// fixtures.
+		const [urlRef] = await knex('url_refs')
+			.insert({ url: 'https://example.com/progress-row' })
+			.returning('id');
+		await knex('content_items').insert({
+			url_id: urlRef.id,
 			scraped: 1,
-			isTarget: 1,
+			is_target: 1,
+			is_external: 0,
 		});
-		await populateMigrationTables(archive);
 		await knex('viewer_read_model_meta').where('id', 1).update({ schema_version: 0 });
 
 		const calls: unknown[] = [];

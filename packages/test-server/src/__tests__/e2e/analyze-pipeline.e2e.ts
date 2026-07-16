@@ -6,11 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { Nitpicker } from '@nitpicker/core';
-import {
-	Archive,
-	CrawlerOrchestrator,
-	populateMigrationTables,
-} from '@nitpicker/crawler';
+import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
 import { getViolations } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -42,7 +38,6 @@ describe('Analyze pipeline (crawl → write → analyze)', () => {
 			},
 		);
 		filePath = orchestrator.archive.filePath;
-		await populateMigrationTables(orchestrator.archive);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
