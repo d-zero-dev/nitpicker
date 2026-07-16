@@ -1,6 +1,8 @@
 import type { PageDetail } from './types.js';
 import type { ArchiveAccessor, JsonLdRow, TagRow } from '@nitpicker/crawler';
 
+import { decodeJsonRef, loadResponseHeadersBySetIds } from '@nitpicker/crawler';
+
 /**
  * Summarises JSON-LD rows for the page-detail response.
  * @param rows - The page's `page_jsonld` rows.
@@ -174,61 +176,34 @@ export async function getPageDetail(
 		return null;
 	}
 
-	// Reconstruct responseHeaders from 0.13 header_set_entries. Multiple
-	// same-name headers (e.g. `Set-Cookie`) collapse into a single
-	// comma-separated value to preserve the pre-0.13 JSON shape (a single
-	// key → string value map). Ordering is by `occurrence` to keep the
-	// concatenation deterministic.
+	// Reconstruct responseHeaders via the crawler's shared header loader so
+	// the detail view always agrees with the crawler's own read paths on
+	// how a given `header_set_id` merges back into a flat record.
 	let responseHeaders: Record<string, string> = {};
 	if (page.headerSetId != null) {
-		const headerRows = (await knex('header_set_entries as hse')
-			.join('header_name_refs as hnr', 'hnr.id', 'hse.name_id')
-			.join('header_value_refs as hvr', 'hvr.id', 'hse.value_id')
-			.where('hse.header_set_id', page.headerSetId)
-			.orderBy(['hnr.name', 'hse.occurrence'])
-			.select('hnr.name as name', 'hvr.value as value')) as {
-			name: string;
-			value: string;
-		}[];
-		const merged = new Map<string, string[]>();
-		for (const row of headerRows) {
-			const list = merged.get(row.name) ?? [];
-			list.push(row.value);
-			merged.set(row.name, list);
-		}
-		responseHeaders = Object.fromEntries(
-			[...merged.entries()].map(([k, v]) => [k, v.join(', ')]),
-		);
+		const headersBySetId = await loadResponseHeadersBySetIds(knex, [page.headerSetId]);
+		responseHeaders = headersBySetId.get(page.headerSetId) ?? {};
 	}
 
-	// Decode meta_extras from json_refs. `codec` is either 'zstd' (0.13
-	// compression) or 'none' (raw JSON text). Corrupt bodies fail closed and
-	// return `{}` with a warning, matching the pre-0.13 try/catch shape.
+	// Decode meta_extras via the crawler's shared json_refs decoder.
+	// Corrupt bodies fail closed to `{}` with a warning, matching the
+	// pre-0.13 try/catch shape.
 	let metaExtras: Record<string, unknown> = {};
 	if (page.extras_body != null) {
-		try {
-			let jsonText: string;
-			if (page.extras_codec === 'zstd') {
-				// 0.13 populates `json_refs.json_text` with
-				// `node:zlib.zstdCompressSync`; use the matching sync
-				// decompress from the same built-in so no extra
-				// dependency is required.
-				const { zstdDecompressSync } = await import('node:zlib');
-				const decompressed = zstdDecompressSync(page.extras_body as Buffer);
-				jsonText = decompressed.toString('utf8');
-			} else {
-				jsonText =
-					typeof page.extras_body === 'string'
-						? page.extras_body
-						: (page.extras_body as Buffer).toString('utf8');
-			}
-			const parsed: unknown = JSON.parse(jsonText);
-			if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-				metaExtras = parsed as Record<string, unknown>;
-			}
-		} catch (error) {
+		const jsonText = decodeJsonRef(page.extras_body, page.extras_codec);
+		if (jsonText === null) {
 			// eslint-disable-next-line no-console -- surfaces DB data-integrity issues
-			console.warn(`Failed to decode meta_extras for ${url}:`, error);
+			console.warn(`Failed to decode meta_extras for ${url}`);
+		} else {
+			try {
+				const parsed: unknown = JSON.parse(jsonText);
+				if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+					metaExtras = parsed as Record<string, unknown>;
+				}
+			} catch (error) {
+				// eslint-disable-next-line no-console -- surfaces DB data-integrity issues
+				console.warn(`Failed to decode meta_extras for ${url}:`, error);
+			}
 		}
 	}
 

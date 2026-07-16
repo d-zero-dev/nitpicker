@@ -75,6 +75,11 @@ async function insertPage(
 		is_target: 1,
 		is_external: 0,
 		is_skipped: row.isSkipped,
+		// A scraped=1 row always carries crawl timestamps in real archives
+		// (insert-page.ts COALESCEs first_crawled_at on first scrape) — the
+		// fixture matches that shape so it never exercises impossible states.
+		first_crawled_at: 1_700_000_000_000,
+		last_crawled_at: 1_700_000_000_000,
 	});
 }
 
