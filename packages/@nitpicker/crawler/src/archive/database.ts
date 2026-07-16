@@ -23,6 +23,7 @@ import knex from 'knex';
 import { emitErrorAndRetry } from '../utils/error/emit-error-with-retry.js';
 import { emitError } from '../utils/error/emit-error.js';
 
+import { createWriteRefCaches } from './db-ops/_shared/create-write-ref-caches.js';
 import { retrySetting } from './db-ops/_shared/retry-setting.js';
 import { replaceAnalysisViolations as replaceAnalysisViolationsOp } from './db-ops/analysis/replace-analysis-violations.js';
 import { getAnchorsOnPage as getAnchorsOnPageOp } from './db-ops/anchors/get-anchors-on-page.js';
@@ -94,6 +95,8 @@ import { LibsqlDialect } from './libsql-dialect.js';
 export class Database extends EventEmitter<DatabaseEvent> {
 	/** The Knex query builder instance connected to the SQLite database. */
 	#instance: Knex;
+	/** Connection-scoped write-side id caches for entity/ref upserts. */
+	#writeRefCaches = createWriteRefCaches();
 	// eslint-disable-next-line no-restricted-syntax
 	private constructor(options: DatabaseOption) {
 		super();
@@ -474,7 +477,8 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.insertInventoryResources',
-			async () => await insertInventoryResourcesOp(this.#instance, urls),
+			async () =>
+				await insertInventoryResourcesOp(this.#instance, this.#writeRefCaches, urls),
 			retrySetting,
 		);
 	}
@@ -490,7 +494,8 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.insertInventorySeeds',
-			async () => await insertInventorySeedsOp(this.#instance, urls),
+			async () =>
+				await insertInventorySeedsOp(this.#instance, this.#writeRefCaches, urls),
 			retrySetting,
 		);
 	}
@@ -508,7 +513,14 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			this,
 			'Database.insertPageError',
 			async () =>
-				await insertPageErrorOp(this.#instance, url, phase, message, isExternal),
+				await insertPageErrorOp(
+					this.#instance,
+					this.#writeRefCaches,
+					url,
+					phase,
+					message,
+					isExternal,
+				),
 			retrySetting,
 		);
 	}
@@ -523,7 +535,8 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.insertResource',
-			async () => await insertResourceOp(this.#instance, resource, source),
+			async () =>
+				await insertResourceOp(this.#instance, this.#writeRefCaches, resource, source),
 			retrySetting,
 		);
 	}
@@ -538,7 +551,13 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.insertResourceReferrers',
-			async () => await insertResourceReferrersOp(this.#instance, src, pageUrl),
+			async () =>
+				await insertResourceReferrersOp(
+					this.#instance,
+					this.#writeRefCaches,
+					src,
+					pageUrl,
+				),
 			retrySetting,
 		);
 	}
@@ -585,7 +604,8 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.recordRedirect',
-			async () => await recordRedirectOp(this.#instance, page, source),
+			async () =>
+				await recordRedirectOp(this.#instance, this.#writeRefCaches, page, source),
 			retrySetting,
 		);
 	}
@@ -671,7 +691,14 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.setSkippedPage',
-			async () => await setSkippedPageOp(this.#instance, url, reason, isExternal),
+			async () =>
+				await setSkippedPageOp(
+					this.#instance,
+					this.#writeRefCaches,
+					url,
+					reason,
+					isExternal,
+				),
 			retrySetting,
 		);
 	}
@@ -720,7 +747,15 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		return emitErrorAndRetry(
 			this,
 			'Database.updatePage',
-			async () => await updatePageOp(this.#instance, page, writeHtml, isTarget, source),
+			async () =>
+				await updatePageOp(
+					this.#instance,
+					this.#writeRefCaches,
+					page,
+					writeHtml,
+					isTarget,
+					source,
+				),
 			retrySetting,
 		);
 	}

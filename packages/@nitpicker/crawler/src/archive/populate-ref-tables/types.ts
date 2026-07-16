@@ -166,6 +166,33 @@ export interface HeaderFlagsRow {
 }
 
 /**
+ * In-process caches shared by every header-table upsert against one
+ * archive connection. The three id-maps resolve `header_name_refs.id` /
+ * `header_value_refs.id` / `header_sets.id` without hitting the DB once
+ * a value has been seen (or preloaded from existing rows).
+ *
+ * `setIdsProcessedThisRun` tracks the subset of `setIdByRawJsonHash` /
+ * `setIdByRawHash` that the current process has already written
+ * entries + flags for. A preloaded id from a prior run is present in the
+ * id caches but NOT in this set — so the entries + flags inserts still
+ * run once (safe under `INSERT OR IGNORE`) to repair any missing rows
+ * left by a crashed writer. Once entries + flags for a given setId have
+ * been written this run, the shortcut skips redundant no-op inserts.
+ */
+export interface HeaderTableCaches {
+	/** `lower-cased name → header_name_refs.id`. */
+	readonly nameIdCache: Map<string, number>;
+	/** `hexHash|value → header_value_refs.id`. */
+	readonly valueIdCache: Map<string, number>;
+	/** `hex(raw_json_hash) → header_sets.id`. */
+	readonly setIdByRawJsonHash: Map<string, number>;
+	/** `hex(raw_hash) → header_sets.id`. */
+	readonly setIdByRawHash: Map<string, number>;
+	/** `header_sets.id` values already fully processed by this process. */
+	readonly setIdsProcessedThisRun: Set<number>;
+}
+
+/**
  * Category label attached to each content-type rule. Mirrors the union
  * `ContentTypeCategory` in `@nitpicker/query/src/types.ts` — kept as a
  * plain string literal here so `@nitpicker/crawler`'s 0.13 step

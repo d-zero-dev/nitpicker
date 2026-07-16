@@ -1,4 +1,3 @@
-import type { DB_Page } from '../../../types.js';
 import type { Knex } from 'knex';
 
 import { pathComparator } from '@d-zero/shared/sort/path';
@@ -6,16 +5,18 @@ import { pathComparator } from '@d-zero/shared/sort/path';
 import { dbLog } from '../../../debug.js';
 
 /**
- * Assigns natural URL sort order values to all internal pages.
- * Pages are sorted using {@link pathComparator} and assigned sequential order numbers.
+ * Assigns natural URL sort order values (`content_items.crawl_order`) to
+ * all internal pages. Pages are sorted using {@link pathComparator} and
+ * assigned sequential order numbers.
  * @param knex - Knex query builder connected to the archive DB.
  */
 export async function setUrlOrder(knex: Knex): Promise<void> {
 	dbLog('Set URL Order');
-	const res = await knex
-		.select('id', 'url')
-		.from<DB_Page>('pages')
-		.where('isExternal', '=', 0);
+	const res = (await knex
+		.select('ci.id', 'ur.url')
+		.from('content_items as ci')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.where('ci.is_external', '=', 0)) as { id: number; url: string }[];
 	const sorted = res.toSorted((a, b) => pathComparator(a.url, b.url));
 
 	// Batch update using chunked CASE statements to avoid N+1 queries
@@ -32,7 +33,7 @@ export async function setUrlOrder(knex: Knex): Promise<void> {
 			.join(' ');
 		const placeholders = ids.map(() => '?').join(',');
 		await knex.raw(
-			`UPDATE pages SET \`order\` = CASE id ${cases} END WHERE id IN (${placeholders})`,
+			`UPDATE content_items SET crawl_order = CASE id ${cases} END WHERE id IN (${placeholders})`,
 			[...bindings, ...ids],
 		);
 	}

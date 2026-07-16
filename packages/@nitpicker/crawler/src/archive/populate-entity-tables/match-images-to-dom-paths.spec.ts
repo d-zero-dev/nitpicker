@@ -1,16 +1,22 @@
+import type { DomPathCandidate } from './types.js';
+
 import { JSDOM } from 'jsdom';
 import { describe, it, expect } from 'vitest';
 
+import { deriveDomPath } from './derive-dom-path.js';
 import { matchImagesToDomPaths } from './match-images-to-dom-paths.js';
 
 /**
- * Parses `html`, returns the `<img>` list in document order for use with
- * `matchImagesToDomPaths`.
+ * Parses `html`, returns the `<img>` candidates (outerHTML + derived
+ * dom_path) in document order for use with `matchImagesToDomPaths`.
  * @param html - Fixture HTML.
  */
-function imgs(html: string): Element[] {
+function imgs(html: string): DomPathCandidate[] {
 	const dom = new JSDOM(html);
-	return [...dom.window.document.querySelectorAll('img')];
+	return [...dom.window.document.querySelectorAll('img')].map((img) => ({
+		outerHTML: img.outerHTML,
+		path: deriveDomPath(img),
+	}));
 }
 
 describe('matchImagesToDomPaths (dom-path-derivation, all 3 cases)', () => {
