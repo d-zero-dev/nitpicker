@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildViewerReadModel } from './build-viewer-read-model.js';
@@ -73,7 +73,6 @@ describe('dropViewerReadModel', () => {
 			imageList: [],
 			isSkipped: false,
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { Archive, populateMigrationTables } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ensureViewerReadModel } from './ensure-viewer-read-model.js';
@@ -120,7 +120,6 @@ describe('ensureViewerReadModel', () => {
 			scraped: 1,
 			isTarget: 1,
 		});
-		await populateMigrationTables(archive);
 		await knex('viewer_read_model_meta').where('id', 1).update({ schema_version: 0 });
 
 		const calls: unknown[] = [];

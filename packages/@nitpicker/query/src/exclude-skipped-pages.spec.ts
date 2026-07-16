@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { Archive, populateMigrationTables } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { excludeSkippedPages } from './exclude-skipped-pages.js';
@@ -104,7 +104,6 @@ describe('excludeSkippedPages', () => {
 				isSkipped: 1,
 			},
 		]);
-		await populateMigrationTables(archive);
 
 		expect(await urlsSurvivingExclusion(knex)).toEqual(['https://example.com/scraped']);
 	});
@@ -150,7 +149,6 @@ describe('excludeSkippedPages', () => {
 				isSkipped: 1,
 			},
 		]);
-		await populateMigrationTables(archive);
 		// Simulate a pre-flag archive by nulling the newly-populated
 		// `content_items.is_skipped` value for the legacy row.
 		await knex('content_items as ci')
@@ -199,7 +197,6 @@ describe('excludeSkippedPages', () => {
 				isSkipped: 1,
 			},
 		]);
-		await populateMigrationTables(archive);
 
 		expect(await urlsSurvivingExclusion(knex)).toEqual([]);
 	});

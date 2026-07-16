@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getSummary } from './get-summary.js';
@@ -291,7 +291,6 @@ describe('getSummary', () => {
 			imageList: [],
 			isSkipped: false,
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -437,7 +436,6 @@ describe('getSummary: HTMLページが1つも無い（全てエラー/到達不�
 			imageList: [],
 			isSkipped: false,
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

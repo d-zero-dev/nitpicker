@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { joinViewerPageIdsToListItems } from './join-viewer-page-ids-to-list-items.js';
@@ -102,7 +102,6 @@ describe('joinViewerPageIdsToListItems', () => {
 		const rows: { id: number; url: string }[] = await knex('pages').select('id', 'url');
 		idA = rows.find((r) => r.url === 'https://example.com/a')!.id;
 		idB = rows.find((r) => r.url === 'https://example.com/b')!.id;
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

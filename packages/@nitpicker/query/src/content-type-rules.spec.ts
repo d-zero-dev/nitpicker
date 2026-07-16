@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { classifyContentType } from './classify-content-type.js';
@@ -180,7 +180,6 @@ describe('applyCategoryFilter spot-checks (hardcoded expected URLs for known-ove
 				isSkipped: false,
 			});
 		}
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -285,7 +284,6 @@ describe('applyCategoryFilter unit test (raw SQL injection for the empty-string 
 			status: 200,
 			contentType: null,
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -397,7 +395,6 @@ describe('applyCategoryFilter (SQL) agrees with classifyContentType (JS) on ever
 			});
 			i++;
 		}
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

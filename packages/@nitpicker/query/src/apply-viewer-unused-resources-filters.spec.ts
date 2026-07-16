@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { applyViewerUnusedResourcesFilters } from './apply-viewer-unused-resources-filters.js';
@@ -115,7 +115,6 @@ describe('applyViewerUnusedResourcesFilters', () => {
 			src: 'https://example.com/used.css',
 		});
 
-		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 

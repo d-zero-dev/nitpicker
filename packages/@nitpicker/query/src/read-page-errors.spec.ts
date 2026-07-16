@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { readPageErrors } from './read-page-errors.js';
@@ -89,7 +89,6 @@ describe('readPageErrors', () => {
 			'retryExhausted',
 			'Navigation timeout of 60000 ms',
 		);
-		await populateMigrationTables(archive);
 
 		const records = await readPageErrors(archive);
 		expect(records).toHaveLength(1);

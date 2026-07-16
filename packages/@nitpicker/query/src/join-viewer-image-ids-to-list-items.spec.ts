@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { joinViewerImageIdsToListItems } from './join-viewer-image-ids-to-list-items.js';
@@ -113,7 +113,6 @@ describe('joinViewerImageIdsToListItems', () => {
 		idA = rows.find((r) => r.src === 'https://example.com/a.png')!.id;
 		idB = rows.find((r) => r.src === 'https://example.com/b.png')!.id;
 
-		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 

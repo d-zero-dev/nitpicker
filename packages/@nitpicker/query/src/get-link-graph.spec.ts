@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getLinkGraph } from './get-link-graph.js';
@@ -138,7 +138,6 @@ describe('getLinkGraph', () => {
 			imageList: [],
 			isSkipped: false,
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -223,7 +222,6 @@ describe('getLinkGraph', () => {
 		await knex('pages')
 			.where('url', 'https://example.com/contact')
 			.update({ source: 'inventory-discovered' });
-		await populateMigrationTables(archive);
 
 		const graph = await getLinkGraph(archive);
 		const about = graph.nodes.find((n) => n.url === 'https://example.com/about');
@@ -237,6 +235,5 @@ describe('getLinkGraph', () => {
 		await knex('pages')
 			.whereIn('url', ['https://example.com/about', 'https://example.com/contact'])
 			.update({ source: 'crawled' });
-		await populateMigrationTables(archive);
 	});
 });

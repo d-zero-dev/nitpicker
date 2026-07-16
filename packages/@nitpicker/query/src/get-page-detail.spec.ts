@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getPageDetail } from './get-page-detail.js';
@@ -132,7 +132,6 @@ describe('getPageDetail', () => {
 			imageList: [],
 			isSkipped: false,
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {
@@ -161,7 +160,6 @@ describe('getPageDetail', () => {
 		// excluded from crawling (robots.txt / excludeUrls /
 		// excludeKeywords) — no list view exposes skip reasons.
 		await archive.setSkippedPage('https://example.com/excluded', 'excluded', false);
-		await populateMigrationTables(archive);
 		const result = await getPageDetail(archive, 'https://example.com/excluded');
 		expect(result).not.toBeNull();
 		expect(result!.isSkipped).toBe(true);
@@ -344,7 +342,6 @@ describe('getPageDetail: 被リンクを redirect 越しに解決する（http/h
 			imageList: [],
 			isSkipped: false,
 		});
-		await populateMigrationTables(archive);
 	});
 
 	afterAll(async () => {

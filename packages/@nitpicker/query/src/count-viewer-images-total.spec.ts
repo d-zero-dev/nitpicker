@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { populateMigrationTables, Archive } from '@nitpicker/crawler';
+import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { countViewerImagesTotal } from './count-viewer-images-total.js';
@@ -106,7 +106,6 @@ describe('countViewerImagesTotal', () => {
 			isSkipped: false,
 		});
 
-		await populateMigrationTables(archive);
 		await buildViewerReadModel(archive);
 	});
 
