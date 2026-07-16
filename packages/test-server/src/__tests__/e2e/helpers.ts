@@ -13,6 +13,12 @@ import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
 export interface CrawlResult {
 	/** Read-only accessor for querying the crawled archive data. */
 	accessor: ArchiveAccessor;
+	/**
+	 * The orchestrator's writable archive handle, still open on `tmpDir`.
+	 * For assertions that need a write-capable accessor (e.g. building the
+	 * viewer read model); most tests should use `accessor` instead.
+	 */
+	archive: Archive;
 	/** Path to the temporary directory containing the raw archive (SQLite DB). */
 	tmpDir: string;
 	/** Path to the working directory created for this crawl session. */
@@ -59,7 +65,7 @@ export async function crawl(
 	const filePath = orchestrator.archive.filePath;
 	const accessor = await Archive.connect(tmpDir);
 
-	return { accessor, tmpDir, cwd, filePath };
+	return { accessor, archive: orchestrator.archive, tmpDir, cwd, filePath };
 }
 
 /**

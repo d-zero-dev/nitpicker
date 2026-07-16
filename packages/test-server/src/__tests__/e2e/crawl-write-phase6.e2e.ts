@@ -1,5 +1,6 @@
 import type { Knex } from 'knex';
 
+import { buildViewerReadModel } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
@@ -66,5 +67,39 @@ describe('crawler write path targets entity tables directly (issue #196)', () =>
 			const count = await countRows(knex, table);
 			expect(count, `expected ${table} to be non-empty`).toBeGreaterThan(0);
 		}
+	});
+
+	it('viewer read model が新 writer の書いた entity テーブルから実データを再構成できる', async () => {
+		// テーブルの行数チェックだけでは「viewer が中身を読めるか」を
+		// 保証できない — read model build を実行し、具体的なページ URL が
+		// viewer_pages に現れることまで確認する（crawl → viewer の
+		// パイプライン全体が新 writer で成立している証明）。build は
+		// 書き込みを伴うため read-only の accessor ではなく writable な
+		// archive ハンドルで行う。
+		await buildViewerReadModel(result.archive);
+		const knex = result.accessor.getKnex();
+		const viewerPages = (await knex('viewer_pages').select('url')) as {
+			url: string;
+		}[];
+		expect(viewerPages.length).toBeGreaterThan(0);
+		expect(viewerPages.map((p) => p.url)).toContain(
+			'http://localhost:8010/resource-reuse/',
+		);
+	});
+
+	it('image_items の dom_path が実 DOM 由来の値を持つ（unknown/ フォールバックに落ちていない）', async () => {
+		// 実クロール中に captureImageDomPaths が puppeteer page から dom_path
+		// を採取できていれば、少なくとも 1 行は `unknown/<n>` 合成マーカー
+		// ではない実パス（`html/...` 形式）になる。
+		const knex = result.accessor.getKnex();
+		const rows = (await knex('image_items as ii')
+			.join('text_refs as tr', 'ii.dom_path_text_id', 'tr.id')
+			.select('tr.text as domPath')) as { domPath: string }[];
+		expect(rows.length).toBeGreaterThan(0);
+		const realPaths = rows.filter((r) => r.domPath.startsWith('html/'));
+		expect(
+			realPaths.length,
+			`expected at least one real dom path, got: ${rows.map((r) => r.domPath).join(', ')}`,
+		).toBeGreaterThan(0);
 	});
 });

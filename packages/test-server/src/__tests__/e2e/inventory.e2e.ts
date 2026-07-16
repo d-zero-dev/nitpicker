@@ -139,8 +139,8 @@ describe('Inventory crawl', () => {
 
 	// Note: a "second inventory pass keeps the existing source label"
 	// scenario is intentionally left out here. The non-destructive property
-	// is enforced at the SQL layer — `#getIdByUrl`'s `ON CONFLICT IGNORE`
-	// path is exercised by the migration / database specs, and the
+	// is enforced at the SQL layer — `resolveContentItemId`'s insert-only
+	// `source` semantics are exercised by the migration / database specs, and the
 	// existing-URL filter (`getExistingPageUrls`) keeps the second pass
 	// from even reaching the INSERT — so an E2E re-pass would only retest
 	// what those unit tests already cover, at the cost of running a full

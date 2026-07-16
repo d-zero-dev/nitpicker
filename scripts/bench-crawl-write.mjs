@@ -140,51 +140,56 @@ function buildPageData(i) {
  */
 async function main() {
 	const cwd = mkdtempSync(path.join(os.tmpdir(), 'nitpicker-bench-write-'));
-	const filePath = path.join(cwd, 'bench.nitpicker');
-	console.log(`Writing ${PAGE_COUNT} synthetic pages to ${filePath}`);
+	try {
+		const filePath = path.join(cwd, 'bench.nitpicker');
+		console.log(`Writing ${PAGE_COUNT} synthetic pages to ${filePath}`);
 
-	const archive = await Archive.create({ filePath, cwd });
-	await archive.setConfig({
-		baseUrl: 'https://bench.example',
-		name: 'bench',
-		version: '0.13.0',
-		recursive: true,
-		interval: 0,
-		image: true,
-		fetchExternal: false,
-		parallels: 1,
-		roots: ['https://bench.example/'],
-		excludes: [],
-		excludeKeywords: [],
-		excludeUrls: [],
-		maxExcludedDepth: 0,
-		retry: 3,
-		fromList: false,
-		disableQueries: false,
-		userAgent: 'bench',
-		ignoreRobots: false,
-	});
+		const archive = await Archive.create({ filePath, cwd });
+		try {
+			await archive.setConfig({
+				baseUrl: 'https://bench.example',
+				name: 'bench',
+				version: '0.13.0',
+				recursive: true,
+				interval: 0,
+				image: true,
+				fetchExternal: false,
+				parallels: 1,
+				roots: ['https://bench.example/'],
+				excludes: [],
+				excludeKeywords: [],
+				excludeUrls: [],
+				maxExcludedDepth: 0,
+				retry: 3,
+				fromList: false,
+				disableQueries: false,
+				userAgent: 'bench',
+				ignoreRobots: false,
+			});
 
-	const start = process.hrtime.bigint();
-	for (let i = 0; i < PAGE_COUNT; i++) {
-		await archive.setPage(buildPageData(i));
-		if ((i + 1) % PROGRESS_INTERVAL === 0) {
-			const elapsedMs = Number(process.hrtime.bigint() - start) / 1e6;
-			console.log(
-				`  ${i + 1}/${PAGE_COUNT} pages (${elapsedMs.toFixed(0)}ms elapsed, ${(elapsedMs / (i + 1)).toFixed(2)}ms/page)`,
-			);
+			const start = process.hrtime.bigint();
+			for (let i = 0; i < PAGE_COUNT; i++) {
+				await archive.setPage(buildPageData(i));
+				if ((i + 1) % PROGRESS_INTERVAL === 0) {
+					const elapsedMs = Number(process.hrtime.bigint() - start) / 1e6;
+					console.log(
+						`  ${i + 1}/${PAGE_COUNT} pages (${elapsedMs.toFixed(0)}ms elapsed, ${(elapsedMs / (i + 1)).toFixed(2)}ms/page)`,
+					);
+				}
+			}
+			const totalMs = Number(process.hrtime.bigint() - start) / 1e6;
+
+			console.log('\n========== RESULT ==========');
+			console.log(`  pageCount:    ${PAGE_COUNT}`);
+			console.log(`  totalMs:      ${totalMs.toFixed(0)}`);
+			console.log(`  msPerPage:    ${(totalMs / PAGE_COUNT).toFixed(3)}`);
+			console.log(`  pagesPerSec:  ${(PAGE_COUNT / (totalMs / 1000)).toFixed(1)}`);
+		} finally {
+			await archive.releaseHandle();
 		}
+	} finally {
+		rmSync(cwd, { recursive: true, force: true });
 	}
-	const totalMs = Number(process.hrtime.bigint() - start) / 1e6;
-
-	await archive.releaseHandle();
-	rmSync(cwd, { recursive: true, force: true });
-
-	console.log('\n========== RESULT ==========');
-	console.log(`  pageCount:    ${PAGE_COUNT}`);
-	console.log(`  totalMs:      ${totalMs.toFixed(0)}`);
-	console.log(`  msPerPage:    ${(totalMs / PAGE_COUNT).toFixed(3)}`);
-	console.log(`  pagesPerSec:  ${(PAGE_COUNT / (totalMs / 1000)).toFixed(1)}`);
 }
 
 await main();
