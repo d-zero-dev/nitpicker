@@ -22,18 +22,23 @@ const dbPath = path.resolve(
  */
 async function insertPageRow(db: Database, url: string): Promise<number> {
 	const knex = db.getKnex();
-	const [inserted] = await knex('pages')
+	const [urlRef] = await knex('url_refs').insert({ url }).returning('id');
+	const [ctRef] = await knex('content_type_refs')
+		.insert({ raw: 'text/html', normalized: 'text/html', category: 'other' })
+		.onConflict('raw')
+		.merge({ raw: 'text/html' })
+		.returning('id');
+	const [inserted] = await knex('content_items')
 		.insert({
-			url,
+			url_id: urlRef.id,
 			scraped: 1,
-			isTarget: 1,
-			isExternal: 0,
+			is_target: 1,
+			is_external: 0,
 			status: -1,
-			statusText: 'NetTimeoutError',
-			contentType: 'text/html',
-			contentLength: 0,
-			responseHeaders: '{}',
-			isSkipped: 0,
+			status_text: 'NetTimeoutError',
+			content_type_id: ctRef.id,
+			content_length: 0,
+			is_skipped: 0,
 		})
 		.returning('id');
 	return Number(

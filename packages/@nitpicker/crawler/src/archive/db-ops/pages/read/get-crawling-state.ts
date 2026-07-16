@@ -1,4 +1,3 @@
-import type { DB_Page } from '../../../types.js';
 import type { Knex } from 'knex';
 
 /**
@@ -12,17 +11,17 @@ import type { Knex } from 'knex';
  * Three filters apply:
  *
  * 1. `scraped = 0` — work still incomplete.
- * 2. `isExternal = 0` — only in-scope work. External URLs go through a
+ * 2. `is_external = 0` — only in-scope work. External URLs go through a
  *    HEAD-only path that always lands on `scraped = 1` (either setPage or
- *    setExternalPage). A row with `isExternal = 1 AND scraped = 0` is
+ *    setExternalPage). A row with `is_external = 1 AND scraped = 0` is
  *    therefore a data anomaly, and resume / inventory / append have no
  *    business retrying it on the next session.
- * 3. `EXISTS (anchor with hrefId = pages.id) OR source != 'crawled'` —
- *    the row was either discovered as an anchor destination during a
- *    previous scrape OR was explicitly tagged with a non-default
- *    source label (`'inventory-seed'`, `'inventory-discovered'`, …).
- *    Both halves of the OR represent "deliberately enqueued, expected
- *    to be processed", which is exactly what `resume` should pick up.
+ * 3. `EXISTS (anchor_edges with href_page_id = content_items.id) OR source
+ *    != 'crawled'` — the row was either discovered as an anchor destination
+ *    during a previous scrape OR was explicitly tagged with a non-default
+ *    source label (`'inventory-seed'`, `'inventory-discovered'`, …). Both
+ *    halves of the OR represent "deliberately enqueued, expected to be
+ *    processed", which is exactly what `resume` should pick up.
  *
  *    The orphan filter targets the **predicted-discard leak** in
  *    `crawler.ts` where `shouldDiscardPredicted` returns true but no
@@ -54,9 +53,9 @@ import type { Knex } from 'knex';
  * responsibility of the caller (e.g. re-running `--inventory ./list.txt`
  * with the same URL list).
  *
- * The query uses an explicit `p` alias on the `pages` table so the
- * correlated `EXISTS` subquery can join via `whereRaw('anchors.hrefId =
- * p.id')`. A future refactor that renames the alias must update both
+ * The query uses an explicit `ci` alias on the `content_items` table so the
+ * correlated `EXISTS` subquery can join via `whereRaw('anchor_edges.href_page_id
+ * = ci.id')`. A future refactor that renames the alias must update both
  * sites — the raw string in the subquery cannot be grep-resolved
  * automatically. Read-only / stub viewer connections never call this
  * method (they do not need to know about pending state), so the EXISTS
@@ -70,13 +69,17 @@ export async function getCrawlingState(
 	knex: Knex,
 ): Promise<{ scraped: string[]; pending: string[] }> {
 	const ex = (r: { url: string }) => r.url;
-	const $scraped = await knex.select('url').from<DB_Page>('pages').where('scraped', 1);
+	const $scraped = await knex('content_items')
+		.join('url_refs', 'url_refs.id', 'content_items.url_id')
+		.select('url_refs.url as url')
+		.where('content_items.scraped', 1);
 	const scraped = $scraped.map(ex);
 	const $pending = await knex
-		.select('p.url')
-		.from<DB_Page>({ p: 'pages' })
-		.where('p.scraped', 0)
-		.where('p.isExternal', 0)
+		.select('ur.url as url')
+		.from({ ci: 'content_items' })
+		.join({ ur: 'url_refs' }, 'ur.id', 'ci.url_id')
+		.where('ci.scraped', 0)
+		.where('ci.is_external', 0)
 		.where((qb) => {
 			// "Anchored OR explicitly labelled". Either side is evidence
 			// that the row was deliberately enqueued for processing —
@@ -86,8 +89,10 @@ export async function getCrawlingState(
 			// inside an EXISTS check; calling through `client.raw(...)`
 			// would reach a private builder field.
 			qb.whereExists(function () {
-				this.select('*').from('anchors').whereRaw('anchors.hrefId = p.id');
-			}).orWhereNot('p.source', 'crawled');
+				this.select('*')
+					.from('anchor_edges')
+					.whereRaw('anchor_edges.href_page_id = ci.id');
+			}).orWhereNot('ci.source', 'crawled');
 		});
 	const pending = $pending.map(ex);
 	return {

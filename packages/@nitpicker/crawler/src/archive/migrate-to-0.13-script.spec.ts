@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
-import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import knex from 'knex';
 import * as tar from 'tar';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -19,12 +18,12 @@ const repoRoot = path.resolve(__dirname, '..', '..', '..', '..', '..');
 const migrateScript = path.resolve(repoRoot, 'scripts', 'migrate-to-0.13.mjs');
 
 /**
- * Builds a small but realistic 0.10 archive fixture via the production
- * `Archive.create` + `setPage` path so downstream migration steps see a
- * schema that matches what a real crawl would produce. Two pages, three
- * anchors (two pointing to the same href for dedup coverage), and one
- * shared external resource are inserted so the anchor-edges / resource
- * populate paths have data to work on.
+ * Builds a small but realistic 0.10 archive fixture by inserting directly
+ * into the legacy `pages` / `anchors` tables (the crawler's write path now
+ * targets `content_items` / `anchor_edges` directly, so a genuine 0.10-shaped
+ * archive — the migration script's actual input — can no longer be produced
+ * via `setPage`). Two pages, three anchors (two pointing to the same href
+ * for dedup coverage) so the anchor-edges populate path has data to work on.
  * @param filePath - Where to write the resulting `.nitpicker`.
  */
 async function buildFixtureArchive(filePath: string): Promise<void> {
@@ -50,51 +49,42 @@ async function buildFixtureArchive(filePath: string): Promise<void> {
 			userAgent: 'test',
 			ignoreRobots: false,
 		});
-		await archive.setPage({
-			url: parseUrl('http://localhost/a')!,
-			redirectPaths: [],
-			isExternal: false,
-			status: 200,
-			statusText: 'OK',
-			contentLength: 100,
-			contentType: 'text/html',
-			responseHeaders: {},
-			meta: { title: 'Page A' },
-			anchorList: [
-				{
-					href: parseUrl('http://localhost/b')!,
-					textContent: 'link1',
-					isExternal: false,
-				},
-				{
-					href: parseUrl('http://localhost/b')!,
-					textContent: 'link2',
-					isExternal: false,
-				},
-			],
-			imageList: [],
-			html: '<html><body>a</body></html>',
-			isSkipped: false,
-			isTarget: true,
-		});
-		await archive.setPage({
-			url: parseUrl('http://localhost/b')!,
-			redirectPaths: [],
-			isExternal: false,
-			status: 200,
-			statusText: 'OK',
-			contentLength: 100,
-			contentType: 'text/html',
-			responseHeaders: {},
-			meta: { title: 'Page B' },
-			anchorList: [
-				{ href: parseUrl('http://localhost/a')!, textContent: 'back', isExternal: false },
-			],
-			imageList: [],
-			html: '<html><body>b</body></html>',
-			isSkipped: false,
-			isTarget: true,
-		});
+		const knexInstance = archive.getKnex();
+		const [pageA] = await knexInstance('pages')
+			.insert({
+				url: 'http://localhost/a',
+				scraped: 1,
+				isTarget: 1,
+				isExternal: 0,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: '{}',
+				title: 'Page A',
+				isSkipped: 0,
+			})
+			.returning('id');
+		const [pageB] = await knexInstance('pages')
+			.insert({
+				url: 'http://localhost/b',
+				scraped: 1,
+				isTarget: 1,
+				isExternal: 0,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: '{}',
+				title: 'Page B',
+				isSkipped: 0,
+			})
+			.returning('id');
+		await knexInstance('anchors').insert([
+			{ pageId: pageA.id, hrefId: pageB.id, textContent: 'link1', hash: null },
+			{ pageId: pageA.id, hrefId: pageB.id, textContent: 'link2', hash: null },
+			{ pageId: pageB.id, hrefId: pageA.id, textContent: 'back', hash: null },
+		]);
 	} finally {
 		await archive.close();
 	}

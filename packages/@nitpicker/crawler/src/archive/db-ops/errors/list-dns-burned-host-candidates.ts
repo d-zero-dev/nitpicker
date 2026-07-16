@@ -83,12 +83,13 @@ export async function listDnsBurnedHostCandidates(knex: Knex): Promise<string[]>
 	}
 
 	// Exclusion-bag #1: pages with a 2xx-3xx status anywhere on the host.
-	// Tracking the latest `lastCrawledAt` per host lets us additionally
+	// Tracking the latest `last_crawled_at` per host lets us additionally
 	// drop hosts whose last successful contact post-dates the most recent
 	// DNS error (the host probably came back after a transient outage).
-	const pageOkRows = (await knex('pages')
-		.select('url', 'lastCrawledAt')
-		.whereBetween('status', [200, 399])) as {
+	const pageOkRows = (await knex('content_items')
+		.join('url_refs', 'content_items.url_id', 'url_refs.id')
+		.select('url_refs.url as url', 'content_items.last_crawled_at as lastCrawledAt')
+		.whereBetween('content_items.status', [200, 399])) as {
 		url: string;
 		lastCrawledAt: number | null;
 	}[];
@@ -112,9 +113,10 @@ export async function listDnsBurnedHostCandidates(knex: Knex): Promise<string[]>
 
 	// Exclusion-bag #2: non-HTML resources with a 2xx-3xx status. resources
 	// have no timestamp column so this is presence-only.
-	const resourceOkRows = (await knex('resources')
-		.select('url')
-		.whereBetween('status', [200, 399])) as { url: string }[];
+	const resourceOkRows = (await knex('resource_items')
+		.join('url_refs', 'resource_items.url_id', 'url_refs.id')
+		.select('url_refs.url as url')
+		.whereBetween('resource_items.status', [200, 399])) as { url: string }[];
 	const resourceOkHosts = new Set<string>();
 	for (const row of resourceOkRows) {
 		let host: string;

@@ -13,7 +13,12 @@ export async function getRedirectsForPages(
 ): Promise<DB_Redirect[]> {
 	if (pageIds.length === 0) return [];
 	return knex
-		.select('redirectDestId as pageId', 'url as from', 'id as fromId')
-		.from('pages')
-		.whereIn('redirectDestId', pageIds);
+		.select(
+			'content_items.redirect_dest_id as pageId',
+			'url_refs.url as from',
+			'content_items.id as fromId',
+		)
+		.from('content_items')
+		.join('url_refs', 'url_refs.id', '=', 'content_items.url_id')
+		.whereIn('content_items.redirect_dest_id', pageIds);
 }

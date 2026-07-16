@@ -1,14 +1,13 @@
-import type { DB_Resource } from '../../types.js';
 import type { Knex } from 'knex';
 
 import { eachSplitted } from '../../../utils/array/each-splitted.js';
 
 /**
- * Return the subset of `urls` that already exist in the `resources` table.
+ * Return the subset of `urls` that already exist as `resource_items` rows.
  * See `getExistingPageUrls` — same chunking strategy.
  * @param knex - Knex query builder connected to the archive DB.
  * @param urls - URL strings to probe.
- * @returns URLs found in `resources`.
+ * @returns URLs found among `resource_items`.
  */
 export async function getExistingResourceUrls(
 	knex: Knex,
@@ -19,10 +18,10 @@ export async function getExistingResourceUrls(
 	}
 	const found: string[] = [];
 	await eachSplitted([...urls], 500, async (chunk) => {
-		const rows = await knex
-			.select('url')
-			.from<DB_Resource>('resources')
-			.whereIn('url', chunk);
+		const rows = await knex('resource_items')
+			.join('url_refs', 'url_refs.id', 'resource_items.url_id')
+			.select('url_refs.url as url')
+			.whereIn('url_refs.url', chunk);
 		for (const row of rows) {
 			found.push(row.url);
 		}
