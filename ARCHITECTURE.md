@@ -50,17 +50,17 @@
 
 ## アーカイブ（DB スキーマ概要）
 
-`.nitpicker` = tar（中身は `db.sqlite` 1 ファイル）。定義の正は `crawler/src/archive/init-schema.ts`。
+`.nitpicker` = tar（中身は `db.sqlite` 1 ファイル）。定義の正は `crawler/src/archive/init-schema.ts`（legacy スキーマ + 周辺テーブル）と `create-entity-tables.ts` / `create-ref-tables.ts`（0.13 entity / ref テーブル）。
 
-- **pages**: 基本属性（id / url / redirectDestId / scraped / isTarget / isExternal / status / contentType / source）+ beholder Meta の ~47 flat 列 + `meta_extras` JSON + denormalised 集計（tag_count / jsonld_count / tags_providers_csv）
-- **anchors / images / resources / resources-referrers**: リンク・画像・サブリソースとその参照関係
-- **page_tags**（Wappalyzer 検出）/ **page_jsonld**（JSON-LD / SpeculationRules）: 1 行 1 検出
+- **content_items / page_meta / resource_items / anchor_edges / resource_ref_edges / image_items（0.13 entity テーブル、正本）**: crawler の writer がクロール中に直接書く対象。URL・テキスト・content-type・JSON・BLOB・ヘッダは ref テーブル（`url_refs` / `text_refs` / `content_type_refs` / `json_refs` / `blob_refs` / `header_sets` 系）への FK で正規化する。書き込み primitive は `db-ops/_shared/`（`resolveContentItemId` / `upsert-*.ts`）
+- **pages / anchors / images / resources / resources-referrers（legacy、DDL のみ）**: 新規クロールでは一切書き込まれず常に 0 行（E2E `crawl-write-phase6.e2e.ts` が pin）。DDL が残るのは `scripts/migrate-to-0.13.mjs` が pre-0.13 アーカイブを変換する際の populate 元としてのみ。drop と FK 宣言の migration は issue #197 のスコープ
+- **page_tags**（Wappalyzer 検出）/ **page_jsonld**（JSON-LD / SpeculationRules）: 1 行 1 検出。FK は `content_items(id)` を参照
 - **page_html_blobs / page_html_ref**: HTML スナップショット。SHA-256 hash PK の content-addressable BLOB（WHY は `init-schema.ts` JSDoc）
 - **info**: 設定（単一行）。起点とスコープは `roots` 1 本で表現（`baseUrl` = `roots[0]`）
 - **page_errors / crawl_errors**: 失敗の 2 系統（スクレイプ経路 / crawler レベル）。kind は保存せず読み取り時に `classifyErrorKind` で導出
 - **inventory_runs**: `--inventory` の監査ログ。append-only・UNIQUE 制約なし（同一 sha256 の再適用は 2 行になる。dedupe 判定用に `source_file_sha256` 列だけ確保してある）。`source_file_path` は privacy のため永続化しない
-- **リダイレクト**: 独立テーブルなし。`pages.redirectDestId` を常に最終宛先まで pre-flatten し、読み取りは `COALESCE(target.redirectDestId, target.id)` の 1 ホップ（`database.ts` JSDoc）
-- **0.13 entity / ref テーブル（reader の読み先）**: reader は entity テーブル（`content_items` / `page_meta` / `resource_items` / `anchor_edges` / `resource_ref_edges` / `image_items`）+ ref テーブル（`url_refs` / `text_refs` / `content_type_refs` / `json_refs` / `blob_refs` / `header_flags`）から読む。**writer は #196 で切り替わるまで legacy テーブル（pages / anchors / …）を更新する一時ズレ**があり、spec は `crawler/src/archive/populate-migration-tables.ts` で吸収する（同 JSDoc が正）
+- **リダイレクト**: 独立テーブルなし。`content_items.redirect_dest_id` を書き込み時（`linkRedirectSources`）に常に最終宛先まで pre-flatten し、読み取りは `COALESCE(target.redirect_dest_id, target.id)` の 1 ホップ（read 時に chain-walk しない）
+- **reader / writer の対称性**: reader も writer も同じ 0.13 entity / ref テーブルを使う（issue #196 で writer 切替済み、ズレなし）。読み取りは flat な `DB_Page` / `DB_Resource` 形状を join で再構築する（`db-ops/pages/read/build-page-query.ts` + `reconstruct-page-rows.ts`、`db-ops/resources/` の対応ファイル）。**fresh アーカイブと migration 済みアーカイブで `page_html_ref` 等 5 テーブルの FK 宣言が分岐している**（fresh は `content_items(id)` 参照、migrated は旧 `pages(id)` 宣言のまま。PK 値が同一なので実害はなく、rename-copy-drop での統一は issue #197 のスコープ）
 - **viewer read model（`viewer_*` テーブル群）**: `buildViewerReadModel`（`query/src/viewer-read-model/build-viewer-read-model.ts`）が構築する読み取り専用の事前計算層。pages / summary / error-kinds / resources / images / header-checks / duplicates / mismatches / anchor-facts / directory-tree をカバーし、各機能は `get-*-fast-path.ts` で read model（fast path）と legacy SQL の二層 dispatch を行う
 - **互換性**: clean-break 方針。`assert-compatible-version.ts` が `info.version >= REQUIRED_FORMAT_VERSION`（現在 0.13.0）を要求し、古い archive は `IncompatibleArchiveError` で拒否。pre-0.13 は `scripts/migrate-to-0.10.mjs` → `scripts/migrate-to-0.13.mjs` の 2 段移行（エラーメッセージが実行順を案内）。v0.x のため breaking 容認
 - **read-only 経路**: viewer / MCP / query CLI は `Archive.openCached`（OS-temp タールキャッシュ）または stub ディレクトリ直結（`Archive.connect`）。migration は writer 接続でのみ走る
@@ -86,7 +86,7 @@
 - **`page_url_rank` は URL テキストを複製しない** — read model ファミリーで唯一の例外（`viewer_images` は数百万行規模になりうるため）。順位比較は SQLite BINARY 照合に合わせた `compareUrlBinary` を使う（素朴な JS 文字列比較は補助面文字で食い違う。`query/src/viewer-read-model/build-page-url-rank-map.ts`）
 - **fast path の強制 legacy 条件は関数ごとに異なる** — pages/resources は `urlPattern`/`directory`、broken links は `urlPattern`/`includeRedirectSources`、headers/mismatches は明示 `sortBy`、duplicates のみ強制 legacy なし。各 `get-*-fast-path.ts` の JSDoc が正。duplicates の legacy 経路は実 `group_id` と衝突しない負の sentinel `-(index+1)` を採番し、route は `groupId <= 0` を 404 にする
 - **`REQUIRED_FORMAT_VERSION` は pkg.version と別値** — crawler が `info.version` に書くのはフォーマット cut であって npm リリース番号ではない。format-breaking な変更はリリース前でも先行 bump し、format cut の無いリリースでは据え置く（`crawler/src/archive/meta/assert-compatible-version.ts`）
-- **anchors / images は再スクレイプ時に置き換え、UNIQUE 制約を張らない** — 同一 tuple が 1 ページ内に正当に複数存在しうる（header と footer の同一リンク等）ため行単位 dedup は不可能（`database.ts` の `updatePage`）
+- **anchor_edges は `UNIQUE(page_id, href_page_id)` で dedup し、first-wins で集約する** — 同一宛先への複数アンカー（header と footer の同一リンク等）は 1 行に集約され、`count` が観測数・`first_hash` / `first_text_id` が最初の 1 件の識別を持つ。2 件目以降の textContent はスキーマ上保持されない（意図的な設計。`create-entity-tables.ts`）。**per-instance のアンカー明細を前提にする consumer（Sheets の Discrepancies 等）は first-wins の 1 行しか受け取れない**点に注意。`image_items` は逆に UNIQUE 制約なし（1 出現 = 1 行）で再スクレイプ時に置き換える
 - **viewer は `process.exit` の例外** — 他コマンドはバッチ型で `cli.ts` 末尾の `process.exit` に到達するが、viewer は SIGINT/SIGTERM まで resolve しない常駐サーバ。シャットダウンは必ず `ArchiveManager.closeAll()` を通す
 - **`Promise.race` の負け側 timer は必ず `clearTimeout`** — 放置すると event loop を握って CLI の自然終了をブロックする。`delay()` は signal を取らないので race に使わない（実例: `fetch-destination.ts`、`close-browser-safely.ts`）
 - **decorator を使わない（legacy / Stage 3 とも）** — Vite 8 内蔵の oxc が transform せず素通しし、Vitest 4.1 でテストが全滅する。retry は `retryCall`、error 発火は `emitError` / `emitErrorAndRetry` の HOF で書く
@@ -148,11 +148,12 @@
 
 ### DB スキーマ変更
 
-1. `crawler/src/archive/init-schema.ts`（テーブル定義 + perf index。ANALYZE 禁止の不変条件を先に読む）
-2. `crawler/src/archive/database.ts`（INSERT/SELECT 経路）と `migrate-*.ts`（既存アーカイブ後付け。read-only では走らない）
-3. `crawler/src/archive/meta/assert-compatible-version.ts`（互換ガード）と `meta/derive-flat-from-meta.ts`（Meta 展開列）
-4. 読み取り影響: `query/src/`（`get-summary.ts` / `list-pages.ts` / `content-type-rules.ts`）
-5. 既存アーカイブ適用スクリプト: リポジトリルート `scripts/`
+1. `crawler/src/archive/init-schema.ts`（legacy テーブル定義 + perf index。ANALYZE 禁止の不変条件を先に読む）と `create-entity-tables.ts` / `create-ref-tables.ts`（0.13 entity / ref テーブルの DDL と設計 WHY）
+2. 書き込み経路: `crawler/src/archive/db-ops/pages/write/`・`db-ops/resources/`（op 本体）と `db-ops/_shared/`（`resolveContentItemId` / `upsert-url-ref.ts` 等の ref/entity id 解決 primitive + 書き込みキャッシュ）
+3. 読み取り経路: `db-ops/pages/read/build-page-query.ts` + `reconstruct-page-rows.ts`（flat 形状の再構築）と `db-ops/_shared/load-response-headers-by-set-ids.ts` / `decode-json-ref.ts`（ヘッダ / json_refs の復元 primitive、query パッケージも共用）
+4. `crawler/src/archive/meta/assert-compatible-version.ts`（互換ガード）と `meta/derive-flat-from-meta.ts`（Meta 展開列）
+5. 読み取り影響: `query/src/`（`get-summary.ts` / `list-pages.ts` / `content-type-rules.ts`）
+6. 既存アーカイブ適用スクリプト: リポジトリルート `scripts/`（`migrate-to-0.13.mjs` は legacy テーブルからの populate。`migrate-*.ts` は read-only では走らない）
 
 ### Content-Type カテゴリ追加（3 箇所は CI が強制・2 箇所は手動）
 
