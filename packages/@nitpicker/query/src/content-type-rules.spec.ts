@@ -263,26 +263,36 @@ describe('applyCategoryFilter unit test (raw SQL injection for the empty-string 
 			userAgent: 'test',
 			ignoreRobots: false,
 		});
-		// Bypass the writer's normalisation so we can pin an actual `contentType = ''`
-		// row in the DB. This exercises the `unknown` matcher's `OR contentType = ''`
-		// branch directly — pre-normalisation archives or future writer bypasses
-		// would produce this exact shape.
+		// Bypass the writer's normalisation so we can pin an actual
+		// `content_type_refs.raw = ''` row in the DB. This exercises the
+		// `unknown` matcher's `OR ctr.raw = ''` branch directly —
+		// pre-normalisation archives or future writer bypasses would
+		// produce this exact shape.
 		const knex = archive.getKnex();
-		await knex('pages').insert({
-			url: 'https://example.com/empty-mime',
+		const [emptyCtRef] = await knex('content_type_refs')
+			.insert({ raw: '', normalized: '', category: 'other' })
+			.returning('id');
+		const [emptyUrlRef] = await knex('url_refs')
+			.insert({ url: 'https://example.com/empty-mime' })
+			.returning('id');
+		await knex('content_items').insert({
+			url_id: emptyUrlRef.id,
 			scraped: 1,
-			isTarget: 1,
-			isExternal: 0,
+			is_target: 1,
+			is_external: 0,
 			status: 200,
-			contentType: '',
+			content_type_id: emptyCtRef.id,
 		});
-		await knex('pages').insert({
-			url: 'https://example.com/null-mime',
+		const [nullUrlRef] = await knex('url_refs')
+			.insert({ url: 'https://example.com/null-mime' })
+			.returning('id');
+		await knex('content_items').insert({
+			url_id: nullUrlRef.id,
 			scraped: 1,
-			isTarget: 1,
-			isExternal: 0,
+			is_target: 1,
+			is_external: 0,
 			status: 200,
-			contentType: null,
+			content_type_id: null,
 		});
 	});
 

@@ -109,9 +109,11 @@ describe('buildViewerReadModel', () => {
 				// unaffected.
 				expect(await hasViewerReadModel(readOnlyAccessor)).toBe(false);
 				expect(await hasViewerReadModel(archive)).toBe(false);
-				const pageCount = await archive.getKnex()('pages').count<{ count: string }[]>({
-					count: '*',
-				});
+				const pageCount = await archive
+					.getKnex()('content_items')
+					.count<{ count: string }[]>({
+						count: '*',
+					});
 				expect(Number(pageCount[0]?.count)).toBe(1);
 			} finally {
 				await readOnlyAccessor.close();
@@ -513,23 +515,27 @@ describe('buildViewerReadModel', () => {
 			await archive.setConfig(BASE_CONFIG);
 
 			// Bypass setPage() entirely: none of `setPage`'s callers ever
-			// leave tag_count/jsonld_count/robots_noindex/isExternal null
+			// leave tag_count/jsonld_count/robots_noindex null
 			// (compute-page-denormalized.ts always writes a `.length`, and
 			// beholder always writes 0/1), and every URL setPage stores was
-			// already validated by parseUrl. This raw insert simulates a
-			// pre-migration/legacy row where those columns are genuinely
-			// null and the URL predates strict validation, to exercise
-			// buildViewerReadModel's defensive `?? 0` fallbacks and
+			// already validated by parseUrl. This raw insert (a
+			// `content_items` row with no corresponding `page_meta` row)
+			// simulates a pre-migration/legacy row where those columns are
+			// genuinely null and the URL predates strict validation, to
+			// exercise buildViewerReadModel's defensive `?? 0` fallbacks and
 			// derivePathSortKey's unparseable-URL catch branch — neither of
-			// which any setPage()-based fixture can reach.
-			await archive.getKnex()('pages').insert({
-				url: 'not a valid url',
+			// which any setPage()-based fixture can reach. `is_external` is
+			// NOT NULL on `content_items` (unlike the legacy `pages` column),
+			// so it is set to a real value here rather than null.
+			const knex = archive.getKnex();
+			const [urlRef] = await knex('url_refs')
+				.insert({ url: 'not a valid url' })
+				.returning('id');
+			await knex('content_items').insert({
+				url_id: urlRef.id,
 				scraped: 1,
-				isTarget: 1,
-				isExternal: null,
-				robots_noindex: null,
-				tag_count: null,
-				jsonld_count: null,
+				is_target: 1,
+				is_external: 0,
 			});
 		});
 
@@ -648,13 +654,24 @@ describe('buildViewerReadModel', () => {
 			// SQLite's compound-SELECT term limit (default 500) rejects a
 			// single `.insert()` call carrying all 750 rows at once.
 			const knex = archive.getKnex();
-			const rows = Array.from({ length: 750 }, (_, i) => ({
-				url: `https://example.com/multi-chunk-${i}`,
+			const urls = Array.from(
+				{ length: 750 },
+				(_, i) => `https://example.com/multi-chunk-${i}`,
+			);
+			const urlRows = urls.map((url) => ({ url }));
+			await knex('url_refs').insert(urlRows.slice(0, 400));
+			await knex('url_refs').insert(urlRows.slice(400));
+			const urlRefs = (await knex('url_refs')
+				.select('id', 'url')
+				.whereIn('url', urls)) as { id: number; url: string }[];
+			const contentItemRows = urlRefs.map((r) => ({
+				url_id: r.id,
 				scraped: 1,
-				isTarget: 1,
+				is_target: 1,
+				is_external: 0,
 			}));
-			await knex('pages').insert(rows.slice(0, 400));
-			await knex('pages').insert(rows.slice(400));
+			await knex('content_items').insert(contentItemRows.slice(0, 400));
+			await knex('content_items').insert(contentItemRows.slice(400));
 		});
 
 		afterAll(async () => {
@@ -878,12 +895,18 @@ describe('buildViewerReadModel', () => {
 			// as the "legacy rows" describe block above) — must be skipped from
 			// the directory tree (no host to group by) while remaining a normal
 			// viewer_pages row.
-			await archive.getKnex()('pages').insert({
-				url: 'not a valid url',
-				scraped: 1,
-				isTarget: 1,
-				isExternal: 0,
-			});
+			{
+				const knex = archive.getKnex();
+				const [urlRef] = await knex('url_refs')
+					.insert({ url: 'not a valid url' })
+					.returning('id');
+				await knex('content_items').insert({
+					url_id: urlRef.id,
+					scraped: 1,
+					is_target: 1,
+					is_external: 0,
+				});
+			}
 
 			await buildViewerReadModel(archive);
 		});

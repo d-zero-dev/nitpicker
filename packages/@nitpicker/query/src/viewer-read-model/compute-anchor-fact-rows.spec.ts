@@ -30,7 +30,7 @@ async function collectAnchorFactRows(
 	await trx.raw(`
 		INSERT INTO viewer_url_refs (id, url)
 		SELECT row_number() OVER (ORDER BY url) AS id, url
-		FROM (SELECT DISTINCT url FROM pages)
+		FROM (SELECT DISTINCT url FROM url_refs)
 		ORDER BY url
 	`);
 	const refRows: { id: number; url: string }[] = await trx('viewer_url_refs')

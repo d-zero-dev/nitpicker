@@ -113,10 +113,9 @@ describe('joinViewerResourceIdsToListItems', () => {
 		});
 
 		const knex = archive.getKnex();
-		const rows: { id: number; url: string }[] = await knex('resources').select(
-			'id',
-			'url',
-		);
+		const rows: { id: number; url: string }[] = await knex('resource_items')
+			.join('url_refs', 'resource_items.url_id', 'url_refs.id')
+			.select('resource_items.id as id', 'url_refs.url as url');
 		idA = rows.find((r) => r.url === 'https://example.com/a.css')!.id;
 		idB = rows.find((r) => r.url === 'https://example.com/b.js')!.id;
 

@@ -99,7 +99,9 @@ describe('joinViewerPageIdsToListItems', () => {
 		});
 
 		const knex = archive.getKnex();
-		const rows: { id: number; url: string }[] = await knex('pages').select('id', 'url');
+		const rows: { id: number; url: string }[] = await knex('content_items')
+			.join('url_refs', 'content_items.url_id', 'url_refs.id')
+			.select('content_items.id as id', 'url_refs.url as url');
 		idA = rows.find((r) => r.url === 'https://example.com/a')!.id;
 		idB = rows.find((r) => r.url === 'https://example.com/b')!.id;
 	});
