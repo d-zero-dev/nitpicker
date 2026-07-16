@@ -1,6 +1,5 @@
 import type { Archive } from '@nitpicker/crawler';
 
-import { populateMigrationTables } from '@nitpicker/crawler';
 import { ensureViewerReadModel } from '@nitpicker/query';
 
 import { formatViewerReadModelProgress } from '../format-viewer-read-model-progress.js';
@@ -23,13 +22,9 @@ import { formatViewerReadModelProgress } from '../format-viewer-read-model-progr
  */
 export async function ensureViewerReadModelQuietly(archive: Archive): Promise<void> {
 	try {
-		// Populate the 0.13 entity tables from the still-legacy write path
-		// FIRST — `ensureViewerReadModel` → `buildViewerReadModel` reads
-		// from `content_items` / `page_meta` / … and would otherwise
-		// produce empty `viewer_*` tables. #196 will move the crawler
-		// write path onto the new tables directly and this call becomes
-		// an idempotent `INSERT OR IGNORE` no-op.
-		await populateMigrationTables(archive);
+		// The crawler's write path inserts directly into `content_items` /
+		// `page_meta` / … during the crawl, so `buildViewerReadModel` can
+		// read them immediately without a legacy→entity populate step.
 		await ensureViewerReadModel(archive, {
 			onProgress: (progress) => {
 				// eslint-disable-next-line no-console
