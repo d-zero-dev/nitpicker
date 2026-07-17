@@ -86,6 +86,19 @@
  * runtime); `populate-image-items.ts` accepts an injected resolver so
  * the crawler package stays jsdom-free at runtime.
  *
+ * Each page's HTML is parsed into its own jsdom `Window`, which V8 does
+ * not reliably reclaim through ordinary GC — not even a forced
+ * `globalThis.gc()` call — because each `Window` runs in its own Node
+ * `vm` context (a long-documented V8 retention characteristic; measured
+ * against a real 380 K-image archive: a Mark-Compact pass reclaimed
+ * under 2 MB out of a 12 GB heap). The only way to give that memory back
+ * to the OS is to destroy the isolate it lives in, so the actual jsdom
+ * parse runs in a `worker_threads` worker (`dom-path-resolver-worker.mjs`)
+ * that this script periodically `terminate()`s and replaces (see
+ * `createJsdomDomPathResolver`). Validated against a real 1 416-page
+ * archive: recycling every 50 pages keeps RSS oscillating in the
+ * 0.5-1.3 GB band for the whole run instead of growing unbounded.
+ *
  * NOT SHIPPED IN NPM
  * ------------------
  *
@@ -98,8 +111,8 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { Worker } from 'node:worker_threads';
 
-import { JSDOM, VirtualConsole } from 'jsdom';
 import knex from 'knex';
 import * as tar from 'tar';
 
@@ -108,13 +121,16 @@ import { dropLegacyTables } from '../packages/@nitpicker/crawler/lib/archive/dro
 import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
 import { migrateEntityTables } from '../packages/@nitpicker/crawler/lib/archive/migrate-entity-tables.js';
 import { migrateRefTables } from '../packages/@nitpicker/crawler/lib/archive/migrate-ref-tables.js';
-import { deriveDomPath } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/derive-dom-path.js';
-import { matchImagesToDomPaths } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/match-images-to-dom-paths.js';
 import { populateEntityTables } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/populate-entities.js';
 import { populateRefTables } from '../packages/@nitpicker/crawler/lib/archive/populate-ref-tables/populate-refs.js';
 import { retargetLegacyFkTables } from '../packages/@nitpicker/crawler/lib/archive/retarget-legacy-fk-tables.js';
 import { checkForeignKeyIntegrity } from '../packages/@nitpicker/crawler/lib/archive/verify-migration/check-foreign-key-integrity.js';
 import { verifyMigration } from '../packages/@nitpicker/crawler/lib/archive/verify-migration/verify-migration.js';
+
+/** Pages one dom-path worker processes before it is terminated and replaced (see `createJsdomDomPathResolver`). */
+const PAGES_PER_DOM_PATH_WORKER = 50;
+
+const DOM_PATH_WORKER_URL = new URL('dom-path-resolver-worker.mjs', import.meta.url);
 
 const SQLITE_DB_FILE_NAME = 'db.sqlite';
 
@@ -254,11 +270,15 @@ async function applyMigrations(dbPath) {
 		const domPathResolver = createJsdomDomPathResolver();
 		/** @type {import('../packages/@nitpicker/crawler/lib/archive/verify-migration/types.js').MigrationVerificationSummary} */
 		let summary;
-		await db.transaction(async (trx) => {
-			await populateEntityTables(trx, domPathResolver);
-			console.log('  verify migration invariants');
-			summary = await verifyMigration(trx);
-		});
+		try {
+			await db.transaction(async (trx) => {
+				await populateEntityTables(trx, domPathResolver.resolve);
+				console.log('  verify migration invariants');
+				summary = await verifyMigration(trx);
+			});
+		} finally {
+			await domPathResolver.close();
+		}
 		console.log(
 			`  verification passed — content_items=${summary.contentItems}, ` +
 				`page_meta=${summary.pageMeta}, anchor_edges=${summary.anchorEdges} ` +
@@ -360,76 +380,73 @@ async function ensureLegacySourceColumns(db) {
 }
 
 /**
- * Returns a `PageDomPathResolver` (see
+ * Returns `{ resolve, close }` where `resolve` matches the
+ * `PageDomPathResolver` signature (see
  * `packages/@nitpicker/crawler/src/archive/populate-entity-tables/populate-image-items.ts`)
- * that parses HTML with jsdom and applies the 3-case match algorithm from
- * `packages/@nitpicker/crawler/src/archive/populate-entity-tables/match-images-to-dom-paths.ts`.
+ * `populateEntityTables` expects, backed by a single `worker_threads`
+ * worker (`dom-path-resolver-worker.mjs`) that does the actual jsdom
+ * parse + DOM walk.
  *
- * jsdom's `VirtualConsole` is silenced because production HTML crashes
- * emit a torrent of `unhandled` warnings (unrecognised CSS at-rules,
- * scripts that reference `window`) that are irrelevant to `<img>` DOM
- * position derivation.
+ * The worker is `terminate()`d and replaced every
+ * {@link PAGES_PER_DOM_PATH_WORKER} pages instead of running in this
+ * process. Every `JSDOM` instance runs its `Window` in its own Node `vm`
+ * context, and V8 does not reliably reclaim `vm` contexts through
+ * ordinary GC — not even a forced `globalThis.gc()` call, confirmed by
+ * measurement: 100 pages processed in-process (with a `globalThis.gc()`
+ * call every 20 pages) still grew RSS from ~200 MB to ~1.8 GB and OOMed
+ * shortly after, against a real 380 K-image archive's HTML. Terminating
+ * the worker destroys its isolate outright, which is the only way to
+ * give that memory back to the OS. Validated against the same real
+ * archive's 1 416 pages: recycling every 50 pages keeps RSS oscillating
+ * in the 0.5-1.3 GB band for the whole run instead of growing unbounded.
+ *
+ * `resolve` calls are strictly sequential (`populateEntityTables` awaits
+ * each page before requesting the next), so a single worker — swapped
+ * out synchronously between calls — is enough; no pool is needed.
+ * `close` must be called once population is done (or has thrown) to
+ * terminate the last live worker.
  */
 function createJsdomDomPathResolver() {
-	const virtualConsole = new VirtualConsole();
-	virtualConsole.on('jsdomError', () => {});
-	return async (pageId, htmlString, images) => {
-		if (htmlString === null) {
-			// Every image on this page falls back — emit a per-image
-			// warning so operators can audit reconstruction fidelity,
-			// not just a single "no HTML for page X" line.
-			return fallbackAllUnknown(images, pageId, 'no HTML snapshot stored');
-		}
-		let dom;
-		try {
-			dom = new JSDOM(htmlString, { virtualConsole });
-		} catch (error) {
-			return fallbackAllUnknown(
-				images,
-				pageId,
-				`jsdom parse failed: ${error?.message ?? error}`,
-			);
-		}
-		try {
-			const candidates = [...dom.window.document.querySelectorAll('img')].map((img) => ({
-				outerHTML: img.outerHTML,
-				path: deriveDomPath(img),
-			}));
-			const result = matchImagesToDomPaths(images, candidates);
-			for (const [imageId, entry] of result) {
-				if (entry.case === 'unknown') {
-					console.warn(
-						`[dom-path] unknown fallback for image id=${imageId} (page ${pageId})`,
-					);
-				}
-			}
-			return result;
-		} finally {
-			dom.window.close();
-		}
-	};
-}
+	let worker = new Worker(DOM_PATH_WORKER_URL);
+	let nextId = 0;
+	let pagesSinceRespawn = 0;
+	const pending = new Map();
 
-/**
- * Returns a `Map<imageId, DomPathResult>` where every image resolves to
- * the `unknown/<id>` fallback and emits one warning line per image so
- * the audit log records a warning for every `unknown/*` fallback —
- * the contract operators rely on to audit reconstruction fidelity.
- * Used when jsdom cannot parse the page
- * OR when the page has no stored HTML snapshot at all.
- * @param {readonly { id: number }[]} images
- * @param {number} pageId
- * @param {string} reason - Human-readable reason for the whole-page fallback.
- */
-function fallbackAllUnknown(images, pageId, reason) {
-	const map = new Map();
-	for (const image of images) {
-		map.set(image.id, { path: `unknown/${image.id}`, case: 'unknown' });
-		console.warn(
-			`[dom-path] unknown fallback for image id=${image.id} (page ${pageId}): ${reason}`,
-		);
-	}
-	return map;
+	const attach = (w) => {
+		w.on('message', (msg) => {
+			const entry = pending.get(msg.id);
+			if (!entry) return;
+			pending.delete(msg.id);
+			entry.resolve(msg.result);
+		});
+		w.on('error', (error) => {
+			for (const entry of pending.values()) entry.reject(error);
+			pending.clear();
+		});
+	};
+	attach(worker);
+
+	return {
+		async resolve(pageId, htmlString, images) {
+			if (pagesSinceRespawn >= PAGES_PER_DOM_PATH_WORKER) {
+				pagesSinceRespawn = 0;
+				const old = worker;
+				worker = new Worker(DOM_PATH_WORKER_URL);
+				attach(worker);
+				await old.terminate();
+			}
+			const id = nextId++;
+			const result = await new Promise((resolve, reject) => {
+				pending.set(id, { resolve, reject });
+				worker.postMessage({ id, pageId, htmlString, images });
+			});
+			pagesSinceRespawn++;
+			return result;
+		},
+		async close() {
+			await worker.terminate();
+		},
+	};
 }
 
 try {
