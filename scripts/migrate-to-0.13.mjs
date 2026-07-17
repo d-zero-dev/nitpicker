@@ -177,6 +177,7 @@ async function main() {
 	}
 	mkdirSync(workDir, { recursive: true });
 
+	const startedAt = Date.now();
 	try {
 		console.log(`[1/3] untar ${inputPath} -> ${workDir}`);
 		await tar.x({ file: inputPath, cwd: workDir });
@@ -200,7 +201,7 @@ async function main() {
 		console.log(`[3/3] tar -> ${outputPath}`);
 		await tar.c({ file: outputPath, cwd: workDir, portable: true }, [innerDirName]);
 
-		console.log('Done.');
+		console.log(`Done. (${formatElapsed(Date.now() - startedAt)})`);
 	} catch (error) {
 		if (existsSync(outputPath)) {
 			rmSync(outputPath, { force: true });
@@ -209,6 +210,30 @@ async function main() {
 	} finally {
 		rmSync(workDir, { recursive: true, force: true });
 	}
+}
+
+/**
+ * Formats a millisecond duration as a rough `<hours>h <minutes>m
+ * <seconds>s` string (dropping leading zero units) for the
+ * operator-facing `Done.` line — not meant for precise timing, just
+ * "was this quick or did it take a while". Archives large enough to
+ * run for multiple hours are realistic, so hours are included;
+ * multi-day runs are not expected for a single archive and are not
+ * specially formatted.
+ * @param {number} ms
+ */
+function formatElapsed(ms) {
+	const totalSeconds = Math.round(ms / 1000);
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+	if (hours > 0) {
+		return `${hours}h ${minutes}m ${seconds}s`;
+	}
+	if (minutes > 0) {
+		return `${minutes}m ${seconds}s`;
+	}
+	return `${seconds}s`;
 }
 
 /**
