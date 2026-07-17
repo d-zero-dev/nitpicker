@@ -50,17 +50,17 @@
 
 ## アーカイブ（DB スキーマ概要）
 
-`.nitpicker` = tar（中身は `db.sqlite` 1 ファイル）。定義の正は `crawler/src/archive/init-schema.ts`（legacy スキーマ + 周辺テーブル）と `create-entity-tables.ts` / `create-ref-tables.ts`（0.13 entity / ref テーブル）。
+`.nitpicker` = tar（中身は `db.sqlite` 1 ファイル）。定義の正は `crawler/src/archive/init-schema.ts`（`info` + DDL 関数のオーケストレーション）と `create-ref-tables.ts` / `create-entity-tables.ts` / `create-adjunct-tables.ts`（各テーブル群の DDL 本体。initSchema と `scripts/migrate-to-0.13.mjs` が同じ関数を呼ぶことで fresh / migrated の DDL 乖離を構造的に防ぐ）。
 
 - **content_items / page_meta / resource_items / anchor_edges / resource_ref_edges / image_items（0.13 entity テーブル、正本）**: crawler の writer がクロール中に直接書く対象。URL・テキスト・content-type・JSON・BLOB・ヘッダは ref テーブル（`url_refs` / `text_refs` / `content_type_refs` / `json_refs` / `blob_refs` / `header_sets` 系）への FK で正規化する。書き込み primitive は `db-ops/_shared/`（`resolveContentItemId` / `upsert-*.ts`）
-- **pages / anchors / images / resources / resources-referrers（legacy、DDL のみ）**: 新規クロールでは一切書き込まれず常に 0 行（E2E `crawl-write-phase6.e2e.ts` が pin）。DDL が残るのは `scripts/migrate-to-0.13.mjs` が pre-0.13 アーカイブを変換する際の populate 元としてのみ。drop と FK 宣言の migration は issue #197 のスコープ
+- **pages / anchors / images / resources / resources-referrers（legacy、現行アーカイブには存在しない）**: fresh archive には作られず（E2E `crawl-write-entity-tables.e2e.ts` が pin）、pre-0.13 アーカイブの中にのみ存在する。`scripts/migrate-to-0.13.mjs` が populate 元として読んだ後、同スクリプトが adjunct テーブルの FK を `content_items(id)` へ張り替え（`retarget-legacy-fk-tables.ts`）、legacy 5 テーブルを DROP する（`drop-legacy-tables.ts`。`pages.redirectDestId` の自己 FK があるため enforcement OFF で実行 — WHY は同ファイル JSDoc）。テスト用の legacy DDL は `archive/test-utils/setup-legacy-fk-db.ts` が唯一の供給源
 - **page_tags**（Wappalyzer 検出）/ **page_jsonld**（JSON-LD / SpeculationRules）: 1 行 1 検出。FK は `content_items(id)` を参照
-- **page_html_blobs / page_html_ref**: HTML スナップショット。SHA-256 hash PK の content-addressable BLOB（WHY は `init-schema.ts` JSDoc）
+- **page_html_blobs / page_html_ref**: HTML スナップショット。SHA-256 hash PK の content-addressable BLOB（WHY は `create-adjunct-tables.ts` JSDoc）
 - **info**: 設定（単一行）。起点とスコープは `roots` 1 本で表現（`baseUrl` = `roots[0]`）
 - **page_errors / crawl_errors**: 失敗の 2 系統（スクレイプ経路 / crawler レベル）。kind は保存せず読み取り時に `classifyErrorKind` で導出
 - **inventory_runs**: `--inventory` の監査ログ。append-only・UNIQUE 制約なし（同一 sha256 の再適用は 2 行になる。dedupe 判定用に `source_file_sha256` 列だけ確保してある）。`source_file_path` は privacy のため永続化しない
 - **リダイレクト**: 独立テーブルなし。`content_items.redirect_dest_id` を書き込み時（`linkRedirectSources`）に常に最終宛先まで pre-flatten し、読み取りは `COALESCE(target.redirect_dest_id, target.id)` の 1 ホップ（read 時に chain-walk しない）
-- **reader / writer の対称性**: reader も writer も同じ 0.13 entity / ref テーブルを使う（issue #196 で writer 切替済み、ズレなし）。読み取りは flat な `DB_Page` / `DB_Resource` 形状を join で再構築する（`db-ops/pages/read/build-page-query.ts` + `reconstruct-page-rows.ts`、`db-ops/resources/` の対応ファイル）。**fresh アーカイブと migration 済みアーカイブで `page_html_ref` 等 5 テーブルの FK 宣言が分岐している**（fresh は `content_items(id)` 参照、migrated は旧 `pages(id)` 宣言のまま。PK 値が同一なので実害はなく、rename-copy-drop での統一は issue #197 のスコープ）
+- **reader / writer の対称性**: reader も writer も同じ 0.13 entity / ref テーブルを使う（issue #196 で writer 切替済み、ズレなし）。読み取りは flat な `DB_Page` / `DB_Resource` 形状を join で再構築する（`db-ops/pages/read/build-page-query.ts` + `reconstruct-page-rows.ts`、`db-ops/resources/` の対応ファイル）。fresh / migrated アーカイブの FK 宣言は `content_items(id)` に統一済み（migrated 側は `migrate-to-0.13.mjs` の rename-copy-drop が保証、`PRAGMA foreign_key_check` 0 件を `verify-migration/check-foreign-key-integrity.ts` が最終検証する）
 - **viewer read model（`viewer_*` テーブル群）**: `buildViewerReadModel`（`query/src/viewer-read-model/build-viewer-read-model.ts`）が構築する読み取り専用の事前計算層。pages / summary / error-kinds / resources / images / header-checks / duplicates / mismatches / anchor-facts / directory-tree をカバーし、各機能は `get-*-fast-path.ts` で read model（fast path）と legacy SQL の二層 dispatch を行う
 - **互換性**: clean-break 方針。`assert-compatible-version.ts` が `info.version >= REQUIRED_FORMAT_VERSION`（現在 0.13.0）を要求し、古い archive は `IncompatibleArchiveError` で拒否。pre-0.13 は `scripts/migrate-to-0.10.mjs` → `scripts/migrate-to-0.13.mjs` の 2 段移行（エラーメッセージが実行順を案内）。v0.x のため breaking 容認
 - **read-only 経路**: viewer / MCP / query CLI は `Archive.openCached`（OS-temp タールキャッシュ）または stub ディレクトリ直結（`Archive.connect`）。migration は writer 接続でのみ走る
@@ -69,8 +69,8 @@
 
 やってはいけないこと、および理由がコードから読めない制約。各項目の詳細な正は右のファイルの JSDoc。
 
-- **`.nitpicker` アーカイブに `ANALYZE` / `PRAGMA optimize` を絶対に走らせない** — 統計が出ると planner が `idx_pages_listfilter` を JOIN 経路に流用し、`listLinks` / `getLinkGraph` が 15s → 500s（33x）に回帰する（`init-schema.ts`）
-- **perf index の一括追加をしない** — index を無計画に足すと ANALYZE 無しの planner heuristics が崩れて別 query が 30-50x 回帰した実績が複数ある。追加時は必ず対象 query と非対象 query の両方を実測すること（`init-schema.ts`）
+- **`.nitpicker` アーカイブに `ANALYZE` / `PRAGMA optimize` を絶対に走らせない** — クエリ最適化は全て「統計なしの planner heuristics」を前提に実測で確定しており、統計が出ると planner がインデックスを別クエリの JOIN 経路に流用して大幅回帰する（legacy スキーマ時代の実測: `idx_pages_listfilter` の流用で `listLinks` / `getLinkGraph` が 15s → 500s、33x）
+- **perf index の一括追加をしない** — index を無計画に足すと ANALYZE 無しの planner heuristics が崩れて別 query が 30-50x 回帰した実績が複数ある。追加時は必ず対象 query と非対象 query の両方を実測すること
 - **`redirectPaths` の `slice(1)` を外さない** — follow-redirects の `res.redirects[0]` はクエリ落ちした元 URL であり、外すとクエリ違いの別ページが同一視され消失する（`crawler/src/crawler/fetch-destination.ts`。E2E: `/query-distinct/`）
 - **「ページか」は content-type で判定する。`isTarget` で判定しない** — `isTarget` は「in-scope なクロール対象か」であり、in-scope な PDF も `isTarget=1`（`crawler/src/archive/normalize-content-type.ts`、`query/src/list-pages.ts`）
 - **被リンクは redirect 透過解決するが、発リンクは解決しない** — 発リンク側の raw な指し先は「古い URL にリンクしている」という監査シグナル。この非対称性を「統一」しないこと（`database.ts`）
@@ -148,12 +148,12 @@
 
 ### DB スキーマ変更
 
-1. `crawler/src/archive/init-schema.ts`（legacy テーブル定義 + perf index。ANALYZE 禁止の不変条件を先に読む）と `create-entity-tables.ts` / `create-ref-tables.ts`（0.13 entity / ref テーブルの DDL と設計 WHY）
+1. `crawler/src/archive/init-schema.ts`（`info` + DDL オーケストレーション。ANALYZE 禁止の不変条件を先に読む）と `create-ref-tables.ts` / `create-entity-tables.ts` / `create-adjunct-tables.ts`（各テーブル群の DDL と設計 WHY）
 2. 書き込み経路: `crawler/src/archive/db-ops/pages/write/`・`db-ops/resources/`（op 本体）と `db-ops/_shared/`（`resolveContentItemId` / `upsert-url-ref.ts` 等の ref/entity id 解決 primitive + 書き込みキャッシュ）
 3. 読み取り経路: `db-ops/pages/read/build-page-query.ts` + `reconstruct-page-rows.ts`（flat 形状の再構築）と `db-ops/_shared/load-response-headers-by-set-ids.ts` / `decode-json-ref.ts`（ヘッダ / json_refs の復元 primitive、query パッケージも共用）
 4. `crawler/src/archive/meta/assert-compatible-version.ts`（互換ガード）と `meta/derive-flat-from-meta.ts`（Meta 展開列）
 5. 読み取り影響: `query/src/`（`get-summary.ts` / `list-pages.ts` / `content-type-rules.ts`）
-6. 既存アーカイブ適用スクリプト: リポジトリルート `scripts/`（`migrate-to-0.13.mjs` は legacy テーブルからの populate。`migrate-*.ts` は read-only では走らない）
+6. 既存アーカイブ適用スクリプト: リポジトリルート `scripts/`（`migrate-to-0.13.mjs` は legacy テーブルからの populate → adjunct FK retarget（`retarget-legacy-fk-tables.ts`）→ legacy drop（`drop-legacy-tables.ts`）→ `foreign_key_check`（`verify-migration/check-foreign-key-integrity.ts`）の一括実行。schema catch-up 用の `migrate-ref-tables.ts` / `migrate-entity-tables.ts` はこのスクリプト専用で、archive open 時には走らない。テスト用の pre-0.13 fixture は `scripts/generate-pre-0.13-fixture.mjs`（`archive/test-utils/setup-legacy-fk-db.ts` 経由）が単一の生成元）
 
 ### Content-Type カテゴリ追加（3 箇所は CI が強制・2 箇所は手動）
 
