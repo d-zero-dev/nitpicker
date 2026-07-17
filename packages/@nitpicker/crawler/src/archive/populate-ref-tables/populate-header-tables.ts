@@ -1,4 +1,7 @@
+import type { ProgressCallback } from '../create-progress-reporter.js';
 import type { Knex } from 'knex';
+
+import { createProgressReporter } from '../create-progress-reporter.js';
 
 import { createHeaderTableCaches } from './create-header-table-caches.js';
 import { decomposeHeaderSet } from './decompose-header-set.js';
@@ -36,12 +39,17 @@ const READ_CHUNK_SIZE = 500;
  * across full re-runs is guaranteed by the `INSERT OR IGNORE`s and the
  * `setIdsProcessedThisRun` guard inside the per-set upsert.
  * @param trx - Knex instance or transaction connected to the archive DB.
+ * @param onProgress - Optional sink for periodic progress lines (one per
+ *   ~5% of each source table scanned); see {@link ../create-progress-reporter.ts}.
  * @example
  * await knex.transaction(async (trx) => {
  *   await populateHeaderTables(trx);
  * });
  */
-export async function populateHeaderTables(trx: Knex): Promise<void> {
+export async function populateHeaderTables(
+	trx: Knex,
+	onProgress?: ProgressCallback,
+): Promise<void> {
 	const caches = await createHeaderTableCaches(trx);
 
 	for (const table of ['pages', 'resources'] as const) {
@@ -53,6 +61,10 @@ export async function populateHeaderTables(trx: Knex): Promise<void> {
 		if (!hasColumn) {
 			continue;
 		}
+		const countRows = await trx(table).count({ n: '*' });
+		const total = Number(countRows[0]?.n ?? 0);
+		const report = createProgressReporter(`header_tables (${table})`, total, onProgress);
+		let processed = 0;
 		let cursor = 0;
 		while (true) {
 			const rows: { id: number; responseHeaders: string | null }[] = await trx(table)
@@ -64,6 +76,8 @@ export async function populateHeaderTables(trx: Knex): Promise<void> {
 				break;
 			}
 			cursor = rows.at(-1)!.id;
+			processed += rows.length;
+			report(processed);
 			for (const row of rows) {
 				const decomposed = decomposeHeaderSet(row.responseHeaders);
 				if (decomposed === null) {

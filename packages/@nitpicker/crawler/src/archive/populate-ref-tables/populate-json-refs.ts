@@ -1,6 +1,9 @@
+import type { ProgressCallback } from '../create-progress-reporter.js';
 import type { Knex } from 'knex';
 
 import { zstdCompressSync } from 'node:zlib';
+
+import { createProgressReporter } from '../create-progress-reporter.js';
 
 import { computeContentHash } from './compute-content-hash.js';
 
@@ -39,12 +42,17 @@ const READ_CHUNK_SIZE = 1000;
  * `INSERT OR IGNORE` on `hash` makes the step idempotent across partial-
  * failure restarts.
  * @param trx - Knex instance or transaction connected to the archive DB.
+ * @param onProgress - Optional sink for periodic progress lines (one per
+ *   ~5% of `pages` scanned); see {@link ../create-progress-reporter.ts}.
  * @example
  * await knex.transaction(async (trx) => {
  *   await populateJsonRefs(trx);
  * });
  */
-export async function populateJsonRefs(trx: Knex): Promise<void> {
+export async function populateJsonRefs(
+	trx: Knex,
+	onProgress?: ProgressCallback,
+): Promise<void> {
 	const hasPages = await trx.schema.hasTable('pages');
 	if (!hasPages) {
 		return;
@@ -63,6 +71,10 @@ export async function populateJsonRefs(trx: Knex): Promise<void> {
 		size_stored: number;
 	}[] = [];
 
+	const countRows = await trx('pages').count({ n: '*' });
+	const total = Number(countRows[0]?.n ?? 0);
+	const report = createProgressReporter('json_refs (pages)', total, onProgress);
+	let processed = 0;
 	let cursor = 0;
 	while (true) {
 		const rows: { id: number; value: string | null }[] = await trx('pages')
@@ -74,6 +86,8 @@ export async function populateJsonRefs(trx: Knex): Promise<void> {
 			break;
 		}
 		cursor = rows.at(-1)!.id;
+		processed += rows.length;
+		report(processed);
 		for (const row of rows) {
 			const raw = row.value;
 			if (raw == null || raw === '') {

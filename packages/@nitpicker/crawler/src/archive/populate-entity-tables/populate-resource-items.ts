@@ -1,4 +1,7 @@
+import type { ProgressCallback } from '../create-progress-reporter.js';
 import type { Knex } from 'knex';
+
+import { createProgressReporter } from '../create-progress-reporter.js';
 
 import { isBlobRefValue } from './is-blob-ref-value.js';
 import { resolveBlobRefs } from './resolve-blob-refs.js';
@@ -36,13 +39,22 @@ const INSERT_CHUNK_SIZE = 500;
  *
  * `INSERT OR IGNORE` on `id` makes the step idempotent.
  * @param trx - Knex instance or transaction connected to the archive DB.
+ * @param onProgress - Optional sink for periodic progress lines (one per
+ *   ~5% of `resources` scanned); see {@link ../create-progress-reporter.ts}.
  * @example
  * await knex.transaction(async (trx) => {
  *   await populateResourceItems(trx);
  * });
  */
-export async function populateResourceItems(trx: Knex): Promise<void> {
+export async function populateResourceItems(
+	trx: Knex,
+	onProgress?: ProgressCallback,
+): Promise<void> {
 	const contentTypeIds = await loadContentTypeRefs(trx);
+	const countRows = await trx('resources').count({ n: '*' });
+	const total = Number(countRows[0]?.n ?? 0);
+	const report = createProgressReporter('resource_items (resources)', total, onProgress);
+	let processed = 0;
 	let cursor = 0;
 	while (true) {
 		const rows: ResourceRow[] = await trx('resources')
@@ -66,6 +78,8 @@ export async function populateResourceItems(trx: Knex): Promise<void> {
 			break;
 		}
 		cursor = rows.at(-1)!.id;
+		processed += rows.length;
+		report(processed);
 
 		const urls = new Set<string>();
 		const dataUris = new Set<string>();

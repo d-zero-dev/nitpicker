@@ -1,6 +1,9 @@
+import type { ProgressCallback } from '../create-progress-reporter.js';
 import type { Knex } from 'knex';
 
 import { zstdCompressSync } from 'node:zlib';
+
+import { createProgressReporter } from '../create-progress-reporter.js';
 
 import { computeContentHash } from './compute-content-hash.js';
 import { DATA_URI_URL_REFS_LIMIT } from './data-uri-url-refs-limit.js';
@@ -59,12 +62,17 @@ const URL_SOURCES: readonly {
  * chunking, but the same batching shape is used as elsewhere for
  * consistency.
  * @param trx - Knex instance or transaction connected to the archive DB.
+ * @param onProgress - Optional sink for periodic progress lines (one per
+ *   ~5% of each source table scanned); see {@link ../create-progress-reporter.ts}.
  * @example
  * await knex.transaction(async (trx) => {
  *   await populateBlobRefs(trx);
  * });
  */
-export async function populateBlobRefs(trx: Knex): Promise<void> {
+export async function populateBlobRefs(
+	trx: Knex,
+	onProgress?: ProgressCallback,
+): Promise<void> {
 	const seen = new Set<string>();
 	const pending: {
 		hash: Buffer;
@@ -89,6 +97,14 @@ export async function populateBlobRefs(trx: Knex): Promise<void> {
 			continue;
 		}
 
+		const countRows = await trx(source.table).count({ n: '*' });
+		const total = Number(countRows[0]?.n ?? 0);
+		const report = createProgressReporter(
+			`blob_refs (${source.table})`,
+			total,
+			onProgress,
+		);
+		let processed = 0;
 		let cursor = 0;
 		while (true) {
 			const rows: Record<string, unknown>[] = await trx(source.table)
@@ -100,6 +116,8 @@ export async function populateBlobRefs(trx: Knex): Promise<void> {
 				break;
 			}
 			cursor = rows.at(-1)!.id as number;
+			processed += rows.length;
+			report(processed);
 			for (const row of rows) {
 				for (const column of presentColumns) {
 					const value = row[column] as string | null;

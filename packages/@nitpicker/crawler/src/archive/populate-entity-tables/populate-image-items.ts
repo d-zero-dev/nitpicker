@@ -1,6 +1,8 @@
+import type { ProgressCallback } from '../create-progress-reporter.js';
 import type { DomPathResult } from './types.js';
 import type { Knex } from 'knex';
 
+import { createProgressReporter } from '../create-progress-reporter.js';
 import { decodeStoredBlob } from '../decode-html-blob.js';
 
 import { isBlobRefValue } from './is-blob-ref-value.js';
@@ -109,6 +111,9 @@ export interface ImageRowForResolver {
  * @param trx - Knex instance or transaction connected to the archive DB.
  * @param resolvePageDomPaths - Callback that returns dom_path strings
  *   for one page's images (see {@link PageDomPathResolver}).
+ * @param onProgress - Optional sink for periodic progress lines (one per
+ *   ~5% of distinct `images.pageId` values scanned); see
+ *   {@link ../create-progress-reporter.ts}.
  * @example
  * const jsdomResolver = createJsdomResolver();
  * await knex.transaction(async (trx) => {
@@ -118,7 +123,18 @@ export interface ImageRowForResolver {
 export async function populateImageItems(
 	trx: Knex,
 	resolvePageDomPaths: PageDomPathResolver,
+	onProgress?: ProgressCallback,
 ): Promise<void> {
+	const countRows = await trx('images').countDistinct({ n: 'pageId' });
+	const totalRow = countRows[0] as { n: number | string } | undefined;
+	const total = Number(totalRow?.n ?? 0);
+	const report = createProgressReporter(
+		'image_items (distinct pages)',
+		total,
+		onProgress,
+	);
+	let processedPages = 0;
+
 	let cursorPageId = 0;
 	while (true) {
 		const pageIdRows: { pageId: number }[] = await trx('images')
@@ -131,6 +147,8 @@ export async function populateImageItems(
 		}
 		const pageIds = pageIdRows.map((r) => r.pageId);
 		cursorPageId = pageIds.at(-1)!;
+		processedPages += pageIds.length;
+		report(processedPages);
 
 		const rows: ImageRow[] = await trx('images')
 			.select(

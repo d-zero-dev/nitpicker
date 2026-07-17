@@ -1,4 +1,7 @@
+import type { ProgressCallback } from '../create-progress-reporter.js';
 import type { Knex } from 'knex';
+
+import { createProgressReporter } from '../create-progress-reporter.js';
 
 import { loadContentTypeRefs } from './resolve-content-type-refs.js';
 import { resolveHeaderSets } from './resolve-header-sets.js';
@@ -50,13 +53,22 @@ const INSERT_CHUNK_SIZE = 300;
  * per-archive cardinality can be very large (one row per distinct URL /
  * response JSON).
  * @param trx - Knex instance or transaction connected to the archive DB.
+ * @param onProgress - Optional sink for periodic progress lines (one per
+ *   ~5% of `pages` scanned); see {@link ../create-progress-reporter.ts}.
  * @example
  * await knex.transaction(async (trx) => {
  *   await populateContentItems(trx);
  * });
  */
-export async function populateContentItems(trx: Knex): Promise<void> {
+export async function populateContentItems(
+	trx: Knex,
+	onProgress?: ProgressCallback,
+): Promise<void> {
 	const contentTypeIds = await loadContentTypeRefs(trx);
+	const countRows = await trx('pages').count({ n: '*' });
+	const total = Number(countRows[0]?.n ?? 0);
+	const report = createProgressReporter('content_items (pages)', total, onProgress);
+	let processed = 0;
 	let cursor = 0;
 	while (true) {
 		const rows: PageRow[] = await trx('pages')
@@ -86,6 +98,8 @@ export async function populateContentItems(trx: Knex): Promise<void> {
 			break;
 		}
 		cursor = rows.at(-1)!.id;
+		processed += rows.length;
+		report(processed);
 
 		const urls = new Set<string>();
 		const headerJsonStrings = new Set<string>();

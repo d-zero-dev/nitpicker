@@ -1,5 +1,8 @@
+import type { ProgressCallback } from '../create-progress-reporter.js';
 import type { AnchorEdgeRowInProgress, AnchorInputRow } from './types.js';
 import type { Knex } from 'knex';
+
+import { createProgressReporter } from '../create-progress-reporter.js';
 
 import { collapseAnchorRows } from './collapse-anchor-rows.js';
 import { resolveTextRefs } from './resolve-text-refs.js';
@@ -52,17 +55,27 @@ const INSERT_CHUNK_SIZE = 500;
  * makes the step idempotent: a re-run after partial failure re-emits the
  * same edges but the writes no-op.
  * @param trx - Knex instance or transaction connected to the archive DB.
+ * @param onProgress - Optional sink for periodic progress lines (one per
+ *   ~5% of `anchors` scanned); see {@link ../create-progress-reporter.ts}.
  * @example
  * await knex.transaction(async (trx) => {
  *   await populateAnchorEdges(trx);
  * });
  */
-export async function populateAnchorEdges(trx: Knex): Promise<void> {
+export async function populateAnchorEdges(
+	trx: Knex,
+	onProgress?: ProgressCallback,
+): Promise<void> {
 	let cursorPageId = 0;
 	let cursorHrefId = 0;
 	let cursorId = 0;
 	let carryOver: AnchorEdgeRowInProgress | null = null;
 	const pending: AnchorEdgeRowInProgress[] = [];
+
+	const countRows = await trx('anchors').count({ n: '*' });
+	const total = Number(countRows[0]?.n ?? 0);
+	const report = createProgressReporter('anchor_edges (anchors)', total, onProgress);
+	let processed = 0;
 
 	while (true) {
 		const rows: AnchorInputRow[] = await trx('anchors')
@@ -91,6 +104,8 @@ export async function populateAnchorEdges(trx: Knex): Promise<void> {
 		cursorPageId = lastRow.pageId;
 		cursorHrefId = lastRow.hrefId;
 		cursorId = lastRow.id;
+		processed += rows.length;
+		report(processed);
 
 		const chunkEdges = [...collapseAnchorRows(rows)];
 		for (const edge of chunkEdges) {

@@ -1,4 +1,7 @@
+import type { ProgressCallback } from '../create-progress-reporter.js';
 import type { Knex } from 'knex';
+
+import { createProgressReporter } from '../create-progress-reporter.js';
 
 import { DATA_URI_URL_REFS_LIMIT } from './data-uri-url-refs-limit.js';
 import { decomposeUrl } from './decompose-url.js';
@@ -88,12 +91,17 @@ function routeDataUriAwayFromUrlRefs(value: string): boolean {
  * `INSERT OR IGNORE` on `url_refs.url` makes the step idempotent —
  * repeated invocations after partial failure only add new URLs.
  * @param trx - Knex instance or transaction connected to the archive DB.
+ * @param onProgress - Optional sink for periodic progress lines (one per
+ *   ~5% of each source table scanned); see {@link ../create-progress-reporter.ts}.
  * @example
  * await knex.transaction(async (trx) => {
  *   await populateUrlRefs(trx);
  * });
  */
-export async function populateUrlRefs(trx: Knex): Promise<void> {
+export async function populateUrlRefs(
+	trx: Knex,
+	onProgress?: ProgressCallback,
+): Promise<void> {
 	const seen = new Set<string>();
 
 	for (const source of URL_SOURCES) {
@@ -111,6 +119,14 @@ export async function populateUrlRefs(trx: Knex): Promise<void> {
 			continue;
 		}
 
+		const countRows = await trx(source.table).count({ n: '*' });
+		const total = Number(countRows[0]?.n ?? 0);
+		const report = createProgressReporter(
+			`url_refs (${source.table})`,
+			total,
+			onProgress,
+		);
+		let processed = 0;
 		let cursor = 0;
 		while (true) {
 			const rows: Record<string, unknown>[] = await trx(source.table)
@@ -122,6 +138,8 @@ export async function populateUrlRefs(trx: Knex): Promise<void> {
 				break;
 			}
 			cursor = rows.at(-1)!.id as number;
+			processed += rows.length;
+			report(processed);
 			for (const row of rows) {
 				for (const column of presentColumns) {
 					const value = row[column];

@@ -1,3 +1,4 @@
+import type { ProgressCallback } from '../create-progress-reporter.js';
 import type { PageDomPathResolver } from './populate-image-items.js';
 import type { Knex } from 'knex';
 
@@ -75,6 +76,8 @@ import { populateResourceRefEdges } from './populate-resource-ref-edges.js';
  * @param resolvePageDomPaths - Callback that returns dom_path strings
  *   for one page's images. Injected rather than hard-coded so
  *   `@nitpicker/crawler` does not become a jsdom consumer at runtime.
+ * @param onProgress - Optional sink threaded to every sub-populate for
+ *   periodic progress lines; see {@link ../create-progress-reporter.ts}.
  * @example
  * const archive = await Archive.open(archivePath);
  * const knex = archive.getKnex();
@@ -86,6 +89,7 @@ import { populateResourceRefEdges } from './populate-resource-ref-edges.js';
 export async function populateEntityTables(
 	trx: Knex,
 	resolvePageDomPaths: PageDomPathResolver,
+	onProgress?: ProgressCallback,
 ): Promise<void> {
 	// Truncate child-first so no outgoing FK check ever sees a broken
 	// reference mid-delete. Order is: leaf edge/entity tables that have
@@ -108,10 +112,10 @@ export async function populateEntityTables(
 	await trx('resource_items').delete();
 	await trx('content_items').delete();
 
-	await populateContentItems(trx);
-	await populatePageMeta(trx);
-	await populateResourceItems(trx);
-	await populateAnchorEdges(trx);
+	await populateContentItems(trx, onProgress);
+	await populatePageMeta(trx, onProgress);
+	await populateResourceItems(trx, onProgress);
+	await populateAnchorEdges(trx, onProgress);
 	await populateResourceRefEdges(trx);
-	await populateImageItems(trx, resolvePageDomPaths);
+	await populateImageItems(trx, resolvePageDomPaths, onProgress);
 }
