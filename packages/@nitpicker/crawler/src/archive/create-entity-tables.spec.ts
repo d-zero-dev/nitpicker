@@ -277,6 +277,7 @@ describe('createEntityTables', () => {
 		expect(names).toEqual([
 			'id',
 			'url_id',
+			'url_blob_id',
 			'is_external',
 			'status',
 			'status_text',

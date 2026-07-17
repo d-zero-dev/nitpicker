@@ -24,6 +24,15 @@ import { MigrationVerificationError } from './types.js';
  * @throws {MigrationVerificationError} If any pair of totals disagrees.
  */
 export async function checkReaderParity(trx: Knex): Promise<void> {
+	// `analysis_violations` postdates issue #116 — an archive from before
+	// that feature landed (and that never ran `nitpicker analyze` after
+	// upgrading) has no such table at all. Unlike the other legacy
+	// tables here (`pages` / `anchors` / `images` / `resources`), which
+	// `init-schema.ts` has always created, this one is genuinely absent
+	// on some real archives, so the check below is skipped rather than
+	// querying a table that may not exist.
+	const hasAnalysisViolations = await trx.schema.hasTable('analysis_violations');
+
 	const checks: {
 		label: string;
 		legacy: () => Promise<number>;
@@ -184,30 +193,34 @@ export async function checkReaderParity(trx: Knex): Promise<void> {
 						.count({ count: '*' }),
 				),
 		},
-		{
-			// `getViolations` joins `analysis_violations` → `content_items`
-			// → `url_refs` to project the page URL for each violation. The
-			// current-path parity check exercises that JOIN chain so a
-			// broken FK / missing `content_items` row surfaces here as a
-			// row-count discrepancy (the legacy side counts `pages` rows
-			// via `analysis_violations.page_id`, so a lost `content_items`
-			// row makes the current-side INNER JOIN drop the violation).
-			label:
-				'getViolations page-URL join (analysis_violations → content_items → url_refs)',
-			legacy: async () =>
-				scalar(
-					trx('analysis_violations as v')
-						.join('pages as p', 'p.id', 'v.page_id')
-						.count({ count: '*' }),
-				),
-			current: async () =>
-				scalar(
-					trx('analysis_violations as v')
-						.join('content_items as p', 'p.id', 'v.page_id')
-						.join('url_refs as ur', 'ur.id', 'p.url_id')
-						.count({ count: '*' }),
-				),
-		},
+		...(hasAnalysisViolations
+			? [
+					{
+						// `getViolations` joins `analysis_violations` → `content_items`
+						// → `url_refs` to project the page URL for each violation. The
+						// current-path parity check exercises that JOIN chain so a
+						// broken FK / missing `content_items` row surfaces here as a
+						// row-count discrepancy (the legacy side counts `pages` rows
+						// via `analysis_violations.page_id`, so a lost `content_items`
+						// row makes the current-side INNER JOIN drop the violation).
+						label:
+							'getViolations page-URL join (analysis_violations → content_items → url_refs)',
+						legacy: async () =>
+							scalar(
+								trx('analysis_violations as v')
+									.join('pages as p', 'p.id', 'v.page_id')
+									.count({ count: '*' }),
+							),
+						current: async () =>
+							scalar(
+								trx('analysis_violations as v')
+									.join('content_items as p', 'p.id', 'v.page_id')
+									.join('url_refs as ur', 'ur.id', 'p.url_id')
+									.count({ count: '*' }),
+							),
+					},
+				]
+			: []),
 	];
 
 	const failures: string[] = [];

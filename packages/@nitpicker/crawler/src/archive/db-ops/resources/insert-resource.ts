@@ -4,16 +4,19 @@ import type { WriteRefCaches } from '../_shared/types.js';
 import type { Knex } from 'knex';
 
 import { normalizeContentType } from '../../../crawler/normalize-content-type.js';
+import { resolveUrlOrBlob } from '../_shared/resolve-url-or-blob.js';
 import { upsertContentTypeRef } from '../_shared/upsert-content-type-ref.js';
 import { upsertResponseHeaders } from '../_shared/upsert-response-headers.js';
-import { upsertUrlRef } from '../_shared/upsert-url-ref.js';
 
 /**
  * Inserts a sub-resource into the `resource_items` table, interning its
- * URL / content type / response headers into the ref tables first.
- * Ignores duplicate URLs (`ON CONFLICT(url_id) IGNORE`) — the first
- * response observed for a URL wins, matching the legacy first-write
- * contract.
+ * URL / content type / response headers into the ref tables first. A
+ * resource's identity URL routes through {@link resolveUrlOrBlob} like an
+ * image `src` — a large inline `data:` URI (e.g. a CSS
+ * `background-image` sub-resource) lands in `blob_refs` instead of
+ * `url_refs`. Ignores duplicates on whichever identity column the row
+ * claims (`url_id` or `url_blob_id`) — the first response observed for a
+ * URL wins, matching the legacy first-write contract.
  *
  * The `source` provenance label is written ONLY on insert; a conflict
  * leaves an existing row's source untouched (this is what makes a second
@@ -29,7 +32,7 @@ export async function insertResource(
 	resource: Resource,
 	source?: PageSource,
 ): Promise<void> {
-	const urlId = await upsertUrlRef(knex, caches, resource.url.href);
+	const slot = await resolveUrlOrBlob(knex, caches, resource.url.href);
 	// Canonicalize like the page path (see `insertPage`) so resource
 	// content-type filters / dedupe keys are case- and whitespace-stable.
 	const contentType = normalizeContentType(resource.contentType);
@@ -40,7 +43,8 @@ export async function insertResource(
 	const headerSetId = await upsertResponseHeaders(knex, caches, resource.headers);
 	await knex('resource_items')
 		.insert({
-			url_id: urlId,
+			url_id: slot.url,
+			url_blob_id: slot.blob,
 			is_external: resource.isExternal ? 1 : 0,
 			status: resource.status,
 			status_text: resource.statusText,
@@ -51,6 +55,6 @@ export async function insertResource(
 			cdn: resource.cdn || 0,
 			...(source === undefined ? {} : { source }),
 		})
-		.onConflict('url_id')
+		.onConflict(slot.blob === null ? 'url_id' : 'url_blob_id')
 		.ignore();
 }

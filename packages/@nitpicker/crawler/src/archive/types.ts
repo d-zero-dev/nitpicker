@@ -534,8 +534,12 @@ export interface Redirect {
 export interface DB_Resource {
 	/** Auto-incremented primary key. */
 	id: number;
-	/** The URL of the resource. */
-	url: string;
+	/**
+	 * The URL of the resource, or `null` when its identity URL is a large
+	 * `data:` URI routed to `blob_refs` instead of `url_refs` (mirrors
+	 * `image_items`' src/blob convention — see `build-resource-query.ts`).
+	 */
+	url: string | null;
 	/** Whether the resource is hosted on an external domain (1) or internal (0). */
 	isExternal: 0 | 1;
 	/** HTTP response status code, or null if not yet fetched. */

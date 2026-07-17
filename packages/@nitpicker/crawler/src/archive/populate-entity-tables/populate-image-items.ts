@@ -2,10 +2,11 @@ import type { DomPathResult } from './types.js';
 import type { Knex } from 'knex';
 
 import { decodeStoredBlob } from '../decode-html-blob.js';
-import { DATA_URI_URL_REFS_LIMIT } from '../populate-ref-tables/data-uri-url-refs-limit.js';
 
+import { isBlobRefValue } from './is-blob-ref-value.js';
 import { resolveBlobRefs } from './resolve-blob-refs.js';
 import { resolveTextRefs } from './resolve-text-refs.js';
+import { resolveUrlOrBlobFromMaps } from './resolve-url-or-blob-from-maps.js';
 import { resolveUrlRefs } from './resolve-url-refs.js';
 import { upsertTextRefs } from './upsert-text-refs.js';
 
@@ -222,8 +223,8 @@ export async function populateImageItems(
 					`populateImageItems: text_refs.id not resolved for dom_path=${domPath.path} — the upsertTextRefs above must have inserted it`,
 				);
 			}
-			const srcSlot = resolveUrlOrBlob(row.src, urlIds, blobIds);
-			const currentSrcSlot = resolveUrlOrBlob(row.currentSrc, urlIds, blobIds);
+			const srcSlot = resolveUrlOrBlobFromMaps(row.src, urlIds, blobIds);
+			const currentSrcSlot = resolveUrlOrBlobFromMaps(row.currentSrc, urlIds, blobIds);
 			inserts.push({
 				id: row.id,
 				page_id: row.pageId,
@@ -273,49 +274,6 @@ async function readPageHtmlInTrx(trx: Knex, pageId: number): Promise<string | nu
 		return null;
 	}
 	return decodeStoredBlob(row.body, row.codec);
-}
-
-/**
- * Predicate matching the `url_refs` populate's routing rule
- * (`populate-ref-tables/populate-url-refs.ts`): a `data:` URI whose
- * length exceeds {@link DATA_URI_URL_REFS_LIMIT} lands in `blob_refs`;
- * anything else (regular URL or short data URI) lands in `url_refs`.
- * @param value - Raw `src` / `currentSrc` column value.
- */
-function isBlobRefValue(value: string): boolean {
-	return value.startsWith('data:') && value.length > DATA_URI_URL_REFS_LIMIT;
-}
-
-/**
- * Routes one legacy `src` / `currentSrc` value to either `url_refs` or
- * `blob_refs` per the {@link DATA_URI_URL_REFS_LIMIT} threshold rule
- * (large data URIs live in `blob_refs`, everything else in `url_refs`).
- * Exactly one of
- * `url` / `blob` is non-null; both may be `null` when the value is null
- * or fails to resolve (e.g. the `blob_refs` row is missing because the
- * data URI was malformed and skipped by `populateBlobRefs`).
- *
- * Colocated with {@link populateImageItems} rather than exported as its
- * own file because it exists solely to serve this one call site and
- * captures three parameters (value + both id maps) that are not
- * meaningful to any other caller.
- * @param value - Raw `src` / `currentSrc` column value.
- * @param urlIds - Map of URL string → `url_refs.id`.
- * @param blobIds - Map of data-URI string → `blob_refs.id`.
- * @returns `{ url, blob }` pair with at most one non-null field.
- */
-function resolveUrlOrBlob(
-	value: string | null,
-	urlIds: ReadonlyMap<string, number>,
-	blobIds: ReadonlyMap<string, number>,
-): { url: number | null; blob: number | null } {
-	if (typeof value !== 'string' || value === '') {
-		return { url: null, blob: null };
-	}
-	if (isBlobRefValue(value)) {
-		return { url: null, blob: blobIds.get(value) ?? null };
-	}
-	return { url: urlIds.get(value) ?? null, blob: null };
 }
 
 /**

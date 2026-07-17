@@ -11,12 +11,10 @@ import { dbLog } from '../../../debug.js';
 import { deriveLineageFromParent } from '../../../derive-lineage-from-parent.js';
 import { matchImagesToDomPaths } from '../../../populate-entity-tables/match-images-to-dom-paths.js';
 import { upsertTextRefs } from '../../../populate-entity-tables/upsert-text-refs.js';
-import { DATA_URI_URL_REFS_LIMIT } from '../../../populate-ref-tables/data-uri-url-refs-limit.js';
 import { resolveRedirectChain } from '../../../resolve-redirect-chain.js';
 import { clearWriteRefCaches } from '../../_shared/clear-write-ref-caches.js';
 import { resolveContentItemId } from '../../_shared/resolve-content-item-id.js';
-import { upsertBlobRef } from '../../_shared/upsert-blob-ref.js';
-import { upsertUrlRef } from '../../_shared/upsert-url-ref.js';
+import { resolveUrlOrBlob } from '../../_shared/resolve-url-or-blob.js';
 
 import { insertJsonLd } from './insert-jsonld.js';
 import { insertPage } from './insert-page.js';
@@ -412,29 +410,4 @@ async function replaceImageItems(
 	await eachSplitted(rows, 100, async (chunk) => {
 		await trx('image_items').insert(chunk);
 	});
-}
-
-/**
- * Routes one `src` / `currentSrc` value to either `url_refs` or
- * `blob_refs` per the data-URI threshold rule (large data URIs live in
- * `blob_refs`, everything else in `url_refs`). At most one of
- * `url` / `blob` is non-null; both are `null` when the value is empty or
- * a malformed data URI that fails to decode.
- * @param trx - The active transaction.
- * @param caches - The connection's write-side id caches.
- * @param value - Raw `src` / `currentSrc` value.
- * @returns `{ url, blob }` pair with at most one non-null field.
- */
-async function resolveUrlOrBlob(
-	trx: Knex.Transaction,
-	caches: WriteRefCaches,
-	value: string | null | undefined,
-): Promise<{ url: number | null; blob: number | null }> {
-	if (typeof value !== 'string' || value === '') {
-		return { url: null, blob: null };
-	}
-	if (value.startsWith('data:') && value.length > DATA_URI_URL_REFS_LIMIT) {
-		return { url: null, blob: await upsertBlobRef(trx, caches, value) };
-	}
-	return { url: await upsertUrlRef(trx, caches, value), blob: null };
 }

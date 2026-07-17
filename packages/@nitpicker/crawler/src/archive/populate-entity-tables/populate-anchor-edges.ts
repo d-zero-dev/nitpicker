@@ -15,12 +15,19 @@ import { resolveTextRefs } from './resolve-text-refs.js';
 const READ_CHUNK_SIZE = 5000;
 
 /**
- * Edges buffered before a bulk `INSERT INTO anchor_edges ... VALUES
- * (...)`. Each edge binds 5 params so 1 000 rows = 5 000 params — well
- * inside the SQLite variable limit. Emitting on this cadence bounds
- * peak buffered-edge memory to ≈ 100 KB.
+ * Edges buffered before a bulk `.insert(rows).onConflict(...).ignore()`.
+ * The real constraint here is NOT the SQLite bound-parameter limit —
+ * knex's sqlite3-family dialect compiles any multi-row `.insert()` (with
+ * or without `onConflict`) into `INSERT INTO ... SELECT ... UNION ALL
+ * SELECT ...`, which is capped by SQLite's `SQLITE_LIMIT_COMPOUND_SELECT`
+ * (default 500). A chunk size above 500 fails with "too many terms in
+ * compound SELECT" — confirmed against a real archive whose anchor count
+ * routinely produces 500+ distinct `(page_id, href_page_id)` pairs per
+ * page. Kept at exactly 500 (not lower) to match the established
+ * convention already used by `upsert-one-header-set.ts` and the
+ * ref-tables populate steps.
  */
-const INSERT_CHUNK_SIZE = 1000;
+const INSERT_CHUNK_SIZE = 500;
 
 /**
  * Populates `anchor_edges` from `anchors` (issue #193).

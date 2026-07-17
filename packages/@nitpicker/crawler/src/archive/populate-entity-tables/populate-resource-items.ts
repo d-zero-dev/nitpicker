@@ -1,7 +1,10 @@
 import type { Knex } from 'knex';
 
+import { isBlobRefValue } from './is-blob-ref-value.js';
+import { resolveBlobRefs } from './resolve-blob-refs.js';
 import { loadContentTypeRefs } from './resolve-content-type-refs.js';
 import { resolveHeaderSets } from './resolve-header-sets.js';
+import { resolveUrlOrBlobFromMaps } from './resolve-url-or-blob-from-maps.js';
 import { resolveUrlRefs } from './resolve-url-refs.js';
 
 /**
@@ -65,21 +68,27 @@ export async function populateResourceItems(trx: Knex): Promise<void> {
 		cursor = rows.at(-1)!.id;
 
 		const urls = new Set<string>();
+		const dataUris = new Set<string>();
 		const headerJsonStrings = new Set<string>();
 		for (const row of rows) {
-			urls.add(row.url);
+			if (isBlobRefValue(row.url)) {
+				dataUris.add(row.url);
+			} else {
+				urls.add(row.url);
+			}
 			if (typeof row.responseHeaders === 'string' && row.responseHeaders !== '') {
 				headerJsonStrings.add(row.responseHeaders);
 			}
 		}
 		const urlIds = await resolveUrlRefs(trx, urls);
+		const blobIds = await resolveBlobRefs(trx, dataUris);
 		const headerSetIds = await resolveHeaderSets(trx, headerJsonStrings);
 
 		const inserts = rows.map((row) => {
-			const urlId = urlIds.get(row.url) ?? null;
-			if (urlId === null) {
+			const slot = resolveUrlOrBlobFromMaps(row.url, urlIds, blobIds);
+			if (slot.url === null && slot.blob === null) {
 				throw new Error(
-					`populateResourceItems: url_refs.id not resolved for resource id=${row.id} url=${row.url} — populateUrlRefs must run first`,
+					`populateResourceItems: neither url_refs.id nor blob_refs.id resolved for resource id=${row.id} url=${row.url.slice(0, 80)} — populateUrlRefs/populateBlobRefs must run first`,
 				);
 			}
 			let contentTypeId: number | null = null;
@@ -98,7 +107,8 @@ export async function populateResourceItems(trx: Knex): Promise<void> {
 					: null;
 			return {
 				id: row.id,
-				url_id: urlId,
+				url_id: slot.url,
+				url_blob_id: slot.blob,
 				is_external: row.isExternal == null ? 0 : row.isExternal ? 1 : 0,
 				status: row.status ?? null,
 				status_text: row.statusText ?? null,

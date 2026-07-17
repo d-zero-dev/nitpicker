@@ -17,9 +17,24 @@ const READ_CHUNK_SIZE = 2000;
 const INSERT_CHUNK_SIZE = 100;
 
 /**
- * Populates `blob_refs` from every `images.src` / `images.currentSrc`
- * value that is a data URI longer than {@link DATA_URI_URL_REFS_LIMIT}
- * bytes (issue #191).
+ * Source table + its URL-shaped column(s) that may hold a data URI large
+ * enough to route to `blob_refs`. `resources.url` is the resource's own
+ * identity (unlike `pages`/`content_items`, whose own URL is always a
+ * real http(s) address in practice) — a `<link>`/CSS sub-resource can
+ * legally be captured as an inline `data:` URI.
+ */
+const URL_SOURCES: readonly {
+	table: 'images' | 'resources';
+	columns: readonly string[];
+}[] = [
+	{ table: 'images', columns: ['src', 'currentSrc'] },
+	{ table: 'resources', columns: ['url'] },
+];
+
+/**
+ * Populates `blob_refs` from every `images.src` / `images.currentSrc` /
+ * `resources.url` value that is a data URI longer than
+ * {@link DATA_URI_URL_REFS_LIMIT} bytes (issue #191).
  *
  * For each such value:
  *
@@ -28,15 +43,16 @@ const INSERT_CHUNK_SIZE = 100;
  * 2. `computeContentHash` hashes the payload bytes (32-byte SHA-256).
  * 3. The payload is zstd-compressed (`codec='zstd'`) — matching
  *    `page_html_blobs` / `json_refs`.
- * 4. `INSERT OR IGNORE` on `hash` deduplicates: two `<img>` elements with
- *    the same underlying base64 payload share one `blob_refs` row.
+ * 4. `INSERT OR IGNORE` on `hash` deduplicates: an `<img>` element and a
+ *    resource that share the same underlying base64 payload share one
+ *    `blob_refs` row.
  *
  * Malformed data URIs that `decodeDataUri` cannot decode are logged and
- * skipped — the raw URI string still exists in the source `images.src`
- * row, and the migration script's operator can hunt it down from the
- * warning log. The alternative — routing malformed large URIs back to
- * `url_refs` — would break the "data URIs > threshold live in
- * blob_refs" contract that 0.13 lookups depend on.
+ * skipped — the raw URI string still exists in the source row, and the
+ * migration script's operator can hunt it down from the warning log. The
+ * alternative — routing malformed large URIs back to `url_refs` — would
+ * break the "data URIs > threshold live in blob_refs" contract that 0.13
+ * lookups depend on.
  *
  * On the reference archive only ~429 images use data URIs, so the total
  * dictionary is tiny — this step is I/O-cheap even without full
@@ -49,22 +65,6 @@ const INSERT_CHUNK_SIZE = 100;
  * });
  */
 export async function populateBlobRefs(trx: Knex): Promise<void> {
-	const hasImages = await trx.schema.hasTable('images');
-	if (!hasImages) {
-		return;
-	}
-	const hasSrc = await trx.schema.hasColumn('images', 'src');
-	const hasCurrentSrc = await trx.schema.hasColumn('images', 'currentSrc');
-	const columns = [
-		'id',
-		...(hasSrc ? ['src'] : []),
-		...(hasCurrentSrc ? ['currentSrc'] : []),
-	];
-	if (columns.length === 1) {
-		// Only `id` — neither URL column present, nothing to scan.
-		return;
-	}
-
 	const seen = new Set<string>();
 	const pending: {
 		hash: Buffer;
@@ -74,57 +74,67 @@ export async function populateBlobRefs(trx: Knex): Promise<void> {
 		size_stored: number;
 	}[] = [];
 
-	let cursor = 0;
-	while (true) {
-		const rows: Record<string, unknown>[] = await trx('images')
-			.select(...columns)
-			.where('id', '>', cursor)
-			.orderBy('id', 'asc')
-			.limit(READ_CHUNK_SIZE);
-		if (rows.length === 0) {
-			break;
+	for (const source of URL_SOURCES) {
+		const hasTable = await trx.schema.hasTable(source.table);
+		if (!hasTable) {
+			continue;
 		}
-		cursor = rows.at(-1)!.id as number;
-		for (const row of rows) {
-			const values: (string | null)[] = [];
-			if (hasSrc) {
-				values.push(row.src as string | null);
+		const presentColumns: string[] = [];
+		for (const column of source.columns) {
+			if (await trx.schema.hasColumn(source.table, column)) {
+				presentColumns.push(column);
 			}
-			if (hasCurrentSrc) {
-				values.push(row.currentSrc as string | null);
+		}
+		if (presentColumns.length === 0) {
+			continue;
+		}
+
+		let cursor = 0;
+		while (true) {
+			const rows: Record<string, unknown>[] = await trx(source.table)
+				.select('id', ...presentColumns)
+				.where('id', '>', cursor)
+				.orderBy('id', 'asc')
+				.limit(READ_CHUNK_SIZE);
+			if (rows.length === 0) {
+				break;
 			}
-			for (const value of values) {
-				if (value == null || value.length <= DATA_URI_URL_REFS_LIMIT) {
-					continue;
-				}
-				if (!value.startsWith('data:')) {
-					continue;
-				}
-				const decoded = decodeDataUri(value);
-				if (decoded === null) {
-					// eslint-disable-next-line no-console
-					console.warn(
-						`populateBlobRefs: skipping malformed data URI (length=${value.length}) — raw string still exists in images row`,
-					);
-					continue;
-				}
-				const hash = computeContentHash(decoded.bytes);
-				const hex = hash.toString('hex');
-				if (seen.has(hex)) {
-					continue;
-				}
-				seen.add(hex);
-				const compressed = zstdCompressSync(decoded.bytes);
-				pending.push({
-					hash,
-					body: compressed,
-					codec: 'zstd',
-					size_raw: decoded.bytes.byteLength,
-					size_stored: compressed.byteLength,
-				});
-				if (pending.length >= INSERT_CHUNK_SIZE) {
-					await trx('blob_refs').insert(pending).onConflict('hash').ignore();
-					pending.length = 0;
+			cursor = rows.at(-1)!.id as number;
+			for (const row of rows) {
+				for (const column of presentColumns) {
+					const value = row[column] as string | null;
+					if (value == null || value.length <= DATA_URI_URL_REFS_LIMIT) {
+						continue;
+					}
+					if (!value.startsWith('data:')) {
+						continue;
+					}
+					const decoded = decodeDataUri(value);
+					if (decoded === null) {
+						// eslint-disable-next-line no-console
+						console.warn(
+							`populateBlobRefs: skipping malformed data URI (length=${value.length}) — raw string still exists in ${source.table} row`,
+						);
+						continue;
+					}
+					const hash = computeContentHash(decoded.bytes);
+					const hex = hash.toString('hex');
+					if (seen.has(hex)) {
+						continue;
+					}
+					seen.add(hex);
+					const compressed = zstdCompressSync(decoded.bytes);
+					pending.push({
+						hash,
+						body: compressed,
+						codec: 'zstd',
+						size_raw: decoded.bytes.byteLength,
+						size_stored: compressed.byteLength,
+					});
+					if (pending.length >= INSERT_CHUNK_SIZE) {
+						await trx('blob_refs').insert(pending).onConflict('hash').ignore();
+						pending.length = 0;
+					}
 				}
 			}
 		}
