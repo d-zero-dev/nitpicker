@@ -224,6 +224,18 @@ async function updatePageInTransaction(
 	const anchorLineageSource = deriveLineageFromParent(parentRow?.source, 'crawled');
 	await replaceAnchorEdges(trx, caches, pageId, page, anchorLineageSource);
 	await replaceImageItems(trx, caches, pageId, page);
+	// Clear this page's resource_ref_edges unconditionally (no non-empty
+	// guard, unlike anchors/images above): the crawler always emits this
+	// page's `responseReferrers` events right after its `page` event (see
+	// `Crawler#handleResources`, called immediately after `#handleResult`
+	// for the same scrape), through the same serialized WriteQueue, so the
+	// fresh set is guaranteed to follow before any reader observes an
+	// empty gap. A degraded re-scrape that legitimately captures zero
+	// sub-resources leaves this page referrer-less until its next
+	// non-empty re-scrape — accepted, since resource_items rows for
+	// no-longer-referenced resources are themselves allowed to become
+	// orphaned (no cross-page cleanup is attempted for those either).
+	await trx('resource_ref_edges').where('page_id', pageId).delete();
 	return pageId;
 }
 

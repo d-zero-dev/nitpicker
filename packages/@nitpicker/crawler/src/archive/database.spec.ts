@@ -783,6 +783,90 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 		}
 	});
 
+	it('再スクレイプでリソース参照が変わると古い referrer edge は残らない', async () => {
+		// resource_ref_edges は resource_items と違って page 単位で置き換わ
+		// る（--retry-failed でページが参照するリソースを変えて再スクレイプ
+		// した場合、古い (resource, page) ペアが永久に残り続けるべきではな
+		// い）。resource_items 自体の欠番・orphan 化（誰も参照しなくなった
+		// リソースの行がそのまま残る）は許容されたトレードオフで、今回の
+		// スコープ外。
+		const dbPath = path.resolve(workingDir, 'rescrape-resource-referrers.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const pageUrl = 'http://localhost/referrer-source';
+		const makeData = () => ({
+			url: parseUrl(pageUrl)!,
+			redirectPaths: [] as string[],
+			isExternal: false,
+			status: 200,
+			statusText: 'OK',
+			contentLength: 100,
+			contentType: 'text/html',
+			responseHeaders: {},
+			meta: { title: 'Referrer source' },
+			anchorList: [],
+			imageList: [],
+			html: '<html></html>',
+			isSkipped: false,
+		});
+		try {
+			await db.insertResource({
+				url: parseUrl('http://localhost/old.png')!,
+				isExternal: false,
+				isError: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'image/png',
+				contentLength: 100,
+				compress: false,
+				cdn: false,
+				headers: null,
+			});
+			await db.insertResource({
+				url: parseUrl('http://localhost/new.png')!,
+				isExternal: false,
+				isError: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'image/png',
+				contentLength: 100,
+				compress: false,
+				cdn: false,
+				headers: null,
+			});
+
+			await db.updatePage(makeData(), true, true);
+			await db.insertResourceReferrers('http://localhost/old.png', pageUrl);
+
+			const knex = db.getKnex();
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id')
+				.where('url_refs.url', pageUrl);
+
+			const beforeRescrape = await knex
+				.from('resource_ref_edges')
+				.where('page_id', page.id)
+				.count({ c: '*' });
+			expect(Number(beforeRescrape[0]!.c)).toBe(1);
+
+			// 再スクレイプ後、今度は new.png だけを参照する。
+			await db.updatePage(makeData(), true, true);
+			await db.insertResourceReferrers('http://localhost/new.png', pageUrl);
+
+			const edges = await knex
+				.from('resource_ref_edges')
+				.join('resource_items', 'resource_ref_edges.resource_id', 'resource_items.id')
+				.join('url_refs', 'resource_items.url_id', 'url_refs.id')
+				.where('resource_ref_edges.page_id', page.id)
+				.select('url_refs.url as url');
+			expect(edges.map((e) => e.url)).toEqual(['http://localhost/new.png']);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
 	it('コンテンツページがリダイレクト元になった時、旧 anchors を消去する', async () => {
 		const dbPath = path.resolve(workingDir, 'rescrape-redirect-source.sqlite');
 		const db = await Database.connect({ filename: dbPath });
