@@ -128,6 +128,18 @@ import { createDomPathResolver } from './create-dom-path-resolver.mjs';
 const SQLITE_DB_FILE_NAME = 'db.sqlite';
 
 /**
+ * `onProgress` sink threaded into `populateRefTables` / `populateEntityTables`
+ * (see `packages/@nitpicker/crawler/src/archive/create-progress-reporter.ts`).
+ * Each sub-populate reports at most once per ~5% of its source table
+ * scanned, so a multi-million-row table produces ~20 lines total instead
+ * of one per chunk.
+ * @param {string} message
+ */
+function logProgress(message) {
+	console.log(`    ${message}`);
+}
+
+/**
  * Entry point.
  */
 async function main() {
@@ -256,7 +268,7 @@ async function applyMigrations(dbPath) {
 
 		console.log('  populate ref tables');
 		await db.transaction(async (trx) => {
-			await populateRefTables(trx);
+			await populateRefTables(trx, logProgress);
 		});
 
 		console.log('  populate entity tables');
@@ -264,7 +276,7 @@ async function applyMigrations(dbPath) {
 		/** @type {import('../packages/@nitpicker/crawler/lib/archive/verify-migration/types.js').MigrationVerificationSummary} */
 		let summary;
 		await db.transaction(async (trx) => {
-			await populateEntityTables(trx, domPathResolver);
+			await populateEntityTables(trx, domPathResolver, logProgress);
 			console.log('  verify migration invariants');
 			summary = await verifyMigration(trx);
 		});
