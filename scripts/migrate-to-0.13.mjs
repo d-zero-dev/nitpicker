@@ -82,22 +82,19 @@
  *   synthetic `unknown/<images.id>` marker. A warning is logged for
  *   every unknown fallback so operators can audit fidelity.
  *
- * The jsdom dependency lives only in this script (not in the crawler
- * runtime); `populate-image-items.ts` accepts an injected resolver so
- * the crawler package stays jsdom-free at runtime.
+ * The HTML parser dependency lives only in this script (not in the
+ * crawler runtime); `populate-image-items.ts` accepts an injected
+ * resolver so the crawler package stays parser-agnostic at runtime.
  *
- * Each page's HTML is parsed into its own jsdom `Window`, which V8 does
- * not reliably reclaim through ordinary GC — not even a forced
- * `globalThis.gc()` call — because each `Window` runs in its own Node
- * `vm` context (a long-documented V8 retention characteristic; measured
- * against a real 380 K-image archive: a Mark-Compact pass reclaimed
- * under 2 MB out of a 12 GB heap). The only way to give that memory back
- * to the OS is to destroy the isolate it lives in, so the actual jsdom
- * parse runs in a `worker_threads` worker (`dom-path-resolver-worker.mjs`)
- * that this script periodically `terminate()`s and replaces (see
- * `createJsdomDomPathResolver`). Validated against a real 1 416-page
- * archive: recycling every 50 pages keeps RSS oscillating in the
- * 0.5-1.3 GB band for the whole run instead of growing unbounded.
+ * Parsing uses parse5 (`create-dom-path-resolver.mjs`), not jsdom. An
+ * earlier version of this script used jsdom, which runs every parsed
+ * document inside its own `Window`'s V8 `vm` context — a context V8
+ * does not reliably reclaim even with a forced `globalThis.gc()` call
+ * between pages (measured against a real 380 K-image archive: a
+ * Mark-Compact pass reclaimed under 2 MB out of a 12 GB heap). parse5
+ * produces a plain-object AST with no backing `vm` context, so the
+ * per-page retention does not exist in the first place — no worker
+ * pool or recycling is needed.
  *
  * NOT SHIPPED IN NPM
  * ------------------
@@ -111,7 +108,6 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { Worker } from 'node:worker_threads';
 
 import knex from 'knex';
 import * as tar from 'tar';
@@ -127,10 +123,7 @@ import { retargetLegacyFkTables } from '../packages/@nitpicker/crawler/lib/archi
 import { checkForeignKeyIntegrity } from '../packages/@nitpicker/crawler/lib/archive/verify-migration/check-foreign-key-integrity.js';
 import { verifyMigration } from '../packages/@nitpicker/crawler/lib/archive/verify-migration/verify-migration.js';
 
-/** Pages one dom-path worker processes before it is terminated and replaced (see `createJsdomDomPathResolver`). */
-const PAGES_PER_DOM_PATH_WORKER = 50;
-
-const DOM_PATH_WORKER_URL = new URL('dom-path-resolver-worker.mjs', import.meta.url);
+import { createDomPathResolver } from './create-dom-path-resolver.mjs';
 
 const SQLITE_DB_FILE_NAME = 'db.sqlite';
 
@@ -267,18 +260,14 @@ async function applyMigrations(dbPath) {
 		});
 
 		console.log('  populate entity tables');
-		const domPathResolver = createJsdomDomPathResolver();
+		const domPathResolver = createDomPathResolver();
 		/** @type {import('../packages/@nitpicker/crawler/lib/archive/verify-migration/types.js').MigrationVerificationSummary} */
 		let summary;
-		try {
-			await db.transaction(async (trx) => {
-				await populateEntityTables(trx, domPathResolver.resolve);
-				console.log('  verify migration invariants');
-				summary = await verifyMigration(trx);
-			});
-		} finally {
-			await domPathResolver.close();
-		}
+		await db.transaction(async (trx) => {
+			await populateEntityTables(trx, domPathResolver);
+			console.log('  verify migration invariants');
+			summary = await verifyMigration(trx);
+		});
 		console.log(
 			`  verification passed — content_items=${summary.contentItems}, ` +
 				`page_meta=${summary.pageMeta}, anchor_edges=${summary.anchorEdges} ` +
@@ -377,76 +366,6 @@ async function ensureLegacySourceColumns(db) {
 		});
 		console.log(`  added ${table}.source (input predates crawl --inventory)`);
 	}
-}
-
-/**
- * Returns `{ resolve, close }` where `resolve` matches the
- * `PageDomPathResolver` signature (see
- * `packages/@nitpicker/crawler/src/archive/populate-entity-tables/populate-image-items.ts`)
- * `populateEntityTables` expects, backed by a single `worker_threads`
- * worker (`dom-path-resolver-worker.mjs`) that does the actual jsdom
- * parse + DOM walk.
- *
- * The worker is `terminate()`d and replaced every
- * {@link PAGES_PER_DOM_PATH_WORKER} pages instead of running in this
- * process. Every `JSDOM` instance runs its `Window` in its own Node `vm`
- * context, and V8 does not reliably reclaim `vm` contexts through
- * ordinary GC — not even a forced `globalThis.gc()` call, confirmed by
- * measurement: 100 pages processed in-process (with a `globalThis.gc()`
- * call every 20 pages) still grew RSS from ~200 MB to ~1.8 GB and OOMed
- * shortly after, against a real 380 K-image archive's HTML. Terminating
- * the worker destroys its isolate outright, which is the only way to
- * give that memory back to the OS. Validated against the same real
- * archive's 1 416 pages: recycling every 50 pages keeps RSS oscillating
- * in the 0.5-1.3 GB band for the whole run instead of growing unbounded.
- *
- * `resolve` calls are strictly sequential (`populateEntityTables` awaits
- * each page before requesting the next), so a single worker — swapped
- * out synchronously between calls — is enough; no pool is needed.
- * `close` must be called once population is done (or has thrown) to
- * terminate the last live worker.
- */
-function createJsdomDomPathResolver() {
-	let worker = new Worker(DOM_PATH_WORKER_URL);
-	let nextId = 0;
-	let pagesSinceRespawn = 0;
-	const pending = new Map();
-
-	const attach = (w) => {
-		w.on('message', (msg) => {
-			const entry = pending.get(msg.id);
-			if (!entry) return;
-			pending.delete(msg.id);
-			entry.resolve(msg.result);
-		});
-		w.on('error', (error) => {
-			for (const entry of pending.values()) entry.reject(error);
-			pending.clear();
-		});
-	};
-	attach(worker);
-
-	return {
-		async resolve(pageId, htmlString, images) {
-			if (pagesSinceRespawn >= PAGES_PER_DOM_PATH_WORKER) {
-				pagesSinceRespawn = 0;
-				const old = worker;
-				worker = new Worker(DOM_PATH_WORKER_URL);
-				attach(worker);
-				await old.terminate();
-			}
-			const id = nextId++;
-			const result = await new Promise((resolve, reject) => {
-				pending.set(id, { resolve, reject });
-				worker.postMessage({ id, pageId, htmlString, images });
-			});
-			pagesSinceRespawn++;
-			return result;
-		},
-		async close() {
-			await worker.terminate();
-		},
-	};
 }
 
 try {
