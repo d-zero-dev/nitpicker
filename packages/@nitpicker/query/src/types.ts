@@ -187,8 +187,12 @@ export interface GetIsolatedClusterOptions {
  * with zero referrers.
  */
 export interface UnusedResourceEntry {
-	/** Resource URL. */
-	url: string;
+	/**
+	 * Resource URL, or `null` when the resource's identity is a large
+	 * `data:` URI routed to `blob_refs` instead of `url_refs` (mirrors
+	 * `image_items`' src/blob convention).
+	 */
+	url: string | null;
 	/** HTTP status of the resource, or `null` if not yet known. */
 	status: number | null;
 	/** Content-Type header value, or `null` if unknown. */
@@ -1351,8 +1355,12 @@ export interface ListResourcesOptions {
  * A resource entry with metadata.
  */
 export interface ResourceEntry {
-	/** The resource URL. */
-	url: string;
+	/**
+	 * The resource URL, or `null` when the resource's identity is a large
+	 * `data:` URI routed to `blob_refs` instead of `url_refs` (mirrors
+	 * `image_items`' src/blob convention).
+	 */
+	url: string | null;
 	/** HTTP status code. */
 	status: number | null;
 	/** HTTP status text. */

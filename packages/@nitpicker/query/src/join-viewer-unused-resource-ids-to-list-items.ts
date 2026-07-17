@@ -4,7 +4,7 @@ import type { Knex } from 'knex';
 /** Row shape read from `resource_items` for the unused-resources list. */
 interface UnusedResourceJoinRow {
 	id: number;
-	url: string;
+	url: string | null;
 	status: number | null;
 	contentType: string | null;
 	contentLength: number | null;
@@ -26,7 +26,7 @@ export async function joinViewerUnusedResourceIdsToListItems(
 		return [];
 	}
 	const rows: UnusedResourceJoinRow[] = await knex('resource_items as ri')
-		.join('url_refs as ur', 'ur.id', 'ri.url_id')
+		.leftJoin('url_refs as ur', 'ur.id', 'ri.url_id')
 		.leftJoin('content_type_refs as ctr', 'ctr.id', 'ri.content_type_id')
 		.whereIn('ri.id', resourceIds)
 		.select(

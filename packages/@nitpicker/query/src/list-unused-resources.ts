@@ -44,7 +44,7 @@ export async function listUnusedResources(
 	const baseWhere = (qb: Knex.QueryBuilder): Knex.QueryBuilder => {
 		const query = qb
 			.leftJoin('resource_ref_edges as rre', 'ri.id', 'rre.resource_id')
-			.join('url_refs as ur', 'ur.id', 'ri.url_id')
+			.leftJoin('url_refs as ur', 'ur.id', 'ri.url_id')
 			.leftJoin('content_type_refs as ctr', 'ctr.id', 'ri.content_type_id')
 			.whereNull('rre.resource_id')
 			.where('ri.is_external', 0);
