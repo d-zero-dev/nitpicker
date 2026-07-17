@@ -9,9 +9,11 @@ import { createEntityTables } from './create-entity-tables.js';
  * These are the 6 core normalised tables (`content_items`, `page_meta`,
  * `resource_items`, `anchor_edges`, `resource_ref_edges`, `image_items`) that
  * replace the legacy write model in the 0.13 format. Fresh archives get
- * them via `initSchema`; this migration handles the "existing archive
- * re-opened by `crawl --append` / `--retry-failed` / analyze" path — the same
- * pattern used by `migrateCrawlErrors`, `migrateRefTables`, etc.
+ * them via `initSchema`; this migration is called only by
+ * `scripts/migrate-to-0.13.mjs` as its schema catch-up step for pre-0.13
+ * input archives. The archive-open path (`db-ops/lifecycle/init.ts`) does
+ * not run it — `assertCompatibleVersion` guarantees every openable
+ * archive already has the full table set.
  *
  * The migration is intentionally table-only. It does not back-fill any data
  * from `pages` / `resources` / `anchors` / `images` — that is the job of the
@@ -27,8 +29,8 @@ import { createEntityTables } from './create-entity-tables.js';
  * `json_refs`, `blob_refs`, `header_sets`) via `REFERENCES`. On an
  * existing archive, `migrateRefTables` MUST have run first so the
  * ref tables exist by the time this migration is applied.
- * `Database.connect` orders the migrations statically so this ordering
- * is enforced there, not here.
+ * `scripts/migrate-to-0.13.mjs` orders the two calls statically so this
+ * ordering is enforced there, not here.
  *
  * **Idempotency**: `createEntityTables` itself uses
  * `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` for every
@@ -41,9 +43,6 @@ import { createEntityTables } from './create-entity-tables.js';
  * to emit only when creation actually happened, so we probe
  * `content_items` first and short-circuit when the schema is already
  * fully installed.
- *
- * On read-only connections the migration is skipped upstream, so this
- * function only ever runs against writer connections.
  * @param instance - The Knex query builder instance connected to the database.
  */
 export async function migrateEntityTables(instance: Knex): Promise<void> {

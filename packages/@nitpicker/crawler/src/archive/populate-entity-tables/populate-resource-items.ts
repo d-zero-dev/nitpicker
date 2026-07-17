@@ -79,7 +79,7 @@ export async function populateResourceItems(trx: Knex): Promise<void> {
 			const urlId = urlIds.get(row.url) ?? null;
 			if (urlId === null) {
 				throw new Error(
-					`populateResourceItems: url_refs.id not resolved for resource id=${row.id} url=${row.url} — 0.13-1 populate must run first`,
+					`populateResourceItems: url_refs.id not resolved for resource id=${row.id} url=${row.url} — populateUrlRefs must run first`,
 				);
 			}
 			let contentTypeId: number | null = null;
@@ -87,7 +87,7 @@ export async function populateResourceItems(trx: Knex): Promise<void> {
 				const resolved = contentTypeIds.get(row.contentType);
 				if (resolved === undefined) {
 					throw new Error(
-						`populateResourceItems: content_type_refs.id not resolved for resource id=${row.id} contentType=${row.contentType} — 0.13-0 populate must run first`,
+						`populateResourceItems: content_type_refs.id not resolved for resource id=${row.id} contentType=${row.contentType} — populateContentTypeRefs must run first`,
 					);
 				}
 				contentTypeId = resolved;

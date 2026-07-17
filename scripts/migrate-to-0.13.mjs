@@ -22,7 +22,10 @@
  * 1. **Schema catch-up** — creates the ref / header / entity tables
  *    if they are absent (`content_items`, `page_meta`, `resource_items`,
  *    `anchor_edges`, `resource_ref_edges`, `image_items` plus the
- *    ref tables). Idempotent via `CREATE TABLE IF NOT EXISTS`.
+ *    ref tables). Idempotent via `CREATE TABLE IF NOT EXISTS`. Also
+ *    adds `pages.source` / `resources.source` when the input predates
+ *    the `--inventory` feature — the entity populate copies `source`
+ *    verbatim, so the columns must exist before it runs.
  * 2. **Ref-table populate** — populates every ref table (`url_refs`,
  *    `text_refs`, `json_refs`, `blob_refs`, `content_type_refs`,
  *    `header_*`) from the still-present pre-0.13 tables.
@@ -38,11 +41,32 @@
  *    `knex.transaction()` block that ran the entity-populate step so
  *    a `MigrationVerificationError` rolls back every entity INSERT;
  *    ref tables populated earlier stay committed but are additive.
- * 5. **info.version bump** — writes `info.version = 0.13.0` so a
+ * 5. **Adjunct FK retarget** — `createAdjunctTables` guarantees the
+ *    adjunct set exists (`crawl_errors` / `inventory_runs` and the
+ *    `content_items`-referencing five), then `retargetLegacyFkTables`
+ *    rebuilds `page_html_ref` / `page_tags` / `page_jsonld` /
+ *    `page_errors` / `analysis_violations` so their FK declarations
+ *    point at `content_items(id)` instead of the legacy `pages(id)`
+ *    (SQLite has no `ALTER TABLE … DROP CONSTRAINT`). Runs with
+ *    `PRAGMA foreign_keys = ON` so the data copy validates row-level
+ *    integrity as it goes.
+ * 6. **Legacy-table drop** — `dropLegacyTables` removes `pages` /
+ *    `anchors` / `images` / `resources` / `resources-referrers`.
+ *    Enforcement is switched OFF for this step: `pages.redirectDestId`
+ *    is a self-FK that can make an enforced `DROP TABLE` fail on
+ *    implicit-DELETE row order, and skipping the implicit DELETE lets
+ *    SQLite truncate whole b-trees instead of deleting row by row.
+ * 7. **FK integrity check** — `checkForeignKeyIntegrity` asserts
+ *    `PRAGMA foreign_key_check` reports zero violations against the
+ *    final schema.
+ * 8. **info.version bump** — writes `info.version = 0.13.0` so a
  *    subsequent CLI open passes `assertCompatibleVersion`. This is
  *    the single mechanism the reader side uses to detect "archive
  *    predates the current format" — no separate per-migration assert.
- * 6. **Re-tar** the work dir to the output path.
+ * 9. **Re-tar** the work dir to the output path. The input file is
+ *    never touched, so it doubles as the rollback artefact — keep it
+ *    until the migrated output has been verified in real use
+ *    (issue #197 recommends ≥ 30 days).
  *
  * DOM-PATH DERIVATION
  * -------------------
@@ -79,6 +103,8 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 import knex from 'knex';
 import * as tar from 'tar';
 
+import { createAdjunctTables } from '../packages/@nitpicker/crawler/lib/archive/create-adjunct-tables.js';
+import { dropLegacyTables } from '../packages/@nitpicker/crawler/lib/archive/drop-legacy-tables.js';
 import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
 import { migrateEntityTables } from '../packages/@nitpicker/crawler/lib/archive/migrate-entity-tables.js';
 import { migrateRefTables } from '../packages/@nitpicker/crawler/lib/archive/migrate-ref-tables.js';
@@ -86,6 +112,8 @@ import { deriveDomPath } from '../packages/@nitpicker/crawler/lib/archive/popula
 import { matchImagesToDomPaths } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/match-images-to-dom-paths.js';
 import { populateEntityTables } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/populate-entities.js';
 import { populateRefTables } from '../packages/@nitpicker/crawler/lib/archive/populate-ref-tables/populate-refs.js';
+import { retargetLegacyFkTables } from '../packages/@nitpicker/crawler/lib/archive/retarget-legacy-fk-tables.js';
+import { checkForeignKeyIntegrity } from '../packages/@nitpicker/crawler/lib/archive/verify-migration/check-foreign-key-integrity.js';
 import { verifyMigration } from '../packages/@nitpicker/crawler/lib/archive/verify-migration/verify-migration.js';
 
 const SQLITE_DB_FILE_NAME = 'db.sqlite';
@@ -215,6 +243,7 @@ async function applyMigrations(dbPath) {
 		await migrateRefTables(db);
 		console.log('  ensure entity tables');
 		await migrateEntityTables(db);
+		await ensureLegacySourceColumns(db);
 
 		console.log('  populate ref tables');
 		await db.transaction(async (trx) => {
@@ -236,6 +265,46 @@ async function applyMigrations(dbPath) {
 				`(sum count=${summary.anchorEdgesSum}), image_items=${summary.imageItems}, ` +
 				`resource_items=${summary.resourceItems}`,
 		);
+
+		console.log('  ensure adjunct tables');
+		await createAdjunctTables(db);
+
+		// Retarget under enforcement so the data copy validates every
+		// pageId / page_id against content_items row by row.
+		console.log('  retarget adjunct FKs → content_items(id)');
+		await db.transaction(async (trx) => {
+			await retargetLegacyFkTables(trx);
+		});
+
+		// The drop runs with enforcement OFF: `pages.redirectDestId` is a
+		// self-FK that can fail an enforced DROP TABLE's implicit DELETE on
+		// row order, and skipping the implicit DELETE truncates whole
+		// b-trees instead of deleting hundreds of thousands of rows one by
+		// one. `PRAGMA foreign_keys` cannot change inside a transaction, so
+		// this is a separate transaction from the retarget above — safe
+		// because the whole mutation happens in the extracted work dir and
+		// the output tar is only produced when every step has succeeded.
+		console.log(
+			'  drop legacy tables (pages/anchors/images/resources/resources-referrers)',
+		);
+		await db.raw('PRAGMA foreign_keys = OFF');
+		await db.transaction(async (trx) => {
+			await dropLegacyTables(trx);
+		});
+		await db.raw('PRAGMA foreign_keys = ON');
+
+		console.log('  verify foreign_key_check reports zero violations');
+		try {
+			await checkForeignKeyIntegrity(db);
+		} catch (error) {
+			console.error(
+				'FK integrity check failed after retarget + drop. This indicates ' +
+					'either corruption in the input archive or a bug in the FK rebuild. ' +
+					'No output was produced; the input archive is untouched — inspect it ' +
+					'before re-running.',
+			);
+			throw error;
+		}
 
 		// Bump info.version so `assertCompatibleVersion` accepts the archive
 		// on next open. This is the single mechanism the reader-side uses to
@@ -263,6 +332,30 @@ async function applyMigrations(dbPath) {
 		await db.raw('PRAGMA wal_checkpoint(TRUNCATE)');
 	} finally {
 		await db.destroy();
+	}
+}
+
+/**
+ * Adds the `source` provenance column to `pages` / `resources` when the
+ * input archive predates the `crawl --inventory` feature. The entity
+ * populate (`populate-content-items.ts` / `populate-resource-items.ts`)
+ * SELECTs the column and copies it verbatim into
+ * `content_items.source` / `resource_items.source`, so it must exist
+ * before the populate runs. SQLite applies the NOT NULL DEFAULT at
+ * column-add time, so pre-existing rows become `'crawled'` without an
+ * explicit backfill UPDATE.
+ * @param {import('knex').Knex} db - Knex handle on the extracted `db.sqlite`.
+ */
+async function ensureLegacySourceColumns(db) {
+	for (const table of ['pages', 'resources']) {
+		if (await db.schema.hasColumn(table, 'source')) {
+			continue;
+		}
+		await db.schema.table(table, (t) => {
+			t.string('source').notNullable().defaultTo('crawled');
+			t.index('source');
+		});
+		console.log(`  added ${table}.source (input predates crawl --inventory)`);
 	}
 }
 

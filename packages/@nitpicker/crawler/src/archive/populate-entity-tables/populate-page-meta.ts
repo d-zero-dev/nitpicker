@@ -223,7 +223,7 @@ function resolveOptionalTextId(
 	const id = textIds.get(value);
 	if (id === undefined) {
 		throw new Error(
-			`populatePageMeta: text_refs.id not resolved for page id=${pageId} column=${column} — 0.13-2 populate must run first`,
+			`populatePageMeta: text_refs.id not resolved for page id=${pageId} column=${column} — populateTextRefs must run first`,
 		);
 	}
 	return id;
@@ -260,7 +260,7 @@ function resolveOptionalUrlId(
 	const id = urlIds.get(value);
 	if (id === undefined) {
 		throw new Error(
-			`populatePageMeta: url_refs.id not resolved for page id=${pageId} column=${column} — 0.13-1 populate must run first`,
+			`populatePageMeta: url_refs.id not resolved for page id=${pageId} column=${column} — populateUrlRefs must run first`,
 		);
 	}
 	return id;
@@ -286,7 +286,7 @@ function resolveOptionalJsonId(
 	const id = jsonIds.get(value);
 	if (id === undefined) {
 		throw new Error(
-			`populatePageMeta: json_refs.id not resolved for page id=${pageId} column=meta_extras — 0.13-3 populate must run first`,
+			`populatePageMeta: json_refs.id not resolved for page id=${pageId} column=meta_extras — populateJsonRefs must run first`,
 		);
 	}
 	return id;

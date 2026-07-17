@@ -8,9 +8,11 @@ import { createRefTables } from './create-ref-tables.js';
  *
  * These are the 10 ref / header dictionary tables that form the
  * durable write-model of the 0.13 format. Fresh archives get them via
- * `initSchema`; this migration handles the "existing archive re-opened by
- * `crawl --append` / `--retry-failed` / analyze" path — the same pattern used
- * by `migrateCrawlErrors`, `migrateHtmlBlobTables`, etc.
+ * `initSchema`; this migration is called only by
+ * `scripts/migrate-to-0.13.mjs` as its schema catch-up step for pre-0.13
+ * input archives. The archive-open path (`db-ops/lifecycle/init.ts`) does
+ * not run it — `assertCompatibleVersion` guarantees every openable
+ * archive already has the full table set.
  *
  * The migration is intentionally table-only. It does not back-fill any data
  * from `pages` / `resources` / `anchors` / `images` into the ref tables — that
@@ -21,8 +23,6 @@ import { createRefTables } from './create-ref-tables.js';
  *
  * Idempotent: presence of `url_refs` is used as the sentinel (all 10
  * tables are created together, so any one of them can serve as the sentinel).
- * On read-only connections the migration is skipped upstream, so this
- * function only ever runs against writer connections.
  * @param instance - The Knex query builder instance connected to the database.
  */
 export async function migrateRefTables(instance: Knex): Promise<void> {

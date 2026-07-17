@@ -11,10 +11,11 @@ const CHUNK_SIZE = 500;
  * that happened before a page row was scraped).
  *
  * **Known limitation — pre-`crawl_errors` archives**: This helper does NOT
- * read `error.log`. `migrateCrawlErrors` creates the `crawl_errors` table on
- * writer connect but does NOT back-fill historical lines from `error.log`,
- * so an archive that predates the `crawl_errors` schema and whose failures
- * live only in `error.log` will resolve every id to "no message" here. The
+ * read `error.log`. The `crawl_errors` table is created empty (by
+ * `initSchema` on fresh archives, by `scripts/migrate-to-0.13.mjs` on
+ * migrated ones) and historical lines from `error.log` are never
+ * back-filled, so an archive whose failures live only in `error.log`
+ * will resolve every id to "no message" here. The
  * downstream `Database.resetFailedPages` treats absence as `unknown` (still
  * retryable), so legacy archives lose the permanent-kind exclusion until a
  * fresh crawl run populates `crawl_errors` / `page_errors`. The trade-off
