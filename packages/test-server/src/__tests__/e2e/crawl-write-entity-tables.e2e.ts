@@ -6,9 +6,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
 
 /**
- * Legacy flat tables the crawler's write path stops writing to once it
- * targets `content_items` / `page_meta` / `anchor_edges` / `resource_items`
- * / `resource_ref_edges` / `image_items` directly.
+ * Legacy flat tables that fresh archives no longer carry — the crawler's
+ * write path targets `content_items` / `page_meta` / `anchor_edges` /
+ * `resource_items` / `resource_ref_edges` / `image_items` directly and
+ * `initSchema` does not declare the legacy DDL at all (the tables only
+ * exist inside pre-0.13 archives as the migration script's populate
+ * source).
  */
 const LEGACY_TABLES = ['pages', 'anchors', 'images', 'resources', 'resources-referrers'];
 
@@ -53,11 +56,11 @@ describe('crawler write path targets entity tables directly (issue #196)', () =>
 		await cleanup(result);
 	});
 
-	it('legacy テーブル（pages/anchors/images/resources/resources-referrers）には書かれない', async () => {
+	it('legacy テーブル（pages/anchors/images/resources/resources-referrers）は存在しない', async () => {
 		const knex = result.accessor.getKnex();
 		for (const table of LEGACY_TABLES) {
-			const count = await countRows(knex, table);
-			expect(count, `expected ${table} to be empty`).toBe(0);
+			const exists = await knex.schema.hasTable(table);
+			expect(exists, `expected ${table} to be absent`).toBe(false);
 		}
 	});
 
