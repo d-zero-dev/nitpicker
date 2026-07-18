@@ -7,87 +7,29 @@ import knex from 'knex';
 import * as tar from 'tar';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import Archive from './archive.js';
 import { peekTarTopDir } from './filesystem/peek-tar-top-dir.js';
 import { LibsqlDialect } from './libsql-dialect.js';
+import { fkParentTables } from './test-utils/fk-parent-tables.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
 const workingDir = path.resolve(__dirname, '__test_fixtures_migrate_to_0_13_script__');
 const repoRoot = path.resolve(__dirname, '..', '..', '..', '..', '..');
 const migrateScript = path.resolve(repoRoot, 'scripts', 'migrate-to-0.13.mjs');
+const fixtureScript = path.resolve(repoRoot, 'scripts', 'generate-pre-0.13-fixture.mjs');
 
 /**
- * Builds a small but realistic 0.10 archive fixture by inserting directly
- * into the legacy `pages` / `anchors` tables (the crawler's write path now
- * targets `content_items` / `anchor_edges` directly, so a genuine 0.10-shaped
- * archive — the migration script's actual input — can no longer be produced
- * via `setPage`). Two pages, three anchors (two pointing to the same href
- * for dedup coverage) so the anchor-edges populate path has data to work on.
+ * Builds a small but realistic 0.10 archive fixture by running
+ * `scripts/generate-pre-0.13-fixture.mjs` — the single source of the
+ * pre-0.13 fixture shape, shared with the `viewer-migrated-archive` E2E
+ * so the two suites cannot silently diverge in what they exercise. The
+ * fixture carries two pages, three anchors (two pointing at the same
+ * href for dedup coverage), one resource with two referrers, and one row
+ * in each retarget-covered adjunct table.
  * @param filePath - Where to write the resulting `.nitpicker`.
  */
-async function buildFixtureArchive(filePath: string): Promise<void> {
-	const archive = await Archive.create({ filePath, cwd: workingDir });
-	try {
-		await archive.setConfig({
-			baseUrl: 'http://localhost',
-			name: 'fixture',
-			version: '0.10.0',
-			recursive: true,
-			interval: 0,
-			image: false,
-			fetchExternal: false,
-			parallels: 1,
-			roots: ['http://localhost'],
-			excludes: [],
-			excludeKeywords: [],
-			excludeUrls: [],
-			maxExcludedDepth: 0,
-			retry: 3,
-			fromList: false,
-			disableQueries: false,
-			userAgent: 'test',
-			ignoreRobots: false,
-		});
-		const knexInstance = archive.getKnex();
-		const [pageA] = await knexInstance('pages')
-			.insert({
-				url: 'http://localhost/a',
-				scraped: 1,
-				isTarget: 1,
-				isExternal: 0,
-				status: 200,
-				statusText: 'OK',
-				contentType: 'text/html',
-				contentLength: 100,
-				responseHeaders: '{}',
-				title: 'Page A',
-				isSkipped: 0,
-			})
-			.returning('id');
-		const [pageB] = await knexInstance('pages')
-			.insert({
-				url: 'http://localhost/b',
-				scraped: 1,
-				isTarget: 1,
-				isExternal: 0,
-				status: 200,
-				statusText: 'OK',
-				contentType: 'text/html',
-				contentLength: 100,
-				responseHeaders: '{}',
-				title: 'Page B',
-				isSkipped: 0,
-			})
-			.returning('id');
-		await knexInstance('anchors').insert([
-			{ pageId: pageA.id, hrefId: pageB.id, textContent: 'link1', hash: null },
-			{ pageId: pageA.id, hrefId: pageB.id, textContent: 'link2', hash: null },
-			{ pageId: pageB.id, hrefId: pageA.id, textContent: 'back', hash: null },
-		]);
-	} finally {
-		await archive.close();
-	}
+function buildFixtureArchive(filePath: string): void {
+	execFileSync('node', [fixtureScript, filePath], { cwd: repoRoot });
 }
 
 /**
@@ -167,7 +109,7 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 		async () => {
 			const inputPath = path.resolve(workingDir, 'input.nitpicker');
 			const outputPath = path.resolve(workingDir, 'input.0.13.nitpicker');
-			await buildFixtureArchive(inputPath);
+			buildFixtureArchive(inputPath);
 
 			const stdout = execFileSync('node', [migrateScript, inputPath, outputPath], {
 				cwd: repoRoot,
@@ -187,13 +129,61 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 				useNullAsDefault: true,
 			});
 			try {
+				// The fixture inserts exactly two legacy pages; the populate
+				// must carry both across (the legacy table itself is gone, so
+				// the expected count is pinned by the fixture, not read back).
 				const contentItemsCount = await db('content_items').count<{ n: number }[]>({
 					n: '*',
 				});
-				const pagesCount = await db('pages').count<{ n: number }[]>({ n: '*' });
-				expect(Number(contentItemsCount[0]!.n)).toBe(Number(pagesCount[0]!.n));
+				expect(Number(contentItemsCount[0]!.n)).toBe(2);
 				const edgesCount = await db('anchor_edges').count<{ n: number }[]>({ n: '*' });
 				expect(Number(edgesCount[0]!.n)).toBeGreaterThan(0);
+
+				// The legacy write-model tables are dropped from the output.
+				for (const table of [
+					'pages',
+					'anchors',
+					'images',
+					'resources',
+					'resources-referrers',
+				]) {
+					expect(await db.schema.hasTable(table), `${table} dropped`).toBe(false);
+				}
+
+				// Every adjunct FK declaration now targets content_items(id).
+				for (const table of [
+					'page_html_ref',
+					'page_tags',
+					'page_jsonld',
+					'page_errors',
+					'analysis_violations',
+				]) {
+					const parents = await fkParentTables(db, table);
+					expect(parents.has('content_items'), `${table} → content_items`).toBe(true);
+					expect(parents.has('pages'), `${table} must not reference pages`).toBe(false);
+				}
+
+				// The FK rebuild carried the fixture's adjunct rows across.
+				expect(await db('page_errors').select('*')).toMatchObject([
+					{ phase: 'screenshot', message: 'viewport switch failed' },
+				]);
+				expect(await db('page_tags').select('*')).toMatchObject([
+					{ provider: 'WordPress', externalId: 'wp' },
+				]);
+				expect(await db('page_jsonld').select('*')).toMatchObject([
+					{ kind: 'json-ld', type: 'Article' },
+				]);
+				expect(await db('analysis_violations').select('*')).toMatchObject([
+					{ validator: 'markuplint', rule: 'required-attr' },
+				]);
+				expect(await db('page_html_ref').select('page_id')).toHaveLength(1);
+
+				// Zero FK violations against the final schema — the same
+				// assertion the migrator itself runs via
+				// `checkForeignKeyIntegrity` before repacking.
+				const violations = await db.select('*').from(db.raw('pragma_foreign_key_check'));
+				expect(violations).toEqual([]);
+
 				// The migrator's version-bump step bumps `info.version` so a
 				// subsequent CLI open passes `assertCompatibleVersion`. Pin
 				// that assertion — a bump-that-forgets-to-bump would
@@ -216,7 +206,7 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 		async () => {
 			const inputPath = path.resolve(workingDir, 'input.nitpicker');
 			const outputPath = path.resolve(workingDir, 'input.0.13.nitpicker');
-			await buildFixtureArchive(inputPath);
+			buildFixtureArchive(inputPath);
 			await mutateFixture(inputPath, async (db) => {
 				// Point one `anchors` row at a non-existent page. `pageId` is
 				// still a real page (so the source-side content_items exists),
@@ -272,7 +262,7 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 		async () => {
 			const inputPath = path.resolve(workingDir, 'empty-info.nitpicker');
 			const outputPath = path.resolve(workingDir, 'empty-info.0.13.nitpicker');
-			await buildFixtureArchive(inputPath);
+			buildFixtureArchive(inputPath);
 			// Simulate an interrupted crawl that reached `Archive.create` but
 			// never got as far as `setConfig` — the `info` table exists but
 			// has zero rows. A bare `UPDATE info SET version = ...` would
@@ -302,6 +292,53 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 
 			expect(existsSync(outputPath)).toBe(false);
 			expect(sha256File(inputPath)).toBe(inputHashBefore);
+		},
+	);
+
+	it(
+		'adds pages.source / resources.source on an archive predating crawl --inventory',
+		{ timeout: 60_000 },
+		async () => {
+			const inputPath = path.resolve(workingDir, 'no-source.nitpicker');
+			const outputPath = path.resolve(workingDir, 'no-source.0.13.nitpicker');
+			buildFixtureArchive(inputPath);
+			// A genuinely old archive has no `source` column at all. The
+			// entity populate SELECTs it, so the migrator's
+			// `ensureLegacySourceColumns` step must add it (with the
+			// 'crawled' default backfilled by SQLite) before populate runs.
+			// The columns carry an index, which must go first — SQLite
+			// refuses DROP COLUMN on an indexed column.
+			await mutateFixture(inputPath, async (db) => {
+				await db.raw('DROP INDEX IF EXISTS pages_source_index');
+				await db.raw('ALTER TABLE pages DROP COLUMN source');
+				await db.raw('DROP INDEX IF EXISTS resources_source_index');
+				await db.raw('ALTER TABLE resources DROP COLUMN source');
+			});
+
+			const stdout = execFileSync('node', [migrateScript, inputPath, outputPath], {
+				cwd: repoRoot,
+			});
+			expect(stdout.toString()).toContain('added pages.source');
+
+			const inspectDir = path.resolve(workingDir, 'inspect-no-source');
+			mkdirSync(inspectDir, { recursive: true });
+			await tar.x({ file: outputPath, cwd: inspectDir });
+			const innerDirName = await peekTarTopDir(outputPath);
+			const innerDbPath = path.resolve(inspectDir, innerDirName, 'db.sqlite');
+			const db = knex({
+				client: LibsqlDialect,
+				connection: { filename: innerDbPath },
+				useNullAsDefault: true,
+			});
+			try {
+				const rows = await db('content_items').select('source');
+				expect(rows.length).toBeGreaterThan(0);
+				for (const row of rows) {
+					expect(row.source).toBe('crawled');
+				}
+			} finally {
+				await db.destroy();
+			}
 		},
 	);
 });

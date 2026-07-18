@@ -242,19 +242,50 @@ describe('Pages', () => {
 			// scraped=0, isTarget=1 — count されない（pending な target ページ）。
 			// `andWhere('scraped', 1)` が誤って `orWhere` になっていると 2 になる。
 			// updatePage は scraped=1 で挿入するので、生 knex で直接挿入する。
-			await db
-				.getKnex()
-				.from('pages')
-				.insert({ url: 'http://localhost/pending-target', scraped: 0, isTarget: 1 });
+			const knex = db.getKnex();
+			const insertContentItem = async (row: {
+				url: string;
+				scraped: 0 | 1;
+				isTarget: 0 | 1;
+				contentType?: string;
+			}) => {
+				const [urlRef] = await knex('url_refs').insert({ url: row.url }).returning('id');
+				let contentTypeId: number | null = null;
+				if (row.contentType !== undefined) {
+					const [ctRef] = await knex('content_type_refs')
+						.insert({
+							raw: row.contentType,
+							normalized: row.contentType,
+							category: 'other',
+						})
+						.onConflict('raw')
+						.merge({ raw: row.contentType })
+						.returning('id');
+					contentTypeId = ctRef.id;
+				}
+				await knex('content_items').insert({
+					url_id: urlRef.id,
+					scraped: row.scraped,
+					is_target: row.isTarget,
+					is_external: 0,
+					content_type_id: contentTypeId,
+				});
+			};
+			await insertContentItem({
+				url: 'http://localhost/pending-target',
+				scraped: 0,
+				isTarget: 1,
+			});
 			// scraped=0, isTarget=0 — count されない（pending な非target、初期状態）
-			await db
-				.getKnex()
-				.from('pages')
-				.insert({ url: 'http://localhost/pending-asset', scraped: 0, isTarget: 0 });
+			await insertContentItem({
+				url: 'http://localhost/pending-asset',
+				scraped: 0,
+				isTarget: 0,
+			});
 			// scraped=1, isTarget=1, だが非HTML（HEAD で捕まえた in-scope な PDF は
 			// isTarget=1 のまま）。isTarget は in-scope の意味なので、ページ数は
 			// content-type で保証する。content-type ガードが無いと 2 になる。
-			await db.getKnex().from('pages').insert({
+			await insertContentItem({
 				url: 'http://localhost/doc.pdf',
 				scraped: 1,
 				isTarget: 1,
@@ -746,6 +777,90 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 			// 空の再スクレイプでは置き換えず据え置く（#70 修正のデータ損失リグレッション回帰）。
 			expect(Number(anchorRow.c)).toBe(2);
 			expect(Number(imageRow.c)).toBe(1);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('再スクレイプでリソース参照が変わると古い referrer edge は残らない', async () => {
+		// resource_ref_edges は resource_items と違って page 単位で置き換わ
+		// る（--retry-failed でページが参照するリソースを変えて再スクレイプ
+		// した場合、古い (resource, page) ペアが永久に残り続けるべきではな
+		// い）。resource_items 自体の欠番・orphan 化（誰も参照しなくなった
+		// リソースの行がそのまま残る）は許容されたトレードオフで、今回の
+		// スコープ外。
+		const dbPath = path.resolve(workingDir, 'rescrape-resource-referrers.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const pageUrl = 'http://localhost/referrer-source';
+		const makeData = () => ({
+			url: parseUrl(pageUrl)!,
+			redirectPaths: [] as string[],
+			isExternal: false,
+			status: 200,
+			statusText: 'OK',
+			contentLength: 100,
+			contentType: 'text/html',
+			responseHeaders: {},
+			meta: { title: 'Referrer source' },
+			anchorList: [],
+			imageList: [],
+			html: '<html></html>',
+			isSkipped: false,
+		});
+		try {
+			await db.insertResource({
+				url: parseUrl('http://localhost/old.png')!,
+				isExternal: false,
+				isError: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'image/png',
+				contentLength: 100,
+				compress: false,
+				cdn: false,
+				headers: null,
+			});
+			await db.insertResource({
+				url: parseUrl('http://localhost/new.png')!,
+				isExternal: false,
+				isError: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'image/png',
+				contentLength: 100,
+				compress: false,
+				cdn: false,
+				headers: null,
+			});
+
+			await db.updatePage(makeData(), true, true);
+			await db.insertResourceReferrers('http://localhost/old.png', pageUrl);
+
+			const knex = db.getKnex();
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id')
+				.where('url_refs.url', pageUrl);
+
+			const beforeRescrape = await knex
+				.from('resource_ref_edges')
+				.where('page_id', page.id)
+				.count({ c: '*' });
+			expect(Number(beforeRescrape[0]!.c)).toBe(1);
+
+			// 再スクレイプ後、今度は new.png だけを参照する。
+			await db.updatePage(makeData(), true, true);
+			await db.insertResourceReferrers('http://localhost/new.png', pageUrl);
+
+			const edges = await knex
+				.from('resource_ref_edges')
+				.join('resource_items', 'resource_ref_edges.resource_id', 'resource_items.id')
+				.join('url_refs', 'resource_items.url_id', 'url_refs.id')
+				.where('resource_ref_edges.page_id', page.id)
+				.select('url_refs.url as url');
+			expect(edges.map((e) => e.url)).toEqual(['http://localhost/new.png']);
 		} finally {
 			await db.destroy();
 			await removeIfExists(dbPath);
@@ -1452,7 +1567,7 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 			});
 
 			const knex = db.getKnex();
-			const [row] = await knex.from('pages').count({ c: '*' });
+			const [row] = await knex.from('content_items').count({ c: '*' });
 			expect(Number(row.c)).toBe(0);
 		} finally {
 			await db.destroy();
@@ -1475,7 +1590,7 @@ describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）
 			).resolves.toBeUndefined();
 
 			const knex = db.getKnex();
-			const [row] = await knex.from('pages').count({ c: '*' });
+			const [row] = await knex.from('content_items').count({ c: '*' });
 			expect(Number(row.c)).toBe(0);
 		} finally {
 			await db.destroy();
@@ -1947,8 +2062,8 @@ describe('repromoteExternalPages', () => {
 
 		const remainingExternal = await db
 			.getKnex()
-			.from('pages')
-			.where('isExternal', 1)
+			.from('content_items')
+			.where('is_external', 1)
 			.count<{ c: number }[]>({ c: '*' });
 		expect(Number(remainingExternal[0]!.c)).toBe(0);
 
@@ -2490,7 +2605,7 @@ describe('resetFailedPages', () => {
 
 		const remainingScraped = await db
 			.getKnex()
-			.from('pages')
+			.from('content_items')
 			.where('scraped', 1)
 			.count<{ c: number }[]>({ c: '*' });
 		expect(Number(remainingScraped[0]!.c)).toBe(0);
@@ -4775,17 +4890,15 @@ describe('redirect chain intermediate lineage propagation', () => {
 });
 
 describe('inventory run audit log', () => {
-	it('initSchema does NOT create a `source_file_path` column (privacy regression guard, symmetric to migrate-inventory-runs.spec.ts)', async () => {
+	it('initSchema does NOT create a `source_file_path` column (privacy regression guard)', async () => {
 		// `source_file_path` is deliberately not persisted because absolute
 		// paths leak user-home / OS structure when archives are shared.
-		// `migrate-inventory-runs.spec.ts` pins the legacy bring-up
-		// path; this asserts the FRESH-archive path (`initSchema`) is
-		// symmetric. Without this guard, accidentally re-adding
-		// `t.string('source_file_path', ...)` to `init-schema.ts` would
-		// pass the existing tests in this describe — they use either
-		// explicit `select(name, ...)` lists or `toMatchObject` (which
-		// silently ignores extra columns) and would not surface the
-		// regression.
+		// Without this guard, accidentally re-adding
+		// `t.string('source_file_path', ...)` to the `inventory_runs` DDL
+		// (`create-adjunct-tables.ts`) would pass the existing tests in
+		// this describe — they use either explicit `select(name, ...)`
+		// lists or `toMatchObject` (which silently ignores extra columns)
+		// and would not surface the regression.
 		const dbPath = path.resolve(workingDir, 'inventory-runs-no-source-path.sqlite');
 		await removeIfExists(dbPath);
 		const db = await Database.connect({ filename: dbPath });

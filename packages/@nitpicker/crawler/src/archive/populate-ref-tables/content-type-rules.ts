@@ -31,7 +31,7 @@ interface Rule {
  * `@nitpicker/crawler` and `@nitpicker/query` import a single source of
  * truth; that migration is out of 0.13's scope.
  */
-export const PHASE_6B_CONTENT_TYPE_RULES: readonly Rule[] = [
+export const CONTENT_TYPE_RULES: readonly Rule[] = [
 	{
 		category: 'html',
 		matchers: [

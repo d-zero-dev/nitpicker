@@ -1,5 +1,8 @@
+import type { ProgressCallback } from '../create-progress-reporter.js';
 import type { AnchorEdgeRowInProgress, AnchorInputRow } from './types.js';
 import type { Knex } from 'knex';
+
+import { createProgressReporter } from '../create-progress-reporter.js';
 
 import { collapseAnchorRows } from './collapse-anchor-rows.js';
 import { resolveTextRefs } from './resolve-text-refs.js';
@@ -15,12 +18,19 @@ import { resolveTextRefs } from './resolve-text-refs.js';
 const READ_CHUNK_SIZE = 5000;
 
 /**
- * Edges buffered before a bulk `INSERT INTO anchor_edges ... VALUES
- * (...)`. Each edge binds 5 params so 1 000 rows = 5 000 params — well
- * inside the SQLite variable limit. Emitting on this cadence bounds
- * peak buffered-edge memory to ≈ 100 KB.
+ * Edges buffered before a bulk `.insert(rows).onConflict(...).ignore()`.
+ * The real constraint here is NOT the SQLite bound-parameter limit —
+ * knex's sqlite3-family dialect compiles any multi-row `.insert()` (with
+ * or without `onConflict`) into `INSERT INTO ... SELECT ... UNION ALL
+ * SELECT ...`, which is capped by SQLite's `SQLITE_LIMIT_COMPOUND_SELECT`
+ * (default 500). A chunk size above 500 fails with "too many terms in
+ * compound SELECT" — confirmed against a real archive whose anchor count
+ * routinely produces 500+ distinct `(page_id, href_page_id)` pairs per
+ * page. Kept at exactly 500 (not lower) to match the established
+ * convention already used by `upsert-one-header-set.ts` and the
+ * ref-tables populate steps.
  */
-const INSERT_CHUNK_SIZE = 1000;
+const INSERT_CHUNK_SIZE = 500;
 
 /**
  * Populates `anchor_edges` from `anchors` (issue #193).
@@ -45,17 +55,27 @@ const INSERT_CHUNK_SIZE = 1000;
  * makes the step idempotent: a re-run after partial failure re-emits the
  * same edges but the writes no-op.
  * @param trx - Knex instance or transaction connected to the archive DB.
+ * @param onProgress - Optional sink for periodic progress lines (one per
+ *   ~5% of `anchors` scanned); see {@link ../create-progress-reporter.ts}.
  * @example
  * await knex.transaction(async (trx) => {
  *   await populateAnchorEdges(trx);
  * });
  */
-export async function populateAnchorEdges(trx: Knex): Promise<void> {
+export async function populateAnchorEdges(
+	trx: Knex,
+	onProgress?: ProgressCallback,
+): Promise<void> {
 	let cursorPageId = 0;
 	let cursorHrefId = 0;
 	let cursorId = 0;
 	let carryOver: AnchorEdgeRowInProgress | null = null;
 	const pending: AnchorEdgeRowInProgress[] = [];
+
+	const countRows = await trx('anchors').count({ n: '*' });
+	const total = Number(countRows[0]?.n ?? 0);
+	const report = createProgressReporter('anchor_edges (anchors)', total, onProgress);
+	let processed = 0;
 
 	while (true) {
 		const rows: AnchorInputRow[] = await trx('anchors')
@@ -84,6 +104,8 @@ export async function populateAnchorEdges(trx: Knex): Promise<void> {
 		cursorPageId = lastRow.pageId;
 		cursorHrefId = lastRow.hrefId;
 		cursorId = lastRow.id;
+		processed += rows.length;
+		report(processed);
 
 		const chunkEdges = [...collapseAnchorRows(rows)];
 		for (const edge of chunkEdges) {

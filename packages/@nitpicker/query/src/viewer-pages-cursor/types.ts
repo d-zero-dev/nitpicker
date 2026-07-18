@@ -5,6 +5,7 @@
  */
 export type ViewerPagesSortColumn =
 	| 'url_sort_key'
+	| 'natural_url_rank'
 	| 'title_sort_key'
 	| 'status_sort_key'
 	| 'status_desc_key'

@@ -3,16 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { getViewerPagesSortSpec } from './get-viewer-pages-sort-spec.js';
 
 describe('getViewerPagesSortSpec', () => {
-	it('sorts by url ascending using url_sort_key/page_id, scanned ascending', () => {
+	it('sorts by url ascending using natural_url_rank/page_id, scanned ascending', () => {
 		expect(getViewerPagesSortSpec('url', 'asc')).toEqual({
-			columns: ['url_sort_key', 'page_id'],
+			columns: ['natural_url_rank', 'page_id'],
 			scanDirection: 'asc',
 		});
 	});
 
 	it('sorts by url descending using the same columns, scanned descending', () => {
 		expect(getViewerPagesSortSpec('url', 'desc')).toEqual({
-			columns: ['url_sort_key', 'page_id'],
+			columns: ['natural_url_rank', 'page_id'],
 			scanDirection: 'desc',
 		});
 	});

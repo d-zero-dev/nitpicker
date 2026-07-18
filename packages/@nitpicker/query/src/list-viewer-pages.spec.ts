@@ -471,6 +471,7 @@ describe('listViewerPages', () => {
 					url_sort_key: `https://example.com/page-${i}`,
 					title_sort_key: `Page ${i}`,
 					path_sort_key: `/page-${i}`,
+					natural_url_rank: i,
 				};
 			});
 			await knex('viewer_pages').insert(rows);

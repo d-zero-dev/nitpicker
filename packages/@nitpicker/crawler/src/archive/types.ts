@@ -76,12 +76,11 @@ export interface Config extends Required<Pick<ParseURLOptions, 'disableQueries'>
 
 /**
  * Provenance of a page or resource row — which crawler channel originally
- * inserted it. Stored as `pages.source` / `resources.source` in the
- * SQLite schema (NOT NULL DEFAULT `'crawled'`).
+ * inserted it. Stored as `content_items.source` / `resource_items.source`
+ * in the SQLite schema (NOT NULL DEFAULT `'crawled'`).
  *
  * - `'crawled'` — discovered via the recursive crawl rooted at `info.roots`.
- *   Default for pre-`--inventory` archives after the
- *   `migratePagesResourcesSource` runtime migration.
+ *   Default for rows that predate the `--inventory` feature.
  * - `'inventory-seed'` — supplied directly by a `crawl --inventory` URL
  *   list. For pages this is the HTML URL that was rendered; for resources
  *   this is a non-HTML URL handed in by the list (HEAD-fetched without
@@ -135,9 +134,9 @@ export interface InventoryRunMeta {
 	source_file_sha256?: string | null;
 	/** Number of non-empty lines in the input list (= URL count before scope filtering). */
 	total_lines?: number | null;
-	/** Number of new HTML seeds inserted as `pages` rows by this run. */
+	/** Number of new HTML seeds inserted as `content_items` rows by this run. */
 	new_pages?: number | null;
-	/** Number of new non-HTML URLs inserted as `resources` rows by this run. */
+	/** Number of new non-HTML URLs inserted as `resource_items` rows by this run. */
 	new_resources?: number | null;
 	/** Number of input URLs dropped because they fell outside the archived scope. */
 	scope_skipped?: number | null;
@@ -168,13 +167,18 @@ export type PageFilter =
 	| 'internal-no-page';
 
 /**
- * Raw database row representing a crawled page in the `pages` table (v2 schema).
+ * Flat page-row shape.
  *
- * Maps 1:1 to the columns defined by `archive/init-schema.ts`. Most meta
- * fields are derived from beholder 3.0.0's nested {@link import('@d-zero/beholder').Meta}
- * via `archive/meta/derive-flat-from-meta.ts` and are stored as plain
- * scalars for SQL-level filter / projection. The catch-all `meta_extras`
- * JSON column preserves nested sub-objects not flattened above.
+ * Serves two roles: (1) the read shape that
+ * `db-ops/pages/read/reconstruct-page-rows.ts` rebuilds by joining the
+ * entity / ref tables (`content_items` / `page_meta` / `url_refs` …), and
+ * (2) the raw row shape of the pre-0.13 legacy `pages` table, which only
+ * exists inside pre-0.13 input archives and is read by the 0.13 migration
+ * populate code. Most meta fields are derived from beholder 3.0.0's nested
+ * {@link import('@d-zero/beholder').Meta} via
+ * `archive/meta/derive-flat-from-meta.ts` and are stored as plain scalars
+ * for SQL-level filter / projection. The catch-all `meta_extras` JSON
+ * column preserves nested sub-objects not flattened above.
  * @example
  * const pages = await accessor.getPages('page');
  * for (const page of pages) {
@@ -358,8 +362,9 @@ export interface DB_Redirect {
 }
 
 /**
- * Raw database row representing an anchor (link) found on a page.
- * Combines data from the `anchors` table and the linked `pages` table.
+ * Flat anchor-row shape reconstructed by joining `anchor_edges` with the
+ * destination's `content_items` row and the ref tables. Also mirrors the
+ * pre-0.13 legacy `anchors` join shape read by the migration populate code.
  * @example
  * const anchors = await accessor.getAnchorsOnPage(pageId);
  * const brokenLinks = anchors.filter((a) => a.status === 404);
@@ -411,9 +416,14 @@ export interface DB_Referrer {
 }
 
 /**
- * Raw database row representing an image element found on a page in the `images` table.
+ * Raw database row of the pre-0.13 legacy `images` table. The table only
+ * exists inside pre-0.13 input archives; current archives store images in
+ * `image_items`. This type is read exclusively by the 0.13 migration
+ * populate code (`populate-image-items.ts`), which converts these rows
+ * into `image_items` before the legacy table is dropped.
  * @example
- * const images: DB_Image[] = await accessor.getKnex()('images').where('pageId', pageId);
+ * // Inside migration populate code reading a pre-0.13 input archive:
+ * const images: DB_Image[] = await trx('images').where('pageId', pageId);
  * const missingAlt = images.filter((img) => img.alt === null);
  */
 export interface DB_Image {
@@ -524,8 +534,12 @@ export interface Redirect {
 export interface DB_Resource {
 	/** Auto-incremented primary key. */
 	id: number;
-	/** The URL of the resource. */
-	url: string;
+	/**
+	 * The URL of the resource, or `null` when its identity URL is a large
+	 * `data:` URI routed to `blob_refs` instead of `url_refs` (mirrors
+	 * `image_items`' src/blob convention — see `build-resource-query.ts`).
+	 */
+	url: string | null;
 	/** Whether the resource is hosted on an external domain (1) or internal (0). */
 	isExternal: 0 | 1;
 	/** HTTP response status code, or null if not yet fetched. */

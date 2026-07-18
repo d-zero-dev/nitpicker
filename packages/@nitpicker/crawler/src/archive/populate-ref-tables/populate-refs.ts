@@ -1,3 +1,4 @@
+import type { ProgressCallback } from '../create-progress-reporter.js';
 import type { Knex } from 'knex';
 
 import { populateBlobRefs } from './populate-blob-refs.js';
@@ -35,6 +36,8 @@ import { populateUrlRefs } from './populate-url-refs.js';
  * transaction with `.bak` protection at the caller level; this function
  * does not open its own transaction so the caller controls the boundary.
  * @param trx - Knex instance or transaction connected to the archive DB.
+ * @param onProgress - Optional sink threaded to every sub-populate for
+ *   periodic progress lines; see {@link ../create-progress-reporter.ts}.
  * @example
  * // Typical migration-script use: connect via Archive, wrap in a
  * // transaction, run every sub-step, then rely on the caller's `.bak`
@@ -46,11 +49,14 @@ import { populateUrlRefs } from './populate-url-refs.js';
  * });
  * await archive.write();
  */
-export async function populateRefTables(trx: Knex): Promise<void> {
+export async function populateRefTables(
+	trx: Knex,
+	onProgress?: ProgressCallback,
+): Promise<void> {
 	await populateContentTypeRefs(trx);
-	await populateUrlRefs(trx);
-	await populateTextRefs(trx);
-	await populateJsonRefs(trx);
-	await populateBlobRefs(trx);
-	await populateHeaderTables(trx);
+	await populateUrlRefs(trx, onProgress);
+	await populateTextRefs(trx, onProgress);
+	await populateJsonRefs(trx, onProgress);
+	await populateBlobRefs(trx, onProgress);
+	await populateHeaderTables(trx, onProgress);
 }

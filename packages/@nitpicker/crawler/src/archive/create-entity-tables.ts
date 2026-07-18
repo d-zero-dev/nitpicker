@@ -17,7 +17,11 @@ import type { Knex } from 'knex';
  *   OpenGraph, Twitter, robots, denormalised aggregates, meta_extras JSON
  *   pointer). Split from `pages` so that filter / cursor queries against
  *   `content_items` scan a narrower row.
- * - `resource_items` — replaces `resources`.
+ * - `resource_items` — replaces `resources`. Identity URL splits into
+ *   `url_id` (regular URLs) vs `url_blob_id` (large `data:` URIs, routed
+ *   via `blob_refs`) — a resource's own URL is captured verbatim from
+ *   the network layer and, unlike a page's URL, can legally be a large
+ *   inline `data:` URI (e.g. a CSS `background-image` sub-resource).
  * - `anchor_edges` — replaces `anchors`. Deduped to distinct
  *   `(page_id, href_page_id)` pairs; `count` records how many instances
  *   were observed and `first_hash` / `first_text_id` capture the first
@@ -60,6 +64,12 @@ import type { Knex } from 'knex';
  * by-URL reader would silently return an arbitrary one. The UNIQUE
  * constraint's auto-index also serves the by-URL seek path, so no
  * separate `CREATE INDEX ... ON content_items(url_id)` is needed.
+ * `resource_items.url_id` is nullable (unlike `content_items.url_id`)
+ * because a resource's identity URL can itself be blob-routed — see the
+ * `resource_items url / blob mutual-exclusion CHECK` invariant below.
+ * `UNIQUE` on a nullable SQLite column only dedups the non-NULL values,
+ * so the guarantee still holds for every resource that does have a
+ * `url_id`.
  *
  * **`redirect_dest_id` self-reference is DEFERRABLE INITIALLY DEFERRED.**
  * `content_items.redirect_dest_id` references `content_items(id)` (not
@@ -116,6 +126,16 @@ import type { Knex } from 'knex';
  * so at most one slot per (src, currentSrc) pair is non-null. Without
  * the CHECK a populate bug or future writer could silently write both,
  * and the viewer would arbitrarily pick one to render.
+ *
+ * **`resource_items` url / blob mutual-exclusion CHECK.** Same rationale
+ * as the image CHECK above, but stricter: `(url_id IS NULL) !=
+ * (url_blob_id IS NULL)` requires EXACTLY one slot to be non-null (not
+ * "at most one") because a resource — unlike an `<img>` that can
+ * legitimately have neither `src` nor `currentSrc` — is always
+ * identified by some URL. `resolveUrlOrBlob` (writer) /
+ * `resolveUrlOrBlobFromMaps` (populate) are shared with `image_items`'
+ * routing so the two entities never disagree on which values count as
+ * "large data URI".
  *
  * ### Index rationale
  *
@@ -256,7 +276,8 @@ export async function createEntityTables(instance: Knex): Promise<void> {
 	await instance.raw(`
 		CREATE TABLE IF NOT EXISTS resource_items (
 			id               INTEGER PRIMARY KEY AUTOINCREMENT,
-			url_id           INTEGER NOT NULL UNIQUE REFERENCES url_refs(id),
+			url_id           INTEGER UNIQUE REFERENCES url_refs(id),
+			url_blob_id      INTEGER UNIQUE REFERENCES blob_refs(id),
 			is_external      INTEGER NOT NULL,
 			status           INTEGER,
 			status_text      TEXT,
@@ -265,7 +286,8 @@ export async function createEntityTables(instance: Knex): Promise<void> {
 			header_set_id    INTEGER REFERENCES header_sets(id),
 			compress         TEXT,
 			cdn              TEXT,
-			source           TEXT NOT NULL DEFAULT 'crawled'
+			source           TEXT NOT NULL DEFAULT 'crawled',
+			CHECK ((url_id IS NULL) != (url_blob_id IS NULL))
 		)
 	`);
 	await instance.raw(

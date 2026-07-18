@@ -16,16 +16,9 @@ describe('initSchema', () => {
 
 		const tables = [
 			'info',
-			'pages',
-			'anchors',
-			'images',
-			'resources',
-			'resources-referrers',
 			'page_html_blobs',
 			'page_html_ref',
-			// 0.13 ref / dictionary tables (issue #190). Additive only —
-			// present on every fresh archive but not read/written by
-			// the legacy consumers; the 0.13 population step fills them.
+			// 0.13 ref / dictionary tables.
 			'url_refs',
 			'content_type_refs',
 			'text_refs',
@@ -36,19 +29,78 @@ describe('initSchema', () => {
 			'header_sets',
 			'header_set_entries',
 			'header_flags',
-			// 0.13 core entity / edge tables (issue #192). Same
-			// additive-only status as the ref tables above: created on
-			// every fresh archive; the populate step fills them.
+			// 0.13 core entity / edge tables — the write-model the crawler
+			// writes during a crawl and every reader queries.
 			'content_items',
 			'page_meta',
 			'resource_items',
 			'anchor_edges',
 			'resource_ref_edges',
 			'image_items',
+			// Adjunct tables hanging off content_items + standalone logs.
+			'page_errors',
+			'crawl_errors',
+			'page_tags',
+			'page_jsonld',
+			'inventory_runs',
+			'analysis_text_refs',
+			'analysis_violations',
 		];
 		for (const table of tables) {
 			const exists = await db.schema.hasTable(table);
 			expect(exists, `table "${table}" should exist`).toBe(true);
+		}
+
+		await db.destroy();
+	});
+
+	it('does not create the legacy flat write-model tables', async () => {
+		const db = knex({
+			client: LibsqlDialect,
+			connection: { filename: ':memory:' },
+			useNullAsDefault: true,
+		});
+
+		await initSchema(db);
+
+		// The legacy tables only exist inside pre-0.13 archives, where they
+		// serve as the populate source for `scripts/migrate-to-0.13.mjs`
+		// before that script drops them. A fresh archive must never carry
+		// them.
+		for (const table of [
+			'pages',
+			'anchors',
+			'images',
+			'resources',
+			'resources-referrers',
+		]) {
+			const exists = await db.schema.hasTable(table);
+			expect(exists, `legacy table "${table}" must not exist`).toBe(false);
+		}
+
+		await db.destroy();
+	});
+
+	it('self-heals a partially-provisioned archive (info exists, later groups missing)', async () => {
+		const db = knex({
+			client: LibsqlDialect,
+			connection: { filename: ':memory:' },
+			useNullAsDefault: true,
+		});
+
+		// Simulate a crash during provisioning: `info` was created but the
+		// process died before the ref / entity / adjunct groups ran. A
+		// single all-or-nothing `hasTable('info')` gate would short-circuit
+		// forever and brick the stub with `no such table` on first write.
+		await db.schema.createTable('info', (t) => {
+			t.increments('id');
+			t.string('version');
+		});
+
+		await initSchema(db);
+
+		for (const table of ['url_refs', 'content_items', 'page_errors']) {
+			expect(await db.schema.hasTable(table), table).toBe(true);
 		}
 
 		await db.destroy();
@@ -64,55 +116,8 @@ describe('initSchema', () => {
 		await initSchema(db);
 		await initSchema(db);
 
-		const exists = await db.schema.hasTable('pages');
+		const exists = await db.schema.hasTable('content_items');
 		expect(exists).toBe(true);
-
-		await db.destroy();
-	});
-
-	it('creates pages table with expected columns', async () => {
-		const db = knex({
-			client: LibsqlDialect,
-			connection: { filename: ':memory:' },
-			useNullAsDefault: true,
-		});
-
-		await initSchema(db);
-
-		const columns = await db.raw("PRAGMA table_info('pages')");
-		const columnNames = columns.map((c: { name: string }) => c.name);
-		expect(columnNames).toContain('id');
-		expect(columnNames).toContain('url');
-		expect(columnNames).toContain('redirectDestId');
-		expect(columnNames).toContain('scraped');
-		expect(columnNames).toContain('isTarget');
-		expect(columnNames).toContain('isExternal');
-		expect(columnNames).toContain('status');
-		expect(columnNames).toContain('contentType');
-		// `html` was removed in #75 — bodies live in `page_html_ref` + `page_html_blobs`.
-		expect(columnNames).not.toContain('html');
-		expect(columnNames).toContain('order');
-
-		await db.destroy();
-	});
-
-	it('creates resources table with expected columns', async () => {
-		const db = knex({
-			client: LibsqlDialect,
-			connection: { filename: ':memory:' },
-			useNullAsDefault: true,
-		});
-
-		await initSchema(db);
-
-		const columns = await db.raw("PRAGMA table_info('resources')");
-		const columnNames = columns.map((c: { name: string }) => c.name);
-		expect(columnNames).toContain('id');
-		expect(columnNames).toContain('url');
-		expect(columnNames).toContain('isExternal');
-		expect(columnNames).toContain('contentType');
-		expect(columnNames).toContain('compress');
-		expect(columnNames).toContain('cdn');
 
 		await db.destroy();
 	});
@@ -451,35 +456,6 @@ describe('initSchema', () => {
 			'has_set_cookie',
 			'cache_policy',
 		]);
-
-		await db.destroy();
-	});
-
-	it('does not modify existing pages / resources / images / anchors / resources-referrers schema', async () => {
-		const db = knex({
-			client: LibsqlDialect,
-			connection: { filename: ':memory:' },
-			useNullAsDefault: true,
-		});
-
-		await initSchema(db);
-
-		// Sanity check the 0.13 DDL did not accidentally re-declare
-		// any column on the legacy write-model tables. The exact column
-		// lists here are pinned so a future accidental additive edit
-		// (dropping a column, renaming, changing null-ability by
-		// re-creating the table) would surface as a test failure.
-		const pagesInfo = await db.raw("PRAGMA table_info('pages')");
-		const pagesColumns = pagesInfo.map((c: { name: string }) => c.name);
-		expect(pagesColumns).toContain('responseHeaders');
-		expect(pagesColumns).not.toContain('url_id');
-		expect(pagesColumns).not.toContain('header_set_id');
-
-		const resourcesInfo = await db.raw("PRAGMA table_info('resources')");
-		const resourcesColumns = resourcesInfo.map((c: { name: string }) => c.name);
-		expect(resourcesColumns).toContain('responseHeaders');
-		expect(resourcesColumns).not.toContain('url_id');
-		expect(resourcesColumns).not.toContain('header_set_id');
 
 		await db.destroy();
 	});

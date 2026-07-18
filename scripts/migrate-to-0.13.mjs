@@ -22,7 +22,10 @@
  * 1. **Schema catch-up** — creates the ref / header / entity tables
  *    if they are absent (`content_items`, `page_meta`, `resource_items`,
  *    `anchor_edges`, `resource_ref_edges`, `image_items` plus the
- *    ref tables). Idempotent via `CREATE TABLE IF NOT EXISTS`.
+ *    ref tables). Idempotent via `CREATE TABLE IF NOT EXISTS`. Also
+ *    adds `pages.source` / `resources.source` when the input predates
+ *    the `--inventory` feature — the entity populate copies `source`
+ *    verbatim, so the columns must exist before it runs.
  * 2. **Ref-table populate** — populates every ref table (`url_refs`,
  *    `text_refs`, `json_refs`, `blob_refs`, `content_type_refs`,
  *    `header_*`) from the still-present pre-0.13 tables.
@@ -38,11 +41,37 @@
  *    `knex.transaction()` block that ran the entity-populate step so
  *    a `MigrationVerificationError` rolls back every entity INSERT;
  *    ref tables populated earlier stay committed but are additive.
- * 5. **info.version bump** — writes `info.version = 0.13.0` so a
+ * 5. **Adjunct FK retarget** — `createAdjunctTables` guarantees the
+ *    adjunct set exists (`crawl_errors` / `inventory_runs` and the
+ *    `content_items`-referencing five), then `retargetLegacyFkTables`
+ *    rebuilds `page_html_ref` / `page_tags` / `page_jsonld` /
+ *    `page_errors` / `analysis_violations` so their FK declarations
+ *    point at `content_items(id)` instead of the legacy `pages(id)`
+ *    (SQLite has no `ALTER TABLE … DROP CONSTRAINT`). Runs with
+ *    `PRAGMA foreign_keys = ON` so the data copy validates row-level
+ *    integrity as it goes.
+ * 6. **Legacy-table drop** — `dropLegacyTables` removes `pages` /
+ *    `anchors` / `images` / `resources` / `resources-referrers`.
+ *    Enforcement is switched OFF for this step: `pages.redirectDestId`
+ *    is a self-FK that can make an enforced `DROP TABLE` fail on
+ *    implicit-DELETE row order, and skipping the implicit DELETE lets
+ *    SQLite truncate whole b-trees instead of deleting row by row.
+ * 7. **FK integrity check** — `checkForeignKeyIntegrity` asserts
+ *    `PRAGMA foreign_key_check` reports zero violations against the
+ *    final schema.
+ * 8. **info.version bump** — writes `info.version = 0.13.0` so a
  *    subsequent CLI open passes `assertCompatibleVersion`. This is
  *    the single mechanism the reader side uses to detect "archive
  *    predates the current format" — no separate per-migration assert.
- * 6. **Re-tar** the work dir to the output path.
+ * 9. **Viewer read model build** — `buildViewerReadModel` runs against
+ *    the migrated archive so it opens in the viewer's fast path
+ *    immediately, matching what a live crawl gets for free at crawl
+ *    completion, instead of requiring a separate `viewer-build` run
+ *    an operator has to remember.
+ * 10. **Re-tar** the work dir to the output path. The input file is
+ *    never touched, so it doubles as the rollback artefact — keep it
+ *    until the migrated output has been verified in real use
+ *    (issue #197 recommends ≥ 30 days).
  *
  * DOM-PATH DERIVATION
  * -------------------
@@ -58,9 +87,19 @@
  *   synthetic `unknown/<images.id>` marker. A warning is logged for
  *   every unknown fallback so operators can audit fidelity.
  *
- * The jsdom dependency lives only in this script (not in the crawler
- * runtime); `populate-image-items.ts` accepts an injected resolver so
- * the crawler package stays jsdom-free at runtime.
+ * The HTML parser dependency lives only in this script (not in the
+ * crawler runtime); `populate-image-items.ts` accepts an injected
+ * resolver so the crawler package stays parser-agnostic at runtime.
+ *
+ * Parsing uses parse5 (`create-dom-path-resolver.mjs`), not jsdom. An
+ * earlier version of this script used jsdom, which runs every parsed
+ * document inside its own `Window`'s V8 `vm` context — a context V8
+ * does not reliably reclaim even with a forced `globalThis.gc()` call
+ * between pages (measured against a real 380 K-image archive: a
+ * Mark-Compact pass reclaimed under 2 MB out of a 12 GB heap). parse5
+ * produces a plain-object AST with no backing `vm` context, so the
+ * per-page retention does not exist in the first place — no worker
+ * pool or recycling is needed.
  *
  * NOT SHIPPED IN NPM
  * ------------------
@@ -75,20 +114,37 @@ import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
-import { JSDOM, VirtualConsole } from 'jsdom';
 import knex from 'knex';
 import * as tar from 'tar';
 
+import Archive from '../packages/@nitpicker/crawler/lib/archive/archive.js';
+import { createAdjunctTables } from '../packages/@nitpicker/crawler/lib/archive/create-adjunct-tables.js';
+import { dropLegacyTables } from '../packages/@nitpicker/crawler/lib/archive/drop-legacy-tables.js';
 import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
 import { migrateEntityTables } from '../packages/@nitpicker/crawler/lib/archive/migrate-entity-tables.js';
 import { migrateRefTables } from '../packages/@nitpicker/crawler/lib/archive/migrate-ref-tables.js';
-import { deriveDomPath } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/derive-dom-path.js';
-import { matchImagesToDomPaths } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/match-images-to-dom-paths.js';
 import { populateEntityTables } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/populate-entities.js';
 import { populateRefTables } from '../packages/@nitpicker/crawler/lib/archive/populate-ref-tables/populate-refs.js';
+import { retargetLegacyFkTables } from '../packages/@nitpicker/crawler/lib/archive/retarget-legacy-fk-tables.js';
+import { checkForeignKeyIntegrity } from '../packages/@nitpicker/crawler/lib/archive/verify-migration/check-foreign-key-integrity.js';
 import { verifyMigration } from '../packages/@nitpicker/crawler/lib/archive/verify-migration/verify-migration.js';
+import { buildViewerReadModel } from '../packages/@nitpicker/query/lib/viewer-read-model/build-viewer-read-model.js';
+
+import { createDomPathResolver } from './create-dom-path-resolver.mjs';
 
 const SQLITE_DB_FILE_NAME = 'db.sqlite';
+
+/**
+ * `onProgress` sink threaded into `populateRefTables` / `populateEntityTables`
+ * (see `packages/@nitpicker/crawler/src/archive/create-progress-reporter.ts`).
+ * Each sub-populate reports at most once per ~5% of its source table
+ * scanned, so a multi-million-row table produces ~20 lines total instead
+ * of one per chunk.
+ * @param {string} message
+ */
+function logProgress(message) {
+	console.log(`    ${message}`);
+}
 
 /**
  * Entry point.
@@ -128,6 +184,7 @@ async function main() {
 	}
 	mkdirSync(workDir, { recursive: true });
 
+	const startedAt = Date.now();
 	try {
 		console.log(`[1/3] untar ${inputPath} -> ${workDir}`);
 		await tar.x({ file: inputPath, cwd: workDir });
@@ -142,6 +199,9 @@ async function main() {
 		console.log('[2/3] apply 0.13 migration migrations');
 		await applyMigrations(dbPath);
 
+		console.log('  build viewer read model');
+		await buildArchiveViewerReadModel(extractedDir);
+
 		// libsql leaves -wal / -shm sidecars after close — remove them so
 		// the re-tar contains a clean single-file db.sqlite.
 		for (const sidecar of [`${dbPath}-wal`, `${dbPath}-shm`]) {
@@ -151,7 +211,7 @@ async function main() {
 		console.log(`[3/3] tar -> ${outputPath}`);
 		await tar.c({ file: outputPath, cwd: workDir, portable: true }, [innerDirName]);
 
-		console.log('Done.');
+		console.log(`Done. (${formatElapsed(Date.now() - startedAt)})`);
 	} catch (error) {
 		if (existsSync(outputPath)) {
 			rmSync(outputPath, { force: true });
@@ -160,6 +220,30 @@ async function main() {
 	} finally {
 		rmSync(workDir, { recursive: true, force: true });
 	}
+}
+
+/**
+ * Formats a millisecond duration as a rough `<hours>h <minutes>m
+ * <seconds>s` string (dropping leading zero units) for the
+ * operator-facing `Done.` line — not meant for precise timing, just
+ * "was this quick or did it take a while". Archives large enough to
+ * run for multiple hours are realistic, so hours are included;
+ * multi-day runs are not expected for a single archive and are not
+ * specially formatted.
+ * @param {number} ms
+ */
+function formatElapsed(ms) {
+	const totalSeconds = Math.round(ms / 1000);
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+	if (hours > 0) {
+		return `${hours}h ${minutes}m ${seconds}s`;
+	}
+	if (minutes > 0) {
+		return `${minutes}m ${seconds}s`;
+	}
+	return `${seconds}s`;
 }
 
 /**
@@ -215,18 +299,19 @@ async function applyMigrations(dbPath) {
 		await migrateRefTables(db);
 		console.log('  ensure entity tables');
 		await migrateEntityTables(db);
+		await ensureLegacySourceColumns(db);
 
 		console.log('  populate ref tables');
 		await db.transaction(async (trx) => {
-			await populateRefTables(trx);
+			await populateRefTables(trx, logProgress);
 		});
 
 		console.log('  populate entity tables');
-		const domPathResolver = createJsdomDomPathResolver();
+		const domPathResolver = createDomPathResolver();
 		/** @type {import('../packages/@nitpicker/crawler/lib/archive/verify-migration/types.js').MigrationVerificationSummary} */
 		let summary;
 		await db.transaction(async (trx) => {
-			await populateEntityTables(trx, domPathResolver);
+			await populateEntityTables(trx, domPathResolver, logProgress);
 			console.log('  verify migration invariants');
 			summary = await verifyMigration(trx);
 		});
@@ -236,6 +321,46 @@ async function applyMigrations(dbPath) {
 				`(sum count=${summary.anchorEdgesSum}), image_items=${summary.imageItems}, ` +
 				`resource_items=${summary.resourceItems}`,
 		);
+
+		console.log('  ensure adjunct tables');
+		await createAdjunctTables(db);
+
+		// Retarget under enforcement so the data copy validates every
+		// pageId / page_id against content_items row by row.
+		console.log('  retarget adjunct FKs → content_items(id)');
+		await db.transaction(async (trx) => {
+			await retargetLegacyFkTables(trx);
+		});
+
+		// The drop runs with enforcement OFF: `pages.redirectDestId` is a
+		// self-FK that can fail an enforced DROP TABLE's implicit DELETE on
+		// row order, and skipping the implicit DELETE truncates whole
+		// b-trees instead of deleting hundreds of thousands of rows one by
+		// one. `PRAGMA foreign_keys` cannot change inside a transaction, so
+		// this is a separate transaction from the retarget above — safe
+		// because the whole mutation happens in the extracted work dir and
+		// the output tar is only produced when every step has succeeded.
+		console.log(
+			'  drop legacy tables (pages/anchors/images/resources/resources-referrers)',
+		);
+		await db.raw('PRAGMA foreign_keys = OFF');
+		await db.transaction(async (trx) => {
+			await dropLegacyTables(trx);
+		});
+		await db.raw('PRAGMA foreign_keys = ON');
+
+		console.log('  verify foreign_key_check reports zero violations');
+		try {
+			await checkForeignKeyIntegrity(db);
+		} catch (error) {
+			console.error(
+				'FK integrity check failed after retarget + drop. This indicates ' +
+					'either corruption in the input archive or a bug in the FK rebuild. ' +
+					'No output was produced; the input archive is untouched — inspect it ' +
+					'before re-running.',
+			);
+			throw error;
+		}
 
 		// Bump info.version so `assertCompatibleVersion` accepts the archive
 		// on next open. This is the single mechanism the reader-side uses to
@@ -267,76 +392,65 @@ async function applyMigrations(dbPath) {
 }
 
 /**
- * Returns a `PageDomPathResolver` (see
- * `packages/@nitpicker/crawler/src/archive/populate-entity-tables/populate-image-items.ts`)
- * that parses HTML with jsdom and applies the 3-case match algorithm from
- * `packages/@nitpicker/crawler/src/archive/populate-entity-tables/match-images-to-dom-paths.ts`.
+ * Builds the viewer read model against the just-migrated archive so a
+ * migrated archive is immediately usable in the viewer's fast path,
+ * matching what a live crawl already gets for free at crawl completion
+ * (`ensureViewerReadModelQuietly`). Without this step a migrated archive
+ * has zero `viewer_*` rows until an operator remembers to run the
+ * separate `viewer-build` command — easy to forget, and the archive
+ * still opens and "works" in the meantime via the slower legacy path,
+ * so there is no error to notice the gap by.
  *
- * jsdom's `VirtualConsole` is silenced because production HTML crashes
- * emit a torrent of `unhandled` warnings (unrecognised CSS at-rules,
- * scripts that reference `window`) that are irrelevant to `<img>` DOM
- * position derivation.
+ * Resumes the already-extracted work dir directly via `Archive.resume`
+ * (no re-extract — `applyMigrations` already mutated `dbPath` in place)
+ * and releases the handle afterward with `releaseHandle()`, NOT
+ * `close()`: `close()` tars up and removes the work dir when the
+ * archive's derived output path doesn't already exist on disk, which
+ * would destroy the very directory `main()`'s own `[3/3] tar` step
+ * still needs. `releaseHandle()` only drops the SQLite handle and the
+ * advisory lock, touching nothing on disk.
+ *
+ * Called after `info.version` is already bumped to `0.13.0` — running
+ * this any earlier would trip `assertCompatibleVersion`'s version gate
+ * on the archive `Archive.resume` opens.
+ * @param {string} extractedDir - The archive's extracted work directory
+ *   (contains `db.sqlite`), already mutated in place by `applyMigrations`.
  */
-function createJsdomDomPathResolver() {
-	const virtualConsole = new VirtualConsole();
-	virtualConsole.on('jsdomError', () => {});
-	return async (pageId, htmlString, images) => {
-		if (htmlString === null) {
-			// Every image on this page falls back — emit a per-image
-			// warning so operators can audit reconstruction fidelity,
-			// not just a single "no HTML for page X" line.
-			return fallbackAllUnknown(images, pageId, 'no HTML snapshot stored');
-		}
-		let dom;
-		try {
-			dom = new JSDOM(htmlString, { virtualConsole });
-		} catch (error) {
-			return fallbackAllUnknown(
-				images,
-				pageId,
-				`jsdom parse failed: ${error?.message ?? error}`,
-			);
-		}
-		try {
-			const candidates = [...dom.window.document.querySelectorAll('img')].map((img) => ({
-				outerHTML: img.outerHTML,
-				path: deriveDomPath(img),
-			}));
-			const result = matchImagesToDomPaths(images, candidates);
-			for (const [imageId, entry] of result) {
-				if (entry.case === 'unknown') {
-					console.warn(
-						`[dom-path] unknown fallback for image id=${imageId} (page ${pageId})`,
-					);
-				}
-			}
-			return result;
-		} finally {
-			dom.window.close();
-		}
-	};
+async function buildArchiveViewerReadModel(extractedDir) {
+	const archive = await Archive.resume(extractedDir);
+	try {
+		await buildViewerReadModel(archive, {
+			onProgress: (progress) => {
+				logProgress(`viewer read model: ${progress.insertedRows}/${progress.totalRows}`);
+			},
+		});
+	} finally {
+		await archive.releaseHandle();
+	}
 }
 
 /**
- * Returns a `Map<imageId, DomPathResult>` where every image resolves to
- * the `unknown/<id>` fallback and emits one warning line per image so
- * the audit log records a warning for every `unknown/*` fallback —
- * the contract operators rely on to audit reconstruction fidelity.
- * Used when jsdom cannot parse the page
- * OR when the page has no stored HTML snapshot at all.
- * @param {readonly { id: number }[]} images
- * @param {number} pageId
- * @param {string} reason - Human-readable reason for the whole-page fallback.
+ * Adds the `source` provenance column to `pages` / `resources` when the
+ * input archive predates the `crawl --inventory` feature. The entity
+ * populate (`populate-content-items.ts` / `populate-resource-items.ts`)
+ * SELECTs the column and copies it verbatim into
+ * `content_items.source` / `resource_items.source`, so it must exist
+ * before the populate runs. SQLite applies the NOT NULL DEFAULT at
+ * column-add time, so pre-existing rows become `'crawled'` without an
+ * explicit backfill UPDATE.
+ * @param {import('knex').Knex} db - Knex handle on the extracted `db.sqlite`.
  */
-function fallbackAllUnknown(images, pageId, reason) {
-	const map = new Map();
-	for (const image of images) {
-		map.set(image.id, { path: `unknown/${image.id}`, case: 'unknown' });
-		console.warn(
-			`[dom-path] unknown fallback for image id=${image.id} (page ${pageId}): ${reason}`,
-		);
+async function ensureLegacySourceColumns(db) {
+	for (const table of ['pages', 'resources']) {
+		if (await db.schema.hasColumn(table, 'source')) {
+			continue;
+		}
+		await db.schema.table(table, (t) => {
+			t.string('source').notNullable().defaultTo('crawled');
+			t.index('source');
+		});
+		console.log(`  added ${table}.source (input predates crawl --inventory)`);
 	}
-	return map;
 }
 
 try {

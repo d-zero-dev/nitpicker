@@ -2,10 +2,10 @@ import type { Archive } from '@nitpicker/crawler';
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-const mockEnsureViewerReadModel = vi.fn();
+const mockBuildViewerReadModel = vi.fn();
 
 vi.mock('@nitpicker/query', () => ({
-	ensureViewerReadModel: mockEnsureViewerReadModel,
+	buildViewerReadModel: mockBuildViewerReadModel,
 }));
 
 const fakeArchive = {} as Archive;
@@ -16,21 +16,27 @@ describe('ensureViewerReadModelQuietly', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('delegates to ensureViewerReadModel with an onProgress callback', async () => {
-		mockEnsureViewerReadModel.mockResolvedValue();
+	it('unconditionally rebuilds via buildViewerReadModel with an onProgress callback', async () => {
+		// Not ensureViewerReadModel: that gate only checks schema_version, so
+		// a re-crawl (--append / --retry-failed / --inventory) against an
+		// archive whose read model was already built once at the current
+		// schema would silently skip the rebuild and leave newly-written
+		// data unreflected. Correctness first — this is unconditional even
+		// though it means the same full-table rebuild cost as a fresh crawl.
+		mockBuildViewerReadModel.mockResolvedValue();
 		const { ensureViewerReadModelQuietly } =
 			await import('./ensure-viewer-read-model-quietly.js');
 
 		await ensureViewerReadModelQuietly(fakeArchive);
 
-		expect(mockEnsureViewerReadModel).toHaveBeenCalledWith(
+		expect(mockBuildViewerReadModel).toHaveBeenCalledWith(
 			fakeArchive,
 			expect.objectContaining({ onProgress: expect.any(Function) }),
 		);
 	});
 
 	it('logs each progress callback to stderr', async () => {
-		mockEnsureViewerReadModel.mockImplementation((_archive, options) => {
+		mockBuildViewerReadModel.mockImplementation((_archive, options) => {
 			options.onProgress({ insertedRows: 50, totalRows: 100 });
 			return Promise.resolve();
 		});
@@ -44,7 +50,7 @@ describe('ensureViewerReadModelQuietly', () => {
 	});
 
 	it('swallows a build failure and logs a warning instead of throwing', async () => {
-		mockEnsureViewerReadModel.mockRejectedValue(new Error('disk full'));
+		mockBuildViewerReadModel.mockRejectedValue(new Error('disk full'));
 		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const { ensureViewerReadModelQuietly } =
 			await import('./ensure-viewer-read-model-quietly.js');

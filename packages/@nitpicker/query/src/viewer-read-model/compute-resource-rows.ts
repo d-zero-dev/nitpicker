@@ -59,10 +59,10 @@ export async function* computeResourceInsertRows(
 			isExternal: 0 | 1;
 			status: number | null;
 			source: string;
-			url: string;
+			url: string | null;
 			referrerCount: string | number | null;
 		}[] = await trx('resource_items as ri')
-			.join('url_refs as ur', 'ur.id', 'ri.url_id')
+			.leftJoin('url_refs as ur', 'ur.id', 'ri.url_id')
 			.leftJoin('resource_ref_edges as rre', 'rre.resource_id', 'ri.id')
 			.where('ri.id', '>', lastId)
 			.groupBy('ri.id')
@@ -94,7 +94,11 @@ export async function* computeResourceInsertRows(
 				status_desc_key: -statusSortKey,
 				source: row.source as ResourceInsertRows['resources'][number]['source'],
 				is_unused: isExternal === 0 && referrerCount === 0 ? 1 : 0,
-				url_sort_key: row.url,
+				// A blob-routed resource (identity is a large `data:` URI, not
+				// a URL) has `url === null`; sort_key is NOT NULL, so it falls
+				// back to the empty string, sorting first (mirrors
+				// `sort-resources-by-url.ts`'s report-side convention).
+				url_sort_key: row.url ?? '',
 			};
 		});
 

@@ -1,6 +1,6 @@
 import type { ContentTypeCategory } from './types.js';
 
-import { PHASE_6B_CONTENT_TYPE_RULES } from './content-type-rules.js';
+import { CONTENT_TYPE_RULES } from './content-type-rules.js';
 
 /**
  * Classifies a raw HTTP `Content-Type` header value into the same coarse
@@ -27,7 +27,7 @@ export function classifyContentType(contentType: string | null): ContentTypeCate
 	if (head === '') {
 		return 'unknown';
 	}
-	for (const rule of PHASE_6B_CONTENT_TYPE_RULES) {
+	for (const rule of CONTENT_TYPE_RULES) {
 		for (const matcher of rule.matchers) {
 			switch (matcher.kind) {
 				case 'exact': {

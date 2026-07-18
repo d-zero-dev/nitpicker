@@ -1,5 +1,7 @@
+import type { ProgressCallback } from '../create-progress-reporter.js';
 import type { Knex } from 'knex';
 
+import { createProgressReporter } from '../create-progress-reporter.js';
 import { PAGE_META_COLUMN_MAPS } from '../page-meta-column-maps.js';
 import { DATA_URI_URL_REFS_LIMIT } from '../populate-ref-tables/data-uri-url-refs-limit.js';
 
@@ -44,13 +46,19 @@ const INSERT_CHUNK_SIZE = 200;
  * `INSERT OR IGNORE` on the `page_id` PK makes the step idempotent so
  * partial-failure re-runs are safe.
  * @param trx - Knex instance or transaction connected to the archive DB.
+ * @param onProgress - Optional sink for periodic progress lines (one per
+ *   ~5% of `pages WHERE scraped = 1` scanned); see
+ *   {@link ../create-progress-reporter.ts}.
  * @example
  * await knex.transaction(async (trx) => {
  *   await populateContentItems(trx);
  *   await populatePageMeta(trx);
  * });
  */
-export async function populatePageMeta(trx: Knex): Promise<void> {
+export async function populatePageMeta(
+	trx: Knex,
+	onProgress?: ProgressCallback,
+): Promise<void> {
 	const textColumns = PAGE_META_COLUMN_MAPS.text.map((entry) => entry.source);
 	const urlColumns = PAGE_META_COLUMN_MAPS.url.map((entry) => entry.source);
 	const plainColumns = [
@@ -90,6 +98,10 @@ export async function populatePageMeta(trx: Knex): Promise<void> {
 		'meta_extras',
 	];
 
+	const countRows = await trx('pages').where('scraped', true).count({ n: '*' });
+	const total = Number(countRows[0]?.n ?? 0);
+	const report = createProgressReporter('page_meta (pages)', total, onProgress);
+	let processed = 0;
 	let cursor = 0;
 	while (true) {
 		const rows: Record<string, unknown>[] = await trx('pages')
@@ -102,6 +114,8 @@ export async function populatePageMeta(trx: Knex): Promise<void> {
 			break;
 		}
 		cursor = rows.at(-1)!.id as number;
+		processed += rows.length;
+		report(processed);
 
 		const texts = new Set<string>();
 		const urls = new Set<string>();
@@ -223,7 +237,7 @@ function resolveOptionalTextId(
 	const id = textIds.get(value);
 	if (id === undefined) {
 		throw new Error(
-			`populatePageMeta: text_refs.id not resolved for page id=${pageId} column=${column} — 0.13-2 populate must run first`,
+			`populatePageMeta: text_refs.id not resolved for page id=${pageId} column=${column} — populateTextRefs must run first`,
 		);
 	}
 	return id;
@@ -260,7 +274,7 @@ function resolveOptionalUrlId(
 	const id = urlIds.get(value);
 	if (id === undefined) {
 		throw new Error(
-			`populatePageMeta: url_refs.id not resolved for page id=${pageId} column=${column} — 0.13-1 populate must run first`,
+			`populatePageMeta: url_refs.id not resolved for page id=${pageId} column=${column} — populateUrlRefs must run first`,
 		);
 	}
 	return id;
@@ -286,7 +300,7 @@ function resolveOptionalJsonId(
 	const id = jsonIds.get(value);
 	if (id === undefined) {
 		throw new Error(
-			`populatePageMeta: json_refs.id not resolved for page id=${pageId} column=meta_extras — 0.13-3 populate must run first`,
+			`populatePageMeta: json_refs.id not resolved for page id=${pageId} column=meta_extras — populateJsonRefs must run first`,
 		);
 	}
 	return id;

@@ -1,6 +1,6 @@
 import type { Archive } from '@nitpicker/crawler';
 
-import { ensureViewerReadModel } from '@nitpicker/query';
+import { buildViewerReadModel } from '@nitpicker/query';
 
 import { formatViewerReadModelProgress } from '../format-viewer-read-model-progress.js';
 
@@ -8,9 +8,22 @@ import { formatViewerReadModelProgress } from '../format-viewer-read-model-progr
  * Builds the persistent viewer read model against a just-finished crawl's
  * archive, immediately before `CrawlerOrchestrator.write()` tars it —
  * issue #112's crawl-completion build trigger, wired at the CLI layer
- * (not inside `@nitpicker/crawler`) because `ensureViewerReadModel` lives in
+ * (not inside `@nitpicker/crawler`) because the read-model builder lives in
  * `@nitpicker/query`, which already depends on `@nitpicker/crawler`; the
  * crawler package must not depend back on query.
+ *
+ * Calls `buildViewerReadModel` directly — NOT the schema-version-gated
+ * `ensureViewerReadModel` — so the read model is unconditionally rebuilt
+ * on every crawl-completion path, including `--append` / `--retry-failed`
+ * / `--inventory` re-crawls of an archive whose read model was already
+ * built once at the current schema. `ensureViewerReadModel`'s gate only
+ * detects a schema change, never a data change, so it would silently skip
+ * the rebuild on exactly those re-crawls and leave newly-written pages
+ * unreflected in the viewer (Computed Readonly Table category in
+ * ARCHITECTURE.md — always safe to discard and rebuild wholesale). This
+ * repeats the same fixed-cost full-table rebuild on every completion
+ * regardless of how much data actually changed; cheaper "did anything
+ * change" tracking is a follow-up, not a correctness requirement.
  *
  * Never throws: `/api/pages` already falls back to the legacy `listPages`
  * path when the read model is missing or stale, so a build failure here
@@ -25,7 +38,7 @@ export async function ensureViewerReadModelQuietly(archive: Archive): Promise<vo
 		// The crawler's write path inserts directly into `content_items` /
 		// `page_meta` / … during the crawl, so `buildViewerReadModel` can
 		// read them immediately without a legacy→entity populate step.
-		await ensureViewerReadModel(archive, {
+		await buildViewerReadModel(archive, {
 			onProgress: (progress) => {
 				// eslint-disable-next-line no-console
 				console.error(formatViewerReadModelProgress(progress));

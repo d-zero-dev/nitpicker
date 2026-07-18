@@ -41,7 +41,14 @@ const SAMPLE_SIZE = 1000;
  * The check throws when the sampled row count is smaller than expected
  * (LEFT JOINs may return `null` sides but never fewer rows than the
  * driving `content_items` set — a shortfall means SQLite silently
- * dropped rows we intended to inspect).
+ * dropped rows we intended to inspect). "Expected" is a separate
+ * `COUNT(*)` against the same `(id % stride) = 0` predicate, not a
+ * `floor(total / stride)` estimate: `content_items.id` is copied
+ * verbatim from the legacy `pages.id`, which accumulates gaps over an
+ * archive's crawl history (redirect consolidation, deleted pages, …).
+ * A density estimate over-counts whenever the id range is sparser than
+ * `[1, total]`, which produced false-positive failures on real
+ * multi-thousand-page archives.
  * @param trx - Knex instance or transaction connected to the populated archive.
  * @throws {MigrationVerificationError} when at least one sampled URL does not round-trip.
  */
@@ -55,6 +62,10 @@ export async function checkUrlRoundTrip(trx: Knex): Promise<void> {
 	// SAMPLE_SIZE rows evenly across the id range for large archives, and the
 	// full table for archives ≤ SAMPLE_SIZE.
 	const stride = Math.max(1, Math.ceil(total / SAMPLE_SIZE));
+	const matchingRows = await trx('content_items')
+		.whereRaw('(id % ?) = 0', [stride])
+		.count<{ n: number }[]>({ n: '*' });
+	const expectedSize = Math.min(SAMPLE_SIZE, Number(matchingRows[0]!.n));
 	const sample = await trx('content_items as ci')
 		.leftJoin('pages as p', 'p.id', 'ci.id')
 		.leftJoin('url_refs as ur', 'ur.id', 'ci.url_id')
@@ -64,7 +75,6 @@ export async function checkUrlRoundTrip(trx: Knex): Promise<void> {
 		.whereRaw('(ci.id % ?) = 0', [stride])
 		.orderBy('ci.id')
 		.limit(SAMPLE_SIZE);
-	const expectedSize = Math.min(SAMPLE_SIZE, Math.max(1, Math.floor(total / stride)));
 	if (sample.length < expectedSize) {
 		// LEFT JOINs preserve driving-table row counts (`p.id` / `url_refs.id`
 		// are PKs → 1:1 or 0:1 match). A shortfall means SQLite silently

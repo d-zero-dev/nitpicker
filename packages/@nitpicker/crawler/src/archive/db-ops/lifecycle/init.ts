@@ -2,24 +2,25 @@ import type { Knex } from 'knex';
 
 import { applyConnectionPragmas, initSchema } from '../../init-schema.js';
 import { assertCompatibleVersion } from '../../meta/assert-compatible-version.js';
-import { migrateAnalysisViolations } from '../../migrate-analysis-violations.js';
-import { migrateCrawlErrors } from '../../migrate-crawl-errors.js';
-import { migrateEntityTables } from '../../migrate-entity-tables.js';
-import { migrateHtmlBlobTables } from '../../migrate-html-blob-tables.js';
 import { migrateInfoRoots } from '../../migrate-info-roots.js';
-import { migrateInventoryRuns } from '../../migrate-inventory-runs.js';
-import { migratePageErrors } from '../../migrate-page-errors.js';
-import { migratePagesResourcesSource } from '../../migrate-pages-resources-source.js';
-import { migrateRefTables } from '../../migrate-ref-tables.js';
 
 /**
- * Initializes the database schema if tables do not exist, then runs lightweight
- * migrations that bring older archives up to the current schema.
+ * Initializes the database schema if tables do not exist, then runs the
+ * one remaining lightweight migration (`info.roots`).
  *
- * Migrations are idempotent and run on every writer-side `Database.connect`;
- * in read-only mode they are SKIPPED so the same DB can be opened safely
- * by a viewer attached to a live (or interrupted) crawl without rewriting
- * the user's tmpDir.
+ * There is deliberately no per-table lazy-migration chain here:
+ * `assertCompatibleVersion` (called below, before any schema work)
+ * rejects every archive older than the current format, so a connection
+ * that reaches `initSchema` is either brand new (initSchema provisions
+ * the full schema) or was produced by `scripts/migrate-to-0.13.mjs`
+ * (which guarantees the full table set before it repacks). A
+ * `hasTable`-guarded catch-up migration could therefore never fire —
+ * schema catch-up for old archives is the migration script's job, not
+ * the open path's.
+ *
+ * In read-only mode schema init + migration are SKIPPED so the same DB
+ * can be opened safely by a viewer attached to a live (or interrupted)
+ * crawl without rewriting the user's tmpDir.
  * @param knex - Knex query builder connected to the archive DB.
  * @param readOnly - When true, skip schema init + migrations.
  */
@@ -29,7 +30,7 @@ export async function init(knex: Knex, readOnly: boolean): Promise<void> {
 	// They are safe in read-only mode because they don't write to the
 	// user's tmpDir, just configure the libsql connection.
 	await applyConnectionPragmas(knex);
-	// Reject pre-0.10 archives before any further work. Runs for both
+	// Reject incompatible archives before any further work. Runs for both
 	// writer and read-only (stub viewer) connections so old
 	// `._nitpicker-*` stubs surface a clear error instead of
 	// dereferencing missing columns at query time. New archives (no
@@ -41,14 +42,4 @@ export async function init(knex: Knex, readOnly: boolean): Promise<void> {
 	}
 	await initSchema(knex);
 	await migrateInfoRoots(knex);
-	await migratePageErrors(knex);
-	await migrateCrawlErrors(knex);
-	await migrateHtmlBlobTables(knex);
-	await migrateAnalysisViolations(knex);
-	await migratePagesResourcesSource(knex);
-	await migrateInventoryRuns(knex);
-	await migrateRefTables(knex);
-	// MUST run after migrateRefTables — 0.13 tables have
-	// FK references to the 0.13 ref tables.
-	await migrateEntityTables(knex);
 }

@@ -1,4 +1,3 @@
-import type { DB_Page } from '../../types.js';
 import type { Knex } from 'knex';
 
 import { createHash } from 'node:crypto';
@@ -8,10 +7,11 @@ import { eachSplitted } from '../../../utils/array/each-splitted.js';
 /**
  * Replaces the stored analysis violations with a freshly generated set.
  *
- * The function resolves every violation URL to a `pages.id`, deduplicates
- * message/code text through `analysis_text_refs`, and rewrites
- * `analysis_violations` in one transaction. This is the storage-side
- * counterpart of the query-layer `getViolations` read path.
+ * The function resolves every violation URL to a `content_items.id` (via
+ * the `url_refs` dictionary), deduplicates message/code text through
+ * `analysis_text_refs`, and rewrites `analysis_violations` in one
+ * transaction. This is the storage-side counterpart of the query-layer
+ * `getViolations` read path.
  * @param knex - Knex query builder connected to the archive DB.
  * @param violations - Flat violation list from the analyze phase.
  */
@@ -34,11 +34,16 @@ export async function replaceAnalysisViolations(
 		}
 
 		const urls = [...new Set(violations.map((v) => v.url))];
-		const pageRows = await trx
-			.select('id', 'url')
-			.from<DB_Page>('pages')
-			.whereIn('url', urls);
-		const pageIdByUrl = new Map(pageRows.map((row) => [row.url, row.id]));
+		const pageIdByUrl = new Map<string, number>();
+		await eachSplitted(urls, 500, async (chunk) => {
+			const pageRows = await trx('content_items')
+				.join('url_refs', 'url_refs.id', 'content_items.url_id')
+				.select('content_items.id as id', 'url_refs.url as url')
+				.whereIn('url_refs.url', chunk);
+			for (const row of pageRows) {
+				pageIdByUrl.set(row.url, row.id);
+			}
+		});
 		if (pageIdByUrl.size !== urls.length) {
 			const missing = urls.filter((url) => !pageIdByUrl.has(url));
 			throw new Error(

@@ -4,7 +4,7 @@ import type { Knex } from 'knex';
 /** Row shape read from `resource_items` joined to `viewer_resource_stats`. */
 interface ResourceJoinRow {
 	id: number;
-	url: string;
+	url: string | null;
 	status: number | null;
 	statusText: string | null;
 	contentType: string | null;
@@ -31,7 +31,7 @@ export async function joinViewerResourceIdsToListItems(
 		return [];
 	}
 	const rows: ResourceJoinRow[] = await knex('resource_items as ri')
-		.join('url_refs as ur', 'ur.id', 'ri.url_id')
+		.leftJoin('url_refs as ur', 'ur.id', 'ri.url_id')
 		.leftJoin('content_type_refs as ctr', 'ctr.id', 'ri.content_type_id')
 		.leftJoin('viewer_resource_stats', 'viewer_resource_stats.resource_id', 'ri.id')
 		.whereIn('ri.id', resourceIds)

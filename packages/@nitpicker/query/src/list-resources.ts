@@ -41,7 +41,7 @@ export async function listResources(
 	const offset = options.offset ?? 0;
 
 	const baseQuery = knex('resource_items as ri')
-		.join('url_refs as ur', 'ur.id', 'ri.url_id')
+		.leftJoin('url_refs as ur', 'ur.id', 'ri.url_id')
 		.leftJoin('content_type_refs as ctr', 'ctr.id', 'ri.content_type_id');
 
 	if (options.urlPattern) {

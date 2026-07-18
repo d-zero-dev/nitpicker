@@ -245,9 +245,7 @@ describe('connect: readOnly option', () => {
 		try {
 			expect(writable.readOnly).toBe(false);
 			await expect(
-				writable
-					.getKnex()('pages')
-					.insert({ url: 'https://example.com/extra', scraped: 0, isTarget: 1 }),
+				writable.getKnex()('url_refs').insert({ url: 'https://example.com/extra' }),
 			).resolves.toBeDefined();
 		} finally {
 			await writable.close();

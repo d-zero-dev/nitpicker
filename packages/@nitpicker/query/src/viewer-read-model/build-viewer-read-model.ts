@@ -10,6 +10,7 @@ import { getSummary } from '../get-summary.js';
 import { backfillAnalysisViolationsFromJson } from './backfill-analysis-violations-from-json.js';
 import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
 import { buildIsolatedReadModelRows } from './build-isolated-read-model-rows.js';
+import { buildPageNaturalUrlRankMap } from './build-page-natural-url-rank-map.js';
 import { buildPageUrlRankMap } from './build-page-url-rank-map.js';
 import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
 import { computeDuplicateGroupPageRows } from './compute-duplicate-group-page-rows.js';
@@ -150,6 +151,13 @@ interface ViewerPageInsertRow {
 	 * `/api/pages`'s directory filter.
 	 */
 	path_sort_key: string;
+	/**
+	 * Dense, zero-based rank in natural URL order (see
+	 * {@link buildPageNaturalUrlRankMap}) — what `viewer_pages`'s default
+	 * `sortBy: 'url'` listing orders by, persisted here so the viewer never
+	 * needs to run the startup external merge sort just to serve that order.
+	 */
+	natural_url_rank: number;
 }
 
 /**
@@ -171,9 +179,14 @@ function derivePathSortKey(url: string): string {
 /**
  * Maps one `pages` row to its `viewer_pages` insert row.
  * @param row - The source row read from `pages`.
+ * @param naturalUrlRankByPageId - Rank map from {@link buildPageNaturalUrlRankMap},
+ *   computed once across every `sourceRows` entry.
  * @returns The corresponding `viewer_pages` insert row.
  */
-function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
+function toViewerPageInsertRow(
+	row: PagesSourceRow,
+	naturalUrlRankByPageId: ReadonlyMap<number, number>,
+): ViewerPageInsertRow {
 	const statusSortKey = row.status ?? NULL_STATUS_SENTINEL;
 	return {
 		page_id: row.id,
@@ -194,6 +207,9 @@ function toViewerPageInsertRow(row: PagesSourceRow): ViewerPageInsertRow {
 		url_sort_key: row.url,
 		title_sort_key: row.title ?? '',
 		path_sort_key: derivePathSortKey(row.url),
+		// Non-null assertion is safe: naturalUrlRankByPageId is built from
+		// this exact sourceRows set, so every row.id has an entry.
+		natural_url_rank: naturalUrlRankByPageId.get(row.id)!,
 	};
 }
 
@@ -382,7 +398,10 @@ export async function buildViewerReadModel(
 				'pm.lang as lang',
 			);
 
-		const insertRows = sourceRows.map(toViewerPageInsertRow);
+		const naturalUrlRankByPageId = buildPageNaturalUrlRankMap(sourceRows);
+		const insertRows = sourceRows.map((row) =>
+			toViewerPageInsertRow(row, naturalUrlRankByPageId),
+		);
 		const pageIdByUrl = new Map(sourceRows.map((row) => [row.url, row.id]));
 		const totalRows = insertRows.length;
 		let insertedRows = 0;

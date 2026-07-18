@@ -28,7 +28,7 @@ export function getViewerPagesSortSpec(
 			};
 		}
 		default: {
-			return { columns: ['url_sort_key', 'page_id'], scanDirection: sortOrder };
+			return { columns: ['natural_url_rank', 'page_id'], scanDirection: sortOrder };
 		}
 	}
 }

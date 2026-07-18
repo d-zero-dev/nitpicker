@@ -131,6 +131,37 @@ describe('checkUrlRoundTrip', () => {
 		);
 	});
 
+	it('does not assume a contiguous id range when computing the expected sample size', async () => {
+		// Real archives accumulate id gaps over their crawl history
+		// (redirect consolidation, deleted pages, …) — content_items.id
+		// is copied verbatim from the legacy pages.id, so it inherits
+		// those gaps. 2000 rows spread across only ODD ids (1..3999)
+		// forces stride = ceil(2000/1000) = 2, and NOT ONE of those ids
+		// is divisible by 2 — a naive `floor(total / stride)` estimate
+		// (1000) would wildly overshoot the true count (0) and the check
+		// would throw on a perfectly healthy archive.
+		const ids = Array.from({ length: 2000 }, (_, index) => index * 2 + 1);
+		const pages = ids.map((id) => ({
+			id,
+			url: `https://example.com/p${id}`,
+			scraped: 1,
+			isTarget: 1,
+		}));
+		const urlRefs = pages.map((p) => ({ id: p.id, url: p.url }));
+		const contentItems = pages.map((p) => ({
+			id: p.id,
+			url_id: p.id,
+			is_external: 0,
+			scraped: 1,
+			is_target: 1,
+			source: 'crawled',
+		}));
+		await db.batchInsert('pages', pages, 500);
+		await db.batchInsert('url_refs', urlRefs, 500);
+		await db.batchInsert('content_items', contentItems, 500);
+		await expect(checkUrlRoundTrip(db)).resolves.toBeUndefined();
+	});
+
 	it('emits the mismatching page id and both URLs in the error context', async () => {
 		await db('pages').insert({
 			id: 1,
