@@ -229,12 +229,21 @@ async function updatePageInTransaction(
 	// page's `responseReferrers` events right after its `page` event (see
 	// `Crawler#handleResources`, called immediately after `#handleResult`
 	// for the same scrape), through the same serialized WriteQueue, so the
-	// fresh set is guaranteed to follow before any reader observes an
-	// empty gap. A degraded re-scrape that legitimately captures zero
-	// sub-resources leaves this page referrer-less until its next
-	// non-empty re-scrape — accepted, since resource_items rows for
-	// no-longer-referenced resources are themselves allowed to become
-	// orphaned (no cross-page cleanup is attempted for those either).
+	// fresh INSERT is guaranteed to follow this DELETE in commit order —
+	// no writer can interleave a stale re-insert between them. This is a
+	// write-ordering guarantee only: the DELETE and the follow-up INSERT
+	// are still two separate transactions, so a concurrent read-only
+	// connection (viewer / MCP open on the same archive during an active
+	// `--append` / `--retry-failed` run) can observe a momentary window
+	// with zero rows for this page and misclassify its resources as
+	// unused. The window closes as soon as the next transaction commits,
+	// so this is a transient display artifact, not a durable data loss —
+	// accepted rather than merging the two writes into one transaction.
+	// A degraded re-scrape that legitimately captures zero sub-resources
+	// leaves this page referrer-less until its next non-empty re-scrape —
+	// accepted, since resource_items rows for no-longer-referenced
+	// resources are themselves allowed to become orphaned (no cross-page
+	// cleanup is attempted for those either).
 	await trx('resource_ref_edges').where('page_id', pageId).delete();
 	return pageId;
 }
