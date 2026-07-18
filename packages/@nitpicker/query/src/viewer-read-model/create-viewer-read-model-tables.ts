@@ -75,7 +75,8 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			jsonld_count integer not null default 0,
 			url_sort_key text not null,
 			title_sort_key text not null,
-			path_sort_key text not null
+			path_sort_key text not null,
+			natural_url_rank integer not null
 		)
 	`);
 

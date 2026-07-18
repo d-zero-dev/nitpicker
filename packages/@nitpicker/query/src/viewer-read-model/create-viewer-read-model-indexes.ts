@@ -24,7 +24,7 @@ import type { Knex } from 'knex';
  */
 export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	await trx.raw(
-		'CREATE INDEX vp_default ON viewer_pages(is_external, content_category, url_sort_key, page_id)',
+		'CREATE INDEX vp_default ON viewer_pages(is_external, content_category, natural_url_rank, page_id)',
 	);
 	await trx.raw(
 		'CREATE INDEX vp_status ON viewer_pages(is_external, content_category, status_sort_key, url_sort_key, page_id)',
