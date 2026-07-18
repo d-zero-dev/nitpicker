@@ -63,7 +63,12 @@
  *    subsequent CLI open passes `assertCompatibleVersion`. This is
  *    the single mechanism the reader side uses to detect "archive
  *    predates the current format" — no separate per-migration assert.
- * 9. **Re-tar** the work dir to the output path. The input file is
+ * 9. **Viewer read model build** — `buildViewerReadModel` runs against
+ *    the migrated archive so it opens in the viewer's fast path
+ *    immediately, matching what a live crawl gets for free at crawl
+ *    completion, instead of requiring a separate `viewer-build` run
+ *    an operator has to remember.
+ * 10. **Re-tar** the work dir to the output path. The input file is
  *    never touched, so it doubles as the rollback artefact — keep it
  *    until the migrated output has been verified in real use
  *    (issue #197 recommends ≥ 30 days).
@@ -112,6 +117,7 @@ import process from 'node:process';
 import knex from 'knex';
 import * as tar from 'tar';
 
+import Archive from '../packages/@nitpicker/crawler/lib/archive/archive.js';
 import { createAdjunctTables } from '../packages/@nitpicker/crawler/lib/archive/create-adjunct-tables.js';
 import { dropLegacyTables } from '../packages/@nitpicker/crawler/lib/archive/drop-legacy-tables.js';
 import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
@@ -122,6 +128,7 @@ import { populateRefTables } from '../packages/@nitpicker/crawler/lib/archive/po
 import { retargetLegacyFkTables } from '../packages/@nitpicker/crawler/lib/archive/retarget-legacy-fk-tables.js';
 import { checkForeignKeyIntegrity } from '../packages/@nitpicker/crawler/lib/archive/verify-migration/check-foreign-key-integrity.js';
 import { verifyMigration } from '../packages/@nitpicker/crawler/lib/archive/verify-migration/verify-migration.js';
+import { buildViewerReadModel } from '../packages/@nitpicker/query/lib/viewer-read-model/build-viewer-read-model.js';
 
 import { createDomPathResolver } from './create-dom-path-resolver.mjs';
 
@@ -191,6 +198,9 @@ async function main() {
 
 		console.log('[2/3] apply 0.13 migration migrations');
 		await applyMigrations(dbPath);
+
+		console.log('  build viewer read model');
+		await buildArchiveViewerReadModel(extractedDir);
 
 		// libsql leaves -wal / -shm sidecars after close — remove them so
 		// the re-tar contains a clean single-file db.sqlite.
@@ -378,6 +388,44 @@ async function applyMigrations(dbPath) {
 		await db.raw('PRAGMA wal_checkpoint(TRUNCATE)');
 	} finally {
 		await db.destroy();
+	}
+}
+
+/**
+ * Builds the viewer read model against the just-migrated archive so a
+ * migrated archive is immediately usable in the viewer's fast path,
+ * matching what a live crawl already gets for free at crawl completion
+ * (`ensureViewerReadModelQuietly`). Without this step a migrated archive
+ * has zero `viewer_*` rows until an operator remembers to run the
+ * separate `viewer-build` command — easy to forget, and the archive
+ * still opens and "works" in the meantime via the slower legacy path,
+ * so there is no error to notice the gap by.
+ *
+ * Resumes the already-extracted work dir directly via `Archive.resume`
+ * (no re-extract — `applyMigrations` already mutated `dbPath` in place)
+ * and releases the handle afterward with `releaseHandle()`, NOT
+ * `close()`: `close()` tars up and removes the work dir when the
+ * archive's derived output path doesn't already exist on disk, which
+ * would destroy the very directory `main()`'s own `[3/3] tar` step
+ * still needs. `releaseHandle()` only drops the SQLite handle and the
+ * advisory lock, touching nothing on disk.
+ *
+ * Called after `info.version` is already bumped to `0.13.0` — running
+ * this any earlier would trip `assertCompatibleVersion`'s version gate
+ * on the archive `Archive.resume` opens.
+ * @param {string} extractedDir - The archive's extracted work directory
+ *   (contains `db.sqlite`), already mutated in place by `applyMigrations`.
+ */
+async function buildArchiveViewerReadModel(extractedDir) {
+	const archive = await Archive.resume(extractedDir);
+	try {
+		await buildViewerReadModel(archive, {
+			onProgress: (progress) => {
+				logProgress(`viewer read model: ${progress.insertedRows}/${progress.totalRows}`);
+			},
+		});
+	} finally {
+		await archive.releaseHandle();
 	}
 }
 
