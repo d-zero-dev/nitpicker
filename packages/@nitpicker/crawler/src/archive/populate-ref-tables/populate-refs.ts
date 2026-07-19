@@ -31,15 +31,22 @@ import { populateUrlRefs } from './populate-url-refs.js';
  *
  * Every sub-populate is independently idempotent via `INSERT OR IGNORE`
  * on its natural key. Running this orchestrator twice on the same archive
- * produces the same rows — no phase marker table is used. The whole
- * invocation is expected to run inside one writer
- * transaction with `.bak` protection at the caller level; this function
- * does not open its own transaction so the caller controls the boundary.
+ * produces the same rows — no phase marker table is used. This function
+ * does not open its own transaction so the caller controls the boundary;
+ * the whole invocation is expected to run inside one writer transaction
+ * with `.bak` protection at the caller level.
+ *
+ * `scripts/migrate-to-0.13.mjs` does NOT call this orchestrator directly
+ * — it calls the same six sub-populates itself, each in its own
+ * transaction, so a killed multi-hour migration only re-does the one
+ * table in flight on resume rather than the whole six-table batch. Use
+ * this function directly when that per-table checkpointing is not
+ * needed and a single all-or-nothing transaction is preferred.
  * @param trx - Knex instance or transaction connected to the archive DB.
  * @param onProgress - Optional sink threaded to every sub-populate for
  *   periodic progress lines; see {@link ../create-progress-reporter.ts}.
  * @example
- * // Typical migration-script use: connect via Archive, wrap in a
+ * // Single-transaction use: connect via Archive, wrap in a
  * // transaction, run every sub-step, then rely on the caller's `.bak`
  * // safety net if any step throws.
  * const archive = await Archive.open(archivePath);
