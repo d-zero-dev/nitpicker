@@ -204,7 +204,10 @@ export function naturalCompare(a: string, b: string): number {
  * intermediate strings, so the only extra memory is V8's TimSort
  * auxiliary buffer — O(N) pointer-sized entries, not O(N × URL length).
  * @param resources - The list of resources to sort. Only the `url`
- *   field is read.
+ *   field is read. A `null` url (a blob-routed resource whose identity
+ *   is a large `data:` URI — see `create-entity-tables.ts`'s
+ *   `resource_items url / blob mutual-exclusion CHECK`) sorts as if it
+ *   were the empty string, placing it first.
  * @returns A new array sorted by URL in natural order.
  * @example
  * ```ts
@@ -216,8 +219,8 @@ export function naturalCompare(a: string, b: string): number {
  * // → [{ url: 'https://x/img-1.jpg' }, { url: 'https://x/img-2.jpg' }, { url: 'https://x/img-10.jpg' }]
  * ```
  */
-export function sortResourcesByUrl<T extends { readonly url: string }>(
+export function sortResourcesByUrl<T extends { readonly url: string | null }>(
 	resources: readonly T[],
 ): T[] {
-	return resources.toSorted((a, b) => naturalCompare(a.url, b.url));
+	return resources.toSorted((a, b) => naturalCompare(a.url ?? '', b.url ?? ''));
 }

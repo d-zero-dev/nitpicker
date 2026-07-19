@@ -7,11 +7,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ArchiveManager } from './archive-manager.js';
 
-// These tests were written against the historical writer path
-// (`Archive.open` → tmpDir owned by manager → cleanup on close). The
-// new default opens archives through the tar cache (read-only, cache
-// directory persisted across opens), so the cleanup / refCount /
-// failure-cleanup assertions only make sense with the cache disabled.
+// These tests target the legacy writer path (`Archive.open` → tmpDir
+// owned by manager → cleanup on close). The default opens archives
+// through the tar cache (read-only, cache directory persisted across
+// opens), where the cleanup / refCount / failure-cleanup assertions
+// below are meaningless — so the cache is disabled for this file.
 // Cache-path coverage lives in `archive-manager-cache.spec.ts`.
 //
 // Setting the env at module top + restoring in a top-level afterAll
@@ -46,7 +46,7 @@ describe('ArchiveManager', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -277,10 +277,10 @@ describe('ArchiveManager', () => {
 	});
 
 	it('`.nitpicker` 拡張子の symlink が stub ディレクトリを指す場合はエラーになる', async () => {
-		// Regression for the symlink misclassification finding:
-		// `current.nitpicker -> ._nitpicker-foo/` resolved to mode='stub'
-		// in the original implementation, silently bypassing
-		// `openPluginData: true` extraction. The classifier now honours
+		// Symlink misclassification regression:
+		// `current.nitpicker -> ._nitpicker-foo/` must NOT silently
+		// classify as mode='stub' (that would bypass
+		// `openPluginData: true` extraction). The classifier honours
 		// the user's stated intent (file extension) and refuses the
 		// classification mismatch with a clear error.
 		const manager = new ArchiveManager();
@@ -338,7 +338,7 @@ describe('ArchiveManager stub mode', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: stubArchiveName,
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -445,7 +445,7 @@ describe('ArchiveManager stub mode', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'finished',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -472,7 +472,7 @@ describe('ArchiveManager stub mode', () => {
 	});
 
 	it('stub mode で開いた accessor は readOnly フラグが立つ（migration 防止経路）', async () => {
-		// Regression hook for the migrateInfoRoots finding: the writer-side
+		// Read-only migration guard regression: the writer-side
 		// schema migration is gated on `accessor.readOnly === false`, so
 		// as long as Archive.connect reliably sets the flag, the DB-layer
 		// migration is skipped against the user's tmpDir. (Since #75 HTML
@@ -522,7 +522,7 @@ describe('ArchiveManager stub mode', () => {
 	// underlying "read-only stub must not mutate the tmpDir" invariant is
 	// still upheld — the error fires before any ALTER TABLE could run.
 	it.skip('レガシースキーマの info テーブル（scope 列あり / roots 列なし）を stub オープンしても ALTER TABLE しない', async () => {
-		// Direct behavioral regression for the migrateInfoRoots finding.
+		// Direct behavioral regression for the read-only migration guard.
 		// We hand-craft a tmpDir whose `info` table matches the
 		// pre-`roots` shape, then assert that opening it through
 		// ArchiveManager (which goes via `Archive.connect`, which uses
@@ -617,7 +617,7 @@ describe('ArchiveManager lifecycle races and partial-failure recovery', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'race',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -644,9 +644,10 @@ describe('ArchiveManager lifecycle races and partial-failure recovery', () => {
 	});
 
 	it('close 中の同一パスへの concurrent open は close 完了を待ち、新しい accessor を返す', async () => {
-		// Regression for the "delete-before-await" race: previously, the
-		// second open() observed an empty cache and raced the still-
-		// releasing lock, surfacing as ArchiveLockError.
+		// Regression for the "delete-before-await" race: without
+		// serialising on `entry.closing`, a second open() observes an
+		// empty cache and races the still-releasing lock, surfacing as
+		// ArchiveLockError.
 		const manager = new ArchiveManager();
 		const first = await manager.open(raceArchiveFilePath);
 
@@ -676,7 +677,7 @@ describe('ArchiveManager lifecycle races and partial-failure recovery', () => {
 	});
 
 	it('archive-mode で close が throw した場合、tmpDir と filePathWithoutExt の両方が rmSync される', async () => {
-		// Regression for the orphaned-renamedDir finding: `Archive.write()`
+		// Orphaned-renamedDir regression: `Archive.write()`
 		// renames tmpDir to filePathWithoutExt before tar. If tar fails,
 		// the renamed dir is the survivor — cleanupOnFailure must remove it.
 		const manager = new ArchiveManager();
@@ -724,7 +725,7 @@ describe('ArchiveManager warning sink (onWarn)', () => {
 	 * simulate (mocked failing `close`) leave the underlying lock and
 	 * tmpDir in inconsistent states that a shared fixture would carry
 	 * across cases.
-	 * @param testName
+	 * @param testName - Basename for the per-test `.nitpicker` file.
 	 */
 	async function buildFreshArchive(testName: string): Promise<string> {
 		const filePath = path.resolve(warnWorkingDir, `${testName}.nitpicker`);
@@ -733,7 +734,7 @@ describe('ArchiveManager warning sink (onWarn)', () => {
 			baseUrl: 'https://example.com',
 			roots: ['https://example.com'],
 			name: testName,
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,

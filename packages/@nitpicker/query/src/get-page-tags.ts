@@ -14,13 +14,21 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * @param accessor - The archive accessor to query.
  * @param url - The page URL.
  * @returns Ordered tag entries, or `[]` when the page has no tags.
+ * @example
+ * const tags = await getPageTags(accessor, 'https://example.com/');
+ * const gtm = tags.find((t) => t.provider === 'Google Tag Manager');
+ * console.log(gtm?.externalId); // e.g. 'GTM-XXXX'
  */
 export async function getPageTags(
 	accessor: ArchiveAccessor,
 	url: string,
 ): Promise<PageTagEntry[]> {
 	const knex = accessor.getKnex();
-	const [page] = await knex('pages').select('id').where('url', url).limit(1);
+	const [page] = await knex('content_items as ci')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.select('ci.id as id')
+		.where('ur.url', url)
+		.limit(1);
 	if (!page) return [];
 	const rows = await accessor.getTagsOfPage(page.id);
 	return rows.map((r) => ({

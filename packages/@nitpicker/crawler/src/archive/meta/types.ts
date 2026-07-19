@@ -8,6 +8,8 @@
  * @module
  */
 
+import { compareSemver } from './compare-semver.js';
+
 /**
  * Flat columns of the `pages` table derived from {@link import('@d-zero/beholder').Meta}.
  *
@@ -16,6 +18,14 @@
  * downstream consumers (e.g. `find-mismatches`) can compare against the
  * absolute page URL directly.
  * @see derive-flat-from-meta.ts
+ * @example
+ * // A `pages` row projected onto (a subset of) its flat meta columns:
+ * const meta: Partial<FlatPageMetaColumns> = {
+ *   title: 'Home',
+ *   canonical: 'https://example.com/',
+ *   robots_noindex: 0,
+ *   og_type: 'website',
+ * };
  */
 export interface FlatPageMetaColumns {
 	// Document basics
@@ -87,6 +97,12 @@ export interface FlatPageMetaColumns {
  * `page_tags` / `page_jsonld` for the common "how many?" and "which
  * providers?" questions.
  * @see compute-page-denormalized.ts
+ * @example
+ * const denorm: PageDenormalizedColumns = {
+ *   tag_count: 3,
+ *   jsonld_count: 1,
+ *   tags_providers_csv: 'Google Analytics,Google Tag Manager',
+ * };
  */
 export interface PageDenormalizedColumns {
 	/** Total Wappalyzer tag entries for the page. */
@@ -104,6 +120,16 @@ export interface PageDenormalizedColumns {
  * `<script type="speculationrules">` (`kind = 'speculationrules'`) entries.
  * @see extract-tags-for-archive.ts (sibling for tags) and the table definition
  * in `archive/init-schema.ts`.
+ * @example
+ * const row: JsonLdRow = {
+ *   id: 1,
+ *   pageId: 42,
+ *   kind: 'ld+json',
+ *   type: 'Article',
+ *   raw: '{"@type":"Article","headline":"Hello"}',
+ *   parsed: { '@type': 'Article', headline: 'Hello' },
+ *   parseError: null,
+ * };
  */
 export interface JsonLdRow {
 	/** Auto-increment primary key. */
@@ -127,6 +153,15 @@ export interface JsonLdRow {
  *
  * Mirrors the row shape minus the auto-increment `id`. `parsed` is the raw
  * JSON value (the database layer JSON-stringifies it before write).
+ * @example
+ * const insert: JsonLdRowForInsert = {
+ *   pageId: 42,
+ *   kind: 'speculationrules',
+ *   type: null,
+ *   raw: '{"prerender":[]}',
+ *   parsed: { prerender: [] },
+ *   parseError: null,
+ * };
  */
 export type JsonLdRowForInsert = Omit<JsonLdRow, 'id'>;
 
@@ -135,6 +170,24 @@ export type JsonLdRowForInsert = Omit<JsonLdRow, 'id'>;
  *
  * Each row represents one detected Wappalyzer provider × external-id tuple for
  * one page. A page typically has 1–10 rows.
+ * @example
+ * const row: TagRow = {
+ *   id: 1,
+ *   pageId: 42,
+ *   provider: 'Google Tag Manager',
+ *   category: 'Tag managers',
+ *   externalId: 'GTM-XXXX',
+ *   version: null,
+ *   confidence: 100,
+ *   categories: ['Tag managers'],
+ *   sources: [
+ *     {
+ *       type: 'script-src',
+ *       src: 'https://www.googletagmanager.com/gtm.js',
+ *       location: 'head',
+ *     },
+ *   ],
+ * };
  */
 export interface TagRow {
 	/** Auto-increment primary key. */
@@ -176,6 +229,17 @@ export interface TagRow {
  * Mirrors the row shape minus the auto-increment `id`. `categories` and
  * `sources` are passed as plain JS arrays (the database layer JSON-stringifies
  * them before write).
+ * @example
+ * const insert: TagRowForInsert = {
+ *   pageId: 42,
+ *   provider: 'Google Analytics',
+ *   category: 'Analytics',
+ *   externalId: 'G-XXXX',
+ *   version: null,
+ *   confidence: 100,
+ *   categories: ['Analytics'],
+ *   sources: [{ type: 'window-global', globalName: 'gtag' }],
+ * };
  */
 export type TagRowForInsert = Omit<TagRow, 'id'>;
 
@@ -185,6 +249,12 @@ export type TagRowForInsert = Omit<TagRow, 'id'>;
  * Keeps the response token-bounded for MCP / LLM consumers; the full `raw`
  * payload is fetched separately via `get-page-jsonld(url)`.
  * @see summarize-jsonld.ts
+ * @example
+ * const summary: JsonLdSummary = {
+ *   count: 2,
+ *   types: ['Article', 'BreadcrumbList'],
+ *   parseErrorCount: 0,
+ * };
  */
 export interface JsonLdSummary {
 	/** Total entries across `ld+json` and `speculationrules`. */
@@ -198,6 +268,11 @@ export interface JsonLdSummary {
 /**
  * Summary of one page's Wappalyzer tags returned by `get-page-detail`.
  * @see summarize-tags.ts
+ * @example
+ * const summary: TagsSummary = {
+ *   count: 2,
+ *   providerIds: { 'Google Analytics': ['G-XXXX'], YouTube: [] },
+ * };
  */
 export interface TagsSummary {
 	/** Total tag rows for the page. */
@@ -212,6 +287,8 @@ export interface TagsSummary {
  *
  * Used by `get-tag-inventory` to return per-provider page counts across the
  * whole site.
+ * @example
+ * const entry: TagInventoryEntry = { provider: 'Google Tag Manager', pageCount: 120 };
  */
 export interface TagInventoryEntry {
 	/** Wappalyzer provider name. */
@@ -226,13 +303,24 @@ export interface TagInventoryEntry {
  *
  * Catch this at CLI / viewer boundaries to print a friendly message; do not
  * confuse with generic `Error` thrown by `Database.connect` (lockfile / I/O).
+ * @example
+ * try {
+ *   const accessor = await Archive.openCached(filePath);
+ * } catch (error) {
+ *   if (error instanceof IncompatibleArchiveError) {
+ *     // Message names the migration script(s) to run.
+ *     console.error(error.message);
+ *   } else {
+ *     throw error;
+ *   }
+ * }
  */
 export class IncompatibleArchiveError extends Error {
 	/**
 	 * @param archiveVersion - The `info.version` value read from the archive
 	 *   (or `'unknown'` when the column is missing / null).
 	 * @param requiredVersion - The minimum format version this build accepts
-	 *   (semver string, e.g. `'0.10.0'`).
+	 *   (semver string, e.g. `'0.13.0'`).
 	 */
 	constructor(
 		readonly archiveVersion: string,
@@ -240,8 +328,29 @@ export class IncompatibleArchiveError extends Error {
 	) {
 		super(
 			`Archive uses Nitpicker ${archiveVersion}; this build requires ${requiredVersion} or newer. ` +
-				`Run \`node scripts/migrate-to-0.10.mjs <path>\` to produce an upgraded copy next to it.`,
+				`Run ${suggestMigrationScript(archiveVersion)} to produce an upgraded copy next to it.`,
 		);
 		this.name = 'IncompatibleArchiveError';
 	}
+}
+
+/**
+ * Selects the migration script an operator should run to bring
+ * `archiveVersion` up to the current {@link IncompatibleArchiveError.requiredVersion}.
+ * Chained: pre-0.10 archives run migrate-to-0.10 first, then
+ * migrate-to-0.13 — so the message points at BOTH steps in order.
+ * 0.10.0-through-0.12.x archives only need migrate-to-0.13.
+ *
+ * Uses {@link compareSemver} instead of `<` string comparison: `'0.9.0'`
+ * lexicographically compares GREATER than `'0.10.0'` (because `'9' > '1'`),
+ * which would misroute pre-0.10 archives into the single-step hint and
+ * make the resulting migrator invocation fail with a confusing error.
+ * @param archiveVersion - Semver read from `info.version`, or `'unknown'`.
+ * @returns Bracketed command string for embedding into the error message.
+ */
+function suggestMigrationScript(archiveVersion: string): string {
+	if (archiveVersion === 'unknown' || compareSemver(archiveVersion, '0.10.0') < 0) {
+		return '`node scripts/migrate-to-0.10.mjs <path>` (then `node scripts/migrate-to-0.13.mjs <path>`)';
+	}
+	return '`node scripts/migrate-to-0.13.mjs <path>`';
 }

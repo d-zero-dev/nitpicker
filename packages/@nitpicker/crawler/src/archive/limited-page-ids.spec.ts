@@ -34,15 +34,18 @@ describe('limitedPageIds', () => {
 		url: string,
 		options: { order?: number; redirectDestId?: number | null } = {},
 	) {
-		const [id] = await db('pages').insert({
-			url,
-			scraped: 1,
-			isTarget: 1,
-			isExternal: 0,
-			order: options.order ?? null,
-			redirectDestId: options.redirectDestId ?? null,
-		});
-		return id;
+		const [urlRef] = await db('url_refs').insert({ url }).returning('id');
+		const [row] = await db('content_items')
+			.insert({
+				url_id: urlRef.id,
+				scraped: 1,
+				is_target: 1,
+				is_external: 0,
+				crawl_order: options.order ?? null,
+				redirect_dest_id: options.redirectDestId ?? null,
+			})
+			.returning('id');
+		return row.id;
 	}
 
 	it('returns page IDs ordered by order column with pagination', async () => {

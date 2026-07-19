@@ -26,7 +26,7 @@ describe('listResources', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -142,5 +142,15 @@ describe('listResources', () => {
 		expect(result.items).toHaveLength(1);
 		expect(result.limit).toBe(1);
 		expect(result.offset).toBe(0);
+	});
+
+	it('compress/cdn が false の場合、格納時の TEXT affinity 変換 (0 -> "0.0") を経ても null に正規化する', async () => {
+		const result = await listResources(archive, { contentType: 'text/css' });
+		// style.css was created with `compress: 'gzip', cdn: false`.
+		expect(result.items[0]).toMatchObject({ compress: 'gzip', cdn: null });
+
+		const external = await listResources(archive, { isExternal: true });
+		// app.js was created with `compress: false, cdn: 'cloudflare'`.
+		expect(external.items[0]).toMatchObject({ compress: null, cdn: 'cloudflare' });
 	});
 });

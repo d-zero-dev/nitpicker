@@ -6,18 +6,11 @@ import { classifyErrorKind } from '@nitpicker/crawler';
 import { readCrawlErrors } from './read-crawl-errors.js';
 import { readErrorLog } from './read-error-log.js';
 import { readPageErrors } from './read-page-errors.js';
+import { resolveErrorKindsSort } from './resolve-error-kinds-sort.js';
 import { sortArrayItems } from './sort-array-items.js';
 
 /** Upper bound on representative URLs kept per {@link ErrorKindEntry}. */
 const MAX_SAMPLE_URLS = 50;
-
-/**
- * Valid values for {@link GetErrorKindsOptions.sortBy}. An out-of-range value
- * from an untyped caller (e.g. a hand-edited `?sortBy=` query string) falls
- * back to `'count'` rather than reaching `sortArrayItems` with a key its
- * config does not define.
- */
-const SORT_FIELDS = ['host', 'kind', 'count'] as const;
 
 /**
  * Extract the hostname from a URL string, or a sentinel when it is absent or
@@ -126,10 +119,7 @@ export async function getErrorKinds(
 		items = items.filter((item) => item.kind === options.kind);
 	}
 
-	const sortBy = SORT_FIELDS.includes(options.sortBy as (typeof SORT_FIELDS)[number])
-		? (options.sortBy as (typeof SORT_FIELDS)[number])
-		: 'count';
-	const sortOrder = options.sortOrder ?? (sortBy === 'count' ? 'desc' : 'asc');
+	const { sortBy, sortOrder } = resolveErrorKindsSort(options);
 	items = sortArrayItems(items, sortBy, sortOrder, {
 		host: { getValue: (item) => item.host },
 		kind: { getValue: (item) => item.kind },

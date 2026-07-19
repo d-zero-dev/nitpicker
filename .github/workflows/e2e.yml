@@ -90,6 +90,7 @@ jobs:
                 multi-root.e2e.ts,
                 output-path.e2e.ts,
                 single-page.e2e.ts,
+                viewer-read-model-build.e2e.ts,
               ]
           - id: inventory-snapshot
             files:
@@ -110,6 +111,7 @@ jobs:
                 resource-reuse.e2e.ts,
                 archive-pipeline.e2e.ts,
                 scroll-jack.e2e.ts,
+                crawl-write-entity-tables.e2e.ts,
               ]
           - id: append-pipeline
             files:
@@ -121,6 +123,7 @@ jobs:
                 js-redirect.e2e.ts,
                 cli-process-exit.e2e.ts,
                 cli-version.e2e.ts,
+                viewer-migrated-archive.e2e.ts,
               ]
     steps:
       - uses: actions/checkout@v7.0.0

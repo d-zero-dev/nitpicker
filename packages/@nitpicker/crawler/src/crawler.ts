@@ -20,6 +20,7 @@ export { default as ArchiveResource } from './archive/resource.js';
 export * from './archive/types.js';
 export { default as Archive } from './archive/archive.js';
 export { isArchiveCacheDisabled } from './archive/cache/is-archive-cache-disabled.js';
+export { acquireArchiveLock, ArchiveLockError } from './archive/archive-lock.js';
 export { peekArchiveLockHolder } from './archive/peek-archive-lock.js';
 export type { ArchiveLockHolder } from './archive/peek-archive-lock.js';
 export type {
@@ -45,3 +46,26 @@ export * from './types.js';
 export * from './crawler/types.js';
 export { classifyErrorKind } from './classify-error-kind.js';
 export { computeFileSha256 } from './utils/compute-file-sha256.js';
+
+// 0.13 ref-table population (issue #191, epic #103). Exposed as the
+// public seam that the migration script (`scripts/migrate-to-0.13.mjs`)
+// drives against an already-connected archive.
+// The individual sub-steps are also exported so the migration script can
+// resume mid-way if the caller decides to split the transaction.
+export { populateEntityTables } from './archive/populate-entity-tables/populate-entities.js';
+export type { PageDomPathResolver } from './archive/populate-entity-tables/populate-image-items.js';
+export { populateRefTables } from './archive/populate-ref-tables/populate-refs.js';
+export { populateContentTypeRefs } from './archive/populate-ref-tables/populate-content-type-refs.js';
+export { populateUrlRefs } from './archive/populate-ref-tables/populate-url-refs.js';
+export { populateTextRefs } from './archive/populate-ref-tables/populate-text-refs.js';
+export { populateJsonRefs } from './archive/populate-ref-tables/populate-json-refs.js';
+export { populateBlobRefs } from './archive/populate-ref-tables/populate-blob-refs.js';
+export { populateHeaderTables } from './archive/populate-ref-tables/populate-header-tables.js';
+
+// 0.13 read-side reconstruction primitives. Exported so downstream
+// readers (`@nitpicker/query`'s page-detail view) reconstruct
+// `responseHeaders` / json_refs payloads with the exact same merge and
+// decode semantics as the crawler's own read paths — one implementation,
+// no cross-package drift.
+export { loadResponseHeadersBySetIds } from './archive/db-ops/_shared/load-response-headers-by-set-ids.js';
+export { decodeJsonRef } from './archive/db-ops/_shared/decode-json-ref.js';

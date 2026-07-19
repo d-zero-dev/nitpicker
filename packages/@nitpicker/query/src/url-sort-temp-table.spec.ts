@@ -42,7 +42,7 @@ function baseConfig() {
 	return {
 		baseUrl: 'https://example.com',
 		name: 'test',
-		version: '0.10.0',
+		version: '0.13.0',
 		recursive: true,
 		interval: 0,
 		image: false,
@@ -149,7 +149,13 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 
 		await prepareUrlSortTempTable(archive);
 		const knex = archive.getKnex();
-		const rows = await orderByUrlRank(knex('pages').select('url'), knex, '"pages"."url"');
+		const rows = await orderByUrlRank(
+			knex('content_items as ci')
+				.join('url_refs as ur', 'ur.id', 'ci.url_id')
+				.select('ur.url as url'),
+			knex,
+			'"ur"."url"',
+		);
 		expect(rows.map((r: { url: string }) => r.url)).toEqual([
 			'https://example.com/image-2.jpg',
 			'https://example.com/image-10.jpg',

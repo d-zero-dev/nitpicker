@@ -41,9 +41,9 @@ export interface ExternalSortUrlsOptions {
  * read-chunk's worth of parsed URLs in memory at a time.
  *
  * Archives with a million-plus URLs make an in-memory "parse everything,
- * then sort" pass expensive enough to exhaust the default V8 heap (observed
- * on an 11 GB / ~1.5M URL archive — the whole-archive version this replaced
- * OOM'd at startup). Splitting the read into `id`-keyset chunks, sorting and
+ * then sort" pass expensive enough to exhaust the default V8 heap (an
+ * 11 GB / ~1.5M URL archive OOMs at startup with the whole-archive
+ * approach). Splitting the read into `id`-keyset chunks, sorting and
  * spilling each chunk to a temp file, then K-way merging the sorted files
  * keeps peak memory bounded by chunk size instead of archive size, at the
  * cost of extra disk I/O and wall-clock time.
@@ -84,8 +84,8 @@ export async function externalSortUrls(
 		// a raw counter with no sense of how much work remains.
 		const knex = accessor.getKnex();
 		const [pagesCount, resourcesCount] = await Promise.all([
-			knex('pages').count<{ count: number }[]>({ count: '*' }),
-			knex('resources').count<{ count: number }[]>({ count: '*' }),
+			knex('content_items').count<{ count: number }[]>({ count: '*' }),
+			knex('resource_items').count<{ count: number }[]>({ count: '*' }),
 		]);
 		const totalRows =
 			Number(pagesCount[0]?.count ?? 0) + Number(resourcesCount[0]?.count ?? 0);

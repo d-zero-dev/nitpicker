@@ -2,10 +2,16 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { findMismatches } from './find-mismatches.js';
 import { makeBeholderMeta } from './test-helpers/make-beholder-meta.js';
+
+vi.mock('./url-sort-temp-table.js', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('./url-sort-temp-table.js')>();
+	return { ...actual, ensureUrlSortTempTable: vi.fn(actual.ensureUrlSortTempTable) };
+});
+const { ensureUrlSortTempTable } = await import('./url-sort-temp-table.js');
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -27,7 +33,7 @@ describe('findMismatches', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -129,5 +135,51 @@ describe('findMismatches', () => {
 	it('limit と offset が機能する', async () => {
 		const result = await findMismatches(archive, 'canonical', 0);
 		expect(result).toHaveLength(0);
+	});
+
+	it('canonical type で明示的な sortBy を指定してもクラッシュしない', async () => {
+		// Regression test: an explicit `sortBy` routes the `canonical` type's
+		// `url`/`actual`/`expected` columns through the natural-URL-sort TEMP
+		// table (`viewer_url_sort_keys`). If `findMismatches` skips
+		// `ensureUrlSortTempTable`, any explicit `sortBy` on this type
+		// crashes with `no such table: viewer_url_sort_keys`.
+		const byActual = await findMismatches(archive, 'canonical', {
+			sortBy: 'actual',
+			sortOrder: 'desc',
+		});
+		expect(byActual.items).toHaveLength(1);
+
+		const byExpected = await findMismatches(archive, 'canonical', { sortBy: 'expected' });
+		expect(byExpected.items).toHaveLength(1);
+
+		const byUrl = await findMismatches(archive, 'canonical', { sortBy: 'url' });
+		expect(byUrl.items).toHaveLength(1);
+	});
+
+	it('does not build the URL-sort temp table for og:title/og:description sorted by actual/expected', async () => {
+		// Regression test: gating `ensureUrlSortTempTable` on `useUrlSort`
+		// alone (any explicit `sortBy`) would pay the full
+		// external-merge-sort setup cost even for `actual`/`expected` sorts on
+		// `og:title`/`og:description` — columns that are never URL-typed.
+		vi.mocked(ensureUrlSortTempTable).mockClear();
+
+		const byActual = await findMismatches(archive, 'og:title', { sortBy: 'actual' });
+		expect(byActual.items).toHaveLength(1);
+		const byExpected = await findMismatches(archive, 'og:description', {
+			sortBy: 'expected',
+		});
+		expect(byExpected.items).toHaveLength(1);
+
+		expect(ensureUrlSortTempTable).not.toHaveBeenCalled();
+	});
+
+	it('does build the URL-sort temp table for og:title/og:description sorted by url, and for any explicit sortBy on canonical', async () => {
+		vi.mocked(ensureUrlSortTempTable).mockClear();
+
+		await findMismatches(archive, 'og:title', { sortBy: 'url' });
+		expect(ensureUrlSortTempTable).toHaveBeenCalledTimes(1);
+
+		await findMismatches(archive, 'canonical', { sortBy: 'actual' });
+		expect(ensureUrlSortTempTable).toHaveBeenCalledTimes(2);
 	});
 });

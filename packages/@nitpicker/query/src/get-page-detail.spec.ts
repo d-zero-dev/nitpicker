@@ -27,7 +27,7 @@ describe('getPageDetail', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -156,10 +156,9 @@ describe('getPageDetail', () => {
 	});
 
 	it('除外 (isSkipped) されたページは skipReason を返す', async () => {
-		// The only remaining way to discover *why* a URL was excluded from
-		// crawling (robots.txt / excludeUrls / excludeKeywords) after the
-		// Page Links view (which used to show a Remarks column for every
-		// page regardless of `scraped`) was removed.
+		// getPageDetail is the only surface that reports *why* a URL was
+		// excluded from crawling (robots.txt / excludeUrls /
+		// excludeKeywords) — no list view exposes skip reasons.
 		await archive.setSkippedPage('https://example.com/excluded', 'excluded', false);
 		const result = await getPageDetail(archive, 'https://example.com/excluded');
 		expect(result).not.toBeNull();
@@ -168,8 +167,11 @@ describe('getPageDetail', () => {
 	});
 
 	it('レスポンスヘッダーをパースして返す', async () => {
+		// 0.13: header names are lower-cased by the ref-table decomposition
+		// step (`decomposeHeaderSet`) — the original casing captured at crawl
+		// time is not preserved.
 		const result = await getPageDetail(archive, 'https://example.com');
-		expect(result!.responseHeaders).toEqual({ 'X-Frame-Options': 'DENY' });
+		expect(result!.responseHeaders).toEqual({ 'x-frame-options': 'DENY' });
 	});
 
 	it('アウトバウンドリンクを返す', async () => {
@@ -237,7 +239,7 @@ describe('getPageDetail: 被リンクを redirect 越しに解決する（http/h
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,

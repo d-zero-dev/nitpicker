@@ -404,11 +404,12 @@ describe('CrawlerOrchestrator.append', () => {
 
 describe('CrawlerOrchestrator.inventory: pending guard demote', () => {
 	it('warns instead of throwing when the archive carries pending placeholder URLs', async () => {
-		// The original guard threw whenever `pending.length > 0`, which blocked
+		// A guard that throws whenever `pending.length > 0` would block
 		// every inventory run on an archive that had leaked predicted-discard
-		// placeholders (`crawler.ts:980` emits no 'skip', so the rows stay
-		// `scraped=0` and `--retry-failed` cannot clear them). The new
-		// behaviour warns and proceeds — crawled-wins source priority keeps
+		// placeholders (the predicted-discard path in `crawler.ts` emits no
+		// 'skip', so the rows stay
+		// `scraped=0` and `--retry-failed` cannot clear them). The guard
+		// therefore warns and proceeds — crawled-wins source priority keeps
 		// stale labels stable. Drive the orchestrator with an inventory list
 		// that resolves to zero novel URLs so the no-op early-return path
 		// fires immediately after the guard, isolating the guard's branch.
@@ -530,10 +531,10 @@ describe('CrawlerOrchestrator.inventory: pending guard demote', () => {
 
 describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 	it('routes non-HTML novel URLs through `insertInventoryResources` (bulk) and never HEAD-probes them', async () => {
-		// The new inventory orchestrator classifies URLs by extension via
+		// The inventory orchestrator classifies URLs by extension via
 		// `isLikelyHtmlUrl` and writes non-HTML entries through the
-		// chunked `insertInventoryResources` bulk path (issue #121
-		// review F14 — the old per-URL `setResources` loop spent minutes
+		// chunked `insertInventoryResources` bulk path (issue #121 —
+		// a per-URL `setResources` loop would spend minutes
 		// inside the `.bak` window on 50k-URL inventory lists). This
 		// pins three contracts in one shot:
 		//
@@ -632,8 +633,8 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 		// the orchestrator does not pre-flight non-HTML URLs.
 		expect(fetchSpy).not.toHaveBeenCalled();
 
-		// Zero `addError` calls. The previous code wrote `crawl_errors`
-		// rows on HEAD failure; the new code does not probe, so this
+		// Zero `addError` calls. HEAD-failure `crawl_errors` rows would
+		// require a probe, and this design does not probe — the
 		// telemetry surface is intentionally silent for non-HTML
 		// inventory URLs.
 		const addErrorMock = vi.mocked(fakeArchive.addError);
@@ -651,16 +652,16 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 		expect(meta.list_label).toMatch(/^inventory-/);
 	});
 
-	it('aborts the ingestion and re-throws when the audit-log INSERT fails (issue #121: no more swallow)', async () => {
-		// Issue #121 inverted the audit-failure contract. The old code
-		// wrote the audit row at the *tail* of a successful crawl and
-		// swallowed any failure, because re-throwing would have wiped
-		// the completed crawl via `.bak` restore. The new code lifts
-		// the audit row into the `.bak`-protected ingestion phase, so a
+	it('aborts the ingestion and re-throws when the audit-log INSERT fails (issue #121: audit failures are not swallowed)', async () => {
+		// The audit-failure contract (issue #121): the audit row is
+		// written inside the `.bak`-protected ingestion phase, so a
 		// failure here CAN restore safely — and SHOULD, to keep the
 		// "either the whole ingestion took or none of it did" atomicity
-		// at the boundary. This test pins the inversion so a regression
-		// that re-adds the swallow surfaces here as a missing throw.
+		// at the boundary. Swallowing would only be justified if the
+		// audit ran at the tail of a successful crawl, where re-throwing
+		// would wipe the completed crawl via `.bak` restore. This test
+		// pins the contract so a regression
+		// that re-adds a swallow surfaces here as a missing throw.
 		const insertInventoryResourcesCalls: { urls: string[] }[] = [];
 		const fakeArchive = {
 			on: vi.fn(),
@@ -733,11 +734,11 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 
 describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => {
 	it('seeds Crawler.resume with archive.getScrapedHtmlPageCount() in the HTML-seed branch', async () => {
-		// Inventory previously hard-coded `pagesScrapedOffset = 0`, so the
-		// progress header showed `(N)` as a session-only browser-render
-		// counter. Operators running inventory against an archive with
-		// pre-existing pages misread the small N as "inner pages dropped
-		// to N" data loss. The HTML-seed branch must now seed the
+		// With a hard-coded `pagesScrapedOffset = 0`, the
+		// progress header would show `(N)` as a session-only browser-render
+		// counter, and operators running inventory against an archive with
+		// pre-existing pages would misread the small N as "inner pages
+		// dropped to N" data loss. The HTML-seed branch must seed the
 		// counter from `getScrapedHtmlPageCount()` so the header reads
 		// cumulative (matching `append` / `retryFailed` / `resume`).
 		const fakeArchive = {

@@ -18,6 +18,7 @@ npx @nitpicker/cli report <file>                       # Google Sheets レポー
 npx @nitpicker/cli pipeline <URL>                      # crawl → analyze → report を直列実行
 npx @nitpicker/cli query <file> <sub-command>          # アーカイブへのクエリ（JSON 出力）
 npx @nitpicker/cli viewer <file-or-stub-dir>           # ローカルビューア起動（常駐、Ctrl-C で停止）
+npx @nitpicker/cli viewer-build <archive> [--force]    # viewer read model を明示的に(再)ビルド
 ```
 
 フラグの相互排他・挙動の詳細は `--help` と各コマンド実装（`packages/@nitpicker/cli/src/commands/`）の JSDoc を参照。
@@ -72,17 +73,20 @@ yarn lint                                          # lint + prettier + cspell
 
 - `.env` 等の機密ファイルを読み取り・編集・コミットしない（判断は `.gitignore` を参考にする）
 - コミット前に `git diff --staged` で機密情報（API キー、トークン、パスワード、企業名、顧客情報）を確認する
-- **サンプル値は予約済み慣例に従う**: ドメインは `example.com` / `*.example` / `*.test` 等（RFC 2606/6761）、IP は TEST-NET。実在の無関係ドメイン・未取得の創作ドメイン・案件識別子・dogfooding 由来の実データを成果物に残さない（詳細は `.claude/commands/git.md`）
+- **サンプル値は予約済み慣例に従う**: ドメインは `example.com` / `*.example` / `*.test` 等（RFC 2606/6761）、IP は TEST-NET。実在の無関係ドメイン・未取得の創作ドメイン・案件識別子・dogfooding 由来の実データを成果物に残さない（詳細は `.claude/skills/git/SKILL.md`）
 - 環境変数やシークレットをコードにハードコードしない
 - **yarn dlx は完全禁止**、npx は原則使わない。依存追加はバージョン固定（`yarn add foo@1.2.3`）で信頼性を確認してから。yarn.lock の手動編集禁止
 
 ## スキル
 
-| スキル          | パス                                      | 用途                                                    |
-| --------------- | ----------------------------------------- | ------------------------------------------------------- |
-| Product Manager | `.claude/skills/product-manager/SKILL.md` | リポジトリ分析、ドキュメント整合チェック、PR レビュー   |
-| QA Engineer     | `.claude/skills/qa-engineer/SKILL.md`     | コードレビュー、テスト品質チェック                      |
-| Impl            | `.claude/skills/impl/SKILL.md`            | 合意済み計画の実装・検証・PR 作成のオーケストレーション |
+| スキル          | パス                                      | 用途                                                     |
+| --------------- | ----------------------------------------- | -------------------------------------------------------- |
+| Product Manager | `.claude/skills/product-manager/SKILL.md` | リポジトリ分析、ドキュメント整合チェック、PR レビュー    |
+| QA Engineer     | `.claude/skills/qa-engineer/SKILL.md`     | コードレビュー、テスト品質チェック                       |
+| Impl            | `.claude/skills/impl/SKILL.md`            | 合意済み計画の実装・検証・PR 作成のオーケストレーション  |
+| Grill me        | `.claude/skills/grill-me/SKILL.md`        | 計画・設計の前提を掘り下げて合意形成する                 |
+| Git             | `.claude/skills/git/SKILL.md`             | コミット規約・コミット前コンテンツチェック               |
+| PR              | `.claude/skills/pr/SKILL.md`              | PR 作成フロー（base 追従・push はユーザー実行・CI 監視） |
 
 ## AI 操作プロトコル
 

@@ -371,7 +371,12 @@ export function createResources(options?: CreateResourcesOptions): CreateSheet {
 			skipSortResources: true,
 			createHeaders: () => [...DEDUPE_HEADERS],
 			async eachResource(resource) {
-				const canonical = canonicalizeUrl(resource.url);
+				// A blob-routed resource (identity is a large `data:` URI, not a
+				// URL — see `create-entity-tables.ts`'s `resource_items url /
+				// blob mutual-exclusion CHECK`) has `url === null`; group all
+				// such resources under one degenerate empty-string key rather
+				// than crashing the report.
+				const canonical = canonicalizeUrl(resource.url ?? '');
 				const key = dedupeKey(canonical, resource.status, resource.contentType);
 				let entry = entries.get(key);
 				if (entry) {
@@ -392,7 +397,7 @@ export function createResources(options?: CreateResourcesOptions): CreateSheet {
 				}
 				entry.count++;
 
-				for (const { key: paramKey, value } of extractQueryPairs(resource.url)) {
+				for (const { key: paramKey, value } of extractQueryPairs(resource.url ?? '')) {
 					recordParamValue(entry, paramKey, value);
 				}
 

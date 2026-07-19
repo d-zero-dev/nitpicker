@@ -15,6 +15,7 @@ export function DuplicatesView() {
 	const { t } = useI18n();
 	const field = (params.get('field') as DuplicateField | null) ?? 'title';
 	const { data, isLoading, error } = useDuplicates(field);
+	const items = data?.items ?? [];
 
 	return (
 		<div>
@@ -37,9 +38,14 @@ export function DuplicatesView() {
 			</div>
 			{isLoading && <div className="state">{t('common.loading')}</div>}
 			{error && <div className="state state-error">{error.message}</div>}
-			{data?.length === 0 && <div className="state">{t('views.duplicates.empty')}</div>}
-			{data?.map((group) => (
-				<div key={group.value} className="card" style={{ marginBottom: 12, minWidth: 0 }}>
+			{data && items.length === 0 && (
+				<div className="state">{t('views.duplicates.empty')}</div>
+			)}
+			{items.map((group) => (
+				<div
+					key={group.groupId}
+					className="card"
+					style={{ marginBottom: 12, minWidth: 0 }}>
 					<div className="card-label">
 						{t('views.duplicates.share', {
 							count: group.count,
@@ -50,10 +56,17 @@ export function DuplicatesView() {
 						{group.value || '(empty)'}
 					</div>
 					<ul>
-						{group.urls.slice(0, 50).map((url) => (
+						{group.pages.map((url) => (
 							<li key={url}>{url}</li>
 						))}
 					</ul>
+					{group.count > group.pages.length && (
+						<div className="card-label">
+							{t('views.duplicates.moreHidden', {
+								count: group.count - group.pages.length,
+							})}
+						</div>
+					)}
 				</div>
 			))}
 		</div>

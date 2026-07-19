@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type createMarkuplintPlugin from './markuplint-plugin.js';
+
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 const execMock = vi.fn();
 
@@ -10,13 +12,16 @@ vi.mock('markuplint', () => ({
 	},
 }));
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-let pluginFactory: typeof import('./markuplint-plugin.js').default;
+let pluginFactory: typeof createMarkuplintPlugin;
+const pluginModulePromise = import('./markuplint-plugin.js');
 
-beforeEach(async () => {
+beforeAll(async () => {
+	const pluginModule = await pluginModulePromise;
+	pluginFactory = pluginModule.default;
+}, 30_000);
+
+beforeEach(() => {
 	vi.clearAllMocks();
-	const mod = await import('./markuplint-plugin.js');
-	pluginFactory = mod.default;
 });
 
 describe('analyze-markuplint plugin', () => {

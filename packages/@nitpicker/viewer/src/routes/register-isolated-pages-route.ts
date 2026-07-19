@@ -1,7 +1,7 @@
 import type { ArchiveContext } from '../types.js';
 import type { Hono } from 'hono';
 
-import { listIsolatedPages } from '@nitpicker/query';
+import { listIsolatedPages, listIsolatedPagesFastPath } from '@nitpicker/query';
 
 import { getCachedIsolatedClusters } from '../isolated-clusters-cache.js';
 import { toNumber } from '../query-params/to-number.js';
@@ -21,8 +21,7 @@ import { toNumber } from '../query-params/to-number.js';
 export function registerIsolatedPagesRoute(app: Hono, context: ArchiveContext): void {
 	app.get('/api/isolated-pages', async (c) => {
 		const accessor = context.manager.get(context.archiveId);
-		const precomputedComponents = await getCachedIsolatedClusters(context);
-		const result = await listIsolatedPages(accessor, {
+		const sharedOptions = {
 			urlPattern: c.req.query('urlPattern'),
 			status: toNumber(c.req.query('status')),
 			source: c.req.query('source') as
@@ -34,8 +33,14 @@ export function registerIsolatedPagesRoute(app: Hono, context: ArchiveContext): 
 			sortOrder: c.req.query('sortOrder') as 'asc' | 'desc' | undefined,
 			limit: toNumber(c.req.query('limit')),
 			offset: toNumber(c.req.query('offset')),
-			precomputedComponents,
-		});
+		};
+		const result =
+			context.mode === 'stub'
+				? await listIsolatedPages(accessor, {
+						...sharedOptions,
+						precomputedComponents: await getCachedIsolatedClusters(context),
+					})
+				: await listIsolatedPagesFastPath(accessor, sharedOptions);
 		return c.json(result);
 	});
 }

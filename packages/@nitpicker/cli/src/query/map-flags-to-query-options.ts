@@ -130,6 +130,16 @@ export function mapFlagsToQueryOptions(
 				validator: flags.validator,
 				severity: flags.severity,
 				rule: flags.rule,
+				urlPattern: flags.urlPattern,
+				sortBy: flags.sortBy as
+					| 'url'
+					| 'validator'
+					| 'severity'
+					| 'rule'
+					| 'message'
+					| 'code'
+					| undefined,
+				sortOrder: flags.sortOrder as 'asc' | 'desc' | undefined,
 				limit: flags.limit,
 				offset: flags.offset,
 			};
@@ -140,9 +150,18 @@ export function mapFlagsToQueryOptions(
 					`Invalid --field value: ${flags.field}. Must be one of: title, description`,
 				);
 			}
+			if (flags.direction != null && !['next', 'prev'].includes(flags.direction)) {
+				throw new Error(
+					`Invalid --direction value: ${flags.direction}. Must be one of: next, prev`,
+				);
+			}
 			return {
 				field: (flags.field as 'title' | 'description' | undefined) ?? 'title',
 				limit: flags.limit,
+				pagesLimit: flags.pagesLimit,
+				cursor: flags.cursor,
+				direction: flags.direction as 'next' | 'prev' | undefined,
+				offset: flags.offset,
 			};
 		}
 		case 'mismatches': {
@@ -156,10 +175,17 @@ export function mapFlagsToQueryOptions(
 					`Invalid --type value: ${flags.type}. Must be one of: canonical, og:title, og:description`,
 				);
 			}
+			if (flags.direction != null && !['next', 'prev'].includes(flags.direction)) {
+				throw new Error(
+					`Invalid --direction value: ${flags.direction}. Must be one of: next, prev`,
+				);
+			}
 			return {
 				type: flags.type as 'canonical' | 'og:title' | 'og:description',
 				limit: flags.limit,
 				offset: flags.offset,
+				cursor: flags.cursor,
+				direction: flags.direction as 'next' | 'prev' | undefined,
 			};
 		}
 		case 'headers': {
@@ -173,7 +199,7 @@ export function mapFlagsToQueryOptions(
 			if (!flags.url) {
 				throw new Error('--url is required for the resource-referrers sub-command.');
 			}
-			return { url: flags.url };
+			return { url: flags.url, limit: flags.limit, cursor: flags.cursor };
 		}
 		case 'error-kinds': {
 			// No options: the aggregation always covers the whole archive.

@@ -288,6 +288,20 @@ export const toolDefinitions: Tool[] = [
 				},
 				severity: { type: 'string', description: 'Filter by severity level' },
 				rule: { type: 'string', description: 'Filter by rule ID' },
+				urlPattern: {
+					type: 'string',
+					description: 'Filter URLs by SQL LIKE pattern',
+				},
+				sortBy: {
+					type: 'string',
+					enum: ['url', 'validator', 'severity', 'rule', 'message', 'code'],
+					description: 'Sort field',
+				},
+				sortOrder: {
+					type: 'string',
+					enum: ['asc', 'desc'],
+					description: 'Sort direction',
+				},
 				limit: { type: 'number', description: 'Max results (default: 100)' },
 				offset: { type: 'number', description: 'Results to skip (default: 0)' },
 			},
@@ -311,6 +325,11 @@ export const toolDefinitions: Tool[] = [
 					description: 'Metadata field to check for duplicates (default: "title")',
 				},
 				limit: { type: 'number', description: 'Max duplicate groups (default: 50)' },
+				offset: { type: 'number', description: 'Duplicate groups to skip (default: 0)' },
+				pagesLimit: {
+					type: 'number',
+					description: 'Max inline sample URLs per duplicate group (default: 20)',
+				},
 			},
 			required: ['archiveId'],
 		},
@@ -334,6 +353,20 @@ export const toolDefinitions: Tool[] = [
 				},
 				limit: { type: 'number', description: 'Max results (default: 100)' },
 				offset: { type: 'number', description: 'Results to skip (default: 0)' },
+				urlPattern: {
+					type: 'string',
+					description: 'SQL LIKE pattern to filter results by page URL',
+				},
+				sortBy: {
+					type: 'string',
+					enum: ['url', 'actual', 'expected'],
+					description: 'Field to sort results by (default: "url")',
+				},
+				sortOrder: {
+					type: 'string',
+					enum: ['asc', 'desc'],
+					description: 'Sort direction (default: "asc")',
+				},
 			},
 			required: ['archiveId', 'type'],
 		},
@@ -341,7 +374,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'get_resource_referrers',
 		description:
-			'Find which pages reference a specific resource (CSS, JS, image). Useful for impact analysis when considering removal or updates of a resource.',
+			'Find which pages reference a specific resource (CSS, JS, image). Useful for impact analysis when considering removal or updates of a resource. Results are bounded and cursor-paginated (default 100 per call) — pass the returned `nextCursor` back in to fetch the rest for a resource referenced by many pages.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -352,6 +385,11 @@ export const toolDefinitions: Tool[] = [
 				resourceUrl: {
 					type: 'string',
 					description: 'The exact URL of the resource to look up',
+				},
+				limit: { type: 'number', description: 'Max referring pages (default: 100)' },
+				cursor: {
+					type: 'string',
+					description: 'Opaque cursor from a previous call, taken from its `nextCursor`',
 				},
 			},
 			required: ['archiveId', 'resourceUrl'],

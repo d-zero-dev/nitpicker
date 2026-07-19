@@ -11,6 +11,7 @@ vi.mock('@nitpicker/query', async () => {
 	return {
 		...actual,
 		getSummary: vi.fn(),
+		getSummaryFastPath: vi.fn(),
 	};
 });
 
@@ -22,7 +23,7 @@ vi.mock('./precomputed-disk-cache.js', () => ({
 	),
 }));
 
-const { getSummary } = await import('@nitpicker/query');
+const { getSummary, getSummaryFastPath } = await import('@nitpicker/query');
 
 afterEach(() => {
 	vi.clearAllMocks();
@@ -82,21 +83,21 @@ describe('getCachedSummary', () => {
 		// /api/summary is hit on every Summary view paint; warm hits
 		// must NOT re-enter SQLite or the 10 GB-archive 26 s cold cost
 		// would compound on every navigation.
-		vi.mocked(getSummary).mockResolvedValueOnce(makeSummary('first'));
+		vi.mocked(getSummaryFastPath).mockResolvedValueOnce(makeSummary('first'));
 		const context = makeContext('archive_a');
 
 		const a = await getCachedSummary(context);
 		const b = await getCachedSummary(context);
 		const c = await getCachedSummary(context);
 
-		expect(getSummary).toHaveBeenCalledTimes(1);
+		expect(getSummaryFastPath).toHaveBeenCalledTimes(1);
 		expect(b).toBe(a);
 		expect(c).toBe(a);
 	});
 
 	it('shares an in-flight computation across concurrent callers', async () => {
 		let resolveCompute: ((v: SummaryResult) => void) | undefined;
-		vi.mocked(getSummary).mockImplementationOnce(
+		vi.mocked(getSummaryFastPath).mockImplementationOnce(
 			() =>
 				new Promise<SummaryResult>((resolve) => {
 					resolveCompute = resolve;
@@ -107,10 +108,10 @@ describe('getCachedSummary', () => {
 		const p1 = getCachedSummary(context);
 		const p2 = getCachedSummary(context);
 		const p3 = getCachedSummary(context);
-		expect(getSummary).toHaveBeenCalledTimes(1);
+		expect(getSummaryFastPath).toHaveBeenCalledTimes(1);
 		resolveCompute?.(makeSummary('shared'));
 		await Promise.all([p1, p2, p3]);
-		expect(getSummary).toHaveBeenCalledTimes(1);
+		expect(getSummaryFastPath).toHaveBeenCalledTimes(1);
 	});
 
 	it('bypasses the cache in stub mode so live-crawl updates are visible on every request', async () => {
@@ -134,9 +135,27 @@ describe('getCachedSummary', () => {
 		expect(getSummary).toHaveBeenCalledTimes(2);
 	});
 
+	it('never calls getSummaryFastPath in stub mode, even when a read model happens to be current in that tmpDir', async () => {
+		// A stub's tmpDir can be the same directory a prior, already-completed
+		// crawl built a `viewer_summary` read model into (`crawl --resume` /
+		// `--append` / `--retry-failed` reopen it as a stub while appending
+		// pages). getSummaryFastPath would treat that stale-but-schema-current
+		// snapshot as valid and skip live recomputation — stub mode must never
+		// give it the chance to do so.
+		vi.mocked(getSummary).mockResolvedValueOnce(makeSummary('live'));
+		const stubContext: ArchiveContext = {
+			...makeContext('archive_stub_2'),
+			mode: 'stub',
+		};
+
+		await getCachedSummary(stubContext);
+
+		expect(getSummaryFastPath).not.toHaveBeenCalled();
+	});
+
 	it('drops a rejected entry so the next request retries instead of replaying the cached error', async () => {
 		const failure = new Error('transient summary failure');
-		vi.mocked(getSummary)
+		vi.mocked(getSummaryFastPath)
 			.mockRejectedValueOnce(failure)
 			.mockResolvedValueOnce(makeSummary('recovered'));
 		const context = makeContext('archive_retry');
@@ -144,6 +163,6 @@ describe('getCachedSummary', () => {
 		await expect(getCachedSummary(context)).rejects.toThrow('transient summary failure');
 		const recovered = await getCachedSummary(context);
 		expect(recovered.baseUrl).toBe('recovered');
-		expect(getSummary).toHaveBeenCalledTimes(2);
+		expect(getSummaryFastPath).toHaveBeenCalledTimes(2);
 	});
 });

@@ -47,7 +47,7 @@ describe('listIsolatedPages', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -83,9 +83,9 @@ describe('listIsolatedPages', () => {
 			isSkipped: false,
 		});
 
-		// Crawled page with no anchor inbound — must NOT appear (the
-		// source-based filter explicitly rejects 'crawled' rows; this row
-		// would have surfaced as an orphan under the old link-graph rule).
+		// Crawled page with no anchor inbound — must NOT appear: the
+		// source-based filter rejects 'crawled' rows even when nothing
+		// links to them (isolation is judged by source, not by in-degree).
 		await archive.setPage({
 			url: parseUrl('https://example.com/crawled-orphan')!,
 			redirectPaths: [],

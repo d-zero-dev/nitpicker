@@ -13,24 +13,20 @@ import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
  * canonical (redirect-resolved) target, with a per-destination referrer
  * count.
  *
- * Shares {@link import('./list-links.js').listLinks}'s redirect-resolution pattern (`LEFT JOIN
- * canonical ON dest.redirectDestId = canonical.id`, `COALESCE(canonical.*,
- * dest.*)`) so a 301 intermediate never produces a destination distinct from
- * its final target — but where `listLinks` returns one row per anchor,
- * this groups by the resolved destination's page id (not URL, so redirect
- * chains that resolve to the same page always land in the same group
- * regardless of literal-URL casing/formatting differences) and reduces each
- * group to a single row. `referrerCount` is `COUNT(DISTINCT source.id)`,
- * not `COUNT(anchors.id)`: two `<a>` tags on the same page pointing at the
- * same destination must count as one referrer, not two.
- *
- * `listLinks` itself is intentionally untouched — CLI/MCP call it directly
- * (not through this function), and its anchor-level, non-deduplicated shape
- * is still the right one for `type: 'broken'` and for diagnostic tooling
- * that wants to see every individual anchor.
+ * 0.13: reads 0.13 `anchor_edges` joined to `content_items` and
+ * `url_refs`. `referrerCount` uses `COUNT(DISTINCT source.id)` — unique
+ * referrer pages, not anchor rows (`anchor_edges` already deduplicates
+ * the `(page_id, href_page_id)` pair).
  * @param accessor - The archive accessor to query.
  * @param options - Filter, sort, and pagination options.
  * @returns A paginated list of unique external destinations.
+ * @example
+ * const { items, total } = await listExternalLinks(accessor, {
+ *   sortBy: 'referrerCount',
+ *   sortOrder: 'desc',
+ *   limit: 20,
+ * });
+ * // items[0] is the external destination linked from the most pages.
  */
 export async function listExternalLinks(
 	accessor: ArchiveAccessor,
@@ -42,15 +38,9 @@ export async function listExternalLinks(
 	const sortOrder = options.sortOrder ?? 'asc';
 
 	const destIdExpression = 'COALESCE("canonical"."id", "dest"."id")';
-	const destUrlExpression = 'COALESCE("canonical"."url", "dest"."url")';
+	const destUrlExpression = 'COALESCE("canonical_ur"."url", "dest_ur"."url")';
 	const statusExpression = 'COALESCE("canonical"."status", "dest"."status")';
 
-	// Single source of truth for which sortBy values are valid, so the
-	// URL-sort-temp-table guard below can never diverge from applyListOrder's
-	// own column resolution (applyListOrder falls back to the first entry —
-	// destUrl, a `type: 'url'` column — for any key it doesn't recognize, so
-	// checking `sortBy === 'destUrl'` alone would miss that fallback and skip
-	// preparing the temp table it silently ends up needing).
 	const sortColumns: Record<
 		'destUrl' | 'status' | 'referrerCount',
 		{ column: string; type?: 'url' }
@@ -62,11 +52,13 @@ export async function listExternalLinks(
 	const sortBy =
 		options.sortBy && options.sortBy in sortColumns ? options.sortBy : 'destUrl';
 
-	const baseQuery = knex('anchors')
-		.join('pages as source', 'anchors.pageId', '=', 'source.id')
-		.join('pages as dest', 'anchors.hrefId', '=', 'dest.id')
-		.leftJoin('pages as canonical', 'dest.redirectDestId', '=', 'canonical.id')
-		.whereRaw(`COALESCE("canonical"."isExternal", "dest"."isExternal") = 1`);
+	const baseQuery = knex('anchor_edges as ae')
+		.join('content_items as source', 'ae.page_id', 'source.id')
+		.join('content_items as dest', 'ae.href_page_id', 'dest.id')
+		.join('url_refs as dest_ur', 'dest_ur.id', 'dest.url_id')
+		.leftJoin('content_items as canonical', 'dest.redirect_dest_id', 'canonical.id')
+		.leftJoin('url_refs as canonical_ur', 'canonical_ur.id', 'canonical.url_id')
+		.whereRaw(`COALESCE("canonical"."is_external", "dest"."is_external") = 1`);
 
 	if (options.urlPattern) {
 		baseQuery.whereRaw(`${destUrlExpression} like ?`, [options.urlPattern]);
@@ -75,9 +67,6 @@ export async function listExternalLinks(
 		baseQuery.whereRaw(`${statusExpression} = ?`, [options.status]);
 	}
 
-	// Total must count distinct destinations, not anchors or GROUP BY rows —
-	// wrap the grouped id list in a subquery so the outer COUNT(*) sees one
-	// row per destination.
 	const groupedIds = baseQuery
 		.clone()
 		.clearSelect()
@@ -102,11 +91,6 @@ export async function listExternalLinks(
 		.groupBy(knex.raw(destIdExpression));
 
 	applyListOrder(dataQuery, knex, sortBy, sortOrder, sortColumns);
-	// Tiebreaker: sorting by status/referrerCount alone is non-deterministic
-	// whenever destinations tie (e.g. many ad domains all returning 200), which
-	// would make MPA pagination duplicate or skip rows across pages. destId is
-	// the GROUP BY key itself, so ordering by it is always well-defined and
-	// gives every page a stable, unique row order.
 	dataQuery.orderByRaw(`${destIdExpression} asc`);
 
 	const rows = (await dataQuery.limit(limit).offset(offset)) as {

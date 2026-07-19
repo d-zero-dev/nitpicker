@@ -95,8 +95,9 @@ describe('CONTENT_TYPE_RULES is the single source of truth', () => {
 	});
 
 	it('overlap-prone MIMEs route by precedence (image+svg wins over xml; xhtml wins over xml; text+xml wins over text)', () => {
-		// These are the exact bugs the review flagged. classifyContentType MUST
-		// agree with the SQL matcher (asserted by the integration tests below).
+		// The highest-risk precedence overlaps in the rule table.
+		// classifyContentType MUST agree with the SQL matcher (asserted by
+		// the integration tests below).
 		expect(classifyContentType('image/svg+xml')).toBe('image');
 		expect(classifyContentType('application/xhtml+xml')).toBe('html');
 		expect(classifyContentType('text/calendar+xml')).toBe('xml');
@@ -117,7 +118,7 @@ describe('applyCategoryFilter spot-checks (hardcoded expected URLs for known-ove
 			baseUrl: 'https://example.com',
 			roots: ['https://example.com'],
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -192,7 +193,12 @@ describe('applyCategoryFilter spot-checks (hardcoded expected URLs for known-ove
 	const urlsFor = async (
 		category: 'html' | 'image' | 'xml' | 'json' | 'text' | 'pdf',
 	) => {
-		const query = archive.getKnex()('pages').select('url').where('scraped', 1);
+		const query = archive
+			.getKnex()('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+			.select('ur.url as url')
+			.where('ci.scraped', 1);
 		applyCategoryFilter(query, category);
 		const rows = (await query) as { url: string }[];
 		return rows.map((r) => r.url).toSorted();
@@ -241,7 +247,7 @@ describe('applyCategoryFilter unit test (raw SQL injection for the empty-string 
 			baseUrl: 'https://example.com',
 			roots: ['https://example.com'],
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -257,26 +263,36 @@ describe('applyCategoryFilter unit test (raw SQL injection for the empty-string 
 			userAgent: 'test',
 			ignoreRobots: false,
 		});
-		// Bypass the writer's normalisation so we can pin an actual `contentType = ''`
-		// row in the DB. This exercises the `unknown` matcher's `OR contentType = ''`
-		// branch directly — pre-normalisation archives or future writer bypasses
-		// would produce this exact shape.
+		// Bypass the writer's normalisation so we can pin an actual
+		// `content_type_refs.raw = ''` row in the DB. This exercises the
+		// `unknown` matcher's `OR ctr.raw = ''` branch directly —
+		// pre-normalisation archives or future writer bypasses would
+		// produce this exact shape.
 		const knex = archive.getKnex();
-		await knex('pages').insert({
-			url: 'https://example.com/empty-mime',
+		const [emptyCtRef] = await knex('content_type_refs')
+			.insert({ raw: '', normalized: '', category: 'other' })
+			.returning('id');
+		const [emptyUrlRef] = await knex('url_refs')
+			.insert({ url: 'https://example.com/empty-mime' })
+			.returning('id');
+		await knex('content_items').insert({
+			url_id: emptyUrlRef.id,
 			scraped: 1,
-			isTarget: 1,
-			isExternal: 0,
+			is_target: 1,
+			is_external: 0,
 			status: 200,
-			contentType: '',
+			content_type_id: emptyCtRef.id,
 		});
-		await knex('pages').insert({
-			url: 'https://example.com/null-mime',
+		const [nullUrlRef] = await knex('url_refs')
+			.insert({ url: 'https://example.com/null-mime' })
+			.returning('id');
+		await knex('content_items').insert({
+			url_id: nullUrlRef.id,
 			scraped: 1,
-			isTarget: 1,
-			isExternal: 0,
+			is_target: 1,
+			is_external: 0,
 			status: 200,
-			contentType: null,
+			content_type_id: null,
 		});
 	});
 
@@ -291,7 +307,12 @@ describe('applyCategoryFilter unit test (raw SQL injection for the empty-string 
 	it('unknown filter matches BOTH NULL and empty-string contentType', async () => {
 		// JS classifier returns 'unknown' for both; the SQL matcher must agree
 		// even though the crawler normally collapses '' → NULL on write.
-		const query = archive.getKnex()('pages').select('url').where('scraped', 1);
+		const query = archive
+			.getKnex()('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+			.select('ur.url as url')
+			.where('ci.scraped', 1);
 		applyCategoryFilter(query, 'unknown');
 		const rows = (await query) as { url: string }[];
 		expect(rows.map((r) => r.url).toSorted()).toEqual([
@@ -301,7 +322,12 @@ describe('applyCategoryFilter unit test (raw SQL injection for the empty-string 
 	});
 
 	it('other filter excludes both NULL and empty-string contentType (they belong to unknown, not other)', async () => {
-		const query = archive.getKnex()('pages').select('url').where('scraped', 1);
+		const query = archive
+			.getKnex()('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+			.select('ur.url as url')
+			.where('ci.scraped', 1);
 		applyCategoryFilter(query, 'other');
 		const rows = (await query) as { url: string }[];
 		expect(rows).toEqual([]);
@@ -321,7 +347,7 @@ describe('applyCategoryFilter (SQL) agrees with classifyContentType (JS) on ever
 			baseUrl: 'https://example.com',
 			roots: ['https://example.com'],
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -398,7 +424,10 @@ describe('applyCategoryFilter (SQL) agrees with classifyContentType (JS) on ever
 	for (const category of categories) {
 		it(`SQL category="${category}" returns exactly the MIMEs that classifyContentType buckets as "${category}"`, async () => {
 			const knex = archive.getKnex();
-			const query = knex('pages').select('contentType').where('scraped', 1);
+			const query = knex('content_items as ci')
+				.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+				.select('ctr.raw as contentType')
+				.where('ci.scraped', 1);
 			applyCategoryFilter(query, category);
 			const rows = (await query) as { contentType: string | null }[];
 			const sqlMatched = new Set(rows.map((r) => r.contentType));
@@ -425,7 +454,11 @@ describe('applyCategoryFilter (SQL) agrees with classifyContentType (JS) on ever
 		// normalise to NULL on write) and false-positive the partition check.
 		const matchCounts = new Map<string, number>();
 		for (const category of categories) {
-			const query = knex('pages').select('url').where('scraped', 1);
+			const query = knex('content_items as ci')
+				.join('url_refs as ur', 'ur.id', 'ci.url_id')
+				.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+				.select('ur.url as url')
+				.where('ci.scraped', 1);
 			applyCategoryFilter(query, category);
 			const rows = (await query) as { url: string }[];
 			for (const row of rows) {

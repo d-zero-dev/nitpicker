@@ -16,9 +16,16 @@
 		"Untarring",
 		"untars",
 
+		// viewer_duplicate_group_pages index abbreviation (issue #115)
+		"vdgp",
+		"vicp",
+		"indegree",
+
 		// Filesystems / OS storage primitives (tar cache documentation)
 		"APFS",
 		"tmpfs",
+		"statfs",
+		"bavail",
 
 		// English compounds used in technical commentary
 		"unsuffixed",

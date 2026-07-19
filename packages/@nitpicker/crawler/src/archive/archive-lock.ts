@@ -45,6 +45,13 @@ export class ArchiveLockError extends Error {
  * @param tmpDir - Absolute path to the archive's temporary working directory.
  * @returns A release function to be called when the work is done.
  * @throws {ArchiveLockError} When the lock cannot be acquired even after a stale-lock retry.
+ * @example
+ * const releaseLock = await acquireArchiveLock(tmpDir);
+ * try {
+ *   // ... exclusive work against tmpDir ...
+ * } finally {
+ *   await releaseLock();
+ * }
  */
 export async function acquireArchiveLock(tmpDir: string): Promise<() => Promise<void>> {
 	const lockPath = `${tmpDir}.lock`;

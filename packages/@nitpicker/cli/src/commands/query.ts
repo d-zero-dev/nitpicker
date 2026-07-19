@@ -26,6 +26,18 @@ export const commandDef = {
 			shortFlag: 'o',
 			desc: 'Number of results to skip',
 		},
+		cursor: {
+			type: 'string',
+			desc: 'Opaque pagination cursor from a previous result (resource-referrers, duplicates, mismatches)',
+		},
+		direction: {
+			type: 'string',
+			desc: 'Direction to walk from --cursor: next (default) or prev (duplicates, mismatches)',
+		},
+		pagesLimit: {
+			type: 'number',
+			desc: 'Inline member-page URL sample size per duplicate group (duplicates). Defaults to 20.',
+		},
 		url: {
 			type: 'string',
 			desc: 'Target URL for page-detail, html, or resource-referrers queries',

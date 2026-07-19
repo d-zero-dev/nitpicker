@@ -26,7 +26,7 @@ describe('findDuplicates', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -166,5 +166,115 @@ describe('findDuplicates', () => {
 		// ORDER BY cnt DESC — both title-duplicate groups have cnt = 2 so
 		// SQLite picks one; only the count is contractually stable.
 		expect(result[0]?.count).toBe(2);
+	});
+});
+
+describe('findDuplicates — offset', () => {
+	let archive: InstanceType<typeof Archive>;
+	const offsetWorkingDir = path.resolve(__dirname, '__test_fixtures_duplicates_offset__');
+	const archiveFilePath = path.resolve(offsetWorkingDir, 'dup-offset-test.nitpicker');
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(offsetWorkingDir, { recursive: true });
+
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: offsetWorkingDir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// Three title-duplicate groups with DISTINCT member counts (4, 3, 2)
+		// so `ORDER BY cnt DESC` is deterministic — a prerequisite for
+		// asserting a specific `offset` lands on a specific group.
+		const groups: { title: string; count: number }[] = [
+			{ title: 'Biggest Group', count: 4 },
+			{ title: 'Middle Group', count: 3 },
+			{ title: 'Smallest Group', count: 2 },
+		];
+		for (const group of groups) {
+			for (let i = 0; i < group.count; i++) {
+				await archive.setPage({
+					url: parseUrl(
+						`https://example.com/${group.title.replaceAll(' ', '-').toLowerCase()}-${i}`,
+					)!,
+					redirectPaths: [],
+					isExternal: false,
+					isTarget: true,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					html: `<html><head><title>${group.title}</title></head></html>`,
+					meta: {
+						lang: 'ja',
+						title: group.title,
+						description: null,
+						keywords: null,
+						noindex: false,
+						nofollow: false,
+						noarchive: false,
+						canonical: null,
+						alternate: null,
+						'og:type': null,
+						'og:title': null,
+						'og:site_name': null,
+						'og:description': null,
+						'og:url': null,
+						'og:image': null,
+						'twitter:card': null,
+					},
+					anchorList: [],
+					imageList: [],
+					isSkipped: false,
+				});
+			}
+		}
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(offsetWorkingDir, { recursive: true, force: true });
+	});
+
+	it('offset を省略すると先頭(最多重複)グループから返る', async () => {
+		const result = await findDuplicates(archive, 'title', 1);
+		expect(result).toHaveLength(1);
+		expect(result[0]?.value).toBe('Biggest Group');
+	});
+
+	it('offset を指定すると ORDER BY cnt DESC 順で該当分だけ読み飛ばす', async () => {
+		const page2 = await findDuplicates(archive, 'title', 1, 1);
+		expect(page2).toHaveLength(1);
+		expect(page2[0]?.value).toBe('Middle Group');
+
+		const page3 = await findDuplicates(archive, 'title', 1, 2);
+		expect(page3).toHaveLength(1);
+		expect(page3[0]?.value).toBe('Smallest Group');
+	});
+
+	it('offset が総グループ数を超えると空配列を返す', async () => {
+		const result = await findDuplicates(archive, 'title', 50, 100);
+		expect(result).toEqual([]);
 	});
 });

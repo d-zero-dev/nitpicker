@@ -89,7 +89,7 @@ describe('createServer', () => {
 			baseUrl: 'https://example.com',
 			roots: ['https://example.com'],
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -209,6 +209,14 @@ describe('createServer', () => {
 			cdn: false,
 			headers: null,
 		});
+		await archive.setResourcesReferrers({
+			url: 'https://example.com',
+			src: 'https://example.com/style.css',
+		});
+		await archive.setResourcesReferrers({
+			url: 'https://example.com/about',
+			src: 'https://example.com/style.css',
+		});
 
 		await archive.write();
 		await archive.close();
@@ -221,7 +229,7 @@ describe('createServer', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('ListTools で26個のツールが返される (v3: + list_isolated_clusters + get_isolated_cluster)', async () => {
+	it('ListTools で26個のツールが返される', async () => {
 		const result = await listTools(server);
 		expect(result.tools).toHaveLength(26);
 		const names = result.tools.map((t) => t.name);
@@ -230,7 +238,6 @@ describe('createServer', () => {
 		expect(names).toContain('get_summary');
 		expect(names).toContain('list_isolated_clusters');
 		expect(names).toContain('get_isolated_cluster');
-		// New in v2:
 		expect(names).toContain('list_pages_by_tag');
 		expect(names).toContain('list_pages_by_jsonld_type');
 		expect(names).toContain('get_tag_inventory');
@@ -239,7 +246,6 @@ describe('createServer', () => {
 		expect(names).toContain('count_pages_by_tag');
 		expect(names).toContain('count_pages_by_jsonld_type');
 		expect(names).toContain('get_page_jsonld_overview');
-		// New in inventory feature:
 		expect(names).toContain('list_isolated_pages');
 		expect(names).toContain('list_unused_resources');
 	});
@@ -259,7 +265,7 @@ describe('createServer', () => {
 		expect(data.baseUrl).toBe('https://example.com');
 		expect(data.roots).toEqual(['https://example.com']);
 		expect(data.totalPages).toBe(2);
-		// New fields contracted with LLM callers: source kind and crawler liveness.
+		// Fields contracted with LLM callers: source kind and crawler liveness.
 		expect(data.mode).toBe('archive');
 		expect(data.crawlerPid).toBeNull();
 		archiveId = data.archiveId;
@@ -340,6 +346,40 @@ describe('createServer', () => {
 		expect(data.items.length).toBe(1);
 	});
 
+	it('get_resource_referrers でリソースの参照元ページを返す', async () => {
+		const result = await callTool(server, 'get_resource_referrers', {
+			archiveId,
+			resourceUrl: 'https://example.com/style.css',
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.total).toBe(2);
+		expect(data.pageUrls).toHaveLength(2);
+		expect(data.nextCursor).toBeNull();
+	});
+
+	it('get_resource_referrers は limit/cursor で bound/継続できる', async () => {
+		const first = await callTool(server, 'get_resource_referrers', {
+			archiveId,
+			resourceUrl: 'https://example.com/style.css',
+			limit: 1,
+		});
+		const firstData = JSON.parse(first.content[0]!.text);
+		expect(firstData.pageUrls).toHaveLength(1);
+		expect(firstData.total).toBe(2);
+		expect(firstData.nextCursor).not.toBeNull();
+
+		const second = await callTool(server, 'get_resource_referrers', {
+			archiveId,
+			resourceUrl: 'https://example.com/style.css',
+			limit: 1,
+			cursor: firstData.nextCursor,
+		});
+		const secondData = JSON.parse(second.content[0]!.text);
+		expect(secondData.pageUrls).toHaveLength(1);
+		expect(secondData.nextCursor).toBeNull();
+	});
+
 	it('list_images で画像をリストする', async () => {
 		const result = await callTool(server, 'list_images', { archiveId });
 		expect(result.isError).toBeUndefined();
@@ -348,21 +388,27 @@ describe('createServer', () => {
 		expect(data.items.length).toBe(1);
 	});
 
-	it('find_duplicates で重複タイトルを検出する', async () => {
+	it('find_duplicates で重複タイトルを検出する（getDuplicatesFastPath 経由、issue #115）', async () => {
 		const result = await callTool(server, 'find_duplicates', { archiveId });
 		expect(result.isError).toBeUndefined();
 		const data = JSON.parse(result.content[0]!.text);
-		expect(Array.isArray(data)).toBe(true);
+		// getDuplicatesFastPath always normalizes to a CursorPaginatedDuplicateGroupList,
+		// not the bare array the legacy findDuplicates returned.
+		expect(Array.isArray(data.items)).toBe(true);
+		expect(data.total).toBe(0);
 	});
 
-	it('find_mismatches で canonical ミスマッチを検出する', async () => {
+	it('find_mismatches で canonical ミスマッチを検出する（getMismatchesFastPath 経由、issue #115）', async () => {
 		const result = await callTool(server, 'find_mismatches', {
 			archiveId,
 			type: 'canonical',
 		});
 		expect(result.isError).toBeUndefined();
 		const data = JSON.parse(result.content[0]!.text);
-		expect(Array.isArray(data)).toBe(true);
+		// getMismatchesFastPath always normalizes to a CursorPaginatedMismatchList,
+		// not the bare array the legacy findMismatches's positional-args overload returned.
+		expect(Array.isArray(data.items)).toBe(true);
+		expect(data.total).toBe(0);
 	});
 
 	it('check_headers でセキュリティヘッダーを確認する', async () => {
@@ -420,6 +466,25 @@ describe('createServer', () => {
 		expect(result.content[0]!.text).toContain('Invalid number');
 	});
 
+	it('find_duplicates の不正な limit 引数でエラーを返す（issue #115 の validation 回帰）', async () => {
+		const result = await callTool(server, 'find_duplicates', {
+			archiveId,
+			limit: 'abc',
+		});
+		expect(result.isError).toBe(true);
+		expect(result.content[0]!.text).toContain('Invalid number');
+	});
+
+	it('find_mismatches の不正な offset 引数でエラーを返す（issue #115 の validation 回帰）', async () => {
+		const result = await callTool(server, 'find_mismatches', {
+			archiveId,
+			type: 'canonical',
+			offset: 'abc',
+		});
+		expect(result.isError).toBe(true);
+		expect(result.content[0]!.text).toContain('Invalid number');
+	});
+
 	it('close_archive でアーカイブを閉じる', async () => {
 		const result = await callTool(server, 'close_archive', { archiveId });
 		expect(result.isError).toBeUndefined();
@@ -450,7 +515,7 @@ describe('createServer stub-mode support', () => {
 			baseUrl: 'https://stub.example.com',
 			roots: ['https://stub.example.com'],
 			name: 'mcp-stub',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,

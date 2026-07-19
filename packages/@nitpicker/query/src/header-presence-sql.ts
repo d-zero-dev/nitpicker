@@ -1,41 +1,44 @@
 import type { HeaderPresence } from './types.js';
 
 /**
- * SQL `LIKE` patterns for each tracked header, matched against the
- * lower-cased `pages.responseHeaders` JSON blob. Patterns require the
- * quote + colon that only appears around a JSON **key** (e.g.
- * `"content-security-policy":`) — a plain substring match would also fire
- * on a header whose *value* happens to mention another header's name (e.g.
- * a Referrer-Policy value describing a CSP), which the JSON-key-shaped
- * pattern excludes.
+ * Mapping from public {@link HeaderPresence} keys to the corresponding
+ * pre-computed boolean column in `header_flags` (0.13). Populated during
+ * 0.13 by `packages/@nitpicker/crawler/src/archive/populate-ref-tables/compute-header-flags.ts`,
+ * which mirrors the same detection rules the old LIKE-based
+ * `pages.responseHeaders` scan used before 0.13.
  */
-const HEADER_LIKE_PATTERNS: Record<keyof HeaderPresence, string> = {
-	hasCSP: '%"content-security-policy":%',
-	hasXFrameOptions: '%"x-frame-options":%',
-	hasXContentTypeOptions: '%"x-content-type-options":%',
-	hasHSTS: '%"strict-transport-security":%',
+const HEADER_FLAG_COLUMN: Record<keyof HeaderPresence, string> = {
+	hasCSP: 'has_csp',
+	hasXFrameOptions: 'has_x_frame_options',
+	hasXContentTypeOptions: 'has_x_content_type_options',
+	hasHSTS: 'has_hsts',
 };
 
 /**
  * The four {@link HeaderPresence} keys, in a stable order. Single source of
  * truth for every caller that needs to iterate the tracked headers (SQL
- * column builders, filter loops, viewer UI controls) — derived from
- * {@link HEADER_LIKE_PATTERNS} so adding a header here is the only edit
- * needed to make it flow through automatically.
+ * column builders, filter loops, viewer UI controls).
  */
 export const HEADER_PRESENCE_KEYS = Object.keys(
-	HEADER_LIKE_PATTERNS,
+	HEADER_FLAG_COLUMN,
 ) as (keyof HeaderPresence)[];
 
 /**
  * Builds the SQL boolean expression (0 or 1) for whether a tracked security
- * header is present on `pages.responseHeaders`. Never parses JSON — a
- * `LIKE` scan of the raw text, so it tolerates malformed or non-object
- * stored values (e.g. the literal text `null`) without throwing, and never
- * requires transferring the full blob to the application layer.
+ * header is present, by reading the 0.13 `header_flags` pre-computed
+ * bool column. `coalesce(..., 0)` handles rows without a `header_set_id` (no
+ * response headers captured — e.g. not-yet-scraped or redirect placeholder pages);
+ * treating flag as 0 matches the pre-0.13 LIKE-based behaviour that
+ * returned 0 when `pages.responseHeaders` was NULL.
  * @param key - Header presence field to evaluate.
- * @returns A SQL `CASE WHEN ... THEN 1 ELSE 0 END` expression string.
+ * @param flagsAlias - table alias used for `header_flags` in the surrounding
+ *   query (callers add `.leftJoin('header_flags as <alias>', ...)` before
+ *   invoking this).
+ * @returns A SQL expression string suitable for `select`/`whereRaw`.
  */
-export function headerPresenceExpression(key: keyof HeaderPresence): string {
-	return `case when lower(coalesce("pages"."responseHeaders", '')) like '${HEADER_LIKE_PATTERNS[key]}' then 1 else 0 end`;
+export function headerPresenceExpression(
+	key: keyof HeaderPresence,
+	flagsAlias: string,
+): string {
+	return `coalesce("${flagsAlias}"."${HEADER_FLAG_COLUMN[key]}", 0)`;
 }

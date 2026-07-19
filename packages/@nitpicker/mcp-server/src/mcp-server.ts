@@ -6,24 +6,24 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import {
 	ArchiveManager,
-	checkHeaders,
 	countPagesByJsonLdType,
 	countPagesByTag,
-	findDuplicates,
-	findMismatches,
-	getIsolatedCluster,
+	getDuplicatesFastPath,
+	getHeaderChecksFastPath,
+	getImagesFastPath,
+	getIsolatedClusterFastPath,
+	getMismatchesFastPath,
 	getPageDetail,
 	getPageHtml,
 	getPageJsonLd,
 	getPageJsonLdOverview,
 	getPageTags,
 	getResourceReferrers,
-	getSummary,
+	getSummaryFastPath,
 	getTagInventory,
 	getViolations,
-	listImages,
-	listIsolatedClusters,
-	listIsolatedPages,
+	listIsolatedClustersFastPath,
+	listIsolatedPagesFastPath,
 	listLinks,
 	listPages,
 	listPagesByJsonLdType,
@@ -98,6 +98,24 @@ function optionalBoolean(
 	throw new TypeError(`Invalid boolean for argument: ${key}`);
 }
 
+/**
+ * Extracts an optional string argument with validation.
+ * @param args - The arguments object.
+ * @param key - The argument key.
+ * @returns The string value, or `undefined` if not present.
+ * @throws {TypeError} If the value is present but not a string.
+ */
+function optionalString(args: Record<string, unknown>, key: string): string | undefined {
+	const value = args[key];
+	if (value == null) {
+		return undefined;
+	}
+	if (typeof value !== 'string') {
+		throw new TypeError(`Invalid string for argument: ${key}`);
+	}
+	return value;
+}
+
 /** Valid link analysis types. */
 const VALID_LINK_TYPES = ['broken', 'external'] as const;
 
@@ -148,7 +166,15 @@ function omit(args: Record<string, unknown>, ...keys: string[]): Record<string, 
  * Creates and configures the Nitpicker MCP server with all tools registered.
  * Uses the low-level Server API to avoid deep type instantiation issues
  * with McpServer + Zod schemas.
- * @returns The configured Server instance.
+ * @returns The configured Server instance. Connect it to a transport to start serving.
+ * @example
+ * ```ts
+ * import { createServer } from '@nitpicker/mcp-server';
+ * import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+ *
+ * const server = createServer();
+ * await server.connect(new StdioServerTransport());
+ * ```
  */
 export function createServer() {
 	// Route ArchiveManager warnings to stderr explicitly via process.stderr.write
@@ -163,7 +189,7 @@ export function createServer() {
 		},
 	});
 	const server = new Server(
-		{ name: 'nitpicker', version: '0.10.0' },
+		{ name: 'nitpicker', version: '0.13.0' },
 		{ capabilities: { tools: {} } },
 	);
 
@@ -188,7 +214,7 @@ export function createServer() {
 						const filePath = requireString(args, 'filePath');
 						const { archiveId, accessor, mode, crawlerLockHolder } =
 							await manager.open(filePath);
-						const summary = await getSummary(accessor);
+						const summary = await getSummaryFastPath(accessor);
 						return jsonResult({
 							archiveId,
 							baseUrl: summary.baseUrl,
@@ -210,7 +236,7 @@ export function createServer() {
 					}
 					case 'get_summary': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						return jsonResult(await getSummary(accessor));
+						return jsonResult(await getSummaryFastPath(accessor));
 					}
 					case 'list_pages': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
@@ -260,11 +286,32 @@ export function createServer() {
 					}
 					case 'list_images': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						return jsonResult(await listImages(accessor, omit(args, 'archiveId')));
+						return jsonResult(await getImagesFastPath(accessor, omit(args, 'archiveId')));
 					}
 					case 'get_violations': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						return jsonResult(await getViolations(accessor, omit(args, 'archiveId')));
+						return jsonResult(
+							await getViolations(accessor, {
+								validator: optionalString(args, 'validator'),
+								severity: optionalString(args, 'severity'),
+								rule: optionalString(args, 'rule'),
+								urlPattern: optionalString(args, 'urlPattern'),
+								sortBy: optionalString(args, 'sortBy') as
+									| 'url'
+									| 'validator'
+									| 'severity'
+									| 'rule'
+									| 'message'
+									| 'code'
+									| undefined,
+								sortOrder: optionalString(args, 'sortOrder') as
+									| 'asc'
+									| 'desc'
+									| undefined,
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
 					}
 					case 'find_duplicates': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
@@ -272,7 +319,13 @@ export function createServer() {
 							? validateEnum(String(args.field), VALID_DUPLICATE_FIELDS, 'field')
 							: undefined;
 						return jsonResult(
-							await findDuplicates(accessor, field, optionalNumber(args, 'limit')),
+							await getDuplicatesFastPath(accessor, {
+								field,
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+								pagesLimit: optionalNumber(args, 'pagesLimit'),
+								cursor: optionalString(args, 'cursor'),
+							}),
 						);
 					}
 					case 'find_mismatches': {
@@ -283,18 +336,31 @@ export function createServer() {
 							'mismatch type',
 						);
 						return jsonResult(
-							await findMismatches(
-								accessor,
-								type,
-								optionalNumber(args, 'limit'),
-								optionalNumber(args, 'offset'),
-							),
+							await getMismatchesFastPath(accessor, type, {
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+								urlPattern: optionalString(args, 'urlPattern'),
+								sortBy: optionalString(args, 'sortBy') as
+									| 'url'
+									| 'actual'
+									| 'expected'
+									| undefined,
+								sortOrder: optionalString(args, 'sortOrder') as
+									| 'asc'
+									| 'desc'
+									| undefined,
+								cursor: optionalString(args, 'cursor'),
+							}),
 						);
 					}
 					case 'get_resource_referrers': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						const resourceUrl = requireString(args, 'resourceUrl');
-						const result = await getResourceReferrers(accessor, resourceUrl);
+						const result = await getResourceReferrers(accessor, {
+							resourceUrl,
+							limit: optionalNumber(args, 'limit'),
+							cursor: optionalString(args, 'cursor'),
+						});
 						if (!result) {
 							return textResult('Resource not found.');
 						}
@@ -302,12 +368,14 @@ export function createServer() {
 					}
 					case 'check_headers': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						return jsonResult(await checkHeaders(accessor, omit(args, 'archiveId')));
+						return jsonResult(
+							await getHeaderChecksFastPath(accessor, omit(args, 'archiveId')),
+						);
 					}
 					case 'list_isolated_pages': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(
-							await listIsolatedPages(accessor, {
+							await listIsolatedPagesFastPath(accessor, {
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
 							}),
@@ -316,7 +384,7 @@ export function createServer() {
 					case 'list_isolated_clusters': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(
-							await listIsolatedClusters(accessor, {
+							await listIsolatedClustersFastPath(accessor, {
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
 							}),
@@ -324,7 +392,7 @@ export function createServer() {
 					}
 					case 'get_isolated_cluster': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						const result = await getIsolatedCluster(
+						const result = await getIsolatedClusterFastPath(
 							accessor,
 							requireString(args, 'representativeUrl'),
 						);
@@ -422,6 +490,14 @@ export function createServer() {
 /**
  * Starts the MCP server using stdio transport.
  * This is the entry point for the `nitpicker-mcp` binary.
+ * @returns Resolves once the stdio transport is connected; the server then
+ *   keeps serving requests until the process exits.
+ * @example
+ * ```ts
+ * import { startServer } from '@nitpicker/mcp-server';
+ *
+ * await startServer();
+ * ```
  */
 export async function startServer() {
 	const server = createServer();

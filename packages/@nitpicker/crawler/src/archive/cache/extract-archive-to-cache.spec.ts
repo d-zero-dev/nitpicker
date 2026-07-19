@@ -41,7 +41,7 @@ async function buildFakeArchive(archivePath: string, title = 'fixture'): Promise
 	await archive.setConfig({
 		baseUrl: 'https://example.com',
 		name: title,
-		version: '0.10.0',
+		version: '0.13.0',
 		recursive: true,
 		interval: 0,
 		image: true,

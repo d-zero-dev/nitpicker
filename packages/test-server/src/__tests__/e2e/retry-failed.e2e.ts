@@ -186,10 +186,11 @@ describe('Retry failed crawl: permanent-kind exclusion converges across iteratio
 		expect(recoverable).toBeDefined();
 		expect(recoverable!.status).toBe(500);
 		// `Page` does not expose a public `id` getter — fetch it via the
-		// `pages.url` lookup so the `page_errors` foreign key is real.
-		const recoverableRow = (await knex('pages')
-			.select('id')
-			.where('url', 'http://localhost:8010/flaky/recoverable')
+		// `content_items`/`url_refs` join so the `page_errors` foreign key is real.
+		const recoverableRow = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ci.url_id', 'ur.id')
+			.select('ci.id as id')
+			.where('ur.url', 'http://localhost:8010/flaky/recoverable')
 			.first()) as { id: number } | undefined;
 		expect(recoverableRow).toBeDefined();
 		await knex('page_errors').insert({

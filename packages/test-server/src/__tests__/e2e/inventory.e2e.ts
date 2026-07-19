@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Archive, computeFileSha256, CrawlerOrchestrator } from '@nitpicker/crawler';
+import { Archive, CrawlerOrchestrator, computeFileSha256 } from '@nitpicker/crawler';
 import { listInventoryRuns, listUnusedResources } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -81,15 +81,16 @@ describe('Inventory crawl', () => {
 	it('labels the URL-list HTML page as inventory-seed', async () => {
 		// hidden-lp anchors to inner-link (which itself becomes
 		// inventory-discovered), so the two form a size-2 cluster — NOT a
-		// singleton — under the new `listIsolatedPages` definition.
+		// singleton — under `listIsolatedPages`'s definition.
 		// Probe the raw `pages.source` column directly to pin the
 		// inventory-seed label that `derivePageSource` writes for URLs
 		// supplied via `--inventory`. The orphan-set behaviour is covered
 		// separately by `compute-isolated-clusters.spec.ts`.
 		const knex = accessor.getKnex();
-		const [row] = (await knex('pages')
-			.select('source')
-			.where('url', 'http://localhost:8010/inventory/hidden-lp')) as {
+		const [row] = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ci.url_id', 'ur.id')
+			.select('ci.source as source')
+			.where('ur.url', 'http://localhost:8010/inventory/hidden-lp')) as {
 			source: string;
 		}[];
 		expect(row, 'hidden-lp must have been inserted by --inventory').toBeDefined();
@@ -104,9 +105,10 @@ describe('Inventory crawl', () => {
 		// `derivePageSource` → `Archive.setPage` → DB INSERT path for the
 		// inventory-discovered case.
 		const knex = accessor.getKnex();
-		const [row] = (await knex('pages')
-			.select('source')
-			.where('url', 'http://localhost:8010/inventory/inner-link')) as {
+		const [row] = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ci.url_id', 'ur.id')
+			.select('ci.source as source')
+			.where('ur.url', 'http://localhost:8010/inventory/inner-link')) as {
 			source: string;
 		}[];
 		expect(
@@ -123,22 +125,22 @@ describe('Inventory crawl', () => {
 		);
 		expect(orphan, 'orphan.pdf must be present in unused resources').toBeDefined();
 		expect(orphan?.source).toBe('inventory-seed');
-		// New behaviour: the orchestrator no longer fires a HEAD pre-flight per
-		// URL, so non-HTML inventory entries land with NULL metadata. The
-		// extension-based classification is the contract here — `query
-		// unused-resources` still surfaces the row by referrer-count = 0, and a
-		// downstream `--retry-failed` (or a re-`--inventory`) can populate
+		// The orchestrator fires no HEAD pre-flight per URL, so non-HTML
+		// inventory entries land with NULL metadata. The extension-based
+		// classification is the contract here — `query unused-resources`
+		// still surfaces the row by referrer-count = 0, and a downstream
+		// `--retry-failed` (or a re-`--inventory`) can populate
 		// status / contentType later if needed. Asserting `null` pins the
-		// regression: if we ever restore HEAD-based metadata, this test must
-		// be updated deliberately.
+		// contract: introducing HEAD-based metadata would have to update
+		// this test deliberately.
 		expect(orphan?.contentType).toBeNull();
 		expect(orphan?.status).toBeNull();
 	});
 
 	// Note: a "second inventory pass keeps the existing source label"
 	// scenario is intentionally left out here. The non-destructive property
-	// is enforced at the SQL layer — `#getIdByUrl`'s `ON CONFLICT IGNORE`
-	// path is exercised by the migration / database specs, and the
+	// is enforced at the SQL layer — `resolveContentItemId`'s insert-only
+	// `source` semantics are exercised by the migration / database specs, and the
 	// existing-URL filter (`getExistingPageUrls`) keeps the second pass
 	// from even reaching the INSERT — so an E2E re-pass would only retest
 	// what those unit tests already cover, at the cost of running a full
@@ -338,13 +340,14 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 		// single seed, every URL is durably tracked as an `inventory-seed`
 		// placeholder in `pages`. Pre-#121, these rows would not exist.
 		const knex = accessor.getKnex();
-		const rows = (await knex('pages')
-			.select('url', 'source', 'scraped')
-			.whereIn('url', [
+		const rows = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ci.url_id', 'ur.id')
+			.select('ur.url as url', 'ci.source as source', 'ci.scraped as scraped')
+			.whereIn('ur.url', [
 				'http://localhost:8010/inventory/hidden-lp',
 				'http://localhost:8010/inventory/inner-link',
 			])
-			.orderBy('url')) as Array<{
+			.orderBy('ur.url')) as Array<{
 			url: string;
 			source: string;
 			scraped: number;
@@ -390,8 +393,8 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 });
 
 describe('Inventory scrape-phase failure persists ingested state (#121 recovery path)', () => {
-	// Regression test for the post-ingestion recovery branch (the F1 path
-	// in the code review): when scrape phase throws *after* ingestion
+	// Regression test for the post-ingestion recovery branch:
+	// when scrape phase throws *after* ingestion
 	// completes (`.bak` is gone), the orchestrator must persist `tmpDir`
 	// to the `.nitpicker` tar via `archive.write()` before unwinding —
 	// otherwise the outer catch's `archive.close()` would see the original
@@ -442,18 +445,19 @@ describe('Inventory scrape-phase failure persists ingested state (#121 recovery 
 		// into the `.nitpicker` file. If that call were missing (or if the
 		// `ingestionComplete=true` guard fell through to the `.bak` restore
 		// branch), re-opening the archive would show zero `inventory-seed`
-		// rows. The previous-fix coverage E2E only exercises the abort
+		// rows. The pre-insert durability E2E above only exercises the abort
 		// path, which short-circuits before reaching this branch.
 		const accessor = await Archive.open({ filePath, cwd });
 		try {
 			const knex = accessor.getKnex();
-			const rows = (await knex('pages')
-				.select('url', 'source', 'scraped')
-				.whereIn('url', [
+			const rows = (await knex('content_items as ci')
+				.join('url_refs as ur', 'ci.url_id', 'ur.id')
+				.select('ur.url as url', 'ci.source as source', 'ci.scraped as scraped')
+				.whereIn('ur.url', [
 					'http://localhost:8010/inventory/hidden-lp',
 					'http://localhost:8010/inventory/inner-link',
 				])
-				.orderBy('url')) as Array<{
+				.orderBy('ur.url')) as Array<{
 				url: string;
 				source: string;
 				scraped: number;
@@ -492,7 +496,7 @@ describe('Inventory scrape-phase failure persists ingested state (#121 recovery 
 	});
 });
 
-describe('Inventory http/https dedup keeps a single inventory-seed row per origin (#121 review F6)', () => {
+describe('Inventory http/https dedup keeps a single inventory-seed row per origin (#121)', () => {
 	// Edge-case pin for the dedup boundary added in `inventory()` —
 	// `protocolAgnosticKey` is the only thing that keeps an inventory
 	// list with cross-scheme duplicates from creating an orphan
@@ -541,9 +545,10 @@ describe('Inventory http/https dedup keeps a single inventory-seed row per origi
 
 	it('creates exactly one inventory-seed row across http/https duplicates', async () => {
 		const knex = accessor.getKnex();
-		const rows = (await knex('pages')
-			.select('url', 'source')
-			.whereIn('url', [
+		const rows = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ci.url_id', 'ur.id')
+			.select('ur.url as url', 'ci.source as source')
+			.whereIn('ur.url', [
 				'http://localhost:8010/inventory/hidden-lp',
 				'https://localhost:8010/inventory/hidden-lp',
 			])) as Array<{ url: string; source: string }>;

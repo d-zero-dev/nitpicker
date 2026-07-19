@@ -8,29 +8,31 @@ import type {
 	ListResourcesOptions,
 	ListImagesOptions,
 	GetViolationsOptions,
+	GetDuplicatesFastPathOptions,
+	FindMismatchesFastPathOptions,
 } from '@nitpicker/query';
 
 import {
-	checkHeaders,
 	countPagesByJsonLdType,
 	countPagesByTag,
-	findDuplicates,
-	findMismatches,
-	getErrorKinds,
-	getIsolatedCluster,
+	getDuplicatesFastPath,
+	getErrorKindsFastPath,
+	getHeaderChecksFastPath,
+	getImagesFastPath,
+	getIsolatedClusterFastPath,
+	getMismatchesFastPath,
 	getPageDetail,
 	getPageHtml,
 	getPageJsonLd,
 	getPageJsonLdOverview,
 	getPageTags,
 	getResourceReferrers,
-	getSummary,
+	getSummaryFastPath,
 	getTagInventory,
 	getViolations,
-	listImages,
 	listInventoryRuns,
-	listIsolatedClusters,
-	listIsolatedPages,
+	listIsolatedClustersFastPath,
+	listIsolatedPagesFastPath,
 	listLinks,
 	listPages,
 	listPagesByJsonLdType,
@@ -65,7 +67,7 @@ export async function dispatchQuery(
 
 	switch (subCommand) {
 		case 'summary': {
-			return getSummary(accessor);
+			return getSummaryFastPath(accessor);
 		}
 		case 'pages': {
 			return listPages(accessor, options as ListPagesOptions);
@@ -93,42 +95,44 @@ export async function dispatchQuery(
 			return listResources(accessor, options as ListResourcesOptions);
 		}
 		case 'images': {
-			return listImages(accessor, options as ListImagesOptions);
+			return getImagesFastPath(accessor, options as ListImagesOptions);
 		}
 		case 'violations': {
 			return getViolations(accessor, options as GetViolationsOptions);
 		}
 		case 'duplicates': {
-			const { field, limit } = options as {
-				field: 'title' | 'description';
-				limit?: number;
-			};
-			return findDuplicates(accessor, field, limit);
+			return getDuplicatesFastPath(accessor, options as GetDuplicatesFastPathOptions);
 		}
 		case 'mismatches': {
-			const { type, limit, offset } = options as {
+			const { type, ...rest } = options as {
 				type: 'canonical' | 'og:title' | 'og:description';
-				limit?: number;
-				offset?: number;
-			};
-			return findMismatches(accessor, type, limit, offset);
+			} & FindMismatchesFastPathOptions;
+			return getMismatchesFastPath(accessor, type, rest);
 		}
 		case 'headers': {
-			return checkHeaders(
+			return getHeaderChecksFastPath(
 				accessor,
 				options as { limit?: number; offset?: number; missingOnly?: boolean },
 			);
 		}
 		case 'resource-referrers': {
-			const { url } = options as { url: string };
-			const result = await getResourceReferrers(accessor, url);
+			const { url, limit, cursor } = options as {
+				url: string;
+				limit?: number;
+				cursor?: string;
+			};
+			const result = await getResourceReferrers(accessor, {
+				resourceUrl: url,
+				limit,
+				cursor,
+			});
 			if (!result) {
 				throw new Error(`Resource not found: ${url}`);
 			}
 			return result;
 		}
 		case 'error-kinds': {
-			return getErrorKinds(accessor);
+			return getErrorKindsFastPath(accessor);
 		}
 		case 'pages-by-tag': {
 			const { provider, externalId, limit, offset } = options as {
@@ -171,15 +175,15 @@ export async function dispatchQuery(
 		}
 		case 'isolated-pages': {
 			const { limit, offset } = options as { limit?: number; offset?: number };
-			return listIsolatedPages(accessor, { limit, offset });
+			return listIsolatedPagesFastPath(accessor, { limit, offset });
 		}
 		case 'isolated-clusters': {
 			const { limit, offset } = options as { limit?: number; offset?: number };
-			return listIsolatedClusters(accessor, { limit, offset });
+			return listIsolatedClustersFastPath(accessor, { limit, offset });
 		}
 		case 'get-isolated-cluster': {
 			const { representativeUrl } = options as { representativeUrl: string };
-			const result = await getIsolatedCluster(accessor, representativeUrl);
+			const result = await getIsolatedClusterFastPath(accessor, representativeUrl);
 			if (result === null) {
 				throw new Error(
 					`No isolated cluster found for representativeUrl: ${representativeUrl}`,

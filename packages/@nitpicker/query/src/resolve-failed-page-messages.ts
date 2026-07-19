@@ -41,7 +41,10 @@ export async function resolveFailedPageMessages(
 	const idToUrl = new Map<number, string>();
 	for (let i = 0; i < pageIds.length; i += CHUNK_SIZE) {
 		const chunk = pageIds.slice(i, i + CHUNK_SIZE);
-		const rows = (await knex('pages').select('id', 'url').whereIn('id', chunk)) as {
+		const rows = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id', 'ur.url as url')
+			.whereIn('ci.id', chunk)) as {
 			id: number;
 			url: string;
 		}[];

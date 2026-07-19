@@ -1,0 +1,171 @@
+import type { ProgressCallback } from '../create-progress-reporter.js';
+import type { AnchorEdgeRowInProgress, AnchorInputRow } from './types.js';
+import type { Knex } from 'knex';
+
+import { createProgressReporter } from '../create-progress-reporter.js';
+
+import { collapseAnchorRows } from './collapse-anchor-rows.js';
+import { resolveTextRefs } from './resolve-text-refs.js';
+
+/**
+ * Rows scanned per keyset-paginated `SELECT` chunk against `anchors`.
+ * `anchors` is the largest table in the archive (≈ 13 M rows on the
+ * reference archive) so the chunk size trades off memory against
+ * round-trip overhead. 5 000 rows per SELECT keeps peak chunk memory
+ * ≈ 5 MB (per-row ≈ 1 KB with URL / textContent stored elsewhere) and
+ * amortises the per-query round-trip cost across many collapses.
+ */
+const READ_CHUNK_SIZE = 5000;
+
+/**
+ * Edges buffered before a bulk `.insert(rows).onConflict(...).ignore()`.
+ * The real constraint here is NOT the SQLite bound-parameter limit —
+ * knex's sqlite3-family dialect compiles any multi-row `.insert()` (with
+ * or without `onConflict`) into `INSERT INTO ... SELECT ... UNION ALL
+ * SELECT ...`, which is capped by SQLite's `SQLITE_LIMIT_COMPOUND_SELECT`
+ * (default 500). A chunk size above 500 fails with "too many terms in
+ * compound SELECT" — confirmed against a real archive whose anchor count
+ * routinely produces 500+ distinct `(page_id, href_page_id)` pairs per
+ * page. Kept at exactly 500 (not lower) to match the established
+ * convention already used by `upsert-one-header-set.ts` and the
+ * ref-tables populate steps.
+ */
+const INSERT_CHUNK_SIZE = 500;
+
+/**
+ * Populates `anchor_edges` from `anchors` (issue #193).
+ *
+ * The algorithm is a **single keyset-paginated scan** over `anchors`
+ * ordered by `(pageId, hrefId, id)`. Each chunk feeds
+ * {@link ./collapse-anchor-rows.ts}, which yields one edge per distinct
+ * `(pageId, hrefId)` pair as soon as the pair boundary is observed.
+ *
+ * A boundary can straddle two chunks (the last row of chunk N shares a
+ * pair with the first row of chunk N+1), so the outer loop keeps an
+ * "open edge" state that flushes only when the *next* pair actually
+ * starts. On end-of-stream the last open edge is emitted.
+ *
+ * `first_text_id` is left unresolved during the streaming pass — the
+ * text is buffered on each pending edge and resolved in bulk by
+ * {@link ./resolve-text-refs.ts} at INSERT time. Every INSERT batch
+ * therefore issues one text-refs lookup + one INSERT, keeping DB
+ * round-trips per edge low.
+ *
+ * `INSERT OR IGNORE` on the `(page_id, href_page_id)` UNIQUE composite
+ * makes the step idempotent: a re-run after partial failure re-emits the
+ * same edges but the writes no-op.
+ * @param trx - Knex instance or transaction connected to the archive DB.
+ * @param onProgress - Optional sink for periodic progress lines (one per
+ *   ~5% of `anchors` scanned); see {@link ../create-progress-reporter.ts}.
+ * @example
+ * await knex.transaction(async (trx) => {
+ *   await populateAnchorEdges(trx);
+ * });
+ */
+export async function populateAnchorEdges(
+	trx: Knex,
+	onProgress?: ProgressCallback,
+): Promise<void> {
+	let cursorPageId = 0;
+	let cursorHrefId = 0;
+	let cursorId = 0;
+	let carryOver: AnchorEdgeRowInProgress | null = null;
+	const pending: AnchorEdgeRowInProgress[] = [];
+
+	const countRows = await trx('anchors').count({ n: '*' });
+	const total = Number(countRows[0]?.n ?? 0);
+	const report = createProgressReporter('anchor_edges (anchors)', total, onProgress);
+	let processed = 0;
+
+	while (true) {
+		const rows: AnchorInputRow[] = await trx('anchors')
+			.select('id', 'pageId', 'hrefId', 'hash', 'textContent')
+			.where(function () {
+				this.where('pageId', '>', cursorPageId)
+					.orWhere(function () {
+						this.where('pageId', cursorPageId).andWhere('hrefId', '>', cursorHrefId);
+					})
+					.orWhere(function () {
+						this.where('pageId', cursorPageId)
+							.andWhere('hrefId', cursorHrefId)
+							.andWhere('id', '>', cursorId);
+					});
+			})
+			.orderBy([
+				{ column: 'pageId', order: 'asc' },
+				{ column: 'hrefId', order: 'asc' },
+				{ column: 'id', order: 'asc' },
+			])
+			.limit(READ_CHUNK_SIZE);
+		if (rows.length === 0) {
+			break;
+		}
+		const lastRow = rows.at(-1)!;
+		cursorPageId = lastRow.pageId;
+		cursorHrefId = lastRow.hrefId;
+		cursorId = lastRow.id;
+		processed += rows.length;
+		report(processed);
+
+		const chunkEdges = [...collapseAnchorRows(rows)];
+		for (const edge of chunkEdges) {
+			if (
+				carryOver !== null &&
+				carryOver.page_id === edge.page_id &&
+				carryOver.href_page_id === edge.href_page_id
+			) {
+				carryOver.count += edge.count;
+				continue;
+			}
+			if (carryOver !== null) {
+				pending.push(carryOver);
+			}
+			carryOver = edge;
+			if (pending.length >= INSERT_CHUNK_SIZE) {
+				await flush(trx, pending);
+			}
+		}
+	}
+	if (carryOver !== null) {
+		pending.push(carryOver);
+	}
+	if (pending.length > 0) {
+		await flush(trx, pending);
+	}
+}
+
+/**
+ * Resolves `first_text_id` for every buffered edge in `pending`, then
+ * bulk-inserts the batch into `anchor_edges` and clears the buffer.
+ *
+ * Extracted from the main loop so the "resolve + insert" pair happens in
+ * exactly one place — the streaming loop, the carry-over flush at
+ * end-of-stream, and any future re-order boundary all land here.
+ * @param trx - Knex instance or transaction.
+ * @param pending - Buffered edges awaiting `first_text_id` resolution
+ *   and INSERT; mutated in place (cleared on return).
+ */
+async function flush(trx: Knex, pending: AnchorEdgeRowInProgress[]): Promise<void> {
+	const texts = new Set<string>();
+	for (const edge of pending) {
+		if (edge.first_textContent != null && edge.first_textContent !== '') {
+			texts.add(edge.first_textContent);
+		}
+	}
+	const textIds = await resolveTextRefs(trx, texts);
+	const inserts = pending.map((edge) => ({
+		page_id: edge.page_id,
+		href_page_id: edge.href_page_id,
+		count: edge.count,
+		first_hash: edge.first_hash,
+		first_text_id:
+			edge.first_textContent != null && edge.first_textContent !== ''
+				? (textIds.get(edge.first_textContent) ?? null)
+				: null,
+	}));
+	await trx('anchor_edges')
+		.insert(inserts)
+		.onConflict(['page_id', 'href_page_id'])
+		.ignore();
+	pending.length = 0;
+}

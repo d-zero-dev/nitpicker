@@ -7,7 +7,7 @@ import { Archive } from '@nitpicker/crawler';
 const dirname = import.meta.dirname;
 const FIXTURE_PATH = path.resolve(dirname, '.fixture.nitpicker');
 const FIXTURE_CWD = path.resolve(dirname, '.fixture-tmp');
-// Bumped from 50 → 120 so the default MPA `pageSize=100` paginates (Next
+// Must exceed the default MPA `pageSize=100` so the fixture paginates (Next
 // button enables, `?page=2` lands on the second page). Smaller fixtures
 // collapse to one page and the pagination smoke tests can't actually
 // observe a page-change event.
@@ -21,7 +21,7 @@ const archive = await Archive.create({ filePath: FIXTURE_PATH, cwd: FIXTURE_CWD 
 await archive.setConfig({
 	baseUrl: 'https://example.com',
 	name: 'e2e-fixture',
-	version: '0.10.0',
+	version: '0.13.0',
 	recursive: true,
 	interval: 0,
 	image: true,

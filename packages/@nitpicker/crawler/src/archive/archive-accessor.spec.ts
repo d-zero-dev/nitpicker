@@ -83,9 +83,10 @@ describe('ArchiveAccessor.getHtmlOfPage', () => {
 			isTarget: false,
 		});
 		const knex = archive.getKnex();
-		const [page] = await knex('pages')
-			.select('id')
-			.where('url', 'http://external.example.com/x');
+		const [page] = await knex('content_items')
+			.join('url_refs', 'content_items.url_id', 'url_refs.id')
+			.select('content_items.id as id')
+			.where('url_refs.url', 'http://external.example.com/x');
 		const html = await archive.getHtmlOfPage(page.id);
 		expect(html).toBeNull();
 	});

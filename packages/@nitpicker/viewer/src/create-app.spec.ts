@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
+import { buildViewerReadModel } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createApp } from './create-app.js';
@@ -25,7 +26,7 @@ describe('createApp', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -159,6 +160,7 @@ describe('createApp', () => {
 			crawlerLockHolder: null,
 		};
 		app = createApp({ context, publicDir: workingDir });
+		await buildViewerReadModel(archive);
 	});
 
 	afterAll(async () => {
@@ -180,12 +182,12 @@ describe('createApp', () => {
 			externalContents: number;
 		};
 		expect(body.totalPages).toBeGreaterThanOrEqual(2);
-		/* The two new fields (added in the Summary-cards redesign) must
-		   pass through the API boundary unchanged. Refactoring the route
-		   to `pick()` a subset of SummaryResult would silently drop them
-		   without this assertion. The `>=` form keeps the test robust to
-		   fixture changes — what's pinned is the invariant
-		   `contents ≥ pages` documented in the SummaryResult JSDoc. */
+		/* `internalContents`/`externalContents` must pass through the API
+		   boundary unchanged. Refactoring the route to `pick()` a subset
+		   of SummaryResult would silently drop them without this
+		   assertion. The `>=` form keeps the test robust to fixture
+		   changes — what's pinned is the invariant `contents ≥ pages`
+		   documented in the SummaryResult JSDoc. */
 		expect(body.internalContents).toBeGreaterThanOrEqual(body.internalPages);
 		expect(body.externalContents).toBeGreaterThanOrEqual(body.externalPages);
 	});
@@ -254,7 +256,7 @@ describe('createApp', () => {
 
 	it('GET /api/links?type=external は listExternalLinks の宛先集約シェイプを返す', async () => {
 		// Regression test for the route dispatching to the wrong query
-		// function: the response must have `referrerCount`, not the old
+		// function: the response must have `referrerCount`, not the
 		// per-anchor `sourceUrl`/`textContent` shape from `listLinks`.
 		const res = await app.request('/api/links?type=external');
 		expect(res.status).toBe(200);
@@ -386,13 +388,7 @@ describe('createApp', () => {
 		);
 	});
 
-	it('GET /api/isolated-pages は precomputed components 経由で動く', async () => {
-		// The fixture has no inventory-* pages, so the response is an
-		// empty list — but the route must still go through
-		// getCachedIsolatedClusters + listIsolatedPages without throwing.
-		// Removing the `precomputedComponents` plumbing in the route or
-		// query function would fail this if anchoring assumed the option
-		// was always present.
+	it('GET /api/isolated-pages は precomputed read model 経由でも動く', async () => {
 		const res = await app.request('/api/isolated-pages');
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { items: unknown[]; total: number };
@@ -400,7 +396,7 @@ describe('createApp', () => {
 		expect(typeof body.total).toBe('number');
 	});
 
-	it('GET /api/isolated-clusters は precomputed components 経由で動く', async () => {
+	it('GET /api/isolated-clusters は precomputed read model 経由でも動く', async () => {
 		const res = await app.request('/api/isolated-clusters');
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { items: unknown[]; total: number };
@@ -408,7 +404,6 @@ describe('createApp', () => {
 	});
 
 	it('GET /api/isolated-clusters/:representativeUrl は 404 で "use isolated-pages" メッセージを返す（singleton-vs-collapsed の差別化）', async () => {
-		// The QA review specifically called out this branch as untested.
 		// Without the singleton differentiation in the route, both cases
 		// would return the same "collapsed by follow-up crawl" message —
 		// which misleads operators who deep-linked a singleton URL into

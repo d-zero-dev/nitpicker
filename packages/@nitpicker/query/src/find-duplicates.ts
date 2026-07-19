@@ -12,49 +12,58 @@ const URL_DELIMITER = '';
 /**
  * Finds pages with duplicate title or description metadata.
  *
- * Uses a single SQL pass — `GROUP BY <field> HAVING COUNT(*) > 1` with
- * `GROUP_CONCAT(url, X'1F')` to materialise the URL list for each group
- * inside the same query. The previous implementation issued one
- * `SELECT url` follow-up per duplicate group (a textbook N+1: 1 + N
- * queries for N groups), which was ~413s on a 168k-HTML-page archive
- * because each follow-up triggered another full-table scan. The
- * GROUP_CONCAT rewrite runs in ~8s on the same archive (49.6x speedup,
- * confirmed by `scripts/bench-find-duplicates.mjs`). The dominant cost is
- * now the single GROUP BY scan; further wins require either ANALYZE
- * (forbidden — see `idx_pages_listfilter` JSDoc) or schema denormalisation,
- * both out of scope.
+ * 0.13: reads through the 0.13 entity tables (`content_items`
+ * joined to `page_meta` for the field's `text_ref` and `url_refs` for the
+ * page URL) and groups on the deduped `text_refs.id` — walking a narrow
+ * integer key instead of the raw text column. `GROUP_CONCAT(url, X'1F')`
+ * materialises the URL list for each group inside the same query, keeping
+ * the read single-pass — a per-group N+1 URL lookup is ~50× slower on
+ * large archives.
  *
  * The URL delimiter is ASCII Unit Separator (`\x1F`), which is illegal in
  * URLs per RFC 3986. This keeps the JS split unambiguous without escaping.
  * @param accessor - The archive accessor to query.
  * @param field - The metadata field to check for duplicates.
  * @param limit - Maximum number of duplicate groups to return. Defaults to 50.
+ * @param offset - Number of duplicate groups (in `ORDER BY cnt DESC` order)
+ *   to skip before `limit` is applied. Defaults to 0.
  * @returns An array of duplicate entries with the shared value and matching URLs.
+ * @example
+ * const groups = await findDuplicates(accessor, 'title', 20);
+ * for (const group of groups) {
+ *   console.log(`"${group.value}" is shared by ${group.count} pages`, group.urls);
+ * }
  */
 export async function findDuplicates(
 	accessor: ArchiveAccessor,
 	field: 'title' | 'description' = 'title',
 	limit: number = 50,
+	offset: number = 0,
 ): Promise<DuplicateEntry[]> {
 	const knex = accessor.getKnex();
-	// `field` is constrained to the literal union 'title' | 'description', so
-	// no string-injection risk from interpolating it into the GROUP BY clause.
-	const column = field === 'title' ? 'title' : 'description';
+	// `field` is constrained to the literal union so no string-injection
+	// risk from interpolating the column name into the SQL.
+	const textIdColumn = field === 'title' ? 'pm.title_text_id' : 'pm.description_text_id';
 
-	const rows = (await knex('pages')
+	const rows = (await knex('content_items as ci')
+		.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+		.join('page_meta as pm', 'pm.page_id', 'ci.id')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.join('text_refs as tr', 'tr.id', textIdColumn)
 		.select(
-			knex.raw(`?? as value`, [column]),
-			knex.raw(`count(*) as cnt`),
-			knex.raw(`group_concat(url, ?) as urls`, [URL_DELIMITER]),
+			knex.raw('"tr"."text" as value'),
+			knex.raw('count(*) as cnt'),
+			knex.raw('group_concat("ur"."url", ?) as urls', [URL_DELIMITER]),
 		)
-		.where({ scraped: 1, isExternal: 0, contentType: 'text/html' })
-		.whereNull('redirectDestId')
-		.whereNotNull(column)
-		.whereNot(column, '')
-		.groupBy(column)
-		.having('cnt', '>', 1)
+		.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
+		.whereNull('ci.redirect_dest_id')
+		.whereNotNull(textIdColumn)
+		.whereNot('tr.text', '')
+		.groupBy(textIdColumn)
+		.having(knex.raw('count(*) > 1'))
 		.orderBy('cnt', 'desc')
-		.limit(limit)) as { value: string; cnt: number; urls: string }[];
+		.limit(limit)
+		.offset(offset)) as { value: string; cnt: number; urls: string }[];
 
 	return rows.map((row) => ({
 		field,

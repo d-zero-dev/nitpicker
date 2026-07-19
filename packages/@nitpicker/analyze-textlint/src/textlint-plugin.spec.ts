@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type createTextlintPlugin from './textlint-plugin.js';
+
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 const lintTextMock = vi.fn();
 
@@ -47,13 +49,16 @@ vi.mock('textlint-rule-prefer-tari-tari', () => ({ default: {} }));
 vi.mock('@textlint-ja/textlint-rule-no-synonyms', () => ({ default: {} }));
 vi.mock('textlint-plugin-html', () => ({ default: {} }));
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-let pluginFactory: typeof import('./textlint-plugin.js').default;
+let pluginFactory: typeof createTextlintPlugin;
+const pluginModulePromise = import('./textlint-plugin.js');
 
-beforeEach(async () => {
+beforeAll(async () => {
+	const pluginModule = await pluginModulePromise;
+	pluginFactory = pluginModule.default;
+}, 30_000);
+
+beforeEach(() => {
 	vi.clearAllMocks();
-	const mod = await import('./textlint-plugin.js');
-	pluginFactory = mod.default;
 });
 
 describe('analyze-textlint plugin', () => {

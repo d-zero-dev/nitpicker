@@ -8,8 +8,9 @@ import { redirectTable } from './redirect-table.js';
 
 describe('redirectTable', () => {
 	/**
-	 * Creates an in-memory SQLite database with a minimal pages table
-	 * (without WAL mode to avoid abort errors on destroy).
+	 * Creates an in-memory SQLite database with minimal `url_refs` /
+	 * `content_items` tables (without WAL mode to avoid abort errors on
+	 * destroy).
 	 */
 	async function setupDb() {
 		const db = knex({
@@ -17,14 +18,21 @@ describe('redirectTable', () => {
 			connection: { filename: ':memory:' },
 			useNullAsDefault: true,
 		});
-		await db.schema.createTable('pages', (t) => {
+		await db.schema.createTable('url_refs', (t) => {
 			t.increments('id');
 			t.string('url', 8190).notNullable().unique();
-			t.integer('redirectDestId').unsigned().references('pages.id').defaultTo(null);
+		});
+		await db.schema.createTable('content_items', (t) => {
+			t.increments('id');
+			t.integer('url_id').unsigned().notNullable().unique().references('url_refs.id');
+			t.integer('redirect_dest_id')
+				.unsigned()
+				.references('content_items.id')
+				.defaultTo(null);
 			t.boolean('scraped').notNullable();
-			t.boolean('isTarget').notNullable();
-			t.boolean('isExternal');
-			t.integer('order').unsigned().nullable();
+			t.boolean('is_target').notNullable();
+			t.boolean('is_external');
+			t.integer('crawl_order').unsigned().nullable();
 		});
 		return db;
 	}
@@ -42,15 +50,18 @@ describe('redirectTable', () => {
 		url: string,
 		options: { order?: number; redirectDestId?: number | null } = {},
 	) {
-		const [id] = await db('pages').insert({
-			url,
-			scraped: 1,
-			isTarget: 1,
-			isExternal: 0,
-			order: options.order ?? null,
-			redirectDestId: options.redirectDestId ?? null,
-		});
-		return id;
+		const [urlRef] = await db('url_refs').insert({ url }).returning('id');
+		const [row] = await db('content_items')
+			.insert({
+				url_id: urlRef.id,
+				scraped: 1,
+				is_target: 1,
+				is_external: 0,
+				crawl_order: options.order ?? null,
+				redirect_dest_id: options.redirectDestId ?? null,
+			})
+			.returning('id');
+		return row.id;
 	}
 
 	it('includes non-redirected pages when includeNull is true', async () => {

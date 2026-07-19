@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type createAxePlugin from './axe-plugin.js';
+
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 const axeRunMock = vi.fn();
 const axeConfigureMock = vi.fn();
@@ -10,13 +12,16 @@ vi.mock('axe-core', () => ({
 	},
 }));
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-let pluginFactory: typeof import('./axe-plugin.js').default;
+let pluginFactory: typeof createAxePlugin;
+const pluginModulePromise = import('./axe-plugin.js');
 
-beforeEach(async () => {
+beforeAll(async () => {
+	const pluginModule = await pluginModulePromise;
+	pluginFactory = pluginModule.default;
+}, 30_000);
+
+beforeEach(() => {
 	vi.clearAllMocks();
-	const mod = await import('./axe-plugin.js');
-	pluginFactory = mod.default;
 });
 
 describe('analyze-axe plugin', () => {

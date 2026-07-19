@@ -29,7 +29,7 @@ describe('getResourceReferrers', () => {
 		await archive.setConfig({
 			baseUrl: 'https://example.com',
 			name: 'test',
-			version: '0.10.0',
+			version: '0.13.0',
 			recursive: true,
 			interval: 0,
 			image: true,
@@ -148,20 +148,54 @@ describe('getResourceReferrers', () => {
 	});
 
 	it('リソースを参照しているページを返す', async () => {
-		const result = await getResourceReferrers(archive, 'https://example.com/style.css');
+		const result = await getResourceReferrers(archive, {
+			resourceUrl: 'https://example.com/style.css',
+		});
 		expect(result).not.toBeNull();
 		expect(result!.resourceUrl).toBe('https://example.com/style.css');
 		expect(result!.pageUrls).toHaveLength(2);
 		expect(result!.total).toBe(2);
 		expect(result!.pageUrls).toContain('https://example.com');
 		expect(result!.pageUrls).toContain('https://example.com/about');
+		expect(result!.nextCursor).toBeNull();
 	});
 
 	it('存在しないリソースは null を返す', async () => {
-		const result = await getResourceReferrers(
-			archive,
-			'https://example.com/nonexistent.css',
-		);
+		const result = await getResourceReferrers(archive, {
+			resourceUrl: 'https://example.com/nonexistent.css',
+		});
 		expect(result).toBeNull();
+	});
+
+	it('limit を超えるページ数を bound し、nextCursor で続きを返す', async () => {
+		const first = await getResourceReferrers(archive, {
+			resourceUrl: 'https://example.com/style.css',
+			limit: 1,
+		});
+		expect(first!.pageUrls).toHaveLength(1);
+		expect(first!.total).toBe(2);
+		expect(first!.nextCursor).not.toBeNull();
+
+		const second = await getResourceReferrers(archive, {
+			resourceUrl: 'https://example.com/style.css',
+			limit: 1,
+			cursor: first!.nextCursor!,
+		});
+		expect(second!.pageUrls).toHaveLength(1);
+		expect(second!.total).toBe(2);
+		expect(second!.nextCursor).toBeNull();
+
+		// The two windows cover both referrers with no overlap or gap.
+		expect(new Set([...first!.pageUrls, ...second!.pageUrls])).toEqual(
+			new Set(['https://example.com', 'https://example.com/about']),
+		);
+	});
+
+	it('不正な cursor は先頭からの読み取りにフォールバックする', async () => {
+		const result = await getResourceReferrers(archive, {
+			resourceUrl: 'https://example.com/style.css',
+			cursor: 'not-a-number',
+		});
+		expect(result!.pageUrls).toHaveLength(2);
 	});
 });

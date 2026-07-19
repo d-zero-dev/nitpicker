@@ -16,13 +16,21 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * @param accessor - The archive accessor to query.
  * @param url - The page URL.
  * @returns Per-entry overview, or `[]` when the page has no JSON-LD.
+ * @example
+ * const entries = await getPageJsonLdOverview(accessor, 'https://example.com/');
+ * const totalBytes = entries.reduce((sum, e) => sum + e.rawByteSize, 0);
+ * // Decide whether getPageJsonLd(accessor, url, false) fits the budget.
  */
 export async function getPageJsonLdOverview(
 	accessor: ArchiveAccessor,
 	url: string,
 ): Promise<PageJsonLdOverviewEntry[]> {
 	const knex = accessor.getKnex();
-	const [page] = await knex('pages').select('id').where('url', url).limit(1);
+	const [page] = await knex('content_items as ci')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.select('ci.id as id')
+		.where('ur.url', url)
+		.limit(1);
 	if (!page) return [];
 	const rows = (await knex('page_jsonld')
 		.select('kind', 'type', knex.raw('length(raw) AS rawByteSize'), 'parseError')

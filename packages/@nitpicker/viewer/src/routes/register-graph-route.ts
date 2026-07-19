@@ -1,6 +1,8 @@
 import type { ArchiveContext } from '../types.js';
 import type { Hono } from 'hono';
 
+import { getLinkGraphFastPath } from '@nitpicker/query';
+
 import { getCachedLinkGraph } from '../graph-cache.js';
 import { toNumber } from '../query-params/to-number.js';
 
@@ -39,6 +41,11 @@ export function registerGraphRoute(app: Hono, context: ArchiveContext): void {
 		const raw = toNumber(c.req.query('limit'));
 		const limit =
 			raw === undefined ? DEFAULT_GRAPH_NODE_LIMIT : raw === 0 ? undefined : raw;
-		return c.json(await getCachedLinkGraph(context, limit));
+		const accessor = context.manager.get(context.archiveId);
+		return c.json(
+			context.mode === 'stub'
+				? await getCachedLinkGraph(context, limit)
+				: await getLinkGraphFastPath(accessor, { limit }),
+		);
 	});
 }

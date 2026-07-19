@@ -33,6 +33,15 @@ import { untar } from './filesystem/untar.js';
  * Use the static factory methods ({@link Archive.create}, {@link Archive.open},
  * {@link Archive.resume}, {@link Archive.connect}) to obtain instances.
  * The constructor is private.
+ * @example
+ * const archive = await Archive.create({ filePath: '/path/to/site.nitpicker' });
+ * try {
+ *   await archive.setConfig(config);
+ *   const pageId = await archive.setPage(pageData);
+ * } finally {
+ *   // Writes the `.nitpicker` tar (if absent), removes tmpDir, releases the lock.
+ *   await archive.close();
+ * }
  */
 export default class Archive extends ArchiveAccessor {
 	/**
@@ -204,11 +213,10 @@ export default class Archive extends ArchiveAccessor {
 	/**
 	 * Pre-insert inventory non-HTML URLs as `source='inventory-seed'`
 	 * placeholders in the `resources` table — the non-HTML counterpart of
-	 * {@link Archive.insertInventorySeeds}. Replaces the previous per-URL
-	 * `setResources` loop in `CrawlerOrchestrator.inventory` so the
-	 * ingestion phase commits all non-HTML rows in one chunked round-trip
-	 * per 500 (a 50k-URL inventory list dropped from minutes-inside-`.bak`
-	 * to seconds).
+	 * {@link Archive.insertInventorySeeds}. Rows are committed in chunked
+	 * bulk inserts (500 per round-trip) rather than per-URL awaits — a
+	 * per-URL loop would keep a 50k-URL inventory list inside the `.bak`
+	 * window for minutes instead of seconds.
 	 *
 	 * Thin facade over {@link Database.insertInventoryResources}.
 	 * `ExURL.href` is the storage key for `resources.url` (matches what
@@ -231,7 +239,7 @@ export default class Archive extends ArchiveAccessor {
 	 * Ctrl+C-tolerance rationale and the `getCrawlingState` interaction.
 	 *
 	 * `ExURL` inputs are normalised to `withoutHashAndAuth` here so the storage
-	 * key matches what `#getIdByUrl` writes for crawled rows, keeping the
+	 * key matches what `resolveContentItemId` writes for crawled rows, keeping the
 	 * crawled-wins downgrade and the existing-URL filter (`getExistingPageUrls`)
 	 * lookups consistent.
 	 * @param urls - HTML seed URLs to pre-insert. No-op when empty.
@@ -259,7 +267,6 @@ export default class Archive extends ArchiveAccessor {
 	async listDnsBurnedHostCandidates(): Promise<string[]> {
 		return this.#db.listDnsBurnedHostCandidates();
 	}
-
 	/**
 	 * Appends one row to the `inventory_runs` audit log.
 	 *
@@ -274,7 +281,6 @@ export default class Archive extends ArchiveAccessor {
 		dbLog('Record inventory run: %s', meta.list_label ?? meta.ran_at);
 		return await this.#db.recordInventoryRun(meta);
 	}
-
 	/**
 	 * Releases the SQLite handle and the advisory lock **without** writing
 	 * the archive or removing `tmpDir`.
@@ -292,6 +298,26 @@ export default class Archive extends ArchiveAccessor {
 		}
 		this.#closeOnce = this.#runReleaseHandle();
 		return this.#closeOnce;
+	}
+	/**
+	 * Replaces the archive's analysis violations with a fresh SQL-backed set.
+	 *
+	 * Thin facade over {@link Database.replaceAnalysisViolations}; kept on
+	 * `Archive` so the analyze pipeline can persist violations without
+	 * reaching into the low-level database class directly.
+	 * @param violations - Flat analyze violations.
+	 */
+	async replaceAnalysisViolations(
+		violations: readonly {
+			validator: string;
+			severity: string;
+			rule: string;
+			code?: string | null;
+			message: string;
+			url: string;
+		}[],
+	): Promise<void> {
+		await this.#db.replaceAnalysisViolations(violations);
 	}
 
 	/**
@@ -482,25 +508,49 @@ export default class Archive extends ArchiveAccessor {
 	/** The prefix used for temporary working directories during archive operations. */
 	static TMP_DIR_PREFIX = '._nitpicker-';
 	/**
-	 * Opens a read-only connection to an existing archive's database.
+	 * Opens a connection to an existing archive's database, defaulting to
+	 * read-only.
 	 *
-	 * Returns an {@link ArchiveAccessor} that provides query methods
-	 * without the ability to modify or write the archive. The DB is opened
-	 * in **read-only mode**: no schema migrations run, and the connection
+	 * Returns an {@link ArchiveAccessor} that provides query methods. In the
+	 * default read-only mode, no schema migrations run and the connection
 	 * refuses to resurrect a missing parent directory or db file (so a
 	 * TOCTOU window between source classification and this call cannot
-	 * silently produce an empty phantom tmpDir).
+	 * silently produce an empty phantom tmpDir); the returned accessor is
+	 * also marked read-only so consumer-facing helpers (e.g.
+	 * {@link ArchiveAccessor.getHtmlOfPage}) avoid any filesystem mutation
+	 * on the user's tmpDir.
 	 *
-	 * The returned accessor is also marked read-only so consumer-facing
-	 * helpers (e.g. {@link ArchiveAccessor.getHtmlOfPage}) avoid any
-	 * filesystem mutation on the user's tmpDir.
+	 * `options.readOnly: false` is a narrow escape hatch for opening a
+	 * second, writable connection to a `tmpDir` that {@link Archive.openCached}
+	 * already extracted (and migrated) into an OS-temp cache directory —
+	 * never the caller's live/interrupted crawl tmpDir, which must stay
+	 * read-only. A read-only open (`Archive.openCached`/`ArchiveManager.open`)
+	 * must never take this path itself — blocking or writing during what
+	 * must be a read-only open is forbidden (issue #177). This escape
+	 * hatch has no current production caller; any future
+	 * one is responsible for its own cross-process coordination (see
+	 * `acquireArchiveLock`) — this method does not acquire any lock itself.
 	 * @param tmpDir - The path to the temporary directory containing the database.
 	 * @param namespace - An optional namespace for scoping data access within the archive.
+	 * @param options - Connection options.
+	 * @param options.readOnly - Defaults to `true`. Pass `false` to obtain a
+	 *   writable accessor against an already-extracted cache directory.
 	 * @returns An ArchiveAccessor instance for querying the archive data.
+	 * @example
+	 * // Default (read-only) — safe for stub mode and cache reads:
+	 * const accessor = await Archive.connect(tmpDir);
+	 * @example
+	 * // Writable escape hatch — only against a tar-cache extraction:
+	 * const writable = await Archive.connect(cacheDir, null, { readOnly: false });
 	 */
-	static async connect(tmpDir: string, namespace: string | null = null) {
-		const db = await Archive.#connectDB(tmpDir, { readOnly: true });
-		const archive = new ArchiveAccessor(tmpDir, db, namespace, { readOnly: true });
+	static async connect(
+		tmpDir: string,
+		namespace: string | null = null,
+		options: { readOnly?: boolean } = {},
+	) {
+		const readOnly = options.readOnly ?? true;
+		const db = await Archive.#connectDB(tmpDir, { readOnly });
+		const archive = new ArchiveAccessor(tmpDir, db, namespace, { readOnly });
 		return archive;
 	}
 	/**

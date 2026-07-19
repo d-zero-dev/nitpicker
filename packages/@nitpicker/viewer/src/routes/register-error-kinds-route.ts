@@ -2,21 +2,27 @@ import type { ArchiveContext } from '../types.js';
 import type { ErrorKind } from '@nitpicker/query';
 import type { Hono } from 'hono';
 
-import { getErrorKinds } from '@nitpicker/query';
-
+import { getCachedErrorKinds } from '../error-kinds-cache.js';
 import { toNumber } from '../query-params/to-number.js';
 
 /**
  * Registers `GET /api/error-kinds` — crawl failures classified by cause
  * (DNS, connection, TLS, timeout, protocol, …), one row per host×kind pair
- * with sample URLs. See {@link getErrorKinds} for how the cause is derived.
+ * with sample URLs.
+ *
+ * The viewer caches the expensive (options-independent) classify-and-
+ * aggregate pass per `archiveId` and applies `host`/`kind`/`sortBy`/
+ * `sortOrder`/`limit`/`offset` on top of that cached snapshot, so second and
+ * later hits (with any combination of query params) return from in-process
+ * memory without re-entering SQLite. See {@link getCachedErrorKinds} for the
+ * archive-vs-stub mode semantics and `getErrorKindsFastPath` for how the
+ * cause is derived.
  * @param app - The Hono application.
  * @param context - The opened archive context.
  */
 export function registerErrorKindsRoute(app: Hono, context: ArchiveContext): void {
 	app.get('/api/error-kinds', async (c) => {
-		const accessor = context.manager.get(context.archiveId);
-		const result = await getErrorKinds(accessor, {
+		const result = await getCachedErrorKinds(context, {
 			host: c.req.query('host'),
 			kind: c.req.query('kind') as ErrorKind | undefined,
 			sortBy: c.req.query('sortBy') as 'host' | 'kind' | 'count' | undefined,

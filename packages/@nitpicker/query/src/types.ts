@@ -14,6 +14,7 @@ export type ArchiveMode = 'archive' | 'stub';
 // packages for the same enums. crawler needs ErrorKind for its DNS-burned
 // host cache and cannot depend on query.
 export type { PageSource, ErrorKind } from '@nitpicker/crawler';
+import type { FindMismatchesOptions } from './find-mismatches.js';
 import type { ErrorKind, PageSource } from '@nitpicker/crawler';
 
 /**
@@ -186,8 +187,12 @@ export interface GetIsolatedClusterOptions {
  * with zero referrers.
  */
 export interface UnusedResourceEntry {
-	/** Resource URL. */
-	url: string;
+	/**
+	 * Resource URL, or `null` when the resource's identity is a large
+	 * `data:` URI routed to `blob_refs` instead of `url_refs` (mirrors
+	 * `image_items`' src/blob convention).
+	 */
+	url: string | null;
 	/** HTTP status of the resource, or `null` if not yet known. */
 	status: number | null;
 	/** Content-Type header value, or `null` if unknown. */
@@ -218,6 +223,73 @@ export interface ListUnusedResourcesOptions {
 	limit?: number;
 	/** Rows to skip from the start. Defaults to 0. */
 	offset?: number;
+}
+
+/**
+ * Paginated result wrapper for {@link import('./list-unused-resources.js').listUnusedResources}.
+ */
+export interface PaginatedUnusedResourceList {
+	/** Unused-resource entries. */
+	items: UnusedResourceEntry[];
+	/** Total matching unused resources. */
+	total: number;
+}
+
+/**
+ * Filter and pagination options for {@link import('./list-viewer-unused-resources.js').listViewerUnusedResources}
+ * — the `viewer_resources` read-model-backed counterpart of
+ * {@link ListUnusedResourcesOptions}.
+ *
+ * Deliberately narrower than {@link ListUnusedResourcesOptions}: `urlPattern`
+ * (LIKE-based) and `contentType` (raw MIME prefix, not the classified
+ * `content_category` the read model stores) are excluded — callers that need
+ * those fall back to `listUnusedResources` instead.
+ */
+export interface ListViewerUnusedResourcesOptions {
+	/** Filter by exact HTTP status code. */
+	status?: number;
+	/** Filter by provenance — see {@link PageSource}. */
+	source?: PageSource;
+	/** Field to sort results by. Defaults to `'url'`. */
+	sortBy?: 'url' | 'status' | 'source';
+	/** Sort direction. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedUnusedResourceList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result wrapper for {@link import('./list-viewer-unused-resources.js').listViewerUnusedResources}
+ * — {@link PaginatedUnusedResourceList} plus keyset cursors for
+ * virtual-scroll continuation.
+ */
+export interface CursorPaginatedUnusedResourceList extends PaginatedUnusedResourceList {
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
 }
 
 /**
@@ -682,6 +754,83 @@ export interface PageListFacets {
 }
 
 /**
+ * Filter and pagination options for {@link listViewerPages} — the
+ * `viewer_pages` read-model-backed counterpart of {@link ListPagesOptions}.
+ *
+ * Deliberately narrower than {@link ListPagesOptions}: `urlPattern` /
+ * `directory` (LIKE-based) are excluded — a LIKE predicate can't seek an
+ * index, so it cannot be part of the fast path's 100ms contract. Callers
+ * that need those fall back to `listPages` instead. `source` is new (not on
+ * {@link ListPagesOptions}, which has no equivalent contract to preserve).
+ */
+export interface ListViewerPagesOptions {
+	/** Filter by external (true) or internal (false) pages. */
+	isExternal?: boolean;
+	/**
+	 * Restrict results to a single {@link ContentTypeCategory}. Omit to keep
+	 * the default (`'html'` + `'unknown'` — the pre-classified equivalent of
+	 * `listPages`'s HTML-or-null base restriction).
+	 */
+	contentTypeCategory?: ContentTypeCategory;
+	/** Filter by exact HTTP status code. */
+	status?: number;
+	/** Filter by minimum HTTP status code (inclusive). */
+	statusMin?: number;
+	/** Filter by maximum HTTP status code (inclusive). */
+	statusMax?: number;
+	/** Filter to pages missing title metadata. */
+	missingTitle?: boolean;
+	/** Filter to pages missing description metadata. */
+	missingDescription?: boolean;
+	/** Filter to pages with noindex set. */
+	noindex?: boolean;
+	/** Filter by provenance — see {@link PageSource}. */
+	source?: import('@nitpicker/crawler').PageSource;
+	/** Field to sort results by. Defaults to `'url'`. */
+	sortBy?: 'url' | 'status' | 'title';
+	/** Sort direction. Defaults to `'asc'`. */
+	sortOrder?: 'asc' | 'desc';
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedPageList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward — used by "scroll up" / "previous page"). Ignored
+	 * when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`. `offset = 0` (or omitted, with no `cursor`) is the fast
+	 * "initial query" path; `offset > 0` runs a direct `OFFSET` read against
+	 * the narrow `viewer_pages` index rather than the wide `pages` table.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result wrapper for {@link listViewerPages} — {@link PaginatedPageList}
+ * plus keyset cursors for virtual-scroll continuation.
+ */
+export interface CursorPaginatedPageList extends PaginatedPageList {
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the previous page in the current sort order, or
+	 * `null` when this is already the first page.
+	 */
+	prevCursor: string | null;
+}
+
+/**
  * Detailed information about a single page.
  *
  * Includes the full flat meta column set, the `metaExtras` JSON catch-all,
@@ -995,9 +1144,9 @@ export interface InboundLink {
 /**
  * Filter options for listing links.
  *
- * `'orphaned'` was removed: its semantics collapsed into
- * {@link import('./list-isolated-pages.js').listIsolatedPages} (singleton inventory-* pages) and the new
- * {@link import('./list-isolated-clusters.js').listIsolatedClusters} (cluster-shaped orphans). The remaining
+ * There is no `'orphaned'` type: orphan detection lives in
+ * {@link import('./list-isolated-pages.js').listIsolatedPages} (singleton inventory-* pages) and
+ * {@link import('./list-isolated-clusters.js').listIsolatedClusters} (cluster-shaped orphans). The
  * `'broken'` / `'external'` types report links where the anchor's resolved
  * final destination matches the criterion — redirect-source rows are
  * walked through `pages.redirectDestId` to the canonical destination before
@@ -1050,6 +1199,63 @@ export interface LinkAnalysisResult {
 	items: LinkEntry[];
 	/** Total count of matching links. */
 	total: number;
+}
+
+/**
+ * Filter/sort/pagination options for {@link listViewerBrokenLinks} — the
+ * `viewer_anchor_facts` read-model fast path for broken-link listing.
+ *
+ * `urlPattern` and `includeRedirectSources` are deliberately absent:
+ * `urlPattern` matches source OR destination across two columns
+ * (`ListLinksOptions`'s semantics), which no single index on
+ * `viewer_anchor_facts` can satisfy, so callers with a `urlPattern` set
+ * must use `listLinks` instead (see `register-links-route.ts`).
+ * `includeRedirectSources` has no equivalent here: `viewer_anchor_facts`
+ * only ever stores the canonical (redirect-resolved) destination.
+ */
+export interface ListViewerBrokenLinksOptions {
+	/** Filter by destination HTTP status. Broken links are always `404`, so this is effectively a no-op unless set to a non-`404` value (which then matches nothing). */
+	status?: number;
+	/** Field to sort results by. Defaults to `'sourceUrl'`. */
+	sortBy?: 'sourceUrl' | 'destUrl' | 'status';
+	/** Sort direction. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedLinkList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result wrapper for {@link listViewerBrokenLinks} —
+ * {@link LinkAnalysisResult} plus keyset cursors for virtual-scroll
+ * continuation.
+ */
+export interface CursorPaginatedLinkList extends LinkAnalysisResult {
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the previous page in the current sort order, or
+	 * `null` when this is already the first page.
+	 */
+	prevCursor: string | null;
 }
 
 /**
@@ -1149,8 +1355,12 @@ export interface ListResourcesOptions {
  * A resource entry with metadata.
  */
 export interface ResourceEntry {
-	/** The resource URL. */
-	url: string;
+	/**
+	 * The resource URL, or `null` when the resource's identity is a large
+	 * `data:` URI routed to `blob_refs` instead of `url_refs` (mirrors
+	 * `image_items`' src/blob convention).
+	 */
+	url: string | null;
 	/** HTTP status code. */
 	status: number | null;
 	/** HTTP status text. */
@@ -1184,12 +1394,115 @@ export interface PaginatedResourceList {
 }
 
 /**
+ * Filter and pagination options for {@link import('./list-viewer-resources.js').listViewerResources}
+ * — the `viewer_resources` read-model-backed counterpart of
+ * {@link ListResourcesOptions}.
+ *
+ * Deliberately narrower than {@link ListResourcesOptions}: `urlPattern`
+ * (LIKE-based) and `contentType` (raw MIME prefix, not the classified
+ * `content_category` the read model stores) are excluded, and `sortBy` is
+ * restricted to the two columns the read model indexes — callers that need
+ * anything else fall back to `listResources` instead.
+ */
+export interface ListViewerResourcesOptions {
+	/** Filter by external (true) or internal (false) resources. */
+	isExternal?: boolean;
+	/** Filter by exact HTTP status code. */
+	status?: number;
+	/** Field to sort results by. Defaults to `'url'`. */
+	sortBy?: 'url' | 'status';
+	/** Sort direction. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedResourceList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result wrapper for {@link import('./list-viewer-resources.js').listViewerResources}
+ * — {@link PaginatedResourceList} plus keyset cursors for virtual-scroll
+ * continuation.
+ */
+export interface CursorPaginatedResourceList extends PaginatedResourceList {
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
+}
+
+/**
+ * Options for {@link import('./get-resource-referrers.js').getResourceReferrers}.
+ */
+export interface GetResourceReferrersOptions {
+	/** The exact URL of the resource to look up. */
+	resourceUrl: string;
+	/** Maximum number of referencing pages to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque cursor from a previous result's `nextCursor`. Forward-only
+	 * (there is no `prevCursor`): the referrer detail list has no "jump to
+	 * page N" or "scroll up" requirement, unlike the MPA-paginated list
+	 * views.
+	 */
+	cursor?: string;
+}
+
+/**
+ * Result of {@link import('./get-resource-referrers.js').getResourceReferrers} —
+ * a bounded, cursor-paginated window of pages referencing a resource.
+ */
+export interface ResourceReferrerResult {
+	/** The resource URL. */
+	resourceUrl: string;
+	/** The page URLs referencing this resource in this window, bounded to at most `limit`. */
+	pageUrls: string[];
+	/**
+	 * Total number of referencing pages — a `COUNT(*)` scoped to this
+	 * resource's `resourceId` (index-covered, always cheap regardless of
+	 * archive size), independent of `pageUrls`' window length.
+	 */
+	total: number;
+	/** Opaque cursor to fetch the next window, or `null` when this is the last one. */
+	nextCursor: string | null;
+}
+
+/**
  * Filter options for listing images.
  */
 export interface ListImagesOptions {
-	/** Filter to images missing alt attribute. */
+	/**
+	 * Tri-state filter on alt-text presence: `true` restricts to images
+	 * missing alt text, `false` restricts to images that have it, `undefined`
+	 * applies no filter — matching `ListResourcesOptions.isExternal`'s
+	 * `!= null` convention rather than treating `false` as a no-op.
+	 */
 	missingAlt?: boolean;
-	/** Filter to images missing explicit width/height attributes. */
+	/**
+	 * Tri-state filter on explicit width/height presence — see
+	 * {@link ListImagesOptions.missingAlt} for the `true`/`false`/`undefined`
+	 * convention.
+	 */
 	missingDimensions?: boolean;
 	/** Filter to images with naturalWidth or naturalHeight exceeding this threshold. */
 	oversizedThreshold?: number;
@@ -1211,6 +1524,20 @@ export interface ListImagesOptions {
 	limit?: number;
 	/** Number of results to skip. */
 	offset?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedImageList}'s
+	 * `nextCursor`/`prevCursor`, forwarded to `getImagesFastPath`'s
+	 * `viewer_images` fast path when applicable. Mutually exclusive with
+	 * `offset` — when both are supplied, `cursor` wins. Ignored by the legacy
+	 * `listImages` path (offset-only). Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted or the legacy
+	 * path is used.
+	 */
+	direction?: 'next' | 'prev';
 }
 
 /**
@@ -1221,6 +1548,13 @@ export interface ImageEntry {
 	pageUrl: string;
 	/** The src attribute. */
 	src: string | null;
+	/**
+	 * The actual loaded source URL after `srcset`/`sizes`/`picture` resolution
+	 * — distinct from {@link src}, the author-written attribute. `null` when
+	 * the browser never resolved a current source (e.g. the image never
+	 * loaded).
+	 */
+	currentSrc: string | null;
 	/** The alt attribute. */
 	alt: string | null;
 	/** Rendered width. */
@@ -1247,6 +1581,64 @@ export interface PaginatedImageList {
 	offset: number;
 	/** Current limit. */
 	limit: number;
+}
+
+/**
+ * Filter and pagination options for {@link import('./list-viewer-images.js').listViewerImages}
+ * — the `viewer_images` read-model-backed counterpart of {@link ListImagesOptions}.
+ *
+ * Deliberately narrower than {@link ListImagesOptions}: `urlPattern` (LIKE-based
+ * against `images.src`, a large text column the read model never duplicates)
+ * is excluded, and `sortBy` drops `src`/`alt` for the same reason — callers
+ * that need either fall back to `listImages` instead.
+ */
+export interface ListViewerImagesOptions {
+	/** Filter to images missing alt attribute. */
+	missingAlt?: boolean;
+	/** Filter to images missing explicit width/height attributes. */
+	missingDimensions?: boolean;
+	/** Filter to images with naturalWidth or naturalHeight exceeding this threshold. */
+	oversizedThreshold?: number;
+	/** Field to sort results by. Defaults to `'pageUrl'`. */
+	sortBy?: 'pageUrl' | 'width' | 'height' | 'naturalWidth' | 'naturalHeight' | 'isLazy';
+	/** Sort direction. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedImageList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result wrapper for {@link import('./list-viewer-images.js').listViewerImages}
+ * — {@link PaginatedImageList} plus keyset cursors for virtual-scroll
+ * continuation.
+ */
+export interface CursorPaginatedImageList extends PaginatedImageList {
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
 }
 
 /**
@@ -1300,6 +1692,275 @@ export interface MismatchEntry {
 }
 
 /**
+ * One duplicate-metadata group from `viewer_duplicate_groups`, with an
+ * inline page-URL sample from `viewer_duplicate_group_pages` — the
+ * `viewer_duplicate_groups`/`viewer_duplicate_group_pages` read-model
+ * counterpart of {@link DuplicateEntry} (issue #115). Unlike `DuplicateEntry`
+ * (whose `urls` is always the group's COMPLETE member list, capped only by
+ * `findDuplicates`'s overall group `limit`), `pages` here is always a
+ * bounded head sample — full pagination through every member page goes
+ * through `/api/duplicates/:groupId/pages` instead of growing this array.
+ */
+export interface ViewerDuplicateGroupEntry {
+	/**
+	 * Sequential id assigned by `computeDuplicateGroupRows` at read-model
+	 * build time — see `viewer_duplicate_groups.group_id`'s table docs for
+	 * why this is a JS-assigned surrogate rather than a derived value.
+	 */
+	groupId: number;
+	/** The field that is duplicated. */
+	field: 'title' | 'description';
+	/** The duplicated value shared by every member page. */
+	value: string;
+	/**
+	 * Total number of pages sharing this value — may exceed `pages.length`
+	 * when the group has more members than `pagesLimit` requested.
+	 */
+	count: number;
+	/**
+	 * First `pagesLimit` member URLs, in `viewer_duplicate_group_pages`
+	 * order. Fetch the remaining member URLs via
+	 * `listViewerDuplicateGroupPages`/`/api/duplicates/:groupId/pages` when
+	 * `count > pages.length`.
+	 */
+	pages: string[];
+}
+
+/**
+ * Filter and pagination options for `listViewerDuplicateGroups` — the
+ * `viewer_duplicate_groups`/`viewer_duplicate_group_pages` read-model
+ * counterpart of `findDuplicates`.
+ */
+export interface ListViewerDuplicateGroupsOptions {
+	/** Which metadata field's duplicate groups to list. Required — `viewer_duplicate_groups` rows for both fields are interleaved by `group_id`, not separable without a filter. */
+	field: 'title' | 'description';
+	/**
+	 * Inline URL sample size per group, read from
+	 * `viewer_duplicate_group_pages`. Defaults to 20.
+	 */
+	pagesLimit?: number;
+	/** Maximum number of groups to return. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous
+	 * {@link CursorPaginatedDuplicateGroupList}'s `nextCursor`/`prevCursor`.
+	 * Mutually exclusive with `offset` — when both are supplied, `cursor`
+	 * wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result for `listViewerDuplicateGroups` — `viewer_duplicate_groups`
+ * ordered by `count_desc_key` (most-duplicated group first), plus keyset
+ * cursors for virtual-scroll continuation.
+ */
+export interface CursorPaginatedDuplicateGroupList {
+	/** Duplicate-group entries. */
+	items: ViewerDuplicateGroupEntry[];
+	/** Total matching groups (for the requested `field`). */
+	total: number;
+	/** Current limit. */
+	limit: number;
+	/** Current offset. */
+	offset: number;
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
+}
+
+/**
+ * Options for `listViewerDuplicateGroupPages` — pages through one group's
+ * COMPLETE member-page list from `viewer_duplicate_group_pages`, the
+ * endpoint `ViewerDuplicateGroupEntry.pages`'s inline sample defers to once
+ * `count > pages.length`.
+ */
+export interface ListViewerDuplicateGroupPagesOptions {
+	/** The `viewer_duplicate_groups.group_id` whose member pages to list. */
+	groupId: number;
+	/** Maximum number of member-page URLs to return. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous
+	 * {@link CursorPaginatedDuplicateGroupPageList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when
+	 * both are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result for `listViewerDuplicateGroupPages` — member-page URLs
+ * from one `viewer_duplicate_groups` row's `viewer_duplicate_group_pages`,
+ * ordered by `url_sort_key`, plus keyset cursors for virtual-scroll
+ * continuation.
+ */
+export interface CursorPaginatedDuplicateGroupPageList {
+	/** Member-page URLs, `url_sort_key` order. */
+	items: string[];
+	/** Total member pages in this group. */
+	total: number;
+	/** Current limit. */
+	limit: number;
+	/** Current offset. */
+	offset: number;
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
+}
+
+/**
+ * Filter and pagination options for `listViewerMismatches` — the
+ * `viewer_mismatches` read-model counterpart of
+ * {@link FindMismatchesOptions}. Omits `sortBy`: `viewer_mismatches` only
+ * indexes `(type, url_sort_key, mismatch_id)` (see `vm_type_url`'s docs), so
+ * a request for `sortBy: 'actual' | 'expected'` is expected to fall back to
+ * the legacy `findMismatches` path before reaching this function — mirroring
+ * `ListViewerHeaderChecksOptions`'s own narrower `sortBy` surface relative to
+ * `CheckHeadersOptions`.
+ */
+export interface ListViewerMismatchesOptions {
+	/** Which mismatch comparison to list. */
+	type: 'canonical' | 'og:title' | 'og:description';
+	/** Sort direction on `url_sort_key`. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results to return. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedMismatchList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result for `listViewerMismatches` — `viewer_mismatches` rows for
+ * one `type`, ordered by `url_sort_key`, plus keyset cursors for
+ * virtual-scroll continuation.
+ */
+export interface CursorPaginatedMismatchList {
+	/** Mismatch entries. */
+	items: MismatchEntry[];
+	/** Total matching rows (for the requested `type`). */
+	total: number;
+	/** Current limit. */
+	limit: number;
+	/** Current offset. */
+	offset: number;
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
+}
+
+/**
+ * `FindMismatchesOptions` (from `find-mismatches.ts`) plus fast-path cursor
+ * fields — the full surface `getMismatchesFastPath` accepts, mirroring
+ * `CheckHeadersOptions`'s own cursor/direction additions over its legacy
+ * base shape.
+ */
+export interface FindMismatchesFastPathOptions extends FindMismatchesOptions {
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedMismatchList}'s
+	 * `nextCursor`/`prevCursor`, forwarded to `getMismatchesFastPath`'s
+	 * `viewer_mismatches` fast path when applicable. Mutually exclusive with
+	 * `offset` — when both are supplied, `cursor` wins. Ignored by the legacy
+	 * `findMismatches` path (offset-only). Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted or the legacy
+	 * path is used.
+	 */
+	direction?: 'next' | 'prev';
+}
+
+/**
+ * Options for `getDuplicatesFastPath` — a fast-path-only surface with no
+ * direct `FindMismatchesFastPathOptions`-style legacy counterpart:
+ * `findDuplicates` takes `field`/`limit` as positional arguments, not an
+ * options object, so this shape is defined fresh here rather than extended
+ * from an existing legacy options type.
+ */
+export interface GetDuplicatesFastPathOptions {
+	/**
+	 * Which metadata field's duplicate groups to list. Defaults to `'title'`
+	 * — the same default `findDuplicates` itself uses.
+	 */
+	field?: 'title' | 'description';
+	/** Maximum number of duplicate groups to return. */
+	limit?: number;
+	/** Inline URL sample size per group. Defaults to 20. */
+	pagesLimit?: number;
+	/**
+	 * Opaque keyset cursor from a previous
+	 * {@link CursorPaginatedDuplicateGroupList}'s `nextCursor`/`prevCursor`.
+	 * Ignored by the legacy `findDuplicates` path (it has no cursor to offer).
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted or the legacy
+	 * path is used.
+	 */
+	direction?: 'next' | 'prev';
+	/** Row offset for page-number jumps. Ignored by the legacy path. */
+	offset?: number;
+}
+
+/**
  * Presence flags for the four security-related HTTP response headers tracked
  * by {@link import('./check-headers.js').checkHeaders} / `listPages`, computed in SQL via
  * `headerPresenceExpression`.
@@ -1343,6 +2004,108 @@ export interface PaginatedHeaderCheckList {
 	offset: number;
 	/** Current limit. */
 	limit: number;
+}
+
+/** The four {@link HeaderPresence} keys, as a type — see `HEADER_PRESENCE_KEYS` for the runtime array. */
+export type HeaderPresenceKey = keyof HeaderPresence;
+
+/**
+ * Filter and pagination options for {@link import('./check-headers.js').checkHeaders}.
+ */
+export interface CheckHeadersOptions {
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/** Number of results to skip. Defaults to 0. */
+	offset?: number;
+	/** Filter to pages missing at least one tracked security header. */
+	missingOnly?: boolean;
+	/** Filter by Content-Security-Policy header presence. */
+	hasCSP?: boolean;
+	/** Filter by X-Frame-Options header presence. */
+	hasXFrameOptions?: boolean;
+	/** Filter by X-Content-Type-Options header presence. */
+	hasXContentTypeOptions?: boolean;
+	/** Filter by Strict-Transport-Security header presence. */
+	hasHSTS?: boolean;
+	/** Field to sort results by. Defaults to `'url'`. */
+	sortBy?: 'url' | HeaderPresenceKey;
+	/** Sort direction. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedHeaderCheckList}'s
+	 * `nextCursor`/`prevCursor`, forwarded to `getHeaderChecksFastPath`'s
+	 * `viewer_header_checks` fast path when applicable. Mutually exclusive
+	 * with `offset` — when both are supplied, `cursor` wins. Ignored by the
+	 * legacy `checkHeaders` path (offset-only). Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted or the legacy
+	 * path is used.
+	 */
+	direction?: 'next' | 'prev';
+}
+
+/**
+ * Filter and pagination options for
+ * {@link import('./list-viewer-header-checks.js').listViewerHeaderChecks} —
+ * the `viewer_header_checks` read-model counterpart of
+ * {@link CheckHeadersOptions}. Omits `sortBy` values other than `'url'`
+ * (the only order `viewer_header_checks` indexes — see
+ * `getHeaderChecksSortSpec`); a request for any other `sortBy` is expected
+ * to fall back to the legacy path before reaching this function.
+ */
+export interface ListViewerHeaderChecksOptions {
+	/** Filter to pages missing at least one tracked security header. */
+	missingOnly?: boolean;
+	/** Filter by Content-Security-Policy header presence. */
+	hasCSP?: boolean;
+	/** Filter by X-Frame-Options header presence. */
+	hasXFrameOptions?: boolean;
+	/** Filter by X-Content-Type-Options header presence. */
+	hasXContentTypeOptions?: boolean;
+	/** Filter by Strict-Transport-Security header presence. */
+	hasHSTS?: boolean;
+	/** Sort direction on `url`. Defaults to `'asc'`. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link CursorPaginatedHeaderCheckList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * Paginated result wrapper for
+ * {@link import('./list-viewer-header-checks.js').listViewerHeaderChecks} —
+ * {@link PaginatedHeaderCheckList} plus keyset cursors for virtual-scroll
+ * continuation.
+ */
+export interface CursorPaginatedHeaderCheckList extends PaginatedHeaderCheckList {
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
 }
 
 /**
@@ -1470,6 +2233,131 @@ export interface ErrorKindsResult {
 	total: number;
 	/** Archive-wide totals, unaffected by `host`/`kind` filters. */
 	facets: ErrorKindFacets;
+}
+
+/**
+ * Progress snapshot reported while {@link buildViewerReadModel} populates
+ * `viewer_pages`. Issued after each insert chunk completes, so callers can
+ * render a percentage or row count for archives large enough (issue #112:
+ * 400k pages take minutes) that a build must not look hung.
+ */
+export interface ViewerReadModelBuildProgress {
+	/** Rows inserted into `viewer_pages` so far, including this chunk. */
+	insertedRows: number;
+	/** Total rows that will be inserted, known upfront (single-pass build). */
+	totalRows: number;
+}
+
+/**
+ * Options for {@link buildViewerReadModel} and {@link ensureViewerReadModel}.
+ */
+export interface BuildViewerReadModelOptions {
+	/**
+	 * Called after each `viewer_pages` insert chunk completes. Omit to build
+	 * silently (the default for callers that don't need progress, e.g. tests).
+	 * @param progress - The current insert progress.
+	 */
+	onProgress?: (progress: ViewerReadModelBuildProgress) => void;
+}
+
+/**
+ * One flat node in a directory tree, as returned by {@link getDirectoryTree}
+ * and {@link listDirectoryChildren}. `parentNodeId` is the only structural
+ * link — callers reconstruct the nested UI tree client-side from this flat
+ * list, since neither endpoint recurses server-side.
+ */
+export interface DirectoryTreeNode {
+	/** This node's unique id — stable across `getDirectoryTree`/`listDirectoryChildren` calls. */
+	nodeId: number;
+	/** The parent directory's `nodeId`, or `null` for a host's root node. */
+	parentNodeId: number | null;
+	/** This node's own path segment (e.g. `"2024"` for `/blog/2024/`), or `''` for a host's root node. */
+	name: string;
+	/** This node's full path from the root (e.g. `/blog/2024/`, or `/` for a root node). */
+	path: string;
+	/** This node's depth — a host's root node is `0`, incrementing by 1 per path segment. */
+	depth: number;
+	/** Count of immediate child directory nodes (not pages) under this node. */
+	directChildDirCount: number;
+	/** Count of pages attached directly to this node. */
+	directPageCount: number;
+	/**
+	 * `directChildDirCount + directPageCount`. The two addends are
+	 * precomputed at read-model build time; the sum itself is a trivial O(1)
+	 * SQL addition over those two already-fetched columns at query time —
+	 * never a `COUNT`/`GROUP BY` scan over `viewer_directory_nodes` or
+	 * `viewer_directory_pages`.
+	 */
+	childCount: number;
+	/** Total pages in this node's entire subtree, including its own `directPageCount`. */
+	descendantPageCount: number;
+	/** Subset of `descendantPageCount` that is internal (in-scope). */
+	internalDescendantPageCount: number;
+	/** Subset of `descendantPageCount` that is external (out-of-scope). */
+	externalDescendantPageCount: number;
+	/**
+	 * `true` iff `directChildDirCount > 0` — whether this node has child
+	 * directories to expand via `listDirectoryChildren`/
+	 * `/api/directory-tree/children`. Deliberately excludes `directPageCount`
+	 * — direct pages surface via the separate `/api/directory-tree/pages`
+	 * panel, not as additional expandable tree rows.
+	 */
+	hasChildren: boolean;
+}
+
+/** One host's worth of initial (depth ≤ 3) directory-tree nodes — see {@link getDirectoryTree}. */
+export interface DirectoryTreeRoot {
+	/** The host (hostname:port) this tree belongs to. */
+	rootKey: string;
+	/** This root's flat, depth ≤ 3 node list, ordered by path. */
+	nodes: DirectoryTreeNode[];
+}
+
+/** Options for {@link listDirectoryChildren}. */
+export interface ListDirectoryChildrenOptions {
+	/** The parent node whose direct child directories to list. */
+	nodeId: number;
+	/** Defensive cap on returned rows. Defaults to 1000 — not a pagination contract, a directory realistically never has more child directories than this. */
+	limit?: number;
+}
+
+/** One directory-tree page-list entry, joined against `viewer_pages` for display — see {@link listDirectoryPages}. */
+export interface DirectoryPageListItem {
+	/** The page's id. */
+	pageId: number;
+	/** The page's absolute URL. */
+	url: string;
+	/** The page's `<title>` text, or `null` when absent. */
+	title: string | null;
+	/** HTTP status code, or `null` for not-yet-classified/errored rows. */
+	status: number | null;
+	/** The page's {@link ContentTypeCategory}. */
+	contentCategory: string;
+}
+
+/** Options for {@link listDirectoryPages}. */
+export interface ListDirectoryPagesOptions {
+	/** The directory node whose direct pages to list (never its descendants). */
+	nodeId: number;
+	/**
+	 * Opaque cursor from a previous {@link CursorPaginatedDirectoryPageList}'s
+	 * `nextCursor`. Omit for the first page.
+	 */
+	cursor?: string;
+	/** Maximum number of results to return. Defaults to 100. */
+	limit?: number;
+}
+
+/**
+ * Cursor-paginated result of {@link listDirectoryPages}. Forward-only (no
+ * `prevCursor`) — unlike {@link CursorPaginatedPageList}, this endpoint has
+ * no virtual-scroll-upward requirement to support.
+ */
+export interface CursorPaginatedDirectoryPageList {
+	/** The page-list items for this page. */
+	items: DirectoryPageListItem[];
+	/** Opaque cursor to fetch the next page, or `null` when this is the last page. */
+	nextCursor: string | null;
 }
 
 /**

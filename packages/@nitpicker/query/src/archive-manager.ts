@@ -138,6 +138,12 @@ export interface ArchiveManagerOptions {
  * crawler on a stub) flow through the {@link ArchiveManagerOptions.onWarn}
  * sink. Use this to suppress or redirect them when stdio is reserved for
  * structured framing (the MCP server).
+ * @example
+ * const manager = new ArchiveManager();
+ * const { archiveId, accessor, mode } = await manager.open('./site.nitpicker');
+ * const config = await accessor.getConfig();
+ * // ... run query functions against `accessor` ...
+ * await manager.close(archiveId); // or manager.closeAll()
  */
 export class ArchiveManager {
 	/** Map of archive IDs to the resolved canonical path they reference. */
@@ -435,6 +441,14 @@ export class ArchiveManager {
 			// (unchanged) archive skips the untar. OS-level temp cleanup
 			// reclaims stale entries — we do not own eviction here.
 			const accessor = await Archive.openCached(realPath);
+			// A read-only open never builds or writes anything — an on-open
+			// opportunistic read-model build would mutate an archive the
+			// viewer must treat as read-only (issue #177). Archives with a
+			// missing or stale read model simply stay on the legacy query
+			// path — `isViewerReadModelCurrent` is checked independently by
+			// each endpoint's fast-path dispatcher, not here. The only build
+			// paths are the crawl-completion hook and the explicit
+			// `nitpicker viewer-build` command.
 			return {
 				accessor,
 				close: () => accessor.close(),

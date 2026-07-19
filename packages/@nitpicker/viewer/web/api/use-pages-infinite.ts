@@ -1,16 +1,20 @@
 import type { InfiniteQueryOptions } from './infinite-query-options.js';
 import type { PagesFilter } from '../types.js';
-import type { PaginatedPageList } from '@nitpicker/query';
+import type { CursorPaginatedPageList } from '@nitpicker/query';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
 
 import { apiGet } from './api-client.js';
-import { getNextOffset } from './get-next-offset.js';
 import { PAGE_SIZE } from './page-size.js';
 
 /**
  * Infinite-scrolling page list. Fetches `PAGE_SIZE` rows per request and
- * advances the offset until all matching rows (`total`) are loaded.
+ * advances via the server-issued `nextCursor` (keyset pagination) rather
+ * than a growing `offset` — `/api/pages` serves this from the `viewer_pages`
+ * read model when available, falling back to the legacy offset-only path
+ * (whose `nextCursor` is a plain offset-as-string, per
+ * `buildLegacyPagesCursors`) otherwise — this hook never needs to know
+ * which backend served a given page.
  * @param filter - The active filter/sort state (forms part of the query key).
  * @param options - Optional flags (`enabled`).
  * @returns The TanStack infinite-query result.
@@ -18,15 +22,14 @@ import { PAGE_SIZE } from './page-size.js';
 export function usePagesInfinite(filter: PagesFilter, options?: InfiniteQueryOptions) {
 	return useInfiniteQuery({
 		queryKey: ['pages', filter],
-		initialPageParam: 0,
+		initialPageParam: null as string | null,
 		queryFn: ({ pageParam }) =>
-			apiGet<PaginatedPageList>('/api/pages', {
+			apiGet<CursorPaginatedPageList>('/api/pages', {
 				...filter,
 				limit: PAGE_SIZE,
-				offset: pageParam,
+				cursor: pageParam ?? undefined,
 			}),
-		getNextPageParam: (lastPage, _allPages, lastPageParam) =>
-			getNextOffset(lastPage, lastPageParam),
+		getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
 		enabled: options?.enabled ?? true,
 	});
 }
