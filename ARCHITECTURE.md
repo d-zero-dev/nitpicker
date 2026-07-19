@@ -157,7 +157,7 @@
 3. 読み取り経路: `db-ops/pages/read/build-page-query.ts` + `reconstruct-page-rows.ts`（flat 形状の再構築）と `db-ops/_shared/load-response-headers-by-set-ids.ts` / `decode-json-ref.ts`（ヘッダ / json_refs の復元 primitive、query パッケージも共用）
 4. `crawler/src/archive/meta/assert-compatible-version.ts`（互換ガード）と `meta/derive-flat-from-meta.ts`（Meta 展開列）
 5. 読み取り影響: `query/src/`（`get-summary.ts` / `list-pages.ts` / `content-type-rules.ts`）
-6. 既存アーカイブ適用スクリプト: リポジトリルート `scripts/`（`migrate-to-0.13.mjs` は legacy テーブルからの populate → adjunct FK retarget（`retarget-legacy-fk-tables.ts`）→ legacy drop（`drop-legacy-tables.ts`）→ `foreign_key_check`（`verify-migration/check-foreign-key-integrity.ts`）の一括実行。schema catch-up 用の `migrate-ref-tables.ts` / `migrate-entity-tables.ts` はこのスクリプト専用で、archive open 時には走らない。テスト用の pre-0.13 fixture は `scripts/generate-pre-0.13-fixture.mjs`（`archive/test-utils/setup-legacy-fk-db.ts` 経由）が単一の生成元）
+6. 既存アーカイブ適用スクリプト: リポジトリルート `scripts/`（`migrate-to-0.13.mjs` は legacy テーブルからの populate → adjunct FK retarget（`retarget-legacy-fk-tables.ts`）→ legacy drop（`drop-legacy-tables.ts`）→ `foreign_key_check`（`verify-migration/check-foreign-key-integrity.ts`）の一括実行。SIGKILL 耐性あり — work dir を決定的パスで管理し、途中終了しても次回実行で完了済みフェーズをスキップして再開する（詳細はスクリプト冒頭の RESUMING AFTER A KILL 節）。schema catch-up 用の `migrate-ref-tables.ts` / `migrate-entity-tables.ts` はこのスクリプト専用で、archive open 時には走らない。テスト用の pre-0.13 fixture は `scripts/generate-pre-0.13-fixture.mjs`（`archive/test-utils/setup-legacy-fk-db.ts` 経由）が単一の生成元）
 
 ### Content-Type カテゴリ追加（3 箇所は CI が強制・2 箇所は手動）
 

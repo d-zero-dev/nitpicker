@@ -24,6 +24,8 @@
 		// Filesystems / OS storage primitives (tar cache documentation)
 		"APFS",
 		"tmpfs",
+		"statfs",
+		"bavail",
 
 		// English compounds used in technical commentary
 		"unsuffixed",
