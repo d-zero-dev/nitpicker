@@ -41,7 +41,7 @@
 		"@tanstack/react-virtual": "3.14.6",
 		"graphology": "0.26.0",
 		"graphology-layout-forceatlas2": "0.10.1",
-		"hono": "4.12.29",
+		"hono": "4.12.30",
 		"react": "19.2.7",
 		"react-dom": "19.2.7",
 		"react-router": "8.2.0",
