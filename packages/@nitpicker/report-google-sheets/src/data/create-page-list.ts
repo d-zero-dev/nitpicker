@@ -126,6 +126,19 @@ export const createPageList: CreateSheet = (reports) => {
 				'og:article:published_time',
 				'jsonld_count',
 				'tags_providers',
+				'main_content_selector',
+				'main_content_word_count',
+				'main_content_body_word_count',
+				'main_content_heading_count',
+				'main_content_image_count',
+				'main_content_table_count',
+				'main_content_button_count',
+				'main_content_iframe_count',
+				'main_content_video_count',
+				'main_content_audio_count',
+				'main_content_canvas_count',
+				'scroll_height_desktop',
+				'scroll_height_mobile',
 			];
 
 			for (const report of reports) {
@@ -322,6 +335,23 @@ export const createPageList: CreateSheet = (reports) => {
 				// for native Google Sheets list rendering.
 				createCellData({ value: page.jsonldCount }, defaultCellFormat),
 				createCellData({ value: page.tagsProvidersCsv }, defaultCellFormat),
+				// beholder MainContentsData / ScrollHeightData denormalised
+				// aggregates. `null` (page never fully rendered) or `0` (rendered,
+				// no main region / no elements of that kind found) render as
+				// blank / 0 respectively — no special-casing needed here.
+				createCellData({ value: page.mainContentSelector }, defaultCellFormat),
+				createCellData({ value: page.mainContentWordCount }, defaultCellFormat),
+				createCellData({ value: page.mainContentBodyWordCount }, defaultCellFormat),
+				createCellData({ value: page.mainContentHeadingCount }, defaultCellFormat),
+				createCellData({ value: page.mainContentImageCount }, defaultCellFormat),
+				createCellData({ value: page.mainContentTableCount }, defaultCellFormat),
+				createCellData({ value: page.mainContentButtonCount }, defaultCellFormat),
+				createCellData({ value: page.mainContentIframeCount }, defaultCellFormat),
+				createCellData({ value: page.mainContentVideoCount }, defaultCellFormat),
+				createCellData({ value: page.mainContentAudioCount }, defaultCellFormat),
+				createCellData({ value: page.mainContentCanvasCount }, defaultCellFormat),
+				createCellData({ value: page.scrollHeightDesktop }, defaultCellFormat),
+				createCellData({ value: page.scrollHeightMobile }, defaultCellFormat),
 			];
 
 			for (const report of reportPageData) {
