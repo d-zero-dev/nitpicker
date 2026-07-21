@@ -282,7 +282,9 @@ export default definePlugin((options: Options) => {
 						rule: r.ruleId,
 						code: '-',
 						message: `${r.message}`,
-						url: `${report.url} (${r.line}:${r.column})`,
+						url: report.url,
+						line: r.line,
+						col: r.column,
 					};
 				});
 			});
