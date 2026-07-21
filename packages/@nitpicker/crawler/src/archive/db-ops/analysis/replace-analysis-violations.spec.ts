@@ -116,6 +116,97 @@ describe('replaceAnalysisViolations', () => {
 		).rejects.toThrow(/could not resolve 1 page URL/);
 	});
 
+	it('persists explicit line/col fields as-is without touching the url', async () => {
+		await seedContentItem(db, 'https://example.com/');
+		await replaceAnalysisViolations(db, [
+			{
+				validator: 'markuplint',
+				severity: 'error',
+				rule: 'required-attr',
+				message: 'Missing alt attribute',
+				url: 'https://example.com/',
+				line: 5,
+				col: 10,
+			},
+		]);
+		const rows = await db('analysis_violations').select('*');
+		expect(rows).toMatchObject([
+			{ page_url_sort_key: 'https://example.com/', line: 5, col: 10 },
+		]);
+	});
+
+	it('repairs a legacy corrupted url by splitting off the trailing (line:col)', async () => {
+		await seedContentItem(db, 'https://example.com/');
+		await replaceAnalysisViolations(db, [
+			{
+				validator: 'markuplint',
+				severity: 'error',
+				rule: 'required-attr',
+				message: 'Missing alt attribute',
+				url: 'https://example.com/ (5:10)',
+			},
+		]);
+		const rows = await db('analysis_violations').select('*');
+		expect(rows).toMatchObject([
+			{ page_url_sort_key: 'https://example.com/', line: 5, col: 10 },
+		]);
+	});
+
+	it('leaves violations without line/col or a corrupted-url suffix untouched (e.g. axe)', async () => {
+		await seedContentItem(db, 'https://example.com/');
+		await replaceAnalysisViolations(db, [
+			{
+				validator: 'axe',
+				severity: 'error',
+				rule: 'label',
+				message: 'Missing label',
+				url: 'https://example.com/',
+			},
+		]);
+		const rows = await db('analysis_violations').select('*');
+		expect(rows).toMatchObject([
+			{ page_url_sort_key: 'https://example.com/', line: null, col: null },
+		]);
+	});
+
+	it('self-heals an existing analysis_violations table that predates the line/col columns', async () => {
+		// Simulate an already-0.13 archive whose analysis_violations table was
+		// provisioned before issue #225 added line/col.
+		await db.raw('DROP TABLE analysis_violations');
+		await db.raw(`
+			CREATE TABLE analysis_violations (
+				id integer primary key,
+				page_id integer not null references content_items(id),
+				validator text not null,
+				severity text not null,
+				rule text not null,
+				message_text_id integer not null references analysis_text_refs(id),
+				code_text_id integer references analysis_text_refs(id),
+				page_url_sort_key text not null,
+				message_sort_key text not null,
+				code_sort_key text not null
+			)
+		`);
+		await seedContentItem(db, 'https://example.com/');
+
+		await replaceAnalysisViolations(db, [
+			{
+				validator: 'markuplint',
+				severity: 'error',
+				rule: 'required-attr',
+				message: 'Missing alt attribute',
+				url: 'https://example.com/ (5:10)',
+			},
+		]);
+
+		expect(await db.schema.hasColumn('analysis_violations', 'line')).toBe(true);
+		expect(await db.schema.hasColumn('analysis_violations', 'col')).toBe(true);
+		const rows = await db('analysis_violations').select('*');
+		expect(rows).toMatchObject([
+			{ page_url_sort_key: 'https://example.com/', line: 5, col: 10 },
+		]);
+	});
+
 	it('deduplicates message and code text through analysis_text_refs', async () => {
 		await seedContentItem(db, 'https://example.com/');
 		await seedContentItem(db, 'https://example.com/a');

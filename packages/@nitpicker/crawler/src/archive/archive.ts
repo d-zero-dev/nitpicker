@@ -315,6 +315,8 @@ export default class Archive extends ArchiveAccessor {
 			code?: string | null;
 			message: string;
 			url: string;
+			line?: number | null;
+			col?: number | null;
 		}[],
 	): Promise<void> {
 		await this.#db.replaceAnalysisViolations(violations);

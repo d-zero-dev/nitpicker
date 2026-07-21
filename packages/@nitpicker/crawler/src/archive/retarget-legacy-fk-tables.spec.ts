@@ -128,7 +128,7 @@ describe('retargetLegacyFkTables', () => {
 			{ pageId: 1, kind: 'json-ld', type: 'Article' },
 		]);
 		expect(await db('analysis_violations').select('*')).toMatchObject([
-			{ page_id: 1, validator: 'axe', rule: 'label' },
+			{ page_id: 1, validator: 'axe', rule: 'label', line: null, col: null },
 		]);
 		const htmlRefs = await db('page_html_ref').select('*');
 		expect(htmlRefs).toHaveLength(1);
@@ -171,6 +171,20 @@ describe('retargetLegacyFkTables', () => {
 				await retargetLegacyFkTables(trx);
 			}),
 		).rejects.toThrow(/FOREIGN KEY constraint failed/);
+	});
+
+	it('aborts when a staged table is missing a column outside the nullable-on-retarget allowlist', async () => {
+		// Unlike analysis_violations.line/col, this column loss is not on the
+		// allowlist — it must still fail loudly rather than silently null-fill.
+		await db.raw('ALTER TABLE page_errors DROP COLUMN "createdAt"');
+		await seedPageAndContentItem(db, 1, 'https://example.com/');
+		await db('page_errors').insert({ pageId: 1, phase: 'render', message: 'boom' });
+
+		await expect(
+			db.transaction(async (trx) => {
+				await retargetLegacyFkTables(trx);
+			}),
+		).rejects.toThrow(/no such column/);
 	});
 
 	it('produces the same index name set as a fresh archive', async () => {

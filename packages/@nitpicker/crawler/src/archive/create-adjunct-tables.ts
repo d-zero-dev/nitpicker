@@ -186,7 +186,9 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 				code_text_id integer references analysis_text_refs(id),
 				page_url_sort_key text not null,
 				message_sort_key text not null,
-				code_sort_key text not null
+				code_sort_key text not null,
+				line integer,
+				col integer
 			)
 		`);
 		await instance.raw(

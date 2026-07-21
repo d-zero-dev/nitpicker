@@ -19,6 +19,23 @@ const RETARGET_TABLES: readonly string[] = [
 ];
 
 /**
+ * Canonical columns that a staged (pre-migration) table may legitimately
+ * lack because {@link createAdjunctTables}'s DDL gained them after the
+ * table was first lazily provisioned on the input archive (`analysis_violations`
+ * predates its `line`/`col` columns — issue #225). Missing columns listed
+ * here are copied back as `NULL` instead of aborting the migration; this is
+ * safe only because the column did not exist when the staged data was
+ * written, so `NULL` is the only value it could ever have had. Any other
+ * canonical column absent from the staged table still aborts the copy (see
+ * {@link retargetLegacyFkTables} JSDoc) — that case must stay loud, since a
+ * genuine rename/drop cannot be told apart from benign schema growth by
+ * column existence alone.
+ */
+const NULLABLE_ON_RETARGET: Readonly<Record<string, readonly string[]>> = {
+	analysis_violations: ['line', 'col'],
+};
+
+/**
  * Rewrites the FK declarations of the adjunct tables from the legacy
  * `pages(id)` to `content_items(id)` by rebuilding each table. SQLite has
  * no `ALTER TABLE … DROP CONSTRAINT`, so the only way to change an FK
@@ -80,9 +97,21 @@ export async function retargetLegacyFkTables(trx: Knex): Promise<void> {
 		const columns: { name: string }[] = await trx
 			.select('name')
 			.from(trx.raw('pragma_table_info(?)', [table]));
-		const columnList = columns.map((column) => `"${column.name}"`).join(', ');
+		const stagedColumns: { name: string }[] = await trx
+			.select('name')
+			.from(trx.raw('pragma_table_info(?)', [`${table}__retarget`]));
+		const stagedColumnNames = new Set(stagedColumns.map((column) => column.name));
+		const nullableOnRetarget = NULLABLE_ON_RETARGET[table] ?? [];
+		const insertColumnList = columns.map((column) => `"${column.name}"`).join(', ');
+		const selectColumnList = columns
+			.map((column) =>
+				!stagedColumnNames.has(column.name) && nullableOnRetarget.includes(column.name)
+					? `NULL AS "${column.name}"`
+					: `"${column.name}"`,
+			)
+			.join(', ');
 		await trx.raw(
-			`INSERT INTO "${table}" (${columnList}) SELECT ${columnList} FROM "${table}__retarget"`,
+			`INSERT INTO "${table}" (${insertColumnList}) SELECT ${selectColumnList} FROM "${table}__retarget"`,
 		);
 		await trx.raw(`DROP TABLE "${table}__retarget"`);
 	}
