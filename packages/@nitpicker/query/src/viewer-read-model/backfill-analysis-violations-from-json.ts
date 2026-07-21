@@ -54,6 +54,8 @@ export async function backfillAnalysisViolationsFromJson(
 			code?: string | null;
 			message: string;
 			url: string;
+			line?: number | null;
+			col?: number | null;
 		}[],
 	);
 }
