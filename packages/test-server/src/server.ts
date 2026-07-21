@@ -9,6 +9,7 @@ import { excludeRoutes } from './routes/exclude.js';
 import { flakyRoutes } from './routes/flaky.js';
 import { inventoryRoutes } from './routes/inventory.js';
 import { jsRedirectRoutes } from './routes/js-redirect.js';
+import { mainContentRoutes } from './routes/main-content.js';
 import { metaRoutes } from './routes/meta.js';
 import { optionsRoutes } from './routes/options.js';
 import { paginationRoutes } from './routes/pagination.js';
@@ -41,6 +42,7 @@ export function createApp() {
 	flakyRoutes(app);
 	inventoryRoutes(app);
 	jsRedirectRoutes(app);
+	mainContentRoutes(app);
 	return app;
 }
 

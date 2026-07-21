@@ -42,10 +42,10 @@ describe('Analyze pipeline (crawl → write → analyze)', () => {
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
 
-		// 2) core 側で開き直して analyze を実行（軽量な main-contents のみ）
+		// 2) core 側で開き直して analyze を実行（軽量な search のみ）
 		const archive = await Archive.open({ filePath, cwd, openPluginData: true });
 		nitpicker = new Nitpicker(archive);
-		await nitpicker.analyze(['@nitpicker/analyze-main-contents']);
+		await nitpicker.analyze(['@nitpicker/analyze-search']);
 	}, 240_000);
 
 	afterAll(async () => {
