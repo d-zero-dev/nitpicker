@@ -612,6 +612,8 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			code?: string | null;
 			message: string;
 			url: string;
+			line?: number | null;
+			col?: number | null;
 		}[],
 	): Promise<void> {
 		return emitErrorAndRetry(

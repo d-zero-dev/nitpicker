@@ -17,6 +17,10 @@ export interface Violation {
 	message: string;
 	/** Page URL where the violation was detected. */
 	url: string;
+	/** 1-based line number where the violation occurred, when the validator reports one (e.g. markuplint, textlint). `undefined` for validators that report only an element/selector (e.g. axe). */
+	line?: number;
+	/** 1-based column number where the violation occurred, when the validator reports one (e.g. markuplint, textlint). `undefined` for validators that report only an element/selector (e.g. axe). */
+	col?: number;
 	/** Raw violation object from the underlying tool, preserved for debugging. */
 	_raw?: unknown;
 }

@@ -89,6 +89,12 @@ describe('createAdjunctTables', () => {
 		expect(await db.schema.hasColumn('page_tags', 'marker')).toBe(true);
 	});
 
+	it('gives analysis_violations nullable line/col columns on fresh creation', async () => {
+		await createAdjunctTables(db);
+		expect(await db.schema.hasColumn('analysis_violations', 'line')).toBe(true);
+		expect(await db.schema.hasColumn('analysis_violations', 'col')).toBe(true);
+	});
+
 	it('enforces the content_items FK on insert (PRAGMA foreign_keys = ON)', async () => {
 		await db.raw('PRAGMA foreign_keys = ON');
 		await createAdjunctTables(db);

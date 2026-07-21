@@ -71,7 +71,9 @@ export default definePlugin((options: Options) => {
 					rule: report.ruleId,
 					code: '',
 					message: report.message,
-					url: `${url.href} (${report.line}:${report.col})`,
+					url: url.href,
+					line: report.line,
+					col: report.col,
 				};
 			});
 			return {

@@ -116,7 +116,9 @@ describe('analyze-textlint plugin', () => {
 				rule: 'no-nfd',
 				code: '-',
 				message: 'Found NFD character',
-				url: 'https://example.com/page (3:10)',
+				url: 'https://example.com/page',
+				line: 3,
+				col: 10,
 			},
 		]);
 	});
