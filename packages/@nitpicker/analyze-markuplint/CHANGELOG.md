@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
+
+### Bug Fixes
+
+- **analyze-markuplint:** stop concatenating position onto violation url ([47d9d9c](https://github.com/d-zero-dev/nitpicker/commit/47d9d9c9b415c9b3618c724d46bc7fbc8a310dcb)), closes [#225](https://github.com/d-zero-dev/nitpicker/issues/225)
+
 # [0.12.0](https://github.com/d-zero-dev/nitpicker/compare/v0.11.0...v0.12.0) (2026-07-01)
 
 **Note:** Version bump only for package @nitpicker/analyze-markuplint

@@ -3,6 +3,81 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
+
+### Bug Fixes
+
+- chain populate-migration into crawler write path and reader spec ordering ([e9cc84e](https://github.com/d-zero-dev/nitpicker/commit/e9cc84e6054cb5596fc63db0a6ebb83af78eb95a)), closes [#196](https://github.com/d-zero-dev/nitpicker/issues/196)
+- **query,viewer:** restore header-presence data on the viewer_pages fast path ([e6b2617](https://github.com/d-zero-dev/nitpicker/commit/e6b2617bb91f4e186ed4c420bcfa9f33b4b97fe5))
+- **query:** accept line/col in the legacy violations backfill payload ([d4bb047](https://github.com/d-zero-dev/nitpicker/commit/d4bb047367678edaddc2e2b37c145426c82a33bc)), closes [#225](https://github.com/d-zero-dev/nitpicker/issues/225)
+- **query:** address phase 6-f code-review findings ([b888c05](https://github.com/d-zero-dev/nitpicker/commit/b888c051106a8550527e638b2a4288dda26fce9e))
+- **query:** avoid conflicting eslint/prettier hex-literal casing in a test ([9e06940](https://github.com/d-zero-dev/nitpicker/commit/9e069400f2433965715838b779b8ad8aec0e9db5))
+- **query:** bound memory and defer indexes in viewer read-model build ([37ddad5](https://github.com/d-zero-dev/nitpicker/commit/37ddad5bb8c523422b2afed8b58095b24e9122fe))
+- **query:** clamp violation pagination inputs ([bf965c6](https://github.com/d-zero-dev/nitpicker/commit/bf965c69078b365aeb139336145bb639b038e3e0))
+- **query:** consolidate error-kinds sortBy validation and tie-break ([acf5532](https://github.com/d-zero-dev/nitpicker/commit/acf5532176a909c023cfe35084c6f14c1a901f26))
+- **query:** propagate source column through viewer_graph_nodes fast path ([8def955](https://github.com/d-zero-dev/nitpicker/commit/8def95520f8df30adb5c5108b0a5302da7e49647))
+- **query:** remove on-open opportunistic viewer read model build ([61cca63](https://github.com/d-zero-dev/nitpicker/commit/61cca63899c3650001fb4f622702b4ca52c287c1)), closes [#112](https://github.com/d-zero-dev/nitpicker/issues/112)
+- **query:** reshape viewer*error_kind*\* read model to host×kind entries ([9c78662](https://github.com/d-zero-dev/nitpicker/commit/9c7866275772c76f6a341b238662a5b1fb5012a2)), closes [#106](https://github.com/d-zero-dev/nitpicker/issues/106)
+- **query:** resolve unreachable JSDoc {[@link](https://github.com/link)} references ([3ad6718](https://github.com/d-zero-dev/nitpicker/commit/3ad67185a2d69ecaae1ef7ef6a810a54c283d807))
+- **query:** restore \x1F URL_DELIMITER in find-duplicates and align reader specs with 0.13 API changes ([0108ef2](https://github.com/d-zero-dev/nitpicker/commit/0108ef2450cb038401547420fde1270b82016fd4))
+- **query:** surface blob-routed resources instead of dropping them ([2e00331](https://github.com/d-zero-dev/nitpicker/commit/2e00331633b4286068717184135d2e52d9a7d320))
+
+- feat(query)!: normalize error-kinds aggregation to host×kind rows ([f9bd2c6](https://github.com/d-zero-dev/nitpicker/commit/f9bd2c61e5740c2a517f664191a40d8c03dc1e3f))
+- feat(query)!: narrow broken links to 404, merge header checks into page lists ([bce3379](https://github.com/d-zero-dev/nitpicker/commit/bce3379eed866b121b786ff6c0801d4eb578c351))
+
+### Features
+
+- **query:** add directory tree read model and query functions ([ee0a385](https://github.com/d-zero-dev/nitpicker/commit/ee0a385191e048bd119ef64d61c5118f8d5ff185)), closes [#107](https://github.com/d-zero-dev/nitpicker/issues/107)
+- **query:** add listExternalLinks with destination dedup and referrer counts ([cf559a5](https://github.com/d-zero-dev/nitpicker/commit/cf559a58b00e3c3c770b4aef5df48aa3b4a58b55))
+- **query:** add status filters to list queries ([1c0d038](https://github.com/d-zero-dev/nitpicker/commit/1c0d038f027c220a0c8e2f760ee30d7952ec4c8e))
+- **query:** add viewer read model cache infrastructure ([a9cfd0d](https://github.com/d-zero-dev/nitpicker/commit/a9cfd0d8cede10dff6f89dffce0b2d7aba8f87ba)), closes [#112](https://github.com/d-zero-dev/nitpicker/issues/112) [#105](https://github.com/d-zero-dev/nitpicker/issues/105) [#108](https://github.com/d-zero-dev/nitpicker/issues/108)
+- **query:** add viewer_anchor_facts edge read model for broken links ([#114](https://github.com/d-zero-dev/nitpicker/issues/114)) ([e53175c](https://github.com/d-zero-dev/nitpicker/commit/e53175c69d6731a5cfa894b6e7d8f26624272d9b))
+- **query:** add viewer_duplicate_groups/mismatches read models (issue [#115](https://github.com/d-zero-dev/nitpicker/issues/115)) ([1866e03](https://github.com/d-zero-dev/nitpicker/commit/1866e03f78348829f57b2c9f353bae4253991afd)), closes [#119](https://github.com/d-zero-dev/nitpicker/issues/119)
+- **query:** add viewer*error_kind*\* read model for /api/error-kinds (issue [#118](https://github.com/d-zero-dev/nitpicker/issues/118)) ([9fd24d7](https://github.com/d-zero-dev/nitpicker/commit/9fd24d774c89ceca4e1150353f56a82cd249e778)), closes [#139](https://github.com/d-zero-dev/nitpicker/issues/139)
+- **query:** add viewer_external_links read model for fast external-link listing ([4dc5a4e](https://github.com/d-zero-dev/nitpicker/commit/4dc5a4e6b7858ea65ae3ead4c88066745670b6c7))
+- **query:** add viewer_header_checks read model for /api/headers fast path ([9582754](https://github.com/d-zero-dev/nitpicker/commit/9582754f57f3e0797d2613931f048d7b2efe8c35)), closes [#119](https://github.com/d-zero-dev/nitpicker/issues/119)
+- **query:** add viewer_images read model for /api/images fast path ([046a016](https://github.com/d-zero-dev/nitpicker/commit/046a01665f17e907f873c0aff3fb617b1ea887d3)), closes [epic-#103](https://github.com/epic-/issues/103) [#113](https://github.com/d-zero-dev/nitpicker/issues/113)
+- **query:** add viewer_pages cursor pagination read path ([d297ef5](https://github.com/d-zero-dev/nitpicker/commit/d297ef509a4ef32bae2599944648dd96ace14e24))
+- **query:** add viewer_summary read model for /api/summary (issue [#104](https://github.com/d-zero-dev/nitpicker/issues/104)) ([1ac6e22](https://github.com/d-zero-dev/nitpicker/commit/1ac6e2283577bfa67ea0365ac9ac229005ca1a22))
+- **query:** build viewer read model on crawl-completion hook and on-open ([66bad5a](https://github.com/d-zero-dev/nitpicker/commit/66bad5a5d4b9ab52e10f6df567cedbdb122544a7)), closes [#112](https://github.com/d-zero-dev/nitpicker/issues/112)
+- **query:** expose page source in link graph nodes ([aeeb90a](https://github.com/d-zero-dev/nitpicker/commit/aeeb90a902e254197f72c562bbbba6f4d04b588c))
+- **query:** persist natural URL sort rank in the viewer read model ([dd1f343](https://github.com/d-zero-dev/nitpicker/commit/dd1f343ec16a562307030dfef9656f3c6f781ca9))
+- **query:** precompute /api/pages facets and benchmark viewer_pages fast path ([a9c795c](https://github.com/d-zero-dev/nitpicker/commit/a9c795ca3ec7d17588a9d7fdee3abbcd514381e1)), closes [#148](https://github.com/d-zero-dev/nitpicker/issues/148) [#106](https://github.com/d-zero-dev/nitpicker/issues/106)
+- **query:** precompute /api/resources and /api/unused-resources via a viewer_resources read model ([b6b6662](https://github.com/d-zero-dev/nitpicker/commit/b6b66620412e3f7f106b12b913c6a5de5c83b20d))
+- **query:** share viewer link urls through refs ([ff5abf5](https://github.com/d-zero-dev/nitpicker/commit/ff5abf5036d317c9f29eda29ed7b6377f0736942))
+- **query:** sort viewer URL ranks with an external merge sort ([703f250](https://github.com/d-zero-dev/nitpicker/commit/703f250b6f34043af851bbd7529d757c0daa83fa))
+- **query:** switch phase 6-f readers to new entity tables ([e5ff302](https://github.com/d-zero-dev/nitpicker/commit/e5ff30234cd52c7bc7c1aa80704f80b0144579f6))
+- **repo:** move analysis violations to sql ([3cec379](https://github.com/d-zero-dev/nitpicker/commit/3cec379d6d79696924a98960368ed30109b41fdb))
+- **repo:** precompute isolated and graph viewer reads ([577cce6](https://github.com/d-zero-dev/nitpicker/commit/577cce6d13c583a1b0224a3bb55b50bff722420b))
+- **viewer:** add spreadsheet table controls ([ba2ca5d](https://github.com/d-zero-dev/nitpicker/commit/ba2ca5d2b314fbba724ef044dc6bb7df64f9f4c3))
+
+### Performance Improvements
+
+- **query:** remove duplicate sortUrl call in buildUrlRanks ([a1a06b3](https://github.com/d-zero-dev/nitpicker/commit/a1a06b3a2bc50a90315ce10a4bf204f2b7b3db7b))
+
+### BREAKING CHANGES
+
+- ErrorKindsResult is now { items, total, facets }
+  instead of { total, channelSource, groups }. ErrorKindGroup and
+  ErrorKindHost are removed in favor of ErrorKindEntry and
+  ErrorKindFacets. Sample URLs are capped per host×kind pair (not per
+  kind) with an overflowedCount for anything beyond the cap. Adds
+  host/kind/sortBy/sortOrder/limit/offset filtering, validating sortBy
+  against a fixed set of fields so an out-of-range value falls back to
+  count-desc instead of crashing.
+- listLinks' broken judgment is now strictly canonical
+  status = 404 (previously >= 400 or no status), so 403/5xx/excluded
+  destinations no longer count as broken. listPageLinks and its
+  PageLinkEntry/ListPageLinksOptions/PaginatedPageLinkList types are removed
+  (no remaining consumer). listPages/listPagesByTag/listPagesByJsonLdType now
+  compute hasCSP/hasXFrameOptions/hasXContentTypeOptions/hasHSTS via SQL
+  instead of transferring the raw responseHeaders blob to JS. getPageDetail
+  gains isSkipped/skipReason so a URL's exclusion reason is still
+  discoverable now that listPageLinks is gone.
+
+New @nitpicker/query/header-presence subpath exports HEADER_PRESENCE_KEYS
+as the single source of truth for the tracked header set.
+
 # [0.12.0](https://github.com/d-zero-dev/nitpicker/compare/v0.11.0...v0.12.0) (2026-07-01)
 
 ### Bug Fixes

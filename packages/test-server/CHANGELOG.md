@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
+
+### Bug Fixes
+
+- **deps:** update dependency @hono/node-server to v2 ([c620ff6](https://github.com/d-zero-dev/nitpicker/commit/c620ff69b01058dc22e5c71b69b9598b38042ca3))
+- **deps:** update dependency @hono/node-server to v2.0.8 ([#188](https://github.com/d-zero-dev/nitpicker/issues/188)) ([12158ed](https://github.com/d-zero-dev/nitpicker/commit/12158ed4ead4da406405536bbe81b8e1beae3049))
+- **deps:** update dependency hono to v4.12.28 ([a251de2](https://github.com/d-zero-dev/nitpicker/commit/a251de25551f372aae6ae58d50ef4a3aa6a6191c))
+- **deps:** update dependency hono to v4.12.29 ([#219](https://github.com/d-zero-dev/nitpicker/issues/219)) ([b9244a6](https://github.com/d-zero-dev/nitpicker/commit/b9244a651e34d378e248c737c6f0e4602f9b66a4))
+- **deps:** update dependency hono to v4.12.30 ([3f74d63](https://github.com/d-zero-dev/nitpicker/commit/3f74d631b64d2ea9f59eae73cbe2c6fc73a37aaa))
+- **deps:** update dependency knex to v3.3.0 ([#160](https://github.com/d-zero-dev/nitpicker/issues/160)) ([959bf10](https://github.com/d-zero-dev/nitpicker/commit/959bf10129a3a7e72670b600779171567a464772))
+
 # [0.12.0](https://github.com/d-zero-dev/nitpicker/compare/v0.11.0...v0.12.0) (2026-07-01)
 
 ### Bug Fixes

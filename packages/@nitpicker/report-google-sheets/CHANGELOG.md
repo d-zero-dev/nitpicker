@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
+
+### Bug Fixes
+
+- **report-google-sheets:** convert inline import() type to top-level import type ([7f95838](https://github.com/d-zero-dev/nitpicker/commit/7f95838f7a7a437c9d3e38f23dd8cc9ef1f3fc72))
+- **report-google-sheets:** tolerate null resource URLs in the Resources sheet ([326d6bd](https://github.com/d-zero-dev/nitpicker/commit/326d6bdfab2387d062f9442e3a82e41e0f7047c8))
+
+### Features
+
+- **repo:** move analysis violations to sql ([3cec379](https://github.com/d-zero-dev/nitpicker/commit/3cec379d6d79696924a98960368ed30109b41fdb))
+
 # [0.12.0](https://github.com/d-zero-dev/nitpicker/compare/v0.11.0...v0.12.0) (2026-07-01)
 
 **Note:** Version bump only for package @nitpicker/report-google-sheets

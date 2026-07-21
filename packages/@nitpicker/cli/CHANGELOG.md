@@ -3,6 +3,25 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
+
+### Bug Fixes
+
+- **cli:** unconditionally rebuild the viewer read model on crawl completion ([55e8d0a](https://github.com/d-zero-dev/nitpicker/commit/55e8d0a14c1d9a194a9ec4d1ba39531bd1543041))
+- populate 0.13 tables at every crawl-end site (not just write()) ([8126bde](https://github.com/d-zero-dev/nitpicker/commit/8126bde81c76f023339ad03c7d02f988934fc6da))
+
+### Features
+
+- **cli:** add crawl-completion read model hook and viewer-build command ([4f43aa9](https://github.com/d-zero-dev/nitpicker/commit/4f43aa9da4f9f13857a09464c31e063e2b9466c4)), closes [#112](https://github.com/d-zero-dev/nitpicker/issues/112)
+- **cli:** dispatch query duplicates/mismatches through fast paths (issue [#115](https://github.com/d-zero-dev/nitpicker/issues/115)) ([448f98f](https://github.com/d-zero-dev/nitpicker/commit/448f98f6696377ddbf721f47bf312d3f57a006df))
+- **cli:** dispatch query error-kinds through getErrorKindsFastPath ([e01f711](https://github.com/d-zero-dev/nitpicker/commit/e01f7111d41570c5feb8766bfbcf4e02433cf96e))
+- **cli:** dispatch query headers through getHeaderChecksFastPath ([a0ec06d](https://github.com/d-zero-dev/nitpicker/commit/a0ec06d426a896fcf4318cbda1dba6dfa5072a67))
+- **cli:** dispatch query images through getImagesFastPath ([5604f7a](https://github.com/d-zero-dev/nitpicker/commit/5604f7ad9dfb619fdc6716c9641d4f469f8b991c))
+- **cli:** dispatch query summary through getSummaryFastPath ([18da45c](https://github.com/d-zero-dev/nitpicker/commit/18da45c674cfaae7b5e2411c765ac46067e544de))
+- **cli:** support limit/cursor for query resource-referrers ([545fb8b](https://github.com/d-zero-dev/nitpicker/commit/545fb8bb6643e732743b39e5db221c13943fecf4))
+- **repo:** move analysis violations to sql ([3cec379](https://github.com/d-zero-dev/nitpicker/commit/3cec379d6d79696924a98960368ed30109b41fdb))
+- **repo:** precompute isolated and graph viewer reads ([577cce6](https://github.com/d-zero-dev/nitpicker/commit/577cce6d13c583a1b0224a3bb55b50bff722420b))
+
 # [0.12.0](https://github.com/d-zero-dev/nitpicker/compare/v0.11.0...v0.12.0) (2026-07-01)
 
 ### Bug Fixes

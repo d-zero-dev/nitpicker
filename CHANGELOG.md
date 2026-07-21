@@ -3,6 +3,236 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
+
+### Bug Fixes
+
+- **analyze-markuplint:** stop concatenating position onto violation url ([47d9d9c](https://github.com/d-zero-dev/nitpicker/commit/47d9d9c9b415c9b3618c724d46bc7fbc8a310dcb)), closes [#225](https://github.com/d-zero-dev/nitpicker/issues/225)
+- **analyze-textlint:** stop concatenating position onto violation url ([b0e4e75](https://github.com/d-zero-dev/nitpicker/commit/b0e4e75fddadb5130edd365d72d9bee6db90027c)), closes [#225](https://github.com/d-zero-dev/nitpicker/issues/225)
+- chain populate-migration into crawler write path and reader spec ordering ([e9cc84e](https://github.com/d-zero-dev/nitpicker/commit/e9cc84e6054cb5596fc63db0a6ebb83af78eb95a)), closes [#196](https://github.com/d-zero-dev/nitpicker/issues/196)
+- **cli:** unconditionally rebuild the viewer read model on crawl completion ([55e8d0a](https://github.com/d-zero-dev/nitpicker/commit/55e8d0a14c1d9a194a9ec4d1ba39531bd1543041))
+- **crawler:** clear a page's resource_ref_edges on every re-scrape ([4c851b0](https://github.com/d-zero-dev/nitpicker/commit/4c851b0ed399859f7564f47e22b696543c888ecb))
+- **crawler:** drop hex literal letters from phase 6-b sources to satisfy CI lint ([5934a2e](https://github.com/d-zero-dev/nitpicker/commit/5934a2e9015c39e8ee46509a0dd3c4a0a63a35b4))
+- **crawler:** fix 3 real-data migration bugs and add resource blob routing ([eab6e6b](https://github.com/d-zero-dev/nitpicker/commit/eab6e6b40e012a28407fa580def527f31457a13d)), closes [#197](https://github.com/d-zero-dev/nitpicker/issues/197) [#116](https://github.com/d-zero-dev/nitpicker/issues/116)
+- **crawler:** fix review findings in the entity-table write/read paths ([c0591ae](https://github.com/d-zero-dev/nitpicker/commit/c0591ae19a97c34cfb37d0d7f9c1c7a28f3fe4c4))
+- **crawler:** heal previously-failed resources on a later successful fetch ([fb8531d](https://github.com/d-zero-dev/nitpicker/commit/fb8531d8eaf501ac570bd2a6eaba677254fd7f0f))
+- **crawler:** repair legacy corrupted violation urls and store line/col ([4c4e1c2](https://github.com/d-zero-dev/nitpicker/commit/4c4e1c24bee918873ee3275ad181653a9a3bdbd7)), closes [#225](https://github.com/d-zero-dev/nitpicker/issues/225)
+- **crawler:** resolve unreachable JSDoc {[@link](https://github.com/link)} references ([bc72ac5](https://github.com/d-zero-dev/nitpicker/commit/bc72ac5af0176dc18ccf11c455a23fa609eba493))
+- **crawler:** retarget remaining read paths and fix write-path regressions ([ae4ed38](https://github.com/d-zero-dev/nitpicker/commit/ae4ed38ffbb59d0134a5bf4b28fd4f8dc96c8b0f))
+- **crawler:** stabilise 0.13 populate against re-crawl, HTML BLOB deadlock, and migrator edge cases ([13f612e](https://github.com/d-zero-dev/nitpicker/commit/13f612e1af8348f92777db15f258c32f8d2f3cea))
+- **crawler:** stop assuming a contiguous id range in checkUrlRoundTrip ([6ee5e9f](https://github.com/d-zero-dev/nitpicker/commit/6ee5e9f9da036630f5ea7d4dc1342e9e9535b986))
+- **crawler:** tighten assert-phase6-populated types for CI build ([3a3c1f0](https://github.com/d-zero-dev/nitpicker/commit/3a3c1f0888f14e0b7225283ced8ccc57aab19163))
+- **deps:** update dependency @hono/node-server to v2 ([c620ff6](https://github.com/d-zero-dev/nitpicker/commit/c620ff69b01058dc22e5c71b69b9598b38042ca3))
+- **deps:** update dependency @hono/node-server to v2.0.8 ([#188](https://github.com/d-zero-dev/nitpicker/issues/188)) ([12158ed](https://github.com/d-zero-dev/nitpicker/commit/12158ed4ead4da406405536bbe81b8e1beae3049))
+- **deps:** update dependency @tanstack/react-query to v5.101.2 ([#170](https://github.com/d-zero-dev/nitpicker/issues/170)) ([d88c73d](https://github.com/d-zero-dev/nitpicker/commit/d88c73dc9edddc4d3b9d2b5b6d22a7ad8992541c))
+- **deps:** update dependency @tanstack/react-virtual to v3.14.4 ([6967bc7](https://github.com/d-zero-dev/nitpicker/commit/6967bc7d5a471687d071313d2599b9ad44d9d16d))
+- **deps:** update dependency @tanstack/react-virtual to v3.14.5 ([#180](https://github.com/d-zero-dev/nitpicker/issues/180)) ([3fb0993](https://github.com/d-zero-dev/nitpicker/commit/3fb0993042ea39adbaf378a714c1ba0ad47deba5))
+- **deps:** update dependency @tanstack/react-virtual to v3.14.6 ([#223](https://github.com/d-zero-dev/nitpicker/issues/223)) ([afdb582](https://github.com/d-zero-dev/nitpicker/commit/afdb58224ec91bde91ab682e14cddb36dc0a376b))
+- **deps:** update dependency fs-extra to v11.3.6 ([#134](https://github.com/d-zero-dev/nitpicker/issues/134)) ([f30d42e](https://github.com/d-zero-dev/nitpicker/commit/f30d42ef4242026a8b99e160cd90ac8d21cefc7b))
+- **deps:** update dependency hono to v4.12.28 ([a251de2](https://github.com/d-zero-dev/nitpicker/commit/a251de25551f372aae6ae58d50ef4a3aa6a6191c))
+- **deps:** update dependency hono to v4.12.29 ([#219](https://github.com/d-zero-dev/nitpicker/issues/219)) ([b9244a6](https://github.com/d-zero-dev/nitpicker/commit/b9244a651e34d378e248c737c6f0e4602f9b66a4))
+- **deps:** update dependency hono to v4.12.30 ([3f74d63](https://github.com/d-zero-dev/nitpicker/commit/3f74d631b64d2ea9f59eae73cbe2c6fc73a37aaa))
+- **deps:** update dependency knex to v3.3.0 ([#160](https://github.com/d-zero-dev/nitpicker/issues/160)) ([959bf10](https://github.com/d-zero-dev/nitpicker/commit/959bf10129a3a7e72670b600779171567a464772))
+- **deps:** update dependency react-router to v8.1.0 ([c39397a](https://github.com/d-zero-dev/nitpicker/commit/c39397a9b035547ba0e907cd9412f3715e19c6f5))
+- **deps:** update dependency react-router to v8.2.0 ([#213](https://github.com/d-zero-dev/nitpicker/issues/213)) ([9d2cb3e](https://github.com/d-zero-dev/nitpicker/commit/9d2cb3edd57b76f4abe0afe4bd77927258e00d66))
+- **deps:** update dependency tar to v7.5.17 ([#135](https://github.com/d-zero-dev/nitpicker/issues/135)) ([bf98d5c](https://github.com/d-zero-dev/nitpicker/commit/bf98d5cab1604ca9f2668472428d86aa02bac985))
+- **deps:** update dependency tar to v7.5.19 ([#171](https://github.com/d-zero-dev/nitpicker/issues/171)) ([7306b08](https://github.com/d-zero-dev/nitpicker/commit/7306b0804d96eb9c966ed3edec83650eea129941))
+- **deps:** update dependency tar to v7.5.20 ([852aa36](https://github.com/d-zero-dev/nitpicker/commit/852aa363219ca213a51716600fd77f71c15c5d3a))
+- populate 0.13 tables at every crawl-end site (not just write()) ([8126bde](https://github.com/d-zero-dev/nitpicker/commit/8126bde81c76f023339ad03c7d02f988934fc6da))
+- populate 0.13 tables at resume() crawl end ([87fbd42](https://github.com/d-zero-dev/nitpicker/commit/87fbd4265363ff5bdfe6d4ae7d927a7fdc5fbcd9))
+- **query,viewer:** restore header-presence data on the viewer_pages fast path ([e6b2617](https://github.com/d-zero-dev/nitpicker/commit/e6b2617bb91f4e186ed4c420bcfa9f33b4b97fe5))
+- **query:** accept line/col in the legacy violations backfill payload ([d4bb047](https://github.com/d-zero-dev/nitpicker/commit/d4bb047367678edaddc2e2b37c145426c82a33bc)), closes [#225](https://github.com/d-zero-dev/nitpicker/issues/225)
+- **query:** address phase 6-f code-review findings ([b888c05](https://github.com/d-zero-dev/nitpicker/commit/b888c051106a8550527e638b2a4288dda26fce9e))
+- **query:** avoid conflicting eslint/prettier hex-literal casing in a test ([9e06940](https://github.com/d-zero-dev/nitpicker/commit/9e069400f2433965715838b779b8ad8aec0e9db5))
+- **query:** bound memory and defer indexes in viewer read-model build ([37ddad5](https://github.com/d-zero-dev/nitpicker/commit/37ddad5bb8c523422b2afed8b58095b24e9122fe))
+- **query:** clamp violation pagination inputs ([bf965c6](https://github.com/d-zero-dev/nitpicker/commit/bf965c69078b365aeb139336145bb639b038e3e0))
+- **query:** consolidate error-kinds sortBy validation and tie-break ([acf5532](https://github.com/d-zero-dev/nitpicker/commit/acf5532176a909c023cfe35084c6f14c1a901f26))
+- **query:** propagate source column through viewer_graph_nodes fast path ([8def955](https://github.com/d-zero-dev/nitpicker/commit/8def95520f8df30adb5c5108b0a5302da7e49647))
+- **query:** remove on-open opportunistic viewer read model build ([61cca63](https://github.com/d-zero-dev/nitpicker/commit/61cca63899c3650001fb4f622702b4ca52c287c1)), closes [#112](https://github.com/d-zero-dev/nitpicker/issues/112)
+- **query:** reshape viewer*error_kind*\* read model to host×kind entries ([9c78662](https://github.com/d-zero-dev/nitpicker/commit/9c7866275772c76f6a341b238662a5b1fb5012a2)), closes [#106](https://github.com/d-zero-dev/nitpicker/issues/106)
+- **query:** resolve unreachable JSDoc {[@link](https://github.com/link)} references ([3ad6718](https://github.com/d-zero-dev/nitpicker/commit/3ad67185a2d69ecaae1ef7ef6a810a54c283d807))
+- **query:** restore \x1F URL_DELIMITER in find-duplicates and align reader specs with 0.13 API changes ([0108ef2](https://github.com/d-zero-dev/nitpicker/commit/0108ef2450cb038401547420fde1270b82016fd4))
+- **query:** surface blob-routed resources instead of dropping them ([2e00331](https://github.com/d-zero-dev/nitpicker/commit/2e00331633b4286068717184135d2e52d9a7d320))
+- **repo:** exclude build output from root tsconfig, fix stale docs ([a263a83](https://github.com/d-zero-dev/nitpicker/commit/a263a832b21264f10e3a79e9e2777b86fca1e95a))
+- **repo:** recycle jsdom worker threads to bound migrate-to-0.13 memory ([187660b](https://github.com/d-zero-dev/nitpicker/commit/187660bf9da4aabc3540dc687dba426fb668595a))
+- **report-google-sheets:** convert inline import() type to top-level import type ([7f95838](https://github.com/d-zero-dev/nitpicker/commit/7f95838f7a7a437c9d3e38f23dd8cc9ef1f3fc72))
+- **report-google-sheets:** tolerate null resource URLs in the Resources sheet ([326d6bd](https://github.com/d-zero-dev/nitpicker/commit/326d6bdfab2387d062f9442e3a82e41e0f7047c8))
+- **types:** add optional line/col to Violation ([e6bb583](https://github.com/d-zero-dev/nitpicker/commit/e6bb583332ed2cdf944744bd78c240eeeb2dbda3)), closes [#225](https://github.com/d-zero-dev/nitpicker/issues/225)
+- **viewer:** disambiguate shared filter-popover e2e test on /broken-links ([6252b76](https://github.com/d-zero-dev/nitpicker/commit/6252b7637ba75e58ff83aba14a32155f44cc0562))
+- **viewer:** honor default radio filter state ([207b0d9](https://github.com/d-zero-dev/nitpicker/commit/207b0d9f91a0599c025809e0d918e68d8df53218))
+- **viewer:** make error-kinds-cache options-aware for the host×kind reshape ([53818cc](https://github.com/d-zero-dev/nitpicker/commit/53818cc046c690ed227a14e001fb2c5e7457e6d3))
+- **viewer:** reproduce SQL host/kind tie-break in error-kinds-cache ([33072fa](https://github.com/d-zero-dev/nitpicker/commit/33072fab58662bce6bc53cf1f144229dbe0db940))
+- **viewer:** resolve remaining lint warnings ([39637ef](https://github.com/d-zero-dev/nitpicker/commit/39637ef3fd987a962cf2201b04887affec14f915))
+- **viewer:** update DuplicatesView for the /api/duplicates envelope response ([146678a](https://github.com/d-zero-dev/nitpicker/commit/146678a2ca2ac2e2486e7779a4b9e2646ede00e6))
+
+- feat(crawler)!: drop legacy write-model tables and unify adjunct FKs on content_items ([c801014](https://github.com/d-zero-dev/nitpicker/commit/c8010147afb42230a797eecbe9929285640e0129))
+- feat(query)!: normalize error-kinds aggregation to host×kind rows ([f9bd2c6](https://github.com/d-zero-dev/nitpicker/commit/f9bd2c61e5740c2a517f664191a40d8c03dc1e3f))
+- feat(viewer)!: fold Headers into Pages, split Links into Broken/External Links ([aae6125](https://github.com/d-zero-dev/nitpicker/commit/aae6125556fe1dc96d6260be852c2bf15a735ced))
+- feat(query)!: narrow broken links to 404, merge header checks into page lists ([bce3379](https://github.com/d-zero-dev/nitpicker/commit/bce3379eed866b121b786ff6c0801d4eb578c351))
+
+### Features
+
+- **cli:** add crawl-completion read model hook and viewer-build command ([4f43aa9](https://github.com/d-zero-dev/nitpicker/commit/4f43aa9da4f9f13857a09464c31e063e2b9466c4)), closes [#112](https://github.com/d-zero-dev/nitpicker/issues/112)
+- **cli:** dispatch query duplicates/mismatches through fast paths (issue [#115](https://github.com/d-zero-dev/nitpicker/issues/115)) ([448f98f](https://github.com/d-zero-dev/nitpicker/commit/448f98f6696377ddbf721f47bf312d3f57a006df))
+- **cli:** dispatch query error-kinds through getErrorKindsFastPath ([e01f711](https://github.com/d-zero-dev/nitpicker/commit/e01f7111d41570c5feb8766bfbcf4e02433cf96e))
+- **cli:** dispatch query headers through getHeaderChecksFastPath ([a0ec06d](https://github.com/d-zero-dev/nitpicker/commit/a0ec06d426a896fcf4318cbda1dba6dfa5072a67))
+- **cli:** dispatch query images through getImagesFastPath ([5604f7a](https://github.com/d-zero-dev/nitpicker/commit/5604f7ad9dfb619fdc6716c9641d4f469f8b991c))
+- **cli:** dispatch query summary through getSummaryFastPath ([18da45c](https://github.com/d-zero-dev/nitpicker/commit/18da45c674cfaae7b5e2411c765ac46067e544de))
+- **cli:** expose directory tree endpoints in the viewer ([cc630ae](https://github.com/d-zero-dev/nitpicker/commit/cc630aea8b0f21864c3d222898f118e240f42f01)), closes [#107](https://github.com/d-zero-dev/nitpicker/issues/107)
+- **cli:** link Connection Failures sample URLs to Page Detail ([340b3e0](https://github.com/d-zero-dev/nitpicker/commit/340b3e04808f23c4fe7de18cf12c59206cc11069))
+- **cli:** rebuild connection failures view as sortable host×kind table ([55fe53f](https://github.com/d-zero-dev/nitpicker/commit/55fe53f9c89c5b2b0c82b954bd99849ec6388f91))
+- **cli:** support limit/cursor for query resource-referrers ([545fb8b](https://github.com/d-zero-dev/nitpicker/commit/545fb8bb6643e732743b39e5db221c13943fecf4))
+- **crawler:** add phase 6-a ref and header staging tables ([f78a5ef](https://github.com/d-zero-dev/nitpicker/commit/f78a5ef9c130b780c3ebf95ee3b821e1fd8fc079)), closes [#190](https://github.com/d-zero-dev/nitpicker/issues/190) [#103](https://github.com/d-zero-dev/nitpicker/issues/103) [#191](https://github.com/d-zero-dev/nitpicker/issues/191) [#192](https://github.com/d-zero-dev/nitpicker/issues/192)
+- **crawler:** add phase 6-b ref-table population helpers ([1786bd4](https://github.com/d-zero-dev/nitpicker/commit/1786bd41a830369ffc7486d97b4e8595f6952cee)), closes [#191](https://github.com/d-zero-dev/nitpicker/issues/191) [#103](https://github.com/d-zero-dev/nitpicker/issues/103)
+- **crawler:** add phase 6-c entity and edge tables ([c762b08](https://github.com/d-zero-dev/nitpicker/commit/c762b08810e70a604e6cc3d4b13fa0ed118ff79e)), closes [#192](https://github.com/d-zero-dev/nitpicker/issues/192) [#103](https://github.com/d-zero-dev/nitpicker/issues/103) [#193](https://github.com/d-zero-dev/nitpicker/issues/193)
+- **crawler:** populate phase 6-d entity and edge tables ([4b11ca8](https://github.com/d-zero-dev/nitpicker/commit/4b11ca85e7f2c947c8e370d25dc69067c595abde))
+- **crawler:** report progress from every 0.13 populate step ([3058904](https://github.com/d-zero-dev/nitpicker/commit/305890431ec266d1898562c5ad69edc5c3a1ef11))
+- **crawler:** support writable Archive.connect and expose lock primitives ([5f5f6e6](https://github.com/d-zero-dev/nitpicker/commit/5f5f6e696a6486884a2dff6e46949c497d25e5e0)), closes [#112](https://github.com/d-zero-dev/nitpicker/issues/112)
+- **crawler:** verify phase 6-e migration invariants ([bab23fd](https://github.com/d-zero-dev/nitpicker/commit/bab23fd9ab5408068cdc65e8d02bc6659ddeff28)), closes [#3](https://github.com/d-zero-dev/nitpicker/issues/3) [#4](https://github.com/d-zero-dev/nitpicker/issues/4) [#8](https://github.com/d-zero-dev/nitpicker/issues/8)
+- **crawler:** write directly to 0.13 entity tables ([d0657d0](https://github.com/d-zero-dev/nitpicker/commit/d0657d013e4cd1d052e20fd5d812111cf627733e)), closes [#196](https://github.com/d-zero-dev/nitpicker/issues/196)
+- **mcp-server:** bound and paginate get_resource_referrers ([f97b0f9](https://github.com/d-zero-dev/nitpicker/commit/f97b0f9a27ebb37be991cd3106cd03f2016cbc94))
+- **mcp-server:** dispatch check_headers through getHeaderChecksFastPath ([6cf3e55](https://github.com/d-zero-dev/nitpicker/commit/6cf3e551ad95248d9b26b78d96b509c40d45d8d9))
+- **mcp-server:** dispatch find_duplicates/find_mismatches through fast paths (issue [#115](https://github.com/d-zero-dev/nitpicker/issues/115)) ([a675928](https://github.com/d-zero-dev/nitpicker/commit/a6759282944de6707c5971a14ca321f0c699d58c))
+- **mcp-server:** dispatch get_summary/open_archive through getSummaryFastPath ([510e781](https://github.com/d-zero-dev/nitpicker/commit/510e78161eca9a9b4ffd67a1ab0aecfa7534f5fe))
+- **mcp-server:** dispatch list_images through getImagesFastPath ([190d599](https://github.com/d-zero-dev/nitpicker/commit/190d599c3a6bcaa07c9ec954c797f30d44fe355e))
+- **mcp-server:** expose page header filters, align list_links docs with 404-only broken ([4123ba5](https://github.com/d-zero-dev/nitpicker/commit/4123ba597221e466ff9894fa1e7817d8095cbc9b))
+- **query:** add directory tree read model and query functions ([ee0a385](https://github.com/d-zero-dev/nitpicker/commit/ee0a385191e048bd119ef64d61c5118f8d5ff185)), closes [#107](https://github.com/d-zero-dev/nitpicker/issues/107)
+- **query:** add listExternalLinks with destination dedup and referrer counts ([cf559a5](https://github.com/d-zero-dev/nitpicker/commit/cf559a58b00e3c3c770b4aef5df48aa3b4a58b55))
+- **query:** add status filters to list queries ([1c0d038](https://github.com/d-zero-dev/nitpicker/commit/1c0d038f027c220a0c8e2f760ee30d7952ec4c8e))
+- **query:** add viewer read model cache infrastructure ([a9cfd0d](https://github.com/d-zero-dev/nitpicker/commit/a9cfd0d8cede10dff6f89dffce0b2d7aba8f87ba)), closes [#112](https://github.com/d-zero-dev/nitpicker/issues/112) [#105](https://github.com/d-zero-dev/nitpicker/issues/105) [#108](https://github.com/d-zero-dev/nitpicker/issues/108)
+- **query:** add viewer_anchor_facts edge read model for broken links ([#114](https://github.com/d-zero-dev/nitpicker/issues/114)) ([e53175c](https://github.com/d-zero-dev/nitpicker/commit/e53175c69d6731a5cfa894b6e7d8f26624272d9b))
+- **query:** add viewer_duplicate_groups/mismatches read models (issue [#115](https://github.com/d-zero-dev/nitpicker/issues/115)) ([1866e03](https://github.com/d-zero-dev/nitpicker/commit/1866e03f78348829f57b2c9f353bae4253991afd)), closes [#119](https://github.com/d-zero-dev/nitpicker/issues/119)
+- **query:** add viewer*error_kind*\* read model for /api/error-kinds (issue [#118](https://github.com/d-zero-dev/nitpicker/issues/118)) ([9fd24d7](https://github.com/d-zero-dev/nitpicker/commit/9fd24d774c89ceca4e1150353f56a82cd249e778)), closes [#139](https://github.com/d-zero-dev/nitpicker/issues/139)
+- **query:** add viewer_external_links read model for fast external-link listing ([4dc5a4e](https://github.com/d-zero-dev/nitpicker/commit/4dc5a4e6b7858ea65ae3ead4c88066745670b6c7))
+- **query:** add viewer_header_checks read model for /api/headers fast path ([9582754](https://github.com/d-zero-dev/nitpicker/commit/9582754f57f3e0797d2613931f048d7b2efe8c35)), closes [#119](https://github.com/d-zero-dev/nitpicker/issues/119)
+- **query:** add viewer_images read model for /api/images fast path ([046a016](https://github.com/d-zero-dev/nitpicker/commit/046a01665f17e907f873c0aff3fb617b1ea887d3)), closes [epic-#103](https://github.com/epic-/issues/103) [#113](https://github.com/d-zero-dev/nitpicker/issues/113)
+- **query:** add viewer_pages cursor pagination read path ([d297ef5](https://github.com/d-zero-dev/nitpicker/commit/d297ef509a4ef32bae2599944648dd96ace14e24))
+- **query:** add viewer_summary read model for /api/summary (issue [#104](https://github.com/d-zero-dev/nitpicker/issues/104)) ([1ac6e22](https://github.com/d-zero-dev/nitpicker/commit/1ac6e2283577bfa67ea0365ac9ac229005ca1a22))
+- **query:** build viewer read model on crawl-completion hook and on-open ([66bad5a](https://github.com/d-zero-dev/nitpicker/commit/66bad5a5d4b9ab52e10f6df567cedbdb122544a7)), closes [#112](https://github.com/d-zero-dev/nitpicker/issues/112)
+- **query:** expose page source in link graph nodes ([aeeb90a](https://github.com/d-zero-dev/nitpicker/commit/aeeb90a902e254197f72c562bbbba6f4d04b588c))
+- **query:** persist natural URL sort rank in the viewer read model ([dd1f343](https://github.com/d-zero-dev/nitpicker/commit/dd1f343ec16a562307030dfef9656f3c6f781ca9))
+- **query:** precompute /api/pages facets and benchmark viewer_pages fast path ([a9c795c](https://github.com/d-zero-dev/nitpicker/commit/a9c795ca3ec7d17588a9d7fdee3abbcd514381e1)), closes [#148](https://github.com/d-zero-dev/nitpicker/issues/148) [#106](https://github.com/d-zero-dev/nitpicker/issues/106)
+- **query:** precompute /api/resources and /api/unused-resources via a viewer_resources read model ([b6b6662](https://github.com/d-zero-dev/nitpicker/commit/b6b66620412e3f7f106b12b913c6a5de5c83b20d))
+- **query:** share viewer link urls through refs ([ff5abf5](https://github.com/d-zero-dev/nitpicker/commit/ff5abf5036d317c9f29eda29ed7b6377f0736942))
+- **query:** sort viewer URL ranks with an external merge sort ([703f250](https://github.com/d-zero-dev/nitpicker/commit/703f250b6f34043af851bbd7529d757c0daa83fa))
+- **query:** switch phase 6-f readers to new entity tables ([e5ff302](https://github.com/d-zero-dev/nitpicker/commit/e5ff30234cd52c7bc7c1aa80704f80b0144579f6))
+- **repo:** build the viewer read model as part of migrate-to-0.13 ([8f59fef](https://github.com/d-zero-dev/nitpicker/commit/8f59fef250284a1a37ba0a7a4e9b2cc627bfca82))
+- **repo:** make migrate-to-0.13 resumable across process kills ([65814d4](https://github.com/d-zero-dev/nitpicker/commit/65814d49c179da7896417dd5a5c42a26de333eea))
+- **repo:** move analysis violations to sql ([3cec379](https://github.com/d-zero-dev/nitpicker/commit/3cec379d6d79696924a98960368ed30109b41fdb))
+- **repo:** precompute isolated and graph viewer reads ([577cce6](https://github.com/d-zero-dev/nitpicker/commit/577cce6d13c583a1b0224a3bb55b50bff722420b))
+- **repo:** print total elapsed time on migrate-to-0.13 completion ([5dee619](https://github.com/d-zero-dev/nitpicker/commit/5dee6194f0d4530dc04c9d230425fbb1eae7651e))
+- **repo:** wire progress reporting into migrate-to-0.13 ([012d798](https://github.com/d-zero-dev/nitpicker/commit/012d7984bb310a6daf5acb4dd5efcf31b0f86b61))
+- **viewer:** add /api/headers route for the viewer_header_checks fast path ([689f83a](https://github.com/d-zero-dev/nitpicker/commit/689f83ad1b42c6ca82709caa4e4e86aea89b375c)), closes [#107](https://github.com/d-zero-dev/nitpicker/issues/107)
+- **viewer:** add spreadsheet table controls ([ba2ca5d](https://github.com/d-zero-dev/nitpicker/commit/ba2ca5d2b314fbba724ef044dc6bb7df64f9f4c3))
+- **viewer:** color network graph nodes by source with legend ([8f37bec](https://github.com/d-zero-dev/nitpicker/commit/8f37becda43958d5d1ba53ab2c7916d135266863)), closes [#117](https://github.com/d-zero-dev/nitpicker/issues/117) [#117](https://github.com/d-zero-dev/nitpicker/issues/117)
+- **viewer:** dedupe External Links by destination, show referrers on Page Detail ([d1cf5a6](https://github.com/d-zero-dev/nitpicker/commit/d1cf5a69799ca12d6f304afc702b62a73ca8b737))
+- **viewer:** dispatch /api/duplicates and /api/mismatches through fast paths (issue [#115](https://github.com/d-zero-dev/nitpicker/issues/115)) ([2039ed3](https://github.com/d-zero-dev/nitpicker/commit/2039ed3d71d56ea85cc3ae413bd6a5a9a5a1ce90))
+- **viewer:** dispatch /api/images through getImagesFastPath ([dfc7142](https://github.com/d-zero-dev/nitpicker/commit/dfc71425fddcc51354c30f982129dabe4e25bbc1)), closes [#113](https://github.com/d-zero-dev/nitpicker/issues/113)
+- **viewer:** dispatch /api/resources and /api/unused-resources through the viewer_resources fast path ([850d423](https://github.com/d-zero-dev/nitpicker/commit/850d42390357861ce0e4d96976fc7c177d145e85))
+- **viewer:** route /api/pages through viewer_pages fast path with fallback ([79450ee](https://github.com/d-zero-dev/nitpicker/commit/79450ee0b515b9b7944826b90de3f5519d3a5763))
+- **viewer:** route broken links through the viewer_anchor_facts fast path ([d619c4a](https://github.com/d-zero-dev/nitpicker/commit/d619c4a04c9968906002d7e76b0e6a686213fda1))
+- **viewer:** route external links through the viewer_external_links fast path ([986119e](https://github.com/d-zero-dev/nitpicker/commit/986119eea63125bf5c189529a031fb43a6113adf))
+- **viewer:** serve /api/error-kinds through the viewer*error_kind*\* fast path ([043755e](https://github.com/d-zero-dev/nitpicker/commit/043755e0668b12ef48138656f903bd92e096b552))
+- **viewer:** serve /api/summary through the viewer_summary fast path ([68e72bf](https://github.com/d-zero-dev/nitpicker/commit/68e72bfa9675eb6ca6650b6630a0e66dae18b806))
+- **viewer:** show Lanes progress and cache the URL sort to disk ([211a61f](https://github.com/d-zero-dev/nitpicker/commit/211a61f77654bd7270ffb673d9b9ecc47a176eac))
+- **viewer:** stop running the startup URL sort when the read model is current ([cb30dee](https://github.com/d-zero-dev/nitpicker/commit/cb30dee37c87bf1bd9d7a5bd5663a599e1eae085))
+- **viewer:** swap page detail link order and surface 200-item cap ([fd54b50](https://github.com/d-zero-dev/nitpicker/commit/fd54b5036ae35ce29140b733c1d33040d78ea27c))
+- **viewer:** unify status filters across table views ([6bc48de](https://github.com/d-zero-dev/nitpicker/commit/6bc48dec41e33a3686f89961b460eb28c49e3519))
+
+### Performance Improvements
+
+- **query:** remove duplicate sortUrl call in buildUrlRanks ([a1a06b3](https://github.com/d-zero-dev/nitpicker/commit/a1a06b3a2bc50a90315ce10a4bf204f2b7b3db7b))
+
+### BREAKING CHANGES
+
+- fresh archives no longer contain the legacy `pages` /
+  `anchors` / `images` / `resources` / `resources-referrers` tables, and
+  `scripts/migrate-to-0.13.mjs` now finishes the format cut: it rebuilds
+  `page_html_ref` / `page_tags` / `page_jsonld` / `page_errors` /
+  `analysis_violations` so their FK declarations point at
+  `content_items(id)` (SQLite has no ALTER TABLE DROP CONSTRAINT), drops
+  the legacy tables, and asserts `PRAGMA foreign_key_check` is clean
+  before repacking. Archives migrated by an older script revision must be
+  re-migrated from their pre-0.13 input.
+
+Details:
+
+- extract the adjunct DDL (page*errors / crawl_errors / page_tags /
+  page_jsonld / inventory_runs / analysis*_ / page*html*_) into
+  createAdjunctTables, shared by initSchema and the migration script so
+  the two provisioning paths can no longer drift — per-table DDL copies
+  in the lazy runtime migrations are exactly how migrated archives ended
+  up with stale `REFERENCES pages(id)` declarations
+- retargetLegacyFkTables stages rows with CREATE TABLE AS SELECT \*,
+  recreates each table via createAdjunctTables, and copies rows back
+  using the recreated table's own column list (pragma_table_info) so a
+  column the canonical DDL has but the input archive lacks fails loudly
+  instead of dropping data silently
+- dropLegacyTables requires PRAGMA foreign_keys = OFF (asserted at
+  runtime): the pages.redirectDestId self-FK makes an enforced DROP's
+  implicit DELETE fail nondeterministically on row order, and skipping
+  the implicit DELETE truncates whole b-trees instead of deleting rows
+  one by one
+- ensureLegacySourceColumns (script-local) replaces the deleted
+  migratePagesResourcesSource for inputs predating crawl --inventory,
+  because the entity populate SELECTs pages.source / resources.source
+- fix four reads that still targeted legacy tables and were dead or
+  broken since the writer switch: getPageCount, getPageSourceByUrl,
+  getResourceUrlList (always empty on fresh archives) and
+  replaceAnalysisViolations (threw "could not resolve page URL" for
+  every violation, breaking `nitpicker analyze`); URL resolution is now
+  chunked to stay under SQLite's bound-parameter limit
+- delete the six lazy runtime migrations (page_errors / crawl_errors /
+  html-blob / analysis_violations / inventory_runs /
+  pages-resources-source): assertCompatibleVersion rejects every archive
+  older than the current format before they could run, so their
+  hasTable('pages') guards made them permanently unreachable
+- initSchema now gates only the one-shot PRAGMAs + info creation on the
+  info sentinel and always runs the idempotent ref / entity / adjunct
+  DDL groups, so a crash between the groups self-heals on the next
+  writer connect instead of bricking the stub with "no such table"
+- rename PHASE_6B_CONTENT_TYPE_RULES to CONTENT_TYPE_RULES and replace
+  the "0.13-N populate must run first" error labels with the actual
+  populate function names
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
+- ErrorKindsResult is now { items, total, facets }
+  instead of { total, channelSource, groups }. ErrorKindGroup and
+  ErrorKindHost are removed in favor of ErrorKindEntry and
+  ErrorKindFacets. Sample URLs are capped per host×kind pair (not per
+  kind) with an overflowedCount for anything beyond the cap. Adds
+  host/kind/sortBy/sortOrder/limit/offset filtering, validating sortBy
+  against a fixed set of fields so an out-of-range value falls back to
+  count-desc instead of crashing.
+- the standalone "Headers" and "Page Links" views/nav items
+  are removed. Security-header presence (CSP/X-Frame-Options/
+  X-Content-Type-Options/HSTS) is now shown as four columns on the Pages
+  view, with matching filter/sort controls wired to /api/pages. Per-page
+  status/referrers/redirect-from now live on the Page Detail view instead
+  of Page Links; Page Detail also surfaces isSkipped/skipReason for
+  excluded URLs. The combined "Links" view (broken/external toggle) is
+  replaced by two dedicated views, "Broken Links" and "External Links",
+  sharing a new LinkListView component instead of duplicating the table
+  wiring. referrer-count-cache.ts is removed along with the page-links
+  route it backed.
+
+The e2e fixture now seeds one 404 page and one external link so the new
+Broken/External Links views have non-empty data to exercise.
+
+- listLinks' broken judgment is now strictly canonical
+  status = 404 (previously >= 400 or no status), so 403/5xx/excluded
+  destinations no longer count as broken. listPageLinks and its
+  PageLinkEntry/ListPageLinksOptions/PaginatedPageLinkList types are removed
+  (no remaining consumer). listPages/listPagesByTag/listPagesByJsonLdType now
+  compute hasCSP/hasXFrameOptions/hasXContentTypeOptions/hasHSTS via SQL
+  instead of transferring the raw responseHeaders blob to JS. getPageDetail
+  gains isSkipped/skipReason so a URL's exclusion reason is still
+  discoverable now that listPageLinks is gone.
+
+New @nitpicker/query/header-presence subpath exports HEADER_PRESENCE_KEYS
+as the single source of truth for the tracked header set.
+
 # [0.12.0](https://github.com/d-zero-dev/nitpicker/compare/v0.11.0...v0.12.0) (2026-07-01)
 
 ### Bug Fixes

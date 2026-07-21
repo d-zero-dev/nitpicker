@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
+
+### Bug Fixes
+
+- **analyze-textlint:** stop concatenating position onto violation url ([b0e4e75](https://github.com/d-zero-dev/nitpicker/commit/b0e4e75fddadb5130edd365d72d9bee6db90027c)), closes [#225](https://github.com/d-zero-dev/nitpicker/issues/225)
+
 # [0.12.0](https://github.com/d-zero-dev/nitpicker/compare/v0.11.0...v0.12.0) (2026-07-01)
 
 **Note:** Version bump only for package @nitpicker/analyze-textlint

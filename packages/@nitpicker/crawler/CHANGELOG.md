@@ -3,6 +3,100 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
+
+### Bug Fixes
+
+- chain populate-migration into crawler write path and reader spec ordering ([e9cc84e](https://github.com/d-zero-dev/nitpicker/commit/e9cc84e6054cb5596fc63db0a6ebb83af78eb95a)), closes [#196](https://github.com/d-zero-dev/nitpicker/issues/196)
+- **crawler:** clear a page's resource_ref_edges on every re-scrape ([4c851b0](https://github.com/d-zero-dev/nitpicker/commit/4c851b0ed399859f7564f47e22b696543c888ecb))
+- **crawler:** drop hex literal letters from phase 6-b sources to satisfy CI lint ([5934a2e](https://github.com/d-zero-dev/nitpicker/commit/5934a2e9015c39e8ee46509a0dd3c4a0a63a35b4))
+- **crawler:** fix 3 real-data migration bugs and add resource blob routing ([eab6e6b](https://github.com/d-zero-dev/nitpicker/commit/eab6e6b40e012a28407fa580def527f31457a13d)), closes [#197](https://github.com/d-zero-dev/nitpicker/issues/197) [#116](https://github.com/d-zero-dev/nitpicker/issues/116)
+- **crawler:** fix review findings in the entity-table write/read paths ([c0591ae](https://github.com/d-zero-dev/nitpicker/commit/c0591ae19a97c34cfb37d0d7f9c1c7a28f3fe4c4))
+- **crawler:** heal previously-failed resources on a later successful fetch ([fb8531d](https://github.com/d-zero-dev/nitpicker/commit/fb8531d8eaf501ac570bd2a6eaba677254fd7f0f))
+- **crawler:** repair legacy corrupted violation urls and store line/col ([4c4e1c2](https://github.com/d-zero-dev/nitpicker/commit/4c4e1c24bee918873ee3275ad181653a9a3bdbd7)), closes [#225](https://github.com/d-zero-dev/nitpicker/issues/225)
+- **crawler:** resolve unreachable JSDoc {[@link](https://github.com/link)} references ([bc72ac5](https://github.com/d-zero-dev/nitpicker/commit/bc72ac5af0176dc18ccf11c455a23fa609eba493))
+- **crawler:** retarget remaining read paths and fix write-path regressions ([ae4ed38](https://github.com/d-zero-dev/nitpicker/commit/ae4ed38ffbb59d0134a5bf4b28fd4f8dc96c8b0f))
+- **crawler:** stabilise 0.13 populate against re-crawl, HTML BLOB deadlock, and migrator edge cases ([13f612e](https://github.com/d-zero-dev/nitpicker/commit/13f612e1af8348f92777db15f258c32f8d2f3cea))
+- **crawler:** stop assuming a contiguous id range in checkUrlRoundTrip ([6ee5e9f](https://github.com/d-zero-dev/nitpicker/commit/6ee5e9f9da036630f5ea7d4dc1342e9e9535b986))
+- **crawler:** tighten assert-phase6-populated types for CI build ([3a3c1f0](https://github.com/d-zero-dev/nitpicker/commit/3a3c1f0888f14e0b7225283ced8ccc57aab19163))
+- **deps:** update dependency fs-extra to v11.3.6 ([#134](https://github.com/d-zero-dev/nitpicker/issues/134)) ([f30d42e](https://github.com/d-zero-dev/nitpicker/commit/f30d42ef4242026a8b99e160cd90ac8d21cefc7b))
+- **deps:** update dependency knex to v3.3.0 ([#160](https://github.com/d-zero-dev/nitpicker/issues/160)) ([959bf10](https://github.com/d-zero-dev/nitpicker/commit/959bf10129a3a7e72670b600779171567a464772))
+- **deps:** update dependency tar to v7.5.17 ([#135](https://github.com/d-zero-dev/nitpicker/issues/135)) ([bf98d5c](https://github.com/d-zero-dev/nitpicker/commit/bf98d5cab1604ca9f2668472428d86aa02bac985))
+- **deps:** update dependency tar to v7.5.19 ([#171](https://github.com/d-zero-dev/nitpicker/issues/171)) ([7306b08](https://github.com/d-zero-dev/nitpicker/commit/7306b0804d96eb9c966ed3edec83650eea129941))
+- **deps:** update dependency tar to v7.5.20 ([852aa36](https://github.com/d-zero-dev/nitpicker/commit/852aa363219ca213a51716600fd77f71c15c5d3a))
+- populate 0.13 tables at every crawl-end site (not just write()) ([8126bde](https://github.com/d-zero-dev/nitpicker/commit/8126bde81c76f023339ad03c7d02f988934fc6da))
+- populate 0.13 tables at resume() crawl end ([87fbd42](https://github.com/d-zero-dev/nitpicker/commit/87fbd4265363ff5bdfe6d4ae7d927a7fdc5fbcd9))
+
+- feat(crawler)!: drop legacy write-model tables and unify adjunct FKs on content_items ([c801014](https://github.com/d-zero-dev/nitpicker/commit/c8010147afb42230a797eecbe9929285640e0129))
+
+### Features
+
+- **crawler:** add phase 6-a ref and header staging tables ([f78a5ef](https://github.com/d-zero-dev/nitpicker/commit/f78a5ef9c130b780c3ebf95ee3b821e1fd8fc079)), closes [#190](https://github.com/d-zero-dev/nitpicker/issues/190) [#103](https://github.com/d-zero-dev/nitpicker/issues/103) [#191](https://github.com/d-zero-dev/nitpicker/issues/191) [#192](https://github.com/d-zero-dev/nitpicker/issues/192)
+- **crawler:** add phase 6-b ref-table population helpers ([1786bd4](https://github.com/d-zero-dev/nitpicker/commit/1786bd41a830369ffc7486d97b4e8595f6952cee)), closes [#191](https://github.com/d-zero-dev/nitpicker/issues/191) [#103](https://github.com/d-zero-dev/nitpicker/issues/103)
+- **crawler:** add phase 6-c entity and edge tables ([c762b08](https://github.com/d-zero-dev/nitpicker/commit/c762b08810e70a604e6cc3d4b13fa0ed118ff79e)), closes [#192](https://github.com/d-zero-dev/nitpicker/issues/192) [#103](https://github.com/d-zero-dev/nitpicker/issues/103) [#193](https://github.com/d-zero-dev/nitpicker/issues/193)
+- **crawler:** populate phase 6-d entity and edge tables ([4b11ca8](https://github.com/d-zero-dev/nitpicker/commit/4b11ca85e7f2c947c8e370d25dc69067c595abde))
+- **crawler:** report progress from every 0.13 populate step ([3058904](https://github.com/d-zero-dev/nitpicker/commit/305890431ec266d1898562c5ad69edc5c3a1ef11))
+- **crawler:** support writable Archive.connect and expose lock primitives ([5f5f6e6](https://github.com/d-zero-dev/nitpicker/commit/5f5f6e696a6486884a2dff6e46949c497d25e5e0)), closes [#112](https://github.com/d-zero-dev/nitpicker/issues/112)
+- **crawler:** verify phase 6-e migration invariants ([bab23fd](https://github.com/d-zero-dev/nitpicker/commit/bab23fd9ab5408068cdc65e8d02bc6659ddeff28)), closes [#3](https://github.com/d-zero-dev/nitpicker/issues/3) [#4](https://github.com/d-zero-dev/nitpicker/issues/4) [#8](https://github.com/d-zero-dev/nitpicker/issues/8)
+- **crawler:** write directly to 0.13 entity tables ([d0657d0](https://github.com/d-zero-dev/nitpicker/commit/d0657d013e4cd1d052e20fd5d812111cf627733e)), closes [#196](https://github.com/d-zero-dev/nitpicker/issues/196)
+- **query:** switch phase 6-f readers to new entity tables ([e5ff302](https://github.com/d-zero-dev/nitpicker/commit/e5ff30234cd52c7bc7c1aa80704f80b0144579f6))
+- **repo:** make migrate-to-0.13 resumable across process kills ([65814d4](https://github.com/d-zero-dev/nitpicker/commit/65814d49c179da7896417dd5a5c42a26de333eea))
+- **repo:** move analysis violations to sql ([3cec379](https://github.com/d-zero-dev/nitpicker/commit/3cec379d6d79696924a98960368ed30109b41fdb))
+
+### BREAKING CHANGES
+
+- fresh archives no longer contain the legacy `pages` /
+  `anchors` / `images` / `resources` / `resources-referrers` tables, and
+  `scripts/migrate-to-0.13.mjs` now finishes the format cut: it rebuilds
+  `page_html_ref` / `page_tags` / `page_jsonld` / `page_errors` /
+  `analysis_violations` so their FK declarations point at
+  `content_items(id)` (SQLite has no ALTER TABLE DROP CONSTRAINT), drops
+  the legacy tables, and asserts `PRAGMA foreign_key_check` is clean
+  before repacking. Archives migrated by an older script revision must be
+  re-migrated from their pre-0.13 input.
+
+Details:
+
+- extract the adjunct DDL (page*errors / crawl_errors / page_tags /
+  page_jsonld / inventory_runs / analysis*_ / page*html*_) into
+  createAdjunctTables, shared by initSchema and the migration script so
+  the two provisioning paths can no longer drift — per-table DDL copies
+  in the lazy runtime migrations are exactly how migrated archives ended
+  up with stale `REFERENCES pages(id)` declarations
+- retargetLegacyFkTables stages rows with CREATE TABLE AS SELECT \*,
+  recreates each table via createAdjunctTables, and copies rows back
+  using the recreated table's own column list (pragma_table_info) so a
+  column the canonical DDL has but the input archive lacks fails loudly
+  instead of dropping data silently
+- dropLegacyTables requires PRAGMA foreign_keys = OFF (asserted at
+  runtime): the pages.redirectDestId self-FK makes an enforced DROP's
+  implicit DELETE fail nondeterministically on row order, and skipping
+  the implicit DELETE truncates whole b-trees instead of deleting rows
+  one by one
+- ensureLegacySourceColumns (script-local) replaces the deleted
+  migratePagesResourcesSource for inputs predating crawl --inventory,
+  because the entity populate SELECTs pages.source / resources.source
+- fix four reads that still targeted legacy tables and were dead or
+  broken since the writer switch: getPageCount, getPageSourceByUrl,
+  getResourceUrlList (always empty on fresh archives) and
+  replaceAnalysisViolations (threw "could not resolve page URL" for
+  every violation, breaking `nitpicker analyze`); URL resolution is now
+  chunked to stay under SQLite's bound-parameter limit
+- delete the six lazy runtime migrations (page_errors / crawl_errors /
+  html-blob / analysis_violations / inventory_runs /
+  pages-resources-source): assertCompatibleVersion rejects every archive
+  older than the current format before they could run, so their
+  hasTable('pages') guards made them permanently unreachable
+- initSchema now gates only the one-shot PRAGMAs + info creation on the
+  info sentinel and always runs the idempotent ref / entity / adjunct
+  DDL groups, so a crash between the groups self-heals on the next
+  writer connect instead of bricking the stub with "no such table"
+- rename PHASE_6B_CONTENT_TYPE_RULES to CONTENT_TYPE_RULES and replace
+  the "0.13-N populate must run first" error labels with the actual
+  populate function names
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
 # [0.12.0](https://github.com/d-zero-dev/nitpicker/compare/v0.11.0...v0.12.0) (2026-07-01)
 
 ### Bug Fixes

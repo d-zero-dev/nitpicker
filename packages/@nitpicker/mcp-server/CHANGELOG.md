@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
+
+### Features
+
+- **mcp-server:** bound and paginate get_resource_referrers ([f97b0f9](https://github.com/d-zero-dev/nitpicker/commit/f97b0f9a27ebb37be991cd3106cd03f2016cbc94))
+- **mcp-server:** dispatch check_headers through getHeaderChecksFastPath ([6cf3e55](https://github.com/d-zero-dev/nitpicker/commit/6cf3e551ad95248d9b26b78d96b509c40d45d8d9))
+- **mcp-server:** dispatch find_duplicates/find_mismatches through fast paths (issue [#115](https://github.com/d-zero-dev/nitpicker/issues/115)) ([a675928](https://github.com/d-zero-dev/nitpicker/commit/a6759282944de6707c5971a14ca321f0c699d58c))
+- **mcp-server:** dispatch get_summary/open_archive through getSummaryFastPath ([510e781](https://github.com/d-zero-dev/nitpicker/commit/510e78161eca9a9b4ffd67a1ab0aecfa7534f5fe))
+- **mcp-server:** dispatch list_images through getImagesFastPath ([190d599](https://github.com/d-zero-dev/nitpicker/commit/190d599c3a6bcaa07c9ec954c797f30d44fe355e))
+- **mcp-server:** expose page header filters, align list_links docs with 404-only broken ([4123ba5](https://github.com/d-zero-dev/nitpicker/commit/4123ba597221e466ff9894fa1e7817d8095cbc9b))
+- **repo:** move analysis violations to sql ([3cec379](https://github.com/d-zero-dev/nitpicker/commit/3cec379d6d79696924a98960368ed30109b41fdb))
+- **repo:** precompute isolated and graph viewer reads ([577cce6](https://github.com/d-zero-dev/nitpicker/commit/577cce6d13c583a1b0224a3bb55b50bff722420b))
+
 # [0.12.0](https://github.com/d-zero-dev/nitpicker/compare/v0.11.0...v0.12.0) (2026-07-01)
 
 ### Features

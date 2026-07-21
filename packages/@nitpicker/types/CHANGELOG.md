@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
+
+### Bug Fixes
+
+- **types:** add optional line/col to Violation ([e6bb583](https://github.com/d-zero-dev/nitpicker/commit/e6bb583332ed2cdf944744bd78c240eeeb2dbda3)), closes [#225](https://github.com/d-zero-dev/nitpicker/issues/225)
+
 # [0.12.0](https://github.com/d-zero-dev/nitpicker/compare/v0.11.0...v0.12.0) (2026-07-01)
 
 **Note:** Version bump only for package @nitpicker/types
