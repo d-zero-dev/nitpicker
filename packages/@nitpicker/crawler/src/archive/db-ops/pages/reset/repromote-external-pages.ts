@@ -76,19 +76,20 @@ export async function repromoteExternalPages(
 			// demotion.
 		});
 		// Clear the prior crawl's data for the repromoted pages. `updatePage`
-		// also replaces anchor_edges/image_items/tags/jsonld when it
-		// re-scrapes them, but only when the new scrape is non-empty — so
-		// this pre-clear is still load-bearing for pages that get
+		// also replaces anchor_edges/image_items/tags/jsonld/page_main_content_*
+		// when it re-scrapes them, but only when the new scrape is non-empty —
+		// so this pre-clear is still load-bearing for pages that get
 		// repromoted but then re-scrape to nothing (or are never reached
 		// again), and it is the only place `resource_ref_edges` is cleared.
 		// Deleting the `page_meta` row (rather than nulling every column)
-		// clears title / description / og:* / twitter:* / meta_extras in
-		// one statement; a re-scrape re-inserts it via
-		// `ON CONFLICT(page_id) DO UPDATE`. `page_tags` / `page_jsonld` are
-		// cleared explicitly even though both tables also carry ON DELETE
-		// CASCADE — we keep the existing pattern of explicit chunked
-		// DELETEs rather than relying on CASCADE indirectly (and would not
-		// cascade anyway: the parent `content_items` row is updated, not
+		// clears title / description / og:* / twitter:* / meta_extras /
+		// main_content_* in one statement; a re-scrape re-inserts it via
+		// `ON CONFLICT(page_id) DO UPDATE`. `page_tags` / `page_jsonld` /
+		// `page_main_content_*` are cleared explicitly even though all of
+		// them also carry ON DELETE CASCADE — we keep the existing pattern
+		// of explicit chunked DELETEs rather than relying on CASCADE
+		// indirectly (and would not cascade anyway: the parent
+		// `content_items` row is updated, not
 		// deleted). Orphan blobs in `page_html_blobs` are left behind; #23
 		// will add GC.
 		await knex('page_meta').whereIn('page_id', chunk).delete();
@@ -98,6 +99,14 @@ export async function repromoteExternalPages(
 		await knex('page_html_ref').whereIn('page_id', chunk).delete();
 		await knex('page_tags').whereIn('pageId', chunk).delete();
 		await knex('page_jsonld').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_headings').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_images').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_tables').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_buttons').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_iframes').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_videos').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_audios').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_canvases').whereIn('pageId', chunk).delete();
 	}
 	dbLog('Repromoted %d external pages back to pending', promotedUrls.length);
 	return promotedUrls;

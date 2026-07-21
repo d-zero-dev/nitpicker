@@ -137,6 +137,20 @@ import type { Knex } from 'knex';
  * routing so the two entities never disagree on which values count as
  * "large data URI".
  *
+ * **`page_meta.main_content_*` / `scroll_height_*` columns.** Denormalised
+ * aggregates derived from beholder's `MainContentsData` / `ScrollHeightData`
+ * (word/element counts, desktop+mobile scroll height), following the same
+ * write-once-at-scrape-time pattern as `tag_count` / `jsonld_count` so list
+ * / detail reads never re-derive them from the per-page child tables
+ * (`page_main_content_headings` etc., see `create-adjunct-tables.ts`).
+ * `main_content_node_name` / `_id` / `_role` / `_selector` / `_class_list`
+ * identify the detected main-content element; unlike `title_text_id` /
+ * `description_text_id` these are stored as plain `TEXT` rather than routed
+ * through `text_refs` — the values are page-specific diagnostics with low
+ * cross-page reuse, so the ref-table dedup machinery would add write-path
+ * cost without a corresponding storage win. `main_content_class_list` holds
+ * a JSON-encoded string array.
+ *
  * ### Index rationale
  *
  * Every index below reflects a legacy-baseline single-column index that
@@ -263,7 +277,24 @@ export async function createEntityTables(instance: Knex): Promise<void> {
 			tag_count                   INTEGER,
 			jsonld_count                INTEGER,
 			tags_providers_csv          TEXT,
-			meta_extras_json_id         INTEGER REFERENCES json_refs(id)
+			meta_extras_json_id         INTEGER REFERENCES json_refs(id),
+			main_content_node_name      TEXT,
+			main_content_id             TEXT,
+			main_content_role           TEXT,
+			main_content_selector       TEXT,
+			main_content_class_list     TEXT,
+			main_content_word_count     INTEGER,
+			main_content_body_word_count INTEGER,
+			main_content_heading_count  INTEGER,
+			main_content_image_count    INTEGER,
+			main_content_table_count    INTEGER,
+			main_content_button_count   INTEGER,
+			main_content_iframe_count   INTEGER,
+			main_content_video_count    INTEGER,
+			main_content_audio_count    INTEGER,
+			main_content_canvas_count   INTEGER,
+			scroll_height_desktop       INTEGER,
+			scroll_height_mobile        INTEGER
 		)
 	`);
 	await instance.raw(

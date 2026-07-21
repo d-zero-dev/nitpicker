@@ -114,6 +114,278 @@ export interface PageDenormalizedColumns {
 }
 
 /**
+ * Denormalised aggregates computed at write time from beholder's
+ * `MainContentsData` / `ScrollHeightData`.
+ *
+ * Stored on `page_meta` following the same pattern as
+ * {@link PageDenormalizedColumns} (`tag_count` / `jsonld_count`): the full
+ * per-element detail lives in the `page_main_content_*` child tables, while
+ * these scalar columns let list / detail reads answer "how many headings?"
+ * without joining them. All fields are `null` when the page was not fully
+ * rendered (external / non-HTML / metadata-only scrape) — see
+ * `compute-main-contents-denormalized.ts` for the `null`-in-null-out contract.
+ * @see compute-main-contents-denormalized.ts
+ * @example
+ * const denorm: MainContentsDenormalizedColumns = {
+ *   main_content_node_name: 'MAIN',
+ *   main_content_id: null,
+ *   main_content_role: null,
+ *   main_content_selector: 'main.l-main',
+ *   main_content_class_list: '["l-main"]',
+ *   main_content_word_count: 1240,
+ *   main_content_body_word_count: 1580,
+ *   main_content_heading_count: 6,
+ *   main_content_image_count: 3,
+ *   main_content_table_count: 0,
+ *   main_content_button_count: 1,
+ *   main_content_iframe_count: 0,
+ *   main_content_video_count: 0,
+ *   main_content_audio_count: 0,
+ *   main_content_canvas_count: 0,
+ *   scroll_height_desktop: 3200,
+ *   scroll_height_mobile: 5400,
+ * };
+ */
+export interface MainContentsDenormalizedColumns {
+	/** Detected main-content element's `nodeName` (e.g. `'MAIN'`), or `null`. */
+	main_content_node_name: string | null;
+	/** Detected main-content element's `id`, or `null`. */
+	main_content_id: string | null;
+	/** Detected main-content element's `role` attribute, or `null`. */
+	main_content_role: string | null;
+	/** Diagnostic tag+id+class selector for the detected element, or `null`. */
+	main_content_selector: string | null;
+	/** JSON-encoded array of the detected element's CSS classes, or `null`. */
+	main_content_class_list: string | null;
+	/** Character count of the main region's text content, or `null`. */
+	main_content_word_count: number | null;
+	/** Character count of `document.body`'s text content, or `null`. */
+	main_content_body_word_count: number | null;
+	/** Number of headings within the main region, or `null`. */
+	main_content_heading_count: number | null;
+	/** Number of images within the main region, or `null`. */
+	main_content_image_count: number | null;
+	/** Number of tables within the main region, or `null`. */
+	main_content_table_count: number | null;
+	/** Number of button-like elements within the main region, or `null`. */
+	main_content_button_count: number | null;
+	/** Number of iframes within the main region, or `null`. */
+	main_content_iframe_count: number | null;
+	/** Number of videos within the main region, or `null`. */
+	main_content_video_count: number | null;
+	/** Number of audios within the main region, or `null`. */
+	main_content_audio_count: number | null;
+	/** Number of canvases within the main region, or `null`. */
+	main_content_canvas_count: number | null;
+	/** `document.body.scrollHeight` at the desktop-compact preset, or `null`. */
+	scroll_height_desktop: number | null;
+	/** `document.body.scrollHeight` at the mobile-small preset, or `null`. */
+	scroll_height_mobile: number | null;
+}
+
+/**
+ * One row in the `page_main_content_headings` table.
+ * @example
+ * const row: MainContentHeadingRow = { id: 1, pageId: 42, order: 0, text: 'Welcome', level: 1 };
+ */
+export interface MainContentHeadingRow {
+	/** Auto-increment primary key. */
+	id: number;
+	/** FK to `content_items.id`. */
+	pageId: number;
+	/** 0-based DOM traversal order within the main content region. */
+	order: number;
+	/** Heading text after whitespace removal, or `null` when empty. */
+	text: string | null;
+	/** Heading level (1-6) from the tag name. */
+	level: 1 | 2 | 3 | 4 | 5 | 6;
+}
+
+/**
+ * One row in the `page_main_content_images` table.
+ * @example
+ * const row: MainContentImageRow = {
+ *   id: 1,
+ *   pageId: 42,
+ *   order: 0,
+ *   src: 'https://example.com/a.png',
+ *   alt: 'A photo',
+ * };
+ */
+export interface MainContentImageRow {
+	/** Auto-increment primary key. */
+	id: number;
+	/** FK to `content_items.id`. */
+	pageId: number;
+	/** 0-based DOM traversal order within the main content region. */
+	order: number;
+	/** Resolved absolute `src` URL. */
+	src: string;
+	/** `alt` attribute value (may be an empty string). */
+	alt: string;
+}
+
+/**
+ * One row in the `page_main_content_tables` table.
+ * @example
+ * const row: MainContentTableRow = {
+ *   id: 1,
+ *   pageId: 42,
+ *   order: 0,
+ *   rows: 3,
+ *   cols: 4,
+ *   hasHeader: 1,
+ *   hasFooter: 0,
+ *   hasMergedCell: 0,
+ * };
+ */
+export interface MainContentTableRow {
+	/** Auto-increment primary key. */
+	id: number;
+	/** FK to `content_items.id`. */
+	pageId: number;
+	/** 0-based DOM traversal order within the main content region. */
+	order: number;
+	/** Number of `<tr>` elements. */
+	rows: number;
+	/** Number of `th`/`td` cells in the first row. */
+	cols: number;
+	/** Whether the table contains a `<thead>` (raw SQLite 0/1; knex does not round-trip `.boolean()` columns back to JS `boolean` on read). */
+	hasHeader: 0 | 1;
+	/** Whether the table contains a `<tfoot>` (raw SQLite 0/1). */
+	hasFooter: 0 | 1;
+	/** Whether any cell uses `colspan` or `rowspan` (raw SQLite 0/1). */
+	hasMergedCell: 0 | 1;
+}
+
+/**
+ * One row in the `page_main_content_buttons` table.
+ * @example
+ * const row: MainContentButtonRow = {
+ *   id: 1,
+ *   pageId: 42,
+ *   order: 0,
+ *   nodeName: 'BUTTON',
+ *   role: null,
+ *   type: 'submit',
+ *   text: 'Send',
+ *   disabled: 0,
+ * };
+ */
+export interface MainContentButtonRow {
+	/** Auto-increment primary key. */
+	id: number;
+	/** FK to `content_items.id`. */
+	pageId: number;
+	/** 0-based DOM traversal order within the main content region. */
+	order: number;
+	/** Element tag name (e.g. `'BUTTON'`, `'A'`, `'DIV'`). */
+	nodeName: string;
+	/** `role` attribute, or `null` when absent. */
+	role: string | null;
+	/** `type` for `<button>` / `<input>`, otherwise `null`. */
+	type: string | null;
+	/** Label text after whitespace removal, or `null` when empty. */
+	text: string | null;
+	/** `true` when `disabled` or `aria-disabled="true"` (raw SQLite 0/1). */
+	disabled: 0 | 1;
+}
+
+/**
+ * One row in the `page_main_content_iframes` table.
+ * @example
+ * const row: MainContentIframeRow = {
+ *   id: 1,
+ *   pageId: 42,
+ *   order: 0,
+ *   src: 'https://example.com/embed',
+ *   title: null,
+ *   width: '640',
+ *   height: '360',
+ * };
+ */
+export interface MainContentIframeRow {
+	/** Auto-increment primary key. */
+	id: number;
+	/** FK to `content_items.id`. */
+	pageId: number;
+	/** 0-based DOM traversal order within the main content region. */
+	order: number;
+	/** Resolved absolute `src` URL. */
+	src: string;
+	/** `title` attribute, or `null` when absent. */
+	title: string | null;
+	/** Raw `width` attribute string, or `null` when absent. */
+	width: string | null;
+	/** Raw `height` attribute string, or `null` when absent. */
+	height: string | null;
+}
+
+/**
+ * One row in the `page_main_content_videos` table.
+ * @example
+ * const row: MainContentVideoRow = {
+ *   id: 1,
+ *   pageId: 42,
+ *   order: 0,
+ *   src: 'https://example.com/v.mp4',
+ *   poster: null,
+ *   width: 640,
+ *   height: 360,
+ * };
+ */
+export interface MainContentVideoRow {
+	/** Auto-increment primary key. */
+	id: number;
+	/** FK to `content_items.id`. */
+	pageId: number;
+	/** 0-based DOM traversal order within the main content region. */
+	order: number;
+	/** Resolved media URL. */
+	src: string;
+	/** Resolved `poster` URL, or `null` when unset. */
+	poster: string | null;
+	/** IDL `width` in pixels. */
+	width: number;
+	/** IDL `height` in pixels. */
+	height: number;
+}
+
+/**
+ * One row in the `page_main_content_audios` table.
+ * @example
+ * const row: MainContentAudioRow = { id: 1, pageId: 42, order: 0, src: 'https://example.com/a.mp3' };
+ */
+export interface MainContentAudioRow {
+	/** Auto-increment primary key. */
+	id: number;
+	/** FK to `content_items.id`. */
+	pageId: number;
+	/** 0-based DOM traversal order within the main content region. */
+	order: number;
+	/** Resolved media URL. */
+	src: string;
+}
+
+/**
+ * One row in the `page_main_content_canvases` table.
+ * @example
+ * const row: MainContentCanvasRow = { id: 1, pageId: 42, order: 0, width: 300, height: 150 };
+ */
+export interface MainContentCanvasRow {
+	/** Auto-increment primary key. */
+	id: number;
+	/** FK to `content_items.id`. */
+	pageId: number;
+	/** 0-based DOM traversal order within the main content region. */
+	order: number;
+	/** IDL bitmap width. */
+	width: number;
+	/** IDL bitmap height. */
+	height: number;
+}
+
+/**
  * One row in the `page_jsonld` table.
  *
  * Captures both `<script type="application/ld+json">` (`kind = 'ld+json'`) and

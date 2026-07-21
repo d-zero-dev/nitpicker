@@ -267,6 +267,8 @@ async function _fetchHead(
 					imageList: [],
 					anchorList: [],
 					html: '',
+					mainContents: null,
+					scrollHeight: null,
 					isSkipped: false,
 				};
 			};

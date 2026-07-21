@@ -75,6 +75,8 @@ export function resourceToPageData(params: ResourceToPageDataParams): PageData |
 		anchorList: [],
 		imageList: [],
 		html: '',
+		mainContents: null,
+		scrollHeight: null,
 		isSkipped: false,
 	};
 }

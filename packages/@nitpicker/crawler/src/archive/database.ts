@@ -1,4 +1,15 @@
-import type { JsonLdRow, TagRow } from './meta/types.js';
+import type {
+	JsonLdRow,
+	MainContentAudioRow,
+	MainContentButtonRow,
+	MainContentCanvasRow,
+	MainContentHeadingRow,
+	MainContentIframeRow,
+	MainContentImageRow,
+	MainContentTableRow,
+	MainContentVideoRow,
+	TagRow,
+} from './meta/types.js';
 import type {
 	Config,
 	DatabaseOption,
@@ -40,8 +51,16 @@ import { recordInventoryRun as recordInventoryRunOp } from './db-ops/inventory/r
 import { checkpoint as checkpointOp } from './db-ops/lifecycle/checkpoint.js';
 import { destroy as destroyOp } from './db-ops/lifecycle/destroy.js';
 import { init as initOp } from './db-ops/lifecycle/init.js';
+import { getAudiosOfPage as getAudiosOfPageOp } from './db-ops/meta/get-audios-of-page.js';
+import { getButtonsOfPage as getButtonsOfPageOp } from './db-ops/meta/get-buttons-of-page.js';
+import { getCanvasesOfPage as getCanvasesOfPageOp } from './db-ops/meta/get-canvases-of-page.js';
+import { getHeadingsOfPage as getHeadingsOfPageOp } from './db-ops/meta/get-headings-of-page.js';
+import { getIframesOfPage as getIframesOfPageOp } from './db-ops/meta/get-iframes-of-page.js';
 import { getJsonLdOfPage as getJsonLdOfPageOp } from './db-ops/meta/get-jsonld-of-page.js';
+import { getMainContentImagesOfPage as getMainContentImagesOfPageOp } from './db-ops/meta/get-main-content-images-of-page.js';
+import { getMainContentTablesOfPage as getMainContentTablesOfPageOp } from './db-ops/meta/get-main-content-tables-of-page.js';
 import { getTagsOfPage as getTagsOfPageOp } from './db-ops/meta/get-tags-of-page.js';
+import { getVideosOfPage as getVideosOfPageOp } from './db-ops/meta/get-videos-of-page.js';
 import { setUrlOrder as setUrlOrderOp } from './db-ops/pages/order/set-url-order.js';
 import { getCrawlingState as getCrawlingStateOp } from './db-ops/pages/read/get-crawling-state.js';
 import { getExistingPageUrls as getExistingPageUrlsOp } from './db-ops/pages/read/get-existing-page-urls.js';
@@ -154,6 +173,19 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		);
 	}
 	/**
+	 * Retrieves all `page_main_content_audios` rows for the given page id.
+	 * Delegates to {@link getAudiosOfPageOp}.
+	 * @param pageId
+	 */
+	async getAudiosOfPage(pageId: number): Promise<MainContentAudioRow[]> {
+		return emitErrorAndRetry(
+			this,
+			'Database.getAudiosOfPage',
+			async () => await getAudiosOfPageOp(this.#instance, pageId),
+			retrySetting,
+		);
+	}
+	/**
 	 * Retrieves the base URL of the crawl session from the `info` table.
 	 * Delegates to {@link getBaseUrlOp}.
 	 * @returns The base URL string.
@@ -164,6 +196,32 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			this,
 			'Database.getBaseUrl',
 			async () => await getBaseUrlOp(this.#instance),
+			retrySetting,
+		);
+	}
+	/**
+	 * Retrieves all `page_main_content_buttons` rows for the given page id.
+	 * Delegates to {@link getButtonsOfPageOp}.
+	 * @param pageId
+	 */
+	async getButtonsOfPage(pageId: number): Promise<MainContentButtonRow[]> {
+		return emitErrorAndRetry(
+			this,
+			'Database.getButtonsOfPage',
+			async () => await getButtonsOfPageOp(this.#instance, pageId),
+			retrySetting,
+		);
+	}
+	/**
+	 * Retrieves all `page_main_content_canvases` rows for the given page id.
+	 * Delegates to {@link getCanvasesOfPageOp}.
+	 * @param pageId
+	 */
+	async getCanvasesOfPage(pageId: number): Promise<MainContentCanvasRow[]> {
+		return emitErrorAndRetry(
+			this,
+			'Database.getCanvasesOfPage',
+			async () => await getCanvasesOfPageOp(this.#instance, pageId),
 			retrySetting,
 		);
 	}
@@ -181,6 +239,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			retrySetting,
 		);
 	}
+
 	/**
 	 * Retrieves the current crawling state by listing scraped and pending URLs.
 	 * Delegates to {@link getCrawlingStateOp} — see the op for the strict
@@ -223,6 +282,19 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		);
 	}
 	/**
+	 * Retrieves all `page_main_content_headings` rows for the given page id.
+	 * Delegates to {@link getHeadingsOfPageOp}.
+	 * @param pageId
+	 */
+	async getHeadingsOfPage(pageId: number): Promise<MainContentHeadingRow[]> {
+		return emitErrorAndRetry(
+			this,
+			'Database.getHeadingsOfPage',
+			async () => await getHeadingsOfPageOp(this.#instance, pageId),
+			retrySetting,
+		);
+	}
+	/**
 	 * Reads the HTML snapshot stored as a zstd-compressed BLOB for the given page.
 	 * Delegates to {@link getHtmlOfPageByIdOp}.
 	 * @param pageId - The database ID of the page.
@@ -233,6 +305,19 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			this,
 			'Database.getHtmlOfPageById',
 			async () => await getHtmlOfPageByIdOp(this.#instance, pageId),
+			retrySetting,
+		);
+	}
+	/**
+	 * Retrieves all `page_main_content_iframes` rows for the given page id.
+	 * Delegates to {@link getIframesOfPageOp}.
+	 * @param pageId
+	 */
+	async getIframesOfPage(pageId: number): Promise<MainContentIframeRow[]> {
+		return emitErrorAndRetry(
+			this,
+			'Database.getIframesOfPage',
+			async () => await getIframesOfPageOp(this.#instance, pageId),
 			retrySetting,
 		);
 	}
@@ -249,6 +334,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			retrySetting,
 		);
 	}
+
 	/**
 	 * Returns the underlying Knex query builder instance for direct SQL access.
 	 * This enables advanced queries (GROUP BY, HAVING, JOINs) at the database
@@ -258,6 +344,34 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	getKnex(): Knex {
 		return this.#instance;
 	}
+	/**
+	 * Retrieves all `page_main_content_images` rows for the given page id.
+	 * Delegates to {@link getMainContentImagesOfPageOp}.
+	 * @param pageId
+	 */
+	async getMainContentImagesOfPage(pageId: number): Promise<MainContentImageRow[]> {
+		return emitErrorAndRetry(
+			this,
+			'Database.getMainContentImagesOfPage',
+			async () => await getMainContentImagesOfPageOp(this.#instance, pageId),
+			retrySetting,
+		);
+	}
+
+	/**
+	 * Retrieves all `page_main_content_tables` rows for the given page id.
+	 * Delegates to {@link getMainContentTablesOfPageOp}.
+	 * @param pageId
+	 */
+	async getMainContentTablesOfPage(pageId: number): Promise<MainContentTableRow[]> {
+		return emitErrorAndRetry(
+			this,
+			'Database.getMainContentTablesOfPage',
+			async () => await getMainContentTablesOfPageOp(this.#instance, pageId),
+			retrySetting,
+		);
+	}
+
 	/**
 	 * Retrieves the crawl session name from the `info` table.
 	 * Delegates to {@link getNameOp}.
@@ -443,6 +557,20 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			retrySetting,
 		);
 	}
+	/**
+	 * Retrieves all `page_main_content_videos` rows for the given page id.
+	 * Delegates to {@link getVideosOfPageOp}.
+	 * @param pageId
+	 */
+	async getVideosOfPage(pageId: number): Promise<MainContentVideoRow[]> {
+		return emitErrorAndRetry(
+			this,
+			'Database.getVideosOfPage',
+			async () => await getVideosOfPageOp(this.#instance, pageId),
+			retrySetting,
+		);
+	}
+
 	/**
 	 * Records a crawler-level (`error` channel) failure into `crawl_errors`.
 	 * Delegates to {@link insertCrawlErrorOp}.

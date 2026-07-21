@@ -182,6 +182,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			verbose: options?.verbose ?? false,
 			userAgent: options?.userAgent || defaultUserAgent,
 			ignoreRobots: options?.ignoreRobots ?? false,
+			mainContentSelector: options?.mainContentSelector ?? null,
 			// Let the crawler reuse sub-resource data captured during page
 			// rendering instead of issuing a redundant HEAD pre-flight.
 			lookupResource: async (urls) => {
@@ -439,6 +440,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			disableQueries,
 			userAgent: options?.userAgent || defaultUserAgent,
 			ignoreRobots: options?.ignoreRobots ?? false,
+			mainContentSelector: options?.mainContentSelector ?? null,
 		});
 		const orchestrator = new CrawlerOrchestrator(archive, {
 			...options,

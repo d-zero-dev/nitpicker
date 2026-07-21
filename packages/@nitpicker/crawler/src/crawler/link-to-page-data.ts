@@ -50,6 +50,8 @@ export function linkToPageData(link: Link): PageData {
 		anchorList: [],
 		imageList: [],
 		html: '',
+		mainContents: null,
+		scrollHeight: null,
 		isSkipped: false,
 	};
 }

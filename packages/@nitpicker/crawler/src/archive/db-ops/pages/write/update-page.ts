@@ -16,9 +16,17 @@ import { clearWriteRefCaches } from '../../_shared/clear-write-ref-caches.js';
 import { resolveContentItemId } from '../../_shared/resolve-content-item-id.js';
 import { resolveUrlOrBlob } from '../../_shared/resolve-url-or-blob.js';
 
+import { insertAudios } from './insert-audios.js';
+import { insertButtons } from './insert-buttons.js';
+import { insertCanvases } from './insert-canvases.js';
+import { insertHeadings } from './insert-headings.js';
+import { insertIframes } from './insert-iframes.js';
 import { insertJsonLd } from './insert-jsonld.js';
+import { insertMainContentImages } from './insert-main-content-images.js';
+import { insertMainContentTables } from './insert-main-content-tables.js';
 import { insertPage } from './insert-page.js';
 import { insertTags } from './insert-tags.js';
+import { insertVideos } from './insert-videos.js';
 import { linkRedirectSources } from './link-redirect-sources.js';
 import { writePageHtmlBlob } from './write-page-html-blob.js';
 
@@ -140,6 +148,19 @@ async function updatePageInTransaction(
 	await insertTags(pageId, page.meta, trx);
 	if (writeHtml) {
 		await insertJsonLd(pageId, page.meta, trx);
+	}
+	// beholder's MainContentsData is captured in the same render pass as the
+	// HTML body / JSON-LD, so it shares the same `writeHtml` + non-null gate:
+	// external / non-HTML / metadata-only scrapes never populate it.
+	if (writeHtml && page.mainContents) {
+		await insertHeadings(pageId, page.mainContents, trx);
+		await insertMainContentImages(pageId, page.mainContents, trx);
+		await insertMainContentTables(pageId, page.mainContents, trx);
+		await insertButtons(pageId, page.mainContents, trx);
+		await insertIframes(pageId, page.mainContents, trx);
+		await insertVideos(pageId, page.mainContents, trx);
+		await insertAudios(pageId, page.mainContents, trx);
+		await insertCanvases(pageId, page.mainContents, trx);
 	}
 
 	// Chain lineage propagates FROM the originating URL

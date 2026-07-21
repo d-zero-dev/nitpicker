@@ -178,6 +178,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			verbose: options?.verbose ?? false,
 			userAgent: options?.userAgent || `Nitpicker/${pkg.version}`,
 			ignoreRobots: options?.ignoreRobots ?? false,
+			mainContentSelector: options?.mainContentSelector ?? null,
 			lookupResource: options?.lookupResource ?? null,
 			lookupPageSource: options?.lookupPageSource ?? null,
 			inventoryMode: options?.inventoryMode ?? null,
@@ -1617,6 +1618,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				metadataOnly,
 				retries: this.#options.retry,
 				headCheckResult,
+				mainContentSelector: this.#options.mainContentSelector,
 			});
 
 			// Image dom-path capture runs here — after the scrape completed but
