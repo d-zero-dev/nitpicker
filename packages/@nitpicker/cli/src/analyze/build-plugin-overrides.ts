@@ -8,8 +8,6 @@ interface PluginOptionFlags {
 	readonly searchKeywords?: string[];
 	/** CSS selector to narrow search scope for analyze-search plugin. */
 	readonly searchScope?: string;
-	/** CSS selector for main content detection in analyze-main-contents plugin. */
-	readonly mainContentSelector?: string;
 	/** BCP 47 language tag for analyze-axe plugin. */
 	readonly axeLang?: string;
 }
@@ -34,12 +32,6 @@ export function buildPluginOverrides(flags: PluginOptionFlags): PluginOverrides 
 			searchOverride.scope = flags.searchScope;
 		}
 		overrides['@nitpicker/analyze-search'] = searchOverride;
-	}
-
-	if (flags.mainContentSelector) {
-		overrides['@nitpicker/analyze-main-contents'] = {
-			mainContentSelector: flags.mainContentSelector,
-		};
 	}
 
 	if (flags.axeLang) {

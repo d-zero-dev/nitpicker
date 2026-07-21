@@ -24,6 +24,7 @@ export function mapFlagsToCrawlConfig(flags: CrawlFlagInput) {
 		retry: flags.retry,
 		userAgent: flags.userAgent,
 		ignoreRobots: flags.ignoreRobots,
+		mainContentSelector: flags.mainContentSelector,
 		verbose: flags.verbose,
 		excludes: flags.exclude,
 		excludeKeywords: flags.excludeKeyword,

@@ -100,6 +100,10 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Ignore robots.txt restrictions (use responsibly)',
 		},
+		mainContentSelector: {
+			type: 'string',
+			desc: 'CSS selector overriding automatic main-content-region detection',
+		},
 		output: {
 			type: 'string',
 			shortFlag: 'o',
@@ -127,10 +131,6 @@ export const commandDef = {
 		searchScope: {
 			type: 'string',
 			desc: 'CSS selector to narrow search scope for analyze-search plugin (overrides config file)',
-		},
-		mainContentSelector: {
-			type: 'string',
-			desc: 'CSS selector for main content detection in analyze-main-contents plugin (overrides config file)',
 		},
 		axeLang: {
 			type: 'string',
@@ -232,6 +232,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			listFile: flags.listFile,
 			userAgent: flags.userAgent,
 			ignoreRobots: flags.ignoreRobots,
+			mainContentSelector: flags.mainContentSelector,
 			output: flags.output,
 			strict: flags.strict,
 			verbose: flags.verbose,
@@ -266,7 +267,6 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 		silent: flags.silent,
 		searchKeywords: flags.searchKeywords,
 		searchScope: flags.searchScope,
-		mainContentSelector: flags.mainContentSelector,
 		axeLang: flags.axeLang,
 	});
 

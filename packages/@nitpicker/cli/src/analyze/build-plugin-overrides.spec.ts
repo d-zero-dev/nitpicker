@@ -39,15 +39,6 @@ describe('buildPluginOverrides', () => {
 		});
 	});
 
-	it('builds main content selector override', () => {
-		const result = buildPluginOverrides({
-			mainContentSelector: '#page-body',
-		});
-		expect(result).toEqual({
-			'@nitpicker/analyze-main-contents': { mainContentSelector: '#page-body' },
-		});
-	});
-
 	it('builds axe lang override', () => {
 		const result = buildPluginOverrides({
 			axeLang: 'ja',
@@ -61,7 +52,6 @@ describe('buildPluginOverrides', () => {
 		const result = buildPluginOverrides({
 			searchKeywords: ['test'],
 			searchScope: 'article',
-			mainContentSelector: '#main',
 			axeLang: 'en',
 		});
 		expect(result).toEqual({
@@ -69,7 +59,6 @@ describe('buildPluginOverrides', () => {
 				keywords: ['test'],
 				scope: 'article',
 			},
-			'@nitpicker/analyze-main-contents': { mainContentSelector: '#main' },
 			'@nitpicker/analyze-axe': { lang: 'en' },
 		});
 	});
@@ -78,7 +67,6 @@ describe('buildPluginOverrides', () => {
 		const result = buildPluginOverrides({
 			searchKeywords: undefined,
 			searchScope: undefined,
-			mainContentSelector: undefined,
 			axeLang: undefined,
 		});
 		expect(result).toEqual({});
