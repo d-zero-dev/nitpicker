@@ -581,7 +581,23 @@ export interface ListPagesOptions {
 		| 'hasCSP'
 		| 'hasXFrameOptions'
 		| 'hasXContentTypeOptions'
-		| 'hasHSTS';
+		| 'hasHSTS'
+		| 'mainContentNodeName'
+		| 'mainContentId'
+		| 'mainContentRole'
+		| 'mainContentSelector'
+		| 'mainContentWordCount'
+		| 'mainContentBodyWordCount'
+		| 'mainContentHeadingCount'
+		| 'mainContentImageCount'
+		| 'mainContentTableCount'
+		| 'mainContentButtonCount'
+		| 'mainContentIframeCount'
+		| 'mainContentVideoCount'
+		| 'mainContentAudioCount'
+		| 'mainContentCanvasCount'
+		| 'scrollHeightDesktop'
+		| 'scrollHeightMobile';
 	/** Sort direction. */
 	sortOrder?: SortOrder;
 	/** Maximum number of results to return. Defaults to 100. */
@@ -629,6 +645,23 @@ export interface PageListRow {
 	tag_count: number | null;
 	jsonld_count: number | null;
 	tags_providers_csv: string | null;
+	main_content_node_name: string | null;
+	main_content_id: string | null;
+	main_content_role: string | null;
+	main_content_selector: string | null;
+	main_content_class_list: string | null;
+	main_content_word_count: number | null;
+	main_content_body_word_count: number | null;
+	main_content_heading_count: number | null;
+	main_content_image_count: number | null;
+	main_content_table_count: number | null;
+	main_content_button_count: number | null;
+	main_content_iframe_count: number | null;
+	main_content_video_count: number | null;
+	main_content_audio_count: number | null;
+	main_content_canvas_count: number | null;
+	scroll_height_desktop: number | null;
+	scroll_height_mobile: number | null;
 	firstCrawledAt: number | null;
 	lastCrawledAt: number | null;
 	hasCSP: 0 | 1;
@@ -713,6 +746,40 @@ export interface PageListItem {
 	jsonldCount: number | null;
 	/** CSV of Wappalyzer providers (denormalised). */
 	tagsProvidersCsv: string | null;
+	/** Detected main-content element's `nodeName` (e.g. `'MAIN'`), or null. */
+	mainContentNodeName: string | null;
+	/** Detected main-content element's `id`, or null. */
+	mainContentId: string | null;
+	/** Detected main-content element's `role` attribute, or null. */
+	mainContentRole: string | null;
+	/** Diagnostic tag+id+class selector for the detected element, or null. */
+	mainContentSelector: string | null;
+	/** Detected main-content element's CSS classes, or null. */
+	mainContentClassList: string[] | null;
+	/** Character count of the main region's text content (denormalised). */
+	mainContentWordCount: number | null;
+	/** Character count of `document.body`'s text content (denormalised). */
+	mainContentBodyWordCount: number | null;
+	/** Number of headings within the main region (denormalised). */
+	mainContentHeadingCount: number | null;
+	/** Number of images within the main region (denormalised). */
+	mainContentImageCount: number | null;
+	/** Number of tables within the main region (denormalised). */
+	mainContentTableCount: number | null;
+	/** Number of button-like elements within the main region (denormalised). */
+	mainContentButtonCount: number | null;
+	/** Number of iframes within the main region (denormalised). */
+	mainContentIframeCount: number | null;
+	/** Number of videos within the main region (denormalised). */
+	mainContentVideoCount: number | null;
+	/** Number of audios within the main region (denormalised). */
+	mainContentAudioCount: number | null;
+	/** Number of canvases within the main region (denormalised). */
+	mainContentCanvasCount: number | null;
+	/** `document.body.scrollHeight` at the desktop-compact preset (denormalised). */
+	scrollHeightDesktop: number | null;
+	/** `document.body.scrollHeight` at the mobile-small preset (denormalised). */
+	scrollHeightMobile: number | null;
 	/** First-discovery UNIX ms (within-archive). */
 	firstCrawledAt: number | null;
 	/** Most-recent-success UNIX ms (within-archive). */
@@ -787,7 +854,22 @@ export interface ListViewerPagesOptions {
 	/** Filter by provenance — see {@link PageSource}. */
 	source?: import('@nitpicker/crawler').PageSource;
 	/** Field to sort results by. Defaults to `'url'`. */
-	sortBy?: 'url' | 'status' | 'title';
+	sortBy?:
+		| 'url'
+		| 'status'
+		| 'title'
+		| 'mainContentWordCount'
+		| 'mainContentBodyWordCount'
+		| 'mainContentHeadingCount'
+		| 'mainContentImageCount'
+		| 'mainContentTableCount'
+		| 'mainContentButtonCount'
+		| 'mainContentIframeCount'
+		| 'mainContentVideoCount'
+		| 'mainContentAudioCount'
+		| 'mainContentCanvasCount'
+		| 'scrollHeightDesktop'
+		| 'scrollHeightMobile';
 	/** Sort direction. Defaults to `'asc'`. */
 	sortOrder?: 'asc' | 'desc';
 	/** Maximum number of results to return. Defaults to 100. */
@@ -970,6 +1052,41 @@ export interface PageDetail {
 	/** CSV of Wappalyzer providers (denormalised). */
 	tagsProvidersCsv: string | null;
 
+	/** Detected main-content element's `nodeName` (e.g. `'MAIN'`), or null. */
+	mainContentNodeName: string | null;
+	/** Detected main-content element's `id`, or null. */
+	mainContentId: string | null;
+	/** Detected main-content element's `role` attribute, or null. */
+	mainContentRole: string | null;
+	/** Diagnostic tag+id+class selector for the detected element, or null. */
+	mainContentSelector: string | null;
+	/** Detected main-content element's CSS classes, or null. */
+	mainContentClassList: string[] | null;
+	/** Character count of the main region's text content (denormalised). */
+	mainContentWordCount: number | null;
+	/** Character count of `document.body`'s text content (denormalised). */
+	mainContentBodyWordCount: number | null;
+	/** Number of headings within the main region (denormalised; full detail via `getPageMainContents`). */
+	mainContentHeadingCount: number | null;
+	/** Number of images within the main region (denormalised; full detail via `getPageMainContents`). */
+	mainContentImageCount: number | null;
+	/** Number of tables within the main region (denormalised; full detail via `getPageMainContents`). */
+	mainContentTableCount: number | null;
+	/** Number of button-like elements within the main region (denormalised; full detail via `getPageMainContents`). */
+	mainContentButtonCount: number | null;
+	/** Number of iframes within the main region (denormalised; full detail via `getPageMainContents`). */
+	mainContentIframeCount: number | null;
+	/** Number of videos within the main region (denormalised; full detail via `getPageMainContents`). */
+	mainContentVideoCount: number | null;
+	/** Number of audios within the main region (denormalised; full detail via `getPageMainContents`). */
+	mainContentAudioCount: number | null;
+	/** Number of canvases within the main region (denormalised; full detail via `getPageMainContents`). */
+	mainContentCanvasCount: number | null;
+	/** `document.body.scrollHeight` at the desktop-compact preset (denormalised). */
+	scrollHeightDesktop: number | null;
+	/** `document.body.scrollHeight` at the mobile-small preset (denormalised). */
+	scrollHeightMobile: number | null;
+
 	/** Parsed `meta_extras` JSON catch-all (nested sub-objects not flattened). */
 	metaExtras: Record<string, unknown>;
 	/** Summary of JSON-LD entries (count + types + parseErrorCount). */
@@ -1053,6 +1170,160 @@ export interface PageTagEntry {
 	categories: readonly string[];
 	/** Source details (script-src / inline / iframe-src / window-global / …). */
 	sources: ReadonlyArray<Record<string, unknown>>;
+}
+
+/**
+ * A heading entry within `PageMainContents.headings`.
+ */
+export interface MainContentHeadingEntry {
+	/** Heading text after whitespace removal, or `null` when empty. */
+	text: string | null;
+	/** Heading level (1-6). */
+	level: 1 | 2 | 3 | 4 | 5 | 6;
+}
+
+/**
+ * An image entry within `PageMainContents.images`.
+ */
+export interface MainContentImageEntry {
+	/** Resolved absolute `src` URL. */
+	src: string;
+	/** `alt` attribute value (may be an empty string). */
+	alt: string;
+}
+
+/**
+ * A table entry within `PageMainContents.tables`.
+ */
+export interface MainContentTableEntry {
+	/** Number of `<tr>` elements. */
+	rows: number;
+	/** Number of `th`/`td` cells in the first row. */
+	cols: number;
+	/** Whether the table contains a `<thead>`. */
+	hasHeader: boolean;
+	/** Whether the table contains a `<tfoot>`. */
+	hasFooter: boolean;
+	/** Whether any cell uses `colspan` or `rowspan`. */
+	hasMergedCell: boolean;
+}
+
+/**
+ * A button-like element entry within `PageMainContents.buttons`.
+ */
+export interface MainContentButtonEntry {
+	/** Element tag name (e.g. `'BUTTON'`, `'A'`, `'DIV'`). */
+	nodeName: string;
+	/** `role` attribute, or `null` when absent. */
+	role: string | null;
+	/** `type` for `<button>` / `<input>`, otherwise `null`. */
+	type: string | null;
+	/** Label text after whitespace removal, or `null` when empty. */
+	text: string | null;
+	/** `true` when `disabled` or `aria-disabled="true"`. */
+	disabled: boolean;
+}
+
+/**
+ * An iframe entry within `PageMainContents.iframes`.
+ */
+export interface MainContentIframeEntry {
+	/** Resolved absolute `src` URL. */
+	src: string;
+	/** `title` attribute, or `null` when absent. */
+	title: string | null;
+	/** Raw `width` attribute string, or `null` when absent. */
+	width: string | null;
+	/** Raw `height` attribute string, or `null` when absent. */
+	height: string | null;
+}
+
+/**
+ * A video entry within `PageMainContents.videos`.
+ */
+export interface MainContentVideoEntry {
+	/** Resolved media URL. */
+	src: string;
+	/** Resolved `poster` URL, or `null` when unset. */
+	poster: string | null;
+	/** IDL `width` in pixels. */
+	width: number;
+	/** IDL `height` in pixels. */
+	height: number;
+}
+
+/**
+ * An audio entry within `PageMainContents.audios`.
+ */
+export interface MainContentAudioEntry {
+	/** Resolved media URL. */
+	src: string;
+}
+
+/**
+ * A canvas entry within `PageMainContents.canvases`.
+ */
+export interface MainContentCanvasEntry {
+	/** IDL bitmap width. */
+	width: number;
+	/** IDL bitmap height. */
+	height: number;
+}
+
+/**
+ * Full drill-down for a page's detected main-content region, returned by
+ * `getPageMainContents(url)`. Bundles all eight `page_main_content_*` child
+ * tables plus the detected element's identity and the page's scroll-height
+ * measurements into one call — mirroring `getPageTags` / `getPageJsonLd`'s
+ * grain, but as a single combined object since the eight arrays describe one
+ * conceptual "main content" rather than independent detections.
+ * @example
+ * const mc = await getPageMainContents(accessor, 'https://example.com/');
+ * if (mc) {
+ *   console.log(mc.wordCount, mc.headings.length, mc.main?.selector);
+ * }
+ */
+export interface PageMainContents {
+	/** Identity of the detected main-content element, or `null` when none was found. */
+	main: {
+		/** Element tag name (e.g. `'MAIN'`). */
+		nodeName: string;
+		/** Element `id`, or `null`. */
+		id: string | null;
+		/** Element CSS classes. */
+		classList: string[];
+		/** `role` attribute, or `null`. */
+		role: string | null;
+		/** Diagnostic tag+id+class selector. */
+		selector: string;
+	} | null;
+	/** Character count of the main region's text content. */
+	wordCount: number;
+	/** Character count of `document.body`'s text content. */
+	bodyWordCount: number;
+	/** `document.body.scrollHeight` at desktop-compact and mobile-small presets. */
+	scrollHeight: {
+		/** Height at the desktop-compact preset, or `null` if unmeasured. */
+		desktop: number | null;
+		/** Height at the mobile-small preset, or `null` if unmeasured. */
+		mobile: number | null;
+	};
+	/** Headings within the main region, in DOM order. */
+	headings: MainContentHeadingEntry[];
+	/** Images within the main region, in DOM order. */
+	images: MainContentImageEntry[];
+	/** Tables within the main region, in DOM order. */
+	tables: MainContentTableEntry[];
+	/** Button-like elements within the main region, in DOM order. */
+	buttons: MainContentButtonEntry[];
+	/** Iframes within the main region, in DOM order. */
+	iframes: MainContentIframeEntry[];
+	/** Videos within the main region, in DOM order. */
+	videos: MainContentVideoEntry[];
+	/** Audios within the main region, in DOM order. */
+	audios: MainContentAudioEntry[];
+	/** Canvases within the main region, in DOM order. */
+	canvases: MainContentCanvasEntry[];
 }
 
 /**

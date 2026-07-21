@@ -9,7 +9,22 @@ export interface ExpectedViewerPagesCursor {
 	/** See `buildViewerPagesFilterKey`. */
 	filterKey: string;
 	/** The current request's sort field. */
-	sortBy: 'url' | 'status' | 'title';
+	sortBy:
+		| 'url'
+		| 'status'
+		| 'title'
+		| 'mainContentWordCount'
+		| 'mainContentBodyWordCount'
+		| 'mainContentHeadingCount'
+		| 'mainContentImageCount'
+		| 'mainContentTableCount'
+		| 'mainContentButtonCount'
+		| 'mainContentIframeCount'
+		| 'mainContentVideoCount'
+		| 'mainContentAudioCount'
+		| 'mainContentCanvasCount'
+		| 'scrollHeightDesktop'
+		| 'scrollHeightMobile';
 	/** The current request's sort direction. */
 	sortOrder: 'asc' | 'desc';
 	/**

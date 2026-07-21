@@ -37,6 +37,7 @@ export { getPageDetail } from './get-page-detail.js';
 export { getPageHtml } from './get-page-html.js';
 export { getPageJsonLd } from './get-page-jsonld.js';
 export { getPageJsonLdOverview } from './get-page-jsonld-overview.js';
+export { getPageMainContents } from './get-page-main-contents.js';
 export { getPageTags } from './get-page-tags.js';
 export { getResourceReferrers } from './get-resource-referrers.js';
 export { getSummary } from './get-summary.js';
