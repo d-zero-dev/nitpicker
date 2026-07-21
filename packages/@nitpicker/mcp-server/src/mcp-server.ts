@@ -17,6 +17,7 @@ import {
 	getPageHtml,
 	getPageJsonLd,
 	getPageJsonLdOverview,
+	getPageMainContents,
 	getPageTags,
 	getResourceReferrers,
 	getSummaryFastPath,
@@ -470,6 +471,12 @@ export function createServer() {
 					case 'get_page_tags': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(await getPageTags(accessor, requireString(args, 'url')));
+					}
+					case 'get_page_main_contents': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await getPageMainContents(accessor, requireString(args, 'url')),
+						);
 					}
 					default: {
 						return {

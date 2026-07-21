@@ -161,6 +161,27 @@ describe('createServer', () => {
 				},
 			],
 			isSkipped: false,
+			mainContents: {
+				title: 'Home',
+				main: {
+					nodeName: 'MAIN',
+					id: null,
+					classList: ['l-main'],
+					role: null,
+					selector: 'main.l-main',
+				},
+				wordCount: 100,
+				bodyWordCount: 150,
+				headings: [{ text: 'Home', level: 1 }],
+				images: [],
+				tables: [],
+				buttons: [],
+				iframes: [],
+				videos: [],
+				audios: [],
+				canvases: [],
+			},
+			scrollHeight: { desktop: 3200, mobile: 5400 },
 		});
 
 		await archive.setPage({
@@ -229,9 +250,9 @@ describe('createServer', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('ListTools で26個のツールが返される', async () => {
+	it('ListTools で27個のツールが返される', async () => {
 		const result = await listTools(server);
-		expect(result.tools).toHaveLength(26);
+		expect(result.tools).toHaveLength(27);
 		const names = result.tools.map((t) => t.name);
 		expect(names).toContain('open_archive');
 		expect(names).toContain('close_archive');
@@ -243,6 +264,7 @@ describe('createServer', () => {
 		expect(names).toContain('get_tag_inventory');
 		expect(names).toContain('get_page_jsonld');
 		expect(names).toContain('get_page_tags');
+		expect(names).toContain('get_page_main_contents');
 		expect(names).toContain('count_pages_by_tag');
 		expect(names).toContain('count_pages_by_jsonld_type');
 		expect(names).toContain('get_page_jsonld_overview');
@@ -326,6 +348,35 @@ describe('createServer', () => {
 		});
 		expect(result.isError).toBeUndefined();
 		expect(result.content[0]!.text).toContain('<title>Home</title>');
+	});
+
+	it('get_page_main_contents はメインコンテンツの集計値と子要素配列を返す', async () => {
+		const result = await callTool(server, 'get_page_main_contents', {
+			archiveId,
+			url: 'https://example.com',
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.main).toEqual({
+			nodeName: 'MAIN',
+			id: null,
+			role: null,
+			selector: 'main.l-main',
+			classList: ['l-main'],
+		});
+		expect(data.wordCount).toBe(100);
+		expect(data.bodyWordCount).toBe(150);
+		expect(data.scrollHeight).toEqual({ desktop: 3200, mobile: 5400 });
+		expect(data.headings).toEqual([{ text: 'Home', level: 1 }]);
+	});
+
+	it('get_page_main_contents はレンダリングされていないページに null を返す', async () => {
+		const result = await callTool(server, 'get_page_main_contents', {
+			archiveId,
+			url: 'https://example.com/about',
+		});
+		expect(result.isError).toBeUndefined();
+		expect(JSON.parse(result.content[0]!.text)).toBeNull();
 	});
 
 	it('list_links で broken リンクを取得する', async () => {
