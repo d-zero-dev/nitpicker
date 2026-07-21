@@ -27,7 +27,7 @@
 | `@nitpicker/cli`                  | 統合 CLI（crawl / analyze / report / pipeline / query / viewer）                             |
 | `@nitpicker/viewer`               | Hono API + React SPA のローカルビューア（backend `src/` + frontend `web/` の単一パッケージ） |
 | `@nitpicker/mcp-server`           | query の MCP 露出（stdio、`nitpicker-mcp`）                                                  |
-| `@nitpicker/analyze-*`            | axe / lighthouse / markuplint / textlint / main-contents / search の各監査                   |
+| `@nitpicker/analyze-*`            | axe / lighthouse / markuplint / textlint / search の各監査                                   |
 | `@nitpicker/report-google-sheets` | Google Sheets レポート出力（5 フェーズの `createSheets`）                                    |
 | `@nitpicker/types`                | 監査型定義（Report / ConfigJSON）                                                            |
 | `packages/test-server`            | E2E 用 Hono サーバー（port 8010、プロダクション非依存）                                      |
@@ -55,6 +55,8 @@
 - **content_items / page_meta / resource_items / anchor_edges / resource_ref_edges / image_items（0.13 entity テーブル、正本）**: crawler の writer がクロール中に直接書く対象。URL・テキスト・content-type・JSON・BLOB・ヘッダは ref テーブル（`url_refs` / `text_refs` / `content_type_refs` / `json_refs` / `blob_refs` / `header_sets` 系）への FK で正規化する。書き込み primitive は `db-ops/_shared/`（`resolveContentItemId` / `upsert-*.ts`）
 - **pages / anchors / images / resources / resources-referrers（legacy、現行アーカイブには存在しない）**: fresh archive には作られず（E2E `crawl-write-entity-tables.e2e.ts` が pin）、pre-0.13 アーカイブの中にのみ存在する。`scripts/migrate-to-0.13.mjs` が populate 元として読んだ後、同スクリプトが adjunct テーブルの FK を `content_items(id)` へ張り替え（`retarget-legacy-fk-tables.ts`）、legacy 5 テーブルを DROP する（`drop-legacy-tables.ts`。`pages.redirectDestId` の自己 FK があるため enforcement OFF で実行 — WHY は同ファイル JSDoc）。テスト用の legacy DDL は `archive/test-utils/setup-legacy-fk-db.ts` が唯一の供給源
 - **page_tags**（Wappalyzer 検出）/ **page_jsonld**（JSON-LD / SpeculationRules）: 1 行 1 検出。FK は `content_items(id)` を参照
+- **page_meta の main-content 系 17 列（beholder の `MainContentsData` / `ScrollHeightData`）**: 検出したメインコンテンツ要素の識別情報（`main_content_node_name` / `id` / `role` / `selector` / `class_list`）と集計値（`main_content_word_count` / `body_word_count` / 8 種の `*_count`、`scroll_height_desktop` / `mobile`）。`tag_count` / `jsonld_count` と同じ denormalised aggregate パターン（`archive/meta/compute-main-contents-denormalized.ts`）。未レンダリングのページは全列 `null`
+- **page_main_content_headings / images / tables / buttons / iframes / videos / audios / canvases**: 上記の main-content 要素配下にある子要素の明細（1 行 1 要素、DOM 順）。`page_tags` / `page_jsonld` と同じ camelCase `pageId` FK（`content_items(id)` 参照）。集計値のみで足りる一覧系クエリは page_meta の列だけを見て、明細が要る場合だけ `getPageMainContents` 経由でこれらを読む
 - **page_html_blobs / page_html_ref**: HTML スナップショット。SHA-256 hash PK の content-addressable BLOB（WHY は `create-adjunct-tables.ts` JSDoc）
 - **info**: 設定（単一行）。起点とスコープは `roots` 1 本で表現（`baseUrl` = `roots[0]`）
 - **page_errors / crawl_errors**: 失敗の 2 系統（スクレイプ経路 / crawler レベル）。kind は保存せず読み取り時に `classifyErrorKind` で導出

@@ -32,23 +32,22 @@ CLI の詳細な使い方と全オプションは [@nitpicker/cli README](./pack
 
 ## パッケージ
 
-| パッケージ                                                                                | 用途                                                    |
-| ----------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| [@nitpicker/cli](./packages/@nitpicker/cli/README.md)                                     | クロール、分析、レポート、クエリ、ビューアを実行するCLI |
-| [@nitpicker/crawler](./packages/@nitpicker/crawler/README.md)                             | ヘッドレスブラウザによるクロールとアーカイブ生成        |
-| [@nitpicker/core](./packages/@nitpicker/core/README.md)                                   | analyzeプラグインを実行する分析エンジン                 |
-| [@nitpicker/query](./packages/@nitpicker/query/README.md)                                 | `.nitpicker` アーカイブのクエリ関数                     |
-| [@nitpicker/report-google-sheets](./packages/@nitpicker/report-google-sheets/README.md)   | Google Sheets向けレポート出力                           |
-| [@nitpicker/mcp-server](./packages/@nitpicker/mcp-server/README.md)                       | MCP経由でアーカイブを問い合わせるサーバー               |
-| [@nitpicker/viewer](./packages/@nitpicker/viewer/README.md)                               | `.nitpicker` アーカイブを閲覧するローカルビューア       |
-| [@nitpicker/types](./packages/@nitpicker/types/README.md)                                 | 共有TypeScript型定義                                    |
-| [@nitpicker/analyze-axe](./packages/@nitpicker/analyze-axe/README.md)                     | axe-coreによるアクセシビリティ分析プラグイン            |
-| [@nitpicker/analyze-lighthouse](./packages/@nitpicker/analyze-lighthouse/README.md)       | Lighthouseによるパフォーマンス分析プラグイン            |
-| [@nitpicker/analyze-markuplint](./packages/@nitpicker/analyze-markuplint/README.md)       | markuplintによるHTML検証プラグイン                      |
-| [@nitpicker/analyze-textlint](./packages/@nitpicker/analyze-textlint/README.md)           | textlintによる日本語文章校正プラグイン                  |
-| [@nitpicker/analyze-main-contents](./packages/@nitpicker/analyze-main-contents/README.md) | メインコンテンツ抽出プラグイン                          |
-| [@nitpicker/analyze-search](./packages/@nitpicker/analyze-search/README.md)               | キーワード・CSSセレクタ検索プラグイン                   |
-| [test-server](./packages/test-server/README.md)                                           | E2Eテスト用サーバー                                     |
+| パッケージ                                                                              | 用途                                                    |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [@nitpicker/cli](./packages/@nitpicker/cli/README.md)                                   | クロール、分析、レポート、クエリ、ビューアを実行するCLI |
+| [@nitpicker/crawler](./packages/@nitpicker/crawler/README.md)                           | ヘッドレスブラウザによるクロールとアーカイブ生成        |
+| [@nitpicker/core](./packages/@nitpicker/core/README.md)                                 | analyzeプラグインを実行する分析エンジン                 |
+| [@nitpicker/query](./packages/@nitpicker/query/README.md)                               | `.nitpicker` アーカイブのクエリ関数                     |
+| [@nitpicker/report-google-sheets](./packages/@nitpicker/report-google-sheets/README.md) | Google Sheets向けレポート出力                           |
+| [@nitpicker/mcp-server](./packages/@nitpicker/mcp-server/README.md)                     | MCP経由でアーカイブを問い合わせるサーバー               |
+| [@nitpicker/viewer](./packages/@nitpicker/viewer/README.md)                             | `.nitpicker` アーカイブを閲覧するローカルビューア       |
+| [@nitpicker/types](./packages/@nitpicker/types/README.md)                               | 共有TypeScript型定義                                    |
+| [@nitpicker/analyze-axe](./packages/@nitpicker/analyze-axe/README.md)                   | axe-coreによるアクセシビリティ分析プラグイン            |
+| [@nitpicker/analyze-lighthouse](./packages/@nitpicker/analyze-lighthouse/README.md)     | Lighthouseによるパフォーマンス分析プラグイン            |
+| [@nitpicker/analyze-markuplint](./packages/@nitpicker/analyze-markuplint/README.md)     | markuplintによるHTML検証プラグイン                      |
+| [@nitpicker/analyze-textlint](./packages/@nitpicker/analyze-textlint/README.md)         | textlintによる日本語文章校正プラグイン                  |
+| [@nitpicker/analyze-search](./packages/@nitpicker/analyze-search/README.md)             | キーワード・CSSセレクタ検索プラグイン                   |
+| [test-server](./packages/test-server/README.md)                                         | E2Eテスト用サーバー                                     |
 
 ## ライセンス
 
