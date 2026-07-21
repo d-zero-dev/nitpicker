@@ -5,7 +5,7 @@ import { discoverAnalyzePlugins } from './discover-analyze-plugins.js';
 describe('discoverAnalyzePlugins', () => {
 	it('returns all standard analyze plugins', () => {
 		const plugins = discoverAnalyzePlugins();
-		expect(plugins.length).toBeGreaterThanOrEqual(6);
+		expect(plugins.length).toBeGreaterThanOrEqual(5);
 		expect(plugins.map((p) => p.name)).toContain('@nitpicker/analyze-axe');
 		expect(plugins.map((p) => p.name)).toContain('@nitpicker/analyze-textlint');
 	});

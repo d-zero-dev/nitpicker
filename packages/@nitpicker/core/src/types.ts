@@ -77,11 +77,6 @@ export interface PluginOverrides {
 		/** CSS selector to narrow the search scope. */
 		scope?: string;
 	};
-	/** Overrides for `@nitpicker/analyze-main-contents` plugin settings. */
-	'@nitpicker/analyze-main-contents'?: {
-		/** CSS selector for main content detection. */
-		mainContentSelector?: string;
-	};
 	/** Overrides for `@nitpicker/analyze-axe` plugin settings. */
 	'@nitpicker/analyze-axe'?: {
 		/** BCP 47 language tag for locale. */
