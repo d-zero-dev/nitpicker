@@ -18,6 +18,7 @@ import { registerLinksRoute } from './routes/register-links-route.js';
 import { registerMismatchesRoute } from './routes/register-mismatches-route.js';
 import { registerPageDetailRoute } from './routes/register-page-detail-route.js';
 import { registerPageHtmlRoute } from './routes/register-page-html-route.js';
+import { registerPageMainContentsRoute } from './routes/register-page-main-contents-route.js';
 import { registerPagesRoute } from './routes/register-pages-route.js';
 import { registerResourceReferrersRoute } from './routes/register-resource-referrers-route.js';
 import { registerResourcesRoute } from './routes/register-resources-route.js';
@@ -49,6 +50,7 @@ export function createApp(options: CreateAppOptions): Hono {
 	registerPagesRoute(app, context);
 	registerPageDetailRoute(app, context);
 	registerPageHtmlRoute(app, context);
+	registerPageMainContentsRoute(app, context);
 	registerDirectoryTreeRoute(app, context);
 	registerDirectoryTreeChildrenRoute(app, context);
 	registerDirectoryTreePagesRoute(app, context);

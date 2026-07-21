@@ -52,6 +52,32 @@ for (let i = 0; i < PAGE_COUNT; i++) {
 		contentLength: 200,
 		responseHeaders: {},
 		html: `<html><head><title>Page ${i}</title></head><body><h1>Page ${i}</h1></body></html>`,
+		// Only the first page carries main-content data — the pagination smoke
+		// tests don't care, and this keeps the fixture-generation loop cheap.
+		mainContents:
+			i === 0
+				? {
+						title: `Page ${i}`,
+						main: {
+							nodeName: 'MAIN',
+							id: null,
+							classList: ['l-main'],
+							role: null,
+							selector: 'main.l-main',
+						},
+						wordCount: 100,
+						bodyWordCount: 150,
+						headings: [{ text: 'Page 0', level: 1 }],
+						images: [],
+						tables: [],
+						buttons: [],
+						iframes: [],
+						videos: [],
+						audios: [],
+						canvases: [],
+					}
+				: null,
+		scrollHeight: i === 0 ? { desktop: 3200, mobile: 5400 } : null,
 		meta: {
 			lang: 'ja',
 			title: `Page ${i}`,

@@ -1,5 +1,21 @@
 /** Every valid `/api/pages` `sortBy` value, for the runtime guard below. */
-const PAGE_SORT_BY_VALUES = ['url', 'status', 'title'] as const;
+const PAGE_SORT_BY_VALUES = [
+	'url',
+	'status',
+	'title',
+	'mainContentWordCount',
+	'mainContentBodyWordCount',
+	'mainContentHeadingCount',
+	'mainContentImageCount',
+	'mainContentTableCount',
+	'mainContentButtonCount',
+	'mainContentIframeCount',
+	'mainContentVideoCount',
+	'mainContentAudioCount',
+	'mainContentCanvasCount',
+	'scrollHeightDesktop',
+	'scrollHeightMobile',
+] as const;
 
 /** A validated `/api/pages` sort field. */
 export type PageSortBy = (typeof PAGE_SORT_BY_VALUES)[number];
