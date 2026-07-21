@@ -99,7 +99,9 @@ describe('analyze-markuplint plugin', () => {
 					rule: 'attr-duplication',
 					code: '',
 					message: 'Duplicate attribute',
-					url: 'https://example.com/page (5:10)',
+					url: 'https://example.com/page',
+					line: 5,
+					col: 10,
 				},
 			],
 		});
