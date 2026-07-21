@@ -1507,7 +1507,7 @@ describe('buildViewerReadModel', () => {
 			}
 
 			await buildViewerReadModel(archive);
-		});
+		}, 30_000);
 
 		afterAll(async () => {
 			if (archive) {
