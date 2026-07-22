@@ -1,10 +1,8 @@
 import type { DirectoryTreeNode, DirectoryTreeRoot } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { INITIAL_DIRECTORY_TREE_DEPTH } from './directory-tree-constants.js';
 import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
-
-/** Maximum depth included in the initial tree load — deeper levels are expanded on demand via `listDirectoryChildren`. */
-const INITIAL_DEPTH = 3;
 
 /** Row shape read from `viewer_directory_nodes` by {@link getDirectoryTree}. */
 interface DirectoryNodeRow {
@@ -93,7 +91,7 @@ export async function getDirectoryTree(
 
 	const knex = accessor.getKnex();
 	const rows: DirectoryNodeRow[] = await knex('viewer_directory_nodes')
-		.where('depth', '<=', INITIAL_DEPTH)
+		.where('depth', '<=', INITIAL_DIRECTORY_TREE_DEPTH)
 		.select(
 			'node_id',
 			'parent_node_id',

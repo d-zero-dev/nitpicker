@@ -28,6 +28,10 @@
 		"./header-presence": {
 			"import": "./lib/header-presence.js",
 			"types": "./lib/header-presence.d.ts"
+		},
+		"./directory-tree-constants": {
+			"import": "./lib/directory-tree-constants.js",
+			"types": "./lib/directory-tree-constants.d.ts"
 		}
 	},
 	"scripts": {
