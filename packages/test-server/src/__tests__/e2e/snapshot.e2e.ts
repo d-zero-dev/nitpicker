@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_PORT } from './test-server-port.js';
 
 describe('HTML snapshot and metadata', () => {
 	let result: CrawlResult;
 
 	beforeAll(async () => {
-		result = await crawl(['http://localhost:8010/meta/']);
+		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/meta/`]);
 	}, 180_000);
 
 	afterAll(async () => {

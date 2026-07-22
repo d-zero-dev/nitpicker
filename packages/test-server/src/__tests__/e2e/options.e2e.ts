@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_ORIGIN } from './test-server-port.js';
 
 describe('Crawler options', () => {
 	describe('fetchExternal: false', () => {
 		let result: CrawlResult;
 
 		beforeAll(async () => {
-			result = await crawl(['http://localhost:8010/options/'], {
+			result = await crawl([`${TEST_SERVER_ORIGIN}/options/`], {
 				fetchExternal: false,
 			});
 		}, 60_000);
@@ -43,7 +44,7 @@ describe('Crawler options', () => {
 		let result: CrawlResult;
 
 		beforeAll(async () => {
-			result = await crawl(['http://localhost:8010/options/'], {
+			result = await crawl([`${TEST_SERVER_ORIGIN}/options/`], {
 				fetchExternal: true,
 			});
 		}, 60_000);
@@ -71,7 +72,7 @@ describe('Crawler options', () => {
 		let result: CrawlResult;
 
 		beforeAll(async () => {
-			result = await crawl(['http://localhost:8010/options/'], {
+			result = await crawl([`${TEST_SERVER_ORIGIN}/options/`], {
 				disableQueries: true,
 			});
 		}, 60_000);

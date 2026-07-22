@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_PORT } from './test-server-port.js';
 
 describe('Error status codes', () => {
 	let result: CrawlResult;
 
 	beforeAll(async () => {
-		result = await crawl(['http://localhost:8010/error-status/']);
+		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/error-status/`]);
 	}, 60_000);
 
 	afterAll(async () => {

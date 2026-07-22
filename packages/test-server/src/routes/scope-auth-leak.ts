@@ -1,3 +1,4 @@
+import type { PortRef } from '../server.js';
 import type { Hono } from 'hono';
 
 /**
@@ -36,8 +37,10 @@ const externalReceivedAuthHeaders: (string | null)[] = [];
  * the safe empty fallback `Basic Og==` (`":"`) or no header at all should
  * have reached the external endpoint.
  * @param app - The Hono application instance to register routes on.
+ * @param portRef - Holder for the server's actual listening port, used to
+ *   build the self-referencing "external" (127.0.0.1) URL below.
  */
-export function scopeAuthLeakRoutes(app: Hono) {
+export function scopeAuthLeakRoutes(app: Hono, portRef: PortRef) {
 	const expectedScopeAuth = 'Basic ' + btoa('scope-user:scope-pass');
 
 	app.get('/scope-auth-leak/main', (c) => {
@@ -58,7 +61,7 @@ export function scopeAuthLeakRoutes(app: Hono) {
 		return c.html(
 			'<!doctype html><html lang="en"><head><title>Scope Auth Leak Main</title></head><body>' +
 				'<p>Scope main</p>' +
-				'<img src="http://127.0.0.1:8010/scope-auth-leak/external-asset.png" alt="external" width="1" height="1">' +
+				`<img src="http://127.0.0.1:${portRef.port}/scope-auth-leak/external-asset.png" alt="external" width="1" height="1">` +
 				'</body></html>',
 		);
 	});

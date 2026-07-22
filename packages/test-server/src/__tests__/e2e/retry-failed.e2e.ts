@@ -6,6 +6,8 @@ import path from 'node:path';
 import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { TEST_SERVER_ORIGIN } from './test-server-port.js';
+
 /**
  * Run a baseline crawl that creates a `.nitpicker` archive on disk, then close
  * it so the caller can re-open it via `Archive.open`.
@@ -40,7 +42,7 @@ async function crawlAndPersist(
  * @param state - `'heal'` to serve 200, `'reset'` to serve 500.
  */
 async function setFlakyState(state: 'heal' | 'reset'): Promise<void> {
-	const res = await fetch(`http://localhost:8010/flaky/control/${state}`);
+	const res = await fetch(`${TEST_SERVER_ORIGIN}/flaky/control/${state}`);
 	await res.text();
 }
 
@@ -54,7 +56,7 @@ describe('Retry failed crawl (recursive, default)', () => {
 		// 1) Baseline crawl while /flaky/recoverable returns 500. The page is
 		//    recorded with status 500 and its (healed-only) child stays unseen.
 		await setFlakyState('reset');
-		const baseline = await crawlAndPersist(['http://localhost:8010/flaky/']);
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/flaky/`]);
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
 		const baselineArchive = await Archive.open({ filePath, cwd });
@@ -118,7 +120,7 @@ describe('Retry failed crawl (--no-recursive)', () => {
 
 	beforeAll(async () => {
 		await setFlakyState('reset');
-		const baseline = await crawlAndPersist(['http://localhost:8010/flaky/']);
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/flaky/`]);
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
 
@@ -164,7 +166,7 @@ describe('Retry failed crawl: permanent-kind exclusion converges across iteratio
 		//    enters the archive with status=500, classified as a recoverable
 		//    candidate by the SQL fail-shape filter.
 		await setFlakyState('reset');
-		const baseline = await crawlAndPersist(['http://localhost:8010/flaky/']);
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/flaky/`]);
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
 
@@ -190,7 +192,7 @@ describe('Retry failed crawl: permanent-kind exclusion converges across iteratio
 		const recoverableRow = (await knex('content_items as ci')
 			.join('url_refs as ur', 'ci.url_id', 'ur.id')
 			.select('ci.id as id')
-			.where('ur.url', 'http://localhost:8010/flaky/recoverable')
+			.where('ur.url', `${TEST_SERVER_ORIGIN}/flaky/recoverable`)
 			.first()) as { id: number } | undefined;
 		expect(recoverableRow).toBeDefined();
 		await knex('page_errors').insert({
@@ -247,7 +249,7 @@ describe('Retry failed crawl: list-mode rejection', () => {
 
 	beforeAll(async () => {
 		await setFlakyState('reset');
-		const baseline = await crawlAndPersist(['http://localhost:8010/flaky/']);
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/flaky/`]);
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
 

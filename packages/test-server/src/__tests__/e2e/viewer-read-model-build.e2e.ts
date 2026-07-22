@@ -8,6 +8,8 @@ import { Archive } from '@nitpicker/crawler';
 import { hasViewerReadModel } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { TEST_SERVER_PORT } from './test-server-port.js';
+
 /** Absolute path to the built CLI entry point. */
 const CLI_BIN = path.resolve(
 	import.meta.dirname,
@@ -80,7 +82,7 @@ describe('viewer read model — build timing (issue #112)', () => {
 		const exitCode = await runCli(
 			[
 				'crawl',
-				'http://localhost:8010/',
+				`http://localhost:${TEST_SERVER_PORT}/`,
 				'--silent',
 				'--no-image',
 				'--no-fetch-external',

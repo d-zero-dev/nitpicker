@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_ORIGIN } from './test-server-port.js';
 
 describe('Meta tag extraction (v2 schema)', () => {
 	let result: CrawlResult;
 
 	beforeAll(async () => {
-		result = await crawl(['http://localhost:8010/meta/']);
+		result = await crawl([`${TEST_SERVER_ORIGIN}/meta/`]);
 	}, 180_000);
 
 	afterAll(async () => {
@@ -28,10 +29,10 @@ describe('Meta tag extraction (v2 schema)', () => {
 		expect(page!.og_title).toBe('OG Title');
 		expect(page!.og_site_name).toBe('Test Site');
 		expect(page!.og_description).toBe('OG Description');
-		expect(page!.og_url).toBe('http://localhost:8010/meta/full');
+		expect(page!.og_url).toBe(`${TEST_SERVER_ORIGIN}/meta/full`);
 		expect(page!.og_image).toContain('og-image.png');
 		expect(page!.twitter_card).toBe('summary_large_image');
-		expect(page!.canonical).toBe('http://localhost:8010/meta/full');
+		expect(page!.canonical).toBe(`${TEST_SERVER_ORIGIN}/meta/full`);
 		expect(page!.robots_noindex).toBe(false);
 		expect(page!.robots_nofollow).toBe(false);
 	});
@@ -61,7 +62,7 @@ describe('Meta tag extraction (v2 schema)', () => {
 		const page = pages.find((p) => p.url.pathname === '/meta/relative-canonical');
 		expect(page).toBeDefined();
 
-		expect(page!.canonical).toBe('http://localhost:8010/meta/relative-canonical');
+		expect(page!.canonical).toBe(`${TEST_SERVER_ORIGIN}/meta/relative-canonical`);
 	});
 
 	it('stores JSON-LD entries in page_jsonld with classified @type', async () => {

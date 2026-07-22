@@ -3,7 +3,7 @@ import type { Report } from '@nitpicker/types';
 
 import { Sheets } from '@d-zero/google-sheets';
 import { google } from 'googleapis';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest';
 
 import { createLinks } from '../../data/create-links.js';
 import { createPageList } from '../../data/create-page-list.js';
@@ -23,6 +23,16 @@ import {
 	testSheetName,
 } from './helpers.js';
 
+// This `ProvidedContext` shape is duplicated in
+// `packages/test-server/src/__tests__/e2e/test-server-port.ts` (a separate TS
+// project — this package has no reference to that one) — keep both
+// declarations in sync if `testServerPort`'s shape ever changes.
+declare module 'vitest' {
+	interface ProvidedContext {
+		testServerPort: number;
+	}
+}
+
 describe('createSheets pipeline', () => {
 	let auth: Auth;
 	let crawlResult: CrawlResult;
@@ -31,7 +41,8 @@ describe('createSheets pipeline', () => {
 
 	beforeAll(async () => {
 		auth = await getAuth();
-		crawlResult = await crawlTestServer(['http://localhost:8010/'], {
+		const port = inject('testServerPort');
+		crawlResult = await crawlTestServer([`http://localhost:${port}/`], {
 			recursive: true,
 			fetchExternal: false,
 		});

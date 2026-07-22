@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_PORT } from './test-server-port.js';
 
 describe('Scope restriction', () => {
 	describe('開始URLによるスコープ制限', () => {
 		let result: CrawlResult;
 
 		beforeAll(async () => {
-			result = await crawl(['http://localhost:8010/scope/blog/']);
+			result = await crawl([`http://localhost:${TEST_SERVER_PORT}/scope/blog/`]);
 		}, 120_000);
 
 		afterAll(async () => {
@@ -37,7 +38,7 @@ describe('Scope restriction', () => {
 		let result: CrawlResult;
 
 		beforeAll(async () => {
-			result = await crawl(['http://localhost:8010/scope/blog/'], {
+			result = await crawl([`http://localhost:${TEST_SERVER_PORT}/scope/blog/`], {
 				fetchExternal: true,
 			});
 		}, 120_000);

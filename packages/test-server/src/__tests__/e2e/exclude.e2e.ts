@@ -1,13 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import {
+	TEST_SERVER_EXTERNAL_ORIGIN,
+	TEST_SERVER_ORIGIN,
+	TEST_SERVER_PORT,
+} from './test-server-port.js';
 
 describe('Exclude patterns', () => {
 	describe('パス除外 (excludes)', () => {
 		let result: CrawlResult;
 
 		beforeAll(async () => {
-			result = await crawl(['http://localhost:8010/exclude/'], {
+			result = await crawl([`${TEST_SERVER_ORIGIN}/exclude/`], {
 				excludes: ['/exclude/secret/*'],
 			});
 		}, 60_000);
@@ -34,7 +39,7 @@ describe('Exclude patterns', () => {
 		let result: CrawlResult;
 
 		beforeAll(async () => {
-			result = await crawl(['http://localhost:8010/exclude/'], {
+			result = await crawl([`${TEST_SERVER_ORIGIN}/exclude/`], {
 				excludeKeywords: ['FORBIDDEN_KEYWORD'],
 			});
 		}, 60_000);
@@ -76,8 +81,8 @@ describe('Exclude patterns', () => {
 		let result: CrawlResult;
 
 		beforeAll(async () => {
-			result = await crawl(['http://localhost:8010/exclude/'], {
-				excludeUrls: ['http://127.0.0.1:8010/exclude/external-a'],
+			result = await crawl([`${TEST_SERVER_ORIGIN}/exclude/`], {
+				excludeUrls: [`${TEST_SERVER_EXTERNAL_ORIGIN}/exclude/external-a`],
 			});
 		}, 60_000);
 
@@ -89,7 +94,7 @@ describe('Exclude patterns', () => {
 			const pages = await result.accessor.getPages('external-page');
 			const urls = pages.map((p) => p.url.href);
 			const hasExternalA = urls.some((u) =>
-				u.includes('127.0.0.1:8010/exclude/external-a'),
+				u.includes(`127.0.0.1:${TEST_SERVER_PORT}/exclude/external-a`),
 			);
 			expect(hasExternalA).toBe(false);
 		});
@@ -98,14 +103,16 @@ describe('Exclude patterns', () => {
 			const pages = await result.accessor.getPages('external-page');
 			const urls = pages.map((p) => p.url.href);
 			const hasExternalB = urls.some((u) =>
-				u.includes('127.0.0.1:8010/exclude/external-b'),
+				u.includes(`127.0.0.1:${TEST_SERVER_PORT}/exclude/external-b`),
 			);
 			expect(hasExternalB).toBe(true);
 		});
 
 		it('excludeUrls がアーカイブの config に保存される', async () => {
 			const config = await result.accessor.getConfig();
-			expect(config.excludeUrls).toContain('http://127.0.0.1:8010/exclude/external-a');
+			expect(config.excludeUrls).toContain(
+				`${TEST_SERVER_EXTERNAL_ORIGIN}/exclude/external-a`,
+			);
 		});
 	});
 });

@@ -1,3 +1,4 @@
+import type { PortRef } from '../server.js';
 import type { Hono } from 'hono';
 
 /**
@@ -6,8 +7,10 @@ import type { Hono } from 'hono';
  * coverage. Each route renders a deterministic HTML snippet — the e2e
  * tests in `meta.e2e.ts` assert against these exact strings.
  * @param app - The Hono application instance to register routes on.
+ * @param portRef - Holder for the server's actual listening port, used to
+ *   build the absolute self-referencing URLs embedded in `/meta/full` below.
  */
-export function metaRoutes(app: Hono) {
+export function metaRoutes(app: Hono, portRef: PortRef) {
 	app.get('/meta/', (c) =>
 		c.html(
 			'<!doctype html><html lang="en"><head><title>Meta Top</title></head><body>' +
@@ -39,18 +42,18 @@ export function metaRoutes(app: Hono) {
 				'<meta name="google-site-verification" content="google-token-abc">' +
 				'<meta name="format-detection" content="telephone=no">' +
 				'<meta property="fb:app_id" content="123456789">' +
-				'<link rel="canonical" href="http://localhost:8010/meta/full">' +
-				'<link rel="alternate" hreflang="en" href="http://localhost:8010/meta/full-en">' +
+				`<link rel="canonical" href="http://localhost:${portRef.port}/meta/full">` +
+				`<link rel="alternate" hreflang="en" href="http://localhost:${portRef.port}/meta/full-en">` +
 				'<link rel="manifest" href="/manifest.webmanifest">' +
 				'<link rel="icon" href="/favicon.ico">' +
 				'<link rel="apple-touch-icon" href="/apple-touch-icon.png">' +
-				'<link rel="amphtml" href="http://localhost:8010/meta/full.amp">' +
+				`<link rel="amphtml" href="http://localhost:${portRef.port}/meta/full.amp">` +
 				'<meta property="og:type" content="article">' +
 				'<meta property="og:title" content="OG Title">' +
 				'<meta property="og:site_name" content="Test Site">' +
 				'<meta property="og:description" content="OG Description">' +
-				'<meta property="og:url" content="http://localhost:8010/meta/full">' +
-				'<meta property="og:image" content="http://localhost:8010/og-image.png">' +
+				`<meta property="og:url" content="http://localhost:${portRef.port}/meta/full">` +
+				`<meta property="og:image" content="http://localhost:${portRef.port}/og-image.png">` +
 				'<meta property="og:image:alt" content="OG image alt">' +
 				'<meta property="og:image:width" content="1200">' +
 				'<meta property="og:image:height" content="630">' +
@@ -62,7 +65,7 @@ export function metaRoutes(app: Hono) {
 				'<meta name="twitter:creator" content="@yusuke">' +
 				'<meta name="twitter:title" content="Twitter Title">' +
 				'<meta name="twitter:description" content="Twitter Desc">' +
-				'<meta name="twitter:image" content="http://localhost:8010/twitter-image.png">' +
+				`<meta name="twitter:image" content="http://localhost:${portRef.port}/twitter-image.png">` +
 				'<meta name="DC.title" content="Dublin Core Title">' +
 				'<meta name="geo.region" content="JP-13">' +
 				'</head>' +

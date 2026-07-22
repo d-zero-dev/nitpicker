@@ -21,24 +21,39 @@ import { scopeRoutes } from './routes/scope.js';
 import { scrollJackRoutes } from './routes/scroll-jack.js';
 
 /**
+ * Mutable holder for the server's actual listening port.
+ *
+ * Routes that embed self-referencing "external" URLs are registered via
+ * `createApp` before `serve()` resolves the OS-assigned port, so they read
+ * `.port` lazily at request time instead of closing over a stale value
+ * captured at registration time. `startServer` only resolves its promise
+ * after setting the real port, so no request can arrive while it is still 0.
+ */
+export interface PortRef {
+	port: number;
+}
+
+/**
  * Creates and configures the Hono application with all E2E test routes.
+ * @param portRef - Holder for the server's actual listening port; passed to
+ *   routes that embed self-referencing "external" URLs.
  * @returns The configured Hono application instance.
  */
-export function createApp() {
+export function createApp(portRef: PortRef) {
 	const app = new Hono();
 
 	basicRoutes(app);
-	recursiveRoutes(app);
-	redirectRoutes(app);
-	metaRoutes(app);
-	excludeRoutes(app);
-	optionsRoutes(app);
+	recursiveRoutes(app, portRef);
+	redirectRoutes(app, portRef);
+	metaRoutes(app, portRef);
+	excludeRoutes(app, portRef);
+	optionsRoutes(app, portRef);
 	errorStatusRoutes(app);
 	scopeRoutes(app);
-	scopeAuthLeakRoutes(app);
+	scopeAuthLeakRoutes(app, portRef);
 	paginationRoutes(app);
 	scrollJackRoutes(app);
-	resourceReuseRoutes(app);
+	resourceReuseRoutes(app, portRef);
 	flakyRoutes(app);
 	inventoryRoutes(app);
 	jsRedirectRoutes(app);
@@ -47,13 +62,20 @@ export function createApp() {
 }
 
 /**
- * Starts the E2E test server on the specified port.
- * @param port - The port number to listen on.
- * @returns A promise that resolves with the HTTP server instance once it is listening.
+ * Starts the E2E test server.
+ * @param port - The port number to listen on. Defaults to `0`, letting the
+ *   OS assign a free port — a fixed port made concurrent worktrees/sessions
+ *   running this server collide with `EADDRINUSE` (#162).
+ * @returns A promise that resolves with the HTTP server instance once it is
+ *   listening; the resolved server's `.address()` reports the actual port.
  */
-export function startServer(port = 8010): Promise<Server> {
-	const app = createApp();
+export function startServer(port = 0): Promise<Server> {
+	const portRef: PortRef = { port };
+	const app = createApp(portRef);
 	return new Promise((resolve) => {
-		const server = serve({ fetch: app.fetch, port }, () => resolve(server));
+		const server = serve({ fetch: app.fetch, port }, (info) => {
+			portRef.port = info.port;
+			resolve(server);
+		});
 	});
 }
