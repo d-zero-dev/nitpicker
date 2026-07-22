@@ -110,7 +110,6 @@ describe('analyze command', () => {
 				verbose: undefined,
 				searchKeywords: undefined,
 				searchScope: undefined,
-				mainContentSelector: undefined,
 				axeLang: undefined,
 				silent: undefined,
 			}),
@@ -135,7 +134,6 @@ describe('analyze command', () => {
 			verbose: true,
 			searchKeywords: undefined,
 			searchScope: undefined,
-			mainContentSelector: undefined,
 			axeLang: undefined,
 			silent: undefined,
 		});
@@ -155,7 +153,6 @@ describe('analyze command', () => {
 			verbose: undefined,
 			searchKeywords: undefined,
 			searchScope: undefined,
-			mainContentSelector: undefined,
 			axeLang: undefined,
 			silent: undefined,
 		});
@@ -175,7 +172,6 @@ describe('analyze command', () => {
 			verbose: undefined,
 			searchKeywords: undefined,
 			searchScope: undefined,
-			mainContentSelector: undefined,
 			axeLang: undefined,
 			silent: undefined,
 		});
@@ -196,7 +192,6 @@ describe('analyze command', () => {
 			verbose: undefined,
 			searchKeywords: undefined,
 			searchScope: undefined,
-			mainContentSelector: undefined,
 			axeLang: undefined,
 			silent: undefined,
 		});
@@ -217,7 +212,6 @@ describe('analyze command', () => {
 			verbose: undefined,
 			searchKeywords: undefined,
 			searchScope: undefined,
-			mainContentSelector: undefined,
 			axeLang: undefined,
 			silent: true,
 		});
@@ -239,7 +233,6 @@ describe('analyze command', () => {
 			verbose: true,
 			searchKeywords: undefined,
 			searchScope: undefined,
-			mainContentSelector: undefined,
 			axeLang: undefined,
 			silent: true,
 		});
@@ -261,7 +254,6 @@ describe('analyze command', () => {
 				verbose: undefined,
 				searchKeywords: undefined,
 				searchScope: undefined,
-				mainContentSelector: undefined,
 				axeLang: undefined,
 				silent: undefined,
 			}),
@@ -292,7 +284,6 @@ describe('analyze command', () => {
 				verbose: undefined,
 				searchKeywords: undefined,
 				searchScope: undefined,
-				mainContentSelector: undefined,
 				axeLang: undefined,
 				silent: undefined,
 			}),
@@ -320,7 +311,6 @@ describe('analyze command', () => {
 				verbose: undefined,
 				searchKeywords: undefined,
 				searchScope: undefined,
-				mainContentSelector: undefined,
 				axeLang: undefined,
 				silent: undefined,
 			}),
@@ -342,7 +332,6 @@ describe('analyze command', () => {
 				verbose: true,
 				searchKeywords: undefined,
 				searchScope: undefined,
-				mainContentSelector: undefined,
 				axeLang: undefined,
 				silent: undefined,
 			}),
@@ -364,7 +353,6 @@ describe('analyze command', () => {
 			verbose: undefined,
 			searchKeywords: undefined,
 			searchScope: undefined,
-			mainContentSelector: undefined,
 			axeLang: undefined,
 			silent: undefined,
 		});
@@ -389,7 +377,6 @@ describe('analyze command', () => {
 				verbose: undefined,
 				searchKeywords: undefined,
 				searchScope: undefined,
-				mainContentSelector: undefined,
 				axeLang: undefined,
 				silent: undefined,
 			}),

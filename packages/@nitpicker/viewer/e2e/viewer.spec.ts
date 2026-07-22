@@ -46,8 +46,31 @@ test.describe('Nitpicker Viewer', () => {
 		await expect(
 			page.getByRole('heading', { name: 'Page detail', level: 1 }),
 		).toBeVisible();
-		await expect(page.locator('.detail-grid')).toBeVisible();
+		await expect(page.locator('.detail-grid').first()).toBeVisible();
 		await expect(page.locator('.hp-frame')).toBeVisible();
+	});
+
+	test('ページ詳細にメインコンテンツのセレクタと見出し明細が表示される', async ({
+		page,
+	}) => {
+		await page.goto('/pages');
+		await page.locator('.pt-row .link-button').first().click();
+		await expect(
+			page.getByRole('heading', { name: 'Page detail', level: 1 }),
+		).toBeVisible();
+		await expect(page.getByText('main.l-main')).toBeVisible();
+		await expect(page.getByRole('heading', { name: /Headings|見出し/ })).toBeVisible();
+		await expect(page.getByText('H1: Page 0')).toBeVisible();
+	});
+
+	test('ページ一覧にメインコンテンツの列が表示される', async ({ page }) => {
+		await page.goto('/pages');
+		await expect(
+			page.getByRole('columnheader', { name: 'main content selector' }),
+		).toBeVisible();
+		await expect(
+			page.getByRole('columnheader', { name: '# main content words' }),
+		).toBeVisible();
 	});
 
 	test('サイドバーから各ビューへ遷移できる', async ({ page }) => {

@@ -1082,16 +1082,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/beholder@npm:3.1.5":
-  version: 3.1.5
-  resolution: "@d-zero/beholder@npm:3.1.5"
+"@d-zero/beholder@npm:4.0.0":
+  version: 4.0.0
+  resolution: "@d-zero/beholder@npm:4.0.0"
   dependencies:
-    "@d-zero/puppeteer-page-scan": "npm:4.6.4"
+    "@d-zero/puppeteer-page-scan": "npm:4.6.5"
     "@d-zero/shared": "npm:0.22.2"
     debug: "npm:4.4.3"
     puppeteer: "npm:25.3.0"
     simple-wappalyzer: "npm:1.1.100"
-  checksum: 10c0/bc2a59838a244a5bcacb2ce828847e3865fef03a3021820501150b815e580dfbe6ce0c605df914d5ab5979ded76ff17f474fce4af303ee8451e86d97bceee222
+  checksum: 10c0/790d24fe20cefd457e1a81318bbc00f2e0ec7ee8db920bdd41a513a451e19059a8aec9366943a9dc282e81d5494892f365bf15e2ad35411bd498b2648f1d39c6
   languageName: node
   linkType: hard
 
@@ -1217,27 +1217,27 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-page-scan@npm:4.6.4":
-  version: 4.6.4
-  resolution: "@d-zero/puppeteer-page-scan@npm:4.6.4"
+"@d-zero/puppeteer-page-scan@npm:4.6.5":
+  version: 4.6.5
+  resolution: "@d-zero/puppeteer-page-scan@npm:4.6.5"
   dependencies:
     "@d-zero/puppeteer-general-actions": "npm:1.2.6"
-    "@d-zero/puppeteer-scroll": "npm:4.0.7"
+    "@d-zero/puppeteer-scroll": "npm:4.0.8"
     "@d-zero/shared": "npm:0.22.2"
   peerDependencies:
     puppeteer: 25.2.1
-  checksum: 10c0/79997601e912e2d54bbedc6d422930928fc92739608091858751e181b02fd42010e80029c9ef8d4e39ead9543b418805af0be2f33dd570090e5f6b2cda55cf09
+  checksum: 10c0/392bbef0b060e1c4fdb2eb9aa4ffe23ec8ed068bef66ce05895e760224fc7c87ab1cc8af10e220b08e929afc2a761970b68554c375a92ef550ecc9f6ced87f82
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-scroll@npm:4.0.7":
-  version: 4.0.7
-  resolution: "@d-zero/puppeteer-scroll@npm:4.0.7"
+"@d-zero/puppeteer-scroll@npm:4.0.8":
+  version: 4.0.8
+  resolution: "@d-zero/puppeteer-scroll@npm:4.0.8"
   dependencies:
     "@d-zero/shared": "npm:0.22.2"
   peerDependencies:
     puppeteer: 25.2.1
-  checksum: 10c0/39bebc749f21d2d95025cc6974e968f1201651cc563d3980f10e216396c99889106ed1610c4415187303515e6b232b41cd3a9fbe33238b49ed22149d51241d69
+  checksum: 10c0/c58c3660087b8dc6aaef268f36695f2ffe2dfcd001043a371d9a5358442e74e99c008d397e0bac5d5ac081fa82769cf148dd4407028856dc33cec3a55dfd122a
   languageName: node
   linkType: hard
 
@@ -2700,13 +2700,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@medv/finder@npm:4.0.2":
-  version: 4.0.2
-  resolution: "@medv/finder@npm:4.0.2"
-  checksum: 10c0/f9b7fec9ad7077a47901a9c4f4fc585b092e8fe8e91f05001c90d1da150cc041822c008fc12726f0458211d5663c82b67243e6e03ca55f3096b5b4feb3ce13e3
-  languageName: node
-  linkType: hard
-
 "@mixmark-io/domino@npm:^2.2.0":
   version: 2.2.0
   resolution: "@mixmark-io/domino@npm:2.2.0"
@@ -2854,17 +2847,6 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nitpicker/analyze-main-contents@npm:0.13.0, @nitpicker/analyze-main-contents@workspace:packages/@nitpicker/analyze-main-contents":
-  version: 0.0.0-use.local
-  resolution: "@nitpicker/analyze-main-contents@workspace:packages/@nitpicker/analyze-main-contents"
-  dependencies:
-    "@medv/finder": "npm:4.0.2"
-    "@nitpicker/core": "npm:0.13.0"
-    "@nitpicker/types": "npm:0.13.0"
-    jsdom: "npm:29.1.1"
-  languageName: unknown
-  linkType: soft
-
 "@nitpicker/analyze-markuplint@npm:0.13.0, @nitpicker/analyze-markuplint@workspace:packages/@nitpicker/analyze-markuplint":
   version: 0.0.0-use.local
   resolution: "@nitpicker/analyze-markuplint@workspace:packages/@nitpicker/analyze-markuplint"
@@ -2938,7 +2920,6 @@ __metadata:
     "@d-zero/shared": "npm:0.22.2"
     "@nitpicker/analyze-axe": "npm:0.13.0"
     "@nitpicker/analyze-lighthouse": "npm:0.13.0"
-    "@nitpicker/analyze-main-contents": "npm:0.13.0"
     "@nitpicker/analyze-markuplint": "npm:0.13.0"
     "@nitpicker/analyze-search": "npm:0.13.0"
     "@nitpicker/analyze-textlint": "npm:0.13.0"
@@ -2974,7 +2955,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/crawler@workspace:packages/@nitpicker/crawler"
   dependencies:
-    "@d-zero/beholder": "npm:3.1.5"
+    "@d-zero/beholder": "npm:4.0.0"
     "@d-zero/dealer": "npm:1.9.4"
     "@d-zero/fs": "npm:0.2.6"
     "@d-zero/shared": "npm:0.22.2"
@@ -18027,7 +18008,7 @@ __metadata:
   resolution: "test-server@workspace:packages/test-server"
   dependencies:
     "@hono/node-server": "npm:2.0.8"
-    "@nitpicker/analyze-main-contents": "npm:0.13.0"
+    "@nitpicker/analyze-search": "npm:0.13.0"
     "@nitpicker/core": "npm:0.13.0"
     "@nitpicker/crawler": "npm:0.13.0"
     "@nitpicker/query": "npm:0.13.0"

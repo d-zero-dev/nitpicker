@@ -88,7 +88,22 @@ async function buildCursorPaginatedResult(
 	context: {
 		spec: ViewerPagesSortSpec;
 		filterKey: string;
-		sortBy: 'url' | 'status' | 'title';
+		sortBy:
+			| 'url'
+			| 'status'
+			| 'title'
+			| 'mainContentWordCount'
+			| 'mainContentBodyWordCount'
+			| 'mainContentHeadingCount'
+			| 'mainContentImageCount'
+			| 'mainContentTableCount'
+			| 'mainContentButtonCount'
+			| 'mainContentIframeCount'
+			| 'mainContentVideoCount'
+			| 'mainContentAudioCount'
+			| 'mainContentCanvasCount'
+			| 'scrollHeightDesktop'
+			| 'scrollHeightMobile';
 		sortOrder: 'asc' | 'desc';
 		total: number;
 		facets: PageListFacets;

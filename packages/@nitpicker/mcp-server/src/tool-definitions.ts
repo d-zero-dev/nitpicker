@@ -146,7 +146,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'get_page_detail',
 		description:
-			'Get full details for a specific page URL: ~47 flat meta fields (title, description, OG, Twitter, robots, link, charset, manifest, themeColor, fb_app_id, verification_google, format_detection, og:image:alt/width/height, og:locale, og:article timestamps, twitter:site/creator, etc.), `metaExtras` JSON (referrer, viewport parsed, httpEquiv, apple, msapplication, verification.{bing|yandex|...}, geo, citation, hreflang alternates, others.*, originTrial), JSON-LD/SpeculationRules **summary** (count + unique @types + parseErrorCount), Wappalyzer tag **summary** (count + provider→ids map), outbound/inbound links, redirect sources, response headers, and within-archive timestamps (firstCrawledAt / lastCrawledAt). Raw JSON-LD entries and full tag rows are NOT included — fetch them via `get_page_jsonld` / `get_page_tags`. Use when drilling down into a specific page.',
+			'Get full details for a specific page URL: ~47 flat meta fields (title, description, OG, Twitter, robots, link, charset, manifest, themeColor, fb_app_id, verification_google, format_detection, og:image:alt/width/height, og:locale, og:article timestamps, twitter:site/creator, etc.), `metaExtras` JSON (referrer, viewport parsed, httpEquiv, apple, msapplication, verification.{bing|yandex|...}, geo, citation, hreflang alternates, others.*, originTrial), JSON-LD/SpeculationRules **summary** (count + unique @types + parseErrorCount), Wappalyzer tag **summary** (count + provider→ids map), main-content **aggregate counts only** (mainContentSelector, mainContentWordCount/BodyWordCount, mainContentHeadingCount/ImageCount/TableCount/ButtonCount/IframeCount/VideoCount/AudioCount/CanvasCount, scrollHeightDesktop/Mobile — null when the page was never rendered), outbound/inbound links, redirect sources, response headers, and within-archive timestamps (firstCrawledAt / lastCrawledAt). Raw JSON-LD entries, full tag rows, and the main-content child-entity arrays are NOT included — fetch them via `get_page_jsonld` / `get_page_tags` / `get_page_main_contents`. Use when drilling down into a specific page.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -535,6 +535,22 @@ export const toolDefinitions: Tool[] = [
 		name: 'get_page_tags',
 		description:
 			'Returns the Wappalyzer tag rows for a page (one per provider × external-id), with `categories`, `version`, `confidence`, and `sources` preserved. Use after `get_page_detail` returned a tags summary and you need provider details. Bounded payload (KB-scale per page); no slim mode needed.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				url: { type: 'string', description: 'The page URL' },
+			},
+			required: ['archiveId', 'url'],
+		},
+	},
+	{
+		name: 'get_page_main_contents',
+		description:
+			'Returns the detected main-content region for a page: its identity (nodeName, id, classList, role, a diagnostic selector), aggregate counts already available via get_page_detail (wordCount, bodyWordCount, scrollHeight at desktop/mobile), and full drill-down for all 8 child-entity arrays in DOM order - headings (text + level), images (src + alt), tables (rows/cols/hasHeader/hasFooter/hasMergedCell), buttons (nodeName/role/type/text/disabled), iframes (src/title/width/height), videos (src/poster/width/height), audios (src), canvases (width/height). Returns null only when the page was never rendered (external page, failed scrape). When the page was rendered but beholder found no main-content element, returns a full object with `main: null`, empty child arrays, and `wordCount: 0` (bodyWordCount and scrollHeight still reflect the whole document, since those are measured independently of main-region detection). Use after get_page_detail when you need the actual entries, not just the counts.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {

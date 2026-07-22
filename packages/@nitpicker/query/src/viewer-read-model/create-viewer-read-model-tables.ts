@@ -73,6 +73,27 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			source text not null,
 			tag_count integer not null default 0,
 			jsonld_count integer not null default 0,
+			-- main_content_* / scroll_height_* default to 0 (never NULL) even
+			-- though the page_meta source column is nullable for pages that
+			-- were never fully rendered: these columns exist here only for
+			-- sort/filter keyset comparisons (which cannot tolerate NULL —
+			-- see the ViewerPagesSortSpec docs), never for display. Display
+			-- values are always re-fetched from page_meta by
+			-- joinViewerPageIdsToListItems, which preserves the true NULL, so
+			-- an unrendered page sorting alongside genuine zero-count pages
+			-- here is harmless.
+			main_content_word_count integer not null default 0,
+			main_content_body_word_count integer not null default 0,
+			main_content_heading_count integer not null default 0,
+			main_content_image_count integer not null default 0,
+			main_content_table_count integer not null default 0,
+			main_content_button_count integer not null default 0,
+			main_content_iframe_count integer not null default 0,
+			main_content_video_count integer not null default 0,
+			main_content_audio_count integer not null default 0,
+			main_content_canvas_count integer not null default 0,
+			scroll_height_desktop integer not null default 0,
+			scroll_height_mobile integer not null default 0,
 			url_sort_key text not null,
 			title_sort_key text not null,
 			path_sort_key text not null,

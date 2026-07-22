@@ -235,26 +235,6 @@ describe('pluginOverrides', () => {
 		});
 	});
 
-	it('overrides main-contents selector from CLI', async () => {
-		mockCosmiconfig({
-			config: {
-				plugins: {
-					analyze: {
-						'@nitpicker/analyze-main-contents': { mainContentSelector: '#old' },
-					},
-				},
-			},
-			filepath: '/path/.nitpickerrc.json',
-		});
-		const config = await loadPluginSettings(
-			{},
-			{
-				'@nitpicker/analyze-main-contents': { mainContentSelector: '#new' },
-			},
-		);
-		expect(config.analyze[0].settings).toEqual({ mainContentSelector: '#new' });
-	});
-
 	it('partially overrides only specified fields, preserving other config values', async () => {
 		mockCosmiconfig({
 			config: {

@@ -37,7 +37,6 @@
 		"@d-zero/shared": "0.22.2",
 		"@nitpicker/analyze-axe": "0.13.0",
 		"@nitpicker/analyze-lighthouse": "0.13.0",
-		"@nitpicker/analyze-main-contents": "0.13.0",
 		"@nitpicker/analyze-markuplint": "0.13.0",
 		"@nitpicker/analyze-search": "0.13.0",
 		"@nitpicker/analyze-textlint": "0.13.0",

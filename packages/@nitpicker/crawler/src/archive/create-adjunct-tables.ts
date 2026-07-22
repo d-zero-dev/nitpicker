@@ -10,6 +10,10 @@ import type { Knex } from 'knex';
  *   an external link that failed DNS, or null for a process-level error)
  * - `page_tags` — Wappalyzer detections, FK → `content_items(id)`
  * - `page_jsonld` — JSON-LD / SpeculationRules, FK → `content_items(id)`
+ * - `page_main_content_headings` / `_images` / `_tables` / `_buttons` /
+ *   `_iframes` / `_videos` / `_audios` / `_canvases` — beholder
+ *   `MainContentsData` sub-entity arrays, one row per DOM element, FK →
+ *   `content_items(id)`
  * - `inventory_runs` — `--inventory` audit log (no FK; append-only)
  * - `analysis_text_refs` + `analysis_violations` — analyze-phase findings,
  *   FK → `content_items(id)`
@@ -142,6 +146,150 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 		await instance.raw(
 			'CREATE INDEX page_jsonld_type_pageId ON page_jsonld(type, pageId)',
 		);
+	}
+
+	// Beholder `MainContentsData` sub-entities, one adjunct table per array
+	// (headings/images/tables/buttons/iframes/videos/audios/canvases). Same
+	// shape as `page_tags` / `page_jsonld`: `pageId` FK → `content_items(id)`
+	// ON DELETE CASCADE, individually guarded so any subset can pre-exist.
+	// `order` preserves the DOM traversal order beholder returns the array
+	// in (0-based); it is not itself an index target since these tables are
+	// always read whole-page via `WHERE pageId = ? ORDER BY "order"`.
+	if (!(await instance.schema.hasTable('page_main_content_headings'))) {
+		await instance.schema.createTable('page_main_content_headings', (t) => {
+			t.increments('id');
+			t.integer('pageId')
+				.notNullable()
+				.unsigned()
+				.references('content_items.id')
+				.onDelete('CASCADE');
+			t.integer('order').notNullable();
+			t.text('text');
+			t.integer('level').notNullable();
+
+			t.index('pageId');
+		});
+	}
+
+	if (!(await instance.schema.hasTable('page_main_content_images'))) {
+		await instance.schema.createTable('page_main_content_images', (t) => {
+			t.increments('id');
+			t.integer('pageId')
+				.notNullable()
+				.unsigned()
+				.references('content_items.id')
+				.onDelete('CASCADE');
+			t.integer('order').notNullable();
+			t.string('src', 8190).notNullable();
+			t.text('alt').notNullable();
+
+			t.index('pageId');
+		});
+	}
+
+	if (!(await instance.schema.hasTable('page_main_content_tables'))) {
+		await instance.schema.createTable('page_main_content_tables', (t) => {
+			t.increments('id');
+			t.integer('pageId')
+				.notNullable()
+				.unsigned()
+				.references('content_items.id')
+				.onDelete('CASCADE');
+			t.integer('order').notNullable();
+			t.integer('rows').notNullable();
+			t.integer('cols').notNullable();
+			t.boolean('hasHeader').notNullable();
+			t.boolean('hasFooter').notNullable();
+			t.boolean('hasMergedCell').notNullable();
+
+			t.index('pageId');
+		});
+	}
+
+	if (!(await instance.schema.hasTable('page_main_content_buttons'))) {
+		await instance.schema.createTable('page_main_content_buttons', (t) => {
+			t.increments('id');
+			t.integer('pageId')
+				.notNullable()
+				.unsigned()
+				.references('content_items.id')
+				.onDelete('CASCADE');
+			t.integer('order').notNullable();
+			t.string('nodeName').notNullable();
+			t.string('role');
+			t.string('type');
+			t.text('text');
+			t.boolean('disabled').notNullable();
+
+			t.index('pageId');
+		});
+	}
+
+	if (!(await instance.schema.hasTable('page_main_content_iframes'))) {
+		await instance.schema.createTable('page_main_content_iframes', (t) => {
+			t.increments('id');
+			t.integer('pageId')
+				.notNullable()
+				.unsigned()
+				.references('content_items.id')
+				.onDelete('CASCADE');
+			t.integer('order').notNullable();
+			t.string('src', 8190).notNullable();
+			t.text('title');
+			t.string('width');
+			t.string('height');
+
+			t.index('pageId');
+		});
+	}
+
+	if (!(await instance.schema.hasTable('page_main_content_videos'))) {
+		await instance.schema.createTable('page_main_content_videos', (t) => {
+			t.increments('id');
+			t.integer('pageId')
+				.notNullable()
+				.unsigned()
+				.references('content_items.id')
+				.onDelete('CASCADE');
+			t.integer('order').notNullable();
+			t.string('src', 8190).notNullable();
+			t.string('poster', 8190);
+			t.integer('width').notNullable();
+			t.integer('height').notNullable();
+
+			t.index('pageId');
+		});
+	}
+
+	if (!(await instance.schema.hasTable('page_main_content_audios'))) {
+		await instance.schema.createTable('page_main_content_audios', (t) => {
+			t.increments('id');
+			t.integer('pageId')
+				.notNullable()
+				.unsigned()
+				.references('content_items.id')
+				.onDelete('CASCADE');
+			t.integer('order').notNullable();
+			t.string('src', 8190).notNullable();
+
+			t.index('pageId');
+		});
+	}
+
+	if (!(await instance.schema.hasTable('page_main_content_canvases'))) {
+		await instance.schema.createTable('page_main_content_canvases', (t) => {
+			t.increments('id');
+			t.integer('pageId')
+				.notNullable()
+				.unsigned()
+				.references('content_items.id')
+				.onDelete('CASCADE');
+			t.integer('order').notNullable();
+			t.integer('width').notNullable();
+			t.integer('height').notNullable();
+
+			t.index('pageId');
+		});
 	}
 
 	if (!(await instance.schema.hasTable('inventory_runs'))) {

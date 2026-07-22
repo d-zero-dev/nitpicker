@@ -64,7 +64,6 @@ describe('pipeline command', () => {
 		plugin: undefined,
 		searchKeywords: undefined,
 		searchScope: undefined,
-		mainContentSelector: undefined,
 		axeLang: undefined,
 		sheet: undefined,
 		credentials: './credentials.json',
@@ -215,7 +214,6 @@ describe('pipeline command', () => {
 			plugin: ['@nitpicker/analyze-axe'],
 			searchKeywords: ['test'],
 			searchScope: '.main',
-			mainContentSelector: '#content',
 			axeLang: 'ja',
 		});
 
@@ -225,7 +223,6 @@ describe('pipeline command', () => {
 				plugin: ['@nitpicker/analyze-axe'],
 				searchKeywords: ['test'],
 				searchScope: '.main',
-				mainContentSelector: '#content',
 				axeLang: 'ja',
 			}),
 		);

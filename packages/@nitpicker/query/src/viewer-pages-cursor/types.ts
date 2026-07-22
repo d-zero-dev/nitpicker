@@ -9,6 +9,18 @@ export type ViewerPagesSortColumn =
 	| 'title_sort_key'
 	| 'status_sort_key'
 	| 'status_desc_key'
+	| 'main_content_word_count'
+	| 'main_content_body_word_count'
+	| 'main_content_heading_count'
+	| 'main_content_image_count'
+	| 'main_content_table_count'
+	| 'main_content_button_count'
+	| 'main_content_iframe_count'
+	| 'main_content_video_count'
+	| 'main_content_audio_count'
+	| 'main_content_canvas_count'
+	| 'scroll_height_desktop'
+	| 'scroll_height_mobile'
 	| 'page_id';
 
 /**
@@ -79,7 +91,22 @@ export interface ViewerPagesCursorPayload {
 	/** See `buildViewerPagesFilterKey`. */
 	filterKey: string;
 	/** The sort field the cursor was minted under. */
-	sortBy: 'url' | 'status' | 'title';
+	sortBy:
+		| 'url'
+		| 'status'
+		| 'title'
+		| 'mainContentWordCount'
+		| 'mainContentBodyWordCount'
+		| 'mainContentHeadingCount'
+		| 'mainContentImageCount'
+		| 'mainContentTableCount'
+		| 'mainContentButtonCount'
+		| 'mainContentIframeCount'
+		| 'mainContentVideoCount'
+		| 'mainContentAudioCount'
+		| 'mainContentCanvasCount'
+		| 'scrollHeightDesktop'
+		| 'scrollHeightMobile';
 	/** The sort direction the cursor was minted under. */
 	sortOrder: 'asc' | 'desc';
 	/** The boundary row's keyset tuple values, in sort-spec column order. */

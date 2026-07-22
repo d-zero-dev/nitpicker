@@ -155,12 +155,40 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		return refs;
 	}
 	/**
+	 * Retrieves the audios within the given page's detected main content
+	 * region, from `page_main_content_audios`.
+	 * @param pageId - The database id of the page.
+	 * @returns Ordered audio rows.
+	 */
+	async getAudiosOfPage(pageId: number) {
+		return this.#db.getAudiosOfPage(pageId);
+	}
+	/**
+	 * Retrieves the button-like elements within the given page's detected
+	 * main content region, from `page_main_content_buttons`.
+	 * @param pageId - The database id of the page.
+	 * @returns Ordered button rows.
+	 */
+	async getButtonsOfPage(pageId: number) {
+		return this.#db.getButtonsOfPage(pageId);
+	}
+	/**
+	 * Retrieves the canvases within the given page's detected main content
+	 * region, from `page_main_content_canvases`.
+	 * @param pageId - The database id of the page.
+	 * @returns Ordered canvas rows.
+	 */
+	async getCanvasesOfPage(pageId: number) {
+		return this.#db.getCanvasesOfPage(pageId);
+	}
+	/**
 	 * Retrieves the crawl configuration stored in the archive database.
 	 * @returns The parsed {@link Config} object.
 	 */
 	async getConfig(): Promise<Config> {
 		return this.#db.getConfig();
 	}
+
 	/**
 	 * Reads custom data stored in the archive by name.
 	 * @param name - The base name of the data file (without extension).
@@ -182,6 +210,15 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 			return await readJSON<T>(filePath);
 		}
 		return await readText(filePath);
+	}
+	/**
+	 * Retrieves the headings within the given page's detected main content
+	 * region, from `page_main_content_headings`.
+	 * @param pageId - The database id of the page.
+	 * @returns Ordered heading rows.
+	 */
+	async getHeadingsOfPage(pageId: number) {
+		return this.#db.getHeadingsOfPage(pageId);
 	}
 	/**
 	 * Reads the HTML snapshot of a page from the archive.
@@ -220,6 +257,15 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		return html;
 	}
 	/**
+	 * Retrieves the iframes within the given page's detected main content
+	 * region, from `page_main_content_iframes`.
+	 * @param pageId - The database id of the page.
+	 * @returns Ordered iframe rows.
+	 */
+	async getIframesOfPage(pageId: number) {
+		return this.#db.getIframesOfPage(pageId);
+	}
+	/**
 	 * Retrieves the JSON-LD / SpeculationRules entries for the given page,
 	 * parsed back from the `page_jsonld` table.
 	 * @param pageId - The database id of the page.
@@ -238,6 +284,26 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	getKnex() {
 		return this.#db.getKnex();
 	}
+	/**
+	 * Retrieves the images within the given page's detected main content
+	 * region, from `page_main_content_images`.
+	 * @param pageId - The database id of the page.
+	 * @returns Ordered image rows.
+	 */
+	async getMainContentImagesOfPage(pageId: number) {
+		return this.#db.getMainContentImagesOfPage(pageId);
+	}
+
+	/**
+	 * Retrieves the tables within the given page's detected main content
+	 * region, from `page_main_content_tables`.
+	 * @param pageId - The database id of the page.
+	 * @returns Ordered table rows.
+	 */
+	async getMainContentTablesOfPage(pageId: number) {
+		return this.#db.getMainContentTablesOfPage(pageId);
+	}
+
 	/**
 	 * Retrieves all pages from the archive, optionally filtered by type.
 	 * Eagerly loads redirect relationships (`redirectFrom`) but does NOT load
@@ -338,6 +404,15 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	 */
 	async getTagsOfPage(pageId: number) {
 		return this.#db.getTagsOfPage(pageId);
+	}
+	/**
+	 * Retrieves the videos within the given page's detected main content
+	 * region, from `page_main_content_videos`.
+	 * @param pageId - The database id of the page.
+	 * @returns Ordered video rows.
+	 */
+	async getVideosOfPage(pageId: number) {
+		return this.#db.getVideosOfPage(pageId);
 	}
 
 	/**

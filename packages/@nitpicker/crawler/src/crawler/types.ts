@@ -152,6 +152,12 @@ export interface CrawlerOptions extends Required<
 	ignoreRobots: boolean;
 
 	/**
+	 * CSS selector overriding beholder's automatic main-content-region
+	 * detection, or `null`/undefined to use the automatic heuristic.
+	 */
+	mainContentSelector?: string | null;
+
+	/**
 	 * Lookup for previously captured sub-resources, or `null` to disable the
 	 * resource-reuse optimization. See {@link ResourceLookup}.
 	 */

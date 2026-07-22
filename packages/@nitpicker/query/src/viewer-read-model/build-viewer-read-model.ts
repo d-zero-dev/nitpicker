@@ -70,6 +70,30 @@ interface PagesSourceRow {
 	tag_count: number | null;
 	/** Denormalised count of JSON-LD / SpeculationRules entries on the page. */
 	jsonld_count: number | null;
+	/** Denormalised beholder MainContentsData word count, or `null` when unrendered. */
+	main_content_word_count: number | null;
+	/** Denormalised beholder MainContentsData body word count, or `null` when unrendered. */
+	main_content_body_word_count: number | null;
+	/** Denormalised heading count within the main region, or `null` when unrendered. */
+	main_content_heading_count: number | null;
+	/** Denormalised image count within the main region, or `null` when unrendered. */
+	main_content_image_count: number | null;
+	/** Denormalised table count within the main region, or `null` when unrendered. */
+	main_content_table_count: number | null;
+	/** Denormalised button count within the main region, or `null` when unrendered. */
+	main_content_button_count: number | null;
+	/** Denormalised iframe count within the main region, or `null` when unrendered. */
+	main_content_iframe_count: number | null;
+	/** Denormalised video count within the main region, or `null` when unrendered. */
+	main_content_video_count: number | null;
+	/** Denormalised audio count within the main region, or `null` when unrendered. */
+	main_content_audio_count: number | null;
+	/** Denormalised canvas count within the main region, or `null` when unrendered. */
+	main_content_canvas_count: number | null;
+	/** Denormalised desktop-compact scroll height, or `null` when unrendered. */
+	scroll_height_desktop: number | null;
+	/** Denormalised mobile-small scroll height, or `null` when unrendered. */
+	scroll_height_mobile: number | null;
 	/** Provenance label — see {@link PageSource}. Always non-null (`NOT NULL DEFAULT 'crawled'` in `init-schema.ts`). */
 	source: PageSource;
 	/**
@@ -123,6 +147,30 @@ interface ViewerPageInsertRow {
 	tag_count: number;
 	/** `PagesSourceRow.jsonld_count`, defaulted to `0` when `null`. */
 	jsonld_count: number;
+	/** `PagesSourceRow.main_content_word_count`, defaulted to `0` when `null` — sort/filter only, display re-fetches the true nullable value from `page_meta`. */
+	main_content_word_count: number;
+	/** `PagesSourceRow.main_content_body_word_count`, defaulted to `0` when `null`. */
+	main_content_body_word_count: number;
+	/** `PagesSourceRow.main_content_heading_count`, defaulted to `0` when `null`. */
+	main_content_heading_count: number;
+	/** `PagesSourceRow.main_content_image_count`, defaulted to `0` when `null`. */
+	main_content_image_count: number;
+	/** `PagesSourceRow.main_content_table_count`, defaulted to `0` when `null`. */
+	main_content_table_count: number;
+	/** `PagesSourceRow.main_content_button_count`, defaulted to `0` when `null`. */
+	main_content_button_count: number;
+	/** `PagesSourceRow.main_content_iframe_count`, defaulted to `0` when `null`. */
+	main_content_iframe_count: number;
+	/** `PagesSourceRow.main_content_video_count`, defaulted to `0` when `null`. */
+	main_content_video_count: number;
+	/** `PagesSourceRow.main_content_audio_count`, defaulted to `0` when `null`. */
+	main_content_audio_count: number;
+	/** `PagesSourceRow.main_content_canvas_count`, defaulted to `0` when `null`. */
+	main_content_canvas_count: number;
+	/** `PagesSourceRow.scroll_height_desktop`, defaulted to `0` when `null`. */
+	scroll_height_desktop: number;
+	/** `PagesSourceRow.scroll_height_mobile`, defaulted to `0` when `null`. */
+	scroll_height_mobile: number;
 	/**
 	 * Case-preserving sort key for URL ordering — currently just `url`
 	 * verbatim, matching `listPages`'s plain `ORDER BY url` (SQLite's
@@ -204,6 +252,18 @@ function toViewerPageInsertRow(
 		source: row.source,
 		tag_count: row.tag_count ?? 0,
 		jsonld_count: row.jsonld_count ?? 0,
+		main_content_word_count: row.main_content_word_count ?? 0,
+		main_content_body_word_count: row.main_content_body_word_count ?? 0,
+		main_content_heading_count: row.main_content_heading_count ?? 0,
+		main_content_image_count: row.main_content_image_count ?? 0,
+		main_content_table_count: row.main_content_table_count ?? 0,
+		main_content_button_count: row.main_content_button_count ?? 0,
+		main_content_iframe_count: row.main_content_iframe_count ?? 0,
+		main_content_video_count: row.main_content_video_count ?? 0,
+		main_content_audio_count: row.main_content_audio_count ?? 0,
+		main_content_canvas_count: row.main_content_canvas_count ?? 0,
+		scroll_height_desktop: row.scroll_height_desktop ?? 0,
+		scroll_height_mobile: row.scroll_height_mobile ?? 0,
 		url_sort_key: row.url,
 		title_sort_key: row.title ?? '',
 		path_sort_key: derivePathSortKey(row.url),
@@ -395,6 +455,18 @@ export async function buildViewerReadModel(
 				'ci.source as source',
 				'pm.tag_count as tag_count',
 				'pm.jsonld_count as jsonld_count',
+				'pm.main_content_word_count as main_content_word_count',
+				'pm.main_content_body_word_count as main_content_body_word_count',
+				'pm.main_content_heading_count as main_content_heading_count',
+				'pm.main_content_image_count as main_content_image_count',
+				'pm.main_content_table_count as main_content_table_count',
+				'pm.main_content_button_count as main_content_button_count',
+				'pm.main_content_iframe_count as main_content_iframe_count',
+				'pm.main_content_video_count as main_content_video_count',
+				'pm.main_content_audio_count as main_content_audio_count',
+				'pm.main_content_canvas_count as main_content_canvas_count',
+				'pm.scroll_height_desktop as scroll_height_desktop',
+				'pm.scroll_height_mobile as scroll_height_mobile',
 				'pm.lang as lang',
 			);
 

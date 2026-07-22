@@ -2,6 +2,7 @@ import { Link, useSearchParams } from 'react-router';
 
 import { usePageDetail } from '../api/use-page-detail.js';
 import { usePageHtml } from '../api/use-page-html.js';
+import { usePageMainContents } from '../api/use-page-main-contents.js';
 import { HtmlPreview } from '../components/html-preview.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useI18n } from '../i18n/use-i18n.js';
@@ -24,6 +25,7 @@ export function PageDetailView() {
 	// so the fetch isn't fired speculatively during the loading window, when
 	// `data` is still undefined and its eventual `isExternal` value is unknown.
 	const html = usePageHtml(data && !data.isExternal ? url : '');
+	const mainContents = usePageMainContents(data && !data.isExternal ? url : '');
 
 	if (!url) {
 		return <div className="state">{t('views.pageDetail.noPage')}</div>;
@@ -212,6 +214,169 @@ export function PageDetailView() {
 							<li key={from}>{from}</li>
 						))}
 					</ul>
+				</>
+			)}
+
+			{!data.isExternal && (
+				<>
+					<h2>{t('views.pageDetail.mainContent')}</h2>
+					{mainContents.isLoading && (
+						<div className="state">{t('views.pageDetail.loadingMainContent')}</div>
+					)}
+					{mainContents.data ? (
+						<>
+							<dl className="detail-grid">
+								<dt>{t('views.pageDetail.mainContentSelector')}</dt>
+								<dd>{mainContents.data.main?.selector ?? '—'}</dd>
+								<dt>{t('views.pageDetail.mainContentWordCount')}</dt>
+								<dd>{mainContents.data.wordCount}</dd>
+								<dt>{t('views.pageDetail.mainContentBodyWordCount')}</dt>
+								<dd>{mainContents.data.bodyWordCount}</dd>
+								<dt>{t('views.pageDetail.mainContentScrollHeight')}</dt>
+								<dd>
+									{mainContents.data.scrollHeight.desktop ?? '—'} /{' '}
+									{mainContents.data.scrollHeight.mobile ?? '—'}
+								</dd>
+							</dl>
+
+							{mainContents.data.headings.length > 0 && (
+								<>
+									<h3>
+										{t('views.pageDetail.mainContentHeadings')} (
+										{mainContents.data.headings.length})
+									</h3>
+									<ul>
+										{mainContents.data.headings.map((heading, index) => (
+											<li key={`heading-${index}`}>
+												H{heading.level}: {heading.text ?? '—'}
+											</li>
+										))}
+									</ul>
+								</>
+							)}
+
+							{mainContents.data.images.length > 0 && (
+								<>
+									<h3>
+										{t('views.pageDetail.mainContentImages')} (
+										{mainContents.data.images.length})
+									</h3>
+									<ul>
+										{mainContents.data.images.map((image, index) => (
+											<li key={`${image.src}-${index}`}>
+												{image.src}
+												{image.alt ? ` (alt: ${image.alt})` : ''}
+											</li>
+										))}
+									</ul>
+								</>
+							)}
+
+							{mainContents.data.tables.length > 0 && (
+								<>
+									<h3>
+										{t('views.pageDetail.mainContentTables')} (
+										{mainContents.data.tables.length})
+									</h3>
+									<ul>
+										{mainContents.data.tables.map((table, index) => (
+											<li key={`table-${index}`}>
+												{table.rows}×{table.cols}
+												{table.hasHeader ? ', header' : ''}
+												{table.hasFooter ? ', footer' : ''}
+												{table.hasMergedCell ? ', merged cells' : ''}
+											</li>
+										))}
+									</ul>
+								</>
+							)}
+
+							{mainContents.data.buttons.length > 0 && (
+								<>
+									<h3>
+										{t('views.pageDetail.mainContentButtons')} (
+										{mainContents.data.buttons.length})
+									</h3>
+									<ul>
+										{mainContents.data.buttons.map((button, index) => (
+											<li key={`button-${index}`}>
+												{button.nodeName}
+												{button.type ? `[${button.type}]` : ''}: {button.text ?? '—'}
+												{button.disabled ? ' (disabled)' : ''}
+											</li>
+										))}
+									</ul>
+								</>
+							)}
+
+							{mainContents.data.iframes.length > 0 && (
+								<>
+									<h3>
+										{t('views.pageDetail.mainContentIframes')} (
+										{mainContents.data.iframes.length})
+									</h3>
+									<ul>
+										{mainContents.data.iframes.map((iframe, index) => (
+											<li key={`${iframe.src}-${index}`}>
+												{iframe.src}
+												{iframe.title ? ` (${iframe.title})` : ''}
+											</li>
+										))}
+									</ul>
+								</>
+							)}
+
+							{mainContents.data.videos.length > 0 && (
+								<>
+									<h3>
+										{t('views.pageDetail.mainContentVideos')} (
+										{mainContents.data.videos.length})
+									</h3>
+									<ul>
+										{mainContents.data.videos.map((video, index) => (
+											<li key={`${video.src}-${index}`}>
+												{video.src} ({video.width}×{video.height})
+											</li>
+										))}
+									</ul>
+								</>
+							)}
+
+							{mainContents.data.audios.length > 0 && (
+								<>
+									<h3>
+										{t('views.pageDetail.mainContentAudios')} (
+										{mainContents.data.audios.length})
+									</h3>
+									<ul>
+										{mainContents.data.audios.map((audio, index) => (
+											<li key={`${audio.src}-${index}`}>{audio.src}</li>
+										))}
+									</ul>
+								</>
+							)}
+
+							{mainContents.data.canvases.length > 0 && (
+								<>
+									<h3>
+										{t('views.pageDetail.mainContentCanvases')} (
+										{mainContents.data.canvases.length})
+									</h3>
+									<ul>
+										{mainContents.data.canvases.map((canvas, index) => (
+											<li key={`canvas-${index}`}>
+												{canvas.width}×{canvas.height}
+											</li>
+										))}
+									</ul>
+								</>
+							)}
+						</>
+					) : (
+						!mainContents.isLoading && (
+							<div className="state">{t('views.pageDetail.noMainContent')}</div>
+						)
+					)}
 				</>
 			)}
 

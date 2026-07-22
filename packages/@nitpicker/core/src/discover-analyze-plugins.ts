@@ -9,7 +9,6 @@ import type { Plugin } from './types.js';
 const STANDARD_ANALYZE_PLUGINS = [
 	'@nitpicker/analyze-axe',
 	'@nitpicker/analyze-lighthouse',
-	'@nitpicker/analyze-main-contents',
 	'@nitpicker/analyze-markuplint',
 	'@nitpicker/analyze-search',
 	'@nitpicker/analyze-textlint',

@@ -38,6 +38,7 @@ describe('mapFlagsToCrawlConfig', () => {
 			userAgent: 'TestBot/1.0',
 			ignoreRobots: true,
 			verbose: true,
+			mainContentSelector: '#main',
 		});
 
 		expect(result.interval).toBe(500);
@@ -52,6 +53,7 @@ describe('mapFlagsToCrawlConfig', () => {
 		expect(result.userAgent).toBe('TestBot/1.0');
 		expect(result.ignoreRobots).toBe(true);
 		expect(result.verbose).toBe(true);
+		expect(result.mainContentSelector).toBe('#main');
 	});
 
 	it('CLI 専用フラグ (resume, silent, diff, single, listFile, list) が結果に含まれない', () => {

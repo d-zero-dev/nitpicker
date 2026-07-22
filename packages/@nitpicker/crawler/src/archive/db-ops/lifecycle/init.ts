@@ -2,21 +2,29 @@ import type { Knex } from 'knex';
 
 import { applyConnectionPragmas, initSchema } from '../../init-schema.js';
 import { assertCompatibleVersion } from '../../meta/assert-compatible-version.js';
+import { migrateInfoMainContentSelector } from '../../migrate-info-main-content-selector.js';
 import { migrateInfoRoots } from '../../migrate-info-roots.js';
+import { migrateMainContentsColumns } from '../../migrate-main-contents-columns.js';
 
 /**
  * Initializes the database schema if tables do not exist, then runs the
- * one remaining lightweight migration (`info.roots`).
+ * remaining lightweight migrations (`info.roots`, `info.mainContentSelector`,
+ * `page_meta.main_content_*`).
  *
- * There is deliberately no per-table lazy-migration chain here:
- * `assertCompatibleVersion` (called below, before any schema work)
- * rejects every archive older than the current format, so a connection
- * that reaches `initSchema` is either brand new (initSchema provisions
- * the full schema) or was produced by `scripts/migrate-to-0.13.mjs`
- * (which guarantees the full table set before it repacks). A
- * `hasTable`-guarded catch-up migration could therefore never fire —
- * schema catch-up for old archives is the migration script's job, not
- * the open path's.
+ * There is deliberately no per-table *table-creation* migration chain here:
+ * `assertCompatibleVersion` (called below, before any schema work) rejects
+ * every archive older than the current format, so a connection that reaches
+ * `initSchema` is either brand new (`initSchema` provisions the full schema)
+ * or was produced by `scripts/migrate-to-0.13.mjs` (which guarantees the
+ * full table set before it repacks) — and `initSchema` itself re-runs
+ * `createEntityTables` / `createAdjunctTables` unconditionally on every
+ * open, self-healing any *missing table* via their internal
+ * `IF NOT EXISTS` / `hasTable` guards. What that self-healing cannot do is
+ * retrofit a *new column* onto an entity table that already exists —
+ * `CREATE TABLE IF NOT EXISTS` is a no-op once the table is present. Column
+ * additions to an existing 0.13 table are therefore the one case that still
+ * needs an explicit `hasColumn`-guarded `ALTER TABLE` here (`migrateInfoRoots`,
+ * `migrateMainContentsColumns`) rather than a DDL-string change alone.
  *
  * In read-only mode schema init + migration are SKIPPED so the same DB
  * can be opened safely by a viewer attached to a live (or interrupted)
@@ -42,4 +50,6 @@ export async function init(knex: Knex, readOnly: boolean): Promise<void> {
 	}
 	await initSchema(knex);
 	await migrateInfoRoots(knex);
+	await migrateInfoMainContentSelector(knex);
+	await migrateMainContentsColumns(knex);
 }

@@ -41,9 +41,11 @@ import { getFailedPageMessages } from '../../../get-failed-page-messages.js';
  * The page row itself is kept (id preserved) so existing
  * `anchor_edges.href_page_id` referrers stay valid, and `is_external` is
  * left untouched so the next pass re-classifies each page from the crawl
- * scope. Related `anchor_edges`, `image_items`, `resource_ref_edges`, and
- * `page_errors` rows are deleted so the re-scrape can re-insert fresh data
- * without duplicates.
+ * scope. Related `anchor_edges`, `image_items`, `resource_ref_edges`,
+ * `page_errors`, and the `page_main_content_*` child tables are deleted so
+ * the re-scrape can re-insert fresh data without duplicates — kept in sync
+ * with the `page_meta` row deletion above so a reset page's `main_content_*`
+ * counts and its child-table detail never disagree.
  *
  * SELECT and UPDATE/DELETE statements are chunked to stay below SQLite's
  * `SQLITE_LIMIT_VARIABLE_NUMBER`.
@@ -128,6 +130,14 @@ export async function resetFailedPages(knex: Knex): Promise<string[]> {
 		await knex('page_html_ref').whereIn('page_id', chunk).delete();
 		await knex('page_tags').whereIn('pageId', chunk).delete();
 		await knex('page_jsonld').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_headings').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_images').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_tables').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_buttons').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_iframes').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_videos').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_audios').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_canvases').whereIn('pageId', chunk).delete();
 	}
 	dbLog('Reset %d failed pages back to pending', urls.length);
 	return urls;

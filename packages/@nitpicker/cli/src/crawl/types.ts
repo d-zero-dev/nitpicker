@@ -36,4 +36,6 @@ export interface CrawlFlagInput {
 	readonly ignoreRobots?: boolean;
 	/** Whether to enable verbose logging output. */
 	readonly verbose?: boolean;
+	/** CSS selector overriding beholder's automatic main-content detection. */
+	readonly mainContentSelector?: string;
 }

@@ -17,7 +17,7 @@ import { createRefTables } from './create-ref-tables.js';
 export async function applyConnectionPragmas(instance: Knex): Promise<void> {
 	// Foreign-key enforcement defaults to OFF on every new SQLite
 	// connection. Required for ON DELETE CASCADE on `page_html_ref`,
-	// `page_tags`, and `page_jsonld` to fire.
+	// `page_tags`, `page_jsonld`, and the `page_main_content_*` tables to fire.
 	await instance.raw('PRAGMA foreign_keys = ON');
 	await instance.raw('PRAGMA wal_autocheckpoint = 1000');
 	// Negative value = KiB of memory (64 MiB). Helps large BLOB scans.
@@ -116,6 +116,7 @@ export async function initSchema(instance: Knex) {
 			t.boolean('disableQueries');
 			t.string('userAgent');
 			t.boolean('ignoreRobots');
+			t.string('mainContentSelector');
 		});
 	}
 

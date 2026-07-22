@@ -11,7 +11,7 @@
 		"hono": "4.12.30"
 	},
 	"devDependencies": {
-		"@nitpicker/analyze-main-contents": "0.13.0",
+		"@nitpicker/analyze-search": "0.13.0",
 		"@nitpicker/core": "0.13.0",
 		"@nitpicker/crawler": "0.13.0",
 		"@nitpicker/query": "0.13.0",

@@ -121,6 +121,10 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Ignore robots.txt restrictions (use responsibly)',
 		},
+		mainContentSelector: {
+			type: 'string',
+			desc: 'CSS selector overriding automatic main-content-region detection',
+		},
 		output: {
 			type: 'string',
 			shortFlag: 'o',

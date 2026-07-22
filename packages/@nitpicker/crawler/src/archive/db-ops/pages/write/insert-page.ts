@@ -1,6 +1,7 @@
 import type { PageData } from '../../../../utils/types/types.js';
 import type {
 	FlatPageMetaColumns,
+	MainContentsDenormalizedColumns,
 	PageDenormalizedColumns,
 } from '../../../meta/types.js';
 import type { PageSource } from '../../../types.js';
@@ -8,6 +9,7 @@ import type { WriteRefCaches } from '../../_shared/types.js';
 import type { Knex } from 'knex';
 
 import { normalizeContentType } from '../../../../crawler/normalize-content-type.js';
+import { computeMainContentsDenormalized } from '../../../meta/compute-main-contents-denormalized.js';
 import { computePageDenormalized } from '../../../meta/compute-page-denormalized.js';
 import { deriveFlatFromMeta } from '../../../meta/derive-flat-from-meta.js';
 import { deriveMetaExtras } from '../../../meta/derive-meta-extras.js';
@@ -69,6 +71,10 @@ export async function insertPage(
 	);
 	const flat = deriveFlatFromMeta(page.meta, page.url.href);
 	const denorm = computePageDenormalized(page.meta);
+	const mainContentsDenorm = computeMainContentsDenormalized(
+		page.mainContents,
+		page.scrollHeight,
+	);
 	const extras = deriveMetaExtras(page.meta);
 	const now = Date.now();
 	// Canonicalize so the stored dictionary value matches the exact-string
@@ -140,7 +146,15 @@ export async function insertPage(
 			entry.source = source;
 		}
 	}
-	await upsertPageMeta(qb, caches, pageId, flat, denorm, extras);
+	await upsertPageMeta(
+		qb,
+		caches,
+		pageId,
+		flat,
+		denorm,
+		page.mainContents == null ? null : mainContentsDenorm,
+		extras,
+	);
 	return pageId;
 }
 
@@ -154,6 +168,13 @@ export async function insertPage(
  * @param pageId - The owning `content_items.id`.
  * @param flat - Flat meta columns from `deriveFlatFromMeta`.
  * @param denorm - Denormalised aggregates from `computePageDenormalized`.
+ * @param mainContentsDenorm - Denormalised `main_content_*` / `scroll_height_*`
+ *   aggregates from `computeMainContentsDenormalized`, or `null` when the
+ *   page's `mainContents` was `null` (degraded / non-HTML scrape). `null`
+ *   here omits all seventeen columns from the upsert entirely — on
+ *   `ON CONFLICT DO UPDATE` this leaves a previous full scrape's values
+ *   untouched rather than overwriting them with NULL, mirroring the
+ *   `page_main_content_*` child-table writers' same no-op-on-null guard.
  * @param extras - Nested-Meta catch-all from `deriveMetaExtras`.
  */
 async function upsertPageMeta(
@@ -162,6 +183,7 @@ async function upsertPageMeta(
 	pageId: number,
 	flat: FlatPageMetaColumns,
 	denorm: PageDenormalizedColumns,
+	mainContentsDenorm: MainContentsDenormalizedColumns | null,
 	extras: Record<string, unknown>,
 ): Promise<void> {
 	const texts = new Set<string>();
@@ -211,6 +233,10 @@ async function upsertPageMeta(
 		tag_count: denorm.tag_count,
 		jsonld_count: denorm.jsonld_count,
 		tags_providers_csv: denorm.tags_providers_csv,
+		// Omitted entirely (not set to null) when mainContentsDenorm is null —
+		// see the parameter doc above for why this preserves prior values on
+		// ON CONFLICT DO UPDATE instead of erasing them.
+		...mainContentsDenorm,
 	};
 	for (const { source, target } of PAGE_META_COLUMN_MAPS.text) {
 		const value = flat[source];

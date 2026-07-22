@@ -75,6 +75,23 @@ const FLAT_META_COLUMNS = [
 	'tag_count',
 	'jsonld_count',
 	'tags_providers_csv',
+	'main_content_node_name',
+	'main_content_id',
+	'main_content_role',
+	'main_content_selector',
+	'main_content_class_list',
+	'main_content_word_count',
+	'main_content_body_word_count',
+	'main_content_heading_count',
+	'main_content_image_count',
+	'main_content_table_count',
+	'main_content_button_count',
+	'main_content_iframe_count',
+	'main_content_video_count',
+	'main_content_audio_count',
+	'main_content_canvas_count',
+	'scroll_height_desktop',
+	'scroll_height_mobile',
 ] as const satisfies ReadonlyArray<keyof DB_Page>;
 
 /**
@@ -202,6 +219,119 @@ export default class Page {
 	}
 
 	/**
+	 * Detected main-content element's `nodeName` (e.g. `'MAIN'`), or null when
+	 * no main region was found or the page was not fully rendered.
+	 */
+	get mainContentNodeName() {
+		return this.#raw.main_content_node_name;
+	}
+
+	/**
+	 * Detected main-content element's `id`, or null.
+	 */
+	get mainContentId() {
+		return this.#raw.main_content_id;
+	}
+
+	/**
+	 * Detected main-content element's `role` attribute, or null.
+	 */
+	get mainContentRole() {
+		return this.#raw.main_content_role;
+	}
+
+	/**
+	 * Diagnostic tag+id+class selector for the detected main-content element, or null.
+	 */
+	get mainContentSelector() {
+		return this.#raw.main_content_selector;
+	}
+
+	/**
+	 * Detected main-content element's CSS classes, or null when no main region
+	 * was found. Parsed from the JSON-encoded `main_content_class_list` column.
+	 */
+	get mainContentClassList(): string[] | null {
+		if (this.#raw.main_content_class_list === null) {
+			return null;
+		}
+		return JSON.parse(this.#raw.main_content_class_list) as string[];
+	}
+
+	/**
+	 * Character count of the main region's text content (denormalised
+	 * aggregate written at scrape time), or null.
+	 */
+	get mainContentWordCount() {
+		return this.#raw.main_content_word_count;
+	}
+
+	/**
+	 * Character count of `document.body`'s text content (denormalised
+	 * aggregate written at scrape time), or null.
+	 */
+	get mainContentBodyWordCount() {
+		return this.#raw.main_content_body_word_count;
+	}
+
+	/**
+	 * Number of headings within the main region (denormalised aggregate), or null.
+	 */
+	get mainContentHeadingCount() {
+		return this.#raw.main_content_heading_count;
+	}
+
+	/**
+	 * Number of images within the main region (denormalised aggregate), or null.
+	 */
+	get mainContentImageCount() {
+		return this.#raw.main_content_image_count;
+	}
+
+	/**
+	 * Number of tables within the main region (denormalised aggregate), or null.
+	 */
+	get mainContentTableCount() {
+		return this.#raw.main_content_table_count;
+	}
+
+	/**
+	 * Number of button-like elements within the main region (denormalised
+	 * aggregate), or null.
+	 */
+	get mainContentButtonCount() {
+		return this.#raw.main_content_button_count;
+	}
+
+	/**
+	 * Number of iframes within the main region (denormalised aggregate), or null.
+	 */
+	get mainContentIframeCount() {
+		return this.#raw.main_content_iframe_count;
+	}
+
+	/**
+	 * Number of videos within the main region (denormalised aggregate), or null.
+	 */
+	get mainContentVideoCount() {
+		return this.#raw.main_content_video_count;
+	}
+
+	/**
+	 * Number of audios within the main region (denormalised aggregate), or null.
+	 */
+	get mainContentAudioCount() {
+		return this.#raw.main_content_audio_count;
+	}
+
+	/**
+	 * Number of canvases within the main region (denormalised aggregate), or null.
+	 */
+	get mainContentCanvasCount() {
+		return this.#raw.main_content_canvas_count;
+	}
+
+	/**
 	 * Iterable view over every flat meta column (~47 fields). Returns a frozen
 	 * record so consumers can pick fields by name without re-enumerating
 	 * typed getters.
@@ -326,6 +456,22 @@ export default class Page {
 	}
 
 	/**
+	 * `document.body.scrollHeight` at the desktop-compact preset (denormalised
+	 * aggregate written at scrape time), or null.
+	 */
+	get scrollHeightDesktop() {
+		return this.#raw.scroll_height_desktop;
+	}
+
+	/**
+	 * `document.body.scrollHeight` at the mobile-small preset (denormalised
+	 * aggregate written at scrape time), or null.
+	 */
+	get scrollHeightMobile() {
+		return this.#raw.scroll_height_mobile;
+	}
+
+	/**
 	 * The reason this page was skipped during crawling, or null if it was not skipped.
 	 */
 	get skipReason() {
@@ -439,6 +585,43 @@ export default class Page {
 	}
 
 	/**
+	 * Retrieves the audios within this page's detected main content region
+	 * from `page_main_content_audios`. Lazy — runs a single SELECT per call.
+	 * @returns Ordered audio rows.
+	 */
+	async getAudios() {
+		return this.#archive.getAudiosOfPage(this.#raw.id);
+	}
+
+	/**
+	 * Retrieves the button-like elements within this page's detected main
+	 * content region from `page_main_content_buttons`. Lazy — runs a single
+	 * SELECT per call.
+	 * @returns Ordered button rows.
+	 */
+	async getButtons() {
+		return this.#archive.getButtonsOfPage(this.#raw.id);
+	}
+
+	/**
+	 * Retrieves the canvases within this page's detected main content region
+	 * from `page_main_content_canvases`. Lazy — runs a single SELECT per call.
+	 * @returns Ordered canvas rows.
+	 */
+	async getCanvases() {
+		return this.#archive.getCanvasesOfPage(this.#raw.id);
+	}
+
+	/**
+	 * Retrieves the headings within this page's detected main content region
+	 * from `page_main_content_headings`. Lazy — runs a single SELECT per call.
+	 * @returns Ordered heading rows.
+	 */
+	async getHeadings() {
+		return this.#archive.getHeadingsOfPage(this.#raw.id);
+	}
+
+	/**
 	 * Thin wrapper that forwards this page's id to the accessor's
 	 * BLOB-read path. Lets callers hold a `Page` reference and ask for its
 	 * HTML without having to thread the page id through.
@@ -455,6 +638,15 @@ export default class Page {
 	}
 
 	/**
+	 * Retrieves the iframes within this page's detected main content region
+	 * from `page_main_content_iframes`. Lazy — runs a single SELECT per call.
+	 * @returns Ordered iframe rows.
+	 */
+	async getIframes() {
+		return this.#archive.getIframesOfPage(this.#raw.id);
+	}
+
+	/**
 	 * Retrieves the JSON-LD entries for this page from `page_jsonld`.
 	 * Lazy — runs a single SELECT per call. Returns entries in insertion
 	 * order (matches the scraper's traversal order).
@@ -462,6 +654,25 @@ export default class Page {
 	 */
 	async getJsonLd(): Promise<readonly JsonLdRow[]> {
 		return this.#archive.getJsonLdOfPage(this.#raw.id);
+	}
+
+	/**
+	 * Retrieves the images within this page's detected main content region
+	 * from `page_main_content_images`. Lazy — runs a single SELECT per call.
+	 * Distinct from the whole-page image scan (`image_items`).
+	 * @returns Ordered image rows.
+	 */
+	async getMainContentImages() {
+		return this.#archive.getMainContentImagesOfPage(this.#raw.id);
+	}
+
+	/**
+	 * Retrieves the tables within this page's detected main content region
+	 * from `page_main_content_tables`. Lazy — runs a single SELECT per call.
+	 * @returns Ordered table rows.
+	 */
+	async getMainContentTables() {
+		return this.#archive.getMainContentTablesOfPage(this.#raw.id);
 	}
 
 	/**
@@ -510,6 +721,15 @@ export default class Page {
 	 */
 	async getTags(): Promise<readonly TagRow[]> {
 		return this.#archive.getTagsOfPage(this.#raw.id);
+	}
+
+	/**
+	 * Retrieves the videos within this page's detected main content region
+	 * from `page_main_content_videos`. Lazy — runs a single SELECT per call.
+	 * @returns Ordered video rows.
+	 */
+	async getVideos() {
+		return this.#archive.getVideosOfPage(this.#raw.id);
 	}
 
 	/**

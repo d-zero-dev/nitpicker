@@ -72,6 +72,12 @@ export interface Config extends Required<Pick<ParseURLOptions, 'disableQueries'>
 
 	/** Whether robots.txt restrictions were ignored during crawling. */
 	ignoreRobots: boolean;
+
+	/**
+	 * CSS selector overriding beholder's automatic main-content-region
+	 * detection, or `null`/omitted to use the automatic heuristic.
+	 */
+	mainContentSelector?: string | null;
 }
 
 /**
@@ -326,6 +332,45 @@ export interface DB_Page {
 	jsonld_count: number | null;
 	/** Sorted unique provider names, comma-separated (empty string when none). */
 	tags_providers_csv: string | null;
+
+	// Main content (beholder MainContentsData / ScrollHeightData, written by
+	// archive/meta/compute-main-contents-denormalized). Null for pages that
+	// were not fully rendered. Full per-element detail lives in the
+	// `page_main_content_*` child tables (see `Page.getHeadings()` etc.).
+	/** Detected main-content element's `nodeName` (e.g. `'MAIN'`), or null. */
+	main_content_node_name: string | null;
+	/** Detected main-content element's `id`, or null. */
+	main_content_id: string | null;
+	/** Detected main-content element's `role` attribute, or null. */
+	main_content_role: string | null;
+	/** Diagnostic tag+id+class selector for the detected element, or null. */
+	main_content_selector: string | null;
+	/** JSON-encoded array of the detected element's CSS classes, or null. */
+	main_content_class_list: string | null;
+	/** Character count of the main region's text content, or null. */
+	main_content_word_count: number | null;
+	/** Character count of `document.body`'s text content, or null. */
+	main_content_body_word_count: number | null;
+	/** Number of headings within the main region, or null. */
+	main_content_heading_count: number | null;
+	/** Number of images within the main region, or null. */
+	main_content_image_count: number | null;
+	/** Number of tables within the main region, or null. */
+	main_content_table_count: number | null;
+	/** Number of button-like elements within the main region, or null. */
+	main_content_button_count: number | null;
+	/** Number of iframes within the main region, or null. */
+	main_content_iframe_count: number | null;
+	/** Number of videos within the main region, or null. */
+	main_content_video_count: number | null;
+	/** Number of audios within the main region, or null. */
+	main_content_audio_count: number | null;
+	/** Number of canvases within the main region, or null. */
+	main_content_canvas_count: number | null;
+	/** `document.body.scrollHeight` at the desktop-compact preset, or null. */
+	scroll_height_desktop: number | null;
+	/** `document.body.scrollHeight` at the mobile-small preset, or null. */
+	scroll_height_mobile: number | null;
 
 	/** JSON-serialised nested Meta sub-objects not flattened above. */
 	meta_extras: string | null;

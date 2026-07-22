@@ -557,6 +557,18 @@ describe('buildViewerReadModel', () => {
 				robots_noindex: 0,
 				tag_count: 0,
 				jsonld_count: 0,
+				main_content_word_count: 0,
+				main_content_body_word_count: 0,
+				main_content_heading_count: 0,
+				main_content_image_count: 0,
+				main_content_table_count: 0,
+				main_content_button_count: 0,
+				main_content_iframe_count: 0,
+				main_content_video_count: 0,
+				main_content_audio_count: 0,
+				main_content_canvas_count: 0,
+				scroll_height_desktop: 0,
+				scroll_height_mobile: 0,
 				url_sort_key: 'not a valid url',
 				path_sort_key: 'not a valid url',
 				// Never-null keyset sort keys, substituted for the row's null
@@ -566,6 +578,142 @@ describe('buildViewerReadModel', () => {
 				status_sort_key: -32_768,
 				status_desc_key: 32_768,
 				source: 'crawled',
+			});
+		});
+	});
+
+	describe('main-content columns', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_main_contents__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'main-contents-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			await archive.setPage({
+				url: parseUrl('https://example.com/rendered')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+				mainContents: {
+					title: 'Rendered',
+					main: {
+						nodeName: 'MAIN',
+						id: null,
+						classList: [],
+						role: null,
+						selector: 'main',
+					},
+					wordCount: 100,
+					bodyWordCount: 150,
+					headings: [{ text: 'H1', level: 1 }],
+					images: [{ src: 'https://example.com/a.png', alt: 'A' }],
+					tables: [],
+					buttons: [
+						{ nodeName: 'BUTTON', role: null, type: null, text: 'Go', disabled: false },
+						{
+							nodeName: 'A',
+							role: 'button',
+							type: null,
+							text: 'Also go',
+							disabled: false,
+						},
+					],
+					iframes: [],
+					videos: [],
+					audios: [],
+					canvases: [],
+				},
+				scrollHeight: { desktop: 3200, mobile: 5400 },
+			});
+
+			await archive.setPage({
+				url: parseUrl('https://example.com/unrendered')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 0,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+				mainContents: null,
+				scrollHeight: null,
+			});
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('projects the 12 numeric main-content columns from page_meta onto viewer_pages', async () => {
+			await buildViewerReadModel(archive);
+			const knex = archive.getKnex();
+
+			const row = await knex('viewer_pages')
+				.where('url', 'https://example.com/rendered')
+				.first();
+			expect(row).toMatchObject({
+				main_content_word_count: 100,
+				main_content_body_word_count: 150,
+				main_content_heading_count: 1,
+				main_content_image_count: 1,
+				main_content_table_count: 0,
+				main_content_button_count: 2,
+				main_content_iframe_count: 0,
+				main_content_video_count: 0,
+				main_content_audio_count: 0,
+				main_content_canvas_count: 0,
+				scroll_height_desktop: 3200,
+				scroll_height_mobile: 5400,
+			});
+		});
+
+		it('defaults an unrendered page (null mainContents) to 0, not null, for keyset safety', async () => {
+			await buildViewerReadModel(archive);
+			const knex = archive.getKnex();
+
+			const row = await knex('viewer_pages')
+				.where('url', 'https://example.com/unrendered')
+				.first();
+			expect(row).toMatchObject({
+				main_content_word_count: 0,
+				main_content_body_word_count: 0,
+				main_content_heading_count: 0,
+				main_content_image_count: 0,
+				main_content_table_count: 0,
+				main_content_button_count: 0,
+				main_content_iframe_count: 0,
+				main_content_video_count: 0,
+				main_content_audio_count: 0,
+				main_content_canvas_count: 0,
+				scroll_height_desktop: 0,
+				scroll_height_mobile: 0,
 			});
 		});
 	});
@@ -1359,7 +1507,7 @@ describe('buildViewerReadModel', () => {
 			}
 
 			await buildViewerReadModel(archive);
-		});
+		}, 30_000);
 
 		afterAll(async () => {
 			if (archive) {

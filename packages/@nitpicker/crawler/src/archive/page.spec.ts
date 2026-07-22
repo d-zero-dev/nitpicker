@@ -14,6 +14,14 @@ function createMockArchive(overrides: Record<string, unknown> = {}) {
 		getAnchorsOnPage: vi.fn().mockResolvedValue([]),
 		getHtmlOfPage: vi.fn().mockResolvedValue(null),
 		getReferrersOfPage: vi.fn().mockResolvedValue([]),
+		getAudiosOfPage: vi.fn().mockResolvedValue([]),
+		getButtonsOfPage: vi.fn().mockResolvedValue([]),
+		getCanvasesOfPage: vi.fn().mockResolvedValue([]),
+		getHeadingsOfPage: vi.fn().mockResolvedValue([]),
+		getIframesOfPage: vi.fn().mockResolvedValue([]),
+		getMainContentImagesOfPage: vi.fn().mockResolvedValue([]),
+		getMainContentTablesOfPage: vi.fn().mockResolvedValue([]),
+		getVideosOfPage: vi.fn().mockResolvedValue([]),
 		...overrides,
 	};
 }
@@ -87,6 +95,23 @@ function createRawPage(overrides: Partial<DB_Page> = {}): DB_Page {
 		tag_count: null,
 		jsonld_count: null,
 		tags_providers_csv: null,
+		main_content_node_name: null,
+		main_content_id: null,
+		main_content_role: null,
+		main_content_selector: null,
+		main_content_class_list: null,
+		main_content_word_count: null,
+		main_content_body_word_count: null,
+		main_content_heading_count: null,
+		main_content_image_count: null,
+		main_content_table_count: null,
+		main_content_button_count: null,
+		main_content_iframe_count: null,
+		main_content_video_count: null,
+		main_content_audio_count: null,
+		main_content_canvas_count: null,
+		scroll_height_desktop: null,
+		scroll_height_mobile: null,
 		meta_extras: null,
 		networkLogs: null,
 		isSkipped: 0,
@@ -191,6 +216,103 @@ describe('Page', () => {
 			expect(page.og_url).toBe('https://example.com/');
 			expect(page.og_image).toBe('https://example.com/image.png');
 			expect(page.twitter_card).toBe('summary');
+		});
+
+		it('returns main-content identity fields from raw data', () => {
+			const page = new Page(
+				createMockArchive() as never,
+				createRawPage({
+					main_content_node_name: 'MAIN',
+					main_content_id: 'content',
+					main_content_role: 'main',
+					main_content_selector: 'main#content',
+				}),
+			);
+			expect(page.mainContentNodeName).toBe('MAIN');
+			expect(page.mainContentId).toBe('content');
+			expect(page.mainContentRole).toBe('main');
+			expect(page.mainContentSelector).toBe('main#content');
+		});
+
+		it('returns null main-content identity fields when no main region was found', () => {
+			const page = new Page(createMockArchive() as never, createRawPage());
+			expect(page.mainContentNodeName).toBeNull();
+			expect(page.mainContentId).toBeNull();
+			expect(page.mainContentRole).toBeNull();
+			expect(page.mainContentSelector).toBeNull();
+		});
+
+		it('parses mainContentClassList from JSON string', () => {
+			const page = new Page(
+				createMockArchive() as never,
+				createRawPage({ main_content_class_list: '["l-main","p-home"]' }),
+			);
+			expect(page.mainContentClassList).toEqual(['l-main', 'p-home']);
+		});
+
+		it('returns null mainContentClassList when column is null', () => {
+			const page = new Page(createMockArchive() as never, createRawPage());
+			expect(page.mainContentClassList).toBeNull();
+		});
+
+		it('returns main-content aggregate counts from raw data', () => {
+			const page = new Page(
+				createMockArchive() as never,
+				createRawPage({
+					main_content_word_count: 100,
+					main_content_body_word_count: 150,
+					main_content_heading_count: 3,
+					main_content_image_count: 2,
+					main_content_table_count: 1,
+					main_content_button_count: 4,
+					main_content_iframe_count: 1,
+					main_content_video_count: 1,
+					main_content_audio_count: 1,
+					main_content_canvas_count: 1,
+				}),
+			);
+			expect(page.mainContentWordCount).toBe(100);
+			expect(page.mainContentBodyWordCount).toBe(150);
+			expect(page.mainContentHeadingCount).toBe(3);
+			expect(page.mainContentImageCount).toBe(2);
+			expect(page.mainContentTableCount).toBe(1);
+			expect(page.mainContentButtonCount).toBe(4);
+			expect(page.mainContentIframeCount).toBe(1);
+			expect(page.mainContentVideoCount).toBe(1);
+			expect(page.mainContentAudioCount).toBe(1);
+			expect(page.mainContentCanvasCount).toBe(1);
+		});
+
+		it('returns null main-content aggregate counts for an unrendered page', () => {
+			const page = new Page(createMockArchive() as never, createRawPage());
+			expect(page.mainContentWordCount).toBeNull();
+			expect(page.mainContentBodyWordCount).toBeNull();
+			expect(page.mainContentHeadingCount).toBeNull();
+			expect(page.mainContentImageCount).toBeNull();
+			expect(page.mainContentTableCount).toBeNull();
+			expect(page.mainContentButtonCount).toBeNull();
+			expect(page.mainContentIframeCount).toBeNull();
+			expect(page.mainContentVideoCount).toBeNull();
+			expect(page.mainContentAudioCount).toBeNull();
+			expect(page.mainContentCanvasCount).toBeNull();
+		});
+
+		it('returns scrollHeightDesktop/Mobile from raw data', () => {
+			const page = new Page(
+				createMockArchive() as never,
+				createRawPage({ scroll_height_desktop: 3200, scroll_height_mobile: 5400 }),
+			);
+			expect(page.scrollHeightDesktop).toBe(3200);
+			expect(page.scrollHeightMobile).toBe(5400);
+		});
+
+		it('includes main-content columns in metaFlat', () => {
+			const page = new Page(
+				createMockArchive() as never,
+				createRawPage({ main_content_word_count: 100 }),
+			);
+			expect(page.metaFlat.main_content_word_count).toBe(100);
+			expect(page.metaFlat.scroll_height_desktop).toBeNull();
 		});
 
 		it('parses responseHeaders from JSON string', () => {
@@ -419,6 +541,130 @@ describe('Page', () => {
 			const html = await page.getHtml();
 			expect(html).toBe('<html></html>');
 			expect(archive.getHtmlOfPage).toHaveBeenCalledWith(42);
+		});
+	});
+
+	describe('main-content child-table getters', () => {
+		it('getHeadings delegates to archive with page id', async () => {
+			const headings = [{ id: 1, pageId: 42, order: 0, text: 'Title', level: 1 }];
+			const archive = createMockArchive({
+				getHeadingsOfPage: vi.fn().mockResolvedValue(headings),
+			});
+			const page = new Page(archive as never, createRawPage({ id: 42 }));
+			await expect(page.getHeadings()).resolves.toBe(headings);
+			expect(archive.getHeadingsOfPage).toHaveBeenCalledWith(42);
+		});
+
+		it('getMainContentImages delegates to archive with page id', async () => {
+			const images = [{ id: 1, pageId: 42, order: 0, src: 'a.png', alt: 'A' }];
+			const archive = createMockArchive({
+				getMainContentImagesOfPage: vi.fn().mockResolvedValue(images),
+			});
+			const page = new Page(archive as never, createRawPage({ id: 42 }));
+			await expect(page.getMainContentImages()).resolves.toBe(images);
+			expect(archive.getMainContentImagesOfPage).toHaveBeenCalledWith(42);
+		});
+
+		it('getMainContentTables delegates to archive with page id', async () => {
+			const tables = [
+				{
+					id: 1,
+					pageId: 42,
+					order: 0,
+					rows: 2,
+					cols: 3,
+					hasHeader: 1,
+					hasFooter: 0,
+					hasMergedCell: 0,
+				},
+			];
+			const archive = createMockArchive({
+				getMainContentTablesOfPage: vi.fn().mockResolvedValue(tables),
+			});
+			const page = new Page(archive as never, createRawPage({ id: 42 }));
+			await expect(page.getMainContentTables()).resolves.toBe(tables);
+			expect(archive.getMainContentTablesOfPage).toHaveBeenCalledWith(42);
+		});
+
+		it('getButtons delegates to archive with page id', async () => {
+			const buttons = [
+				{
+					id: 1,
+					pageId: 42,
+					order: 0,
+					nodeName: 'BUTTON',
+					role: null,
+					type: 'submit',
+					text: 'Send',
+					disabled: 0,
+				},
+			];
+			const archive = createMockArchive({
+				getButtonsOfPage: vi.fn().mockResolvedValue(buttons),
+			});
+			const page = new Page(archive as never, createRawPage({ id: 42 }));
+			await expect(page.getButtons()).resolves.toBe(buttons);
+			expect(archive.getButtonsOfPage).toHaveBeenCalledWith(42);
+		});
+
+		it('getIframes delegates to archive with page id', async () => {
+			const iframes = [
+				{
+					id: 1,
+					pageId: 42,
+					order: 0,
+					src: 'a.html',
+					title: null,
+					width: null,
+					height: null,
+				},
+			];
+			const archive = createMockArchive({
+				getIframesOfPage: vi.fn().mockResolvedValue(iframes),
+			});
+			const page = new Page(archive as never, createRawPage({ id: 42 }));
+			await expect(page.getIframes()).resolves.toBe(iframes);
+			expect(archive.getIframesOfPage).toHaveBeenCalledWith(42);
+		});
+
+		it('getVideos delegates to archive with page id', async () => {
+			const videos = [
+				{
+					id: 1,
+					pageId: 42,
+					order: 0,
+					src: 'a.mp4',
+					poster: null,
+					width: 640,
+					height: 360,
+				},
+			];
+			const archive = createMockArchive({
+				getVideosOfPage: vi.fn().mockResolvedValue(videos),
+			});
+			const page = new Page(archive as never, createRawPage({ id: 42 }));
+			await expect(page.getVideos()).resolves.toBe(videos);
+			expect(archive.getVideosOfPage).toHaveBeenCalledWith(42);
+		});
+
+		it('getAudios delegates to archive with page id', async () => {
+			const audios = [{ id: 1, pageId: 42, order: 0, src: 'a.mp3' }];
+			const archive = createMockArchive({
+				getAudiosOfPage: vi.fn().mockResolvedValue(audios),
+			});
+			const page = new Page(archive as never, createRawPage({ id: 42 }));
+			await expect(page.getAudios()).resolves.toBe(audios);
+			expect(archive.getAudiosOfPage).toHaveBeenCalledWith(42);
+		});
+
+		it('getCanvases delegates to archive with page id', async () => {
+			const canvases = [{ id: 1, pageId: 42, order: 0, width: 300, height: 150 }];
+			const archive = createMockArchive({
+				getCanvasesOfPage: vi.fn().mockResolvedValue(canvases),
+			});
+			const page = new Page(archive as never, createRawPage({ id: 42 }));
+			await expect(page.getCanvases()).resolves.toBe(canvases);
+			expect(archive.getCanvasesOfPage).toHaveBeenCalledWith(42);
 		});
 	});
 

@@ -1630,6 +1630,7 @@ describe('Config', () => {
 			disableQueries: true,
 			userAgent: 'NitpickerBot/1.0',
 			ignoreRobots: true,
+			mainContentSelector: '#main',
 		};
 
 		await db.setConfig(config);
@@ -1673,6 +1674,7 @@ describe('Config', () => {
 			'disableQueries',
 			'userAgent',
 			'ignoreRobots',
+			'mainContentSelector',
 		];
 
 		for (const key of expectedKeys) {
@@ -2013,6 +2015,118 @@ describe('repromoteExternalPages', () => {
 		rmSync(cleanDbPath, { force: true });
 	});
 
+	it('clears all 8 page_main_content_* tables for the repromoted page only', async () => {
+		const cleanDbPath = path.resolve(workingDir, 'repromote-main-contents.sqlite');
+		const { rmSync } = await import('node:fs');
+		rmSync(cleanDbPath, { force: true });
+		const db = await Database.connect({ filename: cleanDbPath });
+
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/blog/post-1')!,
+				redirectPaths: [],
+				isExternal: true,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Blog' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			false,
+			false,
+		);
+		await db.updatePage(
+			{
+				url: parseUrl('https://example.com/marketing/about')!,
+				redirectPaths: [],
+				isExternal: true,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 100,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'Marketing' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			false,
+			false,
+		);
+
+		const allBefore = await db.getPages();
+		const blogId = allBefore.find((p) => p.url === 'https://example.com/blog/post-1')!.id;
+		const marketingId = allBefore.find(
+			(p) => p.url === 'https://example.com/marketing/about',
+		)!.id;
+
+		const knex = db.getKnex();
+		const mainContentTables = [
+			'page_main_content_headings',
+			'page_main_content_images',
+			'page_main_content_tables',
+			'page_main_content_buttons',
+			'page_main_content_iframes',
+			'page_main_content_videos',
+			'page_main_content_audios',
+			'page_main_content_canvases',
+		] as const;
+		const mainContentRow: Record<
+			(typeof mainContentTables)[number],
+			Record<string, unknown>
+		> = {
+			page_main_content_headings: { text: 'heading', level: 1 },
+			page_main_content_images: { src: 'a.png', alt: 'A' },
+			page_main_content_tables: {
+				rows: 2,
+				cols: 3,
+				hasHeader: 1,
+				hasFooter: 0,
+				hasMergedCell: 0,
+			},
+			page_main_content_buttons: {
+				nodeName: 'BUTTON',
+				role: null,
+				type: 'submit',
+				text: 'Go',
+				disabled: 0,
+			},
+			page_main_content_iframes: {
+				src: 'a.html',
+				title: null,
+				width: null,
+				height: null,
+			},
+			page_main_content_videos: { src: 'a.mp4', poster: null, width: 640, height: 360 },
+			page_main_content_audios: { src: 'a.mp3' },
+			page_main_content_canvases: { width: 300, height: 150 },
+		};
+		for (const table of mainContentTables) {
+			await knex(table).insert([
+				{ pageId: blogId, order: 0, ...mainContentRow[table] },
+				{ pageId: marketingId, order: 0, ...mainContentRow[table] },
+			]);
+		}
+
+		const scope = new Map([['example.com', [parseUrl('https://example.com/blog/')!]]]);
+		const promoted = await db.repromoteExternalPages(scope);
+		expect(promoted).toEqual(['https://example.com/blog/post-1']);
+
+		for (const table of mainContentTables) {
+			expect(await knex(table).where('pageId', blogId), table).toEqual([]);
+			expect(await knex(table).where('pageId', marketingId), table).toHaveLength(1);
+		}
+
+		await db.destroy();
+		rmSync(cleanDbPath, { force: true });
+	});
+
 	it('returns an empty list when the scope map has no entries', async () => {
 		const db = await Database.connect({
 			filename: repromoteDbPath,
@@ -2203,6 +2317,70 @@ describe('resetFailedPages', () => {
 			expect(page.contentLength).toBeNull();
 			const ref = await knex('page_html_ref').where('page_id', page.id).first();
 			expect(ref).toBeUndefined();
+		}
+
+		await db.destroy();
+	});
+
+	it('clears page_main_content_* child tables alongside page_meta on reset', async () => {
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ filename: resetDbPath });
+		const knex = db.getKnex();
+
+		const pageId = await insertPage(db, {
+			url: 'https://example.com/main-contents-reset',
+			status: 500,
+		});
+		const mainContentTables = [
+			'page_main_content_headings',
+			'page_main_content_images',
+			'page_main_content_tables',
+			'page_main_content_buttons',
+			'page_main_content_iframes',
+			'page_main_content_videos',
+			'page_main_content_audios',
+			'page_main_content_canvases',
+		] as const;
+		const mainContentRow: Record<
+			(typeof mainContentTables)[number],
+			Record<string, unknown>
+		> = {
+			page_main_content_headings: { text: 'heading', level: 1 },
+			page_main_content_images: { src: 'a.png', alt: 'A' },
+			page_main_content_tables: {
+				rows: 2,
+				cols: 3,
+				hasHeader: 1,
+				hasFooter: 0,
+				hasMergedCell: 0,
+			},
+			page_main_content_buttons: {
+				nodeName: 'BUTTON',
+				role: null,
+				type: 'submit',
+				text: 'Go',
+				disabled: 0,
+			},
+			page_main_content_iframes: {
+				src: 'a.html',
+				title: null,
+				width: null,
+				height: null,
+			},
+			page_main_content_videos: { src: 'a.mp4', poster: null, width: 640, height: 360 },
+			page_main_content_audios: { src: 'a.mp3' },
+			page_main_content_canvases: { width: 300, height: 150 },
+		};
+		for (const table of mainContentTables) {
+			await knex(table).insert({ pageId, order: 0, ...mainContentRow[table] });
+		}
+
+		const reset = await db.resetFailedPages();
+		expect(reset).toContain('https://example.com/main-contents-reset');
+
+		for (const table of mainContentTables) {
+			expect(await knex(table).where('pageId', pageId).first(), table).toBeUndefined();
 		}
 
 		await db.destroy();
