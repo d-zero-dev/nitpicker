@@ -1383,3 +1383,118 @@ h2 {
 	color: var(--badge-warn-fg);
 	background: color-mix(in srgb, var(--badge-warn-fg) 10%, transparent);
 }
+
+/* Directory tree view: a resizable-free two-pane layout (tree | pages). */
+.directory-tree-layout {
+	display: block flex;
+	flex: 1 1 0%;
+	gap: 20px;
+	min-block-size: 0;
+}
+
+.directory-tree-pane {
+	flex: 0 0 auto;
+	inline-size: 340px;
+	overflow-y: auto;
+}
+
+.directory-pages-pane {
+	flex: 1 1 0%;
+	min-inline-size: 0;
+}
+
+.directory-tree-host {
+	font-family: monospace;
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+}
+
+.tree-root,
+.tree-children {
+	padding: 0;
+	margin: 0;
+	list-style: none;
+}
+
+.tree-children {
+	padding-inline-start: 18px;
+}
+
+.tree-row {
+	display: inline flex;
+	gap: 4px;
+	align-items: center;
+	inline-size: 100%;
+	border-radius: 4px;
+}
+
+.tree-row.is-selected {
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.tree-toggle,
+.tree-toggle-spacer {
+	display: block flow-root;
+	flex: 0 0 auto;
+	inline-size: 18px;
+	block-size: 18px;
+	text-align: center;
+}
+
+.tree-toggle {
+	font: inherit;
+	color: var(--text-dim);
+	cursor: pointer;
+	background: none;
+	border: 0;
+	border-radius: 3px;
+}
+
+.tree-toggle:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+.tree-label {
+	display: inline flex;
+	flex: 1 1 0%;
+	gap: 8px;
+	align-items: center;
+	justify-content: space-between;
+	padding-block: 4px;
+	padding-inline: 4px;
+	font: inherit;
+	color: inherit;
+	text-align: start;
+	cursor: pointer;
+	background: none;
+	border: 0;
+	border-radius: 3px;
+}
+
+.tree-label:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+.tree-count {
+	font-size: var(--font-size-xs);
+	color: var(--text-dim);
+}
+
+.tree-loading,
+.tree-error {
+	padding-block: 4px;
+	padding-inline: 4px;
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+}
+
+.tree-error {
+	color: var(--danger);
+}
+
+.directory-pages-panel h2 {
+	font-size: var(--font-size-base);
+	color: var(--text-dim);
+}
