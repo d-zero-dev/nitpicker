@@ -1569,8 +1569,8 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			//    sub-resource requests issued from the same page —
 			//    including cross-origin requests to a different hostname
 			//    sharing the same IP / port (e.g. an embedded
-			//    `<img src="http://127.0.0.1:8010/…">` loaded from a
-			//    `localhost:8010` page) — get the cached `Authorization`
+			//    `<img src="http://127.0.0.1:PORT/…">` loaded from a
+			//    `localhost:PORT` page) — get the cached `Authorization`
 			//    header re-attached by the network stack. The
 			//    `Fetch.authRequired` event never fires for these
 			//    pre-emptive attachments, so neither `page.authenticate`
