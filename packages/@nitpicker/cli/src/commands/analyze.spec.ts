@@ -111,6 +111,7 @@ describe('analyze command', () => {
 				searchKeywords: undefined,
 				searchScope: undefined,
 				axeLang: undefined,
+				templates: undefined,
 				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
@@ -135,6 +136,7 @@ describe('analyze command', () => {
 			searchKeywords: undefined,
 			searchScope: undefined,
 			axeLang: undefined,
+			templates: undefined,
 			silent: undefined,
 		});
 
@@ -154,6 +156,7 @@ describe('analyze command', () => {
 			searchKeywords: undefined,
 			searchScope: undefined,
 			axeLang: undefined,
+			templates: undefined,
 			silent: undefined,
 		});
 
@@ -173,6 +176,7 @@ describe('analyze command', () => {
 			searchKeywords: undefined,
 			searchScope: undefined,
 			axeLang: undefined,
+			templates: undefined,
 			silent: undefined,
 		});
 
@@ -193,6 +197,7 @@ describe('analyze command', () => {
 			searchKeywords: undefined,
 			searchScope: undefined,
 			axeLang: undefined,
+			templates: undefined,
 			silent: undefined,
 		});
 
@@ -213,6 +218,7 @@ describe('analyze command', () => {
 			searchKeywords: undefined,
 			searchScope: undefined,
 			axeLang: undefined,
+			templates: undefined,
 			silent: true,
 		});
 
@@ -234,6 +240,7 @@ describe('analyze command', () => {
 			searchKeywords: undefined,
 			searchScope: undefined,
 			axeLang: undefined,
+			templates: undefined,
 			silent: true,
 		});
 
@@ -255,6 +262,7 @@ describe('analyze command', () => {
 				searchKeywords: undefined,
 				searchScope: undefined,
 				axeLang: undefined,
+				templates: undefined,
 				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
@@ -267,6 +275,58 @@ describe('analyze command', () => {
 			false,
 		);
 		expect(exitSpy).toHaveBeenCalledWith(1);
+	});
+
+	it('--templates と設定済みプラグイン0件の組み合わせではエラーにならず、空フィルタで analyze() が呼ばれる', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		const mockNitpicker = createMockNitpicker({ analyze: [] });
+		vi.mocked(Nitpicker.open).mockResolvedValue(mockNitpicker as never);
+
+		await analyze(['test.nitpicker'], {
+			all: undefined,
+			plugin: undefined,
+			verbose: undefined,
+			searchKeywords: undefined,
+			searchScope: undefined,
+			mainContentSelector: undefined,
+			axeLang: undefined,
+			templates: true,
+			silent: undefined,
+		});
+
+		expect(exitSpy).not.toHaveBeenCalled();
+		expect(mockNitpicker.analyze).toHaveBeenCalledWith(
+			[],
+			expect.objectContaining({ classifyTemplates: true }),
+		);
+		expect(mockNitpicker.write).toHaveBeenCalled();
+	});
+
+	it('--templates 指定時は --plugin が全て不一致でもエラーにならない', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		const mockNitpicker = createMockNitpicker({
+			analyze: [{ name: '@nitpicker/analyze-axe' }],
+		});
+		vi.mocked(Nitpicker.open).mockResolvedValue(mockNitpicker as never);
+		vi.mocked(selectPluginsFn).mockResolvedValue([]);
+
+		await analyze(['test.nitpicker'], {
+			all: undefined,
+			plugin: ['@nitpicker/analyze-unknown'],
+			verbose: undefined,
+			searchKeywords: undefined,
+			searchScope: undefined,
+			mainContentSelector: undefined,
+			axeLang: undefined,
+			templates: true,
+			silent: undefined,
+		});
+
+		expect(exitSpy).not.toHaveBeenCalled();
+		expect(mockNitpicker.analyze).toHaveBeenCalledWith(
+			[],
+			expect.objectContaining({ classifyTemplates: true }),
+		);
 	});
 
 	it('exits with error when all --plugin names are unknown', async () => {
@@ -285,6 +345,7 @@ describe('analyze command', () => {
 				searchKeywords: undefined,
 				searchScope: undefined,
 				axeLang: undefined,
+				templates: undefined,
 				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
@@ -312,6 +373,7 @@ describe('analyze command', () => {
 				searchKeywords: undefined,
 				searchScope: undefined,
 				axeLang: undefined,
+				templates: undefined,
 				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
@@ -333,6 +395,7 @@ describe('analyze command', () => {
 				searchKeywords: undefined,
 				searchScope: undefined,
 				axeLang: undefined,
+				templates: undefined,
 				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
@@ -354,6 +417,7 @@ describe('analyze command', () => {
 			searchKeywords: undefined,
 			searchScope: undefined,
 			axeLang: undefined,
+			templates: undefined,
 			silent: undefined,
 		});
 
@@ -378,6 +442,7 @@ describe('analyze command', () => {
 				searchKeywords: undefined,
 				searchScope: undefined,
 				axeLang: undefined,
+				templates: undefined,
 				silent: undefined,
 			}),
 		).rejects.toThrow(ExitError);
