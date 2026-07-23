@@ -30,6 +30,10 @@ interface DirectoryNodeRow {
 	internal_descendant_page_count: number;
 	/** `viewer_directory_nodes.external_descendant_page_count`. */
 	external_descendant_page_count: number;
+	/** `viewer_directory_nodes.direct_html_page_count`. */
+	direct_html_page_count: number;
+	/** `viewer_directory_nodes.descendant_html_page_count`. */
+	descendant_html_page_count: number;
 	/** `viewer_directory_nodes.has_children`. */
 	has_children: number;
 }
@@ -52,6 +56,8 @@ function toDirectoryTreeNode(row: DirectoryNodeRow): DirectoryTreeNode {
 		descendantPageCount: row.descendant_page_count,
 		internalDescendantPageCount: row.internal_descendant_page_count,
 		externalDescendantPageCount: row.external_descendant_page_count,
+		directHtmlPageCount: row.direct_html_page_count,
+		descendantHtmlPageCount: row.descendant_html_page_count,
 		hasChildren: row.has_children === 1,
 	};
 }
@@ -105,6 +111,8 @@ export async function getDirectoryTree(
 			'descendant_page_count',
 			'internal_descendant_page_count',
 			'external_descendant_page_count',
+			'direct_html_page_count',
+			'descendant_html_page_count',
 			'has_children',
 		)
 		// Deliberately `path_sort_key` alone, NOT `['root_key', 'path_sort_key']`

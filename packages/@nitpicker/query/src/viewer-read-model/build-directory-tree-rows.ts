@@ -5,6 +5,8 @@ import type {
 	DirectoryTreeSourceRow,
 } from './types.js';
 
+import { classifyContentType } from '../classify-content-type.js';
+
 /**
  * Structure-relevant fields extracted from one {@link DirectoryTreeSourceRow}
  * by {@link parsePageRow}.
@@ -20,6 +22,8 @@ interface ParsedPageRow {
 	id: number;
 	/** Copied from the source row's `url`. */
 	url: string;
+	/** Whether `classifyContentType(row.contentType)` is the `html` category. */
+	isHtml: boolean;
 }
 
 /**
@@ -56,6 +60,7 @@ function parsePageRow(row: DirectoryTreeSourceRow): ParsedPageRow | null {
 		isExternal: row.isExternal ? 1 : 0,
 		id: row.id,
 		url: row.url,
+		isHtml: classifyContentType(row.contentType) === 'html',
 	};
 }
 
@@ -94,6 +99,8 @@ function createEmptyNode(params: {
 		descendant_page_count: 0,
 		internal_descendant_page_count: 0,
 		external_descendant_page_count: 0,
+		direct_html_page_count: 0,
+		descendant_html_page_count: 0,
 		has_children: 0,
 	};
 }
@@ -191,14 +198,21 @@ function getOrCreateDirectoryNode(
 
 /**
  * Folds each node's own (direct-only, as set by the page-attachment loop)
- * `internal_descendant_page_count`/`external_descendant_page_count` up into
- * its parent — processing nodes from deepest to shallowest so that, by the
- * time a node is folded into ITS parent, it already holds its full subtree
- * total (every descendant at every depth is added exactly once, since a
- * node's children are always exactly one depth below it and are therefore
- * always processed in an earlier iteration of this same pass). Also
- * finalises `descendant_page_count` (the sum of the two) and `has_children`
- * on every node. Mutates every row in `nodes` in place.
+ * `internal_descendant_page_count`/`external_descendant_page_count`/
+ * `descendant_html_page_count` up into its parent — processing nodes from
+ * deepest to shallowest so that, by the time a node is folded into ITS
+ * parent, it already holds its full subtree total (every descendant at
+ * every depth is added exactly once, since a node's children are always
+ * exactly one depth below it and are therefore always processed in an
+ * earlier iteration of this same pass). Also finalises `descendant_page_count`
+ * (the sum of the internal/external pair) and `has_children` on every node.
+ * Mutates every row in `nodes` in place.
+ *
+ * `direct_html_page_count` is NOT folded here — unlike
+ * `descendant_html_page_count` (seeded with each node's own direct-HTML
+ * count, then accumulated into a subtree total exactly like
+ * `internal_descendant_page_count`), it must stay a direct-only count for
+ * the caller, so it is left untouched by this pass.
  *
  * `has_children` is deliberately `direct_child_dir_count > 0` alone, NOT
  * `direct_child_dir_count + direct_page_count > 0` — every node this builder
@@ -211,8 +225,9 @@ function getOrCreateDirectoryNode(
  * rows), so `has_children` answers exactly the question that UI needs: does
  * this node have anything to expand into.
  * @param nodes - Every node across every host's tree. On entry,
- *   `internal_descendant_page_count`/`external_descendant_page_count` must
- *   hold only each node's OWN direct page counts.
+ *   `internal_descendant_page_count`/`external_descendant_page_count`/
+ *   `descendant_html_page_count` must hold only each node's OWN direct
+ *   counts.
  */
 function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): void {
 	const byId = new Map(nodes.map((node) => [node.node_id, node]));
@@ -227,6 +242,7 @@ function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): vo
 		}
 		parent.internal_descendant_page_count += node.internal_descendant_page_count;
 		parent.external_descendant_page_count += node.external_descendant_page_count;
+		parent.descendant_html_page_count += node.descendant_html_page_count;
 	}
 	for (const node of nodes) {
 		node.descendant_page_count =
@@ -301,6 +317,12 @@ export function buildDirectoryTreeRows(
 			node.internal_descendant_page_count += 1;
 		} else {
 			node.external_descendant_page_count += 1;
+		}
+		if (row.isHtml) {
+			node.direct_html_page_count += 1;
+			// Seeded with this node's own direct-HTML count; propagateDescendantCounts
+			// folds children into parents to turn this into a subtree total.
+			node.descendant_html_page_count += 1;
 		}
 		pages.push({ node_id: node.node_id, page_id: row.id, page_url_sort_key: row.url });
 	}

@@ -80,6 +80,14 @@ export interface DirectoryTreeSourceRow {
 	 * (`null` counts as internal).
 	 */
 	isExternal: number | null;
+	/**
+	 * Raw MIME string (`content_type_refs.raw`), or `null`/empty when
+	 * unclassified — classified via {@link import('../classify-content-type.js').classifyContentType}
+	 * into `*_html_page_count` alongside the unfiltered `*_page_count`
+	 * columns, so the tree UI can show "how many of these are actual pages"
+	 * without conflating them with crawled images/PDFs/etc.
+	 */
+	contentType: string | null;
 }
 
 /**
@@ -126,6 +134,14 @@ export interface DirectoryNodeInsertRow {
 	internal_descendant_page_count: number;
 	/** Subset of `descendant_page_count` where the page's `isExternal` is truthy. */
 	external_descendant_page_count: number;
+	/**
+	 * Subset of `direct_page_count` classified as the `html` category by
+	 * `classifyContentType` — images/PDFs/etc. crawled directly under this
+	 * node are counted in `direct_page_count` but not here.
+	 */
+	direct_html_page_count: number;
+	/** Subset of `descendant_page_count` classified as `html`, including this node's own `direct_html_page_count`. */
+	descendant_html_page_count: number;
 	/**
 	 * `1` iff `direct_child_dir_count > 0`, `0` otherwise — whether this node
 	 * has child DIRECTORIES to expand via `/api/directory-tree/children`.

@@ -6,18 +6,22 @@ import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
 
 /**
  * Shorthand for a {@link DirectoryTreeSourceRow} fixture row — `isExternal`
- * defaults to `0` (internal) when omitted.
+ * defaults to `0` (internal) and `contentType` defaults to `'text/html'`
+ * (so existing fixtures count toward `*_html_page_count` unless a test
+ * explicitly overrides it) when omitted.
  * @param id - The row's `pages.id`.
  * @param url - The row's URL.
  * @param isExternal - Optional `isExternal` override.
+ * @param contentType - Optional raw MIME override.
  * @returns The fixture row.
  */
 function row(
 	id: number,
 	url: string,
 	isExternal: number | null = 0,
+	contentType: string | null = 'text/html',
 ): DirectoryTreeSourceRow {
-	return { id, url, isExternal };
+	return { id, url, isExternal, contentType };
 }
 
 describe('buildDirectoryTreeRows', () => {
@@ -213,6 +217,43 @@ describe('buildDirectoryTreeRows', () => {
 			direct_child_dir_count: 1,
 			direct_page_count: 0,
 			has_children: 1,
+		});
+	});
+
+	it('counts only html-classified rows toward direct_html_page_count, unlike direct_page_count', () => {
+		const { nodes } = buildDirectoryTreeRows([
+			row(1, 'https://example.com/docs/page.html', 0, 'text/html'),
+			row(2, 'https://example.com/docs/photo.jpg', 0, 'image/jpeg'),
+			row(3, 'https://example.com/docs/doc.pdf', 0, 'application/pdf'),
+		]);
+		const docs = nodes.find((n) => n.path === '/docs/')!;
+		expect(docs).toMatchObject({
+			direct_page_count: 3,
+			direct_html_page_count: 1,
+			descendant_page_count: 3,
+			descendant_html_page_count: 1,
+		});
+	});
+
+	it('propagates descendant_html_page_count bottom-up, excluding non-html descendants that still count toward descendant_page_count', () => {
+		const { nodes } = buildDirectoryTreeRows([
+			row(1, 'https://example.com/blog/2024/post.html', 0, 'text/html'),
+			row(2, 'https://example.com/blog/2024/banner.jpg', 0, 'image/jpeg'),
+		]);
+		const byPath = new Map(nodes.map((n) => [n.path, n]));
+		expect(byPath.get('/blog/2024/')).toMatchObject({
+			direct_page_count: 2,
+			direct_html_page_count: 1,
+			descendant_page_count: 2,
+			descendant_html_page_count: 1,
+		});
+		expect(byPath.get('/blog/')).toMatchObject({
+			descendant_page_count: 2,
+			descendant_html_page_count: 1,
+		});
+		expect(byPath.get('/')).toMatchObject({
+			descendant_page_count: 2,
+			descendant_html_page_count: 1,
 		});
 	});
 

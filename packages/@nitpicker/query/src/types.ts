@@ -2595,6 +2595,20 @@ export interface DirectoryTreeNode {
 	/** Subset of `descendantPageCount` that is external (out-of-scope). */
 	externalDescendantPageCount: number;
 	/**
+	 * Subset of `directPageCount` classified as the `html` category by
+	 * `classifyContentType` — images, PDFs, and other non-HTML resources
+	 * crawled directly under this node count toward `directPageCount` but
+	 * not here.
+	 */
+	directHtmlPageCount: number;
+	/**
+	 * Subset of `descendantPageCount` classified as `html`, including this
+	 * node's own `directHtmlPageCount`. Use this (not `descendantPageCount`)
+	 * when showing "how many pages" a subtree has, since "pages" implies
+	 * HTML documents, not every crawled resource type.
+	 */
+	descendantHtmlPageCount: number;
+	/**
 	 * `true` iff `directChildDirCount > 0` — whether this node has child
 	 * directories to expand via `listDirectoryChildren`/
 	 * `/api/directory-tree/children`. Deliberately excludes `directPageCount`

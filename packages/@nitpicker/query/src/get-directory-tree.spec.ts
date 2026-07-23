@@ -156,4 +156,62 @@ describe('getDirectoryTree', () => {
 			});
 		});
 	});
+
+	describe('mixed html/non-html content', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_get_directory_tree_html_count__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'html-count-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			for (const [url, contentType] of [
+				['https://example.com/docs/page.html', 'text/html'],
+				['https://example.com/docs/photo.jpg', 'image/jpeg'],
+			] as const) {
+				await archive.setPage({
+					url: parseUrl(url)!,
+					redirectPaths: [],
+					isExternal: false,
+					isTarget: true,
+					status: 200,
+					statusText: 'OK',
+					contentType,
+					contentLength: 100,
+					responseHeaders: {},
+					html: '',
+					meta: META,
+					anchorList: [],
+					imageList: [],
+					isSkipped: false,
+				});
+			}
+			await buildViewerReadModel(archive);
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('excludes the non-html resource from directHtmlPageCount/descendantHtmlPageCount, unlike directPageCount/descendantPageCount', async () => {
+			const roots = await getDirectoryTree(archive);
+			const docs = roots[0]?.nodes.find((n) => n.path === '/docs/');
+			expect(docs).toMatchObject({
+				directPageCount: 2,
+				descendantPageCount: 2,
+				directHtmlPageCount: 1,
+				descendantHtmlPageCount: 1,
+			});
+		});
+	});
 });
