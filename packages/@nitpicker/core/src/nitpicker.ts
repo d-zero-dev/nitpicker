@@ -7,6 +7,8 @@ import type {
 	ReportPage,
 	TableData,
 } from './types.js';
+import type { ProgressEvent } from '@d-zero/page-cluster/resolve-page-cluster-keys';
+import type { Page } from '@nitpicker/crawler';
 import type { Report, Violation } from '@nitpicker/types';
 
 import os from 'node:os';
@@ -20,6 +22,7 @@ import c from 'ansi-colors';
 import { importModules } from './import-modules.js';
 import { loadPluginSettings } from './load-plugin-settings.js';
 import { Table } from './table.js';
+import { classifyPageTemplates } from './template-classification/classify-page-templates.js';
 import { UrlEventBus } from './url-event-bus.js';
 import { WorkerPool } from './worker/worker-pool.js';
 
@@ -47,6 +50,35 @@ const workerPath = path.resolve(__dirname, 'worker/worker.js');
  * Tracks the number of CPU cores so that worker pools scale with the host.
  */
 const DEFAULT_CONCURRENCY = Math.max(1, os.cpus().length);
+
+/**
+ * Renders a `@d-zero/page-cluster` `ProgressEvent` as a short, human-readable
+ * fragment for the Lanes template-classification lane, including a
+ * done/total percentage wherever the event carries both halves of one
+ * (matching the `N/M (X%)` convention every other lane in this file uses).
+ * `pass0-signals` and `stage-b-start` carry only a running count with no
+ * corpus-wide total, so those two render count-only.
+ * @param event - Progress event forwarded from `resolvePageClusterKeys`.
+ * @returns A short status fragment, e.g. `"42/100 blocks (42%)"`.
+ */
+function formatTemplateClassificationProgress(event: ProgressEvent): string {
+	switch (event.phase) {
+		case 'pass0-signals': {
+			return `reading pages (${event.pagesSeen})`;
+		}
+		case 'pass1-block-complete': {
+			const percent = Math.round((event.blocksProcessed / event.totalBlocks) * 100);
+			return `${event.blocksProcessed}/${event.totalBlocks} blocks (${percent}%)`;
+		}
+		case 'pass1b-assign': {
+			const percent = Math.round((event.pagesAssigned / event.pagesToAssign) * 100);
+			return `${event.pagesAssigned}/${event.pagesToAssign} pages (${percent}%)`;
+		}
+		case 'stage-b-start': {
+			return `merging ${event.unitCount} units`;
+		}
+	}
+}
 
 /**
  * Core orchestrator for running analyze plugins against a `.nitpicker` archive.
@@ -136,7 +168,7 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 	 * declared concurrency or by {@link DEFAULT_CONCURRENCY}. This architecture
 	 * enables per-plugin progress tracking via Lanes.
 	 *
-	 * The analysis proceeds in two phases:
+	 * The analysis proceeds in up to three phases:
 	 *
 	 * 1. **`eachPage` phase** - For each plugin with `eachPage`, dispatches
 	 *    page analysis tasks to the plugin's worker pool. Progress is
@@ -146,10 +178,30 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 	 *    sequentially in the main thread. These are lightweight checks
 	 *    that don't need DOM access.
 	 *
+	 * 3. **Template classification phase** (opt-in via
+	 *    {@link AnalyzeOptions.classifyTemplates}) - Classifies every internal
+	 *    HTML page into a template group by DOM-structure similarity. Unlike
+	 *    phases 1-2 this is not a discovered `@nitpicker/analyze-*` plugin; it
+	 *    runs once, globally, after every batch from phases 1-2 has been
+	 *    accumulated (see `accumulatedPages` below for why it cannot run
+	 *    per-batch).
+	 *
 	 * On completion, three data entries are stored in the archive:
 	 * - `analysis/report` - Full {@link Report} with headers and data
 	 * - `analysis/table` - The raw {@link Table} instance (serialized)
 	 * - SQL-backed analysis violation tables - Flat {@link Violation} records
+	 *
+	 * When `filter` resolves to zero plugins (only reachable when
+	 * `classifyTemplates` is the sole reason for this call — see
+	 * `cli/src/commands/analyze.ts`'s `--templates`-only bypass), this call
+	 * contributes no plugin data of its own. To avoid silently wiping every
+	 * column and violation from a *previous* run's plugins, this case skips
+	 * `replaceAnalysisViolations` entirely and seeds the new `Table` from the
+	 * archive's existing `analysis/report` (if any) before adding
+	 * `templateKey`. This does not apply when one or more plugins ran: running
+	 * a different plugin subset than a prior call has always fully replaced
+	 * the report/table/violations with that subset's output, and that
+	 * established contract is unchanged here.
 	 * @param filter - Optional list of plugin module names to run.
 	 *   If omitted, all configured plugins are executed.
 	 * @param options - Optional settings for progress display.
@@ -176,6 +228,34 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 
 		const table = new Table();
 
+		if (plugins.length === 0) {
+			// Only reachable via `--templates` with zero configured/selected
+			// plugins (see this method's JSDoc). Seed from whatever
+			// `analysis/report` already exists so this run — which contributes
+			// no plugin data of its own — doesn't wipe a previous run's columns.
+			try {
+				const previousReport = await this.archive.getData<Report>('analysis/report');
+				if (previousReport.pageData) {
+					table.addHeaders(previousReport.pageData.headers);
+					table.addData(previousReport.pageData.data);
+				}
+			} catch (error) {
+				// ENOENT (no previous `analysis/report` — e.g. first analyze()
+				// call ever on this archive) is expected and starting from an
+				// empty table is correct. Anything else (corrupted JSON,
+				// permission error) is not silently swallowed: emit it so the
+				// user knows a previous run's data may not have been preserved,
+				// while still proceeding rather than blocking this run entirely.
+				if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+					const message = error instanceof Error ? error.message : String(error);
+					await this.emit('error', {
+						message: `Failed to read previous analysis/report before a zero-plugin run: ${message}`,
+						error: error instanceof Error ? error : null,
+					});
+				}
+			}
+		}
+
 		for (const mod of analyzeMods) {
 			if (!mod.headers) {
 				continue;
@@ -185,6 +265,10 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 			}
 
 			table.addHeaders(mod.headers);
+		}
+
+		if (options?.classifyTemplates) {
+			table.addHeaders({ templateKey: 'Template' });
 		}
 
 		const allViolations: Violation[] = [];
@@ -219,9 +303,40 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 			lanes?.update(id, c.dim(`${label}: Waiting...`));
 		}
 
+		// Template classification (opt-in, `--templates`) is a corpus-wide batch
+		// computation, not a per-page `AnalyzePlugin`, so it has its own lane
+		// outside `pluginLaneIds` and does not go through `analyzeMods`/`Worker`.
+		const templateClassificationLaneId = options?.classifyTemplates
+			? eachPagePlugins.length
+			: null;
+		if (templateClassificationLaneId != null) {
+			lanes?.update(
+				templateClassificationLaneId,
+				c.dim('Template classification: Waiting...'),
+			);
+		}
+
+		// Accumulated across every `getPagesWithRefs` batch so template
+		// classification runs once, globally, after the loop below completes —
+		// never per-batch. Per-batch classification would produce template keys
+		// that are only comparable within their own batch (see
+		// `classifyPageTemplates`'s caller contract). `Page` instances are
+		// lightweight handles (HTML is fetched lazily via `getHtml()`), so
+		// accumulating every page across a 100,000-page batch size is not an
+		// OOM risk even for archives with hundreds of thousands of pages.
+		const accumulatedPages: Page[] = [];
+
 		await this.archive.getPagesWithRefs(
 			100_000,
 			async (pages) => {
+				if (options?.classifyTemplates) {
+					// Avoid `push(...pages)`: a 100,000-page batch can overflow V8's
+					// argument-spread limit even though the data itself fits in memory.
+					for (const page of pages) {
+						accumulatedPages.push(page);
+					}
+				}
+
 				const urlEmitter = new UrlEventBus();
 
 				// Phase 1: eachPage plugins (sequentially, pages in parallel)
@@ -435,6 +550,56 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 			},
 		);
 
+		// Phase 3: template classification (opt-in). Deliberately outside the
+		// `getPagesWithRefs` loop above — it must run once, globally, over every
+		// accumulated page, not once per 100,000-page batch (see
+		// `accumulatedPages`'s JSDoc comment).
+		//
+		// Wrapped in try/catch (unlike phases 1-2, whose failures are already
+		// caught per-page/per-mod) because this phase has no finer-grained
+		// unit to catch around: a failure here must not discard the
+		// already-computed `table`/`allViolations` from phases 1-2, which are
+		// persisted in the unconditional tail below regardless of this
+		// phase's outcome.
+		if (templateClassificationLaneId != null) {
+			try {
+				const templateKeys = await classifyPageTemplates({
+					archive: this.archive,
+					pages: accumulatedPages,
+					// Only worth paying for when there's a lane to update —
+					// passing a defined callback at all (even a no-op one)
+					// demotes `resolvePageClusterKeys` off its byte-identical,
+					// yield-overhead-free sync path for corpora at or below its
+					// inline threshold (see @d-zero/page-cluster's own docs).
+					onProgress: lanes
+						? (event) => {
+								lanes.update(
+									templateClassificationLaneId,
+									`Template classification: ${formatTemplateClassificationProgress(event)}%braille%`,
+								);
+							}
+						: undefined,
+				});
+				for (const [href, templateKey] of templateKeys) {
+					table.addData({ [href]: { templateKey: { value: templateKey } } });
+				}
+				lanes?.update(
+					templateClassificationLaneId,
+					c.green(`Template classification: Done (${templateKeys.size} pages)`),
+				);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				lanes?.update(
+					templateClassificationLaneId,
+					c.red(`Template classification: Failed (${message})`),
+				);
+				await this.emit('error', {
+					message: `[template classification] ${message}`,
+					error: error instanceof Error ? error : null,
+				});
+			}
+		}
+
 		const report: Report = {
 			name: 'general',
 			pageData: table.toJSON(),
@@ -442,7 +607,14 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 
 		await this.archive.setData('analysis/report', report);
 		await this.archive.setData('analysis/table', table);
-		await this.archive.replaceAnalysisViolations(allViolations);
+
+		// See this method's JSDoc: a zero-plugin call (only reachable via
+		// `--templates` alone) contributes no violations of its own, so
+		// replacing the whole table with an empty array would silently erase
+		// every violation a previous run's plugins stored.
+		if (plugins.length > 0) {
+			await this.archive.replaceAnalysisViolations(allViolations);
+		}
 	}
 
 	/**

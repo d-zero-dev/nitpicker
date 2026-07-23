@@ -63,6 +63,10 @@ vi.mock('./worker/worker-pool.js', () => ({
 	},
 }));
 
+vi.mock('./template-classification/classify-page-templates.js', () => ({
+	classifyPageTemplates: vi.fn(),
+}));
+
 vi.mock('@d-zero/shared/cache', () => {
 	/** Mock Cache class for testing. */
 	class MockCache {
@@ -85,8 +89,10 @@ vi.mock('@d-zero/shared/cache', () => {
 import { importModules } from './import-modules.js';
 import { loadPluginSettings } from './load-plugin-settings.js';
 import { Nitpicker } from './nitpicker.js';
+import { classifyPageTemplates } from './template-classification/classify-page-templates.js';
 
 const mockedImportModules = vi.mocked(importModules);
+const mockedClassifyPageTemplates = vi.mocked(classifyPageTemplates);
 
 /**
  * Creates a mock URL object compatible with ExURL.
@@ -129,6 +135,7 @@ afterEach(() => {
 	vi.mocked(loadPluginSettings).mockReset();
 	mockedImportModules.mockReset();
 	mockedRunInWorker.mockReset();
+	mockedClassifyPageTemplates.mockReset();
 	poolInstances.length = 0;
 });
 
@@ -205,12 +212,25 @@ describe('analyze', () => {
 	 * @param pages - Mock pages to return from getPagesWithRefs.
 	 * @param plugins - Plugin configurations.
 	 * @param mods - Analyze plugin modules.
+	 * @param options
+	 * @param options.previousReport
+	 * @param options.getDataError
 	 */
 	function setupAnalyze(
 		pages: ReturnType<typeof createMockPage>[],
 		plugins: Config['analyze'],
 		mods: AnalyzePlugin[],
+		options?: { previousReport?: Report; getDataError?: NodeJS.ErrnoException },
 	) {
+		/** Matches the real `fs.readFile` ENOENT shape (`.code`, not just `.message`). */
+		function enoent(): NodeJS.ErrnoException {
+			const error = new Error(
+				'ENOENT: no such file or directory',
+			) as NodeJS.ErrnoException;
+			error.code = 'ENOENT';
+			return error;
+		}
+
 		const archive = {
 			filePath: '/tmp/test.nitpicker',
 			write: vi.fn().mockResolvedValue(),
@@ -228,6 +248,12 @@ describe('analyze', () => {
 				),
 			setData: vi.fn().mockResolvedValue(),
 			replaceAnalysisViolations: vi.fn().mockResolvedValue(),
+			// No previous `analysis/report` by default (fresh archive) —
+			// `getData` rejects the way the real file-backed implementation does
+			// when the file doesn't exist yet.
+			getData: options?.previousReport
+				? vi.fn().mockResolvedValue(options.previousReport)
+				: vi.fn().mockRejectedValue(options?.getDataError ?? enoent()),
 		};
 		const config: Config = { analyze: plugins };
 		vi.mocked(loadPluginSettings).mockResolvedValue(config);
@@ -603,5 +629,202 @@ describe('analyze', () => {
 
 		expect(poolInstances).toHaveLength(2);
 		expect(poolInstances.every((p) => p.terminated)).toBe(true);
+	});
+
+	it('adds a templateKey column when classifyTemplates is enabled', async () => {
+		const pages = [createMockPage('https://example.com/')];
+		mockedClassifyPageTemplates.mockResolvedValue(
+			new Map([['https://example.com/', 'template-a']]),
+		);
+
+		const { nitpicker, archive } = setupAnalyze(pages, [], []);
+		await nitpicker.analyze(undefined, { classifyTemplates: true });
+
+		expect(classifyPageTemplates).toHaveBeenCalledTimes(1);
+		const reportCall = archive.setData.mock.calls.find(
+			(call: unknown[]) => call[0] === 'analysis/report',
+		);
+		const report = reportCall![1] as Report;
+		expect(report.pageData.headers.templateKey).toBe('Template');
+		expect(report.pageData.data['https://example.com/']!.templateKey).toEqual({
+			value: 'template-a',
+		});
+	});
+
+	it('does not run template classification when classifyTemplates is omitted', async () => {
+		const pages = [createMockPage('https://example.com/')];
+
+		const { nitpicker, archive } = setupAnalyze(pages, [], []);
+		await nitpicker.analyze();
+
+		expect(classifyPageTemplates).not.toHaveBeenCalled();
+		const reportCall = archive.setData.mock.calls.find(
+			(call: unknown[]) => call[0] === 'analysis/report',
+		);
+		const report = reportCall![1] as Report;
+		expect(report.pageData.headers.templateKey).toBeUndefined();
+	});
+
+	it("a zero-plugin run (--templates alone) does not wipe a previous run's report/violations", async () => {
+		const pages = [createMockPage('https://example.com/')];
+		mockedClassifyPageTemplates.mockResolvedValue(
+			new Map([['https://example.com/', 'template-a']]),
+		);
+		const previousReport: Report = {
+			name: 'general',
+			pageData: {
+				headers: { score: 'Score' },
+				data: { 'https://example.com/': { score: { value: 100 } } },
+			},
+		};
+
+		const { nitpicker, archive } = setupAnalyze(pages, [], [], { previousReport });
+		await nitpicker.analyze(undefined, { classifyTemplates: true });
+
+		// The previous run's `score` column survives alongside the new `templateKey`.
+		const reportCall = archive.setData.mock.calls.find(
+			(call: unknown[]) => call[0] === 'analysis/report',
+		);
+		const report = reportCall![1] as Report;
+		expect(report.pageData.data['https://example.com/']).toEqual({
+			score: { value: 100 },
+			templateKey: { value: 'template-a' },
+		});
+
+		// No plugin ran, so violations from a previous run are never touched.
+		expect(archive.replaceAnalysisViolations).not.toHaveBeenCalled();
+	});
+
+	it('a missing previous analysis/report (ENOENT) is silent, but a corrupted one emits an error', async () => {
+		const pages = [createMockPage('https://example.com/')];
+		mockedClassifyPageTemplates.mockResolvedValue(new Map());
+
+		const { nitpicker: freshRun } = setupAnalyze(pages, [], []);
+		const freshErrorHandler = vi.fn();
+		freshRun.on('error', freshErrorHandler);
+		await freshRun.analyze(undefined, { classifyTemplates: true });
+		expect(freshErrorHandler).not.toHaveBeenCalled();
+
+		const corruptError = new SyntaxError('Unexpected token in JSON');
+		const { nitpicker: corruptRun } = setupAnalyze(pages, [], [], {
+			getDataError: corruptError as never,
+		});
+		const corruptErrorHandler = vi.fn();
+		corruptRun.on('error', corruptErrorHandler);
+		await corruptRun.analyze(undefined, { classifyTemplates: true });
+		expect(corruptErrorHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: expect.stringContaining('Unexpected token in JSON'),
+			}),
+		);
+	});
+
+	it('a non-zero-plugin run still fully replaces analysis violations as before', async () => {
+		const pages = [createMockPage('https://example.com/')];
+		const plugin = {
+			name: '@nitpicker/analyze-axe',
+			module: '@nitpicker/analyze-axe',
+			configFilePath: '',
+		};
+		const mod: AnalyzePlugin = {
+			headers: { score: 'Score' },
+			eachPage: vi.fn(),
+		};
+		mockedRunInWorker.mockResolvedValue({
+			page: { score: { value: 100 } },
+			violations: [],
+		});
+
+		const { nitpicker, archive } = setupAnalyze(pages, [plugin], [mod]);
+		await nitpicker.analyze();
+
+		expect(archive.replaceAnalysisViolations).toHaveBeenCalledTimes(1);
+	});
+
+	it('template classification failure emits an error but still persists phase 1/2 results', async () => {
+		const pages = [createMockPage('https://example.com/')];
+		const plugin = {
+			name: '@nitpicker/analyze-axe',
+			module: '@nitpicker/analyze-axe',
+			configFilePath: '',
+		};
+		const mod: AnalyzePlugin = {
+			headers: { score: 'Score' },
+			eachPage: vi.fn(),
+		};
+		mockedRunInWorker.mockResolvedValue({
+			page: { score: { value: 100 } },
+			violations: [{ message: 'test', severity: 'error', url: 'https://example.com/' }],
+		});
+		mockedClassifyPageTemplates.mockRejectedValue(new Error('clustering blew up'));
+
+		const { nitpicker, archive } = setupAnalyze(pages, [plugin], [mod]);
+		const errorHandler = vi.fn();
+		nitpicker.on('error', errorHandler);
+
+		await nitpicker.analyze(undefined, { classifyTemplates: true });
+
+		expect(errorHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: expect.stringContaining('clustering blew up'),
+			}),
+		);
+
+		// axe's result from phases 1-2 is still persisted despite phase 3 failing.
+		const reportCall = archive.setData.mock.calls.find(
+			(call: unknown[]) => call[0] === 'analysis/report',
+		);
+		const report = reportCall![1] as Report;
+		expect(report.pageData.data['https://example.com/']!.score).toEqual({ value: 100 });
+		expect(report.pageData.data['https://example.com/']!.templateKey).toBeUndefined();
+		expect(archive.replaceAnalysisViolations).toHaveBeenCalledWith(
+			expect.arrayContaining([expect.objectContaining({ message: 'test' })]),
+		);
+	});
+
+	it('forwards onProgress to classifyPageTemplates only when lanes is provided', async () => {
+		const pages = [createMockPage('https://example.com/')];
+		mockedClassifyPageTemplates.mockResolvedValue(new Map());
+
+		const { nitpicker: withoutLanes } = setupAnalyze(pages, [], []);
+		await withoutLanes.analyze(undefined, { classifyTemplates: true });
+		expect(mockedClassifyPageTemplates.mock.calls[0]![0].onProgress).toBeUndefined();
+
+		mockedClassifyPageTemplates.mockReset();
+		mockedClassifyPageTemplates.mockResolvedValue(new Map());
+		const mockLanes = { update: vi.fn(), header: vi.fn() };
+		const { nitpicker: withLanes } = setupAnalyze(pages, [], []);
+		await withLanes.analyze(undefined, {
+			classifyTemplates: true,
+			lanes: mockLanes as never,
+		});
+		expect(mockedClassifyPageTemplates.mock.calls[0]![0].onProgress).toBeInstanceOf(
+			Function,
+		);
+	});
+
+	it('renders a done/total percentage in the Lanes progress line for block/assign events', async () => {
+		const pages = [createMockPage('https://example.com/')];
+		const mockLanes = { update: vi.fn(), header: vi.fn() };
+		mockedClassifyPageTemplates.mockImplementation((options) => {
+			options.onProgress?.({
+				phase: 'pass1-block-complete',
+				blockKey: 'block-1',
+				blocksProcessed: 3,
+				totalBlocks: 12,
+			});
+			return Promise.resolve(new Map());
+		});
+
+		const { nitpicker } = setupAnalyze(pages, [], []);
+		await nitpicker.analyze(undefined, {
+			classifyTemplates: true,
+			lanes: mockLanes as never,
+		});
+
+		expect(mockLanes.update).toHaveBeenCalledWith(
+			expect.any(Number),
+			expect.stringContaining('3/12 blocks (25%)'),
+		);
 	});
 });
