@@ -63,8 +63,10 @@ const NO_META = {
  * graph.
  * @param url - The page's absolute URL.
  * @param title - The page's `<title>` text.
+ * @param contentType - The response's raw Content-Type. Defaults to
+ *   `text/html`; pass e.g. `image/jpeg` to register a non-page resource.
  */
-async function setSimplePage(url, title) {
+async function setSimplePage(url, title, contentType = 'text/html') {
 	await archive.setPage({
 		url: parseUrl(url),
 		redirectPaths: [],
@@ -72,10 +74,13 @@ async function setSimplePage(url, title) {
 		isTarget: true,
 		status: 200,
 		statusText: 'OK',
-		contentType: 'text/html',
+		contentType,
 		contentLength: 200,
 		responseHeaders: {},
-		html: `<html><head><title>${title}</title></head><body><h1>${title}</h1></body></html>`,
+		html:
+			contentType === 'text/html'
+				? `<html><head><title>${title}</title></head><body><h1>${title}</h1></body></html>`
+				: '',
 		meta: { ...NO_META, title },
 		anchorList: [],
 		imageList: [],
@@ -99,7 +104,15 @@ await setSimplePage('https://example.com/docs/guide/setup', 'Guide Setup');
 // direct page (`report`) and a child directory (`22/`, depth 4) that is
 // absent from the initial `/api/directory-tree` payload and must be fetched
 // dynamically via `/api/directory-tree/children` — the boundary-node case.
+// Also has a direct non-HTML resource (`banner.jpg`) — this node's
+// directPageCount/descendantPageCount count it, but directHtmlPageCount/
+// descendantHtmlPageCount (what the tree UI's badge shows) must not.
 await setSimplePage('https://example.com/blog/2023/07/report', 'July Report');
+await setSimplePage(
+	'https://example.com/blog/2023/07/banner.jpg',
+	'Banner',
+	'image/jpeg',
+);
 // `/blog/2023/07/22/` (depth 4): reached only through the dynamic fetch
 // above; itself a leaf directory (no further child directories).
 await setSimplePage('https://example.com/blog/2023/07/22/post-a', 'Post A');

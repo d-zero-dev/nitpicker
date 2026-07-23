@@ -80,6 +80,7 @@ export function PagesView() {
 			: undefined;
 	const filter: PagesFilter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
+		directory: params.get('directory') ?? undefined,
 		status: Number.isFinite(statusValue) ? statusValue : undefined,
 		isExternal: scope === 'all' ? undefined : scope === 'true',
 		lang: params.get('lang') ?? undefined,

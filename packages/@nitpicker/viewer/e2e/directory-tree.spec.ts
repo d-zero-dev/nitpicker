@@ -40,7 +40,8 @@ function treeRow(page: Page, name: string) {
  * - `/docs/guide/` (depth 2): a leaf directory (no child directories).
  * - `/blog/2023/07/` (depth 3): the initial payload's boundary node — has
  *   both a direct page and a child directory (`22/`, depth 4) that is absent
- *   from the initial payload and must be fetched dynamically.
+ *   from the initial payload and must be fetched dynamically. Also has a
+ *   direct non-HTML resource (`banner.jpg`) alongside its direct page.
  * - `/blog/2023/07/22/` (depth 4): reached only via the dynamic fetch above;
  *   itself a leaf directory.
  */
@@ -85,33 +86,47 @@ test.describe('Nitpicker Viewer directory tree', () => {
 		await expect(post22Row.locator('.tree-toggle')).toHaveCount(0);
 	});
 
-	test('ディレクトリを選択すると直下ページ一覧がページネーション込みで表示される', async ({
+	test('ディレクトリを選択すると Pages ビューへ directory フィルタ付きで遷移する', async ({
 		page,
 	}) => {
 		await page.goto('/directory-tree');
 		await treeRow(page, 'docs').locator('.tree-label').click();
-		await expect(page.locator('.directory-pages-panel')).toBeVisible();
-		await expect(page.locator('.directory-pages-panel .vt-row').first()).toBeVisible();
-		// 120 direct pages exceed the 100/page infinite-scroll page size, so
-		// scrolling the pages panel to the bottom must load a second page.
-		const scroller = page.locator('.directory-pages-panel .vt-scroll');
-		const initialRowCount = await page.locator('.directory-pages-panel .vt-row').count();
-		await scroller.evaluate((el) => {
-			el.scrollTop = el.scrollHeight;
-		});
-		await expect
-			.poll(async () => page.locator('.directory-pages-panel .vt-row').count())
-			.toBeGreaterThan(initialRowCount);
+		await expect(page).toHaveURL(/\/pages\?directory=/);
+		await expect(page.getByRole('heading', { name: 'Pages', level: 1 })).toBeVisible();
+		await expect(page.locator('.pt-row').first()).toBeVisible();
 	});
 
-	test('直下ページが0件のディレクトリを選択すると空状態メッセージが表示される', async ({
+	test('directory フィルタは選択したディレクトリの子孫ページも含めてマッチする（境界越え）', async ({
 		page,
 	}) => {
 		await page.goto('/directory-tree');
-		// `/blog/2023/` has no direct page of its own — only its child dir `07/`.
-		await treeRow(page, '2023').locator('.tree-label').click();
-		await expect(page.locator('.directory-pages-panel')).toHaveCount(0);
-		await expect(page.getByText('No pages directly in this folder.')).toBeVisible();
+		// `/blog/` itself has no direct page — only descendants: `2023/07/report`
+		// (depth 3, within the initial payload), `2023/07/22/post-a` (depth 4,
+		// only ever reachable via dynamic fetch in the tree), and
+		// `2023/07/banner.jpg` (a non-HTML resource, excluded by the
+		// `contentTypeCategory=html` param the tree navigates with). The
+		// Pages view's `directory` filter is a plain SQL LIKE match, so the
+		// two HTML pages surface without any tree expansion, but the image
+		// does not.
+		await treeRow(page, 'blog').locator('.tree-label').click();
+		await expect(page.locator('.pt-row')).toHaveCount(2);
+		const rowTexts = await page.locator('.pt-row').allTextContents();
+		expect(rowTexts.every((text) => text.includes('/blog/'))).toBe(true);
+		expect(rowTexts.some((text) => text.includes('banner.jpg'))).toBe(false);
+	});
+
+	test('ツリーのバッジは配下の HTML ページ数のみをカウントし、画像等の非HTMLリソースは除外する', async ({
+		page,
+	}) => {
+		await page.goto('/directory-tree');
+		// `07` has a direct image (banner.jpg) alongside its direct page
+		// (report) and a descendant page (22/post-a, depth 4, not yet
+		// fetched). The badge must count only the 2 HTML pages, not the
+		// image — this is `descendantHtmlPageCount`, not the unfiltered
+		// `descendantPageCount` (which would read 3).
+		// Locale is pinned to en-US in playwright.directory-tree.config.ts.
+		const badge = treeRow(page, '07').locator('.tree-count');
+		await expect(badge).toHaveText('2 pages');
 	});
 
 	test('展開済みノードをクリックすると畳まれる', async ({ page }) => {
@@ -120,20 +135,6 @@ test.describe('Nitpicker Viewer directory tree', () => {
 		await expect(treeRow(page, 'guide')).toBeVisible();
 		await treeRow(page, 'docs').locator('.tree-toggle').click();
 		await expect(treeRow(page, 'guide')).toHaveCount(0);
-	});
-
-	test('depth ≤ 3 のノード選択はリロード後も ?nodeId= から復元される', async ({
-		page,
-	}) => {
-		await page.goto('/directory-tree');
-		await treeRow(page, 'docs').locator('.tree-label').click();
-		await expect(page).toHaveURL(/nodeId=/);
-		await expect(page.locator('.directory-pages-panel')).toBeVisible();
-
-		await page.reload();
-
-		await expect(page.locator('.directory-pages-panel')).toBeVisible();
-		await expect(page.locator('.directory-pages-panel .vt-row').first()).toBeVisible();
 	});
 
 	test('ナビゲーション経由でディレクトリツリービューへ遷移できる', async ({ page }) => {

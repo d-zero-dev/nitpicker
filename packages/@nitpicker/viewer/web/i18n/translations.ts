@@ -149,19 +149,12 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			directoryTree: {
 				title: 'Directory Tree',
 				description:
-					'Browse the crawled site by directory structure. Expand a folder to see its subfolders, or select one to list its direct pages.',
-				childCount: '{count} items',
+					'Browse the crawled site by directory structure. Expand a folder to see its subfolders, or select one to view its pages in the Pages list.',
+				pageCount: '{count} pages',
 				expandNode: 'Expand {name}',
 				collapseNode: 'Collapse {name}',
 				noRoots:
 					'No directory data available. Run `nitpicker viewer-build` to generate it.',
-				pagesPanelTitle: 'Pages in {path}',
-				noNodeSelected: 'Select a folder to see its pages.',
-				noPages: 'No pages directly in this folder.',
-				colUrl: 'URL',
-				colTitle: 'Title',
-				colStatus: 'Status',
-				colContentType: 'Content-Type',
 			},
 			pageDetail: {
 				title: 'Page detail',
@@ -484,19 +477,12 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			directoryTree: {
 				title: 'ディレクトリツリー',
 				description:
-					'クロールしたサイトをディレクトリ構造で閲覧します。フォルダを展開してサブフォルダを見るか、選択して直下のページ一覧を表示します。',
-				childCount: '{count} 件',
+					'クロールしたサイトをディレクトリ構造で閲覧します。フォルダを展開してサブフォルダを見るか、選択してページ一覧をPagesビューで表示します。',
+				pageCount: '{count} ページ',
 				expandNode: '{name} を展開',
 				collapseNode: '{name} を折りたたむ',
 				noRoots:
 					'ディレクトリデータがありません。`nitpicker viewer-build` を実行して生成してください。',
-				pagesPanelTitle: '{path} 配下のページ',
-				noNodeSelected: 'フォルダを選択するとページが表示されます。',
-				noPages: 'このフォルダ直下にページはありません。',
-				colUrl: 'URL',
-				colTitle: 'タイトル',
-				colStatus: 'ステータス',
-				colContentType: 'Content-Type',
 			},
 			pageDetail: {
 				title: 'ページ詳細',

@@ -13,9 +13,7 @@ export interface DirectoryTreeProps {
 	expandedOverrides: Map<number, boolean>;
 	/** Toggles a node's expanded state, given its current value. */
 	onToggle: (node: DirectoryTreeNode, isExpanded: boolean) => void;
-	/** The currently selected node id, or `null` when none is selected. */
-	selectedNodeId: number | null;
-	/** Selects a node, so its direct pages show in the pages panel. */
+	/** Navigates to the Pages view filtered to a node's subtree. */
 	onSelect: (node: DirectoryTreeNode) => void;
 }
 
@@ -27,7 +25,6 @@ export interface DirectoryTreeProps {
  * @param props.root
  * @param props.expandedOverrides
  * @param props.onToggle
- * @param props.selectedNodeId
  * @param props.onSelect
  * @returns The tree element, or `null` if the root has no root node (should
  *   not happen for a well-formed payload).
@@ -36,7 +33,6 @@ export function DirectoryTree({
 	root,
 	expandedOverrides,
 	onToggle,
-	selectedNodeId,
 	onSelect,
 }: DirectoryTreeProps) {
 	const childrenByParent = useMemo(
@@ -58,7 +54,6 @@ export function DirectoryTree({
 					childrenByParent={childrenByParent}
 					expandedOverrides={expandedOverrides}
 					onToggle={onToggle}
-					selectedNodeId={selectedNodeId}
 					onSelect={onSelect}
 				/>
 			</ul>

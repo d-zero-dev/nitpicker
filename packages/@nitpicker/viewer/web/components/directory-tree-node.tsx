@@ -29,21 +29,17 @@ export interface DirectoryTreeNodeRowProps {
 	expandedOverrides: Map<number, boolean>;
 	/** Toggles a node's expanded state, given its current value. */
 	onToggle: (node: DirectoryTreeNode, isExpanded: boolean) => void;
-	/** The currently selected node id, or `null` when none is selected. */
-	selectedNodeId: number | null;
 	/**
-	 * Selects a node, so its direct pages show in the pages panel. Receives
-	 * the full node (not just its id) — a dynamically fetched node (depth > 3)
-	 * only ever exists in this component tree's `useDirectoryTreeChildren`
-	 * results, so the caller cannot look it back up from an id alone.
+	 * Navigates to the Pages view filtered to this node's subtree. Receives
+	 * the full node (not just its id) since the caller needs `node.path`.
 	 */
 	onSelect: (node: DirectoryTreeNode) => void;
 }
 
 /**
  * One recursive row in the directory tree. Renders an expand arrow only when
- * `node.hasChildren` is `true` — direct pages surface via the separate pages
- * panel, never as additional tree rows.
+ * `node.hasChildren` is `true` — direct pages surface via the Pages view
+ * (navigated to on click), never as additional tree rows.
  *
  * A node's expanded state defaults to `node.depth < INITIAL_DIRECTORY_TREE_DEPTH`
  * (so the initial depth ≤ `INITIAL_DIRECTORY_TREE_DEPTH` payload renders as
@@ -65,15 +61,14 @@ export interface DirectoryTreeNodeRowProps {
  * the same absence check applies recursively with no hardcoded depth cutoff.
  *
  * Memoized because every row in the visible tree re-renders on any single
- * expand/select action (`expandedOverrides`/`selectedNodeId` are shared
- * state threaded to every row) — memoizing at least skips re-render when an
- * ancestor re-renders without any of this row's own props changing.
+ * expand action (`expandedOverrides` is shared state threaded to every row)
+ * — memoizing at least skips re-render when an ancestor re-renders without
+ * any of this row's own props changing.
  * @param props - The row props.
  * @param props.node
  * @param props.childrenByParent
  * @param props.expandedOverrides
  * @param props.onToggle
- * @param props.selectedNodeId
  * @param props.onSelect
  * @returns The tree row element, plus its expanded subtree when applicable.
  */
@@ -82,7 +77,6 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 	childrenByParent,
 	expandedOverrides,
 	onToggle,
-	selectedNodeId,
 	onSelect,
 }: DirectoryTreeNodeRowProps) {
 	const { t } = useI18n();
@@ -98,11 +92,10 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 	const children = needsFetch ? (childrenQuery.data?.nodes ?? []) : knownChildren;
 
 	const name = node.name || '/';
-	const isSelected = selectedNodeId === node.nodeId;
 
 	return (
 		<li className="tree-node">
-			<div className={`tree-row${isSelected ? ' is-selected' : ''}`}>
+			<div className="tree-row">
 				{node.hasChildren ? (
 					<button
 						type="button"
@@ -124,13 +117,12 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 				<button
 					type="button"
 					className="tree-label link-button"
-					aria-pressed={isSelected}
 					onClick={() => {
 						onSelect(node);
 					}}>
 					<span className="tree-name">{name}</span>
 					<span className="tree-count">
-						{t('views.directoryTree.childCount', { count: node.childCount })}
+						{t('views.directoryTree.pageCount', { count: node.descendantHtmlPageCount })}
 					</span>
 				</button>
 			</div>
@@ -151,7 +143,6 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 							childrenByParent={childrenByParent}
 							expandedOverrides={expandedOverrides}
 							onToggle={onToggle}
-							selectedNodeId={selectedNodeId}
 							onSelect={onSelect}
 						/>
 					))}

@@ -1384,25 +1384,10 @@ h2 {
 	background: color-mix(in srgb, var(--badge-warn-fg) 10%, transparent);
 }
 
-/* Directory tree view: a resizable-free two-pane layout (tree | pages). */
-.directory-tree-layout {
-	display: block flex;
-	flex: 1 1 0%;
-	gap: 20px;
-	min-block-size: 0;
-}
-
-.directory-tree-pane {
-	flex: 0 0 auto;
-	inline-size: 340px;
-	overflow-y: auto;
-}
-
-.directory-pages-pane {
-	flex: 1 1 0%;
-	min-inline-size: 0;
-}
-
+/* Directory tree view — selecting a node navigates to the Pages view
+   (filtered to that subtree) rather than showing a page list in place, so
+   this is a single-pane layout that scrolls with the page (`.content`),
+   not in its own box. */
 .directory-tree-host {
 	font-family: monospace;
 	font-size: var(--font-size-sm);
@@ -1417,7 +1402,13 @@ h2 {
 }
 
 .tree-children {
-	padding-inline-start: 18px;
+	/* A thin guide line down each nesting level (the classic file-tree
+	   affordance) reads the hierarchy at a glance without relying on
+	   even/odd row shading, which would visibly shift whenever a row above
+	   is expanded or collapsed. */
+	padding-inline-start: 17px;
+	margin-inline-start: 9px;
+	border-inline-start: 1px solid var(--border);
 }
 
 .tree-row {
@@ -1428,8 +1419,8 @@ h2 {
 	border-radius: 4px;
 }
 
-.tree-row.is-selected {
-	background: color-mix(in srgb, var(--accent) 14%, transparent);
+.tree-row:hover {
+	background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .tree-toggle,
@@ -1457,10 +1448,8 @@ h2 {
 
 .tree-label {
 	display: inline flex;
-	flex: 1 1 0%;
 	gap: 8px;
 	align-items: center;
-	justify-content: space-between;
 	padding-block: 4px;
 	padding-inline: 4px;
 	font: inherit;
@@ -1478,8 +1467,13 @@ h2 {
 }
 
 .tree-count {
+	padding-block: 1px;
+	padding-inline: 6px;
 	font-size: var(--font-size-xs);
 	color: var(--text-dim);
+	white-space: nowrap;
+	background: var(--bg-elev);
+	border-radius: 999px;
 }
 
 .tree-loading,
@@ -1492,9 +1486,4 @@ h2 {
 
 .tree-error {
 	color: var(--danger);
-}
-
-.directory-pages-panel h2 {
-	font-size: var(--font-size-base);
-	color: var(--text-dim);
 }
