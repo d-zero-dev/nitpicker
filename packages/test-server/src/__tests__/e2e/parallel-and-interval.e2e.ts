@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_PORT } from './test-server-port.js';
 
 describe('Parallel and interval options', () => {
 	describe('parallels: 3', () => {
 		let result: CrawlResult;
 
 		beforeAll(async () => {
-			result = await crawl(['http://localhost:8010/recursive/'], {
+			result = await crawl([`http://localhost:${TEST_SERVER_PORT}/recursive/`], {
 				parallels: 3,
 			});
 		}, 60_000);
@@ -36,7 +37,7 @@ describe('Parallel and interval options', () => {
 		let result: CrawlResult;
 
 		beforeAll(async () => {
-			result = await crawl(['http://localhost:8010/recursive/'], {
+			result = await crawl([`http://localhost:${TEST_SERVER_PORT}/recursive/`], {
 				interval: 500,
 			});
 		}, 60_000);

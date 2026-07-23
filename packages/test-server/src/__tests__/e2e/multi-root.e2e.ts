@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_ORIGIN } from './test-server-port.js';
 
 describe('Multi-root crawl', () => {
 	describe('同一ホスト × 複数サブパス起点', () => {
@@ -8,8 +9,8 @@ describe('Multi-root crawl', () => {
 
 		beforeAll(async () => {
 			result = await crawl([
-				'http://localhost:8010/scope/blog/',
-				'http://localhost:8010/scope/docs/',
+				`${TEST_SERVER_ORIGIN}/scope/blog/`,
+				`${TEST_SERVER_ORIGIN}/scope/docs/`,
 			]);
 		}, 120_000);
 
@@ -35,8 +36,8 @@ describe('Multi-root crawl', () => {
 		it('info.roots に両方の起点 URL が記録される', async () => {
 			const config = await result.accessor.getConfig();
 			expect(config.roots).toEqual([
-				'http://localhost:8010/scope/blog/',
-				'http://localhost:8010/scope/docs/',
+				`${TEST_SERVER_ORIGIN}/scope/blog/`,
+				`${TEST_SERVER_ORIGIN}/scope/docs/`,
 			]);
 		});
 	});

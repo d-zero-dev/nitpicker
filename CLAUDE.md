@@ -27,7 +27,7 @@ npx @nitpicker/cli viewer-build <archive> [--force]    # viewer read model を�
 
 ```sh
 yarn test                                          # ユニットテスト（Vitest）
-yarn vitest run --config vitest.e2e.config.ts      # E2E（maxWorkers: 1、test-server port 8010）
+yarn vitest run --config vitest.e2e.config.ts      # E2E（maxWorkers: 1、test-server はOS割り当ての動的ポート）
 yarn workspace @nitpicker/viewer test:e2e          # viewer の Playwright E2E
 yarn build                                         # 全パッケージビルド
 yarn lint                                          # lint + prettier + cspell

@@ -1,12 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_PORT } from './test-server-port.js';
 
 describe('main-content extraction (real headless-browser DOM heuristic, issue: beholder 4.0.0 promotion)', () => {
 	let result: CrawlResult;
 
 	beforeAll(async () => {
-		result = await crawl(['http://localhost:8010/main-content/'], { recursive: false });
+		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/main-content/`], {
+			recursive: false,
+		});
 	}, 60_000);
 
 	afterAll(async () => {

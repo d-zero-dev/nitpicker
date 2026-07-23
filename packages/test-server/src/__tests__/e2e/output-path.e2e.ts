@@ -7,6 +7,8 @@ import path from 'node:path';
 import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { TEST_SERVER_PORT } from './test-server-port.js';
+
 describe('Output path (filePath option)', () => {
 	let orchestrator: CrawlerOrchestrator;
 	let cwd: string;
@@ -19,7 +21,7 @@ describe('Output path (filePath option)', () => {
 		outputPath = path.join(cwd, 'custom-output.nitpicker');
 
 		orchestrator = await CrawlerOrchestrator.crawling(
-			['http://localhost:8010/'],
+			[`http://localhost:${TEST_SERVER_PORT}/`],
 			{
 				cwd,
 				filePath: outputPath,
@@ -85,7 +87,7 @@ describe('Output path without extension', () => {
 		await fs.mkdir(cwd, { recursive: true });
 
 		orchestrator = await CrawlerOrchestrator.crawling(
-			['http://localhost:8010/'],
+			[`http://localhost:${TEST_SERVER_PORT}/`],
 			{
 				cwd,
 				filePath: path.join(cwd, 'my-report'),

@@ -6,6 +6,8 @@ import path from 'node:path';
 import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { TEST_SERVER_PORT } from './test-server-port.js';
+
 describe('Archive pipeline (.nitpicker write → reopen)', () => {
 	let orchestrator: CrawlerOrchestrator;
 	let tmpDir: string;
@@ -17,7 +19,7 @@ describe('Archive pipeline (.nitpicker write → reopen)', () => {
 		await fs.mkdir(cwd, { recursive: true });
 
 		orchestrator = await CrawlerOrchestrator.crawling(
-			['http://localhost:8010/'],
+			[`http://localhost:${TEST_SERVER_PORT}/`],
 			{
 				cwd,
 				recursive: false,

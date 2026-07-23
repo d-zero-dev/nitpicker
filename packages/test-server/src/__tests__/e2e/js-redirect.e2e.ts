@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_PORT } from './test-server-port.js';
 
 /**
  * E2E coverage for client-side redirect handling.
@@ -42,7 +43,7 @@ describe('Client-side window.location.replace() lands in the archive as a redire
 	let result: CrawlResult;
 
 	beforeAll(async () => {
-		result = await crawl(['http://localhost:8010/js-redirect/']);
+		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/js-redirect/`]);
 	}, 60_000);
 
 	afterAll(async () => {

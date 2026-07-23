@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_ORIGIN, TEST_SERVER_PORT } from './test-server-port.js';
 
 const SCOPE_USER = 'scope-user';
 const SCOPE_PASS = 'scope-pass';
@@ -13,7 +14,7 @@ const EMPTY_AUTH_HEADER = `Basic ${Buffer.from(':').toString('base64')}`;
  * lack thereof) don't bleed into the next assertion.
  */
 async function resetExternalAuthHeaders(): Promise<void> {
-	const response = await fetch('http://localhost:8010/scope-auth-leak/reset', {
+	const response = await fetch(`${TEST_SERVER_ORIGIN}/scope-auth-leak/reset`, {
 		method: 'POST',
 	});
 	if (!response.ok) {
@@ -28,7 +29,7 @@ async function resetExternalAuthHeaders(): Promise<void> {
  * @returns Recorded `Authorization` header values in arrival order.
  */
 async function readExternalAuthHeaders(): Promise<(string | null)[]> {
-	const response = await fetch('http://localhost:8010/scope-auth-leak/external-headers');
+	const response = await fetch(`${TEST_SERVER_ORIGIN}/scope-auth-leak/external-headers`);
 	const json = (await response.json()) as { headers: (string | null)[] };
 	return json.headers;
 }
@@ -49,9 +50,9 @@ describe('Scope credential leak guard — sub-resource Basic auth (E2E)', () => 
 
 	it('does NOT send scope credentials to off-scope sub-resources that demand Basic auth', async () => {
 		// Setup recap (full scenario in scope-auth-leak.ts):
-		// - Scope: http://scope-user:scope-pass@localhost:8010/scope-auth-leak/main
+		// - Scope: http://scope-user:scope-pass@localhost:PORT/scope-auth-leak/main
 		// - Main endpoint requires Basic auth matching scope-user:scope-pass.
-		// - HTML embeds <img src="http://127.0.0.1:8010/scope-auth-leak/external-asset.png">
+		// - HTML embeds <img src="http://127.0.0.1:PORT/scope-auth-leak/external-asset.png">
 		//   — different hostname (127.0.0.1 vs localhost) so the crawler's
 		//   scope map treats it as off-scope even though the port matches.
 		// - External endpoint records every Authorization header it sees
@@ -64,7 +65,7 @@ describe('Scope credential leak guard — sub-resource Basic auth (E2E)', () => 
 		// helper exists to prevent.
 
 		result = await crawl([
-			`http://${SCOPE_USER}:${SCOPE_PASS}@localhost:8010/scope-auth-leak/main`,
+			`http://${SCOPE_USER}:${SCOPE_PASS}@localhost:${TEST_SERVER_PORT}/scope-auth-leak/main`,
 		]);
 
 		// Sanity: the main scope-protected page was scraped successfully —

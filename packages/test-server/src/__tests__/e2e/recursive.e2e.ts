@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_PORT } from './test-server-port.js';
 
 describe('Recursive crawling', () => {
 	let result: CrawlResult;
 
 	beforeAll(async () => {
-		result = await crawl(['http://localhost:8010/recursive/']);
+		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/recursive/`]);
 	}, 60_000);
 
 	afterAll(async () => {
@@ -41,9 +42,12 @@ describe('Recursive crawling', () => {
 	});
 
 	it('recursive: false で再帰しない', async () => {
-		const nonRecursiveResult = await crawl(['http://localhost:8010/recursive/'], {
-			recursive: false,
-		});
+		const nonRecursiveResult = await crawl(
+			[`http://localhost:${TEST_SERVER_PORT}/recursive/`],
+			{
+				recursive: false,
+			},
+		);
 
 		try {
 			const pages = await nonRecursiveResult.accessor.getPages('page');

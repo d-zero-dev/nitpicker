@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_PORT } from './test-server-port.js';
 
 describe('Scroll-jack page (viewport-dependent redirect)', () => {
 	let result: CrawlResult;
 
 	beforeAll(async () => {
-		result = await crawl(['http://localhost:8010/scroll-jack/'], {
+		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/scroll-jack/`], {
 			recursive: false,
 			image: true,
 		});

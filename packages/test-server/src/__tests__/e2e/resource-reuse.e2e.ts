@@ -2,6 +2,7 @@ import { getSummary, listPages } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_ORIGIN } from './test-server-port.js';
 
 describe('Resource reuse', () => {
 	let result: CrawlResult;
@@ -10,14 +11,14 @@ describe('Resource reuse', () => {
 	beforeAll(async () => {
 		// 共有サーバーの観測ログを先行テストの蓄積からリセットする
 		// （リセットに失敗すると完全一致アサーションが壊れるため必ず成功を確認）
-		const reset = await fetch('http://localhost:8010/resource-reuse/__stats', {
+		const reset = await fetch(`${TEST_SERVER_ORIGIN}/resource-reuse/__stats`, {
 			method: 'DELETE',
 		});
 		if (!reset.ok) {
 			throw new Error(`__stats reset failed: ${reset.status}`);
 		}
-		result = await crawl(['http://localhost:8010/resource-reuse/']);
-		const res = await fetch('http://localhost:8010/resource-reuse/__stats');
+		result = await crawl([`${TEST_SERVER_ORIGIN}/resource-reuse/`]);
+		const res = await fetch(`${TEST_SERVER_ORIGIN}/resource-reuse/__stats`);
 		requests = await res.json();
 	}, 120_000);
 
@@ -129,7 +130,9 @@ describe('Resource reuse (list mode)', () => {
 	beforeAll(async () => {
 		// list mode (recursive: false): the root page is fully rendered, and every
 		// discovered anchor — internal ones included — is queued as metadataOnly
-		result = await crawl(['http://localhost:8010/resource-reuse/'], { list: true });
+		result = await crawl([`${TEST_SERVER_ORIGIN}/resource-reuse/`], {
+			list: true,
+		});
 	}, 120_000);
 
 	afterAll(async () => {

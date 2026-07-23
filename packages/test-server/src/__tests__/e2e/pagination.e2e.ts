@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_PORT } from './test-server-port.js';
 
 describe('Speculative pagination (path-based)', () => {
 	let result: CrawlResult;
 
 	beforeAll(async () => {
-		result = await crawl(['http://localhost:8010/pagination/'], {
+		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/pagination/`], {
 			parallels: 5,
 		});
 	}, 120_000);

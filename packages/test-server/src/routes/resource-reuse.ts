@@ -1,3 +1,4 @@
+import type { PortRef } from '../server.js';
 import type { Context, Hono } from 'hono';
 
 /**
@@ -32,8 +33,10 @@ const observedRequests: ObservedRequest[] = [];
  * Each image endpoint records the method of every incoming request so that
  * tests can assert exactly which requests were made.
  * @param app - The Hono application instance to register routes on.
+ * @param portRef - Holder for the server's actual listening port, used to
+ *   build the self-referencing "external" (127.0.0.1) URL below.
  */
-export function resourceReuseRoutes(app: Hono) {
+export function resourceReuseRoutes(app: Hono, portRef: PortRef) {
 	app.get('/resource-reuse/', (c) =>
 		c.html(
 			'<!doctype html><html lang="en"><head><title>Resource Reuse</title></head><body>' +
@@ -47,8 +50,8 @@ export function resourceReuseRoutes(app: Hono) {
 				'<a href="/resource-reuse/redirected.png">redirected image</a>' +
 				// External reuse case: 127.0.0.1 is a different hostname (= external
 				// scope) but the same server — rendered AND directly linked
-				'<img src="http://127.0.0.1:8010/resource-reuse/ext.png" alt="external" width="1" height="1">' +
-				'<a href="http://127.0.0.1:8010/resource-reuse/ext.png">external image</a>' +
+				`<img src="http://127.0.0.1:${portRef.port}/resource-reuse/ext.png" alt="external" width="1" height="1">` +
+				`<a href="http://127.0.0.1:${portRef.port}/resource-reuse/ext.png">external image</a>` +
 				'</body></html>',
 		),
 	);

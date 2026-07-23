@@ -7,6 +7,8 @@ import { Archive, CrawlerOrchestrator, computeFileSha256 } from '@nitpicker/craw
 import { listInventoryRuns, listUnusedResources } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { TEST_SERVER_ORIGIN, TEST_SERVER_PORT } from './test-server-port.js';
+
 /**
  * Run a baseline crawl rooted at the test-server top page, then close the
  * archive so the caller can re-open it via `Archive.open` / `inventory()`.
@@ -44,7 +46,7 @@ describe('Inventory crawl', () => {
 	beforeAll(async () => {
 		// 1) Baseline crawl reaches only the top page and its anchors —
 		//    /inventory/* routes are never linked from the crawl-reachable graph.
-		const baseline = await crawlAndPersist(['http://localhost:8010/']);
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/`]);
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
 
@@ -55,8 +57,8 @@ describe('Inventory crawl', () => {
 		const orchestrator = await CrawlerOrchestrator.inventory(
 			filePath,
 			[
-				'http://localhost:8010/inventory/hidden-lp',
-				'http://localhost:8010/inventory/orphan.pdf',
+				`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+				`${TEST_SERVER_ORIGIN}/inventory/orphan.pdf`,
 			],
 			{ cwd },
 		);
@@ -90,7 +92,7 @@ describe('Inventory crawl', () => {
 		const [row] = (await knex('content_items as ci')
 			.join('url_refs as ur', 'ci.url_id', 'ur.id')
 			.select('ci.source as source')
-			.where('ur.url', 'http://localhost:8010/inventory/hidden-lp')) as {
+			.where('ur.url', `${TEST_SERVER_ORIGIN}/inventory/hidden-lp`)) as {
 			source: string;
 		}[];
 		expect(row, 'hidden-lp must have been inserted by --inventory').toBeDefined();
@@ -108,7 +110,7 @@ describe('Inventory crawl', () => {
 		const [row] = (await knex('content_items as ci')
 			.join('url_refs as ur', 'ci.url_id', 'ur.id')
 			.select('ci.source as source')
-			.where('ur.url', 'http://localhost:8010/inventory/inner-link')) as {
+			.where('ur.url', `${TEST_SERVER_ORIGIN}/inventory/inner-link`)) as {
 			source: string;
 		}[];
 		expect(
@@ -121,7 +123,7 @@ describe('Inventory crawl', () => {
 	it('records a non-HTML URL from the inventory list directly in resources as inventory-seed', async () => {
 		const rows = await listUnusedResources(accessor, { limit: 50 });
 		const orphan = rows.items.find(
-			(row) => row.url === 'http://localhost:8010/inventory/orphan.pdf',
+			(row) => row.url === `${TEST_SERVER_ORIGIN}/inventory/orphan.pdf`,
 		);
 		expect(orphan, 'orphan.pdf must be present in unused resources').toBeDefined();
 		expect(orphan?.source).toBe('inventory-seed');
@@ -210,7 +212,7 @@ describe('Inventory crawl run-audit fingerprint (with source file sha256)', () =
 	let accessor: Archive;
 
 	beforeAll(async () => {
-		const baseline = await crawlAndPersist(['http://localhost:8010/']);
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/`]);
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
 
@@ -221,8 +223,8 @@ describe('Inventory crawl run-audit fingerprint (with source file sha256)', () =
 		// boundary deliberately does NOT receive the path post-lift).
 		listFilePath = path.join(cwd, 'inventory-list.txt');
 		const listBody = [
-			'http://localhost:8010/inventory/hidden-lp',
-			'http://localhost:8010/inventory/orphan.pdf',
+			`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+			`${TEST_SERVER_ORIGIN}/inventory/orphan.pdf`,
 		].join('\n');
 		await fs.writeFile(listFilePath, listBody);
 
@@ -238,8 +240,8 @@ describe('Inventory crawl run-audit fingerprint (with source file sha256)', () =
 		const orchestrator = await CrawlerOrchestrator.inventory(
 			filePath,
 			[
-				'http://localhost:8010/inventory/hidden-lp',
-				'http://localhost:8010/inventory/orphan.pdf',
+				`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+				`${TEST_SERVER_ORIGIN}/inventory/orphan.pdf`,
 			],
 			{ cwd },
 			undefined,
@@ -300,7 +302,7 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 	let accessor: Archive;
 
 	beforeAll(async () => {
-		const baseline = await crawlAndPersist(['http://localhost:8010/']);
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/`]);
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
 
@@ -309,8 +311,8 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 			[
 				// Two HTML seeds to make sure the assertion is not a single-row
 				// coincidence — both must show up in the strict pending set.
-				'http://localhost:8010/inventory/hidden-lp',
-				'http://localhost:8010/inventory/inner-link',
+				`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+				`${TEST_SERVER_ORIGIN}/inventory/inner-link`,
 			],
 			{ cwd },
 			(orch) => {
@@ -344,8 +346,8 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 			.join('url_refs as ur', 'ci.url_id', 'ur.id')
 			.select('ur.url as url', 'ci.source as source', 'ci.scraped as scraped')
 			.whereIn('ur.url', [
-				'http://localhost:8010/inventory/hidden-lp',
-				'http://localhost:8010/inventory/inner-link',
+				`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+				`${TEST_SERVER_ORIGIN}/inventory/inner-link`,
 			])
 			.orderBy('ur.url')) as Array<{
 			url: string;
@@ -353,8 +355,8 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 			scraped: number;
 		}>;
 		expect(rows.map((r) => r.url)).toEqual([
-			'http://localhost:8010/inventory/hidden-lp',
-			'http://localhost:8010/inventory/inner-link',
+			`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+			`${TEST_SERVER_ORIGIN}/inventory/inner-link`,
 		]);
 		for (const row of rows) {
 			expect(row.source).toBe('inventory-seed');
@@ -369,8 +371,8 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 		// interrupted inventory pass is irrecoverable.
 		const { pending } = await accessor.getCrawlingState();
 		expect(pending.toSorted()).toEqual([
-			'http://localhost:8010/inventory/hidden-lp',
-			'http://localhost:8010/inventory/inner-link',
+			`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+			`${TEST_SERVER_ORIGIN}/inventory/inner-link`,
 		]);
 	});
 
@@ -412,7 +414,7 @@ describe('Inventory scrape-phase failure persists ingested state (#121 recovery 
 	let cwd: string;
 
 	beforeAll(async () => {
-		const baseline = await crawlAndPersist(['http://localhost:8010/']);
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/`]);
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
 
@@ -421,8 +423,8 @@ describe('Inventory scrape-phase failure persists ingested state (#121 recovery 
 			CrawlerOrchestrator.inventory(
 				filePath,
 				[
-					'http://localhost:8010/inventory/hidden-lp',
-					'http://localhost:8010/inventory/inner-link',
+					`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+					`${TEST_SERVER_ORIGIN}/inventory/inner-link`,
 				],
 				{ cwd },
 				() => {
@@ -454,8 +456,8 @@ describe('Inventory scrape-phase failure persists ingested state (#121 recovery 
 				.join('url_refs as ur', 'ci.url_id', 'ur.id')
 				.select('ur.url as url', 'ci.source as source', 'ci.scraped as scraped')
 				.whereIn('ur.url', [
-					'http://localhost:8010/inventory/hidden-lp',
-					'http://localhost:8010/inventory/inner-link',
+					`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+					`${TEST_SERVER_ORIGIN}/inventory/inner-link`,
 				])
 				.orderBy('ur.url')) as Array<{
 				url: string;
@@ -463,8 +465,8 @@ describe('Inventory scrape-phase failure persists ingested state (#121 recovery 
 				scraped: number;
 			}>;
 			expect(rows.map((r) => r.url)).toEqual([
-				'http://localhost:8010/inventory/hidden-lp',
-				'http://localhost:8010/inventory/inner-link',
+				`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+				`${TEST_SERVER_ORIGIN}/inventory/inner-link`,
 			]);
 			for (const row of rows) {
 				expect(row.source).toBe('inventory-seed');
@@ -509,7 +511,7 @@ describe('Inventory http/https dedup keeps a single inventory-seed row per origi
 	let accessor: Archive;
 
 	beforeAll(async () => {
-		const baseline = await crawlAndPersist(['http://localhost:8010/']);
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/`]);
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
 
@@ -519,8 +521,8 @@ describe('Inventory http/https dedup keeps a single inventory-seed row per origi
 				// Same URL with two schemes. Without dedup, both would
 				// pass `getExistingPageUrls` (which matches exact `url`)
 				// and produce two `pages` rows.
-				'http://localhost:8010/inventory/hidden-lp',
-				'https://localhost:8010/inventory/hidden-lp',
+				`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+				`https://localhost:${TEST_SERVER_PORT}/inventory/hidden-lp`,
 			],
 			{ cwd },
 			(orch) => {
@@ -549,14 +551,14 @@ describe('Inventory http/https dedup keeps a single inventory-seed row per origi
 			.join('url_refs as ur', 'ci.url_id', 'ur.id')
 			.select('ur.url as url', 'ci.source as source')
 			.whereIn('ur.url', [
-				'http://localhost:8010/inventory/hidden-lp',
-				'https://localhost:8010/inventory/hidden-lp',
+				`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+				`https://localhost:${TEST_SERVER_PORT}/inventory/hidden-lp`,
 			])) as Array<{ url: string; source: string }>;
 		// First-seen wins: the http scheme was supplied first so it
 		// survives the dedup. The order is documented contract for the
 		// dedup helper — if it ever needs to flip, this test catches it.
 		expect(rows).toHaveLength(1);
-		expect(rows[0]?.url).toBe('http://localhost:8010/inventory/hidden-lp');
+		expect(rows[0]?.url).toBe(`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`);
 		expect(rows[0]?.source).toBe('inventory-seed');
 	});
 });
@@ -568,7 +570,7 @@ describe('Inventory crawl noop run (all URLs already in archive)', () => {
 
 	beforeAll(async () => {
 		// Baseline crawl reaches `/` and `/about` (anchored from index).
-		const baseline = await crawlAndPersist(['http://localhost:8010/']);
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/`]);
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
 
@@ -577,7 +579,7 @@ describe('Inventory crawl noop run (all URLs already in archive)', () => {
 		// drops it before any work happens, so this is the noop branch.
 		const orchestrator = await CrawlerOrchestrator.inventory(
 			filePath,
-			['http://localhost:8010/'],
+			[`${TEST_SERVER_ORIGIN}/`],
 			{ cwd },
 		);
 		await orchestrator.write();

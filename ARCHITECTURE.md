@@ -30,7 +30,7 @@
 | `@nitpicker/analyze-*`            | axe / lighthouse / markuplint / textlint / search の各監査                                   |
 | `@nitpicker/report-google-sheets` | Google Sheets レポート出力（5 フェーズの `createSheets`）                                    |
 | `@nitpicker/types`                | 監査型定義（Report / ConfigJSON）                                                            |
-| `packages/test-server`            | E2E 用 Hono サーバー（port 8010、プロダクション非依存）                                      |
+| `packages/test-server`            | E2E 用 Hono サーバー（OS割り当ての動的ポート、プロダクション非依存）                         |
 
 ## 境界と所有権
 
@@ -169,6 +169,6 @@
 ## テストと CLI 契約
 
 - ユニット: `yarn test`（Vitest 4、1関数1ファイルにユニットテスト必須）
-- E2E: `yarn vitest run --config vitest.e2e.config.ts`（maxWorkers: 1、test-server は port 8010、**外部リンクは `127.0.0.1` でシミュレート**（`localhost` と別ホスト名扱い））
+- E2E: `yarn vitest run --config vitest.e2e.config.ts`（maxWorkers: 1、test-server はOS割り当ての動的ポート（並行worktree/セッション間の `EADDRINUSE` を回避、#162）、**外部リンクは `127.0.0.1` でシミュレート**（`localhost` と別ホスト名扱い））
 - viewer E2E: `yarn workspace @nitpicker/viewer test:e2e`（Playwright、fixture 生成 → 実 CLI 起動 → ブラウザ検証）
 - CLI 終了コード: `0` = 成功 / `1` = 致命的（スコープ内エラー含む）/ `2` = 警告（外部リンクエラーのみ。`--strict` で 1 に昇格）

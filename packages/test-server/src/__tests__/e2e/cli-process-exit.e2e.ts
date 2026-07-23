@@ -6,6 +6,8 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { TEST_SERVER_PORT } from './test-server-port.js';
+
 /** Absolute path to the built CLI entry point. */
 const CLI_BIN = path.resolve(
 	import.meta.dirname,
@@ -23,7 +25,7 @@ describe('CLI process termination', () => {
 				[
 					CLI_BIN,
 					'crawl',
-					'http://localhost:8010/',
+					`http://localhost:${TEST_SERVER_PORT}/`,
 					'--silent',
 					'--no-image',
 					'--no-fetch-external',

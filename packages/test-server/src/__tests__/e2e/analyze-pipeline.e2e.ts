@@ -10,6 +10,8 @@ import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
 import { getViolations } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { TEST_SERVER_PORT } from './test-server-port.js';
+
 /**
  * crawl → write → analyze のクロスパッケージ統合テスト。
  *
@@ -29,7 +31,7 @@ describe('Analyze pipeline (crawl → write → analyze)', () => {
 
 		// 1) クロールして .nitpicker を書き出す（スナップショットは SQLite BLOB として保存される）
 		const orchestrator = await CrawlerOrchestrator.crawling(
-			['http://localhost:8010/meta/'],
+			[`http://localhost:${TEST_SERVER_PORT}/meta/`],
 			{
 				cwd,
 				interval: 0,
@@ -69,6 +71,6 @@ describe('Analyze pipeline (crawl → write → analyze)', () => {
 		// /meta/ 配下の internal ページの HTML が WorkerPool に渡り、
 		// per-URL のデータが生成されている（HTML が読めなければ 0 件になる）
 		expect(analyzedUrls.length).toBeGreaterThan(0);
-		expect(analyzedUrls).toContain('http://localhost:8010/meta/full');
+		expect(analyzedUrls).toContain(`http://localhost:${TEST_SERVER_PORT}/meta/full`);
 	});
 });

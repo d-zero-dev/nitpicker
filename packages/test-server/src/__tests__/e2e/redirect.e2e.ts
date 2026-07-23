@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_ORIGIN } from './test-server-port.js';
 
 describe('Redirect handling', () => {
 	let result: CrawlResult;
 
 	beforeAll(async () => {
-		result = await crawl(['http://localhost:8010/redirect/']);
+		result = await crawl([`${TEST_SERVER_ORIGIN}/redirect/`]);
 	}, 60_000);
 
 	afterAll(async () => {
@@ -71,7 +72,7 @@ describe('Redirect convergence (#73): 多対一リダイレクト先を1回だ�
 	let redirectEvents = 0;
 
 	beforeAll(async () => {
-		result = await crawl(['http://localhost:8010/converge/'], undefined, (q) => {
+		result = await crawl([`${TEST_SERVER_ORIGIN}/converge/`], undefined, (q) => {
 			q.on('redirect', () => {
 				redirectEvents++;
 			});
@@ -126,7 +127,7 @@ describe('Redirect convergence dedup はクエリ違いの別ページを潰さ�
 	let result: CrawlResult;
 
 	beforeAll(async () => {
-		result = await crawl(['http://localhost:8010/query-distinct/']);
+		result = await crawl([`${TEST_SERVER_ORIGIN}/query-distinct/`]);
 	}, 60_000);
 
 	afterAll(async () => {
@@ -149,7 +150,7 @@ describe('HEAD と GET で到達先が違っても描画した宛先で claim �
 	let result: CrawlResult;
 
 	beforeAll(async () => {
-		result = await crawl(['http://localhost:8010/diverge/']);
+		result = await crawl([`${TEST_SERVER_ORIGIN}/diverge/`]);
 	}, 60_000);
 
 	afterAll(async () => {
@@ -177,7 +178,7 @@ describe('metadataOnly のリダイレクト元が描画済み宛先を上書き
 	let result: CrawlResult;
 
 	beforeAll(async () => {
-		result = await crawl(['http://localhost:8010/clobber/']);
+		result = await crawl([`${TEST_SERVER_ORIGIN}/clobber/`]);
 	}, 60_000);
 
 	afterAll(async () => {

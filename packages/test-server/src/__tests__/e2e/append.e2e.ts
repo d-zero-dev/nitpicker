@@ -6,6 +6,8 @@ import path from 'node:path';
 import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { TEST_SERVER_ORIGIN } from './test-server-port.js';
+
 /**
  * Run a baseline crawl that creates a `.nitpicker` archive on disk, then close
  * it so the caller can re-open it via `Archive.open`. Returns the archive file
@@ -44,7 +46,7 @@ describe('Append crawl', () => {
 	beforeAll(async () => {
 		// 1) Baseline archive scoped to /scope/blog/. /scope/docs/ is reached via
 		//    a link and therefore recorded as external metadata-only.
-		const baseline = await crawlAndPersist(['http://localhost:8010/scope/blog/'], {
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/scope/blog/`], {
 			fetchExternal: true,
 		});
 		filePath = baseline.filePath;
@@ -54,7 +56,7 @@ describe('Append crawl', () => {
 		//    previously-external /scope/docs/ and re-crawls it as internal.
 		const orchestrator = await CrawlerOrchestrator.append(
 			filePath,
-			['http://localhost:8010/scope/docs/'],
+			[`${TEST_SERVER_ORIGIN}/scope/docs/`],
 			{ cwd, fetchExternal: true },
 		);
 		await orchestrator.write();
@@ -87,8 +89,8 @@ describe('Append crawl', () => {
 	it('info.roots records both the original and the appended root', async () => {
 		const config = await accessor.getConfig();
 		expect(config.roots).toEqual([
-			'http://localhost:8010/scope/blog/',
-			'http://localhost:8010/scope/docs/',
+			`${TEST_SERVER_ORIGIN}/scope/blog/`,
+			`${TEST_SERVER_ORIGIN}/scope/docs/`,
 		]);
 	});
 
@@ -119,7 +121,7 @@ describe('Append crawl: restore from .bak on failure', () => {
 	let originalArchiveBytes: Buffer;
 
 	beforeAll(async () => {
-		const baseline = await crawlAndPersist(['http://localhost:8010/scope/blog/']);
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/scope/blog/`]);
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
 		originalArchiveBytes = await fs.readFile(filePath);
@@ -142,7 +144,7 @@ describe('Append crawl: restore from .bak on failure', () => {
 			.mockRejectedValueOnce(new Error('forced-repromote-failure'));
 
 		await expect(
-			CrawlerOrchestrator.append(filePath, ['http://localhost:8010/scope/docs/'], {
+			CrawlerOrchestrator.append(filePath, [`${TEST_SERVER_ORIGIN}/scope/docs/`], {
 				cwd,
 			}),
 		).rejects.toThrow(/forced-repromote-failure/);
@@ -193,7 +195,7 @@ describe('Append crawl: restore from .bak on failure', () => {
 
 		const thrown = await CrawlerOrchestrator.append(
 			filePath,
-			['http://localhost:8010/scope/docs/'],
+			[`${TEST_SERVER_ORIGIN}/scope/docs/`],
 			{ cwd },
 		).then(
 			() => {
@@ -223,7 +225,7 @@ describe('Append crawl: list-mode rejection', () => {
 	let cwd: string;
 
 	beforeAll(async () => {
-		const baseline = await crawlAndPersist(['http://localhost:8010/scope/blog/']);
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/scope/blog/`]);
 		filePath = baseline.filePath;
 		cwd = baseline.cwd;
 
@@ -243,7 +245,7 @@ describe('Append crawl: list-mode rejection', () => {
 
 	it('throws a helpful error when appending to a list-mode archive', async () => {
 		await expect(
-			CrawlerOrchestrator.append(filePath, ['http://localhost:8010/scope/docs/'], {
+			CrawlerOrchestrator.append(filePath, [`${TEST_SERVER_ORIGIN}/scope/docs/`], {
 				cwd,
 			}),
 		).rejects.toThrow(

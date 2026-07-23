@@ -4,6 +4,7 @@ import { buildViewerReadModel } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
+import { TEST_SERVER_PORT } from './test-server-port.js';
 
 /**
  * Legacy flat tables that fresh archives no longer carry — the crawler's
@@ -49,7 +50,9 @@ describe('crawler write path targets entity tables directly (issue #196)', () =>
 		// suite asserts on gets at least one row from one crawl. `image: true`
 		// overrides the helper's default (`false`) so `<img>` elements are
 		// extracted into `images` / `image_items`.
-		result = await crawl(['http://localhost:8010/resource-reuse/'], { image: true });
+		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/resource-reuse/`], {
+			image: true,
+		});
 	}, 120_000);
 
 	afterAll(async () => {
@@ -86,7 +89,7 @@ describe('crawler write path targets entity tables directly (issue #196)', () =>
 		}[];
 		expect(viewerPages.length).toBeGreaterThan(0);
 		expect(viewerPages.map((p) => p.url)).toContain(
-			'http://localhost:8010/resource-reuse/',
+			`http://localhost:${TEST_SERVER_PORT}/resource-reuse/`,
 		);
 	});
 

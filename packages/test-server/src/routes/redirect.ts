@@ -1,10 +1,13 @@
+import type { PortRef } from '../server.js';
 import type { Context, Hono } from 'hono';
 
 /**
  * Registers routes for testing HTTP redirect chains (301 and 302).
  * @param app - The Hono application instance to register routes on.
+ * @param portRef - Holder for the server's actual listening port, used to
+ *   build the self-referencing "external" (127.0.0.1) URLs below.
  */
-export function redirectRoutes(app: Hono) {
+export function redirectRoutes(app: Hono, portRef: PortRef) {
 	app.get('/redirect/', (c) =>
 		c.html(
 			'<!doctype html><html lang="en"><head><title>Redirect Top</title></head><body>' +
@@ -126,12 +129,12 @@ export function redirectRoutes(app: Hono) {
 	app.get('/clobber/canonical', (c) =>
 		c.html(
 			'<!doctype html><html lang="en"><head><title>Clobber Canonical</title></head><body>' +
-				'<a href="http://127.0.0.1:8010/clobber/ext">External tracker link</a>' +
+				`<a href="http://127.0.0.1:${portRef.port}/clobber/ext">External tracker link</a>` +
 				'</body></html>',
 		),
 	);
 
 	app.on(['GET', 'HEAD'], '/clobber/ext', (c) =>
-		c.redirect('http://localhost:8010/clobber/canonical', 301),
+		c.redirect(`http://localhost:${portRef.port}/clobber/canonical`, 301),
 	);
 }

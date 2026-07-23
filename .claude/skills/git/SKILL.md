@@ -45,7 +45,7 @@ description: Git 操作ルール
 - ドメイン: `example.com` / `example.org` / `example.net`、`*.example` / `*.test` / `*.invalid` / `*.localhost`（RFC 2606 / RFC 6761）
 - IP: `127.0.0.1`、TEST-NET（`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`）、`2001:db8::/32`
 - メール: `user@example.com` 系
-- E2E の `localhost:8010` / `127.0.0.1` は正当（test-server / 外部リンクシミュレーション）
+- E2E の `localhost:<動的ポート>` / `127.0.0.1` は正当（test-server / 外部リンクシミュレーション）
 
 **検出対象（混入してはいけない値）:**
 
