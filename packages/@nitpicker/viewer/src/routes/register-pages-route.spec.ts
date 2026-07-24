@@ -296,4 +296,85 @@ describe('registerPagesRoute (integration)', () => {
 			expect(byUrl.get('https://example.com/b')).toBe(false);
 		});
 	});
+
+	describe('templateKey filter stays on the fast path (page_id-PK join to page_templates, no legacy fallback)', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_register_pages_route_template_key_filter__',
+		);
+		let fixture: Awaited<ReturnType<typeof buildFixture>>;
+
+		beforeAll(async () => {
+			fixture = await buildFixture(workingDir, true);
+			await fixture.archive.replacePageTemplates(
+				new Map([
+					['https://example.com/a', 'template-a'],
+					['https://example.com/b', 'template-a'],
+				]),
+			);
+		});
+
+		afterAll(async () => {
+			await fixture.manager.closeAll();
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('returns only pages with the matching templateKey, not the whole unfiltered set', async () => {
+			const res = await fixture.app.request('/api/pages?templateKey=template-a');
+			const body = (await res.json()) as { items: { url: string }[]; total: number };
+			expect(body.items.map((i) => i.url)).toEqual([
+				'https://example.com/a',
+				'https://example.com/b',
+			]);
+			expect(body.total).toBe(2);
+		});
+
+		it('mints an opaque base64url keyset cursor, not the legacy plain-decimal offset cursor (regression: forcing legacy would change the cursor format)', async () => {
+			const res = await fixture.app.request('/api/pages?templateKey=template-a&limit=1');
+			const body = (await res.json()) as { nextCursor: string | null };
+			expect(body.nextCursor).not.toBeNull();
+			expect(body.nextCursor).not.toMatch(/^\d+$/);
+		});
+
+		it('paginates to completion via nextCursor', async () => {
+			const urls = await paginateAllViaNextCursor(
+				fixture.app,
+				'&templateKey=template-a',
+				1,
+			);
+			expect(urls).toEqual(['https://example.com/a', 'https://example.com/b']);
+		});
+	});
+
+	describe('fast path (viewer_pages read model built, no templateKey filter)', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_register_pages_route_template_key_display__',
+		);
+		let fixture: Awaited<ReturnType<typeof buildFixture>>;
+
+		beforeAll(async () => {
+			fixture = await buildFixture(workingDir, true);
+			await fixture.archive.replacePageTemplates(
+				new Map([['https://example.com/a', 'template-a']]),
+			);
+		});
+
+		afterAll(async () => {
+			await fixture.manager.closeAll();
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('reports templateKey correctly per page via the fast-path post-hoc join (viewer_pages itself has no such column)', async () => {
+			const res = await fixture.app.request('/api/pages');
+			const body = (await res.json()) as {
+				items: { url: string; templateKey: string | null }[];
+			};
+			const byUrl = new Map(body.items.map((i) => [i.url, i.templateKey]));
+			expect(byUrl.get('https://example.com/a')).toBe('template-a');
+			expect(byUrl.get('https://example.com/b')).toBeNull();
+		});
+	});
 });
