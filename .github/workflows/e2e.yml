@@ -91,6 +91,7 @@ jobs:
                 output-path.e2e.ts,
                 single-page.e2e.ts,
                 viewer-read-model-build.e2e.ts,
+                cache-cli.e2e.ts,
               ]
           - id: inventory-snapshot
             files:
