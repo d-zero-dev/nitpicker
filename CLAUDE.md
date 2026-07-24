@@ -19,6 +19,8 @@ npx @nitpicker/cli pipeline <URL>                      # crawl → analyze → r
 npx @nitpicker/cli query <file> <sub-command>          # アーカイブへのクエリ（JSON 出力）
 npx @nitpicker/cli viewer <file-or-stub-dir>           # ローカルビューア起動（常駐、Ctrl-C で停止）
 npx @nitpicker/cli viewer-build <archive> [--force]    # viewer read model を明示的に(再)ビルド
+npx @nitpicker/cli cache list [--json]                 # on-disk キャッシュ一覧（tar展開キャッシュ＋analyze table、サイズ・最終更新日時）
+npx @nitpicker/cli cache clear [archive]               # on-disk キャッシュ全削除、または指定アーカイブのみ削除
 ```
 
 フラグの相互排他・挙動の詳細は `--help` と各コマンド実装（`packages/@nitpicker/cli/src/commands/`）の JSDoc を参照。

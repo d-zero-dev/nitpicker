@@ -19,6 +19,7 @@ import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-awa
 import { Archive } from '@nitpicker/crawler';
 import c from 'ansi-colors';
 
+import { getTableCacheRoot } from './get-table-cache-root.js';
 import { importModules } from './import-modules.js';
 import { loadPluginSettings } from './load-plugin-settings.js';
 import { Table } from './table.js';
@@ -273,7 +274,7 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 		const cache = new Cache<{
 			pages?: Record<string, TableData<string>>;
 			violations?: Violation[];
-		}>('nitpicker-axe', path.join(os.tmpdir(), 'nitpicker/cache/table'));
+		}>('nitpicker-axe', getTableCacheRoot());
 
 		await cache.clear();
 

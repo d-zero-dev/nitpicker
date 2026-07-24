@@ -3,6 +3,7 @@ import { parseCli } from '@d-zero/roar';
 import pkg from '../package.json' with { type: 'json' };
 
 import { analyze, commandDef as analyzeDef } from './commands/analyze.js';
+import { cache, commandDef as cacheDef } from './commands/cache.js';
 import { crawl, commandDef as crawlDef } from './commands/crawl.js';
 import { pipeline, commandDef as pipelineDef } from './commands/pipeline.js';
 import { query, commandDef as queryDef } from './commands/query.js';
@@ -25,6 +26,7 @@ const cli = parseCli({
 		query: queryDef,
 		viewer: viewerDef,
 		'viewer-build': viewerBuildDef,
+		cache: cacheDef,
 	},
 	onError: () => true,
 });
@@ -57,6 +59,10 @@ try {
 		}
 		case 'viewer-build': {
 			await viewerBuild(cli.args, cli.flags);
+			break;
+		}
+		case 'cache': {
+			await cache(cli.args, cli.flags);
 			break;
 		}
 	}

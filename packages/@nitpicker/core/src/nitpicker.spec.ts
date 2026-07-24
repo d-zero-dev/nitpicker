@@ -16,6 +16,7 @@ vi.mock('@nitpicker/crawler', () => ({
 	Archive: {
 		open: vi.fn(),
 	},
+	getArchiveCacheRoot: vi.fn(() => '/mock-cache-root'),
 }));
 
 /**
