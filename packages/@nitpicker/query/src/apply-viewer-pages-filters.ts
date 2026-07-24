@@ -80,4 +80,16 @@ export function applyViewerPagesFilters(
 				.where('template_key', options.templateKey);
 		});
 	}
+	if (options.directory) {
+		const dir = options.directory.endsWith('/')
+			? options.directory
+			: `${options.directory}/`;
+		// `>=`/`<` range on `path_sort_key`, not a LIKE — always seeks the
+		// `vp_path` index regardless of collation, unlike a `LIKE 'dir%'`
+		// pattern (whose index-seek eligibility depends on SQLite's LIKE
+		// optimization and the column's case sensitivity settings). The upper
+		// bound is `dir` plus the highest BMP code point (`￿`), a
+		// sentinel no real path segment sorts past.
+		qb.where('path_sort_key', '>=', dir).where('path_sort_key', '<', `${dir}￿`);
+	}
 }

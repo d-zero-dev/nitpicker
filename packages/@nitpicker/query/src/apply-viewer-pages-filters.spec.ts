@@ -124,3 +124,85 @@ describe('applyViewerPagesFilters', () => {
 		expect(rows.map((r) => r.url)).toEqual(['https://example.com/doc.pdf']);
 	});
 });
+
+describe('applyViewerPagesFilters — directory', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_apply_viewer_pages_filters_directory__',
+	);
+	const archiveFilePath = path.resolve(
+		workingDir,
+		'apply-filters-directory-test.nitpicker',
+	);
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		const pagePaths = [
+			'/blog/2024/post-a',
+			'/blog/2024/sub/post-b',
+			// A sibling directory sharing `/blog` as a literal string prefix —
+			// must NOT be matched by a `directory: '/blog/2024'` filter.
+			'/blog2/post-c',
+		];
+		for (const pagePath of pagePaths) {
+			await archive.setPage({
+				url: parseUrl(`https://example.com${pagePath}`)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+
+		await buildViewerReadModel(archive);
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('matches a directory and its entire subtree, not a literal-prefix sibling', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { directory: '/blog/2024' });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url).toSorted()).toEqual([
+			'https://example.com/blog/2024/post-a',
+			'https://example.com/blog/2024/sub/post-b',
+		]);
+	});
+
+	it('treats a directory with or without a trailing slash the same', async () => {
+		const knex = archive.getKnex();
+		const qbNoSlash = knex('viewer_pages');
+		applyViewerPagesFilters(qbNoSlash, { directory: '/blog/2024' });
+		const qbWithSlash = knex('viewer_pages');
+		applyViewerPagesFilters(qbWithSlash, { directory: '/blog/2024/' });
+
+		const [rowsNoSlash, rowsWithSlash] = await Promise.all([
+			qbNoSlash.select('url'),
+			qbWithSlash.select('url'),
+		]);
+		expect(rowsNoSlash.map((r) => r.url).toSorted()).toEqual(
+			rowsWithSlash.map((r) => r.url).toSorted(),
+		);
+	});
+});

@@ -48,6 +48,20 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 		'CREATE INDEX vp_source ON viewer_pages(is_external, content_category, source, url_sort_key, page_id)',
 	);
 
+	// `directory` (a `path_sort_key` range scan — see `applyViewerPagesFilters`'s
+	// docs) narrows the row set to one subtree first; the subsequent
+	// `ORDER BY` (`url_sort_key` by default) then re-sorts that already-small
+	// subset via `USE TEMP B-TREE FOR ORDER BY` rather than a covering index
+	// scan. That's an acceptable trade for now — the whole point of this
+	// index is to replace a full-table LIKE scan with a bounded range seek,
+	// which the subtree is regardless of how the result then gets sorted. No
+	// `is_external`/`content_category` prefix (unlike `vp_default` etc.):
+	// `directory` is always paired with an explicit `contentTypeCategory` in
+	// its one caller (the directory-tree view's Pages hand-off), but nothing
+	// in `ListViewerPagesOptions` requires that pairing, so a bare
+	// `path_sort_key` lead keeps this index correct for `directory` alone too.
+	await trx.raw('CREATE INDEX vp_path ON viewer_pages(path_sort_key, page_id)');
+
 	// `getDirectoryTree` filters `depth <= 3` (a range, not an equality) and
 	// orders by `path_sort_key` alone (grouping into per-root_key buckets
 	// happens in JS afterward — see that function's docs). Leading the index

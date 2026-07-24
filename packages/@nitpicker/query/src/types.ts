@@ -840,14 +840,17 @@ export interface PageListFacets {
  * Filter and pagination options for {@link listViewerPages} — the
  * `viewer_pages` read-model-backed counterpart of {@link ListPagesOptions}.
  *
- * Deliberately narrower than {@link ListPagesOptions}: `urlPattern` /
- * `directory` (LIKE-based) are excluded — a LIKE predicate can't seek an
+ * Deliberately narrower than {@link ListPagesOptions}: `urlPattern`
+ * (substring LIKE) is excluded — a `%pattern%` predicate can't seek an
  * index, so it cannot be part of the fast path's 100ms contract. Callers
- * that need those fall back to `listPages` instead. `source` is new (not on
+ * that need it fall back to `listPages` instead. `source` is new (not on
  * {@link ListPagesOptions}, which has no equivalent contract to preserve).
- * `templateKey` IS included despite not being a `viewer_pages` column: it
- * resolves via a `page_id`-PK join to `page_templates`, not a wide-table
- * scan, so it doesn't need the LIKE/header-presence exclusion's rationale.
+ * `directory` IS supported here, unlike `urlPattern` — it is a prefix match
+ * against the indexed `path_sort_key` column (a range scan, not a LIKE
+ * scan), so it stays within the fast path's contract. `templateKey` IS also
+ * included despite not being a `viewer_pages` column: it resolves via a
+ * `page_id`-PK join to `page_templates`, not a wide-table scan, so it
+ * doesn't need the LIKE/header-presence exclusion's rationale either.
  */
 export interface ListViewerPagesOptions {
 	/** Filter by external (true) or internal (false) pages. */
@@ -874,11 +877,23 @@ export interface ListViewerPagesOptions {
 	source?: import('@nitpicker/crawler').PageSource;
 	/**
 	 * Filter by exact `--templates` DOM-structure classification group key.
-	 * Unlike `urlPattern`/`directory`, this IS supported by the fast path:
-	 * `page_templates` is joined by `page_id` (its PK), never the wide
-	 * `pages` table — see `applyViewerPagesFilters`.
+	 * Unlike `urlPattern`, this IS supported by the fast path: `page_templates`
+	 * is joined by `page_id` (its PK), never the wide `pages` table — see
+	 * `applyViewerPagesFilters`.
 	 */
 	templateKey?: string;
+	/**
+	 * Directory path prefix to filter by (e.g. `/blog/2024/`) — matches this
+	 * directory and its entire subtree, not just direct children. A trailing
+	 * `/` is added if missing, so `/blog` cannot accidentally prefix-match an
+	 * unrelated sibling like `/blog2/`. Implemented as a `path_sort_key` range
+	 * scan bounded by a maximal Unicode sentinel appended to the directory
+	 * (`>= dir AND < dir` + sentinel), not a LIKE — see this interface's doc
+	 * for why that keeps it inside the fast path's contract. Host-agnostic
+	 * like `listPages`'s `directory`: a multi-root archive with the same path
+	 * under two different hosts is not disambiguated here either.
+	 */
+	directory?: string;
 	/** Field to sort results by. Defaults to `'url'`. */
 	sortBy?:
 		| 'url'

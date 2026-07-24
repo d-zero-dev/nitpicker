@@ -29,4 +29,12 @@ describe('buildViewerPagesFilterKey', () => {
 		expect(none).not.toBe(withSource);
 		expect(withNoindex).not.toBe(withSource);
 	});
+
+	it('produces different keys for different directory filters', () => {
+		const none = buildViewerPagesFilterKey({});
+		const blog = buildViewerPagesFilterKey({ directory: '/blog/' });
+		const docs = buildViewerPagesFilterKey({ directory: '/docs/' });
+		expect(none).not.toBe(blog);
+		expect(blog).not.toBe(docs);
+	});
 });
