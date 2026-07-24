@@ -323,6 +323,22 @@ export default class Archive extends ArchiveAccessor {
 	}
 
 	/**
+	 * Replaces the archive's DOM-structure template classification
+	 * (`--templates`) with a fresh SQL-backed set.
+	 *
+	 * Thin facade over {@link Database.replacePageTemplates}; kept on
+	 * `Archive` so the analyze pipeline can persist template keys without
+	 * reaching into the low-level database class directly.
+	 * @param templateKeysByUrl - Page URL → template key, as produced by
+	 *   `@nitpicker/core`'s `classifyPageTemplates`.
+	 */
+	async replacePageTemplates(
+		templateKeysByUrl: ReadonlyMap<string, string>,
+	): Promise<void> {
+		await this.#db.replacePageTemplates(templateKeysByUrl);
+	}
+
+	/**
 	 * Promote previously-external pages that now fall under the (possibly extended)
 	 * scope back to a pending state so that the crawler re-scrapes them as fully
 	 * internal pages on the next pass.

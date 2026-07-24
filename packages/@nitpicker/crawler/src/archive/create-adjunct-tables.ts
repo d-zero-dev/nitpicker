@@ -17,6 +17,9 @@ import type { Knex } from 'knex';
  * - `inventory_runs` — `--inventory` audit log (no FK; append-only)
  * - `analysis_text_refs` + `analysis_violations` — analyze-phase findings,
  *   FK → `content_items(id)`
+ * - `page_templates` — DOM-structure template classification (`--templates`,
+ *   `@nitpicker/core`'s `template-classification/`), one row per classified
+ *   page, FK → `content_items(id)`
  * - `page_html_blobs` + `page_html_ref` — content-addressable HTML
  *   snapshots, FK → `content_items(id)`
  *
@@ -361,6 +364,22 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 			'CREATE INDEX av_code_order ON analysis_violations(code_sort_key, id)',
 		);
 		await instance.raw('CREATE INDEX av_page ON analysis_violations(page_id, id)');
+	}
+
+	// DOM-structure template classification (`--templates`). One row per
+	// internal HTML page that was classified; `page_id` is both the PK and
+	// the natural key (1:1 with `content_items`), so — unlike
+	// `analysis_violations`, which is 1:many and needs a surrogate `id` —
+	// there's nothing to index beyond the PK itself. `WITHOUT ROWID` packs
+	// rows directly in the PK b-tree, matching `page_html_ref`'s shape
+	// (small fixed-width row, PK-only lookups).
+	if (!(await instance.schema.hasTable('page_templates'))) {
+		await instance.raw(`
+			CREATE TABLE page_templates (
+				page_id      INTEGER PRIMARY KEY REFERENCES content_items(id),
+				template_key TEXT NOT NULL
+			) WITHOUT ROWID
+		`);
 	}
 
 	// Content-addressable HTML blob storage. Knex's schema builder doesn't
