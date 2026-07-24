@@ -8,6 +8,7 @@
 
 export { ArchiveManager } from './archive-manager.js';
 export type { OpenResult } from './archive-manager.js';
+export { backfillBodyHashFromHtmlBlobs } from './viewer-read-model/backfill-body-hash-from-html-blobs.js';
 export { buildViewerReadModel } from './viewer-read-model/build-viewer-read-model.js';
 export { checkHeaders } from './check-headers.js';
 export { classifyErrorKind } from '@nitpicker/crawler';
@@ -24,6 +25,7 @@ export { countPagesByJsonLdType } from './count-pages-by-jsonld-type.js';
 export { countPagesByTag } from './count-pages-by-tag.js';
 export { dropViewerReadModel } from './viewer-read-model/drop-viewer-read-model.js';
 export { ensureViewerReadModel } from './viewer-read-model/ensure-viewer-read-model.js';
+export { findDuplicateBodies } from './find-duplicate-bodies.js';
 export { findDuplicates } from './find-duplicates.js';
 export { findMismatches } from './find-mismatches.js';
 export { getDirectoryTree } from './get-directory-tree.js';

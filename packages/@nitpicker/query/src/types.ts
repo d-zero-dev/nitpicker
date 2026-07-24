@@ -1992,6 +1992,19 @@ export interface DuplicateEntry {
 }
 
 /**
+ * A group of pages whose masked `<body>` content hashes identically —
+ * see {@link import('./find-duplicate-bodies.js').findDuplicateBodies}.
+ */
+export interface DuplicateBodyEntry {
+	/** SHA-256 hash of the masked body content, as a 64-char hex string. */
+	bodyHash: string;
+	/** URLs sharing this body hash. */
+	urls: string[];
+	/** Number of pages with this body hash. */
+	count: number;
+}
+
+/**
  * A metadata mismatch found on a page.
  */
 export interface MismatchEntry {
