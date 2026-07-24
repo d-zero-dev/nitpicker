@@ -105,6 +105,9 @@ test.describe('Nitpicker Viewer directory tree', () => {
 		await expect(page).toHaveURL(/\/pages\?directory=/);
 		await expect(page.getByRole('heading', { name: 'Pages', level: 1 })).toBeVisible();
 		await expect(page.locator('.pt-row').first()).toBeVisible();
+		// The directory filter has no control of its own on the Pages view, so
+		// a notice states which directory the list is scoped to.
+		await expect(page.locator('.filter-notice')).toHaveText('Showing pages under /docs/');
 	});
 
 	test('directory フィルタは選択したディレクトリの子孫ページも含めてマッチする（境界越え）', async ({

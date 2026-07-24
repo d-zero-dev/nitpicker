@@ -485,6 +485,11 @@ export function PagesView() {
 	return (
 		<div className="view">
 			<ViewHeader titleKey="views.pages.title" descriptionKey="views.pages.description" />
+			{filter.directory && (
+				<p className="filter-notice">
+					{t('views.pages.directoryFilterNotice', { directory: filter.directory })}
+				</p>
+			)}
 			{mode === 'mpa' ? (
 				<DataTable
 					mode="mpa"

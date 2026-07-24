@@ -145,6 +145,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				filterMissingTitle: 'Missing title',
 				filterExternal: 'External pages',
 				filterContentType: 'Content-Type',
+				directoryFilterNotice: 'Showing pages under {directory}',
 			},
 			directoryTree: {
 				title: 'Directory Tree',
@@ -480,6 +481,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				filterMissingTitle: 'タイトル欠損',
 				filterExternal: '外部ページ',
 				filterContentType: 'Content-Type',
+				directoryFilterNotice: '「{directory}」配下のページを表示中',
 			},
 			directoryTree: {
 				title: 'ディレクトリツリー',

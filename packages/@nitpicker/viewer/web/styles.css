@@ -284,6 +284,16 @@ h2 {
 	color: var(--text-dim);
 }
 
+/* Filter state, called out separately from .filter-bar's interactive
+   controls — e.g. a directory filter arrived via `?directory=` from another
+   view (the directory tree), so it has no control of its own here to show
+   its current value. */
+.filter-notice {
+	margin-block: 0 12px;
+	font-size: var(--font-size-base);
+	color: var(--text-dim);
+}
+
 /* Filters */
 .filter-bar {
 	display: block flex;
