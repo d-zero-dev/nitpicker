@@ -4,16 +4,7 @@ import type { ArchiveAccessor, PageSource } from '@nitpicker/crawler';
 import { eachSplitted } from '@nitpicker/crawler';
 
 import { resolveRedirectChain } from './resolve-redirect-chain.js';
-
-/**
- * SQLite's default `SQLITE_MAX_VARIABLE_NUMBER` is 999. We chunk `whereIn`
- * batches at 500 to stay safely under that cap — matching the existing
- * pattern used by `Database.getExistingPageUrls` in `@nitpicker/crawler`.
- * On archives with > 999 inventory-* HTML pages a single `whereIn` would
- * throw `SQLITE_ERROR: too many SQL variables`; chunked batching keeps the
- * query correct at any archive size.
- */
-const SQLITE_IN_CHUNK = 500;
+import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
 
 /**
  * Compute all connected components of the **inventory-* subgraph**:

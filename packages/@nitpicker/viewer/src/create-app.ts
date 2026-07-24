@@ -23,6 +23,7 @@ import { registerPagesRoute } from './routes/register-pages-route.js';
 import { registerResourceReferrersRoute } from './routes/register-resource-referrers-route.js';
 import { registerResourcesRoute } from './routes/register-resources-route.js';
 import { registerSummaryRoute } from './routes/register-summary-route.js';
+import { registerTemplateClustersRoute } from './routes/register-template-clusters-route.js';
 import { registerUnusedResourcesRoute } from './routes/register-unused-resources-route.js';
 import { registerViolationsRoute } from './routes/register-violations-route.js';
 import { sanitizeErrorMessage } from './sanitize-error-message.js';
@@ -68,6 +69,7 @@ export function createApp(options: CreateAppOptions): Hono {
 	registerIsolatedPagesRoute(app, context);
 	registerIsolatedClustersRoute(app, context);
 	registerUnusedResourcesRoute(app, context);
+	registerTemplateClustersRoute(app, context);
 
 	app.onError((error, c) => {
 		const raw = error instanceof Error ? error.message : String(error);

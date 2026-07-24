@@ -22,6 +22,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 		nav: {
 			summary: 'Summary',
 			pages: 'Pages',
+			templateClusters: 'Template Clusters',
 			directoryTree: 'Directory Tree',
 			resources: 'Resources',
 			images: 'Images',
@@ -341,6 +342,24 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				contentLength: 'Content-Length',
 				source: 'Source',
 			},
+			templateClusters: {
+				title: 'Template Clusters',
+				description:
+					'Every DOM-structure template cluster found by `--templates`, with the top directories by page count and common stylesheet set computed from its member pages — the raw template key is an opaque blocking key and is not human-readable on its own.',
+				notClassified:
+					'This archive has no DOM-structure template classification yet. Run the following, then re-open the viewer:',
+				notClassifiedCommandHint: 'nitpicker analyze <archive> --templates',
+				noClusters: 'No template clusters found.',
+				pageCount: '{count} pages',
+				commonDirectories: 'Top directories',
+				otherPages: '{count} other pages',
+				commonStylesheets: 'Common stylesheets',
+				noCommonCss: '(none)',
+				commonCssCaveat:
+					'This list is the raw intersection of stylesheets referenced by every page in the cluster — it can include a stylesheet shared site-wide, not only ones distinctive to this template.',
+				rawKey: 'Raw template key',
+				viewPages: 'View pages in this cluster',
+			},
 		},
 	},
 	ja: {
@@ -358,6 +377,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 		nav: {
 			summary: 'サマリー',
 			pages: 'ページ',
+			templateClusters: 'テンプレートクラスタ',
 			directoryTree: 'ディレクトリツリー',
 			resources: 'リソース',
 			images: '画像',
@@ -676,6 +696,24 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				contentType: 'Content-Type',
 				contentLength: 'Content-Length',
 				source: 'ソース',
+			},
+			templateClusters: {
+				title: 'テンプレートクラスタ',
+				description:
+					'`--templates` で検出したDOM構造テンプレートクラスタの一覧。各クラスタの所属ページ数が多いディレクトリ上位と共通CSSファイルを算出して表示します — 生のテンプレートキーはブロッキング用の内部識別子で、それ自体は人間には読めません。',
+				notClassified:
+					'このアーカイブはまだテンプレート分類を実行していません。以下を実行してからビューアを再度開いてください:',
+				notClassifiedCommandHint: 'nitpicker analyze <archive> --templates',
+				noClusters: 'テンプレートクラスタが見つかりません。',
+				pageCount: '{count} ページ',
+				commonDirectories: '主要ディレクトリ',
+				otherPages: '他 {count} ページ',
+				commonStylesheets: '共通CSSファイル',
+				noCommonCss: '(なし)',
+				commonCssCaveat:
+					'この一覧はクラスタ内の全ページが参照するCSSの単純な積集合です。サイト全体で共通するCSS（このテンプレートに固有ではないもの）も含まれる場合があります。',
+				rawKey: '生のテンプレートキー',
+				viewPages: 'このクラスタのページを見る',
 			},
 		},
 	},
