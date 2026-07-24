@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
+
+### Features
+
+- **mcp-server:** add get_page_main_contents tool ([977b152](https://github.com/d-zero-dev/nitpicker/commit/977b1523dfc8e4e2cc997b1267cec75d479da49a))
+
 # [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
 
 ### Features

@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
+
+- feat(crawler)!: extract beholder main-content data into core schema ([4864b8a](https://github.com/d-zero-dev/nitpicker/commit/4864b8a10453867204a23ecba3b0601726cb914b))
+
+### Features
+
+- **crawler:** add page_templates SQL table for --templates classification ([a2a5772](https://github.com/d-zero-dev/nitpicker/commit/a2a5772267446aa4e80f830bc1159b33415a3c89))
+
+### BREAKING CHANGES
+
+- page_meta gains 17 new columns and 8 new adjunct
+  tables are created on next archive open; existing archives are
+  migrated additively (no REQUIRED_FORMAT_VERSION change).
+
 # [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
 
 ### Bug Fixes

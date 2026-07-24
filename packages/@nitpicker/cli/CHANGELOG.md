@@ -3,6 +3,21 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
+
+- feat(cli)!: promote --main-content-selector to a crawl-time option ([99425cc](https://github.com/d-zero-dev/nitpicker/commit/99425cc57b776e8df15e9ef25e7a8ade653b7a0f))
+
+### Features
+
+- **cli:** add --templates flag for DOM-structure page classification ([5bdc870](https://github.com/d-zero-dev/nitpicker/commit/5bdc870cce4240bb383b77f60b5db6ec3039707f))
+
+### BREAKING CHANGES
+
+- `nitpicker analyze --main-content-selector` and
+  `nitpicker pipeline --main-content-selector` (as an analyze option) no
+  longer exist. Use `nitpicker crawl --main-content-selector` (or
+  `pipeline`'s own crawl-time flag of the same name) instead.
+
 # [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
 
 ### Bug Fixes

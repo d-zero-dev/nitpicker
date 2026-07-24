@@ -3,6 +3,56 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
+
+### Bug Fixes
+
+- **core:** remove stray NUL byte from intern-key join separator ([39ce081](https://github.com/d-zero-dev/nitpicker/commit/39ce08117142e948dd39ffe6eae817a41b459dfd))
+- **github:** declare main-contents.e2e.ts in the CI shard manifest ([4055b6e](https://github.com/d-zero-dev/nitpicker/commit/4055b6e05e3afd004f97b91281adbaed08136f6d))
+- **repo:** assign the E2E test server a dynamic port instead of 8010 ([589f245](https://github.com/d-zero-dev/nitpicker/commit/589f24508b8a9c7d0bb07aab2f562e6abe224f7e)), closes [#162](https://github.com/d-zero-dev/nitpicker/issues/162)
+
+- feat(cli)!: promote --main-content-selector to a crawl-time option ([99425cc](https://github.com/d-zero-dev/nitpicker/commit/99425cc57b776e8df15e9ef25e7a8ade653b7a0f))
+- feat(crawler)!: extract beholder main-content data into core schema ([4864b8a](https://github.com/d-zero-dev/nitpicker/commit/4864b8a10453867204a23ecba3b0601726cb914b))
+- refactor(core)!: drop analyze-main-contents from standard plugin list ([fe2beb4](https://github.com/d-zero-dev/nitpicker/commit/fe2beb4357ae853abb74e4ff41c002a5d1546c85))
+- refactor(repo)!: remove analyze-main-contents package ([dbdf155](https://github.com/d-zero-dev/nitpicker/commit/dbdf15569551a4d015fa1bd4836ec68b874a87ac))
+
+### Features
+
+- **cli:** add --templates flag for DOM-structure page classification ([5bdc870](https://github.com/d-zero-dev/nitpicker/commit/5bdc870cce4240bb383b77f60b5db6ec3039707f))
+- **core:** add DOM-structure template classification ([50d631a](https://github.com/d-zero-dev/nitpicker/commit/50d631aa19b5cbb9ae9acd52c0d11c23855b5d7e))
+- **crawler:** add page_templates SQL table for --templates classification ([a2a5772](https://github.com/d-zero-dev/nitpicker/commit/a2a5772267446aa4e80f830bc1159b33415a3c89))
+- **mcp-server:** add get_page_main_contents tool ([977b152](https://github.com/d-zero-dev/nitpicker/commit/977b1523dfc8e4e2cc997b1267cec75d479da49a))
+- **query:** expose main-content data through getPageMainContents and list views ([f0e3f67](https://github.com/d-zero-dev/nitpicker/commit/f0e3f67ff03b9be4a727f2cf2b712602eeb6f2f5))
+- **query:** expose templateKey on page-list/detail reads and support filtering ([e631305](https://github.com/d-zero-dev/nitpicker/commit/e631305cd435ba4b1cc0068f3aa70894bb3242ed))
+- **query:** let the viewer_pages fast path resolve a directory filter ([0f3b9bd](https://github.com/d-zero-dev/nitpicker/commit/0f3b9bdfb790be80d5711b5a98da9df26598ce8e))
+- **query:** track html-only page counts in the directory-tree read model ([5ba6d62](https://github.com/d-zero-dev/nitpicker/commit/5ba6d62daa963727e2927457ba68ff9ad8b93367))
+- **repo:** add migrate-to-0.14 script for the viewer read model rebuild ([f0530ba](https://github.com/d-zero-dev/nitpicker/commit/f0530ba85508f8310b9d289e8f066bc690be0515))
+- **report-google-sheets:** add main-content columns to page list sheet ([b6b2ae6](https://github.com/d-zero-dev/nitpicker/commit/b6b2ae6c99dc5f16f17f3eb7ee2c262a3ec68e71))
+- **viewer:** add collapse-to-depth and sort-order controls to directory tree ([8e60549](https://github.com/d-zero-dev/nitpicker/commit/8e605496698b5cfb131bd4088154b3022172b759))
+- **viewer:** add directory tree UI ([ff8e369](https://github.com/d-zero-dev/nitpicker/commit/ff8e36932ea13f57d05c5c6ebf7c3022028e39dd)), closes [#156](https://github.com/d-zero-dev/nitpicker/issues/156) [#107](https://github.com/d-zero-dev/nitpicker/issues/107)
+- **viewer:** add folder icons and move expand arrow to row end ([51f2492](https://github.com/d-zero-dev/nitpicker/commit/51f2492477d641345a710cb1b6b1822d9f43db89))
+- **viewer:** add templateKey column and filter to the Pages list ([789b2e8](https://github.com/d-zero-dev/nitpicker/commit/789b2e83f40341b8dd8e4c07d4e4ee907e0a4f86))
+- **viewer:** show a directory-filter notice above the Pages table ([2d737e4](https://github.com/d-zero-dev/nitpicker/commit/2d737e46073ecef56e22d3c47ca81bf86ed10189))
+- **viewer:** show main-content columns, sorting, and detail section ([2937af3](https://github.com/d-zero-dev/nitpicker/commit/2937af3d4da44ede205687ceee9a5ea52e433f4b))
+- **viewer:** simplify directory tree to a single pane, delegate pages to /pages ([9b5ba00](https://github.com/d-zero-dev/nitpicker/commit/9b5ba00e388fa35cd2381166dafe88da076697c7))
+
+### BREAKING CHANGES
+
+- `nitpicker analyze --main-content-selector` and
+  `nitpicker pipeline --main-content-selector` (as an analyze option) no
+  longer exist. Use `nitpicker crawl --main-content-selector` (or
+  `pipeline`'s own crawl-time flag of the same name) instead.
+- page_meta gains 17 new columns and 8 new adjunct
+  tables are created on next archive open; existing archives are
+  migrated additively (no REQUIRED_FORMAT_VERSION change).
+- NitpickerConfig no longer accepts a
+  '@nitpicker/analyze-main-contents' override — the plugin is gone
+  (see the analyze-main-contents package removal).
+- @nitpicker/analyze-main-contents is deleted with no
+  compatibility shim. Beholder 4.0.0 now extracts the same main-content
+  metrics during crawling, promoted into the core page schema instead of
+  a post-hoc analyze plugin.
+
 # [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
 
 ### Bug Fixes

@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
+
+### Bug Fixes
+
+- **repo:** assign the E2E test server a dynamic port instead of 8010 ([589f245](https://github.com/d-zero-dev/nitpicker/commit/589f24508b8a9c7d0bb07aab2f562e6abe224f7e)), closes [#162](https://github.com/d-zero-dev/nitpicker/issues/162)
+
 # [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
 
 ### Bug Fixes

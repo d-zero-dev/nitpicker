@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
+
+### Features
+
+- **viewer:** add collapse-to-depth and sort-order controls to directory tree ([8e60549](https://github.com/d-zero-dev/nitpicker/commit/8e605496698b5cfb131bd4088154b3022172b759))
+- **viewer:** add directory tree UI ([ff8e369](https://github.com/d-zero-dev/nitpicker/commit/ff8e36932ea13f57d05c5c6ebf7c3022028e39dd)), closes [#156](https://github.com/d-zero-dev/nitpicker/issues/156) [#107](https://github.com/d-zero-dev/nitpicker/issues/107)
+- **viewer:** add folder icons and move expand arrow to row end ([51f2492](https://github.com/d-zero-dev/nitpicker/commit/51f2492477d641345a710cb1b6b1822d9f43db89))
+- **viewer:** add templateKey column and filter to the Pages list ([789b2e8](https://github.com/d-zero-dev/nitpicker/commit/789b2e83f40341b8dd8e4c07d4e4ee907e0a4f86))
+- **viewer:** show a directory-filter notice above the Pages table ([2d737e4](https://github.com/d-zero-dev/nitpicker/commit/2d737e46073ecef56e22d3c47ca81bf86ed10189))
+- **viewer:** show main-content columns, sorting, and detail section ([2937af3](https://github.com/d-zero-dev/nitpicker/commit/2937af3d4da44ede205687ceee9a5ea52e433f4b))
+- **viewer:** simplify directory tree to a single pane, delegate pages to /pages ([9b5ba00](https://github.com/d-zero-dev/nitpicker/commit/9b5ba00e388fa35cd2381166dafe88da076697c7))
+
 # [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
 
 ### Bug Fixes

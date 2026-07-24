@@ -3,6 +3,24 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
+
+### Bug Fixes
+
+- **core:** remove stray NUL byte from intern-key join separator ([39ce081](https://github.com/d-zero-dev/nitpicker/commit/39ce08117142e948dd39ffe6eae817a41b459dfd))
+
+- refactor(core)!: drop analyze-main-contents from standard plugin list ([fe2beb4](https://github.com/d-zero-dev/nitpicker/commit/fe2beb4357ae853abb74e4ff41c002a5d1546c85))
+
+### Features
+
+- **core:** add DOM-structure template classification ([50d631a](https://github.com/d-zero-dev/nitpicker/commit/50d631aa19b5cbb9ae9acd52c0d11c23855b5d7e))
+
+### BREAKING CHANGES
+
+- NitpickerConfig no longer accepts a
+  '@nitpicker/analyze-main-contents' override — the plugin is gone
+  (see the analyze-main-contents package removal).
+
 # [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
 
 ### Features

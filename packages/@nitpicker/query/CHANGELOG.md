@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
+
+### Features
+
+- **query:** expose main-content data through getPageMainContents and list views ([f0e3f67](https://github.com/d-zero-dev/nitpicker/commit/f0e3f67ff03b9be4a727f2cf2b712602eeb6f2f5))
+- **query:** expose templateKey on page-list/detail reads and support filtering ([e631305](https://github.com/d-zero-dev/nitpicker/commit/e631305cd435ba4b1cc0068f3aa70894bb3242ed))
+- **query:** let the viewer_pages fast path resolve a directory filter ([0f3b9bd](https://github.com/d-zero-dev/nitpicker/commit/0f3b9bdfb790be80d5711b5a98da9df26598ce8e))
+- **query:** track html-only page counts in the directory-tree read model ([5ba6d62](https://github.com/d-zero-dev/nitpicker/commit/5ba6d62daa963727e2927457ba68ff9ad8b93367))
+
 # [0.13.0](https://github.com/d-zero-dev/nitpicker/compare/v0.12.0...v0.13.0) (2026-07-21)
 
 ### Bug Fixes
