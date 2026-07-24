@@ -1388,6 +1388,54 @@ h2 {
    (filtered to that subtree) rather than showing a page list in place, so
    this is a single-pane layout that scrolls with the page (`.content`),
    not in its own box. */
+.tree-collapse-control,
+.tree-sort-control {
+	display: block flex;
+	gap: 8px;
+	align-items: center;
+	margin-block-end: 12px;
+	font-size: var(--font-size-base);
+	color: var(--text-dim);
+}
+
+.tree-collapse-control input,
+.tree-sort-control select {
+	padding-block: 5px;
+	padding-inline: 8px;
+	font-size: var(--font-size-base);
+	color: var(--text);
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
+.tree-collapse-control input {
+	inline-size: 60px;
+}
+
+.tree-collapse-button,
+.tree-sort-button {
+	padding-block: 5px;
+	padding-inline: 10px;
+	font-size: var(--font-size-sm);
+	color: var(--text);
+	cursor: pointer;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
+.tree-collapse-button:hover,
+.tree-sort-button:hover {
+	border-color: var(--accent);
+}
+
+.tree-collapse-button:focus-visible,
+.tree-sort-button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
 .directory-tree-host {
 	font-family: monospace;
 	font-size: var(--font-size-sm);

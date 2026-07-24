@@ -1,10 +1,12 @@
+import type { DirectoryTreeSortOrder } from '../types.js';
 import type { DirectoryTreeNode } from '@nitpicker/query';
 
-import { INITIAL_DIRECTORY_TREE_DEPTH } from '@nitpicker/query/directory-tree-constants';
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 
 import { useDirectoryTreeChildren } from '../api/use-directory-tree-children.js';
 import { useI18n } from '../i18n/use-i18n.js';
+
+import { sortDirectoryTreeNodes } from './sort-directory-tree-nodes.js';
 
 /** Props for {@link DirectoryTreeNodeRow}. */
 export interface DirectoryTreeNodeRowProps {
@@ -27,6 +29,17 @@ export interface DirectoryTreeNodeRowProps {
 	 * state doc for the default a missing entry falls back to).
 	 */
 	expandedOverrides: Map<number, boolean>;
+	/**
+	 * A node with `depth` below this value defaults to expanded; at or past
+	 * it, collapsed. Owned by `DirectoryTreeView` — its initial value
+	 * matches `INITIAL_DIRECTORY_TREE_DEPTH` (the backend's initial-payload
+	 * cutoff, so the tree loads already expanded to match), but the
+	 * "collapse to depth" control can lower or raise it at any time by
+	 * resetting `expandedOverrides` alongside it.
+	 */
+	collapseDepthThreshold: number;
+	/** The sibling ordering applied within every level of the tree. */
+	sortOrder: DirectoryTreeSortOrder;
 	/** Toggles a node's expanded state, given its current value. */
 	onToggle: (node: DirectoryTreeNode, isExpanded: boolean) => void;
 	/**
@@ -43,14 +56,13 @@ export interface DirectoryTreeNodeRowProps {
  * additional tree rows, and the root itself has no toggle at all (see
  * `isRoot` below).
  *
- * A node's expanded state defaults to `node.depth < INITIAL_DIRECTORY_TREE_DEPTH`
- * (so the initial depth ≤ `INITIAL_DIRECTORY_TREE_DEPTH` payload renders as
- * an already-expanded tree, matching the "initial load shows the tree"
- * acceptance criteria) and `false` at the boundary depth and beyond — a
- * boundary node's children are fetched only after an explicit click, never
- * eagerly on load. Reads the same `@nitpicker/query` constant the backend's
- * `/api/directory-tree` cutoff uses, rather than an independent literal, so
- * the two can't silently drift apart. `expandedOverrides` records only the
+ * A node's expanded state defaults to `node.depth < collapseDepthThreshold`
+ * (initially `INITIAL_DIRECTORY_TREE_DEPTH`, so the initial depth ≤ that
+ * payload renders as an already-expanded tree, matching the "initial load
+ * shows the tree" acceptance criteria) and `false` at or past the
+ * threshold — a boundary node's children are fetched only after crossing
+ * that threshold (an explicit click, or the "collapse to depth" control
+ * raising it), never eagerly on load. `expandedOverrides` records only the
  * nodes a user has explicitly toggled, so this default can flip in either
  * direction without needing to pre-populate every node id up front. A
  * host's root node is the one exception — it is always expanded and has no
@@ -73,6 +85,8 @@ export interface DirectoryTreeNodeRowProps {
  * @param props.node
  * @param props.childrenByParent
  * @param props.expandedOverrides
+ * @param props.collapseDepthThreshold
+ * @param props.sortOrder
  * @param props.onToggle
  * @param props.onSelect
  * @returns The tree row element, plus its expanded subtree when applicable.
@@ -81,6 +95,8 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 	node,
 	childrenByParent,
 	expandedOverrides,
+	collapseDepthThreshold,
+	sortOrder,
 	onToggle,
 	onSelect,
 }: DirectoryTreeNodeRowProps) {
@@ -90,16 +106,29 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 	// under would hide the entire tree behind a single click, which isn't a
 	// useful "collapsed" state the way it is for any other directory.
 	const isRoot = node.parentNodeId === null;
-	const defaultExpanded = node.depth < INITIAL_DIRECTORY_TREE_DEPTH;
+	const defaultExpanded = node.depth < collapseDepthThreshold;
 	const isExpanded = isRoot || (expandedOverrides.get(node.nodeId) ?? defaultExpanded);
-	const knownChildren = childrenByParent.get(node.nodeId) ?? [];
+	const knownChildren = useMemo(
+		() => childrenByParent.get(node.nodeId) ?? [],
+		[childrenByParent, node.nodeId],
+	);
 	const needsFetch = node.hasChildren && knownChildren.length === 0;
 
 	const childrenQuery = useDirectoryTreeChildren(node.nodeId, {
 		enabled: isExpanded && needsFetch,
 	});
 
-	const children = needsFetch ? (childrenQuery.data?.nodes ?? []) : knownChildren;
+	// `knownChildren` is already sorted by `DirectoryTree` (the same grouping
+	// covers every depth), but a dynamically fetched page arrives raw from
+	// `/api/directory-tree/children` and must be sorted here before render.
+	const fetchedChildren = childrenQuery.data?.nodes;
+	const children = useMemo(
+		() =>
+			needsFetch
+				? sortDirectoryTreeNodes(fetchedChildren ?? [], sortOrder)
+				: knownChildren,
+		[needsFetch, fetchedChildren, sortOrder, knownChildren],
+	);
 
 	const name = node.name || '/';
 	// A leaf directory (no children to expand into) has no open/closed
@@ -120,7 +149,9 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 					</span>
 					<span className="tree-name">{name}</span>
 					<span className="tree-count">
-						{t('views.directoryTree.pageCount', { count: node.descendantHtmlPageCount })}
+						{t('views.directoryTree.pageCount', {
+							count: node.descendantHtmlPageCount.toLocaleString(),
+						})}
 					</span>
 				</button>
 				{node.hasChildren && !isRoot ? (
@@ -173,6 +204,8 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 							node={child}
 							childrenByParent={childrenByParent}
 							expandedOverrides={expandedOverrides}
+							collapseDepthThreshold={collapseDepthThreshold}
+							sortOrder={sortOrder}
 							onToggle={onToggle}
 							onSelect={onSelect}
 						/>

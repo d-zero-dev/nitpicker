@@ -155,6 +155,13 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				collapseNode: 'Collapse {name}',
 				noRoots:
 					'No directory data available. Run `nitpicker viewer-build` to generate it.',
+				collapseDepthInputLabel: 'Depth',
+				collapseToDepth: 'Collapse to depth',
+				sortOrderLabel: 'Sort order',
+				sortOrderPath: 'Path order',
+				sortOrderPagesDesc: 'Most pages first',
+				sortOrderPagesAsc: 'Fewest pages first',
+				applySortOrder: 'Sort',
 			},
 			pageDetail: {
 				title: 'Page detail',
@@ -483,6 +490,13 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				collapseNode: '{name} を折りたたむ',
 				noRoots:
 					'ディレクトリデータがありません。`nitpicker viewer-build` を実行して生成してください。',
+				collapseDepthInputLabel: '階層数',
+				collapseToDepth: '階層まで全て閉じる',
+				sortOrderLabel: '並び順',
+				sortOrderPath: 'パス順',
+				sortOrderPagesDesc: 'ページが多い順',
+				sortOrderPagesAsc: 'ページが少ない順',
+				applySortOrder: '並び替え',
 			},
 			pageDetail: {
 				title: 'ページ詳細',

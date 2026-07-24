@@ -105,3 +105,11 @@ export type PaginationMode = 'mpa' | 'virtual';
  * the historical `PAGE_SIZE` used by virtual-mode infinite queries).
  */
 export type PageSize = 50 | 100 | 200;
+
+/**
+ * Directory-tree sibling ordering. `'path'` is the backend's native order
+ * (`path_sort_key`) and requires no client-side reordering; the page-count
+ * orders are computed purely from `descendantHtmlPageCount`, already present
+ * on every node, so no additional request is needed.
+ */
+export type DirectoryTreeSortOrder = 'path' | 'pagesDesc' | 'pagesAsc';

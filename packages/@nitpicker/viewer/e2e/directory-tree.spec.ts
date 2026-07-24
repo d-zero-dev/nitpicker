@@ -155,4 +155,70 @@ test.describe('Nitpicker Viewer directory tree', () => {
 			page.getByRole('heading', { name: 'Directory Tree', level: 1 }),
 		).toBeVisible();
 	});
+
+	test('階層まで全て閉じるコントロールで指定した深さまで畳まれる', async ({ page }) => {
+		await page.goto('/directory-tree');
+		// `guide` (depth 2, under `docs`) is expanded by default (depth < 3).
+		await expect(treeRow(page, 'guide')).toBeVisible();
+
+		await page.locator('#tree-collapse-depth-input').fill('1');
+		await page.locator('.tree-collapse-button').click();
+
+		// depth 1 (docs) itself is still visible, but its depth-2 child collapses.
+		await expect(treeRow(page, 'docs')).toBeVisible();
+		await expect(treeRow(page, 'guide')).toHaveCount(0);
+	});
+
+	test('並び替えコントロールでページ数の多い順にルート直下の兄弟を並び替えられる', async ({
+		page,
+	}) => {
+		await page.goto('/directory-tree');
+		const treeNames = () => page.locator('.tree-name').allTextContents();
+
+		// Wait for the initial tree payload to render before reading order —
+		// otherwise `treeNames()` can race the fetch and see an empty list.
+		await expect(treeRow(page, 'docs')).toBeVisible();
+
+		// Default 'path' order sorts siblings alphabetically: 'blog' before 'docs'.
+		const initial = await treeNames();
+		expect(initial.indexOf('blog')).toBeLessThan(initial.indexOf('docs'));
+
+		await page.locator('#tree-sort-order-select').selectOption('pagesDesc');
+		await page.locator('.tree-sort-button').click();
+
+		// 'docs' (120 pages) now sorts before 'blog' (2 pages). The sort applies
+		// via a URL update (React Router navigation), which lands a render or
+		// two after the click resolves — poll instead of reading `treeNames()`
+		// exactly once right after the click.
+		await expect
+			.poll(async () => {
+				const sorted = await treeNames();
+				return sorted.indexOf('docs') < sorted.indexOf('blog');
+			})
+			.toBe(true);
+	});
+
+	test('ノード選択で Pages ビューへ遷移後、ブラウザバックすると展開状態が保持される', async ({
+		page,
+	}) => {
+		await page.goto('/directory-tree');
+
+		// Expand the `07` boundary node (depth 3, collapsed by default) — its
+		// child `22` requires a dynamic fetch and must not be visible yet.
+		await expect(page.locator('.tree-name', { hasText: /^22$/ })).toHaveCount(0);
+		await treeRow(page, '07').locator('.tree-toggle').click();
+		await expect(page.locator('.tree-name', { hasText: /^22$/ })).toBeVisible();
+
+		await treeRow(page, 'docs').locator('.tree-label').click();
+		await expect(page).toHaveURL(/\/pages\?directory=/);
+
+		await page.goBack();
+		await expect(
+			page.getByRole('heading', { name: 'Directory Tree', level: 1 }),
+		).toBeVisible();
+
+		// The explicit expand override for `07` survived the round trip via the
+		// URL (`?expanded=`), so `22` is still visible without re-clicking.
+		await expect(page.locator('.tree-name', { hasText: /^22$/ })).toBeVisible();
+	});
 });
