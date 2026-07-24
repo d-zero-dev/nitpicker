@@ -38,8 +38,10 @@ export interface DirectoryTreeNodeRowProps {
 
 /**
  * One recursive row in the directory tree. Renders an expand arrow only when
- * `node.hasChildren` is `true` — direct pages surface via the Pages view
- * (navigated to on click), never as additional tree rows.
+ * `node.hasChildren` is `true` AND the node isn't a host's root — direct
+ * pages surface via the Pages view (navigated to on click), never as
+ * additional tree rows, and the root itself has no toggle at all (see
+ * `isRoot` below).
  *
  * A node's expanded state defaults to `node.depth < INITIAL_DIRECTORY_TREE_DEPTH`
  * (so the initial depth ≤ `INITIAL_DIRECTORY_TREE_DEPTH` payload renders as
@@ -50,7 +52,10 @@ export interface DirectoryTreeNodeRowProps {
  * `/api/directory-tree` cutoff uses, rather than an independent literal, so
  * the two can't silently drift apart. `expandedOverrides` records only the
  * nodes a user has explicitly toggled, so this default can flip in either
- * direction without needing to pre-populate every node id up front.
+ * direction without needing to pre-populate every node id up front. A
+ * host's root node is the one exception — it is always expanded and has no
+ * toggle to collapse it, since collapsing the single row every other row
+ * nests under would hide the entire tree behind one click.
  *
  * Whether this node's children need a network fetch is decided purely by
  * whether they are already present in `childrenByParent` — never by
@@ -80,8 +85,13 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 	onSelect,
 }: DirectoryTreeNodeRowProps) {
 	const { t } = useI18n();
+	// A host's root node (the top of the tree, not just a shallow depth) is
+	// always shown expanded — collapsing the one row every other row nests
+	// under would hide the entire tree behind a single click, which isn't a
+	// useful "collapsed" state the way it is for any other directory.
+	const isRoot = node.parentNodeId === null;
 	const defaultExpanded = node.depth < INITIAL_DIRECTORY_TREE_DEPTH;
-	const isExpanded = expandedOverrides.get(node.nodeId) ?? defaultExpanded;
+	const isExpanded = isRoot || (expandedOverrides.get(node.nodeId) ?? defaultExpanded);
 	const knownChildren = childrenByParent.get(node.nodeId) ?? [];
 	const needsFetch = node.hasChildren && knownChildren.length === 0;
 
@@ -92,11 +102,28 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 	const children = needsFetch ? (childrenQuery.data?.nodes ?? []) : knownChildren;
 
 	const name = node.name || '/';
+	// A leaf directory (no children to expand into) has no open/closed
+	// state of its own, so it always reads as "closed".
+	const folderIcon = node.hasChildren && isExpanded ? '📂' : '📁';
 
 	return (
 		<li className="tree-node">
 			<div className="tree-row">
-				{node.hasChildren ? (
+				<button
+					type="button"
+					className="tree-label link-button"
+					onClick={() => {
+						onSelect(node);
+					}}>
+					<span className="tree-icon" aria-hidden="true">
+						{folderIcon}
+					</span>
+					<span className="tree-name">{name}</span>
+					<span className="tree-count">
+						{t('views.directoryTree.pageCount', { count: node.descendantHtmlPageCount })}
+					</span>
+				</button>
+				{node.hasChildren && !isRoot ? (
 					<button
 						type="button"
 						className="tree-toggle"
@@ -109,22 +136,26 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 						onClick={() => {
 							onToggle(node, isExpanded);
 						}}>
-						{isExpanded ? '▾' : '▸'}
+						<svg
+							className="tree-toggle-icon"
+							viewBox="0 0 24 24"
+							width="18"
+							height="18"
+							aria-hidden="true"
+							style={{ transform: isExpanded ? 'rotate(90deg)' : undefined }}>
+							<path
+								d="M9 6l6 6-6 6"
+								fill="none"
+								stroke="currentColor"
+								strokeWidth="2.5"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+							/>
+						</svg>
 					</button>
 				) : (
 					<span className="tree-toggle-spacer" aria-hidden="true" />
 				)}
-				<button
-					type="button"
-					className="tree-label link-button"
-					onClick={() => {
-						onSelect(node);
-					}}>
-					<span className="tree-name">{name}</span>
-					<span className="tree-count">
-						{t('views.directoryTree.pageCount', { count: node.descendantHtmlPageCount })}
-					</span>
-				</button>
 			</div>
 			{isExpanded && node.hasChildren && (
 				<ul className="tree-children">

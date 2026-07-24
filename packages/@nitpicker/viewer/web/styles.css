@@ -1427,13 +1427,20 @@ h2 {
 .tree-toggle-spacer {
 	display: block flow-root;
 	flex: 0 0 auto;
-	inline-size: 18px;
-	block-size: 18px;
+	inline-size: 26px;
+	block-size: 26px;
+
+	/* Pinned to the row's end regardless of how much space the label takes,
+	   so it reads as "expand this" after the name/count rather than
+	   leading with a control before the name is even visible. */
+	margin-inline-start: auto;
 	text-align: center;
 }
 
 .tree-toggle {
-	font: inherit;
+	display: block flex;
+	align-items: center;
+	justify-content: center;
 	color: var(--text-dim);
 	cursor: pointer;
 	background: none;
@@ -1444,6 +1451,16 @@ h2 {
 .tree-toggle:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 1px;
+}
+
+.tree-toggle-icon {
+	transition: transform 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.tree-toggle-icon {
+		transition: none;
+	}
 }
 
 .tree-label {
@@ -1464,6 +1481,11 @@ h2 {
 .tree-label:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
+}
+
+.tree-icon {
+	font-size: var(--font-size-base);
+	line-height: 1;
 }
 
 .tree-count {

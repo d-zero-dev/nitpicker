@@ -69,6 +69,17 @@ test.describe('Nitpicker Viewer directory tree', () => {
 		await expect(guideRow.locator('.tree-toggle-spacer')).toBeVisible();
 	});
 
+	test('rootノードには展開矢印が表示されず、常に展開されている', async ({ page }) => {
+		await page.goto('/directory-tree');
+		const rootRow = treeRow(page, '/');
+		await expect(rootRow.locator('.tree-toggle')).toHaveCount(0);
+		await expect(rootRow.locator('.tree-toggle-spacer')).toBeVisible();
+		// root's own children (docs/blog) are visible without any click —
+		// there is no way to collapse root to hide them.
+		await expect(treeRow(page, 'docs')).toBeVisible();
+		await expect(treeRow(page, 'blog')).toBeVisible();
+	});
+
 	test('未展開の境界ノードをクリックすると子ディレクトリが動的に取得される', async ({
 		page,
 	}) => {
