@@ -2718,3 +2718,62 @@ export interface UrlSortKey {
 	/** {@link import('@d-zero/shared/parse-url').ExURL.protocol}. */
 	protocol: string;
 }
+
+/**
+ * One `page_templates.template_key` group's summary — see
+ * {@link import('./list-page-template-clusters.js').listPageTemplateClusters}.
+ *
+ * `templateKey` itself is an opaque `@d-zero/page-cluster` blocking key
+ * (e.g. `["css:166e4235afcb8b15","cluster:0"]`) — the `css:` hash cannot be
+ * reversed to a filename, and a `path:` segment reflects only the shallow
+ * blocking depth, not this cluster's actual member set after cross-block
+ * merging. `commonDirectories` / `commonStylesheetUrls` are computed fresh
+ * from this cluster's actual member pages instead of parsed out of the key,
+ * which is what makes them a meaningful, human-readable substitute for it.
+ */
+export interface TemplateClusterSummary {
+	/** The raw `page_templates.template_key` value for this cluster. */
+	templateKey: string;
+	/** Number of pages classified under `templateKey`. */
+	pageCount: number;
+	/**
+	 * Deepest directory shared by every member page, one entry per distinct
+	 * host — see {@link import('./compute-common-directory.js').computeCommonDirectory}.
+	 */
+	commonDirectories: string[];
+	/**
+	 * Stylesheet URLs referenced by every member page — see
+	 * {@link import('./compute-css-intersection.js').computeCssIntersection}
+	 * for why this is a simplified approximation of the cluster's actual
+	 * `css:<hash>` basis, not an exact reconstruction of it.
+	 */
+	commonStylesheetUrls: string[];
+	/**
+	 * Deduplicated filenames derived from `commonStylesheetUrls` — see
+	 * {@link import('./compute-stylesheet-file-names.js').computeStylesheetFileNames}.
+	 * Precomputed server-side rather than in the viewer frontend because the
+	 * underlying URL parser depends on a Node-only module the browser build
+	 * cannot use (see that function's own JSDoc).
+	 */
+	commonStylesheetFileNames: string[];
+}
+
+/**
+ * Result of {@link import('./list-page-template-clusters.js').listPageTemplateClusters}.
+ */
+export interface TemplateClusterListResult {
+	/**
+	 * Whether `--templates` classification has ever been run on this
+	 * archive. `false` covers both "no `page_templates` table" (a
+	 * pre-`--templates` archive) and "table exists but has zero rows" (a
+	 * fresh archive always provisions the table via `createAdjunctTables`,
+	 * independent of whether `--templates` was passed to `analyze`) — table
+	 * presence alone cannot tell those apart, and the viewer must not
+	 * confuse either with "ran, and found zero clusters" (a case that
+	 * cannot otherwise occur: any row in `page_templates` belongs to some
+	 * cluster).
+	 */
+	hasClassification: boolean;
+	/** Empty when `hasClassification` is `false`. */
+	clusters: TemplateClusterSummary[];
+}
