@@ -143,7 +143,9 @@ DOM構造類似性によるページのテンプレート分類（`--templates` 
 5. `core/src/nitpicker.ts`（`analyze()` の Phase 3。`getPagesWithRefs` のバッチコールバック内ではなく、全バッチ蓄積後に1回だけ実行する — バッチ境界を跨いだテンプレートキーの一貫性を保つため。分類結果は `archive.replacePageTemplates()` で直接 SQL に書き込み、`Table`/`Report` には一切乗らない）
 6. `cli/src/commands/analyze.ts`（`--templates` フラグ、プラグイン0件時のガードのバイパス）
 7. 読み取り: `query/src/list-pages.ts` ほか `PAGE_LIST_SELECT_COLUMNS` を共有する全クエリ（`list-pages-by-tag.ts` / `list-pages-by-jsonld-type.ts` / `join-viewer-page-ids-to-list-items.ts`）と `get-page-detail.ts` が `page_templates` を `LEFT JOIN` して `templateKey` を返す。ソート対応なし（`viewer_pages` read model 側のスキーマ変更が必要になるため意図的に未対応）
-8. viewer 表示: `viewer/web/routes/pages-view.tsx` の Pages 一覧に列を1つ追加するのみ。専用 route・グループ化 drill-down 画面・MCP 専用ツール・CLI サブコマンドは意図的に未実装
+8. viewer 表示（Pages 列）: `viewer/web/routes/pages-view.tsx` の Pages 一覧に列を1つ追加するのみ
+9. クラスタ分析: `query/src/list-page-template-clusters.ts`（`templateKey` ごとのページ数・共通ディレクトリ（`compute-common-directory.ts`）・共通CSS積集合（`compute-css-intersection.ts` + `collect-page-stylesheet-urls-by-page-id.ts`）をクラスタの実メンバーページから再計算する。`templateKey` 文字列自体は `@d-zero/page-cluster` のブロッキングキーで、`css:` 以下は SHA-256 ハッシュのため人間には読めない — これがクラスタ単位の再計算が必要な理由。共通CSSの積集合は `@d-zero/page-cluster` が実際にハッシュ化前に行う first-party フィルタ・文書頻度90%フィルタ（非公開実装）を通していない簡易版であり、サイト全体で共通するCSSも含まれうる、と `compute-css-intersection.ts` の JSDoc に明記。`page_templates` はどのアーカイブにも `createAdjunctTables` で常時作成されるため、`hasClassification`（`--templates` 実行済みか）はテーブル有無ではなく行数0件で判定する）
+10. viewer 表示（クラスタ分析画面）: `viewer/src/routes/register-template-clusters-route.ts`（`GET /api/template-clusters` 一発取得。`page_templates` は read model 非経由のためキャッシュは `viewer/src/template-clusters-cache.ts` のメモリ LRU のみ、stub mode はbypass）+ `viewer/web/routes/template-clusters-view.tsx`（`templateKey` ごとに `<details>` セクション表示、見出しは共通CSSファイル名優先・無ければ共通ディレクトリにフォールバック、Pages 一覧への `templateKey` フィルタ付きリンク）。MCP 専用ツール・CLI サブコマンドは意図的に未実装
 
 ### viewer のビュー / API 追加
 
