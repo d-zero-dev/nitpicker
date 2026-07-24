@@ -15,6 +15,7 @@ import type {
 import {
 	countPagesByJsonLdType,
 	countPagesByTag,
+	findDuplicateBodies,
 	getDuplicatesFastPath,
 	getErrorKindsFastPath,
 	getHeaderChecksFastPath,
@@ -102,6 +103,10 @@ export async function dispatchQuery(
 		}
 		case 'duplicates': {
 			return getDuplicatesFastPath(accessor, options as GetDuplicatesFastPathOptions);
+		}
+		case 'duplicate-bodies': {
+			const { limit, offset } = options as { limit?: number; offset?: number };
+			return findDuplicateBodies(accessor, limit, offset);
 		}
 		case 'mismatches': {
 			const { type, ...rest } = options as {

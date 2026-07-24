@@ -11,6 +11,7 @@ export type QuerySubCommand =
 	| 'images'
 	| 'violations'
 	| 'duplicates'
+	| 'duplicate-bodies'
 	| 'mismatches'
 	| 'headers'
 	| 'resource-referrers'
@@ -42,6 +43,7 @@ export const VALID_SUB_COMMANDS = [
 	'images',
 	'violations',
 	'duplicates',
+	'duplicate-bodies',
 	'mismatches',
 	'headers',
 	'resource-referrers',

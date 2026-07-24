@@ -311,4 +311,11 @@ describe('mapFlagsToQueryOptions', () => {
 			offset: 0,
 		});
 	});
+
+	it('returns limit/offset only for duplicate-bodies (no required filters)', () => {
+		expect(mapFlagsToQueryOptions('duplicate-bodies', { limit: 30, offset: 5 })).toEqual({
+			limit: 30,
+			offset: 5,
+		});
+	});
 });

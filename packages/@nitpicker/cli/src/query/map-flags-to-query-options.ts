@@ -267,7 +267,8 @@ export function mapFlagsToQueryOptions(
 		case 'isolated-pages':
 		case 'isolated-clusters':
 		case 'unused-resources':
-		case 'inventory-runs': {
+		case 'inventory-runs':
+		case 'duplicate-bodies': {
 			// Pagination-only — no required filters.
 			return {
 				limit: flags.limit,
