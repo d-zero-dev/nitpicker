@@ -140,4 +140,11 @@ describe('joinViewerPageIdsToListItems', () => {
 		});
 		expect(items[1]).toMatchObject({ hasCSP: false });
 	});
+
+	it('does not throw and returns templateKey: null when page_templates does not exist (archive predating --templates, or a read-only connection that skipped self-heal)', async () => {
+		const knex = archive.getKnex();
+		await knex.schema.dropTable('page_templates');
+		const items = await joinViewerPageIdsToListItems(knex, [idA, idB]);
+		expect(items.map((i) => i.templateKey)).toEqual([null, null]);
+	});
 });

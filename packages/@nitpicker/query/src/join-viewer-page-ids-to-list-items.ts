@@ -6,6 +6,7 @@ import {
 	PAGE_LIST_SELECT_COLUMNS,
 	mapPageRowToListItem,
 } from './map-page-row-to-list-item.js';
+import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
 
 /**
  * Joins an already ID-limited, already-ordered `page_id` list back to the
@@ -26,7 +27,8 @@ export async function joinViewerPageIdsToListItems(
 	if (pageIds.length === 0) {
 		return [];
 	}
-	const rows: (PageListRow & { id: number })[] = await knex('content_items as ci')
+	const hasPageTemplates = await hasPageTemplatesTable(knex);
+	let query = knex('content_items as ci')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
 		.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
 		.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
@@ -53,11 +55,16 @@ export async function joinViewerPageIdsToListItems(
 			'twitter_image_ur.id',
 			'pm.twitter_image_url_id',
 		)
-		.leftJoin('url_refs as manifest_ur', 'manifest_ur.id', 'pm.manifest_url_id')
+		.leftJoin('url_refs as manifest_ur', 'manifest_ur.id', 'pm.manifest_url_id');
+	if (hasPageTemplates) {
+		query = query.leftJoin('page_templates as pt', 'pt.page_id', 'ci.id');
+	}
+	const rows: (PageListRow & { id: number })[] = await query
 		.whereIn('ci.id', pageIds)
 		.select(
 			'ci.id as id',
 			...PAGE_LIST_SELECT_COLUMNS,
+			templateKeySelectColumn(knex, hasPageTemplates),
 			...buildHeaderPresenceSelects(knex, 'hf'),
 		);
 	const rowsById = new Map(rows.map((row) => [row.id, row]));

@@ -23,5 +23,6 @@ export function buildViewerPagesFilterKey(
 		missingDescription: filters.missingDescription,
 		noindex: filters.noindex,
 		source: filters.source,
+		templateKey: filters.templateKey,
 	});
 }

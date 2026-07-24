@@ -443,3 +443,187 @@ describe('listPages: ページ性は content-type（エラーページは残し�
 		expect(paths).not.toContain('/doc.pdf');
 	});
 });
+
+describe('listPages: templateKey（page_templates の LEFT JOIN）', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_list_pages_template_key__');
+	const archiveFilePath = path.resolve(dir, 'list-pages-template-key-test.nitpicker');
+
+	const META = {
+		lang: null,
+		title: null,
+		description: null,
+		keywords: null,
+		noindex: false,
+		nofollow: false,
+		noarchive: false,
+		canonical: null,
+		alternate: null,
+		'og:type': null,
+		'og:title': null,
+		'og:site_name': null,
+		'og:description': null,
+		'og:url': null,
+		'og:image': null,
+		'twitter:card': null,
+	};
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		for (const url of [
+			'https://example.com/classified',
+			'https://example.com/unclassified',
+		]) {
+			await archive.setPage({
+				url: parseUrl(url)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+
+		await archive.replacePageTemplates(
+			new Map([['https://example.com/classified', 'template-a']]),
+		);
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('page_templates に行があるページは templateKey を返す', async () => {
+		const result = await listPages(archive);
+		const classified = result.items.find((p) => p.url.endsWith('/classified'));
+		expect(classified?.templateKey).toBe('template-a');
+	});
+
+	it('page_templates に行がないページは templateKey が null になる', async () => {
+		const result = await listPages(archive);
+		const unclassified = result.items.find((p) => p.url.endsWith('/unclassified'));
+		expect(unclassified?.templateKey).toBeNull();
+	});
+});
+
+describe('listPages: page_templates テーブル自体が存在しないアーカイブ（--templates 未実行の旧アーカイブ、read-only オープンで自己修復が走らないケースの再現）', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_list_pages_no_template_table__');
+	const archiveFilePath = path.resolve(
+		dir,
+		'list-pages-no-template-table-test.nitpicker',
+	);
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: {
+				lang: null,
+				title: null,
+				description: null,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': null,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		// Simulates an archive crawled/analyzed before `--templates` shipped:
+		// drop the table this connection would otherwise self-heal on the
+		// next write-mode open, mirroring a viewer read-only connection that
+		// never runs that self-heal at all (see `hasPageTemplatesTable`'s doc).
+		await archive.getKnex().schema.dropTable('page_templates');
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('page_templates テーブルが無くても例外を投げず、templateKey は null になる', async () => {
+		const result = await listPages(archive);
+		expect(result.items).toHaveLength(1);
+		expect(result.items[0]?.templateKey).toBeNull();
+	});
+});

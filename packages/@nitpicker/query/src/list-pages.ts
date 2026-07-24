@@ -15,6 +15,7 @@ import {
 	PAGE_LIST_SELECT_COLUMNS,
 	mapPageRowToListItem,
 } from './map-page-row-to-list-item.js';
+import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
 import { paginateQuery } from './paginate-query.js';
 import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
 
@@ -26,6 +27,8 @@ type PageFacetRow = {
 	lang: string | null;
 	/** SQLite boolean: `1` for external pages, `0` for internal. */
 	isExternal: 0 | 1;
+	/** `--templates` classification group key, or `null` when absent/unclassified. */
+	templateKey: string | null;
 };
 
 /**
@@ -47,11 +50,14 @@ function isPresent<T>(value: T | null | undefined): value is T {
  * `PageListRow` shape.
  * @param knex - Knex instance.
  * @param contentTypeCategory - Optional category override.
+ * @param hasPageTemplates - Result of {@link hasPageTemplatesTable} for this
+ *   connection; gates the `page_templates` join (see that function's doc).
  * @returns Query builder scoped to page-list rows.
  */
 function createPageListBaseQuery(
 	knex: ReturnType<ArchiveAccessor['getKnex']>,
-	contentTypeCategory?: ListPagesOptions['contentTypeCategory'],
+	contentTypeCategory: ListPagesOptions['contentTypeCategory'] | undefined,
+	hasPageTemplates: boolean,
 ) {
 	const baseQuery = knex('content_items as ci')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
@@ -83,6 +89,9 @@ function createPageListBaseQuery(
 		.leftJoin('url_refs as manifest_ur', 'manifest_ur.id', 'pm.manifest_url_id')
 		.where('ci.scraped', 1)
 		.whereNull('ci.redirect_dest_id');
+	if (hasPageTemplates) {
+		baseQuery.leftJoin('page_templates as pt', 'pt.page_id', 'ci.id');
+	}
 	if (contentTypeCategory) {
 		applyCategoryFilter(baseQuery, contentTypeCategory);
 	} else {
@@ -118,8 +127,13 @@ export async function listPages(
 	const knex = accessor.getKnex();
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
+	const hasPageTemplates = await hasPageTemplatesTable(knex);
 
-	const baseQuery = createPageListBaseQuery(knex, options.contentTypeCategory);
+	const baseQuery = createPageListBaseQuery(
+		knex,
+		options.contentTypeCategory,
+		hasPageTemplates,
+	);
 
 	if (options.status != null) {
 		baseQuery.where('ci.status', options.status);
@@ -158,6 +172,17 @@ export async function listPages(
 			: `${options.directory}/`;
 		baseQuery.where('ur.url', 'like', `%${dir}%`);
 	}
+	if (options.templateKey) {
+		// `pt` only exists in the FROM clause when `hasPageTemplates` — see
+		// `createPageListBaseQuery`. Without the table, no page has a
+		// `templateKey` classification, so the filter deterministically
+		// yields zero rows instead of referencing a missing column.
+		if (hasPageTemplates) {
+			baseQuery.where('pt.template_key', options.templateKey);
+		} else {
+			baseQuery.whereRaw('0 = 1');
+		}
+	}
 	for (const key of HEADER_PRESENCE_KEYS) {
 		const expected = options[key];
 		if (expected != null) {
@@ -182,6 +207,7 @@ export async function listPages(
 				applyListOrder(
 					q.select(
 						...PAGE_LIST_SELECT_COLUMNS,
+						templateKeySelectColumn(knex, hasPageTemplates),
 						...buildHeaderPresenceSelects(knex, 'hf'),
 					),
 					knex,
@@ -252,7 +278,7 @@ export async function listPages(
 			offset,
 			mapRow: mapPageRowToListItem,
 		}),
-		getPageListFacets(knex, options.contentTypeCategory),
+		getPageListFacets(knex, options.contentTypeCategory, hasPageTemplates),
 	]);
 	return { ...result, facets };
 }
@@ -261,18 +287,21 @@ export async function listPages(
  * Lists dynamic enum filter candidates for the Pages table.
  * @param knex - Knex instance.
  * @param contentTypeCategory - Optional category override.
+ * @param hasPageTemplates - Result of {@link hasPageTemplatesTable} for this connection.
  * @returns Facet candidates.
  */
 async function getPageListFacets(
 	knex: ReturnType<ArchiveAccessor['getKnex']>,
-	contentTypeCategory?: ListPagesOptions['contentTypeCategory'],
+	contentTypeCategory: ListPagesOptions['contentTypeCategory'] | undefined,
+	hasPageTemplates: boolean,
 ): Promise<PageListFacets> {
-	const rows = (await createPageListBaseQuery(knex, contentTypeCategory)
+	const rows = (await createPageListBaseQuery(knex, contentTypeCategory, hasPageTemplates)
 		.clone()
 		.distinct(
 			'ci.status as status',
 			'pm.lang as lang',
 			'ci.is_external as isExternal',
+			templateKeySelectColumn(knex, hasPageTemplates),
 		)) as PageFacetRow[];
 	return {
 		statuses: [...new Set(rows.map((row) => row.status).filter(isPresent))].toSorted(
@@ -284,5 +313,8 @@ async function getPageListFacets(
 		types: [...new Set(rows.map((row) => Boolean(row.isExternal)))].toSorted(
 			(a, b) => Number(a) - Number(b),
 		),
+		templateKeys: [
+			...new Set(rows.map((row) => row.templateKey).filter(isPresent)),
+		].toSorted((a, b) => a.localeCompare(b)),
 	};
 }

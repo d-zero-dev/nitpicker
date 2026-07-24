@@ -70,6 +70,14 @@ export const PAGE_LIST_COLUMNS: readonly string[] = [
  * `text_refs` (`title_ref` / `description_ref` / `keywords_ref` /
  * `robots_raw_ref` / `og_title_ref` / `og_description_ref`).
  *
+ * `templateKey` (from `page_templates`, `pt`) is deliberately NOT in this
+ * list: that table may not exist yet on archives predating `--templates`
+ * classification or on read-only connections (schema self-heal is skipped
+ * — see `hasPageTemplatesTable` in `./page-templates-join.js`), so every
+ * caller appends its own `templateKeySelectColumn(...)` result instead of
+ * a fixed string, to fall back to a `NULL` literal when the table is
+ * absent.
+ *
  * All three page-list queries (`listPages`, `listPagesByTag`,
  * `listPagesByJsonLdType`) share this projection so their emitted DTO shape
  * stays lock-step with {@link PAGE_LIST_COLUMNS}.
@@ -199,5 +207,6 @@ export function mapPageRowToListItem(row: PageListRow): PageListItem {
 		hasXFrameOptions: !!row.hasXFrameOptions,
 		hasXContentTypeOptions: !!row.hasXContentTypeOptions,
 		hasHSTS: !!row.hasHSTS,
+		templateKey: row.templateKey,
 	};
 }

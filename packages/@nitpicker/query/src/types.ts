@@ -544,6 +544,13 @@ export interface ListPagesOptions {
 	urlPattern?: string;
 	/** Directory path prefix to filter by. */
 	directory?: string;
+	/**
+	 * Filter by exact `--templates` DOM-structure classification group key.
+	 * Also supported by {@link ListViewerPagesOptions}'s read-model fast
+	 * path via a `page_id`-PK join to `page_templates` — see
+	 * `applyViewerPagesFilters`.
+	 */
+	templateKey?: string;
 	/** Field to sort results by. */
 	sortBy?:
 		| 'url'
@@ -668,6 +675,7 @@ export interface PageListRow {
 	hasXFrameOptions: 0 | 1;
 	hasXContentTypeOptions: 0 | 1;
 	hasHSTS: 0 | 1;
+	templateKey: string | null;
 }
 
 /**
@@ -792,6 +800,8 @@ export interface PageListItem {
 	hasXContentTypeOptions: boolean;
 	/** Whether Strict-Transport-Security header is present. */
 	hasHSTS: boolean;
+	/** DOM-structure template group key from `--templates` classification, or null if never classified. */
+	templateKey: string | null;
 }
 
 /**
@@ -818,6 +828,12 @@ export interface PageListFacets {
 	langs: string[];
 	/** Distinct internal/external flags present in the page-list universe. */
 	types: boolean[];
+	/**
+	 * Distinct `--templates` classification group keys present in the
+	 * page-list universe. Empty when the archive has never been classified
+	 * (or `page_templates` doesn't exist yet — see `hasPageTemplatesTable`).
+	 */
+	templateKeys: string[];
 }
 
 /**
@@ -829,6 +845,9 @@ export interface PageListFacets {
  * index, so it cannot be part of the fast path's 100ms contract. Callers
  * that need those fall back to `listPages` instead. `source` is new (not on
  * {@link ListPagesOptions}, which has no equivalent contract to preserve).
+ * `templateKey` IS included despite not being a `viewer_pages` column: it
+ * resolves via a `page_id`-PK join to `page_templates`, not a wide-table
+ * scan, so it doesn't need the LIKE/header-presence exclusion's rationale.
  */
 export interface ListViewerPagesOptions {
 	/** Filter by external (true) or internal (false) pages. */
@@ -853,6 +872,13 @@ export interface ListViewerPagesOptions {
 	noindex?: boolean;
 	/** Filter by provenance — see {@link PageSource}. */
 	source?: import('@nitpicker/crawler').PageSource;
+	/**
+	 * Filter by exact `--templates` DOM-structure classification group key.
+	 * Unlike `urlPattern`/`directory`, this IS supported by the fast path:
+	 * `page_templates` is joined by `page_id` (its PK), never the wide
+	 * `pages` table — see `applyViewerPagesFilters`.
+	 */
+	templateKey?: string;
 	/** Field to sort results by. Defaults to `'url'`. */
 	sortBy?:
 		| 'url'
@@ -1086,6 +1112,8 @@ export interface PageDetail {
 	scrollHeightDesktop: number | null;
 	/** `document.body.scrollHeight` at the mobile-small preset (denormalised). */
 	scrollHeightMobile: number | null;
+	/** DOM-structure template group key from `--templates` classification, or null if never classified. */
+	templateKey: string | null;
 
 	/** Parsed `meta_extras` JSON catch-all (nested sub-objects not flattened). */
 	metaExtras: Record<string, unknown>;

@@ -202,6 +202,150 @@ describe('getPageDetail', () => {
 		const result = await getPageDetail(archive, 'https://example.com/nonexistent');
 		expect(result).toBeNull();
 	});
+
+	it('page_templates に行がないページは templateKey が null になる', async () => {
+		const result = await getPageDetail(archive, 'https://example.com/about');
+		expect(result!.templateKey).toBeNull();
+	});
+});
+
+describe('getPageDetail: templateKey（page_templates の LEFT JOIN）', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_get_page_detail_template_key__');
+	const archiveFilePath = path.resolve(dir, 'get-page-detail-template-key.nitpicker');
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: makeBeholderMeta({ lang: 'ja', title: 'Home' }),
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		await archive.replacePageTemplates(new Map([['https://example.com', 'template-a']]));
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('page_templates に行があるページは templateKey を返す', async () => {
+		const result = await getPageDetail(archive, 'https://example.com');
+		expect(result!.templateKey).toBe('template-a');
+	});
+});
+
+describe('getPageDetail: page_templates テーブル自体が存在しないアーカイブ（--templates 未実行の旧アーカイブ、read-only オープンで自己修復が走らないケースの再現）', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(
+		__dirname,
+		'__test_fixtures_get_page_detail_no_template_table__',
+	);
+	const archiveFilePath = path.resolve(
+		dir,
+		'get-page-detail-no-template-table.nitpicker',
+	);
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: makeBeholderMeta({ lang: 'ja', title: 'Home' }),
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// Simulates an archive crawled/analyzed before `--templates` shipped:
+		// drop the table this connection would otherwise self-heal on the
+		// next write-mode open, mirroring a viewer read-only connection that
+		// never runs that self-heal at all (see `hasPageTemplatesTable`'s doc).
+		await archive.getKnex().schema.dropTable('page_templates');
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('page_templates テーブルが無くても例外を投げず、templateKey は null になる', async () => {
+		const result = await getPageDetail(archive, 'https://example.com');
+		expect(result).not.toBeNull();
+		expect(result!.templateKey).toBeNull();
+	});
 });
 
 describe('getPageDetail: 被リンクを redirect 越しに解決する（http/https 合算, #71）', () => {

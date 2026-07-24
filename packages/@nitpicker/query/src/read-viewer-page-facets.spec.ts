@@ -127,6 +127,7 @@ describe('readViewerPageFacets', () => {
 			statuses: [200, 404],
 			langs: ['en', 'ja'],
 			types: [false, true],
+			templateKeys: [],
 		});
 	});
 
@@ -136,6 +137,7 @@ describe('readViewerPageFacets', () => {
 			statuses: [200],
 			langs: ['fr'],
 			types: [false],
+			templateKeys: [],
 		});
 	});
 
@@ -145,6 +147,19 @@ describe('readViewerPageFacets', () => {
 			statuses: [],
 			langs: [],
 			types: [],
+			templateKeys: [],
 		});
+	});
+
+	it('returns distinct template keys when page_templates has been classified, independent of the content-category scope', async () => {
+		const knex = archive.getKnex();
+		await archive.replacePageTemplates(
+			new Map([
+				['https://example.com/a', 'template-a'],
+				['https://example.com/doc.pdf', 'template-b'],
+			]),
+		);
+		const facets = await readViewerPageFacets(knex);
+		expect(facets.templateKeys).toEqual(['template-a', 'template-b']);
 	});
 });
