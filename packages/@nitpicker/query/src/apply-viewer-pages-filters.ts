@@ -6,10 +6,11 @@ import type { Knex } from 'knex';
  * `viewer_pages`-scoped query builder. Shared by the id-resolution query and
  * the total-count query so both see exactly the same row set.
  *
- * Every predicate here targets an indexed `viewer_pages` column (never the
- * wide write-model `pages` table) — this function runs BEFORE any join, on
- * the narrow read model only; the wide table is joined in only after LIMIT,
- * once the row set is small, so the wide read stays bounded.
+ * Every predicate targets an indexed `viewer_pages` column, or (for
+ * `templateKey`) a `WHERE page_id IN (subquery)` against a narrow
+ * `page_id`-PK'd auxiliary table — never the wide write-model `pages` table.
+ * The wide table itself is joined in only after LIMIT, once the row set is
+ * small, so the wide read stays bounded.
  * @param qb - A Knex query builder scoped to `viewer_pages` (or a subquery
  *   selecting from it).
  * @param options - The filter options to apply.
@@ -61,5 +62,22 @@ export function applyViewerPagesFilters(
 	}
 	if (options.source) {
 		qb.where('source', options.source);
+	}
+	if (options.templateKey) {
+		// `page_templates` is a narrow, `page_id`-PK'd auxiliary table
+		// populated by `--templates` (see `hasPageTemplatesTable`'s doc) —
+		// like `page_tags`/`page_jsonld`, it is not part of the read-model
+		// schema, so filtering by it needs no `viewer_pages` column and no
+		// `VIEWER_READ_MODEL_SCHEMA_VERSION` bump. A `whereIn` subquery (not
+		// a `JOIN`) keeps `page_templates` out of the FROM clause entirely —
+		// `readKeysetWindow`'s generic `SELECT page_id, ...` is shared by
+		// every `viewer_*` table, so a joined table with its own `page_id`
+		// column would make that unqualified column ambiguous.
+		qb.whereIn('page_id', (builder) => {
+			builder
+				.select('page_id')
+				.from('page_templates')
+				.where('template_key', options.templateKey);
+		});
 	}
 }

@@ -11,6 +11,7 @@
            ↑    ↑       ↑  ↑    ↑
            │    │       core │  report-google-sheets ← @d-zero/google-sheets（外部）
            │    │        ↑   │         ↑
+           │    │        ├── @d-zero/page-cluster（外部）
            │    │  analyze-* プラグイン │
            │    └── query              │
            │         ↑                 │
@@ -19,18 +20,18 @@
            └── @d-zero/dealer（外部）──┘
 ```
 
-| パッケージ                        | 責務                                                                                         |
-| --------------------------------- | -------------------------------------------------------------------------------------------- |
-| `@nitpicker/crawler`              | クロールオーケストレーション + `.nitpicker` アーカイブ（SQLite）+ スコープ判定 + エラー分類  |
-| `@nitpicker/core`                 | analyze プラグインシステム（プラグインごとの長寿命 `WorkerPool`）                            |
-| `@nitpicker/query`                | アーカイブへの読み取り専用 SQL API（listPages / getSummary / listLinks 等）                  |
-| `@nitpicker/cli`                  | 統合 CLI（crawl / analyze / report / pipeline / query / viewer）                             |
-| `@nitpicker/viewer`               | Hono API + React SPA のローカルビューア（backend `src/` + frontend `web/` の単一パッケージ） |
-| `@nitpicker/mcp-server`           | query の MCP 露出（stdio、`nitpicker-mcp`）                                                  |
-| `@nitpicker/analyze-*`            | axe / lighthouse / markuplint / textlint / search の各監査                                   |
-| `@nitpicker/report-google-sheets` | Google Sheets レポート出力（5 フェーズの `createSheets`）                                    |
-| `@nitpicker/types`                | 監査型定義（Report / ConfigJSON）                                                            |
-| `packages/test-server`            | E2E 用 Hono サーバー（OS割り当ての動的ポート、プロダクション非依存）                         |
+| パッケージ                        | 責務                                                                                                                                                                                            |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@nitpicker/crawler`              | クロールオーケストレーション + `.nitpicker` アーカイブ（SQLite）+ スコープ判定 + エラー分類                                                                                                     |
+| `@nitpicker/core`                 | analyze プラグインシステム（プラグインごとの長寿命 `WorkerPool`）+ テンプレート分類（`template-classification/`、`@d-zero/page-cluster` によるDOM構造クラスタリング、`--templates` オプトイン） |
+| `@nitpicker/query`                | アーカイブへの読み取り専用 SQL API（listPages / getSummary / listLinks 等）                                                                                                                     |
+| `@nitpicker/cli`                  | 統合 CLI（crawl / analyze / report / pipeline / query / viewer）                                                                                                                                |
+| `@nitpicker/viewer`               | Hono API + React SPA のローカルビューア（backend `src/` + frontend `web/` の単一パッケージ）                                                                                                    |
+| `@nitpicker/mcp-server`           | query の MCP 露出（stdio、`nitpicker-mcp`）                                                                                                                                                     |
+| `@nitpicker/analyze-*`            | axe / lighthouse / markuplint / textlint / search の各監査                                                                                                                                      |
+| `@nitpicker/report-google-sheets` | Google Sheets レポート出力（5 フェーズの `createSheets`）                                                                                                                                       |
+| `@nitpicker/types`                | 監査型定義（Report / ConfigJSON）                                                                                                                                                               |
+| `packages/test-server`            | E2E 用 Hono サーバー（OS割り当ての動的ポート、プロダクション非依存）                                                                                                                            |
 
 ## 境界と所有権
 
@@ -130,6 +131,19 @@
 2. 参考実装: `analyze-search/src/search-plugin.ts`
 3. `core/src/nitpicker.ts` と `core/src/worker/worker-pool.ts`（実行モデル）
 4. `cli/src/commands/analyze.ts` + **`cli/package.json` の `dependencies` に追加**（依存方向ルール参照）
+
+### テンプレート分類機能の変更
+
+DOM構造類似性によるページのテンプレート分類（`--templates` オプトイン）。全ページ横断のバッチ計算であり `AnalyzePlugin`（`eachPage`/`eachUrl`、1ページ独立処理専用）には乗らないため、`AnalyzePlugin` システムとは別の専用経路として `core` に直接実装されている。命名は外部ライブラリの `clusterKey` ではなく `templateKey`（`@nitpicker/query` の無関係な「isolated cluster」＝リンク到達性によるグラフクラスタとの用語衝突を避けるため）。分類結果は `analysis/report`・`Table` を経由せず、専用の `page_templates` SQL テーブル（`analysis_violations` と同じ「専用テーブル＋ライブクエリ、read model 非経由」方式）にのみ書き込む。
+
+1. `core/src/template-classification/collect-page-stylesheet-urls.ts`（`resource_ref_edges` + `content_type_refs.category='css'` からページ→CSS参照を取得。`@nitpicker/query` を経由せず `Archive.getKnex()` を直接使う — `core → query` という依存辺は存在しないため）
+2. `core/src/template-classification/create-page-cluster-factory.ts`（`@d-zero/page-cluster` の `PageFactory` 契約: 逐次・複数周回・同一順序を守る）
+3. `core/src/template-classification/classify-page-templates.ts`（`resolvePageClusterKeys` 呼び出し・`clusterKey`→`templateKey`読み替え・アーカイブ path+size+mtime+ページ数キーの永続キャッシュ）
+4. `crawler/src/archive/create-adjunct-tables.ts`（`page_templates` テーブルの DDL。`page_id` PK 1:1、`WITHOUT ROWID`）と `crawler/src/archive/db-ops/analysis/replace-page-templates.ts`（全置換書き込み。URL が `content_items` に解決できないページは `replaceAnalysisViolations` と異なりエラーにせずスキップ）+ `archive.ts` / `database.ts` のファサードメソッド
+5. `core/src/nitpicker.ts`（`analyze()` の Phase 3。`getPagesWithRefs` のバッチコールバック内ではなく、全バッチ蓄積後に1回だけ実行する — バッチ境界を跨いだテンプレートキーの一貫性を保つため。分類結果は `archive.replacePageTemplates()` で直接 SQL に書き込み、`Table`/`Report` には一切乗らない）
+6. `cli/src/commands/analyze.ts`（`--templates` フラグ、プラグイン0件時のガードのバイパス）
+7. 読み取り: `query/src/list-pages.ts` ほか `PAGE_LIST_SELECT_COLUMNS` を共有する全クエリ（`list-pages-by-tag.ts` / `list-pages-by-jsonld-type.ts` / `join-viewer-page-ids-to-list-items.ts`）と `get-page-detail.ts` が `page_templates` を `LEFT JOIN` して `templateKey` を返す。ソート対応なし（`viewer_pages` read model 側のスキーマ変更が必要になるため意図的に未対応）
+8. viewer 表示: `viewer/web/routes/pages-view.tsx` の Pages 一覧に列を1つ追加するのみ。専用 route・グループ化 drill-down 画面・MCP 専用ツール・CLI サブコマンドは意図的に未実装
 
 ### viewer のビュー / API 追加
 

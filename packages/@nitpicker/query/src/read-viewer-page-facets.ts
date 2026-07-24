@@ -1,6 +1,8 @@
 import type { ContentTypeCategory, PageListFacets } from './types.js';
 import type { Knex } from 'knex';
 
+import { hasPageTemplatesTable } from './page-templates-join.js';
+
 /** Row shape read back from `viewer_count_buckets` for a facet lookup. */
 interface FacetBucketValueRow {
 	/** `facet:<dimension>:content_category=<category>` — see `computePageFacetBuckets`. */
@@ -38,6 +40,15 @@ function resolveFacetCategoryKey(
  * scans `pages` — every value here is a plain lookup against
  * `viewer_count_buckets`'s `(scope, key, value)` primary key, so this stays
  * inside the 100ms contract regardless of archive size.
+ *
+ * `templateKeys` is the one exception: `page_templates` is populated at
+ * `analyze --templates` time, entirely independent of the crawl-end/
+ * viewer-build read-model pipeline that produces `viewer_count_buckets` (see
+ * `hasPageTemplatesTable`'s doc), so there is no precomputed bucket to look
+ * up. It reads a live `DISTINCT template_key` instead — acceptable because
+ * `page_templates` is a narrow two-column `WITHOUT ROWID` table with no
+ * joins, unlike the wide-table scans the `usesWideTableOnlyFilter` fallback
+ * exists to avoid.
  * @param knex - The archive's Knex instance.
  * @param contentTypeCategory - The caller's active category filter, or
  *   `undefined` to resolve the same `'html'` ∪ `'unknown'` default view
@@ -71,9 +82,19 @@ export async function readViewerPageFacets(
 		}
 	}
 
+	const hasPageTemplates = await hasPageTemplatesTable(knex);
+	const templateKeys = hasPageTemplates
+		? (
+				(await knex('page_templates').distinct('template_key')) as {
+					template_key: string;
+				}[]
+			).map((row) => row.template_key)
+		: [];
+
 	return {
 		statuses: statuses.toSorted((a, b) => a - b),
 		langs: langs.toSorted((a, b) => a.localeCompare(b)),
 		types: types.toSorted((a, b) => Number(a) - Number(b)),
+		templateKeys: templateKeys.toSorted((a, b) => a.localeCompare(b)),
 	};
 }

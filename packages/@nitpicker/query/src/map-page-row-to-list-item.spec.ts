@@ -65,6 +65,7 @@ function makeRow(overrides: Partial<PageListRow> = {}): PageListRow {
 		hasXFrameOptions: 0,
 		hasXContentTypeOptions: 0,
 		hasHSTS: 0,
+		templateKey: null,
 		...overrides,
 	};
 }
@@ -107,11 +108,13 @@ describe('mapPageRowToListItem', () => {
 		expect(out.hasDescription).toBe(false);
 	});
 
-	it('PAGE_LIST_COLUMNS plus the SQL-computed header columns match the row interface keys', () => {
+	it('PAGE_LIST_COLUMNS plus the SQL-computed/joined-only columns match the row interface keys', () => {
 		// hasCSP/hasXFrameOptions/hasXContentTypeOptions/hasHSTS are NOT plain
 		// `pages` columns — they're computed via `buildHeaderPresenceSelects`
-		// (SQL CASE WHEN expressions aliased to these names), so they're absent
-		// from PAGE_LIST_COLUMNS but still present on the row shape.
+		// (SQL CASE WHEN expressions aliased to these names). templateKey comes
+		// from a `page_templates` LEFT JOIN present only in the 0.13 query
+		// paths. All are absent from PAGE_LIST_COLUMNS (the legacy pre-0.13
+		// column list) but still present on the row shape.
 		const row = makeRow();
 		const rowKeys = Object.keys(row).toSorted();
 		const cols = [
@@ -120,6 +123,7 @@ describe('mapPageRowToListItem', () => {
 			'hasXFrameOptions',
 			'hasXContentTypeOptions',
 			'hasHSTS',
+			'templateKey',
 		].toSorted();
 		expect(cols).toEqual(rowKeys);
 	});

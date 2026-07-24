@@ -33,7 +33,9 @@ const DEFAULT_LIMIT = 100;
  *   filters (`hasCSP` / `hasXFrameOptions` / `hasXContentTypeOptions` /
  *   `hasHSTS`) computed from `pages.responseHeaders` — `viewer_pages` has no
  *   equivalent column, and evaluating them only after the narrow-table
- *   id-limiting stage would corrupt `total`/pagination.
+ *   id-limiting stage would corrupt `total`/pagination. `templateKey` does
+ *   NOT force this fallback: `listViewerPages` resolves it via a narrow
+ *   `page_id`-PK join to `page_templates`, not a wide-table scan.
  * - `listPages` (the legacy, offset-only, write-model path) otherwise —
  *   covers archives predating the read model (issue #112's build-timing
  *   work is tracked separately) and the excluded-filter cases above. Its
@@ -69,6 +71,7 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 				missingDescription: toBoolean(q.missingDescription),
 				noindex: toBoolean(q.noindex),
 				source: toPageSource(q.source),
+				templateKey: q.templateKey,
 				sortBy: toPageSortBy(q.sortBy),
 				sortOrder: toPageSortOrder(q.sortOrder),
 				limit: toNumber(q.limit),
@@ -97,6 +100,7 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 			hasHSTS: toBoolean(q.hasHSTS),
 			urlPattern: q.urlPattern,
 			directory: q.directory,
+			templateKey: q.templateKey,
 			sortBy: toPageSortBy(q.sortBy),
 			sortOrder: toPageSortOrder(q.sortOrder),
 			limit,

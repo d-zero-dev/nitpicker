@@ -6,6 +6,7 @@ import {
 	PAGE_LIST_SELECT_COLUMNS,
 	mapPageRowToListItem,
 } from './map-page-row-to-list-item.js';
+import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
 
 /**
  * Lists pages that have a Wappalyzer-detected tag matching the given provider
@@ -32,6 +33,7 @@ export async function listPagesByTag(
 	const knex = accessor.getKnex();
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
+	const hasPageTemplates = await hasPageTemplatesTable(knex);
 	let q = knex('content_items as ci')
 		.join('page_tags', 'page_tags.pageId', '=', 'ci.id')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
@@ -60,9 +62,14 @@ export async function listPagesByTag(
 			'twitter_image_ur.id',
 			'pm.twitter_image_url_id',
 		)
-		.leftJoin('url_refs as manifest_ur', 'manifest_ur.id', 'pm.manifest_url_id')
+		.leftJoin('url_refs as manifest_ur', 'manifest_ur.id', 'pm.manifest_url_id');
+	if (hasPageTemplates) {
+		q = q.leftJoin('page_templates as pt', 'pt.page_id', 'ci.id');
+	}
+	q = q
 		.distinct(
 			...PAGE_LIST_SELECT_COLUMNS,
+			templateKeySelectColumn(knex, hasPageTemplates),
 			'ci.id',
 			...buildHeaderPresenceSelects(knex, 'hf'),
 		)

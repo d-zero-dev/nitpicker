@@ -50,6 +50,18 @@ export interface AnalyzeOptions {
 
 	/** When `true`, outputs plain-text progress lines instead of animated Lanes. */
 	readonly verbose?: boolean;
+
+	/**
+	 * When `true`, runs an additional, opt-in classification phase that
+	 * groups internal HTML pages by DOM-structure similarity (using
+	 * `@d-zero/page-cluster`), independent of the configured
+	 * `@nitpicker/analyze-*` plugins. Results are added to the report table
+	 * as a `templateKey` column. Defaults to `false` — the algorithm's
+	 * runtime on very large archives is not yet characterized, so it is
+	 * never run implicitly.
+	 * @see {@link ./template-classification/classify-page-templates.ts!classifyPageTemplates}
+	 */
+	readonly classifyTemplates?: boolean;
 }
 
 /**

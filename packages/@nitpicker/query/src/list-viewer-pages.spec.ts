@@ -364,6 +364,7 @@ describe('listViewerPages', () => {
 				statuses: [200, 404, 500],
 				langs: ['en', 'ja'],
 				types: [false, true],
+				templateKeys: [],
 			});
 		});
 
@@ -376,6 +377,7 @@ describe('listViewerPages', () => {
 				statuses: [200],
 				langs: ['fr'],
 				types: [false],
+				templateKeys: [],
 			});
 		});
 	});

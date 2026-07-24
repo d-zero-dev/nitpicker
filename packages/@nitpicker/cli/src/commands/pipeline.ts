@@ -268,6 +268,11 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 		searchKeywords: flags.searchKeywords,
 		searchScope: flags.searchScope,
 		axeLang: flags.axeLang,
+		// `pipeline` has no `--templates` flag of its own; template
+		// classification's runtime on large archives is unvalidated (see
+		// `AnalyzeOptions.classifyTemplates`), so it stays opt-in via the
+		// standalone `analyze` command rather than folded into every pipeline run.
+		templates: undefined,
 	});
 
 	// Step 3: Report (only if --sheet is provided)

@@ -37,6 +37,7 @@ import { emitError } from '../utils/error/emit-error.js';
 import { createWriteRefCaches } from './db-ops/_shared/create-write-ref-caches.js';
 import { retrySetting } from './db-ops/_shared/retry-setting.js';
 import { replaceAnalysisViolations as replaceAnalysisViolationsOp } from './db-ops/analysis/replace-analysis-violations.js';
+import { replacePageTemplates as replacePageTemplatesOp } from './db-ops/analysis/replace-page-templates.js';
 import { getAnchorsOnPage as getAnchorsOnPageOp } from './db-ops/anchors/get-anchors-on-page.js';
 import { getBaseUrl as getBaseUrlOp } from './db-ops/config/get-base-url.js';
 import { getConfig as getConfigOp } from './db-ops/config/get-config.js';
@@ -748,6 +749,21 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			this,
 			'Database.replaceAnalysisViolations',
 			async () => await replaceAnalysisViolationsOp(this.#instance, violations),
+			retrySetting,
+		);
+	}
+	/**
+	 * Replaces the stored DOM-structure template classification with a
+	 * freshly generated set. Delegates to {@link replacePageTemplatesOp}.
+	 * @param templateKeysByUrl - Page URL → template key.
+	 */
+	async replacePageTemplates(
+		templateKeysByUrl: ReadonlyMap<string, string>,
+	): Promise<void> {
+		return emitErrorAndRetry(
+			this,
+			'Database.replacePageTemplates',
+			async () => await replacePageTemplatesOp(this.#instance, templateKeysByUrl),
 			retrySetting,
 		);
 	}

@@ -6,6 +6,7 @@ import {
 	PAGE_LIST_SELECT_COLUMNS,
 	mapPageRowToListItem,
 } from './map-page-row-to-list-item.js';
+import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
 
 /**
  * Lists pages that have at least one JSON-LD (or SpeculationRules) entry with
@@ -28,7 +29,8 @@ export async function listPagesByJsonLdType(
 	const knex = accessor.getKnex();
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
-	const rows = (await knex('content_items as ci')
+	const hasPageTemplates = await hasPageTemplatesTable(knex);
+	let query = knex('content_items as ci')
 		.join('page_jsonld', 'page_jsonld.pageId', '=', 'ci.id')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
 		.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
@@ -56,9 +58,14 @@ export async function listPagesByJsonLdType(
 			'twitter_image_ur.id',
 			'pm.twitter_image_url_id',
 		)
-		.leftJoin('url_refs as manifest_ur', 'manifest_ur.id', 'pm.manifest_url_id')
+		.leftJoin('url_refs as manifest_ur', 'manifest_ur.id', 'pm.manifest_url_id');
+	if (hasPageTemplates) {
+		query = query.leftJoin('page_templates as pt', 'pt.page_id', 'ci.id');
+	}
+	const rows = (await query
 		.distinct(
 			...PAGE_LIST_SELECT_COLUMNS,
+			templateKeySelectColumn(knex, hasPageTemplates),
 			'ci.id',
 			...buildHeaderPresenceSelects(knex, 'hf'),
 		)

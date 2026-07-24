@@ -89,6 +89,7 @@ export function PagesView() {
 		hasXFrameOptions: parseHeaderFilterParam(params.get('hasXFrameOptions')),
 		hasXContentTypeOptions: parseHeaderFilterParam(params.get('hasXContentTypeOptions')),
 		hasHSTS: parseHeaderFilterParam(params.get('hasHSTS')),
+		templateKey: params.get('templateKey') ?? undefined,
 		sortBy: (params.get('sortBy') as PagesFilter['sortBy']) || 'url',
 		sortOrder: (params.get('sortOrder') as PagesFilter['sortOrder']) || 'asc',
 	};
@@ -289,6 +290,12 @@ export function PagesView() {
 				cell: boolCell,
 			},
 			{ accessorKey: 'hasHSTS', header: 'HSTS', size: 70, cell: boolCell },
+			{
+				accessorKey: 'templateKey',
+				header: t('views.pages.colTemplateKey'),
+				size: 140,
+				cell: textCell,
+			},
 		];
 	}, [navigate, t]);
 	const columnControls = useMemo(() => {
@@ -438,11 +445,27 @@ export function PagesView() {
 				],
 			);
 		}
+		addRadioFilter(
+			controls,
+			{ params, updateMany },
+			'templateKey',
+			'templateKey',
+			t('views.pages.colTemplateKey'),
+			[
+				{ value: '', label: t('common.all'), checked: !filter.templateKey },
+				...(facets?.templateKeys ?? []).map((value) => ({
+					value,
+					label: value,
+					checked: filter.templateKey === value,
+				})),
+			],
+		);
 		return controls;
 	}, [
 		contentTypeCategory,
 		facets?.langs,
 		facets?.statuses,
+		facets?.templateKeys,
 		facets?.types,
 		filter.hasCSP,
 		filter.hasHSTS,
@@ -450,6 +473,7 @@ export function PagesView() {
 		filter.hasXFrameOptions,
 		filter.lang,
 		filter.missingTitle,
+		filter.templateKey,
 		params,
 		scope,
 		status,

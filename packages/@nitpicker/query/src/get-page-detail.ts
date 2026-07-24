@@ -3,6 +3,8 @@ import type { ArchiveAccessor, JsonLdRow, TagRow } from '@nitpicker/crawler';
 
 import { decodeJsonRef, loadResponseHeadersBySetIds } from '@nitpicker/crawler';
 
+import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
+
 /**
  * Summarises JSON-LD rows for the page-detail response.
  * @param rows - The page's `page_jsonld` rows.
@@ -64,8 +66,9 @@ export async function getPageDetail(
 	url: string,
 ): Promise<PageDetail | null> {
 	const knex = accessor.getKnex();
+	const hasPageTemplates = await hasPageTemplatesTable(knex);
 
-	const [page] = await knex('content_items as ci')
+	let query = knex('content_items as ci')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
 		.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
 		.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
@@ -105,7 +108,11 @@ export async function getPageDetail(
 			'twitter_image_ur.id',
 			'pm.twitter_image_url_id',
 		)
-		.leftJoin('json_refs as extras_ref', 'extras_ref.id', 'pm.meta_extras_json_id')
+		.leftJoin('json_refs as extras_ref', 'extras_ref.id', 'pm.meta_extras_json_id');
+	if (hasPageTemplates) {
+		query = query.leftJoin('page_templates as pt', 'pt.page_id', 'ci.id');
+	}
+	const [page] = await query
 		.select(
 			'ci.id as id',
 			'ur.url as url',
@@ -186,6 +193,7 @@ export async function getPageDetail(
 			'pm.main_content_canvas_count as main_content_canvas_count',
 			'pm.scroll_height_desktop as scroll_height_desktop',
 			'pm.scroll_height_mobile as scroll_height_mobile',
+			templateKeySelectColumn(knex, hasPageTemplates),
 		)
 		.where('ur.url', url)
 		.limit(1);
@@ -368,6 +376,7 @@ export async function getPageDetail(
 		mainContentCanvasCount: page.main_content_canvas_count,
 		scrollHeightDesktop: page.scroll_height_desktop,
 		scrollHeightMobile: page.scroll_height_mobile,
+		templateKey: page.templateKey,
 		metaExtras,
 		jsonLd: summarizeJsonLdRows(jsonLdRows),
 		tags: summarizeTagRows(tagRows),
