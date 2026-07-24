@@ -9,9 +9,10 @@ import { useI18n } from '../i18n/use-i18n.js';
 /**
  * Builds the human-readable heading for one cluster's section: the common
  * stylesheet filenames when there are any (the strongest signal for "what
- * this template is"), falling back to the common directory, and finally to
- * the raw template key when neither yields anything (an unparseable-URL edge
- * case — see `computeCommonDirectory`'s defensive skip).
+ * this template is"), falling back to the top directories by page count,
+ * and finally to the raw template key when neither yields anything (an
+ * unparseable-URL edge case — see `computeDirectoryDistribution`'s
+ * defensive skip).
  *
  * `commonStylesheetFileNames` (dedup'd, filename-only) is precomputed
  * server-side by `@nitpicker/query`'s `computeStylesheetFileNames` rather
@@ -24,17 +25,33 @@ function clusterHeading(cluster: TemplateClusterSummary): string {
 		return cluster.commonStylesheetFileNames.join(', ');
 	}
 	if (cluster.commonDirectories.length > 0) {
-		return cluster.commonDirectories.join(', ');
+		return cluster.commonDirectories.map((entry) => entry.directory).join(', ');
 	}
 	return cluster.templateKey;
 }
 
 /**
+ * Pages not covered by any of the top directories `computeDirectoryDistribution`
+ * returned — the count a viewer needs to know the top-N list isn't silently
+ * dropping members, without the backend having to send every long-tail
+ * directory over the wire.
+ * @param cluster
+ */
+function otherPageCount(cluster: TemplateClusterSummary): number {
+	const topCount = cluster.commonDirectories.reduce(
+		(sum, entry) => sum + entry.pageCount,
+		0,
+	);
+	return cluster.pageCount - topCount;
+}
+
+/**
  * Template cluster analysis: one collapsible section per
- * `page_templates.template_key` cluster, each showing page count, common
- * directory, and common stylesheet set computed from the cluster's actual
- * member pages — the raw key itself is an opaque blocking key and is not
- * human-readable (see `TemplateClusterSummary`'s JSDoc in `@nitpicker/query`).
+ * `page_templates.template_key` cluster, each showing page count, top
+ * directories by page count, and common stylesheet set computed from the
+ * cluster's actual member pages — the raw key itself is an opaque blocking
+ * key and is not human-readable (see `TemplateClusterSummary`'s JSDoc in
+ * `@nitpicker/query`).
  * @returns The template clusters view element.
  */
 export function TemplateClustersView() {
@@ -77,11 +94,26 @@ export function TemplateClustersView() {
 							<dt>{t('views.templateClusters.commonDirectories')}</dt>
 							<dd>
 								{cluster.commonDirectories.length > 0 ? (
-									<ul>
-										{cluster.commonDirectories.map((dir) => (
-											<li key={dir}>{dir}</li>
-										))}
-									</ul>
+									<>
+										<ul>
+											{cluster.commonDirectories.map((entry) => (
+												<li key={entry.directory}>
+													{entry.directory} (
+													{t('views.templateClusters.pageCount', {
+														count: entry.pageCount,
+													})}
+													)
+												</li>
+											))}
+										</ul>
+										{otherPageCount(cluster) > 0 && (
+											<p className="view-description">
+												{t('views.templateClusters.otherPages', {
+													count: otherPageCount(cluster),
+												})}
+											</p>
+										)}
+									</>
 								) : (
 									'—'
 								)}

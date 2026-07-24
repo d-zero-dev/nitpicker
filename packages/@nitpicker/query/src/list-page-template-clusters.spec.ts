@@ -242,7 +242,9 @@ describe('listPageTemplateClusters', () => {
 			);
 			expect(pathCluster?.commonStylesheetUrls).toEqual([]);
 			expect(pathCluster?.commonStylesheetFileNames).toEqual([]);
-			expect(pathCluster?.commonDirectories).toEqual(['https://example.com/']);
+			expect(pathCluster?.commonDirectories).toEqual([
+				{ directory: 'https://example.com/', pageCount: 2 },
+			]);
 		});
 	});
 
@@ -277,7 +279,9 @@ describe('listPageTemplateClusters', () => {
 				(c) => c.templateKey === '["path:bulk","cluster:0"]',
 			);
 			expect(cluster?.pageCount).toBe(pageCount);
-			expect(cluster?.commonDirectories).toEqual(['https://example.com/bulk/']);
+			expect(cluster?.commonDirectories).toEqual([
+				{ directory: 'https://example.com/bulk/', pageCount },
+			]);
 		});
 	});
 });

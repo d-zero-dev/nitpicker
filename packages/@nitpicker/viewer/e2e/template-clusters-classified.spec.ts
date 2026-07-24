@@ -50,4 +50,20 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 		await cssCluster.locator('summary').click();
 		await expect(cssCluster).toContainText('["css:1a2b3c4d5e6f7890","cluster:0"]');
 	});
+
+	test('7ディレクトリに分散したクラスタは上位5件のみ表示し、残りを「他Nページ」にまとめる', async ({
+		page,
+	}) => {
+		await page.goto('/template-clusters');
+
+		const sectionsCluster = page.locator('details', { hasText: 'section-a' });
+		await sectionsCluster.locator('summary').click();
+		for (const section of ['a', 'b', 'c', 'd', 'e']) {
+			await expect(sectionsCluster).toContainText(`section-${section}`);
+		}
+		for (const section of ['f', 'g']) {
+			await expect(sectionsCluster).not.toContainText(`section-${section}`);
+		}
+		await expect(sectionsCluster).toContainText('2 other pages');
+	});
 });

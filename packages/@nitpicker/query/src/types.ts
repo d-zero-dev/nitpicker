@@ -2720,6 +2720,18 @@ export interface UrlSortKey {
 }
 
 /**
+ * One entry of a {@link import('./compute-directory-distribution.js').computeDirectoryDistribution}
+ * result — a first-path-segment directory and how many of the input pages
+ * fall under it.
+ */
+export interface DirectoryDistributionEntry {
+	/** The directory URL (`<scheme>//<host>/<first-segment>/`, or `<scheme>//<host>/` for the root). */
+	directory: string;
+	/** Number of input pages whose path falls under `directory`. */
+	pageCount: number;
+}
+
+/**
  * One `page_templates.template_key` group's summary — see
  * {@link import('./list-page-template-clusters.js').listPageTemplateClusters}.
  *
@@ -2737,10 +2749,14 @@ export interface TemplateClusterSummary {
 	/** Number of pages classified under `templateKey`. */
 	pageCount: number;
 	/**
-	 * Deepest directory shared by every member page, one entry per distinct
-	 * host — see {@link import('./compute-common-directory.js').computeCommonDirectory}.
+	 * The top-N first-path-segment directories by member-page count — see
+	 * {@link import('./compute-directory-distribution.js').computeDirectoryDistribution}
+	 * for why this is a frequency distribution rather than a single deepest
+	 * common prefix (a large cluster's pages routinely span more than one
+	 * top-level section, and a single shared-prefix directory collapses that
+	 * down to the site root, hiding the sectional pattern entirely).
 	 */
-	commonDirectories: string[];
+	commonDirectories: DirectoryDistributionEntry[];
 	/**
 	 * Stylesheet URLs referenced by every member page — see
 	 * {@link import('./compute-css-intersection.js').computeCssIntersection}

@@ -109,12 +109,24 @@ await archive.setResourcesReferrers({
 await setSimplePage('https://example.com/news/article-1', 'News Article 1');
 await setSimplePage('https://example.com/news/article-2', 'News Article 2');
 
+// `sections` cluster: 7 pages spread across 7 distinct top-level
+// directories, one page each — exercises the top-N (5) truncation and the
+// "N other pages" remainder in `computeDirectoryDistribution` / the view's
+// `otherPageCount`, which the single-directory clusters above cannot.
+const sectionUrls = [];
+for (const section of ['a', 'b', 'c', 'd', 'e', 'f', 'g']) {
+	const url = `https://example.com/section-${section}/page`;
+	await setSimplePage(url, `Section ${section}`);
+	sectionUrls.push(url);
+}
+
 await archive.replacePageTemplates(
 	new Map([
 		['https://example.com/blog/post-1', '["css:1a2b3c4d5e6f7890","cluster:0"]'],
 		['https://example.com/blog/post-2', '["css:1a2b3c4d5e6f7890","cluster:0"]'],
 		['https://example.com/news/article-1', '["path:news","cluster:0"]'],
 		['https://example.com/news/article-2', '["path:news","cluster:0"]'],
+		...sectionUrls.map((url) => [url, '["path:sections","cluster:0"]']),
 	]),
 );
 

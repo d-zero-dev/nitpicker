@@ -4,17 +4,18 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import { eachSplitted } from '@nitpicker/crawler';
 
 import { collectPageStylesheetUrlsByPageId } from './collect-page-stylesheet-urls-by-page-id.js';
-import { computeCommonDirectory } from './compute-common-directory.js';
 import { computeCssIntersection } from './compute-css-intersection.js';
+import { computeDirectoryDistribution } from './compute-directory-distribution.js';
 import { computeStylesheetFileNames } from './compute-stylesheet-file-names.js';
 import { hasPageTemplatesTable } from './page-templates-join.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
 
 /**
  * Lists every `page_templates.template_key` cluster with a human-facing
- * summary (page count, common directory, common stylesheet set) computed
- * fresh from the cluster's actual member pages — see {@link TemplateClusterSummary}
- * for why that's necessary (the raw key itself is not human-readable).
+ * summary (page count, top directories by page count, common stylesheet
+ * set) computed fresh from the cluster's actual member pages — see
+ * {@link TemplateClusterSummary} for why that's necessary (the raw key
+ * itself is not human-readable).
  *
  * **JOIN-order pitfall this function must avoid — verified against a real
  * 486,000-page archive:** resolving `page_templates.page_id` to a URL via a
@@ -119,7 +120,7 @@ export async function listPageTemplateClusters(
 		clusters.push({
 			templateKey,
 			pageCount: pageIds.length,
-			commonDirectories: computeCommonDirectory(urls),
+			commonDirectories: computeDirectoryDistribution(urls),
 			commonStylesheetUrls,
 			commonStylesheetFileNames: computeStylesheetFileNames(commonStylesheetUrls),
 		});

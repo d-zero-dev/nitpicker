@@ -12,8 +12,8 @@ export { buildViewerReadModel } from './viewer-read-model/build-viewer-read-mode
 export { checkHeaders } from './check-headers.js';
 export { classifyErrorKind } from '@nitpicker/crawler';
 export { collectPageStylesheetUrlsByPageId } from './collect-page-stylesheet-urls-by-page-id.js';
-export { computeCommonDirectory } from './compute-common-directory.js';
 export { computeCssIntersection } from './compute-css-intersection.js';
+export { computeDirectoryDistribution } from './compute-directory-distribution.js';
 export { computeIsolatedClusters } from './compute-isolated-clusters.js';
 export { computeStylesheetFileNames } from './compute-stylesheet-file-names.js';
 export { classifyContentType, CONTENT_TYPE_CATEGORIES } from './classify-content-type.js';
