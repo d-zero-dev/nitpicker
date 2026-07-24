@@ -31,7 +31,8 @@
 		"clean": "tsc --build --clean",
 		"test:e2e": "node ./e2e/generate-fixture.mjs && playwright test",
 		"test:e2e:stub": "node ./e2e/generate-stub-fixture.mjs && playwright test --config playwright.stub.config.ts",
-		"test:e2e:directory-tree": "node ./e2e/generate-directory-tree-fixture.mjs && playwright test --config playwright.directory-tree.config.ts"
+		"test:e2e:directory-tree": "node ./e2e/generate-directory-tree-fixture.mjs && playwright test --config playwright.directory-tree.config.ts",
+		"test:e2e:template-clusters": "node ./e2e/generate-template-clusters-fixture.mjs && playwright test --config playwright.template-clusters.config.ts"
 	},
 	"dependencies": {
 		"@d-zero/dealer": "1.9.4",
