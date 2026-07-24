@@ -186,10 +186,13 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 	 *    accumulated (see `accumulatedPages` below for why it cannot run
 	 *    per-batch).
 	 *
-	 * On completion, three data entries are stored in the archive:
+	 * On completion, data entries are stored in the archive:
 	 * - `analysis/report` - Full {@link Report} with headers and data
 	 * - `analysis/table` - The raw {@link Table} instance (serialized)
 	 * - SQL-backed analysis violation tables - Flat {@link Violation} records
+	 * - `page_templates` SQL table - `templateKey` per page, written via
+	 *   `Archive.replacePageTemplates` and never round-tripped through
+	 *   `Table`/`Report`
 	 *
 	 * When `filter` resolves to zero plugins (only reachable when
 	 * `classifyTemplates` is the sole reason for this call — see
@@ -197,11 +200,10 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 	 * contributes no plugin data of its own. To avoid silently wiping every
 	 * column and violation from a *previous* run's plugins, this case skips
 	 * `replaceAnalysisViolations` entirely and seeds the new `Table` from the
-	 * archive's existing `analysis/report` (if any) before adding
-	 * `templateKey`. This does not apply when one or more plugins ran: running
-	 * a different plugin subset than a prior call has always fully replaced
-	 * the report/table/violations with that subset's output, and that
-	 * established contract is unchanged here.
+	 * archive's existing `analysis/report` (if any). This does not apply when
+	 * one or more plugins ran: running a different plugin subset than a prior
+	 * call has always fully replaced the report/table/violations with that
+	 * subset's output, and that established contract is unchanged here.
 	 * @param filter - Optional list of plugin module names to run.
 	 *   If omitted, all configured plugins are executed.
 	 * @param options - Optional settings for progress display.
@@ -265,10 +267,6 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 			}
 
 			table.addHeaders(mod.headers);
-		}
-
-		if (options?.classifyTemplates) {
-			table.addHeaders({ templateKey: 'Template' });
 		}
 
 		const allViolations: Violation[] = [];
@@ -580,8 +578,8 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 							}
 						: undefined,
 				});
-				for (const [href, templateKey] of templateKeys) {
-					table.addData({ [href]: { templateKey: { value: templateKey } } });
+				if (templateKeys.size > 0) {
+					await this.archive.replacePageTemplates(templateKeys);
 				}
 				lanes?.update(
 					templateClassificationLaneId,

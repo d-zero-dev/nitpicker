@@ -128,6 +128,7 @@ function createMockArchive() {
 		getPagesWithRefs: vi.fn().mockResolvedValue(),
 		setData: vi.fn().mockResolvedValue(),
 		replaceAnalysisViolations: vi.fn().mockResolvedValue(),
+		replacePageTemplates: vi.fn().mockResolvedValue(),
 	} as never;
 }
 
@@ -248,6 +249,7 @@ describe('analyze', () => {
 				),
 			setData: vi.fn().mockResolvedValue(),
 			replaceAnalysisViolations: vi.fn().mockResolvedValue(),
+			replacePageTemplates: vi.fn().mockResolvedValue(),
 			// No previous `analysis/report` by default (fresh archive) —
 			// `getData` rejects the way the real file-backed implementation does
 			// when the file doesn't exist yet.
@@ -631,7 +633,7 @@ describe('analyze', () => {
 		expect(poolInstances.every((p) => p.terminated)).toBe(true);
 	});
 
-	it('adds a templateKey column when classifyTemplates is enabled', async () => {
+	it('calls replacePageTemplates with the classified template keys when classifyTemplates is enabled', async () => {
 		const pages = [createMockPage('https://example.com/')];
 		mockedClassifyPageTemplates.mockResolvedValue(
 			new Map([['https://example.com/', 'template-a']]),
@@ -641,14 +643,17 @@ describe('analyze', () => {
 		await nitpicker.analyze(undefined, { classifyTemplates: true });
 
 		expect(classifyPageTemplates).toHaveBeenCalledTimes(1);
+		expect(archive.replacePageTemplates).toHaveBeenCalledWith(
+			new Map([['https://example.com/', 'template-a']]),
+		);
+
+		// `templateKey` is only ever persisted via `replacePageTemplates`,
+		// never merged into the report/table.
 		const reportCall = archive.setData.mock.calls.find(
 			(call: unknown[]) => call[0] === 'analysis/report',
 		);
 		const report = reportCall![1] as Report;
-		expect(report.pageData.headers.templateKey).toBe('Template');
-		expect(report.pageData.data['https://example.com/']!.templateKey).toEqual({
-			value: 'template-a',
-		});
+		expect(report.pageData.headers.templateKey).toBeUndefined();
 	});
 
 	it('does not run template classification when classifyTemplates is omitted', async () => {
@@ -658,6 +663,7 @@ describe('analyze', () => {
 		await nitpicker.analyze();
 
 		expect(classifyPageTemplates).not.toHaveBeenCalled();
+		expect(archive.replacePageTemplates).not.toHaveBeenCalled();
 		const reportCall = archive.setData.mock.calls.find(
 			(call: unknown[]) => call[0] === 'analysis/report',
 		);
@@ -681,15 +687,19 @@ describe('analyze', () => {
 		const { nitpicker, archive } = setupAnalyze(pages, [], [], { previousReport });
 		await nitpicker.analyze(undefined, { classifyTemplates: true });
 
-		// The previous run's `score` column survives alongside the new `templateKey`.
+		// The previous run's `score` column survives untouched; template
+		// classification is written to `page_templates` separately and never
+		// merged into the report/table.
 		const reportCall = archive.setData.mock.calls.find(
 			(call: unknown[]) => call[0] === 'analysis/report',
 		);
 		const report = reportCall![1] as Report;
 		expect(report.pageData.data['https://example.com/']).toEqual({
 			score: { value: 100 },
-			templateKey: { value: 'template-a' },
 		});
+		expect(archive.replacePageTemplates).toHaveBeenCalledWith(
+			new Map([['https://example.com/', 'template-a']]),
+		);
 
 		// No plugin ran, so violations from a previous run are never touched.
 		expect(archive.replaceAnalysisViolations).not.toHaveBeenCalled();
@@ -777,6 +787,7 @@ describe('analyze', () => {
 		const report = reportCall![1] as Report;
 		expect(report.pageData.data['https://example.com/']!.score).toEqual({ value: 100 });
 		expect(report.pageData.data['https://example.com/']!.templateKey).toBeUndefined();
+		expect(archive.replacePageTemplates).not.toHaveBeenCalled();
 		expect(archive.replaceAnalysisViolations).toHaveBeenCalledWith(
 			expect.arrayContaining([expect.objectContaining({ message: 'test' })]),
 		);
