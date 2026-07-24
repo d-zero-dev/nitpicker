@@ -250,9 +250,9 @@ describe('createServer', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('ListTools で27個のツールが返される', async () => {
+	it('ListTools で28個のツールが返される', async () => {
 		const result = await listTools(server);
-		expect(result.tools).toHaveLength(27);
+		expect(result.tools).toHaveLength(28);
 		const names = result.tools.map((t) => t.name);
 		expect(names).toContain('open_archive');
 		expect(names).toContain('close_archive');
@@ -449,6 +449,14 @@ describe('createServer', () => {
 		expect(data.total).toBe(0);
 	});
 
+	it('find_duplicate_bodies で body_hash 経由の重複を検出する（fixture 内は body が異なるため空配列）', async () => {
+		const result = await callTool(server, 'find_duplicate_bodies', { archiveId });
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(Array.isArray(data)).toBe(true);
+		expect(data).toHaveLength(0);
+	});
+
 	it('find_mismatches で canonical ミスマッチを検出する（getMismatchesFastPath 経由、issue #115）', async () => {
 		const result = await callTool(server, 'find_mismatches', {
 			archiveId,
@@ -519,6 +527,15 @@ describe('createServer', () => {
 
 	it('find_duplicates の不正な limit 引数でエラーを返す（issue #115 の validation 回帰）', async () => {
 		const result = await callTool(server, 'find_duplicates', {
+			archiveId,
+			limit: 'abc',
+		});
+		expect(result.isError).toBe(true);
+		expect(result.content[0]!.text).toContain('Invalid number');
+	});
+
+	it('find_duplicate_bodies の不正な limit 引数でエラーを返す', async () => {
+		const result = await callTool(server, 'find_duplicate_bodies', {
 			archiveId,
 			limit: 'abc',
 		});

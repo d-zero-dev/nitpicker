@@ -8,6 +8,7 @@ import {
 	ArchiveManager,
 	countPagesByJsonLdType,
 	countPagesByTag,
+	findDuplicateBodies,
 	getDuplicatesFastPath,
 	getHeaderChecksFastPath,
 	getImagesFastPath,
@@ -327,6 +328,16 @@ export function createServer() {
 								pagesLimit: optionalNumber(args, 'pagesLimit'),
 								cursor: optionalString(args, 'cursor'),
 							}),
+						);
+					}
+					case 'find_duplicate_bodies': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await findDuplicateBodies(
+								accessor,
+								optionalNumber(args, 'limit'),
+								optionalNumber(args, 'offset'),
+							),
 						);
 					}
 					case 'find_mismatches': {
