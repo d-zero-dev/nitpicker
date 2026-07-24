@@ -556,6 +556,29 @@ describe('createEntityTables', () => {
 		await db.destroy();
 	});
 
+	it('does not throw when page_meta pre-exists without body_hash (legacy archive on open)', async () => {
+		const db = await openDbWithEntityTables();
+		// Simulate a legacy `page_meta` that predates the `body_hash` column
+		// by dropping just that one column from the otherwise-current shape
+		// (keeping every other column/index-backing column intact, so this
+		// exercises exactly the `body_hash` gap and nothing else).
+		// `createEntityTables` runs unconditionally on every archive open —
+		// including this one, before `migratePageMetaBodyHash` ever gets a
+		// chance to add the column back — so it must never reference
+		// `body_hash` in a way that requires the column to already exist
+		// (regression guard: an earlier version of this DDL created
+		// `idx_page_meta_body_hash` here unconditionally, which raised
+		// `no such column: body_hash` against exactly this shape).
+		await db.schema.alterTable('page_meta', (t) => {
+			t.dropColumn('body_hash');
+		});
+		expect(await db.schema.hasColumn('page_meta', 'body_hash')).toBe(false);
+
+		await expect(createEntityTables(db)).resolves.toBeUndefined();
+
+		await db.destroy();
+	});
+
 	it('re-creates missing tables when only some 0.13 tables exist (partial-corruption repair)', async () => {
 		const db = await openDbWithEntityTables();
 

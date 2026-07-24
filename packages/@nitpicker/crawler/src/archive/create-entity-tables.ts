@@ -294,12 +294,21 @@ export async function createEntityTables(instance: Knex): Promise<void> {
 			main_content_audio_count    INTEGER,
 			main_content_canvas_count   INTEGER,
 			scroll_height_desktop       INTEGER,
-			scroll_height_mobile        INTEGER
+			scroll_height_mobile        INTEGER,
+			body_hash                   BLOB
 		)
 	`);
 	await instance.raw(
 		'CREATE INDEX IF NOT EXISTS idx_page_meta_og_type ON page_meta(og_type)',
 	);
+	// `idx_page_meta_body_hash` is NOT created here even though `body_hash`
+	// is: this DDL runs unconditionally on every archive open (including
+	// legacy archives that still lack the column at this point, before
+	// `migratePageMetaBodyHash` adds it), so an unconditional
+	// `CREATE INDEX ... body_hash` here would fail with `no such column` on
+	// any archive that predates this feature. The index is created in
+	// `migratePageMetaBodyHash` instead, which runs after the column-add
+	// guard for both fresh and legacy archives.
 	await instance.raw(
 		'CREATE INDEX IF NOT EXISTS idx_page_meta_robots_noindex ON page_meta(robots_noindex)',
 	);
