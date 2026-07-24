@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 concurrency:
   group: publish
@@ -48,4 +49,4 @@ jobs:
             echo "tag=latest" >> "$GITHUB_OUTPUT"
           fi
       - name: Publish
-        run: npx lerna publish from-git --dist-tag ${{ steps.dist-tag.outputs.tag }} --yes
+        run: npx lerna publish from-package --dist-tag ${{ steps.dist-tag.outputs.tag }} --yes
