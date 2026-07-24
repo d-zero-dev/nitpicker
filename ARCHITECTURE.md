@@ -25,7 +25,7 @@
 | `@nitpicker/crawler`              | クロールオーケストレーション + `.nitpicker` アーカイブ（SQLite）+ スコープ判定 + エラー分類                                                                                                     |
 | `@nitpicker/core`                 | analyze プラグインシステム（プラグインごとの長寿命 `WorkerPool`）+ テンプレート分類（`template-classification/`、`@d-zero/page-cluster` によるDOM構造クラスタリング、`--templates` オプトイン） |
 | `@nitpicker/query`                | アーカイブへの読み取り専用 SQL API（listPages / getSummary / listLinks 等）                                                                                                                     |
-| `@nitpicker/cli`                  | 統合 CLI（crawl / analyze / report / pipeline / query / viewer）                                                                                                                                |
+| `@nitpicker/cli`                  | 統合 CLI（crawl / analyze / report / pipeline / query / viewer / viewer-build / cache）                                                                                                         |
 | `@nitpicker/viewer`               | Hono API + React SPA のローカルビューア（backend `src/` + frontend `web/` の単一パッケージ）                                                                                                    |
 | `@nitpicker/mcp-server`           | query の MCP 露出（stdio、`nitpicker-mcp`）                                                                                                                                                     |
 | `@nitpicker/analyze-*`            | axe / lighthouse / markuplint / textlint / search の各監査                                                                                                                                      |
@@ -103,7 +103,7 @@
 - **DNS burn は session-success guard 付きでのみ行う** — resolver flip 事故でセッション全体が degenerate completion に陥るのを防ぐ（`crawler/src/crawler/should-burn-host.ts`）
 - **inventory の source 優先度は `crawled > inventory-seed > inventory-discovered`** — crawled 経由で到達可能なページは inventory 由来と見なさない。ingestion（pre-insert + audit 行 + `.bak` 削除）は 1 セットの原子的操作で、失敗時は `.bak` 復元で全て巻き戻る（`database.ts`、`crawler-orchestrator.ts` の `ingestionComplete`）
 - **Archive への書き込みは `WriteQueue` で直列化** — 複数イベントハンドラからの SQLite 書き込みロック競合を防ぐ。`crawlEnd` で `drain()` 必須（`crawler/src/write-queue.ts`）
-- **タールキャッシュは誰も evict しない** — read-only open の展開先 `<os.tmpdir>/nitpicker/cache/` の寿命は OS の temp cleanup に委ねる設計。手動削除は `rm -rf` で安全（`archive.ts` の `openCached`）
+- **タールキャッシュは誰も evict しない** — read-only open の展開先 `<os.tmpdir>/nitpicker/cache/` の寿命は OS の temp cleanup に委ねる設計。手動削除は `rm -rf` で安全（`archive.ts` の `openCached`）。`nitpicker cache list` / `cache clear` は同じ場所（tar 展開キャッシュ + analyze の `table` キャッシュ）を一覧・削除する診断用 CLI で、確認プロンプト無しの即時削除という設計思想も踏襲する（`cli/src/commands/cache.ts`）
 - **libsql 0.5.x の `readonly: true` は SQL 層で no-op** — read-only 安全性は migration スキップ + `setData` namespace ガード + 内部 review の 3 層で担保（`database.ts`）
 - **report の resources sort は派生文字列を 1 つも作らない** — `Intl.Collator` per-compare（分単位ブロック → Sheets keep-alive 切断）、ゼロパディング sort key 事前生成（数百 MB ヒープ）、比較関数内 `toLowerCase()`（GC 圧迫）はすべて実測で却下済み。`charCodeAt` 比較のみで書く（`report-google-sheets/src/utils/sort-resources-by-url.ts`）
 - **集約シートは `finalizeResources` hook を使う** — `eachResource` 内で「最後の resource か」を判定して emit する書き方は Phase 3 の並列化で壊れるため禁止（`sheets/run-finalize-resources.ts`。V8 引数上限 ~65k の既知の制約も同 JSDoc）
