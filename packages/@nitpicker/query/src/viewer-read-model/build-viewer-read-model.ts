@@ -498,7 +498,12 @@ export async function buildViewerReadModel(
 		// docs for the tree-building rules (host eligibility, trailing-slash
 		// directory/page boundary, count propagation).
 		const { nodes: directoryNodes, pages: directoryPages } = buildDirectoryTreeRows(
-			sourceRows.map((row) => ({ id: row.id, url: row.url, isExternal: row.isExternal })),
+			sourceRows.map((row) => ({
+				id: row.id,
+				url: row.url,
+				isExternal: row.isExternal,
+				contentType: row.contentType,
+			})),
 		);
 		for (let start = 0; start < directoryNodes.length; start += INSERT_CHUNK_SIZE) {
 			await trx('viewer_directory_nodes').insert(

@@ -42,3 +42,4 @@ jobs:
         run: yarn workspace @nitpicker/viewer exec playwright install --with-deps chromium
       - run: yarn workspace @nitpicker/viewer test:e2e
       - run: yarn workspace @nitpicker/viewer test:e2e:stub
+      - run: yarn workspace @nitpicker/viewer test:e2e:directory-tree

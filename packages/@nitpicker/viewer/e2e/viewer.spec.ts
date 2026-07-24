@@ -168,6 +168,25 @@ test.describe('Nitpicker Viewer', () => {
 		// path all resolve.
 		await expect(page.locator('.view-header .view-description')).toBeVisible();
 	});
+
+	test('viewer read model 未構築のアーカイブでは空状態メッセージが表示される', async ({
+		page,
+	}) => {
+		// This suite's shared fixture (generate-fixture.mjs) never calls
+		// buildViewerReadModel, so directory-tree's 3 query functions (gated on
+		// isViewerReadModelCurrent with no legacy fallback) always return an
+		// empty `{ roots: [] }` against it — the natural place to exercise the
+		// "no read model" empty state without a dedicated fixture.
+		await page.goto('/directory-tree');
+		await expect(
+			page.getByRole('heading', { name: 'Directory Tree', level: 1 }),
+		).toBeVisible();
+		await expect(
+			page.getByText(
+				'No directory data available. Run `nitpicker viewer-build` to generate it.',
+			),
+		).toBeVisible();
+	});
 });
 
 test.describe('MPA ページネーション', () => {

@@ -8,6 +8,7 @@ import { useI18n } from '../i18n/use-i18n.js';
 const NAV_ITEMS: NavItem[] = [
 	{ path: '/', labelKey: 'nav.summary' },
 	{ path: '/pages', labelKey: 'nav.pages' },
+	{ path: '/directory-tree', labelKey: 'nav.directoryTree' },
 	{ path: '/resources', labelKey: 'nav.resources' },
 	{ path: '/images', labelKey: 'nav.images' },
 	{ path: '/broken-links', labelKey: 'nav.brokenLinks' },

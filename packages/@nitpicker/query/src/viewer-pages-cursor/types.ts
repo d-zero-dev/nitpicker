@@ -77,6 +77,8 @@ export interface ViewerPagesCursorFilterKeyInput {
 	source?: string;
 	/** See `ListViewerPagesOptions.templateKey`. */
 	templateKey?: string;
+	/** See `ListViewerPagesOptions.directory`. */
+	directory?: string;
 }
 
 /**

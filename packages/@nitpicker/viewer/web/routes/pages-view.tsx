@@ -80,6 +80,7 @@ export function PagesView() {
 			: undefined;
 	const filter: PagesFilter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
+		directory: params.get('directory') ?? undefined,
 		status: Number.isFinite(statusValue) ? statusValue : undefined,
 		isExternal: scope === 'all' ? undefined : scope === 'true',
 		lang: params.get('lang') ?? undefined,
@@ -484,6 +485,11 @@ export function PagesView() {
 	return (
 		<div className="view">
 			<ViewHeader titleKey="views.pages.title" descriptionKey="views.pages.description" />
+			{filter.directory && (
+				<p className="filter-notice">
+					{t('views.pages.directoryFilterNotice', { directory: filter.directory })}
+				</p>
+			)}
 			{mode === 'mpa' ? (
 				<DataTable
 					mode="mpa"

@@ -116,6 +116,63 @@ async function buildFixture(
 }
 
 /**
+ * Builds a fixture archive with pages under `/blog/2024/`, its subdirectory
+ * `/blog/2024/sub/`, and the literal-prefix sibling `/blog2/` — enough
+ * structure to exercise the `directory` filter's whole-subtree match and its
+ * sibling-prefix exclusion. The read model is always built (this fixture
+ * only exercises the fast path).
+ * @param workingDir - Unique scratch directory for this fixture.
+ * @returns The app, archive, and manager — callers must close both in
+ *   `afterAll`.
+ */
+async function buildDirectoryFixture(workingDir: string) {
+	const { mkdirSync } = await import('node:fs');
+	mkdirSync(workingDir, { recursive: true });
+	const archive = await Archive.create({
+		filePath: path.resolve(workingDir, 'fixture.nitpicker'),
+		cwd: workingDir,
+	});
+	await archive.setConfig(BASE_CONFIG);
+	for (const pagePath of [
+		'/blog/2024/post-a',
+		'/blog/2024/sub/post-b',
+		'/blog2/post-c',
+	]) {
+		await archive.setPage({
+			url: parseUrl(`https://example.com${pagePath}`)!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+	}
+	await buildViewerReadModel(archive);
+
+	const manager = new ArchiveManager();
+	const { archiveId, mode } = await manager.open(archive.tmpDir);
+	const app = createApp({
+		context: {
+			manager,
+			archiveId,
+			filePath: archive.tmpDir,
+			mode,
+			crawlerLockHolder: null,
+		},
+		publicDir: '/tmp/no-such-dir-register-pages-route-spec',
+	});
+	return { app, archive, manager };
+}
+
+/**
  * Drives `/api/pages?limit=...` to exhaustion via `nextCursor` alone (the
  * same continuation contract `usePagesInfinite` relies on), collecting every
  * page's URLs in request order.
@@ -375,6 +432,35 @@ describe('registerPagesRoute (integration)', () => {
 			const byUrl = new Map(body.items.map((i) => [i.url, i.templateKey]));
 			expect(byUrl.get('https://example.com/a')).toBe('template-a');
 			expect(byUrl.get('https://example.com/b')).toBeNull();
+		});
+	});
+
+	describe('directory filter takes the fast path and matches the whole subtree', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_register_pages_route_directory__',
+		);
+		let fixture: Awaited<ReturnType<typeof buildDirectoryFixture>>;
+
+		beforeAll(async () => {
+			fixture = await buildDirectoryFixture(workingDir);
+		});
+
+		afterAll(async () => {
+			await fixture.manager.closeAll();
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('matches the directory and its descendants, not a literal-prefix sibling', async () => {
+			const res = await fixture.app.request(
+				`/api/pages?directory=${encodeURIComponent('/blog/2024/')}`,
+			);
+			const body = (await res.json()) as { items: { url: string }[] };
+			expect(body.items.map((i) => i.url).toSorted()).toEqual([
+				'https://example.com/blog/2024/post-a',
+				'https://example.com/blog/2024/sub/post-b',
+			]);
 		});
 	});
 });

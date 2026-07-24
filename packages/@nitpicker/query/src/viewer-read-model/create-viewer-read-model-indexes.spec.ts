@@ -59,6 +59,7 @@ describe('createViewerReadModelIndexes', () => {
 			'vp_missing_description',
 			'vp_noindex',
 			'vp_source',
+			'vp_path',
 		]) {
 			expect(indexNames.has(indexName)).toBe(true);
 		}

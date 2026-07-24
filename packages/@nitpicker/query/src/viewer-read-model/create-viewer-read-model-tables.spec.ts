@@ -113,6 +113,8 @@ describe('createViewerReadModelTables', () => {
 			descendant_page_count: 0,
 			internal_descendant_page_count: 0,
 			external_descendant_page_count: 0,
+			direct_html_page_count: 0,
+			descendant_html_page_count: 0,
 			has_children: 0,
 		};
 		await knex('viewer_directory_nodes').insert({ node_id: 1, ...baseNode });

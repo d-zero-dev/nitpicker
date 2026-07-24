@@ -24,5 +24,6 @@ export function buildViewerPagesFilterKey(
 		noindex: filters.noindex,
 		source: filters.source,
 		templateKey: filters.templateKey,
+		directory: filters.directory,
 	});
 }

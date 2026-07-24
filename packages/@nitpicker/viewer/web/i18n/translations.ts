@@ -22,6 +22,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 		nav: {
 			summary: 'Summary',
 			pages: 'Pages',
+			directoryTree: 'Directory Tree',
 			resources: 'Resources',
 			images: 'Images',
 			brokenLinks: 'Broken Links',
@@ -144,6 +145,24 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				filterMissingTitle: 'Missing title',
 				filterExternal: 'External pages',
 				filterContentType: 'Content-Type',
+				directoryFilterNotice: 'Showing pages under {directory}',
+			},
+			directoryTree: {
+				title: 'Directory Tree',
+				description:
+					'Browse the crawled site by directory structure. Expand a folder to see its subfolders, or select one to view its pages in the Pages list.',
+				pageCount: '{count} pages',
+				expandNode: 'Expand {name}',
+				collapseNode: 'Collapse {name}',
+				noRoots:
+					'No directory data available. Run `nitpicker viewer-build` to generate it.',
+				collapseDepthInputLabel: 'Depth',
+				collapseToDepth: 'Collapse to depth',
+				sortOrderLabel: 'Sort order',
+				sortOrderPath: 'Path order',
+				sortOrderPagesDesc: 'Most pages first',
+				sortOrderPagesAsc: 'Fewest pages first',
+				applySortOrder: 'Sort',
 			},
 			pageDetail: {
 				title: 'Page detail',
@@ -339,6 +358,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 		nav: {
 			summary: 'サマリー',
 			pages: 'ページ',
+			directoryTree: 'ディレクトリツリー',
 			resources: 'リソース',
 			images: '画像',
 			brokenLinks: 'リンク切れ',
@@ -461,6 +481,24 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				filterMissingTitle: 'タイトル欠損',
 				filterExternal: '外部ページ',
 				filterContentType: 'Content-Type',
+				directoryFilterNotice: '「{directory}」配下のページを表示中',
+			},
+			directoryTree: {
+				title: 'ディレクトリツリー',
+				description:
+					'クロールしたサイトをディレクトリ構造で閲覧します。フォルダを展開してサブフォルダを見るか、選択してページ一覧をPagesビューで表示します。',
+				pageCount: '{count} ページ',
+				expandNode: '{name} を展開',
+				collapseNode: '{name} を折りたたむ',
+				noRoots:
+					'ディレクトリデータがありません。`nitpicker viewer-build` を実行して生成してください。',
+				collapseDepthInputLabel: '階層数',
+				collapseToDepth: '階層まで全て閉じる',
+				sortOrderLabel: '並び順',
+				sortOrderPath: 'パス順',
+				sortOrderPagesDesc: 'ページが多い順',
+				sortOrderPagesAsc: 'ページが少ない順',
+				applySortOrder: '並び替え',
 			},
 			pageDetail: {
 				title: 'ページ詳細',

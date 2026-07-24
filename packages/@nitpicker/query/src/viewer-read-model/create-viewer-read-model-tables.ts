@@ -158,6 +158,8 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			descendant_page_count integer not null,
 			internal_descendant_page_count integer not null,
 			external_descendant_page_count integer not null,
+			direct_html_page_count integer not null,
+			descendant_html_page_count integer not null,
 			has_children integer not null,
 			unique(root_key, path)
 		)

@@ -1,10 +1,8 @@
 import type { DirectoryTreeNode, DirectoryTreeRoot } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { INITIAL_DIRECTORY_TREE_DEPTH } from './directory-tree-constants.js';
 import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
-
-/** Maximum depth included in the initial tree load — deeper levels are expanded on demand via `listDirectoryChildren`. */
-const INITIAL_DEPTH = 3;
 
 /** Row shape read from `viewer_directory_nodes` by {@link getDirectoryTree}. */
 interface DirectoryNodeRow {
@@ -32,6 +30,10 @@ interface DirectoryNodeRow {
 	internal_descendant_page_count: number;
 	/** `viewer_directory_nodes.external_descendant_page_count`. */
 	external_descendant_page_count: number;
+	/** `viewer_directory_nodes.direct_html_page_count`. */
+	direct_html_page_count: number;
+	/** `viewer_directory_nodes.descendant_html_page_count`. */
+	descendant_html_page_count: number;
 	/** `viewer_directory_nodes.has_children`. */
 	has_children: number;
 }
@@ -54,6 +56,8 @@ function toDirectoryTreeNode(row: DirectoryNodeRow): DirectoryTreeNode {
 		descendantPageCount: row.descendant_page_count,
 		internalDescendantPageCount: row.internal_descendant_page_count,
 		externalDescendantPageCount: row.external_descendant_page_count,
+		directHtmlPageCount: row.direct_html_page_count,
+		descendantHtmlPageCount: row.descendant_html_page_count,
 		hasChildren: row.has_children === 1,
 	};
 }
@@ -93,7 +97,7 @@ export async function getDirectoryTree(
 
 	const knex = accessor.getKnex();
 	const rows: DirectoryNodeRow[] = await knex('viewer_directory_nodes')
-		.where('depth', '<=', INITIAL_DEPTH)
+		.where('depth', '<=', INITIAL_DIRECTORY_TREE_DEPTH)
 		.select(
 			'node_id',
 			'parent_node_id',
@@ -107,6 +111,8 @@ export async function getDirectoryTree(
 			'descendant_page_count',
 			'internal_descendant_page_count',
 			'external_descendant_page_count',
+			'direct_html_page_count',
+			'descendant_html_page_count',
 			'has_children',
 		)
 		// Deliberately `path_sort_key` alone, NOT `['root_key', 'path_sort_key']`

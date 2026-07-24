@@ -28,14 +28,17 @@ const DEFAULT_LIMIT = 100;
  * - `listViewerPages` (the `viewer_pages` read-model fast path) when the
  *   read model is built and current AND the request uses none of the
  *   filters that only the wide `pages` table can evaluate: the LIKE-based
- *   `urlPattern` / `directory` (a LIKE predicate can't seek an index, so it
- *   is deliberately excluded from the fast path), and the header-presence
+ *   `urlPattern` (a substring LIKE predicate can't seek an index, so it is
+ *   deliberately excluded from the fast path), and the header-presence
  *   filters (`hasCSP` / `hasXFrameOptions` / `hasXContentTypeOptions` /
  *   `hasHSTS`) computed from `pages.responseHeaders` — `viewer_pages` has no
  *   equivalent column, and evaluating them only after the narrow-table
  *   id-limiting stage would corrupt `total`/pagination. `templateKey` does
  *   NOT force this fallback: `listViewerPages` resolves it via a narrow
- *   `page_id`-PK join to `page_templates`, not a wide-table scan.
+ *   `page_id`-PK join to `page_templates`, not a wide-table scan. `directory`
+ *   DOES take the fast path too — see `ListViewerPagesOptions.directory`'s
+ *   docs for why a prefix range scan stays within its contract unlike
+ *   `urlPattern`.
  * - `listPages` (the legacy, offset-only, write-model path) otherwise —
  *   covers archives predating the read model (issue #112's build-timing
  *   work is tracked separately) and the excluded-filter cases above. Its
@@ -54,7 +57,6 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 
 		const usesWideTableOnlyFilter = Boolean(
 			q.urlPattern ||
-			q.directory ||
 			q.hasCSP ||
 			q.hasXFrameOptions ||
 			q.hasXContentTypeOptions ||
@@ -72,6 +74,7 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 				noindex: toBoolean(q.noindex),
 				source: toPageSource(q.source),
 				templateKey: q.templateKey,
+				directory: q.directory || undefined,
 				sortBy: toPageSortBy(q.sortBy),
 				sortOrder: toPageSortOrder(q.sortOrder),
 				limit: toNumber(q.limit),

@@ -7,6 +7,7 @@ import { MAIN_CONTENT_ID, SkipLink } from './components/skip-link.js';
 import { TopBar } from './components/top-bar.js';
 import { I18nProvider } from './i18n/i18n-provider.js';
 import { BrokenLinksView } from './routes/broken-links-view.js';
+import { DirectoryTreeView } from './routes/directory-tree-view.js';
 import { DuplicatesView } from './routes/duplicates-view.js';
 import { ErrorsView } from './routes/errors-view.js';
 import { ExternalLinksView } from './routes/external-links-view.js';
@@ -56,6 +57,7 @@ export function App() {
 									<Route path="/" element={<SummaryView />} />
 									<Route path="/pages" element={<PagesView />} />
 									<Route path="/pages/detail" element={<PageDetailView />} />
+									<Route path="/directory-tree" element={<DirectoryTreeView />} />
 									<Route path="/resources" element={<ResourcesView />} />
 									<Route path="/images" element={<ImagesView />} />
 									<Route path="/broken-links" element={<BrokenLinksView />} />
