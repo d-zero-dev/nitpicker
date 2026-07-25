@@ -36,7 +36,7 @@ jobs:
       - name: Determine dist-tag
         id: dist-tag
         run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
+          VERSION=$(node -e "console.log(require('./lerna.json').version)")
           if [[ "$VERSION" == *"-alpha"* ]]; then
             echo "tag=alpha" >> "$GITHUB_OUTPUT"
           elif [[ "$VERSION" == *"-beta"* ]]; then
