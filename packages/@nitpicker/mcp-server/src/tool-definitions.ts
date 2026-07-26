@@ -335,6 +335,23 @@ export const toolDefinitions: Tool[] = [
 		},
 	},
 	{
+		name: 'find_duplicate_bodies',
+		description:
+			'Find pages whose rendered <body> content is byte-identical after masking dynamic ids and /index.{ext} URL-suffix variance. Unlike find_duplicates (which compares title/description metadata), this compares actual page content — use it to catch server-side URL normalization gaps, http/https or path-variant duplicate crawls, and pages that dynamically render identical content under different URLs, regardless of HTTP status or hostname.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				limit: { type: 'number', description: 'Max duplicate groups (default: 50)' },
+				offset: { type: 'number', description: 'Duplicate groups to skip (default: 0)' },
+			},
+			required: ['archiveId'],
+		},
+	},
+	{
 		name: 'find_mismatches',
 		description:
 			'Find metadata mismatches: canonical URL ≠ page URL, og:title ≠ title, og:description ≠ description. Use for SEO consistency checks.',

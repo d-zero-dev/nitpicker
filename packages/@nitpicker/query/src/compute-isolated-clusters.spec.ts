@@ -351,3 +351,190 @@ describe('computeIsolatedClusters', () => {
 		}
 	});
 });
+
+describe('computeIsolatedClusters: content_items.alias_of_id handling', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(
+		__dirname,
+		'__test_fixtures_compute_isolated_clusters_alias__',
+	);
+	const archiveFilePath = path.resolve(dir, 'compute-clusters-alias-test.nitpicker');
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// seed-x anchors to /old-y (an alias of seed-z); seed-z anchors to
+		// seed-w. If alias resolution is wired correctly the three form one
+		// 3-node component and /old-y (itself a would-be inventory-*
+		// candidate) is excluded, mirroring the redirect-cluster case above.
+		await archive.setPage(
+			{
+				url: parseUrl('https://example.com/alias-cluster/seed-x')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: { ...EMPTY_META, title: 'Alias Cluster Seed X' },
+				anchorList: [
+					{
+						href: parseUrl('https://example.com/alias-cluster/old-y')!,
+						isExternal: false,
+						title: null,
+						textContent: 'Y',
+						hash: null,
+					},
+				],
+				imageList: [],
+				isSkipped: false,
+			},
+			'inventory-seed',
+		);
+		await archive.setPage(
+			{
+				url: parseUrl('https://example.com/alias-cluster/old-y')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: { ...EMPTY_META, title: 'Alias Cluster Old Y' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			},
+			'inventory-discovered',
+		);
+		await archive.setPage(
+			{
+				url: parseUrl('https://example.com/alias-cluster/seed-z')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: { ...EMPTY_META, title: 'Alias Cluster Seed Z' },
+				anchorList: [
+					{
+						href: parseUrl('https://example.com/alias-cluster/seed-w')!,
+						isExternal: false,
+						title: null,
+						textContent: 'W',
+						hash: null,
+					},
+				],
+				imageList: [],
+				isSkipped: false,
+			},
+			'inventory-seed',
+		);
+		await archive.setPage(
+			{
+				url: parseUrl('https://example.com/alias-cluster/seed-w')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: { ...EMPTY_META, title: 'Alias Cluster Seed W' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			},
+			'inventory-seed',
+		);
+
+		const knex = archive.getKnex();
+		const target = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com/alias-cluster/seed-z')
+			.first();
+		const member = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com/alias-cluster/old-y')
+			.first();
+		await knex('content_items').where('id', member.id).update({ alias_of_id: target.id });
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('resolves an anchor to an alias URL to its representative, forming one connected component', async () => {
+		const components = await computeIsolatedClusters(archive);
+		const cluster = components.find((c) =>
+			c.members.some((m) => m.url === 'https://example.com/alias-cluster/seed-x'),
+		);
+		expect(cluster?.size).toBe(3);
+		expect(cluster?.members.map((m) => m.url).toSorted()).toEqual([
+			'https://example.com/alias-cluster/seed-w',
+			'https://example.com/alias-cluster/seed-x',
+			'https://example.com/alias-cluster/seed-z',
+		]);
+	});
+
+	it('excludes the alias-source row from candidates', async () => {
+		const components = await computeIsolatedClusters(archive);
+		const allMemberUrls = components.flatMap((c) => c.members.map((m) => m.url));
+		expect(allMemberUrls).not.toContain('https://example.com/alias-cluster/old-y');
+	});
+
+	it('throws an actionable error when content_items.alias_of_id does not exist', async () => {
+		const knex = archive.getKnex();
+		await knex.schema.alterTable('content_items', (t) => {
+			t.dropColumn('alias_of_id');
+		});
+
+		await expect(computeIsolatedClusters(archive)).rejects.toThrow(/viewer-build/);
+
+		// Restore the column so afterAll's close()/other tests are unaffected.
+		await knex.schema.alterTable('content_items', (t) => {
+			t.integer('alias_of_id');
+		});
+	});
+});

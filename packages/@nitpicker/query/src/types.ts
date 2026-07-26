@@ -1145,6 +1145,8 @@ export interface PageDetail {
 	inboundLinks: InboundLink[];
 	/** URLs that redirect to this page. */
 	redirectFrom: string[];
+	/** URLs merged into this page via URL-normalization equivalence (`content_items.alias_of_id`). */
+	aliasUrls: string[];
 }
 
 /**
@@ -1988,6 +1990,19 @@ export interface DuplicateEntry {
 	/** URLs sharing this value. */
 	urls: string[];
 	/** Number of pages with this duplicate value. */
+	count: number;
+}
+
+/**
+ * A group of pages whose masked `<body>` content hashes identically —
+ * see {@link import('./find-duplicate-bodies.js').findDuplicateBodies}.
+ */
+export interface DuplicateBodyEntry {
+	/** SHA-256 hash of the masked body content, as a 64-char hex string. */
+	bodyHash: string;
+	/** URLs sharing this body hash. */
+	urls: string[];
+	/** Number of pages with this body hash. */
 	count: number;
 }
 

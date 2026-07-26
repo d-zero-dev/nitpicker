@@ -7,6 +7,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 
 import { isHtmlContentType } from '../../../../crawler/is-html-content-type.js';
 import { eachSplitted } from '../../../../utils/array/each-splitted.js';
+import { computeBodyHash } from '../../../body-hash/compute-body-hash.js';
 import { dbLog } from '../../../debug.js';
 import { deriveLineageFromParent } from '../../../derive-lineage-from-parent.js';
 import { matchImagesToDomPaths } from '../../../populate-entity-tables/match-images-to-dom-paths.js';
@@ -199,6 +200,12 @@ async function updatePageInTransaction(
 	// content check alone expresses the intent without a redundant term.
 	if (writeHtml && page.html.length > 0) {
 		await writePageHtmlBlob(pageId, page.html, trx);
+		// Computed from the same `page.html` written above, in the same
+		// transaction, so `page_meta.body_hash` never observably lags the
+		// snapshot it was derived from.
+		await trx('page_meta')
+			.where('page_id', pageId)
+			.update({ body_hash: computeBodyHash(page.html) });
 	} else if (
 		writeHtml &&
 		page.contentType !== null &&
@@ -214,7 +221,12 @@ async function updatePageInTransaction(
 		// stale ref can only have been written by a snapshot-capable call
 		// (`setPage`); `setExternalPage` passes `writeHtml = false` and never
 		// sets `html`, so it has nothing to clear.
+		//
+		// `page_meta.body_hash` is cleared alongside it for the same reason —
+		// it is derived from the same HTML `page_html_ref` points at, so it
+		// must not outlive the ref it was computed from.
 		await trx('page_html_ref').where('page_id', pageId).delete();
+		await trx('page_meta').where('page_id', pageId).update({ body_hash: null });
 	}
 	// Re-scrape semantics: the same URL can be scraped more than once
 	// (e.g. `crawl --resume`, re-visits, `--append` re-promotion). Edges

@@ -9,6 +9,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import { applyListOrder } from './apply-list-order.js';
 import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
 import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presence-sql.js';
+import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 
 /**
  * Checks security-related HTTP response headers for internal pages.
@@ -27,6 +28,8 @@ import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presenc
  * @param options.offset - Number of results to skip. Defaults to 0.
  * @param options.missingOnly - When true, only returns pages missing at least one security header.
  * @returns A paginated list of header check results.
+ * @throws {Error} If `content_items.alias_of_id` does not exist on this
+ *   connection (see `requireAliasOfIdColumn`).
  * @example
  * const { items, total } = await checkHeaders(accessor, { missingOnly: true, limit: 50 });
  * for (const page of items) {
@@ -38,6 +41,7 @@ export async function checkHeaders(
 	options: CheckHeadersOptions = {},
 ): Promise<PaginatedHeaderCheckList> {
 	const knex = accessor.getKnex();
+	await requireAliasOfIdColumn(knex);
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 	const sortBy = options.sortBy ?? 'url';
@@ -49,7 +53,8 @@ export async function checkHeaders(
 		.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
 		.leftJoin('header_flags as hf', 'hf.header_set_id', 'ci.header_set_id')
 		.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
-		.whereNull('ci.redirect_dest_id');
+		.whereNull('ci.redirect_dest_id')
+		.whereNull('ci.alias_of_id');
 
 	if (options.missingOnly) {
 		baseQuery.where((qb) => {

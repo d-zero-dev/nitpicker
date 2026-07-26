@@ -448,6 +448,175 @@ describe('snapshot 付与: 非HTML / 空html にスナップショットを作�
 	});
 });
 
+describe('body_hash: <body>内容ハッシュの書き込み', () => {
+	/**
+	 * Builds page data for the body_hash-gating tests.
+	 * @param url - The page URL.
+	 * @param contentType - The response content type.
+	 * @param html - The rendered HTML string (empty for non-HTML / degraded scrapes).
+	 * @returns Page data accepted by `Database.updatePage`.
+	 */
+	const makePage = (url: string, contentType: string, html: string) => ({
+		url: parseUrl(url)!,
+		redirectPaths: [] as string[],
+		isExternal: false,
+		status: 200,
+		statusText: 'OK',
+		contentLength: 100,
+		contentType,
+		responseHeaders: {},
+		meta: { title: '' },
+		anchorList: [],
+		imageList: [],
+		html,
+		isSkipped: false,
+	});
+
+	/**
+	 * Looks up `page_meta.body_hash` for the given URL via a join on
+	 * `content_items` + `url_refs`.
+	 * @param db
+	 * @param url
+	 */
+	const getBodyHashByUrl = async (db: Database, url: string) =>
+		await db
+			.getKnex()
+			.from('page_meta')
+			.join('content_items', 'page_meta.page_id', '=', 'content_items.id')
+			.join('url_refs', 'content_items.url_id', '=', 'url_refs.id')
+			.select('page_meta.body_hash as bodyHash')
+			.where('url_refs.url', url)
+			.first();
+
+	it('HTML (text/html with non-empty html) writes a 32-byte body_hash', async () => {
+		const dbPath = path.resolve(workingDir, 'body-hash-html.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const url = 'http://localhost/page';
+		try {
+			await db.updatePage(
+				makePage(url, 'text/html', '<html><body>x</body></html>'),
+				true,
+				true,
+			);
+			const row = await getBodyHashByUrl(db, url);
+			expect(row).toBeDefined();
+			expect(Buffer.from(row!.bodyHash)).toHaveLength(32);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('Non-HTML (application/pdf with empty html) leaves body_hash null', async () => {
+		const dbPath = path.resolve(workingDir, 'body-hash-pdf.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const url = 'http://localhost/doc.pdf';
+		try {
+			await db.updatePage(makePage(url, 'application/pdf', ''), true, true);
+			const row = await getBodyHashByUrl(db, url);
+			expect(row?.bodyHash).toBeNull();
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('Degraded scrape (text/html but empty html) keeps the previous body_hash', async () => {
+		const dbPath = path.resolve(workingDir, 'body-hash-degraded.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const url = 'http://localhost/degrades';
+		try {
+			await db.updatePage(
+				makePage(url, 'text/html', '<html><body>x</body></html>'),
+				true,
+				true,
+			);
+			const before = await getBodyHashByUrl(db, url);
+			expect(before?.bodyHash).not.toBeNull();
+
+			await db.updatePage(makePage(url, 'text/html', ''), true, true);
+			const after = await getBodyHashByUrl(db, url);
+			expect(Buffer.from(after!.bodyHash).equals(Buffer.from(before!.bodyHash))).toBe(
+				true,
+			);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('HTML → non-HTML re-scrape clears body_hash alongside the stale page_html_ref', async () => {
+		const dbPath = path.resolve(workingDir, 'body-hash-flip.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const url = 'http://localhost/flips';
+		try {
+			await db.updatePage(
+				makePage(url, 'text/html', '<html><body>x</body></html>'),
+				true,
+				true,
+			);
+			const before = await getBodyHashByUrl(db, url);
+			expect(before?.bodyHash).not.toBeNull();
+
+			await db.updatePage(makePage(url, 'application/pdf', ''), true, true);
+			const after = await getBodyHashByUrl(db, url);
+			expect(after?.bodyHash).toBeNull();
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('Re-scrape with different body content updates body_hash to the new value', async () => {
+		const dbPath = path.resolve(workingDir, 'body-hash-update.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const url = 'http://localhost/changes';
+		try {
+			await db.updatePage(
+				makePage(url, 'text/html', '<html><body>old</body></html>'),
+				true,
+				true,
+			);
+			const before = await getBodyHashByUrl(db, url);
+
+			await db.updatePage(
+				makePage(url, 'text/html', '<html><body>new</body></html>'),
+				true,
+				true,
+			);
+			const after = await getBodyHashByUrl(db, url);
+
+			expect(Buffer.from(after!.bodyHash).equals(Buffer.from(before!.bodyHash))).toBe(
+				false,
+			);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('Re-scrape with identical body content keeps body_hash unchanged', async () => {
+		const dbPath = path.resolve(workingDir, 'body-hash-stable.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const url = 'http://localhost/stable';
+		try {
+			const page = makePage(url, 'text/html', '<html><body>same</body></html>');
+			await db.updatePage(page, true, true);
+			const before = await getBodyHashByUrl(db, url);
+
+			await db.updatePage(page, true, true);
+			const after = await getBodyHashByUrl(db, url);
+
+			expect(Buffer.from(after!.bodyHash).equals(Buffer.from(before!.bodyHash))).toBe(
+				true,
+			);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+});
+
 describe('content-type の正規化（#72）', () => {
 	it('contentType は小文字化・trim して保存され、ページとして分類される', async () => {
 		const dbPath = path.resolve(workingDir, 'content-type-normalize.sqlite');

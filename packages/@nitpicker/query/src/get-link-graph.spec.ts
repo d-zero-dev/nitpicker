@@ -234,3 +234,144 @@ describe('getLinkGraph', () => {
 		await updateSourceByUrl('https://example.com/contact', 'crawled');
 	});
 });
+
+describe('getLinkGraph: content_items.alias_of_id handling', () => {
+	const dir = path.resolve(dirname, '__test_fixtures_link_graph_alias__');
+	const archiveFilePath = path.resolve(dir, 'link-graph-alias-test.nitpicker');
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// Home (`/`) and its alias (`/index.html`) both exist as rows; About
+		// links to the alias URL specifically, to prove the alias-side node
+		// and its inbound edge both drop rather than resolve to the target.
+		await archive.setPage({
+			url: parseUrl('https://example.com/')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: 'Home' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/index.html')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: 'Home' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/about')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: 'About' },
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/index.html')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Home',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		const knex = archive.getKnex();
+		const target = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com')
+			.first();
+		const member = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com/index.html')
+			.first();
+		await knex('content_items').where('id', member.id).update({ alias_of_id: target.id });
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('drops the alias-side node from the graph entirely', async () => {
+		const graph = await getLinkGraph(archive);
+		const urls = graph.nodes.map((n) => n.url);
+		expect(urls).toContain('https://example.com');
+		expect(urls).not.toContain('https://example.com/index.html');
+	});
+
+	it('drops edges pointing at the alias-side URL rather than resolving them', async () => {
+		const graph = await getLinkGraph(archive);
+		expect(graph.edges.some((e) => e.target === 'https://example.com/index.html')).toBe(
+			false,
+		);
+	});
+
+	it('throws an actionable error when content_items.alias_of_id does not exist', async () => {
+		const knex = archive.getKnex();
+		await knex.schema.alterTable('content_items', (t) => {
+			t.dropColumn('alias_of_id');
+		});
+
+		await expect(getLinkGraph(archive)).rejects.toThrow(/viewer-build/);
+
+		// Restore the column so afterAll's close()/other tests are unaffected.
+		await knex.schema.alterTable('content_items', (t) => {
+			t.integer('alias_of_id');
+		});
+	});
+});

@@ -701,3 +701,295 @@ describe('computeAnchorFactRows — chunking', () => {
 		).rejects.toThrow(RangeError);
 	});
 });
+
+/**
+ * Mirrors `computeAnchorFactRows — redirect resolution` above, but for
+ * `content_items.alias_of_id` instead of `redirect_dest_id`: an anchor to
+ * an alias-member page and an anchor directly to the same representative
+ * must collapse into a single `dest_page_id`, judged broken/external via
+ * the representative, not the alias member.
+ */
+describe('computeAnchorFactRows — alias resolution', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_compute_anchor_fact_rows_alias__',
+	);
+	let archive: InstanceType<typeof Archive>;
+	const archiveFilePath = path.resolve(
+		workingDir,
+		'compute-anchor-fact-rows-alias-test.nitpicker',
+	);
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/direct')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: { ...META, title: 'Direct' },
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/target')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Direct link',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/via-alias')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: { ...META, title: 'Via alias' },
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/target/index.html')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Alias link',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/target')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 404,
+			statusText: 'Not Found',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/target/index.html')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 404,
+			statusText: 'Not Found',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// Simulate an alias assignment (as `backfillAliasOfId` would compute):
+		// `/target/index.html` merged into `/target`.
+		const knex = archive.getKnex();
+		const target = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com/target')
+			.first();
+		const member = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com/target/index.html')
+			.first();
+		await knex('content_items').where('id', member.id).update({ alias_of_id: target.id });
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('collapses an alias-targeting anchor and a direct anchor onto the same representative dest_page_id, judged broken via the representative status', async () => {
+		const knex = archive.getKnex();
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
+		);
+		const targetRows = rows.filter(
+			(row) => urlByRefId.get(row.dest_url_ref_id) === 'https://example.com/target',
+		);
+		expect(targetRows).toHaveLength(2);
+		expect(new Set(targetRows.map((row) => row.dest_page_id)).size).toBe(1);
+		for (const row of targetRows) {
+			expect(row).toMatchObject({ status: 404, is_broken: 1, count: 1 });
+		}
+	});
+
+	it('does not report the alias member itself as a destination', async () => {
+		const knex = archive.getKnex();
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
+		);
+		expect(
+			findByDestUrl(rows, urlByRefId, 'https://example.com/target/index.html'),
+		).toBeUndefined();
+	});
+});
+
+/**
+ * Pins the code-review-confirmed gap: a redirect destination row can itself
+ * be a non-representative alias member of a *different* group
+ * (`backfillAliasOfId` only excludes redirect *sources* from alias
+ * candidacy, not redirect *destinations*), so resolution must follow one
+ * more `alias_of_id` hop after `redirect_dest_id`.
+ */
+describe('computeAnchorFactRows — a redirect landing on a non-representative alias member', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_compute_anchor_fact_rows_redirect_then_alias__',
+	);
+	let archive: InstanceType<typeof Archive>;
+	const archiveFilePath = path.resolve(
+		workingDir,
+		'compute-anchor-fact-rows-redirect-then-alias-test.nitpicker',
+	);
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		// /source anchors to /old, which redirects to /new/index.html, which
+		// is itself merged as an alias member of /new (the true final page).
+		await archive.setPage({
+			url: parseUrl('https://example.com/source')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: { ...META, title: 'Source' },
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/old')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Old link',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/new/index.html')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 404,
+			statusText: 'Not Found',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/new')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 404,
+			statusText: 'Not Found',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setRedirect({
+			url: parseUrl('https://example.com/old')!,
+			redirectPaths: ['https://example.com/new/index.html'],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		const knex = archive.getKnex();
+		const rep = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com/new')
+			.first();
+		const member = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com/new/index.html')
+			.first();
+		await knex('content_items').where('id', member.id).update({ alias_of_id: rep.id });
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('resolves the anchor all the way to the true representative, not the redirect-destination-as-alias-member', async () => {
+		const knex = archive.getKnex();
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
+		);
+		const targetRows = rows.filter(
+			(row) => urlByRefId.get(row.dest_url_ref_id) === 'https://example.com/new',
+		);
+		expect(targetRows).toHaveLength(1);
+		expect(targetRows[0]).toMatchObject({ status: 404, is_broken: 1 });
+		expect(
+			findByDestUrl(rows, urlByRefId, 'https://example.com/new/index.html'),
+		).toBeUndefined();
+	});
+});

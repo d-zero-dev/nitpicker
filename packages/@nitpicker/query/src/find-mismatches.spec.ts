@@ -183,3 +183,114 @@ describe('findMismatches', () => {
 		expect(ensureUrlSortTempTable).toHaveBeenCalledTimes(2);
 	});
 });
+
+describe('findMismatches: content_items.alias_of_id handling', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_find_mismatches_alias__');
+	const archiveFilePath = path.resolve(dir, 'find-mismatches-alias-test.nitpicker');
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// The alias member itself has a canonical mismatch (points elsewhere),
+		// but it must not surface once merged away via alias_of_id.
+		await archive.setPage({
+			url: parseUrl('https://example.com/')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: makeBeholderMeta({ title: 'Home' }),
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/index.html')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: makeBeholderMeta({
+				title: 'Home',
+				link: { canonical: 'https://example.com/somewhere-else' },
+			}),
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		const knex = archive.getKnex();
+		const target = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com')
+			.first();
+		const member = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com/index.html')
+			.first();
+		await knex('content_items').where('id', member.id).update({ alias_of_id: target.id });
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('excludes an alias member from canonical mismatch results', async () => {
+		const result = await findMismatches(archive, 'canonical');
+		expect(result).toEqual([]);
+	});
+
+	it('throws an actionable error when content_items.alias_of_id does not exist', async () => {
+		const knex = archive.getKnex();
+		await knex.schema.alterTable('content_items', (t) => {
+			t.dropColumn('alias_of_id');
+		});
+
+		await expect(findMismatches(archive, 'canonical')).rejects.toThrow(/viewer-build/);
+
+		// Restore the column so afterAll's close()/other tests are unaffected.
+		await knex.schema.alterTable('content_items', (t) => {
+			t.integer('alias_of_id');
+		});
+	});
+});

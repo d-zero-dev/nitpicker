@@ -2073,3 +2073,70 @@ describe('buildViewerReadModel', () => {
 		});
 	});
 });
+
+/**
+ * Exercises the full alias pipeline end to end — `buildViewerReadModel`
+ * itself computing `content_items.alias_of_id` (via `backfillAliasOfId`,
+ * run internally after `backfillBodyHashFromHtmlBlobs`) and then excluding
+ * the alias member from `sourceRows` — rather than injecting `alias_of_id`
+ * directly via SQL as the per-consumer-query specs do. This is the one
+ * place that proves the write-side computation and the read-side exclusion
+ * actually compose correctly together.
+ */
+describe('buildViewerReadModel: content_items.alias_of_id end-to-end', () => {
+	const workingDir = path.resolve(__dirname, '__test_fixtures_build_read_model_alias__');
+	const archiveFilePath = path.resolve(workingDir, 'build-alias-test.nitpicker');
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		// `/` and `/index.html` share a title and body — Tier A alias
+		// candidates. No manual `alias_of_id` injection here: the build
+		// itself must compute it.
+		for (const url of ['https://example.com/', 'https://example.com/index.html']) {
+			await archive.setPage({
+				url: parseUrl(url)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html><body>Home</body></html>',
+				meta: { ...META, title: 'Home' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('computes alias_of_id during the build and excludes the alias member from viewer_pages', async () => {
+		await buildViewerReadModel(archive);
+		const knex = archive.getKnex();
+
+		const pages = await knex('viewer_pages').select('url');
+		expect(pages.map((p: { url: string }) => p.url)).toEqual(['https://example.com']);
+
+		const member = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.alias_of_id as aliasOfId')
+			.where('ur.url', 'https://example.com/index.html')
+			.first();
+		expect(member.aliasOfId).not.toBeNull();
+	});
+});

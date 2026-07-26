@@ -5,7 +5,12 @@ import { copyFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 
 import { Archive } from '@nitpicker/crawler';
-import { buildViewerReadModel, ensureViewerReadModel } from '@nitpicker/query';
+import {
+	backfillAliasOfId,
+	backfillBodyHashFromHtmlBlobs,
+	buildViewerReadModel,
+	ensureViewerReadModel,
+} from '@nitpicker/query';
 
 import { ExitCode } from '../exit-code.js';
 import { formatCliError } from '../format-cli-error.js';
@@ -133,6 +138,33 @@ export async function viewerBuild(
 			} else {
 				await ensureViewerReadModel(archive, { onProgress: logProgress });
 			}
+			// Not folded into the branches above: `ensureViewerReadModel`'s
+			// schema-version gate answers "does the read model need a
+			// rebuild", which is the wrong question for this backfill —
+			// `body_hash` didn't change the read-model schema, so an archive
+			// whose read model is already current would otherwise never run
+			// it. Called unconditionally here so `viewer-build` (with or
+			// without `--force`) always catches up a legacy archive's
+			// `body_hash` values; its own row-count guard makes the
+			// `--force` branch's second call (buildViewerReadModel already
+			// ran it once above) a cheap no-op.
+			await backfillBodyHashFromHtmlBlobs(archive, (processed, total) => {
+				// eslint-disable-next-line no-console
+				console.error(`[nitpicker] page_meta.body_hash backfill: ${processed}/${total}`);
+			});
+			// Must run after the body_hash backfill above: alias_of_id's
+			// trailing-slash tier requires body_hash to already be computed
+			// for both candidate pages. Called unconditionally for the same
+			// schema-version-gate reason as backfillBodyHashFromHtmlBlobs —
+			// alias_of_id does not change the read-model schema either, so
+			// `ensureViewerReadModel` alone would never trigger this on an
+			// already-current archive.
+			await backfillAliasOfId(archive, (processed, total) => {
+				// eslint-disable-next-line no-console
+				console.error(
+					`[nitpicker] content_items.alias_of_id backfill: ${processed}/${total}`,
+				);
+			});
 			await archive.write();
 		} finally {
 			await archive.close();

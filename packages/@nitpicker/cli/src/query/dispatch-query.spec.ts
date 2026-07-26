@@ -28,6 +28,7 @@ vi.mock('@nitpicker/query', () => ({
 		nextCursor: null,
 		prevCursor: null,
 	}),
+	findDuplicateBodies: vi.fn().mockResolvedValue([]),
 	getMismatchesFastPath: vi.fn().mockResolvedValue({
 		items: [],
 		total: 0,
@@ -324,6 +325,16 @@ describe('dispatchQuery', () => {
 			limit: 50,
 			offset: 25,
 		});
+	});
+
+	it('dispatches duplicate-bodies sub-command with limit and offset', async () => {
+		const { findDuplicateBodies } = await import('@nitpicker/query');
+		const result = await dispatchQuery(mockAccessor, 'duplicate-bodies', {
+			limit: 50,
+			offset: 25,
+		} as never);
+		expect(result).toEqual([]);
+		expect(findDuplicateBodies).toHaveBeenCalledWith(mockAccessor, 50, 25);
 	});
 
 	it('dispatches unused-resources sub-command with limit and offset', async () => {

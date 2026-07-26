@@ -1,6 +1,8 @@
 import type { GetLinkGraphOptions, GraphEdge, GraphNode, LinkGraph } from './types.js';
 import type { ArchiveAccessor, PageSource } from '@nitpicker/crawler';
 
+import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
+
 /**
  * Builds the internal-page-filter predicate for an aliased `content_items`
  * (or ref-joined) surface. 0.13 stores `is_external` / `scraped` as
@@ -30,9 +32,15 @@ function aliasedInternalWhere(
  * duplicate anchors between the same page pair). Edges are further deduped
  * to distinct `(source.url, dest.url)` pairs via `DISTINCT` because the
  * grouping is at the URL level, not the edge-row level.
+ * Alias members (`content_items.alias_of_id IS NOT NULL`) are dropped
+ * entirely from both nodes and edges — the same "drop, don't resolve"
+ * treatment already applied to `redirect_dest_id` here — since the
+ * representative page's own node/edges already carry the merged traffic.
  * @param accessor - The archive accessor to query.
  * @param options - Optional node cap.
  * @returns The link graph (nodes + edges + truncated flag).
+ * @throws {Error} If `content_items.alias_of_id` does not exist on this
+ *   connection (see `requireAliasOfIdColumn`).
  * @example
  * // Cap to the 500 highest in-degree pages for a renderable graph:
  * const { nodes, edges, truncated } = await getLinkGraph(accessor, { limit: 500 });
@@ -42,6 +50,7 @@ export async function getLinkGraph(
 	options: GetLinkGraphOptions = {},
 ): Promise<LinkGraph> {
 	const knex = accessor.getKnex();
+	await requireAliasOfIdColumn(knex);
 
 	const [pageRows, edgeRows] = (await Promise.all([
 		knex('content_items as ci')
@@ -49,7 +58,8 @@ export async function getLinkGraph(
 			.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
 			.select('ur.url as url', 'ci.status as status', 'ci.source as source')
 			.where({ 'ci.is_external': 0, 'ci.scraped': 1, 'ctr.raw': 'text/html' })
-			.whereNull('ci.redirect_dest_id'),
+			.whereNull('ci.redirect_dest_id')
+			.whereNull('ci.alias_of_id'),
 		knex('anchor_edges as ae')
 			.join('content_items as source', 'ae.page_id', 'source.id')
 			.join('content_items as dest', 'ae.href_page_id', 'dest.id')
@@ -60,8 +70,10 @@ export async function getLinkGraph(
 			.distinct('source_ur.url as source', 'dest_ur.url as target')
 			.where(aliasedInternalWhere('source', 'source_ctr'))
 			.whereNull('source.redirect_dest_id')
+			.whereNull('source.alias_of_id')
 			.where(aliasedInternalWhere('dest', 'dest_ctr'))
 			.whereNull('dest.redirect_dest_id')
+			.whereNull('dest.alias_of_id')
 			.whereRaw('"ae"."page_id" != "ae"."href_page_id"'),
 	])) as [
 		{ url: string; status: number | null; source: PageSource }[],

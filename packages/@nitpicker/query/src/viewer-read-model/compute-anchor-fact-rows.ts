@@ -42,9 +42,16 @@ const READ_CHUNK_SIZE = 2000;
  * `source.id` range with zero anchor_edges is unremarkable); the loop
  * instead runs until `rangeStart` passes `content_items`'s max id.
  *
- * Redirect resolution (`COALESCE(canonical.*, dest.*)`) and the
- * broken-link definition (`status = 404` strictly — see `list-links.ts`'s
- * scope note) are preserved verbatim.
+ * Redirect resolution (`COALESCE(canonical_alias.*, canonical.*,
+ * alias_canonical.*, dest.*)`, resolving through both `redirect_dest_id` and
+ * `alias_of_id` — a page is never both a redirect source and a
+ * URL-normalization alias of another page, but resolving both keeps this
+ * correct either way without needing to know which) and the broken-link
+ * definition (`status = 404` strictly — see `list-links.ts`'s scope note)
+ * are preserved verbatim. `canonical_alias` is one further `alias_of_id` hop
+ * past `canonical`, since a redirect *destination* row can itself be a
+ * non-representative alias member of a different group (`backfillAliasOfId`
+ * only excludes redirect *sources* from alias candidacy).
  * @param trx - An open Knex transaction (a plain `Knex` instance also
  *   works, e.g. in tests).
  * @param chunkSize - Width of the `source.id` range scanned per chunk. Must
@@ -67,11 +74,20 @@ export async function* computeAnchorFactRows(
 		);
 	}
 
-	const destIdExpression = 'COALESCE("canonical"."id", "dest"."id")';
-	const statusExpression = 'COALESCE("canonical"."status", "dest"."status")';
+	// `canonical_alias` resolves one further `alias_of_id` hop past
+	// `canonical`: a redirect destination row can itself be a
+	// non-representative alias member of a *different* group
+	// (`backfillAliasOfId`'s candidate selection excludes redirect *sources*
+	// from alias grouping, not redirect *destinations*), so `canonical`
+	// alone is not always the final representative.
+	const destIdExpression =
+		'COALESCE("canonical_alias"."id", "canonical"."id", "alias_canonical"."id", "dest"."id")';
+	const statusExpression =
+		'COALESCE("canonical_alias"."status", "canonical"."status", "alias_canonical"."status", "dest"."status")';
 	const isExternalExpression =
-		'COALESCE("canonical"."is_external", "dest"."is_external")';
-	const destUrlExpression = 'COALESCE("canonical_url"."url", "dest_url"."url")';
+		'COALESCE("canonical_alias"."is_external", "canonical"."is_external", "alias_canonical"."is_external", "dest"."is_external")';
+	const destUrlExpression =
+		'COALESCE("canonical_alias_url"."url", "canonical_url"."url", "alias_canonical_url"."url", "dest_url"."url")';
 
 	const maxIdRows = (await trx('content_items').max('id as maxId')) as {
 		maxId: number | null;
@@ -98,9 +114,33 @@ export async function* computeAnchorFactRows(
 				'=',
 				'canonical.id',
 			)
+			.leftJoin(
+				'content_items as alias_canonical',
+				'dest.alias_of_id',
+				'=',
+				'alias_canonical.id',
+			)
+			.leftJoin(
+				'content_items as canonical_alias',
+				'canonical.alias_of_id',
+				'=',
+				'canonical_alias.id',
+			)
 			.join('url_refs as source_url', 'source.url_id', '=', 'source_url.id')
 			.join('url_refs as dest_url', 'dest.url_id', '=', 'dest_url.id')
 			.leftJoin('url_refs as canonical_url', 'canonical.url_id', '=', 'canonical_url.id')
+			.leftJoin(
+				'url_refs as alias_canonical_url',
+				'alias_canonical.url_id',
+				'=',
+				'alias_canonical_url.id',
+			)
+			.leftJoin(
+				'url_refs as canonical_alias_url',
+				'canonical_alias.url_id',
+				'=',
+				'canonical_alias_url.id',
+			)
 			.leftJoin('viewer_url_refs as source_ref', 'source_url.url', '=', 'source_ref.url')
 			.leftJoin('viewer_url_refs as dest_ref', function () {
 				this.on(trx.raw(`"dest_ref"."url" = ${destUrlExpression}`));

@@ -43,6 +43,10 @@ export type {
 } from './archive/meta/types.js';
 export { IncompatibleArchiveError } from './archive/meta/types.js';
 export { REQUIRED_FORMAT_VERSION } from './archive/meta/assert-compatible-version.js';
+export { computeBodyHash } from './archive/body-hash/compute-body-hash.js';
+export { decodeStoredBlob } from './archive/decode-html-blob.js';
+export { computeTierAAliasKey } from './archive/url-alias/compute-tier-a-alias-key.js';
+export { computeTierBAliasKey } from './archive/url-alias/compute-tier-b-alias-key.js';
 
 // Core
 export {

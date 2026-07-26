@@ -467,3 +467,118 @@ describe('getSummary: HTMLページが1つも無い（全てエラー/到達不�
 		expect(result.externalContents).toBe(0);
 	});
 });
+
+describe('getSummary: content_items.alias_of_id handling', () => {
+	const dir = path.resolve(__dirname, '__test_fixtures_summary_alias__');
+	const archiveFilePath = path.resolve(dir, 'summary-alias-test.nitpicker');
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		for (const url of ['https://example.com/', 'https://example.com/index.html']) {
+			await archive.setPage({
+				url: parseUrl(url)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html><body>Home</body></html>',
+				meta: {
+					lang: 'ja',
+					title: 'Home',
+					description: null,
+					keywords: null,
+					noindex: false,
+					nofollow: false,
+					noarchive: false,
+					canonical: null,
+					alternate: null,
+					'og:type': null,
+					'og:title': null,
+					'og:site_name': null,
+					'og:description': null,
+					'og:url': null,
+					'og:image': null,
+					'twitter:card': null,
+				},
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+
+		// Simulate an alias assignment (as backfillAliasOfId would compute):
+		// `/index.html` merged into the bare root. The crawler's own URL
+		// handling normalizes a bare-root trailing slash away at write time
+		// (`https://example.com/` is stored as `https://example.com`), so the
+		// lookup below matches on the slash-less form actually stored.
+		const knex = archive.getKnex();
+		const target = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com')
+			.first();
+		const member = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com/index.html')
+			.first();
+		await knex('content_items').where('id', member.id).update({ alias_of_id: target.id });
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('counts an alias-merged page as one page, not two', async () => {
+		const result = await getSummary(archive);
+		expect(result.totalPages).toBe(1);
+		expect(result.internalPages).toBe(1);
+	});
+
+	it('throws an actionable error when content_items.alias_of_id does not exist', async () => {
+		const knex = archive.getKnex();
+		await knex.schema.alterTable('content_items', (t) => {
+			t.dropColumn('alias_of_id');
+		});
+
+		await expect(getSummary(archive)).rejects.toThrow(/viewer-build/);
+
+		// Restore the column so afterAll's close()/other tests are unaffected.
+		await knex.schema.alterTable('content_items', (t) => {
+			t.integer('alias_of_id');
+		});
+	});
+});
