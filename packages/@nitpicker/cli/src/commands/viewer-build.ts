@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import { Archive } from '@nitpicker/crawler';
 import {
+	backfillAliasOfId,
 	backfillBodyHashFromHtmlBlobs,
 	buildViewerReadModel,
 	ensureViewerReadModel,
@@ -150,6 +151,19 @@ export async function viewerBuild(
 			await backfillBodyHashFromHtmlBlobs(archive, (processed, total) => {
 				// eslint-disable-next-line no-console
 				console.error(`[nitpicker] page_meta.body_hash backfill: ${processed}/${total}`);
+			});
+			// Must run after the body_hash backfill above: alias_of_id's
+			// trailing-slash tier requires body_hash to already be computed
+			// for both candidate pages. Called unconditionally for the same
+			// schema-version-gate reason as backfillBodyHashFromHtmlBlobs —
+			// alias_of_id does not change the read-model schema either, so
+			// `ensureViewerReadModel` alone would never trigger this on an
+			// already-current archive.
+			await backfillAliasOfId(archive, (processed, total) => {
+				// eslint-disable-next-line no-console
+				console.error(
+					`[nitpicker] content_items.alias_of_id backfill: ${processed}/${total}`,
+				);
 			});
 			await archive.write();
 		} finally {
