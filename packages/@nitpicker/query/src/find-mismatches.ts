@@ -3,6 +3,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type { Knex } from 'knex';
 
 import { applyListOrder } from './apply-list-order.js';
+import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
 
 /**
@@ -37,6 +38,8 @@ export interface FindMismatchesOptions {
  * @param offset - Number of results to skip. Defaults to 0.
  * @returns An array of mismatch entries (simple overload), or a paged result
  *   with `items`/`total`/`limit`/`offset` when an options object is passed.
+ * @throws {Error} If `content_items.alias_of_id` does not exist on this
+ *   connection (see `requireAliasOfIdColumn`).
  * @example
  * // Simple overload — first 100 canonical mismatches:
  * const entries = await findMismatches(accessor, 'canonical');
@@ -67,6 +70,7 @@ export async function findMismatches(
 	| { items: MismatchEntry[]; total: number; limit: number; offset: number }
 > {
 	const knex = accessor.getKnex();
+	await requireAliasOfIdColumn(knex);
 	const pagedMode = typeof optionsOrLimit === 'object';
 	const options = pagedMode ? optionsOrLimit : {};
 	const limit = pagedMode ? (options.limit ?? 100) : (optionsOrLimit ?? 100);
@@ -84,7 +88,8 @@ export async function findMismatches(
 		.join('page_meta as pm', 'pm.page_id', 'ci.id')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
 		.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
-		.whereNull('ci.redirect_dest_id');
+		.whereNull('ci.redirect_dest_id')
+		.whereNull('ci.alias_of_id');
 	if (options.urlPattern) {
 		baseQuery.where('ur.url', 'like', options.urlPattern);
 	}

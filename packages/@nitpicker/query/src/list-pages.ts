@@ -17,6 +17,7 @@ import {
 } from './map-page-row-to-list-item.js';
 import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
 import { paginateQuery } from './paginate-query.js';
+import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
 
 /** One DISTINCT row read for facet computation — see {@link getPageListFacets}. */
@@ -88,7 +89,8 @@ function createPageListBaseQuery(
 		)
 		.leftJoin('url_refs as manifest_ur', 'manifest_ur.id', 'pm.manifest_url_id')
 		.where('ci.scraped', 1)
-		.whereNull('ci.redirect_dest_id');
+		.whereNull('ci.redirect_dest_id')
+		.whereNull('ci.alias_of_id');
 	if (hasPageTemplates) {
 		baseQuery.leftJoin('page_templates as pt', 'pt.page_id', 'ci.id');
 	}
@@ -125,6 +127,7 @@ export async function listPages(
 	options: ListPagesOptions = {},
 ): Promise<PaginatedPageList> {
 	const knex = accessor.getKnex();
+	await requireAliasOfIdColumn(knex);
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 	const hasPageTemplates = await hasPageTemplatesTable(knex);
@@ -164,7 +167,46 @@ export async function listPages(
 		baseQuery.where('pm.robots_noindex', 1);
 	}
 	if (options.urlPattern) {
-		baseQuery.where('ur.url', 'like', options.urlPattern);
+		const urlPattern = options.urlPattern;
+		// Matches the canonical page's own URL, OR any URL that resolves to
+		// it — via an HTTP redirect (`redirect_dest_id`) or a
+		// URL-normalization alias (`alias_of_id`). Both are genuinely
+		// different relationships (one is an observed HTTP 3xx, the other a
+		// same-body/URL-shape inference) but a search for either kind of
+		// source URL (e.g. `https://example.com` redirecting to
+		// `https://example.com/index.html`, or `/index.html` merged as an
+		// alias of `/`) must still surface the one row that survives after
+		// the exclusions above, not silently miss it — so each gets its own
+		// named subquery rather than being folded into one opaque `OR`.
+		//
+		// Each side is expressed as `ci.id IN (SELECT ... )` rather than a
+		// correlated `EXISTS` subquery: `EXPLAIN QUERY PLAN` on a ~450k-row
+		// real archive showed `orWhereExists` compiles to a `CORRELATED
+		// SCALAR SUBQUERY` re-run once per row of the outer `scraped = 1`
+		// scan (visibly slow in the viewer on that archive), while the `IN`
+		// form is a `LIST SUBQUERY` — computed once and probed via a Bloom
+		// filter — even though both return the same rows. The two sides are
+		// combined with `UNION ALL` (not folded into a single `OR` across
+		// `redirect_dest_id/alias_of_id`): a row is never both a redirect
+		// source and an alias member, so `UNION ALL` cannot double-count,
+		// and each arm keeps its own index-backed plan (see
+		// `compute-isolated-clusters.ts` for the same `OR`-across-columns
+		// pitfall on this exact pair of columns).
+		const redirectMatchIds = knex('content_items as redirect_ci')
+			.select('redirect_ci.redirect_dest_id')
+			.join('url_refs as redirect_ur', 'redirect_ur.id', 'redirect_ci.url_id')
+			.whereNotNull('redirect_ci.redirect_dest_id')
+			.andWhere('redirect_ur.url', 'like', urlPattern);
+		const equivalentIds = redirectMatchIds.unionAll(
+			knex('content_items as alias_ci')
+				.select('alias_ci.alias_of_id')
+				.join('url_refs as alias_ur', 'alias_ur.id', 'alias_ci.url_id')
+				.whereNotNull('alias_ci.alias_of_id')
+				.andWhere('alias_ur.url', 'like', urlPattern),
+		);
+		baseQuery.where((qb) => {
+			qb.where('ur.url', 'like', urlPattern).orWhereIn('ci.id', equivalentIds);
+		});
 	}
 	if (options.directory) {
 		const dir = options.directory.endsWith('/')

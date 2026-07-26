@@ -506,10 +506,163 @@ describe('getPageDetail: 被リンクを redirect 越しに解決する（http/h
 		]);
 	});
 
-	it('redirect 元ページ自身の被リンクは宛先側に付け替えられ、空になる', async () => {
-		// http://example.com/page を指すリンクは https 宛先の被リンクに解決されるため、
-		// 元(http)ページの被リンクには現れない（二重計上を防ぐ）。
+	it('redirect 元ページの URL で検索しても、宛先ページの詳細（被リンク込み）が返る', async () => {
+		// http://example.com/page (redirect 元) で検索した場合も、
+		// https://example.com/page (宛先) で検索したのと同じ詳細に解決される —
+		// get-page-detail.ts の URL 解決が alias_of_id と同様に redirect_dest_id
+		// も辿るため。
 		const result = await getPageDetail(archive, 'http://example.com/page');
-		expect(result!.inboundLinks).toHaveLength(0);
+		expect(result!.url).toBe('https://example.com/page');
+		const inboundUrls = result!.inboundLinks.map((l) => l.url).toSorted();
+		expect(inboundUrls).toEqual([
+			'https://example.com/linker-http',
+			'https://example.com/linker-https',
+		]);
+	});
+});
+
+describe('getPageDetail: content_items.alias_of_id handling', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_get_page_detail_alias__');
+	const archiveFilePath = path.resolve(dir, 'page-detail-alias.nitpicker');
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// Canonical `/` and its alias `/index.html`.
+		await archive.setPage({
+			url: parseUrl('https://example.com/')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html><head><title>Home</title></head></html>',
+			meta: makeBeholderMeta({ title: 'Home' }),
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/index.html')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html><head><title>Home</title></head></html>',
+			meta: makeBeholderMeta({ title: 'Home' }),
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		// Links directly at the alias URL — must resolve as an inbound link to
+		// the canonical page, same as redirect-source-targeted links do.
+		await archive.setPage({
+			url: parseUrl('https://example.com/linker')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: makeBeholderMeta({ title: 'Linker' }),
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/index.html')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Home via alias',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		const knex = archive.getKnex();
+		const target = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com')
+			.first();
+		const member = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com/index.html')
+			.first();
+		await knex('content_items').where('id', member.id).update({ alias_of_id: target.id });
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('looking up the alias URL resolves to the canonical page detail', async () => {
+		const result = await getPageDetail(archive, 'https://example.com/index.html');
+		expect(result!.url).toBe('https://example.com');
+	});
+
+	it('lists merged alias URLs on the canonical page detail, regardless of which URL was queried', async () => {
+		const byCanonical = await getPageDetail(archive, 'https://example.com');
+		const byAlias = await getPageDetail(archive, 'https://example.com/index.html');
+		expect(byCanonical!.aliasUrls).toEqual(['https://example.com/index.html']);
+		expect(byAlias!.aliasUrls).toEqual(['https://example.com/index.html']);
+	});
+
+	it('resolves inbound links targeting the alias URL to the canonical page', async () => {
+		const result = await getPageDetail(archive, 'https://example.com');
+		const inboundUrls = result!.inboundLinks.map((l) => l.url);
+		expect(inboundUrls).toEqual(['https://example.com/linker']);
+	});
+
+	it('throws an actionable error when content_items.alias_of_id does not exist', async () => {
+		const knex = archive.getKnex();
+		await knex.schema.alterTable('content_items', (t) => {
+			t.dropColumn('alias_of_id');
+		});
+
+		await expect(getPageDetail(archive, 'https://example.com')).rejects.toThrow(
+			/viewer-build/,
+		);
+
+		// Restore the column so afterAll's close()/other tests are unaffected.
+		await knex.schema.alterTable('content_items', (t) => {
+			t.integer('alias_of_id');
+		});
 	});
 });

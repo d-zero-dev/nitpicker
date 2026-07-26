@@ -3,6 +3,7 @@ import type { ArchiveAccessor, PageSource } from '@nitpicker/crawler';
 
 import { eachSplitted } from '@nitpicker/crawler';
 
+import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 import { resolveRedirectChain } from './resolve-redirect-chain.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
 
@@ -53,8 +54,17 @@ import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
  * (forbidden — see `idx_pages_listfilter` JSDoc). The current 17s on a
  * 66k-inventory archive is accepted; non-inventory archives short-circuit
  * on the `pageRows.length === 0` early return below.
+ * Alias-source rows (`content_items.alias_of_id IS NOT NULL`) get the same
+ * treatment as redirect-source rows: excluded from the candidate node set,
+ * and any anchor pointing at one is resolved through to its representative
+ * before the union — merged into the same `redirectMap` walked by
+ * {@link resolveRedirectChain}, since both columns are simple `id → id`
+ * hops and a row never has both set (alias candidates exclude redirect
+ * sources by construction).
  * @param accessor - The archive accessor to query.
  * @returns Every connected component of the inventory-* subgraph, including singletons.
+ * @throws {Error} If `content_items.alias_of_id` does not exist on this
+ *   connection (see `requireAliasOfIdColumn`).
  * @example
  * const components = await computeIsolatedClusters(accessor);
  * const clusters = components.filter((c) => c.size >= 2);
@@ -64,10 +74,11 @@ export async function computeIsolatedClusters(
 	accessor: ArchiveAccessor,
 ): Promise<IsolatedComponent[]> {
 	const knex = accessor.getKnex();
+	await requireAliasOfIdColumn(knex);
 
 	// 1. Fetch the candidate node set: inventory-* HTML pages that are
-	//    themselves canonical (not redirect-source rows). 0.13: read
-	//    through `content_items` + `page_meta` (for `title`) +
+	//    themselves canonical (not redirect-source or alias-source rows).
+	//    0.13: read through `content_items` + `page_meta` (for `title`) +
 	//    `content_type_refs` (for the `text/html` filter) + `url_refs`.
 	const pageRows = (await knex('content_items as ci')
 		.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
@@ -87,7 +98,8 @@ export async function computeIsolatedClusters(
 			'ctr.raw': 'text/html',
 		})
 		.whereIn('ci.source', ['inventory-seed', 'inventory-discovered'])
-		.whereNull('ci.redirect_dest_id')) as {
+		.whereNull('ci.redirect_dest_id')
+		.whereNull('ci.alias_of_id')) as {
 		id: number;
 		url: string;
 		title: string | null;
@@ -116,11 +128,29 @@ export async function computeIsolatedClusters(
 		});
 	}
 
-	// 2. Build the redirect-chain map (pageId → redirectDestId) once, for
+	// 2. Build the redirect/alias-chain map (pageId → destId) once, for
 	//    O(chain-length) per-anchor resolution without re-querying SQLite.
-	const redirectRows = (await knex('content_items')
-		.select('id', 'redirect_dest_id as redirectDestId')
-		.whereNotNull('redirect_dest_id')) as {
+	//    `redirect_dest_id` and `alias_of_id` are merged into a single map
+	//    since both are plain `id → id` hops and mutually exclusive per row.
+	//    Read as a `UNION ALL` of two single-column `IS NOT NULL` queries
+	//    rather than one `OR`-across-two-columns predicate: EXPLAIN QUERY
+	//    PLAN on a real ~450k-row archive showed the `OR` form forces a full
+	//    `SCAN content_items` (SQLite won't combine two single-column
+	//    indexes for an `OR` across different columns here), while each
+	//    `UNION ALL` arm uses its own covering index
+	//    (`idx_content_items_redirect_dest_id` / `idx_content_items_alias_of_id`).
+	//    `UNION ALL` (not `UNION`) is safe because a row is never both a
+	//    redirect source and an alias member, so the two arms cannot overlap.
+	const redirectRows = (await knex
+		.select('id', knex.raw('"redirect_dest_id" as "redirectDestId"'))
+		.from('content_items')
+		.whereNotNull('redirect_dest_id')
+		.unionAll(
+			knex
+				.select('id', knex.raw('"alias_of_id" as "redirectDestId"'))
+				.from('content_items')
+				.whereNotNull('alias_of_id'),
+		)) as {
 		id: number;
 		redirectDestId: number;
 	}[];

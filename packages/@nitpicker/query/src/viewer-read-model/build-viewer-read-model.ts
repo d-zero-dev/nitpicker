@@ -7,6 +7,7 @@ import { excludeSkippedPages } from '../exclude-skipped-pages.js';
 import { getErrorKinds } from '../get-error-kinds.js';
 import { getSummary } from '../get-summary.js';
 
+import { backfillAliasOfId } from './backfill-alias-of-id.js';
 import { backfillAnalysisViolationsFromJson } from './backfill-analysis-violations-from-json.js';
 import { backfillBodyHashFromHtmlBlobs } from './backfill-body-hash-from-html-blobs.js';
 import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
@@ -287,7 +288,15 @@ function toViewerPageInsertRow(
  * `backfillBodyHashFromHtmlBlobs` directly, unconditionally, after either
  * branch of its own `--force` check — the row-count guard inside
  * `backfillBodyHashFromHtmlBlobs` makes that second call a cheap no-op on
- * the `--force` path, where this function already ran it once. Computes a
+ * the `--force` path, where this function already ran it once. Runs
+ * `backfillAliasOfId` immediately after — a full recompute (not a
+ * backfill-only fill) of `content_items.alias_of_id`, grouping pages that
+ * are the same underlying resource under URL-normalization or a
+ * body-hash-confirmed trailing-slash variance; it must run after
+ * `backfillBodyHashFromHtmlBlobs` since its trailing-slash tier depends on
+ * `body_hash` already being computed, and `viewer-build.ts` calls it
+ * unconditionally too for the same schema-version-gate reason as
+ * `backfillBodyHashFromHtmlBlobs`. Computes a
  * `getSummary` snapshot (see below for why this happens outside the
  * transaction), then drops all 24 tables if present, recreates them,
  * populates `viewer_pages`
@@ -413,6 +422,11 @@ export async function buildViewerReadModel(
 	// here would report body-hash backfill counts under a callback that
 	// claims to describe `viewer_pages` rows.
 	await backfillBodyHashFromHtmlBlobs(accessor);
+	// Runs after body_hash: alias_of_id's Tier B (trailing-slash) grouping
+	// requires body_hash to already be computed for both candidate pages, so
+	// this backfill would otherwise see stale (still-NULL) body_hash values
+	// on an archive going through both catch-ups in the same build.
+	await backfillAliasOfId(accessor);
 	const [summary, errorKinds, isolatedComponents] = await Promise.all([
 		getSummary(accessor),
 		getErrorKinds(accessor),
@@ -461,6 +475,7 @@ export async function buildViewerReadModel(
 			.leftJoin('text_refs as og_title_ref', 'og_title_ref.id', 'pm.og_title_text_id')
 			.where('ci.scraped', 1)
 			.whereNull('ci.redirect_dest_id')
+			.whereNull('ci.alias_of_id')
 			.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
 			.select(
 				'ci.id as id',

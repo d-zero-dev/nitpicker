@@ -10,6 +10,7 @@ import { classifyErrorKind } from '@nitpicker/crawler';
 
 import { classifyContentType } from './classify-content-type.js';
 import { excludeSkippedPages } from './exclude-skipped-pages.js';
+import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
 
 /**
@@ -21,9 +22,16 @@ import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
  * columns directly — the 0.13 populate step skips empty text, so
  * `IS NOT NULL` on the id column is equivalent to
  * `IS NOT NULL AND != ''` on the raw text.
+ *
+ * Every count excludes `alias_of_id`-having rows the same way it already
+ * excludes `redirect_dest_id`-having rows — a page merged into another via
+ * URL-normalization is no more "its own page" for counting purposes than an
+ * HTTP redirect source is.
  * @param accessor - The archive accessor to query.
  * @returns Summary statistics including page counts, status distribution,
  *   metadata rates, and content-type distribution.
+ * @throws {Error} If `content_items.alias_of_id` does not exist on this
+ *   connection (see `requireAliasOfIdColumn`).
  * @example
  * const summary = await getSummary(accessor);
  * console.log(`${summary.internalPages} internal HTML pages`);
@@ -32,6 +40,7 @@ import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
  */
 export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResult> {
 	const knex = accessor.getKnex();
+	await requireAliasOfIdColumn(knex);
 	const config = await accessor.getConfig();
 	const baseUrl = config.baseUrl;
 	const roots = config.roots;
@@ -40,7 +49,8 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		.select('id')
 		.where('scraped', 1)
 		.where('status', -1)
-		.whereNull('redirect_dest_id') as Promise<{ id: number }[]>;
+		.whereNull('redirect_dest_id')
+		.whereNull('alias_of_id') as Promise<{ id: number }[]>;
 	const failedPageMessagesPromise = failedPageIdRowsPromise.then((rows) =>
 		resolveFailedPageMessages(
 			accessor,
@@ -55,6 +65,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 				.count('ci.id as count')
 				.where('ci.scraped', 1)
 				.whereNull('ci.redirect_dest_id')
+				.whereNull('ci.alias_of_id')
 				.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
 				.where((qb) => {
 					qb.whereNull('ctr.raw').orWhere('ctr.raw', 'text/html');
@@ -87,13 +98,15 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 					),
 				)
 				.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
-				.whereNull('ci.redirect_dest_id') as Promise<Record<string, number>[]>,
+				.whereNull('ci.redirect_dest_id')
+				.whereNull('ci.alias_of_id') as Promise<Record<string, number>[]>,
 			knex('content_items as ci')
 				.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
 				.select('ctr.raw as contentType', 'ci.is_external as isExternal')
 				.count('ci.id as count')
 				.where('ci.scraped', 1)
 				.whereNull('ci.redirect_dest_id')
+				.whereNull('ci.alias_of_id')
 				.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
 				.groupBy('ctr.raw', 'ci.is_external') as Promise<
 				{

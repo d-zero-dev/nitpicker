@@ -8,6 +8,7 @@
 
 export { ArchiveManager } from './archive-manager.js';
 export type { OpenResult } from './archive-manager.js';
+export { backfillAliasOfId } from './viewer-read-model/backfill-alias-of-id.js';
 export { backfillBodyHashFromHtmlBlobs } from './viewer-read-model/backfill-body-hash-from-html-blobs.js';
 export { buildViewerReadModel } from './viewer-read-model/build-viewer-read-model.js';
 export { checkHeaders } from './check-headers.js';

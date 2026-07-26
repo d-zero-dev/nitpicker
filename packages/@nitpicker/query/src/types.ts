@@ -1145,6 +1145,8 @@ export interface PageDetail {
 	inboundLinks: InboundLink[];
 	/** URLs that redirect to this page. */
 	redirectFrom: string[];
+	/** URLs merged into this page via URL-normalization equivalence (`content_items.alias_of_id`). */
+	aliasUrls: string[];
 }
 
 /**

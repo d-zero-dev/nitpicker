@@ -2,6 +2,7 @@ import type { LinkAnalysisResult, LinkEntry, ListLinksOptions } from './types.js
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { applyListOrder } from './apply-list-order.js';
+import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 
 /**
  * Analyse links in the archive: **broken** (canonical destination resolved
@@ -26,13 +27,20 @@ import { applyListOrder } from './apply-list-order.js';
  * `status IS NULL`, which never satisfies `= 404`, so excluded destinations
  * are never misreported as broken links.
  *
- * Anchor destinations are resolved through `content_items.redirect_dest_id`
- * to their canonical final destination before broken / external judgment.
- * When `includeRedirectSources: true`, the resolution is skipped and the
- * literal dest values are used.
+ * Anchor destinations are resolved through `content_items.redirect_dest_id`,
+ * then `content_items.alias_of_id`, to their canonical final destination
+ * before broken / external judgment — and one further `alias_of_id` hop
+ * after the redirect resolution, since a redirect's destination row can
+ * itself be a non-representative alias member of a *different* group
+ * (`backfillAliasOfId`'s candidate selection excludes redirect *sources*
+ * from alias grouping, not redirect *destinations*). When
+ * `includeRedirectSources: true`, all resolution is skipped and the literal
+ * dest values are used.
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
  * @returns Link analysis results with entries and total count.
+ * @throws {Error} If `content_items.alias_of_id` does not exist on this
+ *   connection (see `requireAliasOfIdColumn`).
  * @example
  * const { items, total } = await listLinks(accessor, { type: 'broken', limit: 100 });
  * for (const link of items) {
@@ -44,6 +52,7 @@ export async function listLinks(
 	options: ListLinksOptions,
 ): Promise<LinkAnalysisResult> {
 	const knex = accessor.getKnex();
+	await requireAliasOfIdColumn(knex);
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 	const includeRedirectSources = options.includeRedirectSources ?? false;
@@ -61,18 +70,44 @@ export async function listLinks(
 	if (!includeRedirectSources) {
 		baseQuery
 			.leftJoin('content_items as canonical', 'dest.redirect_dest_id', 'canonical.id')
-			.leftJoin('url_refs as canonical_ur', 'canonical_ur.id', 'canonical.url_id');
+			.leftJoin('url_refs as canonical_ur', 'canonical_ur.id', 'canonical.url_id')
+			.leftJoin(
+				'content_items as alias_canonical',
+				'dest.alias_of_id',
+				'alias_canonical.id',
+			)
+			.leftJoin(
+				'url_refs as alias_canonical_ur',
+				'alias_canonical_ur.id',
+				'alias_canonical.url_id',
+			)
+			// A redirect destination can itself be a non-representative alias
+			// member of a *different* group (`backfillAliasOfId` only excludes
+			// redirect *sources* from alias candidacy, not redirect
+			// *destinations*), so one more hop is needed after `canonical` —
+			// see `resolveAliasAndRedirectChain`'s JSDoc for the same gap in
+			// `get-page-detail.ts`.
+			.leftJoin(
+				'content_items as canonical_alias',
+				'canonical.alias_of_id',
+				'canonical_alias.id',
+			)
+			.leftJoin(
+				'url_refs as canonical_alias_ur',
+				'canonical_alias_ur.id',
+				'canonical_alias.url_id',
+			);
 	}
 
 	const destUrlExpression = includeRedirectSources
 		? '"dest_ur"."url"'
-		: 'COALESCE("canonical_ur"."url", "dest_ur"."url")';
+		: 'COALESCE("canonical_alias_ur"."url", "canonical_ur"."url", "alias_canonical_ur"."url", "dest_ur"."url")';
 	const statusExpression = includeRedirectSources
 		? '"dest"."status"'
-		: 'COALESCE("canonical"."status", "dest"."status")';
+		: 'COALESCE("canonical_alias"."status", "canonical"."status", "alias_canonical"."status", "dest"."status")';
 	const isExternalExpression = includeRedirectSources
 		? '"dest"."is_external"'
-		: 'COALESCE("canonical"."is_external", "dest"."is_external")';
+		: 'COALESCE("canonical_alias"."is_external", "canonical"."is_external", "alias_canonical"."is_external", "dest"."is_external")';
 
 	baseQuery.select(
 		'source_ur.url as sourceUrl',

@@ -1,6 +1,8 @@
 import type { DuplicateEntry } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
+
 /**
  * ASCII Unit Separator — used as the GROUP_CONCAT delimiter so the URL
  * split is unambiguous even when an URL contains commas, pipes, or any
@@ -28,6 +30,8 @@ const URL_DELIMITER = '';
  * @param offset - Number of duplicate groups (in `ORDER BY cnt DESC` order)
  *   to skip before `limit` is applied. Defaults to 0.
  * @returns An array of duplicate entries with the shared value and matching URLs.
+ * @throws {Error} If `content_items.alias_of_id` does not exist on this
+ *   connection (see `requireAliasOfIdColumn`).
  * @example
  * const groups = await findDuplicates(accessor, 'title', 20);
  * for (const group of groups) {
@@ -41,6 +45,7 @@ export async function findDuplicates(
 	offset: number = 0,
 ): Promise<DuplicateEntry[]> {
 	const knex = accessor.getKnex();
+	await requireAliasOfIdColumn(knex);
 	// `field` is constrained to the literal union so no string-injection
 	// risk from interpolating the column name into the SQL.
 	const textIdColumn = field === 'title' ? 'pm.title_text_id' : 'pm.description_text_id';
@@ -57,6 +62,7 @@ export async function findDuplicates(
 		)
 		.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
 		.whereNull('ci.redirect_dest_id')
+		.whereNull('ci.alias_of_id')
 		.whereNotNull(textIdColumn)
 		.whereNot('tr.text', '')
 		.groupBy(textIdColumn)

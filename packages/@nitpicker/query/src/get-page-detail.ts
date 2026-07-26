@@ -4,6 +4,8 @@ import type { ArchiveAccessor, JsonLdRow, TagRow } from '@nitpicker/crawler';
 import { decodeJsonRef, loadResponseHeadersBySetIds } from '@nitpicker/crawler';
 
 import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
+import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
+import { resolveAliasAndRedirectChain } from './resolve-alias-and-redirect-chain.js';
 
 /**
  * Summarises JSON-LD rows for the page-detail response.
@@ -52,9 +54,24 @@ function summarizeTagRows(rows: readonly TagRow[]): PageDetail['tags'] {
  * `header_sets` + `header_set_entries` + `header_name_refs` +
  * `header_value_refs`. `meta_extras` is decoded from `json_refs` (zstd or
  * uncompressed).
+ *
+ * A `url` naming either an HTTP-redirect source (`content_items.redirect_dest_id`)
+ * or a URL-normalization alias (`content_items.alias_of_id`) resolves to its
+ * final destination's / representative's detail, via
+ * `resolveAliasAndRedirectChain` — "look up, then follow to the canonical
+ * row," walked one hop at a time rather than read once, because a redirect's
+ * destination row can itself turn out to be a non-representative alias
+ * member of a *different* group (`backfillAliasOfId`'s candidate selection
+ * excludes redirect *sources* from alias grouping, not redirect
+ * destinations*). These two are genuinely different relationships (one is
+ * an observed HTTP 3xx, the other is a same-body/URL-shape inference with no
+ * server-side redirect involved) but both collapse to "this URL's real page
+ * is that other row" for the caller's purposes.
  * @param accessor - The archive accessor to query.
  * @param url - The URL of the page to retrieve.
  * @returns Detailed page information, or null if the page is not found.
+ * @throws {Error} If `content_items.alias_of_id` does not exist on this
+ *   connection (see `requireAliasOfIdColumn`).
  * @example
  * const detail = await getPageDetail(accessor, 'https://example.com/');
  * if (detail) {
@@ -66,7 +83,18 @@ export async function getPageDetail(
 	url: string,
 ): Promise<PageDetail | null> {
 	const knex = accessor.getKnex();
+	await requireAliasOfIdColumn(knex);
 	const hasPageTemplates = await hasPageTemplatesTable(knex);
+
+	const candidate = await knex('content_items as ci')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.select('ci.id as id')
+		.where('ur.url', url)
+		.first();
+	if (!candidate) {
+		return null;
+	}
+	const targetId = await resolveAliasAndRedirectChain(knex, candidate.id);
 
 	let query = knex('content_items as ci')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
@@ -195,7 +223,7 @@ export async function getPageDetail(
 			'pm.scroll_height_mobile as scroll_height_mobile',
 			templateKeySelectColumn(knex, hasPageTemplates),
 		)
-		.where('ur.url', url)
+		.where('ci.id', targetId)
 		.limit(1);
 	if (!page) {
 		return null;
@@ -269,7 +297,10 @@ export async function getPageDetail(
 		.join('url_refs as referrer_ur', 'referrer_ur.id', 'referrer.url_id')
 		.join('content_items as target', 'ae.href_page_id', 'target.id')
 		.leftJoin('text_refs as text_ref', 'text_ref.id', 'ae.first_text_id')
-		.whereRaw('coalesce("target"."redirect_dest_id", "target"."id") = ?', [page.id])
+		.whereRaw(
+			'coalesce("target"."redirect_dest_id", "target"."alias_of_id", "target"."id") = ?',
+			[page.id],
+		)
 		.groupBy('referrer.id', 'referrer_ur.url')) as {
 		url: string;
 		textContent: string | null;
@@ -288,6 +319,13 @@ export async function getPageDetail(
 		.where('ci.redirect_dest_id', page.id);
 
 	const redirectFrom = redirectRows.map((row: { url: string }) => row.url);
+
+	const aliasRows = await knex('content_items as ci')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.select('ur.url as url')
+		.where('ci.alias_of_id', page.id);
+
+	const aliasUrls = aliasRows.map((row: { url: string }) => row.url);
 
 	const [jsonLdRows, tagRows] = await Promise.all([
 		accessor.getJsonLdOfPage(page.id),
@@ -384,5 +422,6 @@ export async function getPageDetail(
 		outboundLinks,
 		inboundLinks,
 		redirectFrom,
+		aliasUrls,
 	};
 }

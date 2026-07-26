@@ -278,3 +278,115 @@ describe('findDuplicates — offset', () => {
 		expect(result).toEqual([]);
 	});
 });
+
+describe('findDuplicates: content_items.alias_of_id handling', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_duplicates_alias__');
+	const archiveFilePath = path.resolve(dir, 'dup-alias-test.nitpicker');
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// `/` and `/index.html` share the same title only because they are the
+		// same page (alias pair) — this must NOT be reported as a title
+		// duplicate once merged, unlike a genuine 2-page duplicate group.
+		for (const url of ['https://example.com/', 'https://example.com/index.html']) {
+			await archive.setPage({
+				url: parseUrl(url)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html><head><title>Home</title></head></html>',
+				meta: {
+					lang: 'ja',
+					title: 'Home',
+					description: null,
+					keywords: null,
+					noindex: false,
+					nofollow: false,
+					noarchive: false,
+					canonical: null,
+					alternate: null,
+					'og:type': null,
+					'og:title': null,
+					'og:site_name': null,
+					'og:description': null,
+					'og:url': null,
+					'og:image': null,
+					'twitter:card': null,
+				},
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+
+		const knex = archive.getKnex();
+		const target = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com')
+			.first();
+		const member = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com/index.html')
+			.first();
+		await knex('content_items').where('id', member.id).update({ alias_of_id: target.id });
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('does not report an alias-merged pair as a title duplicate', async () => {
+		const result = await findDuplicates(archive, 'title');
+		expect(result).toEqual([]);
+	});
+
+	it('throws an actionable error when content_items.alias_of_id does not exist', async () => {
+		const knex = archive.getKnex();
+		await knex.schema.alterTable('content_items', (t) => {
+			t.dropColumn('alias_of_id');
+		});
+
+		await expect(findDuplicates(archive, 'title')).rejects.toThrow(/viewer-build/);
+
+		// Restore the column so afterAll's close()/other tests are unaffected.
+		await knex.schema.alterTable('content_items', (t) => {
+			t.integer('alias_of_id');
+		});
+	});
+});
