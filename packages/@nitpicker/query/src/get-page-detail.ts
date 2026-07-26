@@ -63,7 +63,7 @@ function summarizeTagRows(rows: readonly TagRow[]): PageDetail['tags'] {
  * destination row can itself turn out to be a non-representative alias
  * member of a *different* group (`backfillAliasOfId`'s candidate selection
  * excludes redirect *sources* from alias grouping, not redirect
- * destinations*). These two are genuinely different relationships (one is
+ * destinations. These two are genuinely different relationships (one is
  * an observed HTTP 3xx, the other is a same-body/URL-shape inference with no
  * server-side redirect involved) but both collapse to "this URL's real page
  * is that other row" for the caller's purposes.
