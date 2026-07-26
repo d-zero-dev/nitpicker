@@ -46,6 +46,21 @@ yarn lint                                          # lint + prettier + cspell
 - **パッケージディレクトリに cd しない**: 常にリポジトリルートから実行する
 - **コマンドの連続実行禁止**: `&&` / `;` / 改行連結をしない。1 回の実行で 1 コマンドのみ（permissions のパターンマッチを守るため）
 
+## 依存関係の追加
+
+- バージョンは固定で追加する（`yarn add foo@1.2.3`）。`^` / `~` を付けない（`.yarnrc.yml` の `defaultSemverRangePrefix: ''` で既定化されている）
+- **追加したら `.github/renovate.json` の `packageRules` を確認する**。そのパッケージが既存の `groupName` グループに入るべきか、新しいグループを作るべきかを判断する
+  - `config:recommended` は `group:monorepos` を含むため、**同一 monorepo から公開されるパッケージ群（`@puppeteer/*`、`@tanstack/*`、`@testing-library/*` など）は設定なしで自動的に束ねられる**。手で書く必要はない
+  - 手当てが必要なのは Renovate が推測できない**ベンダー横断の結合**:
+    - 本体と型定義のペア（`debug` + `@types/debug`）。DefinitelyTyped は別リポジトリで公開されるため自動グループ化されない
+    - peer dependency で結ばれた別ベンダーのパッケージ
+    - `resolutions` で固定しているパッケージとその利用側（現在は `google-auth-library`）
+    - 自前の `@d-zero/*` パッケージ群（configs と runtime で分ける）
+    - 併用が前提のツール群（`lighthouse` + `chrome-launcher`、`knex` + `libsql` など）
+  - 判断基準は「**片方だけバージョンが上がった状態でビルドと型チェックが通るか**」。通らないなら同じ `groupName` にまとめる
+- グループ化を怠ると、Renovate が個別に PR を作り、片方だけマージされた中間状態で CI が赤になる。結果として**両方の PR がマージできなくなる**
+- グルーピングの現状は `git branch -r --list 'origin/renovate/*'` で確認できる。`*-monorepo` サフィックスのブランチは `group:monorepos` による自動グループ
+
 ## ドキュメント原則
 
 情報は置き場で役割が決まる。**コードには How、テストコードには What、コミットログには Why、コードコメントには Why not**（Why が必要なときは Why も書く）。
@@ -81,14 +96,15 @@ yarn lint                                          # lint + prettier + cspell
 
 ## スキル
 
-| スキル          | パス                                      | 用途                                                     |
-| --------------- | ----------------------------------------- | -------------------------------------------------------- |
-| Product Manager | `.claude/skills/product-manager/SKILL.md` | リポジトリ分析、ドキュメント整合チェック、PR レビュー    |
-| QA Engineer     | `.claude/skills/qa-engineer/SKILL.md`     | コードレビュー、テスト品質チェック                       |
-| Impl            | `.claude/skills/impl/SKILL.md`            | 合意済み計画の実装・検証・PR 作成のオーケストレーション  |
-| Grill me        | `.claude/skills/grill-me/SKILL.md`        | 計画・設計の前提を掘り下げて合意形成する                 |
-| Git             | `.claude/skills/git/SKILL.md`             | コミット規約・コミット前コンテンツチェック               |
-| PR              | `.claude/skills/pr/SKILL.md`              | PR 作成フロー（base 追従・push はユーザー実行・CI 監視） |
+| スキル          | パス                                      | 用途                                                            |
+| --------------- | ----------------------------------------- | --------------------------------------------------------------- |
+| Product Manager | `.claude/skills/product-manager/SKILL.md` | リポジトリ分析、ドキュメント整合チェック、PR レビュー           |
+| QA Engineer     | `.claude/skills/qa-engineer/SKILL.md`     | コードレビュー、テスト品質チェック                              |
+| Impl            | `.claude/skills/impl/SKILL.md`            | 合意済み計画の実装・検証・PR 作成のオーケストレーション         |
+| Grill me        | `.claude/skills/grill-me/SKILL.md`        | 計画・設計の前提を掘り下げて合意形成する                        |
+| Git             | `.claude/skills/git/SKILL.md`             | コミット規約・コミット前コンテンツチェック                      |
+| PR              | `.claude/skills/pr/SKILL.md`              | PR 作成フロー（base 追従・push はユーザー実行・CI 監視）        |
+| npm publish     | `.claude/skills/npm-publish/SKILL.md`     | リリース（dev→main マージ・バージョニング・publish 監視・検証） |
 
 ## AI 操作プロトコル
 
