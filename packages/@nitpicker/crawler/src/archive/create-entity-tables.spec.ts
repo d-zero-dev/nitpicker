@@ -102,6 +102,7 @@ describe('createEntityTables', () => {
 			'content_length',
 			'header_set_id',
 			'redirect_dest_id',
+			'alias_of_id',
 			'source',
 			'first_crawled_at',
 			'last_crawled_at',
@@ -238,6 +239,62 @@ describe('createEntityTables', () => {
 					(id, url_id, is_external, scraped, is_target)
 					VALUES (20, ?, 0, 1, 1)`,
 				[urlIdParent],
+			);
+		});
+
+		await db.destroy();
+	});
+
+	it('accepts a self-referential alias_of_id on content_items', async () => {
+		const db = await openDbWithEntityTables({ foreignKeys: true });
+
+		await insertContentItem(db, 1, 'a');
+		const urlIdB = await insertUrl(db, 'https://example.com/index.html');
+		await db.raw(
+			`INSERT INTO content_items
+				(id, url_id, is_external, scraped, is_target, alias_of_id)
+				VALUES (2, ?, 0, 1, 1, 1)`,
+			[urlIdB],
+		);
+
+		// A non-existent target is still rejected at commit time.
+		await expect(
+			(async () => {
+				const urlIdC = await insertUrl(db, 'https://example.com/c');
+				await db.raw(
+					`INSERT INTO content_items
+						(id, url_id, is_external, scraped, is_target, alias_of_id)
+						VALUES (3, ?, 0, 1, 1, 999)`,
+					[urlIdC],
+				);
+			})(),
+		).rejects.toThrow();
+
+		await db.destroy();
+	});
+
+	it('allows deferring content_items.alias_of_id inside a transaction', async () => {
+		const db = await openDbWithEntityTables({ foreignKeys: true });
+
+		// Mirrors the redirect_dest_id deferred-FK case above: alias_of_id
+		// is discovered by a post-hoc backfill pass that can write a member
+		// row before its representative row if it iterates in an
+		// arbitrary order within one transaction.
+		const urlIdMember = await insertUrl(db, 'https://example.com/about/index.html');
+		const urlIdRepresentative = await insertUrl(db, 'https://example.com/about/');
+
+		await db.transaction(async (trx) => {
+			await trx.raw(
+				`INSERT INTO content_items
+					(id, url_id, is_external, scraped, is_target, alias_of_id)
+					VALUES (10, ?, 0, 1, 1, 20)`,
+				[urlIdMember],
+			);
+			await trx.raw(
+				`INSERT INTO content_items
+					(id, url_id, is_external, scraped, is_target)
+					VALUES (20, ?, 0, 1, 1)`,
+				[urlIdRepresentative],
 			);
 		});
 

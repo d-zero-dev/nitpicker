@@ -199,6 +199,7 @@ export async function createEntityTables(instance: Knex): Promise<void> {
 			content_length   INTEGER,
 			header_set_id    INTEGER REFERENCES header_sets(id),
 			redirect_dest_id INTEGER REFERENCES content_items(id) DEFERRABLE INITIALLY DEFERRED,
+			alias_of_id      INTEGER REFERENCES content_items(id) DEFERRABLE INITIALLY DEFERRED,
 			source           TEXT NOT NULL DEFAULT 'crawled',
 			first_crawled_at INTEGER,
 			last_crawled_at  INTEGER,
@@ -216,6 +217,15 @@ export async function createEntityTables(instance: Knex): Promise<void> {
 	await instance.raw(
 		'CREATE INDEX IF NOT EXISTS idx_content_items_redirect_dest_id ON content_items(redirect_dest_id)',
 	);
+	// `idx_content_items_alias_of_id` is NOT created here even though
+	// `alias_of_id` is: this DDL runs unconditionally on every archive open
+	// (including legacy archives that still lack the column at this point,
+	// before `migrateContentItemsAliasOfId` adds it), so an unconditional
+	// `CREATE INDEX ... alias_of_id` here would fail with `no such column`
+	// on any archive that predates this feature. The index is created in
+	// `migrateContentItemsAliasOfId` instead, which runs after the
+	// column-add guard for both fresh and legacy archives (same reasoning as
+	// `page_meta.body_hash`'s index).
 	await instance.raw(
 		'CREATE INDEX IF NOT EXISTS idx_content_items_content_type_id ON content_items(content_type_id)',
 	);

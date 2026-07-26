@@ -2,6 +2,7 @@ import type { Knex } from 'knex';
 
 import { applyConnectionPragmas, initSchema } from '../../init-schema.js';
 import { assertCompatibleVersion } from '../../meta/assert-compatible-version.js';
+import { migrateContentItemsAliasOfId } from '../../migrate-content-items-alias-of-id.js';
 import { migrateInfoMainContentSelector } from '../../migrate-info-main-content-selector.js';
 import { migrateInfoRoots } from '../../migrate-info-roots.js';
 import { migrateMainContentsColumns } from '../../migrate-main-contents-columns.js';
@@ -25,8 +26,8 @@ import { migratePageMetaBodyHash } from '../../migrate-page-meta-body-hash.js';
  * `CREATE TABLE IF NOT EXISTS` is a no-op once the table is present. Column
  * additions to an existing 0.13 table are therefore the one case that still
  * needs an explicit `hasColumn`-guarded `ALTER TABLE` here (`migrateInfoRoots`,
- * `migrateMainContentsColumns`, `migratePageMetaBodyHash`) rather than a
- * DDL-string change alone.
+ * `migrateMainContentsColumns`, `migratePageMetaBodyHash`,
+ * `migrateContentItemsAliasOfId`) rather than a DDL-string change alone.
  *
  * In read-only mode schema init + migration are SKIPPED so the same DB
  * can be opened safely by a viewer attached to a live (or interrupted)
@@ -55,4 +56,5 @@ export async function init(knex: Knex, readOnly: boolean): Promise<void> {
 	await migrateInfoMainContentSelector(knex);
 	await migrateMainContentsColumns(knex);
 	await migratePageMetaBodyHash(knex);
+	await migrateContentItemsAliasOfId(knex);
 }
