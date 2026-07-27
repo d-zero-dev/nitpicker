@@ -28,7 +28,8 @@ export type QuerySubCommand =
 	| 'isolated-clusters'
 	| 'get-isolated-cluster'
 	| 'unused-resources'
-	| 'inventory-runs';
+	| 'inventory-runs'
+	| 'outages';
 
 /**
  * List of all valid query sub-command names.
@@ -61,4 +62,5 @@ export const VALID_SUB_COMMANDS = [
 	'get-isolated-cluster',
 	'unused-resources',
 	'inventory-runs',
+	'outages',
 ] as const satisfies readonly QuerySubCommand[];

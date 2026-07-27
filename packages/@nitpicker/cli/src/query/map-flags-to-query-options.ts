@@ -268,7 +268,8 @@ export function mapFlagsToQueryOptions(
 		case 'isolated-clusters':
 		case 'unused-resources':
 		case 'inventory-runs':
-		case 'duplicate-bodies': {
+		case 'duplicate-bodies':
+		case 'outages': {
 			// Pagination-only — no required filters.
 			return {
 				limit: flags.limit,

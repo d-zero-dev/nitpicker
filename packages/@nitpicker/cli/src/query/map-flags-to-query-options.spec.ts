@@ -318,4 +318,11 @@ describe('mapFlagsToQueryOptions', () => {
 			offset: 5,
 		});
 	});
+
+	it('returns limit/offset only for outages (no required filters)', () => {
+		expect(mapFlagsToQueryOptions('outages', { limit: 20, offset: 0 })).toEqual({
+			limit: 20,
+			offset: 0,
+		});
+	});
 });
