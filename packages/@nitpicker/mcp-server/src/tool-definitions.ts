@@ -672,4 +672,21 @@ export const toolDefinitions: Tool[] = [
 			required: ['archiveId'],
 		},
 	},
+	{
+		name: 'list_network_outages',
+		description:
+			'List recorded operator-network outages — periods where the crawl operator\'s own connectivity, not the target sites, was suspected down and worker fetches were paused. Each row has `started_at` / `ended_at` (epoch ms; `ended_at` is never null — a row left open by a crashed session resolves to the archive\'s last observed activity) and the trigger evidence (`probe_host`, `trigger_error_count`, `trigger_host_count`). Use this to distinguish "this page failed because the target site is down" from "this page failed because our own network was down at the time" — the latter is retried automatically by `crawl --retry-failed` even though its error message classifies as a normally-permanent kind (e.g. `dns`).',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				limit: { type: 'number', description: 'Max results (default: 100)' },
+				offset: { type: 'number', description: 'Results to skip (default: 0)' },
+			},
+			required: ['archiveId'],
+		},
+	},
 ];

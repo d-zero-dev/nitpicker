@@ -27,6 +27,7 @@ import {
 	listIsolatedClustersFastPath,
 	listIsolatedPagesFastPath,
 	listLinks,
+	listNetworkOutages,
 	listPages,
 	listPagesByJsonLdType,
 	listPagesByTag,
@@ -417,6 +418,15 @@ export function createServer() {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(
 							await listUnusedResources(accessor, {
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
+					}
+					case 'list_network_outages': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await listNetworkOutages(accessor, {
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
 							}),
