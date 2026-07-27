@@ -67,19 +67,20 @@ function sortErrorKindEntries(
 }
 
 /**
- * Applies `host`/`kind` filtering, `sortBy`/`sortOrder` sorting, and
- * `limit`/`offset` pagination to an already-computed, unfiltered
- * `ErrorKindsResult` — mirrors `getErrorKinds`'s own options contract (see
- * that function's docs) in plain JS, so `getCachedErrorKinds` can serve any
- * request's parameters from one cached "whole archive" snapshot without
- * re-running the expensive classify-and-aggregate pass per request.
+ * Applies `host`/`kind`/`attribution` filtering, `sortBy`/`sortOrder`
+ * sorting, and `limit`/`offset` pagination to an already-computed,
+ * unfiltered `ErrorKindsResult` — mirrors `getErrorKinds`'s own options
+ * contract (see that function's docs) in plain JS, so `getCachedErrorKinds`
+ * can serve any request's parameters from one cached "whole archive"
+ * snapshot without re-running the expensive classify-and-aggregate pass per
+ * request.
  * `sortBy`/`sortOrder` are resolved via the same `resolveErrorKindsSort`
  * `getErrorKinds` and `getViewerErrorKinds` use, so an out-of-range `sortBy`
  * can't silently pick the wrong default direction here either.
  * @param full - The unfiltered result (computed with `options: {}`) to slice.
  * @param options - The caller's actual filter/sort/pagination options.
  * @returns The filtered/sorted/paginated result. `facets` is copied through
- *   unchanged — it is archive-wide and unaffected by `host`/`kind` filters.
+ *   unchanged — it is archive-wide and unaffected by `host`/`kind`/`attribution` filters.
  */
 function applyErrorKindsOptions(
 	full: ErrorKindsResult,
@@ -91,6 +92,9 @@ function applyErrorKindsOptions(
 	}
 	if (options.kind) {
 		items = items.filter((item) => item.kind === options.kind);
+	}
+	if (options.attribution) {
+		items = items.filter((item) => item.attribution === options.attribution);
 	}
 
 	const { sortBy, sortOrder } = resolveErrorKindsSort(options);

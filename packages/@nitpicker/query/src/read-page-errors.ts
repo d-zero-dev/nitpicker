@@ -19,9 +19,10 @@ export async function readPageErrors(accessor: ArchiveAccessor): Promise<ErrorRe
 	const rows = await knex('page_errors as e')
 		.leftJoin('content_items as p', 'p.id', 'e.pageId')
 		.leftJoin('url_refs as ur', 'ur.id', 'p.url_id')
-		.select('ur.url as url', 'e.message as message');
-	return rows.map((r: { url: string | null; message: string }) => ({
+		.select('ur.url as url', 'e.message as message', 'e.createdAt as createdAt');
+	return rows.map((r: { url: string | null; message: string; createdAt: number }) => ({
 		url: r.url ?? null,
 		message: r.message,
+		createdAt: r.createdAt,
 	}));
 }

@@ -46,6 +46,7 @@ vi.mock('@nitpicker/query', () => ({
 		total: 0,
 	}),
 	listInventoryRuns: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+	listNetworkOutages: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	listIsolatedPagesFastPath: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	listIsolatedClustersFastPath: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	getIsolatedClusterFastPath: vi.fn().mockResolvedValue(null),
@@ -358,6 +359,19 @@ describe('dispatchQuery', () => {
 		} as never);
 		expect(result).toEqual({ items: [], total: 0 });
 		expect(listInventoryRuns).toHaveBeenCalledWith(mockAccessor, {
+			limit: 25,
+			offset: 5,
+		});
+	});
+
+	it('dispatches outages sub-command with limit and offset', async () => {
+		const { listNetworkOutages } = await import('@nitpicker/query');
+		const result = await dispatchQuery(mockAccessor, 'outages', {
+			limit: 25,
+			offset: 5,
+		} as never);
+		expect(result).toEqual({ items: [], total: 0 });
+		expect(listNetworkOutages).toHaveBeenCalledWith(mockAccessor, {
 			limit: 25,
 			offset: 5,
 		});

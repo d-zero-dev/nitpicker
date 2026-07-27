@@ -1,13 +1,20 @@
-import type { ErrorKind, ErrorKindEntry, ErrorKindFacets } from '@nitpicker/query';
+import type {
+	ErrorKind,
+	ErrorKindEntry,
+	ErrorKindFacets,
+	FailureAttribution,
+} from '@nitpicker/query';
 
 import { usePagedQuery } from './use-paged-query.js';
 
 /** Options for {@link useErrorKinds}. */
 export interface UseErrorKindsOptions {
-	/** Exact host to filter to — used by the detail pane's host×kind lookup. */
+	/** Exact host to filter to — used by the detail pane's host×kind×attribution lookup. */
 	host?: string;
-	/** Exact kind to filter to — the list's kind column filter, or half of the detail pane's lookup key. */
+	/** Exact kind to filter to — the list's kind column filter, or one third of the detail pane's lookup key. */
 	kind?: ErrorKind;
+	/** Exact attribution to filter to — the list's attribution column filter, or one third of the detail pane's lookup key. */
+	attribution?: FailureAttribution;
 	/** Field to sort results by. */
 	sortBy?: 'host' | 'kind' | 'count';
 	/** Sort direction. */

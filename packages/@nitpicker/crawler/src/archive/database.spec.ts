@@ -2820,6 +2820,62 @@ describe('resetFailedPages', () => {
 		await db.destroy();
 	});
 
+	it('resets a dns-classified page whose failure falls inside a recorded network outage window', async () => {
+		// The outage override: a `dns` message is normally permanent-excluded,
+		// but if its timestamp falls inside a `network_outages` window, the
+		// most likely cause is the crawl operator's own network, not the
+		// target site, so the page must rejoin the retry pool.
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ filename: resetDbPath });
+		const knex = db.getKnex();
+
+		const inWindowId = await insertPage(db, {
+			url: 'https://outage-caused.example.invalid/',
+			status: -1,
+		});
+		const outOfWindowId = await insertPage(db, {
+			url: 'https://genuinely-gone.example.invalid/',
+			status: -1,
+		});
+
+		await knex('page_errors').insert([
+			{
+				pageId: inWindowId,
+				phase: 'crawl',
+				message: 'getaddrinfo ENOTFOUND outage-caused.example.invalid',
+				createdAt: 1_000_150,
+			},
+			{
+				pageId: outOfWindowId,
+				phase: 'crawl',
+				message: 'getaddrinfo ENOTFOUND genuinely-gone.example.invalid',
+				createdAt: 500,
+			},
+		]);
+
+		const outageId = await db.insertNetworkOutage({
+			startedAt: 1_000_100,
+			detectedAt: 1_000_120,
+			probeHost: 'a.example',
+			triggerErrorCount: 5,
+			triggerHostCount: 2,
+		});
+		await db.closeNetworkOutage(outageId, 1_000_200);
+
+		const reset = await db.resetFailedPages();
+		expect(reset).toEqual(['https://outage-caused.example.invalid/']);
+
+		const untouchedRow = await knex('content_items')
+			.join('url_refs', 'content_items.url_id', 'url_refs.id')
+			.where('url_refs.url', 'https://genuinely-gone.example.invalid/')
+			.first();
+		expect(untouchedRow.scraped).toBe(1);
+		expect(untouchedRow.status).toBe(-1);
+
+		await db.destroy();
+	});
+
 	it('falls back to crawl_errors when page_errors has no message for the candidate', async () => {
 		// `page_errors` is populated by scrape attempts; pages that failed at
 		// the crawler-channel level (DNS / TLS / refused before any scrape

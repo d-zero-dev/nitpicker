@@ -3,6 +3,7 @@ import type { MetadataFulfillment } from '@nitpicker/query';
 import { useSummary } from '../api/use-summary.js';
 import { ContentTypeStackedBar } from '../components/content-type-stacked-bar.js';
 import { ViewHeader } from '../components/view-header.js';
+import { getAttributionLabel } from '../i18n/get-attribution-label.js';
 import { getErrorKindLabel } from '../i18n/get-error-kind-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
 import { clampRatio } from '../utils/clamp-ratio.js';
@@ -98,6 +99,13 @@ export function SummaryView() {
 				titleKey="views.summary.title"
 				descriptionKey="views.summary.description"
 			/>
+			{data.networkOutageAffectedFailures > 0 && (
+				<p className="filter-notice">
+					{t('views.summary.networkOutageNotice', {
+						count: data.networkOutageAffectedFailures,
+					})}
+				</p>
+			)}
 			{data.roots.map((root) => (
 				<p key={root} className="state">
 					{root}
@@ -159,10 +167,25 @@ export function SummaryView() {
 										// Denominator is the parent -1 count so the sub-bars
 										// describe the composition of -1, not the global mix.
 										const subRatio = computeRatio(sub.count, entry.count);
+										// Keyed on kind+attribution, not kind alone: the same
+										// kind (e.g. 'dns') can appear twice — once site-caused,
+										// once network-caused (outage-attributed) — and both
+										// rows must render, not collide/overwrite in React's
+										// reconciliation.
 										return (
-											<li key={sub.kind} className="bar-row">
-												<span style={{ width: 60 }}>
+											<li key={`${sub.kind}-${sub.attribution}`} className="bar-row">
+												<span style={{ width: 110 }}>
 													{getErrorKindLabel(sub.kind, t)}
+													{/* Only the network-caused rows get an extra
+													    label — the site-caused case is the
+													    pre-existing, unsurprising default and stays
+													    visually unchanged. */}
+													{sub.attribution === 'network' && (
+														<>
+															{' · '}
+															<small>{getAttributionLabel(sub.attribution, t)}</small>
+														</>
+													)}
 												</span>
 												<span className="bar-track">
 													<span

@@ -6,7 +6,21 @@ import { readErrorLog } from './read-error-log.js';
 const CHUNK_SIZE = 500;
 
 /**
- * Resolve a raw error message for each `pages.id` that has `status = -1`.
+ * One resolved failure message, with the timestamp it was recorded at (when
+ * known). `createdAt` is what lets `getSummary` decide whether the failure
+ * falls inside a `network_outages` window — see `is-within-outage-window.ts`
+ * in the crawler package. `null` only for `error.log`-sourced messages
+ * (plain-text legacy fallback, no timestamp field), which can therefore
+ * never be attributed to an outage.
+ */
+export interface ResolvedFailedPageMessage {
+	message: string;
+	createdAt: number | null;
+}
+
+/**
+ * Resolve a raw error message (plus its timestamp) for each `pages.id` that
+ * has `status = -1`.
  *
  * Bulk-queried — at most `ceil(N / 500)` SQL round-trips for N page ids
  * (plus one `error.log` read), never N. Three message sources are consulted
@@ -27,12 +41,13 @@ const CHUNK_SIZE = 500;
  * thrown, mirroring `getErrorKinds`.
  * @param accessor - The opened archive accessor.
  * @param pageIds - `pages.id` values to look up (already filtered to status=-1).
- * @returns `Map<pageId, message>` — only ids with a resolved message are present.
+ * @returns `Map<pageId, ResolvedFailedPageMessage>` — only ids with a
+ *   resolved message are present.
  */
 export async function resolveFailedPageMessages(
 	accessor: ArchiveAccessor,
 	pageIds: readonly number[],
-): Promise<Map<number, string>> {
+): Promise<Map<number, ResolvedFailedPageMessage>> {
 	if (pageIds.length === 0) {
 		return new Map();
 	}
@@ -54,52 +69,73 @@ export async function resolveFailedPageMessages(
 	}
 
 	// Source 1: page_errors — `pageId` keyed. Earliest insert wins per pageId
-	// because schema permits multiple rows per page.
-	const pageErrorByPageId = new Map<number, string>();
+	// because schema permits multiple rows per page (the first row is
+	// usually the trigger cause; later rows are follow-on noise).
+	const pageErrorByPageId = new Map<number, ResolvedFailedPageMessage>();
 	if (await knex.schema.hasTable('page_errors')) {
 		for (let i = 0; i < pageIds.length; i += CHUNK_SIZE) {
 			const chunk = pageIds.slice(i, i + CHUNK_SIZE);
 			const rows = (await knex('page_errors')
-				.select('pageId', 'message')
-				.whereIn('pageId', chunk)) as {
+				.select('pageId', 'message', 'createdAt')
+				.whereIn('pageId', chunk)
+				.orderBy('id', 'asc')) as {
 				pageId: number;
 				message: string;
+				createdAt: number;
 			}[];
 			for (const row of rows) {
 				if (!pageErrorByPageId.has(row.pageId)) {
-					pageErrorByPageId.set(row.pageId, row.message);
+					pageErrorByPageId.set(row.pageId, {
+						message: row.message,
+						createdAt: row.createdAt,
+					});
 				}
 			}
 		}
 	}
 
-	// Source 2: crawl_errors — URL keyed. Same earliest-wins rule.
-	const crawlErrorByUrl = new Map<string, string>();
+	// Source 2: crawl_errors — URL keyed. Latest `createdAt` wins: the most
+	// recent message is the most relevant for both classification and
+	// outage attribution.
+	const crawlErrorByUrl = new Map<string, ResolvedFailedPageMessage>();
 	if (await knex.schema.hasTable('crawl_errors')) {
 		const urls = [...idToUrl.values()];
 		for (let i = 0; i < urls.length; i += CHUNK_SIZE) {
 			const chunk = urls.slice(i, i + CHUNK_SIZE);
 			const rows = (await knex('crawl_errors')
-				.select('url', 'message')
-				.whereIn('url', chunk)) as { url: string | null; message: string }[];
+				.select('url', 'message', 'createdAt')
+				.whereIn('url', chunk)) as {
+				url: string | null;
+				message: string;
+				createdAt: number;
+			}[];
 			for (const row of rows) {
-				if (row.url !== null && !crawlErrorByUrl.has(row.url)) {
-					crawlErrorByUrl.set(row.url, row.message);
+				if (row.url === null) {
+					continue;
+				}
+				const existing = crawlErrorByUrl.get(row.url);
+				if (existing === undefined || row.createdAt > (existing.createdAt ?? -Infinity)) {
+					crawlErrorByUrl.set(row.url, {
+						message: row.message,
+						createdAt: row.createdAt,
+					});
 				}
 			}
 		}
 	}
 
-	// Source 3: error.log — single pass.
-	const logByUrl = new Map<string, string>();
+	// Source 3: error.log — single pass. No timestamp field, so `createdAt`
+	// is always `null` for these — they can never be attributed to an
+	// outage window.
+	const logByUrl = new Map<string, ResolvedFailedPageMessage>();
 	const logRecords = await readErrorLog(accessor.tmpDir);
 	for (const record of logRecords) {
 		if (record.url !== null && !logByUrl.has(record.url)) {
-			logByUrl.set(record.url, record.message);
+			logByUrl.set(record.url, { message: record.message, createdAt: null });
 		}
 	}
 
-	const resolved = new Map<number, string>();
+	const resolved = new Map<number, ResolvedFailedPageMessage>();
 	for (const id of pageIds) {
 		const pageErr = pageErrorByPageId.get(id);
 		if (pageErr !== undefined) {

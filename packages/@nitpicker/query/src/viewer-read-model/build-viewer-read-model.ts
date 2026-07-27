@@ -752,6 +752,7 @@ export async function buildViewerReadModel(
 			status_json: JSON.stringify(summary.statusDistribution),
 			content_type_json: JSON.stringify(summary.contentTypeDistribution),
 			metadata_json: JSON.stringify(summary.metadataFulfillment),
+			network_outage_affected_failures: summary.networkOutageAffectedFailures,
 		});
 
 		// Normalises the `getErrorKinds` snapshot taken before this

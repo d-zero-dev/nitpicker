@@ -92,7 +92,30 @@ describe('getFailedPageMessages', () => {
 		});
 
 		const result = await getFailedPageMessages(knex, [pageId], [url]);
-		expect(result.get(pageId)).toBe('from-page-errors');
+		expect(result.get(pageId)?.message).toBe('from-page-errors');
+
+		await db.destroy();
+	});
+
+	it('returns the page_errors createdAt alongside the message', async () => {
+		await fs.rm(dbPath, { force: true });
+		const db = await Database.connect({ filename: dbPath });
+		const knex = db.getKnex();
+
+		const url = 'https://example.com/with-timestamp';
+		const pageId = await insertPageRow(db, url);
+		await knex('page_errors').insert({
+			pageId,
+			phase: 'render',
+			message: 'timed-error',
+			createdAt: 1_700_000_123_456,
+		});
+
+		const result = await getFailedPageMessages(knex, [pageId], [url]);
+		expect(result.get(pageId)).toEqual({
+			message: 'timed-error',
+			createdAt: 1_700_000_123_456,
+		});
 
 		await db.destroy();
 	});
@@ -112,7 +135,43 @@ describe('getFailedPageMessages', () => {
 		});
 
 		const result = await getFailedPageMessages(knex, [pageId], [url]);
-		expect(result.get(pageId)).toBe('crawl-only-msg');
+		expect(result.get(pageId)?.message).toBe('crawl-only-msg');
+		expect(result.get(pageId)?.createdAt).toBe(1_700_000_000_000);
+
+		await db.destroy();
+	});
+
+	it('prefers the LATEST crawl_errors row when multiple rows share the same URL', async () => {
+		// Previously undefined behaviour (no ORDER BY — SQLite's natural
+		// scan order decided the winner). Fixed to explicitly pick the most
+		// recent row: the freshest evidence is what both classification and
+		// outage-window attribution should key off, not insertion order.
+		await fs.rm(dbPath, { force: true });
+		const db = await Database.connect({ filename: dbPath });
+		const knex = db.getKnex();
+
+		const url = 'https://example.com/multi-crawl-error';
+		const pageId = await insertPageRow(db, url);
+		await knex('crawl_errors').insert([
+			{
+				url,
+				isExternal: 0,
+				message: 'stale-error',
+				createdAt: 1_700_000_000_000,
+			},
+			{
+				url,
+				isExternal: 0,
+				message: 'fresh-error',
+				createdAt: 1_700_000_050_000,
+			},
+		]);
+
+		const result = await getFailedPageMessages(knex, [pageId], [url]);
+		expect(result.get(pageId)).toEqual({
+			message: 'fresh-error',
+			createdAt: 1_700_000_050_000,
+		});
 
 		await db.destroy();
 	});
@@ -145,7 +204,7 @@ describe('getFailedPageMessages', () => {
 		]);
 
 		const result = await getFailedPageMessages(knex, [pageId], [url]);
-		expect(result.get(pageId)).toBe('first-error');
+		expect(result.get(pageId)?.message).toBe('first-error');
 
 		await db.destroy();
 	});
@@ -179,7 +238,9 @@ describe('getFailedPageMessages', () => {
 		});
 
 		const result = await getFailedPageMessages(knex, [pageId], [url]);
-		expect(result.get(pageId)).toBe('getaddrinfo ENOTFOUND empty-page-error.example.com');
+		expect(result.get(pageId)?.message).toBe(
+			'getaddrinfo ENOTFOUND empty-page-error.example.com',
+		);
 
 		await db.destroy();
 	});
@@ -212,7 +273,7 @@ describe('getFailedPageMessages', () => {
 		]);
 
 		const result = await getFailedPageMessages(knex, [trackedId], [trackedUrl]);
-		expect(result.get(trackedId)).toBe('real per-url msg');
+		expect(result.get(trackedId)?.message).toBe('real per-url msg');
 
 		await db.destroy();
 	});
@@ -239,7 +300,7 @@ describe('getFailedPageMessages', () => {
 			[orphanUrl, trackedUrl],
 		);
 		expect(result.has(orphanId)).toBe(false);
-		expect(result.get(trackedId)).toBe('tracked-msg');
+		expect(result.get(trackedId)?.message).toBe('tracked-msg');
 
 		await db.destroy();
 	});

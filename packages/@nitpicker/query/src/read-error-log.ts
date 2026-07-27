@@ -33,6 +33,8 @@ export async function readErrorLog(tmpDir: string): Promise<ErrorRecord[]> {
 		records.push({
 			url: rawUrl === 'null' || rawUrl === '' ? null : rawUrl,
 			message: spaceIndex === -1 ? '' : rest.slice(spaceIndex + 1),
+			// Plain-text log lines carry no timestamp field.
+			createdAt: null,
 		});
 	}
 	return records;

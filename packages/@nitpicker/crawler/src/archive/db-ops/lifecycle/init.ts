@@ -7,6 +7,7 @@ import { migrateInfoMainContentSelector } from '../../migrate-info-main-content-
 import { migrateInfoRoots } from '../../migrate-info-roots.js';
 import { migrateMainContentsColumns } from '../../migrate-main-contents-columns.js';
 import { migratePageMetaBodyHash } from '../../migrate-page-meta-body-hash.js';
+import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-network-outages.js';
 
 /**
  * Initializes the database schema if tables do not exist, then runs the
@@ -28,6 +29,13 @@ import { migratePageMetaBodyHash } from '../../migrate-page-meta-body-hash.js';
  * needs an explicit `hasColumn`-guarded `ALTER TABLE` here (`migrateInfoRoots`,
  * `migrateMainContentsColumns`, `migratePageMetaBodyHash`,
  * `migrateContentItemsAliasOfId`) rather than a DDL-string change alone.
+ *
+ * `closeStaleOpenNetworkOutages` is not a schema migration (no columns
+ * change) but belongs at this same boot phase for the same reason the
+ * others do: it must run before ANY reader (`resetFailedPages`,
+ * `listDnsBurnedHostCandidates`, …) can observe a `network_outages` row
+ * left `ended_at = NULL` by a crawl process that was killed mid-outage in a
+ * prior session.
  *
  * In read-only mode schema init + migration are SKIPPED so the same DB
  * can be opened safely by a viewer attached to a live (or interrupted)
@@ -57,4 +65,5 @@ export async function init(knex: Knex, readOnly: boolean): Promise<void> {
 	await migrateMainContentsColumns(knex);
 	await migratePageMetaBodyHash(knex);
 	await migrateContentItemsAliasOfId(knex);
+	await closeStaleOpenNetworkOutages(knex);
 }

@@ -428,6 +428,244 @@ describe('Crawler', () => {
 		});
 	});
 
+	describe('network outage detection', () => {
+		/** Low thresholds so two different-host failures reliably trip the detector inside a test's timeout. */
+		const outageOptions = {
+			...defaultOptions,
+			networkOutageWindowMs: 60_000,
+			networkOutageErrorThreshold: 2,
+			networkOutageHostThreshold: 2,
+			// 1ms so the recovery-probe loop iterates fast in real (non-fake) time.
+			networkOutageProbeIntervalMs: 1,
+		};
+
+		it('confirms an outage (probe fails) once two different hosts fail within the window', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockRejectedValue(
+				new Error('getaddrinfo ENOTFOUND'),
+			);
+
+			const crawler = new Crawler({
+				...outageOptions,
+				// Confirmed and stays down for the duration of this test — the
+				// recovery loop will keep retrying in the background; it is
+				// stopped via abort() in the final assertion step.
+				networkProbe: () => Promise.resolve(false),
+			});
+
+			const confirmed: CrawlerEventTypes['networkOutageConfirmed'][] = [];
+			crawler.on('networkOutageConfirmed', (e) => {
+				confirmed.push(e);
+			});
+
+			crawler.start([
+				parseUrl('https://outage-a.example/')!,
+				parseUrl('https://outage-b.example/')!,
+			]);
+
+			await vi.waitFor(() => {
+				expect(confirmed).toHaveLength(1);
+			});
+			expect(confirmed[0]!.triggerHostCount).toBeGreaterThanOrEqual(2);
+			expect(confirmed[0]!.probeHost).not.toBeNull();
+
+			// Stop the background recovery-probe loop this test left running.
+			crawler.abort();
+			clearDnsBurnedHostCache();
+		});
+
+		it('does NOT confirm an outage when the probe succeeds (false alarm)', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockRejectedValue(
+				new Error('getaddrinfo ENOTFOUND'),
+			);
+
+			const crawler = new Crawler({
+				...outageOptions,
+				networkProbe: () => Promise.resolve(true),
+			});
+
+			const confirmed: CrawlerEventTypes['networkOutageConfirmed'][] = [];
+			crawler.on('networkOutageConfirmed', (e) => {
+				confirmed.push(e);
+			});
+
+			crawler.start([
+				parseUrl('https://falsealarm-a.example/')!,
+				parseUrl('https://falsealarm-b.example/')!,
+			]);
+
+			await vi.waitFor(() => {
+				expect(confirmed).toHaveLength(0);
+			});
+			// A short grace period confirms this isn't just "hasn't fired yet" —
+			// the false-alarm probe already resolved by the time driveDeal's
+			// synchronous loop finished, so nothing further can arrive.
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(confirmed).toHaveLength(0);
+			clearDnsBurnedHostCache();
+		});
+
+		it('emits networkOutageRecovered once a later probe succeeds', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockRejectedValue(
+				new Error('getaddrinfo ENOTFOUND'),
+			);
+
+			let probeCallCount = 0;
+			const crawler = new Crawler({
+				...outageOptions,
+				networkProbe: () => {
+					probeCallCount++;
+					// Fail the confirming probe and the first recovery attempt,
+					// then succeed.
+					return Promise.resolve(probeCallCount > 2);
+				},
+			});
+
+			const confirmed: CrawlerEventTypes['networkOutageConfirmed'][] = [];
+			const recovered: CrawlerEventTypes['networkOutageRecovered'][] = [];
+			crawler.on('networkOutageConfirmed', (e) => confirmed.push(e));
+			crawler.on('networkOutageRecovered', (e) => recovered.push(e));
+
+			crawler.start([
+				parseUrl('https://recover-a.example/')!,
+				parseUrl('https://recover-b.example/')!,
+			]);
+
+			await vi.waitFor(() => {
+				expect(confirmed).toHaveLength(1);
+			});
+			await vi.waitFor(() => {
+				expect(recovered).toHaveLength(1);
+			});
+			expect(typeof recovered[0]!.endedAt).toBe('number');
+			clearDnsBurnedHostCache();
+		});
+
+		it('evicts network-classified destinationCache/dnsBurnedHostCache entries on recovery, preserving unrelated ones', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+			const { destinationCache } = await import('./destination-cache.js');
+			const { dnsBurnedHostCache } = await import('./dns-burned-host-cache.js');
+			destinationCache.clear();
+
+			// Pre-existing cache state, unrelated to the outage this test
+			// triggers: a site-specific failure (client-blocked) that must
+			// survive, and a preload-seeded DNS burn (no corresponding
+			// burn-timestamp entry) that must also survive.
+			destinationCache.set(
+				'https://blocked.example/',
+				new Error('ERR_BLOCKED_BY_CLIENT'),
+			);
+			dnsBurnedHostCache.set('preload-seeded.example', 'dns');
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockRejectedValue(
+				new Error('getaddrinfo ENOTFOUND'),
+			);
+
+			let probeCallCount = 0;
+			const crawler = new Crawler({
+				...outageOptions,
+				networkProbe: () => {
+					probeCallCount++;
+					return Promise.resolve(probeCallCount > 1);
+				},
+			});
+
+			const recovered: CrawlerEventTypes['networkOutageRecovered'][] = [];
+			crawler.on('networkOutageRecovered', (e) => recovered.push(e));
+
+			crawler.start([
+				parseUrl('https://evict-a.example/')!,
+				parseUrl('https://evict-b.example/')!,
+			]);
+
+			await vi.waitFor(() => {
+				expect(recovered).toHaveLength(1);
+			});
+
+			// The two failing URLs' retry storms burn their own hosts into
+			// dnsBurnedHostCache with a REAL burn timestamp (via the
+			// production onGiveUp path) — those must be gone after recovery.
+			expect(dnsBurnedHostCache.has('evict-a.example')).toBe(false);
+			expect(dnsBurnedHostCache.has('evict-b.example')).toBe(false);
+			// The unrelated pre-existing entries must survive.
+			expect(dnsBurnedHostCache.has('preload-seeded.example')).toBe(true);
+			expect(destinationCache.get('https://blocked.example/')).toBeInstanceOf(Error);
+
+			destinationCache.clear();
+			clearDnsBurnedHostCache();
+		});
+
+		it('reopens the gate on abort without emitting networkOutageRecovered, unblocking a paused worker', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+			const fetchDestMod = await import('./fetch-destination.js');
+			const fetchSpy = vi
+				.spyOn(fetchDestMod, 'fetchDestination')
+				.mockRejectedValue(new Error('getaddrinfo ENOTFOUND'));
+
+			const crawler = new Crawler({
+				...outageOptions,
+				// Stays down for the whole test — only abort() should unblock it.
+				networkProbe: () => Promise.resolve(false),
+			});
+
+			const recovered: CrawlerEventTypes['networkOutageRecovered'][] = [];
+			crawler.on('networkOutageRecovered', (e) => recovered.push(e));
+
+			crawler.start([
+				parseUrl('https://abort-a.example/')!,
+				parseUrl('https://abort-b.example/')!,
+				parseUrl('https://abort-c.example/')!,
+			]);
+
+			// Wait until the third URL's HEAD attempt would have started if the
+			// gate were open — i.e. until fetchDestination has been called for
+			// every one of the three URLs. Before the abort, item 3 should be
+			// stuck on `#networkGate.wait()` and never reach fetchDestination.
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			const urlsFetched = fetchSpy.mock.calls.map(
+				(call) => (call[0] as { url: { href: string } }).url.href,
+			);
+			expect(urlsFetched).not.toContain('https://abort-c.example');
+
+			crawler.abort();
+
+			await vi.waitFor(() => {
+				const urlsFetchedAfterAbort = fetchSpy.mock.calls.map(
+					(call) => (call[0] as { url: { href: string } }).url.href,
+				);
+				expect(urlsFetchedAfterAbort).toContain('https://abort-c.example');
+			});
+			expect(recovered).toHaveLength(0);
+			clearDnsBurnedHostCache();
+		});
+	});
+
 	describe('resource reuse via the lookupResource option', () => {
 		it('キャプチャ済みリソースが再利用され、ネットワークフェッチが一切発生しない', async () => {
 			await driveDeal();

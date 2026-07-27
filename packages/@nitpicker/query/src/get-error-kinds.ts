@@ -1,8 +1,14 @@
-import type { ErrorKindEntry, ErrorKindsResult, GetErrorKindsOptions } from './types.js';
+import type {
+	ErrorKindEntry,
+	ErrorKindsResult,
+	FailureAttribution,
+	GetErrorKindsOptions,
+} from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
-import { classifyErrorKind } from '@nitpicker/crawler';
+import { classifyErrorKind, isWithinOutageWindow } from '@nitpicker/crawler';
 
+import { listAllOutageWindows } from './list-all-outage-windows.js';
 import { readCrawlErrors } from './read-crawl-errors.js';
 import { readErrorLog } from './read-error-log.js';
 import { readPageErrors } from './read-page-errors.js';
@@ -47,18 +53,29 @@ function hostOf(url: string | null): string {
  * merged. Scrape-path (`page_errors`) history is unaffected.
  *
  * A single host is normally classified into exactly one kind, but the row is
- * keyed by (host, kind) rather than by host alone — a retried request can in
- * principle fail with a different cause on a later attempt, and normalizing
- * up front keeps that case from silently merging two distinct causes into one
- * row.
+ * keyed by (host, kind, attribution) rather than by host alone — a retried
+ * request can in principle fail with a different cause on a later attempt,
+ * and normalizing up front keeps that case from silently merging two
+ * distinct causes into one row.
+ *
+ * `attribution` (see {@link FailureAttribution}) splits each (host, kind)
+ * pair further: a record's timestamp is checked against every recorded
+ * `network_outages` window (`isWithinOutageWindow`), so a `dns` failure
+ * that happened while the crawl operator's own network was down gets its
+ * own `'network'` row, separate from the same host's `'site'`-attributed
+ * `dns` failures from other times. A record with no timestamp
+ * (`error.log`-sourced) is always `'site'` — it can never be checked
+ * against a window. An archive with no recorded outages produces only
+ * `'site'` rows, identical to this function's behaviour before the
+ * attribution axis existed.
  * @param accessor - The opened archive accessor.
  * @param options - Filter, sort, and pagination options.
- * @returns Host×kind rows for the requested page, the matching row count, and
- *   archive-wide totals in `facets`.
+ * @returns Host×kind×attribution rows for the requested page, the matching
+ *   row count, and archive-wide totals in `facets`.
  * @example
  * ```ts
  * const { items } = await getErrorKinds(accessor, { kind: 'dns', sortBy: 'count', sortOrder: 'desc' });
- * console.log(items[0]?.host, items[0]?.count);
+ * console.log(items[0]?.host, items[0]?.count, items[0]?.attribution);
  * ```
  */
 export async function getErrorKinds(
@@ -68,7 +85,10 @@ export async function getErrorKinds(
 	const knex = accessor.getKnex();
 	const hasCrawlErrors = await knex.schema.hasTable('crawl_errors');
 
-	const pageRecords = await readPageErrors(accessor);
+	const [pageRecords, outageWindows] = await Promise.all([
+		readPageErrors(accessor),
+		listAllOutageWindows(accessor),
+	]);
 
 	// Prefer the structured table, but fall back to error.log whenever it yields
 	// nothing — not just when the table is absent. A legacy (pre-capture) archive
@@ -91,13 +111,17 @@ export async function getErrorKinds(
 
 	const accumulators = new Map<string, ErrorKindEntry>();
 	let totalRecords = 0;
-	for (const { url, message } of [...pageRecords, ...channelRecords]) {
+	for (const { url, message, createdAt } of [...pageRecords, ...channelRecords]) {
 		const kind = classifyErrorKind(message);
 		const host = hostOf(url);
-		const key = `${host} ${kind}`;
+		const attribution: FailureAttribution =
+			createdAt != null && isWithinOutageWindow(createdAt, outageWindows)
+				? 'network'
+				: 'site';
+		const key = `${host} ${kind} ${attribution}`;
 		let acc = accumulators.get(key);
 		if (!acc) {
-			acc = { host, kind, count: 0, sampleUrls: [], overflowedCount: 0 };
+			acc = { host, kind, attribution, count: 0, sampleUrls: [], overflowedCount: 0 };
 			accumulators.set(key, acc);
 		}
 		acc.count++;
@@ -117,6 +141,9 @@ export async function getErrorKinds(
 	}
 	if (options.kind) {
 		items = items.filter((item) => item.kind === options.kind);
+	}
+	if (options.attribution) {
+		items = items.filter((item) => item.attribution === options.attribution);
 	}
 
 	const { sortBy, sortOrder } = resolveErrorKindsSort(options);

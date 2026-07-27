@@ -160,6 +160,59 @@ describe('Database.listDnsBurnedHostCandidates', () => {
 		expect(burned).not.toContain('wifi-hiccup.invalid');
 	});
 
+	it('excludes a host whose latest DNS error falls inside a recorded network outage window (damage-3 regression)', async () => {
+		// This is the fix for "damage 3": a host first contacted DURING an
+		// operator-side network outage has zero prior success recorded (the
+		// only signal the OTHER exclusion bags rely on), so without this
+		// check it would be preload-seeded into dnsBurnedHostCache and
+		// short-circuited on every subsequent session forever — even though
+		// the host was never actually unreachable.
+		const db = await openDb();
+		const knex = db.getKnex();
+		await knex('crawl_errors').insert({
+			url: 'https://first-contact-during-outage.invalid/page',
+			isExternal: 0,
+			message: 'getaddrinfo ENOTFOUND first-contact-during-outage.invalid',
+			createdAt: 1_000_150,
+		});
+		const outageId = await db.insertNetworkOutage({
+			startedAt: 1_000_100,
+			detectedAt: 1_000_120,
+			probeHost: 'a.example',
+			triggerErrorCount: 5,
+			triggerHostCount: 2,
+		});
+		await db.closeNetworkOutage(outageId, 1_000_200);
+
+		const burned = await db.listDnsBurnedHostCandidates();
+		expect(burned).not.toContain('first-contact-during-outage.invalid');
+	});
+
+	it('still burns a host whose latest DNS error falls OUTSIDE any recorded outage window', async () => {
+		// Regression guard for the opposite direction: the outage exclusion
+		// must not become a blanket amnesty for every DNS failure once any
+		// outage has ever been recorded in the archive.
+		const db = await openDb();
+		const knex = db.getKnex();
+		await knex('crawl_errors').insert({
+			url: 'https://actually-dead.invalid/page',
+			isExternal: 0,
+			message: 'getaddrinfo ENOTFOUND actually-dead.invalid',
+			createdAt: 500,
+		});
+		const outageId = await db.insertNetworkOutage({
+			startedAt: 1_000_100,
+			detectedAt: 1_000_120,
+			probeHost: 'a.example',
+			triggerErrorCount: 5,
+			triggerHostCount: 2,
+		});
+		await db.closeNetworkOutage(outageId, 1_000_200);
+
+		const burned = await db.listDnsBurnedHostCandidates();
+		expect(burned).toContain('actually-dead.invalid');
+	});
+
 	it('normalises hostnames to lowercase', async () => {
 		const db = await openDb();
 		await db.insertCrawlError(

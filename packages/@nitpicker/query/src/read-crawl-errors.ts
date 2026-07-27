@@ -12,9 +12,10 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  */
 export async function readCrawlErrors(accessor: ArchiveAccessor): Promise<ErrorRecord[]> {
 	const knex = accessor.getKnex();
-	const rows = await knex('crawl_errors').select('url', 'message');
-	return rows.map((r: { url: string | null; message: string }) => ({
+	const rows = await knex('crawl_errors').select('url', 'message', 'createdAt');
+	return rows.map((r: { url: string | null; message: string; createdAt: number }) => ({
 		url: r.url ?? null,
 		message: r.message,
+		createdAt: r.createdAt,
 	}));
 }

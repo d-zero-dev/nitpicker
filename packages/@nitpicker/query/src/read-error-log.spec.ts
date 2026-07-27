@@ -38,10 +38,12 @@ describe('readErrorLog', () => {
 		expect(records[0]).toEqual({
 			url: 'https://example.com/a',
 			message: 'Error: connect ECONNREFUSED',
+			createdAt: null,
 		});
 		expect(records[1]).toEqual({
 			url: 'https://example.com/b',
 			message: 'Navigation timeout of 60000 ms',
+			createdAt: null,
 		});
 	});
 

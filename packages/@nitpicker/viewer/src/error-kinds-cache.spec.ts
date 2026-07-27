@@ -67,6 +67,7 @@ function makeEntry(overrides: Partial<ErrorKindEntry> = {}): ErrorKindEntry {
 	return {
 		host: 'a.example.com',
 		kind: 'dns',
+		attribution: 'site',
 		count: 1,
 		sampleUrls: [],
 		overflowedCount: 0,
@@ -232,6 +233,35 @@ describe('getCachedErrorKinds', () => {
 			});
 			expect(byBoth.items).toHaveLength(1);
 			expect(byBoth.items[0]).toMatchObject({ host: 'a.example.com', kind: 'timeout' });
+		});
+
+		it('filters by attribution — regression test for the missing attribution filter (issue #91)', async () => {
+			const withAttribution = makeResult({
+				items: [
+					makeEntry({
+						host: 'a.example.com',
+						kind: 'dns',
+						attribution: 'site',
+						count: 5,
+					}),
+					makeEntry({
+						host: 'a.example.com',
+						kind: 'dns',
+						attribution: 'network',
+						count: 2,
+					}),
+				],
+				total: 2,
+				facets: { totalRecords: 7, channelSource: 'crawl_errors' },
+			});
+			vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(withAttribution);
+			const context = makeContext('archive_opts_filter_attribution');
+
+			const networkOnly = await getCachedErrorKinds(context, { attribution: 'network' });
+			expect(networkOnly.items).toHaveLength(1);
+			expect(networkOnly.items[0]).toMatchObject({ attribution: 'network', count: 2 });
+			// facets stay archive-wide, unaffected by the filter.
+			expect(networkOnly.facets.totalRecords).toBe(7);
 		});
 
 		it('sorts by count descending by default', async () => {

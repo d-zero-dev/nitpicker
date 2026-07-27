@@ -2,6 +2,7 @@ import type {
 	BrowserScrapeResult,
 	CrawlerEventTypes,
 	CrawlerOptions,
+	OutageSuspect,
 	ResourceLookupResult,
 	ScrapeOutcome,
 } from './types.js';
@@ -33,12 +34,17 @@ import { crawlerLog } from '../debug.js';
 import { buildJsRedirectEdge } from './build-js-redirect-edge.js';
 import { buildRedirectEvent } from './build-redirect-event.js';
 import { captureImageDomPaths } from './capture-image-dom-paths.js';
+import { chooseProbeHost } from './choose-probe-host.js';
 import { createChangePhaseHandler } from './create-change-phase-handler.js';
 import { derivePageSource } from './derive-page-source.js';
+import { destinationCache } from './destination-cache.js';
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
+import { dnsBurnedHostBurnTimestamps } from './dns-burned-host-burn-timestamps.js';
 import { dnsBurnedHostCache } from './dns-burned-host-cache.js';
 import { dnsBurnedHostShortCircuitCounter } from './dns-burned-host-short-circuit-counter.js';
 import { drainPhaseErrors } from './drain-phase-errors.js';
+import { evictNetworkClassifiedDestinationCacheEntries } from './evict-network-classified-destination-cache-entries.js';
+import { evictOutageTaintedDnsBurns } from './evict-outage-tainted-dns-burns.js';
 import { fetchDestination } from './fetch-destination.js';
 import { findScopeEntry } from './find-scope-entry.js';
 import { formatCrawlProgress } from './format-crawl-progress.js';
@@ -54,9 +60,12 @@ import { isPuppeteerFallbackCandidate } from './is-puppeteer-fallback-candidate.
 import LinkList from './link-list.js';
 import { linkToPageData } from './link-to-page-data.js';
 import { logUndrainedPhaseErrors } from './log-undrained-phase-errors.js';
+import NetworkGate from './network-gate.js';
+import NetworkOutageDetector from './network-outage-detector.js';
 import { partitionUrlsByHtml } from './partition-urls-by-html.js';
 import { planSubResourceEmits } from './plan-sub-resource-emits.js';
 import { PreloadShortCircuitError } from './preload-short-circuit-error.js';
+import { probeNetwork } from './probe-network.js';
 import { protocolAgnosticKey } from './protocol-agnostic-key.js';
 import { redirectDestKey } from './redirect-dest-key.js';
 import { resourceToPageData } from './resource-to-page-data.js';
@@ -79,6 +88,15 @@ export type { CrawlerOptions } from './types.js';
  */
 const HEAD_TIMEOUT_ESCALATION_MS: readonly number[] = [10_000, 30_000, 60_000];
 
+/** Default {@link CrawlerOptions.networkOutageWindowMs}. */
+const DEFAULT_NETWORK_OUTAGE_WINDOW_MS = 10_000;
+/** Default {@link CrawlerOptions.networkOutageErrorThreshold}. */
+const DEFAULT_NETWORK_OUTAGE_ERROR_THRESHOLD = 5;
+/** Default {@link CrawlerOptions.networkOutageHostThreshold}. */
+const DEFAULT_NETWORK_OUTAGE_HOST_THRESHOLD = 2;
+/** Default {@link CrawlerOptions.networkOutageProbeIntervalMs}. */
+const DEFAULT_NETWORK_OUTAGE_PROBE_INTERVAL_MS = 10_000;
+
 /**
  * The core crawler engine that discovers and scrapes web pages.
  *
@@ -95,8 +113,39 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	readonly #abortController = new AbortController();
 	/** Tracks discovered URLs, their scrape status, and deduplication. */
 	readonly #linkList = new LinkList();
+	/**
+	 * Gate every worker callback awaits before doing network work (see the
+	 * worker body inside {@link #runDeal}). Open by default; closed by
+	 * {@link #handleOutageSuspect} once a recovery probe confirms a suspect
+	 * outage, reopened once a later probe succeeds. Re-opened defensively at
+	 * the start of {@link #runDeal} (a no-op if already open) so a fresh
+	 * session never inherits a closed gate from a prior anomalous one.
+	 */
+	readonly #networkGate = new NetworkGate();
+	/**
+	 * Sliding-window detector for "the operator's own network, not the
+	 * target sites, looks like it is down". Fed from {@link #sendHeadRequest}'s
+	 * `onWait` / `onGiveUp`; a non-null {@link OutageSuspect} triggers
+	 * {@link #handleOutageSuspect}. Reset at the start of {@link #runDeal}.
+	 * Assigned in the constructor (not a field initializer) because it
+	 * needs `this.#options`'s network-outage tunables.
+	 */
+	readonly #networkOutageDetector: NetworkOutageDetector;
 	/** Merged crawler configuration (user overrides + defaults). */
 	readonly #options: CrawlerOptions;
+	/**
+	 * Synchronous claim flag guarding the async gap between "a suspect
+	 * outage arrived" and "the confirming probe settled" in
+	 * {@link #handleOutageSuspect}. Without it, two workers whose HEAD
+	 * requests both exhaust retries in quick succession could each start
+	 * their own confirming probe while the gate is still open, and if both
+	 * probes fail, both would close the gate and emit
+	 * `networkOutageConfirmed` — creating two simultaneously-open
+	 * `network_outages` rows for one ongoing outage. Checked and set
+	 * synchronously (no `await` between the check and the set), which is
+	 * race-free because JS has no thread-level interleaving.
+	 */
+	#outageHandlingInProgress = false;
 	/**
 	 * Phase errors observed during {@link Crawler._launchBrowserAndScrape},
 	 * buffered per URL href so they can be emitted as `pageError` events
@@ -182,7 +231,22 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			lookupResource: options?.lookupResource ?? null,
 			lookupPageSource: options?.lookupPageSource ?? null,
 			inventoryMode: options?.inventoryMode ?? null,
+			networkOutageWindowMs:
+				options?.networkOutageWindowMs ?? DEFAULT_NETWORK_OUTAGE_WINDOW_MS,
+			networkOutageErrorThreshold:
+				options?.networkOutageErrorThreshold ?? DEFAULT_NETWORK_OUTAGE_ERROR_THRESHOLD,
+			networkOutageHostThreshold:
+				options?.networkOutageHostThreshold ?? DEFAULT_NETWORK_OUTAGE_HOST_THRESHOLD,
+			networkOutageProbeIntervalMs:
+				options?.networkOutageProbeIntervalMs ?? DEFAULT_NETWORK_OUTAGE_PROBE_INTERVAL_MS,
+			networkProbe: options?.networkProbe ?? null,
 		};
+
+		this.#networkOutageDetector = new NetworkOutageDetector({
+			windowMs: this.#options.networkOutageWindowMs,
+			errorThreshold: this.#options.networkOutageErrorThreshold,
+			hostThreshold: this.#options.networkOutageHostThreshold,
+		});
 
 		this.#robotsChecker = new RobotsChecker(
 			this.#options.userAgent,
@@ -374,6 +438,58 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	}
 
 	/**
+	 * Confirm a sliding-window suspect via an active probe, and if
+	 * confirmed, close {@link #networkGate} and start
+	 * {@link #runRecoveryProbeLoop}.
+	 *
+	 * Guarded by {@link #outageHandlingInProgress} (a synchronous
+	 * check-then-set, race-free under JS's single-threaded execution) AND
+	 * by `#networkGate.isOpen` — the latter covers the entire duration a
+	 * recovery loop is running (no new suspect should re-confirm or
+	 * re-probe while one outage is already open), the former covers only
+	 * the narrow async gap between "decided to investigate" and "the
+	 * confirming probe settled", which the gate-open check alone cannot see
+	 * since the gate has not closed yet at that point.
+	 * @param suspect - The trigger emitted by {@link NetworkOutageDetector.record}.
+	 */
+	async #handleOutageSuspect(suspect: OutageSuspect): Promise<void> {
+		if (!this.#networkGate.isOpen || this.#outageHandlingInProgress) {
+			return;
+		}
+		this.#outageHandlingInProgress = true;
+		try {
+			// No usable probe target at all (no session successes yet AND no
+			// parseable root URL) — cannot confirm, and cannot ever detect
+			// recovery either, so there is nothing safe to do but leave the
+			// gate open and treat this as inconclusive.
+			const probeHost = chooseProbeHost(this.#successfulHosts, this.#options.roots);
+			if (probeHost === null) {
+				return;
+			}
+
+			const probe = this.#options.networkProbe ?? probeNetwork;
+			const initiallyReachable = await probe(probeHost);
+			if (initiallyReachable) {
+				// False alarm: the sliding window tripped (e.g. several
+				// unrelated hosts happened to fail close together) but the
+				// probe host answers fine. Leave the gate open.
+				return;
+			}
+
+			this.#networkGate.close();
+			void this.emit('networkOutageConfirmed', {
+				startedAt: suspect.startedAt,
+				detectedAt: suspect.detectedAt,
+				probeHost,
+				triggerErrorCount: suspect.triggerErrorCount,
+				triggerHostCount: suspect.triggerHostCount,
+			});
+			void this.#runRecoveryProbeLoop(probeHost, suspect.startedAt);
+		} finally {
+			this.#outageHandlingInProgress = false;
+		}
+	}
+	/**
 	 * Processes captured sub-resources from a page scrape, deduplicates them,
 	 * and emits `response` / `responseReferrers` events for new resources.
 	 * @param resources - Sub-resource entries captured during the page load
@@ -562,6 +678,54 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		}
 	}
 	/**
+	 * Undo cache damage from the outage window `[startedAt, endedAt]`:
+	 * evict `destinationCache` entries whose cached error looks
+	 * network-related (any such entry may be stale evidence about the
+	 * operator's network, not the target site), and un-burn any
+	 * `dnsBurnedHostCache` host THIS session burned during that window
+	 * (preload-seeded burns are structurally immune — see
+	 * `evict-outage-tainted-dns-burns.ts`).
+	 *
+	 * Called on every closed→open gate transition, whether triggered by a
+	 * successful recovery probe or by an abort — the cached failures are
+	 * stale either way, and the eviction itself has no failure mode that
+	 * depends on why the gate reopened.
+	 * @param startedAt - The outage's `startedAt` (from the triggering `OutageSuspect`).
+	 * @param endedAt - The moment the gate is reopening.
+	 */
+	#onGateReopened(startedAt: number, endedAt: number): void {
+		evictNetworkClassifiedDestinationCacheEntries(destinationCache);
+		evictOutageTaintedDnsBurns({
+			cache: dnsBurnedHostCache,
+			burnTimestamps: dnsBurnedHostBurnTimestamps,
+			window: { startedAt, endedAt },
+		});
+	}
+	/**
+	 * Feed one observed network-layer error into
+	 * {@link #networkOutageDetector} and hand off to
+	 * {@link #handleOutageSuspect} the instant its sliding window trips.
+	 *
+	 * Called from BOTH `onWait` (every non-final retry attempt) and
+	 * `onGiveUp` (the final attempt) inside {@link #sendHeadRequest}, so a
+	 * single URL's retry storm contributes every attempt's error, not just
+	 * its terminal one — a real network-wide outage is expected to trip the
+	 * `hostThreshold` gate from many DIFFERENT hosts' attempts arriving in
+	 * the same short window, not from one URL retrying against one host.
+	 * @param message - The raw error message to classify.
+	 * @param host - Lower-cased hostname the error occurred on.
+	 */
+	#recordNetworkError(message: string, host: string): void {
+		const suspect = this.#networkOutageDetector.record({
+			kind: classifyErrorKind(message),
+			host,
+			at: Date.now(),
+		});
+		if (suspect) {
+			void this.#handleOutageSuspect(suspect);
+		}
+	}
+	/**
 	 * Resolve the source label of the page being scraped so sub-resources
 	 * captured during its render can inherit the correct lineage label
 	 * (`'inventory-discovered'` when the parent is in the inventory chain,
@@ -637,6 +801,12 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		// does not inherit "host alive" claims from a prior run that may have
 		// happened on an entirely different network.
 		this.#successfulHosts.clear();
+		// Network-outage state is per-crawl too: a sliding window of errors
+		// (or a gate left closed) from a prior run on this same `Crawler`
+		// instance must not leak into a fresh session. `#networkGate.open()`
+		// is a no-op if already open.
+		this.#networkOutageDetector.reset();
+		this.#networkGate.open();
 
 		// external URL の追跡（target は deal の total/done から導出）
 		const externalUrls = new Set<string>();
@@ -692,6 +862,13 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				};
 
 				return async () => {
+					// Pause here, not inside `fetchDestination` or deeper, so a
+					// paused worker shows as a long-running dealer task instead
+					// of requiring any change to `@d-zero/dealer` itself — a
+					// closed gate resolves the instant `#handleOutageSuspect`'s
+					// recovery probe succeeds (see `network-gate.ts`).
+					await this.#networkGate.wait();
+
 					// Interval delay is handled here instead of by dealer because
 					// DNS-burned hosts must skip the wait entirely. Spending the
 					// per-URL interval on a host the cache already knows is dead
@@ -968,6 +1145,53 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 		crawlerLog('Crawl End');
 		void this.emit('crawlEnd', {});
+	}
+	/**
+	 * While {@link #networkGate} is closed, probe every
+	 * `networkOutageProbeIntervalMs` until one succeeds, then reopen the
+	 * gate and emit `networkOutageRecovered`.
+	 *
+	 * If the crawl is aborted while this loop is running, the gate is
+	 * opened anyway (so any worker stuck on `#networkGate.wait()` can
+	 * unblock and `deal()` can resolve) but `networkOutageRecovered` is NOT
+	 * emitted — an abort says nothing about whether the network actually
+	 * recovered, so the `network_outages` row is deliberately left open for
+	 * the next writer session's boot-time finalizer
+	 * (`close-stale-open-network-outages.ts`) to resolve. Either way,
+	 * {@link #onGateReopened} still runs — the cached failures are stale
+	 * regardless of why the gate reopened.
+	 * @param probeHost - The hostname to probe, chosen once by
+	 *   {@link #handleOutageSuspect} and reused for every attempt in this loop.
+	 * @param startedAt - The outage's `startedAt`, forwarded to {@link #onGateReopened}.
+	 */
+	async #runRecoveryProbeLoop(probeHost: string, startedAt: number): Promise<void> {
+		const probe = this.#options.networkProbe ?? probeNetwork;
+		const bailIfAborted = (): boolean => {
+			if (!this.#abortController.signal.aborted) {
+				return false;
+			}
+			this.#networkGate.open();
+			this.#onGateReopened(startedAt, Date.now());
+			return true;
+		};
+
+		if (bailIfAborted()) {
+			return;
+		}
+		for (;;) {
+			await delay(this.#options.networkOutageProbeIntervalMs);
+			if (bailIfAborted()) {
+				return;
+			}
+			const recovered = await probe(probeHost);
+			if (recovered) {
+				const endedAt = Date.now();
+				this.#networkGate.open();
+				this.#onGateReopened(startedAt, endedAt);
+				void this.emit('networkOutageRecovered', { endedAt });
+				return;
+			}
+		}
 	}
 	/**
 	 * Orchestrates the full scrape pipeline for a single URL.
@@ -1465,11 +1689,13 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				retries: this.#options.retry,
 				label: 'HEAD request',
 				onWait: (determinedInterval, retryCount, label, error) => {
+					this.#recordNetworkError(error.message, host);
 					update(
 						`${label}: ${error.message} — %countdown(${determinedInterval},fetchHead_${laneIndex}_${retryCount},s)%s (retry #${retryCount + 1})`,
 					);
 				},
 				onGiveUp: (retryCount, error, label) => {
+					this.#recordNetworkError(error.message, host);
 					// Burn the host so subsequent URLs short-circuit — but ONLY
 					// when this is the first time we've ever seen the host fail
 					// in this session. A host that responded earlier is treated
@@ -1487,6 +1713,12 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						})
 					) {
 						dnsBurnedHostCache.set(host, 'dns');
+						// Recorded so a later outage recovery can tell THIS
+						// burn (possibly outage-caused) apart from a
+						// preload-seeded one (a cross-session, confirmed-dead
+						// verdict that must never be undone by an in-session
+						// recovery) — see `evict-outage-tainted-dns-burns.ts`.
+						dnsBurnedHostBurnTimestamps.set(host, Date.now());
 					}
 					update(
 						c.red(`${label}: gave up after ${retryCount} retries — ${error.message}`),
@@ -1495,6 +1727,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			},
 		);
 	}
+
 	/**
 	 * Launches a fresh Puppeteer browser, runs the beholder scraper, and cleans up.
 	 *

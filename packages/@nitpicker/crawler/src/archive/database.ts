@@ -16,10 +16,12 @@ import type {
 	DB_Redirect,
 	DB_Resource,
 	DatabaseEvent,
+	InsertNetworkOutageParams,
 	InventoryRunMeta,
 	PageFilter,
 	PageSource,
 } from './types.js';
+import type { OutageWindow } from '../is-within-outage-window.js';
 import type { PageData, Resource } from '../utils/types/types.js';
 import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 import type { Knex } from 'knex';
@@ -62,6 +64,9 @@ import { getMainContentImagesOfPage as getMainContentImagesOfPageOp } from './db
 import { getMainContentTablesOfPage as getMainContentTablesOfPageOp } from './db-ops/meta/get-main-content-tables-of-page.js';
 import { getTagsOfPage as getTagsOfPageOp } from './db-ops/meta/get-tags-of-page.js';
 import { getVideosOfPage as getVideosOfPageOp } from './db-ops/meta/get-videos-of-page.js';
+import { closeNetworkOutage as closeNetworkOutageOp } from './db-ops/outages/close-network-outage.js';
+import { insertNetworkOutage as insertNetworkOutageOp } from './db-ops/outages/insert-network-outage.js';
+import { listNetworkOutages as listNetworkOutagesOp } from './db-ops/outages/list-network-outages.js';
 import { setUrlOrder as setUrlOrderOp } from './db-ops/pages/order/set-url-order.js';
 import { getCrawlingState as getCrawlingStateOp } from './db-ops/pages/read/get-crawling-state.js';
 import { getExistingPageUrls as getExistingPageUrlsOp } from './db-ops/pages/read/get-existing-page-urls.js';
@@ -151,6 +156,20 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 */
 	async checkpoint() {
 		await checkpointOp(this.#instance);
+	}
+	/**
+	 * Closes an outage row by stamping `ended_at` — a no-op if the row is
+	 * already closed. Delegates to {@link closeNetworkOutageOp}.
+	 * @param id - The `network_outages.id` to close.
+	 * @param endedAt - Epoch ms the outage is considered to have ended.
+	 */
+	async closeNetworkOutage(id: number, endedAt: number): Promise<void> {
+		return emitErrorAndRetry(
+			this,
+			'Database.closeNetworkOutage',
+			async () => await closeNetworkOutageOp(this.#instance, id, endedAt),
+			retrySetting,
+		);
 	}
 	/**
 	 * Destroys the database connection, releasing all pooled resources.
@@ -620,6 +639,20 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
+	 * Appends one open (`ended_at = NULL`) row to the `network_outages`
+	 * journal. Delegates to {@link insertNetworkOutageOp}.
+	 * @param params - The confirmed-outage fields to record.
+	 * @returns The autoincremented `id` of the newly-inserted row.
+	 */
+	async insertNetworkOutage(params: InsertNetworkOutageParams): Promise<number> {
+		return emitErrorAndRetry(
+			this,
+			'Database.insertNetworkOutage',
+			async () => await insertNetworkOutageOp(this.#instance, params),
+			retrySetting,
+		);
+	}
+	/**
 	 * Records a partial scrape failure against the page identified by `url`.
 	 * Delegates to {@link insertPageErrorOp}.
 	 * @param url - URL of the page being scraped.
@@ -692,6 +725,20 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			this,
 			'Database.listDnsBurnedHostCandidates',
 			async () => await listDnsBurnedHostCandidatesOp(this.#instance),
+			retrySetting,
+		);
+	}
+	/**
+	 * Lists every recorded outage as a resolved {@link OutageWindow}.
+	 * Delegates to {@link listNetworkOutagesOp}.
+	 * @returns Resolved outage windows, or `[]` on an archive that predates
+	 *   `network_outages` or has recorded no outages.
+	 */
+	async listNetworkOutages(): Promise<OutageWindow[]> {
+		return emitErrorAndRetry(
+			this,
+			'Database.listNetworkOutages',
+			async () => await listNetworkOutagesOp(this.#instance),
 			retrySetting,
 		);
 	}

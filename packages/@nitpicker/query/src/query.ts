@@ -69,6 +69,7 @@ export { listIsolatedClusters } from './list-isolated-clusters.js';
 export { listIsolatedPagesFastPath } from './list-isolated-pages-fast-path.js';
 export { listIsolatedPages } from './list-isolated-pages.js';
 export { listLinks } from './list-links.js';
+export { listNetworkOutages } from './list-network-outages.js';
 export { listPages } from './list-pages.js';
 export { listPageTemplateClusters } from './list-page-template-clusters.js';
 export { listPagesByJsonLdType } from './list-pages-by-jsonld-type.js';

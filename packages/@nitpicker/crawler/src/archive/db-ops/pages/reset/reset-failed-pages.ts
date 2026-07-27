@@ -1,9 +1,11 @@
 import type { Knex } from 'knex';
 
 import { classifyErrorKind } from '../../../../classify-error-kind.js';
+import { isWithinOutageWindow } from '../../../../is-within-outage-window.js';
 import { PERMANENT_ERROR_KINDS } from '../../../../permanent-error-kinds.js';
 import { dbLog } from '../../../debug.js';
 import { getFailedPageMessages } from '../../../get-failed-page-messages.js';
+import { listNetworkOutages } from '../../outages/list-network-outages.js';
 
 /**
  * Reset previously-attempted pages that ended in a recoverable failure so a
@@ -34,6 +36,19 @@ import { getFailedPageMessages } from '../../../get-failed-page-messages.js';
  * candidate pool for the next iteration. The exclusion keeps the retry
  * target shrinking across `--retry-failed` passes by leaving deterministic
  * dead-ends alone.
+ *
+ * **Outage override**: before applying the permanent-kind exclusion, the
+ * message's `createdAt` is checked against every recorded
+ * `network_outages` window (see `is-within-outage-window.ts`). A `dns` (or
+ * any other permanent-kind) failure whose timestamp falls inside a window
+ * is treated as retryable regardless — `dns` is only a permanent,
+ * site-specific verdict when nothing else explains it; inside a confirmed
+ * operator-network outage, the same `getaddrinfo ENOTFOUND` message is
+ * evidence about the CRAWLER's connectivity, not the target site, and
+ * excluding it from retry would strand a perfectly reachable host as a
+ * false permanent failure for the rest of the archive's life. An archive
+ * with no recorded outages (`listNetworkOutages` returns `[]`) behaves
+ * exactly as before this override existed.
  *
  * Matching rows — internal and external alike — are demoted back to pending
  * (`scraped = 0`) and have their stale scrape metadata cleared (the
@@ -74,16 +89,29 @@ export async function resetFailedPages(knex: Knex): Promise<string[]> {
 
 	const candidateIds = candidates.map((row) => row.id);
 	const candidateUrls = candidates.map((row) => row.url);
-	const messages = await getFailedPageMessages(knex, candidateIds, candidateUrls);
-	// Drop candidates whose latest recorded message classifies as permanent.
-	// An empty/absent message stays in the retry pool — we keep retrying when
-	// we don't know it's permanent, erring on the side of investigation.
+	// Unrelated tables (page_errors/crawl_errors vs network_outages), no data
+	// dependency between them — run concurrently instead of paying two
+	// sequential round-trips on every `--retry-failed` pass.
+	const [messages, outageWindows] = await Promise.all([
+		getFailedPageMessages(knex, candidateIds, candidateUrls),
+		listNetworkOutages(knex),
+	]);
+	// Drop candidates whose latest recorded message classifies as permanent —
+	// UNLESS that message's timestamp falls inside a recorded network outage,
+	// in which case the permanent-kind verdict is overridden (see the
+	// "Outage override" section of this function's docstring). An
+	// empty/absent message stays in the retry pool regardless — we keep
+	// retrying when we don't know it's permanent, erring on the side of
+	// investigation.
 	const retryable = candidates.filter((row) => {
-		const message = messages.get(row.id) ?? '';
-		if (message === '') {
+		const resolved = messages.get(row.id);
+		if (resolved === undefined || resolved.message === '') {
 			return true;
 		}
-		return !PERMANENT_ERROR_KINDS.has(classifyErrorKind(message));
+		if (!PERMANENT_ERROR_KINDS.has(classifyErrorKind(resolved.message))) {
+			return true;
+		}
+		return isWithinOutageWindow(resolved.createdAt, outageWindows);
 	});
 	const excludedCount = candidates.length - retryable.length;
 	if (excludedCount > 0) {

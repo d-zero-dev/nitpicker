@@ -16,6 +16,7 @@ import { registerIsolatedClustersRoute } from './routes/register-isolated-cluste
 import { registerIsolatedPagesRoute } from './routes/register-isolated-pages-route.js';
 import { registerLinksRoute } from './routes/register-links-route.js';
 import { registerMismatchesRoute } from './routes/register-mismatches-route.js';
+import { registerNetworkOutagesRoute } from './routes/register-network-outages-route.js';
 import { registerPageDetailRoute } from './routes/register-page-detail-route.js';
 import { registerPageHtmlRoute } from './routes/register-page-html-route.js';
 import { registerPageMainContentsRoute } from './routes/register-page-main-contents-route.js';
@@ -66,6 +67,7 @@ export function createApp(options: CreateAppOptions): Hono {
 	registerGraphRoute(app, context);
 	registerArchiveInfoRoute(app, context);
 	registerErrorKindsRoute(app, context);
+	registerNetworkOutagesRoute(app, context);
 	registerIsolatedPagesRoute(app, context);
 	registerIsolatedClustersRoute(app, context);
 	registerUnusedResourcesRoute(app, context);

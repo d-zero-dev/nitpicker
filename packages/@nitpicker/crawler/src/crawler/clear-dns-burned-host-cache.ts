@@ -1,3 +1,4 @@
+import { dnsBurnedHostBurnTimestamps } from './dns-burned-host-burn-timestamps.js';
 import { dnsBurnedHostCache } from './dns-burned-host-cache.js';
 import { dnsBurnedHostShortCircuitCounter } from './dns-burned-host-short-circuit-counter.js';
 
@@ -9,4 +10,5 @@ import { dnsBurnedHostShortCircuitCounter } from './dns-burned-host-short-circui
 export function clearDnsBurnedHostCache() {
 	dnsBurnedHostCache.clear();
 	dnsBurnedHostShortCircuitCounter.count = 0;
+	dnsBurnedHostBurnTimestamps.clear();
 }

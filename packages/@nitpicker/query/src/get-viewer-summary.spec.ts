@@ -182,4 +182,108 @@ describe('getViewerSummary', () => {
 			expect(result.roots).toEqual(['https://example.com']);
 		});
 	});
+
+	describe('with a recorded network outage', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_get_viewer_summary_outage__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'outage-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			await archive.setPage({
+				url: parseUrl('https://example.com/outage-caused')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: -1,
+				statusText: 'ERR_NAME_NOT_RESOLVED',
+				contentType: null,
+				contentLength: null,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+			await archive.setPage({
+				url: parseUrl('https://example.com/genuinely-gone')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: -1,
+				statusText: 'ERR_NAME_NOT_RESOLVED',
+				contentType: null,
+				contentLength: null,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			const knex = archive.getKnex();
+			await knex('crawl_errors').insert([
+				{
+					url: 'https://example.com/outage-caused',
+					isExternal: 0,
+					message: 'getaddrinfo ENOTFOUND outage-caused.example',
+					createdAt: 1_000_150,
+				},
+				{
+					url: 'https://example.com/genuinely-gone',
+					isExternal: 0,
+					message: 'getaddrinfo ENOTFOUND genuinely-gone.example',
+					createdAt: 500,
+				},
+			]);
+			const outageId = await archive.insertNetworkOutage({
+				startedAt: 1_000_100,
+				detectedAt: 1_000_120,
+				probeHost: 'a.example',
+				triggerErrorCount: 5,
+				triggerHostCount: 2,
+			});
+			await archive.closeNetworkOutage(outageId, 1_000_200);
+
+			await buildViewerReadModel(archive);
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('matches a getSummary() (legacy) snapshot, including the attribution split and affected count', async () => {
+			const [viewerSummary, legacySummary] = await Promise.all([
+				getViewerSummary(archive),
+				getSummary(archive),
+			]);
+			expect(viewerSummary).toEqual(legacySummary);
+			expect(viewerSummary.networkOutageAffectedFailures).toBe(1);
+
+			const minusOne = viewerSummary.statusDistribution.find((e) => e.status === -1);
+			expect(minusOne?.errorKindBreakdown).toContainEqual({
+				kind: 'dns',
+				attribution: 'network',
+				count: 1,
+			});
+			expect(minusOne?.errorKindBreakdown).toContainEqual({
+				kind: 'dns',
+				attribution: 'site',
+				count: 1,
+			});
+		});
+	});
 });

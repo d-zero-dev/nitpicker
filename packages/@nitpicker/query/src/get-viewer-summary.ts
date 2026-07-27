@@ -52,5 +52,6 @@ export async function getViewerSummary(
 		statusDistribution: JSON.parse(row.status_json) as StatusCount[],
 		metadataFulfillment: JSON.parse(row.metadata_json) as MetadataFulfillment,
 		contentTypeDistribution: JSON.parse(row.content_type_json) as ContentTypeCount[],
+		networkOutageAffectedFailures: Number(row.network_outage_affected_failures),
 	};
 }

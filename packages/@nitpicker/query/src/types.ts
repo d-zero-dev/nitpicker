@@ -334,6 +334,48 @@ export interface ListInventoryRunsOptions {
 }
 
 /**
+ * One row of {@link import('./list-network-outages.js').listNetworkOutages}
+ * output — one recorded operator-network outage.
+ *
+ * Schema-mirror of the `network_outages` table. Field semantics live on
+ * {@link import('@nitpicker/crawler').NetworkOutageRow} in the crawler
+ * package — this interface is the read-side shape.
+ */
+export interface NetworkOutageEntry {
+	/** Autoincrement primary key (monotonically increasing per archive). */
+	id: number;
+	/** Epoch ms, backdated to the earliest error still inside the detector's sliding window at trigger time. */
+	started_at: number;
+	/** Epoch ms the sliding window actually crossed both thresholds. */
+	detected_at: number;
+	/**
+	 * Epoch ms the outage ended. Never `null` on read: a row left open by a
+	 * crashed session is resolved on the fly to the archive's last observed
+	 * activity timestamp (see `is-within-outage-window.ts` and
+	 * `close-stale-open-network-outages.ts` in the crawler package) — this
+	 * read-side shape has no unresolved-open state to represent.
+	 */
+	ended_at: number;
+	/** Hostname the recovery probe targeted, or `null` if none was available. */
+	probe_host: string | null;
+	/** Error count in the detector's window at trigger time. */
+	trigger_error_count: number;
+	/** Distinct host count in the detector's window at trigger time. */
+	trigger_host_count: number;
+}
+
+/**
+ * Pagination options for
+ * {@link import('./list-network-outages.js').listNetworkOutages}.
+ */
+export interface ListNetworkOutagesOptions {
+	/** Maximum rows to return. Defaults to 100. */
+	limit?: number;
+	/** Rows to skip from the start. Defaults to 0. */
+	offset?: number;
+}
+
+/**
  * Options for opening a .nitpicker archive file.
  */
 export interface OpenArchiveOptions {
@@ -451,6 +493,18 @@ export interface SummaryResult {
 	 * count descending so the dominant types lead the chart.
 	 */
 	contentTypeDistribution: ContentTypeCount[];
+	/**
+	 * Count of currently-failed (`status = -1`) pages whose latest recorded
+	 * error falls inside a recorded `network_outages` window — i.e. failures
+	 * attributable to the crawl operator's own network rather than the
+	 * target site, even though the message may classify into a normally
+	 * "permanent" {@link ErrorKind} like `dns`. Always `<=` the `status ===
+	 * -1` row's `count`. Zero on an archive with no recorded outages, so
+	 * this field is meaningless-but-harmless (always 0) for every archive
+	 * predating this feature. The viewer surfaces this as "N failures may
+	 * clear after `crawl --retry-failed`".
+	 */
+	networkOutageAffectedFailures: number;
 }
 
 /**
@@ -474,14 +528,33 @@ export interface StatusCount {
 }
 
 /**
+ * Who is responsible for a hard failure: the target site (`'site'`, the
+ * default — the message's classified {@link ErrorKind} stands as-is) or the
+ * crawl operator's own network (`'network'` — the message's timestamp fell
+ * inside a recorded `network_outages` window, so a normally-permanent kind
+ * like `dns` is actually a symptom of the operator's connectivity, not the
+ * target site being gone). This axis is orthogonal to {@link ErrorKind}:
+ * a `dns` failure can be `'site'` (the domain really doesn't resolve) or
+ * `'network'` (the crawler's own resolver was down when this URL was
+ * attempted) — the message alone cannot distinguish them, only the
+ * timestamp-vs-outage-window check can.
+ */
+export type FailureAttribution = 'site' | 'network';
+
+/**
  * One sub-row of {@link StatusCount.errorKindBreakdown} — count of hard-failed
- * pages whose underlying message classifies as this {@link ErrorKind}.
+ * pages whose underlying message classifies as this {@link ErrorKind} AND
+ * share the same {@link FailureAttribution}. The same `kind` can appear
+ * twice (once per attribution) when an archive has both site-caused and
+ * outage-caused failures of that kind.
  */
 export interface ErrorKindCount {
 	/** Classified cause (e.g. `'dns'`, `'timeout'`, `'unknown'`). */
 	kind: ErrorKind;
-	/** Number of pages classified into this cause. */
+	/** Number of pages classified into this cause and attribution. */
 	count: number;
+	/** See {@link FailureAttribution}. */
+	attribution: FailureAttribution;
 }
 
 /**
@@ -2500,6 +2573,13 @@ export interface ErrorRecord {
 	url: string | null;
 	/** Raw message used to classify the cause. */
 	message: string;
+	/**
+	 * Epoch ms the failure was recorded, or `null` when the source carries no
+	 * timestamp (`error.log`'s plain-text lines). Used by `getErrorKinds` to
+	 * decide {@link FailureAttribution} against recorded `network_outages`
+	 * windows.
+	 */
+	createdAt: number | null;
 }
 
 /**
@@ -2510,6 +2590,8 @@ export interface GetErrorKindsOptions {
 	host?: string;
 	/** Exact kind to filter to — the list's kind column filter, or half of the detail pane's lookup key. */
 	kind?: ErrorKind;
+	/** Exact {@link FailureAttribution} to filter to — the list's attribution column filter. */
+	attribution?: FailureAttribution;
 	/** Field to sort results by. */
 	sortBy?: 'host' | 'kind' | 'count';
 	/** Sort direction. Defaults to `desc` when sorting by `count`, `asc` otherwise. */
@@ -2529,7 +2611,14 @@ export interface ErrorKindEntry {
 	host: string;
 	/** The classified cause shared by every failure in this row. */
 	kind: ErrorKind;
-	/** Total failure records for this host×kind pair. */
+	/**
+	 * See {@link FailureAttribution}. A given (host, kind) pair can appear as
+	 * two rows — one `'site'`, one `'network'` — when some of its failure
+	 * records fall inside a recorded `network_outages` window and some do
+	 * not.
+	 */
+	attribution: FailureAttribution;
+	/** Total failure records for this host×kind×attribution triple. */
 	count: number;
 	/** Up to a capped number of representative failing URLs for this pair (see `getErrorKinds`). */
 	sampleUrls: string[];

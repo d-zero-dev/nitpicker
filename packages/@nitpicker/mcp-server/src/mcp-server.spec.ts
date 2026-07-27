@@ -250,9 +250,9 @@ describe('createServer', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('ListTools で28個のツールが返される', async () => {
+	it('ListTools で29個のツールが返される', async () => {
 		const result = await listTools(server);
-		expect(result.tools).toHaveLength(28);
+		expect(result.tools).toHaveLength(29);
 		const names = result.tools.map((t) => t.name);
 		expect(names).toContain('open_archive');
 		expect(names).toContain('close_archive');
@@ -270,6 +270,7 @@ describe('createServer', () => {
 		expect(names).toContain('get_page_jsonld_overview');
 		expect(names).toContain('list_isolated_pages');
 		expect(names).toContain('list_unused_resources');
+		expect(names).toContain('list_network_outages');
 	});
 
 	it('toolDefinitions の数と ListTools の数が一致する', async () => {
@@ -300,6 +301,13 @@ describe('createServer', () => {
 		expect(data.totalPages).toBe(2);
 		expect(data.baseUrl).toBe('https://example.com');
 		expect(data.roots).toEqual(['https://example.com']);
+	});
+
+	it('list_network_outages で断区間の一覧を取得する（未記録なら空配列）', async () => {
+		const result = await callTool(server, 'list_network_outages', { archiveId });
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data).toEqual({ items: [], total: 0 });
 	});
 
 	it('list_pages で全ページをリストする', async () => {

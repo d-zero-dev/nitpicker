@@ -52,7 +52,8 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			external_contents integer not null,
 			status_json text not null,
 			content_type_json text not null,
-			metadata_json text not null
+			metadata_json text not null,
+			network_outage_affected_failures integer not null
 		)
 	`);
 
@@ -233,10 +234,15 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// runs exactly once, inside `getErrorKinds`, never a second time here
 	// (this codebase's "don't duplicate classification logic" rule).
 	//
-	// One row per unique (host, kind) pair — the same grain `getErrorKinds`
-	// itself aggregates to. `sample_urls_json` is a `JSON.stringify`d array
-	// (matching `viewer_summary`'s JSON-column convention) rather than a
-	// separate samples table: samples are always read together with their
+	// One row per unique (host, kind, attribution) triple — the same grain
+	// `getErrorKinds` itself aggregates to. `attribution` (see
+	// `FailureAttribution`) splits a (host, kind) pair into up to two rows
+	// when some of its failures happened during a recorded `network_outages`
+	// window and some did not — the same (host, kind) pair present twice is
+	// not a duplicate, it is two distinct populations of failures with
+	// different likely causes. `sample_urls_json` is a `JSON.stringify`d
+	// array (matching `viewer_summary`'s JSON-column convention) rather than
+	// a separate samples table: samples are always read together with their
 	// owning row, never filtered/sorted independently, so there is no query
 	// shape that benefits from normalising them out. Deliberately has no
 	// `viewer_url_refs` FK either — sample URLs are opaque display data,
@@ -246,10 +252,11 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 		CREATE TABLE viewer_error_kind_entries (
 			host text not null,
 			kind text not null,
+			attribution text not null,
 			count integer not null,
 			sample_urls_json text not null,
 			overflowed_count integer not null,
-			primary key(host, kind)
+			primary key(host, kind, attribution)
 		) WITHOUT ROWID
 	`);
 

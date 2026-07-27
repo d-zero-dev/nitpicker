@@ -15,6 +15,8 @@ import type { Knex } from 'knex';
  *   `MainContentsData` sub-entity arrays, one row per DOM element, FK →
  *   `content_items(id)`
  * - `inventory_runs` — `--inventory` audit log (no FK; append-only)
+ * - `network_outages` — operator-network-outage journal (no FK; append-only
+ *   except `ended_at`, which is written once on recovery)
  * - `analysis_text_refs` + `analysis_violations` — analyze-phase findings,
  *   FK → `content_items(id)`
  * - `page_templates` — DOM-structure template classification (`--templates`,
@@ -312,6 +314,38 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 			t.integer('scope_skipped').nullable();
 			t.text('notes').nullable();
 			t.index('ran_at');
+		});
+	}
+
+	if (!(await instance.schema.hasTable('network_outages'))) {
+		await instance.schema.createTable('network_outages', (t) => {
+			// One row per detected operator-network outage. The archive's
+			// evidence that a run of `dns`/`local-network`-shaped failures
+			// was caused by the crawl operator's own connectivity, not the
+			// target sites — used to retroactively re-classify `crawl_errors`
+			// / `page_errors` rows whose `createdAt` falls inside a window
+			// (see `is-within-outage-window.ts`). No index: a crawl session
+			// produces at most a handful of these rows, so a full in-memory
+			// scan by every consumer is cheaper than maintaining a B-tree
+			// that few queries would use (`ARCHITECTURE.md`'s
+			// perf-index-is-not-free / evidence-before-indexing rules).
+			t.increments('id');
+			// Backdated to the earliest error still inside the detector's
+			// sliding window at trigger time, NOT the trigger instant —
+			// see `NetworkOutageDetector`'s `OutageSuspect.startedAt`.
+			t.integer('started_at').notNullable();
+			// When the sliding window actually crossed both thresholds.
+			t.integer('detected_at').notNullable();
+			// NULL until a recovery probe succeeds. A row can also be left
+			// NULL forever if the crawl process is killed mid-outage; readers
+			// MUST NOT treat a NULL `ended_at` as an unbounded window (that
+			// would retroactively cover every later error as
+			// network-caused) — see `is-within-outage-window.ts` and the
+			// writer-side clamp-on-next-open in `db-ops/outages/`.
+			t.integer('ended_at').nullable();
+			t.string('probe_host').nullable();
+			t.integer('trigger_error_count').notNullable();
+			t.integer('trigger_host_count').notNullable();
 		});
 	}
 

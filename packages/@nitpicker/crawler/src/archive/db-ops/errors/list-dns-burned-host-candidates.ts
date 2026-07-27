@@ -1,6 +1,8 @@
 import type { Knex } from 'knex';
 
 import { classifyErrorKind } from '../../../classify-error-kind.js';
+import { isWithinOutageWindow } from '../../../is-within-outage-window.js';
+import { listNetworkOutages } from '../outages/list-network-outages.js';
 
 /**
  * Hostnames whose `crawl_errors` history is consistently DNS failures and
@@ -19,6 +21,17 @@ import { classifyErrorKind } from '../../../classify-error-kind.js';
  *
  * Returns `[]` on legacy archives that pre-date the `crawl_errors`
  * table — the `hasTable` guard keeps the call non-destructive.
+ *
+ * **Outage exclusion**: a host whose latest DNS error's `createdAt` falls
+ * inside a recorded `network_outages` window is dropped from the result
+ * regardless of the other checks. A host with no prior success this
+ * archive has ever seen (the case this whole exclusion-bag scheme cannot
+ * otherwise catch) would, without this check, get preload-seeded into
+ * `dnsBurnedHostCache` and short-circuit on EVERY subsequent session
+ * forever — the exact "damage 3" this function's caller
+ * (`#preloadDnsBurnedHostCache`) exists to prevent for hosts genuinely
+ * proven dead, not to inflict on hosts merely unlucky enough to be first
+ * contacted during an operator-side network blip.
  * @param knex - Knex query builder connected to the archive DB.
  * @returns Lower-cased hostnames safe to short-circuit.
  */
@@ -128,11 +141,13 @@ export async function listDnsBurnedHostCandidates(knex: Knex): Promise<string[]>
 		resourceOkHosts.add(host);
 	}
 
+	const outageWindows = await listNetworkOutages(knex);
+
 	// A candidate host is burned only if neither pages nor resources hold a
-	// 2xx-3xx for it, AND its latest 2xx page (if any) is not newer than
-	// the latest DNS error. The third check guards against re-burning a
-	// host that recovered between the last DNS failure and the most recent
-	// crawl.
+	// 2xx-3xx for it, its latest 2xx page (if any) is not newer than the
+	// latest DNS error (guards against re-burning a host that recovered
+	// between the last DNS failure and the most recent crawl), AND that
+	// latest DNS error did not happen during a recorded network outage.
 	const burned: string[] = [];
 	for (const [host, latestErrorAt] of candidateLatestErrorAt) {
 		if (pageOkHosts.has(host)) {
@@ -143,6 +158,9 @@ export async function listDnsBurnedHostCandidates(knex: Knex): Promise<string[]>
 		}
 		const latestOkAt = latestPageOkAt.get(host);
 		if (typeof latestOkAt === 'number' && latestOkAt > latestErrorAt) {
+			continue;
+		}
+		if (isWithinOutageWindow(latestErrorAt, outageWindows)) {
 			continue;
 		}
 		burned.push(host);

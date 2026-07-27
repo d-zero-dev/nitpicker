@@ -35,6 +35,7 @@ import {
 	listIsolatedClustersFastPath,
 	listIsolatedPagesFastPath,
 	listLinks,
+	listNetworkOutages,
 	listPages,
 	listPagesByJsonLdType,
 	listPagesByTag,
@@ -203,6 +204,10 @@ export async function dispatchQuery(
 		case 'inventory-runs': {
 			const { limit, offset } = options as { limit?: number; offset?: number };
 			return listInventoryRuns(accessor, { limit, offset });
+		}
+		case 'outages': {
+			const { limit, offset } = options as { limit?: number; offset?: number };
+			return listNetworkOutages(accessor, { limit, offset });
 		}
 		case 'page-tags': {
 			const { url } = options as { url: string };
