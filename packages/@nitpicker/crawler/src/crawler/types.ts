@@ -1,4 +1,6 @@
+import type { NetworkProbe } from './probe-network.js';
 import type { PageSource } from '../archive/types.js';
+import type { ErrorKind } from '../types.js';
 import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
 import type { ChangePhaseEvent, ScrapeResult } from '@d-zero/beholder';
 import type { ParseURLOptions } from '@d-zero/shared/parse-url';
@@ -185,6 +187,39 @@ export interface CrawlerOptions extends Required<
 	 * the DB DEFAULT `'crawled'` applies.
 	 */
 	inventoryMode: InventoryMode | null;
+
+	/**
+	 * Sliding-window size in ms for network-outage suspicion. See
+	 * `NetworkOutageDetector`.
+	 */
+	networkOutageWindowMs: number;
+
+	/**
+	 * Minimum error count within {@link networkOutageWindowMs} to declare a
+	 * suspect outage.
+	 */
+	networkOutageErrorThreshold: number;
+
+	/**
+	 * Minimum distinct-host count within {@link networkOutageWindowMs} to
+	 * declare a suspect outage. Guards against a single flaky host looking
+	 * like a network-wide event.
+	 */
+	networkOutageHostThreshold: number;
+
+	/**
+	 * Interval in ms between recovery probes while the network gate is
+	 * closed.
+	 */
+	networkOutageProbeIntervalMs: number;
+
+	/**
+	 * Injectable network-reachability probe, or `null` to use the default
+	 * `dns.lookup`-based `probeNetwork`. Overriding this is the seam tests
+	 * use to simulate confirmed outages and recoveries deterministically
+	 * without touching the real network.
+	 */
+	networkProbe: NetworkProbe | null;
 }
 
 /**
@@ -397,4 +432,100 @@ export interface CrawlerEventTypes {
 		 */
 		source: PageSource | undefined;
 	};
+
+	/**
+	 * Emitted the instant `Crawler` closes its internal network gate after a
+	 * recovery probe CONFIRMS a suspect outage (the sliding-window threshold
+	 * alone only makes it a suspect — see `NetworkOutageDetector`). The
+	 * orchestrator persists this via `Archive.insertNetworkOutage` and must
+	 * remember the returned row id to pass to the matching
+	 * `networkOutageRecovered` event, since `Crawler` itself never touches
+	 * the archive and has no way to know the row's id.
+	 */
+	networkOutageConfirmed: {
+		/** Backdated to the earliest error still inside the detector's window at trigger time. */
+		startedAt: number;
+		/** When the sliding window actually crossed both thresholds. */
+		detectedAt: number;
+		/** Hostname the recovery probe is targeting, or `null` if none was available. */
+		probeHost: string | null;
+		triggerErrorCount: number;
+		triggerHostCount: number;
+	};
+
+	/**
+	 * Emitted the instant `Crawler` reopens its internal network gate after
+	 * a recovery probe succeeds. NOT emitted when the gate is opened
+	 * because the crawl was aborted while paused — in that case the outage
+	 * row is deliberately left open for the next writer session's
+	 * boot-time finalizer to resolve (see
+	 * `db-ops/outages/close-stale-open-network-outages.ts`), since an abort
+	 * says nothing about whether the network actually recovered.
+	 */
+	networkOutageRecovered: {
+		/** Epoch ms the recovery probe first succeeded. */
+		endedAt: number;
+	};
+}
+
+/**
+ * Tunables for `NetworkOutageDetector`.
+ */
+export interface NetworkOutageDetectorOptions {
+	/**
+	 * Sliding-window size in ms (`W`). Before each check, entries older than
+	 * `at - windowMs` (inclusive boundary — an entry exactly `windowMs` old
+	 * still counts) are evicted.
+	 */
+	readonly windowMs: number;
+	/** Minimum error count within the window to declare a suspect outage (`N`). */
+	readonly errorThreshold: number;
+	/**
+	 * Minimum number of DISTINCT hosts represented in the window to declare
+	 * a suspect outage (`M`). Guards against one flaky host (a site that is
+	 * genuinely retrying/failing on its own) looking like a network-wide
+	 * event — a real local-network blip surfaces across unrelated hosts at
+	 * once.
+	 */
+	readonly hostThreshold: number;
+}
+
+/**
+ * One observed error, as fed to `NetworkOutageDetector.record`.
+ */
+export interface NetworkErrorRecord {
+	readonly kind: ErrorKind;
+	readonly host: string;
+	/**
+	 * Epoch ms this error was observed. Caller-supplied — the detector never
+	 * calls `Date.now()` itself, so window-boundary behaviour can be pinned
+	 * with exact values instead of fake timers. Callers MUST supply
+	 * non-decreasing values across successive `record()` calls; the window
+	 * eviction is a simple cutoff against the latest `at` and does not
+	 * re-sort out-of-order input.
+	 */
+	readonly at: number;
+}
+
+/**
+ * Emitted by `NetworkOutageDetector.record` the instant the sliding window
+ * crosses both thresholds.
+ */
+export interface OutageSuspect {
+	/**
+	 * Backdated to the earliest error still inside the window at trigger
+	 * time — NOT the trigger instant itself. A sliding-window detector only
+	 * confirms an outage after `W` seconds and `N` errors have accumulated,
+	 * so the outage itself started earlier; backdating lets the persisted
+	 * `network_outages` row (and the failures it retroactively covers) reach
+	 * back to that earlier point instead of losing everything the detector
+	 * missed while still accumulating evidence.
+	 */
+	readonly startedAt: number;
+	/** The `at` of the record that tripped the threshold. */
+	readonly detectedAt: number;
+	/** Window size at trigger time (== `errorThreshold` or more). */
+	readonly triggerErrorCount: number;
+	/** Distinct host count at trigger time (== `hostThreshold` or more). */
+	readonly triggerHostCount: number;
 }

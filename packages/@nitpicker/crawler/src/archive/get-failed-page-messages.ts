@@ -4,11 +4,24 @@ import type { Knex } from 'knex';
 const CHUNK_SIZE = 500;
 
 /**
- * Bulk-resolve a raw error message for each given page id, using only sources
- * reachable from a {@link Knex} handle. Read order: `page_errors` (keyed by
- * `pageId`, the most direct signal a scrape attempt recorded), then
- * `crawl_errors` (keyed by `url`, the crawler-channel record for failures
- * that happened before a page row was scraped).
+ * One resolved failure message, with the timestamp it was recorded at.
+ * `createdAt` is what lets a caller (`resetFailedPages`) decide whether the
+ * failure falls inside a `network_outages` window and should be treated as
+ * retryable regardless of its classified `ErrorKind` — see
+ * `is-within-outage-window.ts`.
+ */
+export interface FailedPageMessage {
+	message: string;
+	/** Epoch ms the message was recorded (`page_errors.createdAt` or `crawl_errors.createdAt`). */
+	createdAt: number;
+}
+
+/**
+ * Bulk-resolve a raw error message (plus its timestamp) for each given page
+ * id, using only sources reachable from a {@link Knex} handle. Read order:
+ * `page_errors` (keyed by `pageId`, the most direct signal a scrape attempt
+ * recorded), then `crawl_errors` (keyed by `url`, the crawler-channel
+ * record for failures that happened before a page row was scraped).
  *
  * **Known limitation — pre-`crawl_errors` archives**: This helper does NOT
  * read `error.log`. The `crawl_errors` table is created empty (by
@@ -34,8 +47,8 @@ const CHUNK_SIZE = 500;
  * @param urls - The corresponding `pages.url` values, in the same order as
  *   `ids`. Length and indexing MUST match `ids` so the page → url join can be
  *   reconstructed without a second `pages` round-trip.
- * @returns `Map<pageId, message>` populated only for ids whose message was
- *   found in one of the consulted tables.
+ * @returns `Map<pageId, FailedPageMessage>` populated only for ids whose
+ *   message was found in one of the consulted tables.
  * @example
  * ```ts
  * const messages = await getFailedPageMessages(
@@ -49,7 +62,7 @@ export async function getFailedPageMessages(
 	instance: Knex,
 	ids: readonly number[],
 	urls: readonly string[],
-): Promise<Map<number, string>> {
+): Promise<Map<number, FailedPageMessage>> {
 	if (ids.length === 0) {
 		return new Map();
 	}
@@ -59,7 +72,7 @@ export async function getFailedPageMessages(
 		);
 	}
 
-	const messageByPageId = new Map<number, string>();
+	const messageByPageId = new Map<number, FailedPageMessage>();
 
 	if (await instance.schema.hasTable('page_errors')) {
 		for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
@@ -72,9 +85,13 @@ export async function getFailedPageMessages(
 			// it as `parse-error` on the next run when the rows happen to be
 			// returned in a different order.
 			const rows = (await instance('page_errors')
-				.select('pageId', 'message')
+				.select('pageId', 'message', 'createdAt')
 				.whereIn('pageId', chunk)
-				.orderBy('id', 'asc')) as { pageId: number; message: string }[];
+				.orderBy('id', 'asc')) as {
+				pageId: number;
+				message: string;
+				createdAt: number;
+			}[];
 			for (const row of rows) {
 				// Earliest-id wins. Schema permits multiple rows per pageId
 				// (the same scrape can record several phase errors); the
@@ -90,7 +107,10 @@ export async function getFailedPageMessages(
 				// `dns` / `tls` / `client-blocked` etc. — defeating
 				// `--retry-failed`'s permanent-kind exclusion.
 				if (row.message !== '' && !messageByPageId.has(row.pageId)) {
-					messageByPageId.set(row.pageId, row.message);
+					messageByPageId.set(row.pageId, {
+						message: row.message,
+						createdAt: row.createdAt,
+					});
 				}
 			}
 		}
@@ -120,15 +140,30 @@ export async function getFailedPageMessages(
 			missingUrls.push(url);
 		}
 	}
-	const urlToMessage = new Map<string, string>();
+	const urlToMessage = new Map<string, FailedPageMessage>();
 	for (let i = 0; i < missingUrls.length; i += CHUNK_SIZE) {
 		const chunk = missingUrls.slice(i, i + CHUNK_SIZE);
 		const rows = (await instance('crawl_errors')
-			.select('url', 'message')
-			.whereIn('url', chunk)) as { url: string | null; message: string }[];
+			.select('url', 'message', 'createdAt')
+			.whereIn('url', chunk)) as {
+			url: string | null;
+			message: string;
+			createdAt: number;
+		}[];
 		for (const row of rows) {
-			if (row.url !== null && !urlToMessage.has(row.url)) {
-				urlToMessage.set(row.url, row.message);
+			if (row.url === null) {
+				continue;
+			}
+			// Latest-createdAt wins (fixes a previously-undefined
+			// selection among duplicate URLs — SQLite's natural scan
+			// order is implementation-defined). The most recent message
+			// is the most relevant one for both classification and outage
+			// attribution: an old NXDOMAIN followed by a network-outage
+			// blip should resolve to the outage-era message, not whichever
+			// happened to be inserted first.
+			const existing = urlToMessage.get(row.url);
+			if (existing === undefined || row.createdAt > existing.createdAt) {
+				urlToMessage.set(row.url, { message: row.message, createdAt: row.createdAt });
 			}
 		}
 	}
@@ -137,9 +172,9 @@ export async function getFailedPageMessages(
 		if (url === undefined) {
 			continue;
 		}
-		const message = urlToMessage.get(url);
-		if (message !== undefined) {
-			messageByPageId.set(id, message);
+		const resolved = urlToMessage.get(url);
+		if (resolved !== undefined) {
+			messageByPageId.set(id, resolved);
 		}
 	}
 

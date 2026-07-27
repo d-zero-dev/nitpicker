@@ -151,6 +151,51 @@ export interface InventoryRunMeta {
 }
 
 /**
+ * A row in `network_outages` — one detected operator-network outage.
+ *
+ * Append-only except `ended_at`: it is written once, `NULL`, when the
+ * outage is first detected, and updated exactly once when a recovery probe
+ * succeeds. A row can also be left `ended_at = NULL` forever if the crawl
+ * process is killed mid-outage — readers must resolve this via a clamp
+ * (see `is-within-outage-window.ts` and the `db-ops/outages/` writer that
+ * closes stale-open rows on the next writer session), never by treating
+ * `NULL` as an unbounded window.
+ */
+export interface NetworkOutageRow {
+	id: number;
+	/** Epoch ms, backdated to the earliest error still inside the detector's sliding window at trigger time. */
+	started_at: number;
+	/** Epoch ms the sliding window actually crossed both thresholds. */
+	detected_at: number;
+	/** Epoch ms the recovery probe first succeeded, or `null` while still open / if the session crashed before recovery. */
+	ended_at: number | null;
+	/** Hostname the recovery probe targeted, or `null` if none was available (see `choose-probe-host.ts`). */
+	probe_host: string | null;
+	/** Error count in the detector's window at trigger time. */
+	trigger_error_count: number;
+	/** Distinct host count in the detector's window at trigger time. */
+	trigger_host_count: number;
+}
+
+/**
+ * Fields required to record a newly-detected outage via
+ * `Database.insertNetworkOutage`. camelCase (unlike {@link NetworkOutageRow}
+ * / {@link InventoryRunMeta}) because callers build this directly from
+ * `NetworkOutageDetector`'s camelCase `OutageSuspect` plus a probe host —
+ * the db-op does the camelCase → snake_case column mapping on write.
+ */
+export interface InsertNetworkOutageParams {
+	/** Backdated to the earliest error still inside the detector's window at trigger time. */
+	startedAt: number;
+	/** When the sliding window actually crossed both thresholds. */
+	detectedAt: number;
+	/** Hostname the recovery probe will target, or `null` if none was available. */
+	probeHost: string | null;
+	triggerErrorCount: number;
+	triggerHostCount: number;
+}
+
+/**
  * Filter type for querying pages from the database.
  *
  * - `'page'` - HTML pages that are crawl targets

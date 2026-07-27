@@ -18,6 +18,17 @@ vi.mock('./crawler/crawler.js', () => {
 		/** Registered event handlers keyed by event name. */
 		handlers = new Map<string, (payload: never) => void>();
 
+		/**
+		 * Captures the options object the orchestrator constructed this
+		 * instance with, so tests can assert option-forwarding regressions
+		 * (e.g. the network-outage thresholds / probe) without a real
+		 * `Crawler`.
+		 * @param options - The options passed to `new Crawler(...)`.
+		 */
+		constructor(options?: unknown) {
+			fakeCrawlerConstructorCalls.push(options);
+		}
+
 		/** No-op abort to satisfy the orchestrator's interface. */
 		abort() {}
 
@@ -77,6 +88,12 @@ vi.mock('./crawler/crawler.js', () => {
 });
 
 /**
+ * Per-test record of the options object each `new Crawler(...)` construction
+ * received. Reset in `afterEach`.
+ */
+const fakeCrawlerConstructorCalls: unknown[] = [];
+
+/**
  * Per-test record of `Crawler.resume()` invocations. Reset in `afterEach`.
  */
 const fakeCrawlerResumeCalls: {
@@ -100,6 +117,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 	fakeCrawlerDriver = null;
 	fakeCrawlerResumeCalls.length = 0;
+	fakeCrawlerConstructorCalls.length = 0;
 });
 
 describe('CrawlerOrchestrator.crawling: error イベントの書き込み失敗', () => {
@@ -211,6 +229,192 @@ describe('CrawlerOrchestrator.crawling: PreloadShortCircuitError', () => {
 		});
 
 		expect(addError).toHaveBeenCalledOnce();
+	});
+});
+
+describe('CrawlerOrchestrator.crawling: networkOutageConfirmed / networkOutageRecovered', () => {
+	it('confirmed → archive.insertNetworkOutage が呼ばれ、その id が recovered での closeNetworkOutage に使われる', async () => {
+		const insertNetworkOutage = vi.fn(() => Promise.resolve(42));
+		const closeNetworkOutage = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			insertNetworkOutage,
+			closeNetworkOutage,
+			filePath: '/tmp/orchestrator-outage-test.nitpicker',
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('networkOutageConfirmed')?.({
+				startedAt: 100,
+				detectedAt: 200,
+				probeHost: 'a.example',
+				triggerErrorCount: 5,
+				triggerHostCount: 2,
+			} as never);
+			crawler.handlers.get('networkOutageRecovered')?.({ endedAt: 1500 } as never);
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-outage-test.nitpicker',
+		});
+
+		expect(insertNetworkOutage).toHaveBeenCalledWith({
+			startedAt: 100,
+			detectedAt: 200,
+			probeHost: 'a.example',
+			triggerErrorCount: 5,
+			triggerHostCount: 2,
+		});
+		expect(closeNetworkOutage).toHaveBeenCalledWith(42, 1500);
+	});
+
+	it('recovered イベントに対応する confirmed が無い場合は closeNetworkOutage を呼ばない（防御的no-op）', async () => {
+		const insertNetworkOutage = vi.fn(() => Promise.resolve(42));
+		const closeNetworkOutage = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			insertNetworkOutage,
+			closeNetworkOutage,
+			filePath: '/tmp/orchestrator-outage-orphan-test.nitpicker',
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			// No matching 'networkOutageConfirmed' fired first.
+			crawler.handlers.get('networkOutageRecovered')?.({ endedAt: 1500 } as never);
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-outage-orphan-test.nitpicker',
+		});
+
+		expect(closeNetworkOutage).not.toHaveBeenCalled();
+	});
+
+	it('accumulates the confirmed count and duration into networkOutageSummaryCounter, reset after the session', async () => {
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			insertNetworkOutage: vi.fn(() => Promise.resolve(7)),
+			closeNetworkOutage: vi.fn(() => Promise.resolve()),
+			filePath: '/tmp/orchestrator-outage-summary-test.nitpicker',
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		const { networkOutageSummaryCounter } =
+			await import('./crawler/network-outage-summary-counter.js');
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('networkOutageConfirmed')?.({
+				startedAt: 1000,
+				detectedAt: 1100,
+				probeHost: 'a.example',
+				triggerErrorCount: 5,
+				triggerHostCount: 2,
+			} as never);
+			crawler.handlers.get('networkOutageRecovered')?.({ endedAt: 6000 } as never);
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-outage-summary-test.nitpicker',
+		});
+
+		// The summary is printed and reset to 0 by `#finalizeCrawlSession`
+		// before `crawling()` resolves, so by the time we get here the
+		// counter must already be back at its zero baseline.
+		expect(networkOutageSummaryCounter.confirmedCount).toBe(0);
+		expect(networkOutageSummaryCounter.totalDurationMs).toBe(0);
+	});
+});
+
+describe('CrawlerOrchestrator.crawling: network-outage option forwarding (regression)', () => {
+	it('forwards networkOutage* thresholds and networkProbe from crawling() options to the underlying Crawler — regression test for issue #91 (these were previously silently dropped, so callers had no way to configure them outside unit tests that construct Crawler directly)', async () => {
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			addError: vi.fn(() => Promise.resolve()),
+			filePath: '/tmp/orchestrator-network-outage-options-test.nitpicker',
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		const fakeProbe = vi.fn(() => Promise.resolve(true));
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-network-outage-options-test.nitpicker',
+			networkOutageWindowMs: 1234,
+			networkOutageErrorThreshold: 7,
+			networkOutageHostThreshold: 3,
+			networkOutageProbeIntervalMs: 5678,
+			networkProbe: fakeProbe,
+		});
+
+		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
+		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
+			networkOutageWindowMs: 1234,
+			networkOutageErrorThreshold: 7,
+			networkOutageHostThreshold: 3,
+			networkOutageProbeIntervalMs: 5678,
+			networkProbe: fakeProbe,
+		});
+	});
+
+	it('omits the network-outage fields (passes undefined) when crawling() options do not set them, letting Crawler apply its own defaults', async () => {
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			addError: vi.fn(() => Promise.resolve()),
+			filePath: '/tmp/orchestrator-network-outage-defaults-test.nitpicker',
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-network-outage-defaults-test.nitpicker',
+		});
+
+		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
+		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
+			networkOutageWindowMs: undefined,
+			networkOutageErrorThreshold: undefined,
+			networkOutageHostThreshold: undefined,
+			networkOutageProbeIntervalMs: undefined,
+			networkProbe: null,
+		});
 	});
 });
 

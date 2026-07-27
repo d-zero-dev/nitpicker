@@ -23,6 +23,7 @@ const ADJUNCT_TABLES = [
 	'page_main_content_audios',
 	'page_main_content_canvases',
 	'inventory_runs',
+	'network_outages',
 	'analysis_text_refs',
 	'analysis_violations',
 	'page_html_blobs',
@@ -109,6 +110,35 @@ describe('createAdjunctTables', () => {
 		await createAdjunctTables(db);
 		expect(await db.schema.hasColumn('analysis_violations', 'line')).toBe(true);
 		expect(await db.schema.hasColumn('analysis_violations', 'col')).toBe(true);
+	});
+
+	it('declares network_outages with no FK and no secondary index', async () => {
+		// Deliberately no index (see the DDL's JSDoc): a crawl session
+		// produces at most a handful of rows, and every consumer reads the
+		// whole table into memory rather than querying by column.
+		await createAdjunctTables(db);
+		expect(await db.schema.hasColumn('network_outages', 'started_at')).toBe(true);
+		expect(await db.schema.hasColumn('network_outages', 'ended_at')).toBe(true);
+		const parents = await fkParentTables(db, 'network_outages');
+		expect(parents.size).toBe(0);
+	});
+
+	it('preserves existing network_outages rows across a second createAdjunctTables run', async () => {
+		// The append-only journal must survive re-provisioning (e.g. a
+		// self-healing partial archive) exactly like `inventory_runs` does.
+		await createAdjunctTables(db);
+		await db('network_outages').insert({
+			started_at: 100,
+			detected_at: 200,
+			ended_at: null,
+			probe_host: 'a.example',
+			trigger_error_count: 5,
+			trigger_host_count: 2,
+		});
+		await createAdjunctTables(db);
+		const rows = await db('network_outages').select('*');
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.started_at).toBe(100);
 	});
 
 	it('enforces the content_items FK on insert (PRAGMA foreign_keys = ON)', async () => {

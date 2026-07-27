@@ -1,5 +1,6 @@
 import type { Config } from './archive/types.js';
-import type { InventoryMode } from './crawler/types.js';
+import type { NetworkProbe } from './crawler/probe-network.js';
+import type { CrawlerOptions, InventoryMode } from './crawler/types.js';
 import type { CrawlEvent, InventoryRunAggregates } from './types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
@@ -21,6 +22,7 @@ import { dnsBurnedHostCache } from './crawler/dns-burned-host-cache.js';
 import { dnsBurnedHostShortCircuitCounter } from './crawler/dns-burned-host-short-circuit-counter.js';
 import { findScopeEntry } from './crawler/find-scope-entry.js';
 import { isLikelyHtmlUrl } from './crawler/is-likely-html-url.js';
+import { networkOutageSummaryCounter } from './crawler/network-outage-summary-counter.js';
 import { PreloadShortCircuitError } from './crawler/preload-short-circuit-error.js';
 import { protocolAgnosticKey } from './crawler/protocol-agnostic-key.js';
 import { crawlerLog, log } from './debug.js';
@@ -99,6 +101,31 @@ interface CrawlConfig extends Config {
 	 * this `null` so new rows are labelled `'crawled'` by the DB DEFAULT.
 	 */
 	inventoryMode: InventoryMode | null;
+
+	/**
+	 * See {@link CrawlerOptions.networkOutageWindowMs}. Omitted (`undefined`
+	 * on the `Partial<CrawlConfig>` callers actually pass) falls through to
+	 * `Crawler`'s own default — this field exists so tests can shrink the
+	 * window for a fast, deterministic outage-detection cycle.
+	 */
+	networkOutageWindowMs: number;
+
+	/** See {@link CrawlerOptions.networkOutageErrorThreshold}. */
+	networkOutageErrorThreshold: number;
+
+	/** See {@link CrawlerOptions.networkOutageHostThreshold}. */
+	networkOutageHostThreshold: number;
+
+	/** See {@link CrawlerOptions.networkOutageProbeIntervalMs}. */
+	networkOutageProbeIntervalMs: number;
+
+	/**
+	 * See {@link CrawlerOptions.networkProbe}. The seam tests use to simulate
+	 * confirmed outages and recoveries deterministically without touching
+	 * the real network — plumbed through from `CrawlerOrchestrator.crawling`'s
+	 * `options` so an E2E test can inject it via the public API.
+	 */
+	networkProbe: NetworkProbe | null;
 }
 
 /**
@@ -134,6 +161,17 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	readonly #crawler: Crawler;
 	/** Whether the crawl was started from a pre-defined URL list (non-recursive mode). */
 	readonly #fromList: boolean;
+	/**
+	 * The `network_outages` row id for the currently-open outage, or `null`
+	 * when none is open. Set by the `networkOutageConfirmed` handler (once
+	 * the INSERT resolves) and consumed by `networkOutageRecovered` — the
+	 * `Crawler` class never touches the archive itself and has no way to
+	 * know the row's id, so the orchestrator is the only place that can
+	 * bridge the two events for the same outage.
+	 */
+	#openNetworkOutageId: number | null = null;
+	/** `startedAt` of the currently-open outage, tracked alongside {@link #openNetworkOutageId} so `networkOutageRecovered` can compute a duration for {@link networkOutageSummaryCounter}. */
+	#openNetworkOutageStartedAt: number | null = null;
 	/** Serializes archive writes from crawler event handlers (FIFO). */
 	readonly #writeQueue = new WriteQueue();
 
@@ -213,6 +251,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			// rows continue to land in pages/resources with the DB DEFAULT
 			// `'crawled'` provenance label.
 			inventoryMode: options?.inventoryMode ?? null,
+			// Forwarded as-is (including `undefined`) — `Crawler`'s own
+			// constructor merges each against its `DEFAULT_NETWORK_OUTAGE_*`
+			// constant, so omitting them here is exactly "use the default".
+			networkOutageWindowMs: options?.networkOutageWindowMs,
+			networkOutageErrorThreshold: options?.networkOutageErrorThreshold,
+			networkOutageHostThreshold: options?.networkOutageHostThreshold,
+			networkOutageProbeIntervalMs: options?.networkOutageProbeIntervalMs,
+			networkProbe: options?.networkProbe ?? null,
 		});
 	}
 
@@ -243,6 +289,11 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 */
 	async crawling(list: ExURL[], opts?: { recursive?: boolean }) {
 		const writeQueue = this.#writeQueue;
+		// Per-session state, like `Crawler`'s own `#successfulHosts.clear()` /
+		// `#networkGate.open()` reset at the start of `#runDeal` — a fresh
+		// session must not inherit a dangling outage id from a prior one.
+		this.#openNetworkOutageId = null;
+		this.#openNetworkOutageStartedAt = null;
 
 		return new Promise<void>((resolve, reject) => {
 			this.#crawler.on('error', (error) => {
@@ -294,6 +345,80 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					.enqueue(() => this.#archive.setRedirect(result, source))
 					.catch((error) => reject(error));
 				void this.emit('redirect', { result });
+			});
+
+			this.#crawler.on(
+				'networkOutageConfirmed',
+				({ startedAt, detectedAt, probeHost, triggerErrorCount, triggerHostCount }) => {
+					crawlerLog(
+						'Network outage confirmed: probeHost=%s triggerErrorCount=%d triggerHostCount=%d',
+						probeHost,
+						triggerErrorCount,
+						triggerHostCount,
+					);
+
+					// event notice; mirrors `#finalizeCrawlSession`'s unconditional
+					// `console.error` for the DNS-burn short-circuit summary.
+					console.error(
+						`[network] outage suspected — pausing workers (probe host: ${probeHost ?? 'none'})`,
+					);
+					writeQueue
+						.enqueue(async () => {
+							// Both fields are set together, inside this single
+							// closure, so the pair can never fall out of sync
+							// (e.g. one set synchronously above while the other
+							// waits on the INSERT) — `networkOutageRecovered`'s
+							// queued closure always sees either both set or
+							// neither.
+							const id = await this.#archive.insertNetworkOutage({
+								startedAt,
+								detectedAt,
+								probeHost,
+								triggerErrorCount,
+								triggerHostCount,
+							});
+							this.#openNetworkOutageId = id;
+							this.#openNetworkOutageStartedAt = startedAt;
+						})
+						.catch((error) => reject(error));
+				},
+			);
+
+			this.#crawler.on('networkOutageRecovered', ({ endedAt }) => {
+				// The `id` read is deferred to INSIDE the queued closure, not
+				// read synchronously here, because `networkOutageConfirmed`'s
+				// INSERT is itself only queued (not awaited) when that event
+				// fires — `#openNetworkOutageId` is not guaranteed to be set
+				// yet at the instant `networkOutageRecovered` fires (the two
+				// events can arrive in quick succession, e.g. in tests that
+				// drive them back-to-back with no real probe-interval delay
+				// between them). `WriteQueue` runs enqueued operations in
+				// submission order, so by the time THIS closure actually
+				// executes, the confirm's INSERT closure (enqueued first) has
+				// already completed and `#openNetworkOutageId` is reliably set.
+				writeQueue
+					.enqueue(() => {
+						const id = this.#openNetworkOutageId;
+						const startedAt = this.#openNetworkOutageStartedAt;
+						if (id === null) {
+							// Defensive: `networkOutageConfirmed` always
+							// precedes `networkOutageRecovered` on the same
+							// `Crawler` instance. If this fires anyway, there
+							// is no row to close.
+							crawlerLog('Network outage recovered but no open outage id was tracked');
+							return Promise.resolve();
+						}
+						this.#openNetworkOutageId = null;
+						this.#openNetworkOutageStartedAt = null;
+						const durationMs = endedAt - (startedAt ?? endedAt);
+						networkOutageSummaryCounter.confirmedCount++;
+						networkOutageSummaryCounter.totalDurationMs += durationMs;
+						crawlerLog('Network outage recovered: id=%d endedAt=%d', id, endedAt);
+						// eslint-disable-next-line no-console -- see the confirmed handler above
+						console.error(`[network] recovered after ${Math.round(durationMs / 1000)}s`);
+						return this.#archive.closeNetworkOutage(id, endedAt);
+					})
+					.catch((error) => reject(error));
 			});
 
 			this.#crawler.on('response', ({ resource, source }) => {
@@ -1219,6 +1344,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			// eslint-disable-next-line no-console
 			console.error(`[preload] Short-circuited ${skipped} URL(s) on DNS-burned hosts`);
 		}
+		const { confirmedCount, totalDurationMs } = networkOutageSummaryCounter;
+		if (confirmedCount > 0) {
+			// eslint-disable-next-line no-console
+			console.error(
+				`[network] ${confirmedCount} outage(s), ${Math.round(totalDurationMs / 1000)}s total`,
+			);
+		}
+		networkOutageSummaryCounter.confirmedCount = 0;
+		networkOutageSummaryCounter.totalDurationMs = 0;
 		clearDestinationCache();
 		clearDnsBurnedHostCache();
 	}

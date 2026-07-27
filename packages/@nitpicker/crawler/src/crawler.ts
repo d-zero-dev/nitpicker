@@ -56,6 +56,15 @@ export {
 export * from './types.js';
 export * from './crawler/types.js';
 export { classifyErrorKind } from './classify-error-kind.js';
+export { NETWORK_RELATED_ERROR_KINDS } from './network-related-error-kinds.js';
+export type { OutageWindow } from './is-within-outage-window.js';
+export { isWithinOutageWindow } from './is-within-outage-window.js';
+export { default as NetworkOutageDetector } from './crawler/network-outage-detector.js';
+export { default as NetworkGate } from './crawler/network-gate.js';
+export type { NetworkProbe } from './crawler/probe-network.js';
+export { probeNetwork } from './crawler/probe-network.js';
+export { computeOutageClampTimestamp } from './archive/db-ops/outages/compute-outage-clamp-timestamp.js';
+export { chooseProbeHost } from './crawler/choose-probe-host.js';
 export { computeFileSha256 } from './utils/compute-file-sha256.js';
 
 // 0.13 ref-table population (issue #191, epic #103). Exposed as the

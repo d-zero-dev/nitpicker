@@ -1,4 +1,10 @@
-import type { Config, InventoryRunMeta, PageSource } from './types.js';
+import type {
+	Config,
+	InsertNetworkOutageParams,
+	InventoryRunMeta,
+	PageSource,
+} from './types.js';
+import type { OutageWindow } from '../is-within-outage-window.js';
 import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
 import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 
@@ -144,6 +150,17 @@ export default class Archive extends ArchiveAccessor {
 		await this.#db.insertPageError(url, phase, message, isExternal);
 	}
 	/**
+	 * Closes an outage row by stamping `ended_at` — a no-op if already closed.
+	 *
+	 * Thin facade over {@link Database.closeNetworkOutage}.
+	 * @param id - The `network_outages.id` to close.
+	 * @param endedAt - Epoch ms the outage is considered to have ended.
+	 */
+	async closeNetworkOutage(id: number, endedAt: number): Promise<void> {
+		dbLog('Close network outage id=%d endedAt=%d', id, endedAt);
+		return await this.#db.closeNetworkOutage(id, endedAt);
+	}
+	/**
 	 * Retrieves the current crawling state, including lists of scraped and pending URLs.
 	 * @returns An object with `scraped` and `pending` URL arrays.
 	 */
@@ -252,6 +269,22 @@ export default class Archive extends ArchiveAccessor {
 		await this.#db.insertInventorySeeds(urls.map((u) => u.withoutHashAndAuth));
 	}
 	/**
+	 * Appends one open row to the `network_outages` journal.
+	 *
+	 * Thin facade over {@link Database.insertNetworkOutage} — see
+	 * {@link recordInventoryRun}'s docstring for why this indirection exists.
+	 * @param params - The confirmed-outage fields to record.
+	 * @returns The autoincremented `id` of the inserted row.
+	 */
+	async insertNetworkOutage(params: InsertNetworkOutageParams): Promise<number> {
+		dbLog(
+			'Insert network outage: startedAt=%d probeHost=%s',
+			params.startedAt,
+			params.probeHost,
+		);
+		return await this.#db.insertNetworkOutage(params);
+	}
+	/**
 	 * Hostnames whose `crawl_errors` history is consistently DNS failures and
 	 * for which no recent 2xx/3xx page or resource is recorded. Consumed by
 	 * `CrawlerOrchestrator.#preloadDnsBurnedHostCache` to seed the DNS-burned
@@ -268,6 +301,15 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.listDnsBurnedHostCandidates();
 	}
 	/**
+	 * Lists every recorded outage as a resolved {@link OutageWindow}.
+	 *
+	 * Thin facade over {@link Database.listNetworkOutages}.
+	 * @returns Resolved outage windows, or `[]` if none have been recorded.
+	 */
+	async listNetworkOutages(): Promise<OutageWindow[]> {
+		return await this.#db.listNetworkOutages();
+	}
+	/**
 	 * Appends one row to the `inventory_runs` audit log.
 	 *
 	 * Thin facade over {@link Database.recordInventoryRun} — keeps the
@@ -281,6 +323,7 @@ export default class Archive extends ArchiveAccessor {
 		dbLog('Record inventory run: %s', meta.list_label ?? meta.ran_at);
 		return await this.#db.recordInventoryRun(meta);
 	}
+
 	/**
 	 * Releases the SQLite handle and the advisory lock **without** writing
 	 * the archive or removing `tmpDir`.
