@@ -98,6 +98,8 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				contentTypeDistribution: 'Content-Type distribution',
 				contentTypeStackedBarLabel: 'Content-Type breakdown',
 				metadataFulfillment: 'Metadata fulfillment',
+				networkOutageNotice:
+					'{count} failure(s) may be caused by your own network during a detected outage, not the target site — they may clear after running `crawl --retry-failed`.',
 			},
 			errorKind: {
 				dns: 'DNS',
@@ -112,6 +114,10 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				timeout: 'Timeout',
 				protocol: 'Protocol',
 				unknown: 'Unknown',
+			},
+			attribution: {
+				site: 'Target site',
+				network: 'Your network (outage)',
 			},
 			contentType: {
 				html: 'HTML (.html, .htm)',
@@ -289,18 +295,20 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			errors: {
 				title: 'Connection Failures',
 				description:
-					'Hosts that never returned an HTTP response — DNS resolution, TLS, connection, or timeout failures — grouped by host and cause. Unlike Violations / Duplicates / Mismatches, these pages were never reached at all.',
+					'Hosts that never returned an HTTP response — DNS resolution, TLS, connection, or timeout failures — grouped by host, cause, and attribution. Unlike Violations / Duplicates / Mismatches, these pages were never reached at all. This is a historical log: counts here do NOT decrease after `crawl --retry-failed` recovers a page — see the Summary view for the current outstanding-failure count instead.',
 				total: '{total} failure records',
 				channelSource: 'DNS / connection / TLS source: {source}',
 				host: 'Host',
 				kind: 'Kind',
+				attribution: 'Attribution',
 				count: 'Count',
 				filterKind: 'Kind',
+				filterAttribution: 'Attribution',
 				detailTitle: 'Failing URLs',
 				back: '← Back to hosts',
 				overflowed: '+{count} more not shown',
 				notFound:
-					'No failures recorded for this host and kind anymore — it may have been resolved or the archive re-crawled.',
+					'No failures recorded for this host, kind, and attribution anymore — it may have been resolved or the archive re-crawled.',
 			},
 			isolatedPages: {
 				title: 'Isolated Pages',
@@ -453,6 +461,8 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				contentTypeDistribution: 'Content-Type 分布',
 				contentTypeStackedBarLabel: 'Content-Type の内訳',
 				metadataFulfillment: 'メタデータ充足率',
+				networkOutageNotice:
+					'{count} 件の失敗は、検出されたネットワーク断の間に発生しており、対象サイトではなくお使いのネットワーク側が原因の可能性があります。`crawl --retry-failed` で解消する場合があります。',
 			},
 			errorKind: {
 				dns: 'DNS',
@@ -467,6 +477,10 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				timeout: 'タイムアウト',
 				protocol: 'プロトコル',
 				unknown: '不明',
+			},
+			attribution: {
+				site: '対象サイト',
+				network: 'お使いのネットワーク（断）',
 			},
 			contentType: {
 				html: 'HTML (.html, .htm)',
@@ -644,18 +658,20 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			errors: {
 				title: '接続障害',
 				description:
-					'HTTPレスポンス自体が得られなかったホスト（DNS未解決・TLS失敗・接続拒否・タイムアウト）を、ホストと原因別に一覧化します。違反・重複・不一致とは異なり、これらのページはそもそも到達できていません。',
+					'HTTPレスポンス自体が得られなかったホスト（DNS未解決・TLS失敗・接続拒否・タイムアウト）を、ホスト・原因・判定別に一覧化します。違反・重複・不一致とは異なり、これらのページはそもそも到達できていません。この画面は履歴ログであり、`crawl --retry-failed` でページが回復しても件数は減りません — 現在の未回収件数はサマリー画面を参照してください。',
 				total: '失敗レコード {total} 件',
 				channelSource: 'DNS / 接続 / TLS の取得元: {source}',
 				host: 'ホスト',
 				kind: '種別',
+				attribution: '判定',
 				count: '件数',
 				filterKind: '種別',
+				filterAttribution: '判定',
 				detailTitle: '失敗した URL',
 				back: '← ホスト一覧に戻る',
 				overflowed: '他 {count} 件（非表示）',
 				notFound:
-					'このホスト・種別の組み合わせの失敗記録は見つかりませんでした。解消されたか、アーカイブが再クロールされた可能性があります。',
+					'このホスト・種別・判定の組み合わせの失敗記録は見つかりませんでした。解消されたか、アーカイブが再クロールされた可能性があります。',
 			},
 			isolatedPages: {
 				title: '完全孤立ページ',

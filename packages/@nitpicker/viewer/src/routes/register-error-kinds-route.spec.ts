@@ -34,7 +34,13 @@ const BASE_CONFIG = {
 
 /** Response shape of `GET /api/error-kinds`. */
 interface ErrorKindsResponseBody {
-	items: { host: string; kind: string; count: number; sampleUrls: string[] }[];
+	items: {
+		host: string;
+		kind: string;
+		attribution: string;
+		count: number;
+		sampleUrls: string[];
+	}[];
 	total: number;
 	facets: { totalRecords: number; channelSource: string };
 }
@@ -93,6 +99,28 @@ async function buildFixture(workingDir: string, withReadModel: boolean) {
 		crawlerError('https://api.example.org/', 'connect ECONNREFUSED 10.0.0.1:443', true),
 	);
 
+	// A DNS failure whose `createdAt` falls inside a recorded outage window,
+	// so it classifies as attribution 'network' — distinct from
+	// ext.example.net's 'site'-attributed DNS rows above. `addError` always
+	// stamps `Date.now()`, so an explicit `createdAt` requires inserting into
+	// `crawl_errors` directly via `getKnex()` (same pattern as
+	// `get-summary.spec.ts`'s network-outage-attribution fixture).
+	const knex = archive.getKnex();
+	await knex('crawl_errors').insert({
+		url: 'https://outage.example.net/z',
+		isExternal: 1,
+		message: 'getaddrinfo ENOTFOUND outage.example.net',
+		createdAt: 1_000_150,
+	});
+	const outageId = await archive.insertNetworkOutage({
+		startedAt: 1_000_100,
+		detectedAt: 1_000_120,
+		probeHost: 'a.example',
+		triggerErrorCount: 5,
+		triggerHostCount: 2,
+	});
+	await archive.closeNetworkOutage(outageId, 1_000_200);
+
 	if (withReadModel) {
 		await buildViewerReadModel(archive);
 	}
@@ -134,20 +162,28 @@ describe.each([
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('returns the classified host×kind breakdown, sorted by count descending by default', async () => {
+		it('returns the classified host×kind×attribution breakdown, sorted by count descending by default', async () => {
 			const res = await fixture.app.request('/api/error-kinds');
 			const body = (await res.json()) as ErrorKindsResponseBody;
-			expect(body.total).toBe(2);
-			expect(body.facets).toEqual({ totalRecords: 3, channelSource: 'crawl_errors' });
+			expect(body.total).toBe(3);
+			expect(body.facets).toEqual({ totalRecords: 4, channelSource: 'crawl_errors' });
 			expect(body.items[0]).toMatchObject({
 				host: 'ext.example.net',
 				kind: 'dns',
+				attribution: 'site',
 				count: 2,
 				sampleUrls: ['http://ext.example.net/x', 'http://ext.example.net/y'],
 			});
 			expect(body.items[1]).toMatchObject({
 				host: 'api.example.org',
 				kind: 'connection-refused',
+				attribution: 'site',
+				count: 1,
+			});
+			expect(body.items[2]).toMatchObject({
+				host: 'outage.example.net',
+				kind: 'dns',
+				attribution: 'network',
 				count: 1,
 			});
 		});
@@ -158,7 +194,7 @@ describe.each([
 			expect(body.items).toHaveLength(1);
 			expect(body.items[0]).toMatchObject({ host: 'api.example.org' });
 			// facets stay archive-wide, unaffected by the kind filter.
-			expect(body.facets.totalRecords).toBe(3);
+			expect(body.facets.totalRecords).toBe(4);
 		});
 
 		it('honors the ?host= query filter', async () => {
@@ -168,12 +204,41 @@ describe.each([
 			expect(body.items[0]).toMatchObject({ kind: 'dns', count: 2 });
 		});
 
+		it('honors the ?attribution= query filter — network', async () => {
+			const res = await fixture.app.request('/api/error-kinds?attribution=network');
+			const body = (await res.json()) as ErrorKindsResponseBody;
+			expect(body.items).toHaveLength(1);
+			expect(body.items[0]).toMatchObject({
+				host: 'outage.example.net',
+				kind: 'dns',
+				attribution: 'network',
+				count: 1,
+			});
+		});
+
+		it('honors the ?attribution= query filter — site', async () => {
+			const res = await fixture.app.request('/api/error-kinds?attribution=site');
+			const body = (await res.json()) as ErrorKindsResponseBody;
+			expect(body.items).toHaveLength(2);
+			expect(body.items.every((item) => item.attribution === 'site')).toBe(true);
+		});
+
+		it('combines ?kind= and ?attribution= — matching only their intersection', async () => {
+			const res = await fixture.app.request(
+				'/api/error-kinds?kind=dns&attribution=network',
+			);
+			const body = (await res.json()) as ErrorKindsResponseBody;
+			expect(body.items).toHaveLength(1);
+			expect(body.items[0]).toMatchObject({ host: 'outage.example.net' });
+		});
+
 		it('honors ?sortBy=host&sortOrder=asc', async () => {
 			const res = await fixture.app.request('/api/error-kinds?sortBy=host&sortOrder=asc');
 			const body = (await res.json()) as ErrorKindsResponseBody;
 			expect(body.items.map((i) => i.host)).toEqual([
 				'api.example.org',
 				'ext.example.net',
+				'outage.example.net',
 			]);
 		});
 
@@ -184,7 +249,7 @@ describe.each([
 			const body = (await res.json()) as ErrorKindsResponseBody;
 			expect(body.items).toHaveLength(1);
 			expect(body.items[0]).toMatchObject({ host: 'ext.example.net' });
-			expect(body.total).toBe(2);
+			expect(body.total).toBe(3);
 		});
 	},
 );
