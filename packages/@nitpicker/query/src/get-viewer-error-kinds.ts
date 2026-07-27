@@ -48,6 +48,9 @@ export async function getViewerErrorKinds(
 	if (options.kind) {
 		query = query.where('kind', options.kind);
 	}
+	if (options.attribution) {
+		query = query.where('attribution', options.attribution);
+	}
 
 	const totalRow = await query
 		.clone()
@@ -63,6 +66,7 @@ export async function getViewerErrorKinds(
 	const rows: {
 		host: string;
 		kind: ErrorKindEntry['kind'];
+		attribution: ErrorKindEntry['attribution'];
 		count: number;
 		sample_urls_json: string;
 		overflowed_count: number;
@@ -74,11 +78,19 @@ export async function getViewerErrorKinds(
 		])
 		.limit(options.limit ?? -1)
 		.offset(options.offset ?? 0)
-		.select('host', 'kind', 'count', 'sample_urls_json', 'overflowed_count');
+		.select(
+			'host',
+			'kind',
+			'attribution',
+			'count',
+			'sample_urls_json',
+			'overflowed_count',
+		);
 
 	const items: ErrorKindEntry[] = rows.map((row) => ({
 		host: row.host,
 		kind: row.kind,
+		attribution: row.attribution,
 		count: Number(row.count),
 		sampleUrls: JSON.parse(row.sample_urls_json) as string[],
 		overflowedCount: Number(row.overflowed_count),

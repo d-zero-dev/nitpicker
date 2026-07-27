@@ -20,6 +20,7 @@ export function computeErrorKindInsertRows(
 	const entries: ErrorKindInsertRows['entries'] = result.items.map((item) => ({
 		host: item.host,
 		kind: item.kind,
+		attribution: item.attribution,
 		count: item.count,
 		sample_urls_json: JSON.stringify(item.sampleUrls),
 		overflowed_count: item.overflowedCount,

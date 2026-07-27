@@ -1,4 +1,4 @@
-import type { PageSource } from '../types.js';
+import type { FailureAttribution, PageSource } from '../types.js';
 import type { ErrorKind } from '@nitpicker/crawler';
 
 /**
@@ -252,7 +252,9 @@ export interface ErrorKindEntryInsertRow {
 	host: string;
 	/** The classified cause shared by every failure in this row. */
 	kind: ErrorKind;
-	/** Total failure records for this host×kind pair. */
+	/** See {@link FailureAttribution}. */
+	attribution: FailureAttribution;
+	/** Total failure records for this host×kind×attribution triple. */
 	count: number;
 	/** `JSON.stringify`d array of representative failing URLs for this pair. */
 	sample_urls_json: string;

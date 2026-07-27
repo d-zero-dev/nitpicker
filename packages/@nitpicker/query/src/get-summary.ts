@@ -1,15 +1,18 @@
 import type {
 	ContentTypeCategory,
 	ContentTypeCount,
+	ErrorKindCount,
+	FailureAttribution,
 	StatusCount,
 	SummaryResult,
 } from './types.js';
 import type { ArchiveAccessor, ErrorKind } from '@nitpicker/crawler';
 
-import { classifyErrorKind } from '@nitpicker/crawler';
+import { classifyErrorKind, isWithinOutageWindow } from '@nitpicker/crawler';
 
 import { classifyContentType } from './classify-content-type.js';
 import { excludeSkippedPages } from './exclude-skipped-pages.js';
+import { listAllOutageWindows } from './list-all-outage-windows.js';
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
 
@@ -27,6 +30,16 @@ import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
  * excludes `redirect_dest_id`-having rows — a page merged into another via
  * URL-normalization is no more "its own page" for counting purposes than an
  * HTTP redirect source is.
+ *
+ * Each `errorKindBreakdown` entry (on the `status === -1` row) carries a
+ * {@link FailureAttribution}: `'site'` unless the failure's message
+ * timestamp falls inside a recorded `network_outages` window, in which
+ * case it is `'network'` — the crawl operator's own connectivity, not the
+ * target site, is the more likely cause even for a normally-permanent kind
+ * like `dns`. {@link SummaryResult.networkOutageAffectedFailures} is the
+ * sum of every `'network'`-attributed count, i.e. how many currently-failed
+ * pages may clear on the next `crawl --retry-failed`. Both are always `0`
+ * on an archive with no recorded outages — identical to today's behaviour.
  * @param accessor - The archive accessor to query.
  * @returns Summary statistics including page counts, status distribution,
  *   metadata rates, and content-type distribution.
@@ -36,7 +49,8 @@ import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
  * const summary = await getSummary(accessor);
  * console.log(`${summary.internalPages} internal HTML pages`);
  * const failed = summary.statusDistribution.find((s) => s.status === -1);
- * console.log(failed?.errorKindBreakdown); // per-cause counts, if any failures
+ * console.log(failed?.errorKindBreakdown); // per-cause, per-attribution counts
+ * console.log(summary.networkOutageAffectedFailures); // retryable-after-outage count
  */
 export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResult> {
 	const knex = accessor.getKnex();
@@ -57,67 +71,75 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 			rows.map((r) => r.id),
 		),
 	);
-	const [pageRows, metaRows, contentTypeRows, failedPageIdRows, failedPageMessages] =
-		await Promise.all([
-			knex('content_items as ci')
-				.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
-				.select('ci.is_external as isExternal', 'ci.status as status')
-				.count('ci.id as count')
-				.where('ci.scraped', 1)
-				.whereNull('ci.redirect_dest_id')
-				.whereNull('ci.alias_of_id')
-				.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
-				.where((qb) => {
-					qb.whereNull('ctr.raw').orWhere('ctr.raw', 'text/html');
-				})
-				.groupBy('ci.is_external', 'ci.status') as Promise<
-				{ isExternal: 0 | 1; status: number | null; count: number | string }[]
-			>,
-			knex('content_items as ci')
-				.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
-				.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
-				.select(
-					knex.raw('COUNT(*) as total'),
-					knex.raw(
-						'COUNT(CASE WHEN "pm"."title_text_id" IS NOT NULL THEN 1 END) as hasTitle',
-					),
-					knex.raw(
-						'COUNT(CASE WHEN "pm"."description_text_id" IS NOT NULL THEN 1 END) as hasDescription',
-					),
-					knex.raw(
-						'COUNT(CASE WHEN "pm"."keywords_text_id" IS NOT NULL THEN 1 END) as hasKeywords',
-					),
-					knex.raw(
-						'COUNT(CASE WHEN "pm"."og_title_text_id" IS NOT NULL THEN 1 END) as hasOgTitle',
-					),
-					knex.raw(
-						'COUNT(CASE WHEN "pm"."og_description_text_id" IS NOT NULL THEN 1 END) as hasOgDescription',
-					),
-					knex.raw(
-						'COUNT(CASE WHEN "pm"."og_image_url_id" IS NOT NULL THEN 1 END) as hasOgImage',
-					),
-				)
-				.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
-				.whereNull('ci.redirect_dest_id')
-				.whereNull('ci.alias_of_id') as Promise<Record<string, number>[]>,
-			knex('content_items as ci')
-				.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
-				.select('ctr.raw as contentType', 'ci.is_external as isExternal')
-				.count('ci.id as count')
-				.where('ci.scraped', 1)
-				.whereNull('ci.redirect_dest_id')
-				.whereNull('ci.alias_of_id')
-				.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
-				.groupBy('ctr.raw', 'ci.is_external') as Promise<
-				{
-					contentType: string | null;
-					isExternal: 0 | 1;
-					count: number | string;
-				}[]
-			>,
-			failedPageIdRowsPromise,
-			failedPageMessagesPromise,
-		]);
+	const outageWindowsPromise = listAllOutageWindows(accessor);
+	const [
+		pageRows,
+		metaRows,
+		contentTypeRows,
+		failedPageIdRows,
+		failedPageMessages,
+		outageWindows,
+	] = await Promise.all([
+		knex('content_items as ci')
+			.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+			.select('ci.is_external as isExternal', 'ci.status as status')
+			.count('ci.id as count')
+			.where('ci.scraped', 1)
+			.whereNull('ci.redirect_dest_id')
+			.whereNull('ci.alias_of_id')
+			.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
+			.where((qb) => {
+				qb.whereNull('ctr.raw').orWhere('ctr.raw', 'text/html');
+			})
+			.groupBy('ci.is_external', 'ci.status') as Promise<
+			{ isExternal: 0 | 1; status: number | null; count: number | string }[]
+		>,
+		knex('content_items as ci')
+			.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+			.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
+			.select(
+				knex.raw('COUNT(*) as total'),
+				knex.raw(
+					'COUNT(CASE WHEN "pm"."title_text_id" IS NOT NULL THEN 1 END) as hasTitle',
+				),
+				knex.raw(
+					'COUNT(CASE WHEN "pm"."description_text_id" IS NOT NULL THEN 1 END) as hasDescription',
+				),
+				knex.raw(
+					'COUNT(CASE WHEN "pm"."keywords_text_id" IS NOT NULL THEN 1 END) as hasKeywords',
+				),
+				knex.raw(
+					'COUNT(CASE WHEN "pm"."og_title_text_id" IS NOT NULL THEN 1 END) as hasOgTitle',
+				),
+				knex.raw(
+					'COUNT(CASE WHEN "pm"."og_description_text_id" IS NOT NULL THEN 1 END) as hasOgDescription',
+				),
+				knex.raw(
+					'COUNT(CASE WHEN "pm"."og_image_url_id" IS NOT NULL THEN 1 END) as hasOgImage',
+				),
+			)
+			.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
+			.whereNull('ci.redirect_dest_id')
+			.whereNull('ci.alias_of_id') as Promise<Record<string, number>[]>,
+		knex('content_items as ci')
+			.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+			.select('ctr.raw as contentType', 'ci.is_external as isExternal')
+			.count('ci.id as count')
+			.where('ci.scraped', 1)
+			.whereNull('ci.redirect_dest_id')
+			.whereNull('ci.alias_of_id')
+			.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
+			.groupBy('ctr.raw', 'ci.is_external') as Promise<
+			{
+				contentType: string | null;
+				isExternal: 0 | 1;
+				count: number | string;
+			}[]
+		>,
+		failedPageIdRowsPromise,
+		failedPageMessagesPromise,
+		outageWindowsPromise,
+	]);
 
 	let totalNum = 0;
 	let internalNum = 0;
@@ -146,16 +168,44 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		});
 
 	const minusOneEntry = statusDistribution.find((e) => e.status === -1);
+	let networkOutageAffectedFailures = 0;
 	if (minusOneEntry && failedPageIdRows.length > 0) {
-		const kindCounts = new Map<ErrorKind, number>();
+		// Keyed on `${kind} ${attribution}` so a kind that has BOTH
+		// site-caused and outage-caused occurrences gets two independent
+		// counters instead of one colliding bucket.
+		const kindCounts = new Map<
+			string,
+			{ kind: ErrorKind; attribution: FailureAttribution; count: number }
+		>();
 		for (const row of failedPageIdRows) {
-			const message = failedPageMessages.get(row.id) ?? '';
+			const resolved = failedPageMessages.get(row.id);
+			const message = resolved?.message ?? '';
 			const kind = message === '' ? 'unknown' : classifyErrorKind(message);
-			kindCounts.set(kind, (kindCounts.get(kind) ?? 0) + 1);
+			// Attribution: a failure is network-caused only when its message
+			// has a known timestamp AND that timestamp falls inside a
+			// recorded outage window — see `is-within-outage-window.ts`. An
+			// error.log-sourced message (createdAt === null) or an archive
+			// with no recorded outages can never be attributed to the
+			// network, matching today's behaviour exactly.
+			const attribution: FailureAttribution =
+				resolved?.createdAt != null &&
+				isWithinOutageWindow(resolved.createdAt, outageWindows)
+					? 'network'
+					: 'site';
+			if (attribution === 'network') {
+				networkOutageAffectedFailures++;
+			}
+			const bucketKey = `${kind} ${attribution}`;
+			const existing = kindCounts.get(bucketKey);
+			if (existing) {
+				existing.count++;
+			} else {
+				kindCounts.set(bucketKey, { kind, attribution, count: 1 });
+			}
 		}
-		minusOneEntry.errorKindBreakdown = [...kindCounts.entries()]
-			.map(([kind, count]) => ({ kind, count }))
-			.toSorted((a, b) => b.count - a.count);
+		minusOneEntry.errorKindBreakdown = [...kindCounts.values()].toSorted(
+			(a, b) => b.count - a.count,
+		) satisfies ErrorKindCount[];
 	}
 
 	const meta = metaRows[0] ?? ({} as Record<string, number>);
@@ -219,5 +269,6 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		statusDistribution,
 		metadataFulfillment,
 		contentTypeDistribution,
+		networkOutageAffectedFailures,
 	};
 }

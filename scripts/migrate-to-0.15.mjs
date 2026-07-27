@@ -2,7 +2,7 @@
 /**
  * Rebuilds the viewer read model for a `.nitpicker` archive built before the
  * network-outage failure-attribution axis existed (read model schema
- * version < 19, bumped when `viewer_error_kind_entries` gained an
+ * version < 20, bumped when `viewer_error_kind_entries` gained an
  * `attribution` column — its primary key widened from `(host, kind)` to
  * `(host, kind, attribution)` — and `viewer_summary` gained
  * `network_outage_affected_failures`). No archive write-model change

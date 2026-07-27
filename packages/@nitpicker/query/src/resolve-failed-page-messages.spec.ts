@@ -112,7 +112,8 @@ describe('resolveFailedPageMessages', () => {
 		});
 
 		const messages = await resolveFailedPageMessages(archive, [id]);
-		expect(messages.get(id)).toBe('Navigation timeout of 60000 ms');
+		expect(messages.get(id)?.message).toBe('Navigation timeout of 60000 ms');
+		expect(typeof messages.get(id)?.createdAt).toBe('number');
 	});
 
 	it('falls back to crawl_errors when page_errors has no row for the page', async () => {
@@ -134,7 +135,38 @@ describe('resolveFailedPageMessages', () => {
 		});
 
 		const messages = await resolveFailedPageMessages(archive, [id]);
-		expect(messages.get(id)).toBe('getaddrinfo ENOTFOUND example.com');
+		expect(messages.get(id)?.message).toBe('getaddrinfo ENOTFOUND example.com');
+		expect(typeof messages.get(id)?.createdAt).toBe('number');
+	});
+
+	it('prefers the LATEST crawl_errors row when multiple rows share the same URL', async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({
+			filePath: path.resolve(workingDir, 'capture.nitpicker'),
+			cwd: workingDir,
+		});
+		await archive.setConfig(baseConfig());
+
+		const id = await insertFailedPage(archive, 'https://example.com/multi-crawl-error');
+		const knex = archive.getKnex();
+		await knex('crawl_errors').insert([
+			{
+				url: 'https://example.com/multi-crawl-error',
+				isExternal: 0,
+				message: 'stale-error',
+				createdAt: 1000,
+			},
+			{
+				url: 'https://example.com/multi-crawl-error',
+				isExternal: 0,
+				message: 'fresh-error',
+				createdAt: 5000,
+			},
+		]);
+
+		const messages = await resolveFailedPageMessages(archive, [id]);
+		expect(messages.get(id)).toEqual({ message: 'fresh-error', createdAt: 5000 });
 	});
 
 	it('returns a map without the pageId when no source records a message', async () => {

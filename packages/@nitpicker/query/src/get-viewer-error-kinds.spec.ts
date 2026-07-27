@@ -328,4 +328,94 @@ describe('getViewerErrorKinds', () => {
 			expect(result.items).toHaveLength(3);
 		});
 	});
+
+	describe('with a recorded network outage', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_get_viewer_error_kinds_outage__',
+		);
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({
+				filePath: path.resolve(workingDir, 'outage-test.nitpicker'),
+				cwd: workingDir,
+			});
+			await archive.setConfig(baseConfig());
+
+			const knex = archive.getKnex();
+			await knex('crawl_errors').insert([
+				{
+					url: 'https://outage-caused.example/',
+					isExternal: 0,
+					message: 'getaddrinfo ENOTFOUND outage-caused.example',
+					createdAt: 1_000_150,
+				},
+				{
+					url: 'https://genuinely-gone.example/',
+					isExternal: 0,
+					message: 'getaddrinfo ENOTFOUND genuinely-gone.example',
+					createdAt: 500,
+				},
+			]);
+			const outageId = await archive.insertNetworkOutage({
+				startedAt: 1_000_100,
+				detectedAt: 1_000_120,
+				probeHost: 'a.example',
+				triggerErrorCount: 5,
+				triggerHostCount: 2,
+			});
+			await archive.closeNetworkOutage(outageId, 1_000_200);
+
+			await buildViewerReadModel(archive);
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('splits dns rows by attribution, matching getErrorKinds() exactly', async () => {
+			const [viewerResult, legacyResult] = await Promise.all([
+				getViewerErrorKinds(archive),
+				getErrorKinds(archive),
+			]);
+			const sortStable = (r: typeof legacyResult) => ({
+				...r,
+				items: r.items.toSorted(
+					(a, b) =>
+						a.host.localeCompare(b.host) || a.attribution.localeCompare(b.attribution),
+				),
+			});
+			expect(sortStable(viewerResult)).toEqual(sortStable(legacyResult));
+
+			const outageCaused = viewerResult.items.find(
+				(item) => item.host === 'outage-caused.example',
+			);
+			const genuinelyGone = viewerResult.items.find(
+				(item) => item.host === 'genuinely-gone.example',
+			);
+			expect(outageCaused).toMatchObject({
+				kind: 'dns',
+				attribution: 'network',
+				count: 1,
+			});
+			expect(genuinelyGone).toMatchObject({ kind: 'dns', attribution: 'site', count: 1 });
+		});
+
+		it('filters by attribution', async () => {
+			const [viewerNetwork, legacyNetwork] = await Promise.all([
+				getViewerErrorKinds(archive, { attribution: 'network' }),
+				getErrorKinds(archive, { attribution: 'network' }),
+			]);
+			expect(viewerNetwork).toEqual(legacyNetwork);
+			expect(viewerNetwork.items).toHaveLength(1);
+			expect(viewerNetwork.items[0]?.host).toBe('outage-caused.example');
+		});
+	});
 });

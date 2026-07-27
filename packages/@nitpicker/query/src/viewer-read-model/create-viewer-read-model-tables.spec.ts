@@ -148,6 +148,7 @@ describe('createViewerReadModelTables', () => {
 				status_json: '[]',
 				content_type_json: '[]',
 				metadata_json: '{}',
+				network_outage_affected_failures: 0,
 			}),
 		).rejects.toThrow();
 	});
@@ -185,7 +186,7 @@ describe('createViewerReadModelTables', () => {
 		).rejects.toThrow();
 	});
 
-	it('viewer_error_kind_entries enforces a composite (host, kind) key, not a single-column rowid, rejecting a duplicate pair', async () => {
+	it('viewer_error_kind_entries enforces a composite (host, kind, attribution) key, not a single-column rowid, rejecting a duplicate triple', async () => {
 		const knex = archive.getKnex();
 		const baseRow = {
 			count: 1,
@@ -195,11 +196,13 @@ describe('createViewerReadModelTables', () => {
 		await knex('viewer_error_kind_entries').insert({
 			host: 'a.example.com',
 			kind: 'dns',
+			attribution: 'site',
 			...baseRow,
 		});
 		await knex('viewer_error_kind_entries').insert({
 			host: 'b.example.com',
 			kind: 'timeout',
+			attribution: 'site',
 			...baseRow,
 		});
 		const rows = await knex('viewer_error_kind_entries').select('host').orderBy('host');
@@ -209,9 +212,43 @@ describe('createViewerReadModelTables', () => {
 			knex('viewer_error_kind_entries').insert({
 				host: 'a.example.com',
 				kind: 'dns',
+				attribution: 'site',
 				...baseRow,
 			}),
 		).rejects.toThrow();
+	});
+
+	it('viewer_error_kind_entries allows the same (host, kind) twice when attribution differs', async () => {
+		// The whole point of widening the PK to include attribution: a
+		// host×kind pair can have both site-caused and outage-caused
+		// failures, and they must coexist as two independent rows. Uses a
+		// host/kind pair not touched by the composite-key test above — this
+		// describe block shares one archive across all its tests (`beforeAll`,
+		// not `beforeEach`), so rows persist between tests.
+		const knex = archive.getKnex();
+		const baseRow = {
+			count: 1,
+			sample_urls_json: '[]',
+			overflowed_count: 0,
+		};
+		await knex('viewer_error_kind_entries').insert({
+			host: 'c.example.com',
+			kind: 'connection-timeout',
+			attribution: 'site',
+			...baseRow,
+		});
+		await expect(
+			knex('viewer_error_kind_entries').insert({
+				host: 'c.example.com',
+				kind: 'connection-timeout',
+				attribution: 'network',
+				...baseRow,
+			}),
+		).resolves.not.toThrow();
+		const rows = await knex('viewer_error_kind_entries')
+			.where({ host: 'c.example.com', kind: 'connection-timeout' })
+			.select('attribution');
+		expect(rows.map((r) => r.attribution).toSorted()).toEqual(['network', 'site']);
 	});
 
 	it('viewer_resources rejects a duplicate resource_id', async () => {

@@ -582,3 +582,162 @@ describe('getSummary: content_items.alias_of_id handling', () => {
 		});
 	});
 });
+
+describe('getSummary: network-outage attribution', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_summary_outage_attribution__');
+	const archiveFilePath = path.resolve(dir, 'summary-outage-attribution.nitpicker');
+
+	/**
+	 * Insert a status=-1 page with the minimal meta shape `setPage` requires.
+	 * @param url - The failed page's URL.
+	 */
+	async function insertFailedPage(url: string): Promise<void> {
+		await archive.setPage({
+			url: parseUrl(url)!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: -1,
+			statusText: 'ERR_NAME_NOT_RESOLVED',
+			contentType: null,
+			contentLength: null,
+			responseHeaders: {},
+			html: '',
+			meta: {
+				lang: null,
+				title: null,
+				description: null,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': null,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+	}
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		await insertFailedPage('https://example.com/outage-caused');
+		await insertFailedPage('https://example.com/genuinely-gone');
+
+		const knex = archive.getKnex();
+		await knex('crawl_errors').insert([
+			{
+				url: 'https://example.com/outage-caused',
+				isExternal: 0,
+				message: 'getaddrinfo ENOTFOUND outage-caused.example',
+				createdAt: 1_000_150,
+			},
+			{
+				url: 'https://example.com/genuinely-gone',
+				isExternal: 0,
+				message: 'getaddrinfo ENOTFOUND genuinely-gone.example',
+				createdAt: 500,
+			},
+		]);
+
+		const outageId = await archive.insertNetworkOutage({
+			startedAt: 1_000_100,
+			detectedAt: 1_000_120,
+			probeHost: 'a.example',
+			triggerErrorCount: 5,
+			triggerHostCount: 2,
+		});
+		await archive.closeNetworkOutage(outageId, 1_000_200);
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('splits the dns bucket by attribution: one network-caused, one site-caused', async () => {
+		const result = await getSummary(archive);
+		const minusOne = result.statusDistribution.find((e) => e.status === -1);
+		expect(minusOne?.count).toBe(2);
+
+		const breakdown = minusOne?.errorKindBreakdown ?? [];
+		expect(breakdown).toContainEqual({ kind: 'dns', attribution: 'network', count: 1 });
+		expect(breakdown).toContainEqual({ kind: 'dns', attribution: 'site', count: 1 });
+	});
+
+	it('counts networkOutageAffectedFailures as exactly the network-attributed failures', async () => {
+		const result = await getSummary(archive);
+		expect(result.networkOutageAffectedFailures).toBe(1);
+	});
+});
+
+describe('getSummary: no recorded outages behaves identically to before this feature', () => {
+	it('reports networkOutageAffectedFailures as 0 when network_outages has no rows', async () => {
+		const dir = path.resolve(__dirname, '__test_fixtures_summary_no_outages__');
+		const archiveFilePath = path.resolve(dir, 'summary-no-outages.nitpicker');
+		const { mkdirSync, rmSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		const archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		const result = await getSummary(archive);
+		expect(result.networkOutageAffectedFailures).toBe(0);
+
+		await archive.close();
+		rmSync(dir, { recursive: true, force: true });
+	});
+});
