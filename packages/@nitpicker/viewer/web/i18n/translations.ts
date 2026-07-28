@@ -360,7 +360,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			templateClusters: {
 				title: 'Template Clusters',
 				description:
-					'Every DOM-structure template cluster found by `--templates`, with the top directories by page count and common stylesheet set computed from its member pages — the raw template key is an opaque blocking key and is not human-readable on its own.',
+					'Every DOM-structure template cluster found by `--templates`, with the top directories by page count and the cluster selection reason `@d-zero/page-cluster` reported — the raw template key is an opaque blocking key and is not human-readable on its own.',
 				notClassified:
 					'This archive has no DOM-structure template classification yet. Run the following, then re-open the viewer:',
 				notClassifiedCommandHint: 'nitpicker analyze <archive> --templates',
@@ -368,12 +368,29 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				pageCount: '{count} pages',
 				commonDirectories: 'Top directories',
 				otherPages: '{count} other pages',
-				commonStylesheets: 'Common stylesheets',
-				noCommonCss: '(none)',
-				commonCssCaveat:
-					'This list is the raw intersection of stylesheets referenced by every page in the cluster — it can include a stylesheet shared site-wide, not only ones distinctive to this template.',
 				rawKey: 'Raw template key',
 				viewPages: 'View pages in this cluster',
+				reasonTitle: 'Cluster reason',
+				noReason:
+					'This cluster was classified before this data was recorded. Re-run `nitpicker analyze <archive> --templates` to populate it.',
+				blockingTitle: 'Blocking',
+				blockingKindCss: 'Shared stylesheet',
+				blockingKindPath: 'URL path prefix',
+				blockingKindOrphanMerge: 'No stylesheet — merged into path group',
+				structuralCoreTokensTitle: 'Structural core tokens',
+				landmarksTitle: 'Landmarks',
+				landmarkTypes: {
+					header: 'Header',
+					footer: 'Footer',
+					nav: 'Nav',
+					aside: 'Aside',
+					form: 'Form',
+					search: 'Search',
+				},
+				landmarkPresenceRate: 'Presence',
+				landmarkChromeRate: 'Shared-chrome rate',
+				landmarkShellTokens: 'Shell tokens',
+				siblingClusterKeysTitle: 'Sibling clusters',
 			},
 			consoleLogs: {
 				title: 'Console Logs',
@@ -741,7 +758,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			templateClusters: {
 				title: 'テンプレートクラスタ',
 				description:
-					'`--templates` で検出したDOM構造テンプレートクラスタの一覧。各クラスタの所属ページ数が多いディレクトリ上位と共通CSSファイルを算出して表示します — 生のテンプレートキーはブロッキング用の内部識別子で、それ自体は人間には読めません。',
+					'`--templates` で検出したDOM構造テンプレートクラスタの一覧。各クラスタの所属ページ数が多いディレクトリ上位と、`@d-zero/page-cluster` が報告したクラスタ選定理由を表示します — 生のテンプレートキーはブロッキング用の内部識別子で、それ自体は人間には読めません。',
 				notClassified:
 					'このアーカイブはまだテンプレート分類を実行していません。以下を実行してからビューアを再度開いてください:',
 				notClassifiedCommandHint: 'nitpicker analyze <archive> --templates',
@@ -749,12 +766,29 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				pageCount: '{count} ページ',
 				commonDirectories: '主要ディレクトリ',
 				otherPages: '他 {count} ページ',
-				commonStylesheets: '共通CSSファイル',
-				noCommonCss: '(なし)',
-				commonCssCaveat:
-					'この一覧はクラスタ内の全ページが参照するCSSの単純な積集合です。サイト全体で共通するCSS（このテンプレートに固有ではないもの）も含まれる場合があります。',
 				rawKey: '生のテンプレートキー',
 				viewPages: 'このクラスタのページを見る',
+				reasonTitle: 'クラスタ選定理由',
+				noReason:
+					'このクラスタはこのデータが記録される前に分類されました。`nitpicker analyze <archive> --templates` を再実行すると反映されます。',
+				blockingTitle: 'ブロッキング',
+				blockingKindCss: '共有スタイルシート',
+				blockingKindPath: 'URLパス接頭辞',
+				blockingKindOrphanMerge: 'スタイルシート参照なし — パスグループへ統合',
+				structuralCoreTokensTitle: '構造トークン',
+				landmarksTitle: 'ランドマーク',
+				landmarkTypes: {
+					header: 'ヘッダー',
+					footer: 'フッター',
+					nav: 'ナビゲーション',
+					aside: 'サイドバー',
+					form: 'フォーム',
+					search: '検索',
+				},
+				landmarkPresenceRate: '出現率',
+				landmarkChromeRate: '共通chrome率',
+				landmarkShellTokens: 'シェルトークン',
+				siblingClusterKeysTitle: '兄弟クラスタ',
 			},
 			consoleLogs: {
 				title: 'コンソールログ',

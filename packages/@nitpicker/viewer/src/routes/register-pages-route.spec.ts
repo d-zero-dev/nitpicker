@@ -368,6 +368,7 @@ describe('registerPagesRoute (integration)', () => {
 					['https://example.com/a', 'template-a'],
 					['https://example.com/b', 'template-a'],
 				]),
+				new Map(),
 			);
 		});
 
@@ -415,6 +416,7 @@ describe('registerPagesRoute (integration)', () => {
 			fixture = await buildFixture(workingDir, true);
 			await fixture.archive.replacePageTemplates(
 				new Map([['https://example.com/a', 'template-a']]),
+				new Map(),
 			);
 		});
 

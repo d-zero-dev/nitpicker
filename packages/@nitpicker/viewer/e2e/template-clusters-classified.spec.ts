@@ -19,14 +19,39 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 		await expect(cssCluster.locator('summary')).toContainText('2 pages');
 	});
 
-	test('path由来クラスタは共通CSSが無い旨を表示し、共通ディレクトリにフォールバックする', async ({
+	test('path由来クラスタは共通CSSファイル名が無く、共通ディレクトリにフォールバックする', async ({
 		page,
 	}) => {
 		await page.goto('/template-clusters');
 
 		const pathCluster = page.locator('details', { hasText: '/news/' });
 		await pathCluster.locator('summary').click();
-		await expect(pathCluster).toContainText('(none)');
+		await expect(pathCluster).toContainText('URL path prefix');
+		await expect(pathCluster).toContainText('news');
+	});
+
+	test('css由来クラスタはクラスタ選定理由（blocking/landmarks）を表示する', async ({
+		page,
+	}) => {
+		await page.goto('/template-clusters');
+
+		const cssCluster = page.locator('details', { hasText: 'blog.css' });
+		await cssCluster.locator('summary').click();
+		await expect(cssCluster).toContainText('Cluster reason');
+		await expect(cssCluster).toContainText('Shared stylesheet');
+		await expect(cssCluster).toContainText('https://example.com/blog.css');
+		await expect(cssCluster).toContainText('Header');
+		await expect(cssCluster).toContainText('Footer');
+	});
+
+	test('reasonデータが無いクラスタは再実行を促す案内を表示する', async ({ page }) => {
+		await page.goto('/template-clusters');
+
+		const legacyCluster = page.locator('details', { hasText: '/legacy/' });
+		await legacyCluster.locator('summary').click();
+		await expect(legacyCluster).toContainText(
+			'Re-run `nitpicker analyze <archive> --templates`',
+		);
 	});
 
 	test('クラスタを展開してPagesへのリンクをクリックするとtemplateKeyフィルタ付きでPagesビューに遷移する', async ({
