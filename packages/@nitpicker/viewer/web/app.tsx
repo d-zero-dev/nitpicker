@@ -7,6 +7,7 @@ import { MAIN_CONTENT_ID, SkipLink } from './components/skip-link.js';
 import { TopBar } from './components/top-bar.js';
 import { I18nProvider } from './i18n/i18n-provider.js';
 import { BrokenLinksView } from './routes/broken-links-view.js';
+import { ConsoleLogsView } from './routes/console-logs-view.js';
 import { DirectoryTreeView } from './routes/directory-tree-view.js';
 import { DuplicatesView } from './routes/duplicates-view.js';
 import { ErrorsView } from './routes/errors-view.js';
@@ -72,6 +73,7 @@ export function App() {
 									<Route path="/isolated-pages" element={<IsolatedPagesView />} />
 									<Route path="/isolated-clusters" element={<IsolatedClustersView />} />
 									<Route path="/unused-resources" element={<UnusedResourcesView />} />
+									<Route path="/console-logs" element={<ConsoleLogsView />} />
 									<Route path="*" element={<Navigate to="/" replace />} />
 								</Routes>
 							</main>

@@ -292,6 +292,12 @@ export function PagesView() {
 			},
 			{ accessorKey: 'hasHSTS', header: 'HSTS', size: 70, cell: boolCell },
 			{
+				accessorKey: 'consoleErrorCount',
+				header: t('views.pages.colConsoleErrorCount'),
+				size: 90,
+				cell: textCell,
+			},
+			{
 				accessorKey: 'templateKey',
 				header: t('views.pages.colTemplateKey'),
 				size: 140,
@@ -326,6 +332,7 @@ export function PagesView() {
 			'mainContentCanvasCount',
 			'scrollHeightDesktop',
 			'scrollHeightMobile',
+			'consoleErrorCount',
 		]) {
 			addSort(controls, { params, updateMany }, key, key);
 		}

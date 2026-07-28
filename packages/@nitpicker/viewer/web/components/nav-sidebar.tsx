@@ -22,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
 	{ path: '/isolated-pages', labelKey: 'nav.isolatedPages' },
 	{ path: '/isolated-clusters', labelKey: 'nav.isolatedClusters' },
 	{ path: '/unused-resources', labelKey: 'nav.unusedResources' },
+	{ path: '/console-logs', labelKey: 'nav.consoleLogs' },
 ];
 
 /**

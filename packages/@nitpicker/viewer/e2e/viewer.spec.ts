@@ -508,6 +508,7 @@ const VIEW_PATHS = [
 	'/violations',
 	'/duplicates',
 	'/mismatches',
+	'/console-logs',
 ] as const;
 
 for (const viewPath of VIEW_PATHS) {
