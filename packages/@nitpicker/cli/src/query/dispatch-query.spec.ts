@@ -51,6 +51,8 @@ vi.mock('@nitpicker/query', () => ({
 	listIsolatedClustersFastPath: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	getIsolatedClusterFastPath: vi.fn().mockResolvedValue(null),
 	listUnusedResources: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+	listConsoleLogs: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+	getPageConsoleLogs: vi.fn().mockResolvedValue([]),
 	ArchiveManager: vi.fn(),
 }));
 
@@ -375,5 +377,39 @@ describe('dispatchQuery', () => {
 			limit: 25,
 			offset: 5,
 		});
+	});
+
+	it('dispatches console-logs sub-command with type/sortBy/sortOrder/limit/offset', async () => {
+		const { listConsoleLogs } = await import('@nitpicker/query');
+		const result = await dispatchQuery(mockAccessor, 'console-logs', {
+			type: 'error',
+			sortBy: 'totalCount',
+			sortOrder: 'desc',
+			limit: 25,
+			offset: 5,
+		} as never);
+		expect(result).toEqual({ items: [], total: 0 });
+		expect(listConsoleLogs).toHaveBeenCalledWith(mockAccessor, {
+			type: 'error',
+			sortBy: 'totalCount',
+			sortOrder: 'desc',
+			limit: 25,
+			offset: 5,
+		});
+	});
+
+	it('dispatches page-console-logs sub-command with url', async () => {
+		const { getPageConsoleLogs } = await import('@nitpicker/query');
+		const result = await dispatchQuery(mockAccessor, 'page-console-logs', {
+			url: 'https://example.com',
+		} as never);
+		expect(result).toEqual([]);
+		expect(getPageConsoleLogs).toHaveBeenCalledWith(mockAccessor, 'https://example.com');
+	});
+
+	it('page-console-logs sub-command throws when --url is missing', async () => {
+		await expect(
+			dispatchQuery(mockAccessor, 'page-console-logs', {} as never),
+		).rejects.toThrow('--url is required for the page-console-logs sub-command.');
 	});
 });

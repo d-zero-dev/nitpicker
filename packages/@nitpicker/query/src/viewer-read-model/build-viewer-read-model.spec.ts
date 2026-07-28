@@ -1715,6 +1715,105 @@ describe('buildViewerReadModel', () => {
 			const rows = await archive.getKnex()('viewer_summary').select('*');
 			expect(rows).toHaveLength(1);
 		});
+
+		it('writes console_json with all-zero counts when no console logs were captured (issue #228)', async () => {
+			await buildViewerReadModel(archive);
+			const row = await archive.getKnex()('viewer_summary').where('id', 1).first();
+			expect(JSON.parse(row.console_json as string)).toEqual({
+				pageerror: 0,
+				error: 0,
+				warn: 0,
+			});
+		});
+	});
+
+	describe('viewer_summary population: console_json with captured logs (issue #228)', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_summary_console_logs__',
+		);
+		const archiveFilePath = path.resolve(
+			workingDir,
+			'summary-console-logs-test.nitpicker',
+		);
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			await archive.setPage({
+				url: parseUrl('https://example.com/')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: { ...META, title: 'Home' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// `https://example.com` (no trailing slash) — matches the URL
+			// `setPage` normalises the root page to (see the other
+			// `viewer_pages` lookups in this file, e.g. line 296), so
+			// `replaceConsoleLogs`'s `resolveContentItemId` lands on the same
+			// `content_items` row rather than creating a mismatched placeholder.
+			await archive.setConsoleLogs(
+				'https://example.com',
+				[],
+				[
+					{
+						pageUrl: 'https://example.com/',
+						type: 'error',
+						text: 'boom',
+						args: [],
+						ts: 1,
+					},
+					{
+						pageUrl: 'https://example.com/',
+						type: 'warn',
+						text: 'careful',
+						args: [],
+						ts: 2,
+					},
+				],
+			);
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('copies through countConsoleLogsByType into viewer_summary.console_json', async () => {
+			await buildViewerReadModel(archive);
+			const row = await archive.getKnex()('viewer_summary').where('id', 1).first();
+			expect(JSON.parse(row.console_json as string)).toEqual({
+				pageerror: 0,
+				error: 1,
+				warn: 1,
+			});
+		});
+
+		it('denormalises console_error_count onto viewer_pages for the page that logged', async () => {
+			await buildViewerReadModel(archive);
+			const row = await archive
+				.getKnex()('viewer_pages')
+				.where('url', 'https://example.com')
+				.first();
+			expect(row.console_error_count).toBe(1);
+		});
 	});
 
 	describe('viewer_error_kind_* population (issue #118)', () => {

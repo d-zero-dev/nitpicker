@@ -40,7 +40,7 @@ export const commandDef = {
 		},
 		url: {
 			type: 'string',
-			desc: 'Target URL for page-detail, html, or resource-referrers queries',
+			desc: 'Target URL for page-detail, html, resource-referrers, or page-console-logs queries',
 		},
 		status: {
 			type: 'number',
@@ -80,7 +80,7 @@ export const commandDef = {
 		},
 		sortBy: {
 			type: 'string',
-			desc: 'Field to sort by (url, status, title)',
+			desc: 'Field to sort by (url, status, title for pages; totalCount, pageCount, text, type for console-logs)',
 		},
 		sortOrder: {
 			type: 'string',
@@ -88,7 +88,7 @@ export const commandDef = {
 		},
 		type: {
 			type: 'string',
-			desc: 'Filter type: broken, external (links) or canonical, og:title, og:description (mismatches)',
+			desc: 'Filter type: broken, external (links); canonical, og:title, og:description (mismatches); or a console message type e.g. error, warn, pageerror (console-logs)',
 		},
 		contentType: {
 			type: 'string',

@@ -32,5 +32,6 @@ export function clearWriteRefCaches(caches: WriteRefCaches): void {
 	caches.contentTypeIds.clear();
 	caches.jsonIds.clear();
 	caches.blobIds.clear();
+	caches.consoleLogIds.clear();
 	caches.headers = null;
 }

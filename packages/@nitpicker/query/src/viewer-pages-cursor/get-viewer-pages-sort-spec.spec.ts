@@ -80,6 +80,7 @@ describe('getViewerPagesSortSpec', () => {
 			['mainContentCanvasCount', 'main_content_canvas_count'],
 			['scrollHeightDesktop', 'scroll_height_desktop'],
 			['scrollHeightMobile', 'scroll_height_mobile'],
+			['consoleErrorCount', 'console_error_count'],
 		];
 		for (const [sortBy, column] of cases) {
 			expect(getViewerPagesSortSpec(sortBy, 'desc')).toEqual({

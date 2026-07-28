@@ -53,5 +53,10 @@ export async function getViewerSummary(
 		metadataFulfillment: JSON.parse(row.metadata_json) as MetadataFulfillment,
 		contentTypeDistribution: JSON.parse(row.content_type_json) as ContentTypeCount[],
 		networkOutageAffectedFailures: Number(row.network_outage_affected_failures),
+		consoleLogCounts: JSON.parse(row.console_json) as {
+			pageerror: number;
+			error: number;
+			warn: number;
+		},
 	};
 }

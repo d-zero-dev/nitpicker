@@ -21,6 +21,7 @@ export type ViewerPagesSortColumn =
 	| 'main_content_canvas_count'
 	| 'scroll_height_desktop'
 	| 'scroll_height_mobile'
+	| 'console_error_count'
 	| 'page_id';
 
 /**
@@ -110,7 +111,8 @@ export interface ViewerPagesCursorPayload {
 		| 'mainContentAudioCount'
 		| 'mainContentCanvasCount'
 		| 'scrollHeightDesktop'
-		| 'scrollHeightMobile';
+		| 'scrollHeightMobile'
+		| 'consoleErrorCount';
 	/** The sort direction the cursor was minted under. */
 	sortOrder: 'asc' | 'desc';
 	/** The boundary row's keyset tuple values, in sort-spec column order. */

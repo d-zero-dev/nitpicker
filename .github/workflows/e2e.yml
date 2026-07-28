@@ -115,6 +115,7 @@ jobs:
                 scroll-jack.e2e.ts,
                 crawl-write-entity-tables.e2e.ts,
                 network-outage-gate.e2e.ts,
+                crawl-write-console-logs.e2e.ts,
               ]
           - id: append-pipeline
             files:

@@ -741,3 +741,90 @@ describe('getSummary: no recorded outages behaves identically to before this fea
 		rmSync(dir, { recursive: true, force: true });
 	});
 });
+
+describe('getSummary: console log counts (issue #228)', () => {
+	it('reports total occurrence counts for pageerror/error/warn, excluding other types', async () => {
+		const dir = path.resolve(__dirname, '__test_fixtures_summary_console_logs__');
+		const archiveFilePath = path.resolve(dir, 'summary-console-logs.nitpicker');
+		const { mkdirSync, rmSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		const archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		await archive.setConsoleLogs(
+			'https://example.com/a',
+			[],
+			[
+				{ pageUrl: 'https://example.com/a', type: 'error', text: 'e', args: [], ts: 1 },
+				{ pageUrl: 'https://example.com/a', type: 'warn', text: 'w', args: [], ts: 2 },
+				{ pageUrl: 'https://example.com/a', type: 'log', text: 'l', args: [], ts: 3 },
+				{
+					pageUrl: 'https://example.com/a',
+					type: 'pageerror',
+					text: 'p',
+					args: [],
+					ts: 4,
+				},
+			],
+		);
+
+		const result = await getSummary(archive);
+		expect(result.consoleLogCounts).toEqual({ pageerror: 1, error: 1, warn: 1 });
+
+		await archive.close();
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('reports all-zero counts when no console logs were captured', async () => {
+		const dir = path.resolve(__dirname, '__test_fixtures_summary_no_console_logs__');
+		const archiveFilePath = path.resolve(dir, 'summary-no-console-logs.nitpicker');
+		const { mkdirSync, rmSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		const archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		const result = await getSummary(archive);
+		expect(result.consoleLogCounts).toEqual({ pageerror: 0, error: 0, warn: 0 });
+
+		await archive.close();
+		rmSync(dir, { recursive: true, force: true });
+	});
+});

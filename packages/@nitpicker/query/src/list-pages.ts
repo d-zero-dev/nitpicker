@@ -18,6 +18,7 @@ import {
 import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
 import { paginateQuery } from './paginate-query.js';
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
+import { requireConsoleErrorCountColumn } from './require-console-error-count-column.js';
 import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
 
 /** One DISTINCT row read for facet computation — see {@link getPageListFacets}. */
@@ -128,6 +129,7 @@ export async function listPages(
 ): Promise<PaginatedPageList> {
 	const knex = accessor.getKnex();
 	await requireAliasOfIdColumn(knex);
+	await requireConsoleErrorCountColumn(knex);
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 	const hasPageTemplates = await hasPageTemplatesTable(knex);
@@ -306,6 +308,7 @@ export async function listPages(
 						mainContentCanvasCount: { column: '"pm"."main_content_canvas_count"' },
 						scrollHeightDesktop: { column: '"pm"."scroll_height_desktop"' },
 						scrollHeightMobile: { column: '"pm"."scroll_height_mobile"' },
+						consoleErrorCount: { column: '"pm"."console_error_count"' },
 						hasCSP: { column: headerPresenceExpression('hasCSP', 'hf') },
 						hasXFrameOptions: {
 							column: headerPresenceExpression('hasXFrameOptions', 'hf'),

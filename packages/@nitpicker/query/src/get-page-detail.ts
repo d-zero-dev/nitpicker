@@ -3,6 +3,7 @@ import type { ArchiveAccessor, JsonLdRow, TagRow } from '@nitpicker/crawler';
 
 import { decodeJsonRef, loadResponseHeadersBySetIds } from '@nitpicker/crawler';
 
+import { getPageConsoleLogs } from './get-page-console-logs.js';
 import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 import { resolveAliasAndRedirectChain } from './resolve-alias-and-redirect-chain.js';
@@ -327,9 +328,10 @@ export async function getPageDetail(
 
 	const aliasUrls = aliasRows.map((row: { url: string }) => row.url);
 
-	const [jsonLdRows, tagRows] = await Promise.all([
+	const [jsonLdRows, tagRows, consoleLogs] = await Promise.all([
 		accessor.getJsonLdOfPage(page.id),
 		accessor.getTagsOfPage(page.id),
+		getPageConsoleLogs(accessor, page.url),
 	]);
 
 	return {
@@ -423,5 +425,6 @@ export async function getPageDetail(
 		inboundLinks,
 		redirectFrom,
 		aliasUrls,
+		consoleLogs,
 	};
 }

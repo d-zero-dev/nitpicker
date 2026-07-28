@@ -22,7 +22,8 @@ export function getViewerPagesSortSpec(
 		| 'mainContentAudioCount'
 		| 'mainContentCanvasCount'
 		| 'scrollHeightDesktop'
-		| 'scrollHeightMobile',
+		| 'scrollHeightMobile'
+		| 'consoleErrorCount',
 	sortOrder: 'asc' | 'desc',
 ): ViewerPagesSortSpec {
 	switch (sortBy) {
@@ -111,6 +112,12 @@ export function getViewerPagesSortSpec(
 		case 'scrollHeightMobile': {
 			return {
 				columns: ['scroll_height_mobile', 'url_sort_key', 'page_id'],
+				scanDirection: sortOrder,
+			};
+		}
+		case 'consoleErrorCount': {
+			return {
+				columns: ['console_error_count', 'url_sort_key', 'page_id'],
 				scanDirection: sortOrder,
 			};
 		}

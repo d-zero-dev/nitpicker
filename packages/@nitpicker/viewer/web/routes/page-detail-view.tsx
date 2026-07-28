@@ -217,6 +217,29 @@ export function PageDetailView() {
 				</>
 			)}
 
+			{data.consoleLogs.length > 0 && (
+				<>
+					<h2>
+						{t('views.pageDetail.consoleLogs')} ({data.consoleLogs.length})
+					</h2>
+					<ul>
+						{data.consoleLogs.map((entry, index) => (
+							<li key={`console-log-${index}`}>
+								<span className="state">[{entry.type}]</span>{' '}
+								{new Date(entry.ts).toLocaleString()} — {entry.text}
+								{entry.locationUrl && (
+									<span className="state">
+										{' '}
+										({entry.locationUrl}
+										{entry.locationLine == null ? '' : `:${entry.locationLine}`})
+									</span>
+								)}
+							</li>
+						))}
+					</ul>
+				</>
+			)}
+
 			{!data.isExternal && (
 				<>
 					<h2>{t('views.pageDetail.mainContent')}</h2>

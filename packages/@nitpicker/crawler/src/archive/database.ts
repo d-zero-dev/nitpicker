@@ -23,6 +23,7 @@ import type {
 } from './types.js';
 import type { OutageWindow } from '../is-within-outage-window.js';
 import type { PageData, Resource } from '../utils/types/types.js';
+import type { ConsoleLogEntry } from '@d-zero/beholder';
 import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 import type { Knex } from 'knex';
 
@@ -46,6 +47,7 @@ import { getConfig as getConfigOp } from './db-ops/config/get-config.js';
 import { getName as getNameOp } from './db-ops/config/get-name.js';
 import { setConfig as setConfigOp } from './db-ops/config/set-config.js';
 import { updateConfig as updateConfigOp } from './db-ops/config/update-config.js';
+import { replaceConsoleLogs as replaceConsoleLogsOp } from './db-ops/console-logs/replace-console-logs.js';
 import { insertCrawlError as insertCrawlErrorOp } from './db-ops/errors/insert-crawl-error.js';
 import { insertPageError as insertPageErrorOp } from './db-ops/errors/insert-page-error.js';
 import { listDnsBurnedHostCandidates as listDnsBurnedHostCandidatesOp } from './db-ops/errors/list-dns-burned-host-candidates.js';
@@ -756,7 +758,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			retrySetting,
 		);
 	}
-
 	/**
 	 * Records a redirect edge (source → destination) **without** re-storing the
 	 * destination's content. Delegates to {@link recordRedirectOp}.
@@ -799,6 +800,34 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			retrySetting,
 		);
 	}
+	/**
+	 * Replaces one page's `page_console_logs` rows with a freshly captured
+	 * set of console messages / page errors. Delegates to
+	 * {@link replaceConsoleLogsOp}.
+	 * @param pageUrl - The originally-requested URL, normalised (`withoutHashAndAuth` form).
+	 * @param redirectPaths - The redirect chain hops captured during fetch, in order.
+	 * @param entries - The console log entries to persist.
+	 */
+	async replaceConsoleLogs(
+		pageUrl: string,
+		redirectPaths: readonly string[],
+		entries: readonly ConsoleLogEntry[],
+	) {
+		return emitErrorAndRetry(
+			this,
+			'Database.replaceConsoleLogs',
+			async () =>
+				await replaceConsoleLogsOp(
+					this.#instance,
+					this.#writeRefCaches,
+					pageUrl,
+					redirectPaths,
+					entries,
+				),
+			retrySetting,
+		);
+	}
+
 	/**
 	 * Replaces the stored DOM-structure template classification with a
 	 * freshly generated set. Delegates to {@link replacePageTemplatesOp}.

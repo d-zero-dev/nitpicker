@@ -59,6 +59,7 @@ function makeRow(overrides: Partial<PageListRow> = {}): PageListRow {
 		main_content_canvas_count: null,
 		scroll_height_desktop: null,
 		scroll_height_mobile: null,
+		console_error_count: null,
 		firstCrawledAt: null,
 		lastCrawledAt: null,
 		hasCSP: 0,

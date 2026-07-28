@@ -448,6 +448,12 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					.catch((error) => reject(error));
 			});
 
+			this.#crawler.on('consoleLogs', ({ pageUrl, redirectPaths, entries }) => {
+				writeQueue
+					.enqueue(() => this.#archive.setConsoleLogs(pageUrl, redirectPaths, entries))
+					.catch((error) => reject(error));
+			});
+
 			this.#crawler.on('crawlEnd', () => {
 				writeQueue
 					.drain()

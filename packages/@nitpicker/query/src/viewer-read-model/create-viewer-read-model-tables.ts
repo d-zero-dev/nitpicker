@@ -53,7 +53,8 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			status_json text not null,
 			content_type_json text not null,
 			metadata_json text not null,
-			network_outage_affected_failures integer not null
+			network_outage_affected_failures integer not null,
+			console_json text not null
 		)
 	`);
 
@@ -95,6 +96,12 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			main_content_canvas_count integer not null default 0,
 			scroll_height_desktop integer not null default 0,
 			scroll_height_mobile integer not null default 0,
+			-- page_meta.console_error_count (pageerror+error occurrences,
+			-- issue #228), same NULL-to-0 defaulting rationale as the
+			-- main_content_*/scroll_height_* columns above: sort/filter only,
+			-- display re-fetches the true (possibly NULL) value via
+			-- joinViewerPageIdsToListItems.
+			console_error_count integer not null default 0,
 			url_sort_key text not null,
 			title_sort_key text not null,
 			path_sort_key text not null,

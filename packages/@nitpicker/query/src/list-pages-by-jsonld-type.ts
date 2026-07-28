@@ -7,6 +7,7 @@ import {
 	mapPageRowToListItem,
 } from './map-page-row-to-list-item.js';
 import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
+import { requireConsoleErrorCountColumn } from './require-console-error-count-column.js';
 
 /**
  * Lists pages that have at least one JSON-LD (or SpeculationRules) entry with
@@ -27,6 +28,7 @@ export async function listPagesByJsonLdType(
 	options: ListPagesByJsonLdTypeOptions,
 ): Promise<PageListItem[]> {
 	const knex = accessor.getKnex();
+	await requireConsoleErrorCountColumn(knex);
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 	const hasPageTemplates = await hasPageTemplatesTable(knex);

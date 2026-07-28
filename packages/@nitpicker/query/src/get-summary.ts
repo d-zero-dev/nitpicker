@@ -11,6 +11,7 @@ import type { ArchiveAccessor, ErrorKind } from '@nitpicker/crawler';
 import { classifyErrorKind, isWithinOutageWindow } from '@nitpicker/crawler';
 
 import { classifyContentType } from './classify-content-type.js';
+import { countConsoleLogsByType } from './count-console-logs-by-type.js';
 import { excludeSkippedPages } from './exclude-skipped-pages.js';
 import { listAllOutageWindows } from './list-all-outage-windows.js';
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
@@ -59,6 +60,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 	const baseUrl = config.baseUrl;
 	const roots = config.roots;
 
+	const consoleLogCountsPromise = countConsoleLogsByType(knex);
 	const failedPageIdRowsPromise = knex('content_items')
 		.select('id')
 		.where('scraped', 1)
@@ -79,6 +81,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		failedPageIdRows,
 		failedPageMessages,
 		outageWindows,
+		consoleLogCounts,
 	] = await Promise.all([
 		knex('content_items as ci')
 			.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
@@ -139,6 +142,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		failedPageIdRowsPromise,
 		failedPageMessagesPromise,
 		outageWindowsPromise,
+		consoleLogCountsPromise,
 	]);
 
 	let totalNum = 0;
@@ -270,5 +274,6 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		metadataFulfillment,
 		contentTypeDistribution,
 		networkOutageAffectedFailures,
+		consoleLogCounts,
 	};
 }

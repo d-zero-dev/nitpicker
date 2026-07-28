@@ -4,6 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 
 import { registerArchiveInfoRoute } from './routes/register-archive-info-route.js';
+import { registerConsoleLogsRoute } from './routes/register-console-logs-route.js';
 import { registerDirectoryTreeChildrenRoute } from './routes/register-directory-tree-children-route.js';
 import { registerDirectoryTreePagesRoute } from './routes/register-directory-tree-pages-route.js';
 import { registerDirectoryTreeRoute } from './routes/register-directory-tree-route.js';
@@ -72,6 +73,7 @@ export function createApp(options: CreateAppOptions): Hono {
 	registerIsolatedClustersRoute(app, context);
 	registerUnusedResourcesRoute(app, context);
 	registerTemplateClustersRoute(app, context);
+	registerConsoleLogsRoute(app, context);
 
 	app.onError((error, c) => {
 		const raw = error instanceof Error ? error.message : String(error);

@@ -10,6 +10,7 @@ import type {
 	GetViolationsOptions,
 	GetDuplicatesFastPathOptions,
 	FindMismatchesFastPathOptions,
+	ListConsoleLogsOptions,
 } from '@nitpicker/query';
 
 import {
@@ -22,6 +23,7 @@ import {
 	getImagesFastPath,
 	getIsolatedClusterFastPath,
 	getMismatchesFastPath,
+	getPageConsoleLogs,
 	getPageDetail,
 	getPageHtml,
 	getPageJsonLd,
@@ -31,6 +33,7 @@ import {
 	getSummaryFastPath,
 	getTagInventory,
 	getViolations,
+	listConsoleLogs,
 	listInventoryRuns,
 	listIsolatedClustersFastPath,
 	listIsolatedPagesFastPath,
@@ -212,6 +215,13 @@ export async function dispatchQuery(
 		case 'page-tags': {
 			const { url } = options as { url: string };
 			return getPageTags(accessor, url);
+		}
+		case 'console-logs': {
+			return listConsoleLogs(accessor, options as ListConsoleLogsOptions);
+		}
+		case 'page-console-logs': {
+			const { url } = options as { url: string };
+			return getPageConsoleLogs(accessor, url);
 		}
 		default: {
 			const _exhaustive: never = subCommand;

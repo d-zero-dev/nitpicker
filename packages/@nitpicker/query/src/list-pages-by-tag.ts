@@ -7,6 +7,7 @@ import {
 	mapPageRowToListItem,
 } from './map-page-row-to-list-item.js';
 import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
+import { requireConsoleErrorCountColumn } from './require-console-error-count-column.js';
 
 /**
  * Lists pages that have a Wappalyzer-detected tag matching the given provider
@@ -31,6 +32,7 @@ export async function listPagesByTag(
 	options: ListPagesByTagOptions,
 ): Promise<PageListItem[]> {
 	const knex = accessor.getKnex();
+	await requireConsoleErrorCountColumn(knex);
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 	const hasPageTemplates = await hasPageTemplatesTable(knex);

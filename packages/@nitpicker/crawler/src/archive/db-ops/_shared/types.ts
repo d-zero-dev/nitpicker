@@ -44,6 +44,8 @@ export interface WriteRefCaches {
 	readonly jsonIds: Map<string, number>;
 	/** `hex(content hash) → blob_refs.id`. */
 	readonly blobIds: Map<string, number>;
+	/** `hex(content hash) → console_log_items.id`. */
+	readonly consoleLogIds: Map<string, number>;
 	/**
 	 * Header dictionary caches (`header_name_refs` / `header_value_refs` /
 	 * `header_sets` id maps). `null` until the first header-set upsert

@@ -127,6 +127,31 @@ export function SummaryView() {
 				<Card label={t('views.summary.externalContents')} value={data.externalContents} />
 			</div>
 
+			{/* Suppressed when zero — most archives have zero page errors and
+			    warnings, so an all-zero section every time would be noise
+			    the same way the content-type bar suppresses on zero. */}
+			{(data.consoleLogCounts.pageerror > 0 ||
+				data.consoleLogCounts.error > 0 ||
+				data.consoleLogCounts.warn > 0) && (
+				<>
+					<h2>{t('views.summary.consoleLogs')}</h2>
+					<div className="cards">
+						<Card
+							label={t('views.summary.consolePageErrors')}
+							value={data.consoleLogCounts.pageerror}
+						/>
+						<Card
+							label={t('views.summary.consoleErrors')}
+							value={data.consoleLogCounts.error}
+						/>
+						<Card
+							label={t('views.summary.consoleWarnings')}
+							value={data.consoleLogCounts.warn}
+						/>
+					</div>
+				</>
+			)}
+
 			<h2>{t('views.summary.statusDistribution')}</h2>
 			<div className="bars">
 				{data.statusDistribution.map((entry) => {

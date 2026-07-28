@@ -9,6 +9,7 @@ describe('shouldDiscardPredicted', () => {
 		const result: ScrapeResult = {
 			type: 'error',
 			resources: [],
+			consoleLogs: [],
 			error: { name: 'Error', message: 'connection refused', shutdown: false },
 		};
 		expect(shouldDiscardPredicted(result)).toBe(true);
@@ -18,6 +19,7 @@ describe('shouldDiscardPredicted', () => {
 		const result: ScrapeResult = {
 			type: 'success',
 			resources: [],
+			consoleLogs: [],
 			pageData: {
 				url: {} as never,
 				redirectPaths: [],
@@ -42,6 +44,7 @@ describe('shouldDiscardPredicted', () => {
 		const result: ScrapeResult = {
 			type: 'success',
 			resources: [],
+			consoleLogs: [],
 			pageData: {
 				url: {} as never,
 				redirectPaths: [],
@@ -66,6 +69,7 @@ describe('shouldDiscardPredicted', () => {
 		const result: ScrapeResult = {
 			type: 'success',
 			resources: [],
+			consoleLogs: [],
 			pageData: {
 				url: {} as never,
 				redirectPaths: [],
@@ -90,6 +94,7 @@ describe('shouldDiscardPredicted', () => {
 		const result: ScrapeResult = {
 			type: 'success',
 			resources: [],
+			consoleLogs: [],
 			pageData: {
 				url: {} as never,
 				redirectPaths: [],
@@ -114,6 +119,7 @@ describe('shouldDiscardPredicted', () => {
 		const result: ScrapeResult = {
 			type: 'skipped',
 			resources: [],
+			consoleLogs: [],
 			ignored: {
 				url: {} as never,
 				matchedText: 'keyword',

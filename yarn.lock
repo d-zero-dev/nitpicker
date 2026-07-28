@@ -1082,16 +1082,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/beholder@npm:4.0.0":
-  version: 4.0.0
-  resolution: "@d-zero/beholder@npm:4.0.0"
+"@d-zero/beholder@npm:4.1.0":
+  version: 4.1.0
+  resolution: "@d-zero/beholder@npm:4.1.0"
   dependencies:
     "@d-zero/puppeteer-page-scan": "npm:4.6.5"
     "@d-zero/shared": "npm:0.22.2"
     debug: "npm:4.4.3"
     puppeteer: "npm:25.3.0"
     simple-wappalyzer: "npm:1.1.100"
-  checksum: 10c0/790d24fe20cefd457e1a81318bbc00f2e0ec7ee8db920bdd41a513a451e19059a8aec9366943a9dc282e81d5494892f365bf15e2ad35411bd498b2648f1d39c6
+  checksum: 10c0/5548bbde5914f71e49bf6e6c75db134b82db7a55dc68cdb9d531c684d910155a64023c03a1dc437827b82f4d45fda126bf96bb5ef92ff23cd267f1ffc07aa2db
   languageName: node
   linkType: hard
 
@@ -2979,7 +2979,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/crawler@workspace:packages/@nitpicker/crawler"
   dependencies:
-    "@d-zero/beholder": "npm:4.0.0"
+    "@d-zero/beholder": "npm:4.1.0"
     "@d-zero/dealer": "npm:1.9.4"
     "@d-zero/fs": "npm:0.2.6"
     "@d-zero/shared": "npm:0.22.2"
