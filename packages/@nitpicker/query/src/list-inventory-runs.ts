@@ -18,6 +18,16 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * call this unconditionally and a "no such table" exception would break
  * the viewer / MCP flows.
  *
+ * Also tolerates a missing `invalid_skipped` column specifically (added
+ * after the table itself): self-healing column migrations only run on a
+ * writer connection (`db-ops/lifecycle/init.ts`), and this table can be
+ * read from an archive that never took that path again after upgrading —
+ * a `readOnly` stub connection, or a tar-cache entry whose cache key
+ * (content-derived, not app-version-derived — see
+ * `cache/compute-archive-cache-key.ts`) survived across the upgrade
+ * without ever re-extracting. `hasColumn` is checked so this can't throw
+ * "no such column" on either archive shape.
+ *
  * Read-only — safe against viewer / stub-mode archives.
  * @param accessor - The archive accessor to query.
  * @param options - Pagination options.
@@ -61,6 +71,11 @@ export async function listInventoryRuns(
 	}[];
 	const total = countResult[0]?.total ?? 0;
 
+	const hasInvalidSkipped = await knex.schema.hasColumn(
+		'inventory_runs',
+		'invalid_skipped',
+	);
+
 	const rows = (await knex('inventory_runs')
 		.select(
 			'id',
@@ -71,6 +86,7 @@ export async function listInventoryRuns(
 			'new_pages',
 			'new_resources',
 			'scope_skipped',
+			...(hasInvalidSkipped ? ['invalid_skipped'] : []),
 			'notes',
 		)
 		.orderBy('ran_at', 'desc')
@@ -78,7 +94,10 @@ export async function listInventoryRuns(
 		.offset(offset)) as InventoryRunEntry[];
 
 	return {
-		items: rows,
+		// Normalize `invalid_skipped` to `null` when the column was absent
+		// (rather than `undefined`), matching every other optional field's
+		// NULL-tolerant contract on `InventoryRunEntry`.
+		items: rows.map((row) => ({ ...row, invalid_skipped: row.invalid_skipped ?? null })),
 		total: Number(total),
 	};
 }

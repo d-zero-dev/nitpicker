@@ -1,15 +1,20 @@
 import type { CommandDef, InferFlags } from '@d-zero/roar';
 import type { Config, CrawlerError } from '@nitpicker/crawler';
 
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { readList } from '@d-zero/readtext/list';
+import { readList, toListWithPosition } from '@d-zero/readtext/list';
 import { computeFileSha256, CrawlerOrchestrator } from '@nitpicker/crawler';
 
+import { classifyInventoryListItems } from '../crawl/classify-inventory-list-items.js';
 import { log, verbosely } from '../crawl/debug.js';
 import { diff } from '../crawl/diff.js';
 import { ensureViewerReadModelQuietly } from '../crawl/ensure-viewer-read-model-quietly.js';
 import { eventAssignments } from '../crawl/event-assignments.js';
+import { formatInvalidInventoryUrlWarning } from '../crawl/format-invalid-inventory-url-warning.js';
+import { formatInventorySkipSummary } from '../crawl/format-inventory-skip-summary.js';
+import { isValidUrl } from '../crawl/is-valid-url.js';
 import { mapFlagsToCrawlConfig } from '../crawl/map-flags-to-crawl-config.js';
 import { ExitCode } from '../exit-code.js';
 
@@ -353,29 +358,56 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
  * {@link CrawlerOrchestrator.inventory}, and surface the result through
  * the same `run` progress reporter as the other crawl modes.
  *
- * The URL list file is parsed by `@d-zero/readtext/list`, which strips
- * blank lines and `#` comments — same conventions as `--list-file`.
+ * The list file is read exactly once, as raw bytes — the same buffer feeds
+ * the content-hash (`computeFileSha256`), the parsed URL list, and the copy
+ * archived by the orchestrator, so the hash naming the archived copy always
+ * matches what was actually parsed even if the file changes on disk between
+ * calls. Lines are split by `toListWithPosition` (`@d-zero/readtext/list`),
+ * which strips blank lines and `#` comments — same conventions as
+ * `--list-file` — while keeping each surviving line's source position.
+ *
+ * Unlike every other URL-list entry point in this command (positional args,
+ * `--list`, `--list-file`), an unparseable line here does not abort the
+ * run: source lists come from machine-generated intermediates (a doc-root
+ * `ls`, a spreadsheet export) where a handful of malformed lines is the
+ * norm, and discarding 1,222 good URLs over 12 bad ones defeats the "find
+ * orphan pages" purpose of `--inventory` (issue #99). Each invalid line is
+ * warned individually (with its line:column, so the operator can find and
+ * fix it) and a summary is printed once at the end; if every line is
+ * invalid, that's a real "wrong file" input error and still throws.
  * @param archivePath - Path to the existing `.nitpicker` archive (positional).
  * @param listFile - Path to the URL list file passed via `--inventory`.
  * @param flags - Parsed CLI flags from the `crawl` command.
  */
 async function inventoryCrawl(archivePath: string, listFile: string, flags: CrawlFlags) {
 	const resolvedListFile = path.resolve(process.cwd(), listFile);
-	const list = await readList(resolvedListFile);
-	if (list.length === 0) {
+	const bytes = await fs.readFile(resolvedListFile);
+	const items = toListWithPosition(bytes.toString('utf8'));
+	if (items.length === 0) {
 		throw new Error(`No URLs found in inventory file: ${listFile}`);
 	}
-	validateUrls(list);
-	// Compute the source-file digest HERE — at the CLI boundary — so the
-	// absolute path never crosses into the orchestrator. The path is
-	// privacy-sensitive (user-home / OS structure leaks when archives are
-	// shared), and the audit row only needs the content fingerprint.
-	const sourceFileSha256 = await computeFileSha256(resolvedListFile);
+
+	const { valid, invalid } = classifyInventoryListItems(items);
+	if (invalid.length > 0) {
+		for (const item of invalid) {
+			// eslint-disable-next-line no-console -- operator-facing warning, must be visible regardless of DEBUG filters or --silent
+			console.warn(formatInvalidInventoryUrlWarning(listFile, item));
+		}
+		// eslint-disable-next-line no-console -- see above
+		console.warn(formatInventorySkipSummary(invalid.length, items.length));
+	}
+	if (valid.length === 0) {
+		throw new Error(
+			`All ${invalid.length} line(s) in inventory file failed URL validation: ${listFile}`,
+		);
+	}
+
+	const sha256 = computeFileSha256(bytes);
 	const errStack: (CrawlerError | Error)[] = [];
 
 	const orchestrator = await CrawlerOrchestrator.inventory(
 		archivePath,
-		list,
+		valid,
 		{
 			...mapFlagsToCrawlConfig(flags),
 			list: false,
@@ -388,7 +420,7 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 				flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
 			).catch((error) => errStack.push(error));
 		},
-		sourceFileSha256,
+		{ sha256, bytes, invalidLineCount: invalid.length },
 	);
 
 	try {
@@ -462,9 +494,7 @@ async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
  */
 function validateUrls(urls: readonly string[]) {
 	for (const url of urls) {
-		try {
-			new URL(url);
-		} catch {
+		if (!isValidUrl(url)) {
 			throw new Error(
 				`Invalid URL: "${url}". Please provide a valid URL (e.g., https://example.com)`,
 			);

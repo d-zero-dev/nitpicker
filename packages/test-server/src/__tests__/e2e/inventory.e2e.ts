@@ -208,6 +208,7 @@ describe('Inventory crawl run-audit fingerprint (with source file sha256)', () =
 	let filePath: string;
 	let cwd: string;
 	let listFilePath: string;
+	let listBytes: Buffer;
 	let expectedSha256: string;
 	let accessor: Archive;
 
@@ -217,25 +218,26 @@ describe('Inventory crawl run-audit fingerprint (with source file sha256)', () =
 		cwd = baseline.cwd;
 
 		// Write a real txt list under cwd. Two URLs — one HTML seed, one
-		// non-HTML resource. The CLI normally hashes the file; this
-		// e2e simulates that boundary by calling `computeFileSha256`
-		// here and passing the digest to `inventory()` (the orchestrator
-		// boundary deliberately does NOT receive the path post-lift).
+		// non-HTML resource. The CLI normally reads this file once (as raw
+		// bytes) and derives the digest from that buffer; this e2e simulates
+		// that boundary directly (the orchestrator boundary deliberately
+		// does NOT receive the path — see `InventorySource` JSDoc).
 		listFilePath = path.join(cwd, 'inventory-list.txt');
 		const listBody = [
 			`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
 			`${TEST_SERVER_ORIGIN}/inventory/orphan.pdf`,
 		].join('\n');
-		await fs.writeFile(listFilePath, listBody);
+		listBytes = Buffer.from(listBody);
+		await fs.writeFile(listFilePath, listBytes);
 
 		// Compute the expected sha256 INDEPENDENTLY (= via Node's
 		// `crypto.createHash`) so the assertion below is a content-
 		// equality check, not a vacuous `^[0-9a-f]{64}$` shape check.
 		// A regression where `computeFileSha256` hashes the wrong input
 		// (e.g. the path string instead of the file body) gets caught.
-		expectedSha256 = crypto.createHash('sha256').update(listBody).digest('hex');
+		expectedSha256 = crypto.createHash('sha256').update(listBytes).digest('hex');
 
-		const sourceFileSha256 = await computeFileSha256(listFilePath);
+		const sha256 = computeFileSha256(listBytes);
 
 		const orchestrator = await CrawlerOrchestrator.inventory(
 			filePath,
@@ -245,13 +247,16 @@ describe('Inventory crawl run-audit fingerprint (with source file sha256)', () =
 			],
 			{ cwd },
 			undefined,
-			sourceFileSha256,
+			{ sha256, bytes: listBytes, invalidLineCount: 0 },
 		);
 		await orchestrator.write();
 		await orchestrator.archive.close();
 		orchestrator.garbageCollect();
 
-		accessor = await Archive.open({ filePath, cwd });
+		// `openPluginData: true` — this describe block's tests read the
+		// saved `inventory/<sha256>.txt` via `getData`, which needs the
+		// non-`db.sqlite` tar entries actually extracted into tmpDir.
+		accessor = await Archive.open({ filePath, cwd, openPluginData: true });
 	}, 120_000);
 
 	afterAll(async () => {
@@ -273,6 +278,64 @@ describe('Inventory crawl run-audit fingerprint (with source file sha256)', () =
 		// / a buffered slice / etc. The expected digest was computed
 		// independently above from the same body written to the file.
 		expect(row.source_file_sha256).toBe(expectedSha256);
+	});
+
+	it('archives the exact source list bytes under inventory/<sha256>.txt (issue #99)', async () => {
+		// Content equality against the original file body — not just
+		// "some file exists" — pins that the saved copy is byte-identical
+		// to what was fed in.
+		const saved = await accessor.getData(`inventory/${expectedSha256}`, 'txt');
+		expect(saved).toBe(listBytes.toString('utf8'));
+	});
+
+	it('survives a second inventory pass on the same archive (openPluginData fix, issue #99)', async () => {
+		// Regression guard for the `openPluginData` bug: `Archive.open`
+		// without it only extracts `db.sqlite`, so a second writer-mode
+		// open + `write()` would tar back a tmpDir missing the saved list
+		// and silently drop it. Re-running `--inventory` with the exact
+		// same list hits the no-op early return (every URL already known)
+		// — the interesting assertion is that the file saved by the FIRST
+		// run (in `beforeAll`, under `cwd`) is still present after this
+		// SECOND open/write cycle.
+		//
+		// A separate `secondCwd` is used for the writer-mode open/close
+		// below so it does not contend for the archive lock with the
+		// `accessor` read handle this describe block keeps open until
+		// `afterAll`.
+		const secondCwd = `${cwd}-second-pass`;
+		await fs.mkdir(secondCwd, { recursive: true });
+		try {
+			const orchestrator = await CrawlerOrchestrator.inventory(
+				filePath,
+				[
+					`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+					`${TEST_SERVER_ORIGIN}/inventory/orphan.pdf`,
+				],
+				{ cwd: secondCwd },
+				undefined,
+				{ sha256: expectedSha256, bytes: listBytes, invalidLineCount: 0 },
+			);
+			await orchestrator.write();
+			await orchestrator.archive.close();
+			orchestrator.garbageCollect();
+
+			const reopenedAccessor = await Archive.open({
+				filePath,
+				cwd: secondCwd,
+				openPluginData: true,
+			});
+			try {
+				const saved = await reopenedAccessor.getData(
+					`inventory/${expectedSha256}`,
+					'txt',
+				);
+				expect(saved).toBe(listBytes.toString('utf8'));
+			} finally {
+				await reopenedAccessor.close();
+			}
+		} finally {
+			await fs.rm(secondCwd, { recursive: true, force: true });
+		}
 	});
 });
 

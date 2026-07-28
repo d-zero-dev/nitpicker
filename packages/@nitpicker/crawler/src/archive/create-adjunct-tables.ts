@@ -312,6 +312,7 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 			t.integer('new_pages').nullable();
 			t.integer('new_resources').nullable();
 			t.integer('scope_skipped').nullable();
+			t.integer('invalid_skipped').nullable();
 			t.text('notes').nullable();
 			t.index('ran_at');
 		});

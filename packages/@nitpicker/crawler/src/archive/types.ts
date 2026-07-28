@@ -136,9 +136,9 @@ export interface InventoryRunMeta {
 	ran_at: string;
 	/** Human-readable identifier (e.g. `'prod-2026-06-21'`). `null` when the caller did not supply one. */
 	list_label?: string | null;
-	/** SHA-256 hex digest of the source file. `null` if hashing failed (e.g. file vanished mid-run). */
+	/** SHA-256 hex digest of the source file. `null` for programmatic callers that built the URL list in-memory (no source file to hash). */
 	source_file_sha256?: string | null;
-	/** Number of non-empty lines in the input list (= URL count before scope filtering). */
+	/** Number of valid URLs in the input list, after the CLI has warned-and-dropped unparseable-URL lines but before scope filtering. */
 	total_lines?: number | null;
 	/** Number of new HTML seeds inserted as `content_items` rows by this run. */
 	new_pages?: number | null;
@@ -146,6 +146,8 @@ export interface InventoryRunMeta {
 	new_resources?: number | null;
 	/** Number of input URLs dropped because they fell outside the archived scope. */
 	scope_skipped?: number | null;
+	/** Number of source-file lines dropped by the CLI for failing URL validation, before this row's `total_lines` was counted. `null` for programmatic callers that built the URL list in-memory (no source file to have invalid lines). */
+	invalid_skipped?: number | null;
 	/** Free-form text for backfill annotations or operator notes. */
 	notes?: string | null;
 }

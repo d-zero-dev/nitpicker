@@ -160,7 +160,13 @@ describe('viewerBuild command', () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
-		expect(mockArchiveOpen).toHaveBeenCalledWith({ filePath: '/tmp/existing.nitpicker' });
+		// `openPluginData: true` — otherwise `write()` below would silently
+		// drop any non-`db.sqlite` tar entry (analyze output, a saved
+		// inventory list) from the archive (issue #99 regression guard).
+		expect(mockArchiveOpen).toHaveBeenCalledWith({
+			filePath: '/tmp/existing.nitpicker',
+			openPluginData: true,
+		});
 	});
 
 	it('calls buildViewerReadModel (forced rebuild) when --force is passed', async () => {

@@ -11,7 +11,7 @@ import type { CrawlerError, PageData } from './utils/types/types.js';
  * documented per-property rather than scattered across the two emit sites.
  */
 export interface InventoryRunAggregates {
-	/** Total non-empty lines in the input list (= `inventoryUrls.length` before any filtering). Stored verbatim as `inventory_runs.total_lines`. */
+	/** `inventoryUrls.length` as received by `CrawlerOrchestrator.inventory` — the CLI (`inventoryCrawl`) has already warned-and-dropped unparseable-URL lines before this point, so this counts valid URLs, not raw source-file lines. Stored verbatim as `inventory_runs.total_lines`. */
 	inventoryUrlsCount: number;
 	/** Number of novel URLs classified as HTML and queued for render. Stored as `new_pages` (excludes anchor-discovered descendants — those add later via the crawler graph and are NOT counted here). */
 	htmlSeedsCount: number;
@@ -33,6 +33,14 @@ export interface InventoryRunAggregates {
 	 * `source_file_sha256` will be `NULL`.
 	 */
 	sourceFileSha256: string | null;
+	/**
+	 * Number of source-file lines the CLI warned-and-dropped for failing
+	 * URL validation, before `inventoryUrlsCount` was ever counted. Stored
+	 * verbatim as `inventory_runs.invalid_skipped`. `null` for programmatic
+	 * callers that built `inventoryUrls` in-memory — there is no source
+	 * file, so no line was ever dropped as invalid.
+	 */
+	invalidSkipped: number | null;
 }
 
 /**

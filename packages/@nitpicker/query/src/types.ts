@@ -309,9 +309,9 @@ export interface InventoryRunEntry {
 	ran_at: string;
 	/** Human-readable label (auto-generated as `inventory-${ran_at}` when the CLI did not supply one). */
 	list_label: string | null;
-	/** SHA-256 hex digest of the source file at run time. `null` if hashing failed. */
+	/** SHA-256 hex digest of the source file. `null` for programmatic callers that built the URL list in-memory (no source file to hash). */
 	source_file_sha256: string | null;
-	/** Number of non-empty lines in the input list. */
+	/** Number of valid URLs in the input list, after the CLI warned-and-dropped unparseable-URL lines but before scope filtering. */
 	total_lines: number | null;
 	/** Number of newly-inserted `pages` rows produced by this run. */
 	new_pages: number | null;
@@ -319,6 +319,8 @@ export interface InventoryRunEntry {
 	new_resources: number | null;
 	/** Number of input URLs dropped because they fell outside the archived scope. */
 	scope_skipped: number | null;
+	/** Number of source-file lines the CLI warned-and-dropped for failing URL validation. `null` for programmatic callers that built the URL list in-memory. */
+	invalid_skipped: number | null;
 	/** Free-form annotation from a backfill or manual `INSERT`. */
 	notes: string | null;
 }
