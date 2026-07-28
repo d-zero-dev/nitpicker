@@ -309,6 +309,54 @@ export const toolDefinitions: Tool[] = [
 		},
 	},
 	{
+		name: 'list_console_logs',
+		description:
+			'List distinct console messages / page errors captured during the crawl, aggregated across every page they occurred on. Each entry reports pageCount (distinct pages) and totalCount (total occurrences) — the same message logged by a shared framework on many pages collapses to one entry. Filter by type (e.g. "error", "warn", "pageerror" for uncaught exceptions). Use for finding site-wide JS errors.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				type: {
+					type: 'string',
+					description:
+						'Filter by console message type (e.g. "log", "warn", "error", "pageerror" for uncaught exceptions)',
+				},
+				sortBy: {
+					type: 'string',
+					enum: ['totalCount', 'pageCount', 'text', 'type'],
+					description: 'Sort field (default: totalCount)',
+				},
+				sortOrder: {
+					type: 'string',
+					enum: ['asc', 'desc'],
+					description: 'Sort direction (default: desc)',
+				},
+				limit: { type: 'number', description: 'Max results (default: 100)' },
+				offset: { type: 'number', description: 'Results to skip (default: 0)' },
+			},
+			required: ['archiveId'],
+		},
+	},
+	{
+		name: 'get_page_console_logs',
+		description:
+			'Get every console message / page error captured for a single page, in capture order. Includes args, source location, and stack trace (for "pageerror" entries).',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				url: { type: 'string', description: 'The page URL' },
+			},
+			required: ['archiveId', 'url'],
+		},
+	},
+	{
 		name: 'find_duplicates',
 		description:
 			'Find pages with identical title or description. Detects SEO issues where multiple pages share the same metadata. Use for deduplication audits.',

@@ -23,18 +23,19 @@ stdio トランスポートで起動し、`.nitpicker` アーカイブを開い�
 
 ## 主なツール
 
-| ツール            | 説明                                         |
-| ----------------- | -------------------------------------------- |
-| `open_archive`    | `.nitpicker` ファイルを開き、archiveIdを返す |
-| `close_archive`   | アーカイブを閉じる                           |
-| `get_summary`     | サイト全体の概要統計                         |
-| `list_pages`      | ページ一覧                                   |
-| `get_page_detail` | 指定ページの詳細                             |
-| `get_page_html`   | HTMLスナップショット                         |
-| `list_links`      | リンク一覧                                   |
-| `list_resources`  | リソース一覧                                 |
-| `list_images`     | 画像一覧                                     |
-| `get_violations`  | 分析プラグインの違反結果                     |
+| ツール              | 説明                                                              |
+| ------------------- | ----------------------------------------------------------------- |
+| `open_archive`      | `.nitpicker` ファイルを開き、archiveIdを返す                      |
+| `close_archive`     | アーカイブを閉じる                                                |
+| `get_summary`       | サイト全体の概要統計                                              |
+| `list_pages`        | ページ一覧                                                        |
+| `get_page_detail`   | 指定ページの詳細                                                  |
+| `get_page_html`     | HTMLスナップショット                                              |
+| `list_links`        | リンク一覧                                                        |
+| `list_resources`    | リソース一覧                                                      |
+| `list_images`       | 画像一覧                                                          |
+| `get_violations`    | 分析プラグインの違反結果                                          |
+| `list_console_logs` | 捕捉したconsoleログ・ページエラー（内容ごとに全ページ横断で集約） |
 
 ## 関連リンク
 

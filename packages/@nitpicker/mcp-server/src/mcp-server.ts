@@ -14,6 +14,7 @@ import {
 	getImagesFastPath,
 	getIsolatedClusterFastPath,
 	getMismatchesFastPath,
+	getPageConsoleLogs,
 	getPageDetail,
 	getPageHtml,
 	getPageJsonLd,
@@ -24,6 +25,7 @@ import {
 	getSummaryFastPath,
 	getTagInventory,
 	getViolations,
+	listConsoleLogs,
 	listIsolatedClustersFastPath,
 	listIsolatedPagesFastPath,
 	listLinks,
@@ -314,6 +316,32 @@ export function createServer() {
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
 							}),
+						);
+					}
+					case 'list_console_logs': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await listConsoleLogs(accessor, {
+								type: optionalString(args, 'type'),
+								sortBy: optionalString(args, 'sortBy') as
+									| 'totalCount'
+									| 'pageCount'
+									| 'text'
+									| 'type'
+									| undefined,
+								sortOrder: optionalString(args, 'sortOrder') as
+									| 'asc'
+									| 'desc'
+									| undefined,
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
+					}
+					case 'get_page_console_logs': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await getPageConsoleLogs(accessor, requireString(args, 'url')),
 						);
 					}
 					case 'find_duplicates': {

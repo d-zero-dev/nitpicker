@@ -239,6 +239,20 @@ describe('createServer', () => {
 			src: 'https://example.com/style.css',
 		});
 
+		await archive.setConsoleLogs(
+			'https://example.com',
+			[],
+			[
+				{
+					pageUrl: 'https://example.com',
+					type: 'error',
+					text: 'boom',
+					args: [],
+					ts: 1,
+				},
+			],
+		);
+
 		await archive.write();
 		await archive.close();
 
@@ -250,9 +264,9 @@ describe('createServer', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('ListTools で29個のツールが返される', async () => {
+	it('ListTools で31個のツールが返される', async () => {
 		const result = await listTools(server);
-		expect(result.tools).toHaveLength(29);
+		expect(result.tools).toHaveLength(31);
 		const names = result.tools.map((t) => t.name);
 		expect(names).toContain('open_archive');
 		expect(names).toContain('close_archive');
@@ -271,6 +285,8 @@ describe('createServer', () => {
 		expect(names).toContain('list_isolated_pages');
 		expect(names).toContain('list_unused_resources');
 		expect(names).toContain('list_network_outages');
+		expect(names).toContain('list_console_logs');
+		expect(names).toContain('get_page_console_logs');
 	});
 
 	it('toolDefinitions の数と ListTools の数が一致する', async () => {
@@ -308,6 +324,50 @@ describe('createServer', () => {
 		expect(result.isError).toBeUndefined();
 		const data = JSON.parse(result.content[0]!.text);
 		expect(data).toEqual({ items: [], total: 0 });
+	});
+
+	it('list_console_logs で捕捉した console ログを集約して取得する', async () => {
+		const result = await callTool(server, 'list_console_logs', { archiveId });
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.total).toBe(1);
+		expect(data.items[0]).toMatchObject({
+			type: 'error',
+			text: 'boom',
+			pageCount: 1,
+			totalCount: 1,
+		});
+	});
+
+	it('list_console_logs は type でフィルタできる', async () => {
+		const result = await callTool(server, 'list_console_logs', {
+			archiveId,
+			type: 'warn',
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data).toEqual({ items: [], total: 0 });
+	});
+
+	it('get_page_console_logs で単一ページの console ログを取得する', async () => {
+		const result = await callTool(server, 'get_page_console_logs', {
+			archiveId,
+			url: 'https://example.com',
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data).toEqual([
+			{
+				type: 'error',
+				text: 'boom',
+				args: null,
+				locationUrl: null,
+				locationLine: null,
+				locationColumn: null,
+				stack: null,
+				ts: 1,
+			},
+		]);
 	});
 
 	it('list_pages で全ページをリストする', async () => {
