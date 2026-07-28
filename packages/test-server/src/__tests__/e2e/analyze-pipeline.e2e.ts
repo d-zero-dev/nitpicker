@@ -73,4 +73,51 @@ describe('Analyze pipeline (crawl → write → analyze)', () => {
 		expect(analyzedUrls.length).toBeGreaterThan(0);
 		expect(analyzedUrls).toContain(`http://localhost:${TEST_SERVER_PORT}/meta/full`);
 	});
+
+	it('analyze 結果が --append による再クロール後も失われない（openPluginData 回帰テスト、issue #99）', async () => {
+		// 回帰対象: `Archive.open` を `openPluginData: true` なしで呼ぶと
+		// `db.sqlite` 以外の tar エントリ（analyze の `setData` 出力）が
+		// tmpDir に展開されず、その状態で `write()` すると黙って消える。
+		//
+		// beforeAll の analyze はメモリ上の tmpDir に `analysis/report` を
+		// 書くのみで、この時点ではまだ `filePath` の tar 本体に永続化されて
+		// いない（他のテストは同じ tmpDir から直接 getData するため、
+		// これまで `.nitpicker` への書き戻しは不要だった）。この回帰
+		// テストが要求する前提条件そのものなので、このテストで初めて
+		// write() し、tar 本体に反映させる。このテストが本ファイル最後の
+		// it() であることに依存する（以降 nitpicker.archive の tmpDir を
+		// 読む他テストはない）。
+		await nitpicker.archive.write();
+
+		// 別 cwd を使うのは、beforeAll で開いたままの `nitpicker.archive`
+		// が保持するロックと衝突させないため（同じ .nitpicker ファイルに
+		// 対する 2 本目の writer-mode open）。
+		const appendCwd = `${cwd}-append`;
+		await fs.mkdir(appendCwd, { recursive: true });
+		try {
+			const orchestrator = await CrawlerOrchestrator.append(
+				filePath,
+				[`http://localhost:${TEST_SERVER_PORT}/meta/`],
+				{ cwd: appendCwd, recursive: false },
+			);
+			await orchestrator.write();
+			await orchestrator.archive.close();
+			orchestrator.garbageCollect();
+
+			const reopened = await Archive.open({
+				filePath,
+				cwd: appendCwd,
+				openPluginData: true,
+			});
+			try {
+				const report = await reopened.getData<Report>('analysis/report');
+				expect(report).toBeDefined();
+				expect(report.pageData).toBeDefined();
+			} finally {
+				await reopened.close();
+			}
+		} finally {
+			await fs.rm(appendCwd, { recursive: true, force: true });
+		}
+	});
 });
