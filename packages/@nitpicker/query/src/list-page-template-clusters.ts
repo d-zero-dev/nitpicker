@@ -3,19 +3,20 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { eachSplitted } from '@nitpicker/crawler';
 
-import { collectPageStylesheetUrlsByPageId } from './collect-page-stylesheet-urls-by-page-id.js';
-import { computeCssIntersection } from './compute-css-intersection.js';
 import { computeDirectoryDistribution } from './compute-directory-distribution.js';
 import { computeStylesheetFileNames } from './compute-stylesheet-file-names.js';
 import { hasPageTemplatesTable } from './page-templates-join.js';
+import { readClusterReasonsByTemplateKey } from './read-cluster-reasons-by-template-key.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
 
 /**
  * Lists every `page_templates.template_key` cluster with a human-facing
- * summary (page count, top directories by page count, common stylesheet
- * set) computed fresh from the cluster's actual member pages — see
- * {@link TemplateClusterSummary} for why that's necessary (the raw key
- * itself is not human-readable).
+ * summary — page count and top directories computed fresh from the
+ * cluster's actual member pages, plus the `ClusterReason`
+ * `@d-zero/page-cluster` reported when it classified the cluster (read back
+ * from `page_template_cluster_reasons`, `null` when absent) — see
+ * {@link TemplateClusterSummary} for why the raw key itself is not
+ * human-readable on its own.
  *
  * **JOIN-order pitfall this function must avoid — verified against a real
  * 486,000-page archive:** resolving `page_templates.page_id` to a URL via a
@@ -23,8 +24,8 @@ import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
  * query planner pick a full scan of `url_refs` (1.57M rows on that archive)
  * as the outer loop instead of starting from `page_templates`'s much smaller
  * row set — 12s on that archive. Chunking `page_id` into `whereIn` value
- * lists (this function's approach, matching `collect-page-stylesheet-urls*`'s
- * existing pattern) keeps the planner on `content_items`'s `PRIMARY KEY`
+ * lists (this function's approach, matching `eachSplitted`'s use elsewhere
+ * in this package) keeps the planner on `content_items`'s `PRIMARY KEY`
  * search instead — 0.03s on the same archive. `ANALYZE` is forbidden
  * archive-wide (see ARCHITECTURE.md), so this is not something a statistics
  * hint can fix — the query shape itself has to avoid the pitfall.
@@ -90,10 +91,10 @@ export async function listPageTemplateClusters(
 	}
 
 	const urlByPageId = new Map<number, string>();
-	// The two queries below touch disjoint table sets (content_items/url_refs
-	// vs resource_items/resource_ref_edges) and neither depends on the
-	// other's result, so they run concurrently rather than back-to-back.
-	const [, stylesheetsByPageId] = await Promise.all([
+	// The two operations below touch disjoint table sets (content_items/url_refs
+	// vs page_template_cluster_reasons) and neither depends on the other's
+	// result, so they run concurrently rather than back-to-back.
+	const [, reasonsByTemplateKey] = await Promise.all([
 		eachSplitted(
 			rows.map((r) => r.pageId),
 			SQLITE_IN_CHUNK,
@@ -107,7 +108,7 @@ export async function listPageTemplateClusters(
 				}
 			},
 		),
-		collectPageStylesheetUrlsByPageId(accessor),
+		readClusterReasonsByTemplateKey(knex),
 	]);
 
 	const clusters: TemplateClusterSummary[] = [];
@@ -115,14 +116,16 @@ export async function listPageTemplateClusters(
 		const urls = pageIds
 			.map((id) => urlByPageId.get(id))
 			.filter((url): url is string => url != null);
-		const cssUrlsByPage = pageIds.map((id) => stylesheetsByPageId.get(id) ?? []);
-		const commonStylesheetUrls = computeCssIntersection(cssUrlsByPage);
+		const reason = reasonsByTemplateKey.get(templateKey) ?? null;
+		const cssHrefs = (reason?.blocking ?? []).flatMap((entry) =>
+			entry.reason.kind === 'css' ? entry.reason.distinctiveStylesheetHrefs : [],
+		);
 		clusters.push({
 			templateKey,
 			pageCount: pageIds.length,
 			commonDirectories: computeDirectoryDistribution(urls),
-			commonStylesheetUrls,
-			commonStylesheetFileNames: computeStylesheetFileNames(commonStylesheetUrls),
+			commonStylesheetFileNames: computeStylesheetFileNames(cssHrefs),
+			reason,
 		});
 	}
 

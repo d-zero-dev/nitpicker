@@ -517,6 +517,7 @@ describe('listPages: templateKey（page_templates の LEFT JOIN）', () => {
 
 		await archive.replacePageTemplates(
 			new Map([['https://example.com/classified', 'template-a']]),
+			new Map(),
 		);
 	});
 
