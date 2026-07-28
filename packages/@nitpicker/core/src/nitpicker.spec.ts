@@ -636,9 +636,26 @@ describe('analyze', () => {
 
 	it('calls replacePageTemplates with the classified template keys when classifyTemplates is enabled', async () => {
 		const pages = [createMockPage('https://example.com/')];
-		mockedClassifyPageTemplates.mockResolvedValue(
-			new Map([['https://example.com/', 'template-a']]),
-		);
+		// A non-empty `clusterReasons` here (not just `templateKeysByUrl`) —
+		// an empty Map on both sides would make the `toHaveBeenCalledWith`
+		// assertion below pass even if `nitpicker.ts` forwarded a hardcoded
+		// `new Map()` instead of the real `clusterReasons` value.
+		const clusterReasons = new Map([
+			[
+				'template-a',
+				{
+					memberCount: 1,
+					blocking: [{ blockKey: 'path:x', reason: { kind: 'path', pathKey: 'x' } }],
+					structuralCoreTokens: [],
+					landmarks: {},
+					siblingClusterKeys: [],
+				},
+			],
+		]);
+		mockedClassifyPageTemplates.mockResolvedValue({
+			templateKeysByUrl: new Map([['https://example.com/', 'template-a']]),
+			clusterReasons,
+		});
 
 		const { nitpicker, archive } = setupAnalyze(pages, [], []);
 		await nitpicker.analyze(undefined, { classifyTemplates: true });
@@ -646,6 +663,7 @@ describe('analyze', () => {
 		expect(classifyPageTemplates).toHaveBeenCalledTimes(1);
 		expect(archive.replacePageTemplates).toHaveBeenCalledWith(
 			new Map([['https://example.com/', 'template-a']]),
+			clusterReasons,
 		);
 
 		// `templateKey` is only ever persisted via `replacePageTemplates`,
@@ -674,9 +692,10 @@ describe('analyze', () => {
 
 	it("a zero-plugin run (--templates alone) does not wipe a previous run's report/violations", async () => {
 		const pages = [createMockPage('https://example.com/')];
-		mockedClassifyPageTemplates.mockResolvedValue(
-			new Map([['https://example.com/', 'template-a']]),
-		);
+		mockedClassifyPageTemplates.mockResolvedValue({
+			templateKeysByUrl: new Map([['https://example.com/', 'template-a']]),
+			clusterReasons: new Map(),
+		});
 		const previousReport: Report = {
 			name: 'general',
 			pageData: {
@@ -700,6 +719,7 @@ describe('analyze', () => {
 		});
 		expect(archive.replacePageTemplates).toHaveBeenCalledWith(
 			new Map([['https://example.com/', 'template-a']]),
+			new Map(),
 		);
 
 		// No plugin ran, so violations from a previous run are never touched.
@@ -708,7 +728,10 @@ describe('analyze', () => {
 
 	it('a missing previous analysis/report (ENOENT) is silent, but a corrupted one emits an error', async () => {
 		const pages = [createMockPage('https://example.com/')];
-		mockedClassifyPageTemplates.mockResolvedValue(new Map());
+		mockedClassifyPageTemplates.mockResolvedValue({
+			templateKeysByUrl: new Map(),
+			clusterReasons: new Map(),
+		});
 
 		const { nitpicker: freshRun } = setupAnalyze(pages, [], []);
 		const freshErrorHandler = vi.fn();
@@ -796,14 +819,20 @@ describe('analyze', () => {
 
 	it('forwards onProgress to classifyPageTemplates only when lanes is provided', async () => {
 		const pages = [createMockPage('https://example.com/')];
-		mockedClassifyPageTemplates.mockResolvedValue(new Map());
+		mockedClassifyPageTemplates.mockResolvedValue({
+			templateKeysByUrl: new Map(),
+			clusterReasons: new Map(),
+		});
 
 		const { nitpicker: withoutLanes } = setupAnalyze(pages, [], []);
 		await withoutLanes.analyze(undefined, { classifyTemplates: true });
 		expect(mockedClassifyPageTemplates.mock.calls[0]![0].onProgress).toBeUndefined();
 
 		mockedClassifyPageTemplates.mockReset();
-		mockedClassifyPageTemplates.mockResolvedValue(new Map());
+		mockedClassifyPageTemplates.mockResolvedValue({
+			templateKeysByUrl: new Map(),
+			clusterReasons: new Map(),
+		});
 		const mockLanes = { update: vi.fn(), header: vi.fn() };
 		const { nitpicker: withLanes } = setupAnalyze(pages, [], []);
 		await withLanes.analyze(undefined, {
@@ -825,7 +854,7 @@ describe('analyze', () => {
 				blocksProcessed: 3,
 				totalBlocks: 12,
 			});
-			return Promise.resolve(new Map());
+			return Promise.resolve({ templateKeysByUrl: new Map(), clusterReasons: new Map() });
 		});
 
 		const { nitpicker } = setupAnalyze(pages, [], []);

@@ -562,14 +562,19 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 		// phase's outcome.
 		if (templateClassificationLaneId != null) {
 			try {
-				const templateKeys = await classifyPageTemplates({
+				const { templateKeysByUrl, clusterReasons } = await classifyPageTemplates({
 					archive: this.archive,
 					pages: accumulatedPages,
-					// Only worth paying for when there's a lane to update —
-					// passing a defined callback at all (even a no-op one)
-					// demotes `resolvePageClusterKeys` off its byte-identical,
-					// yield-overhead-free sync path for corpora at or below its
-					// inline threshold (see @d-zero/page-cluster's own docs).
+					// Silently a no-op below @d-zero/page-cluster's
+					// CORPUS_INLINE_THRESHOLD (20,000 pages) regardless of
+					// whether `lanes` is provided: `classifyPageTemplates`
+					// always sets `onClusterReason` now (to collect
+					// `clusterReasons` below), and that option unconditionally
+					// forces the small-corpus branch onto `resolvePageClusterKeysInMemory`,
+					// which never emits progress events — see `onClusterReason`'s
+					// and `onProgress`'s own JSDoc on `ResolvePageClusterKeysOptions`.
+					// Still worth wiring for the streaming path (>20,000 pages),
+					// where progress events are unaffected.
 					onProgress: lanes
 						? (event) => {
 								lanes.update(
@@ -579,12 +584,12 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 							}
 						: undefined,
 				});
-				if (templateKeys.size > 0) {
-					await this.archive.replacePageTemplates(templateKeys);
+				if (templateKeysByUrl.size > 0) {
+					await this.archive.replacePageTemplates(templateKeysByUrl, clusterReasons);
 				}
 				lanes?.update(
 					templateClassificationLaneId,
-					c.green(`Template classification: Done (${templateKeys.size} pages)`),
+					c.green(`Template classification: Done (${templateKeysByUrl.size} pages)`),
 				);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
