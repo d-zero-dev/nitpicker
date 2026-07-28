@@ -5328,6 +5328,7 @@ describe('inventory run audit log', () => {
 				new_pages: 1234,
 				new_resources: 56,
 				scope_skipped: 7,
+				invalid_skipped: 12,
 				notes: 'first prod run',
 			});
 			expect(typeof id).toBe('number');
@@ -5345,6 +5346,7 @@ describe('inventory run audit log', () => {
 					'new_pages',
 					'new_resources',
 					'scope_skipped',
+					'invalid_skipped',
 					'notes',
 				)
 				.where('id', id);
@@ -5357,6 +5359,7 @@ describe('inventory run audit log', () => {
 				new_pages: 1234,
 				new_resources: 56,
 				scope_skipped: 7,
+				invalid_skipped: 12,
 				notes: 'first prod run',
 			});
 		} finally {
@@ -5385,6 +5388,7 @@ describe('inventory run audit log', () => {
 			expect(row.new_pages).toBeNull();
 			expect(row.new_resources).toBeNull();
 			expect(row.scope_skipped).toBeNull();
+			expect(row.invalid_skipped).toBeNull();
 			expect(row.notes).toBeNull();
 		} finally {
 			await db.destroy();

@@ -21,19 +21,24 @@ import { dbLog, log, saveLog } from './debug.js';
 import { appendText } from './filesystem/append-text.js';
 import { exists } from './filesystem/exists.js';
 import { isDir } from './filesystem/is-dir.js';
+import { outputBinary } from './filesystem/output-binary.js';
 import { peekTarTopDir } from './filesystem/peek-tar-top-dir.js';
 import { remove } from './filesystem/remove.js';
 import { rename } from './filesystem/rename.js';
 import { tar } from './filesystem/tar.js';
 import { untar } from './filesystem/untar.js';
+import { safePath } from './safe-path.js';
 
 /**
  * Main archive class for creating, opening, resuming, and writing Nitpicker
  * archive files (`.nitpicker`).
  *
- * An Archive wraps a single SQLite database into a tar archive. HTML
- * bodies live inside the same DB as zstd-compressed BLOBs (see #75) — the
- * tar payload is effectively just `db.sqlite`. It extends
+ * An Archive wraps a SQLite database into a tar archive. HTML bodies live
+ * inside the same DB as zstd-compressed BLOBs (see #75), so `db.sqlite` is
+ * normally the tar's only entry — but it is not the only entry the format
+ * allows: {@link ArchiveAccessor.setData} (namespace-scoped analyze output)
+ * and {@link Archive.saveInventorySourceList} (a saved `--inventory`
+ * source list) add plain files alongside it. It extends
  * {@link ArchiveAccessor} to provide read access to stored data.
  *
  * Use the static factory methods ({@link Archive.create}, {@link Archive.open},
@@ -408,6 +413,36 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.resetFailedPages();
 	}
 	/**
+	 * Persists the raw bytes of an `--inventory` source URL list into the
+	 * archive's tar payload, at `inventory/<sha256>.txt`.
+	 *
+	 * The file name is the content hash rather than the original file name:
+	 * re-applying the same list is then a no-op write (`fs.writeFile`
+	 * overwrites identical bytes), and the original name — which may embed a
+	 * client/project identifier — is never retained (the archive already
+	 * omits the source file's absolute path for the same reason; see
+	 * `CrawlerOrchestrator.inventory`'s `source` param).
+	 *
+	 * This bypasses the namespace-scoped {@link ArchiveAccessor.setData} API
+	 * (that one is reserved for analyze plugins and requires a namespace) —
+	 * this always lands under the fixed `inventory/` prefix regardless of
+	 * how this accessor was constructed. Callers that need to read the
+	 * saved list back can use the inherited `getData(`inventory/${sha256}`,
+	 * 'txt')`, since it resolves to the same path when no namespace is set.
+	 *
+	 * No entry is ever removed here — same accepted gap as `page_html_blobs`
+	 * (a future #23 GC pass will sweep unreachable hashes across both). A
+	 * source list that differs byte-for-byte on every run (e.g. a
+	 * regenerated doc-root export with fresh timestamps) adds one entry per
+	 * run with no pruning of superseded ones.
+	 * @param sha256 - Lower-case hex SHA-256 digest of `bytes` (used as the file name).
+	 * @param bytes - The exact bytes of the source list file, written verbatim.
+	 */
+	async saveInventorySourceList(sha256: string, bytes: Buffer): Promise<void> {
+		const filePath = safePath(this.tmpDir, 'inventory', `${sha256}.txt`);
+		await outputBinary(filePath, bytes);
+	}
+	/**
 	 * Stores the crawl configuration into the archive database.
 	 * @param config - The configuration object to store.
 	 */
@@ -508,10 +543,17 @@ export default class Archive extends ArchiveAccessor {
 	 *
 	 * Checkpoints the SQLite WAL so the database is self-contained inside
 	 * `db.sqlite`, renames the temporary working directory to the archive's
-	 * basename, and tars it into the final `.nitpicker`. The tar container
-	 * holds a single `db.sqlite` file (the legacy `snapshot-html.zip` is gone
-	 * — HTML lives as BLOBs in the DB), so finalisation is effectively a
-	 * single-file copy with no per-snapshot syscalls.
+	 * basename, and tars the **entire tmpDir**. `db.sqlite` is normally the
+	 * only entry (HTML lives as BLOBs in the DB, not a `snapshot-html.zip`),
+	 * but a namespace-scoped `setData` write (analyze output) or
+	 * `saveInventorySourceList` (a saved `--inventory` source list) adds
+	 * extra files under tmpDir that get tarred right alongside it.
+	 *
+	 * This is why every writer path that reaches `write()` must open with
+	 * `openPluginData: true` — `Archive.open`'s default extracts only
+	 * `db.sqlite`, so a re-crawl (`append` / `inventory` / `retryFailed`)
+	 * opened without it would tar back a tmpDir missing those extra files,
+	 * silently dropping them from the rewritten archive.
 	 */
 	async write() {
 		saveLog('Starts: %s', this.#filePath);
@@ -876,6 +918,18 @@ type ArchiveOptions = {
  * Additional options for opening an existing archive.
  */
 type ArchiveOpenOptions = {
-	/** When true, extracts all files including plugin data. When false, only extracts the database and snapshots. */
+	/**
+	 * When `false` (the default), only `db.sqlite` is extracted into tmpDir.
+	 * When `true`, every tar entry is extracted, including non-namespace
+	 * files written via {@link ArchiveAccessor.setData} (analyze output) or
+	 * {@link Archive.saveInventorySourceList} (a saved `--inventory` source
+	 * list).
+	 *
+	 * Every writer path that later calls {@link Archive.write} MUST pass
+	 * `true`: `write()` re-tars whatever is currently in tmpDir, so a
+	 * re-crawl (`append` / `inventory` / `retryFailed`) opened with the
+	 * default would tar back a tmpDir missing those extra files, silently
+	 * dropping them from the rewritten archive.
+	 */
 	openPluginData?: boolean;
 };

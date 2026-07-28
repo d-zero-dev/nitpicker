@@ -574,9 +574,17 @@ describe('CrawlerOrchestrator.append', () => {
 		).rejects.toThrow('stop-here');
 
 		expect(openSpy).toHaveBeenCalledOnce();
-		const openArg = openSpy.mock.calls[0]![0] as { filePath: string; cwd: string };
+		const openArg = openSpy.mock.calls[0]![0] as {
+			filePath: string;
+			cwd: string;
+			openPluginData?: boolean;
+		};
 		expect(openArg.filePath).toBe('/tmp/test-cwd/existing.nitpicker');
 		expect(openArg.cwd).toBe('/tmp/test-cwd');
+		// `openPluginData: true` — otherwise a re-write would silently drop
+		// any non-`db.sqlite` tar entry (analyze output, a saved inventory
+		// list) from the archive (issue #99 regression guard).
+		expect(openArg.openPluginData).toBe(true);
 	});
 
 	it('passes an absolute archive path through unchanged', async () => {
@@ -601,8 +609,12 @@ describe('CrawlerOrchestrator.append', () => {
 			),
 		).rejects.toThrow('stop-here');
 
-		const openArg = openSpy.mock.calls[0]![0] as { filePath: string };
+		const openArg = openSpy.mock.calls[0]![0] as {
+			filePath: string;
+			openPluginData?: boolean;
+		};
 		expect(openArg.filePath).toBe('/abs/path/existing.nitpicker');
+		expect(openArg.openPluginData).toBe(true);
 	});
 });
 
@@ -853,6 +865,9 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 		expect(meta.new_pages).toBe(0);
 		expect(meta.new_resources).toBe(4);
 		expect(meta.scope_skipped).toBe(0);
+		// No `source` was passed (5th arg omitted) — there is no source file
+		// to have had invalid lines, so this must be NULL, not 0.
+		expect(meta.invalid_skipped).toBeNull();
 		expect(meta.list_label).toMatch(/^inventory-/);
 	});
 
@@ -1010,5 +1025,271 @@ describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => 
 		expect(fakeArchive.getScrapedHtmlPageCount).toHaveBeenCalledTimes(1);
 		expect(fakeCrawlerResumeCalls).toHaveLength(1);
 		expect(fakeCrawlerResumeCalls[0]?.pagesScrapedOffset).toBe(140_000);
+	});
+});
+
+describe('CrawlerOrchestrator: openPluginData regression guard (issue #99)', () => {
+	// `Archive.open`'s default extracts only `db.sqlite`; `write()` re-tars
+	// the whole tmpDir, so any writer path that skips `openPluginData: true`
+	// would silently drop non-`db.sqlite` tar entries (analyze output, a
+	// saved inventory list) on the next re-crawl. `append`'s equivalent
+	// assertions live in its own describe block above; these two round out
+	// the other writer paths that call `write()`.
+
+	it('CrawlerOrchestrator.inventory opens the archive with openPluginData: true', async () => {
+		const closeSpy = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			getConfig: vi.fn(() => Promise.reject(new Error('stop-here'))),
+			close: closeSpy,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		const openSpy = vi
+			.spyOn(archiveModule.default, 'open')
+			.mockResolvedValueOnce(fakeArchive);
+
+		await expect(
+			CrawlerOrchestrator.inventory('./existing.nitpicker', ['https://example.com/'], {
+				cwd: '/tmp/test-cwd',
+			}),
+		).rejects.toThrow('stop-here');
+
+		expect(openSpy).toHaveBeenCalledOnce();
+		const openArg = openSpy.mock.calls[0]![0] as { openPluginData?: boolean };
+		expect(openArg.openPluginData).toBe(true);
+	});
+
+	it('CrawlerOrchestrator.retryFailed opens the archive with openPluginData: true', async () => {
+		const closeSpy = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			getConfig: vi.fn(() => Promise.reject(new Error('stop-here'))),
+			close: closeSpy,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		const openSpy = vi
+			.spyOn(archiveModule.default, 'open')
+			.mockResolvedValueOnce(fakeArchive);
+
+		await expect(
+			CrawlerOrchestrator.retryFailed('./existing.nitpicker', {
+				cwd: '/tmp/test-cwd',
+			}),
+		).rejects.toThrow('stop-here');
+
+		expect(openSpy).toHaveBeenCalledOnce();
+		const openArg = openSpy.mock.calls[0]![0] as { openPluginData?: boolean };
+		expect(openArg.openPluginData).toBe(true);
+	});
+});
+
+describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () => {
+	/**
+	 * Builds a fake archive stubbed for the no-op early-return path (every
+	 * candidate URL already known → `novelUrls.length === 0`), with
+	 * `saveInventorySourceList` spied so tests can assert whether/how it
+	 * was called.
+	 * @returns The fake archive and its `saveInventorySourceList` spy.
+	 */
+	function setupNoopFakeArchive() {
+		const saveInventorySourceList = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+				}),
+			),
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			getExistingPageUrls: vi.fn(() =>
+				Promise.resolve(['https://example.com/already-known']),
+			),
+			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+			saveInventorySourceList,
+		} as unknown as Archive;
+		return { fakeArchive, saveInventorySourceList };
+	}
+
+	it('archives the exact source bytes even when every URL resolves to the no-op early return', async () => {
+		// The no-op early return (`novelUrls.length === 0`) skips the `.bak`
+		// window and the audit-row write entirely — but a run that discarded
+		// every URL (all already known, or all out of scope) is exactly the
+		// case an operator most needs a recoverable copy of what was fed in.
+		// `saveInventorySourceList` must run before that early return, not
+		// only on the ingestion happy path.
+		const { fakeArchive, saveInventorySourceList } = setupNoopFakeArchive();
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		const bytes = Buffer.from('https://example.com/already-known\n');
+		await CrawlerOrchestrator.inventory(
+			'fixture.nitpicker',
+			['https://example.com/already-known'],
+			{ cwd: '/tmp/inventory-source-archive-noop-test' },
+			undefined,
+			{ sha256: 'deadbeef', bytes, invalidLineCount: 0 },
+		);
+
+		expect(saveInventorySourceList).toHaveBeenCalledExactlyOnceWith('deadbeef', bytes);
+	});
+
+	it('does not call saveInventorySourceList when no source was given', async () => {
+		// Programmatic callers that built `inventoryUrls` in-memory (no
+		// backing file) pass `source: null` — there is nothing to archive.
+		const { fakeArchive, saveInventorySourceList } = setupNoopFakeArchive();
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		await CrawlerOrchestrator.inventory(
+			'fixture.nitpicker',
+			['https://example.com/already-known'],
+			{ cwd: '/tmp/inventory-source-archive-null-test' },
+		);
+
+		expect(saveInventorySourceList).not.toHaveBeenCalled();
+	});
+
+	it("records the audit row's source_file_sha256 as NULL when no source was given", async () => {
+		const saveInventorySourceList = vi.fn(() => Promise.resolve());
+		const recordInventoryRun = vi.fn(() => Promise.resolve(1));
+		const fakeArchive = {
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+				}),
+			),
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			getExistingPageUrls: vi.fn(() => Promise.resolve([])),
+			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+			setResources: vi.fn(() => Promise.resolve()),
+			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventoryResources: vi.fn(() => Promise.resolve()),
+			addError: vi.fn(() => Promise.resolve()),
+			recordInventoryRun,
+			saveInventorySourceList,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		const testCwd = path.resolve('/tmp/inventory-source-sha-null-test');
+		await fs.mkdir(testCwd, { recursive: true });
+		const fixturePath = path.join(testCwd, 'fixture.nitpicker');
+		await fs.writeFile(fixturePath, '');
+
+		try {
+			await CrawlerOrchestrator.inventory(
+				'fixture.nitpicker',
+				['https://example.com/orphan.pdf'],
+				{ cwd: testCwd },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(saveInventorySourceList).not.toHaveBeenCalled();
+		const [meta] = recordInventoryRun.mock.calls[0]!;
+		expect(meta.source_file_sha256).toBeNull();
+		expect(meta.total_lines).toBe(1);
+	});
+
+	it("records the audit row's invalid_skipped from source.invalidLineCount (issue #99)", async () => {
+		const saveInventorySourceList = vi.fn(() => Promise.resolve());
+		const recordInventoryRun = vi.fn(() => Promise.resolve(1));
+		const fakeArchive = {
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+				}),
+			),
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			getExistingPageUrls: vi.fn(() => Promise.resolve([])),
+			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+			setResources: vi.fn(() => Promise.resolve()),
+			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventoryResources: vi.fn(() => Promise.resolve()),
+			addError: vi.fn(() => Promise.resolve()),
+			recordInventoryRun,
+			saveInventorySourceList,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		const testCwd = path.resolve('/tmp/inventory-invalid-skipped-test');
+		await fs.mkdir(testCwd, { recursive: true });
+		const fixturePath = path.join(testCwd, 'fixture.nitpicker');
+		await fs.writeFile(fixturePath, '');
+
+		try {
+			await CrawlerOrchestrator.inventory(
+				'fixture.nitpicker',
+				['https://example.com/orphan.pdf'],
+				{ cwd: testCwd },
+				undefined,
+				{ sha256: 'cafef00d', bytes: Buffer.from('x'), invalidLineCount: 12 },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		const [meta] = recordInventoryRun.mock.calls[0]!;
+		expect(meta.invalid_skipped).toBe(12);
 	});
 });

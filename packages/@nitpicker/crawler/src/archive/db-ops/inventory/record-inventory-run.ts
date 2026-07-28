@@ -33,6 +33,7 @@ export async function recordInventoryRun(
 			new_pages: meta.new_pages ?? null,
 			new_resources: meta.new_resources ?? null,
 			scope_skipped: meta.scope_skipped ?? null,
+			invalid_skipped: meta.invalid_skipped ?? null,
 			notes: meta.notes ?? null,
 		})
 		.returning('id');

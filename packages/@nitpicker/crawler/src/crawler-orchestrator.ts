@@ -140,6 +140,21 @@ type CrawlInitializedCallback = (
 ) => void | Promise<void>;
 
 /**
+ * The CLI's already-read `--inventory` source list, passed to
+ * {@link CrawlerOrchestrator.inventory} instead of a file path — see that
+ * method's `source` param for why the path itself never crosses this
+ * boundary.
+ */
+interface InventorySource {
+	/** Lower-case hex SHA-256 digest of `bytes` (`computeFileSha256(bytes)`). */
+	sha256: string;
+	/** The exact bytes of the source list file, archived verbatim. */
+	bytes: Buffer;
+	/** Number of source-file lines the CLI warned-and-dropped for failing URL validation, before `inventoryUrls` was ever built. Recorded on the audit row as `inventory_runs.invalid_skipped`. */
+	invalidLineCount: number;
+}
+
+/**
  * The main entry point for Nitpicker web crawling and archiving.
  *
  * CrawlerOrchestrator orchestrates the full lifecycle of a crawl session: it creates an archive,
@@ -624,7 +639,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			? archivePath
 			: path.resolve(cwd, archivePath);
 
-		const archive = await Archive.open({ filePath: absFilePath, cwd });
+		// See `ArchiveOpenOptions.openPluginData` for why this must be `true`
+		// on every writer path that calls `write()`.
+		const archive = await Archive.open({
+			filePath: absFilePath,
+			cwd,
+			openPluginData: true,
+		});
 		// Any throw between here and the successful return must release the
 		// archive lock and clean up tmpDir; the caller's `close()` only runs on
 		// the happy path. Errors from `close()` itself are intentionally
@@ -725,22 +746,29 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * 3. Reject archives with unfinished `pending` URLs — those would inherit
 	 *    the inventory `source` label by mistake. Operator must resume /
 	 *    retry-failed first.
-	 * 4. Parse the URL list. Anything outside the archived scope is warned
-	 *    and skipped (inventory is per-server by design).
-	 * 5. Subtract URLs that already exist in `pages` or `resources` so the
+	 * 4. If `source` is given, archive its exact bytes under
+	 *    `inventory/<sha256>.txt` (see {@link Archive.saveInventorySourceList}).
+	 *    Done before scope classification so even a run that discards every
+	 *    URL (out of scope or already known) still leaves a recoverable
+	 *    copy of what was fed in.
+	 * 5. Parse the URL list — the CLI has already warned-and-dropped
+	 *    unparseable-URL lines before calling this method, so every
+	 *    remaining entry parses. Anything outside the archived scope is
+	 *    warned and skipped (inventory is per-server by design).
+	 * 6. Subtract URLs that already exist in `pages` or `resources` so the
 	 *    second (and N-th) inventory pass is a no-op for known rows — keeps
 	 *    `'inventory-seed'` rows from being silently demoted.
-	 * 6. Make `<archive>.bak`. Anything thrown beyond this point restores
+	 * 7. Make `<archive>.bak`. Anything thrown beyond this point restores
 	 *    from the backup.
-	 * 7. HEAD-probe each novel URL. Responses classified as HTML are queued
+	 * 8. HEAD-probe each novel URL. Responses classified as HTML are queued
 	 *    as Crawler seeds (`'inventory-seed'`); everything else is recorded
 	 *    in `resources` directly as `'inventory-seed'` (no browser launch).
-	 * 8. If any HTML seeds exist, start a Crawler with
+	 * 9. If any HTML seeds exist, start a Crawler with
 	 *    `inventoryMode = { seedUrls }` so the rendered page and every newly
 	 *    discovered downstream link is labelled correctly. `resume` is fed
 	 *    the existing `scraped` / `resources` sets so links into already-
 	 *    crawled pages stop at the seen-gate without re-rendering.
-	 * 9. Drop the backup on success; restore it on any throw.
+	 * 10. Drop the backup on success; restore it on any throw.
 	 *
 	 * Mutually exclusive with `--append` / `--retry-failed` / `--resume` /
 	 * `--diff` / `--list` / `--list-file` / `--single` / `--output` — the
@@ -750,16 +778,18 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * @param inventoryUrls - Pre-read URL list (one URL per element).
 	 * @param options - Optional config overrides — most callers leave this blank and let the archived config flow through.
 	 * @param initializedCallback - Hook invoked once the orchestrator is constructed but before `crawling` runs (the CLI uses it to attach progress reporting).
-	 * @param sourceFileSha256 - **Pre-computed** SHA-256 hex digest of the
-	 *   source URL list. The orchestrator deliberately does NOT receive
-	 *   the file path: the path is privacy-sensitive (leaks user-home /
-	 *   OS structure when archives are shared) and we want it lifted off
-	 *   this boundary so no future log line / breadcrumb / error message
-	 *   inside the orchestrator can accidentally re-leak it. The CLI
-	 *   computes the digest via `computeFileSha256(resolvedListFile)`
-	 *   and passes it through here. Pass `null` for programmatic
-	 *   callers that built `inventoryUrls` in-memory; the audit row's
-	 *   `source_file_sha256` column will be `NULL`.
+	 * @param source - The CLI's already-read source list, as `{ sha256, bytes }`.
+	 *   The orchestrator deliberately does NOT receive the file path: the
+	 *   path is privacy-sensitive (leaks user-home / OS structure when
+	 *   archives are shared) and we want it lifted off this boundary so no
+	 *   future log line / breadcrumb / error message inside the orchestrator
+	 *   can accidentally re-leak it. `bytes` is archived verbatim under
+	 *   `inventory/<sha256>.txt` (see {@link Archive.saveInventorySourceList})
+	 *   before scope classification, so a later `--inventory` run against
+	 *   the same list is an audit no-op even when it discards zero new
+	 *   URLs. Pass `null` for programmatic callers that built
+	 *   `inventoryUrls` in-memory; the audit row's `source_file_sha256`
+	 *   column will be `NULL` and no source list is archived.
 	 * @returns The orchestrator instance after a successful inventory pass.
 	 * @throws {Error} When `inventoryUrls` is empty, the archive is in list mode, or pending URLs from a previous crawl remain unresolved.
 	 */
@@ -768,7 +798,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		inventoryUrls: string[],
 		options?: Partial<CrawlConfig>,
 		initializedCallback?: CrawlInitializedCallback,
-		sourceFileSha256: string | null = null,
+		source: InventorySource | null = null,
 	) {
 		if (inventoryUrls.length === 0) {
 			throw new Error('inventory: URL list is empty');
@@ -778,7 +808,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			? archivePath
 			: path.resolve(cwd, archivePath);
 
-		const archive = await Archive.open({ filePath: absFilePath, cwd });
+		// See `ArchiveOpenOptions.openPluginData` for why this must be `true`
+		// on every writer path that calls `write()`.
+		const archive = await Archive.open({
+			filePath: absFilePath,
+			cwd,
+			openPluginData: true,
+		});
 		try {
 			const archived = await archive.getConfig();
 			if (archived.fromList) {
@@ -804,6 +840,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				console.warn(
 					`inventory: archive has ${pending.length} pending URLs from a previous crawl. Proceeding — crawled-wins priority keeps their labels stable. Consider \`--resume\` first if you want the prior work finalized.`,
 				);
+			}
+
+			// Archive the exact source bytes before scope classification, so
+			// even a run that discards every URL (out-of-scope or already
+			// known — see `novelUrls.length === 0` below) still leaves a
+			// recoverable copy of what was fed in. Content-hash-named, so a
+			// second `--inventory` pass with the same list is a no-op write.
+			if (source) {
+				await archive.saveInventorySourceList(source.sha256, source.bytes);
 			}
 
 			// Parse + scope-classify the candidate URLs. sortUrl drops
@@ -974,7 +1019,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					htmlSeedsCount: htmlSeeds.length,
 					nonHtmlCount: nonHtmlSeeds.length,
 					outOfScope,
-					sourceFileSha256,
+					sourceFileSha256: source?.sha256 ?? null,
+					invalidSkipped: source?.invalidLineCount ?? null,
 				});
 				// Ingestion's DB writes are now committed. From here on a
 				// throw must NOT trigger the `.bak` restore (it would wipe
@@ -1143,7 +1189,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			? archivePath
 			: path.resolve(cwd, archivePath);
 
-		const archive = await Archive.open({ filePath: absFilePath, cwd });
+		// See `ArchiveOpenOptions.openPluginData` for why this must be `true`
+		// on every writer path that calls `write()`.
+		const archive = await Archive.open({
+			filePath: absFilePath,
+			cwd,
+			openPluginData: true,
+		});
 		// Any throw between here and the successful return must release the
 		// archive lock and clean up tmpDir; the caller's `close()` only runs on
 		// the happy path.
@@ -1296,10 +1348,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * no `--label` flag, so this is always the auto form.
 	 * `source_file_sha256` arrives pre-computed via
 	 * `aggregates.sourceFileSha256` (the CLI's `inventoryCrawl` ran
-	 * `computeFileSha256` against the input txt before the orchestrator
-	 * was even invoked). The orchestrator boundary deliberately never sees
-	 * the absolute path — see {@link InventoryRunAggregates} for the
-	 * privacy rationale.
+	 * `computeFileSha256` against the bytes it read from the input txt,
+	 * before the orchestrator was even invoked). The orchestrator boundary
+	 * deliberately never sees the absolute path — see
+	 * {@link InventoryRunAggregates} for the privacy rationale.
 	 *
 	 * **Audit-write failures abort the ingestion phase.** Swallowing them
 	 * would only be justified if the audit were the last write after the
@@ -1329,6 +1381,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			new_pages: aggregates.htmlSeedsCount,
 			new_resources: aggregates.nonHtmlCount,
 			scope_skipped: aggregates.outOfScope,
+			invalid_skipped: aggregates.invalidSkipped,
 		});
 	}
 
