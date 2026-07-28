@@ -56,6 +56,7 @@ export const PAGE_LIST_COLUMNS: readonly string[] = [
 	'main_content_canvas_count',
 	'scroll_height_desktop',
 	'scroll_height_mobile',
+	'console_error_count',
 	'firstCrawledAt',
 	'lastCrawledAt',
 ];
@@ -132,6 +133,7 @@ export const PAGE_LIST_SELECT_COLUMNS: readonly string[] = [
 	'pm.main_content_canvas_count as main_content_canvas_count',
 	'pm.scroll_height_desktop as scroll_height_desktop',
 	'pm.scroll_height_mobile as scroll_height_mobile',
+	'pm.console_error_count as console_error_count',
 	'ci.first_crawled_at as firstCrawledAt',
 	'ci.last_crawled_at as lastCrawledAt',
 ];
@@ -201,6 +203,7 @@ export function mapPageRowToListItem(row: PageListRow): PageListItem {
 		mainContentCanvasCount: row.main_content_canvas_count,
 		scrollHeightDesktop: row.scroll_height_desktop,
 		scrollHeightMobile: row.scroll_height_mobile,
+		consoleErrorCount: row.console_error_count,
 		firstCrawledAt: row.firstCrawledAt,
 		lastCrawledAt: row.lastCrawledAt,
 		hasCSP: !!row.hasCSP,

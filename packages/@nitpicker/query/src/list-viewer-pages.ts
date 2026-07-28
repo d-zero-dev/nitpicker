@@ -103,7 +103,8 @@ async function buildCursorPaginatedResult(
 			| 'mainContentAudioCount'
 			| 'mainContentCanvasCount'
 			| 'scrollHeightDesktop'
-			| 'scrollHeightMobile';
+			| 'scrollHeightMobile'
+			| 'consoleErrorCount';
 		sortOrder: 'asc' | 'desc';
 		total: number;
 		facets: PageListFacets;

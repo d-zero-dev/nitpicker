@@ -507,6 +507,18 @@ export interface SummaryResult {
 	 * clear after `crawl --retry-failed`".
 	 */
 	networkOutageAffectedFailures: number;
+	/**
+	 * Total `page_console_logs` occurrence counts (not distinct-message
+	 * counts — the same message logged on 500 pages contributes 500, not 1)
+	 * of `pageerror` / `error` / `warn` console log entries across the whole
+	 * archive (issue #228). `log` / `debug` / `info` / other types are
+	 * captured but not surfaced here — the viewer treats those as noise for
+	 * a dashboard-level badge, though they remain queryable via
+	 * `listConsoleLogs`. Always all-zero on an archive that predates this
+	 * feature or has never been re-opened by a writer since (the tables are
+	 * absent, not merely empty).
+	 */
+	consoleLogCounts: { pageerror: number; error: number; warn: number };
 }
 
 /**
@@ -679,7 +691,8 @@ export interface ListPagesOptions {
 		| 'mainContentAudioCount'
 		| 'mainContentCanvasCount'
 		| 'scrollHeightDesktop'
-		| 'scrollHeightMobile';
+		| 'scrollHeightMobile'
+		| 'consoleErrorCount';
 	/** Sort direction. */
 	sortOrder?: SortOrder;
 	/** Maximum number of results to return. Defaults to 100. */
@@ -744,6 +757,7 @@ export interface PageListRow {
 	main_content_canvas_count: number | null;
 	scroll_height_desktop: number | null;
 	scroll_height_mobile: number | null;
+	console_error_count: number | null;
 	firstCrawledAt: number | null;
 	lastCrawledAt: number | null;
 	hasCSP: 0 | 1;
@@ -863,6 +877,12 @@ export interface PageListItem {
 	scrollHeightDesktop: number | null;
 	/** `document.body.scrollHeight` at the mobile-small preset (denormalised). */
 	scrollHeightMobile: number | null;
+	/**
+	 * Count of `pageerror`+`error` console log occurrences on this page
+	 * (denormalised, issue #228), or `null` on a page that predates the
+	 * feature / has never been re-scraped since.
+	 */
+	consoleErrorCount: number | null;
 	/** First-discovery UNIX ms (within-archive). */
 	firstCrawledAt: number | null;
 	/** Most-recent-success UNIX ms (within-archive). */
@@ -985,7 +1005,8 @@ export interface ListViewerPagesOptions {
 		| 'mainContentAudioCount'
 		| 'mainContentCanvasCount'
 		| 'scrollHeightDesktop'
-		| 'scrollHeightMobile';
+		| 'scrollHeightMobile'
+		| 'consoleErrorCount';
 	/** Sort direction. Defaults to `'asc'`. */
 	sortOrder?: 'asc' | 'desc';
 	/** Maximum number of results to return. Defaults to 100. */
@@ -1222,6 +1243,12 @@ export interface PageDetail {
 	redirectFrom: string[];
 	/** URLs merged into this page via URL-normalization equivalence (`content_items.alias_of_id`). */
 	aliasUrls: string[];
+	/**
+	 * Console messages / page errors captured on this page (issue #228),
+	 * in capture order. Empty on an archive that predates the feature or
+	 * has never been re-scraped since — see {@link import('./get-page-console-logs.js').getPageConsoleLogs}.
+	 */
+	consoleLogs: PageConsoleLogEntry[];
 }
 
 /**
@@ -2898,4 +2925,69 @@ export interface TemplateClusterListResult {
 	hasClassification: boolean;
 	/** Empty when `hasClassification` is `false`. */
 	clusters: TemplateClusterSummary[];
+}
+
+/**
+ * One distinct console message / page error, aggregated across every page
+ * it occurred on — see
+ * {@link import('./list-console-logs.js').listConsoleLogs}.
+ */
+export interface ConsoleLogSummaryEntry {
+	/** `console_log_items.id`. */
+	consoleLogId: number;
+	/** The console message type, or `'pageerror'` for an uncaught exception. */
+	type: string;
+	/** The message text, or the error's `message` for `pageerror` entries. */
+	text: string;
+	/** Source file URL the message was logged from, or `null` if unavailable. */
+	locationUrl: string | null;
+	/** Source line number, or `null` if unavailable. */
+	locationLine: number | null;
+	/** Distinct pages this message occurred on. */
+	pageCount: number;
+	/** Total occurrences across every page (a page may log the same message more than once). */
+	totalCount: number;
+}
+
+/**
+ * Options for {@link import('./list-console-logs.js').listConsoleLogs}.
+ */
+export interface ListConsoleLogsOptions {
+	/** Filter to one console message type (or `'pageerror'`). */
+	type?: string;
+	/** Field to sort results by. Defaults to `'totalCount'`. */
+	sortBy?: 'totalCount' | 'pageCount' | 'text' | 'type';
+	/** Sort direction. Defaults to `'desc'`. */
+	sortOrder?: SortOrder;
+	/** Maximum number of results. Defaults to 100. */
+	limit?: number;
+	/** Number of results to skip. Defaults to 0. */
+	offset?: number;
+}
+
+/**
+ * One page occurrence of a console message / page error — see
+ * {@link import('./get-page-console-logs.js').getPageConsoleLogs}.
+ */
+export interface PageConsoleLogEntry {
+	/** The console message type, or `'pageerror'` for an uncaught exception. */
+	type: string;
+	/** The message text, or the error's `message` for `pageerror` entries. */
+	text: string;
+	/**
+	 * Arguments passed to the console call, decoded from `json_refs`, or
+	 * `null` when there were no arguments or the payload could not be
+	 * decoded.
+	 */
+	args: unknown[] | null;
+	/** Source file URL the message was logged from, or `null` if unavailable. */
+	locationUrl: string | null;
+	/** Source line number, or `null` if unavailable. */
+	locationLine: number | null;
+	/** Source column number, or `null` if unavailable. */
+	locationColumn: number | null;
+	/** Stack trace text, present only for `pageerror` entries. */
+	stack: string | null;
+	/** Epoch ms this occurrence was captured. */
+	ts: number;
 }

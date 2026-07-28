@@ -1,6 +1,11 @@
 import type { GetViolationsOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { resolveListLimit } from './resolve-list-limit.js';
+import { resolveListOffset } from './resolve-list-offset.js';
+import { resolveListSortBy } from './resolve-list-sort-by.js';
+import { resolveListSortOrder } from './resolve-list-sort-order.js';
+
 /**
  * Violation entry returned to viewers and CLI/MCP callers.
  */
@@ -21,8 +26,6 @@ interface ViolationEntry {
 
 /** Default page size when `options.limit` is absent or invalid. */
 const DEFAULT_LIMIT = 100;
-/** Default row offset when `options.offset` is absent or invalid. */
-const DEFAULT_OFFSET = 0;
 
 /** Sort fields accepted by {@link getViolations}. */
 const SORT_BY_VALUES = [
@@ -33,52 +36,6 @@ const SORT_BY_VALUES = [
 	'message',
 	'code',
 ] as const;
-
-/**
- * Normalizes the requested sort field and falls back to `url`.
- * @param sortBy - The requested sort field.
- * @returns A supported sort key.
- */
-function resolveSortBy(
-	sortBy: GetViolationsOptions['sortBy'],
-): (typeof SORT_BY_VALUES)[number] {
-	return SORT_BY_VALUES.includes(sortBy as (typeof SORT_BY_VALUES)[number])
-		? (sortBy as (typeof SORT_BY_VALUES)[number])
-		: 'url';
-}
-
-/**
- * Normalizes the requested sort direction and falls back to `asc`.
- * @param sortOrder - The requested sort direction.
- * @returns A supported sort direction.
- */
-function resolveSortOrder(sortOrder: GetViolationsOptions['sortOrder']): 'asc' | 'desc' {
-	return sortOrder === 'desc' ? 'desc' : 'asc';
-}
-
-/**
- * Normalizes the requested page size and falls back to the default when the
- * caller passes a negative, non-integer, or non-finite value.
- * @param limit - The requested page size.
- * @returns A safe limit for the SQL query.
- */
-function resolveLimit(limit: GetViolationsOptions['limit']): number {
-	return Number.isInteger(limit) && (limit as number) >= 0
-		? (limit as number)
-		: DEFAULT_LIMIT;
-}
-
-/**
- * Normalizes the requested offset and falls back to `0` when the caller passes
- * a negative, non-integer, or non-finite value.
- * @param offset - The requested row offset.
- * @returns A safe offset for the SQL query.
- */
-function resolveOffset(offset: GetViolationsOptions['offset']): number {
-	return Number.isInteger(offset) && (offset as number) >= 0
-		? (offset as number)
-		: DEFAULT_OFFSET;
-}
 
 /**
  * Retrieves analysis violations from the SQL read path.
@@ -104,10 +61,10 @@ export async function getViolations(
 	options: GetViolationsOptions = {},
 ): Promise<{ items: ViolationEntry[]; total: number }> {
 	const knex = accessor.getKnex();
-	const limit = resolveLimit(options.limit);
-	const offset = resolveOffset(options.offset);
-	const sortBy = resolveSortBy(options.sortBy);
-	const sortOrder = resolveSortOrder(options.sortOrder);
+	const limit = resolveListLimit(options.limit, DEFAULT_LIMIT);
+	const offset = resolveListOffset(options.offset);
+	const sortBy = resolveListSortBy(options.sortBy, SORT_BY_VALUES, 'url');
+	const sortOrder = resolveListSortOrder(options.sortOrder, 'asc');
 
 	const filtered = knex('analysis_violations as v');
 	if (options.validator) filtered.where('v.validator', options.validator);

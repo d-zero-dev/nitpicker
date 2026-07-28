@@ -132,6 +132,27 @@ describe('getPageDetail', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+
+		await archive.setConsoleLogs(
+			'https://example.com/about',
+			[],
+			[
+				{
+					pageUrl: 'https://example.com/about',
+					type: 'error',
+					text: 'boom',
+					args: [],
+					ts: 1,
+				},
+				{
+					pageUrl: 'https://example.com/about',
+					type: 'log',
+					text: 'loaded',
+					args: [],
+					ts: 2,
+				},
+			],
+		);
 	});
 
 	afterAll(async () => {
@@ -201,6 +222,19 @@ describe('getPageDetail', () => {
 	it('存在しないページは null を返す', async () => {
 		const result = await getPageDetail(archive, 'https://example.com/nonexistent');
 		expect(result).toBeNull();
+	});
+
+	it('captured console logs are returned in ts order (issue #228)', async () => {
+		const result = await getPageDetail(archive, 'https://example.com/about');
+		expect(result!.consoleLogs.map((e) => ({ type: e.type, text: e.text }))).toEqual([
+			{ type: 'error', text: 'boom' },
+			{ type: 'log', text: 'loaded' },
+		]);
+	});
+
+	it('a page with no console logs returns an empty array', async () => {
+		const result = await getPageDetail(archive, 'https://example.com');
+		expect(result!.consoleLogs).toEqual([]);
 	});
 
 	it('page_templates に行がないページは templateKey が null になる', async () => {

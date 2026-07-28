@@ -24,7 +24,8 @@ export interface ExpectedViewerPagesCursor {
 		| 'mainContentAudioCount'
 		| 'mainContentCanvasCount'
 		| 'scrollHeightDesktop'
-		| 'scrollHeightMobile';
+		| 'scrollHeightMobile'
+		| 'consoleErrorCount';
 	/** The current request's sort direction. */
 	sortOrder: 'asc' | 'desc';
 	/**

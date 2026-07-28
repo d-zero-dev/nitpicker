@@ -96,6 +96,12 @@ interface PagesSourceRow {
 	scroll_height_desktop: number | null;
 	/** Denormalised mobile-small scroll height, or `null` when unrendered. */
 	scroll_height_mobile: number | null;
+	/**
+	 * Denormalised `pageerror`+`error` console log occurrence count (issue
+	 * #228), or `null` on a page that predates the feature / has never been
+	 * re-scraped since.
+	 */
+	console_error_count: number | null;
 	/** Provenance label — see {@link PageSource}. Always non-null (`NOT NULL DEFAULT 'crawled'` in `init-schema.ts`). */
 	source: PageSource;
 	/**
@@ -173,6 +179,8 @@ interface ViewerPageInsertRow {
 	scroll_height_desktop: number;
 	/** `PagesSourceRow.scroll_height_mobile`, defaulted to `0` when `null`. */
 	scroll_height_mobile: number;
+	/** `PagesSourceRow.console_error_count`, defaulted to `0` when `null`. */
+	console_error_count: number;
 	/**
 	 * Case-preserving sort key for URL ordering — currently just `url`
 	 * verbatim, matching `listPages`'s plain `ORDER BY url` (SQLite's
@@ -266,6 +274,7 @@ function toViewerPageInsertRow(
 		main_content_canvas_count: row.main_content_canvas_count ?? 0,
 		scroll_height_desktop: row.scroll_height_desktop ?? 0,
 		scroll_height_mobile: row.scroll_height_mobile ?? 0,
+		console_error_count: row.console_error_count ?? 0,
 		url_sort_key: row.url,
 		title_sort_key: row.title ?? '',
 		path_sort_key: derivePathSortKey(row.url),
@@ -502,6 +511,7 @@ export async function buildViewerReadModel(
 				'pm.main_content_canvas_count as main_content_canvas_count',
 				'pm.scroll_height_desktop as scroll_height_desktop',
 				'pm.scroll_height_mobile as scroll_height_mobile',
+				'pm.console_error_count as console_error_count',
 				'pm.lang as lang',
 			);
 
@@ -753,6 +763,7 @@ export async function buildViewerReadModel(
 			content_type_json: JSON.stringify(summary.contentTypeDistribution),
 			metadata_json: JSON.stringify(summary.metadataFulfillment),
 			network_outage_affected_failures: summary.networkOutageAffectedFailures,
+			console_json: JSON.stringify(summary.consoleLogCounts),
 		});
 
 		// Normalises the `getErrorKinds` snapshot taken before this
