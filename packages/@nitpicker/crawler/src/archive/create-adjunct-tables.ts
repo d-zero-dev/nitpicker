@@ -22,6 +22,9 @@ import type { Knex } from 'knex';
  * - `page_templates` — DOM-structure template classification (`--templates`,
  *   `@nitpicker/core`'s `template-classification/`), one row per classified
  *   page, FK → `content_items(id)`
+ * - `page_template_cluster_reasons` — the `ClusterReason` `@d-zero/page-cluster`
+ *   reports for each `page_templates.template_key` cluster (natural key, no
+ *   FK — `template_key` is a cluster-scoped blocking key, not a page)
  * - `page_html_blobs` + `page_html_ref` — content-addressable HTML
  *   snapshots, FK → `content_items(id)`
  * - `console_log_items` — content-addressable dictionary of distinct
@@ -418,6 +421,24 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 			CREATE TABLE page_templates (
 				page_id      INTEGER PRIMARY KEY REFERENCES content_items(id),
 				template_key TEXT NOT NULL
+			) WITHOUT ROWID
+		`);
+	}
+
+	// `ClusterReason` is sized by cluster count, not page count (one row per
+	// distinct `template_key`, not per page like `page_templates` above) —
+	// storing it there instead would duplicate the same JSON across every
+	// member page's row. No FK: `template_key` is `@d-zero/page-cluster`'s
+	// opaque blocking key, not a reference to another table's row.
+	if (!(await instance.schema.hasTable('page_template_cluster_reasons'))) {
+		await instance.raw(`
+			CREATE TABLE page_template_cluster_reasons (
+				template_key           TEXT PRIMARY KEY,
+				member_count           INTEGER NOT NULL,
+				blocking               TEXT NOT NULL,
+				structural_core_tokens TEXT NOT NULL,
+				landmarks              TEXT NOT NULL,
+				sibling_cluster_keys   TEXT NOT NULL
 			) WITHOUT ROWID
 		`);
 	}

@@ -29,9 +29,15 @@ describe('replacePageTemplates', () => {
 		await db.destroy();
 	});
 
+	const NO_REASONS = new Map();
+
 	it('resolves page URLs to content_items ids and persists rows', async () => {
 		const pageId = await seedContentItem(db, 'https://example.com/');
-		await replacePageTemplates(db, new Map([['https://example.com/', 'template-a']]));
+		await replacePageTemplates(
+			db,
+			new Map([['https://example.com/', 'template-a']]),
+			NO_REASONS,
+		);
 
 		const rows = await db('page_templates').select('*');
 		expect(rows).toEqual([{ page_id: pageId, template_key: 'template-a' }]);
@@ -46,8 +52,13 @@ describe('replacePageTemplates', () => {
 				['https://example.com/', 'template-a'],
 				['https://example.com/a', 'template-b'],
 			]),
+			NO_REASONS,
 		);
-		await replacePageTemplates(db, new Map([['https://example.com/', 'template-a']]));
+		await replacePageTemplates(
+			db,
+			new Map([['https://example.com/', 'template-a']]),
+			NO_REASONS,
+		);
 
 		const rows = await db('page_templates').select('*');
 		expect(rows).toHaveLength(1);
@@ -55,8 +66,12 @@ describe('replacePageTemplates', () => {
 
 	it('clears all rows when given an empty map', async () => {
 		await seedContentItem(db, 'https://example.com/');
-		await replacePageTemplates(db, new Map([['https://example.com/', 'template-a']]));
-		await replacePageTemplates(db, new Map());
+		await replacePageTemplates(
+			db,
+			new Map([['https://example.com/', 'template-a']]),
+			NO_REASONS,
+		);
+		await replacePageTemplates(db, new Map(), NO_REASONS);
 
 		expect(await db('page_templates').select('*')).toEqual([]);
 	});
@@ -69,6 +84,7 @@ describe('replacePageTemplates', () => {
 				['https://example.com/', 'template-a'],
 				['https://example.com/missing', 'template-b'],
 			]),
+			NO_REASONS,
 		);
 
 		const rows = await db('page_templates').select('*');
@@ -84,8 +100,39 @@ describe('replacePageTemplates', () => {
 		await replacePageTemplates(
 			db,
 			new Map([['https://example.com/style.css', 'template-a']]),
+			NO_REASONS,
 		);
 
 		expect(await db('page_templates').select('*')).toEqual([]);
+	});
+
+	it('persists cluster reasons and replaces them on the next run instead of appending', async () => {
+		await seedContentItem(db, 'https://example.com/');
+		const reason = {
+			memberCount: 1,
+			blocking: [
+				{ blockKey: 'css:abc', reason: { kind: 'css', distinctiveStylesheetHrefs: [] } },
+			],
+			structuralCoreTokens: ['token-a'],
+			landmarks: {},
+			siblingClusterKeys: [],
+		};
+		await replacePageTemplates(
+			db,
+			new Map([['https://example.com/', 'template-a']]),
+			new Map([['template-a', reason]]),
+		);
+
+		const rows = await db('page_template_cluster_reasons').select('*');
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.template_key).toBe('template-a');
+		expect(rows[0]?.member_count).toBe(1);
+		expect(JSON.parse(rows[0]?.blocking as string)).toEqual(reason.blocking);
+		expect(JSON.parse(rows[0]?.structural_core_tokens as string)).toEqual(
+			reason.structuralCoreTokens,
+		);
+
+		await replacePageTemplates(db, new Map(), NO_REASONS);
+		expect(await db('page_template_cluster_reasons').select('*')).toEqual([]);
 	});
 });
