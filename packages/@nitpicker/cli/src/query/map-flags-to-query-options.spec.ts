@@ -325,4 +325,48 @@ describe('mapFlagsToQueryOptions', () => {
 			offset: 0,
 		});
 	});
+
+	it('maps console-logs flags correctly', () => {
+		expect(
+			mapFlagsToQueryOptions('console-logs', {
+				type: 'error',
+				sortBy: 'totalCount',
+				sortOrder: 'desc',
+				limit: 20,
+				offset: 0,
+			}),
+		).toEqual({
+			type: 'error',
+			sortBy: 'totalCount',
+			sortOrder: 'desc',
+			limit: 20,
+			offset: 0,
+		});
+	});
+
+	it('rejects an invalid console-logs --sortBy value', () => {
+		expect(() => mapFlagsToQueryOptions('console-logs', { sortBy: 'bogus' })).toThrow(
+			/Invalid --sortBy value/,
+		);
+	});
+
+	it('rejects an invalid console-logs --sortOrder value', () => {
+		expect(() => mapFlagsToQueryOptions('console-logs', { sortOrder: 'bogus' })).toThrow(
+			/Invalid --sortOrder value/,
+		);
+	});
+
+	it('maps page-console-logs flags correctly', () => {
+		expect(
+			mapFlagsToQueryOptions('page-console-logs', { url: 'https://example.com' }),
+		).toEqual({
+			url: 'https://example.com',
+		});
+	});
+
+	it('page-console-logs requires --url', () => {
+		expect(() => mapFlagsToQueryOptions('page-console-logs', {})).toThrow(
+			'--url is required for the page-console-logs sub-command.',
+		);
+	});
 });

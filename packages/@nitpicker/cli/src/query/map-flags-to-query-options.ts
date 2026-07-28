@@ -284,6 +284,34 @@ export function mapFlagsToQueryOptions(
 			}
 			return { representativeUrl: flags.representativeUrl };
 		}
+		case 'console-logs': {
+			if (
+				flags.sortBy != null &&
+				!['totalCount', 'pageCount', 'text', 'type'].includes(flags.sortBy)
+			) {
+				throw new Error(
+					`Invalid --sortBy value: ${flags.sortBy}. Must be one of: totalCount, pageCount, text, type`,
+				);
+			}
+			if (flags.sortOrder != null && !['asc', 'desc'].includes(flags.sortOrder)) {
+				throw new Error(
+					`Invalid --sortOrder value: ${flags.sortOrder}. Must be one of: asc, desc`,
+				);
+			}
+			return {
+				type: flags.type,
+				sortBy: flags.sortBy as 'totalCount' | 'pageCount' | 'text' | 'type' | undefined,
+				sortOrder: flags.sortOrder as 'asc' | 'desc' | undefined,
+				limit: flags.limit,
+				offset: flags.offset,
+			};
+		}
+		case 'page-console-logs': {
+			if (!flags.url) {
+				throw new Error('--url is required for the page-console-logs sub-command.');
+			}
+			return { url: flags.url };
+		}
 		default: {
 			const _exhaustive: never = subCommand;
 			throw new Error(`Unknown sub-command: ${String(_exhaustive)}`);
