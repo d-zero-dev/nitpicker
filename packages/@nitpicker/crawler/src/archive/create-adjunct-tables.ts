@@ -24,6 +24,11 @@ import type { Knex } from 'knex';
  *   page, FK → `content_items(id)`
  * - `page_html_blobs` + `page_html_ref` — content-addressable HTML
  *   snapshots, FK → `content_items(id)`
+ * - `console_log_items` — content-addressable dictionary of distinct
+ *   console messages / page errors (no FK; hash-deduplicated across every
+ *   page in the archive, mirroring `text_refs` / `json_refs`)
+ * - `page_console_logs` — one row per (page, console log) occurrence, FK →
+ *   `content_items(id)` and `console_log_items(id)`
  *
  * The DDL is shared between fresh-archive provisioning ({@link initSchema}
  * calls this right after `createEntityTables`) and the migration script
@@ -442,5 +447,66 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 			) WITHOUT ROWID
 		`);
 		await instance.raw('CREATE INDEX idx_page_html_ref_hash ON page_html_ref(hash)');
+	}
+
+	// Content-addressable dictionary of distinct console messages / page
+	// errors (beholder's `ConsoleLogEntry`, issue #228). `hash` is
+	// SHA-256 over a canonical tuple of every content field (type, text,
+	// args JSON, location, stack) — the same identical warning emitted by
+	// a shared framework on every page therefore collapses to one row
+	// regardless of how many pages or how many times it fires, mirroring
+	// `text_refs` / `json_refs`. `args_json_id` is nullable because a
+	// call with no arguments (or one whose args failed to
+	// `JSON.stringify`, e.g. a circular reference) has nothing to store.
+	// `text_id` is nullable too: `text_refs` never stores the empty
+	// string (its dictionary upsert treats `''` as "nothing to dedupe"),
+	// so a call like `console.log()` with zero arguments — whose
+	// `text` beholder reports as `''` — has no `text_refs` row to point
+	// at; `text_id = NULL` there means "empty text", read back as `''`.
+	// `type` keeps its own index for the Console Logs view's type filter.
+	if (!(await instance.schema.hasTable('console_log_items'))) {
+		await instance.raw(`
+			CREATE TABLE console_log_items (
+				id             INTEGER PRIMARY KEY,
+				hash           BLOB NOT NULL UNIQUE,
+				type           TEXT NOT NULL,
+				text_id        INTEGER REFERENCES text_refs(id),
+				args_json_id   INTEGER REFERENCES json_refs(id),
+				loc_url_id     INTEGER REFERENCES url_refs(id),
+				loc_line       INTEGER,
+				loc_column     INTEGER,
+				stack_text_id  INTEGER REFERENCES text_refs(id)
+			)
+		`);
+		await instance.raw(
+			'CREATE INDEX idx_console_log_items_type ON console_log_items(type)',
+		);
+	}
+
+	// One row per (page, console log) occurrence — beholder captures a
+	// `ts` per firing, so the same message logged 3 times on one page
+	// yields 3 rows (unlike `anchor_edges`' first-wins dedup: an
+	// occurrence count matters here, not just presence). Replaced
+	// wholesale per page on every non-empty scrape by
+	// `replaceConsoleLogs`, the same Scoped-Replace pattern as
+	// `anchor_edges` / `image_items` — there is no natural key to UPDATE
+	// a specific prior occurrence against.
+	if (!(await instance.schema.hasTable('page_console_logs'))) {
+		await instance.schema.createTable('page_console_logs', (t) => {
+			t.increments('id');
+			t.integer('pageId')
+				.notNullable()
+				.unsigned()
+				.references('content_items.id')
+				.onDelete('CASCADE');
+			t.integer('consoleLogId')
+				.notNullable()
+				.unsigned()
+				.references('console_log_items.id');
+			t.integer('ts').notNullable();
+
+			t.index('pageId');
+			t.index('consoleLogId');
+		});
 	}
 }

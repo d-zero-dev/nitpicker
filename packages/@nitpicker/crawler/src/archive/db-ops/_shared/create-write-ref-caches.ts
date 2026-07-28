@@ -23,6 +23,7 @@ export function createWriteRefCaches(): WriteRefCaches {
 		contentTypeIds: new Map(),
 		jsonIds: new Map(),
 		blobIds: new Map(),
+		consoleLogIds: new Map(),
 		headers: null,
 	};
 }

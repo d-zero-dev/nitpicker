@@ -8,6 +8,7 @@ import { migrateInfoRoots } from '../../migrate-info-roots.js';
 import { migrateInventoryRunsInvalidSkipped } from '../../migrate-inventory-runs-invalid-skipped.js';
 import { migrateMainContentsColumns } from '../../migrate-main-contents-columns.js';
 import { migratePageMetaBodyHash } from '../../migrate-page-meta-body-hash.js';
+import { migratePageMetaConsoleErrorCount } from '../../migrate-page-meta-console-error-count.js';
 import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-network-outages.js';
 
 /**
@@ -29,8 +30,8 @@ import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-networ
  * additions to an existing 0.13 table are therefore the one case that still
  * needs an explicit `hasColumn`-guarded `ALTER TABLE` here (`migrateInfoRoots`,
  * `migrateMainContentsColumns`, `migratePageMetaBodyHash`,
- * `migrateContentItemsAliasOfId`, `migrateInventoryRunsInvalidSkipped`)
- * rather than a DDL-string change alone.
+ * `migratePageMetaConsoleErrorCount`, `migrateContentItemsAliasOfId`,
+ * `migrateInventoryRunsInvalidSkipped`) rather than a DDL-string change alone.
  *
  * `closeStaleOpenNetworkOutages` is not a schema migration (no columns
  * change) but belongs at this same boot phase for the same reason the
@@ -66,6 +67,7 @@ export async function init(knex: Knex, readOnly: boolean): Promise<void> {
 	await migrateInfoMainContentSelector(knex);
 	await migrateMainContentsColumns(knex);
 	await migratePageMetaBodyHash(knex);
+	await migratePageMetaConsoleErrorCount(knex);
 	await migrateContentItemsAliasOfId(knex);
 	await migrateInventoryRunsInvalidSkipped(knex);
 	await closeStaleOpenNetworkOutages(knex);

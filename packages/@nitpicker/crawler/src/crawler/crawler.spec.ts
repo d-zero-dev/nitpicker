@@ -1273,6 +1273,7 @@ describe('Crawler', () => {
 					isSkipped: false,
 				},
 				resources: [],
+				consoleLogs: [],
 			});
 
 			const crawler = new Crawler(defaultOptions);
@@ -1440,6 +1441,7 @@ describe('Crawler', () => {
 			).mockResolvedValue({
 				type: 'skipped',
 				resources: [],
+				consoleLogs: [],
 				ignored: {
 					url: parseUrl('https://waf-skip.example.com/page-a.html')!,
 					matchedText: 'excluded-keyword',
@@ -1805,6 +1807,7 @@ describe('Crawler', () => {
 						pageUrl: url.withoutHash,
 					},
 				],
+				consoleLogs: [],
 			});
 
 			const lookupPageSource = vi.fn(() => Promise.resolve('inventory-seed' as const));
@@ -1901,6 +1904,7 @@ describe('Crawler', () => {
 						pageUrl: url.withoutHash,
 					},
 				],
+				consoleLogs: [],
 			});
 
 			const crawler = new Crawler({
@@ -1998,6 +2002,7 @@ describe('Crawler', () => {
 						pageUrl: url.withoutHash,
 					},
 				],
+				consoleLogs: [],
 			});
 
 			const lookupPageSource = vi.fn(() => Promise.resolve());
@@ -2028,6 +2033,155 @@ describe('Crawler', () => {
 			//      page in a live `--inventory` session.
 			expect(responses[0]!.source).toBe('inventory-discovered');
 			expect(lookupPageSource).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('console log capture', () => {
+		it('emits `consoleLogs` with the page URL and redirect chain when entries are captured', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const url = parseUrl('https://example.com/logged-page.html')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url,
+				redirectPaths: [],
+				isTarget: true,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			});
+
+			vi.spyOn(
+				Crawler.prototype as unknown as {
+					_launchBrowserAndScrape: (...args: unknown[]) => Promise<unknown>;
+				},
+				'_launchBrowserAndScrape',
+			).mockResolvedValue({
+				type: 'success',
+				pageData: {
+					url,
+					redirectPaths: ['https://example.com/old-page.html'],
+					isTarget: true,
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					meta: { title: '' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				resources: [],
+				consoleLogs: [
+					{
+						pageUrl: url.withoutHash,
+						type: 'error',
+						text: 'boom',
+						args: [],
+						ts: 1000,
+					},
+				],
+			});
+
+			const crawler = new Crawler(defaultOptions);
+			const consoleLogs: CrawlerEventTypes['consoleLogs'][] = [];
+			crawler.on('consoleLogs', (payload) => {
+				consoleLogs.push(payload);
+			});
+
+			crawler.start([url]);
+
+			await vi.waitFor(() => {
+				expect(consoleLogs).toHaveLength(1);
+			});
+
+			expect(consoleLogs[0]!.pageUrl).toBe(url.withoutHashAndAuth);
+			expect(consoleLogs[0]!.redirectPaths).toEqual([
+				'https://example.com/old-page.html',
+			]);
+			expect(consoleLogs[0]!.entries).toHaveLength(1);
+			expect(consoleLogs[0]!.entries[0]!.text).toBe('boom');
+		});
+
+		it('does not emit `consoleLogs` when the scrape captured no entries', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const url = parseUrl('https://example.com/silent-page.html')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url,
+				redirectPaths: [],
+				isTarget: true,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			});
+
+			vi.spyOn(
+				Crawler.prototype as unknown as {
+					_launchBrowserAndScrape: (...args: unknown[]) => Promise<unknown>;
+				},
+				'_launchBrowserAndScrape',
+			).mockResolvedValue({
+				type: 'success',
+				pageData: {
+					url,
+					redirectPaths: [],
+					isTarget: true,
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					meta: { title: '' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				resources: [],
+				consoleLogs: [],
+			});
+
+			const crawler = new Crawler(defaultOptions);
+			const consoleLogs: CrawlerEventTypes['consoleLogs'][] = [];
+			crawler.on('consoleLogs', (payload) => {
+				consoleLogs.push(payload);
+			});
+			const pages: CrawlerEventTypes['page'][] = [];
+			crawler.on('page', (payload) => {
+				pages.push(payload);
+			});
+
+			crawler.start([url]);
+
+			await vi.waitFor(() => {
+				expect(pages).toHaveLength(1);
+			});
+
+			expect(consoleLogs).toHaveLength(0);
 		});
 	});
 });

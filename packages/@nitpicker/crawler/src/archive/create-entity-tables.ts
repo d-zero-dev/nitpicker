@@ -305,7 +305,8 @@ export async function createEntityTables(instance: Knex): Promise<void> {
 			main_content_canvas_count   INTEGER,
 			scroll_height_desktop       INTEGER,
 			scroll_height_mobile        INTEGER,
-			body_hash                   BLOB
+			body_hash                   BLOB,
+			console_error_count         INTEGER
 		)
 	`);
 	await instance.raw(

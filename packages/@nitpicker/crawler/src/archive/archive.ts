@@ -6,6 +6,7 @@ import type {
 } from './types.js';
 import type { OutageWindow } from '../is-within-outage-window.js';
 import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
+import type { ConsoleLogEntry } from '@d-zero/beholder';
 import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 
 import path from 'node:path';
@@ -451,6 +452,21 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.setConfig(config);
 	}
 	/**
+	 * Replaces one page's captured console messages / page errors in the
+	 * archive database.
+	 * @param pageUrl - The originally-requested URL, normalised (`withoutHashAndAuth` form).
+	 * @param redirectPaths - The redirect chain hops captured during fetch, in order.
+	 * @param entries - The console log entries to persist.
+	 */
+	async setConsoleLogs(
+		pageUrl: string,
+		redirectPaths: readonly string[],
+		entries: readonly ConsoleLogEntry[],
+	) {
+		dbLog('Set console logs: %d entries on %s', entries.length, pageUrl);
+		await this.#db.replaceConsoleLogs(pageUrl, redirectPaths, entries);
+	}
+	/**
 	 * Stores an external page's data in the archive database without storing
 	 * an HTML snapshot. External-page rows carry only metadata (status, title,
 	 * content-type), never a rendered body.
@@ -511,6 +527,7 @@ export default class Archive extends ArchiveAccessor {
 		dbLog("Set resource's referrers: %s on %s", src, url);
 		await this.#db.insertResourceReferrers(src, url);
 	}
+
 	/**
 	 * Marks a page as skipped in the archive database with the given reason.
 	 * @param url - The URL of the page to mark as skipped.

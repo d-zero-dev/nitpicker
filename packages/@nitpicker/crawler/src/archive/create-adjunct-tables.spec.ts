@@ -28,6 +28,8 @@ const ADJUNCT_TABLES = [
 	'analysis_violations',
 	'page_html_blobs',
 	'page_html_ref',
+	'console_log_items',
+	'page_console_logs',
 ] as const;
 
 const CONTENT_ITEMS_FK_TABLES = [
@@ -44,6 +46,7 @@ const CONTENT_ITEMS_FK_TABLES = [
 	'page_main_content_canvases',
 	'analysis_violations',
 	'page_html_ref',
+	'page_console_logs',
 ] as const;
 
 describe('createAdjunctTables', () => {
@@ -139,6 +142,32 @@ describe('createAdjunctTables', () => {
 		const rows = await db('network_outages').select('*');
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.started_at).toBe(100);
+	});
+
+	it('declares console_log_items as a content-addressable dictionary with no content_items FK', async () => {
+		await createAdjunctTables(db);
+		const parents = await fkParentTables(db, 'console_log_items');
+		expect(parents.has('content_items')).toBe(false);
+		expect(await db.schema.hasColumn('console_log_items', 'hash')).toBe(true);
+		expect(await db.schema.hasColumn('console_log_items', 'type')).toBe(true);
+	});
+
+	it('enforces hash uniqueness on console_log_items', async () => {
+		await db.raw('PRAGMA foreign_keys = OFF');
+		await createAdjunctTables(db);
+		await db('text_refs').insert({ id: 1, hash: Buffer.from('h'), text: 'boom' });
+		const hash = Buffer.from('same-hash');
+		await db('console_log_items').insert({ id: 1, hash, type: 'error', text_id: 1 });
+		await expect(
+			db('console_log_items').insert({ id: 2, hash, type: 'warn', text_id: 1 }),
+		).rejects.toThrow(/UNIQUE constraint failed/);
+	});
+
+	it('declares page_console_logs with FKs to content_items and console_log_items', async () => {
+		await createAdjunctTables(db);
+		const parents = await fkParentTables(db, 'page_console_logs');
+		expect(parents.has('content_items')).toBe(true);
+		expect(parents.has('console_log_items')).toBe(true);
 	});
 
 	it('enforces the content_items FK on insert (PRAGMA foreign_keys = ON)', async () => {

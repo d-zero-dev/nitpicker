@@ -9,6 +9,7 @@ import type {
 import type { PageDataWithDomPaths, PageSource } from '../archive/types.js';
 import type {
 	ChangePhaseEvent,
+	ConsoleLogEntry,
 	PageData,
 	ResourceEntry,
 	ScrapeResult,
@@ -438,6 +439,37 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	}
 
 	/**
+	 * Emits captured console messages / page errors for a scrape (issue
+	 * #228), skipping the emit entirely when `entries` is empty.
+	 *
+	 * The empty-skip is deliberate, not an optimization: `replaceConsoleLogs`
+	 * replaces a page's rows wholesale (Scoped-Replace, like
+	 * `anchor_edges` / `image_items`), so emitting on an empty capture would
+	 * wipe out a prior good result on a degraded re-scrape (navigation
+	 * timeout, partial render) that legitimately produced nothing this
+	 * time — the same trade-off `updatePage` documents for anchors/images.
+	 * @param entries - Console log entries captured during the page load.
+	 * @param url - The originally-requested URL (not necessarily the page
+	 *   that ends up holding the content — see `CrawlerEventTypes.consoleLogs`).
+	 * @param redirectPaths - The redirect chain hops captured during fetch,
+	 *   in order. Empty when the scrape produced no `pageData` (a
+	 *   `'skipped'` / `'error'` result).
+	 */
+	#handleConsoleLogs(
+		entries: ConsoleLogEntry[],
+		url: ExURL,
+		redirectPaths: readonly string[],
+	) {
+		if (entries.length === 0) {
+			return;
+		}
+		void this.emit('consoleLogs', {
+			pageUrl: url.withoutHashAndAuth,
+			redirectPaths,
+			entries,
+		});
+	}
+	/**
 	 * Confirm a sliding-window suspect via an active probe, and if
 	 * confirmed, close {@link #networkGate} and start
 	 * {@link #runRecoveryProbeLoop}.
@@ -515,6 +547,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			void this.emit('responseReferrers', payload);
 		}
 	}
+
 	/**
 	 * Dispatches a scrape result to the appropriate handler based on its type.
 	 *
@@ -1067,6 +1100,11 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						this.#handleResult(result, url, enqueue, paginationState, concurrency);
 						const parentSource = await this.#resolveParentSource(url);
 						this.#handleResources(result.resources, parentSource);
+						this.#handleConsoleLogs(
+							result.consoleLogs,
+							url,
+							result.pageData?.redirectPaths ?? [],
+						);
 						log(formatResultSummary(result));
 
 						// Phase errors must be emitted AFTER 'page' / 'externalPage'
@@ -1262,6 +1300,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					type: 'success',
 					pageData: metadataOnly ? { ...pageData, isTarget: false } : pageData,
 					resources: [],
+					consoleLogs: [],
 				};
 			}
 		}
@@ -1400,6 +1439,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				return {
 					type: 'error',
 					resources: [],
+					consoleLogs: [],
 					error: {
 						name: error instanceof Error ? error.name : 'Error',
 						message: errorMessage,
@@ -1413,6 +1453,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			return {
 				type: 'error',
 				resources: [],
+				consoleLogs: [],
 				error: {
 					name: error instanceof Error ? error.name : 'Error',
 					message: errorMessage,
@@ -1464,6 +1505,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						type: 'success',
 						pageData: { ...titleResult, isTarget: false },
 						resources: [],
+						consoleLogs: [],
 					};
 				} catch (error) {
 					crawlerLog('Title GET failed for %s: %O', url.href, error);
@@ -1473,6 +1515,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				type: 'success',
 				pageData: { ...headCheckResult, isTarget: false },
 				resources: [],
+				consoleLogs: [],
 			};
 		}
 
@@ -1485,6 +1528,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				type: 'success',
 				pageData: headCheckResult,
 				resources: [],
+				consoleLogs: [],
 			};
 		}
 
@@ -1939,6 +1983,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			return {
 				type: 'error',
 				resources: [],
+				consoleLogs: [],
 				error: {
 					name: error instanceof Error ? error.name : 'Error',
 					message: error instanceof Error ? error.message : String(error),

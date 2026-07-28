@@ -2,7 +2,7 @@ import type { NetworkProbe } from './probe-network.js';
 import type { PageSource } from '../archive/types.js';
 import type { ErrorKind } from '../types.js';
 import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
-import type { ChangePhaseEvent, ScrapeResult } from '@d-zero/beholder';
+import type { ChangePhaseEvent, ConsoleLogEntry, ScrapeResult } from '@d-zero/beholder';
 import type { ParseURLOptions } from '@d-zero/shared/parse-url';
 
 /**
@@ -371,6 +371,32 @@ export interface CrawlerEventTypes {
 		url: string;
 		/** The URL of the referenced resource (without hash). */
 		src: string;
+	};
+
+	/**
+	 * Emitted once per scrape with the console messages / page errors
+	 * beholder captured for that page (issue #228). Only emitted when
+	 * `entries` is non-empty — see `Crawler#handleConsoleLogs` for why a
+	 * degraded re-scrape that captures nothing must not clear prior good
+	 * data.
+	 */
+	consoleLogs: {
+		/**
+		 * The originally-requested URL, normalised (`withoutHashAndAuth`
+		 * form) — the same identity `updatePage` resolves its redirect
+		 * chain from, NOT necessarily the page that ends up holding the
+		 * content.
+		 */
+		pageUrl: string;
+		/**
+		 * The redirect chain hops captured during fetch, in order. Empty
+		 * when the page was not redirected, or when the scrape produced no
+		 * `pageData` (a `'skipped'` / `'error'` result) and no redirect
+		 * information is available.
+		 */
+		redirectPaths: readonly string[];
+		/** The captured console messages / page errors, in capture order. */
+		entries: ConsoleLogEntry[];
 	};
 
 	/**
