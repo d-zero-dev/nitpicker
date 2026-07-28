@@ -30,6 +30,8 @@
 		// English compounds used in technical commentary
 		"unsuffixed",
 		"greppable",
+		"desync",
+		"lossily",
 
 		// HTML
 		"noarchive",
