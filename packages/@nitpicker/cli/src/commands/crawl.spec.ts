@@ -14,7 +14,7 @@ const mockResume = vi.fn();
 const mockAppend = vi.fn();
 const mockRetryFailed = vi.fn();
 const mockInventory = vi.fn();
-const mockComputeFileSha256 = vi.fn(() => Promise.resolve('d'.repeat(64)));
+const mockComputeFileSha256 = vi.fn(() => 'd'.repeat(64));
 
 vi.mock('@nitpicker/crawler', () => ({
 	CrawlerOrchestrator: {
@@ -55,8 +55,41 @@ vi.mock('../crawl/ensure-viewer-read-model-quietly.js', () => ({
 
 const mockReadList = vi.fn().mockResolvedValue(['https://example.com/from-file']);
 
+/**
+ * Minimal reimplementation of `@d-zero/readtext`'s position-aware list
+ * parser (split → trim → drop blank/`#`-comment lines, tracking 1-origin
+ * line/column), standing in for the real dependency in this suite.
+ * @param text - Raw list-file text to parse.
+ */
+function fakeToListWithPosition(text: string) {
+	const lines = text.split('\n');
+	const items: { value: string; line: number; column: number }[] = [];
+	for (const [index, rawLine] of lines.entries()) {
+		const value = rawLine.trim();
+		if (value.length === 0 || value.startsWith('#')) {
+			continue;
+		}
+		const leadingWhitespaceLength = rawLine.length - rawLine.trimStart().length;
+		items.push({ value, line: index + 1, column: leadingWhitespaceLength + 1 });
+	}
+	return items;
+}
+
+const mockToListWithPosition = vi.fn(fakeToListWithPosition);
+
 vi.mock('@d-zero/readtext/list', () => ({
 	readList: mockReadList,
+	toListWithPosition: mockToListWithPosition,
+}));
+
+const mockReadFile = vi
+	.fn()
+	.mockResolvedValue(Buffer.from('https://example.com/hidden\n'));
+
+vi.mock('node:fs/promises', () => ({
+	default: {
+		readFile: (...args: unknown[]) => mockReadFile(...args),
+	},
 }));
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -802,7 +835,7 @@ describe('crawl', () => {
 
 	it('--inventory フラグでアーカイブと URL リストを CrawlerOrchestrator.inventory に渡す', async () => {
 		const fake = setupFakeOrchestrator();
-		mockReadList.mockResolvedValueOnce(['https://example.com/hidden']);
+		mockReadFile.mockResolvedValueOnce(Buffer.from('https://example.com/hidden\n'));
 		const { crawl } = await import('./crawl.js');
 
 		await crawl(['/tmp/test.nitpicker'], createFlags({ inventory: '/tmp/urls.txt' }));
@@ -812,19 +845,25 @@ describe('crawl', () => {
 			['https://example.com/hidden'],
 			expect.any(Object),
 			expect.any(Function),
-			// 5th arg: the **pre-computed** SHA-256 of the source file.
-			// The CLI hashes the resolved txt at `inventoryCrawl` and
-			// passes the digest to the orchestrator — the absolute path
-			// is deliberately NOT forwarded (privacy: leaks user-home /
-			// OS structure when archives are shared). 64-char hex.
-			expect.stringMatching(/^[0-9a-f]{64}$/),
+			// 5th arg: `{ sha256, bytes, invalidLineCount }`. The orchestrator
+			// never sees the file path — only the CLI's precomputed digest
+			// and the exact bytes it read — the absolute path is
+			// deliberately NOT forwarded (privacy: leaks user-home / OS
+			// structure when archives are shared).
+			{
+				sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+				bytes: Buffer.from('https://example.com/hidden\n'),
+				invalidLineCount: 0,
+			},
 		);
-		// And the CLI actually ran the hash against the resolved
-		// absolute path (= `process.cwd() + '/tmp/urls.txt'` resolution
-		// path), not bypassed it.
+		// And the CLI actually hashed the bytes it read — not the path,
+		// not a re-read of the file.
 		expect(mockComputeFileSha256).toHaveBeenCalledWith(
-			expect.stringMatching(/urls\.txt$/),
+			Buffer.from('https://example.com/hidden\n'),
 		);
+		// The file is read exactly once (no separate read-then-hash pass
+		// that could desync the archived copy from its own file name).
+		expect(mockReadFile).toHaveBeenCalledTimes(1);
 		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(fake.archive);
 		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
 		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
@@ -833,7 +872,7 @@ describe('crawl', () => {
 	});
 
 	it('--inventory で空ファイルの場合、エラーを投げる', async () => {
-		mockReadList.mockResolvedValueOnce([]);
+		mockReadFile.mockResolvedValueOnce(Buffer.from(''));
 		const { crawl } = await import('./crawl.js');
 
 		await expect(
@@ -841,13 +880,44 @@ describe('crawl', () => {
 		).rejects.toThrow('No URLs found in inventory file: /tmp/empty.txt');
 	});
 
-	it('--inventory に無効な URL が含まれる場合、エラーを投げる', async () => {
-		mockReadList.mockResolvedValueOnce(['https://example.com', 'not-a-url']);
+	it('--inventory に無効な URL が含まれる場合、警告して除外し、有効な URL のみで続行する（issue #99）', async () => {
+		mockReadFile.mockResolvedValueOnce(
+			Buffer.from('https://example.com/ok\nnot-a-url\n'),
+		);
+		const { crawl } = await import('./crawl.js');
+
+		await crawl(['/tmp/test.nitpicker'], createFlags({ inventory: '/tmp/urls.txt' }));
+
+		// Only the valid URL reaches the orchestrator.
+		expect(mockInventory).toHaveBeenCalledWith(
+			'/tmp/test.nitpicker',
+			['https://example.com/ok'],
+			expect.any(Object),
+			expect.any(Function),
+			expect.objectContaining({ sha256: expect.any(String), invalidLineCount: 1 }),
+		);
+		// The invalid line is warned with its line:column and the offending
+		// text, and the operator-typed (not resolved) list-file string.
+		expect(consoleWarnSpy).toHaveBeenCalledWith(
+			'[nitpicker] inventory list: skipping invalid URL at /tmp/urls.txt:2:1 — "not-a-url"',
+		);
+		// A one-line summary follows: 1 of 2 lines skipped, 1 URL continues.
+		expect(consoleWarnSpy).toHaveBeenCalledWith(
+			'[nitpicker] inventory list: 1 of 2 lines skipped as invalid; continuing with 1 URLs',
+		);
+	});
+
+	it('--inventory で全行が無効な URL の場合、エラーを投げる', async () => {
+		mockReadFile.mockResolvedValueOnce(Buffer.from('not-a-url\nalso-not-a-url\n'));
 		const { crawl } = await import('./crawl.js');
 
 		await expect(
 			crawl(['/tmp/test.nitpicker'], createFlags({ inventory: '/tmp/urls.txt' })),
-		).rejects.toThrow('Invalid URL: "not-a-url"');
+		).rejects.toThrow(
+			'All 2 line(s) in inventory file failed URL validation: /tmp/urls.txt',
+		);
+		// The orchestrator must never see an empty/all-invalid list.
+		expect(mockInventory).not.toHaveBeenCalled();
 	});
 
 	it('--inventory と位置引数なしの場合、エラーを投げる', async () => {

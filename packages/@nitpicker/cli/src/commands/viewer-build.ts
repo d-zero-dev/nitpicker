@@ -131,7 +131,10 @@ export async function viewerBuild(
 		// this CLI (crawl.ts, diff.ts), which all default to process.cwd()
 		// for the transient extraction scratch dir regardless of where the
 		// target archive itself lives.
-		const archive = await Archive.open({ filePath: absFilePath });
+		//
+		// See `ArchiveOpenOptions.openPluginData` for why this must be
+		// `true` (the `write()` below re-tars the whole tmpDir).
+		const archive = await Archive.open({ filePath: absFilePath, openPluginData: true });
 		try {
 			if (flags.force) {
 				await buildViewerReadModel(archive, { onProgress: logProgress });
