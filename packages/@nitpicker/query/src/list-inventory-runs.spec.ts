@@ -101,6 +101,7 @@ describe('listInventoryRuns', () => {
 			new_pages: 10,
 			new_resources: 5,
 			scope_skipped: 2,
+			invalid_skipped: 4,
 			notes: 'first applied list',
 		});
 
@@ -113,6 +114,7 @@ describe('listInventoryRuns', () => {
 			new_pages: 10,
 			new_resources: 5,
 			scope_skipped: 2,
+			invalid_skipped: 4,
 			notes: 'first applied list',
 		});
 		expect(typeof result.items[0]?.id).toBe('number');
@@ -120,6 +122,34 @@ describe('listInventoryRuns', () => {
 		// Pin the read shape so a regression that reintroduces SELECT of
 		// the orphan column on legacy archives gets caught here.
 		expect(result.items[0]).not.toHaveProperty('source_file_path');
+	});
+
+	it('tolerates a missing invalid_skipped column (pre-#99 archive, stub / stale tar-cache read)', async () => {
+		// Self-healing column migrations only run on a writer connection —
+		// a read-only stub or a stale tar-cache entry can reach this table
+		// without ever picking up `invalid_skipped`. Simulate that shape by
+		// recording a row, then dropping the column the normal writer path
+		// would have added.
+		await archive.recordInventoryRun({
+			ran_at: '2026-06-21T00:00:00Z',
+			list_label: 'pre-invalid-skipped',
+			scope_skipped: 1,
+		});
+		await archive.getKnex().schema.table('inventory_runs', (t) => {
+			t.dropColumn('invalid_skipped');
+		});
+		expect(
+			await archive.getKnex().schema.hasColumn('inventory_runs', 'invalid_skipped'),
+		).toBe(false);
+
+		const result = await listInventoryRuns(archive);
+
+		expect(result.items).toHaveLength(1);
+		expect(result.items[0]).toMatchObject({
+			list_label: 'pre-invalid-skipped',
+			scope_skipped: 1,
+			invalid_skipped: null,
+		});
 	});
 
 	it('returns an empty result when `inventory_runs` is missing (read-only / legacy archive fallback)', async () => {
