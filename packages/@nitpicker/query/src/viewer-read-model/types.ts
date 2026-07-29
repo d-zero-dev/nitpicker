@@ -195,7 +195,7 @@ export interface ExternalLinkInsertRow {
 	 * the count of {@link AnchorFactInsertRow} rows sharing this
 	 * `dest_page_id`, since those rows are already deduplicated one-per-
 	 * `(source_page_id, dest_page_id)` pair. Must stay in the same counting
-	 * grain as `getPageDetail.inboundLinks` (see that function's docs, #71)
+	 * grain as `listInboundLinks`'s `total` (see that function's docs, #235)
 	 * — multiple anchors from the same page count once.
 	 */
 	referrer_count: number;
@@ -238,6 +238,14 @@ export interface AnchorFactInsertRow {
 	 * time, never by an indexed read query.
 	 */
 	is_external_link: number;
+	/**
+	 * `MIN(ae.first_text_id)` — the first-wins anchor text's `text_refs.id`
+	 * for this `(source_page_id, dest_page_id)` pair (same first-wins
+	 * semantics as `anchor_edges.first_text_id`), or `null` if the anchor
+	 * carried no text. Read directly by `listInboundLinks` so a referrer
+	 * window's anchor text never needs a second `anchor_edges` round-trip.
+	 */
+	first_text_id: number | null;
 }
 
 /**
