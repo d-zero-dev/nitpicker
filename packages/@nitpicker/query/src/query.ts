@@ -63,6 +63,7 @@ export { listDirectoryChildren } from './list-directory-children.js';
 export { listDirectoryPages } from './list-directory-pages.js';
 export { listExternalLinks } from './list-external-links.js';
 export { listImages } from './list-images.js';
+export { listInboundLinks } from './list-inbound-links.js';
 export { listInventoryRuns } from './list-inventory-runs.js';
 export { listIsolatedClustersFastPath } from './list-isolated-clusters-fast-path.js';
 export { listIsolatedClusters } from './list-isolated-clusters.js';

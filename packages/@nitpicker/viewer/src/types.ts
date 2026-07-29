@@ -49,3 +49,18 @@ export interface CreateAppOptions {
 	/** Absolute path to the directory containing the built frontend assets. */
 	publicDir: string;
 }
+
+/**
+ * Response shape for `/api/pages/inbound-links` when the viewer read model
+ * cannot serve the request — currently only reachable in stub mode (a live
+ * crawl), where `viewer_anchor_facts` can never exist (`buildViewerReadModel`
+ * refuses read-only accessors, and `viewer-build` refuses stub directories).
+ * A distinct `available: false` marker, rather than an empty
+ * `{ items: [], total: 0 }`, so the frontend can tell "not computed yet"
+ * apart from "genuinely zero inbound links" — the same distinction
+ * `/api/directory-tree`'s read-model-only `[]` return blurs.
+ */
+export interface InboundLinksUnavailable {
+	/** Always `false` — the discriminant frontend code checks for. */
+	available: false;
+}

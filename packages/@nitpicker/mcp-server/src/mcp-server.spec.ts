@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
+import { buildViewerReadModel } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createServer } from './mcp-server.js';
@@ -253,6 +254,8 @@ describe('createServer', () => {
 			],
 		);
 
+		await buildViewerReadModel(archive);
+
 		await archive.write();
 		await archive.close();
 
@@ -264,11 +267,12 @@ describe('createServer', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('ListTools で31個のツールが返される', async () => {
+	it('ListTools で32個のツールが返される', async () => {
 		const result = await listTools(server);
-		expect(result.tools).toHaveLength(31);
+		expect(result.tools).toHaveLength(32);
 		const names = result.tools.map((t) => t.name);
 		expect(names).toContain('open_archive');
+		expect(names).toContain('list_inbound_links');
 		expect(names).toContain('close_archive');
 		expect(names).toContain('get_summary');
 		expect(names).toContain('list_isolated_clusters');
@@ -397,12 +401,44 @@ describe('createServer', () => {
 		expect(data.title).toBe('Home');
 		expect(data.outboundLinks).toBeDefined();
 		expect(data.outboundLinks.length).toBe(1);
-		expect(data.inboundLinks).toBeDefined();
-		expect(data.inboundLinks.length).toBe(0);
 	});
 
 	it('get_page_detail で存在しないページは "Page not found." を返す', async () => {
 		const result = await callTool(server, 'get_page_detail', {
+			archiveId,
+			url: 'https://example.com/nonexistent',
+		});
+		expect(result.content[0]!.text).toBe('Page not found.');
+	});
+
+	it('list_inbound_links でページへの被リンクを取得する', async () => {
+		const result = await callTool(server, 'list_inbound_links', {
+			archiveId,
+			url: 'https://example.com/about',
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.total).toBe(1);
+		expect(data.items).toHaveLength(1);
+		expect(data.items[0].url).toBe('https://example.com');
+		expect(data.items[0].textContent).toBe('About us');
+		expect(data.items[0].count).toBe(1);
+	});
+
+	it('list_inbound_links は limit: 0 で件数のみ返す', async () => {
+		const result = await callTool(server, 'list_inbound_links', {
+			archiveId,
+			url: 'https://example.com/about',
+			limit: 0,
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.total).toBe(1);
+		expect(data.items).toHaveLength(0);
+	});
+
+	it('list_inbound_links で存在しないページは "Page not found." を返す', async () => {
+		const result = await callTool(server, 'list_inbound_links', {
 			archiveId,
 			url: 'https://example.com/nonexistent',
 		});

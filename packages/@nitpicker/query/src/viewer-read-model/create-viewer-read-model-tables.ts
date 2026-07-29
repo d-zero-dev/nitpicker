@@ -216,6 +216,12 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// primary column is negated and walked ascending instead. See
 	// ARCHITECTURE.md「設計注意（viewer_anchor_facts read model、issue
 	// #114）」for the full read/write/storage rationale.
+	// `first_text_id` mirrors `anchor_edges.first_text_id` (first-wins anchor
+	// text for the pair, see the anchor_edges dedup invariant) — references
+	// `text_refs(id)` directly rather than `viewer_url_refs`/a dedicated
+	// viewer-side copy, since text_refs already exists in the same database
+	// and duplicating its rows here would cost storage for no read-path
+	// benefit (this table never seeks by text).
 	await trx.raw(`
 		CREATE TABLE viewer_anchor_facts (
 			edge_id integer primary key,
@@ -228,7 +234,8 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			status_desc_key integer not null,
 			count integer not null,
 			is_broken integer not null,
-			is_external_link integer not null
+			is_external_link integer not null,
+			first_text_id integer references text_refs(id)
 		)
 	`);
 

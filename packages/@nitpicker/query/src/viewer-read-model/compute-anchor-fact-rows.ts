@@ -26,7 +26,19 @@ const READ_CHUNK_SIZE = 2000;
  * resolved-canonical destinations: multiple distinct dest pages that
  * redirect to the same canonical collapse into one output row and their
  * counts must add — the same summed occurrence count a `count(*)` over
- * per-row anchor rows yields.
+ * per-row anchor rows yields. `first_text_id` is `MIN(ae.first_text_id)`
+ * over the same group, so `listInboundLinks` can read anchor text straight
+ * off `viewer_anchor_facts` without a second `anchor_edges` round-trip. When
+ * the group is a single `anchor_edges` row (the common case — one referrer,
+ * one href), this exactly mirrors that row's own first-wins anchor text.
+ * When redirect/alias resolution collapses *distinct* `anchor_edges` rows
+ * from the same referrer into one group (e.g. one anchor points directly at
+ * the canonical destination and another points at a redirect source that
+ * lands on it), `MIN()` picks the lower `text_refs.id` — a deterministic,
+ * stable choice across rebuilds, but not a guarantee that it's the
+ * chronologically-first-observed anchor among the distinct hrefs (unlike the
+ * single-row case, `text_refs.id` order need not track anchor-array order
+ * once ids are shared/reused elsewhere in the archive).
  *
  * Reads `anchor_edges` in bounded chunks by partitioning `source.id`
  * (`content_items.id`) into non-overlapping ranges
@@ -105,6 +117,7 @@ export async function* computeAnchorFactRows(
 			status: number | null;
 			isExternal: 0 | 1;
 			count: number;
+			firstTextId: number | null;
 		}[] = await trx('anchor_edges as ae')
 			.join('content_items as source', 'ae.page_id', '=', 'source.id')
 			.join('content_items as dest', 'ae.href_page_id', '=', 'dest.id')
@@ -156,6 +169,7 @@ export async function* computeAnchorFactRows(
 				trx.raw(`${statusExpression} as "status"`),
 				trx.raw(`${isExternalExpression} as "isExternal"`),
 				trx.raw('sum("ae"."count") as "count"'),
+				trx.raw('min("ae"."first_text_id") as "firstTextId"'),
 			);
 
 		if (rows.length === 0) {
@@ -180,6 +194,7 @@ export async function* computeAnchorFactRows(
 				count: Number(row.count),
 				is_broken: row.status === 404 ? 1 : 0,
 				is_external_link: row.isExternal ? 1 : 0,
+				first_text_id: row.firstTextId,
 			};
 		});
 	}

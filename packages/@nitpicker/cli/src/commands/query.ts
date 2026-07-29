@@ -28,11 +28,11 @@ export const commandDef = {
 		},
 		cursor: {
 			type: 'string',
-			desc: 'Opaque pagination cursor from a previous result (resource-referrers, duplicates, mismatches)',
+			desc: 'Opaque pagination cursor from a previous result (resource-referrers, inbound-links, duplicates, mismatches)',
 		},
 		direction: {
 			type: 'string',
-			desc: 'Direction to walk from --cursor: next (default) or prev (duplicates, mismatches)',
+			desc: 'Direction to walk from --cursor: next (default) or prev (inbound-links, duplicates, mismatches)',
 		},
 		pagesLimit: {
 			type: 'number',
@@ -40,7 +40,7 @@ export const commandDef = {
 		},
 		url: {
 			type: 'string',
-			desc: 'Target URL for page-detail, html, resource-referrers, or page-console-logs queries',
+			desc: 'Target URL for page-detail, inbound-links, html, resource-referrers, or page-console-logs queries',
 		},
 		status: {
 			type: 'number',

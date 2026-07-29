@@ -55,6 +55,12 @@ test.describe('Nitpicker Viewer (stub mode)', () => {
 		await expect(
 			page.getByRole('heading', { name: 'Page detail', level: 1 }),
 		).toBeVisible();
+		// `viewer_anchor_facts` can never exist in stub mode (`buildViewerReadModel`
+		// refuses read-only accessors, and `viewer-build` refuses stub
+		// directories) — `/api/pages/inbound-links` must respond with the
+		// `{ available: false }` marker rather than the route throwing, so
+		// Page Detail itself never 500s here (issue #235).
+		await expect(page.getByText('Available once the crawl finishes.')).toBeVisible();
 	});
 
 	test('viewer 起動中も stub の tmpDir は残存し、.nitpicker は未生成', () => {

@@ -180,7 +180,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			pageDetail: {
 				title: 'Page detail',
 				description:
-					'Full metadata, inbound/outbound links, redirects, and the stored HTML snapshot for one page.',
+					'Full metadata, outbound links, redirects, and the stored HTML snapshot for one page. Inbound links are shown by count, with a link to the full list.',
 				skipReason: 'Skipped (reason)',
 				status: 'Status',
 				contentType: 'Content-Type',
@@ -192,6 +192,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				ogImage: 'og:image',
 				outbound: 'Outbound links',
 				inbound: 'Inbound links',
+				viewInboundLinks: 'View all inbound links',
 				linksTruncated: 'Showing the first {max} of {total} entries.',
 				redirectedFrom: 'Redirected from',
 				consoleLogs: 'Console logs',
@@ -214,6 +215,14 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				mainContentCanvases: 'Canvases',
 				loadingMainContent: 'Loading main content…',
 				noMainContent: 'No main content data available.',
+			},
+			inboundLinks: {
+				title: 'Inbound links',
+				description: 'Every referrer page linking to one target page.',
+				colReferrer: 'Referrer URL',
+				colAnchorText: 'Anchor text',
+				colCount: 'Count',
+				unavailable: 'Available once the crawl finishes.',
 			},
 			resources: {
 				title: 'Resources',
@@ -578,7 +587,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			pageDetail: {
 				title: 'ページ詳細',
 				description:
-					'1 ページの全メタデータ、内部・外部リンク、リダイレクト、保存された HTML スナップショットを表示します。',
+					'1 ページの全メタデータ、発リンク、リダイレクト、保存された HTML スナップショットを表示します。被リンクは件数のみ表示し、一覧は別画面へのリンクから確認できます。',
 				skipReason: '除外理由',
 				status: 'ステータス',
 				contentType: 'Content-Type',
@@ -590,6 +599,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				ogImage: 'og:image',
 				outbound: '発リンク',
 				inbound: '被リンク',
+				viewInboundLinks: '被リンク一覧を見る',
 				linksTruncated: '全 {total} 件のうち先頭 {max} 件のみ表示しています。',
 				redirectedFrom: 'リダイレクト元',
 				consoleLogs: 'コンソールログ',
@@ -612,6 +622,14 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				mainContentCanvases: 'canvas',
 				loadingMainContent: 'メインコンテンツを読み込み中…',
 				noMainContent: 'メインコンテンツのデータがありません。',
+			},
+			inboundLinks: {
+				title: '被リンク',
+				description: '対象ページにリンクしているすべての参照元ページ。',
+				colReferrer: '参照元 URL',
+				colAnchorText: 'アンカーテキスト',
+				colCount: '件数',
+				unavailable: 'クロール完了後に利用できます。',
 			},
 			resources: {
 				title: 'リソース',

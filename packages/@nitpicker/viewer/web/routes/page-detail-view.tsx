@@ -1,5 +1,6 @@
 import { Link, useSearchParams } from 'react-router';
 
+import { useInboundLinks } from '../api/use-inbound-links.js';
 import { usePageDetail } from '../api/use-page-detail.js';
 import { usePageHtml } from '../api/use-page-html.js';
 import { usePageMainContents } from '../api/use-page-main-contents.js';
@@ -10,8 +11,11 @@ import { useI18n } from '../i18n/use-i18n.js';
 const MAX_LINKS_DISPLAYED = 200;
 
 /**
- * Full detail for a single page: metadata, inbound/outbound links, redirects,
- * and the stored HTML snapshot. The target URL comes from the `url` query param.
+ * Full detail for a single page: metadata, outbound links, redirects, and
+ * the stored HTML snapshot. Inbound links are summarized by count with a
+ * link to the dedicated `/pages/inbound-links` list (issue #235) — a page's
+ * referrer count can reach the hundreds of thousands on a large site, too
+ * large to embed here. The target URL comes from the `url` query param.
  * @returns The page detail view element.
  */
 export function PageDetailView() {
@@ -26,6 +30,19 @@ export function PageDetailView() {
 	// `data` is still undefined and its eventual `isExternal` value is unknown.
 	const html = usePageHtml(data && !data.isExternal ? url : '');
 	const mainContents = usePageMainContents(data && !data.isExternal ? url : '');
+	// Count-only read (`limit: 0`) — the full inbound-link window lives at
+	// `/pages/inbound-links`, not here (see this component's docs).
+	const {
+		data: inboundData,
+		isLoading: inboundIsLoading,
+		isError: inboundIsError,
+		error: inboundError,
+	} = useInboundLinks(url, { limit: 0 }, ['inbound-links-count', url], {
+		enabled: url !== '',
+	});
+	const inboundUnavailable = inboundData != null && 'available' in inboundData;
+	const inboundTotal =
+		inboundData && !('available' in inboundData) ? inboundData.total : null;
 
 	if (!url) {
 		return <div className="state">{t('views.pageDetail.noPage')}</div>;
@@ -158,24 +175,22 @@ export function PageDetailView() {
 			</dl>
 
 			<h2>
-				{t('views.pageDetail.inbound')} ({data.inboundLinks.length})
+				{t('views.pageDetail.inbound')}
+				{inboundTotal == null ? '' : ` (${inboundTotal})`}
 			</h2>
-			<ul>
-				{data.inboundLinks.slice(0, MAX_LINKS_DISPLAYED).map((link, index) => (
-					<li key={`${link.url}-${index}`}>
-						<Link to={`/pages/detail?url=${encodeURIComponent(link.url)}`}>
-							{link.url}
-						</Link>
-					</li>
-				))}
-			</ul>
-			{data.inboundLinks.length > MAX_LINKS_DISPLAYED && (
-				<p className="state">
-					{t('views.pageDetail.linksTruncated', {
-						max: MAX_LINKS_DISPLAYED,
-						total: data.inboundLinks.length,
-					})}
-				</p>
+			{inboundUnavailable ? (
+				<p className="state">{t('views.inboundLinks.unavailable')}</p>
+			) : inboundIsError ? (
+				<p className="state state-error">{inboundError.message}</p>
+			) : inboundIsLoading ? (
+				<p className="state">{t('common.loading')}</p>
+			) : (
+				inboundTotal != null &&
+				inboundTotal > 0 && (
+					<Link to={`/pages/inbound-links?url=${encodeURIComponent(url)}`}>
+						{t('views.pageDetail.viewInboundLinks')}
+					</Link>
+				)
 			)}
 
 			{data.outboundLinks.length > 0 && (

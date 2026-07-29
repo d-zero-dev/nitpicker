@@ -11,6 +11,15 @@ vi.mock('@nitpicker/query', () => ({
 		.mockResolvedValue({ total: 0, channelSource: 'none', groups: [] }),
 	listPages: vi.fn().mockResolvedValue({ items: [], total: 0, offset: 0, limit: 100 }),
 	getPageDetail: vi.fn().mockResolvedValue({ url: 'https://example.com', status: 200 }),
+	listInboundLinks: vi.fn().mockResolvedValue({
+		url: 'https://example.com',
+		items: [],
+		total: 0,
+		limit: 100,
+		offset: 0,
+		nextCursor: null,
+		prevCursor: null,
+	}),
 	getPageHtml: vi.fn().mockResolvedValue({ html: '<html></html>', truncated: false }),
 	listLinks: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	listResources: vi
@@ -107,6 +116,58 @@ describe('dispatchQuery', () => {
 
 		await expect(
 			dispatchQuery(mockAccessor, 'page-detail', {
+				url: 'https://missing.example.com',
+			} as never),
+		).rejects.toThrow('Page not found: https://missing.example.com');
+	});
+
+	it('dispatches inbound-links sub-command', async () => {
+		const { listInboundLinks } = await import('@nitpicker/query');
+		const result = await dispatchQuery(mockAccessor, 'inbound-links', {
+			url: 'https://example.com',
+		} as never);
+		expect(result).toEqual({
+			url: 'https://example.com',
+			items: [],
+			total: 0,
+			limit: 100,
+			offset: 0,
+			nextCursor: null,
+			prevCursor: null,
+		});
+		expect(listInboundLinks).toHaveBeenCalledWith(mockAccessor, {
+			url: 'https://example.com',
+			limit: undefined,
+			offset: undefined,
+			cursor: undefined,
+			direction: undefined,
+		});
+	});
+
+	it('dispatches inbound-links sub-command with limit, offset, cursor, direction', async () => {
+		const { listInboundLinks } = await import('@nitpicker/query');
+		await dispatchQuery(mockAccessor, 'inbound-links', {
+			url: 'https://example.com',
+			limit: 10,
+			offset: 20,
+			cursor: 'abc',
+			direction: 'prev',
+		} as never);
+		expect(listInboundLinks).toHaveBeenCalledWith(mockAccessor, {
+			url: 'https://example.com',
+			limit: 10,
+			offset: 20,
+			cursor: 'abc',
+			direction: 'prev',
+		});
+	});
+
+	it('throws when inbound-links returns null', async () => {
+		const { listInboundLinks } = await import('@nitpicker/query');
+		vi.mocked(listInboundLinks).mockResolvedValueOnce(null);
+
+		await expect(
+			dispatchQuery(mockAccessor, 'inbound-links', {
 				url: 'https://missing.example.com',
 			} as never),
 		).rejects.toThrow('Page not found: https://missing.example.com');

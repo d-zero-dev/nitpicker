@@ -5,6 +5,7 @@ export type QuerySubCommand =
 	| 'summary'
 	| 'pages'
 	| 'page-detail'
+	| 'inbound-links'
 	| 'html'
 	| 'links'
 	| 'resources'
@@ -40,6 +41,7 @@ export const VALID_SUB_COMMANDS = [
 	'summary',
 	'pages',
 	'page-detail',
+	'inbound-links',
 	'html',
 	'links',
 	'resources',
