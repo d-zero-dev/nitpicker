@@ -5,9 +5,10 @@ import { getCachedTemplateClusters } from '../template-clusters-cache.js';
 
 /**
  * Registers `GET /api/template-clusters` — a summary of every
- * `page_templates.template_key` cluster in the archive (page count, common
- * directory, common stylesheet set), computed fresh from each cluster's
- * member pages since the raw key itself isn't human-readable (see
+ * `page_templates.template_key` cluster in the archive (page count and
+ * common directory computed fresh from each cluster's member pages, plus
+ * the `ClusterReason` `@d-zero/page-cluster` reported when it classified
+ * the cluster) since the raw key itself isn't human-readable (see
  * `@nitpicker/query`'s `TemplateClusterSummary` JSDoc).
  *
  * Takes no query parameters and returns every cluster in one response —

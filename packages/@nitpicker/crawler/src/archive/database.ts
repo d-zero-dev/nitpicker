@@ -11,6 +11,7 @@ import type {
 	TagRow,
 } from './meta/types.js';
 import type {
+	ClusterReasonData,
 	Config,
 	DatabaseOption,
 	DB_Redirect,
@@ -832,14 +833,22 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * Replaces the stored DOM-structure template classification with a
 	 * freshly generated set. Delegates to {@link replacePageTemplatesOp}.
 	 * @param templateKeysByUrl - Page URL → template key.
+	 * @param clusterReasonsByTemplateKey - Template key → the `ClusterReason`
+	 *   `@d-zero/page-cluster` reported for it.
 	 */
 	async replacePageTemplates(
 		templateKeysByUrl: ReadonlyMap<string, string>,
+		clusterReasonsByTemplateKey: ReadonlyMap<string, ClusterReasonData>,
 	): Promise<void> {
 		return emitErrorAndRetry(
 			this,
 			'Database.replacePageTemplates',
-			async () => await replacePageTemplatesOp(this.#instance, templateKeysByUrl),
+			async () =>
+				await replacePageTemplatesOp(
+					this.#instance,
+					templateKeysByUrl,
+					clusterReasonsByTemplateKey,
+				),
 			retrySetting,
 		);
 	}

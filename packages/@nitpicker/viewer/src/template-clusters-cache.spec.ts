@@ -51,7 +51,8 @@ describe('getCachedTemplateClusters', () => {
 					templateKey: 'k',
 					pageCount: 1,
 					commonDirectories: [],
-					commonStylesheetUrls: [],
+					commonStylesheetFileNames: [],
+					reason: null,
 				},
 			],
 		});
@@ -95,8 +96,8 @@ describe('getCachedTemplateClusters', () => {
 						templateKey: 'A',
 						pageCount: 1,
 						commonDirectories: [],
-						commonStylesheetUrls: [],
 						commonStylesheetFileNames: [],
+						reason: null,
 					},
 				],
 			})
@@ -107,8 +108,8 @@ describe('getCachedTemplateClusters', () => {
 						templateKey: 'B',
 						pageCount: 1,
 						commonDirectories: [],
-						commonStylesheetUrls: [],
 						commonStylesheetFileNames: [],
+						reason: null,
 					},
 				],
 			});
@@ -132,8 +133,8 @@ describe('getCachedTemplateClusters', () => {
 						templateKey: id,
 						pageCount: 1,
 						commonDirectories: [],
-						commonStylesheetUrls: [],
 						commonStylesheetFileNames: [],
+						reason: null,
 					},
 				],
 			});
@@ -151,7 +152,8 @@ describe('getCachedTemplateClusters', () => {
 					templateKey: '1-recomputed',
 					pageCount: 1,
 					commonDirectories: [],
-					commonStylesheetUrls: [],
+					commonStylesheetFileNames: [],
+					reason: null,
 				},
 			],
 		});
@@ -171,8 +173,8 @@ describe('getCachedTemplateClusters', () => {
 						templateKey: 'first',
 						pageCount: 1,
 						commonDirectories: [],
-						commonStylesheetUrls: [],
 						commonStylesheetFileNames: [],
+						reason: null,
 					},
 				],
 			})
@@ -183,8 +185,8 @@ describe('getCachedTemplateClusters', () => {
 						templateKey: 'second',
 						pageCount: 1,
 						commonDirectories: [],
-						commonStylesheetUrls: [],
 						commonStylesheetFileNames: [],
+						reason: null,
 					},
 				],
 			});
@@ -209,8 +211,8 @@ describe('getCachedTemplateClusters', () => {
 						templateKey: 'recovered',
 						pageCount: 1,
 						commonDirectories: [],
-						commonStylesheetUrls: [],
 						commonStylesheetFileNames: [],
+						reason: null,
 					},
 				],
 			});

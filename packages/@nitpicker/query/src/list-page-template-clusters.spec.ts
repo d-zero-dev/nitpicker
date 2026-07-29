@@ -152,42 +152,59 @@ describe('listPageTemplateClusters', () => {
 		});
 	});
 
-	describe('テンプレート分類済みのアーカイブ', () => {
+	describe('テンプレート分類済みのアーカイブ（reasonデータあり）', () => {
 		const workingDir = path.resolve(
 			__dirname,
 			'__test_fixtures_template_clusters_classified__',
 		);
 		let archive: InstanceType<typeof Archive>;
 
+		const cssReason = {
+			memberCount: 2,
+			blocking: [
+				{
+					blockKey: 'css:abc123',
+					reason: {
+						kind: 'css' as const,
+						distinctiveStylesheetHrefs: ['https://example.com/shared.css'],
+					},
+				},
+			],
+			structuralCoreTokens: ['token-a'],
+			landmarks: {},
+			siblingClusterKeys: [],
+		};
+		const pathReason = {
+			memberCount: 2,
+			blocking: [
+				{ blockKey: 'path:news', reason: { kind: 'path' as const, pathKey: 'news' } },
+			],
+			structuralCoreTokens: ['token-b'],
+			landmarks: {},
+			siblingClusterKeys: [],
+		};
+		const orphanMergeReason = {
+			memberCount: 1,
+			blocking: [
+				{
+					blockKey: 'path:sponsored',
+					reason: { kind: 'orphanMerge' as const, pathKey: 'sponsored' },
+				},
+			],
+			structuralCoreTokens: ['token-c'],
+			landmarks: {},
+			siblingClusterKeys: [],
+		};
+
 		beforeAll(async () => {
 			archive = await createArchive(workingDir, 'classified.nitpicker');
 
 			// /a, /b: css由来クラスタ（同一CSSセットを共有）
 			// /c, /d: path由来クラスタ（CSS参照なし）
-			for (const p of ['/a', '/b', '/c', '/d']) {
+			// /e: スタイルシート参照のないページがpathグループへ統合されたクラスタ
+			for (const p of ['/a', '/b', '/c', '/d', '/e']) {
 				await setTestPage(archive, `https://example.com${p}`);
 			}
-
-			await archive.setResources({
-				url: parseUrl('https://example.com/shared.css')!,
-				isExternal: false,
-				isError: false,
-				status: 200,
-				statusText: 'OK',
-				contentType: 'text/css',
-				contentLength: 200,
-				compress: false,
-				cdn: false,
-				headers: null,
-			});
-			await archive.setResourcesReferrers({
-				url: 'https://example.com/a',
-				src: 'https://example.com/shared.css',
-			});
-			await archive.setResourcesReferrers({
-				url: 'https://example.com/b',
-				src: 'https://example.com/shared.css',
-			});
 
 			await archive.replacePageTemplates(
 				new Map([
@@ -195,6 +212,12 @@ describe('listPageTemplateClusters', () => {
 					['https://example.com/b', '["css:abc123","cluster:0"]'],
 					['https://example.com/c', '["path:news","cluster:0"]'],
 					['https://example.com/d', '["path:news","cluster:0"]'],
+					['https://example.com/e', '["path:sponsored","cluster:0"]'],
+				]),
+				new Map([
+					['["css:abc123","cluster:0"]', cssReason],
+					['["path:news","cluster:0"]', pathReason],
+					['["path:sponsored","cluster:0"]', orphanMergeReason],
 				]),
 			);
 		});
@@ -222,29 +245,78 @@ describe('listPageTemplateClusters', () => {
 			expect(pathCluster?.pageCount).toBe(2);
 		});
 
-		it('css由来クラスタは共通CSSの積集合が非空になる', async () => {
+		it('css由来クラスタはblockingのdistinctiveStylesheetHrefsからファイル名を導出する', async () => {
 			const result = await listPageTemplateClusters(archive);
 
 			const cssCluster = result.clusters.find(
 				(c) => c.templateKey === '["css:abc123","cluster:0"]',
 			);
-			expect(cssCluster?.commonStylesheetUrls).toEqual([
-				'https://example.com/shared.css',
-			]);
 			expect(cssCluster?.commonStylesheetFileNames).toEqual(['shared.css']);
+			expect(cssCluster?.reason?.blocking[0]?.reason).toEqual({
+				kind: 'css',
+				distinctiveStylesheetHrefs: ['https://example.com/shared.css'],
+			});
 		});
 
-		it('path由来クラスタは共通CSSが空でも共通ディレクトリは機能する', async () => {
+		it('path由来クラスタは共通CSSファイル名が空でも共通ディレクトリは機能する', async () => {
 			const result = await listPageTemplateClusters(archive);
 
 			const pathCluster = result.clusters.find(
 				(c) => c.templateKey === '["path:news","cluster:0"]',
 			);
-			expect(pathCluster?.commonStylesheetUrls).toEqual([]);
 			expect(pathCluster?.commonStylesheetFileNames).toEqual([]);
+			expect(pathCluster?.reason?.blocking[0]?.reason).toEqual({
+				kind: 'path',
+				pathKey: 'news',
+			});
 			expect(pathCluster?.commonDirectories).toEqual([
 				{ directory: 'https://example.com/', pageCount: 2 },
 			]);
+		});
+
+		it('orphanMerge由来クラスタ（スタイルシート参照なしでpathグループへ統合）も共通CSSファイル名は空になる', async () => {
+			const result = await listPageTemplateClusters(archive);
+
+			const orphanCluster = result.clusters.find(
+				(c) => c.templateKey === '["path:sponsored","cluster:0"]',
+			);
+			expect(orphanCluster?.commonStylesheetFileNames).toEqual([]);
+			expect(orphanCluster?.reason?.blocking[0]?.reason).toEqual({
+				kind: 'orphanMerge',
+				pathKey: 'sponsored',
+			});
+		});
+	});
+
+	describe('テンプレート分類済みだがreasonデータが無いアーカイブ（page-cluster 0.3.1時代の分類）', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_template_clusters_no_reason__',
+		);
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			archive = await createArchive(workingDir, 'no-reason.nitpicker');
+			await setTestPage(archive, 'https://example.com/a');
+			await archive.replacePageTemplates(
+				new Map([['https://example.com/a', '["path:legacy","cluster:0"]']]),
+				new Map(),
+			);
+		});
+
+		afterAll(async () => {
+			await destroyArchive(archive, workingDir);
+		});
+
+		it('reason: nullを返しつつpageCount/commonDirectoriesは通常通り返す', async () => {
+			const result = await listPageTemplateClusters(archive);
+
+			const cluster = result.clusters.find(
+				(c) => c.templateKey === '["path:legacy","cluster:0"]',
+			);
+			expect(cluster?.reason).toBeNull();
+			expect(cluster?.pageCount).toBe(1);
+			expect(cluster?.commonStylesheetFileNames).toEqual([]);
 		});
 	});
 
@@ -265,7 +337,7 @@ describe('listPageTemplateClusters', () => {
 				await setTestPage(archive, url);
 				templateKeysByUrl.set(url, '["path:bulk","cluster:0"]');
 			}
-			await archive.replacePageTemplates(templateKeysByUrl);
+			await archive.replacePageTemplates(templateKeysByUrl, new Map());
 		}, 60_000);
 
 		afterAll(async () => {

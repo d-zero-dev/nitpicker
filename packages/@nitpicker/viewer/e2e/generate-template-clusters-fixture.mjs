@@ -120,6 +120,12 @@ for (const section of ['a', 'b', 'c', 'd', 'e', 'f', 'g']) {
 	sectionUrls.push(url);
 }
 
+// `legacy` cluster: classified with a `templateKey` but deliberately given no
+// entry in the reasons map below — simulates a cluster classified by a
+// `@d-zero/page-cluster` version that predates `onClusterReason` (pre-0.5.0),
+// exercising the view's "re-run --templates" fallback for the reason section.
+await setSimplePage('https://example.com/legacy/old-page', 'Legacy Page');
+
 await archive.replacePageTemplates(
 	new Map([
 		['https://example.com/blog/post-1', '["css:1a2b3c4d5e6f7890","cluster:0"]'],
@@ -127,6 +133,62 @@ await archive.replacePageTemplates(
 		['https://example.com/news/article-1', '["path:news","cluster:0"]'],
 		['https://example.com/news/article-2', '["path:news","cluster:0"]'],
 		...sectionUrls.map((url) => [url, '["path:sections","cluster:0"]']),
+		['https://example.com/legacy/old-page', '["path:legacy","cluster:0"]'],
+	]),
+	new Map([
+		[
+			'["css:1a2b3c4d5e6f7890","cluster:0"]',
+			{
+				memberCount: 2,
+				blocking: [
+					{
+						blockKey: 'css:1a2b3c4d5e6f7890',
+						reason: {
+							kind: 'css',
+							distinctiveStylesheetHrefs: ['https://example.com/blog.css'],
+						},
+					},
+				],
+				structuralCoreTokens: ['article', 'h1', 'time'],
+				landmarks: {
+					header: {
+						presenceRate: 1,
+						chromeRate: 1,
+						shellTokens: ['header.site-header'],
+						memberCountWithInstance: 2,
+					},
+					footer: {
+						presenceRate: 1,
+						chromeRate: 1,
+						shellTokens: ['footer.site-footer'],
+						memberCountWithInstance: 2,
+					},
+				},
+				siblingClusterKeys: [],
+			},
+		],
+		[
+			'["path:news","cluster:0"]',
+			{
+				memberCount: 2,
+				blocking: [{ blockKey: 'path:news', reason: { kind: 'path', pathKey: 'news' } }],
+				structuralCoreTokens: ['article', 'h1'],
+				landmarks: {},
+				siblingClusterKeys: [],
+			},
+		],
+		[
+			'["path:sections","cluster:0"]',
+			{
+				memberCount: 7,
+				blocking: [
+					{ blockKey: 'path:sections', reason: { kind: 'path', pathKey: 'sections' } },
+				],
+				structuralCoreTokens: ['h1'],
+				landmarks: {},
+				siblingClusterKeys: [],
+			},
+		],
 	]),
 );
 

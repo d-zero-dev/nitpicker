@@ -1,3 +1,4 @@
+import type { ClusterReasonData } from '../../types.js';
 import type { Knex } from 'knex';
 
 import { eachSplitted } from '../../../utils/array/each-splitted.js';
@@ -16,16 +17,45 @@ import { eachSplitted } from '../../../utils/array/each-splitted.js';
  * (e.g. a URL-normalization mismatch between the in-memory `Page.url.href`
  * and the stored `url_refs.url`) should not discard the rest of a
  * potentially multi-thousand-page classification run.
+ *
+ * `page_templates` and `page_template_cluster_reasons` are replaced in the
+ * same transaction as each other so the two tables never observe a torn
+ * write (one updated, the other still holding the previous run's data).
+ * Cluster reasons are looked up by `templateKey` directly — unlike
+ * page rows, no URL → `content_items` resolution is needed since
+ * `page_template_cluster_reasons` has no page-level FK.
  * @param knex - Knex query builder connected to the archive DB.
  * @param templateKeysByUrl - Page URL → template key, as produced by
+ *   `classifyPageTemplates`.
+ * @param clusterReasonsByTemplateKey - Template key → the `ClusterReason`
+ *   `@d-zero/page-cluster` reported for it, as produced by
  *   `classifyPageTemplates`.
  */
 export async function replacePageTemplates(
 	knex: Knex,
 	templateKeysByUrl: ReadonlyMap<string, string>,
+	clusterReasonsByTemplateKey: ReadonlyMap<string, ClusterReasonData>,
 ): Promise<void> {
 	await knex.transaction(async (trx) => {
 		await trx('page_templates').delete();
+		await trx('page_template_cluster_reasons').delete();
+
+		if (clusterReasonsByTemplateKey.size > 0) {
+			const reasonRows = [...clusterReasonsByTemplateKey].map(
+				([templateKey, reason]) => ({
+					template_key: templateKey,
+					member_count: reason.memberCount,
+					blocking: JSON.stringify(reason.blocking),
+					structural_core_tokens: JSON.stringify(reason.structuralCoreTokens),
+					landmarks: JSON.stringify(reason.landmarks),
+					sibling_cluster_keys: JSON.stringify(reason.siblingClusterKeys),
+				}),
+			);
+			await eachSplitted(reasonRows, 500, async (chunk) => {
+				await trx('page_template_cluster_reasons').insert(chunk);
+			});
+		}
+
 		if (templateKeysByUrl.size === 0) {
 			return;
 		}

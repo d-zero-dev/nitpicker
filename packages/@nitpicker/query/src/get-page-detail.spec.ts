@@ -290,7 +290,10 @@ describe('getPageDetail: templateKey（page_templates の LEFT JOIN）', () => {
 			isSkipped: false,
 		});
 
-		await archive.replacePageTemplates(new Map([['https://example.com', 'template-a']]));
+		await archive.replacePageTemplates(
+			new Map([['https://example.com', 'template-a']]),
+			new Map(),
+		);
 	});
 
 	afterAll(async () => {

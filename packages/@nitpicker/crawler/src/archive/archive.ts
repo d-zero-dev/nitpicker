@@ -1,4 +1,5 @@
 import type {
+	ClusterReasonData,
 	Config,
 	InsertNetworkOutageParams,
 	InventoryRunMeta,
@@ -380,11 +381,15 @@ export default class Archive extends ArchiveAccessor {
 	 * reaching into the low-level database class directly.
 	 * @param templateKeysByUrl - Page URL → template key, as produced by
 	 *   `@nitpicker/core`'s `classifyPageTemplates`.
+	 * @param clusterReasonsByTemplateKey - Template key → the `ClusterReason`
+	 *   `@d-zero/page-cluster` reported for it, as produced by
+	 *   `@nitpicker/core`'s `classifyPageTemplates`.
 	 */
 	async replacePageTemplates(
 		templateKeysByUrl: ReadonlyMap<string, string>,
+		clusterReasonsByTemplateKey: ReadonlyMap<string, ClusterReasonData>,
 	): Promise<void> {
-		await this.#db.replacePageTemplates(templateKeysByUrl);
+		await this.#db.replacePageTemplates(templateKeysByUrl, clusterReasonsByTemplateKey);
 	}
 
 	/**

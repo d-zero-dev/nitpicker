@@ -2872,9 +2872,10 @@ export interface DirectoryDistributionEntry {
  * (e.g. `["css:166e4235afcb8b15","cluster:0"]`) — the `css:` hash cannot be
  * reversed to a filename, and a `path:` segment reflects only the shallow
  * blocking depth, not this cluster's actual member set after cross-block
- * merging. `commonDirectories` / `commonStylesheetUrls` are computed fresh
- * from this cluster's actual member pages instead of parsed out of the key,
- * which is what makes them a meaningful, human-readable substitute for it.
+ * merging. `commonDirectories` is computed fresh from this cluster's actual
+ * member pages instead of parsed out of the key, and `commonStylesheetFileNames`
+ * / `reason` come from `@d-zero/page-cluster`'s own `ClusterReason` — together
+ * they're a meaningful, human-readable substitute for the key.
  */
 export interface TemplateClusterSummary {
 	/** The raw `page_templates.template_key` value for this cluster. */
@@ -2891,20 +2892,88 @@ export interface TemplateClusterSummary {
 	 */
 	commonDirectories: DirectoryDistributionEntry[];
 	/**
-	 * Stylesheet URLs referenced by every member page — see
-	 * {@link import('./compute-css-intersection.js').computeCssIntersection}
-	 * for why this is a simplified approximation of the cluster's actual
-	 * `css:<hash>` basis, not an exact reconstruction of it.
-	 */
-	commonStylesheetUrls: string[];
-	/**
-	 * Deduplicated filenames derived from `commonStylesheetUrls` — see
+	 * Deduplicated filenames extracted from every css-kind blocking entry's
+	 * `distinctiveStylesheetHrefs` in `reason.blocking` — see
 	 * {@link import('./compute-stylesheet-file-names.js').computeStylesheetFileNames}.
 	 * Precomputed server-side rather than in the viewer frontend because the
 	 * underlying URL parser depends on a Node-only module the browser build
-	 * cannot use (see that function's own JSDoc).
+	 * cannot use (see that function's own JSDoc). Empty when `reason` is
+	 * `null` or carries no css-kind blocking entry.
 	 */
 	commonStylesheetFileNames: string[];
+	/**
+	 * The `ClusterReason` `@d-zero/page-cluster` reported when this cluster
+	 * was classified, read back from `page_template_cluster_reasons`. `null`
+	 * means the cluster predates that table — it was classified by a
+	 * `@d-zero/page-cluster` version without `onClusterReason` (pre-0.5.0) —
+	 * not that `--templates` has never run; `hasClassification` on
+	 * {@link TemplateClusterListResult} already covers that case.
+	 */
+	reason: TemplateClusterReasonSummary | null;
+}
+
+/**
+ * One landmark type's (header/footer/nav/aside/form/search) commonality
+ * profile within a cluster — mirrors `@d-zero/page-cluster`'s
+ * `LandmarkClusterProfile`. Redefined here rather than imported: `@nitpicker/query`
+ * does not depend on `@d-zero/page-cluster` (only `@nitpicker/core` does),
+ * and the raw values are read back verbatim from the `landmarks` JSON column
+ * `page_template_cluster_reasons` stores.
+ */
+export interface TemplateClusterLandmarkProfile {
+	/** Fraction (0–1) of the cluster's member pages carrying at least one instance of this type. */
+	presenceRate: number;
+	/** Fraction (0–1) of this type's instances classified as shared chrome. */
+	chromeRate: number;
+	/** The shell token set discovered for this type within this cluster. */
+	shellTokens: string[];
+	/** How many member pages contributed at least one instance of this type. */
+	memberCountWithInstance: number;
+}
+
+/** Landmark type keys `TemplateClusterReasonSummary.landmarks` may carry. */
+export type TemplateClusterLandmarkType =
+	| 'header'
+	| 'footer'
+	| 'nav'
+	| 'aside'
+	| 'form'
+	| 'search';
+
+/**
+ * The evidence behind one Pass-0 blocking key that fed into a cluster —
+ * mirrors `@d-zero/page-cluster`'s `BlockingReason`. See
+ * {@link TemplateClusterLandmarkProfile}'s JSDoc for why this is redefined
+ * rather than imported.
+ */
+export type TemplateClusterBlockingReason =
+	| { kind: 'css'; distinctiveStylesheetHrefs: string[] }
+	| { kind: 'path'; pathKey: string }
+	| { kind: 'orphanMerge'; pathKey: string };
+
+/** One Pass-0 blocking key behind a cluster, and the evidence for it. */
+export interface TemplateClusterBlockingEntry {
+	blockKey: string;
+	reason: TemplateClusterBlockingReason;
+}
+
+/**
+ * Structured explanation of why a cluster's member pages ended up together —
+ * mirrors `@d-zero/page-cluster`'s `ClusterReason`, read back from
+ * `page_template_cluster_reasons`. See {@link TemplateClusterLandmarkProfile}'s
+ * JSDoc for why this is redefined rather than imported.
+ */
+export interface TemplateClusterReasonSummary {
+	/** Number of pages this cluster contains, as `@d-zero/page-cluster` counted it. */
+	memberCount: number;
+	/** The distinct Pass-0 blocking keys that fed into this cluster. */
+	blocking: TemplateClusterBlockingEntry[];
+	/** The frequency-quorum core of this cluster's DOM structural tokens. */
+	structuralCoreTokens: string[];
+	/** Per-landmark-type commonality; types absent from every member page are omitted. */
+	landmarks: Partial<Record<TemplateClusterLandmarkType, TemplateClusterLandmarkProfile>>;
+	/** Sibling final cluster keys split from the same Pass-0 block as this one. */
+	siblingClusterKeys: string[];
 }
 
 /**

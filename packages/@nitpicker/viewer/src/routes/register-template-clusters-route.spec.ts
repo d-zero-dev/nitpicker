@@ -93,6 +93,7 @@ async function buildFixture(workingDir: string, classify: boolean) {
 				['https://example.com/a', '["path:top","cluster:0"]'],
 				['https://example.com/b', '["path:top","cluster:0"]'],
 			]),
+			new Map(),
 		);
 	}
 

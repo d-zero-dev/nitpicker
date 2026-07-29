@@ -13,8 +13,6 @@ export { backfillBodyHashFromHtmlBlobs } from './viewer-read-model/backfill-body
 export { buildViewerReadModel } from './viewer-read-model/build-viewer-read-model.js';
 export { checkHeaders } from './check-headers.js';
 export { classifyErrorKind } from '@nitpicker/crawler';
-export { collectPageStylesheetUrlsByPageId } from './collect-page-stylesheet-urls-by-page-id.js';
-export { computeCssIntersection } from './compute-css-intersection.js';
 export { computeDirectoryDistribution } from './compute-directory-distribution.js';
 export { computeIsolatedClusters } from './compute-isolated-clusters.js';
 export { computeStylesheetFileNames } from './compute-stylesheet-file-names.js';
@@ -91,6 +89,7 @@ export { listViewerPages } from './list-viewer-pages.js';
 export { listViewerResources } from './list-viewer-resources.js';
 export { listViewerUnusedResources } from './list-viewer-unused-resources.js';
 export { prepareUrlSortTempTable } from './url-sort-temp-table.js';
+export { readClusterReasonsByTemplateKey } from './read-cluster-reasons-by-template-key.js';
 export { resolveErrorKindsSort } from './resolve-error-kinds-sort.js';
 export type { ResolvedErrorKindsSort } from './resolve-error-kinds-sort.js';
 export { sortArrayItems } from './sort-array-items.js';

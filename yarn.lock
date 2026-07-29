@@ -1205,16 +1205,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/page-cluster@npm:0.3.1":
-  version: 0.3.1
-  resolution: "@d-zero/page-cluster@npm:0.3.1"
+"@d-zero/page-cluster@npm:0.5.1":
+  version: 0.5.1
+  resolution: "@d-zero/page-cluster@npm:0.5.1"
   dependencies:
     "@d-zero/dealer": "npm:1.10.1"
     "@d-zero/shared": "npm:0.22.2"
     htmlparser2: "npm:12.0.0"
   bin:
     page-cluster: dist/cli.js
-  checksum: 10c0/0725767c26327b06a211efa0295d5c9cb5936d91a0ada2921afc02bc6fde7ddc944d9f75cfcc6aa1d68d49df47ca49d89d11c59f4de017ab47fb0a4cd5fd381e
+  checksum: 10c0/626618a03bc080becab0067f5d71bd71a84171984f8ed6949544c8b552caa8579cb749bc6df0c0cc975630dee0b7610b115b4ecb30d2073d8fcf1ae5193ac150
   languageName: node
   linkType: hard
 
@@ -2965,7 +2965,7 @@ __metadata:
   resolution: "@nitpicker/core@workspace:packages/@nitpicker/core"
   dependencies:
     "@d-zero/dealer": "npm:1.9.4"
-    "@d-zero/page-cluster": "npm:0.3.1"
+    "@d-zero/page-cluster": "npm:0.5.1"
     "@d-zero/shared": "npm:0.22.2"
     "@nitpicker/crawler": "npm:0.14.0"
     "@nitpicker/types": "npm:0.14.0"
