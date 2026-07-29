@@ -146,7 +146,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'get_page_detail',
 		description:
-			'Get full details for a specific page URL: ~47 flat meta fields (title, description, OG, Twitter, robots, link, charset, manifest, themeColor, fb_app_id, verification_google, format_detection, og:image:alt/width/height, og:locale, og:article timestamps, twitter:site/creator, etc.), `metaExtras` JSON (referrer, viewport parsed, httpEquiv, apple, msapplication, verification.{bing|yandex|...}, geo, citation, hreflang alternates, others.*, originTrial), JSON-LD/SpeculationRules **summary** (count + unique @types + parseErrorCount), Wappalyzer tag **summary** (count + provider→ids map), main-content **aggregate counts only** (mainContentSelector, mainContentWordCount/BodyWordCount, mainContentHeadingCount/ImageCount/TableCount/ButtonCount/IframeCount/VideoCount/AudioCount/CanvasCount, scrollHeightDesktop/Mobile — null when the page was never rendered), outbound/inbound links, redirect sources, response headers, and within-archive timestamps (firstCrawledAt / lastCrawledAt). Raw JSON-LD entries, full tag rows, and the main-content child-entity arrays are NOT included — fetch them via `get_page_jsonld` / `get_page_tags` / `get_page_main_contents`. Use when drilling down into a specific page.',
+			"Get full details for a specific page URL: ~47 flat meta fields (title, description, OG, Twitter, robots, link, charset, manifest, themeColor, fb_app_id, verification_google, format_detection, og:image:alt/width/height, og:locale, og:article timestamps, twitter:site/creator, etc.), `metaExtras` JSON (referrer, viewport parsed, httpEquiv, apple, msapplication, verification.{bing|yandex|...}, geo, citation, hreflang alternates, others.*, originTrial), JSON-LD/SpeculationRules **summary** (count + unique @types + parseErrorCount), Wappalyzer tag **summary** (count + provider→ids map), main-content **aggregate counts only** (mainContentSelector, mainContentWordCount/BodyWordCount, mainContentHeadingCount/ImageCount/TableCount/ButtonCount/IframeCount/VideoCount/AudioCount/CanvasCount, scrollHeightDesktop/Mobile — null when the page was never rendered), outbound links, redirect sources, response headers, and within-archive timestamps (firstCrawledAt / lastCrawledAt). Inbound links are NOT included here — a page's referrer count can reach the hundreds of thousands on a large site; use `list_inbound_links` instead. Raw JSON-LD entries, full tag rows, and the main-content child-entity arrays are also NOT included — fetch them via `get_page_jsonld` / `get_page_tags` / `get_page_main_contents`. Use when drilling down into a specific page.",
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -155,6 +155,33 @@ export const toolDefinitions: Tool[] = [
 					description: 'The archive ID returned by open_archive',
 				},
 				url: { type: 'string', description: 'The exact URL of the page to retrieve' },
+			},
+			required: ['archiveId', 'url'],
+		},
+	},
+	{
+		name: 'list_inbound_links',
+		description:
+			"Find which pages link to a specific page — the reverse of the page's outbound links. Results are bounded and cursor-paginated (default 100 per call) — pass the returned `nextCursor` back in to fetch the rest for a page linked from many pages. Redirect sources and URL-normalization aliases resolve to their canonical page, the same resolution `get_page_detail` applies. Pass `limit: 0` to get only the total referrer count without any rows.",
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				url: {
+					type: 'string',
+					description: 'The exact URL of the page whose inbound links to list',
+				},
+				limit: {
+					type: 'number',
+					description: 'Max referring pages (default: 100; 0 for count only)',
+				},
+				cursor: {
+					type: 'string',
+					description: 'Opaque cursor from a previous call, taken from its `nextCursor`',
+				},
 			},
 			required: ['archiveId', 'url'],
 		},
