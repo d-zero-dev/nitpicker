@@ -79,6 +79,39 @@ describe('mapFlagsToQueryOptions', () => {
 		);
 	});
 
+	it('requires --url for inbound-links', () => {
+		expect(() => mapFlagsToQueryOptions('inbound-links', {})).toThrow(
+			'--url is required for the inbound-links sub-command',
+		);
+	});
+
+	it('throws for invalid inbound-links direction', () => {
+		expect(() =>
+			mapFlagsToQueryOptions('inbound-links', {
+				url: 'https://example.com',
+				direction: 'sideways',
+			}),
+		).toThrow('Invalid --direction value');
+	});
+
+	it('returns url/limit/offset/cursor/direction for inbound-links', () => {
+		expect(
+			mapFlagsToQueryOptions('inbound-links', {
+				url: 'https://example.com',
+				limit: 10,
+				offset: 20,
+				cursor: 'abc',
+				direction: 'prev',
+			}),
+		).toEqual({
+			url: 'https://example.com',
+			limit: 10,
+			offset: 20,
+			cursor: 'abc',
+			direction: 'prev',
+		});
+	});
+
 	it('requires --url for html', () => {
 		expect(() => mapFlagsToQueryOptions('html', {})).toThrow(
 			'--url is required for the html sub-command',
