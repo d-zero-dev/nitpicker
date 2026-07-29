@@ -14,6 +14,7 @@ import { ErrorsView } from './routes/errors-view.js';
 import { ExternalLinksView } from './routes/external-links-view.js';
 import { GraphView } from './routes/graph-view.js';
 import { ImagesView } from './routes/images-view.js';
+import { InboundLinksView } from './routes/inbound-links-view.js';
 import { IsolatedClustersView } from './routes/isolated-clusters-view.js';
 import { IsolatedPagesView } from './routes/isolated-pages-view.js';
 import { MismatchesView } from './routes/mismatches-view.js';
@@ -59,6 +60,7 @@ export function App() {
 									<Route path="/" element={<SummaryView />} />
 									<Route path="/pages" element={<PagesView />} />
 									<Route path="/pages/detail" element={<PageDetailView />} />
+									<Route path="/pages/inbound-links" element={<InboundLinksView />} />
 									<Route path="/template-clusters" element={<TemplateClustersView />} />
 									<Route path="/directory-tree" element={<DirectoryTreeView />} />
 									<Route path="/resources" element={<ResourcesView />} />

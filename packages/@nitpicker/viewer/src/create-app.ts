@@ -13,6 +13,7 @@ import { registerErrorKindsRoute } from './routes/register-error-kinds-route.js'
 import { registerGraphRoute } from './routes/register-graph-route.js';
 import { registerHeaderChecksRoute } from './routes/register-header-checks-route.js';
 import { registerImagesRoute } from './routes/register-images-route.js';
+import { registerInboundLinksRoute } from './routes/register-inbound-links-route.js';
 import { registerIsolatedClustersRoute } from './routes/register-isolated-clusters-route.js';
 import { registerIsolatedPagesRoute } from './routes/register-isolated-pages-route.js';
 import { registerLinksRoute } from './routes/register-links-route.js';
@@ -52,6 +53,7 @@ export function createApp(options: CreateAppOptions): Hono {
 	registerSummaryRoute(app, context);
 	registerPagesRoute(app, context);
 	registerPageDetailRoute(app, context);
+	registerInboundLinksRoute(app, context);
 	registerPageHtmlRoute(app, context);
 	registerPageMainContentsRoute(app, context);
 	registerDirectoryTreeRoute(app, context);
