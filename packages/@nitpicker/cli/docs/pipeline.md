@@ -17,6 +17,8 @@ npx @nitpicker/cli pipeline https://example.com --sheet <Google Sheets URL> --al
 
 `--sheet` を指定した場合だけ `report` ステップを実行します。指定しない場合は `crawl` と `analyze` までを実行します。
 
+crawlステップの前提条件（Puppeteer用Chromeが必要）は [crawl の前提条件](./crawl.md#前提条件-puppeteer用chrome) を参照してください。
+
 ## オプション一覧
 
 ### crawl系

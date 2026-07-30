@@ -1,5 +1,6 @@
 import type { CrawlerError } from '@nitpicker/crawler';
 
+import { assertChromeIsInstalled } from '@nitpicker/crawler';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { ExitCode } from '../exit-code.js';
@@ -15,6 +16,10 @@ vi.mock('./crawl.js', () => {
 		startCrawl: vi.fn(),
 	};
 });
+
+vi.mock('@nitpicker/crawler', () => ({
+	assertChromeIsInstalled: vi.fn(),
+}));
 
 vi.mock('./analyze.js', () => ({
 	analyze: vi.fn(),
@@ -390,5 +395,29 @@ describe('pipeline command', () => {
 			['https://example.com'],
 			expect.objectContaining({ strict: true }),
 		);
+	});
+
+	it('crawl 開始前に assertChromeIsInstalled を呼び出す', async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+		vi.mocked(analyzeFn).mockResolvedValue();
+
+		await pipeline(['https://example.com'], defaultFlags);
+
+		expect(assertChromeIsInstalled).toHaveBeenCalled();
+		expect(vi.mocked(assertChromeIsInstalled).mock.invocationCallOrder[0]).toBeLessThan(
+			vi.mocked(startCrawlFn).mock.invocationCallOrder[0]!,
+		);
+	});
+
+	it('assertChromeIsInstalled が失敗した場合、crawl を開始せずエラーを伝播する', async () => {
+		vi.mocked(assertChromeIsInstalled).mockRejectedValueOnce(
+			new Error('Chrome executable not found at: /fake/chrome'),
+		);
+
+		await expect(pipeline(['https://example.com'], defaultFlags)).rejects.toThrow(
+			'Chrome executable not found at: /fake/chrome',
+		);
+		expect(startCrawlFn).not.toHaveBeenCalled();
+		expect(analyzeFn).not.toHaveBeenCalled();
 	});
 });

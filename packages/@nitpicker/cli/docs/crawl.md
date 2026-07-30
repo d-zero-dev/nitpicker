@@ -12,6 +12,19 @@ npx @nitpicker/cli crawl --resume <stub-dir>
 
 複数URLを渡すと、それぞれがクロール起点かつスコープエントリになります。スコープは `(hostname, port, path)` で判定されます。
 
+## 前提条件: Puppeteer用Chrome
+
+`crawl`（`--diff` を除く全モード）はPuppeteer経由でヘッドレスChromeを起動します。環境（npmのinstall-scriptブロック方針、`unzip` 等の展開ツール不在、ネットワーク制限など）によってはpostinstallでのChrome自動ダウンロードが行われないことがあります。
+
+Chromeが見つからない場合、クロールが実際にページを取得し始める前に以下のようなエラーで即座に停止します。
+
+```
+Error: Chrome executable not found at: <解決されたパス>
+Run `npx puppeteer@<pinned-version> browsers install chrome` to install the Chrome build Puppeteer expects, then retry.
+```
+
+案内された通り、表示された `npx puppeteer@<version> browsers install chrome` コマンドをそのまま実行すればインストールできます。
+
 ## 通常クロール
 
 ```sh
