@@ -19,20 +19,22 @@ const PORT = 4325;
  */
 export default defineConfig({
 	testDir: './e2e',
-	// The stub-mode, directory-tree, template-clusters-classified, and
-	// inbound-links suites each have their own webServer (a different fixture
-	// and port) and are wired up via `playwright.stub.config.ts` /
-	// `test:e2e:stub`, `playwright.directory-tree.config.ts` /
-	// `test:e2e:directory-tree`, `playwright.template-clusters.config.ts` /
-	// `test:e2e:template-clusters`, and `playwright.inbound-links.config.ts` /
-	// `test:e2e:inbound-links`. Keep them out of this run so every
-	// dedicated-fixture suite stays independently scheduled in CI — without
-	// this, e.g. `directory-tree.spec.ts` would also run here against the
-	// shared fixture, whose `/api/directory-tree` always returns an empty
+	// The stub-mode, directory-tree, template-clusters-classified,
+	// inbound-links, and duplicate-clusters suites each have their own
+	// webServer (a different fixture and port) and are wired up via
+	// `playwright.stub.config.ts` / `test:e2e:stub`,
+	// `playwright.directory-tree.config.ts` / `test:e2e:directory-tree`,
+	// `playwright.template-clusters.config.ts` / `test:e2e:template-clusters`,
+	// `playwright.inbound-links.config.ts` / `test:e2e:inbound-links`, and
+	// `playwright.duplicate-clusters.config.ts` / `test:e2e:duplicate-clusters`.
+	// Keep them out of this run so every dedicated-fixture suite stays
+	// independently scheduled in CI — without this, e.g.
+	// `directory-tree.spec.ts` would also run here against the shared
+	// fixture, whose `/api/directory-tree` always returns an empty
 	// `{ roots: [] }` (the shared fixture never builds the viewer read
 	// model), and every assertion would fail.
 	testIgnore:
-		/(viewer-stub|directory-tree|template-clusters-classified|inbound-links)\.spec\.ts$/,
+		/(viewer-stub|directory-tree|template-clusters-classified|inbound-links|duplicate-clusters)\.spec\.ts$/,
 	fullyParallel: false,
 	workers: 1,
 	retries: 0,
