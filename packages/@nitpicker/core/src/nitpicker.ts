@@ -562,7 +562,7 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 		// phase's outcome.
 		if (templateClassificationLaneId != null) {
 			try {
-				const templateKeys = await classifyPageTemplates({
+				const classification = await classifyPageTemplates({
 					archive: this.archive,
 					pages: accumulatedPages,
 					// Only worth paying for when there's a lane to update —
@@ -570,6 +570,9 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 					// demotes `resolvePageClusterKeys` off its byte-identical,
 					// yield-overhead-free sync path for corpora at or below its
 					// inline threshold (see @d-zero/page-cluster's own docs).
+					// `classifyPageTemplates` always requests cluster reasons too,
+					// independent of this — see its own JSDoc for why that no
+					// longer costs the sync-path demotion this comment warns about.
 					onProgress: lanes
 						? (event) => {
 								lanes.update(
@@ -579,12 +582,17 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 							}
 						: undefined,
 				});
-				if (templateKeys.size > 0) {
-					await this.archive.replacePageTemplates(templateKeys);
+				if (classification.templateKeysByUrl.size > 0) {
+					await this.archive.replacePageTemplates(
+						classification.templateKeysByUrl,
+						classification.clusterReasonsByTemplateKey,
+					);
 				}
 				lanes?.update(
 					templateClassificationLaneId,
-					c.green(`Template classification: Done (${templateKeys.size} pages)`),
+					c.green(
+						`Template classification: Done (${classification.templateKeysByUrl.size} pages)`,
+					),
 				);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);

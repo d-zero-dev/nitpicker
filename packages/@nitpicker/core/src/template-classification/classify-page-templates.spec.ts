@@ -1,4 +1,5 @@
-import { utimes } from 'node:fs/promises';
+import { stat, utimes } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -121,14 +122,28 @@ describe('classifyPageTemplates', () => {
 		const pages = await archive.getPages();
 		const result = await classifyPageTemplates({ archive, pages });
 
-		const keyA = result.get('https://example.com/article-1');
-		const keyB = result.get('https://example.com/article-2');
-		const keyC = result.get('https://example.com/list');
+		const keyA = result.templateKeysByUrl.get('https://example.com/article-1');
+		const keyB = result.templateKeysByUrl.get('https://example.com/article-2');
+		const keyC = result.templateKeysByUrl.get('https://example.com/list');
 
 		expect(keyA).toBeDefined();
 		expect(keyA).toBe(keyB);
 		expect(keyC).toBeDefined();
 		expect(keyC).not.toBe(keyA);
+	});
+
+	it('各templateKeyのクラスタ選定理由を捕捉する', async () => {
+		const pages = await archive.getPages();
+		const future = new Date(Date.now() + 90_000);
+		await utimes(archiveFilePath, future, future);
+
+		const result = await classifyPageTemplates({ archive, pages });
+		const keyA = result.templateKeysByUrl.get('https://example.com/article-1')!;
+
+		expect(result.clusterReasonsByTemplateKey.size).toBeGreaterThan(0);
+		const reasonA = result.clusterReasonsByTemplateKey.get(keyA);
+		expect(reasonA).toBeDefined();
+		expect(reasonA!.memberCount).toBeGreaterThan(0);
 	});
 
 	it('同一アーカイブへの繰り返し呼び出しはキャッシュヒットし、mtime変更で再計算される', async () => {
@@ -150,7 +165,12 @@ describe('classifyPageTemplates', () => {
 		vi.mocked(resolvePageClusterKeys).mockClear();
 		const recomputed = await classifyPageTemplates({ archive, pages });
 		expect(resolvePageClusterKeys).toHaveBeenCalledTimes(1);
-		expect(Object.fromEntries(recomputed)).toEqual(Object.fromEntries(cached));
+		expect(Object.fromEntries(recomputed.templateKeysByUrl)).toEqual(
+			Object.fromEntries(cached.templateKeysByUrl),
+		);
+		expect(Object.fromEntries(recomputed.clusterReasonsByTemplateKey)).toEqual(
+			Object.fromEntries(cached.clusterReasonsByTemplateKey),
+		);
 	});
 
 	it('ファイルのsize/mtimeが同じでもページ数が変わればキャッシュが無効化される', async () => {
@@ -165,6 +185,29 @@ describe('classifyPageTemplates', () => {
 		vi.mocked(resolvePageClusterKeys).mockClear();
 		await classifyPageTemplates({ archive, pages: pages.slice(0, 2) });
 		expect(resolvePageClusterKeys).toHaveBeenCalledTimes(1);
+	});
+
+	it('クラスタ選定理由を持たない旧形式のキャッシュエントリは再計算にフォールバックする', async () => {
+		const { Cache } = await import('@d-zero/shared/cache');
+		const pages = await archive.getPages();
+
+		const future = new Date(Date.now() + 150_000);
+		await utimes(archiveFilePath, future, future);
+		const stats = await stat(archiveFilePath);
+		const cacheKey = `${archiveFilePath}:${stats.size}:${stats.mtimeMs}:${pages.length}`;
+
+		const cache = new Cache<Record<string, string>>(
+			'nitpicker-templates',
+			path.join(os.tmpdir(), 'nitpicker/cache/templates'),
+		);
+		// Pre-`clusterReasonsByTemplateKey` on-disk shape: a bare URL→key map,
+		// no `templateKeys`/`clusterReasons` wrapper.
+		await cache.store(cacheKey, { 'https://example.com/stale': 'stale-key' });
+
+		vi.mocked(resolvePageClusterKeys).mockClear();
+		const result = await classifyPageTemplates({ archive, pages });
+		expect(resolvePageClusterKeys).toHaveBeenCalledTimes(1);
+		expect(result.templateKeysByUrl.has('https://example.com/stale')).toBe(false);
 	});
 
 	it('resolvePageClusterKeysの戻り値件数がページ数と食い違う場合はエラーを投げる', async () => {
