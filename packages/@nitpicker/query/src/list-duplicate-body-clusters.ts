@@ -31,8 +31,10 @@ const DEFAULT_SAMPLE_PAGES_LIMIT = 20;
  * `findDuplicateBodies` uses) cannot express "first N URLs per group" —
  * SQLite's `GROUP_CONCAT` has no `ORDER BY ... LIMIT` inside the aggregate.
  * Stage 1 computes the filtered/ranked cluster list from aggregate columns
- * only (no per-row URL data). Stage 2 then fetches, per surviving cluster,
- * every member URL — needed in full (not just `samplePagesLimit`) because
+ * only (no per-row URL data). Stage 2 then fetches every member URL for
+ * every surviving cluster in a single `whereIn(body_hash, ...)` query
+ * (grouped back into per-cluster lists in memory afterward, not one query
+ * per cluster) — needed in full (not just `samplePagesLimit`) because
  * `commonDirectories` must reflect the true distribution across the whole
  * cluster (see `computeDirectoryDistribution`'s own JSDoc on why a partial
  * sample would misrepresent a multi-section trap). `samplePages` is then a
@@ -125,30 +127,51 @@ export async function listDuplicateBodyClusters(
 		ogUrlMismatchRatio: number;
 	}[];
 
-	// Stage 2: per surviving cluster, fetch every member URL.
-	return Promise.all(
-		clusterRows.map(async (row) => {
-			// The driver only binds Buffer (not a plain Uint8Array) for a BLOB
-			// parameter — `row.bodyHash` as returned by stage 1 is a bare
-			// Uint8Array, so it must be re-wrapped before use in a `.where()`.
-			const bodyHash = Buffer.from(row.bodyHash);
-			const urlRows = (await knex('page_meta as pm')
-				.join('content_items as ci', 'ci.id', 'pm.page_id')
-				.join('url_refs as ur', 'ur.id', 'ci.url_id')
-				.select('ur.url as url')
-				.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'pm.body_hash': bodyHash })
-				.whereNull('ci.redirect_dest_id')
-				.whereNull('ci.alias_of_id')
-				.orderBy('ur.url', 'asc')) as { url: string }[];
-			const urls = urlRows.map((r) => r.url);
+	if (clusterRows.length === 0) {
+		return [];
+	}
 
-			return {
-				signature: bodyHash.toString('hex'),
-				count: Number(row.cnt),
-				ogUrlMismatchRatio: Number(row.ogUrlMismatchRatio),
-				samplePages: urls.slice(0, samplePagesLimit),
-				commonDirectories: computeDirectoryDistribution(urls),
-			};
-		}),
-	);
+	// Stage 2: every member URL for every surviving cluster, fetched in ONE
+	// `whereIn` query rather than one query per cluster (the driver only
+	// binds Buffer, not a plain Uint8Array, for a BLOB parameter — `row.bodyHash`
+	// as returned by stage 1 is a bare Uint8Array, so each must be re-wrapped
+	// before use in `.whereIn()`), then grouped back into per-cluster URL
+	// lists in memory. `orderBy('ur.url', 'asc')` over the combined result set
+	// still yields each cluster's own URLs in ascending order, since rows are
+	// appended to their cluster's list in the order the single query returns
+	// them.
+	const bodyHashes = clusterRows.map((row) => Buffer.from(row.bodyHash));
+	const urlRows = (await knex('page_meta as pm')
+		.join('content_items as ci', 'ci.id', 'pm.page_id')
+		.join('url_refs as ur', 'ur.id', 'ci.url_id')
+		.select('ur.url as url', 'pm.body_hash as bodyHash')
+		.where({ 'ci.scraped': 1, 'ci.is_external': 0 })
+		.whereIn('pm.body_hash', bodyHashes)
+		.whereNull('ci.redirect_dest_id')
+		.whereNull('ci.alias_of_id')
+		.orderBy('ur.url', 'asc')) as { url: string; bodyHash: Uint8Array }[];
+
+	const urlsBySignature = new Map<string, string[]>();
+	for (const row of urlRows) {
+		const signature = Buffer.from(row.bodyHash).toString('hex');
+		const urls = urlsBySignature.get(signature);
+		if (urls) {
+			urls.push(row.url);
+		} else {
+			urlsBySignature.set(signature, [row.url]);
+		}
+	}
+
+	return clusterRows.map((row) => {
+		const signature = Buffer.from(row.bodyHash).toString('hex');
+		const urls = urlsBySignature.get(signature) ?? [];
+
+		return {
+			signature,
+			count: Number(row.cnt),
+			ogUrlMismatchRatio: Number(row.ogUrlMismatchRatio),
+			samplePages: urls.slice(0, samplePagesLimit),
+			commonDirectories: computeDirectoryDistribution(urls),
+		};
+	});
 }

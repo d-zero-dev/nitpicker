@@ -1,6 +1,9 @@
 import type { DedupeCapEventEntry, ListDedupeCapEventsOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { resolveListLimit } from './resolve-list-limit.js';
+import { resolveListOffset } from './resolve-list-offset.js';
+
 /**
  * List recorded same-cluster-cap audit rows from the archive, newest first.
  *
@@ -37,8 +40,8 @@ export async function listDedupeCapEvents(
 	options: ListDedupeCapEventsOptions = {},
 ): Promise<{ items: DedupeCapEventEntry[]; total: number }> {
 	const knex = accessor.getKnex();
-	const limit = options.limit ?? 100;
-	const offset = options.offset ?? 0;
+	const limit = resolveListLimit(options.limit, 100);
+	const offset = resolveListOffset(options.offset);
 
 	const hasTable = await knex.schema.hasTable('dedupe_cap_events');
 	if (!hasTable) {

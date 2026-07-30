@@ -114,6 +114,26 @@ describe('listDedupeCapEvents', () => {
 		expect(secondPage.total).toBe(3);
 	});
 
+	it('負のofferやlimitを渡してもdefaultへフォールバックする（knexへ不正な値を渡さない）', async () => {
+		await archive.insertDedupeCapEvent({
+			shapeKey: 'example.com/a/{n}/',
+			sampleUrl: 'https://example.com/a/1/',
+			bodyHash: Buffer.from('a'),
+			effectiveThreshold: 50,
+			observedCount: 100,
+			detectedAt: 1000,
+		});
+
+		await expect(
+			listDedupeCapEvents(archive, { limit: -1, offset: -1 }),
+		).resolves.toEqual({
+			items: expect.arrayContaining([
+				expect.objectContaining({ id: expect.any(Number) }),
+			]),
+			total: 1,
+		});
+	});
+
 	it('returns every column, with body_hash as a hex string', async () => {
 		const id = await archive.insertDedupeCapEvent({
 			shapeKey: 'example.com/full/{n}/',
