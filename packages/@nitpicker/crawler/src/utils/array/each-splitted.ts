@@ -10,10 +10,10 @@ import { splitArray } from '@d-zero/shared/split-array';
  * @returns A promise that resolves when all chunk callbacks have completed.
  */
 export async function eachSplitted<T>(
-	a: T[],
+	a: readonly T[],
 	count: number,
 	callback: (items: T[]) => void | Promise<void>,
 ) {
-	const splitted = splitArray(a, count);
+	const splitted = splitArray(a as T[], count);
 	await Promise.all(splitted.map((items) => callback(items)));
 }

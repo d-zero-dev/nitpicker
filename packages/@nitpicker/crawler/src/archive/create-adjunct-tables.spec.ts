@@ -26,6 +26,7 @@ const ADJUNCT_TABLES = [
 	'network_outages',
 	'analysis_text_refs',
 	'analysis_violations',
+	'page_template_clusters',
 	'page_html_blobs',
 	'page_html_ref',
 	'console_log_items',
@@ -142,6 +143,36 @@ describe('createAdjunctTables', () => {
 		const rows = await db('network_outages').select('*');
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.started_at).toBe(100);
+	});
+
+	it('declares page_template_clusters with no FK and the BLOB+codec+size shape', async () => {
+		await createAdjunctTables(db);
+		const parents = await fkParentTables(db, 'page_template_clusters');
+		expect(parents.size).toBe(0);
+		expect(await db.schema.hasColumn('page_template_clusters', 'template_key')).toBe(
+			true,
+		);
+		expect(await db.schema.hasColumn('page_template_clusters', 'member_count')).toBe(
+			true,
+		);
+		expect(await db.schema.hasColumn('page_template_clusters', 'reason_json')).toBe(true);
+		expect(await db.schema.hasColumn('page_template_clusters', 'codec')).toBe(true);
+		expect(await db.schema.hasColumn('page_template_clusters', 'size_raw')).toBe(true);
+		expect(await db.schema.hasColumn('page_template_clusters', 'size_stored')).toBe(true);
+	});
+
+	it('rejects an unrecognized page_template_clusters.codec value', async () => {
+		await createAdjunctTables(db);
+		await expect(
+			db('page_template_clusters').insert({
+				template_key: 'css:abc',
+				member_count: 1,
+				reason_json: Buffer.from('{}'),
+				codec: 'gzip',
+				size_raw: 2,
+				size_stored: 2,
+			}),
+		).rejects.toThrow(/CHECK constraint failed/);
 	});
 
 	it('declares console_log_items as a content-addressable dictionary with no content_items FK', async () => {

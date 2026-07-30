@@ -22,6 +22,10 @@ import type { Knex } from 'knex';
  * - `page_templates` — DOM-structure template classification (`--templates`,
  *   `@nitpicker/core`'s `template-classification/`), one row per classified
  *   page, FK → `content_items(id)`
+ * - `page_template_clusters` — one row per distinct `page_templates.template_key`,
+ *   holding `@d-zero/page-cluster`'s cluster-selection evidence (no FK;
+ *   `template_key` is not a `page_templates` FK target, so consistency is
+ *   maintained by replacing both tables together, not by a foreign key)
  * - `page_html_blobs` + `page_html_ref` — content-addressable HTML
  *   snapshots, FK → `content_items(id)`
  * - `console_log_items` — content-addressable dictionary of distinct
@@ -418,6 +422,35 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 			CREATE TABLE page_templates (
 				page_id      INTEGER PRIMARY KEY REFERENCES content_items(id),
 				template_key TEXT NOT NULL
+			) WITHOUT ROWID
+		`);
+	}
+
+	// One row per distinct `template_key` produced by the same `--templates`
+	// classification run, holding `@d-zero/page-cluster`'s cluster-selection
+	// evidence (`ClusterReason`, renamed `TemplateClusterReason` on this side)
+	// as a zstd-compressed JSON blob — same BLOB+codec+size shape as
+	// `page_html_blobs` below. A column on `page_templates` was rejected: that
+	// table is one row per *page*, so the same cluster's reason would be
+	// duplicated across every member page (multi-GB on a large archive with a
+	// few-hundred-member cluster). A `json_refs` row was also rejected: reason
+	// payloads differ per cluster (distinct `memberCount`/token sets), so
+	// content-address dedup would not pay for itself, and `json_refs` is a
+	// shared dictionary that other tables reference — this table's full
+	// replace-on-every-run write pattern (see `replacePageTemplates`) would
+	// otherwise leave orphaned rows behind with no owner able to delete them.
+	// No FK to `page_templates`: `template_key` is not that table's primary
+	// key (`page_id` is), so there is nothing to reference — consistency is
+	// instead maintained by replacing both tables in the same transaction.
+	if (!(await instance.schema.hasTable('page_template_clusters'))) {
+		await instance.raw(`
+			CREATE TABLE page_template_clusters (
+				template_key TEXT PRIMARY KEY,
+				member_count INTEGER NOT NULL,
+				reason_json  BLOB NOT NULL,
+				codec        TEXT NOT NULL CHECK(codec IN ('zstd', 'none')),
+				size_raw     INTEGER NOT NULL,
+				size_stored  INTEGER NOT NULL
 			) WITHOUT ROWID
 		`);
 	}

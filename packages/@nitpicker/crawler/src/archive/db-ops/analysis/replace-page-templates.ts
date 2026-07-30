@@ -1,6 +1,8 @@
+import type { ReplacePageTemplatesParams } from './types.js';
 import type { Knex } from 'knex';
 
 import { eachSplitted } from '../../../utils/array/each-splitted.js';
+import { compressPayload } from '../_shared/compress-payload.js';
 
 /**
  * Replaces the stored DOM-structure template classification (`--templates`)
@@ -16,16 +18,54 @@ import { eachSplitted } from '../../../utils/array/each-splitted.js';
  * (e.g. a URL-normalization mismatch between the in-memory `Page.url.href`
  * and the stored `url_refs.url`) should not discard the rest of a
  * potentially multi-thousand-page classification run.
+ *
+ * `page_template_clusters` is always cleared alongside `page_templates`
+ * regardless of whether `clusterReasonsByTemplateKey` is passed — "no
+ * reason" must mean "not captured for this run", never "carry over the
+ * previous run's reason". Reason rows are inserted for every key in
+ * `clusterReasonsByTemplateKey` even if some have no surviving member page
+ * in `templateKeysByUrl` after URL-resolution skips above — harmless
+ * (nothing joins `page_template_clusters` back to `page_templates` by FK;
+ * see the table's own JSDoc), and simpler than cross-filtering the two maps.
  * @param knex - Knex query builder connected to the archive DB.
- * @param templateKeysByUrl - Page URL → template key, as produced by
- *   `classifyPageTemplates`.
+ * @param params - See {@link ReplacePageTemplatesParams}.
  */
 export async function replacePageTemplates(
 	knex: Knex,
-	templateKeysByUrl: ReadonlyMap<string, string>,
+	params: ReplacePageTemplatesParams,
 ): Promise<void> {
+	const { templateKeysByUrl, clusterReasonsByTemplateKey } = params;
+
+	// Compressing every reason is pure CPU work independent of the DB — done
+	// before opening the transaction below so it doesn't extend how long the
+	// SQLite write-lock is held for.
+	const reasonRows =
+		clusterReasonsByTemplateKey && clusterReasonsByTemplateKey.size > 0
+			? [...clusterReasonsByTemplateKey].map(([templateKey, reason]) => {
+					const { body, codec, sizeRaw, sizeStored } = compressPayload(
+						Buffer.from(JSON.stringify(reason), 'utf8'),
+					);
+					return {
+						template_key: templateKey,
+						member_count: reason.memberCount,
+						reason_json: body,
+						codec,
+						size_raw: sizeRaw,
+						size_stored: sizeStored,
+					};
+				})
+			: [];
+
 	await knex.transaction(async (trx) => {
 		await trx('page_templates').delete();
+		await trx('page_template_clusters').delete();
+
+		if (reasonRows.length > 0) {
+			await eachSplitted(reasonRows, 100, async (chunk) => {
+				await trx('page_template_clusters').insert(chunk);
+			});
+		}
+
 		if (templateKeysByUrl.size === 0) {
 			return;
 		}

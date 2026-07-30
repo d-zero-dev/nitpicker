@@ -1,9 +1,9 @@
 import type { WriteRefCaches } from './types.js';
 import type { Knex } from 'knex';
 
-import { zstdCompressSync } from 'node:zlib';
-
 import { computeContentHash } from '../../populate-ref-tables/compute-content-hash.js';
+
+import { compressPayload } from './compress-payload.js';
 
 /**
  * Resolves the `json_refs.id` for one JSON payload string, inserting the
@@ -36,13 +36,13 @@ export async function upsertJsonRef(
 	if (cached !== undefined) {
 		return cached;
 	}
-	const compressed = zstdCompressSync(rawBytes);
+	const { body, sizeRaw, sizeStored } = compressPayload(rawBytes);
 	const rows: { id: number }[] = await qb.raw(
 		`INSERT INTO json_refs (hash, json_text, codec, size_raw, size_stored)
 		 VALUES (?, ?, 'zstd', ?, ?)
 		 ON CONFLICT(hash) DO UPDATE SET hash = hash
 		 RETURNING id`,
-		[hash, compressed, rawBytes.byteLength, compressed.byteLength],
+		[hash, body, sizeRaw, sizeStored],
 	);
 	const first = rows[0];
 	if (first === undefined) {
