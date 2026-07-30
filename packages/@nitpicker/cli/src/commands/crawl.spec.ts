@@ -15,6 +15,7 @@ const mockAppend = vi.fn();
 const mockRetryFailed = vi.fn();
 const mockInventory = vi.fn();
 const mockComputeFileSha256 = vi.fn(() => 'd'.repeat(64));
+const mockAssertChromeIsInstalled = vi.fn().mockResolvedValue();
 
 vi.mock('@nitpicker/crawler', () => ({
 	CrawlerOrchestrator: {
@@ -25,6 +26,7 @@ vi.mock('@nitpicker/crawler', () => ({
 		inventory: mockInventory,
 	},
 	computeFileSha256: mockComputeFileSha256,
+	assertChromeIsInstalled: mockAssertChromeIsInstalled,
 }));
 
 const mockEventAssignments = vi.fn().mockResolvedValue();
@@ -1033,6 +1035,47 @@ describe('crawl', () => {
 				createFlags({ inventory: '/tmp/urls.txt', single: true }),
 			),
 		).rejects.toThrow('--inventory cannot be combined with --single');
+	});
+
+	it('クロール開始前に assertChromeIsInstalled を呼び出す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['https://example.com'], createFlags());
+
+		expect(mockAssertChromeIsInstalled).toHaveBeenCalled();
+		expect(mockAssertChromeIsInstalled.mock.invocationCallOrder[0]).toBeLessThan(
+			mockCrawling.mock.invocationCallOrder[0]!,
+		);
+	});
+
+	it('assertChromeIsInstalled が失敗した場合、クロールを開始せずエラーを伝播する', async () => {
+		mockAssertChromeIsInstalled.mockRejectedValueOnce(
+			new Error('Chrome executable not found at: /fake/chrome'),
+		);
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl(['https://example.com'], createFlags())).rejects.toThrow(
+			'Chrome executable not found at: /fake/chrome',
+		);
+		expect(mockCrawling).not.toHaveBeenCalled();
+	});
+
+	it('--diff モードでは assertChromeIsInstalled を呼ばない', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['a.nitpicker', 'b.nitpicker'], createFlags({ diff: true }));
+
+		expect(mockAssertChromeIsInstalled).not.toHaveBeenCalled();
+	});
+
+	it('--resume モードでも assertChromeIsInstalled が失敗すればクロールを開始しない', async () => {
+		mockAssertChromeIsInstalled.mockRejectedValueOnce(
+			new Error('Chrome executable not found at: /fake/chrome'),
+		);
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl([], createFlags({ resume: '/tmp/stub' }))).rejects.toThrow(
+			'Chrome executable not found at: /fake/chrome',
+		);
+		expect(mockResume).not.toHaveBeenCalled();
 	});
 });
 

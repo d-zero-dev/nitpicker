@@ -65,6 +65,7 @@ export type { NetworkProbe } from './crawler/probe-network.js';
 export { probeNetwork } from './crawler/probe-network.js';
 export { computeOutageClampTimestamp } from './archive/db-ops/outages/compute-outage-clamp-timestamp.js';
 export { chooseProbeHost } from './crawler/choose-probe-host.js';
+export { assertChromeIsInstalled } from './crawler/assert-chrome-installed.js';
 export { computeFileSha256 } from './utils/compute-file-sha256.js';
 
 // 0.13 ref-table population (issue #191, epic #103). Exposed as the

@@ -5,7 +5,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { readList, toListWithPosition } from '@d-zero/readtext/list';
-import { computeFileSha256, CrawlerOrchestrator } from '@nitpicker/crawler';
+import {
+	assertChromeIsInstalled,
+	computeFileSha256,
+	CrawlerOrchestrator,
+} from '@nitpicker/crawler';
 
 import { classifyInventoryListItems } from '../crawl/classify-inventory-list-items.js';
 import { log, verbosely } from '../crawl/debug.js';
@@ -514,6 +518,10 @@ function validateUrls(urls: readonly string[]) {
  * 5. `--retry-failed` mode: Re-fetches failed pages in an existing archive
  * 6. `--list-file` / `--list` mode: Crawls a pre-defined URL list (non-recursive)
  * 7. Default mode: Crawls from one or more root URLs
+ *
+ * Every mode except `--diff` launches a browser, so
+ * {@link assertChromeIsInstalled} runs once up front and fails fast if
+ * Chrome is missing, rather than letting it surface per-page.
  * @param args - Positional arguments (typically one or two URLs/file paths)
  * @param flags - Parsed CLI flags from the `crawl` command
  * @returns A promise that resolves when the dispatched mode completes.
@@ -557,6 +565,12 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 	}
 
 	try {
+		// Every mode below launches a browser per URL; failing this once,
+		// up front, turns a missing Chrome into an immediate fatal error
+		// instead of a per-page scrape error buried in a "completed with
+		// N error(s)" summary (see `assertChromeIsInstalled`'s JSDoc).
+		await assertChromeIsInstalled();
+
 		if (flags.resume) {
 			if (flags.output) {
 				throw new Error(
