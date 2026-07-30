@@ -124,6 +124,19 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				site: 'Target site',
 				network: 'Your network (outage)',
 			},
+			templateClusterBlockingKind: {
+				css: 'Common stylesheets',
+				path: 'URL path',
+				orphanMerge: 'Merged orphan block',
+			},
+			landmarkType: {
+				header: 'Header',
+				footer: 'Footer',
+				nav: 'Navigation',
+				aside: 'Aside',
+				form: 'Form',
+				search: 'Search',
+			},
 			contentType: {
 				html: 'HTML (.html, .htm)',
 				pdf: 'PDF (.pdf)',
@@ -374,6 +387,24 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 					'This list is the raw intersection of stylesheets referenced by every page in the cluster — it can include a stylesheet shared site-wide, not only ones distinctive to this template.',
 				rawKey: 'Raw template key',
 				viewPages: 'View pages in this cluster',
+				blocking: 'Blocking evidence',
+				blockingCaveat:
+					'Why `--templates` grouped this cluster separately from other clusters, as reported by the clustering library.',
+				distinctiveStylesheets: 'Distinctive stylesheets',
+				distinctiveCssCaveat:
+					'Stylesheets left after removing site-wide chrome and non-first-party hosts — distinctive to this blocking group, but shared with any sibling clusters listed below.',
+				structuralCore: 'Common DOM structure',
+				structuralCoreMore: '+{count} more',
+				landmarks: 'Common page parts',
+				landmarkColType: 'Part',
+				landmarkColPresence: 'Present on',
+				landmarkColChrome: 'Site-wide',
+				landmarkColPages: 'Pages',
+				siblings: 'Sibling clusters',
+				siblingsCaveat:
+					'Clusters that split off from the same blocking group as this one.',
+				noReason: 'No cluster-selection evidence was captured for this cluster.',
+				noReasonCommandHint: 'nitpicker analyze <archive> --templates',
 			},
 			consoleLogs: {
 				title: 'Console Logs',
@@ -504,6 +535,19 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			attribution: {
 				site: '対象サイト',
 				network: 'お使いのネットワーク（断）',
+			},
+			templateClusterBlockingKind: {
+				css: '共通CSSファイル',
+				path: 'URLパス',
+				orphanMerge: '孤立ブロックの統合',
+			},
+			landmarkType: {
+				header: 'ヘッダー',
+				footer: 'フッター',
+				nav: 'ナビゲーション',
+				aside: 'サイドバー',
+				form: 'フォーム',
+				search: '検索',
 			},
 			contentType: {
 				html: 'HTML (.html, .htm)',
@@ -755,6 +799,23 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 					'この一覧はクラスタ内の全ページが参照するCSSの単純な積集合です。サイト全体で共通するCSS（このテンプレートに固有ではないもの）も含まれる場合があります。',
 				rawKey: '生のテンプレートキー',
 				viewPages: 'このクラスタのページを見る',
+				blocking: '分類の根拠',
+				blockingCaveat:
+					'`--templates` がこのクラスタを他のクラスタと分けて分類した理由（クラスタリングライブラリの報告）。',
+				distinctiveStylesheets: '特徴的なCSSファイル',
+				distinctiveCssCaveat:
+					'サイト全体共通のCSSと自ドメイン以外のホストを除いた後に残ったCSSファイル — このブロッキンググループに特徴的ですが、下記の兄弟クラスタとは共有される場合があります。',
+				structuralCore: '共通DOM構造',
+				structuralCoreMore: '他 {count} 件',
+				landmarks: '共通するページパーツ',
+				landmarkColType: 'パーツ',
+				landmarkColPresence: '保有率',
+				landmarkColChrome: 'サイト共通率',
+				landmarkColPages: 'ページ数',
+				siblings: '兄弟クラスタ',
+				siblingsCaveat: '同じブロッキンググループから分岐したクラスタ。',
+				noReason: 'このクラスタのクラスタ選定理由は保存されていません。',
+				noReasonCommandHint: 'nitpicker analyze <archive> --templates',
 			},
 			consoleLogs: {
 				title: 'コンソールログ',
