@@ -246,6 +246,61 @@ describe('listPageTemplateClusters', () => {
 				{ directory: 'https://example.com/', pageCount: 2 },
 			]);
 		});
+
+		it('クラスタ選定理由が保存されていない場合はreason: nullを返す', async () => {
+			const result = await listPageTemplateClusters(archive);
+
+			for (const cluster of result.clusters) {
+				expect(cluster.reason).toBeNull();
+			}
+		});
+	});
+
+	describe('クラスタ選定理由が保存されたアーカイブ', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_template_clusters_with_reason__',
+		);
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			archive = await createArchive(workingDir, 'with-reason.nitpicker');
+			await setTestPage(archive, 'https://example.com/a');
+			await archive.replacePageTemplates(
+				new Map([['https://example.com/a', '["css:abc123","cluster:0"]']]),
+				new Map([
+					[
+						'["css:abc123","cluster:0"]',
+						{
+							memberCount: 1,
+							blocking: [
+								{
+									blockKey: 'css:abc123',
+									reason: { kind: 'css', distinctiveStylesheetHrefs: ['shared.css'] },
+								},
+							],
+							structuralCoreTokens: ['body>header'],
+							landmarks: {},
+							siblingClusterKeys: [],
+						},
+					],
+				]),
+			);
+		});
+
+		afterAll(async () => {
+			await destroyArchive(archive, workingDir);
+		});
+
+		it('保存されたクラスタ選定理由を要約して返す', async () => {
+			const result = await listPageTemplateClusters(archive);
+
+			const cluster = result.clusters.find(
+				(c) => c.templateKey === '["css:abc123","cluster:0"]',
+			);
+			expect(cluster?.reason?.clusteredMemberCount).toBe(1);
+			expect(cluster?.reason?.distinctiveStylesheetUrls).toEqual(['shared.css']);
+		});
 	});
 
 	describe('chunk境界(500件)を超えるページ数のクラスタ', () => {

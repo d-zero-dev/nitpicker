@@ -15,7 +15,12 @@ export type ArchiveMode = 'archive' | 'stub';
 // host cache and cannot depend on query.
 export type { PageSource, ErrorKind } from '@nitpicker/crawler';
 import type { FindMismatchesOptions } from './find-mismatches.js';
-import type { ErrorKind, PageSource } from '@nitpicker/crawler';
+import type {
+	ErrorKind,
+	PageSource,
+	TemplateClusterBlockingEvidence,
+	TemplateClusterLandmarkType,
+} from '@nitpicker/crawler';
 
 /**
  * One row of {@link import('./list-isolated-pages.js').listIsolatedPages} output — a **完全孤立** (singleton)
@@ -2905,6 +2910,69 @@ export interface TemplateClusterSummary {
 	 * cannot use (see that function's own JSDoc).
 	 */
 	commonStylesheetFileNames: string[];
+	/**
+	 * `@d-zero/page-cluster`'s cluster-selection evidence for this
+	 * `templateKey`, summarized for API transport — see
+	 * {@link import('./summarize-template-cluster-reason.js').summarizeTemplateClusterReason}.
+	 * `null` (not omitted) means "no reason available for this cluster",
+	 * which covers three distinct cases the caller cannot tell apart from
+	 * this field alone: a pre-cluster-reason archive (no
+	 * `page_template_clusters` table), a read-only connection that skips
+	 * schema self-heal, or a cluster `@d-zero/page-cluster` classified but
+	 * did not emit a reason for (see `PageTemplateClassification`'s own
+	 * JSDoc in `@nitpicker/core`).
+	 */
+	reason: TemplateClusterReasonSummary | null;
+}
+
+/**
+ * One landmark type's commonality across a cluster's member pages,
+ * summarized from `TemplateClusterReason.landmarks` for API transport.
+ */
+export interface TemplateClusterLandmarkSummary {
+	/** Which landmark type this row describes. */
+	type: TemplateClusterLandmarkType;
+	presenceRate: number;
+	chromeRate: number;
+	memberCountWithInstance: number;
+	/** First `shellTokenCount` tokens only — see `shellTokenCount` for the full count. */
+	shellTokens: string[];
+	/** Total number of shell tokens found, independent of how many `shellTokens` carries. */
+	shellTokenCount: number;
+}
+
+/**
+ * API-transport summary of one cluster's `@d-zero/page-cluster`
+ * cluster-selection evidence — see
+ * {@link import('./summarize-template-cluster-reason.js').summarizeTemplateClusterReason}
+ * for why this is a trimmed view of the verbatim
+ * `page_template_clusters.reason_json` payload rather than the payload
+ * itself.
+ */
+export interface TemplateClusterReasonSummary {
+	/**
+	 * The member count `@d-zero/page-cluster` used to derive this reason.
+	 * **Not the same as `TemplateClusterSummary.pageCount`** — on an archive
+	 * whose page count exceeded `@d-zero/page-cluster`'s inline-processing
+	 * threshold, this is a per-block sample size, not the cluster's true
+	 * page count. Never display this as a page count.
+	 */
+	clusteredMemberCount: number;
+	blocking: TemplateClusterBlockingEvidence[];
+	/**
+	 * The `kind:'css'` entries in `blocking`, combined into one set and
+	 * deduplicated — see `compute-css-intersection.ts`'s own JSDoc for how
+	 * this differs from `TemplateClusterSummary.commonStylesheetUrls`.
+	 */
+	distinctiveStylesheetUrls: string[];
+	/** Filenames derived from `distinctiveStylesheetUrls`. */
+	distinctiveStylesheetFileNames: string[];
+	/** First `structuralCoreTokenCount` tokens only. */
+	structuralCoreTokens: string[];
+	structuralCoreTokenCount: number;
+	/** Stable order: header, footer, nav, aside, form, search. */
+	landmarks: TemplateClusterLandmarkSummary[];
+	siblingClusterKeys: string[];
 }
 
 /**

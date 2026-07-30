@@ -7,8 +7,10 @@ import { collectPageStylesheetUrlsByPageId } from './collect-page-stylesheet-url
 import { computeCssIntersection } from './compute-css-intersection.js';
 import { computeDirectoryDistribution } from './compute-directory-distribution.js';
 import { computeStylesheetFileNames } from './compute-stylesheet-file-names.js';
+import { loadTemplateClusterReasons } from './load-template-cluster-reasons.js';
 import { hasPageTemplatesTable } from './page-templates-join.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
+import { summarizeTemplateClusterReason } from './summarize-template-cluster-reason.js';
 
 /**
  * Lists every `page_templates.template_key` cluster with a human-facing
@@ -90,10 +92,11 @@ export async function listPageTemplateClusters(
 	}
 
 	const urlByPageId = new Map<number, string>();
-	// The two queries below touch disjoint table sets (content_items/url_refs
-	// vs resource_items/resource_ref_edges) and neither depends on the
-	// other's result, so they run concurrently rather than back-to-back.
-	const [, stylesheetsByPageId] = await Promise.all([
+	// The three queries below touch disjoint table sets (content_items/url_refs,
+	// resource_items/resource_ref_edges, page_template_clusters) and none
+	// depends on another's result, so they run concurrently rather than
+	// back-to-back.
+	const [, stylesheetsByPageId, reasonsByTemplateKey] = await Promise.all([
 		eachSplitted(
 			rows.map((r) => r.pageId),
 			SQLITE_IN_CHUNK,
@@ -108,6 +111,7 @@ export async function listPageTemplateClusters(
 			},
 		),
 		collectPageStylesheetUrlsByPageId(accessor),
+		loadTemplateClusterReasons(knex, [...pageIdsByTemplateKey.keys()]),
 	]);
 
 	const clusters: TemplateClusterSummary[] = [];
@@ -117,12 +121,14 @@ export async function listPageTemplateClusters(
 			.filter((url): url is string => url != null);
 		const cssUrlsByPage = pageIds.map((id) => stylesheetsByPageId.get(id) ?? []);
 		const commonStylesheetUrls = computeCssIntersection(cssUrlsByPage);
+		const reason = reasonsByTemplateKey.get(templateKey);
 		clusters.push({
 			templateKey,
 			pageCount: pageIds.length,
 			commonDirectories: computeDirectoryDistribution(urls),
 			commonStylesheetUrls,
 			commonStylesheetFileNames: computeStylesheetFileNames(commonStylesheetUrls),
+			reason: reason ? summarizeTemplateClusterReason(reason) : null,
 		});
 	}
 
