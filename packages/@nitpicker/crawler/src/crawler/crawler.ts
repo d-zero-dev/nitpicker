@@ -29,6 +29,7 @@ import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-awa
 import c from 'ansi-colors';
 
 import pkg from '../../package.json' with { type: 'json' };
+import { computeBodyHash } from '../archive/body-hash/compute-body-hash.js';
 import { classifyErrorKind } from '../classify-error-kind.js';
 import { crawlerLog } from '../debug.js';
 
@@ -37,6 +38,11 @@ import { buildRedirectEvent } from './build-redirect-event.js';
 import { captureImageDomPaths } from './capture-image-dom-paths.js';
 import { chooseProbeHost } from './choose-probe-host.js';
 import { createChangePhaseHandler } from './create-change-phase-handler.js';
+import { computeMetaSignature } from './dedupe/compute-meta-signature.js';
+import { computeShapeKey } from './dedupe/compute-shape-key.js';
+import DedupeCapTracker from './dedupe/dedupe-cap-tracker.js';
+import { isPredictedContentDuplicate } from './dedupe/is-predicted-content-duplicate.js';
+import { resolveOgUrlMismatch } from './dedupe/resolve-og-url-mismatch.js';
 import { derivePageSource } from './derive-page-source.js';
 import { destinationCache } from './destination-cache.js';
 import { detectPaginationPattern } from './detect-pagination-pattern.js';
@@ -97,6 +103,8 @@ const DEFAULT_NETWORK_OUTAGE_ERROR_THRESHOLD = 5;
 const DEFAULT_NETWORK_OUTAGE_HOST_THRESHOLD = 2;
 /** Default {@link CrawlerOptions.networkOutageProbeIntervalMs}. */
 const DEFAULT_NETWORK_OUTAGE_PROBE_INTERVAL_MS = 10_000;
+/** Default {@link CrawlerOptions.dedupeMapCap}. */
+const DEFAULT_DEDUPE_MAP_CAP = 100_000;
 
 /**
  * The core crawler engine that discovers and scrapes web pages.
@@ -112,6 +120,25 @@ const DEFAULT_NETWORK_OUTAGE_PROBE_INTERVAL_MS = 10_000;
 export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	/** Controller used to cancel the deal-based crawl via its AbortSignal. */
 	readonly #abortController = new AbortController();
+	/**
+	 * Per-shape count of anchors rejected by the dedupe-cap enqueue gates
+	 * after that shape capped. Read by {@link getDedupeCapRejections} at
+	 * `crawlEnd` so the orchestrator can finalize each
+	 * `dedupe_cap_events.rejected_count` exactly once (see
+	 * `Crawler#getDedupeCapRejections`'s JSDoc for why this is not written
+	 * to the archive incrementally).
+	 */
+	readonly #dedupeCapRejectionCounts = new Map<string, number>();
+	/**
+	 * Opt-in (`--dedupe-cap`) same-cluster soft cap. Always constructed
+	 * (Misra-Gries state stays empty when {@link CrawlerOptions.dedupeCap} is
+	 * `null`), gated on by `#options.dedupeCap !== null` at each call site
+	 * rather than being conditionally `undefined`, so the two enqueue gates
+	 * and the observation call in {@link #handleResult} do not need to
+	 * null-check a class field.
+	 */
+	readonly #dedupeCapTracker: DedupeCapTracker;
+
 	/** Tracks discovered URLs, their scrape status, and deduplication. */
 	readonly #linkList = new LinkList();
 	/**
@@ -158,6 +185,23 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		string /* url.href */,
 		{ phase: string; message: string }[]
 	>();
+	/**
+	 * Predicted-pagination body-hash tracking (always-on — independent of
+	 * the opt-in `--dedupe-cap` tracker). Maps a URL shape key
+	 * ({@link computeShapeKey}) to the {@link computeBodyHash} of the most
+	 * recently scraped *predicted* page of that shape. Never reset mid-crawl
+	 * (persists for the whole session, like {@link #scrapedDestinations}).
+	 */
+	readonly #predictedShapeBodyHashes = new Map<string, Buffer>();
+	/**
+	 * Shapes for which {@link #predictedShapeBodyHashes} detected a
+	 * content-duplicate predicted page (see {@link isPredictedContentDuplicate}).
+	 * Once a shape lands here, no further predicted URLs are generated for it
+	 * (checked in {@link #handleResult}'s pagination-pattern branch) — the
+	 * cheapest possible way to stop a self-generating trap without needing
+	 * the opt-in dedupe-cap machinery.
+	 */
+	readonly #predictedShapeStopped = new Set<string>();
 	/** Set of resource URLs (without hash) already captured, for deduplication. */
 	readonly #resources = new Set<string>();
 	/** Number of HTML pages (isTarget=1) scraped in previous sessions, used to seed the progress counter on resume. */
@@ -241,6 +285,9 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			networkOutageProbeIntervalMs:
 				options?.networkOutageProbeIntervalMs ?? DEFAULT_NETWORK_OUTAGE_PROBE_INTERVAL_MS,
 			networkProbe: options?.networkProbe ?? null,
+			dedupeCap: options?.dedupeCap ?? null,
+			dedupeMapCap: options?.dedupeMapCap ?? DEFAULT_DEDUPE_MAP_CAP,
+			preloadedStickyShapeKeys: options?.preloadedStickyShapeKeys ?? [],
 		};
 
 		this.#networkOutageDetector = new NetworkOutageDetector({
@@ -248,6 +295,11 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			errorThreshold: this.#options.networkOutageErrorThreshold,
 			hostThreshold: this.#options.networkOutageHostThreshold,
 		});
+
+		this.#dedupeCapTracker = new DedupeCapTracker(
+			{ cap: this.#options.dedupeCap ?? 0, mapCap: this.#options.dedupeMapCap },
+			this.#options.preloadedStickyShapeKeys,
+		);
 
 		this.#robotsChecker = new RobotsChecker(
 			this.#options.userAgent,
@@ -275,6 +327,20 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		this.#abortController.abort();
 	}
 
+	/**
+	 * Per-shape count of anchors the dedupe-cap enqueue gates rejected after
+	 * that shape capped (opt-in `--dedupe-cap`). Read by
+	 * `CrawlerOrchestrator` at `crawlEnd` to finalize each
+	 * `dedupe_cap_events.rejected_count` exactly once — rejections are
+	 * accumulated in memory rather than written to the archive per-rejection
+	 * to avoid write amplification (a capped trap can generate an unbounded
+	 * number of rejected anchors).
+	 * @returns A snapshot of the per-shape rejection counts. Empty when
+	 *   `--dedupe-cap` was not enabled or no shape has capped yet.
+	 */
+	getDedupeCapRejections(): ReadonlyMap<string, number> {
+		return this.#dedupeCapRejectionCounts;
+	}
 	/**
 	 * Retrieve the list of Chromium process IDs that are still running.
 	 *
@@ -560,32 +626,102 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @param enqueue - Callback to enqueue newly discovered URLs into the dealer
 	 *   queue, prioritising likely-HTML URLs to the front (see {@link partitionUrlsByHtml}).
 	 *   Accepts a batch so a group of URLs (e.g. predicted pagination) keeps its order.
-	 * @param paginationState - Mutable state for predicted pagination cascade prevention
-	 * @param paginationState.lastPushedUrl
-	 * @param paginationState.lastPushedWasPredicted
 	 * @param concurrency - Current concurrency level, used to determine predicted URL count
 	 */
 	#handleResult(
 		result: ScrapeResult,
 		url: ExURL,
 		enqueue: (...urls: ExURL[]) => Promise<void>,
-		paginationState?: { lastPushedUrl: string | null; lastPushedWasPredicted: boolean },
 		concurrency?: number,
 	) {
 		switch (result.type) {
 			case 'success': {
 				if (!result.pageData) break;
+				// Scoped to this one page's anchor list (fresh per `#handleResult`
+				// call, not shared across pages): pagination-pattern detection
+				// compares consecutive anchors as they are discovered by
+				// `processAnchors`'s single synchronous loop below, so "consecutive"
+				// must mean "adjacent in this document", not "adjacent in whatever
+				// order the crawl's workers happened to finish". Sharing this state
+				// across pages/workers let `step` be computed from two unrelated
+				// URLs, compounding across rounds until a `/news/date/{year}/`
+				// pager's predicted token overflowed into scientific notation
+				// (`1.7715854126052197e+120`, observed in production).
+				const paginationState: {
+					lastPushedUrl: string | null;
+					lastPushedWasPredicted: boolean;
+				} = {
+					lastPushedUrl: null,
+					lastPushedWasPredicted: false,
+				};
+
+				// Feed this page's own signature into the same-cluster tracker
+				// (opt-in via `--dedupe-cap`). This is deliberately separate
+				// from the enqueue gates below: gating decides whether to
+				// admit a not-yet-scraped anchor based on shape alone; this
+				// observes the page that was JUST scraped, using its actual
+				// meta/body content. External and metadata-only pages carry no
+				// useful signal for this feature and are skipped, matching the
+				// signature-scope exclusions in `computeMetaSignature`'s design.
+				if (
+					this.#options.dedupeCap !== null &&
+					!result.pageData.isExternal &&
+					!this.#linkList.isMetadataOnly(result.pageData.url.withoutHash) &&
+					result.pageData.html.length > 0
+				) {
+					const shapeKey = computeShapeKey(result.pageData.url.withoutHashAndAuth);
+					const metaSig = computeMetaSignature(result.pageData.meta);
+					if (shapeKey && metaSig) {
+						const bodyHash = computeBodyHash(result.pageData.html);
+						const ogUrlMismatch = resolveOgUrlMismatch(
+							result.pageData.meta,
+							result.pageData.url.href,
+						);
+						const event = this.#dedupeCapTracker.observe({
+							shapeKey,
+							metaSig,
+							bodyHash,
+							ogUrlMismatch,
+							url: result.pageData.url.href,
+						});
+						if (event) {
+							void this.emit('dedupeCap', event);
+						}
+					}
+				}
+
 				handleScrapeEnd(
 					result.pageData,
 					this.#linkList,
 					this.#scope,
 					this.#options,
 					(newUrl, opts) => {
+						// Gate 1: blocks real anchors discovered on this page whose
+						// shape is already confirmed as a trap. This does NOT cover
+						// predicted URLs — `generatePredictedUrls`'s output is
+						// pushed directly below (`this.#linkList.add(specUrl, ...)`),
+						// bypassing this closure entirely — so the predicted-URL
+						// generation site below has its own equivalent check
+						// (`shapeIsStopped`, combined with `#predictedShapeStopped`).
+						// External / metadata-only anchors are out of scope for the
+						// cap (issue #208: "cap 適用は internal only").
+						if (
+							this.#options.dedupeCap !== null &&
+							!opts?.metadataOnly &&
+							findScopeEntry(newUrl, this.#scope, this.#options) !== null
+						) {
+							const gateShapeKey = computeShapeKey(newUrl.withoutHashAndAuth);
+							if (gateShapeKey && this.#dedupeCapTracker.isCapped(gateShapeKey)) {
+								this.#recordDedupeCapRejection(gateShapeKey);
+								return;
+							}
+						}
+
 						this.#linkList.add(newUrl, opts);
 						void enqueue(newUrl);
 
 						// Predicted pagination detection
-						if (!paginationState || !concurrency) return;
+						if (!concurrency) return;
 
 						// metadataOnly / external: update tracking but skip pattern detection
 						if (
@@ -607,25 +743,41 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 								newUrl.withoutHashAndAuth,
 							);
 							if (pattern) {
-								const urls = generatePredictedUrls(
-									pattern,
-									newUrl.withoutHashAndAuth,
-									concurrency,
-								);
-								const specUrls: ExURL[] = [];
-								for (const specUrlStr of urls) {
-									const specUrl = parseUrl(specUrlStr, this.#options);
-									if (specUrl) {
-										this.#linkList.add(specUrl, { predicted: true });
-										specUrls.push(specUrl);
+								// Stop generating further predicted URLs for this shape
+								// once EITHER confirmation mechanism has fired — the
+								// always-on content-duplication check
+								// (`#predictedShapeStopped`), or the opt-in
+								// `--dedupe-cap` tracker (`#dedupeCapTracker.isCapped`,
+								// only consulted when the flag is set). Falls through to
+								// the plain (non-predicted) bookkeeping below instead of
+								// returning, since the anchor itself is still real.
+								const shapeKey = computeShapeKey(newUrl.withoutHashAndAuth);
+								const shapeIsStopped =
+									shapeKey !== null &&
+									(this.#predictedShapeStopped.has(shapeKey) ||
+										(this.#options.dedupeCap !== null &&
+											this.#dedupeCapTracker.isCapped(shapeKey)));
+								if (!shapeIsStopped) {
+									const urls = generatePredictedUrls(
+										pattern,
+										newUrl.withoutHashAndAuth,
+										concurrency,
+									);
+									const specUrls: ExURL[] = [];
+									for (const specUrlStr of urls) {
+										const specUrl = parseUrl(specUrlStr, this.#options);
+										if (specUrl) {
+											this.#linkList.add(specUrl, { predicted: true });
+											specUrls.push(specUrl);
+										}
 									}
+									// Enqueue as one batch so ascending page order is kept
+									// at the front of the queue (see enqueue in #runDeal).
+									if (specUrls.length > 0) void enqueue(...specUrls);
+									paginationState.lastPushedUrl = newUrl.withoutHashAndAuth;
+									paginationState.lastPushedWasPredicted = true;
+									return;
 								}
-								// Enqueue as one batch so ascending page order is kept
-								// at the front of the queue (see enqueue in #runDeal).
-								if (specUrls.length > 0) void enqueue(...specUrls);
-								paginationState.lastPushedUrl = newUrl.withoutHashAndAuth;
-								paginationState.lastPushedWasPredicted = true;
-								return;
 							}
 						}
 
@@ -735,6 +887,22 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		});
 	}
 	/**
+	 * Increments {@link #dedupeCapRejectionCounts} for one shape. Scoped to
+	 * the two concrete enqueue-time rejections (a real anchor or a
+	 * JS-redirect destination that was discovered but blocked) — it does
+	 * NOT count predicted URLs that were never generated at all because
+	 * their shape was already stopped (see the `shapeIsStopped` check in
+	 * {@link #handleResult}), since nothing concrete existed there to
+	 * reject.
+	 * @param shapeKey - The capped shape a rejection is being recorded for.
+	 */
+	#recordDedupeCapRejection(shapeKey: string): void {
+		this.#dedupeCapRejectionCounts.set(
+			shapeKey,
+			(this.#dedupeCapRejectionCounts.get(shapeKey) ?? 0) + 1,
+		);
+	}
+	/**
 	 * Feed one observed network-layer error into
 	 * {@link #networkOutageDetector} and hand off to
 	 * {@link #handleOutageSuspect} the instant its sliding window trips.
@@ -758,6 +926,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			void this.#handleOutageSuspect(suspect);
 		}
 	}
+
 	/**
 	 * Resolve the source label of the page being scraped so sub-resources
 	 * captured during its render can inherit the correct lineage label
@@ -860,12 +1029,6 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		const concurrency = this.#options.parallels
 			? Math.max(this.#options.parallels, 1)
 			: Crawler.MAX_PROCESS_LENGTH;
-
-		// Predicted pagination state
-		const paginationState = {
-			lastPushedUrl: null as string | null,
-			lastPushedWasPredicted: false,
-		};
 
 		await deal(
 			initialUrls,
@@ -1021,8 +1184,26 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 								if (destination) {
 									const destinationUrl = parseUrl(destination, this.#options);
 									if (destinationUrl) {
-										this.#linkList.add(destinationUrl);
-										void enqueue(destinationUrl);
+										// Gate 2: this direct enqueue does not go through
+										// `#handleResult`'s addUrl closure (gate 1), so it needs
+										// its own same-cluster-cap check — a JS-redirect trap
+										// that advances a parameter via `location.replace()`
+										// would otherwise keep re-entering the queue here.
+										const gateShapeKey = computeShapeKey(
+											destinationUrl.withoutHashAndAuth,
+										);
+										const isCapped =
+											this.#options.dedupeCap !== null &&
+											gateShapeKey !== null &&
+											findScopeEntry(destinationUrl, this.#scope, this.#options) !==
+												null &&
+											this.#dedupeCapTracker.isCapped(gateShapeKey);
+										if (isCapped) {
+											if (gateShapeKey) this.#recordDedupeCapRejection(gateShapeKey);
+										} else {
+											this.#linkList.add(destinationUrl);
+											void enqueue(destinationUrl);
+										}
 									} else {
 										// `deriveJsRedirectTarget` already canonicalises
 										// via WHATWG URL parsing, so reaching the
@@ -1088,6 +1269,34 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 							return;
 						}
 
+						// Discard a predicted URL whose rendered body is a
+						// byte-for-byte duplicate of the previous predicted page of the
+						// same shape, and stop generating further predictions for that
+						// shape (checked above, in the pagination-pattern branch). This
+						// is the always-on backstop against a site that returns 2xx for
+						// any extrapolated token but ignores it entirely (e.g. always
+						// serving the same "no results" template) — `shouldDiscardPredicted`
+						// alone cannot see this, since it only inspects HTTP status.
+						if (
+							isPredicted &&
+							result.type === 'success' &&
+							result.pageData &&
+							result.pageData.html.length > 0
+						) {
+							const shapeKey = computeShapeKey(url.withoutHashAndAuth);
+							if (shapeKey) {
+								const bodyHash = computeBodyHash(result.pageData.html);
+								const lastBodyHash = this.#predictedShapeBodyHashes.get(shapeKey) ?? null;
+								if (isPredictedContentDuplicate(bodyHash, lastBodyHash)) {
+									this.#predictedShapeStopped.add(shapeKey);
+									handleIgnoreAndSkip(url, this.#linkList, this.#scope, this.#options);
+									log(c.dim('Predicted (content duplicate, discarded)'));
+									return;
+								}
+								this.#predictedShapeBodyHashes.set(shapeKey, bodyHash);
+							}
+						}
+
 						// Count only after discard check: rendered HTML pages that
 						// will be persisted to the archive. Launch failures bypass
 						// this point via the catch block; discarded predicted URLs
@@ -1097,7 +1306,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						}
 
 						log('Saving results%dots%');
-						this.#handleResult(result, url, enqueue, paginationState, concurrency);
+						this.#handleResult(result, url, enqueue, concurrency);
 						const parentSource = await this.#resolveParentSource(url);
 						this.#handleResources(result.resources, parentSource);
 						this.#handleConsoleLogs(

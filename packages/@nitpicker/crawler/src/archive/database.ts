@@ -17,6 +17,7 @@ import type {
 	DB_Redirect,
 	DB_Resource,
 	DatabaseEvent,
+	InsertDedupeCapEventParams,
 	InsertNetworkOutageParams,
 	InventoryRunMeta,
 	PageFilter,
@@ -49,6 +50,10 @@ import { getName as getNameOp } from './db-ops/config/get-name.js';
 import { setConfig as setConfigOp } from './db-ops/config/set-config.js';
 import { updateConfig as updateConfigOp } from './db-ops/config/update-config.js';
 import { replaceConsoleLogs as replaceConsoleLogsOp } from './db-ops/console-logs/replace-console-logs.js';
+import { accumulateDedupeCapRejectedCount as accumulateDedupeCapRejectedCountOp } from './db-ops/dedupe-cap/accumulate-dedupe-cap-rejected-count.js';
+import { finalizeDedupeCapEvent as finalizeDedupeCapEventOp } from './db-ops/dedupe-cap/finalize-dedupe-cap-event.js';
+import { insertDedupeCapEvent as insertDedupeCapEventOp } from './db-ops/dedupe-cap/insert-dedupe-cap-event.js';
+import { listDedupeCapShapeKeys as listDedupeCapShapeKeysOp } from './db-ops/dedupe-cap/list-dedupe-cap-shape-keys.js';
 import { insertCrawlError as insertCrawlErrorOp } from './db-ops/errors/insert-crawl-error.js';
 import { insertPageError as insertPageErrorOp } from './db-ops/errors/insert-page-error.js';
 import { listDnsBurnedHostCandidates as listDnsBurnedHostCandidatesOp } from './db-ops/errors/list-dns-burned-host-candidates.js';
@@ -154,6 +159,25 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
+	 * Adds onto the `rejected_count` of a shape's `dedupe_cap_events` row,
+	 * looked up by `shape_key` rather than `id`. Delegates to
+	 * {@link accumulateDedupeCapRejectedCountOp}.
+	 * @param shapeKey - The capped shape whose rejection count to accumulate.
+	 * @param rejectedCount - Additional anchors rejected for this shape in the current session.
+	 */
+	async accumulateDedupeCapRejectedCount(
+		shapeKey: string,
+		rejectedCount: number,
+	): Promise<void> {
+		return emitErrorAndRetry(
+			this,
+			'Database.accumulateDedupeCapRejectedCount',
+			async () =>
+				await accumulateDedupeCapRejectedCountOp(this.#instance, shapeKey, rejectedCount),
+			retrySetting,
+		);
+	}
+	/**
 	 * Forces a WAL checkpoint, writing all pending WAL data back to the main
 	 * database file. Delegates to {@link checkpointOp}.
 	 */
@@ -181,6 +205,22 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	async destroy() {
 		await destroyOp(this.#instance);
 	}
+	/**
+	 * Finalizes a `dedupe_cap_events` row by stamping `rejected_count` — a
+	 * no-op if the row is already finalized. Delegates to
+	 * {@link finalizeDedupeCapEventOp}.
+	 * @param id - The `dedupe_cap_events.id` to finalize.
+	 * @param rejectedCount - Number of anchors rejected for this shape after it capped.
+	 */
+	async finalizeDedupeCapEvent(id: number, rejectedCount: number): Promise<void> {
+		return emitErrorAndRetry(
+			this,
+			'Database.finalizeDedupeCapEvent',
+			async () => await finalizeDedupeCapEventOp(this.#instance, id, rejectedCount),
+			retrySetting,
+		);
+	}
+
 	/**
 	 * Retrieves all anchors (outgoing links) on a specific page.
 	 * Delegates to {@link getAnchorsOnPageOp}.
@@ -610,6 +650,20 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		);
 	}
 	/**
+	 * Appends one row (`rejected_count = NULL`) to the `dedupe_cap_events`
+	 * journal. Delegates to {@link insertDedupeCapEventOp}.
+	 * @param params - The newly-capped shape's fields to record.
+	 * @returns The autoincremented `id` of the newly-inserted row.
+	 */
+	async insertDedupeCapEvent(params: InsertDedupeCapEventParams): Promise<number> {
+		return emitErrorAndRetry(
+			this,
+			'Database.insertDedupeCapEvent',
+			async () => await insertDedupeCapEventOp(this.#instance, params),
+			retrySetting,
+		);
+	}
+	/**
 	 * Pre-insert inventory non-HTML URLs into `resources` as placeholder rows.
 	 * Delegates to {@link insertInventoryResourcesOp}.
 	 * @param urls - URL strings (already in `withoutHashAndAuth` form).
@@ -718,6 +772,20 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
+	 * Every distinct `dedupe_cap_events.shape_key` recorded in this archive.
+	 * Delegates to {@link listDedupeCapShapeKeysOp}.
+	 * @returns Distinct shape keys already confirmed capped, or `[]` on an
+	 *   archive that predates `dedupe_cap_events` or has recorded none.
+	 */
+	async listDedupeCapShapeKeys(): Promise<string[]> {
+		return emitErrorAndRetry(
+			this,
+			'Database.listDedupeCapShapeKeys',
+			async () => await listDedupeCapShapeKeysOp(this.#instance),
+			retrySetting,
+		);
+	}
+	/**
 	 * Hostnames whose `crawl_errors` history is consistently DNS failures and
 	 * for which no recent 2xx-3xx page or resource is recorded.
 	 * Delegates to {@link listDnsBurnedHostCandidatesOp}.
@@ -731,6 +799,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			retrySetting,
 		);
 	}
+
 	/**
 	 * Lists every recorded outage as a resolved {@link OutageWindow}.
 	 * Delegates to {@link listNetworkOutagesOp}.

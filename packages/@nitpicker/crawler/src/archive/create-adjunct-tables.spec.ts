@@ -24,6 +24,7 @@ const ADJUNCT_TABLES = [
 	'page_main_content_canvases',
 	'inventory_runs',
 	'network_outages',
+	'dedupe_cap_events',
 	'analysis_text_refs',
 	'analysis_violations',
 	'page_templates',
@@ -144,6 +145,40 @@ describe('createAdjunctTables', () => {
 		const rows = await db('network_outages').select('*');
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.started_at).toBe(100);
+	});
+
+	it('declares dedupe_cap_events with no FK and no secondary index', async () => {
+		// Deliberately no index, same reasoning as network_outages: a crawl
+		// session produces at most a handful of rows.
+		await createAdjunctTables(db);
+		expect(await db.schema.hasColumn('dedupe_cap_events', 'shape_key')).toBe(true);
+		expect(await db.schema.hasColumn('dedupe_cap_events', 'sample_url')).toBe(true);
+		expect(await db.schema.hasColumn('dedupe_cap_events', 'body_hash')).toBe(true);
+		expect(await db.schema.hasColumn('dedupe_cap_events', 'effective_threshold')).toBe(
+			true,
+		);
+		expect(await db.schema.hasColumn('dedupe_cap_events', 'observed_count')).toBe(true);
+		expect(await db.schema.hasColumn('dedupe_cap_events', 'detected_at')).toBe(true);
+		expect(await db.schema.hasColumn('dedupe_cap_events', 'rejected_count')).toBe(true);
+		const parents = await fkParentTables(db, 'dedupe_cap_events');
+		expect(parents.size).toBe(0);
+	});
+
+	it('preserves existing dedupe_cap_events rows across a second createAdjunctTables run', async () => {
+		await createAdjunctTables(db);
+		await db('dedupe_cap_events').insert({
+			shape_key: 'example.com/news/date/{n}/',
+			sample_url: 'https://example.com/news/date/2024/',
+			body_hash: Buffer.from('hash'),
+			effective_threshold: 50,
+			observed_count: 100,
+			detected_at: 1000,
+			rejected_count: null,
+		});
+		await createAdjunctTables(db);
+		const rows = await db('dedupe_cap_events').select('*');
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.shape_key).toBe('example.com/news/date/{n}/');
 	});
 
 	it('declares page_template_clusters with no FK and the BLOB+codec+size shape', async () => {

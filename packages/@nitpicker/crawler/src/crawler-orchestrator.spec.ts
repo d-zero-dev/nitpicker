@@ -33,6 +33,14 @@ vi.mock('./crawler/crawler.js', () => {
 		abort() {}
 
 		/**
+		 * Returns an empty rejection map, matching a crawl where
+		 * `--dedupe-cap` never capped any shape.
+		 * @returns An empty `Map`.
+		 */
+		getDedupeCapRejections() {
+			return new Map<string, number>();
+		}
+		/**
 		 * Returns an empty undead-PID list.
 		 * @returns An empty array.
 		 */
@@ -989,6 +997,7 @@ describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => 
 			getResourceUrlList: vi.fn(() => Promise.resolve([])),
 			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(140_000)),
 			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
 			setUrlOrder: vi.fn(() => Promise.resolve()),
 			close: vi.fn(() => Promise.resolve()),
 			setResources: vi.fn(() => Promise.resolve()),
@@ -1025,6 +1034,180 @@ describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => 
 		expect(fakeArchive.getScrapedHtmlPageCount).toHaveBeenCalledTimes(1);
 		expect(fakeCrawlerResumeCalls).toHaveLength(1);
 		expect(fakeCrawlerResumeCalls[0]?.pagesScrapedOffset).toBe(140_000);
+	});
+});
+
+describe('CrawlerOrchestrator.crawling: dedupeCap event handling (issue #208)', () => {
+	it('dedupeCap → archive.insertDedupeCapEvent が呼ばれ、その id が crawlEnd での finalizeDedupeCapEvent に使われる', async () => {
+		const insertDedupeCapEvent = vi.fn(() => Promise.resolve(99));
+		const finalizeDedupeCapEvent = vi.fn(() => Promise.resolve());
+		const accumulateDedupeCapRejectedCount = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			insertDedupeCapEvent,
+			finalizeDedupeCapEvent,
+			accumulateDedupeCapRejectedCount,
+			filePath: '/tmp/orchestrator-dedupe-cap-test.nitpicker',
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('dedupeCap')?.({
+				shapeKey: 'example.com/news/{n}/',
+				sampleUrl: 'https://example.com/news/1/',
+				bodyHash: Buffer.from('a'),
+				effectiveThreshold: 1,
+				observedCount: 2,
+			} as never);
+			(
+				crawler as unknown as { getDedupeCapRejections: () => Map<string, number> }
+			).getDedupeCapRejections = () => new Map([['example.com/news/{n}/', 5]]);
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-dedupe-cap-test.nitpicker',
+		});
+
+		expect(insertDedupeCapEvent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				shapeKey: 'example.com/news/{n}/',
+				sampleUrl: 'https://example.com/news/1/',
+				effectiveThreshold: 1,
+				observedCount: 2,
+			}),
+		);
+		expect(finalizeDedupeCapEvent).toHaveBeenCalledWith(99, 5);
+		expect(accumulateDedupeCapRejectedCount).not.toHaveBeenCalled();
+	});
+
+	it('このセッションでdedupeCapイベントが発火していないshape（プリロード済みsticky）の拒否数はaccumulateDedupeCapRejectedCountでshape_key照合により加算される', async () => {
+		// A shape preloaded into DedupeCapTracker's sticky set from an earlier
+		// session's `dedupe_cap_events` row never re-fires `dedupeCap` this
+		// session (the tracker short-circuits before `observe` runs), so
+		// `#dedupeCapEventIds` has no entry for it — yet gate rejections still
+		// accumulate. Regression guard: this must not be silently dropped.
+		const insertDedupeCapEvent = vi.fn(() => Promise.resolve(99));
+		const finalizeDedupeCapEvent = vi.fn(() => Promise.resolve());
+		const accumulateDedupeCapRejectedCount = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			insertDedupeCapEvent,
+			finalizeDedupeCapEvent,
+			accumulateDedupeCapRejectedCount,
+			filePath: '/tmp/orchestrator-dedupe-cap-preloaded-test.nitpicker',
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			// No `dedupeCap` event fired this session — simulates a shape that
+			// was already sticky from a prior session's preload.
+			(
+				crawler as unknown as { getDedupeCapRejections: () => Map<string, number> }
+			).getDedupeCapRejections = () => new Map([['example.com/archived-trap/{n}/', 3]]);
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-dedupe-cap-preloaded-test.nitpicker',
+		});
+
+		expect(insertDedupeCapEvent).not.toHaveBeenCalled();
+		expect(finalizeDedupeCapEvent).not.toHaveBeenCalled();
+		expect(accumulateDedupeCapRejectedCount).toHaveBeenCalledWith(
+			'example.com/archived-trap/{n}/',
+			3,
+		);
+	});
+});
+
+describe('CrawlerOrchestrator.inventory: dedupeCap sticky preload wiring (issue #208)', () => {
+	it('archive.listDedupeCapShapeKeys() の結果がCrawlerのpreloadedStickyShapeKeysオプションへ渡される', async () => {
+		const fakeArchive = {
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+				}),
+			),
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			getExistingPageUrls: vi.fn(() => Promise.resolve([])),
+			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			listDedupeCapShapeKeys: vi.fn(() =>
+				Promise.resolve(['example.com/old-trap/{n}/', 'example.com/other-trap/{v}']),
+			),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+			setResources: vi.fn(() => Promise.resolve()),
+			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventoryResources: vi.fn(() => Promise.resolve()),
+			addError: vi.fn(() => Promise.resolve()),
+			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = path.resolve('/tmp/inventory-dedupe-cap-preload-test');
+		await fs.mkdir(testCwd, { recursive: true });
+		const fixturePath = path.join(testCwd, 'fixture.nitpicker');
+		await fs.writeFile(fixturePath, '');
+
+		try {
+			await CrawlerOrchestrator.inventory(
+				'fixture.nitpicker',
+				['https://example.com/new-page.html'],
+				{ cwd: testCwd },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(fakeArchive.listDedupeCapShapeKeys).toHaveBeenCalledTimes(1);
+		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
+		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
+			preloadedStickyShapeKeys: [
+				'example.com/old-trap/{n}/',
+				'example.com/other-trap/{v}',
+			],
+		});
 	});
 });
 

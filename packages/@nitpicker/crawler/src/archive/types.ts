@@ -198,6 +198,20 @@ export interface InsertNetworkOutageParams {
 }
 
 /**
+ * Fields required to record a newly-capped URL shape via
+ * `Database.insertDedupeCapEvent`. camelCase, mapped to snake_case columns
+ * on write — same convention as {@link InsertNetworkOutageParams}.
+ */
+export interface InsertDedupeCapEventParams {
+	shapeKey: string;
+	sampleUrl: string;
+	bodyHash: Buffer;
+	effectiveThreshold: number;
+	observedCount: number;
+	detectedAt: number;
+}
+
+/**
  * Filter type for querying pages from the database.
  *
  * - `'page'` - HTML pages that are crawl targets

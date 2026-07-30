@@ -126,6 +126,21 @@ interface CrawlConfig extends Config {
 	 * `options` so an E2E test can inject it via the public API.
 	 */
 	networkProbe: NetworkProbe | null;
+
+	/** See {@link CrawlerOptions.dedupeCap}. `null`/omitted disables the feature. */
+	dedupeCap: number | null;
+
+	/** See {@link CrawlerOptions.dedupeMapCap}. Omitted falls through to `Crawler`'s own default. */
+	dedupeMapCap: number;
+
+	/**
+	 * See {@link CrawlerOptions.preloadedStickyShapeKeys}. Set internally by
+	 * the four resuming-session static methods
+	 * (`append`/`inventory`/`retryFailed`/`resume`) via
+	 * `#preloadDedupeCapStickyShapeKeys`; not part of the public options a
+	 * caller of those methods passes directly.
+	 */
+	preloadedStickyShapeKeys: readonly string[];
 }
 
 /**
@@ -174,6 +189,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	readonly #archive: Archive;
 	/** The crawler engine that discovers and scrapes pages. */
 	readonly #crawler: Crawler;
+	/**
+	 * `dedupe_cap_events.id` for each shape confirmed capped this session, so
+	 * `crawlEnd` can look up the right row to finalize with
+	 * `Crawler#getDedupeCapRejections`'s counts. A `Map` (not a single
+	 * scalar like {@link #openNetworkOutageId}) because, unlike a network
+	 * outage, more than one shape can be capped simultaneously within one
+	 * crawl.
+	 */
+	readonly #dedupeCapEventIds = new Map<string, number>();
 	/** Whether the crawl was started from a pre-defined URL list (non-recursive mode). */
 	readonly #fromList: boolean;
 	/**
@@ -274,6 +298,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			networkOutageHostThreshold: options?.networkOutageHostThreshold,
 			networkOutageProbeIntervalMs: options?.networkOutageProbeIntervalMs,
 			networkProbe: options?.networkProbe ?? null,
+			dedupeCap: options?.dedupeCap ?? null,
+			dedupeMapCap: options?.dedupeMapCap,
+			// Only the four resuming-session static methods
+			// (`append`/`inventory`/`retryFailed`/`resume`) pass this — a
+			// fresh `crawling()` has no archive history to seed from (see
+			// `#preloadDedupeCapStickyShapeKeys`'s JSDoc).
+			preloadedStickyShapeKeys: options?.preloadedStickyShapeKeys ?? [],
 		});
 	}
 
@@ -436,6 +467,34 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					.catch((error) => reject(error));
 			});
 
+			this.#crawler.on(
+				'dedupeCap',
+				({ shapeKey, sampleUrl, bodyHash, effectiveThreshold, observedCount }) => {
+					crawlerLog(
+						'Dedupe cap reached: shapeKey=%s effectiveThreshold=%d observedCount=%d',
+						shapeKey,
+						effectiveThreshold,
+						observedCount,
+					);
+					console.error(
+						`[dedupe-cap] same-cluster trap confirmed: ${shapeKey} (sample: ${sampleUrl})`,
+					);
+					writeQueue
+						.enqueue(async () => {
+							const id = await this.#archive.insertDedupeCapEvent({
+								shapeKey,
+								sampleUrl,
+								bodyHash,
+								effectiveThreshold,
+								observedCount,
+								detectedAt: Date.now(),
+							});
+							this.#dedupeCapEventIds.set(shapeKey, id);
+						})
+						.catch((error) => reject(error));
+				},
+			);
+
 			this.#crawler.on('response', ({ resource, source }) => {
 				writeQueue
 					.enqueue(() => this.#archive.setResources(resource, source))
@@ -455,6 +514,43 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			});
 
 			this.#crawler.on('crawlEnd', () => {
+				// Deferred to INSIDE a queued closure, not read synchronously
+				// here, for the same reason `networkOutageRecovered`'s handler
+				// defers reading `#openNetworkOutageId`: a `dedupeCap` event's
+				// INSERT closure may still be queued (not yet executed) at the
+				// instant `crawlEnd` fires. `WriteQueue` runs enqueued
+				// operations in submission order, so by the time THIS closure
+				// executes, every earlier-queued `dedupeCap` INSERT has
+				// already completed and `#dedupeCapEventIds` is reliably
+				// populated.
+				writeQueue
+					.enqueue(async () => {
+						const rejections = this.#crawler.getDedupeCapRejections();
+						await Promise.all(
+							[...rejections].map(([shapeKey, rejectedCount]) => {
+								const id = this.#dedupeCapEventIds.get(shapeKey);
+								// A shape capped THIS session has an id here (the
+								// `dedupeCap` event always enqueues an INSERT before any
+								// rejection for that shape can be counted) and is
+								// finalized once via its row id. A shape with no id was
+								// never observed this session at all — it was preloaded
+								// into `DedupeCapTracker`'s sticky set from an EARLIER
+								// session's `dedupe_cap_events` row (see
+								// `#preloadDedupeCapStickyShapeKeys`'s JSDoc), so gate
+								// rejections still accumulate for it but no new row (and
+								// thus no id) is ever created. That earlier row's count is
+								// accumulated onto by shape_key instead of overwritten.
+								return id === undefined
+									? this.#archive.accumulateDedupeCapRejectedCount(
+											shapeKey,
+											rejectedCount,
+										)
+									: this.#archive.finalizeDedupeCapEvent(id, rejectedCount);
+							}),
+						);
+					})
+					.catch((error) => reject(error));
+
 				writeQueue
 					.drain()
 					.then(() => resolve())
@@ -694,9 +790,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				}
 				await archive.repromoteExternalPages(scopeMap, archived);
 
+				// Seed the sticky set from prior sessions' confirmed traps so
+				// `--append` does not pay the cost of re-discovering them (see
+				// `DedupeCapTracker`'s constructor JSDoc).
+				const preloadedStickyShapeKeys = await archive.listDedupeCapShapeKeys();
 				const orchestrator = new CrawlerOrchestrator(archive, {
 					...mergedConfig,
 					roots: mergedRoots,
+					preloadedStickyShapeKeys,
 				});
 				const { scraped, pending } = await archive.getCrawlingState();
 				const resources = await archive.getResourceUrlList();
@@ -1059,6 +1160,16 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					inventoryMode: { seedUrls: seedSet },
 				};
 				if (htmlSeeds.length > 0) {
+					// Seed the sticky set from prior sessions' confirmed traps
+					// so `--inventory` does not pay the cost of
+					// re-discovering them (see `DedupeCapTracker`'s
+					// constructor JSDoc). Scoped to this branch only,
+					// matching `#preloadDnsBurnedHostCache`'s scoping below —
+					// the fallback (non-HTML-only) branch never calls
+					// `orchestrator.crawling(...)`, so the tracker is never
+					// consulted there.
+					orchestratorOptions.preloadedStickyShapeKeys =
+						await archive.listDedupeCapShapeKeys();
 					const orchestrator = new CrawlerOrchestrator(archive, orchestratorOptions);
 					// Re-read pending *after* the pre-insert so the strict-
 					// pending set includes the freshly inserted
@@ -1235,7 +1346,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				log('Archive %s', absFilePath);
 				log('Reset %d failed page(s)', resetUrls.length);
 
-				const orchestrator = new CrawlerOrchestrator(archive, config);
+				// Seed the sticky set from prior sessions' confirmed traps so
+				// `--retry-failed` does not pay the cost of re-discovering
+				// them (see `DedupeCapTracker`'s constructor JSDoc).
+				const preloadedStickyShapeKeys = await archive.listDedupeCapShapeKeys();
+				const orchestrator = new CrawlerOrchestrator(archive, {
+					...config,
+					preloadedStickyShapeKeys,
+				});
 				const { scraped, pending } = await archive.getCrawlingState();
 				const resources = await archive.getResourceUrlList();
 				const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
@@ -1289,9 +1407,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	) {
 		const archive = await Archive.resume(stubPath);
 		const archivedConfig = await archive.getConfig();
+		// Seed the sticky set from prior sessions' confirmed traps so
+		// `--resume` does not pay the cost of re-discovering them (see
+		// `DedupeCapTracker`'s constructor JSDoc).
+		const preloadedStickyShapeKeys = await archive.listDedupeCapShapeKeys();
 		const config = {
 			...archivedConfig,
 			...cleanObject(options),
+			preloadedStickyShapeKeys,
 		};
 		const orchestrator = new CrawlerOrchestrator(archive, config);
 		const _url = await archive.getUrl();
