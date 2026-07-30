@@ -3,6 +3,59 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.15.0](https://github.com/d-zero-dev/nitpicker/compare/v0.14.0...v0.15.0) (2026-07-30)
+
+### Bug Fixes
+
+- **crawler:** use decimals in output-binary.spec.ts to fix CI lint ([fdfc25a](https://github.com/d-zero-dev/nitpicker/commit/fdfc25a589a8a264f7d7feeafabd00b87943cb6f))
+- **github:** read the release version from lerna.json for dist-tag ([f6bf2f8](https://github.com/d-zero-dev/nitpicker/commit/f6bf2f8b5f8a5892868573c7f9113c689c9cad55))
+- **query:** show directory distribution instead of single common prefix ([9429e17](https://github.com/d-zero-dev/nitpicker/commit/9429e1776b3926401ba8ab1dbb892ae0aa5168f5))
+
+- feat(query)!: split inbound links out of getPageDetail into listInboundLinks ([e3889fc](https://github.com/d-zero-dev/nitpicker/commit/e3889fc006b9e902185b1f4cfd6009a89ac2b25c))
+
+### Features
+
+- **cli:** add `nitpicker cache list`/`cache clear` command ([a23b649](https://github.com/d-zero-dev/nitpicker/commit/a23b649d7f5663702af241b32ae0d2dfae4563d9))
+- **cli:** add console-logs and page-console-logs query sub-commands ([4cac07e](https://github.com/d-zero-dev/nitpicker/commit/4cac07eb6070e535fea5e1f8298178c28076a693))
+- **cli:** add duplicate-bodies query sub-command ([3a92818](https://github.com/d-zero-dev/nitpicker/commit/3a92818a23ab206198d2073672f80d07e6ca8cda))
+- **cli:** add inbound-links query sub-command ([38ec0cf](https://github.com/d-zero-dev/nitpicker/commit/38ec0cff71bcbd04d2512b7cc3c6618f1e95300d))
+- **cli:** add outages query sub-command ([bedd007](https://github.com/d-zero-dev/nitpicker/commit/bedd007cd2b5a426df9231ade4c8db32a4e09cfb))
+- **cli:** backfill content_items.alias_of_id on every viewer-build run ([4226d04](https://github.com/d-zero-dev/nitpicker/commit/4226d04cd8d4373d63aaaaef145400fe58956d22))
+- **cli:** warn-and-skip invalid inventory URLs instead of hard-erroring ([0883e93](https://github.com/d-zero-dev/nitpicker/commit/0883e9379b9ec1867ec31b66125a069b62cf9d0c))
+- **core:** capture cluster-selection reasons during classification ([6f13726](https://github.com/d-zero-dev/nitpicker/commit/6f13726a5a9de5e25e609067662bd8f47e1eb838))
+- **core:** collect ClusterReason via onClusterReason and bump page-cluster ([83a9463](https://github.com/d-zero-dev/nitpicker/commit/83a9463e81c572532bdc129c041da31414cef318))
+- **crawler:** add cache-root list/clear utilities and export them ([c05aa04](https://github.com/d-zero-dev/nitpicker/commit/c05aa049e1a397e529139b81b1d9cb3969ffc29a))
+- **crawler:** add content_items.alias_of_id self-referencing column ([d7e44b2](https://github.com/d-zero-dev/nitpicker/commit/d7e44b232d82f8357c47de2d43f8076ef8e56745))
+- **crawler:** capture and persist console log entries per page ([31ba317](https://github.com/d-zero-dev/nitpicker/commit/31ba317bd12a36ac884bd99dcf729e52c984ee5f))
+- **crawler:** compute page_meta.body_hash from masked <body> content ([c3cdbb3](https://github.com/d-zero-dev/nitpicker/commit/c3cdbb38f2cb97e4fece5526d4be893cd185bffe))
+- **crawler:** detect operator network outages and pause the crawl gate ([d6f2d32](https://github.com/d-zero-dev/nitpicker/commit/d6f2d32c36e8f8b267328929c02e00ee29758c80))
+- **crawler:** persist page-cluster's cluster-selection reason ([f7c72b6](https://github.com/d-zero-dev/nitpicker/commit/f7c72b68ef821003f34661636940238b780d1c18))
+- **crawler:** persist page-cluster's ClusterReason per template cluster ([8054165](https://github.com/d-zero-dev/nitpicker/commit/80541658a1548a483a01f2ca2c43ef71bb1077be))
+- **crawler:** warn-and-skip inventory sources, archive them, fix tar drop bug ([376bf43](https://github.com/d-zero-dev/nitpicker/commit/376bf435a54656a4dd53cc7a822e5f95efdf74e4))
+- **mcp-server:** add list_console_logs and get_page_console_logs tools ([1c77b71](https://github.com/d-zero-dev/nitpicker/commit/1c77b7156a166e7374d222c54abfb059cfddb07d))
+- **mcp-server:** add list_inbound_links tool ([1b7ce24](https://github.com/d-zero-dev/nitpicker/commit/1b7ce24c020c2fe28fe126f9a05894331416575a))
+- **mcp-server:** add list_network_outages tool ([b932be8](https://github.com/d-zero-dev/nitpicker/commit/b932be8d7b6d5212bd3bcb643f84ded970ef6109))
+- **mcp-server:** expose find_duplicate_bodies tool ([a51f852](https://github.com/d-zero-dev/nitpicker/commit/a51f852b2f1951d8071fe1972910ba0136b11c40))
+- **query:** add console log read APIs and viewer read model support ([6d9304c](https://github.com/d-zero-dev/nitpicker/commit/6d9304c682028d373dbeb31c3a4de15d3e8acc66))
+- **query:** add findDuplicateBodies and body_hash backfill ([bd1f87f](https://github.com/d-zero-dev/nitpicker/commit/bd1f87f634c2d1dc76f4033b94adea25b2d3ae3e))
+- **query:** add template cluster summary aggregation ([be388c8](https://github.com/d-zero-dev/nitpicker/commit/be388c86ecb87d6433c734bf5a48ff454585989d))
+- **query:** expose cluster-selection reason on template cluster summaries ([32741fc](https://github.com/d-zero-dev/nitpicker/commit/32741fc11bfd1ab3d65095e127ae3e3d2a681ec5))
+- **query:** merge URL-normalization-equivalent pages via alias_of_id ([f13797b](https://github.com/d-zero-dev/nitpicker/commit/f13797b8d62bc64b7c3565035de8142af717db25))
+- **query:** read ClusterReason from page_template_cluster_reasons ([ba535e6](https://github.com/d-zero-dev/nitpicker/commit/ba535e6ecd41c227ee5229b02c10c8b1f02086b0))
+- **query:** split failure attribution between site and network causes ([5cf14d1](https://github.com/d-zero-dev/nitpicker/commit/5cf14d13b7ea0cd9d0fc34c6d13b8574f38722d8))
+- **query:** surface invalid_skipped and tolerate its absence on old archives ([972b8c5](https://github.com/d-zero-dev/nitpicker/commit/972b8c578e68b0d184c119bb989437fee477110d))
+- **viewer:** add Console Logs view, Page Detail section, and Summary badges ([00397ad](https://github.com/d-zero-dev/nitpicker/commit/00397ad1b9d7feebb65bedfa5b65a69343647573))
+- **viewer:** add dedicated inbound-links view and Page Detail count ([868bd13](https://github.com/d-zero-dev/nitpicker/commit/868bd139182129d8e17ef15cb5f178767d55f01a))
+- **viewer:** add template cluster analysis view ([0529d0e](https://github.com/d-zero-dev/nitpicker/commit/0529d0ebef3ae2b44bda84910e9028647497f2ed))
+- **viewer:** show cluster selection reason in the template clusters view ([8c790d2](https://github.com/d-zero-dev/nitpicker/commit/8c790d20b0c2beb01af1e0a32dc370d6c2c3fb77))
+- **viewer:** show cluster-selection evidence on the template clusters view ([7db2ceb](https://github.com/d-zero-dev/nitpicker/commit/7db2cebebaa256bc4b263e9016d5ca475d08986a))
+- **viewer:** show network-outage attribution in Summary and Errors views ([aa40798](https://github.com/d-zero-dev/nitpicker/commit/aa40798d71c1ec2f051a9c494a7d1314f19bada2))
+
+### BREAKING CHANGES
+
+- PageDetail no longer has an inboundLinks field. Use
+  listInboundLinks(accessor, { url }) instead.
+
 # [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
 
 ### Bug Fixes

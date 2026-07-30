@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.15.0](https://github.com/d-zero-dev/nitpicker/compare/v0.14.0...v0.15.0) (2026-07-30)
+
+### Features
+
+- **mcp-server:** add list_console_logs and get_page_console_logs tools ([1c77b71](https://github.com/d-zero-dev/nitpicker/commit/1c77b7156a166e7374d222c54abfb059cfddb07d))
+- **mcp-server:** add list_inbound_links tool ([1b7ce24](https://github.com/d-zero-dev/nitpicker/commit/1b7ce24c020c2fe28fe126f9a05894331416575a))
+- **mcp-server:** add list_network_outages tool ([b932be8](https://github.com/d-zero-dev/nitpicker/commit/b932be8d7b6d5212bd3bcb643f84ded970ef6109))
+- **mcp-server:** expose find_duplicate_bodies tool ([a51f852](https://github.com/d-zero-dev/nitpicker/commit/a51f852b2f1951d8071fe1972910ba0136b11c40))
+
 # [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
 
 ### Features

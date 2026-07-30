@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/analyze-lighthouse",
-	"version": "0.14.0",
+	"version": "0.15.0",
 	"description": "Nitpicker plugin for performance analysis using Lighthouse",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
@@ -27,8 +27,8 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@nitpicker/core": "0.14.0",
-		"@nitpicker/types": "0.14.0",
+		"@nitpicker/core": "0.15.0",
+		"@nitpicker/types": "0.15.0",
 		"chrome-launcher": "1.2.1",
 		"lighthouse": "13.4.0"
 	},

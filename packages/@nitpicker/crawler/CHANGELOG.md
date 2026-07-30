@@ -3,6 +3,23 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.15.0](https://github.com/d-zero-dev/nitpicker/compare/v0.14.0...v0.15.0) (2026-07-30)
+
+### Bug Fixes
+
+- **crawler:** use decimals in output-binary.spec.ts to fix CI lint ([fdfc25a](https://github.com/d-zero-dev/nitpicker/commit/fdfc25a589a8a264f7d7feeafabd00b87943cb6f))
+
+### Features
+
+- **crawler:** add cache-root list/clear utilities and export them ([c05aa04](https://github.com/d-zero-dev/nitpicker/commit/c05aa049e1a397e529139b81b1d9cb3969ffc29a))
+- **crawler:** add content_items.alias_of_id self-referencing column ([d7e44b2](https://github.com/d-zero-dev/nitpicker/commit/d7e44b232d82f8357c47de2d43f8076ef8e56745))
+- **crawler:** capture and persist console log entries per page ([31ba317](https://github.com/d-zero-dev/nitpicker/commit/31ba317bd12a36ac884bd99dcf729e52c984ee5f))
+- **crawler:** compute page_meta.body_hash from masked <body> content ([c3cdbb3](https://github.com/d-zero-dev/nitpicker/commit/c3cdbb38f2cb97e4fece5526d4be893cd185bffe))
+- **crawler:** detect operator network outages and pause the crawl gate ([d6f2d32](https://github.com/d-zero-dev/nitpicker/commit/d6f2d32c36e8f8b267328929c02e00ee29758c80))
+- **crawler:** persist page-cluster's cluster-selection reason ([f7c72b6](https://github.com/d-zero-dev/nitpicker/commit/f7c72b68ef821003f34661636940238b780d1c18))
+- **crawler:** persist page-cluster's ClusterReason per template cluster ([8054165](https://github.com/d-zero-dev/nitpicker/commit/80541658a1548a483a01f2ca2c43ef71bb1077be))
+- **crawler:** warn-and-skip inventory sources, archive them, fix tar drop bug ([376bf43](https://github.com/d-zero-dev/nitpicker/commit/376bf435a54656a4dd53cc7a822e5f95efdf74e4))
+
 # [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
 
 - feat(crawler)!: extract beholder main-content data into core schema ([4864b8a](https://github.com/d-zero-dev/nitpicker/commit/4864b8a10453867204a23ecba3b0601726cb914b))

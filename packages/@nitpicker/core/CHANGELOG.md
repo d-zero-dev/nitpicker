@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.15.0](https://github.com/d-zero-dev/nitpicker/compare/v0.14.0...v0.15.0) (2026-07-30)
+
+### Features
+
+- **core:** capture cluster-selection reasons during classification ([6f13726](https://github.com/d-zero-dev/nitpicker/commit/6f13726a5a9de5e25e609067662bd8f47e1eb838))
+- **core:** collect ClusterReason via onClusterReason and bump page-cluster ([83a9463](https://github.com/d-zero-dev/nitpicker/commit/83a9463e81c572532bdc129c041da31414cef318))
+
 # [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
 
 ### Bug Fixes

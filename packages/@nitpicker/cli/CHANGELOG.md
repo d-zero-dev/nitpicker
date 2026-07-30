@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.15.0](https://github.com/d-zero-dev/nitpicker/compare/v0.14.0...v0.15.0) (2026-07-30)
+
+### Features
+
+- **cli:** add `nitpicker cache list`/`cache clear` command ([a23b649](https://github.com/d-zero-dev/nitpicker/commit/a23b649d7f5663702af241b32ae0d2dfae4563d9))
+- **cli:** add console-logs and page-console-logs query sub-commands ([4cac07e](https://github.com/d-zero-dev/nitpicker/commit/4cac07eb6070e535fea5e1f8298178c28076a693))
+- **cli:** add duplicate-bodies query sub-command ([3a92818](https://github.com/d-zero-dev/nitpicker/commit/3a92818a23ab206198d2073672f80d07e6ca8cda))
+- **cli:** add inbound-links query sub-command ([38ec0cf](https://github.com/d-zero-dev/nitpicker/commit/38ec0cff71bcbd04d2512b7cc3c6618f1e95300d))
+- **cli:** add outages query sub-command ([bedd007](https://github.com/d-zero-dev/nitpicker/commit/bedd007cd2b5a426df9231ade4c8db32a4e09cfb))
+- **cli:** backfill content_items.alias_of_id on every viewer-build run ([4226d04](https://github.com/d-zero-dev/nitpicker/commit/4226d04cd8d4373d63aaaaef145400fe58956d22))
+- **cli:** warn-and-skip invalid inventory URLs instead of hard-erroring ([0883e93](https://github.com/d-zero-dev/nitpicker/commit/0883e9379b9ec1867ec31b66125a069b62cf9d0c))
+
 # [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
 
 - feat(cli)!: promote --main-content-selector to a crawl-time option ([99425cc](https://github.com/d-zero-dev/nitpicker/commit/99425cc57b776e8df15e9ef25e7a8ade653b7a0f))

@@ -3,6 +3,21 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.15.0](https://github.com/d-zero-dev/nitpicker/compare/v0.14.0...v0.15.0) (2026-07-30)
+
+### Bug Fixes
+
+- **query:** show directory distribution instead of single common prefix ([9429e17](https://github.com/d-zero-dev/nitpicker/commit/9429e1776b3926401ba8ab1dbb892ae0aa5168f5))
+
+### Features
+
+- **viewer:** add Console Logs view, Page Detail section, and Summary badges ([00397ad](https://github.com/d-zero-dev/nitpicker/commit/00397ad1b9d7feebb65bedfa5b65a69343647573))
+- **viewer:** add dedicated inbound-links view and Page Detail count ([868bd13](https://github.com/d-zero-dev/nitpicker/commit/868bd139182129d8e17ef15cb5f178767d55f01a))
+- **viewer:** add template cluster analysis view ([0529d0e](https://github.com/d-zero-dev/nitpicker/commit/0529d0ebef3ae2b44bda84910e9028647497f2ed))
+- **viewer:** show cluster selection reason in the template clusters view ([8c790d2](https://github.com/d-zero-dev/nitpicker/commit/8c790d20b0c2beb01af1e0a32dc370d6c2c3fb77))
+- **viewer:** show cluster-selection evidence on the template clusters view ([7db2ceb](https://github.com/d-zero-dev/nitpicker/commit/7db2cebebaa256bc4b263e9016d5ca475d08986a))
+- **viewer:** show network-outage attribution in Summary and Errors views ([aa40798](https://github.com/d-zero-dev/nitpicker/commit/aa40798d71c1ec2f051a9c494a7d1314f19bada2))
+
 # [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
 
 ### Features

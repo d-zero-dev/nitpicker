@@ -3,6 +3,30 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.15.0](https://github.com/d-zero-dev/nitpicker/compare/v0.14.0...v0.15.0) (2026-07-30)
+
+### Bug Fixes
+
+- **query:** show directory distribution instead of single common prefix ([9429e17](https://github.com/d-zero-dev/nitpicker/commit/9429e1776b3926401ba8ab1dbb892ae0aa5168f5))
+
+- feat(query)!: split inbound links out of getPageDetail into listInboundLinks ([e3889fc](https://github.com/d-zero-dev/nitpicker/commit/e3889fc006b9e902185b1f4cfd6009a89ac2b25c))
+
+### Features
+
+- **query:** add console log read APIs and viewer read model support ([6d9304c](https://github.com/d-zero-dev/nitpicker/commit/6d9304c682028d373dbeb31c3a4de15d3e8acc66))
+- **query:** add findDuplicateBodies and body_hash backfill ([bd1f87f](https://github.com/d-zero-dev/nitpicker/commit/bd1f87f634c2d1dc76f4033b94adea25b2d3ae3e))
+- **query:** add template cluster summary aggregation ([be388c8](https://github.com/d-zero-dev/nitpicker/commit/be388c86ecb87d6433c734bf5a48ff454585989d))
+- **query:** expose cluster-selection reason on template cluster summaries ([32741fc](https://github.com/d-zero-dev/nitpicker/commit/32741fc11bfd1ab3d65095e127ae3e3d2a681ec5))
+- **query:** merge URL-normalization-equivalent pages via alias_of_id ([f13797b](https://github.com/d-zero-dev/nitpicker/commit/f13797b8d62bc64b7c3565035de8142af717db25))
+- **query:** read ClusterReason from page_template_cluster_reasons ([ba535e6](https://github.com/d-zero-dev/nitpicker/commit/ba535e6ecd41c227ee5229b02c10c8b1f02086b0))
+- **query:** split failure attribution between site and network causes ([5cf14d1](https://github.com/d-zero-dev/nitpicker/commit/5cf14d13b7ea0cd9d0fc34c6d13b8574f38722d8))
+- **query:** surface invalid_skipped and tolerate its absence on old archives ([972b8c5](https://github.com/d-zero-dev/nitpicker/commit/972b8c578e68b0d184c119bb989437fee477110d))
+
+### BREAKING CHANGES
+
+- PageDetail no longer has an inboundLinks field. Use
+  listInboundLinks(accessor, { url }) instead.
+
 # [0.14.0](https://github.com/d-zero-dev/nitpicker/compare/v0.13.0...v0.14.0) (2026-07-24)
 
 ### Features
