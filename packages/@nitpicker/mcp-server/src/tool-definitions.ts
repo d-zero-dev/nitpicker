@@ -764,4 +764,46 @@ export const toolDefinitions: Tool[] = [
 			required: ['archiveId'],
 		},
 	},
+	{
+		name: 'find_duplicate_clusters',
+		description:
+			'Find same-`body_hash` clusters filtered and ranked for "is this a self-generating crawl trap" (a pager/query-parameter loop the crawler kept following, e.g. `/news/date/{n}/`) — the curated counterpart of find_duplicate_bodies. Filters to clusters at or above minCount with a uniform title across every member page, and ranks by ogUrlMismatchRatio (share of members whose og:url points elsewhere, typically the parent listing) then cluster size. Each result includes a bounded samplePages list and a commonDirectories frequency distribution computed from the full member set.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				minCount: {
+					type: 'number',
+					description: 'Minimum cluster size to include (default: 10)',
+				},
+				limit: { type: 'number', description: 'Max clusters (default: 50)' },
+				offset: { type: 'number', description: 'Clusters to skip (default: 0)' },
+				samplePagesLimit: {
+					type: 'number',
+					description: 'Max inline sample URLs per cluster (default: 20)',
+				},
+			},
+			required: ['archiveId'],
+		},
+	},
+	{
+		name: 'list_dedupe_cap_events',
+		description:
+			'List recorded same-cluster-cap audit rows: URL shapes (e.g. `example.com/news/date/{n}/`) that the opt-in `--dedupe-cap` crawl flag confirmed as self-generating traps and stopped enqueueing further anchors for. Each row has the shape key, a sample URL, the effective threshold that triggered the cap (after halving for confidence signals), the observed count, when it was detected, and rejected_count (anchors rejected afterward — null if the crawl never reached crawlEnd).',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				limit: { type: 'number', description: 'Max results (default: 100)' },
+				offset: { type: 'number', description: 'Results to skip (default: 0)' },
+			},
+			required: ['archiveId'],
+		},
+	},
 ];

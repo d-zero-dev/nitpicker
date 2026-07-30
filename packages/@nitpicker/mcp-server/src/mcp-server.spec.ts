@@ -267,9 +267,9 @@ describe('createServer', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('ListTools で32個のツールが返される', async () => {
+	it('ListTools で34個のツールが返される', async () => {
 		const result = await listTools(server);
-		expect(result.tools).toHaveLength(32);
+		expect(result.tools).toHaveLength(34);
 		const names = result.tools.map((t) => t.name);
 		expect(names).toContain('open_archive');
 		expect(names).toContain('list_inbound_links');
@@ -282,6 +282,8 @@ describe('createServer', () => {
 		expect(names).toContain('get_tag_inventory');
 		expect(names).toContain('get_page_jsonld');
 		expect(names).toContain('get_page_tags');
+		expect(names).toContain('find_duplicate_clusters');
+		expect(names).toContain('list_dedupe_cap_events');
 		expect(names).toContain('get_page_main_contents');
 		expect(names).toContain('count_pages_by_tag');
 		expect(names).toContain('count_pages_by_jsonld_type');
@@ -328,6 +330,20 @@ describe('createServer', () => {
 		expect(result.isError).toBeUndefined();
 		const data = JSON.parse(result.content[0]!.text);
 		expect(data).toEqual({ items: [], total: 0 });
+	});
+
+	it('list_dedupe_cap_events でdedupe-cap発火の一覧を取得する（未記録なら空配列）', async () => {
+		const result = await callTool(server, 'list_dedupe_cap_events', { archiveId });
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data).toEqual({ items: [], total: 0 });
+	});
+
+	it('find_duplicate_clusters でminCount以上のクラスタを検出する（fixtureは重複件数が少ないため空配列）', async () => {
+		const result = await callTool(server, 'find_duplicate_clusters', { archiveId });
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data).toEqual([]);
 	});
 
 	it('list_console_logs で捕捉した console ログを集約して取得する', async () => {
@@ -728,5 +744,125 @@ describe('createServer stub-mode support', () => {
 		// (data is moving) from "interrupted crawl stub" (read-only fixture).
 		expect(data.crawlerPid).toBeNull();
 		await callTool(server, 'close_archive', { archiveId: data.archiveId });
+	});
+});
+
+describe('createServer: find_duplicate_clusters / list_dedupe_cap_events with real data (issue #208)', () => {
+	// A dedicated small fixture, separate from the shared one above, so
+	// asserting on non-empty results here can't be broken by unrelated
+	// changes to the shared fixture's page count/content.
+	const dedupeCapWorkingDir = path.resolve(workingDir, '__mcp_dedupe_cap_fixture__');
+	const dedupeCapFilePath = path.resolve(dedupeCapWorkingDir, 'mcp-dedupe-cap.nitpicker');
+	let server: ReturnType<typeof createServer>;
+	let archiveId: string;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dedupeCapWorkingDir, { recursive: true });
+		const archive = await Archive.create({
+			filePath: dedupeCapFilePath,
+			cwd: dedupeCapWorkingDir,
+		});
+
+		await archive.setConfig({
+			baseUrl: 'https://trap.example.com',
+			roots: ['https://trap.example.com'],
+			name: 'mcp-dedupe-cap',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: false,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'mcp-dedupe-cap',
+			ignoreRobots: false,
+		});
+
+		// Three pages sharing one body_hash and title — a same-cluster trap.
+		for (let i = 0; i < 3; i++) {
+			await archive.setPage({
+				url: parseUrl(`https://trap.example.com/news/date/${i}/`)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html><body>trap body</body></html>',
+				meta: { title: 'お知らせ' } as never,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+
+		await archive.insertDedupeCapEvent({
+			shapeKey: 'trap.example.com/news/date/{n}/',
+			sampleUrl: 'https://trap.example.com/news/date/0/',
+			bodyHash: Buffer.from('trap-body-hash'),
+			effectiveThreshold: 1,
+			observedCount: 2,
+			detectedAt: 1000,
+		});
+
+		await buildViewerReadModel(archive);
+		await archive.write();
+		await archive.close();
+
+		server = createServer();
+		const result = await callTool(server, 'open_archive', {
+			filePath: dedupeCapFilePath,
+		});
+		archiveId = JSON.parse(result.content[0]!.text).archiveId;
+	});
+
+	afterAll(async () => {
+		const { rmSync } = await import('node:fs');
+		rmSync(dedupeCapWorkingDir, { recursive: true, force: true });
+	});
+
+	it('find_duplicate_clusters がminCount/samplePagesLimit引数を実際に反映した結果を返す', async () => {
+		const result = await callTool(server, 'find_duplicate_clusters', {
+			archiveId,
+			minCount: 3,
+			samplePagesLimit: 2,
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data).toHaveLength(1);
+		expect(data[0].count).toBe(3);
+		expect(data[0].samplePages).toHaveLength(2);
+	});
+
+	it('find_duplicate_clusters はminCountを満たさない場合は空配列を返す', async () => {
+		const result = await callTool(server, 'find_duplicate_clusters', {
+			archiveId,
+			minCount: 10,
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data).toEqual([]);
+	});
+
+	it('list_dedupe_cap_events が記録済みのcapイベントを返す', async () => {
+		const result = await callTool(server, 'list_dedupe_cap_events', { archiveId });
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.total).toBe(1);
+		expect(data.items[0]).toMatchObject({
+			shape_key: 'trap.example.com/news/date/{n}/',
+			sample_url: 'https://trap.example.com/news/date/0/',
+			effective_threshold: 1,
+			observed_count: 2,
+		});
 	});
 });

@@ -26,6 +26,8 @@ import {
 	getTagInventory,
 	getViolations,
 	listConsoleLogs,
+	listDedupeCapEvents,
+	listDuplicateBodyClusters,
 	listInboundLinks,
 	listIsolatedClustersFastPath,
 	listIsolatedPagesFastPath,
@@ -383,6 +385,17 @@ export function createServer() {
 							),
 						);
 					}
+					case 'find_duplicate_clusters': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await listDuplicateBodyClusters(accessor, {
+								minCount: optionalNumber(args, 'minCount'),
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+								samplePagesLimit: optionalNumber(args, 'samplePagesLimit'),
+							}),
+						);
+					}
 					case 'find_mismatches': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						const type = validateEnum(
@@ -469,6 +482,15 @@ export function createServer() {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(
 							await listNetworkOutages(accessor, {
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
+					}
+					case 'list_dedupe_cap_events': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await listDedupeCapEvents(accessor, {
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
 							}),
