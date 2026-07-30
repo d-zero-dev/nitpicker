@@ -32,7 +32,9 @@ export type QuerySubCommand =
 	| 'inventory-runs'
 	| 'outages'
 	| 'console-logs'
-	| 'page-console-logs';
+	| 'page-console-logs'
+	| 'duplicate-clusters'
+	| 'dedupe-cap-events';
 
 /**
  * List of all valid query sub-command names.
@@ -69,4 +71,6 @@ export const VALID_SUB_COMMANDS = [
 	'outages',
 	'console-logs',
 	'page-console-logs',
+	'duplicate-clusters',
+	'dedupe-cap-events',
 ] as const satisfies readonly QuerySubCommand[];

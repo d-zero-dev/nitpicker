@@ -29,5 +29,7 @@ export function mapFlagsToCrawlConfig(flags: CrawlFlagInput) {
 		excludes: flags.exclude,
 		excludeKeywords: flags.excludeKeyword,
 		excludeUrls: flags.excludeUrl,
+		dedupeCap: flags.dedupeCap ?? null,
+		dedupeMapCap: flags.dedupeMapCap,
 	};
 }

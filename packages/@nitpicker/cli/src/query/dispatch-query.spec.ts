@@ -38,6 +38,8 @@ vi.mock('@nitpicker/query', () => ({
 		prevCursor: null,
 	}),
 	findDuplicateBodies: vi.fn().mockResolvedValue([]),
+	listDuplicateBodyClusters: vi.fn().mockResolvedValue([]),
+	listDedupeCapEvents: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	getMismatchesFastPath: vi.fn().mockResolvedValue({
 		items: [],
 		total: 0,
@@ -399,6 +401,38 @@ describe('dispatchQuery', () => {
 		} as never);
 		expect(result).toEqual([]);
 		expect(findDuplicateBodies).toHaveBeenCalledWith(mockAccessor, 50, 25);
+	});
+
+	it('dispatches duplicate-clusters sub-command with minCount/limit/offset/samplePagesLimit', async () => {
+		const { listDuplicateBodyClusters } = await import('@nitpicker/query');
+		// `pagesLimit` is the CLI flag name; `dispatchQuery` runs it through the
+		// real `mapFlagsToQueryOptions`, which renames it to `samplePagesLimit`.
+		const result = await dispatchQuery(mockAccessor, 'duplicate-clusters', {
+			minCount: 5,
+			limit: 50,
+			offset: 25,
+			pagesLimit: 3,
+		} as never);
+		expect(result).toEqual([]);
+		expect(listDuplicateBodyClusters).toHaveBeenCalledWith(mockAccessor, {
+			minCount: 5,
+			limit: 50,
+			offset: 25,
+			samplePagesLimit: 3,
+		});
+	});
+
+	it('dispatches dedupe-cap-events sub-command with limit and offset', async () => {
+		const { listDedupeCapEvents } = await import('@nitpicker/query');
+		const result = await dispatchQuery(mockAccessor, 'dedupe-cap-events', {
+			limit: 25,
+			offset: 5,
+		} as never);
+		expect(result).toEqual({ items: [], total: 0 });
+		expect(listDedupeCapEvents).toHaveBeenCalledWith(mockAccessor, {
+			limit: 25,
+			offset: 5,
+		});
 	});
 
 	it('dispatches unused-resources sub-command with limit and offset', async () => {

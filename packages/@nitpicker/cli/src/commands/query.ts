@@ -36,7 +36,11 @@ export const commandDef = {
 		},
 		pagesLimit: {
 			type: 'number',
-			desc: 'Inline member-page URL sample size per duplicate group (duplicates). Defaults to 20.',
+			desc: 'Inline member-page URL sample size per duplicate group (duplicates), or per body-hash cluster (duplicate-clusters). Defaults to 20.',
+		},
+		minCount: {
+			type: 'number',
+			desc: 'Minimum cluster size to include (duplicate-clusters). Defaults to 10.',
 		},
 		url: {
 			type: 'string',

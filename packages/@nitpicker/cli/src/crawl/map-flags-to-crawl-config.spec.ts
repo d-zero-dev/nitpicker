@@ -83,4 +83,19 @@ describe('mapFlagsToCrawlConfig', () => {
 		expect(result.excludeUrls).toBeUndefined();
 		expect(result.interval).toBeUndefined();
 	});
+
+	it('dedupeCap を指定した値のままマッピングする', () => {
+		const result = mapFlagsToCrawlConfig({ dedupeCap: 100 });
+		expect(result.dedupeCap).toBe(100);
+	});
+
+	it('dedupeCap 未指定は null（無効化）にマッピングする', () => {
+		const result = mapFlagsToCrawlConfig({});
+		expect(result.dedupeCap).toBeNull();
+	});
+
+	it('dedupeMapCap を指定した値のままマッピングする', () => {
+		const result = mapFlagsToCrawlConfig({ dedupeMapCap: 50_000 });
+		expect(result.dedupeMapCap).toBe(50_000);
+	});
 });

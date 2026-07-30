@@ -166,35 +166,37 @@ npx @nitpicker/cli crawl --diff ./before.nitpicker ./after.nitpicker
 
 ## オプション一覧
 
-| オプション                                 | 型                 | 説明                                                  |
-| ------------------------------------------ | ------------------ | ----------------------------------------------------- |
-| `--resume`, `-R`                           | string             | stubディレクトリからクロールを再開                    |
-| `--append`, `-A`                           | string, repeatable | 既存アーカイブへ新しい再帰クロール起点を追加          |
-| `--retry-failed`                           | boolean            | 既存アーカイブ内の失敗ページを再取得                  |
-| `--inventory`                              | string             | サーバー側URLリストを既存アーカイブへ取り込み         |
-| `--interval`, `-I`                         | number             | リクエスト間隔をミリ秒で指定                          |
-| `--image` / `--no-image`                   | boolean            | 画像を取得するか。既定は有効                          |
-| `--fetch-external` / `--no-fetch-external` | boolean            | 外部リンクを取得するか。既定は有効                    |
-| `--parallels`, `-P`                        | number             | 並列スクレイピング数                                  |
-| `--recursive` / `--no-recursive`           | boolean            | 再帰クロールするか。既定は有効                        |
-| `--exclude`                                | string, repeatable | 除外するページURLパスのglob                           |
-| `--exclude-keyword`                        | string, repeatable | ページ本文に含まれる除外キーワード                    |
-| `--exclude-url`                            | string, repeatable | 除外する外部URL prefix                                |
-| `--disable-queries`, `-Q`                  | boolean            | URLのクエリ文字列を無効化                             |
-| `--image-file-size-threshold`              | number             | 画像ファイルサイズのしきい値                          |
-| `--single`                                 | boolean            | 単一ページモード                                      |
-| `--max-excluded-depth`                     | number             | 指定深さを超えるクロールを避ける                      |
-| `--retry`                                  | number             | URLごとのスクレイプ失敗リトライ回数。既定は `3`       |
-| `--list`                                   | string, repeatable | 指定URLリストだけをクロール                           |
-| `--list-file`                              | string             | URLリストファイルだけをクロール                       |
-| `--user-agent`                             | string             | HTTPリクエストのUser-Agent                            |
-| `--ignore-robots`                          | boolean            | robots.txt制限を無視                                  |
-| `--main-content-selector`                  | string             | メインコンテンツ領域の自動検出を上書きするCSSセレクタ |
-| `--output`, `-o`                           | string             | 出力 `.nitpicker` ファイルパス                        |
-| `--strict`                                 | boolean            | 外部リンクエラーを致命的エラーとして扱う              |
-| `--verbose`                                | boolean            | 詳細ログを出力                                        |
-| `--silent`                                 | boolean            | 標準出力ログを抑制                                    |
-| `--diff`                                   | boolean            | 2つのアーカイブの差分を出力                           |
+| オプション                                 | 型                 | 説明                                                                                                                                                                                                                                                                      |
+| ------------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--resume`, `-R`                           | string             | stubディレクトリからクロールを再開                                                                                                                                                                                                                                        |
+| `--append`, `-A`                           | string, repeatable | 既存アーカイブへ新しい再帰クロール起点を追加                                                                                                                                                                                                                              |
+| `--retry-failed`                           | boolean            | 既存アーカイブ内の失敗ページを再取得                                                                                                                                                                                                                                      |
+| `--inventory`                              | string             | サーバー側URLリストを既存アーカイブへ取り込み                                                                                                                                                                                                                             |
+| `--interval`, `-I`                         | number             | リクエスト間隔をミリ秒で指定                                                                                                                                                                                                                                              |
+| `--image` / `--no-image`                   | boolean            | 画像を取得するか。既定は有効                                                                                                                                                                                                                                              |
+| `--fetch-external` / `--no-fetch-external` | boolean            | 外部リンクを取得するか。既定は有効                                                                                                                                                                                                                                        |
+| `--parallels`, `-P`                        | number             | 並列スクレイピング数                                                                                                                                                                                                                                                      |
+| `--recursive` / `--no-recursive`           | boolean            | 再帰クロールするか。既定は有効                                                                                                                                                                                                                                            |
+| `--exclude`                                | string, repeatable | 除外するページURLパスのglob                                                                                                                                                                                                                                               |
+| `--exclude-keyword`                        | string, repeatable | ページ本文に含まれる除外キーワード                                                                                                                                                                                                                                        |
+| `--exclude-url`                            | string, repeatable | 除外する外部URL prefix                                                                                                                                                                                                                                                    |
+| `--disable-queries`, `-Q`                  | boolean            | URLのクエリ文字列を無効化                                                                                                                                                                                                                                                 |
+| `--image-file-size-threshold`              | number             | 画像ファイルサイズのしきい値                                                                                                                                                                                                                                              |
+| `--single`                                 | boolean            | 単一ページモード                                                                                                                                                                                                                                                          |
+| `--max-excluded-depth`                     | number             | 指定深さを超えるクロールを避ける                                                                                                                                                                                                                                          |
+| `--retry`                                  | number             | URLごとのスクレイプ失敗リトライ回数。既定は `3`                                                                                                                                                                                                                           |
+| `--list`                                   | string, repeatable | 指定URLリストだけをクロール                                                                                                                                                                                                                                               |
+| `--list-file`                              | string             | URLリストファイルだけをクロール                                                                                                                                                                                                                                           |
+| `--user-agent`                             | string             | HTTPリクエストのUser-Agent                                                                                                                                                                                                                                                |
+| `--ignore-robots`                          | boolean            | robots.txt制限を無視                                                                                                                                                                                                                                                      |
+| `--main-content-selector`                  | string             | メインコンテンツ領域の自動検出を上書きするCSSセレクタ                                                                                                                                                                                                                     |
+| `--output`, `-o`                           | string             | 出力 `.nitpicker` ファイルパス                                                                                                                                                                                                                                            |
+| `--strict`                                 | boolean            | 外部リンクエラーを致命的エラーとして扱う                                                                                                                                                                                                                                  |
+| `--verbose`                                | boolean            | 詳細ログを出力                                                                                                                                                                                                                                                            |
+| `--silent`                                 | boolean            | 標準出力ログを抑制                                                                                                                                                                                                                                                        |
+| `--diff`                                   | boolean            | 2つのアーカイブの差分を出力                                                                                                                                                                                                                                               |
+| `--dedupe-cap`                             | number             | 同一クラスタ soft cap。URL形状（例: `/news/date/{n}/`）ごとにtitle/description/og:tagが一致する観測がこの件数に達したら以降の新規URLをenqueueしない。opt-in（省略で無効）。自己生成型のpager/queryパラメータtrapへの保険。発火内容は `query dedupe-cap-events` で確認可能 |
+| `--dedupe-map-cap`                         | number             | `--dedupe-cap` が同時追跡するURL形状の数の上限。超過分は最も長く未更新の形状から破棄。`--dedupe-cap` 指定時のみ有効                                                                                                                                                       |
 
 ## 終了コード
 

@@ -115,6 +115,14 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Treat external link errors as fatal (exit code 1 instead of 2)',
 		},
+		dedupeCap: {
+			type: 'number',
+			desc: 'Same-cluster soft cap: stop enqueueing newly-discovered internal URLs whose shape (e.g. `/news/date/{n}/`) has accumulated this many matching-title/description/og-tag observations. Opt-in — omit to disable. Backstop against a site that keeps serving 2xx for a self-generating pager/query-parameter trap; see `query dedupe-cap-events` for what fired.',
+		},
+		dedupeMapCap: {
+			type: 'number',
+			desc: 'Hard cap on the number of distinct URL shapes --dedupe-cap tracks at once; the least-recently-touched shape is evicted beyond this. Only relevant when --dedupe-cap is set.',
+		},
 		// analyze flags
 		all: {
 			type: 'boolean',
@@ -248,6 +256,8 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			retryFailed: false,
 			inventory: undefined,
 			diff: undefined,
+			dedupeCap: flags.dedupeCap,
+			dedupeMapCap: flags.dedupeMapCap,
 		});
 	} catch (error) {
 		if (

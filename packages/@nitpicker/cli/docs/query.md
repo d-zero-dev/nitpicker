@@ -40,6 +40,8 @@ npx @nitpicker/cli query ./site.nitpicker page-detail --url https://example.com/
 | `images`                     | 画像一覧と画像品質フィルタ                                             |
 | `violations`                 | 分析プラグインの違反結果                                               |
 | `duplicates`                 | title/descriptionの重複                                                |
+| `duplicate-clusters`         | 同一body_hashクラスタの集約（trap兆候でソート）                        |
+| `dedupe-cap-events`          | `--dedupe-cap` の同一クラスタ soft cap 発火履歴                        |
 | `mismatches`                 | canonical/OGPメタデータの不一致                                        |
 | `headers`                    | セキュリティヘッダー確認                                               |
 | `resource-referrers`         | 指定リソースの参照元ページ                                             |
