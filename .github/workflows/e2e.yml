@@ -103,6 +103,7 @@ jobs:
                 config-persistence.e2e.ts,
                 scope-auth-leak.e2e.ts,
                 main-contents.e2e.ts,
+                dedupe-cap.e2e.ts,
               ]
           - id: retry-exclude
             files:
