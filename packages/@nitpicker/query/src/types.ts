@@ -383,6 +383,50 @@ export interface ListNetworkOutagesOptions {
 }
 
 /**
+ * One row of {@link import('./list-dedupe-cap-events.js').listDedupeCapEvents}
+ * output — one URL shape confirmed as a same-cluster trap during a crawl
+ * (opt-in `--dedupe-cap`, issue #208).
+ *
+ * Schema-mirror of the `dedupe_cap_events` table.
+ */
+export interface DedupeCapEventEntry {
+	/** Autoincrement primary key (monotonically increasing per archive). */
+	id: number;
+	/** The URL shape key that capped (e.g. `example.com/news/date/{n}/`) — a template, not a navigable URL. */
+	shape_key: string;
+	/** One concrete member URL, captured at cap time for human identification. */
+	sample_url: string;
+	/** `computeBodyHash` result recorded at cap time, as a 64-char hex string, or `null` if the page had no rendered body. */
+	body_hash: string | null;
+	/** The Misra-Gries threshold that actually triggered the cap, after halving for confidence signals — not necessarily `--dedupe-cap`'s raw value. */
+	effective_threshold: number;
+	/** The tracker's Misra-Gries counter value at cap time — a lower bound on matching-signature pages seen, not an exact observation count. */
+	observed_count: number;
+	/** Epoch ms the cap was confirmed. */
+	detected_at: number;
+	/**
+	 * Number of anchors rejected for this shape after it capped, finalized
+	 * once at `crawlEnd`. `null` means "unknown" (the crawl never reached
+	 * `crawlEnd`) — unlike `NetworkOutageEntry.ended_at`, this is never
+	 * resolved on the fly to a synthetic value, since there is no
+	 * "unbounded window" correctness hazard to guard against here (see
+	 * `dedupe_cap_events`'s DDL JSDoc).
+	 */
+	rejected_count: number | null;
+}
+
+/**
+ * Pagination options for
+ * {@link import('./list-dedupe-cap-events.js').listDedupeCapEvents}.
+ */
+export interface ListDedupeCapEventsOptions {
+	/** Maximum rows to return. Defaults to 100. */
+	limit?: number;
+	/** Rows to skip from the start. Defaults to 0. */
+	offset?: number;
+}
+
+/**
  * Options for opening a .nitpicker archive file.
  */
 export interface OpenArchiveOptions {
@@ -2181,6 +2225,56 @@ export interface DuplicateBodyEntry {
 	urls: string[];
 	/** Number of pages with this body hash. */
 	count: number;
+}
+
+/**
+ * One same-`body_hash` cluster, filtered and enriched for the "is this a
+ * same-cluster trap" question (issue #208) — the curated counterpart of
+ * {@link import('./find-duplicate-bodies.js').findDuplicateBodies}'s raw,
+ * unfiltered group list. See
+ * {@link import('./list-duplicate-body-clusters.js').listDuplicateBodyClusters}.
+ */
+export interface DuplicateBodyClusterEntry {
+	/** The shared `body_hash`, as a 64-char hex string — reused as-is rather than defining a new hash (issue #208's proposal to define a separate "signature" was dropped; `body_hash` already is one). */
+	signature: string;
+	/** Total number of pages in this cluster. */
+	count: number;
+	/**
+	 * Fraction (0–1, over the full `count`) of member pages whose non-null
+	 * `og:url` points somewhere other than the page itself — a
+	 * pager/query-parameter trap's `og:url` typically still points at the
+	 * parent listing rather than the (fake) paginated URL, so a high ratio
+	 * here is a trap indicator. A page with no `og:url` at all contributes to
+	 * the denominator (`count`) but not the numerator, since the ratio
+	 * expresses "share of the whole cluster", not "share of pages that have
+	 * an og:url".
+	 */
+	ogUrlMismatchRatio: number;
+	/** Up to the caller's `samplePagesLimit` member URLs (not the full member list — see `count` for the true size). */
+	samplePages: string[];
+	/**
+	 * Top-N first-path-segment directories across the cluster's FULL member
+	 * set (not just `samplePages`) — see `computeDirectoryDistribution` for
+	 * why this is a frequency distribution rather than a single deepest
+	 * common prefix, and why a plain single `parentPath` (as issue #208
+	 * originally proposed) would collapse a multi-section trap to the site
+	 * root.
+	 */
+	commonDirectories: DirectoryDistributionEntry[];
+}
+
+/**
+ * Options for {@link import('./list-duplicate-body-clusters.js').listDuplicateBodyClusters}.
+ */
+export interface ListDuplicateBodyClustersOptions {
+	/** Minimum cluster size to include. Defaults to 10 (issue #208's proposed N). */
+	minCount?: number;
+	/** Maximum number of clusters to return. Defaults to 50. */
+	limit?: number;
+	/** Number of clusters (in ranked order) to skip before `limit` is applied. Defaults to 0. */
+	offset?: number;
+	/** Maximum number of sample URLs per cluster. Defaults to 20. */
+	samplePagesLimit?: number;
 }
 
 /**
