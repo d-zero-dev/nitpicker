@@ -158,6 +158,7 @@ describe('readViewerPageFacets', () => {
 				['https://example.com/a', 'template-a'],
 				['https://example.com/doc.pdf', 'template-b'],
 			]),
+			new Map(),
 		);
 		const facets = await readViewerPageFacets(knex);
 		expect(facets.templateKeys).toEqual(['template-a', 'template-b']);

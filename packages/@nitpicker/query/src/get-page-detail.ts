@@ -76,7 +76,7 @@ function summarizeTagRows(rows: readonly TagRow[]): PageDetail['tags'] {
  * @example
  * const detail = await getPageDetail(accessor, 'https://example.com/');
  * if (detail) {
- *   console.log(detail.title, detail.status, detail.inboundLinks.length);
+ *   console.log(detail.title, detail.status, detail.outboundLinks.length);
  * }
  */
 export async function getPageDetail(
@@ -287,33 +287,6 @@ export async function getPageDetail(
 		}),
 	);
 
-	// Inbound links resolve through redirects: an anchor pointing at a
-	// redirect source is counted as an incoming link to the redirect's final
-	// destination. Grouped by referrer so a referrer with multiple
-	// anchor_edges to this page still yields exactly one row.
-	const inboundRows = (await knex('anchor_edges as ae')
-		.select('referrer_ur.url as url')
-		.min('text_ref.text as textContent')
-		.join('content_items as referrer', 'ae.page_id', 'referrer.id')
-		.join('url_refs as referrer_ur', 'referrer_ur.id', 'referrer.url_id')
-		.join('content_items as target', 'ae.href_page_id', 'target.id')
-		.leftJoin('text_refs as text_ref', 'text_ref.id', 'ae.first_text_id')
-		.whereRaw(
-			'coalesce("target"."redirect_dest_id", "target"."alias_of_id", "target"."id") = ?',
-			[page.id],
-		)
-		.groupBy('referrer.id', 'referrer_ur.url')) as {
-		url: string;
-		textContent: string | null;
-	}[];
-
-	const inboundLinks = inboundRows.map(
-		(row: { url: string; textContent: string | null }) => ({
-			url: row.url,
-			textContent: row.textContent,
-		}),
-	);
-
 	const redirectRows = await knex('content_items as ci')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
 		.select('ur.url as url')
@@ -422,7 +395,6 @@ export async function getPageDetail(
 		tags: summarizeTagRows(tagRows),
 		responseHeaders,
 		outboundLinks,
-		inboundLinks,
 		redirectFrom,
 		aliasUrls,
 		consoleLogs,

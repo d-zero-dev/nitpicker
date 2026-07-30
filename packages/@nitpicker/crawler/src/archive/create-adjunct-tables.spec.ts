@@ -26,6 +26,7 @@ const ADJUNCT_TABLES = [
 	'network_outages',
 	'analysis_text_refs',
 	'analysis_violations',
+	'page_templates',
 	'page_template_clusters',
 	'page_html_blobs',
 	'page_html_ref',
@@ -199,6 +200,28 @@ describe('createAdjunctTables', () => {
 		const parents = await fkParentTables(db, 'page_console_logs');
 		expect(parents.has('content_items')).toBe(true);
 		expect(parents.has('console_log_items')).toBe(true);
+	});
+
+	it('rejects a duplicate page_template_clusters.template_key (PRIMARY KEY)', async () => {
+		await createAdjunctTables(db);
+		await db('page_template_clusters').insert({
+			template_key: 'css:abc123',
+			member_count: 3,
+			reason_json: Buffer.from('{}'),
+			codec: 'zstd',
+			size_raw: 2,
+			size_stored: 2,
+		});
+		await expect(
+			db('page_template_clusters').insert({
+				template_key: 'css:abc123',
+				member_count: 1,
+				reason_json: Buffer.from('{}'),
+				codec: 'zstd',
+				size_raw: 2,
+				size_stored: 2,
+			}),
+		).rejects.toThrow();
 	});
 
 	it('enforces the content_items FK on insert (PRAGMA foreign_keys = ON)', async () => {

@@ -19,16 +19,6 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 		await expect(cssCluster.locator('summary')).toContainText('2 pages');
 	});
 
-	test('path由来クラスタは共通CSSが無い旨を表示し、共通ディレクトリにフォールバックする', async ({
-		page,
-	}) => {
-		await page.goto('/template-clusters');
-
-		const pathCluster = page.locator('details', { hasText: '/news/' });
-		await pathCluster.locator('summary').click();
-		await expect(pathCluster).toContainText('(none)');
-	});
-
 	test('クラスタを展開してPagesへのリンクをクリックするとtemplateKeyフィルタ付きでPagesビューに遷移する', async ({
 		page,
 	}) => {

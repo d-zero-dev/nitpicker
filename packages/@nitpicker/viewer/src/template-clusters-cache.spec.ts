@@ -52,6 +52,8 @@ describe('getCachedTemplateClusters', () => {
 					pageCount: 1,
 					commonDirectories: [],
 					commonStylesheetUrls: [],
+					commonStylesheetFileNames: [],
+					reason: null,
 				},
 			],
 		});
@@ -97,6 +99,7 @@ describe('getCachedTemplateClusters', () => {
 						commonDirectories: [],
 						commonStylesheetUrls: [],
 						commonStylesheetFileNames: [],
+						reason: null,
 					},
 				],
 			})
@@ -109,6 +112,7 @@ describe('getCachedTemplateClusters', () => {
 						commonDirectories: [],
 						commonStylesheetUrls: [],
 						commonStylesheetFileNames: [],
+						reason: null,
 					},
 				],
 			});
@@ -134,6 +138,7 @@ describe('getCachedTemplateClusters', () => {
 						commonDirectories: [],
 						commonStylesheetUrls: [],
 						commonStylesheetFileNames: [],
+						reason: null,
 					},
 				],
 			});
@@ -152,6 +157,8 @@ describe('getCachedTemplateClusters', () => {
 					pageCount: 1,
 					commonDirectories: [],
 					commonStylesheetUrls: [],
+					commonStylesheetFileNames: [],
+					reason: null,
 				},
 			],
 		});
@@ -173,6 +180,7 @@ describe('getCachedTemplateClusters', () => {
 						commonDirectories: [],
 						commonStylesheetUrls: [],
 						commonStylesheetFileNames: [],
+						reason: null,
 					},
 				],
 			})
@@ -185,6 +193,7 @@ describe('getCachedTemplateClusters', () => {
 						commonDirectories: [],
 						commonStylesheetUrls: [],
 						commonStylesheetFileNames: [],
+						reason: null,
 					},
 				],
 			});
@@ -211,6 +220,7 @@ describe('getCachedTemplateClusters', () => {
 						commonDirectories: [],
 						commonStylesheetUrls: [],
 						commonStylesheetFileNames: [],
+						reason: null,
 					},
 				],
 			});

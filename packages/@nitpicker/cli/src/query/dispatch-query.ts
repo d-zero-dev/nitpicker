@@ -34,6 +34,7 @@ import {
 	getTagInventory,
 	getViolations,
 	listConsoleLogs,
+	listInboundLinks,
 	listInventoryRuns,
 	listIsolatedClustersFastPath,
 	listIsolatedPagesFastPath,
@@ -80,6 +81,26 @@ export async function dispatchQuery(
 		case 'page-detail': {
 			const { url } = options as { url: string };
 			const result = await getPageDetail(accessor, url);
+			if (!result) {
+				throw new Error(`Page not found: ${url}`);
+			}
+			return result;
+		}
+		case 'inbound-links': {
+			const { url, limit, offset, cursor, direction } = options as {
+				url: string;
+				limit?: number;
+				offset?: number;
+				cursor?: string;
+				direction?: 'next' | 'prev';
+			};
+			const result = await listInboundLinks(accessor, {
+				url,
+				limit,
+				offset,
+				cursor,
+				direction,
+			});
 			if (!result) {
 				throw new Error(`Page not found: ${url}`);
 			}

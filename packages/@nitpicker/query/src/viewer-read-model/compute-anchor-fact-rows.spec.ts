@@ -319,6 +319,185 @@ describe('computeAnchorFactRows', () => {
 });
 
 /**
+ * `first_text_id` is `MIN(ae.first_text_id)` over every `anchor_edges` row
+ * collapsed into one `viewer_anchor_facts` row. A single referrer with two
+ * distinct anchors — one directly at the canonical destination, one at a
+ * redirect source that lands on it — produces two distinct `anchor_edges`
+ * rows (different `href_page_id`) that the redirect-resolution `GROUP BY`
+ * collapses into one, exercising the `MIN()` aggregation across rows rather
+ * than the trivial single-row passthrough.
+ */
+describe('computeAnchorFactRows — first_text_id', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_compute_anchor_fact_rows_first_text_id__',
+	);
+	let archive: InstanceType<typeof Archive>;
+	const archiveFilePath = path.resolve(
+		workingDir,
+		'compute-anchor-fact-rows-first-text-id-test.nitpicker',
+	);
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		// One referrer with a single anchor carrying no text — the anchor's
+		// `textContent` is `null`, so `anchor_edges.first_text_id` is `null`
+		// for this (page, href) pair (crawler layer, tested separately).
+		await archive.setPage({
+			url: parseUrl('https://example.com/textless-referrer')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: { ...META, title: 'Textless referrer' },
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/textless-target')!,
+					isExternal: false,
+					title: null,
+					textContent: null,
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/textless-target')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// One referrer linking the same canonical destination twice: once
+		// directly, once via a redirect source — two distinct `anchor_edges`
+		// rows that collapse into one `viewer_anchor_facts` row, so
+		// `first_text_id` must resolve to the earlier-inserted anchor's text
+		// ("Direct link", inserted first in `anchorList`), not the later one.
+		await archive.setPage({
+			url: parseUrl('https://example.com/multi-anchor-referrer')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: { ...META, title: 'Multi-anchor referrer' },
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/canonical')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Direct link',
+				},
+				{
+					href: parseUrl('https://example.com/old-path')!,
+					isExternal: false,
+					title: null,
+					textContent: 'Via redirect source',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/canonical')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: { ...META, title: 'Canonical' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setRedirect({
+			url: parseUrl('https://example.com/old-path')!,
+			redirectPaths: ['https://example.com/canonical'],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('sets first_text_id to null when the anchor carried no text', async () => {
+		const knex = archive.getKnex();
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
+		);
+		const textless = findByDestUrl(
+			rows,
+			urlByRefId,
+			'https://example.com/textless-target',
+		)!;
+		expect(textless.first_text_id).toBeNull();
+	});
+
+	it('resolves first_text_id, via text_refs, to the anchor text of the target', async () => {
+		const knex = archive.getKnex();
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
+		);
+		const direct = findByDestUrl(rows, urlByRefId, 'https://example.com/canonical')!;
+		expect(direct.first_text_id).not.toBeNull();
+		const textRow = await knex('text_refs').where('id', direct.first_text_id).first();
+		expect(textRow?.text).toBe('Direct link');
+	});
+
+	it('collapses the direct anchor and the redirect-source anchor from the same referrer into one row, count: 2', async () => {
+		const knex = archive.getKnex();
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
+		);
+		const direct = findByDestUrl(rows, urlByRefId, 'https://example.com/canonical')!;
+		expect(direct.count).toBe(2);
+	});
+});
+
+/**
  * Mirrors `list-links.spec.ts`'s redirect-resolution describe block: an
  * anchor to an internal redirect-source page and an anchor directly to the
  * same canonical destination must collapse into a single row (same

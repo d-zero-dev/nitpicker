@@ -636,12 +636,16 @@ describe('analyze', () => {
 
 	it('calls replacePageTemplates with the classified template keys and cluster reasons when classifyTemplates is enabled', async () => {
 		const pages = [createMockPage('https://example.com/')];
+		// A non-empty `clusterReasonsByTemplateKey` here (not just
+		// `templateKeysByUrl`) — an empty Map on both sides would make the
+		// `toHaveBeenCalledWith` assertion below pass even if `nitpicker.ts`
+		// forwarded a hardcoded `new Map()` instead of the real value.
 		const clusterReasonsByTemplateKey = new Map([
 			[
 				'template-a',
 				{
 					memberCount: 1,
-					blocking: [],
+					blocking: [{ blockKey: 'path:x', reason: { kind: 'path', pathKey: 'x' } }],
 					structuralCoreTokens: [],
 					landmarks: {},
 					siblingClusterKeys: [],

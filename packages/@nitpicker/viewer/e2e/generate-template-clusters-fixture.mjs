@@ -113,6 +113,8 @@ await setSimplePage('https://example.com/news/article-2', 'News Article 2');
 // directories, one page each — exercises the top-N (5) truncation and the
 // "N other pages" remainder in `computeDirectoryDistribution` / the view's
 // `otherPageCount`, which the single-directory clusters above cannot.
+// Deliberately has no captured reason — covers the `reason === null`
+// "not captured" rendering path.
 const sectionUrls = [];
 for (const section of ['a', 'b', 'c', 'd', 'e', 'f', 'g']) {
 	const url = `https://example.com/section-${section}/page`;

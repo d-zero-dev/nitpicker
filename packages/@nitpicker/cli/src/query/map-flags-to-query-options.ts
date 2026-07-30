@@ -83,6 +83,23 @@ export function mapFlagsToQueryOptions(
 			}
 			return { url: flags.url };
 		}
+		case 'inbound-links': {
+			if (!flags.url) {
+				throw new Error('--url is required for the inbound-links sub-command.');
+			}
+			if (flags.direction != null && !['next', 'prev'].includes(flags.direction)) {
+				throw new Error(
+					`Invalid --direction value: ${flags.direction}. Must be one of: next, prev`,
+				);
+			}
+			return {
+				url: flags.url,
+				limit: flags.limit,
+				offset: flags.offset,
+				cursor: flags.cursor,
+				direction: flags.direction as 'next' | 'prev' | undefined,
+			};
+		}
 		case 'html': {
 			if (!flags.url) {
 				throw new Error('--url is required for the html sub-command.');

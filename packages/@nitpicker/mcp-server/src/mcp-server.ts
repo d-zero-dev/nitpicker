@@ -26,6 +26,7 @@ import {
 	getTagInventory,
 	getViolations,
 	listConsoleLogs,
+	listInboundLinks,
 	listIsolatedClustersFastPath,
 	listIsolatedPagesFastPath,
 	listLinks,
@@ -251,6 +252,19 @@ export function createServer() {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						const url = requireString(args, 'url');
 						const result = await getPageDetail(accessor, url);
+						if (!result) {
+							return textResult('Page not found.');
+						}
+						return jsonResult(result);
+					}
+					case 'list_inbound_links': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						const url = requireString(args, 'url');
+						const result = await listInboundLinks(accessor, {
+							url,
+							limit: optionalNumber(args, 'limit'),
+							cursor: optionalString(args, 'cursor'),
+						});
 						if (!result) {
 							return textResult('Page not found.');
 						}

@@ -13,8 +13,6 @@ export { backfillBodyHashFromHtmlBlobs } from './viewer-read-model/backfill-body
 export { buildViewerReadModel } from './viewer-read-model/build-viewer-read-model.js';
 export { checkHeaders } from './check-headers.js';
 export { classifyErrorKind } from '@nitpicker/crawler';
-export { collectPageStylesheetUrlsByPageId } from './collect-page-stylesheet-urls-by-page-id.js';
-export { computeCssIntersection } from './compute-css-intersection.js';
 export { computeDirectoryDistribution } from './compute-directory-distribution.js';
 export { computeIsolatedClusters } from './compute-isolated-clusters.js';
 export { computeStylesheetFileNames } from './compute-stylesheet-file-names.js';
@@ -65,6 +63,7 @@ export { listDirectoryChildren } from './list-directory-children.js';
 export { listDirectoryPages } from './list-directory-pages.js';
 export { listExternalLinks } from './list-external-links.js';
 export { listImages } from './list-images.js';
+export { listInboundLinks } from './list-inbound-links.js';
 export { listInventoryRuns } from './list-inventory-runs.js';
 export { listIsolatedClustersFastPath } from './list-isolated-clusters-fast-path.js';
 export { listIsolatedClusters } from './list-isolated-clusters.js';

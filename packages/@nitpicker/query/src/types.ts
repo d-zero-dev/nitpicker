@@ -1242,8 +1242,11 @@ export interface PageDetail {
 	responseHeaders: Record<string, string>;
 	/** Outgoing links from this page. */
 	outboundLinks: OutboundLink[];
-	/** Incoming links to this page. */
-	inboundLinks: InboundLink[];
+	// Inbound links are deliberately not embedded here: a page's referrer
+	// count can reach the hundreds of thousands on large sites (unlike
+	// outbound links, which are bounded by that one page's own anchors), so
+	// they are read separately via `listInboundLinks`, a bounded,
+	// cursor-paginated query (#235).
 	/** URLs that redirect to this page. */
 	redirectFrom: string[];
 	/** URLs merged into this page via URL-normalization equivalence (`content_items.alias_of_id`). */
@@ -1555,13 +1558,80 @@ export interface OutboundLink {
 }
 
 /**
- * An incoming link pointing to a page.
+ * Options for {@link import('./list-inbound-links.js').listInboundLinks}.
  */
-export interface InboundLink {
+export interface ListInboundLinksOptions {
+	/**
+	 * The exact URL of the page whose inbound links to list. A redirect
+	 * source or URL-normalization alias resolves to its canonical page's
+	 * inbound links, the same resolution `getPageDetail` applies.
+	 */
+	url: string;
+	/**
+	 * Maximum number of results to return. Defaults to 100. Pass `0` to skip
+	 * the row window entirely and return only `total` with empty `items` —
+	 * the shape a caller that only needs a count (e.g. Page Detail's
+	 * referrer count) should request.
+	 */
+	limit?: number;
+	/**
+	 * Opaque keyset cursor from a previous {@link InboundLinkList}'s
+	 * `nextCursor`/`prevCursor`. Mutually exclusive with `offset` — when both
+	 * are supplied, `cursor` wins. Omit for the first page.
+	 */
+	cursor?: string;
+	/**
+	 * Direction to walk from `cursor`: `'next'` (forward, default) or
+	 * `'prev'` (backward). Ignored when `cursor` is omitted.
+	 */
+	direction?: 'next' | 'prev';
+	/**
+	 * Row offset for page-number jumps (MPA pagination). Mutually exclusive
+	 * with `cursor`.
+	 */
+	offset?: number;
+}
+
+/**
+ * One inbound link — a distinct referrer page linking to the target, with
+ * its first-observed anchor text and the number of anchors on that referrer
+ * pointing here (see `anchor_edges`'s first-wins dedup — this is the same
+ * grain: one row per referrer, not per anchor).
+ */
+export interface InboundLinkEntry {
 	/** The URL of the referring page. */
 	url: string;
-	/** The anchor text content. */
+	/** The first-observed anchor text content, or `null` if it carried none. */
 	textContent: string | null;
+	/** Number of anchors on the referrer page pointing to the target. */
+	count: number;
+}
+
+/**
+ * Result of {@link import('./list-inbound-links.js').listInboundLinks} — a
+ * bounded, cursor-paginated window of pages linking to a target page.
+ */
+export interface InboundLinkList {
+	/** The target page's URL, as supplied in the request. */
+	url: string;
+	/** Inbound link entries in this window, bounded to at most `limit`. */
+	items: InboundLinkEntry[];
+	/** Total distinct referrer pages linking to the target — independent of `items`' window length. */
+	total: number;
+	/** Current limit. */
+	limit: number;
+	/** Current offset. */
+	offset: number;
+	/**
+	 * Opaque cursor to fetch the next page in the current sort order, or
+	 * `null` when this is the last page.
+	 */
+	nextCursor: string | null;
+	/**
+	 * Opaque cursor to fetch the preceding page, or `null` when this is
+	 * already the first page.
+	 */
+	prevCursor: string | null;
 }
 
 /**

@@ -106,7 +106,7 @@ test.describe('Nitpicker Viewer', () => {
 		await expect(page.locator('.pt-row').first()).toContainText('2');
 	});
 
-	test('外部リンクの宛先をクリックすると Page Detail で参照元ページ一覧が確認できる', async ({
+	test('外部リンクの宛先をクリックすると Page Detail から被リンクへの導線が確認できる', async ({
 		page,
 	}) => {
 		await page.goto('/external-links');
@@ -114,10 +114,17 @@ test.describe('Nitpicker Viewer', () => {
 		await expect(
 			page.getByRole('heading', { name: 'Page detail', level: 1 }),
 		).toBeVisible();
-		// Two internal pages link to this external destination.
-		await expect(
-			page.getByRole('heading', { name: /Inbound links \(2\)/ }),
-		).toBeVisible();
+		// This suite's shared fixture (generate-fixture.mjs) never calls
+		// buildViewerReadModel (see its own docs — directory-tree's "no read
+		// model" empty-state test depends on that), and `listInboundLinks`
+		// has no legacy fallback, so the inbound-links count surfaces the
+		// actionable "run viewer-build" error here instead of a live count.
+		// The live count (2 internal pages link to this destination) and the
+		// full inbound-links list have their own coverage in
+		// `inbound-links.spec.ts`, against a fixture that builds the read
+		// model.
+		await expect(page.getByRole('heading', { name: 'Inbound links' })).toBeVisible();
+		await expect(page.getByText(/viewer-build/)).toBeVisible();
 		// External pages are never scraped — the HTML snapshot / outbound
 		// links sections are not meaningful and must not render.
 		await expect(page.getByRole('heading', { name: /Outbound links/ })).toHaveCount(0);

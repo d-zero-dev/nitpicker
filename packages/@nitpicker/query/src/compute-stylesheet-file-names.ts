@@ -34,9 +34,9 @@ function stylesheetFileName(url: string): string {
  * the same filename — without it, a heading built from this list would read
  * as a nonsensical "style.css, style.css" (observed against a real site's
  * common stylesheet set).
- * @param urls - A cluster's common stylesheet URLs (e.g.
- *   {@link import('./compute-css-intersection.js').computeCssIntersection}'s
- *   output).
+ * @param urls - A cluster's common stylesheet URLs — e.g. the
+ *   `distinctiveStylesheetHrefs` of a css-kind blocking entry in a
+ *   `TemplateClusterReasonSummary.reason.blocking`.
  * @returns Deduplicated filenames, in first-seen order.
  * @example
  * ```ts
