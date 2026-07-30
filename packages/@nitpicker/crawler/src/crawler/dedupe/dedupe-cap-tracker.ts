@@ -121,8 +121,15 @@ export default class DedupeCapTracker {
 			bodyHashMatches = false;
 		} else if (existing.metaSig === metaSig) {
 			existing.count++;
-			slot = existing;
 			bodyHashMatches = existing.bodyHash.equals(bodyHash);
+			// Track the most recently observed body for this shape, not the
+			// one recorded when the slot was first created — otherwise a
+			// shape whose first page differs from an otherwise-identical run
+			// of later pages (e.g. a one-off warmup response) would compare
+			// every later page against that stale first hash forever and
+			// never see a match.
+			existing.bodyHash = bodyHash;
+			slot = existing;
 		} else {
 			existing.count--;
 			if (existing.count <= 0) {

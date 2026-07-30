@@ -627,12 +627,17 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 *   queue, prioritising likely-HTML URLs to the front (see {@link partitionUrlsByHtml}).
 	 *   Accepts a batch so a group of URLs (e.g. predicted pagination) keeps its order.
 	 * @param concurrency - Current concurrency level, used to determine predicted URL count
+	 * @param precomputedBodyHash - This page's body hash, if the caller already
+	 *   computed it (the predicted-content-duplicate check, A-3, computes it for
+	 *   every predicted page regardless of `--dedupe-cap`) — reused for the
+	 *   dedupe-cap observation below instead of hashing the same html twice.
 	 */
 	#handleResult(
 		result: ScrapeResult,
 		url: ExURL,
 		enqueue: (...urls: ExURL[]) => Promise<void>,
 		concurrency?: number,
+		precomputedBodyHash?: Buffer | null,
 	) {
 		switch (result.type) {
 			case 'success': {
@@ -672,7 +677,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					const shapeKey = computeShapeKey(result.pageData.url.withoutHashAndAuth);
 					const metaSig = computeMetaSignature(result.pageData.meta);
 					if (shapeKey && metaSig) {
-						const bodyHash = computeBodyHash(result.pageData.html);
+						const bodyHash = precomputedBodyHash ?? computeBodyHash(result.pageData.html);
 						const ogUrlMismatch = resolveOgUrlMismatch(
 							result.pageData.meta,
 							result.pageData.url.href,
@@ -703,11 +708,20 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						// bypassing this closure entirely — so the predicted-URL
 						// generation site below has its own equivalent check
 						// (`shapeIsStopped`, combined with `#predictedShapeStopped`).
-						// External / metadata-only anchors are out of scope for the
-						// cap (issue #208: "cap 適用は internal only").
+						// External anchors are out of scope for the cap (issue #208:
+						// "cap 適用は internal only"), enforced by the scope check
+						// below. Deliberately NOT also excluding `opts?.metadataOnly`
+						// (unlike the tracker's observation side, which does skip
+						// metadata-only pages — they carry no reliable signature): with
+						// `--recursive=false`, `handle-scrape-end.ts` marks EVERY anchor
+						// metadata-only, internal or not, so excluding them here would
+						// silently disable `--dedupe-cap` for anchor discovery whenever
+						// `--recursive=false` is set — while gate 2 (the JS-redirect
+						// direct enqueue below) has no such exclusion and would still
+						// cap the very same shape, an inconsistency between the two
+						// discovery paths.
 						if (
 							this.#options.dedupeCap !== null &&
-							!opts?.metadataOnly &&
 							findScopeEntry(newUrl, this.#scope, this.#options) !== null
 						) {
 							const gateShapeKey = computeShapeKey(newUrl.withoutHashAndAuth);
@@ -1091,6 +1105,11 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					const markBrowserScrape = () => {
 						renderedInBrowser = true;
 					};
+					// Set by the predicted-content-duplicate check below (A-3) when it
+					// computes this page's body hash, so `#handleResult`'s dedupe-cap
+					// observation (also gated on this page's html) can reuse it instead
+					// of hashing the same html a second time.
+					let precomputedBodyHash: Buffer | null = null;
 
 					try {
 						const robotsAllowed = await this.#robotsChecker.isAllowed(url);
@@ -1286,6 +1305,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 							const shapeKey = computeShapeKey(url.withoutHashAndAuth);
 							if (shapeKey) {
 								const bodyHash = computeBodyHash(result.pageData.html);
+								precomputedBodyHash = bodyHash;
 								const lastBodyHash = this.#predictedShapeBodyHashes.get(shapeKey) ?? null;
 								if (isPredictedContentDuplicate(bodyHash, lastBodyHash)) {
 									this.#predictedShapeStopped.add(shapeKey);
@@ -1306,7 +1326,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						}
 
 						log('Saving results%dots%');
-						this.#handleResult(result, url, enqueue, concurrency);
+						this.#handleResult(result, url, enqueue, concurrency, precomputedBodyHash);
 						const parentSource = await this.#resolveParentSource(url);
 						this.#handleResources(result.resources, parentSource);
 						this.#handleConsoleLogs(

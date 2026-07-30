@@ -1133,6 +1133,52 @@ describe('CrawlerOrchestrator.crawling: dedupeCap event handling (issue #208)', 
 			3,
 		);
 	});
+
+	it('拒否が一度も起きなかった（getDedupeCapRejectionsに現れない）今セッションcapped済みshapeもrejected_count=0でfinalizeされる（NULLのまま放置しない）', async () => {
+		// A shape that caps near the very end of the crawl (or whose remaining
+		// anchors were all already discovered before it capped) never enters
+		// `getDedupeCapRejections()` — regression guard for a bug where such a
+		// shape's row stayed `rejected_count: NULL` forever despite `crawlEnd`
+		// firing normally, indistinguishable from "the crawl never completed".
+		const insertDedupeCapEvent = vi.fn(() => Promise.resolve(99));
+		const finalizeDedupeCapEvent = vi.fn(() => Promise.resolve());
+		const accumulateDedupeCapRejectedCount = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			insertDedupeCapEvent,
+			finalizeDedupeCapEvent,
+			accumulateDedupeCapRejectedCount,
+			filePath: '/tmp/orchestrator-dedupe-cap-zero-rejections-test.nitpicker',
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('dedupeCap')?.({
+				shapeKey: 'example.com/late-cap/{n}/',
+				sampleUrl: 'https://example.com/late-cap/1/',
+				bodyHash: Buffer.from('a'),
+				effectiveThreshold: 1,
+				observedCount: 2,
+			} as never);
+			// No further rejections for this shape — the default FakeCrawler
+			// stub already returns an empty Map, matching this scenario.
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-dedupe-cap-zero-rejections-test.nitpicker',
+		});
+
+		expect(finalizeDedupeCapEvent).toHaveBeenCalledWith(99, 0);
+		expect(accumulateDedupeCapRejectedCount).not.toHaveBeenCalled();
+	});
 });
 
 describe('CrawlerOrchestrator.inventory: dedupeCap sticky preload wiring (issue #208)', () => {

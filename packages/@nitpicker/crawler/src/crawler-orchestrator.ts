@@ -136,9 +136,9 @@ interface CrawlConfig extends Config {
 	/**
 	 * See {@link CrawlerOptions.preloadedStickyShapeKeys}. Set internally by
 	 * the four resuming-session static methods
-	 * (`append`/`inventory`/`retryFailed`/`resume`) via
-	 * `#preloadDedupeCapStickyShapeKeys`; not part of the public options a
-	 * caller of those methods passes directly.
+	 * (`append`/`inventory`/`retryFailed`/`resume`), each independently
+	 * calling `archive.listDedupeCapShapeKeys()`; not part of the public
+	 * options a caller of those methods passes directly.
 	 */
 	preloadedStickyShapeKeys: readonly string[];
 }
@@ -303,7 +303,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			// Only the four resuming-session static methods
 			// (`append`/`inventory`/`retryFailed`/`resume`) pass this — a
 			// fresh `crawling()` has no archive history to seed from (see
-			// `#preloadDedupeCapStickyShapeKeys`'s JSDoc).
+			// `CrawlConfig.preloadedStickyShapeKeys`'s JSDoc).
 			preloadedStickyShapeKeys: options?.preloadedStickyShapeKeys ?? [],
 		});
 	}
@@ -526,8 +526,22 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				writeQueue
 					.enqueue(async () => {
 						const rejections = this.#crawler.getDedupeCapRejections();
+						// Finalize every shape capped THIS session (has an id in
+						// `#dedupeCapEventIds`), not just the ones with a nonzero
+						// rejection count — a shape that capped near the end of the
+						// crawl (or whose remaining anchors all happened to be
+						// discovered before it capped) never enters `rejections` at
+						// all, and would otherwise stay `rejected_count: NULL` forever
+						// despite the crawl completing normally, corrupting the "NULL
+						// means the crawl never reached crawlEnd" contract
+						// `list-dedupe-cap-events.ts` documents.
+						const shapeKeysToFinalize = new Set([
+							...this.#dedupeCapEventIds.keys(),
+							...rejections.keys(),
+						]);
 						await Promise.all(
-							[...rejections].map(([shapeKey, rejectedCount]) => {
+							[...shapeKeysToFinalize].map((shapeKey) => {
+								const rejectedCount = rejections.get(shapeKey) ?? 0;
 								const id = this.#dedupeCapEventIds.get(shapeKey);
 								// A shape capped THIS session has an id here (the
 								// `dedupeCap` event always enqueues an INSERT before any
@@ -536,7 +550,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 								// never observed this session at all — it was preloaded
 								// into `DedupeCapTracker`'s sticky set from an EARLIER
 								// session's `dedupe_cap_events` row (see
-								// `#preloadDedupeCapStickyShapeKeys`'s JSDoc), so gate
+								// `CrawlConfig.preloadedStickyShapeKeys`'s JSDoc), so gate
 								// rejections still accumulate for it but no new row (and
 								// thus no id) is ever created. That earlier row's count is
 								// accumulated onto by shape_key instead of overwritten.

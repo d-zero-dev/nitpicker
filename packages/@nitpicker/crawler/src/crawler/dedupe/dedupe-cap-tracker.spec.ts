@@ -116,6 +116,30 @@ describe('DedupeCapTracker', () => {
 		});
 	});
 
+	it('body_hash比較は常に直近の観測値と行う（スロット作成時の値と比較し続けない）', () => {
+		// A shape whose first page differs from an otherwise-identical run of
+		// later pages (e.g. a one-off warmup response) must still get the
+		// body_hash halving once the later pages start repeating — if the
+		// comparison target were never updated past slot creation, it would
+		// compare every later page against the stale first hash forever and
+		// never see a match.
+		const tracker = new DedupeCapTracker({ cap: 5, mapCap: 100 });
+		const firstBodyHash = Buffer.from('warmup-body');
+		const repeatedBodyHash = Buffer.from('same-body');
+
+		// obs1: slot created with firstBodyHash, count=1.
+		tracker.observe(observation({ bodyHash: firstBodyHash }));
+		// obs2: differs from firstBodyHash → bodyHashMatches=false either way,
+		// but the fix updates the slot's tracked hash to repeatedBodyHash here.
+		expect(tracker.observe(observation({ bodyHash: repeatedBodyHash }))).toBeNull();
+		// obs3: matches obs2's repeatedBodyHash → bodyHashMatches=true only if
+		// the slot's tracked hash was updated to the most recent observation.
+		// effectiveThreshold = ceil(5/2) = 3, count = 3 >= 3 → CAPPED.
+		const capped = tracker.observe(observation({ bodyHash: repeatedBodyHash }));
+		expect(capped?.effectiveThreshold).toBe(3);
+		expect(capped?.observedCount).toBe(3);
+	});
+
 	it('og:url不一致でも実効閾値が半分(切り上げ)になる', () => {
 		const tracker = new DedupeCapTracker({ cap: 5, mapCap: 100 });
 

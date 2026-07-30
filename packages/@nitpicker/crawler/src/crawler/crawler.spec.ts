@@ -945,6 +945,47 @@ describe('Crawler', () => {
 			// assetAnchor has a different shape → unaffected, still routed to push.
 			expect(push).toHaveBeenCalledWith(assetAnchor);
 		});
+
+		it('--dedupe-cap かつ --recursive=false（anchorがmetadataOnlyになる）でも既にcapped済みのshapeはenqueueされない', async () => {
+			// With `recursive: false`, handle-scrape-end.ts marks EVERY anchor
+			// metadata-only (internal or not) — regression guard that gate 1
+			// still blocks a capped shape's anchor in this mode instead of
+			// silently letting it through (which would make `--dedupe-cap`
+			// inconsistent with gate 2's JS-redirect check, which has no
+			// metadataOnly exclusion).
+			const { unshift } = await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { computeShapeKey } = await import('./dedupe/compute-shape-key.js');
+
+			const htmlAnchor = parseUrl('https://example.com/about')!;
+			const cappedShapeKey = computeShapeKey(htmlAnchor.withoutHashAndAuth)!;
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue(
+				nonHtmlResultWithAnchors([{ href: htmlAnchor, textContent: 'About' }]) as Awaited<
+					ReturnType<typeof fetchDestMod.fetchDestination>
+				>,
+			);
+
+			const crawler = new Crawler({
+				...defaultOptions,
+				recursive: false,
+				dedupeCap: 100,
+				preloadedStickyShapeKeys: [cappedShapeKey],
+			});
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			crawler.start([parseUrl('https://example.com/feed.xml')!]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			expect(unshift).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('predicted-page content-duplicate discard (always-on, issue #208)', () => {
