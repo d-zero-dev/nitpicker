@@ -22,9 +22,10 @@ import type { Knex } from 'knex';
  * - `page_templates` — DOM-structure template classification (`--templates`,
  *   `@nitpicker/core`'s `template-classification/`), one row per classified
  *   page, FK → `content_items(id)`
- * - `page_template_cluster_reasons` — the `ClusterReason` `@d-zero/page-cluster`
- *   reports for each `page_templates.template_key` cluster (natural key, no
- *   FK — `template_key` is a cluster-scoped blocking key, not a page)
+ * - `page_template_clusters` — one row per distinct `page_templates.template_key`,
+ *   holding `@d-zero/page-cluster`'s cluster-selection evidence (no FK;
+ *   `template_key` is not a `page_templates` FK target, so consistency is
+ *   maintained by replacing both tables together, not by a foreign key)
  * - `page_html_blobs` + `page_html_ref` — content-addressable HTML
  *   snapshots, FK → `content_items(id)`
  * - `console_log_items` — content-addressable dictionary of distinct
@@ -425,20 +426,31 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 		`);
 	}
 
-	// `ClusterReason` is sized by cluster count, not page count (one row per
-	// distinct `template_key`, not per page like `page_templates` above) —
-	// storing it there instead would duplicate the same JSON across every
-	// member page's row. No FK: `template_key` is `@d-zero/page-cluster`'s
-	// opaque blocking key, not a reference to another table's row.
-	if (!(await instance.schema.hasTable('page_template_cluster_reasons'))) {
+	// One row per distinct `template_key` produced by the same `--templates`
+	// classification run, holding `@d-zero/page-cluster`'s cluster-selection
+	// evidence (`ClusterReason`, renamed `TemplateClusterReason` on this side)
+	// as a zstd-compressed JSON blob — same BLOB+codec+size shape as
+	// `page_html_blobs` below. A column on `page_templates` was rejected: that
+	// table is one row per *page*, so the same cluster's reason would be
+	// duplicated across every member page (multi-GB on a large archive with a
+	// few-hundred-member cluster). A `json_refs` row was also rejected: reason
+	// payloads differ per cluster (distinct `memberCount`/token sets), so
+	// content-address dedup would not pay for itself, and `json_refs` is a
+	// shared dictionary that other tables reference — this table's full
+	// replace-on-every-run write pattern (see `replacePageTemplates`) would
+	// otherwise leave orphaned rows behind with no owner able to delete them.
+	// No FK to `page_templates`: `template_key` is not that table's primary
+	// key (`page_id` is), so there is nothing to reference — consistency is
+	// instead maintained by replacing both tables in the same transaction.
+	if (!(await instance.schema.hasTable('page_template_clusters'))) {
 		await instance.raw(`
-			CREATE TABLE page_template_cluster_reasons (
-				template_key           TEXT PRIMARY KEY,
-				member_count           INTEGER NOT NULL,
-				blocking               TEXT NOT NULL,
-				structural_core_tokens TEXT NOT NULL,
-				landmarks              TEXT NOT NULL,
-				sibling_cluster_keys   TEXT NOT NULL
+			CREATE TABLE page_template_clusters (
+				template_key TEXT PRIMARY KEY,
+				member_count INTEGER NOT NULL,
+				reason_json  BLOB NOT NULL,
+				codec        TEXT NOT NULL CHECK(codec IN ('zstd', 'none')),
+				size_raw     INTEGER NOT NULL,
+				size_stored  INTEGER NOT NULL
 			) WITHOUT ROWID
 		`);
 	}

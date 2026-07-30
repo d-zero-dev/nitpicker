@@ -206,6 +206,31 @@ describe('listPageTemplateClusters', () => {
 				await setTestPage(archive, `https://example.com${p}`);
 			}
 
+			// /a, /b の実際のCSS参照 — commonStylesheetFileNames（実メンバーページの
+			// 積集合、compute-css-intersection.ts）が reason.distinctiveStylesheetUrls
+			// （page-cluster自身のブロッキング根拠）と独立に計算されることを両方
+			// 検証できるようにする。
+			await archive.setResources({
+				url: parseUrl('https://example.com/shared.css')!,
+				isExternal: false,
+				isError: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/css',
+				contentLength: 200,
+				compress: false,
+				cdn: false,
+				headers: null,
+			});
+			await archive.setResourcesReferrers({
+				url: 'https://example.com/a',
+				src: 'https://example.com/shared.css',
+			});
+			await archive.setResourcesReferrers({
+				url: 'https://example.com/b',
+				src: 'https://example.com/shared.css',
+			});
+
 			await archive.replacePageTemplates(
 				new Map([
 					['https://example.com/a', '["css:abc123","cluster:0"]'],
@@ -245,7 +270,7 @@ describe('listPageTemplateClusters', () => {
 			expect(pathCluster?.pageCount).toBe(2);
 		});
 
-		it('css由来クラスタはblockingのdistinctiveStylesheetHrefsからファイル名を導出する', async () => {
+		it('css由来クラスタは実メンバーページの共通CSSと、reasonのdistinctiveStylesheetUrlsの両方を返す', async () => {
 			const result = await listPageTemplateClusters(archive);
 
 			const cssCluster = result.clusters.find(
@@ -256,6 +281,9 @@ describe('listPageTemplateClusters', () => {
 				kind: 'css',
 				distinctiveStylesheetHrefs: ['https://example.com/shared.css'],
 			});
+			expect(cssCluster?.reason?.distinctiveStylesheetUrls).toEqual([
+				'https://example.com/shared.css',
+			]);
 		});
 
 		it('path由来クラスタは共通CSSファイル名が空でも共通ディレクトリは機能する', async () => {

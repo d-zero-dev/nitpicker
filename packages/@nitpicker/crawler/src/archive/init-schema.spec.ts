@@ -45,6 +45,7 @@ describe('initSchema', () => {
 			'inventory_runs',
 			'analysis_text_refs',
 			'analysis_violations',
+			'page_template_clusters',
 		];
 		for (const table of tables) {
 			const exists = await db.schema.hasTable(table);
@@ -155,6 +156,34 @@ describe('initSchema', () => {
 		// WITHOUT ROWID is detectable via sqlite_master.sql containing it.
 		const [{ sql }] = await db.raw(
 			"SELECT sql FROM sqlite_master WHERE type='table' AND name='page_html_blobs'",
+		);
+		expect(sql).toMatch(/WITHOUT ROWID/);
+
+		await db.destroy();
+	});
+
+	it('creates page_template_clusters as WITHOUT ROWID with the expected columns', async () => {
+		const db = knex({
+			client: LibsqlDialect,
+			connection: { filename: ':memory:' },
+			useNullAsDefault: true,
+		});
+
+		await initSchema(db);
+
+		const columns = await db.raw("PRAGMA table_info('page_template_clusters')");
+		const names = columns.map((c: { name: string }) => c.name);
+		expect(names).toEqual([
+			'template_key',
+			'member_count',
+			'reason_json',
+			'codec',
+			'size_raw',
+			'size_stored',
+		]);
+
+		const [{ sql }] = await db.raw(
+			"SELECT sql FROM sqlite_master WHERE type='table' AND name='page_template_clusters'",
 		);
 		expect(sql).toMatch(/WITHOUT ROWID/);
 

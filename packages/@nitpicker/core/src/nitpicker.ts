@@ -562,19 +562,17 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 		// phase's outcome.
 		if (templateClassificationLaneId != null) {
 			try {
-				const { templateKeysByUrl, clusterReasons } = await classifyPageTemplates({
+				const classification = await classifyPageTemplates({
 					archive: this.archive,
 					pages: accumulatedPages,
-					// Silently a no-op below @d-zero/page-cluster's
-					// CORPUS_INLINE_THRESHOLD (20,000 pages) regardless of
-					// whether `lanes` is provided: `classifyPageTemplates`
-					// always sets `onClusterReason` now (to collect
-					// `clusterReasons` below), and that option unconditionally
-					// forces the small-corpus branch onto `resolvePageClusterKeysInMemory`,
-					// which never emits progress events — see `onClusterReason`'s
-					// and `onProgress`'s own JSDoc on `ResolvePageClusterKeysOptions`.
-					// Still worth wiring for the streaming path (>20,000 pages),
-					// where progress events are unaffected.
+					// Only worth paying for when there's a lane to update —
+					// passing a defined callback at all (even a no-op one)
+					// demotes `resolvePageClusterKeys` off its byte-identical,
+					// yield-overhead-free sync path for corpora at or below its
+					// inline threshold (see @d-zero/page-cluster's own docs).
+					// `classifyPageTemplates` always requests cluster reasons too,
+					// independent of this — see its own JSDoc for why that no
+					// longer costs the sync-path demotion this comment warns about.
 					onProgress: lanes
 						? (event) => {
 								lanes.update(
@@ -584,12 +582,17 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 							}
 						: undefined,
 				});
-				if (templateKeysByUrl.size > 0) {
-					await this.archive.replacePageTemplates(templateKeysByUrl, clusterReasons);
+				if (classification.templateKeysByUrl.size > 0) {
+					await this.archive.replacePageTemplates(
+						classification.templateKeysByUrl,
+						classification.clusterReasonsByTemplateKey,
+					);
 				}
 				lanes?.update(
 					templateClassificationLaneId,
-					c.green(`Template classification: Done (${templateKeysByUrl.size} pages)`),
+					c.green(
+						`Template classification: Done (${classification.templateKeysByUrl.size} pages)`,
+					),
 				);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);

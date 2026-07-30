@@ -19,41 +19,6 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 		await expect(cssCluster.locator('summary')).toContainText('2 pages');
 	});
 
-	test('path由来クラスタは共通CSSファイル名が無く、共通ディレクトリにフォールバックする', async ({
-		page,
-	}) => {
-		await page.goto('/template-clusters');
-
-		const pathCluster = page.locator('details', { hasText: '/news/' });
-		await pathCluster.locator('summary').click();
-		await expect(pathCluster).toContainText('URL path prefix');
-		await expect(pathCluster).toContainText('news');
-	});
-
-	test('css由来クラスタはクラスタ選定理由（blocking/landmarks）を表示する', async ({
-		page,
-	}) => {
-		await page.goto('/template-clusters');
-
-		const cssCluster = page.locator('details', { hasText: 'blog.css' });
-		await cssCluster.locator('summary').click();
-		await expect(cssCluster).toContainText('Cluster reason');
-		await expect(cssCluster).toContainText('Shared stylesheet');
-		await expect(cssCluster).toContainText('https://example.com/blog.css');
-		await expect(cssCluster).toContainText('Header');
-		await expect(cssCluster).toContainText('Footer');
-	});
-
-	test('reasonデータが無いクラスタは再実行を促す案内を表示する', async ({ page }) => {
-		await page.goto('/template-clusters');
-
-		const legacyCluster = page.locator('details', { hasText: '/legacy/' });
-		await legacyCluster.locator('summary').click();
-		await expect(legacyCluster).toContainText(
-			'Re-run `nitpicker analyze <archive> --templates`',
-		);
-	});
-
 	test('クラスタを展開してPagesへのリンクをクリックするとtemplateKeyフィルタ付きでPagesビューに遷移する', async ({
 		page,
 	}) => {
@@ -90,5 +55,72 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 			await expect(sectionsCluster).not.toContainText(`section-${section}`);
 		}
 		await expect(sectionsCluster).toContainText('2 other pages');
+	});
+
+	test('css由来クラスタは分類の根拠・共通DOM構造・共通パーツを表示する', async ({
+		page,
+	}) => {
+		await page.goto('/template-clusters');
+
+		const cssCluster = page.locator('details', { hasText: 'blog.css' });
+		await cssCluster.locator('summary').click();
+		await expect(cssCluster).toContainText('Common stylesheets');
+		await expect(cssCluster).toContainText('https://example.com/blog.css');
+		await expect(cssCluster).toContainText('body>h1');
+		await expect(cssCluster).toContainText('Header');
+	});
+
+	test('path由来クラスタは分類の根拠にURLパスを表示し、特徴的CSSは表示しない', async ({
+		page,
+	}) => {
+		await page.goto('/template-clusters');
+
+		const pathCluster = page.locator('details', { hasText: '/news/' });
+		await pathCluster.locator('summary').click();
+		await expect(pathCluster).toContainText('URL path');
+		await expect(pathCluster).toContainText('news');
+		await expect(pathCluster).not.toContainText('Distinctive stylesheets');
+	});
+
+	test('同一ブロッキンググループから分岐した兄弟クラスタは見出しに共通ディレクトリを併記して区別する', async ({
+		page,
+	}) => {
+		await page.goto('/template-clusters');
+
+		const docsCluster = page.locator('details', { hasText: '/docs/' });
+		const helpCluster = page.locator('details', { hasText: '/help/' });
+		await expect(docsCluster.locator('summary')).toContainText('docs.css');
+		await expect(docsCluster.locator('summary')).toContainText('/docs/');
+		await expect(helpCluster.locator('summary')).toContainText('docs.css');
+		await expect(helpCluster.locator('summary')).toContainText('/help/');
+	});
+
+	test('兄弟クラスタのSiblingsセクションに相手のtemplateKeyへのリンクが表示される', async ({
+		page,
+	}) => {
+		await page.goto('/template-clusters');
+
+		const docsCluster = page.locator('details', { hasText: '/docs/' });
+		await docsCluster.locator('summary').click();
+		await expect(docsCluster).toContainText('Sibling clusters');
+		const siblingLink = docsCluster.getByRole('link', {
+			name: '["css:9f8e7d6c5b4a3210","cluster:1"]',
+		});
+		await expect(siblingLink).toHaveAttribute('href', /templateKey=/);
+	});
+
+	test('クラスタ選定理由が保存されていないクラスタは未保存の旨と実行コマンドを表示する', async ({
+		page,
+	}) => {
+		await page.goto('/template-clusters');
+
+		const sectionsCluster = page.locator('details', { hasText: 'section-a' });
+		await sectionsCluster.locator('summary').click();
+		await expect(sectionsCluster).toContainText(
+			'No cluster-selection evidence was captured for this cluster.',
+		);
+		await expect(sectionsCluster).toContainText(
+			'nitpicker analyze <archive> --templates',
+		);
 	});
 });

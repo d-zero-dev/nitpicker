@@ -180,29 +180,6 @@ export interface NetworkOutageRow {
 }
 
 /**
- * Structural mirror of `@d-zero/page-cluster`'s `ClusterReason` (surfaced to
- * callers as `@nitpicker/core`'s `ClusterReason` type). `@nitpicker/crawler`
- * does not depend on `@nitpicker/core` or `@d-zero/page-cluster` — crawler is
- * the lower architectural layer core builds on, not the reverse — so
- * `replacePageTemplates` accepts this duck-typed shape and persists it
- * verbatim as JSON without interpreting `blocking`/`landmarks` internals.
- * `@nitpicker/core`'s `ClusterReason` values satisfy this structurally with
- * no explicit cast needed.
- */
-export interface ClusterReasonData {
-	/** Number of pages the cluster contains. */
-	readonly memberCount: number;
-	/** The Pass-0 blocking keys that fed into the cluster, and the evidence behind each. */
-	readonly blocking: readonly { readonly blockKey: string; readonly reason: unknown }[];
-	/** The frequency-quorum core of the cluster's DOM structural tokens. */
-	readonly structuralCoreTokens: readonly string[];
-	/** Per-landmark-type commonality; types absent from every member page are omitted. */
-	readonly landmarks: Readonly<Record<string, unknown>>;
-	/** Sibling final cluster keys split from the same Pass-0 block. */
-	readonly siblingClusterKeys: readonly string[];
-}
-
-/**
  * Fields required to record a newly-detected outage via
  * `Database.insertNetworkOutage`. camelCase (unlike {@link NetworkOutageRow}
  * / {@link InventoryRunMeta}) because callers build this directly from

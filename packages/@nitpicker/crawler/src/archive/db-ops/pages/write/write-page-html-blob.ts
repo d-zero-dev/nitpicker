@@ -1,7 +1,8 @@
 import type { Knex } from 'knex';
 
 import { createHash } from 'node:crypto';
-import { zstdCompressSync } from 'node:zlib';
+
+import { compressPayload } from '../../_shared/compress-payload.js';
 
 /**
  * Encodes, dedups, and persists a page's HTML snapshot.
@@ -27,14 +28,14 @@ export async function writePageHtmlBlob(
 ): Promise<void> {
 	const rawBytes = Buffer.from(html, 'utf8');
 	const hash = createHash('sha256').update(rawBytes).digest();
-	const compressed = zstdCompressSync(rawBytes);
+	const { body, codec, sizeRaw, sizeStored } = compressPayload(rawBytes);
 	await trx('page_html_blobs')
 		.insert({
 			hash,
-			body: compressed,
-			codec: 'zstd',
-			size_raw: rawBytes.byteLength,
-			size_stored: compressed.byteLength,
+			body,
+			codec,
+			size_raw: sizeRaw,
+			size_stored: sizeStored,
 		})
 		.onConflict('hash')
 		.ignore();

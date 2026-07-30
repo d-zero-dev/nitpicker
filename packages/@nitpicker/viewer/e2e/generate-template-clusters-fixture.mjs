@@ -113,6 +113,8 @@ await setSimplePage('https://example.com/news/article-2', 'News Article 2');
 // directories, one page each — exercises the top-N (5) truncation and the
 // "N other pages" remainder in `computeDirectoryDistribution` / the view's
 // `otherPageCount`, which the single-directory clusters above cannot.
+// Deliberately has no captured reason — covers the `reason === null`
+// "not captured" rendering path.
 const sectionUrls = [];
 for (const section of ['a', 'b', 'c', 'd', 'e', 'f', 'g']) {
 	const url = `https://example.com/section-${section}/page`;
@@ -120,20 +122,49 @@ for (const section of ['a', 'b', 'c', 'd', 'e', 'f', 'g']) {
 	sectionUrls.push(url);
 }
 
-// `legacy` cluster: classified with a `templateKey` but deliberately given no
-// entry in the reasons map below — simulates a cluster classified by a
-// `@d-zero/page-cluster` version that predates `onClusterReason` (pre-0.5.0),
-// exercising the view's "re-run --templates" fallback for the reason section.
-await setSimplePage('https://example.com/legacy/old-page', 'Legacy Page');
+// `/docs/` and `/help/` clusters: sibling final clusters that split off the
+// same css blocking group — both carry the identical `distinctiveStylesheetHrefs`
+// (`docs.css`), exercising the heading's directory-disambiguation (two
+// clusters that would otherwise render an identical "docs.css" heading) and
+// the Siblings section's cross-links.
+await setSimplePage('https://example.com/docs/guide-1', 'Docs Guide 1');
+await setSimplePage('https://example.com/docs/guide-2', 'Docs Guide 2');
+await setSimplePage('https://example.com/help/guide-1', 'Help Guide 1');
+await archive.setResources({
+	url: parseUrl('https://example.com/docs.css'),
+	isExternal: false,
+	isError: false,
+	status: 200,
+	statusText: 'OK',
+	contentType: 'text/css',
+	contentLength: 500,
+	compress: false,
+	cdn: false,
+	headers: null,
+});
+for (const url of [
+	'https://example.com/docs/guide-1',
+	'https://example.com/docs/guide-2',
+	'https://example.com/help/guide-1',
+]) {
+	await archive.setResourcesReferrers({ url, src: 'https://example.com/docs.css' });
+}
 
+// Cluster-selection reasons: the `/blog/` (css) and `/news/` (path) clusters
+// carry a captured reason — one of each `BlockingReason.kind` that yields
+// distinctive stylesheets and one that doesn't — while the `sections`
+// cluster deliberately has none, covering the `reason === null` "not
+// captured" rendering path with a single cluster.
 await archive.replacePageTemplates(
 	new Map([
 		['https://example.com/blog/post-1', '["css:1a2b3c4d5e6f7890","cluster:0"]'],
 		['https://example.com/blog/post-2', '["css:1a2b3c4d5e6f7890","cluster:0"]'],
 		['https://example.com/news/article-1', '["path:news","cluster:0"]'],
 		['https://example.com/news/article-2', '["path:news","cluster:0"]'],
+		['https://example.com/docs/guide-1', '["css:9f8e7d6c5b4a3210","cluster:0"]'],
+		['https://example.com/docs/guide-2', '["css:9f8e7d6c5b4a3210","cluster:0"]'],
+		['https://example.com/help/guide-1', '["css:9f8e7d6c5b4a3210","cluster:1"]'],
 		...sectionUrls.map((url) => [url, '["path:sections","cluster:0"]']),
-		['https://example.com/legacy/old-page', '["path:legacy","cluster:0"]'],
 	]),
 	new Map([
 		[
@@ -142,25 +173,19 @@ await archive.replacePageTemplates(
 				memberCount: 2,
 				blocking: [
 					{
-						blockKey: 'css:1a2b3c4d5e6f7890',
+						blockKey: '["css:1a2b3c4d5e6f7890"]',
 						reason: {
 							kind: 'css',
 							distinctiveStylesheetHrefs: ['https://example.com/blog.css'],
 						},
 					},
 				],
-				structuralCoreTokens: ['article', 'h1', 'time'],
+				structuralCoreTokens: ['body>h1'],
 				landmarks: {
 					header: {
 						presenceRate: 1,
 						chromeRate: 1,
-						shellTokens: ['header.site-header'],
-						memberCountWithInstance: 2,
-					},
-					footer: {
-						presenceRate: 1,
-						chromeRate: 1,
-						shellTokens: ['footer.site-footer'],
+						shellTokens: ['header>nav'],
 						memberCountWithInstance: 2,
 					},
 				},
@@ -171,22 +196,48 @@ await archive.replacePageTemplates(
 			'["path:news","cluster:0"]',
 			{
 				memberCount: 2,
-				blocking: [{ blockKey: 'path:news', reason: { kind: 'path', pathKey: 'news' } }],
-				structuralCoreTokens: ['article', 'h1'],
+				blocking: [
+					{ blockKey: '["path:news"]', reason: { kind: 'path', pathKey: 'news' } },
+				],
+				structuralCoreTokens: ['body>h1'],
 				landmarks: {},
 				siblingClusterKeys: [],
 			},
 		],
 		[
-			'["path:sections","cluster:0"]',
+			'["css:9f8e7d6c5b4a3210","cluster:0"]',
 			{
-				memberCount: 7,
+				memberCount: 2,
 				blocking: [
-					{ blockKey: 'path:sections', reason: { kind: 'path', pathKey: 'sections' } },
+					{
+						blockKey: '["css:9f8e7d6c5b4a3210"]',
+						reason: {
+							kind: 'css',
+							distinctiveStylesheetHrefs: ['https://example.com/docs.css'],
+						},
+					},
 				],
-				structuralCoreTokens: ['h1'],
+				structuralCoreTokens: ['body>h1'],
 				landmarks: {},
-				siblingClusterKeys: [],
+				siblingClusterKeys: ['["css:9f8e7d6c5b4a3210","cluster:1"]'],
+			},
+		],
+		[
+			'["css:9f8e7d6c5b4a3210","cluster:1"]',
+			{
+				memberCount: 1,
+				blocking: [
+					{
+						blockKey: '["css:9f8e7d6c5b4a3210"]',
+						reason: {
+							kind: 'css',
+							distinctiveStylesheetHrefs: ['https://example.com/docs.css'],
+						},
+					},
+				],
+				structuralCoreTokens: ['body>h1'],
+				landmarks: {},
+				siblingClusterKeys: ['["css:9f8e7d6c5b4a3210","cluster:0"]'],
 			},
 		],
 	]),

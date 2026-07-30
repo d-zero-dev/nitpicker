@@ -1,8 +1,9 @@
-import { utimes } from 'node:fs/promises';
+import { stat, utimes } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import { Archive, decodeJsonRef } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { classifyPageTemplates } from './classify-page-templates.js';
@@ -119,10 +120,11 @@ describe('classifyPageTemplates', () => {
 
 	it('同一テンプレートのページには同じtemplateKeyを、別テンプレートのページには異なるtemplateKeyを割り当てる', async () => {
 		const pages = await archive.getPages();
-		const { templateKeysByUrl, clusterReasons } = await classifyPageTemplates({
-			archive,
-			pages,
-		});
+		const { templateKeysByUrl, clusterReasonsByTemplateKey } =
+			await classifyPageTemplates({
+				archive,
+				pages,
+			});
 
 		const keyA = templateKeysByUrl.get('https://example.com/article-1');
 		const keyB = templateKeysByUrl.get('https://example.com/article-2');
@@ -133,40 +135,59 @@ describe('classifyPageTemplates', () => {
 		expect(keyC).toBeDefined();
 		expect(keyC).not.toBe(keyA);
 
-		expect(clusterReasons.has(keyA!)).toBe(true);
-		expect(clusterReasons.has(keyC!)).toBe(true);
-		expect(clusterReasons.get(keyA!)?.memberCount).toBe(2);
-		expect(clusterReasons.get(keyC!)?.memberCount).toBe(1);
+		expect(clusterReasonsByTemplateKey.has(keyA!)).toBe(true);
+		expect(clusterReasonsByTemplateKey.has(keyC!)).toBe(true);
+		expect(clusterReasonsByTemplateKey.get(keyA!)?.memberCount).toBe(2);
+		expect(clusterReasonsByTemplateKey.get(keyC!)?.memberCount).toBe(1);
 	});
 
-	it('実際のclusterReasonsがreplacePageTemplates経由でpage_template_cluster_reasonsに書き込まれ、JSONとして読み戻せる', async () => {
+	it('実際のclusterReasonsByTemplateKeyがreplacePageTemplates経由でpage_template_clustersに書き込まれ、JSONとして読み戻せる', async () => {
 		// Exercises the real `@d-zero/page-cluster` output (not a hand-authored
-		// `ClusterReason` fixture) through the real `replacePageTemplates`
+		// `TemplateClusterReason` fixture) through the real `replacePageTemplates`
 		// write path — closes the gap where every other test either mocks
 		// clustering (nitpicker.spec.ts) or hand-constructs the reason object
 		// (list-page-template-clusters.spec.ts), so a future upstream shape
 		// drift (a renamed field, a differently-typed `landmarks`) would
 		// otherwise go undetected until it broke in production.
 		const pages = await archive.getPages();
-		const { templateKeysByUrl, clusterReasons } = await classifyPageTemplates({
-			archive,
-			pages,
-		});
+		const { templateKeysByUrl, clusterReasonsByTemplateKey } =
+			await classifyPageTemplates({
+				archive,
+				pages,
+			});
 
-		await archive.replacePageTemplates(templateKeysByUrl, clusterReasons);
+		await archive.replacePageTemplates(templateKeysByUrl, clusterReasonsByTemplateKey);
 
 		const rows = await archive
-			.getKnex()('page_template_cluster_reasons')
-			.select('template_key as templateKey', 'member_count as memberCount', 'blocking');
-		expect(rows.length).toBe(clusterReasons.size);
+			.getKnex()('page_template_clusters')
+			.select(
+				'template_key as templateKey',
+				'member_count as memberCount',
+				'reason_json as reasonJson',
+				'codec',
+			);
+		expect(rows.length).toBe(clusterReasonsByTemplateKey.size);
 		for (const row of rows) {
-			const expected = clusterReasons.get(row.templateKey);
+			const expected = clusterReasonsByTemplateKey.get(row.templateKey);
 			expect(expected).toBeDefined();
 			expect(row.memberCount).toBe(expected!.memberCount);
-			const blocking = JSON.parse(row.blocking as string) as unknown[];
-			expect(blocking).toEqual(expected!.blocking);
-			expect(blocking.length).toBeGreaterThan(0);
+			const decoded = decodeJsonRef(row.reasonJson, row.codec);
+			expect(decoded && JSON.parse(decoded)).toEqual(expected);
 		}
+	});
+
+	it('各templateKeyのクラスタ選定理由を捕捉する', async () => {
+		const pages = await archive.getPages();
+		const future = new Date(Date.now() + 90_000);
+		await utimes(archiveFilePath, future, future);
+
+		const result = await classifyPageTemplates({ archive, pages });
+		const keyA = result.templateKeysByUrl.get('https://example.com/article-1')!;
+
+		expect(result.clusterReasonsByTemplateKey.size).toBeGreaterThan(0);
+		const reasonA = result.clusterReasonsByTemplateKey.get(keyA);
+		expect(reasonA).toBeDefined();
+		expect(reasonA!.memberCount).toBeGreaterThan(0);
 	});
 
 	it('同一アーカイブへの繰り返し呼び出しはキャッシュヒットし、mtime変更で再計算される', async () => {
@@ -181,10 +202,11 @@ describe('classifyPageTemplates', () => {
 		vi.mocked(resolvePageClusterKeys).mockClear();
 		const cached = await classifyPageTemplates({ archive, pages });
 		expect(resolvePageClusterKeys).not.toHaveBeenCalled();
-		// A cache hit must restore clusterReasons too — see CachedClassification's
-		// JSDoc for why a cache hit that dropped them would silently discard
-		// reason data a full recomputation would have produced.
-		expect(cached.clusterReasons.size).toBeGreaterThan(0);
+		// A cache hit must restore clusterReasonsByTemplateKey too — see
+		// TemplateClassificationCacheEntry's JSDoc for why a cache hit that
+		// dropped them would silently discard reason data a full
+		// recomputation would have produced.
+		expect(cached.clusterReasonsByTemplateKey.size).toBeGreaterThan(0);
 
 		const future = new Date(Date.now() + 60_000);
 		await utimes(archiveFilePath, future, future);
@@ -195,8 +217,8 @@ describe('classifyPageTemplates', () => {
 		expect(Object.fromEntries(recomputed.templateKeysByUrl)).toEqual(
 			Object.fromEntries(cached.templateKeysByUrl),
 		);
-		expect(Object.fromEntries(recomputed.clusterReasons)).toEqual(
-			Object.fromEntries(cached.clusterReasons),
+		expect(Object.fromEntries(recomputed.clusterReasonsByTemplateKey)).toEqual(
+			Object.fromEntries(cached.clusterReasonsByTemplateKey),
 		);
 	});
 
@@ -212,6 +234,29 @@ describe('classifyPageTemplates', () => {
 		vi.mocked(resolvePageClusterKeys).mockClear();
 		await classifyPageTemplates({ archive, pages: pages.slice(0, 2) });
 		expect(resolvePageClusterKeys).toHaveBeenCalledTimes(1);
+	});
+
+	it('クラスタ選定理由を持たない旧形式のキャッシュエントリは再計算にフォールバックする', async () => {
+		const { Cache } = await import('@d-zero/shared/cache');
+		const pages = await archive.getPages();
+
+		const future = new Date(Date.now() + 150_000);
+		await utimes(archiveFilePath, future, future);
+		const stats = await stat(archiveFilePath);
+		const cacheKey = `${archiveFilePath}:${stats.size}:${stats.mtimeMs}:${pages.length}`;
+
+		const cache = new Cache<Record<string, string>>(
+			'nitpicker-templates',
+			path.join(os.tmpdir(), 'nitpicker/cache/templates'),
+		);
+		// Pre-`clusterReasonsByTemplateKey` on-disk shape: a bare URL→key map,
+		// no `templateKeys`/`clusterReasons` wrapper.
+		await cache.store(cacheKey, { 'https://example.com/stale': 'stale-key' });
+
+		vi.mocked(resolvePageClusterKeys).mockClear();
+		const result = await classifyPageTemplates({ archive, pages });
+		expect(resolvePageClusterKeys).toHaveBeenCalledTimes(1);
+		expect(result.templateKeysByUrl.has('https://example.com/stale')).toBe(false);
 	});
 
 	it('resolvePageClusterKeysの戻り値件数がページ数と食い違う場合はエラーを投げる', async () => {

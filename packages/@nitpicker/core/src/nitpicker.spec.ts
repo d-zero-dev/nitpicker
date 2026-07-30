@@ -634,13 +634,13 @@ describe('analyze', () => {
 		expect(poolInstances.every((p) => p.terminated)).toBe(true);
 	});
 
-	it('calls replacePageTemplates with the classified template keys when classifyTemplates is enabled', async () => {
+	it('calls replacePageTemplates with the classified template keys and cluster reasons when classifyTemplates is enabled', async () => {
 		const pages = [createMockPage('https://example.com/')];
-		// A non-empty `clusterReasons` here (not just `templateKeysByUrl`) —
-		// an empty Map on both sides would make the `toHaveBeenCalledWith`
-		// assertion below pass even if `nitpicker.ts` forwarded a hardcoded
-		// `new Map()` instead of the real `clusterReasons` value.
-		const clusterReasons = new Map([
+		// A non-empty `clusterReasonsByTemplateKey` here (not just
+		// `templateKeysByUrl`) — an empty Map on both sides would make the
+		// `toHaveBeenCalledWith` assertion below pass even if `nitpicker.ts`
+		// forwarded a hardcoded `new Map()` instead of the real value.
+		const clusterReasonsByTemplateKey = new Map([
 			[
 				'template-a',
 				{
@@ -654,7 +654,7 @@ describe('analyze', () => {
 		]);
 		mockedClassifyPageTemplates.mockResolvedValue({
 			templateKeysByUrl: new Map([['https://example.com/', 'template-a']]),
-			clusterReasons,
+			clusterReasonsByTemplateKey,
 		});
 
 		const { nitpicker, archive } = setupAnalyze(pages, [], []);
@@ -663,7 +663,7 @@ describe('analyze', () => {
 		expect(classifyPageTemplates).toHaveBeenCalledTimes(1);
 		expect(archive.replacePageTemplates).toHaveBeenCalledWith(
 			new Map([['https://example.com/', 'template-a']]),
-			clusterReasons,
+			clusterReasonsByTemplateKey,
 		);
 
 		// `templateKey` is only ever persisted via `replacePageTemplates`,
@@ -694,7 +694,7 @@ describe('analyze', () => {
 		const pages = [createMockPage('https://example.com/')];
 		mockedClassifyPageTemplates.mockResolvedValue({
 			templateKeysByUrl: new Map([['https://example.com/', 'template-a']]),
-			clusterReasons: new Map(),
+			clusterReasonsByTemplateKey: new Map(),
 		});
 		const previousReport: Report = {
 			name: 'general',
@@ -730,7 +730,7 @@ describe('analyze', () => {
 		const pages = [createMockPage('https://example.com/')];
 		mockedClassifyPageTemplates.mockResolvedValue({
 			templateKeysByUrl: new Map(),
-			clusterReasons: new Map(),
+			clusterReasonsByTemplateKey: new Map(),
 		});
 
 		const { nitpicker: freshRun } = setupAnalyze(pages, [], []);
@@ -821,7 +821,7 @@ describe('analyze', () => {
 		const pages = [createMockPage('https://example.com/')];
 		mockedClassifyPageTemplates.mockResolvedValue({
 			templateKeysByUrl: new Map(),
-			clusterReasons: new Map(),
+			clusterReasonsByTemplateKey: new Map(),
 		});
 
 		const { nitpicker: withoutLanes } = setupAnalyze(pages, [], []);
@@ -831,7 +831,7 @@ describe('analyze', () => {
 		mockedClassifyPageTemplates.mockReset();
 		mockedClassifyPageTemplates.mockResolvedValue({
 			templateKeysByUrl: new Map(),
-			clusterReasons: new Map(),
+			clusterReasonsByTemplateKey: new Map(),
 		});
 		const mockLanes = { update: vi.fn(), header: vi.fn() };
 		const { nitpicker: withLanes } = setupAnalyze(pages, [], []);
@@ -854,7 +854,10 @@ describe('analyze', () => {
 				blocksProcessed: 3,
 				totalBlocks: 12,
 			});
-			return Promise.resolve({ templateKeysByUrl: new Map(), clusterReasons: new Map() });
+			return Promise.resolve({
+				templateKeysByUrl: new Map(),
+				clusterReasonsByTemplateKey: new Map(),
+			});
 		});
 
 		const { nitpicker } = setupAnalyze(pages, [], []);

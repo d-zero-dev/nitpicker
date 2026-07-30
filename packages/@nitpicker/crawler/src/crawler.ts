@@ -89,3 +89,10 @@ export { populateHeaderTables } from './archive/populate-ref-tables/populate-hea
 // no cross-package drift.
 export { loadResponseHeadersBySetIds } from './archive/db-ops/_shared/load-response-headers-by-set-ids.js';
 export { decodeJsonRef } from './archive/db-ops/_shared/decode-json-ref.js';
+export type {
+	TemplateClusterBlockingEvidence,
+	TemplateClusterBlockingReason,
+	TemplateClusterLandmarkProfile,
+	TemplateClusterLandmarkType,
+	TemplateClusterReason,
+} from './archive/db-ops/analysis/types.js';

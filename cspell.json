@@ -91,6 +91,9 @@
 		// libraries / authors
 		"medv",
 
+		// @d-zero/page-cluster (Jaccard similarity coefficient)
+		"Jaccard",
+
 		// technical terms
 		"Upserts",
 		"TOCTOU",

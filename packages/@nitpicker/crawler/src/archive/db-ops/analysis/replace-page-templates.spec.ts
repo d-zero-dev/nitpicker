@@ -1,3 +1,4 @@
+import type { TemplateClusterReason } from './types.js';
 import type { Knex } from 'knex';
 
 import knex from 'knex';
@@ -8,8 +9,29 @@ import { createEntityTables } from '../../create-entity-tables.js';
 import { createRefTables } from '../../create-ref-tables.js';
 import { LibsqlDialect } from '../../libsql-dialect.js';
 import { seedContentItem } from '../../test-utils/seed-content-item.js';
+import { decodeJsonRef } from '../_shared/decode-json-ref.js';
 
 import { replacePageTemplates } from './replace-page-templates.js';
+
+const SAMPLE_REASON: TemplateClusterReason = {
+	memberCount: 2,
+	blocking: [
+		{
+			blockKey: 'css:abc',
+			reason: { kind: 'css', distinctiveStylesheetHrefs: ['a.css'] },
+		},
+	],
+	structuralCoreTokens: ['body>header', 'body>main'],
+	landmarks: {
+		header: {
+			presenceRate: 1,
+			chromeRate: 1,
+			shellTokens: ['nav'],
+			memberCountWithInstance: 2,
+		},
+	},
+	siblingClusterKeys: [],
+};
 
 describe('replacePageTemplates', () => {
 	let db: Knex;
@@ -29,15 +51,11 @@ describe('replacePageTemplates', () => {
 		await db.destroy();
 	});
 
-	const NO_REASONS = new Map();
-
 	it('resolves page URLs to content_items ids and persists rows', async () => {
 		const pageId = await seedContentItem(db, 'https://example.com/');
-		await replacePageTemplates(
-			db,
-			new Map([['https://example.com/', 'template-a']]),
-			NO_REASONS,
-		);
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([['https://example.com/', 'template-a']]),
+		});
 
 		const rows = await db('page_templates').select('*');
 		expect(rows).toEqual([{ page_id: pageId, template_key: 'template-a' }]);
@@ -46,19 +64,15 @@ describe('replacePageTemplates', () => {
 	it('replaces the previous template set instead of appending', async () => {
 		await seedContentItem(db, 'https://example.com/');
 		await seedContentItem(db, 'https://example.com/a');
-		await replacePageTemplates(
-			db,
-			new Map([
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([
 				['https://example.com/', 'template-a'],
 				['https://example.com/a', 'template-b'],
 			]),
-			NO_REASONS,
-		);
-		await replacePageTemplates(
-			db,
-			new Map([['https://example.com/', 'template-a']]),
-			NO_REASONS,
-		);
+		});
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([['https://example.com/', 'template-a']]),
+		});
 
 		const rows = await db('page_templates').select('*');
 		expect(rows).toHaveLength(1);
@@ -66,26 +80,22 @@ describe('replacePageTemplates', () => {
 
 	it('clears all rows when given an empty map', async () => {
 		await seedContentItem(db, 'https://example.com/');
-		await replacePageTemplates(
-			db,
-			new Map([['https://example.com/', 'template-a']]),
-			NO_REASONS,
-		);
-		await replacePageTemplates(db, new Map(), NO_REASONS);
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([['https://example.com/', 'template-a']]),
+		});
+		await replacePageTemplates(db, { templateKeysByUrl: new Map() });
 
 		expect(await db('page_templates').select('*')).toEqual([]);
 	});
 
 	it('silently skips a page URL that has no content_items row, without discarding the rest', async () => {
 		const pageId = await seedContentItem(db, 'https://example.com/');
-		await replacePageTemplates(
-			db,
-			new Map([
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([
 				['https://example.com/', 'template-a'],
 				['https://example.com/missing', 'template-b'],
 			]),
-			NO_REASONS,
-		);
+		});
 
 		const rows = await db('page_templates').select('*');
 		expect(rows).toEqual([{ page_id: pageId, template_key: 'template-a' }]);
@@ -97,42 +107,48 @@ describe('replacePageTemplates', () => {
 			.returning('id');
 		await db('resource_items').insert({ url_id: urlRef.id, is_external: 0 });
 
-		await replacePageTemplates(
-			db,
-			new Map([['https://example.com/style.css', 'template-a']]),
-			NO_REASONS,
-		);
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([['https://example.com/style.css', 'template-a']]),
+		});
 
 		expect(await db('page_templates').select('*')).toEqual([]);
 	});
 
-	it('persists cluster reasons and replaces them on the next run instead of appending', async () => {
+	it('persists a cluster reason and round-trips it through decodeJsonRef', async () => {
 		await seedContentItem(db, 'https://example.com/');
-		const reason = {
-			memberCount: 1,
-			blocking: [
-				{ blockKey: 'css:abc', reason: { kind: 'css', distinctiveStylesheetHrefs: [] } },
-			],
-			structuralCoreTokens: ['token-a'],
-			landmarks: {},
-			siblingClusterKeys: [],
-		};
-		await replacePageTemplates(
-			db,
-			new Map([['https://example.com/', 'template-a']]),
-			new Map([['template-a', reason]]),
-		);
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([['https://example.com/', 'template-a']]),
+			clusterReasonsByTemplateKey: new Map([['template-a', SAMPLE_REASON]]),
+		});
 
-		const rows = await db('page_template_cluster_reasons').select('*');
+		const rows = await db('page_template_clusters').select('*');
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.template_key).toBe('template-a');
-		expect(rows[0]?.member_count).toBe(1);
-		expect(JSON.parse(rows[0]?.blocking as string)).toEqual(reason.blocking);
-		expect(JSON.parse(rows[0]?.structural_core_tokens as string)).toEqual(
-			reason.structuralCoreTokens,
-		);
+		expect(rows[0]?.member_count).toBe(2);
+		const decoded = decodeJsonRef(rows[0]?.reason_json, rows[0]?.codec);
+		expect(decoded && JSON.parse(decoded)).toEqual(SAMPLE_REASON);
+	});
 
-		await replacePageTemplates(db, new Map(), NO_REASONS);
-		expect(await db('page_template_cluster_reasons').select('*')).toEqual([]);
+	it('clears the previous reason set when called again without one', async () => {
+		await seedContentItem(db, 'https://example.com/');
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([['https://example.com/', 'template-a']]),
+			clusterReasonsByTemplateKey: new Map([['template-a', SAMPLE_REASON]]),
+		});
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([['https://example.com/', 'template-a']]),
+		});
+
+		expect(await db('page_template_clusters').select('*')).toEqual([]);
+	});
+
+	it('persists a reason row even when its template key has no surviving member page', async () => {
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map(),
+			clusterReasonsByTemplateKey: new Map([['template-orphan', SAMPLE_REASON]]),
+		});
+
+		const rows = await db('page_template_clusters').select('template_key');
+		expect(rows).toEqual([{ template_key: 'template-orphan' }]);
 	});
 });

@@ -1,5 +1,5 @@
+import type { TemplateClusterReason } from './db-ops/analysis/types.js';
 import type {
-	ClusterReasonData,
 	Config,
 	InsertNetworkOutageParams,
 	InventoryRunMeta,
@@ -381,13 +381,14 @@ export default class Archive extends ArchiveAccessor {
 	 * reaching into the low-level database class directly.
 	 * @param templateKeysByUrl - Page URL → template key, as produced by
 	 *   `@nitpicker/core`'s `classifyPageTemplates`.
-	 * @param clusterReasonsByTemplateKey - Template key → the `ClusterReason`
-	 *   `@d-zero/page-cluster` reported for it, as produced by
-	 *   `@nitpicker/core`'s `classifyPageTemplates`.
+	 * @param clusterReasonsByTemplateKey - Template key → cluster-selection
+	 *   evidence, if the caller captured it. Omitting this always clears the
+	 *   previously-stored reasons too — "no reason" means "not captured for
+	 *   this run", never "carry over the previous run's reasons".
 	 */
 	async replacePageTemplates(
 		templateKeysByUrl: ReadonlyMap<string, string>,
-		clusterReasonsByTemplateKey: ReadonlyMap<string, ClusterReasonData>,
+		clusterReasonsByTemplateKey?: ReadonlyMap<string, TemplateClusterReason>,
 	): Promise<void> {
 		await this.#db.replacePageTemplates(templateKeysByUrl, clusterReasonsByTemplateKey);
 	}

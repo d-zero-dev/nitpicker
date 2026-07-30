@@ -1,8 +1,8 @@
 import type {
 	ClassifyPageTemplatesOptions,
-	ClassifyPageTemplatesResult,
-	ClusterReason,
+	PageTemplateClassification,
 } from './types.js';
+import type { TemplateClusterReason } from '@nitpicker/crawler';
 
 import { stat } from 'node:fs/promises';
 import os from 'node:os';
@@ -13,6 +13,43 @@ import { Cache } from '@d-zero/shared/cache';
 
 import { collectPageStylesheetUrls } from './collect-page-stylesheet-urls.js';
 import { createPageClusterFactory } from './create-page-cluster-factory.js';
+
+/**
+ * The persisted shape of one `getTemplateCache()` entry. A named interface
+ * (rather than inlining `Record<string, string>` as the cache's value type,
+ * which is what this cache stored before cluster reasons existed) so
+ * {@link isTemplateClassificationCacheEntry} has a shape to check a loaded
+ * value against.
+ */
+interface TemplateClassificationCacheEntry {
+	readonly templateKeys: Record<string, string>;
+	readonly clusterReasons: Record<string, TemplateClusterReason>;
+}
+
+/**
+ * Narrows a loaded cache value to the current {@link TemplateClassificationCacheEntry}
+ * shape, so a pre-existing on-disk cache entry from before cluster-reason
+ * capture was added (a bare `Record<string, string>`, no `templateKeys` key)
+ * is treated as a miss instead of being misread as `{ templateKeys: undefined,
+ * clusterReasons: undefined }`. No version counter is used for this — the
+ * structural check is sufficient and avoids a magic number that would need
+ * bumping on every future cache-shape change.
+ * @param value - The value loaded from the persistent cache.
+ */
+function isTemplateClassificationCacheEntry(
+	value: unknown,
+): value is TemplateClassificationCacheEntry {
+	if (typeof value !== 'object' || value === null) {
+		return false;
+	}
+	const candidate = value as Record<string, unknown>;
+	return (
+		typeof candidate.templateKeys === 'object' &&
+		candidate.templateKeys !== null &&
+		typeof candidate.clusterReasons === 'object' &&
+		candidate.clusterReasons !== null
+	);
+}
 
 /**
  * Classifies every internal HTML page in the archive into a template group
@@ -45,13 +82,17 @@ import { createPageClusterFactory } from './create-page-cluster-factory.js';
  * cluster" concept (`@nitpicker/query`'s `compute-isolated-clusters.ts`,
  * link-reachability graph components — a completely different kind of
  * grouping from DOM-structure similarity).
+ *
+ * `onClusterReason` is always passed to `resolvePageClusterKeys` (not made
+ * conditional the way `onProgress` is) — as of `@d-zero/page-cluster` 0.5.3,
+ * requesting cluster reasons no longer forces small corpora off the
+ * progress-emitting path (see that option's own JSDoc), so there is no
+ * responsiveness cost to always capturing them.
  * @param options - See {@link ClassifyPageTemplatesOptions}.
- * @returns See {@link ClassifyPageTemplatesResult}. `templateKeysByUrl` only
- *   has an entry for internal HTML pages with retrievable HTML;
- *   `clusterReasons` has one entry per distinct template key among them.
+ * @returns See {@link PageTemplateClassification}.
  * @example
  * ```ts
- * const { templateKeysByUrl, clusterReasons } = await classifyPageTemplates({ archive, pages });
+ * const { templateKeysByUrl } = await classifyPageTemplates({ archive, pages });
  * for (const [url, templateKey] of templateKeysByUrl) {
  *   table.addData({ [url]: { templateKey: { value: templateKey } } });
  * }
@@ -59,17 +100,17 @@ import { createPageClusterFactory } from './create-page-cluster-factory.js';
  */
 export async function classifyPageTemplates(
 	options: ClassifyPageTemplatesOptions,
-): Promise<ClassifyPageTemplatesResult> {
+): Promise<PageTemplateClassification> {
 	const { archive, pages, onProgress } = options;
 	const cache = getTemplateCache();
 	const cacheKey = await buildArchiveCacheKey(archive.filePath, pages.length);
 
 	if (cacheKey) {
 		const cached = await cache.load(cacheKey);
-		if (cached) {
+		if (cached && isTemplateClassificationCacheEntry(cached)) {
 			return {
-				templateKeysByUrl: new Map(Object.entries(cached.templateKeysByUrl)),
-				clusterReasons: new Map(Object.entries(cached.clusterReasons)),
+				templateKeysByUrl: new Map(Object.entries(cached.templateKeys)),
+				clusterReasonsByTemplateKey: new Map(Object.entries(cached.clusterReasons)),
 			};
 		}
 	}
@@ -77,10 +118,12 @@ export async function classifyPageTemplates(
 	const stylesheetsByUrl = await collectPageStylesheetUrls(archive);
 	const { factory, getYieldedUrls } = createPageClusterFactory(pages, stylesheetsByUrl);
 
-	const clusterReasons = new Map<string, ClusterReason>();
+	const clusterReasonsByTemplateKey = new Map<string, TemplateClusterReason>();
 	const clusterKeys = await resolvePageClusterKeys(factory, {
 		...(onProgress ? { onProgress } : {}),
-		onClusterReason: (clusterKey, reason) => clusterReasons.set(clusterKey, reason),
+		onClusterReason: (clusterKey, reason) => {
+			clusterReasonsByTemplateKey.set(clusterKey, reason);
+		},
 	});
 	// Safe only after `resolvePageClusterKeys` has resolved — see
 	// `createPageClusterFactory`'s JSDoc for why.
@@ -90,7 +133,10 @@ export async function classifyPageTemplates(
 		// Would silently mis-map template keys to the wrong URLs if allowed
 		// through — see createPageClusterFactory's JSDoc for why this should
 		// be structurally impossible, but a loud failure here is far
-		// preferable to a quiet mis-assignment.
+		// preferable to a quiet mis-assignment. No equivalent check exists for
+		// `clusterReasonsByTemplateKey` — see `PageTemplateClassification`'s
+		// own JSDoc for why that map is a best-effort side channel, not a
+		// per-page guarantee.
 		throw new Error(
 			`classifyPageTemplates: resolvePageClusterKeys returned ${clusterKeys.length} keys for ${yieldedUrls.length} yielded pages.`,
 		);
@@ -103,27 +149,12 @@ export async function classifyPageTemplates(
 
 	if (cacheKey) {
 		await cache.store(cacheKey, {
-			templateKeysByUrl: Object.fromEntries(templateKeysByUrl),
-			clusterReasons: Object.fromEntries(clusterReasons),
-		});
+			templateKeys: Object.fromEntries(templateKeysByUrl),
+			clusterReasons: Object.fromEntries(clusterReasonsByTemplateKey),
+		} satisfies TemplateClassificationCacheEntry);
 	}
 
-	return { templateKeysByUrl, clusterReasons };
-}
-
-/**
- * On-disk shape of one cached {@link classifyPageTemplates} result — both
- * maps serialized to plain objects (`Cache` round-trips through JSON). Stored
- * together so a cache hit during the crash-recovery window this cache exists
- * for (see {@link classifyPageTemplates}'s own JSDoc) restores
- * `clusterReasons` too, not just `templateKeysByUrl` — otherwise a resumed
- * run would write real template keys alongside an empty
- * `page_template_cluster_reasons`, silently discarding reason data that a
- * full recomputation would have produced.
- */
-interface CachedClassification {
-	templateKeysByUrl: Record<string, string>;
-	clusterReasons: Record<string, ClusterReason>;
+	return { templateKeysByUrl, clusterReasonsByTemplateKey };
 }
 
 /**
@@ -132,7 +163,7 @@ interface CachedClassification {
  * an isolated tmpDir-per-test without module-mocking `os.tmpdir`.
  */
 function getTemplateCache() {
-	return new Cache<CachedClassification>(
+	return new Cache<TemplateClassificationCacheEntry>(
 		'nitpicker-templates',
 		path.join(os.tmpdir(), 'nitpicker/cache/templates'),
 	);

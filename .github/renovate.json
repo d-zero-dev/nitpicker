@@ -132,6 +132,7 @@
 				"@d-zero/fs",
 				"@d-zero/google-auth",
 				"@d-zero/google-sheets",
+				"@d-zero/page-cluster",
 				"@d-zero/readtext",
 				"@d-zero/roar",
 				"@d-zero/shared"

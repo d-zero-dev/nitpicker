@@ -15,7 +15,12 @@ export type ArchiveMode = 'archive' | 'stub';
 // host cache and cannot depend on query.
 export type { PageSource, ErrorKind } from '@nitpicker/crawler';
 import type { FindMismatchesOptions } from './find-mismatches.js';
-import type { ErrorKind, PageSource } from '@nitpicker/crawler';
+import type {
+	ErrorKind,
+	PageSource,
+	TemplateClusterBlockingEvidence,
+	TemplateClusterLandmarkType,
+} from '@nitpicker/crawler';
 
 /**
  * One row of {@link import('./list-isolated-pages.js').listIsolatedPages} output — a **完全孤立** (singleton)
@@ -2942,10 +2947,9 @@ export interface DirectoryDistributionEntry {
  * (e.g. `["css:166e4235afcb8b15","cluster:0"]`) — the `css:` hash cannot be
  * reversed to a filename, and a `path:` segment reflects only the shallow
  * blocking depth, not this cluster's actual member set after cross-block
- * merging. `commonDirectories` is computed fresh from this cluster's actual
- * member pages instead of parsed out of the key, and `commonStylesheetFileNames`
- * / `reason` come from `@d-zero/page-cluster`'s own `ClusterReason` — together
- * they're a meaningful, human-readable substitute for the key.
+ * merging. `commonDirectories` / `commonStylesheetUrls` are computed fresh
+ * from this cluster's actual member pages instead of parsed out of the key,
+ * which is what makes them a meaningful, human-readable substitute for it.
  */
 export interface TemplateClusterSummary {
 	/** The raw `page_templates.template_key` value for this cluster. */
@@ -2962,87 +2966,82 @@ export interface TemplateClusterSummary {
 	 */
 	commonDirectories: DirectoryDistributionEntry[];
 	/**
-	 * Deduplicated filenames extracted from every css-kind blocking entry's
-	 * `distinctiveStylesheetHrefs` in `reason.blocking` — see
+	 * Stylesheet URLs referenced by every member page — see
+	 * {@link import('./compute-css-intersection.js').computeCssIntersection}
+	 * for why this is a simplified approximation of the cluster's actual
+	 * `css:<hash>` basis, not an exact reconstruction of it.
+	 */
+	commonStylesheetUrls: string[];
+	/**
+	 * Deduplicated filenames derived from `commonStylesheetUrls` — see
 	 * {@link import('./compute-stylesheet-file-names.js').computeStylesheetFileNames}.
 	 * Precomputed server-side rather than in the viewer frontend because the
 	 * underlying URL parser depends on a Node-only module the browser build
-	 * cannot use (see that function's own JSDoc). Empty when `reason` is
-	 * `null` or carries no css-kind blocking entry.
+	 * cannot use (see that function's own JSDoc).
 	 */
 	commonStylesheetFileNames: string[];
 	/**
-	 * The `ClusterReason` `@d-zero/page-cluster` reported when this cluster
-	 * was classified, read back from `page_template_cluster_reasons`. `null`
-	 * means the cluster predates that table — it was classified by a
-	 * `@d-zero/page-cluster` version without `onClusterReason` (pre-0.5.0) —
-	 * not that `--templates` has never run; `hasClassification` on
-	 * {@link TemplateClusterListResult} already covers that case.
+	 * `@d-zero/page-cluster`'s cluster-selection evidence for this
+	 * `templateKey`, summarized for API transport — see
+	 * {@link import('./summarize-template-cluster-reason.js').summarizeTemplateClusterReason}.
+	 * `null` (not omitted) means "no reason available for this cluster",
+	 * which covers three distinct cases the caller cannot tell apart from
+	 * this field alone: a pre-cluster-reason archive (no
+	 * `page_template_clusters` table), a read-only connection that skips
+	 * schema self-heal, or a cluster `@d-zero/page-cluster` classified but
+	 * did not emit a reason for (see `PageTemplateClassification`'s own
+	 * JSDoc in `@nitpicker/core`).
 	 */
 	reason: TemplateClusterReasonSummary | null;
 }
 
 /**
- * One landmark type's (header/footer/nav/aside/form/search) commonality
- * profile within a cluster — mirrors `@d-zero/page-cluster`'s
- * `LandmarkClusterProfile`. Redefined here rather than imported: `@nitpicker/query`
- * does not depend on `@d-zero/page-cluster` (only `@nitpicker/core` does),
- * and the raw values are read back verbatim from the `landmarks` JSON column
- * `page_template_cluster_reasons` stores.
+ * One landmark type's commonality across a cluster's member pages,
+ * summarized from `TemplateClusterReason.landmarks` for API transport.
  */
-export interface TemplateClusterLandmarkProfile {
-	/** Fraction (0–1) of the cluster's member pages carrying at least one instance of this type. */
+export interface TemplateClusterLandmarkSummary {
+	/** Which landmark type this row describes. */
+	type: TemplateClusterLandmarkType;
 	presenceRate: number;
-	/** Fraction (0–1) of this type's instances classified as shared chrome. */
 	chromeRate: number;
-	/** The shell token set discovered for this type within this cluster. */
-	shellTokens: string[];
-	/** How many member pages contributed at least one instance of this type. */
 	memberCountWithInstance: number;
-}
-
-/** Landmark type keys `TemplateClusterReasonSummary.landmarks` may carry. */
-export type TemplateClusterLandmarkType =
-	| 'header'
-	| 'footer'
-	| 'nav'
-	| 'aside'
-	| 'form'
-	| 'search';
-
-/**
- * The evidence behind one Pass-0 blocking key that fed into a cluster —
- * mirrors `@d-zero/page-cluster`'s `BlockingReason`. See
- * {@link TemplateClusterLandmarkProfile}'s JSDoc for why this is redefined
- * rather than imported.
- */
-export type TemplateClusterBlockingReason =
-	| { kind: 'css'; distinctiveStylesheetHrefs: string[] }
-	| { kind: 'path'; pathKey: string }
-	| { kind: 'orphanMerge'; pathKey: string };
-
-/** One Pass-0 blocking key behind a cluster, and the evidence for it. */
-export interface TemplateClusterBlockingEntry {
-	blockKey: string;
-	reason: TemplateClusterBlockingReason;
+	/** First `shellTokenCount` tokens only — see `shellTokenCount` for the full count. */
+	shellTokens: string[];
+	/** Total number of shell tokens found, independent of how many `shellTokens` carries. */
+	shellTokenCount: number;
 }
 
 /**
- * Structured explanation of why a cluster's member pages ended up together —
- * mirrors `@d-zero/page-cluster`'s `ClusterReason`, read back from
- * `page_template_cluster_reasons`. See {@link TemplateClusterLandmarkProfile}'s
- * JSDoc for why this is redefined rather than imported.
+ * API-transport summary of one cluster's `@d-zero/page-cluster`
+ * cluster-selection evidence — see
+ * {@link import('./summarize-template-cluster-reason.js').summarizeTemplateClusterReason}
+ * for why this is a trimmed view of the verbatim
+ * `page_template_clusters.reason_json` payload rather than the payload
+ * itself.
  */
 export interface TemplateClusterReasonSummary {
-	/** Number of pages this cluster contains, as `@d-zero/page-cluster` counted it. */
-	memberCount: number;
-	/** The distinct Pass-0 blocking keys that fed into this cluster. */
-	blocking: TemplateClusterBlockingEntry[];
-	/** The frequency-quorum core of this cluster's DOM structural tokens. */
+	/**
+	 * The member count `@d-zero/page-cluster` used to derive this reason.
+	 * **Not the same as `TemplateClusterSummary.pageCount`** — on an archive
+	 * whose page count exceeded `@d-zero/page-cluster`'s inline-processing
+	 * threshold, this is a per-block sample size, not the cluster's true
+	 * page count. Never display this as a page count.
+	 */
+	clusteredMemberCount: number;
+	blocking: TemplateClusterBlockingEvidence[];
+	/**
+	 * The `kind:'css'` entries in `blocking`, combined into one set and
+	 * deduplicated — see `compute-css-intersection.ts`'s own JSDoc for how
+	 * this differs from `TemplateClusterSummary.commonStylesheetUrls`.
+	 */
+	distinctiveStylesheetUrls: string[];
+	/** Filenames derived from `distinctiveStylesheetUrls`. */
+	distinctiveStylesheetFileNames: string[];
+	/** First `structuralCoreTokenCount` tokens only. */
 	structuralCoreTokens: string[];
-	/** Per-landmark-type commonality; types absent from every member page are omitted. */
-	landmarks: Partial<Record<TemplateClusterLandmarkType, TemplateClusterLandmarkProfile>>;
-	/** Sibling final cluster keys split from the same Pass-0 block as this one. */
+	structuralCoreTokenCount: number;
+	/** Stable order: header, footer, nav, aside, form, search. */
+	landmarks: TemplateClusterLandmarkSummary[];
 	siblingClusterKeys: string[];
 }
 

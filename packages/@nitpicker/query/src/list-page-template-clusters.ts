@@ -3,20 +3,21 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { eachSplitted } from '@nitpicker/crawler';
 
+import { collectPageStylesheetUrlsByPageId } from './collect-page-stylesheet-urls-by-page-id.js';
+import { computeCssIntersection } from './compute-css-intersection.js';
 import { computeDirectoryDistribution } from './compute-directory-distribution.js';
 import { computeStylesheetFileNames } from './compute-stylesheet-file-names.js';
+import { loadTemplateClusterReasons } from './load-template-cluster-reasons.js';
 import { hasPageTemplatesTable } from './page-templates-join.js';
-import { readClusterReasonsByTemplateKey } from './read-cluster-reasons-by-template-key.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
+import { summarizeTemplateClusterReason } from './summarize-template-cluster-reason.js';
 
 /**
  * Lists every `page_templates.template_key` cluster with a human-facing
- * summary — page count and top directories computed fresh from the
- * cluster's actual member pages, plus the `ClusterReason`
- * `@d-zero/page-cluster` reported when it classified the cluster (read back
- * from `page_template_cluster_reasons`, `null` when absent) — see
- * {@link TemplateClusterSummary} for why the raw key itself is not
- * human-readable on its own.
+ * summary (page count, top directories by page count, common stylesheet
+ * set) computed fresh from the cluster's actual member pages — see
+ * {@link TemplateClusterSummary} for why that's necessary (the raw key
+ * itself is not human-readable).
  *
  * **JOIN-order pitfall this function must avoid — verified against a real
  * 486,000-page archive:** resolving `page_templates.page_id` to a URL via a
@@ -24,8 +25,8 @@ import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
  * query planner pick a full scan of `url_refs` (1.57M rows on that archive)
  * as the outer loop instead of starting from `page_templates`'s much smaller
  * row set — 12s on that archive. Chunking `page_id` into `whereIn` value
- * lists (this function's approach, matching `eachSplitted`'s use elsewhere
- * in this package) keeps the planner on `content_items`'s `PRIMARY KEY`
+ * lists (this function's approach, matching `collect-page-stylesheet-urls*`'s
+ * existing pattern) keeps the planner on `content_items`'s `PRIMARY KEY`
  * search instead — 0.03s on the same archive. `ANALYZE` is forbidden
  * archive-wide (see ARCHITECTURE.md), so this is not something a statistics
  * hint can fix — the query shape itself has to avoid the pitfall.
@@ -91,10 +92,11 @@ export async function listPageTemplateClusters(
 	}
 
 	const urlByPageId = new Map<number, string>();
-	// The two operations below touch disjoint table sets (content_items/url_refs
-	// vs page_template_cluster_reasons) and neither depends on the other's
-	// result, so they run concurrently rather than back-to-back.
-	const [, reasonsByTemplateKey] = await Promise.all([
+	// The three queries below touch disjoint table sets (content_items/url_refs,
+	// resource_items/resource_ref_edges, page_template_clusters) and none
+	// depends on another's result, so they run concurrently rather than
+	// back-to-back.
+	const [, stylesheetsByPageId, reasonsByTemplateKey] = await Promise.all([
 		eachSplitted(
 			rows.map((r) => r.pageId),
 			SQLITE_IN_CHUNK,
@@ -108,7 +110,8 @@ export async function listPageTemplateClusters(
 				}
 			},
 		),
-		readClusterReasonsByTemplateKey(knex),
+		collectPageStylesheetUrlsByPageId(accessor),
+		loadTemplateClusterReasons(knex, [...pageIdsByTemplateKey.keys()]),
 	]);
 
 	const clusters: TemplateClusterSummary[] = [];
@@ -116,16 +119,16 @@ export async function listPageTemplateClusters(
 		const urls = pageIds
 			.map((id) => urlByPageId.get(id))
 			.filter((url): url is string => url != null);
-		const reason = reasonsByTemplateKey.get(templateKey) ?? null;
-		const cssHrefs = (reason?.blocking ?? []).flatMap((entry) =>
-			entry.reason.kind === 'css' ? entry.reason.distinctiveStylesheetHrefs : [],
-		);
+		const cssUrlsByPage = pageIds.map((id) => stylesheetsByPageId.get(id) ?? []);
+		const commonStylesheetUrls = computeCssIntersection(cssUrlsByPage);
+		const reason = reasonsByTemplateKey.get(templateKey);
 		clusters.push({
 			templateKey,
 			pageCount: pageIds.length,
 			commonDirectories: computeDirectoryDistribution(urls),
-			commonStylesheetFileNames: computeStylesheetFileNames(cssHrefs),
-			reason,
+			commonStylesheetUrls,
+			commonStylesheetFileNames: computeStylesheetFileNames(commonStylesheetUrls),
+			reason: reason ? summarizeTemplateClusterReason(reason) : null,
 		});
 	}
 

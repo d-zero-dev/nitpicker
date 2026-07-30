@@ -27,7 +27,7 @@ const ADJUNCT_TABLES = [
 	'analysis_text_refs',
 	'analysis_violations',
 	'page_templates',
-	'page_template_cluster_reasons',
+	'page_template_clusters',
 	'page_html_blobs',
 	'page_html_ref',
 	'console_log_items',
@@ -146,6 +146,36 @@ describe('createAdjunctTables', () => {
 		expect(rows[0]?.started_at).toBe(100);
 	});
 
+	it('declares page_template_clusters with no FK and the BLOB+codec+size shape', async () => {
+		await createAdjunctTables(db);
+		const parents = await fkParentTables(db, 'page_template_clusters');
+		expect(parents.size).toBe(0);
+		expect(await db.schema.hasColumn('page_template_clusters', 'template_key')).toBe(
+			true,
+		);
+		expect(await db.schema.hasColumn('page_template_clusters', 'member_count')).toBe(
+			true,
+		);
+		expect(await db.schema.hasColumn('page_template_clusters', 'reason_json')).toBe(true);
+		expect(await db.schema.hasColumn('page_template_clusters', 'codec')).toBe(true);
+		expect(await db.schema.hasColumn('page_template_clusters', 'size_raw')).toBe(true);
+		expect(await db.schema.hasColumn('page_template_clusters', 'size_stored')).toBe(true);
+	});
+
+	it('rejects an unrecognized page_template_clusters.codec value', async () => {
+		await createAdjunctTables(db);
+		await expect(
+			db('page_template_clusters').insert({
+				template_key: 'css:abc',
+				member_count: 1,
+				reason_json: Buffer.from('{}'),
+				codec: 'gzip',
+				size_raw: 2,
+				size_stored: 2,
+			}),
+		).rejects.toThrow(/CHECK constraint failed/);
+	});
+
 	it('declares console_log_items as a content-addressable dictionary with no content_items FK', async () => {
 		await createAdjunctTables(db);
 		const parents = await fkParentTables(db, 'console_log_items');
@@ -172,26 +202,24 @@ describe('createAdjunctTables', () => {
 		expect(parents.has('console_log_items')).toBe(true);
 	});
 
-	it('declares page_template_cluster_reasons with template_key as PK and no FK', async () => {
+	it('rejects a duplicate page_template_clusters.template_key (PRIMARY KEY)', async () => {
 		await createAdjunctTables(db);
-		const parents = await fkParentTables(db, 'page_template_cluster_reasons');
-		expect(parents.size).toBe(0);
-		await db('page_template_cluster_reasons').insert({
+		await db('page_template_clusters').insert({
 			template_key: 'css:abc123',
 			member_count: 3,
-			blocking: '[]',
-			structural_core_tokens: '[]',
-			landmarks: '{}',
-			sibling_cluster_keys: '[]',
+			reason_json: Buffer.from('{}'),
+			codec: 'zstd',
+			size_raw: 2,
+			size_stored: 2,
 		});
 		await expect(
-			db('page_template_cluster_reasons').insert({
+			db('page_template_clusters').insert({
 				template_key: 'css:abc123',
 				member_count: 1,
-				blocking: '[]',
-				structural_core_tokens: '[]',
-				landmarks: '{}',
-				sibling_cluster_keys: '[]',
+				reason_json: Buffer.from('{}'),
+				codec: 'zstd',
+				size_raw: 2,
+				size_stored: 2,
 			}),
 		).rejects.toThrow();
 	});
