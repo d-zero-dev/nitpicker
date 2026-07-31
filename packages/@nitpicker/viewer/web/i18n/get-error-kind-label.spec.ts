@@ -40,6 +40,7 @@ describe('getErrorKindLabel', () => {
 			'local-network',
 			'parse-error',
 			'client-blocked',
+			'redirect-loop',
 			'timeout',
 			'protocol',
 			'unknown',
