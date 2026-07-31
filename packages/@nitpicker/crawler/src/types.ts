@@ -68,6 +68,7 @@ export interface InventoryRunAggregates {
  * | `local-network` | **yes** | no | local machine's network is unreachable / changed (WiFi, sleep, ICMP-unreachable, …) |
  * | `parse-error` | mostly persistent | no | HTTP response could not be parsed (proxy, garbage, MITM) |
  * | `client-blocked` | persistent (per browser) | no | Chromium-side `ERR_BLOCKED_BY_*` family — the browser actively refused the request (ad/tracker heuristics, CSP, CORP, administrator block list, …) |
+ * | `redirect-loop` | no | no | the redirect chain exceeded `follow-redirects`' `maxRedirects` limit — the site's own redirect configuration never converges |
  * | `protocol` | yes | no | puppeteer protocol layer (frame detached, target closed, …) |
  * | `timeout` | yes | no | puppeteer navigation timeout or HEAD pre-flight race timeout (`Timeout: <url>`) |
  * | `unknown` | unknown | no | catch-all for messages no matcher recognised |
@@ -102,6 +103,7 @@ export type ErrorKind =
 	| 'local-network'
 	| 'parse-error'
 	| 'client-blocked'
+	| 'redirect-loop'
 	| 'timeout'
 	| 'protocol'
 	| 'unknown';

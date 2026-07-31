@@ -35,14 +35,15 @@ describe('evictNetworkClassifiedDestinationCacheEntries', () => {
 		expect(cache.get('https://a.example/')).toBe(fakePageData);
 	});
 
-	it('does NOT evict a site-specific cached error (tls / client-blocked / connection-refused)', () => {
+	it('does NOT evict a site-specific cached error (tls / client-blocked / connection-refused / redirect-loop)', () => {
 		const cache = new Map<string, PageData | Error>([
 			['tls', new Error('ERR_CERT_DATE_INVALID')],
 			['client-blocked', new Error('ERR_BLOCKED_BY_CLIENT')],
 			['connection-refused', new Error('ECONNREFUSED')],
+			['redirect-loop', new Error('Maximum number of redirects exceeded')],
 		]);
 		evictNetworkClassifiedDestinationCacheEntries(cache);
-		expect(cache.size).toBe(3);
+		expect(cache.size).toBe(4);
 	});
 
 	it('leaves an unrelated entry untouched while evicting a network-classified one', () => {

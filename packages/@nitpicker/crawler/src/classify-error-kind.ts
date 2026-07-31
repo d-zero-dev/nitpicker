@@ -58,6 +58,19 @@ const MATCHERS: readonly { readonly kind: ErrorKind; readonly pattern: RegExp }[
 		kind: 'parse-error',
 		pattern: /Parse Error|Expected HTTP\/|Unexpected end of stream/i,
 	},
+	// `follow-redirects` (pinned at 1.16.0, `fetch-destination.ts`'s HEAD/GET
+	// pre-flight) throws exactly "Maximum number of redirects exceeded" —
+	// no cause token, no URL — when a chain never terminates within its
+	// `maxRedirects` budget. `ERR_TOO_MANY_REDIRECTS` is the equivalent
+	// Chromium net-error code, covering the same symptom surfaced through a
+	// puppeteer navigation instead of the Node HTTP client. Both mean the
+	// SAME thing: the site's own redirect configuration loops and will loop
+	// again on any future fetch, which is why this is deterministic (not a
+	// transient network condition) — see `PERMANENT_ERROR_KINDS`.
+	{
+		kind: 'redirect-loop',
+		pattern: /Maximum number of redirects exceeded|ERR_TOO_MANY_REDIRECTS/i,
+	},
 	// `client-blocked` covers Chromium's ERR_BLOCKED_* family — the browser
 	// actively decided to reject the request (ad/tracker heuristics, CSP,
 	// CORB / ORB, administrator block list, fingerprinting protection,
@@ -119,6 +132,7 @@ const MATCHERS: readonly { readonly kind: ErrorKind; readonly pattern: RegExp }[
  * classifyErrorKind('getaddrinfo ENOTFOUND www.example.com'); // 'dns'
  * classifyErrorKind('gave up after 3 retries — Race 180,000ms'); // 'timeout'
  * classifyErrorKind('Protocol error (Page.reload): Target closed'); // 'protocol'
+ * classifyErrorKind('Maximum number of redirects exceeded'); // 'redirect-loop'
  * ```
  */
 export function classifyErrorKind(message: string): ErrorKind {

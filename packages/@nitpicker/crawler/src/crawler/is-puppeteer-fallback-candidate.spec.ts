@@ -117,4 +117,11 @@ describe('isPuppeteerFallbackCandidate', () => {
 		).toBe(false);
 		expect(isPuppeteerFallbackCandidate('Execution context was destroyed')).toBe(false);
 	});
+
+	it('opts OUT for redirect-loop — a puppeteer navigation follows the same chain and loops the same way', () => {
+		expect(isPuppeteerFallbackCandidate('Maximum number of redirects exceeded')).toBe(
+			false,
+		);
+		expect(isPuppeteerFallbackCandidate('net::ERR_TOO_MANY_REDIRECTS')).toBe(false);
+	});
 });

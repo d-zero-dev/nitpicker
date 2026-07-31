@@ -22,6 +22,7 @@ describe('NETWORK_RELATED_ERROR_KINDS', () => {
 			'connection-refused',
 			'parse-error',
 			'client-blocked',
+			'redirect-loop',
 			'timeout',
 			'protocol',
 			'unknown',

@@ -4,7 +4,7 @@ import { classifyErrorKind } from './classify-error-kind.js';
 import { PERMANENT_ERROR_KINDS } from './permanent-error-kinds.js';
 
 describe('PERMANENT_ERROR_KINDS', () => {
-	it('contains exactly the five persistent kinds — guards against accidental drift', () => {
+	it('contains exactly the six persistent kinds — guards against accidental drift', () => {
 		// Pinning the membership prevents silent additions; widening this set
 		// changes `resetFailedPages` behavior across every Nitpicker user, so a
 		// reviewer should explicitly re-evaluate the docstring rationale when
@@ -14,6 +14,7 @@ describe('PERMANENT_ERROR_KINDS', () => {
 			'connection-refused',
 			'dns',
 			'parse-error',
+			'redirect-loop',
 			'tls',
 		]);
 	});
@@ -31,6 +32,7 @@ describe('PERMANENT_ERROR_KINDS', () => {
 			'net::ERR_BLOCKED_BY_CLIENT at https://ad.example.com/',
 			'Parse Error: Expected HTTP/, RTSP/ or ICE/',
 			'connect ECONNREFUSED 127.0.0.1:443',
+			'Maximum number of redirects exceeded',
 		] as const;
 		for (const message of persistentMessages) {
 			expect(PERMANENT_ERROR_KINDS.has(classifyErrorKind(message))).toBe(true);

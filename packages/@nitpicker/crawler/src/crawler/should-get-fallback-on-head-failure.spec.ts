@@ -93,6 +93,12 @@ describe('shouldGetFallbackOnHeadFailure', () => {
 		).toBe(false);
 	});
 
+	it('opts OUT for redirect-loop — a GET hits the same never-terminating chain', () => {
+		expect(
+			shouldGetFallbackOnHeadFailure(new Error('Maximum number of redirects exceeded')),
+		).toBe(false);
+	});
+
 	it('opts OUT for unknown — without a positive signal we keep the cached verdict to avoid pointless retries', () => {
 		expect(
 			shouldGetFallbackOnHeadFailure(new Error('something completely unexpected')),
