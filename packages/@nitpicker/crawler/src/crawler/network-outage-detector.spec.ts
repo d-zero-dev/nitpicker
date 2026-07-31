@@ -106,6 +106,7 @@ describe('NetworkOutageDetector', () => {
 				'connection-refused',
 				'parse-error',
 				'client-blocked',
+				'redirect-loop',
 				'timeout',
 				'protocol',
 				'unknown',

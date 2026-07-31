@@ -219,6 +219,21 @@ describe('classifyErrorKind', () => {
 		expect(classifyErrorKind('Unexpected end of stream')).toBe('parse-error');
 	});
 
+	it('classifies redirect chains that never terminate as redirect-loop', () => {
+		// `follow-redirects` (pinned 1.16.0, used by the HEAD/GET pre-flight in
+		// `fetch-destination.ts`) throws exactly this message — no cause token,
+		// no URL — once the chain exceeds its `maxRedirects` budget.
+		expect(classifyErrorKind('Maximum number of redirects exceeded')).toBe(
+			'redirect-loop',
+		);
+		// Chromium's equivalent net-error code, surfaced via a puppeteer
+		// navigation instead of the Node HTTP client.
+		expect(classifyErrorKind('net::ERR_TOO_MANY_REDIRECTS')).toBe('redirect-loop');
+		expect(
+			classifyErrorKind('[Retried 3 times] Maximum number of redirects exceeded'),
+		).toBe('redirect-loop');
+	});
+
 	it('classifies puppeteer protocol/lifecycle failures as protocol', () => {
 		expect(
 			classifyErrorKind('Protocol error (DOM.describeNode): Cannot find context'),

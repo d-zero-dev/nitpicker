@@ -42,6 +42,7 @@ describe('shouldBurnHost', () => {
 			'local-network',
 			'parse-error',
 			'client-blocked',
+			'redirect-loop',
 			'timeout',
 			'protocol',
 			'unknown',

@@ -8,11 +8,12 @@ import type { ErrorKind } from './types.js';
  * Used by `resetFailedPages` to exclude pages whose latest recorded error
  * falls in this set, so `--retry-failed` actually converges: without the
  * exclusion, NXDOMAIN / TLS mismatch / `ERR_BLOCKED_BY_CLIENT` /
- * `ECONNREFUSED` / HTTP parse-error pages would be reset to pending on every
- * iteration, the crawler would re-attempt them, they would fail again the
- * same way, and the retry-target count would stay constant forever.
+ * `ECONNREFUSED` / HTTP parse-error / redirect-loop pages would be reset to
+ * pending on every iteration, the crawler would re-attempt them, they would
+ * fail again the same way, and the retry-target count would stay constant
+ * forever.
  *
- * Why these five and not others:
+ * Why these six and not others:
  * - **dns** — `ENOTFOUND` / `ERR_NAME_NOT_RESOLVED` are authoritative DNS
  *   answers; the host is gone (or never existed). EAI_AGAIN is split out as
  *   `dns-transient` precisely so it is NOT in this set.
@@ -29,6 +30,10 @@ import type { ErrorKind } from './types.js';
  *   the listener; either no process is listening on the port or its accept
  *   queue rejected the connection. Either way the answer is final until the
  *   server operator intervenes.
+ * - **redirect-loop** — `Maximum number of redirects exceeded` /
+ *   `ERR_TOO_MANY_REDIRECTS` means the site's own redirect chain never
+ *   terminates; the exact same chain is served on every future fetch until
+ *   the site operator fixes it.
  *
  * Notably absent (intentionally retryable):
  * - `connection-reset` / `connection-timeout` — could be middlebox or
@@ -47,4 +52,5 @@ export const PERMANENT_ERROR_KINDS: ReadonlySet<ErrorKind> = new Set<ErrorKind>(
 	'client-blocked',
 	'parse-error',
 	'connection-refused',
+	'redirect-loop',
 ]);

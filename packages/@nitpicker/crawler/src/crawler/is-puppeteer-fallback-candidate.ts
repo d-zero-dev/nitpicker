@@ -29,6 +29,9 @@ import { classifyErrorKind } from '../classify-error-kind.js';
  *   as `timeout` via the `NetTimeoutError "Timeout: <url>"` shape.
  * - **local-network** — operator-side connectivity loss; nothing on this
  *   machine will reach the host.
+ * - **redirect-loop** — the redirect chain itself never terminates; a
+ *   puppeteer navigation follows the identical Location-header chain (or
+ *   hits Chromium's own `ERR_TOO_MANY_REDIRECTS`) and loops the same way.
  * - **protocol** — puppeteer lifecycle race; bouncing back to puppeteer
  *   reproduces the same race.
  * - **unknown** — by design. Spinning up a fresh Chromium for every
