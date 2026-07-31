@@ -17,6 +17,9 @@ import type { Knex } from 'knex';
  * - `inventory_runs` — `--inventory` audit log (no FK; append-only)
  * - `network_outages` — operator-network-outage journal (no FK; append-only
  *   except `ended_at`, which is written once on recovery)
+ * - `dedupe_cap_events` — `--dedupe-cap` same-cluster soft-cap audit log (no
+ *   FK; append-only except `rejected_count`, which is written once at
+ *   `crawlEnd`)
  * - `analysis_text_refs` + `analysis_violations` — analyze-phase findings,
  *   FK → `content_items(id)`
  * - `page_templates` — DOM-structure template classification (`--templates`,
@@ -356,6 +359,46 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 			t.string('probe_host').nullable();
 			t.integer('trigger_error_count').notNullable();
 			t.integer('trigger_host_count').notNullable();
+		});
+	}
+
+	if (!(await instance.schema.hasTable('dedupe_cap_events'))) {
+		await instance.schema.createTable('dedupe_cap_events', (t) => {
+			// One row per URL shape the `--dedupe-cap` same-cluster soft cap
+			// (`DedupeCapTracker`) confirmed as a trap during this crawl. No
+			// index: a crawl produces at most a handful of these rows (same
+			// reasoning as `network_outages`, above).
+			t.increments('id');
+			// The URL shape key (`computeShapeKey`) that capped — a template
+			// with placeholders (e.g. `example.com/news/date/{n}/`), not a
+			// literal URL.
+			t.string('shape_key').notNullable();
+			// One concrete URL matching this shape, captured at cap time so a
+			// human reading the audit log can identify what was being
+			// crawled — `shape_key` alone is a template, not a navigable URL.
+			t.string('sample_url').notNullable();
+			// `computeBodyHash` result recorded at cap time. Nullable only in
+			// the sense that BLOB columns are nullable by default; every row
+			// this feature writes populates it (a page with no rendered
+			// `<body>` never reaches the tracker — see `Crawler#handleResult`).
+			t.binary('body_hash').nullable();
+			// The Misra-Gries threshold that actually triggered the cap,
+			// after halving for the `body_hash`-match / `og:url`-mismatch
+			// confidence signals — NOT necessarily equal to `--dedupe-cap`'s
+			// raw value.
+			t.integer('effective_threshold').notNullable();
+			// The tracker's Misra-Gries counter value at cap time: a LOWER
+			// BOUND on the number of matching-signature pages seen for this
+			// shape, not an exact observation count (see `DedupeCapTracker`).
+			t.integer('observed_count').notNullable();
+			t.integer('detected_at').notNullable();
+			// NULL until `crawlEnd` finalizes it (see
+			// `Crawler#getDedupeCapRejections`). Unlike `network_outages.ended_at`,
+			// a NULL here has no ambiguous "still ongoing" reading — a
+			// crawl that never reached `crawlEnd` simply left the count
+			// undetermined, so no boot-time reconciliation pass is needed
+			// (readers display "unknown", not "0" or "unbounded").
+			t.integer('rejected_count').nullable();
 		});
 	}
 

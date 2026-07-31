@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 
 import { basicRoutes } from './routes/basic.js';
 import { consoleLogsRoutes } from './routes/console-logs.js';
+import { dedupeCapTrapRoutes } from './routes/dedupe-cap-trap.js';
 import { errorStatusRoutes } from './routes/error-status.js';
 import { excludeRoutes } from './routes/exclude.js';
 import { flakyRoutes } from './routes/flaky.js';
@@ -60,6 +61,7 @@ export function createApp(portRef: PortRef) {
 	jsRedirectRoutes(app);
 	mainContentRoutes(app);
 	consoleLogsRoutes(app);
+	dedupeCapTrapRoutes(app, portRef);
 	return app;
 }
 

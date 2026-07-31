@@ -38,4 +38,8 @@ export interface CrawlFlagInput {
 	readonly verbose?: boolean;
 	/** CSS selector overriding beholder's automatic main-content detection. */
 	readonly mainContentSelector?: string;
+	/** Same-cluster soft-cap threshold. `undefined` disables the feature (mapped to `null`). */
+	readonly dedupeCap?: number;
+	/** Hard cap on the number of distinct URL shapes `dedupeCap` tracks at once. */
+	readonly dedupeMapCap?: number;
 }

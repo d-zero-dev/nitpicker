@@ -286,11 +286,20 @@ export function mapFlagsToQueryOptions(
 		case 'unused-resources':
 		case 'inventory-runs':
 		case 'duplicate-bodies':
+		case 'dedupe-cap-events':
 		case 'outages': {
 			// Pagination-only — no required filters.
 			return {
 				limit: flags.limit,
 				offset: flags.offset,
+			};
+		}
+		case 'duplicate-clusters': {
+			return {
+				minCount: flags.minCount,
+				limit: flags.limit,
+				offset: flags.offset,
+				samplePagesLimit: flags.pagesLimit,
 			};
 		}
 		case 'get-isolated-cluster': {

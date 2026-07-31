@@ -105,6 +105,55 @@ async function driveDeal() {
 }
 
 /**
+ * Variant of {@link driveDeal} whose `push`/`unshift` spies feed newly
+ * discovered URLs (e.g. predicted pagination batches) back into the same
+ * queue instead of merely recording the call, draining until empty. Needed
+ * for scenarios where a later assertion depends on a URL discovered
+ * mid-crawl actually being scraped (`fetchDestination` called again for
+ * it) — `driveDeal`'s single pass over the initial `items` never reaches
+ * such URLs.
+ *
+ * Deduplicates by `withoutHashAndAuth` before dealing, mirroring the real
+ * `@d-zero/dealer`'s `seen`-set contract (each URL is processed at most
+ * once per crawl) — without this, a page whose anchors are re-fetched with
+ * the SAME anchor list every time (as a test fixture's `mockImplementation`
+ * naturally does, since it keys off the requested URL rather than crawl
+ * progress) would have those anchors re-enqueued and re-dealt forever.
+ * @returns The shared `push` and `unshift` spies passed to the worker factory.
+ */
+async function driveDealRecursive() {
+	const push = vi.fn((...urls: unknown[]) => {
+		pending.push(...urls);
+		return Promise.resolve();
+	});
+	const unshift = vi.fn((...urls: unknown[]) => {
+		pending.unshift(...urls);
+		return Promise.resolve();
+	});
+	let pending: unknown[] = [];
+	const seen = new Set<string>();
+	const { deal } = await import('@d-zero/dealer');
+	vi.mocked(deal).mockImplementation(async (items, factory) => {
+		pending = [...(items as unknown[])];
+		while (pending.length > 0) {
+			const item = pending.shift();
+			const key = (item as ExURL).withoutHashAndAuth;
+			if (seen.has(key)) continue;
+			seen.add(key);
+			const noop = () => {};
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- deal factory signature is complex; cast is intentional in test
+			const workFn = (factory as Function)(item, noop, 0, noop, push, unshift) as
+				| (() => Promise<void>)
+				| undefined;
+			if (workFn) {
+				await workFn();
+			}
+		}
+	});
+	return { push, unshift };
+}
+
+/**
  * Default crawler options for testing.
  */
 const defaultOptions = {
@@ -856,6 +905,348 @@ describe('Crawler', () => {
 				'https://example.com/page/5',
 				'https://example.com/page/6',
 			]);
+		});
+
+		it('--dedupe-cap: 既にcapped済みのshapeを持つ新規anchorはenqueueされない', async () => {
+			const { push, unshift } = await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { computeShapeKey } = await import('./dedupe/compute-shape-key.js');
+
+			const htmlAnchor = parseUrl('https://example.com/about')!;
+			const assetAnchor = parseUrl('https://example.com/doc.pdf')!;
+			const cappedShapeKey = computeShapeKey(htmlAnchor.withoutHashAndAuth)!;
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue(
+				nonHtmlResultWithAnchors([
+					{ href: htmlAnchor, textContent: 'About' },
+					{ href: assetAnchor, textContent: 'PDF' },
+				]) as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>,
+			);
+
+			const crawler = new Crawler({
+				...defaultOptions,
+				dedupeCap: 100,
+				preloadedStickyShapeKeys: [cappedShapeKey],
+			});
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			crawler.start([parseUrl('https://example.com/feed.xml')!]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			// htmlAnchor's shape was preloaded as capped (gate 1) → never enqueued.
+			expect(unshift).not.toHaveBeenCalled();
+			// assetAnchor has a different shape → unaffected, still routed to push.
+			expect(push).toHaveBeenCalledWith(assetAnchor);
+		});
+
+		it('--dedupe-cap かつ --recursive=false（anchorがmetadataOnlyになる）でも既にcapped済みのshapeはenqueueされない', async () => {
+			// With `recursive: false`, handle-scrape-end.ts marks EVERY anchor
+			// metadata-only (internal or not) — regression guard that gate 1
+			// still blocks a capped shape's anchor in this mode instead of
+			// silently letting it through (which would make `--dedupe-cap`
+			// inconsistent with gate 2's JS-redirect check, which has no
+			// metadataOnly exclusion).
+			const { unshift } = await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { computeShapeKey } = await import('./dedupe/compute-shape-key.js');
+
+			const htmlAnchor = parseUrl('https://example.com/about')!;
+			const cappedShapeKey = computeShapeKey(htmlAnchor.withoutHashAndAuth)!;
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue(
+				nonHtmlResultWithAnchors([{ href: htmlAnchor, textContent: 'About' }]) as Awaited<
+					ReturnType<typeof fetchDestMod.fetchDestination>
+				>,
+			);
+
+			const crawler = new Crawler({
+				...defaultOptions,
+				recursive: false,
+				dedupeCap: 100,
+				preloadedStickyShapeKeys: [cappedShapeKey],
+			});
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			crawler.start([parseUrl('https://example.com/feed.xml')!]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			expect(unshift).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('predicted-page content-duplicate discard (always-on, issue #208)', () => {
+		/**
+		 * Minimal non-HTML PageData builder — a non-HTML `contentType` makes
+		 * `#scrapePage` return the HEAD pre-flight result verbatim, skipping
+		 * the browser entirely (same trick `nonHtmlResultWithAnchors` above
+		 * uses), while still letting `html` carry real content so the A-3
+		 * body-hash comparison has something to compare.
+		 * @param url - The page's own URL.
+		 * @param anchors - Anchors to expose on the scraped page.
+		 * @param html - The page's body content.
+		 * @returns A PageData-shaped object for fetchDestination to resolve with.
+		 */
+		function nonHtmlPageData(
+			url: ExURL,
+			anchors: { href: ExURL; textContent: string }[],
+			html: string,
+		) {
+			return {
+				url,
+				redirectPaths: [],
+				isTarget: false,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'application/xml',
+				contentLength: 0,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: anchors,
+				imageList: [],
+				html,
+				isSkipped: false,
+			};
+		}
+
+		it('連続する予測ページの本文が同一なら2件目以降を破棄し、pageイベントを発火しない', async () => {
+			await driveDealRecursive();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const origin = parseUrl('https://example.com/feed.xml')!;
+			const page2 = parseUrl('https://example.com/page/2')!;
+			const page3 = parseUrl('https://example.com/page/3')!;
+			const page4 = parseUrl('https://example.com/page/4')!;
+			const page5 = parseUrl('https://example.com/page/5')!;
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockImplementation((args) => {
+				const href = (args as { url: ExURL }).url.withoutHashAndAuth;
+				if (href === page4.withoutHashAndAuth || href === page5.withoutHashAndAuth) {
+					// Both predicted pages render byte-for-byte identical bodies —
+					// the site ignores the extrapolated page number entirely.
+					return Promise.resolve(
+						nonHtmlPageData(parseUrl(href)!, [], '<p>duplicate</p>') as Awaited<
+							ReturnType<typeof fetchDestMod.fetchDestination>
+						>,
+					);
+				}
+				return Promise.resolve(
+					nonHtmlPageData(
+						origin,
+						[
+							{ href: page2, textContent: 'Page 2' },
+							{ href: page3, textContent: 'Page 3' },
+						],
+						'',
+					) as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>,
+				);
+			});
+
+			// parallels: 2 → two predicted URLs of the same shape (page/4, page/5),
+			// dealt in order by driveDealRecursive so page/4 is scraped (and its
+			// body hash recorded) before page/5 is compared against it.
+			const crawler = new Crawler({ ...defaultOptions, parallels: 2 });
+			const pages: CrawlerEventTypes['page'][] = [];
+			crawler.on('page', (p) => {
+				pages.push(p);
+			});
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			crawler.start([origin]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			const pageUrls = pages.map((p) => p.result.url.withoutHashAndAuth);
+			expect(pageUrls).toContain(page4.withoutHashAndAuth);
+			expect(pageUrls).not.toContain(page5.withoutHashAndAuth);
+		});
+	});
+
+	describe('same-cluster cap gate 2: JS-redirect direct enqueue (issue #208)', () => {
+		it('JS-redirectの着地先URLのshapeが既にcapped済みなら、addUrlクロージャ（gate 1）を経由せずにenqueueをブロックし拒否数を記録する', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { computeShapeKey } = await import('./dedupe/compute-shape-key.js');
+
+			const sourceUrl = parseUrl('https://example.com/redirector')!;
+			const destinationUrl = parseUrl('https://example.com/trap/99')!;
+			const cappedShapeKey = computeShapeKey(destinationUrl.withoutHashAndAuth)!;
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url: sourceUrl,
+				redirectPaths: [],
+				isTarget: true,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 0,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			} as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>);
+
+			// `_launchBrowserAndScrape` is the sanctioned test-only hook for
+			// driving the js-redirect cascade without a real browser (see its
+			// own JSDoc `@internal` note).
+			vi.spyOn(
+				Crawler.prototype as unknown as {
+					_launchBrowserAndScrape: (...args: unknown[]) => Promise<unknown>;
+				},
+				'_launchBrowserAndScrape',
+			).mockResolvedValue({
+				type: 'redirect-edge',
+				source: 'js-redirect',
+				pageData: {
+					url: sourceUrl,
+					redirectPaths: [destinationUrl.href],
+					isTarget: true,
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 0,
+					responseHeaders: {},
+					meta: { title: '' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+			});
+
+			const crawler = new Crawler({
+				...defaultOptions,
+				dedupeCap: 100,
+				preloadedStickyShapeKeys: [cappedShapeKey],
+			});
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			crawler.start([sourceUrl]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			// Gate 2 rejects the JS-redirect destination before it is ever
+			// enqueued — this path does not go through the addUrl closure
+			// (gate 1) at all, so this is the only place that can catch a
+			// regression here.
+			expect(crawler.getDedupeCapRejections().get(cappedShapeKey)).toBe(1);
+		});
+	});
+
+	describe('paginationState is scoped per page (issue #208 regression guard)', () => {
+		it('別ページ由来の連番URL同士を比較して予測URLを生成しない', async () => {
+			const { unshift } = await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const pageA = parseUrl('https://example.com/page-a.xml')!;
+			const pageB = parseUrl('https://example.com/page-b.xml')!;
+			const productA1 = parseUrl('https://example.com/product/1')!;
+			const productB2 = parseUrl('https://example.com/product/2')!;
+
+			/**
+			 *
+			 * @param url
+			 * @param anchors
+			 */
+			function nonHtmlResult(
+				url: ExURL,
+				anchors: { href: ExURL; textContent: string }[],
+			) {
+				return {
+					url,
+					redirectPaths: [],
+					isTarget: false,
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'application/xml',
+					contentLength: 0,
+					responseHeaders: {},
+					meta: { title: '' },
+					anchorList: anchors,
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				};
+			}
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockImplementation((args) => {
+				const href = (args as { url: ExURL }).url.withoutHashAndAuth;
+				if (href === pageA.withoutHashAndAuth) {
+					return Promise.resolve(
+						nonHtmlResult(pageA, [
+							{ href: productA1, textContent: 'Product 1' },
+						]) as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>,
+					);
+				}
+				return Promise.resolve(
+					nonHtmlResult(pageB, [
+						{ href: productB2, textContent: 'Product 2' },
+					]) as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>,
+				);
+			});
+
+			// parallels: 2 → if a (bogus) pattern were detected, two predicted
+			// URLs would be generated and unshifted as ONE batched call.
+			const crawler = new Crawler({ ...defaultOptions, parallels: 2 });
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			// Two SEPARATE root pages, each contributing exactly ONE anchor.
+			// Under the pre-fix bug (`paginationState` declared once per crawl
+			// in `#runDeal`, shared across every page's `#handleResult`),
+			// product/1 (page A's only push) would still be
+			// `paginationState.lastPushedUrl` when product/2 (page B's only
+			// push) is processed — despite the two anchors never appearing
+			// together on the same document, they would look like a valid
+			// numeric pagination pair and trigger prediction. The fix scopes
+			// `paginationState` fresh to each `#handleResult` invocation, so
+			// page B's processing starts with `lastPushedUrl: null` and no
+			// cross-page comparison ever happens.
+			crawler.start([pageA, pageB]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			// Real single-anchor routing always calls unshift with exactly one
+			// URL; only a (bogus) predicted-URL batch would call it with more
+			// than one, so this is the discriminating assertion.
+			const batchCalls = unshift.mock.calls.filter((args) => args.length > 1);
+			expect(batchCalls).toHaveLength(0);
 		});
 	});
 

@@ -134,6 +134,25 @@ describe('pipeline command', () => {
 		);
 	});
 
+	it("forwards --dedupe-cap/--dedupe-map-cap to startCrawl (pipeline.ts hand-writes its own flags object rather than reusing crawl.ts's mapper, see the TODO on commandDef.flags)", async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+		vi.mocked(analyzeFn).mockResolvedValue();
+
+		await pipeline(['https://example.com'], {
+			...defaultFlags,
+			dedupeCap: 5,
+			dedupeMapCap: 2000,
+		});
+
+		expect(startCrawlFn).toHaveBeenCalledWith(
+			['https://example.com'],
+			expect.objectContaining({
+				dedupeCap: 5,
+				dedupeMapCap: 2000,
+			}),
+		);
+	});
+
 	it('runs crawl, analyze, and report when --sheet is provided', async () => {
 		const sheetUrl = 'https://docs.google.com/spreadsheets/d/xxx';
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');

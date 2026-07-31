@@ -220,6 +220,32 @@ export interface CrawlerOptions extends Required<
 	 * without touching the real network.
 	 */
 	networkProbe: NetworkProbe | null;
+
+	/**
+	 * Same-cluster soft-cap threshold (`--dedupe-cap`), or `null` to disable
+	 * the feature entirely (the default). When set, {@link Crawler} stops
+	 * enqueueing newly-discovered URLs whose shape (see `computeShapeKey`)
+	 * has accumulated this many matching-signature observations (see
+	 * `DedupeCapTracker`).
+	 */
+	dedupeCap: number | null;
+
+	/**
+	 * Hard cap on the number of distinct URL shapes the same-cluster soft
+	 * cap tracks at once (`--dedupe-map-cap`); the least-recently-touched
+	 * shape is evicted beyond this. Only relevant when {@link dedupeCap} is
+	 * non-null.
+	 */
+	dedupeMapCap: number;
+
+	/**
+	 * Shape keys already confirmed capped in a prior session
+	 * (persisted as `dedupe_cap_events.shape_key`), seeded into the
+	 * tracker's sticky set so `--resume` / `--append` / `--retry-failed` /
+	 * `--inventory` do not re-admit a trap this crawl already paid the cost
+	 * of discovering once. Ignored when {@link dedupeCap} is `null`.
+	 */
+	preloadedStickyShapeKeys: readonly string[];
 }
 
 /**
@@ -491,6 +517,22 @@ export interface CrawlerEventTypes {
 	networkOutageRecovered: {
 		/** Epoch ms the recovery probe first succeeded. */
 		endedAt: number;
+	};
+
+	/**
+	 * Emitted the instant the opt-in same-cluster soft cap
+	 * ({@link CrawlerOptions.dedupeCap}) confirms a URL shape as a trap (see
+	 * `DedupeCapTracker`). The orchestrator persists this via
+	 * `Archive.insertDedupeCapEvent` and must remember the returned row id so
+	 * `rejected_count` can be finalized once at `crawlEnd` (`Crawler` itself
+	 * never touches the archive).
+	 */
+	dedupeCap: {
+		shapeKey: string;
+		sampleUrl: string;
+		bodyHash: Buffer;
+		effectiveThreshold: number;
+		observedCount: number;
 	};
 }
 

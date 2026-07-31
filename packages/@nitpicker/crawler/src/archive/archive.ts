@@ -1,6 +1,7 @@
 import type { TemplateClusterReason } from './db-ops/analysis/types.js';
 import type {
 	Config,
+	InsertDedupeCapEventParams,
 	InsertNetworkOutageParams,
 	InventoryRunMeta,
 	PageSource,
@@ -123,6 +124,27 @@ export default class Archive extends ArchiveAccessor {
 	abort() {}
 
 	/**
+	 * Adds onto the `rejected_count` of a shape's `dedupe_cap_events` row,
+	 * looked up by `shape_key` rather than `id` — used for a shape that
+	 * capped in an earlier session (preloaded into `DedupeCapTracker`'s
+	 * sticky set) and so has no event id from the current session.
+	 *
+	 * Thin facade over {@link Database.accumulateDedupeCapRejectedCount}.
+	 * @param shapeKey - The capped shape whose rejection count to accumulate.
+	 * @param rejectedCount - Additional anchors rejected for this shape in the current session.
+	 */
+	async accumulateDedupeCapRejectedCount(
+		shapeKey: string,
+		rejectedCount: number,
+	): Promise<void> {
+		dbLog(
+			'Accumulate dedupe cap rejected count shapeKey=%s rejectedCount=%d',
+			shapeKey,
+			rejectedCount,
+		);
+		return await this.#db.accumulateDedupeCapRejectedCount(shapeKey, rejectedCount);
+	}
+	/**
 	 * Records a crawler-level error to both the human-readable `error.log` (full
 	 * stack, for debugging) and the structured `crawl_errors` table (queryable,
 	 * for the `error-kinds` analysis). The cause is not classified here — it is
@@ -167,6 +189,19 @@ export default class Archive extends ArchiveAccessor {
 		dbLog('Close network outage id=%d endedAt=%d', id, endedAt);
 		return await this.#db.closeNetworkOutage(id, endedAt);
 	}
+	/**
+	 * Finalizes a `dedupe_cap_events` row by stamping `rejected_count` — a
+	 * no-op if already finalized.
+	 *
+	 * Thin facade over {@link Database.finalizeDedupeCapEvent}.
+	 * @param id - The `dedupe_cap_events.id` to finalize.
+	 * @param rejectedCount - Number of anchors rejected for this shape after it capped.
+	 */
+	async finalizeDedupeCapEvent(id: number, rejectedCount: number): Promise<void> {
+		dbLog('Finalize dedupe cap event id=%d rejectedCount=%d', id, rejectedCount);
+		return await this.#db.finalizeDedupeCapEvent(id, rejectedCount);
+	}
+
 	/**
 	 * Retrieves the current crawling state, including lists of scraped and pending URLs.
 	 * @returns An object with `scraped` and `pending` URL arrays.
@@ -235,6 +270,18 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.getBaseUrl();
 	}
 	/**
+	 * Appends one row (`rejected_count = NULL`) to the `dedupe_cap_events`
+	 * journal.
+	 *
+	 * Thin facade over {@link Database.insertDedupeCapEvent}.
+	 * @param params - The newly-capped shape's fields to record.
+	 * @returns The autoincremented `id` of the inserted row.
+	 */
+	async insertDedupeCapEvent(params: InsertDedupeCapEventParams): Promise<number> {
+		dbLog('Insert dedupe cap event: shapeKey=%s', params.shapeKey);
+		return await this.#db.insertDedupeCapEvent(params);
+	}
+	/**
 	 * Pre-insert inventory non-HTML URLs as `source='inventory-seed'`
 	 * placeholders in the `resources` table — the non-HTML counterpart of
 	 * {@link Archive.insertInventorySeeds}. Rows are committed in chunked
@@ -291,6 +338,18 @@ export default class Archive extends ArchiveAccessor {
 		);
 		return await this.#db.insertNetworkOutage(params);
 	}
+
+	/**
+	 * Every distinct `dedupe_cap_events.shape_key` recorded in this archive.
+	 * Consumed by `CrawlerOrchestrator` to preload `DedupeCapTracker`'s
+	 * sticky set on `--resume` / `--append` / `--retry-failed` /
+	 * `--inventory`, mirroring {@link listDnsBurnedHostCandidates}'s
+	 * writer-only exposure.
+	 * @returns Distinct shape keys already confirmed capped.
+	 */
+	async listDedupeCapShapeKeys(): Promise<string[]> {
+		return this.#db.listDedupeCapShapeKeys();
+	}
 	/**
 	 * Hostnames whose `crawl_errors` history is consistently DNS failures and
 	 * for which no recent 2xx/3xx page or resource is recorded. Consumed by
@@ -307,6 +366,7 @@ export default class Archive extends ArchiveAccessor {
 	async listDnsBurnedHostCandidates(): Promise<string[]> {
 		return this.#db.listDnsBurnedHostCandidates();
 	}
+
 	/**
 	 * Lists every recorded outage as a resolved {@link OutageWindow}.
 	 *

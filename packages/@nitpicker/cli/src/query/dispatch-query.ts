@@ -34,6 +34,8 @@ import {
 	getTagInventory,
 	getViolations,
 	listConsoleLogs,
+	listDedupeCapEvents,
+	listDuplicateBodyClusters,
 	listInboundLinks,
 	listInventoryRuns,
 	listIsolatedClustersFastPath,
@@ -132,6 +134,21 @@ export async function dispatchQuery(
 		case 'duplicate-bodies': {
 			const { limit, offset } = options as { limit?: number; offset?: number };
 			return findDuplicateBodies(accessor, limit, offset);
+		}
+		case 'duplicate-clusters': {
+			return listDuplicateBodyClusters(
+				accessor,
+				options as {
+					minCount?: number;
+					limit?: number;
+					offset?: number;
+					samplePagesLimit?: number;
+				},
+			);
+		}
+		case 'dedupe-cap-events': {
+			const { limit, offset } = options as { limit?: number; offset?: number };
+			return listDedupeCapEvents(accessor, { limit, offset });
 		}
 		case 'mismatches': {
 			const { type, ...rest } = options as {

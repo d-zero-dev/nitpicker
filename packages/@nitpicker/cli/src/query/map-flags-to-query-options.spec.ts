@@ -359,6 +359,31 @@ describe('mapFlagsToQueryOptions', () => {
 		});
 	});
 
+	it('returns limit/offset only for dedupe-cap-events (no required filters)', () => {
+		expect(mapFlagsToQueryOptions('dedupe-cap-events', { limit: 20, offset: 0 })).toEqual(
+			{
+				limit: 20,
+				offset: 0,
+			},
+		);
+	});
+
+	it('maps duplicate-clusters flags, renaming --pagesLimit to samplePagesLimit', () => {
+		expect(
+			mapFlagsToQueryOptions('duplicate-clusters', {
+				minCount: 5,
+				limit: 50,
+				offset: 25,
+				pagesLimit: 3,
+			} as never),
+		).toEqual({
+			minCount: 5,
+			limit: 50,
+			offset: 25,
+			samplePagesLimit: 3,
+		});
+	});
+
 	it('maps console-logs flags correctly', () => {
 		expect(
 			mapFlagsToQueryOptions('console-logs', {

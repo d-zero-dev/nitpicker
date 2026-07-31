@@ -10,6 +10,10 @@
 		"bench-output/**"
 	],
 	"words": [
+		// Misra-Gries algorithm (DedupeCapTracker, issue #208)
+		"Misra",
+		"Gries",
+
 		// nitpicker
 		"readtext",
 		"unanalyzed",
@@ -32,6 +36,7 @@
 		"greppable",
 		"desync",
 		"lossily",
+		"unfinalized",
 
 		// HTML
 		"noarchive",
