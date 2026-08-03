@@ -93,6 +93,11 @@ describe('listConsoleLogs', () => {
 		expect(result.items[0]?.text).toBe('a-only warning');
 	});
 
+	it('filters by an array of types, OR-ing them together', async () => {
+		const result = await listConsoleLogs(archive, { type: ['error', 'warn'] });
+		expect(result.total).toBe(2);
+	});
+
 	it('returns every distinct entry with no filter', async () => {
 		const result = await listConsoleLogs(archive);
 		expect(result.total).toBe(2);

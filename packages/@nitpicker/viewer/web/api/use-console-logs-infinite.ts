@@ -17,8 +17,8 @@ interface ConsoleLogsPage {
 
 /** Filter state for the Console Logs view. */
 export interface ConsoleLogsFilter {
-	/** Filter to one console message type (or `'pageerror'`). */
-	type?: string;
+	/** Filter to one or more console message types (or `'pageerror'`), OR'd. */
+	type?: string | readonly string[];
 	/** Field to sort by. */
 	sortBy?: string;
 	/** Sort direction. */

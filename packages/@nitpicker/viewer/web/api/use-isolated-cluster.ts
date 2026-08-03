@@ -1,4 +1,4 @@
-import type { IsolatedClusterDetail } from '@nitpicker/query';
+import type { IsolatedClusterDetail, PageSource } from '@nitpicker/query';
 
 import { useQuery } from '@tanstack/react-query';
 
@@ -8,8 +8,10 @@ export interface UseIsolatedClusterOptions {
 	limit?: number;
 	offset?: number;
 	urlPattern?: string;
-	status?: number;
-	source?: string;
+	/** Filter by member status. Repeated for an OR match. */
+	status?: string | readonly string[];
+	/** Filter by member source. Repeated for an OR match. */
+	source?: PageSource | readonly PageSource[];
 	sortBy?: string;
 	sortOrder?: string;
 }

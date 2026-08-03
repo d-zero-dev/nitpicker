@@ -14,6 +14,7 @@ import {
 
 import { buildLegacyPagesCursors } from '../query-params/build-legacy-pages-cursors.js';
 import { parseLegacyPagesCursor } from '../query-params/parse-legacy-pages-cursor.js';
+import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
 import { toPageSortOrder } from '../query-params/to-page-sort-order.js';
 import { toPageSource } from '../query-params/to-page-source.js';
@@ -51,8 +52,8 @@ export function registerUnusedResourcesRoute(app: Hono, context: ArchiveContext)
 		);
 		if (!usesWideTableOnlyFilter && (await isViewerReadModelCurrent(accessor))) {
 			const options: ListViewerUnusedResourcesOptions = {
-				status: toNumber(q.status),
-				source: toPageSource(q.source),
+				status: toMultiValue(c.req.queries('status'), toNumber),
+				source: toMultiValue(c.req.queries('source'), toPageSource),
 				sortBy: toUnusedResourcesSortBy(q.sortBy),
 				sortOrder: toPageSortOrder(q.sortOrder),
 				limit: toNumber(q.limit),

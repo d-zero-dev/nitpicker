@@ -12,6 +12,7 @@ import { buildLegacyPagesCursors } from '../query-params/build-legacy-pages-curs
 import { parseLegacyPagesCursor } from '../query-params/parse-legacy-pages-cursor.js';
 import { toBoolean } from '../query-params/to-boolean.js';
 import { toContentTypeCategory } from '../query-params/to-content-type-category.js';
+import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
 import { toPageSortBy } from '../query-params/to-page-sort-by.js';
 import { toPageSortOrder } from '../query-params/to-page-sort-order.js';
@@ -65,15 +66,18 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 		if (!usesWideTableOnlyFilter && (await isViewerReadModelCurrent(accessor))) {
 			const options: ListViewerPagesOptions = {
 				isExternal: toBoolean(q.isExternal),
-				contentTypeCategory: toContentTypeCategory(q.contentTypeCategory),
-				status: toNumber(q.status),
+				contentTypeCategory: toMultiValue(
+					c.req.queries('contentTypeCategory'),
+					toContentTypeCategory,
+				),
+				status: toMultiValue(c.req.queries('status'), toNumber),
 				statusMin: toNumber(q.statusMin),
 				statusMax: toNumber(q.statusMax),
 				missingTitle: toBoolean(q.missingTitle),
 				missingDescription: toBoolean(q.missingDescription),
 				noindex: toBoolean(q.noindex),
 				source: toPageSource(q.source),
-				templateKey: q.templateKey,
+				templateKey: c.req.queries('templateKey'),
 				directory: q.directory || undefined,
 				sortBy: toPageSortBy(q.sortBy),
 				sortOrder: toPageSortOrder(q.sortOrder),

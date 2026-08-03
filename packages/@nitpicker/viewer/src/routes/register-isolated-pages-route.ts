@@ -1,10 +1,16 @@
 import type { ArchiveContext } from '../types.js';
 import type { Hono } from 'hono';
 
-import { listIsolatedPages, listIsolatedPagesFastPath } from '@nitpicker/query';
+import {
+	listIsolatedPages,
+	listIsolatedPagesFastPath,
+	resolveLegacyFilterValue,
+} from '@nitpicker/query';
 
 import { getCachedIsolatedClusters } from '../isolated-clusters-cache.js';
+import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
+import { toPageSource } from '../query-params/to-page-source.js';
 
 /**
  * Registers `GET /api/isolated-pages` — internal HTML pages with no
@@ -21,14 +27,10 @@ import { toNumber } from '../query-params/to-number.js';
 export function registerIsolatedPagesRoute(app: Hono, context: ArchiveContext): void {
 	app.get('/api/isolated-pages', async (c) => {
 		const accessor = context.manager.get(context.archiveId);
+		const status = toMultiValue(c.req.queries('status'), toNumber);
+		const source = toMultiValue(c.req.queries('source'), toPageSource);
 		const sharedOptions = {
 			urlPattern: c.req.query('urlPattern'),
-			status: toNumber(c.req.query('status')),
-			source: c.req.query('source') as
-				| 'crawled'
-				| 'inventory-seed'
-				| 'inventory-discovered'
-				| undefined,
 			sortBy: c.req.query('sortBy') as 'url' | 'title' | 'status' | 'source' | undefined,
 			sortOrder: c.req.query('sortOrder') as 'asc' | 'desc' | undefined,
 			limit: toNumber(c.req.query('limit')),
@@ -38,9 +40,11 @@ export function registerIsolatedPagesRoute(app: Hono, context: ArchiveContext): 
 			context.mode === 'stub'
 				? await listIsolatedPages(accessor, {
 						...sharedOptions,
+						status: resolveLegacyFilterValue(status),
+						source: resolveLegacyFilterValue(source),
 						precomputedComponents: await getCachedIsolatedClusters(context),
 					})
-				: await listIsolatedPagesFastPath(accessor, sharedOptions);
+				: await listIsolatedPagesFastPath(accessor, { ...sharedOptions, status, source });
 		return c.json(result);
 	});
 }

@@ -1,4 +1,4 @@
-import type { UnusedResourceEntry } from '@nitpicker/query';
+import type { PageSource, UnusedResourceEntry } from '@nitpicker/query';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { useMemo } from 'react';
@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import { usePagedQuery } from '../api/use-paged-query.js';
 import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
 import {
-	addRadioFilter,
+	addChecklistFilter,
 	addSort,
 	addTextFilter,
 	createTableControls,
@@ -17,6 +17,9 @@ import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
 import { useI18n } from '../i18n/use-i18n.js';
+
+/** Selectable provenance values for the `source` filter. */
+const SOURCE_VALUES: PageSource[] = ['crawled', 'inventory-seed'];
 
 /**
  * Unused resources view — lists internal sub-resources that no archived
@@ -30,13 +33,13 @@ export function UnusedResourcesView() {
 	const { t } = useI18n();
 	const { params, updateMany } = useUrlFilter();
 	const { pageSize, currentPage, setPage, setPageSize } = useListPagination();
-	const status = params.get('status');
-	const statusValue = status == null ? undefined : Number(status);
+	const status = params.getAll('status');
+	const source = params.getAll('source');
 	const filter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
-		status: Number.isFinite(statusValue) ? statusValue : undefined,
+		status: status.length > 0 ? status : undefined,
 		contentType: params.get('contentType') ?? undefined,
-		source: params.get('source') ?? undefined,
+		source: source.length > 0 ? source : undefined,
 		sortBy: params.get('sortBy') ?? undefined,
 		sortOrder: params.get('sortOrder') ?? undefined,
 	};
@@ -94,18 +97,17 @@ export function UnusedResourcesView() {
 			'urlPattern',
 			t('views.pages.filterUrlPattern'),
 		);
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			context,
 			'status',
 			'status',
 			t('views.unusedResources.status'),
-			buildStatusFilterOptions(
-				paged.data?.items,
-				(item) => item.status,
-				status,
-				t('common.all'),
-			),
+			buildStatusFilterOptions({
+				items: paged.data?.items,
+				getStatus: (item) => item.status,
+				currentStatuses: status,
+			}),
 		);
 		addTextFilter(
 			controls,
@@ -114,11 +116,14 @@ export function UnusedResourcesView() {
 			'contentType',
 			t('views.resources.filterContentType'),
 		);
-		addRadioFilter(controls, context, 'source', 'source', t('common.source'), [
-			{ value: '', label: t('common.all'), checked: false },
-			{ value: 'crawled', label: 'crawled', checked: false },
-			{ value: 'inventory-seed', label: 'inventory-seed', checked: false },
-		]);
+		addChecklistFilter(
+			controls,
+			context,
+			'source',
+			'source',
+			t('common.source'),
+			SOURCE_VALUES.map((value) => ({ value, label: value })),
+		);
 		return controls;
 	}, [paged.data?.items, params, status, t, updateMany]);
 

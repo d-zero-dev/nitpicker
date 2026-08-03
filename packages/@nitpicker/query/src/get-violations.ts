@@ -1,6 +1,7 @@
 import type { GetViolationsOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 import { resolveListLimit } from './resolve-list-limit.js';
 import { resolveListOffset } from './resolve-list-offset.js';
 import { resolveListSortBy } from './resolve-list-sort-by.js';
@@ -68,7 +69,7 @@ export async function getViolations(
 
 	const filtered = knex('analysis_violations as v');
 	if (options.validator) filtered.where('v.validator', options.validator);
-	if (options.severity) filtered.where('v.severity', options.severity);
+	applyEqualityOrInFilter(filtered, 'v.severity', options.severity);
 	if (options.rule) filtered.where('v.rule', options.rule);
 	if (options.urlPattern) {
 		filtered.where('v.page_url_sort_key', 'like', options.urlPattern);

@@ -1,6 +1,8 @@
-import type { IsolatedPageEntry, ListIsolatedPagesOptions } from './types.js';
+import type { IsolatedPageEntry, ListViewerIsolatedPagesOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type { Knex } from 'knex';
+
+import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 
 /**
  * Applies the `ORDER BY` clauses for singleton isolated-page rows. `status`
@@ -16,8 +18,8 @@ import type { Knex } from 'knex';
  */
 function applyIsolatedPageOrder(
 	query: Knex.QueryBuilder,
-	sortBy: ListIsolatedPagesOptions['sortBy'],
-	sortOrder: ListIsolatedPagesOptions['sortOrder'],
+	sortBy: ListViewerIsolatedPagesOptions['sortBy'],
+	sortOrder: ListViewerIsolatedPagesOptions['sortOrder'],
 ): Knex.QueryBuilder {
 	switch (sortBy ?? 'url') {
 		case 'title': {
@@ -51,6 +53,9 @@ function applyIsolatedPageOrder(
  * 'url')`, URL ordering here is plain SQLite `BINARY` on the precomputed
  * `url_sort_key`, matching the established `viewer_pages` fast-path
  * convention.
+ * Takes {@link ListViewerIsolatedPagesOptions}, not
+ * `ListIsolatedPagesOptions`: see that type's docs for why `status`/`source`
+ * need a separate, array-capable type here.
  * @param accessor - Archive accessor whose read model is current.
  * @param options - Filters and offset pagination.
  * @returns Singleton isolated pages with the same public shape as `listIsolatedPages`.
@@ -62,7 +67,7 @@ function applyIsolatedPageOrder(
  */
 export async function listViewerIsolatedPages(
 	accessor: ArchiveAccessor,
-	options: ListIsolatedPagesOptions = {},
+	options: ListViewerIsolatedPagesOptions = {},
 ): Promise<{ items: IsolatedPageEntry[]; total: number }> {
 	const knex = accessor.getKnex();
 	const limit = options.limit ?? 100;
@@ -80,12 +85,8 @@ export async function listViewerIsolatedPages(
 	if (options.urlPattern) {
 		baseQuery.where('pages.url', 'like', options.urlPattern);
 	}
-	if (options.status != null) {
-		baseQuery.where('pages.status', options.status);
-	}
-	if (options.source) {
-		baseQuery.where('pages.source', options.source);
-	}
+	applyEqualityOrInFilter(baseQuery, 'pages.status', options.status);
+	applyEqualityOrInFilter(baseQuery, 'pages.source', options.source);
 
 	const countResult = (await baseQuery
 		.clone()

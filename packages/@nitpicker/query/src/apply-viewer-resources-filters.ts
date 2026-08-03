@@ -1,6 +1,8 @@
 import type { ListViewerResourcesOptions } from './types.js';
 import type { Knex } from 'knex';
 
+import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
+
 /**
  * Applies every `ListViewerResourcesOptions` filter as `WHERE` predicates on
  * a `viewer_resources`-scoped query builder. Shared by the id-resolution
@@ -25,7 +27,5 @@ export function applyViewerResourcesFilters(
 	// `applyViewerPagesFilters` rationale (the sentinel-substituted column is
 	// what the indexes are built on, and is a strictly monotonic transform of
 	// `status` so equality semantics are unchanged).
-	if (options.status != null) {
-		qb.where('status_sort_key', options.status);
-	}
+	applyEqualityOrInFilter(qb, 'status_sort_key', options.status);
 }

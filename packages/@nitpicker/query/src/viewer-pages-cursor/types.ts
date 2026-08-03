@@ -61,9 +61,9 @@ export interface ViewerPagesCursorFilterKeyInput {
 	/** See `ListViewerPagesOptions.isExternal`. */
 	isExternal?: boolean;
 	/** See `ListViewerPagesOptions.contentTypeCategory`. */
-	contentTypeCategory?: string;
+	contentTypeCategory?: string | string[];
 	/** See `ListViewerPagesOptions.status`. */
-	status?: number;
+	status?: number | number[];
 	/** See `ListViewerPagesOptions.statusMin`. */
 	statusMin?: number;
 	/** See `ListViewerPagesOptions.statusMax`. */
@@ -77,7 +77,7 @@ export interface ViewerPagesCursorFilterKeyInput {
 	/** See `ListViewerPagesOptions.source`. */
 	source?: string;
 	/** See `ListViewerPagesOptions.templateKey`. */
-	templateKey?: string;
+	templateKey?: string | string[];
 	/** See `ListViewerPagesOptions.directory`. */
 	directory?: string;
 }

@@ -14,4 +14,16 @@ describe('buildMismatchesFilterKey', () => {
 			buildMismatchesFilterKey({ type: 'canonical' }),
 		);
 	});
+
+	it('produces the same key for a type array regardless of element order', () => {
+		expect(buildMismatchesFilterKey({ type: ['canonical', 'og:title'] })).toBe(
+			buildMismatchesFilterKey({ type: ['og:title', 'canonical'] }),
+		);
+	});
+
+	it('produces a different key for a scalar than for a single-element array', () => {
+		expect(buildMismatchesFilterKey({ type: 'canonical' })).not.toBe(
+			buildMismatchesFilterKey({ type: ['canonical'] }),
+		);
+	});
 });

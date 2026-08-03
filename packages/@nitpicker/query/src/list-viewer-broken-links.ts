@@ -10,6 +10,7 @@ import type {
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type { Knex } from 'knex';
 
+import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 import { buildAnchorFactsFilterKey } from './viewer-anchor-facts-cursor/build-anchor-facts-filter-key.js';
 import { decodeAnchorFactsCursor } from './viewer-anchor-facts-cursor/decode-anchor-facts-cursor.js';
 import { encodeAnchorFactsCursor } from './viewer-anchor-facts-cursor/encode-anchor-facts-cursor.js';
@@ -29,9 +30,7 @@ function applyBrokenLinksFilters(
 	options: ListViewerBrokenLinksOptions,
 ): void {
 	qb.where('is_broken', 1);
-	if (options.status != null) {
-		qb.where('status', options.status);
-	}
+	applyEqualityOrInFilter(qb, 'status', options.status);
 }
 
 /**

@@ -45,7 +45,7 @@ export interface ViewerResourcesCursorFilterKeyInput {
 	/** See `ListViewerResourcesOptions.isExternal`. */
 	isExternal?: boolean;
 	/** See `ListViewerResourcesOptions.status`. */
-	status?: number;
+	status?: number | number[];
 }
 
 /**

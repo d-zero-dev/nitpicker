@@ -211,6 +211,14 @@ describe('registerLinksRoute — /api/links?type=external (integration)', () => 
 				{ destUrl: 'https://ads.example.com', status: 200, referrerCount: 2 },
 			]);
 		});
+
+		it('OR-filters across a repeated status query param', async () => {
+			const res = await fixture.app.request(
+				'/api/links?type=external&status=200&status=404',
+			);
+			const body = (await res.json()) as { items: unknown[]; total: number };
+			expect(body.total).toBe(1);
+		});
 	});
 
 	describe('legacy fallback path (no read model built)', () => {
@@ -240,6 +248,14 @@ describe('registerLinksRoute — /api/links?type=external (integration)', () => 
 			expect(body.items).toEqual([
 				{ destUrl: 'https://ads.example.com', status: 200, referrerCount: 2 },
 			]);
+		});
+
+		it('narrows a multi-value status to its first element (legacy path has no OR equivalent)', async () => {
+			const res = await fixture.app.request(
+				'/api/links?type=external&status=200&status=404',
+			);
+			const body = (await res.json()) as { items: unknown[]; total: number };
+			expect(body.total).toBe(1);
 		});
 	});
 });
@@ -282,6 +298,14 @@ describe('registerLinksRoute — /api/links?type=broken (integration)', () => {
 			]);
 			expect(body.nextCursor).toBeNull();
 			expect(body.prevCursor).toBeNull();
+		});
+
+		it('OR-filters across a repeated status query param', async () => {
+			const res = await fixture.app.request(
+				'/api/links?type=broken&status=404&status=500',
+			);
+			const body = (await res.json()) as { items: unknown[]; total: number };
+			expect(body.total).toBe(1);
 		});
 
 		it('forces the legacy fallback when urlPattern is set, since no single index covers source-OR-dest matching', async () => {
@@ -465,6 +489,18 @@ describe('registerLinksRoute — /api/links?type=broken (integration)', () => {
 				status: 404,
 			});
 			expect(body.nextCursor).toBeNull();
+		});
+
+		it('narrows a multi-value status to its first element (legacy path has no OR equivalent)', async () => {
+			// The single broken link is status 404. Putting a non-matching
+			// status first proves the legacy path uses only that first
+			// element rather than OR-ing across the whole array — if it
+			// did, the real 404 later in the array would still match.
+			const res = await fixture.app.request(
+				'/api/links?type=broken&status=500&status=404',
+			);
+			const body = (await res.json()) as { items: unknown[]; total: number };
+			expect(body.total).toBe(0);
 		});
 	});
 });

@@ -1,15 +1,21 @@
-import type { IsolatedPageEntry, ListIsolatedPagesOptions } from './types.js';
+import type { IsolatedPageEntry, ListViewerIsolatedPagesOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { listIsolatedPages } from './list-isolated-pages.js';
 import { listViewerIsolatedPages } from './list-viewer-isolated-pages.js';
+import { resolveLegacyFilterValue } from './resolve-legacy-filter-value.js';
 import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
 
 /**
  * Dispatches `/api/isolated-pages` reads to the read model when current,
- * otherwise falls back to the legacy union-find path.
+ * otherwise falls back to the legacy union-find path. Takes {@link
+ * ListViewerIsolatedPagesOptions} (fast-path shape, `status`/`source`
+ * array-capable): the legacy `listIsolatedPages` still filters both by
+ * strict equality, so a multi-select value is narrowed to its first element
+ * via `resolveLegacyFilterValue` on that branch — multi-select degrades to
+ * single-select on a stale/absent read model rather than matching nothing.
  * @param accessor - The archive accessor to query.
- * @param options - Filter, sort, and pagination options (shared by both paths).
+ * @param options - Filter, sort, and pagination options.
  * @returns Matching isolated-page rows plus the total matching count.
  * @example
  * // Callers never need to know which path served the read:
@@ -17,9 +23,13 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
  */
 export async function listIsolatedPagesFastPath(
 	accessor: ArchiveAccessor,
-	options: ListIsolatedPagesOptions = {},
+	options: ListViewerIsolatedPagesOptions = {},
 ): Promise<{ items: IsolatedPageEntry[]; total: number }> {
 	return (await isViewerReadModelCurrent(accessor))
 		? listViewerIsolatedPages(accessor, options)
-		: listIsolatedPages(accessor, options);
+		: listIsolatedPages(accessor, {
+				...options,
+				status: resolveLegacyFilterValue(options.status),
+				source: resolveLegacyFilterValue(options.source),
+			});
 }

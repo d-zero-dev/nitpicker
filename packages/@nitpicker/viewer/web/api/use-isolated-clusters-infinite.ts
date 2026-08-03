@@ -10,8 +10,8 @@ import { PAGE_SIZE } from './page-size.js';
 export interface IsolatedClustersFilter {
 	/** URL pattern applied to representative URLs. */
 	urlPattern?: string;
-	/** Filter by representative member status. */
-	status?: number;
+	/** Filter by representative member status. Repeated for an OR match. */
+	status?: string | readonly string[];
 	/** Sort field. */
 	sortBy?: string;
 	/** Sort direction. */

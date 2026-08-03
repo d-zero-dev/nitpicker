@@ -172,6 +172,11 @@ describe('viewer isolated read model', () => {
 		]);
 	});
 
+	it('singletons を status の配列で OR フィルタする', async () => {
+		const result = await listViewerIsolatedPages(archive, { status: [200, 999] });
+		expect(result.total).toBe(1);
+	});
+
 	it('clusters を viewer_isolated_components から返す', async () => {
 		const result = await listViewerIsolatedClusters(archive);
 		expect(result.total).toBe(1);
@@ -201,5 +206,16 @@ describe('viewer isolated read model', () => {
 				source: 'inventory-discovered',
 			},
 		]);
+	});
+
+	it('cluster detail を status の配列で OR フィルタする', async () => {
+		const result = await getViewerIsolatedCluster(
+			archive,
+			'https://example.com/cluster-a',
+			{
+				status: [200, 404],
+			},
+		);
+		expect(result?.size).toBe(2);
 	});
 });

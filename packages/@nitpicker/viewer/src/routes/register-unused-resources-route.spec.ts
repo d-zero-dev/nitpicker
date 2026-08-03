@@ -229,5 +229,26 @@ describe('registerUnusedResourcesRoute — /api/unused-resources (integration)',
 			expect(body.items[0]!.url).toBe('https://example.com/orphan.pdf');
 			expect(body.nextCursor).toBeNull();
 		});
+
+		it('narrows a multi-value status to its first element (legacy path has no OR equivalent)', async () => {
+			// The only unused resource is status 200, and is a 'crawled'
+			// source. Putting a non-matching status first proves the legacy
+			// path uses only that first element rather than OR-ing across
+			// the whole array — if it did, the real 200 later in the array
+			// would still make this match.
+			const res = await fixture.app.request(
+				'/api/unused-resources?status=999&status=200',
+			);
+			const body = (await res.json()) as { items: unknown[]; total: number };
+			expect(body.total).toBe(0);
+		});
+
+		it('narrows a multi-value source to its first element (legacy path has no OR equivalent)', async () => {
+			const res = await fixture.app.request(
+				'/api/unused-resources?source=inventory-seed&source=crawled',
+			);
+			const body = (await res.json()) as { items: unknown[]; total: number };
+			expect(body.total).toBe(0);
+		});
 	});
 });

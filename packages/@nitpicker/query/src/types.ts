@@ -77,6 +77,24 @@ export interface ListIsolatedPagesOptions {
 }
 
 /**
+ * Pagination options for {@link import('./list-viewer-isolated-pages.js').listViewerIsolatedPages}
+ * — the read-model fast-path counterpart of {@link ListIsolatedPagesOptions}.
+ * A separate interface (rather than widening `ListIsolatedPagesOptions.status`/
+ * `.source` themselves) because the legacy `listIsolatedPages` this type would
+ * otherwise still be shared with filters via strict equality (`item.status
+ * !== options.status`), which an array would silently break (never match).
+ */
+export interface ListViewerIsolatedPagesOptions extends Omit<
+	ListIsolatedPagesOptions,
+	'status' | 'source'
+> {
+	/** Filter by HTTP status, or any of several (OR). */
+	status?: number | number[];
+	/** Filter by source, or any of several (OR). */
+	source?: PageSource | PageSource[];
+}
+
+/**
  * One row of {@link import('./list-isolated-clusters.js').listIsolatedClusters} output — a connected component of
  * the inventory-* subgraph with size ≥ 2 (= **孤立集合**).
  *
@@ -162,6 +180,21 @@ export interface ListIsolatedClustersOptions {
 }
 
 /**
+ * Pagination options for {@link import('./list-viewer-isolated-clusters.js').listViewerIsolatedClusters}
+ * — the read-model fast-path counterpart of {@link ListIsolatedClustersOptions}.
+ * A separate interface for the same reason as
+ * {@link ListViewerIsolatedPagesOptions}: the legacy `listIsolatedClusters`
+ * this type would otherwise still be shared with filters via strict equality.
+ */
+export interface ListViewerIsolatedClustersOptions extends Omit<
+	ListIsolatedClustersOptions,
+	'status'
+> {
+	/** Filter by representative member status, or any of several (OR). */
+	status?: number | number[];
+}
+
+/**
  * Options for {@link import('./get-isolated-cluster.js').getIsolatedCluster}.
  */
 export interface GetIsolatedClusterOptions {
@@ -185,6 +218,23 @@ export interface GetIsolatedClusterOptions {
 	 * shared-cache rationale.
 	 */
 	precomputedComponents?: IsolatedComponent[];
+}
+
+/**
+ * Options for {@link import('./get-viewer-isolated-cluster.js').getViewerIsolatedCluster}
+ * — the read-model fast-path counterpart of {@link GetIsolatedClusterOptions}.
+ * A separate interface for the same reason as
+ * {@link ListViewerIsolatedPagesOptions}: the legacy `getIsolatedCluster` this
+ * type would otherwise still be shared with filters via strict equality.
+ */
+export interface GetViewerIsolatedClusterOptions extends Omit<
+	GetIsolatedClusterOptions,
+	'status' | 'source'
+> {
+	/** Filter by HTTP status, or any of several (OR). */
+	status?: number | number[];
+	/** Filter by source, or any of several (OR). */
+	source?: PageSource | PageSource[];
 }
 
 /**
@@ -251,10 +301,10 @@ export interface PaginatedUnusedResourceList {
  * those fall back to `listUnusedResources` instead.
  */
 export interface ListViewerUnusedResourcesOptions {
-	/** Filter by exact HTTP status code. */
-	status?: number;
-	/** Filter by provenance — see {@link PageSource}. */
-	source?: PageSource;
+	/** Filter by exact HTTP status code, or any of several (OR). */
+	status?: number | number[];
+	/** Filter by provenance, or any of several (OR) — see {@link PageSource}. */
+	source?: PageSource | PageSource[];
 	/** Field to sort results by. Defaults to `'url'`. */
 	sortBy?: 'url' | 'status' | 'source';
 	/** Sort direction. Defaults to `'asc'`. */
@@ -1000,13 +1050,14 @@ export interface ListViewerPagesOptions {
 	/** Filter by external (true) or internal (false) pages. */
 	isExternal?: boolean;
 	/**
-	 * Restrict results to a single {@link ContentTypeCategory}. Omit to keep
-	 * the default (`'html'` + `'unknown'` — the pre-classified equivalent of
-	 * `listPages`'s HTML-or-null base restriction).
+	 * Restrict results to one or more {@link ContentTypeCategory} values (OR
+	 * across an array). Omit to keep the default (`'html'` + `'unknown'` —
+	 * the pre-classified equivalent of `listPages`'s HTML-or-null base
+	 * restriction).
 	 */
-	contentTypeCategory?: ContentTypeCategory;
-	/** Filter by exact HTTP status code. */
-	status?: number;
+	contentTypeCategory?: ContentTypeCategory | ContentTypeCategory[];
+	/** Filter by exact HTTP status code, or any of several (OR). */
+	status?: number | number[];
 	/** Filter by minimum HTTP status code (inclusive). */
 	statusMin?: number;
 	/** Filter by maximum HTTP status code (inclusive). */
@@ -1020,12 +1071,12 @@ export interface ListViewerPagesOptions {
 	/** Filter by provenance — see {@link PageSource}. */
 	source?: import('@nitpicker/crawler').PageSource;
 	/**
-	 * Filter by exact `--templates` DOM-structure classification group key.
-	 * Unlike `urlPattern`, this IS supported by the fast path: `page_templates`
-	 * is joined by `page_id` (its PK), never the wide `pages` table — see
-	 * `applyViewerPagesFilters`.
+	 * Filter by exact `--templates` DOM-structure classification group key,
+	 * or any of several (OR). Unlike `urlPattern`, this IS supported by the
+	 * fast path: `page_templates` is joined by `page_id` (its PK), never the
+	 * wide `pages` table — see `applyViewerPagesFilters`.
 	 */
-	templateKey?: string;
+	templateKey?: string | string[];
 	/**
 	 * Directory path prefix to filter by (e.g. `/blog/2024/`) — matches this
 	 * directory and its entire subtree, not just direct children. A trailing
@@ -1751,8 +1802,8 @@ export interface LinkAnalysisResult {
  * only ever stores the canonical (redirect-resolved) destination.
  */
 export interface ListViewerBrokenLinksOptions {
-	/** Filter by destination HTTP status. Broken links are always `404`, so this is effectively a no-op unless set to a non-`404` value (which then matches nothing). */
-	status?: number;
+	/** Filter by destination HTTP status, or any of several (OR). Broken links are always `404`, so this is effectively a no-op unless set to a non-`404` value (which then matches nothing). */
+	status?: number | number[];
 	/** Field to sort results by. Defaults to `'sourceUrl'`. */
 	sortBy?: 'sourceUrl' | 'destUrl' | 'status';
 	/** Sort direction. Defaults to `'asc'`. */
@@ -1824,6 +1875,22 @@ export interface ListExternalLinksOptions {
 	limit?: number;
 	/** Number of results to skip. */
 	offset?: number;
+}
+
+/**
+ * Filter/sort/pagination options for {@link import('./list-viewer-external-links.js').listViewerExternalLinks}
+ * — the read-model fast-path counterpart of {@link ListExternalLinksOptions}.
+ * A separate interface (rather than widening `ListExternalLinksOptions.status`
+ * itself) because the legacy `listExternalLinks` this type would otherwise
+ * still be shared with filters via a `whereRaw(... = ?, [options.status])`
+ * single-value bind, which an array would silently break.
+ */
+export interface ListViewerExternalLinksOptions extends Omit<
+	ListExternalLinksOptions,
+	'status'
+> {
+	/** Filter by destination HTTP status, or any of several (OR). */
+	status?: number | number[];
 }
 
 /**
@@ -1944,8 +2011,8 @@ export interface PaginatedResourceList {
 export interface ListViewerResourcesOptions {
 	/** Filter by external (true) or internal (false) resources. */
 	isExternal?: boolean;
-	/** Filter by exact HTTP status code. */
-	status?: number;
+	/** Filter by exact HTTP status code, or any of several (OR). */
+	status?: number | number[];
 	/** Field to sort results by. Defaults to `'url'`. */
 	sortBy?: 'url' | 'status';
 	/** Sort direction. Defaults to `'asc'`. */
@@ -2184,8 +2251,8 @@ export interface CursorPaginatedImageList extends PaginatedImageList {
 export interface GetViolationsOptions {
 	/** Filter by validator name (e.g., "axe", "markuplint"). */
 	validator?: string;
-	/** Filter by severity level. */
-	severity?: string;
+	/** Filter by severity level, or any of several (OR). */
+	severity?: string | string[];
 	/** Filter by rule ID. */
 	rule?: string;
 	/** URL pattern to filter page URLs. */
@@ -2277,6 +2344,9 @@ export interface ListDuplicateBodyClustersOptions {
 	samplePagesLimit?: number;
 }
 
+/** Which metadata comparison a mismatch entry / filter refers to. */
+export type MismatchType = 'canonical' | 'og:title' | 'og:description';
+
 /**
  * A metadata mismatch found on a page.
  */
@@ -2284,7 +2354,7 @@ export interface MismatchEntry {
 	/** The page URL. */
 	url: string;
 	/** The type of mismatch. */
-	type: 'canonical' | 'og:title' | 'og:description';
+	type: MismatchType;
 	/** The actual page value. */
 	actual: string | null;
 	/** The expected or compared value. */
@@ -2454,8 +2524,11 @@ export interface CursorPaginatedDuplicateGroupPageList {
  * `CheckHeadersOptions`.
  */
 export interface ListViewerMismatchesOptions {
-	/** Which mismatch comparison to list. */
-	type: 'canonical' | 'og:title' | 'og:description';
+	/**
+	 * Which mismatch comparison(s) to list, OR'd together. `undefined` or an
+	 * empty array means "every type".
+	 */
+	type?: MismatchType | MismatchType[];
 	/** Sort direction on `url_sort_key`. Defaults to `'asc'`. */
 	sortOrder?: SortOrder;
 	/** Maximum number of results to return. */
@@ -2798,6 +2871,25 @@ export interface GetErrorKindsOptions {
 	limit?: number;
 	/** Rows to skip from the start. Defaults to 0. */
 	offset?: number;
+}
+
+/**
+ * Options for {@link import('./get-viewer-error-kinds.js').getViewerErrorKinds}
+ * — the read-model fast-path counterpart of {@link GetErrorKindsOptions}. A
+ * separate interface (rather than widening `GetErrorKindsOptions.kind`/
+ * `.attribution` themselves) because that type is also consumed by the
+ * legacy `getErrorKinds` (still equality-filtered) and by the CLI's
+ * `dispatch-query.ts`/MCP server — widening it there would let an array
+ * silently reach code that only compares a scalar.
+ */
+export interface GetViewerErrorKindsOptions extends Omit<
+	GetErrorKindsOptions,
+	'kind' | 'attribution'
+> {
+	/** Exact kind(s) to filter to, OR'd together — the list's kind column filter, or half of the detail pane's lookup key. */
+	kind?: ErrorKind | ErrorKind[];
+	/** Exact {@link FailureAttribution} value(s) to filter to, OR'd together — the list's attribution column filter. */
+	attribution?: FailureAttribution | FailureAttribution[];
 }
 
 /**
@@ -3185,8 +3277,8 @@ export interface ConsoleLogSummaryEntry {
  * Options for {@link import('./list-console-logs.js').listConsoleLogs}.
  */
 export interface ListConsoleLogsOptions {
-	/** Filter to one console message type (or `'pageerror'`). */
-	type?: string;
+	/** Filter to one or more console message types (or `'pageerror'`), OR'd together. */
+	type?: string | string[];
 	/** Field to sort results by. Defaults to `'totalCount'`. */
 	sortBy?: 'totalCount' | 'pageCount' | 'text' | 'type';
 	/** Sort direction. Defaults to `'desc'`. */

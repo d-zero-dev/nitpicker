@@ -17,7 +17,7 @@ export function registerConsoleLogsRoute(app: Hono, context: ArchiveContext): vo
 		const q = c.req.query();
 		const accessor = context.manager.get(context.archiveId);
 		const options: ListConsoleLogsOptions = {
-			type: q.type,
+			type: c.req.queries('type'),
 			sortBy: q.sortBy as ListConsoleLogsOptions['sortBy'],
 			sortOrder: q.sortOrder as ListConsoleLogsOptions['sortOrder'],
 			limit: toNumber(q.limit),

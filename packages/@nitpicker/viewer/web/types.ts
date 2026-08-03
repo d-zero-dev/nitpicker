@@ -1,7 +1,24 @@
 import type { ListPagesOptions } from '@nitpicker/query';
 
-/** Page-list filter state (everything except pagination, which the hook owns). */
-export type PagesFilter = Omit<ListPagesOptions, 'limit' | 'offset'>;
+/**
+ * Page-list filter state (everything except pagination, which the hook
+ * owns). `status`/`contentTypeCategory`/`templateKey` accept a repeated
+ * array of raw query-string values (multi-select checkbox, OR'd
+ * server-side) in addition to `ListPagesOptions`'s single value — the
+ * server's `toMultiValue`/`toNumber`/`toContentTypeCategory` parse each
+ * array element, so the client sends strings rather than pre-converting
+ * (matching every other list view's filter type, e.g. `ResourcesFilter`).
+ * `lang` stays a single value since it has no fast-path equivalent (see
+ * `ListViewerPagesOptions` in `@nitpicker/query`).
+ */
+export type PagesFilter = Omit<
+	ListPagesOptions,
+	'limit' | 'offset' | 'status' | 'contentTypeCategory' | 'templateKey'
+> & {
+	status?: string | readonly string[];
+	contentTypeCategory?: string | readonly string[];
+	templateKey?: string | readonly string[];
+};
 
 /**
  * Analysis violation entry, mirroring the API response shape.

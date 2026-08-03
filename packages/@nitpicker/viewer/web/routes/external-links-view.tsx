@@ -8,7 +8,7 @@ import { useExternalLinksInfinite } from '../api/use-external-links-infinite.js'
 import { usePagedQuery } from '../api/use-paged-query.js';
 import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
 import {
-	addRadioFilter,
+	addChecklistFilter,
 	addSort,
 	addTextFilter,
 	createTableControls,
@@ -32,11 +32,10 @@ export function ExternalLinksView() {
 	const navigate = useNavigate();
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
-	const status = params.get('status');
-	const statusValue = status == null ? undefined : Number(status);
+	const status = params.getAll('status');
 	const filter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
-		status: Number.isFinite(statusValue) ? statusValue : undefined,
+		status: status.length > 0 ? status : undefined,
 		sortBy: params.get('sortBy') ?? undefined,
 		sortOrder: params.get('sortOrder') ?? undefined,
 	};
@@ -102,18 +101,17 @@ export function ExternalLinksView() {
 			'urlPattern',
 			t('views.pages.filterUrlPattern'),
 		);
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			context,
 			'status',
 			'status',
 			t('views.externalLinks.colStatus'),
-			buildStatusFilterOptions(
-				paged.data?.items,
-				(item) => item.status,
-				status,
-				t('common.all'),
-			),
+			buildStatusFilterOptions({
+				items: paged.data?.items,
+				getStatus: (item) => item.status,
+				currentStatuses: status,
+			}),
 		);
 		return controls;
 	}, [paged.data?.items, params, status, t, updateMany]);

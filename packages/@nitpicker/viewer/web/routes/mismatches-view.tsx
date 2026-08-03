@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 
 import { usePagedQuery } from '../api/use-paged-query.js';
 import {
-	addRadioFilter,
+	addChecklistFilter,
 	addSort,
 	addTextFilter,
 	createTableControls,
@@ -30,7 +30,7 @@ const MISMATCH_TYPES: MismatchType[] = ['canonical', 'og:title', 'og:description
 export function MismatchesView() {
 	const { params, updateMany } = useUrlFilter();
 	const { t } = useI18n();
-	const type = (params.get('type') as MismatchType | null) ?? 'canonical';
+	const type = params.getAll('type') as MismatchType[];
 	const { pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const offset = (currentPage - 1) * pageSize;
 	const filter = {
@@ -44,10 +44,7 @@ export function MismatchesView() {
 		{ ...filter, limit: pageSize, offset },
 		['mismatches-paged', filter, pageSize, currentPage],
 	);
-	const rows = useMemo(
-		() => (paged.data?.items ?? []).map((row) => ({ ...row, type })),
-		[paged.data?.items, type],
-	);
+	const rows = paged.data?.items ?? [];
 	const columns = useMemo<ColumnDef<MismatchEntry>[]>(
 		() => [
 			{
@@ -93,14 +90,13 @@ export function MismatchesView() {
 		for (const key of ['url', 'actual', 'expected']) {
 			addSort(controls, context, key, key);
 		}
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			context,
 			'type',
 			'type',
 			t('common.type'),
-			MISMATCH_TYPES.map((value) => ({ value, label: value, checked: false })),
-			'canonical',
+			MISMATCH_TYPES.map((value) => ({ value, label: value })),
 		);
 		addTextFilter(
 			controls,

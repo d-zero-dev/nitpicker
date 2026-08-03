@@ -46,9 +46,9 @@ export type ViewerUnusedResourcesKeysetRow = Record<
  */
 export interface ViewerUnusedResourcesCursorFilterKeyInput {
 	/** See `ListViewerUnusedResourcesOptions.status`. */
-	status?: number;
+	status?: number | number[];
 	/** See `ListViewerUnusedResourcesOptions.source`. */
-	source?: PageSource;
+	source?: PageSource | PageSource[];
 }
 
 /**

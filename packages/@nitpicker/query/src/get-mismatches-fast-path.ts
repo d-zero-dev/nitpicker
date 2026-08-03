@@ -1,12 +1,33 @@
 import type {
 	CursorPaginatedMismatchList,
 	FindMismatchesFastPathOptions,
+	MismatchType,
 } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { findMismatches } from './find-mismatches.js';
 import { listViewerMismatches } from './list-viewer-mismatches.js';
 import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
+
+/**
+ * Narrows a possibly-array/possibly-omitted `type` selection down to the
+ * single value `findMismatches` (legacy) accepts as its required positional
+ * argument. The legacy path has no `WHERE type IN (...)` equivalent to fall
+ * back to, so a multi-select — or "every type" (`undefined`/`[]`) — request
+ * that lands here (read model absent/stale, or `usesWideTableOnlyFilter`)
+ * degrades to the same single default type the UI's radio-button predecessor
+ * always sent, rather than throwing or guessing which of several types to
+ * scan for.
+ * @param type - The caller's `type` selection.
+ * @returns The single type to pass to `findMismatches`.
+ */
+function resolveLegacyMismatchType(
+	type: MismatchType | MismatchType[] | undefined,
+): MismatchType {
+	if (type == null) return 'canonical';
+	const values = Array.isArray(type) ? type : [type];
+	return values.length === 1 ? values[0]! : 'canonical';
+}
 
 /**
  * Dispatches to `listViewerMismatches` (the `viewer_mismatches` read-model
@@ -32,7 +53,10 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
  * has no keyset cursor to offer, so `nextCursor`/`prevCursor` are always
  * `null` there.
  * @param accessor - The archive accessor to query.
- * @param type - Which mismatch comparison to list.
+ * @param type - Which mismatch comparison(s) to list — a single value, an
+ *   array (OR'd together, fast path only), or `undefined` for every type.
+ *   A multi-value/`undefined` selection that falls back to the legacy path
+ *   is narrowed to a single type first — see {@link resolveLegacyMismatchType}.
  * @param options - Filter, sort, and pagination options — the full
  *   `findMismatches` surface, including any explicit `sortBy`/`urlPattern`
  *   that forces the legacy fallback.
@@ -43,7 +67,7 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
  */
 export async function getMismatchesFastPath(
 	accessor: ArchiveAccessor,
-	type: 'canonical' | 'og:title' | 'og:description',
+	type: MismatchType | MismatchType[] | undefined,
 	options: FindMismatchesFastPathOptions = {},
 ): Promise<CursorPaginatedMismatchList> {
 	const usesWideTableOnlyFilter = options.sortBy != null || options.urlPattern != null;
@@ -59,7 +83,7 @@ export async function getMismatchesFastPath(
 		});
 	}
 
-	const legacyResult = await findMismatches(accessor, type, {
+	const legacyResult = await findMismatches(accessor, resolveLegacyMismatchType(type), {
 		limit: options.limit,
 		offset: options.offset,
 		urlPattern: options.urlPattern,

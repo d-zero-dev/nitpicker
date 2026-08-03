@@ -7,6 +7,7 @@ import { usePagedQuery } from '../api/use-paged-query.js';
 import { useResourcesInfinite } from '../api/use-resources-infinite.js';
 import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
 import {
+	addChecklistFilter,
 	addRadioFilter,
 	addSort,
 	addTextFilter,
@@ -29,11 +30,10 @@ export function ResourcesView() {
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const scope = params.get('isExternal') ?? 'false';
-	const status = params.get('status');
-	const statusValue = status == null ? undefined : Number(status);
+	const status = params.getAll('status');
 	const filter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
-		status: Number.isFinite(statusValue) ? statusValue : undefined,
+		status: status.length > 0 ? status : undefined,
 		contentType: params.get('contentType') ?? undefined,
 		isExternal: scope === 'all' ? undefined : scope === 'true',
 		sortBy: params.get('sortBy') ?? undefined,
@@ -123,18 +123,17 @@ export function ResourcesView() {
 			'urlPattern',
 			t('views.pages.filterUrlPattern'),
 		);
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			context,
 			'status',
 			'status',
 			t('views.resources.colStatus'),
-			buildStatusFilterOptions(
-				paged.data?.items,
-				(item) => item.status,
-				status,
-				t('common.all'),
-			),
+			buildStatusFilterOptions({
+				items: paged.data?.items,
+				getStatus: (item) => item.status,
+				currentStatuses: status,
+			}),
 		);
 		addTextFilter(
 			controls,

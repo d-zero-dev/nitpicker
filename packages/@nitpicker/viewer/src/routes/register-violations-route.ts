@@ -17,7 +17,7 @@ export function registerViolationsRoute(app: Hono, context: ArchiveContext): voi
 		const accessor = context.manager.get(context.archiveId);
 		const options: GetViolationsOptions = {
 			validator: q.validator,
-			severity: q.severity,
+			severity: c.req.queries('severity'),
 			rule: q.rule,
 			urlPattern: q.urlPattern,
 			sortBy: q.sortBy as GetViolationsOptions['sortBy'],

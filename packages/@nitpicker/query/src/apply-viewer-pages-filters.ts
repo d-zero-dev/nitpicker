@@ -1,6 +1,9 @@
 import type { ListViewerPagesOptions } from './types.js';
 import type { Knex } from 'knex';
 
+import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
+import { hasFilterValue } from './has-filter-value.js';
+
 /**
  * Applies every `ListViewerPagesOptions` filter as `WHERE` predicates on a
  * `viewer_pages`-scoped query builder. Shared by the id-resolution query and
@@ -22,8 +25,8 @@ export function applyViewerPagesFilters(
 	if (options.isExternal != null) {
 		qb.where('is_external', options.isExternal ? 1 : 0);
 	}
-	if (options.contentTypeCategory) {
-		qb.where('content_category', options.contentTypeCategory);
+	if (hasFilterValue(options.contentTypeCategory)) {
+		applyEqualityOrInFilter(qb, 'content_category', options.contentTypeCategory);
 	} else {
 		// Pre-classified equivalent of `listPages`'s default HTML-or-null base
 		// restriction: `classifyContentType(null) === 'unknown'` and
@@ -42,9 +45,7 @@ export function applyViewerPagesFilters(
 	// docs in build-viewer-read-model.ts), so equality/range semantics are
 	// unchanged: it still excludes null-status rows exactly like filtering on
 	// the raw nullable `status` column did.
-	if (options.status != null) {
-		qb.where('status_sort_key', options.status);
-	}
+	applyEqualityOrInFilter(qb, 'status_sort_key', options.status);
 	if (options.statusMin != null) {
 		qb.where('status_sort_key', '>=', options.statusMin);
 	}
@@ -63,7 +64,7 @@ export function applyViewerPagesFilters(
 	if (options.source) {
 		qb.where('source', options.source);
 	}
-	if (options.templateKey) {
+	if (hasFilterValue(options.templateKey)) {
 		// `page_templates` is a narrow, `page_id`-PK'd auxiliary table
 		// populated by `--templates` (see `hasPageTemplatesTable`'s doc) —
 		// like `page_tags`/`page_jsonld`, it is not part of the read-model
@@ -74,10 +75,8 @@ export function applyViewerPagesFilters(
 		// every `viewer_*` table, so a joined table with its own `page_id`
 		// column would make that unqualified column ambiguous.
 		qb.whereIn('page_id', (builder) => {
-			builder
-				.select('page_id')
-				.from('page_templates')
-				.where('template_key', options.templateKey);
+			builder.select('page_id').from('page_templates');
+			applyEqualityOrInFilter(builder, 'template_key', options.templateKey);
 		});
 	}
 	if (options.directory) {

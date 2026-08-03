@@ -133,8 +133,10 @@ export function addRadioFilter(
 }
 
 /**
- * Stores multi-select filters as repeated query parameters so the server can
- * evaluate them as an AND-style filter without inventing a custom delimiter.
+ * Stores multi-select filters as repeated query parameters (`?key=a&key=b`)
+ * so the server can evaluate them as an OR (any-of) filter without inventing
+ * a custom delimiter — the same shape `URLSearchParams.getAll` reads back and
+ * Hono's `c.req.queries()` parses on the server.
  * @param controls
  * @param context
  * @param columnId
@@ -142,8 +144,9 @@ export function addRadioFilter(
  * @param label
  * @param options
  * @example
- * addChecklistFilter(controls, context, 'ruleIds', 'ruleId', 'Rules', [
- *   { value: 'heading-order', label: 'heading-order' },
+ * addChecklistFilter(controls, context, 'status', 'status', 'Status', [
+ *   { value: '200', label: '200' },
+ *   { value: '404', label: '404' },
  * ]);
  */
 export function addChecklistFilter(
@@ -152,7 +155,7 @@ export function addChecklistFilter(
 	columnId: string,
 	key: string,
 	label: string,
-	options: TableFilterOption[],
+	options: readonly Pick<TableFilterOption, 'value' | 'label'>[],
 ) {
 	controls.filter ??= {};
 	const current = new Set(context.params.getAll(key));

@@ -32,4 +32,24 @@ describe('buildFilterKey', () => {
 	it('produces a different key for a different value', () => {
 		expect(buildFilterKey({ status: 200 })).not.toBe(buildFilterKey({ status: 404 }));
 	});
+
+	it('produces the same key for an array regardless of element order', () => {
+		expect(buildFilterKey({ status: [200, 404] })).toBe(
+			buildFilterKey({ status: [404, 200] }),
+		);
+	});
+
+	it('produces the same key whether or not an array has duplicate elements', () => {
+		expect(buildFilterKey({ status: [200, 404] })).toBe(
+			buildFilterKey({ status: [200, 200, 404] }),
+		);
+	});
+
+	it('produces a different key for a scalar than for a single-element array', () => {
+		expect(buildFilterKey({ status: 200 })).not.toBe(buildFilterKey({ status: [200] }));
+	});
+
+	it('normalizes an empty array to the same key as undefined — both mean "no filter"', () => {
+		expect(buildFilterKey({ status: [] })).toBe(buildFilterKey({ status: undefined }));
+	});
 });

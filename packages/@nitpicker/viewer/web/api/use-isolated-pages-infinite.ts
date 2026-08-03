@@ -1,5 +1,5 @@
 import type { InfiniteQueryOptions } from './infinite-query-options.js';
-import type { IsolatedPageEntry } from '@nitpicker/query';
+import type { IsolatedPageEntry, PageSource } from '@nitpicker/query';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
 
@@ -10,10 +10,10 @@ import { PAGE_SIZE } from './page-size.js';
 export interface IsolatedPagesFilter {
 	/** URL pattern (SQL LIKE-ish substring). */
 	urlPattern?: string;
-	/** Filter by HTTP status. */
-	status?: number;
-	/** Filter by source label. */
-	source?: string;
+	/** Filter by HTTP status. Repeated for an OR match. */
+	status?: string | readonly string[];
+	/** Filter by source label. Repeated for an OR match. */
+	source?: PageSource | readonly PageSource[];
 	/** Sort field. */
 	sortBy?: string;
 	/** Sort direction. */

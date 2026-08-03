@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router';
 import { usePagedQuery } from '../api/use-paged-query.js';
 import { usePagesInfinite } from '../api/use-pages-infinite.js';
 import {
+	addChecklistFilter,
 	addRadioFilter,
 	addSort,
 	addTextFilter,
@@ -70,18 +71,17 @@ export function PagesView() {
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 
 	const scope = params.get('isExternal') ?? 'false';
-	const status = params.get('status');
-	const statusValue = status == null ? undefined : Number(status);
-	const contentTypeParam = params.get('contentTypeCategory');
-	const contentTypeCategory: ContentTypeCategory | undefined =
-		contentTypeParam &&
-		(CONTENT_TYPE_CATEGORIES as readonly string[]).includes(contentTypeParam)
-			? (contentTypeParam as ContentTypeCategory)
-			: undefined;
+	const status = params.getAll('status');
+	const contentTypeCategory = params
+		.getAll('contentTypeCategory')
+		.filter((value): value is ContentTypeCategory =>
+			(CONTENT_TYPE_CATEGORIES as readonly string[]).includes(value),
+		);
+	const templateKey = params.getAll('templateKey');
 	const filter: PagesFilter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
 		directory: params.get('directory') ?? undefined,
-		status: Number.isFinite(statusValue) ? statusValue : undefined,
+		status,
 		isExternal: scope === 'all' ? undefined : scope === 'true',
 		lang: params.get('lang') ?? undefined,
 		contentTypeCategory,
@@ -90,7 +90,7 @@ export function PagesView() {
 		hasXFrameOptions: parseHeaderFilterParam(params.get('hasXFrameOptions')),
 		hasXContentTypeOptions: parseHeaderFilterParam(params.get('hasXContentTypeOptions')),
 		hasHSTS: parseHeaderFilterParam(params.get('hasHSTS')),
-		templateKey: params.get('templateKey') ?? undefined,
+		templateKey,
 		sortBy: (params.get('sortBy') as PagesFilter['sortBy']) || 'url',
 		sortOrder: (params.get('sortOrder') as PagesFilter['sortOrder']) || 'asc',
 	};
@@ -344,20 +344,17 @@ export function PagesView() {
 			'urlPattern',
 			t('views.pages.filterUrlPattern'),
 		);
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			{ params, updateMany },
 			'status',
 			'status',
 			t('views.pages.colStatus'),
-			[
-				{ value: '', label: t('common.all'), checked: !status },
-				...(facets?.statuses ?? []).map((value) => ({
-					value: String(value),
-					label: String(value),
-					checked: status === String(value),
-				})),
-			],
+			(facets?.statuses ?? []).map((value) => ({
+				value: String(value),
+				label: String(value),
+				checked: status.includes(String(value)),
+			})),
 		);
 		addRadioFilter(
 			controls,
@@ -390,20 +387,17 @@ export function PagesView() {
 				})),
 			],
 		);
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			{ params, updateMany },
 			'contentType',
 			'contentTypeCategory',
 			t('views.pages.filterContentType'),
-			[
-				{ value: '', label: t('common.all'), checked: !contentTypeCategory },
-				...CONTENT_TYPE_CATEGORIES.map((category) => ({
-					value: category,
-					label: t(`views.contentType.${category}` as const),
-					checked: contentTypeCategory === category,
-				})),
-			],
+			CONTENT_TYPE_CATEGORIES.map((category) => ({
+				value: category,
+				label: t(`views.contentType.${category}` as const),
+				checked: contentTypeCategory.includes(category),
+			})),
 		);
 		addRadioFilter(
 			controls,
@@ -453,20 +447,17 @@ export function PagesView() {
 				],
 			);
 		}
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			{ params, updateMany },
 			'templateKey',
 			'templateKey',
 			t('views.pages.colTemplateKey'),
-			[
-				{ value: '', label: t('common.all'), checked: !filter.templateKey },
-				...(facets?.templateKeys ?? []).map((value) => ({
-					value,
-					label: value,
-					checked: filter.templateKey === value,
-				})),
-			],
+			(facets?.templateKeys ?? []).map((value) => ({
+				value,
+				label: value,
+				checked: templateKey.includes(value),
+			})),
 		);
 		return controls;
 	}, [
@@ -481,11 +472,11 @@ export function PagesView() {
 		filter.hasXFrameOptions,
 		filter.lang,
 		filter.missingTitle,
-		filter.templateKey,
 		params,
 		scope,
 		status,
 		t,
+		templateKey,
 		updateMany,
 	]);
 
