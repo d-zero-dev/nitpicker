@@ -1,6 +1,7 @@
 import type { ConsoleLogSummaryEntry, ListConsoleLogsOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 import { hasConsoleLogsTables } from './has-console-logs-tables.js';
 import { resolveListLimit } from './resolve-list-limit.js';
 import { resolveListOffset } from './resolve-list-offset.js';
@@ -61,9 +62,7 @@ export async function listConsoleLogs(
 		.leftJoin('text_refs as tr', 'tr.id', 'cli.text_id')
 		.leftJoin('url_refs as ur', 'ur.id', 'cli.loc_url_id')
 		.groupBy('cli.id');
-	if (options.type) {
-		grouped.where('cli.type', options.type);
-	}
+	applyEqualityOrInFilter(grouped, 'cli.type', options.type);
 
 	const totalRow = await knex
 		.count<{ count: string }[]>({ count: '*' })

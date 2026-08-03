@@ -194,6 +194,27 @@ describe('listViewerMismatches', () => {
 		});
 	});
 
+	it('filters by an array of types, OR-ing them together, with the row-level type preserved per entry', async () => {
+		const result = await listViewerMismatches(archive, {
+			type: ['og:title', 'og:description'],
+		});
+		expect(result.total).toBe(2);
+		expect(result.items.map((item) => item.type).toSorted()).toEqual([
+			'og:description',
+			'og:title',
+		]);
+	});
+
+	it('lists every type when type is omitted', async () => {
+		const result = await listViewerMismatches(archive, {});
+		expect(result.total).toBe(5);
+	});
+
+	it('lists every type when type is an empty array', async () => {
+		const result = await listViewerMismatches(archive, { type: [] });
+		expect(result.total).toBe(5);
+	});
+
 	it('paginates forward via nextCursor and matches an equivalent offset read', async () => {
 		const page1 = await listViewerMismatches(archive, { type: 'canonical', limit: 2 });
 		expect(page1.items.map((item) => item.url)).toEqual([

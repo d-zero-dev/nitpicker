@@ -1,10 +1,12 @@
 import type {
-	GetIsolatedClusterOptions,
+	GetViewerIsolatedClusterOptions,
 	IsolatedClusterDetail,
 	IsolatedClusterMember,
 } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type { Knex } from 'knex';
+
+import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 
 /**
  * Applies the `ORDER BY` clauses for cluster-member rows. `status` ordering
@@ -19,8 +21,8 @@ import type { Knex } from 'knex';
  */
 function applyIsolatedClusterMemberOrder(
 	query: Knex.QueryBuilder,
-	sortBy: GetIsolatedClusterOptions['sortBy'],
-	sortOrder: GetIsolatedClusterOptions['sortOrder'],
+	sortBy: GetViewerIsolatedClusterOptions['sortBy'],
+	sortOrder: GetViewerIsolatedClusterOptions['sortOrder'],
 ): Knex.QueryBuilder {
 	switch (sortBy ?? 'url') {
 		case 'title': {
@@ -45,7 +47,10 @@ function applyIsolatedClusterMemberOrder(
 
 /**
  * Fast-path counterpart of `getIsolatedCluster`, backed by
- * `viewer_isolated_components` + `viewer_isolated_component_pages`.
+ * `viewer_isolated_components` + `viewer_isolated_component_pages`. Takes
+ * {@link GetViewerIsolatedClusterOptions}, not `GetIsolatedClusterOptions`:
+ * see that type's docs for why `status`/`source` need a separate,
+ * array-capable type here.
  * @param accessor - Archive accessor whose read model is current.
  * @param representativeUrl - Cluster identifier from `listViewerIsolatedClusters`.
  * @param options - Member filters and pagination.
@@ -63,7 +68,7 @@ function applyIsolatedClusterMemberOrder(
 export async function getViewerIsolatedCluster(
 	accessor: ArchiveAccessor,
 	representativeUrl: string,
-	options: GetIsolatedClusterOptions = {},
+	options: GetViewerIsolatedClusterOptions = {},
 ): Promise<IsolatedClusterDetail | null> {
 	const knex = accessor.getKnex();
 	const component = await knex('viewer_isolated_components')
@@ -81,12 +86,8 @@ export async function getViewerIsolatedCluster(
 	if (options.urlPattern) {
 		baseQuery.where('url', 'like', options.urlPattern);
 	}
-	if (options.status != null) {
-		baseQuery.where('status', options.status);
-	}
-	if (options.source) {
-		baseQuery.where('source', options.source);
-	}
+	applyEqualityOrInFilter(baseQuery, 'status', options.status);
+	applyEqualityOrInFilter(baseQuery, 'source', options.source);
 
 	const countResult = (await baseQuery
 		.clone()

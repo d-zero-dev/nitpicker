@@ -10,6 +10,7 @@ import type {
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type { Knex } from 'knex';
 
+import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 import { readKeysetWindow } from './viewer-cursor-kit/read-keyset-window.js';
 import { buildMismatchesFilterKey } from './viewer-mismatches-cursor/build-mismatches-filter-key.js';
 import { decodeMismatchesCursor } from './viewer-mismatches-cursor/decode-mismatches-cursor.js';
@@ -20,6 +21,8 @@ import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model/viewer-rea
 
 /** One `viewer_mismatches` window row, plus its display-only columns. */
 interface MismatchWindowRow extends MismatchesKeysetRow {
+	/** See `viewer_mismatches.type`. Read per-row since a multi-`type` filter can mix types within one window. */
+	type: MismatchEntry['type'];
 	/** See `viewer_mismatches.actual`. */
 	actual: string | null;
 	/** See `viewer_mismatches.expected`. */
@@ -27,9 +30,9 @@ interface MismatchWindowRow extends MismatchesKeysetRow {
 }
 
 /**
- * Constrains a `viewer_mismatches` query builder to one `type` — the only
- * filter `listViewerMismatches` supports, and required (see
- * `ListViewerMismatchesOptions.type`'s docs).
+ * Constrains a `viewer_mismatches` query builder to `type` — the only filter
+ * `listViewerMismatches` supports. `undefined`/an empty array means "every
+ * type" (see `ListViewerMismatchesOptions.type`'s docs).
  * @param qb - The query builder to constrain.
  * @param options - The caller's options.
  */
@@ -37,7 +40,7 @@ function applyMismatchesFilters(
 	qb: Knex.QueryBuilder,
 	options: ListViewerMismatchesOptions,
 ): void {
-	qb.where('type', options.type);
+	applyEqualityOrInFilter(qb, 'type', options.type);
 }
 
 /**
@@ -85,7 +88,7 @@ async function readMismatchesWindow(
 		knex,
 		'viewer_mismatches',
 		(qb) => applyMismatchesFilters(qb, options),
-		['actual', 'expected'],
+		['type', 'actual', 'expected'],
 		spec,
 		orderDirection,
 		limit,
@@ -95,16 +98,21 @@ async function readMismatchesWindow(
 }
 
 /**
- * Maps one raw window row to the public `MismatchEntry` shape.
+ * Maps one raw window row to the public `MismatchEntry` shape. `type` comes
+ * from the row itself, not the caller's filter options: a multi-`type`
+ * filter can mix rows of different types within one window, so the request's
+ * `options.type` (possibly an array, or `undefined` for "every type") is
+ * never the right value to stamp onto every entry.
  * @param row - One row from {@link readMismatchesWindow}.
- * @param type - The mismatch type this window was read for.
  * @returns The corresponding `MismatchEntry`.
  */
-function toMismatchEntry(
-	row: MismatchWindowRow,
-	type: ListViewerMismatchesOptions['type'],
-): MismatchEntry {
-	return { url: row.url_sort_key, type, actual: row.actual, expected: row.expected };
+function toMismatchEntry(row: MismatchWindowRow): MismatchEntry {
+	return {
+		url: row.url_sort_key,
+		type: row.type,
+		actual: row.actual,
+		expected: row.expected,
+	};
 }
 
 /**
@@ -119,7 +127,8 @@ function toMismatchEntry(
  * @param accessor - The archive accessor to query. Callers are responsible
  *   for confirming the read model is built and current (see
  *   `isViewerReadModelCurrent`) before calling this.
- * @param options - Filter, sort, and pagination options. `type` is required.
+ * @param options - Filter, sort, and pagination options. `type` accepts a
+ *   single value, an array (OR'd together), or `undefined` for every type.
  * @returns A cursor-paginated list of mismatch entries.
  * @throws {Error} If `options.cursor` is malformed, stale, or was minted
  *   under a different `type`/sort combination.
@@ -154,7 +163,7 @@ export async function listViewerMismatches(
 		hasMoreAfter: boolean,
 		hasMoreBefore: boolean,
 	): CursorPaginatedMismatchList {
-		const items = window.map((row) => toMismatchEntry(row, options.type));
+		const items = window.map((row) => toMismatchEntry(row));
 		const lastRow = window.at(-1);
 		const firstRow = window[0];
 		const nextCursor =

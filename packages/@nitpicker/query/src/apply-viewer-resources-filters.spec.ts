@@ -112,6 +112,14 @@ describe('applyViewerResourcesFilters', () => {
 		expect(rows.map((r) => r.url_sort_key)).toEqual(['https://example.com/broken.js']);
 	});
 
+	it('filters by an array of statuses, OR-ing them together', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_resources');
+		applyViewerResourcesFilters(qb, { status: [200, 404] });
+		const rows = await qb.select('url_sort_key');
+		expect(rows).toHaveLength(3);
+	});
+
 	it('filters to internal resources only when isExternal is false', async () => {
 		const knex = archive.getKnex();
 		const qb = knex('viewer_resources');

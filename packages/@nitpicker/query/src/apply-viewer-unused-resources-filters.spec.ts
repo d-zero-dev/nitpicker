@@ -134,6 +134,22 @@ describe('applyViewerUnusedResourcesFilters', () => {
 		expect(rows.map((r) => r.url_sort_key)).toEqual(['https://example.com/orphan.pdf']);
 	});
 
+	it('filters by an array of statuses, OR-ing them together', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_resources');
+		applyViewerUnusedResourcesFilters(qb, { status: [200, 999] });
+		const rows = await qb.select('url_sort_key');
+		expect(rows.map((r) => r.url_sort_key)).toEqual(['https://example.com/orphan.pdf']);
+	});
+
+	it('filters by an array of sources, OR-ing them together', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_resources');
+		applyViewerUnusedResourcesFilters(qb, { source: ['inventory-seed', 'crawled'] });
+		const rows = await qb.select('url_sort_key');
+		expect(rows.map((r) => r.url_sort_key)).toEqual(['https://example.com/orphan.pdf']);
+	});
+
 	it('applies the source filter on top of the fixed base predicate', async () => {
 		const knex = archive.getKnex();
 		const matching = knex('viewer_resources');

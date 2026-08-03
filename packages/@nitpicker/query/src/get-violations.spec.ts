@@ -163,6 +163,13 @@ describe('getViolations', () => {
 		expect(result.items.every((v) => v.severity === 'error')).toBe(true);
 	});
 
+	it('severity の配列で OR フィルタする', async () => {
+		const result = await getViolations(archive, {
+			severity: ['error', 'warning'],
+		});
+		expect(result.total).toBe(4);
+	});
+
 	it('rule でフィルタする', async () => {
 		const result = await getViolations(archive, { rule: 'color-contrast' });
 		expect(result.total).toBe(1);

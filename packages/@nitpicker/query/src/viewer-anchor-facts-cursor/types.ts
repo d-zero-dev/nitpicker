@@ -78,7 +78,7 @@ export function isNumericAnchorFactsSortColumn(column: AnchorFactsSortColumn): b
  */
 export interface AnchorFactsCursorFilterKeyInput {
 	/** See `ListViewerBrokenLinksOptions.status`. */
-	status?: number;
+	status?: number | number[];
 }
 
 /**

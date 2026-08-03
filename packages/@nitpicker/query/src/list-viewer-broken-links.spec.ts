@@ -236,6 +236,13 @@ describe('listViewerBrokenLinks', () => {
 		expect(nonMatching.total).toBe(0);
 	});
 
+	it('filters by an array of statuses, OR-ing them together', async () => {
+		const matching = await listViewerBrokenLinks(archive, { status: [404, 500] });
+		expect(matching.total).toBe(2);
+		const nonMatching = await listViewerBrokenLinks(archive, { status: [500, 403] });
+		expect(nonMatching.total).toBe(0);
+	});
+
 	it('sorts by destUrl ascending', async () => {
 		const result = await listViewerBrokenLinks(archive, {
 			sortBy: 'destUrl',

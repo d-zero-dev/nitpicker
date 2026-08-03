@@ -1,6 +1,8 @@
 import type { ListViewerUnusedResourcesOptions } from './types.js';
 import type { Knex } from 'knex';
 
+import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
+
 /**
  * Applies the fixed `is_unused = 1` base predicate plus every
  * `ListViewerUnusedResourcesOptions` filter as `WHERE` predicates on a
@@ -19,10 +21,6 @@ export function applyViewerUnusedResourcesFilters(
 	options: ListViewerUnusedResourcesOptions,
 ): void {
 	qb.where('is_unused', 1);
-	if (options.status != null) {
-		qb.where('status_sort_key', options.status);
-	}
-	if (options.source) {
-		qb.where('source', options.source);
-	}
+	applyEqualityOrInFilter(qb, 'status_sort_key', options.status);
+	applyEqualityOrInFilter(qb, 'source', options.source);
 }

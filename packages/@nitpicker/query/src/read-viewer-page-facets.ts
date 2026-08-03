@@ -53,13 +53,21 @@ function resolveFacetCategoryKey(
  * @param contentTypeCategory - The caller's active category filter, or
  *   `undefined` to resolve the same `'html'` ∪ `'unknown'` default view
  *   `applyViewerPagesFilters` itself filters to when the option is omitted.
+ *   An array (multi-select OR) falls back to the `undefined`/default scope:
+ *   `viewer_count_buckets` only precomputes one bucket per single category,
+ *   not per arbitrary subset, so there is no exact bucket to look up for
+ *   "any of these categories" — the candidates shown are then a superset
+ *   (every category's values) rather than scoped to the selection, which is
+ *   an acceptable approximation for a filter's own candidate list.
  * @returns The facet candidates for the resolved category scope.
  */
 export async function readViewerPageFacets(
 	knex: Knex,
-	contentTypeCategory?: ContentTypeCategory,
+	contentTypeCategory?: ContentTypeCategory | ContentTypeCategory[],
 ): Promise<PageListFacets> {
-	const categoryKey = resolveFacetCategoryKey(contentTypeCategory);
+	const categoryKey = resolveFacetCategoryKey(
+		Array.isArray(contentTypeCategory) ? undefined : contentTypeCategory,
+	);
 	const rows = await knex('viewer_count_buckets')
 		.where('scope', 'pages')
 		.whereIn('key', [

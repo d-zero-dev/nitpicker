@@ -1,6 +1,10 @@
-import type { ListExternalLinksOptions, PaginatedExternalLinkList } from './types.js';
+import type {
+	ListViewerExternalLinksOptions,
+	PaginatedExternalLinkList,
+} from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 import { applyListOrder } from './apply-list-order.js';
 import { paginateQuery } from './paginate-query.js';
 
@@ -13,10 +17,14 @@ import { paginateQuery } from './paginate-query.js';
  * version's `GROUP BY` + `COUNT(DISTINCT ...)` combination is a known
  * SQLite performance pitfall).
  *
- * Same options/response shape as {@link listExternalLinks} — callers switch
- * between the two purely based on whether the read model is current (see
- * `register-links-route.ts`), with no visible contract difference. One
- * accepted difference: `destUrl` sorts by plain `BINARY` collation here
+ * Same response shape as {@link listExternalLinks}, and the same options
+ * modulo `status` accepting an array (OR) here — {@link
+ * ListViewerExternalLinksOptions} exists precisely because `listExternalLinks`
+ * still filters `status` by single-value equality, so widening the shared
+ * options type would let an array reach it unchanged. Callers switch between
+ * the two purely based on whether the read model is current (see
+ * `register-links-route.ts`). One accepted response-shape difference:
+ * `destUrl` sorts by plain `BINARY` collation here
  * (matching `viewer_pages.url_sort_key`'s precedent), not the natural/
  * numeric-aware sort {@link listExternalLinks} uses via
  * `ensureUrlSortTempTable` — the same fast-path/legacy sort divergence
@@ -34,7 +42,7 @@ import { paginateQuery } from './paginate-query.js';
  */
 export async function listViewerExternalLinks(
 	accessor: ArchiveAccessor,
-	options: ListExternalLinksOptions = {},
+	options: ListViewerExternalLinksOptions = {},
 ): Promise<PaginatedExternalLinkList> {
 	const knex = accessor.getKnex();
 	const limit = options.limit ?? 100;
@@ -52,9 +60,7 @@ export async function listViewerExternalLinks(
 			)
 			.where('filter_url.url', 'like', options.urlPattern);
 	}
-	if (options.status != null) {
-		baseQuery.where('status', options.status);
-	}
+	applyEqualityOrInFilter(baseQuery, 'status', options.status);
 
 	const sortColumns: Record<'destUrl' | 'status' | 'referrerCount', { column: string }> =
 		{

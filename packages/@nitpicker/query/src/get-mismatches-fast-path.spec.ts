@@ -106,6 +106,62 @@ describe('getMismatchesFastPath', () => {
 		);
 	});
 
+	it('narrows a multi-value type selection to canonical when forced onto the legacy path', async () => {
+		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
+		vi.mocked(findMismatches).mockResolvedValue({
+			items: [],
+			total: 1,
+			limit: 100,
+			offset: 0,
+		});
+
+		await getMismatchesFastPath(accessor, ['og:title', 'og:description'], {
+			sortBy: 'actual',
+		});
+
+		expect(findMismatches).toHaveBeenCalledWith(
+			accessor,
+			'canonical',
+			expect.objectContaining({ sortBy: 'actual' }),
+		);
+	});
+
+	it('narrows an undefined ("every type") selection to canonical when forced onto the legacy path', async () => {
+		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
+		vi.mocked(findMismatches).mockResolvedValue({
+			items: [],
+			total: 1,
+			limit: 100,
+			offset: 0,
+		});
+
+		await getMismatchesFastPath(accessor, undefined, { sortBy: 'actual' });
+
+		expect(findMismatches).toHaveBeenCalledWith(
+			accessor,
+			'canonical',
+			expect.objectContaining({ sortBy: 'actual' }),
+		);
+	});
+
+	it('passes a single-element array type through unchanged when forced onto the legacy path', async () => {
+		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
+		vi.mocked(findMismatches).mockResolvedValue({
+			items: [],
+			total: 1,
+			limit: 100,
+			offset: 0,
+		});
+
+		await getMismatchesFastPath(accessor, ['og:title'], { sortBy: 'actual' });
+
+		expect(findMismatches).toHaveBeenCalledWith(
+			accessor,
+			'og:title',
+			expect.objectContaining({ sortBy: 'actual' }),
+		);
+	});
+
 	it('falls back to the legacy path when the read model is stale or absent', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
 		vi.mocked(findMismatches).mockResolvedValue({

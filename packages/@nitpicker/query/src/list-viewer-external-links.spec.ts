@@ -256,6 +256,11 @@ describe('listViewerExternalLinks', () => {
 		});
 	});
 
+	it('status の配列で OR フィルタする', async () => {
+		const result = await listViewerExternalLinks(archive, { status: [200, 404] });
+		expect(result.items).toHaveLength(3);
+	});
+
 	it('urlPattern は宛先URLのみを対象にする（リンク元URLにはマッチしない）', async () => {
 		const matching = await listViewerExternalLinks(archive, { urlPattern: '%ads%' });
 		expect(matching.items).toHaveLength(1);

@@ -1,3 +1,5 @@
+import type { MismatchType } from '../types.js';
+
 /**
  * The only keyset tuple this cursor family supports: `(url_sort_key,
  * mismatch_id)`. `getMismatchesFastPath` bails to the legacy path for any
@@ -29,7 +31,7 @@ export interface MismatchesKeysetRow {
  */
 export interface MismatchesCursorFilterKeyInput {
 	/** See `ListViewerMismatchesOptions.type`. */
-	type: 'canonical' | 'og:title' | 'og:description';
+	type?: MismatchType | MismatchType[];
 }
 
 /**

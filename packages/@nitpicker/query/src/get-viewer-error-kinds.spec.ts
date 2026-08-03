@@ -284,6 +284,19 @@ describe('getViewerErrorKinds', () => {
 			expect(both.total).toBe(0);
 		});
 
+		it('filters by an array of kinds, OR-ing them together', async () => {
+			const result = await getViewerErrorKinds(archive, {
+				kind: ['connection-refused', 'timeout'],
+			});
+			const [connectionRefusedOnly, timeoutOnly] = await Promise.all([
+				getViewerErrorKinds(archive, { kind: 'connection-refused' }),
+				getViewerErrorKinds(archive, { kind: 'timeout' }),
+			]);
+			expect(result.items).toHaveLength(
+				connectionRefusedOnly.items.length + timeoutOnly.items.length,
+			);
+		});
+
 		it('sorts by host asc/desc, matching getErrorKinds()', async () => {
 			const [viewerAsc, legacyAsc] = await Promise.all([
 				getViewerErrorKinds(archive, { sortBy: 'host', sortOrder: 'asc' }),
@@ -416,6 +429,17 @@ describe('getViewerErrorKinds', () => {
 			expect(viewerNetwork).toEqual(legacyNetwork);
 			expect(viewerNetwork.items).toHaveLength(1);
 			expect(viewerNetwork.items[0]?.host).toBe('outage-caused.example');
+		});
+
+		it('filters by an array of attributions, OR-ing them together', async () => {
+			const result = await getViewerErrorKinds(archive, {
+				attribution: ['network', 'site'],
+			});
+			const [networkOnly, siteOnly] = await Promise.all([
+				getViewerErrorKinds(archive, { attribution: 'network' }),
+				getViewerErrorKinds(archive, { attribution: 'site' }),
+			]);
+			expect(result.items).toHaveLength(networkOnly.items.length + siteOnly.items.length);
 		});
 	});
 });

@@ -1,6 +1,11 @@
-import type { ErrorKindEntry, ErrorKindsResult, GetErrorKindsOptions } from './types.js';
+import type {
+	ErrorKindEntry,
+	ErrorKindsResult,
+	GetViewerErrorKindsOptions,
+} from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 import { resolveErrorKindsSort } from './resolve-error-kinds-sort.js';
 
 /**
@@ -17,7 +22,10 @@ import { resolveErrorKindsSort } from './resolve-error-kinds-sort.js';
  * first, the same convention `getViewerSummary` uses — this function does
  * not itself check staleness and throws if the meta row is missing.
  * @param accessor - The archive accessor to query.
- * @param options - The same filter/sort/pagination options `getErrorKinds` accepts.
+ * @param options - Filter/sort/pagination options. Takes {@link
+ *   GetViewerErrorKindsOptions}, not `GetErrorKindsOptions`: see that type's
+ *   docs for why `kind`/`attribution` need a separate, array-capable type
+ *   here.
  * @returns The error-kind breakdown, reconstructed from the read model.
  * @throws {Error} If `viewer_error_kind_meta` has no row (the caller
  *   failed to guard with `isViewerReadModelCurrent()`, or the read model is
@@ -30,7 +38,7 @@ import { resolveErrorKindsSort } from './resolve-error-kinds-sort.js';
  */
 export async function getViewerErrorKinds(
 	accessor: ArchiveAccessor,
-	options: GetErrorKindsOptions = {},
+	options: GetViewerErrorKindsOptions = {},
 ): Promise<ErrorKindsResult> {
 	const knex = accessor.getKnex();
 	const meta = await knex('viewer_error_kind_meta').where('id', 1).first();
@@ -45,12 +53,8 @@ export async function getViewerErrorKinds(
 	if (options.host) {
 		query = query.where('host', options.host);
 	}
-	if (options.kind) {
-		query = query.where('kind', options.kind);
-	}
-	if (options.attribution) {
-		query = query.where('attribution', options.attribution);
-	}
+	applyEqualityOrInFilter(query, 'kind', options.kind);
+	applyEqualityOrInFilter(query, 'attribution', options.attribution);
 
 	const totalRow = await query
 		.clone()
