@@ -19,9 +19,9 @@ const DEFAULT_LIMIT = 50;
 /**
  * Dispatches to `listViewerDuplicateGroups` (the `viewer_duplicate_groups`
  * read-model fast path, issue #115) when the read model is current, falling
- * back to `findDuplicates`/`countDuplicateGroups` (the legacy, write-model
+ * back to `findDuplicates`/`countDuplicateGroups` (the live, write-model
  * path) otherwise. Unlike `getHeaderChecksFastPath`/`getImagesFastPath`,
- * there is no filter/sort combination that forces a legacy fallback even
+ * there is no filter/sort combination that forces a live fallback even
  * when the read model IS current: `findDuplicates` has no `sortBy`/
  * `urlPattern` concept to diverge from `viewer_duplicate_groups`'s single
  * supported order, so the read model is always preferred once it exists.
@@ -39,7 +39,7 @@ const DEFAULT_LIMIT = 50;
  * `/api/duplicates` viewer route.
  *
  * Returns `CursorPaginatedDuplicateGroupList` regardless of which backend
- * answered: the legacy branch has no keyset cursor to offer, so
+ * answered: the live branch has no keyset cursor to offer, so
  * `nextCursor`/`prevCursor` are always `null` there. Its `groupId` is a
  * negative sentinel (`-(index + 1)`), never a positive
  * `viewer_duplicate_groups.group_id` — `findDuplicates`/`DuplicateEntry`
@@ -49,7 +49,7 @@ const DEFAULT_LIMIT = 50;
  * `listViewerDuplicateGroupPages`/`/api/duplicates/:groupId/pages` call,
  * silently returning an unrelated group's pages. Callers must treat a
  * non-positive `groupId` as "no drill-down available" — which is harmless
- * here because the legacy branch's `pages` is never truncated (see below),
+ * here because the live branch's `pages` is never truncated (see below),
  * so there is nothing left to page through anyway.
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.

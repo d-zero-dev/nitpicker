@@ -204,17 +204,17 @@ describe('getIsolatedClusterFastPath', () => {
 		});
 	});
 
-	describe('read model absent (legacy fallback)', () => {
+	describe('read model absent (live fallback)', () => {
 		const workingDir = path.resolve(
 			dirname,
-			'__test_fixtures_get_isolated_cluster_fast_path_legacy__',
+			'__test_fixtures_get_isolated_cluster_fast_path_live__',
 		);
 		let archive: InstanceType<typeof Archive>;
 
 		beforeAll(async () => {
 			archive = await buildFixtureArchive(workingDir);
 			// Deliberately skip buildViewerReadModel — isViewerReadModelCurrent
-			// reports false, forcing the legacy getIsolatedCluster branch.
+			// reports false, forcing the live getIsolatedCluster branch.
 		});
 
 		afterAll(async () => {

@@ -139,12 +139,12 @@ describe('getViewerSummary', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('matches a getSummary() (legacy) snapshot of the same archive', async () => {
-			const [viewerSummary, legacySummary] = await Promise.all([
+		it('matches a getSummary() (live) snapshot of the same archive', async () => {
+			const [viewerSummary, liveSummary] = await Promise.all([
 				getViewerSummary(archive),
 				getSummary(archive),
 			]);
-			expect(viewerSummary).toEqual(legacySummary);
+			expect(viewerSummary).toEqual(liveSummary);
 		});
 
 		it("computes the 2-page fixture's counts/distributions independently of getSummary() (hardcoded expectations)", async () => {
@@ -265,12 +265,12 @@ describe('getViewerSummary', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('matches a getSummary() (legacy) snapshot, including the attribution split and affected count', async () => {
-			const [viewerSummary, legacySummary] = await Promise.all([
+		it('matches a getSummary() (live) snapshot, including the attribution split and affected count', async () => {
+			const [viewerSummary, liveSummary] = await Promise.all([
 				getViewerSummary(archive),
 				getSummary(archive),
 			]);
-			expect(viewerSummary).toEqual(legacySummary);
+			expect(viewerSummary).toEqual(liveSummary);
 			expect(viewerSummary.networkOutageAffectedFailures).toBe(1);
 
 			const minusOne = viewerSummary.statusDistribution.find((e) => e.status === -1);

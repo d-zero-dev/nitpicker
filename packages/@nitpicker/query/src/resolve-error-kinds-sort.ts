@@ -15,7 +15,7 @@ export interface ResolvedErrorKindsSort {
  * Clamps an untyped `sortBy` to `{host, kind, count}` (falling back to
  * `'count'` for anything else, e.g. a hand-edited `?sortBy=` query string
  * that bypassed the `GetErrorKindsOptions` type) and resolves `sortOrder`'s
- * default from the *clamped* value — shared by `getErrorKinds` (legacy),
+ * default from the *clamped* value — shared by `getErrorKinds` (live),
  * `getViewerErrorKinds` (SQL fast path), and the viewer's
  * `error-kinds-cache.ts` (JS re-application over a cached snapshot) so this
  * one decision can't drift out of sync between the three implementations of

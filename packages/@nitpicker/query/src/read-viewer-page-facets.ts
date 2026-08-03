@@ -35,7 +35,7 @@ function resolveFacetCategoryKey(
  * is_external) for `/api/pages`'s `viewer_pages` fast path, from the
  * `viewer_count_buckets` rows `computePageFacetBuckets` wrote at build time.
  *
- * Mirrors `getPageListFacets` (the legacy `listPages` live-`DISTINCT`
+ * Mirrors `getPageListFacets` (`listPages`'s own live-`DISTINCT`
  * counterpart in `list-pages.ts`) in scope and result sort order, but never
  * scans `pages` — every value here is a plain lookup against
  * `viewer_count_buckets`'s `(scope, key, value)` primary key, so this stays

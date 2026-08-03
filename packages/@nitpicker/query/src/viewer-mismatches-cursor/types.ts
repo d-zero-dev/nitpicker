@@ -2,7 +2,7 @@ import type { MismatchType } from '../types.js';
 
 /**
  * The only keyset tuple this cursor family supports: `(url_sort_key,
- * mismatch_id)`. `getMismatchesFastPath` bails to the legacy path for any
+ * mismatch_id)`. `getMismatchesFastPath` bails to the live path for any
  * `sortBy` other than `'url'` (`viewer_mismatches` only indexes `(type,
  * url_sort_key, mismatch_id)` — see `vm_type_url`'s docs), so unlike
  * `viewer-anchor-facts-cursor`/`viewer-images-cursor` there is no

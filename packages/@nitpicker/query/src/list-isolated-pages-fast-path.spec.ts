@@ -175,17 +175,17 @@ describe('listIsolatedPagesFastPath', () => {
 		});
 	});
 
-	describe('read model absent (legacy fallback)', () => {
+	describe('read model absent (live fallback)', () => {
 		const workingDir = path.resolve(
 			dirname,
-			'__test_fixtures_list_isolated_pages_fast_path_legacy__',
+			'__test_fixtures_list_isolated_pages_fast_path_live__',
 		);
 		let archive: InstanceType<typeof Archive>;
 
 		beforeAll(async () => {
 			archive = await buildFixtureArchive(workingDir);
 			// Deliberately skip buildViewerReadModel — isViewerReadModelCurrent
-			// reports false, forcing the legacy listIsolatedPages branch.
+			// reports false, forcing the live listIsolatedPages branch.
 		});
 
 		afterAll(async () => {

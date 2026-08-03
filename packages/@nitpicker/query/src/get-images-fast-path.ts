@@ -25,7 +25,7 @@ const FAST_PATH_SORT_BY_VALUES = new Set<ListImagesOptions['sortBy']>([
  * none of the filters/sorts only the wide `images` table can evaluate — the
  * LIKE-based `urlPattern` (matched against `images.src`, a large text
  * column the read model never duplicates) or a `sortBy` of `src`/`alt`
- * (same reason). Falls back to `listImages` (the legacy, offset-only,
+ * (same reason). Falls back to `listImages` (the live, offset-only,
  * write-model path) otherwise.
  *
  * Unlike `listResources`/`listViewerResources` (which currently have no
@@ -36,7 +36,7 @@ const FAST_PATH_SORT_BY_VALUES = new Set<ListImagesOptions['sortBy']>([
  * dispatch decision three times.
  *
  * Returns `CursorPaginatedImageList` (a superset of `listImages`'s
- * `PaginatedImageList`) regardless of which backend answered: the legacy
+ * `PaginatedImageList`) regardless of which backend answered: the live
  * branch has no keyset cursor to offer, so `nextCursor`/`prevCursor` are
  * always `null` there. CLI/MCP callers that only care about
  * `items`/`total`/`offset`/`limit` can ignore the extra fields; the viewer
@@ -44,7 +44,7 @@ const FAST_PATH_SORT_BY_VALUES = new Set<ListImagesOptions['sortBy']>([
  * @param accessor - The archive accessor to query.
  * @param options - Filter, sort, and pagination options — the full
  *   `listImages` surface, including `urlPattern` and `src`/`alt` sorts that
- *   force the legacy fallback.
+ *   force the live fallback.
  * @returns The image list, from whichever backend is currently valid.
  * @example
  * // Callers never need to check isViewerReadModelCurrent themselves:
@@ -73,6 +73,6 @@ export async function getImagesFastPath(
 		return listViewerImages(accessor, viewerOptions);
 	}
 
-	const legacyResult = await listImages(accessor, options);
-	return { ...legacyResult, nextCursor: null, prevCursor: null };
+	const liveResult = await listImages(accessor, options);
+	return { ...liveResult, nextCursor: null, prevCursor: null };
 }

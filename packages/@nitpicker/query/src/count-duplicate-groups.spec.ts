@@ -48,7 +48,7 @@ describe('countDuplicateGroups', () => {
 			// Three distinct title-duplicate groups, so the total group COUNT
 			// (3) differs from any small `limit` a caller might pass to
 			// `findDuplicates` — the exact scenario `getDuplicatesFastPath`'s
-			// legacy fallback needs an accurate total for.
+			// live fallback needs an accurate total for.
 			{ url: 'https://example.com/a1', title: 'Group A', description: null },
 			{ url: 'https://example.com/a2', title: 'Group A', description: null },
 			{ url: 'https://example.com/b1', title: 'Group B', description: null },

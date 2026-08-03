@@ -167,12 +167,12 @@ describe('listViewerUnusedResources', () => {
 	});
 
 	it('matches listUnusedResources: internal + unreferenced only, excluding used and external', async () => {
-		const [viewerResult, legacyResult] = await Promise.all([
+		const [viewerResult, liveResult] = await Promise.all([
 			listViewerUnusedResources(archive, { limit: 100 }),
 			listUnusedResources(archive, { limit: 100 }),
 		]);
 		expect(viewerResult.items.map((i) => i.url).toSorted()).toEqual(
-			legacyResult.items.map((i) => i.url).toSorted(),
+			liveResult.items.map((i) => i.url).toSorted(),
 		);
 		expect(viewerResult.total).toBe(3);
 		const urls = viewerResult.items.map((i) => i.url);

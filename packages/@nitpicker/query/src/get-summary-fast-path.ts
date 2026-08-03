@@ -7,11 +7,11 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
 
 /**
  * Dispatches to `getViewerSummary` (the `viewer_summary` read-model fast
- * path) when current, else `getSummary` (the legacy full aggregation).
+ * path) when current, else `getSummary` (the live full aggregation).
  *
  * Unlike `/api/pages`'/`/api/links`'s route-level dispatch (which also
  * weighs filter-shape compatibility), summary has no request parameters
- * that could force a legacy fallback — the choice is purely "is the read
+ * that could force a live fallback — the choice is purely "is the read
  * model current or not" — and this same choice is needed identically by
  * three independent callers (the viewer route, the CLI `query summary`
  * command, and the MCP `get_summary`/`open_archive` tools). Centralising it

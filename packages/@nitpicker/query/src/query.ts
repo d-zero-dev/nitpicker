@@ -94,7 +94,7 @@ export { listViewerUnusedResources } from './list-viewer-unused-resources.js';
 export { matchesAnyFilterValue } from './matches-any-filter-value.js';
 export { prepareUrlSortTempTable } from './url-sort-temp-table.js';
 export { resolveErrorKindsSort } from './resolve-error-kinds-sort.js';
-export { resolveLegacyFilterValue } from './resolve-legacy-filter-value.js';
+export { resolveLiveFilterValue } from './resolve-live-filter-value.js';
 export type { ResolvedErrorKindsSort } from './resolve-error-kinds-sort.js';
 export { sortArrayItems } from './sort-array-items.js';
 export * from './types.js';

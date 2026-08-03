@@ -7,7 +7,7 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
 
 /**
  * Dispatches to `getViewerErrorKinds` (the `viewer_error_kind_*` read-model
- * fast path, issue #118) when current, else `getErrorKinds` (the legacy
+ * fast path, issue #118) when current, else `getErrorKinds` (the live
  * live classify-and-aggregate pass). `options` passes through unchanged to
  * whichever backend answers — both implement the same filter/sort/pagination
  * contract, so the choice is purely "is the read model current or not".

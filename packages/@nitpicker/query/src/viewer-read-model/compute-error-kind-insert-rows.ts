@@ -7,7 +7,7 @@ import type { ErrorKindsResult } from '../types.js';
  * archive" contract) into flat row arrays for the `viewer_error_kind_*`
  * tables. Performs no classification itself — `classifyErrorKind` runs
  * exactly once, inside `getErrorKinds`, so the read-model build and the
- * legacy live path can never disagree on how a message classifies (see
+ * live path can never disagree on how a message classifies (see
  * `create-viewer-read-model-tables.ts`'s "don't duplicate classification
  * logic" note for issue #118).
  * @param result - The unfiltered result of `getErrorKinds(accessor)`.

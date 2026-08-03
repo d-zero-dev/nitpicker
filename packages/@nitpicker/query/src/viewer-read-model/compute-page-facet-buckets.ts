@@ -17,7 +17,7 @@ type FacetDimension = 'is_external' | 'lang' | 'status';
  * category (plus the synthetic `'default'` category), so `/api/pages`'s
  * dynamic filter dropdowns can be served from a single indexed
  * `viewer_count_buckets` lookup instead of a per-request `DISTINCT` scan over
- * `pages` — see `getPageListFacets` in `list-pages.ts` for the legacy
+ * `pages` — see `getPageListFacets` in `list-pages.ts` for the live
  * live-scan counterpart this precomputation replaces on the `viewer_pages`
  * fast path.
  *
@@ -60,7 +60,7 @@ export function computePageFacetBuckets(
 			}
 			// Null-or-empty both mean "no lang facet" here, matching this
 			// module's own has_title/has_description/has_og_title idiom —
-			// deliberately stricter than legacy `getPageListFacets`'s
+			// deliberately stricter than live `getPageListFacets`'s
 			// `isPresent` (`!= null` only), which would otherwise surface an
 			// unlabeled blank radio option for `<html lang="">` rows.
 			if (row.lang != null && row.lang !== '') {

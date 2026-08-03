@@ -166,15 +166,15 @@ describe('listViewerImages', () => {
 		expect(result.prevCursor).toBeNull();
 	});
 
-	it('keeps src and currentSrc distinct, matching the legacy result', async () => {
-		const [viewerResult, legacyResult] = await Promise.all([
+	it('keeps src and currentSrc distinct, matching the live result', async () => {
+		const [viewerResult, liveResult] = await Promise.all([
 			listViewerImages(archive, { limit: 100 }),
 			listImages(archive, { limit: 100 }),
 		]);
 		const viewerBySrc = new Map(viewerResult.items.map((i) => [i.src, i]));
-		const legacyBySrc = new Map(legacyResult.items.map((i) => [i.src, i]));
+		const liveBySrc = new Map(liveResult.items.map((i) => [i.src, i]));
 		for (const src of viewerBySrc.keys()) {
-			expect(viewerBySrc.get(src)?.currentSrc).toBe(legacyBySrc.get(src)?.currentSrc);
+			expect(viewerBySrc.get(src)?.currentSrc).toBe(liveBySrc.get(src)?.currentSrc);
 		}
 		expect(viewerBySrc.get('https://example.com/a1.png')?.currentSrc).toBe(
 			'https://example.com/a1-current.png',
@@ -186,24 +186,24 @@ describe('listViewerImages', () => {
 		expect(result.items.map((i) => i.src)).toEqual(['https://example.com/a2.png']);
 	});
 
-	it('treats missingAlt: false as "has alt", agreeing with the legacy listImages path — regression test for a fast-path/legacy divergence', async () => {
-		const [viewerResult, legacyResult] = await Promise.all([
+	it('treats missingAlt: false as "has alt", agreeing with the live listImages path — regression test for a fast-path/live divergence', async () => {
+		const [viewerResult, liveResult] = await Promise.all([
 			listViewerImages(archive, { missingAlt: false, limit: 100 }),
 			listImages(archive, { missingAlt: false, limit: 100 }),
 		]);
 		expect(viewerResult.items.map((i) => i.src).toSorted()).toEqual(
-			legacyResult.items.map((i) => i.src).toSorted(),
+			liveResult.items.map((i) => i.src).toSorted(),
 		);
 		expect(viewerResult.total).toBe(2);
 	});
 
-	it('treats missingDimensions: false as "has dimensions", agreeing with the legacy listImages path', async () => {
-		const [viewerResult, legacyResult] = await Promise.all([
+	it('treats missingDimensions: false as "has dimensions", agreeing with the live listImages path', async () => {
+		const [viewerResult, liveResult] = await Promise.all([
 			listViewerImages(archive, { missingDimensions: false, limit: 100 }),
 			listImages(archive, { missingDimensions: false, limit: 100 }),
 		]);
 		expect(viewerResult.items.map((i) => i.src).toSorted()).toEqual(
-			legacyResult.items.map((i) => i.src).toSorted(),
+			liveResult.items.map((i) => i.src).toSorted(),
 		);
 	});
 

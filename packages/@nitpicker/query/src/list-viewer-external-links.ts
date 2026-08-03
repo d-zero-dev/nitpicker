@@ -27,7 +27,7 @@ import { paginateQuery } from './paginate-query.js';
  * `destUrl` sorts by plain `BINARY` collation here
  * (matching `viewer_pages.url_sort_key`'s precedent), not the natural/
  * numeric-aware sort {@link listExternalLinks} uses via
- * `ensureUrlSortTempTable` — the same fast-path/legacy sort divergence
+ * `ensureUrlSortTempTable` — the same fast-path/live sort divergence
  * already accepted for `/api/pages`.
  * @param accessor - The archive accessor to query. Callers are responsible
  *   for confirming the read model is built and current (see

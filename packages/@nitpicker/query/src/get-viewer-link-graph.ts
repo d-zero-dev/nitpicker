@@ -5,7 +5,7 @@ import type { ArchiveAccessor, PageSource } from '@nitpicker/crawler';
  * Fast-path counterpart of `getLinkGraph`, backed by
  * `viewer_graph_nodes`/`viewer_graph_edges`.
  * @param accessor - Archive accessor whose read model is current.
- * @param options - Optional node cap; `0` preserves the legacy "empty graph"
+ * @param options - Optional node cap; `0` preserves the live "empty graph"
  *   semantics of `getLinkGraph({ limit: 0 })`.
  * @returns The internal link graph.
  * @example

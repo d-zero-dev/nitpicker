@@ -157,7 +157,7 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	// measured the unfiltered default view (no `isExternal` filter — the
 	// common case) falling back to `SCAN … | USE TEMP B-TREE FOR ORDER BY`
 	// with only the `is_external`-prefixed indexes present (400k-row archive:
-	// 29.5ms fast path vs 26.3ms legacy — a regression, not an improvement),
+	// 29.5ms fast path vs 26.3ms live — a regression, not an improvement),
 	// because a composite index whose leading column is unconstrained can't
 	// satisfy an `ORDER BY` on a later column without an extra sort step. The
 	// `_order`-suffixed indexes below (no `is_external` prefix) give the
@@ -166,7 +166,7 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	// listing only supports `sortBy` in `url`/`status` (resources) or
 	// `url`/`status`/`source` (unused-resources) — the remaining
 	// `ListResourcesOptions.sortBy` values (`statusText`/`contentType`/
-	// `isExternal`/`referrerCount`/`compress`/`cdn`) fall back to the legacy
+	// `isExternal`/`referrerCount`/`compress`/`cdn`) fall back to the live
 	// query rather than gaining dedicated indexes here, following #106's
 	// evidence-before-indexing precedent.
 	await trx.raw(
@@ -252,7 +252,7 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	// `has_x_content_type_options`/`has_hsts` equality filters — following
 	// #106/#118's evidence-before-indexing precedent, these are rarer filter
 	// combinations than `missingOnly`, and `getHeaderChecksFastPath` bails to
-	// the legacy path for any explicit `sortBy` regardless.
+	// the live path for any explicit `sortBy` regardless.
 	await trx.raw(
 		'CREATE INDEX vh_missing ON viewer_header_checks(is_missing, url_sort_key, page_id)',
 	);
@@ -295,7 +295,7 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	// above. No `status_desc_key`-style descending twin: fast-path listing
 	// only supports `sortBy` on `url_sort_key` (see
 	// `ListViewerMismatchesOptions`'s docs for why `actual`/`expected`
-	// sorting bails to the legacy `findMismatches` path instead), and a
+	// sorting bails to the live `findMismatches` path instead), and a
 	// single ascending index scanned backward already serves `sortOrder:
 	// 'desc'` with no separate descending-key column needed — the exact
 	// `vel_*`/`vaf_*` distinction: `viewer_external_links` (offset
