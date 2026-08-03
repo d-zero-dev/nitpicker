@@ -1,20 +1,20 @@
 /**
- * Narrows a possibly-array filter value down to the single scalar a legacy
+ * Narrows a possibly-array filter value down to the single scalar a live
  * (pre-read-model) query function expects. An array collapses to its first
- * element — legacy paths only run when the read model is absent, stale, or
+ * element — live paths only run when the read model is absent, stale, or
  * deliberately bypassed (stub mode), so multi-select there degrades to
- * single-select rather than throwing or silently matching zero rows (legacy
+ * single-select rather than throwing or silently matching zero rows (live
  * predicates compare with strict equality, which an array value would never
  * satisfy).
  * @param value - A scalar, an array of scalars, or `undefined`/`null`.
- * @returns The scalar to pass to the legacy function, or `undefined` for "no
+ * @returns The scalar to pass to the live function, or `undefined` for "no
  *   filter".
  * @example
- * const legacyOptions = {
- *   status: resolveLegacyFilterValue(options.status),
+ * const liveOptions = {
+ *   status: resolveLiveFilterValue(options.status),
  * };
  */
-export function resolveLegacyFilterValue<T>(
+export function resolveLiveFilterValue<T>(
 	value: T | readonly T[] | undefined,
 ): T | undefined {
 	if (value == null) return undefined;

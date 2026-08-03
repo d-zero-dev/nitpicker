@@ -11,9 +11,9 @@ import { PAGE_SIZE } from './page-size.js';
  * Infinite-scrolling page list. Fetches `PAGE_SIZE` rows per request and
  * advances via the server-issued `nextCursor` (keyset pagination) rather
  * than a growing `offset` — `/api/pages` serves this from the `viewer_pages`
- * read model when available, falling back to the legacy offset-only path
+ * read model when available, falling back to the live offset-only path
  * (whose `nextCursor` is a plain offset-as-string, per
- * `buildLegacyPagesCursors`) otherwise — this hook never needs to know
+ * `buildLivePagesCursors`) otherwise — this hook never needs to know
  * which backend served a given page.
  * @param filter - The active filter/sort state (forms part of the query key).
  * @param options - Optional flags (`enabled`).

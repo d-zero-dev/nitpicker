@@ -11,8 +11,8 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
 
 /**
  * Narrows a possibly-array/possibly-omitted `type` selection down to the
- * single value `findMismatches` (legacy) accepts as its required positional
- * argument. The legacy path has no `WHERE type IN (...)` equivalent to fall
+ * single value `findMismatches` (live) accepts as its required positional
+ * argument. The live path has no `WHERE type IN (...)` equivalent to fall
  * back to, so a multi-select — or "every type" (`undefined`/`[]`) — request
  * that lands here (read model absent/stale, or `usesWideTableOnlyFilter`)
  * degrades to the same single default type the UI's radio-button predecessor
@@ -21,7 +21,7 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
  * @param type - The caller's `type` selection.
  * @returns The single type to pass to `findMismatches`.
  */
-function resolveLegacyMismatchType(
+function resolveLiveMismatchType(
 	type: MismatchType | MismatchType[] | undefined,
 ): MismatchType {
 	if (type == null) return 'canonical';
@@ -36,11 +36,11 @@ function resolveLegacyMismatchType(
  * the LIKE-based `urlPattern` (matched against `pages.url`, a column the
  * read model duplicates as `url_sort_key` but never LIKE-indexes) or ANY
  * explicit `sortBy` (including `'url'`, mirroring `getHeaderChecksFastPath`'s
- * own `'url'`-forces-legacy rule): `viewer_mismatches` only indexes `(type,
+ * own `'url'`-forces-live rule): `viewer_mismatches` only indexes `(type,
  * url_sort_key, mismatch_id)` (see `vm_type_url`'s docs), so a request for
  * `sortBy: 'actual' | 'expected'` — or an explicit natural-sort `'url'`
- * request the legacy path's `applyListOrder` treats differently from its own
- * unset-`sortBy` default — falls back to `findMismatches` (the legacy,
+ * request the live path's `applyListOrder` treats differently from its own
+ * unset-`sortBy` default — falls back to `findMismatches` (the live,
  * offset-only, write-model path) instead.
  *
  * This is the single entry point every `findMismatches` consumer uses
@@ -49,17 +49,17 @@ function resolveLegacyMismatchType(
  * `/api/mismatches` viewer route.
  *
  * Returns `CursorPaginatedMismatchList` (a superset of `findMismatches`'s
- * paged-mode result) regardless of which backend answered: the legacy branch
+ * paged-mode result) regardless of which backend answered: the live branch
  * has no keyset cursor to offer, so `nextCursor`/`prevCursor` are always
  * `null` there.
  * @param accessor - The archive accessor to query.
  * @param type - Which mismatch comparison(s) to list — a single value, an
  *   array (OR'd together, fast path only), or `undefined` for every type.
- *   A multi-value/`undefined` selection that falls back to the legacy path
- *   is narrowed to a single type first — see {@link resolveLegacyMismatchType}.
+ *   A multi-value/`undefined` selection that falls back to the live path
+ *   is narrowed to a single type first — see {@link resolveLiveMismatchType}.
  * @param options - Filter, sort, and pagination options — the full
  *   `findMismatches` surface, including any explicit `sortBy`/`urlPattern`
- *   that forces the legacy fallback.
+ *   that forces the live fallback.
  * @returns The mismatch list, from whichever backend is currently valid.
  * @example
  * // Callers never need to check isViewerReadModelCurrent themselves:
@@ -83,12 +83,12 @@ export async function getMismatchesFastPath(
 		});
 	}
 
-	const legacyResult = await findMismatches(accessor, resolveLegacyMismatchType(type), {
+	const liveResult = await findMismatches(accessor, resolveLiveMismatchType(type), {
 		limit: options.limit,
 		offset: options.offset,
 		urlPattern: options.urlPattern,
 		sortBy: options.sortBy,
 		sortOrder: options.sortOrder,
 	});
-	return { ...legacyResult, nextCursor: null, prevCursor: null };
+	return { ...liveResult, nextCursor: null, prevCursor: null };
 }

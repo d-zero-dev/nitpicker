@@ -51,7 +51,7 @@ describe('getMismatchesFastPath', () => {
 		expect(findMismatches).not.toHaveBeenCalled();
 	});
 
-	it('forces the legacy path when sortBy is set, even if the read model is current', async () => {
+	it('forces the live path when sortBy is set, even if the read model is current', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
 		vi.mocked(findMismatches).mockResolvedValue({
 			items: [],
@@ -72,7 +72,7 @@ describe('getMismatchesFastPath', () => {
 		expect(listViewerMismatches).not.toHaveBeenCalled();
 	});
 
-	it('forces the legacy path when urlPattern is set, even if the read model is current', async () => {
+	it('forces the live path when urlPattern is set, even if the read model is current', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
 		vi.mocked(findMismatches).mockResolvedValue({
 			items: [],
@@ -106,7 +106,7 @@ describe('getMismatchesFastPath', () => {
 		);
 	});
 
-	it('narrows a multi-value type selection to canonical when forced onto the legacy path', async () => {
+	it('narrows a multi-value type selection to canonical when forced onto the live path', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
 		vi.mocked(findMismatches).mockResolvedValue({
 			items: [],
@@ -126,7 +126,7 @@ describe('getMismatchesFastPath', () => {
 		);
 	});
 
-	it('narrows an undefined ("every type") selection to canonical when forced onto the legacy path', async () => {
+	it('narrows an undefined ("every type") selection to canonical when forced onto the live path', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
 		vi.mocked(findMismatches).mockResolvedValue({
 			items: [],
@@ -144,7 +144,7 @@ describe('getMismatchesFastPath', () => {
 		);
 	});
 
-	it('passes a single-element array type through unchanged when forced onto the legacy path', async () => {
+	it('passes a single-element array type through unchanged when forced onto the live path', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
 		vi.mocked(findMismatches).mockResolvedValue({
 			items: [],
@@ -162,7 +162,7 @@ describe('getMismatchesFastPath', () => {
 		);
 	});
 
-	it('falls back to the legacy path when the read model is stale or absent', async () => {
+	it('falls back to the live path when the read model is stale or absent', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
 		vi.mocked(findMismatches).mockResolvedValue({
 			items: [],

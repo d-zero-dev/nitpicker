@@ -37,8 +37,8 @@ export interface LinksFilter {
  * pagination) rather than a growing `offset` — the same contract
  * `usePagesInfinite` uses for `/api/pages`. `/api/links?type=broken` serves
  * this from the `viewer_anchor_facts` read model when available, falling
- * back to the legacy anchor-scan path (whose `nextCursor` is a plain
- * offset-as-string, per `buildLegacyPagesCursors`) otherwise — this hook
+ * back to the live anchor-scan path (whose `nextCursor` is a plain
+ * offset-as-string, per `buildLivePagesCursors`) otherwise — this hook
  * never needs to know which backend served a given page.
  * @param type - The link analysis type.
  * @param filter - The active filter/sort state (forms part of the query key).

@@ -78,7 +78,7 @@ function toDirectoryTreeNode(row: DirectoryNodeRow): DirectoryTreeNode {
  * @returns One entry per distinct `root_key` with at least one node, each
  *   carrying its flat depth ≤ 3 node list. Returns `[]` when the read model
  *   has not been built, or has been built under a stale schema version (no
- *   legacy fallback exists for this feature, unlike `/api/pages` —
+ *   live fallback exists for this feature, unlike `/api/pages` —
  *   `isViewerReadModelCurrent` is checked, not just `hasViewerReadModel`,
  *   so a v3-or-earlier read model — built before `viewer_directory_nodes`
  *   existed — returns `[]` instead of throwing a "no such table" error).

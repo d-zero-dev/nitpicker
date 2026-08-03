@@ -12,8 +12,8 @@ import {
 	listViewerResources,
 } from '@nitpicker/query';
 
-import { buildLegacyPagesCursors } from '../query-params/build-legacy-pages-cursors.js';
-import { parseLegacyPagesCursor } from '../query-params/parse-legacy-pages-cursor.js';
+import { buildLivePagesCursors } from '../query-params/build-live-pages-cursors.js';
+import { parseLivePagesCursor } from '../query-params/parse-live-pages-cursor.js';
 import { toBoolean } from '../query-params/to-boolean.js';
 import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
@@ -35,9 +35,9 @@ const DEFAULT_LIMIT = 100;
  *   LIKE-based `urlPattern`, the raw-MIME-prefix `contentType` (the read
  *   model only stores the classified `content_category`), and any `sortBy`
  *   outside `url`/`status` (the read model indexes).
- * - `listResources` (the legacy, offset-only, write-model path) otherwise.
+ * - `listResources` (the live, offset-only, write-model path) otherwise.
  *   Its `cursor` is a plain decimal offset string (see
- *   `buildLegacyPagesCursors`), not the fast path's opaque keyset token, but
+ *   `buildLivePagesCursors`), not the fast path's opaque keyset token, but
  *   exposes the same `nextCursor`-only contract either backend can serve.
  * @param app - The Hono application.
  * @param context - The opened archive context.
@@ -65,7 +65,7 @@ export function registerResourcesRoute(app: Hono, context: ArchiveContext): void
 		}
 
 		const limit = toNumber(q.limit) ?? DEFAULT_LIMIT;
-		const offset = parseLegacyPagesCursor(q.cursor, toNumber(q.offset) ?? 0);
+		const offset = parseLivePagesCursor(q.cursor, toNumber(q.offset) ?? 0);
 		const options: ListResourcesOptions = {
 			urlPattern: q.urlPattern,
 			status: toNumber(q.status),
@@ -76,15 +76,15 @@ export function registerResourcesRoute(app: Hono, context: ArchiveContext): void
 			limit,
 			offset,
 		};
-		const legacyResult = await listResources(accessor, options);
-		const { nextCursor, prevCursor } = buildLegacyPagesCursors({
+		const liveResult = await listResources(accessor, options);
+		const { nextCursor, prevCursor } = buildLivePagesCursors({
 			offset,
-			itemCount: legacyResult.items.length,
-			total: legacyResult.total,
-			limit: legacyResult.limit,
+			itemCount: liveResult.items.length,
+			total: liveResult.total,
+			limit: liveResult.limit,
 		});
 		const result: CursorPaginatedResourceList = {
-			...legacyResult,
+			...liveResult,
 			nextCursor,
 			prevCursor,
 		};

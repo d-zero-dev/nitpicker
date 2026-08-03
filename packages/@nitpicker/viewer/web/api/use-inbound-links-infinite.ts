@@ -15,7 +15,7 @@ export type InboundLinkRow = InboundLinkEntry;
  * `PAGE_SIZE` rows per request and advances via the server-issued
  * `nextCursor` (keyset pagination) — `/api/pages/inbound-links` has no
  * offset-vs-cursor branch to hide from this hook (unlike
- * `useLinksInfinite`'s legacy fallback): it reads `viewer_anchor_facts`
+ * `useLinksInfinite`'s live fallback): it reads `viewer_anchor_facts`
  * exclusively, so the cursor shape never changes between pages.
  *
  * In stub mode the endpoint responds `{ available: false }` with no

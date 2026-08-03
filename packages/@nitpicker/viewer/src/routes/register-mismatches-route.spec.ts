@@ -68,7 +68,7 @@ function makeMeta(overrides: Record<string, unknown> = {}): Meta {
  * @param workingDir - Unique scratch directory for this fixture.
  * @param withReadModel - Whether to build the `viewer_mismatches` read model
  *   before opening read-only (exercises the fast path) or leave it unbuilt
- *   (exercises the legacy fallback path).
+ *   (exercises the live fallback path).
  * @returns The app and manager — callers must close the manager in `afterAll`.
  */
 async function buildFixture(workingDir: string, withReadModel: boolean) {
@@ -216,7 +216,7 @@ describe('registerMismatchesRoute — /api/mismatches (integration)', () => {
 			expect(page2.nextCursor).toBeNull();
 		});
 
-		it('forces the legacy fallback for an explicit sortBy', async () => {
+		it('forces the live fallback for an explicit sortBy', async () => {
 			const res = await fixture.app.request(
 				'/api/mismatches?type=canonical&sortBy=actual',
 			);
@@ -246,10 +246,10 @@ describe('registerMismatchesRoute — /api/mismatches (integration)', () => {
 		});
 	});
 
-	describe('legacy fallback path (no read model built)', () => {
+	describe('live fallback path (no read model built)', () => {
 		const workingDir = path.resolve(
 			__dirname,
-			'__test_fixtures_register_mismatches_route_legacy__',
+			'__test_fixtures_register_mismatches_route_live__',
 		);
 		let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
@@ -263,7 +263,7 @@ describe('registerMismatchesRoute — /api/mismatches (integration)', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('returns the same shape via the legacy live query, with null cursors', async () => {
+		it('returns the same shape via the live query, with null cursors', async () => {
 			const res = await fixture.app.request('/api/mismatches?type=canonical');
 			const body = (await res.json()) as {
 				items: { url: string }[];
@@ -280,13 +280,13 @@ describe('registerMismatchesRoute — /api/mismatches (integration)', () => {
 			expect(body.prevCursor).toBeNull();
 		});
 
-		it('defaults to canonical when type is omitted (legacy path has no OR/every-type equivalent)', async () => {
+		it('defaults to canonical when type is omitted (live path has no OR/every-type equivalent)', async () => {
 			const res = await fixture.app.request('/api/mismatches');
 			const body = (await res.json()) as { total: number };
 			expect(body.total).toBe(2);
 		});
 
-		it('narrows a multi-type selection to canonical (legacy path has no OR equivalent)', async () => {
+		it('narrows a multi-type selection to canonical (live path has no OR equivalent)', async () => {
 			const res = await fixture.app.request(
 				'/api/mismatches?type=canonical&type=og:title',
 			);

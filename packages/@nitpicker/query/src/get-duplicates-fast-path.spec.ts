@@ -90,7 +90,7 @@ describe('getDuplicatesFastPath', () => {
 		);
 	});
 
-	it('falls back to the legacy path when the read model is stale or absent, converting the shape', async () => {
+	it('falls back to the live path when the read model is stale or absent, converting the shape', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
 		vi.mocked(findDuplicates).mockResolvedValue([
 			{ field: 'title', value: 'Dup A', count: 3, urls: ['u1', 'u2', 'u3'] },
@@ -125,7 +125,7 @@ describe('getDuplicatesFastPath', () => {
 		});
 	});
 
-	it('never truncates the legacy pages sample — findDuplicates already returns every member URL', async () => {
+	it('never truncates the live pages sample — findDuplicates already returns every member URL', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
 		vi.mocked(findDuplicates).mockResolvedValue([
 			{ field: 'title', value: 'Dup A', count: 3, urls: ['u1', 'u2', 'u3'] },
@@ -137,7 +137,7 @@ describe('getDuplicatesFastPath', () => {
 		expect(result.items[0]!.pages).toEqual(['u1', 'u2', 'u3']);
 	});
 
-	it('mints a non-positive groupId sentinel on the legacy branch, distinct from real viewer_duplicate_groups ids', async () => {
+	it('mints a non-positive groupId sentinel on the live branch, distinct from real viewer_duplicate_groups ids', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
 		vi.mocked(findDuplicates).mockResolvedValue([
 			{ field: 'title', value: 'Dup A', count: 2, urls: ['u1', 'u2'] },
@@ -151,7 +151,7 @@ describe('getDuplicatesFastPath', () => {
 		expect(result.items.every((item) => item.groupId <= 0)).toBe(true);
 	});
 
-	it('forwards an explicit limit and offset to the legacy findDuplicates/countDuplicateGroups calls', async () => {
+	it('forwards an explicit limit and offset to the live findDuplicates/countDuplicateGroups calls', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
 		vi.mocked(findDuplicates).mockResolvedValue([]);
 		vi.mocked(countDuplicateGroups).mockResolvedValue(0);

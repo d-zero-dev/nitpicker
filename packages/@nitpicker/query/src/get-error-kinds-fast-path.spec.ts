@@ -45,7 +45,7 @@ describe('getErrorKindsFastPath', () => {
 		expect(getErrorKinds).not.toHaveBeenCalled();
 	});
 
-	it('falls back to the legacy classify-and-aggregate pass when the read model is stale or absent', async () => {
+	it('falls back to the live classify-and-aggregate pass when the read model is stale or absent', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
 		vi.mocked(getErrorKinds).mockResolvedValue(makeResult('error.log'));
 

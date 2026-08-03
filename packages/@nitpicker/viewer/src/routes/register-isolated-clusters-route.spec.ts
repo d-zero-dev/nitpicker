@@ -229,7 +229,7 @@ describe('registerIsolatedClustersRoute — /api/isolated-clusters (integration)
 		});
 	});
 
-	describe('stub mode (legacy fallback path)', () => {
+	describe('stub mode (live fallback path)', () => {
 		let archive: InstanceType<typeof Archive>;
 		let app: ReturnType<typeof createApp>;
 		const stubWorkingDir = path.resolve(
@@ -299,7 +299,7 @@ describe('registerIsolatedClustersRoute — /api/isolated-clusters (integration)
 				);
 			}
 
-			// Live-crawl stub mode forces the legacy branch in the route
+			// Live-crawl stub mode forces the live branch in the route
 			// regardless of read-model presence — no buildViewerReadModel call.
 			const context: ArchiveContext = {
 				manager: { get: () => archive } as unknown as ArchiveManager,

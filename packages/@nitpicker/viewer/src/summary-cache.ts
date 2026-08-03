@@ -34,7 +34,7 @@ const lru = createPromiseLru<string, SummaryResult>({ maxEntries: MAX_ENTRIES })
  * permanently valid until the archive itself changes (which would mean a
  * new `archiveId`).
  *
- * 10 GB-scale archive measurements (legacy `getSummary` fallback, i.e. no
+ * 10 GB-scale archive measurements (live `getSummary` fallback, i.e. no
  * current `viewer_summary` read model): cold first-hit ~26 s (the cost of
  * paging the working set in from disk through SQLite's 64 MiB page
  * cache + libsql's 256 MiB mmap window — I/O bound, not CPU bound), but

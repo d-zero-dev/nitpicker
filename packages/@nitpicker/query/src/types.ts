@@ -80,7 +80,7 @@ export interface ListIsolatedPagesOptions {
  * Pagination options for {@link import('./list-viewer-isolated-pages.js').listViewerIsolatedPages}
  * — the read-model fast-path counterpart of {@link ListIsolatedPagesOptions}.
  * A separate interface (rather than widening `ListIsolatedPagesOptions.status`/
- * `.source` themselves) because the legacy `listIsolatedPages` this type would
+ * `.source` themselves) because the live `listIsolatedPages` this type would
  * otherwise still be shared with filters via strict equality (`item.status
  * !== options.status`), which an array would silently break (never match).
  */
@@ -183,7 +183,7 @@ export interface ListIsolatedClustersOptions {
  * Pagination options for {@link import('./list-viewer-isolated-clusters.js').listViewerIsolatedClusters}
  * — the read-model fast-path counterpart of {@link ListIsolatedClustersOptions}.
  * A separate interface for the same reason as
- * {@link ListViewerIsolatedPagesOptions}: the legacy `listIsolatedClusters`
+ * {@link ListViewerIsolatedPagesOptions}: the live `listIsolatedClusters`
  * this type would otherwise still be shared with filters via strict equality.
  */
 export interface ListViewerIsolatedClustersOptions extends Omit<
@@ -224,7 +224,7 @@ export interface GetIsolatedClusterOptions {
  * Options for {@link import('./get-viewer-isolated-cluster.js').getViewerIsolatedCluster}
  * — the read-model fast-path counterpart of {@link GetIsolatedClusterOptions}.
  * A separate interface for the same reason as
- * {@link ListViewerIsolatedPagesOptions}: the legacy `getIsolatedCluster` this
+ * {@link ListViewerIsolatedPagesOptions}: the live `getIsolatedCluster` this
  * type would otherwise still be shared with filters via strict equality.
  */
 export interface GetViewerIsolatedClusterOptions extends Omit<
@@ -1881,7 +1881,7 @@ export interface ListExternalLinksOptions {
  * Filter/sort/pagination options for {@link import('./list-viewer-external-links.js').listViewerExternalLinks}
  * — the read-model fast-path counterpart of {@link ListExternalLinksOptions}.
  * A separate interface (rather than widening `ListExternalLinksOptions.status`
- * itself) because the legacy `listExternalLinks` this type would otherwise
+ * itself) because the live `listExternalLinks` this type would otherwise
  * still be shared with filters via a `whereRaw(... = ?, [options.status])`
  * single-value bind, which an array would silently break.
  */
@@ -2132,13 +2132,13 @@ export interface ListImagesOptions {
 	 * Opaque keyset cursor from a previous {@link CursorPaginatedImageList}'s
 	 * `nextCursor`/`prevCursor`, forwarded to `getImagesFastPath`'s
 	 * `viewer_images` fast path when applicable. Mutually exclusive with
-	 * `offset` — when both are supplied, `cursor` wins. Ignored by the legacy
+	 * `offset` — when both are supplied, `cursor` wins. Ignored by the live
 	 * `listImages` path (offset-only). Omit for the first page.
 	 */
 	cursor?: string;
 	/**
 	 * Direction to walk from `cursor`: `'next'` (forward, default) or
-	 * `'prev'` (backward). Ignored when `cursor` is omitted or the legacy
+	 * `'prev'` (backward). Ignored when `cursor` is omitted or the live
 	 * path is used.
 	 */
 	direction?: 'next' | 'prev';
@@ -2519,7 +2519,7 @@ export interface CursorPaginatedDuplicateGroupPageList {
  * {@link FindMismatchesOptions}. Omits `sortBy`: `viewer_mismatches` only
  * indexes `(type, url_sort_key, mismatch_id)` (see `vm_type_url`'s docs), so
  * a request for `sortBy: 'actual' | 'expected'` is expected to fall back to
- * the legacy `findMismatches` path before reaching this function — mirroring
+ * the live `findMismatches` path before reaching this function — mirroring
  * `ListViewerHeaderChecksOptions`'s own narrower `sortBy` surface relative to
  * `CheckHeadersOptions`.
  */
@@ -2580,7 +2580,7 @@ export interface CursorPaginatedMismatchList {
 /**
  * `FindMismatchesOptions` (from `find-mismatches.ts`) plus fast-path cursor
  * fields — the full surface `getMismatchesFastPath` accepts, mirroring
- * `CheckHeadersOptions`'s own cursor/direction additions over its legacy
+ * `CheckHeadersOptions`'s own cursor/direction additions over its live
  * base shape.
  */
 export interface FindMismatchesFastPathOptions extends FindMismatchesOptions {
@@ -2588,13 +2588,13 @@ export interface FindMismatchesFastPathOptions extends FindMismatchesOptions {
 	 * Opaque keyset cursor from a previous {@link CursorPaginatedMismatchList}'s
 	 * `nextCursor`/`prevCursor`, forwarded to `getMismatchesFastPath`'s
 	 * `viewer_mismatches` fast path when applicable. Mutually exclusive with
-	 * `offset` — when both are supplied, `cursor` wins. Ignored by the legacy
+	 * `offset` — when both are supplied, `cursor` wins. Ignored by the live
 	 * `findMismatches` path (offset-only). Omit for the first page.
 	 */
 	cursor?: string;
 	/**
 	 * Direction to walk from `cursor`: `'next'` (forward, default) or
-	 * `'prev'` (backward). Ignored when `cursor` is omitted or the legacy
+	 * `'prev'` (backward). Ignored when `cursor` is omitted or the live
 	 * path is used.
 	 */
 	direction?: 'next' | 'prev';
@@ -2602,10 +2602,10 @@ export interface FindMismatchesFastPathOptions extends FindMismatchesOptions {
 
 /**
  * Options for `getDuplicatesFastPath` — a fast-path-only surface with no
- * direct `FindMismatchesFastPathOptions`-style legacy counterpart:
+ * direct `FindMismatchesFastPathOptions`-style live counterpart:
  * `findDuplicates` takes `field`/`limit` as positional arguments, not an
  * options object, so this shape is defined fresh here rather than extended
- * from an existing legacy options type.
+ * from an existing live options type.
  */
 export interface GetDuplicatesFastPathOptions {
 	/**
@@ -2620,16 +2620,16 @@ export interface GetDuplicatesFastPathOptions {
 	/**
 	 * Opaque keyset cursor from a previous
 	 * {@link CursorPaginatedDuplicateGroupList}'s `nextCursor`/`prevCursor`.
-	 * Ignored by the legacy `findDuplicates` path (it has no cursor to offer).
+	 * Ignored by the live `findDuplicates` path (it has no cursor to offer).
 	 */
 	cursor?: string;
 	/**
 	 * Direction to walk from `cursor`: `'next'` (forward, default) or
-	 * `'prev'` (backward). Ignored when `cursor` is omitted or the legacy
+	 * `'prev'` (backward). Ignored when `cursor` is omitted or the live
 	 * path is used.
 	 */
 	direction?: 'next' | 'prev';
-	/** Row offset for page-number jumps. Ignored by the legacy path. */
+	/** Row offset for page-number jumps. Ignored by the live path. */
 	offset?: number;
 }
 
@@ -2709,12 +2709,12 @@ export interface CheckHeadersOptions {
 	 * `nextCursor`/`prevCursor`, forwarded to `getHeaderChecksFastPath`'s
 	 * `viewer_header_checks` fast path when applicable. Mutually exclusive
 	 * with `offset` — when both are supplied, `cursor` wins. Ignored by the
-	 * legacy `checkHeaders` path (offset-only). Omit for the first page.
+	 * live `checkHeaders` path (offset-only). Omit for the first page.
 	 */
 	cursor?: string;
 	/**
 	 * Direction to walk from `cursor`: `'next'` (forward, default) or
-	 * `'prev'` (backward). Ignored when `cursor` is omitted or the legacy
+	 * `'prev'` (backward). Ignored when `cursor` is omitted or the live
 	 * path is used.
 	 */
 	direction?: 'next' | 'prev';
@@ -2727,7 +2727,7 @@ export interface CheckHeadersOptions {
  * {@link CheckHeadersOptions}. Omits `sortBy` values other than `'url'`
  * (the only order `viewer_header_checks` indexes — see
  * `getHeaderChecksSortSpec`); a request for any other `sortBy` is expected
- * to fall back to the legacy path before reaching this function.
+ * to fall back to the live path before reaching this function.
  */
 export interface ListViewerHeaderChecksOptions {
 	/** Filter to pages missing at least one tracked security header. */
@@ -2878,7 +2878,7 @@ export interface GetErrorKindsOptions {
  * — the read-model fast-path counterpart of {@link GetErrorKindsOptions}. A
  * separate interface (rather than widening `GetErrorKindsOptions.kind`/
  * `.attribution` themselves) because that type is also consumed by the
- * legacy `getErrorKinds` (still equality-filtered) and by the CLI's
+ * live `getErrorKinds` (still equality-filtered) and by the CLI's
  * `dispatch-query.ts`/MCP server — widening it there would let an array
  * silently reach code that only compares a scalar.
  */

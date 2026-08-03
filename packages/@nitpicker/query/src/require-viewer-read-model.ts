@@ -9,8 +9,8 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
  * error or silently read a stale snapshot.
  *
  * Unlike `isViewerReadModelCurrent`'s other callers (`get-*-fast-path.ts`),
- * which branch to a legacy SQL fallback when the read model isn't current,
- * `listInboundLinks` has no legacy fallback (see its docs, #235) — the
+ * which branch to a live SQL fallback when the read model isn't current,
+ * `listInboundLinks` has no live fallback (see its docs, #235) — the
  * `viewer_anchor_facts.dest_page_id` index is the only way to answer
  * "who links here" without a full `anchor_edges` scan, so there is nothing
  * correct to fall back to. This mirrors `requireAliasOfIdColumn`'s pattern

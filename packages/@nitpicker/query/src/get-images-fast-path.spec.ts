@@ -66,7 +66,7 @@ describe('getImagesFastPath', () => {
 		);
 	});
 
-	it('falls back to the legacy path when the read model is stale or absent', async () => {
+	it('falls back to the live path when the read model is stale or absent', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
 		vi.mocked(listImages).mockResolvedValue({
 			items: [],
@@ -84,7 +84,7 @@ describe('getImagesFastPath', () => {
 		expect(listViewerImages).not.toHaveBeenCalled();
 	});
 
-	it('forces the legacy path when urlPattern is supplied, even if the read model is current', async () => {
+	it('forces the live path when urlPattern is supplied, even if the read model is current', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
 		vi.mocked(listImages).mockResolvedValue({
 			items: [],
@@ -101,7 +101,7 @@ describe('getImagesFastPath', () => {
 	});
 
 	it.each(['src', 'alt'] as const)(
-		'forces the legacy path when sortBy is %s, even if the read model is current',
+		'forces the live path when sortBy is %s, even if the read model is current',
 		async (sortBy) => {
 			vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
 			vi.mocked(listImages).mockResolvedValue({

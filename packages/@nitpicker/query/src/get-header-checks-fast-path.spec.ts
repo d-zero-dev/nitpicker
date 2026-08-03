@@ -55,7 +55,7 @@ describe('getHeaderChecksFastPath', () => {
 		expect(checkHeaders).not.toHaveBeenCalled();
 	});
 
-	it('forces the legacy path when sortBy is explicitly "url" — checkHeaders treats this as a request for natural sort, which the fast path cannot provide', async () => {
+	it('forces the live path when sortBy is explicitly "url" — checkHeaders treats this as a request for natural sort, which the fast path cannot provide', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
 		vi.mocked(checkHeaders).mockResolvedValue({
 			items: [],
@@ -85,7 +85,7 @@ describe('getHeaderChecksFastPath', () => {
 		);
 	});
 
-	it('falls back to the legacy path when the read model is stale or absent', async () => {
+	it('falls back to the live path when the read model is stale or absent', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
 		vi.mocked(checkHeaders).mockResolvedValue({
 			items: [],
@@ -104,7 +104,7 @@ describe('getHeaderChecksFastPath', () => {
 	});
 
 	it.each(['hasCSP', 'hasXFrameOptions', 'hasXContentTypeOptions', 'hasHSTS'] as const)(
-		'forces the legacy path when sortBy is %s, even if the read model is current',
+		'forces the live path when sortBy is %s, even if the read model is current',
 		async (sortBy) => {
 			vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
 			vi.mocked(checkHeaders).mockResolvedValue({

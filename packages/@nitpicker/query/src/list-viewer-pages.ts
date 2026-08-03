@@ -170,7 +170,7 @@ async function buildCursorPaginatedResult(
  * `options.cursor` takes priority over `options.offset` when both are
  * supplied. `options.offset` (page-number jumps / MPA pagination) reads
  * directly from `viewer_pages` with a plain `OFFSET` — still far cheaper
- * than the legacy `listPages` path because `viewer_pages` is a narrow,
+ * than the live `listPages` path because `viewer_pages` is a narrow,
  * fully-covered-by-index table, unlike the wide `pages` table `listPages`
  * scans.
  * @param accessor - The archive accessor to query. Callers are responsible

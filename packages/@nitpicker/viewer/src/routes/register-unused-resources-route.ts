@@ -12,8 +12,8 @@ import {
 	listViewerUnusedResources,
 } from '@nitpicker/query';
 
-import { buildLegacyPagesCursors } from '../query-params/build-legacy-pages-cursors.js';
-import { parseLegacyPagesCursor } from '../query-params/parse-legacy-pages-cursor.js';
+import { buildLivePagesCursors } from '../query-params/build-live-pages-cursors.js';
+import { parseLivePagesCursor } from '../query-params/parse-live-pages-cursor.js';
 import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
 import { toPageSortOrder } from '../query-params/to-page-sort-order.js';
@@ -37,7 +37,7 @@ const DEFAULT_LIMIT = 100;
  *   `resources` table can evaluate: the LIKE-based `urlPattern`, the
  *   raw-MIME-prefix `contentType`, and any `sortBy` outside
  *   `url`/`status`/`source`.
- * - `listUnusedResources` (the legacy, offset-only,
+ * - `listUnusedResources` (the live, offset-only,
  *   request-time-anti-join path) otherwise.
  * @param app - The Hono application.
  * @param context - The opened archive context.
@@ -65,7 +65,7 @@ export function registerUnusedResourcesRoute(app: Hono, context: ArchiveContext)
 		}
 
 		const limit = toNumber(q.limit) ?? DEFAULT_LIMIT;
-		const offset = parseLegacyPagesCursor(q.cursor, toNumber(q.offset) ?? 0);
+		const offset = parseLivePagesCursor(q.cursor, toNumber(q.offset) ?? 0);
 		const options: ListUnusedResourcesOptions = {
 			urlPattern: q.urlPattern,
 			status: toNumber(q.status),
@@ -76,15 +76,15 @@ export function registerUnusedResourcesRoute(app: Hono, context: ArchiveContext)
 			limit,
 			offset,
 		};
-		const legacyResult = await listUnusedResources(accessor, options);
-		const { nextCursor, prevCursor } = buildLegacyPagesCursors({
+		const liveResult = await listUnusedResources(accessor, options);
+		const { nextCursor, prevCursor } = buildLivePagesCursors({
 			offset,
-			itemCount: legacyResult.items.length,
-			total: legacyResult.total,
+			itemCount: liveResult.items.length,
+			total: liveResult.total,
 			limit,
 		});
 		const result: CursorPaginatedUnusedResourceList = {
-			...legacyResult,
+			...liveResult,
 			nextCursor,
 			prevCursor,
 		};

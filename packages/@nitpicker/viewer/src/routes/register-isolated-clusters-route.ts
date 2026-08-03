@@ -8,7 +8,7 @@ import {
 	isViewerReadModelCurrent,
 	listIsolatedClusters,
 	listIsolatedClustersFastPath,
-	resolveLegacyFilterValue,
+	resolveLiveFilterValue,
 } from '@nitpicker/query';
 
 import { getCachedIsolatedClusters } from '../isolated-clusters-cache.js';
@@ -52,7 +52,7 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 			context.mode === 'stub'
 				? await listIsolatedClusters(accessor, {
 						...sharedOptions,
-						status: resolveLegacyFilterValue(status),
+						status: resolveLiveFilterValue(status),
 						precomputedComponents: await getCachedIsolatedClusters(context),
 					})
 				: await listIsolatedClustersFastPath(accessor, { ...sharedOptions, status });
@@ -77,8 +77,8 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 			context.mode === 'stub'
 				? await getIsolatedCluster(accessor, representativeUrl, {
 						...sharedOptions,
-						status: resolveLegacyFilterValue(status),
-						source: resolveLegacyFilterValue(source),
+						status: resolveLiveFilterValue(status),
+						source: resolveLiveFilterValue(source),
 						precomputedComponents: await getCachedIsolatedClusters(context),
 					})
 				: await getIsolatedClusterFastPath(accessor, representativeUrl, {

@@ -15,7 +15,7 @@ import { resolveErrorKindsSort } from './resolve-error-kinds-sort.js';
  * `crawl_errors`/`error.log` scan-and-classify pass on archives where the
  * read model is current. Filtering, sorting, and pagination all happen in
  * SQL, so the cost of any `options` combination is the same small query —
- * unlike the legacy path, which always re-scans and reclassifies before
+ * unlike the live path, which always re-scans and reclassifies before
  * filtering in memory.
  *
  * Callers are responsible for guarding with `isViewerReadModelCurrent`
@@ -34,7 +34,7 @@ import { resolveErrorKindsSort } from './resolve-error-kinds-sort.js';
  * if (await isViewerReadModelCurrent(accessor)) {
  *   return getViewerErrorKinds(accessor, { kind: 'dns', sortBy: 'count' });
  * }
- * return getErrorKinds(accessor, options); // legacy fallback
+ * return getErrorKinds(accessor, options); // live fallback
  */
 export async function getViewerErrorKinds(
 	accessor: ArchiveAccessor,

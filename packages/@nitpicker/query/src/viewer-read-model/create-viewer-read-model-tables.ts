@@ -322,7 +322,7 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// `source` mirrors `pages.source` so the graph view can color nodes by
 	// ingestion channel (crawled / inventory-seed / inventory-discovered).
 	// See `GraphNode.source` in `../types.ts` — the fast-path read
-	// (`getViewerLinkGraph`) must produce the same shape as the legacy
+	// (`getViewerLinkGraph`) must produce the same shape as the live
 	// `getLinkGraph` or the type guard fails.
 	await trx.raw(`
 		CREATE TABLE viewer_graph_nodes (
@@ -350,7 +350,7 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// `content_category` column (unlike `viewer_pages`): neither
 	// `ListViewerResourcesOptions` nor `ListViewerUnusedResourcesOptions`
 	// filters on it — `ListResourcesOptions.contentType` is a raw MIME prefix
-	// the read model doesn't classify, and bails to legacy regardless (see
+	// the read model doesn't classify, and bails to the live path regardless (see
 	// `register-resources-route.ts`). `is_unused` is duplicated onto this
 	// table (rather than living only in `viewer_resource_stats`) because
 	// `/api/unused-resources` needs it as a pre-limit filter column, exactly

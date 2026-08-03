@@ -2,7 +2,7 @@
  * Sentinel `status_sort_key` value substituted for `null` status (errored /
  * not-yet-classified rows, or destinations never fetched). Chosen smaller
  * than any real HTTP status code (100-599) so unknown-status rows keep
- * sorting first in ascending order — the same order the legacy write-model
+ * sorting first in ascending order — the same order the live write-model
  * queries produce by ordering directly on the nullable `status` column,
  * where SQLite treats `NULL` as smaller than any value.
  *

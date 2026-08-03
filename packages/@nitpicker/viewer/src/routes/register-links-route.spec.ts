@@ -59,7 +59,7 @@ const META = {
  * @param workingDir - Unique scratch directory for this fixture.
  * @param withReadModel - Whether to build the `viewer_external_links` read
  *   model before opening read-only (exercises the fast path) or leave it
- *   unbuilt (exercises the legacy fallback path).
+ *   unbuilt (exercises the live fallback path).
  * @returns The app, archive, and manager — callers must close both in
  *   `afterAll`.
  */
@@ -221,10 +221,10 @@ describe('registerLinksRoute — /api/links?type=external (integration)', () => 
 		});
 	});
 
-	describe('legacy fallback path (no read model built)', () => {
+	describe('live fallback path (no read model built)', () => {
 		const workingDir = path.resolve(
 			__dirname,
-			'__test_fixtures_register_links_route_legacy__',
+			'__test_fixtures_register_links_route_live__',
 		);
 		let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
@@ -238,7 +238,7 @@ describe('registerLinksRoute — /api/links?type=external (integration)', () => 
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('returns the same destination-deduped shape via the legacy live query', async () => {
+		it('returns the same destination-deduped shape via the live query', async () => {
 			const res = await fixture.app.request('/api/links?type=external');
 			const body = (await res.json()) as {
 				items: { destUrl: string; status: number | null; referrerCount: number }[];
@@ -250,7 +250,7 @@ describe('registerLinksRoute — /api/links?type=external (integration)', () => 
 			]);
 		});
 
-		it('narrows a multi-value status to its first element (legacy path has no OR equivalent)', async () => {
+		it('narrows a multi-value status to its first element (live path has no OR equivalent)', async () => {
 			const res = await fixture.app.request(
 				'/api/links?type=external&status=200&status=404',
 			);
@@ -308,7 +308,7 @@ describe('registerLinksRoute — /api/links?type=broken (integration)', () => {
 			expect(body.total).toBe(1);
 		});
 
-		it('forces the legacy fallback when urlPattern is set, since no single index covers source-OR-dest matching', async () => {
+		it('forces the live fallback when urlPattern is set, since no single index covers source-OR-dest matching', async () => {
 			const res = await fixture.app.request(
 				`/api/links?type=broken&urlPattern=${encodeURIComponent('%page-b%')}`,
 			);
@@ -341,9 +341,9 @@ describe('registerLinksRoute — /api/links?type=broken (integration)', () => {
 			// Sorting by `sourceUrl` (the fast path's silent fallback if the
 			// unsupported-sort guard were missing) would place `s1` before
 			// `s2` (alphabetical). Sorting by `isExternal` ascending (only
-			// `listLinks`, the legacy path, supports this) places the
+			// `listLinks`, the live path, supports this) places the
 			// internal destination (`s2`) first instead — a result only
-			// reachable by actually forcing the legacy fallback.
+			// reachable by actually forcing the live fallback.
 			await archive.setPage({
 				url: parseUrl('https://example.com/s1')!,
 				redirectPaths: [],
@@ -446,7 +446,7 @@ describe('registerLinksRoute — /api/links?type=broken (integration)', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('forces the legacy fallback for sortBy=isExternal, which viewer_anchor_facts has no index for', async () => {
+		it('forces the live fallback for sortBy=isExternal, which viewer_anchor_facts has no index for', async () => {
 			const res = await fixture.app.request(
 				'/api/links?type=broken&sortBy=isExternal&sortOrder=asc',
 			);
@@ -458,10 +458,10 @@ describe('registerLinksRoute — /api/links?type=broken (integration)', () => {
 		});
 	});
 
-	describe('legacy fallback path (no read model built)', () => {
+	describe('live fallback path (no read model built)', () => {
 		const workingDir = path.resolve(
 			__dirname,
-			'__test_fixtures_register_links_route_broken_legacy__',
+			'__test_fixtures_register_links_route_broken_live__',
 		);
 		let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
@@ -475,7 +475,7 @@ describe('registerLinksRoute — /api/links?type=broken (integration)', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('returns the same broken-link shape via the legacy live query, with an offset-string nextCursor', async () => {
+		it('returns the same broken-link shape via the live query, with an offset-string nextCursor', async () => {
 			const res = await fixture.app.request('/api/links?type=broken');
 			const body = (await res.json()) as {
 				items: { sourceUrl: string; destUrl: string; status: number | null }[];
@@ -491,9 +491,9 @@ describe('registerLinksRoute — /api/links?type=broken (integration)', () => {
 			expect(body.nextCursor).toBeNull();
 		});
 
-		it('narrows a multi-value status to its first element (legacy path has no OR equivalent)', async () => {
+		it('narrows a multi-value status to its first element (live path has no OR equivalent)', async () => {
 			// The single broken link is status 404. Putting a non-matching
-			// status first proves the legacy path uses only that first
+			// status first proves the live path uses only that first
 			// element rather than OR-ing across the whole array — if it
 			// did, the real 404 later in the array would still match.
 			const res = await fixture.app.request(

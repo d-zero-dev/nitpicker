@@ -22,7 +22,7 @@ import type { Knex } from 'knex';
  * deliberately no dedicated covering index for this filter (see
  * `createViewerReadModelIndexes`'s docs) — it is a residual OR scan with no
  * index to assist it, over a table with no large text columns, still far
- * cheaper than the legacy path's scan of the wide `images` table plus its
+ * cheaper than the live path's scan of the wide `images` table plus its
  * covering index.
  * @param qb - A Knex query builder scoped to `viewer_images` (or a subquery
  *   selecting from it).

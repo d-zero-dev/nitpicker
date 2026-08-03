@@ -21,7 +21,7 @@ const PORT = 4327;
  * build the read model, so `/api/directory-tree` would always return an
  * empty `{ roots: [] }` against it. Kept in its own config (rather than
  * adding the read model build to the shared fixture) so the six other
- * views' fast-path/legacy dispatch in the shared-fixture suite stays
+ * views' fast-path/live dispatch in the shared-fixture suite stays
  * unaffected.
  */
 if (!existsSync(fixturePath)) {

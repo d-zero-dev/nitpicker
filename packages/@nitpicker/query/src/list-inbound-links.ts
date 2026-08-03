@@ -139,7 +139,7 @@ async function readTextRefs(
  * count can reach the hundreds of thousands on a large site (issue #235).
  *
  * Reads exclusively from `viewer_anchor_facts` (see `requireViewerReadModel`)
- * — there is no legacy fallback, unlike most `viewer_*`-backed queries:
+ * — there is no live fallback, unlike most `viewer_*`-backed queries:
  * answering "who links here" without the `dest_page_id` index would require
  * a full `anchor_edges` scan resolved through
  * `COALESCE(redirect_dest_id, alias_of_id, id)` for every row, the exact

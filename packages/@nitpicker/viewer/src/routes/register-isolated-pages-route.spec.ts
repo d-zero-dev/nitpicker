@@ -198,7 +198,7 @@ describe('registerIsolatedPagesRoute — /api/isolated-pages (integration)', () 
 		});
 	});
 
-	describe('stub mode (legacy fallback path)', () => {
+	describe('stub mode (live fallback path)', () => {
 		const workingDir = path.resolve(
 			__dirname,
 			'__test_fixtures_register_isolated_pages_route_stub__',
@@ -208,7 +208,7 @@ describe('registerIsolatedPagesRoute — /api/isolated-pages (integration)', () 
 
 		beforeAll(async () => {
 			archive = await buildFixtureArchive(workingDir);
-			// Live-crawl stub mode forces the legacy branch in the route
+			// Live-crawl stub mode forces the live branch in the route
 			// regardless of read-model presence — no buildViewerReadModel call.
 
 			const context: ArchiveContext = {

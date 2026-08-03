@@ -3,16 +3,16 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { listIsolatedPages } from './list-isolated-pages.js';
 import { listViewerIsolatedPages } from './list-viewer-isolated-pages.js';
-import { resolveLegacyFilterValue } from './resolve-legacy-filter-value.js';
+import { resolveLiveFilterValue } from './resolve-live-filter-value.js';
 import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
 
 /**
  * Dispatches `/api/isolated-pages` reads to the read model when current,
- * otherwise falls back to the legacy union-find path. Takes {@link
+ * otherwise falls back to the live union-find path. Takes {@link
  * ListViewerIsolatedPagesOptions} (fast-path shape, `status`/`source`
- * array-capable): the legacy `listIsolatedPages` still filters both by
+ * array-capable): the live `listIsolatedPages` still filters both by
  * strict equality, so a multi-select value is narrowed to its first element
- * via `resolveLegacyFilterValue` on that branch — multi-select degrades to
+ * via `resolveLiveFilterValue` on that branch — multi-select degrades to
  * single-select on a stale/absent read model rather than matching nothing.
  * @param accessor - The archive accessor to query.
  * @param options - Filter, sort, and pagination options.
@@ -29,7 +29,7 @@ export async function listIsolatedPagesFastPath(
 		? listViewerIsolatedPages(accessor, options)
 		: listIsolatedPages(accessor, {
 				...options,
-				status: resolveLegacyFilterValue(options.status),
-				source: resolveLegacyFilterValue(options.source),
+				status: resolveLiveFilterValue(options.status),
+				source: resolveLiveFilterValue(options.source),
 			});
 }

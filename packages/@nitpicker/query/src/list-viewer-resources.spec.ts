@@ -211,17 +211,15 @@ describe('listViewerResources', () => {
 		expect(result.prevCursor).toBeNull();
 	});
 
-	it('joins referrerCount from viewer_resource_stats, matching the legacy correlated-subquery result', async () => {
-		const [viewerResult, legacyResult] = await Promise.all([
+	it('joins referrerCount from viewer_resource_stats, matching the live correlated-subquery result', async () => {
+		const [viewerResult, liveResult] = await Promise.all([
 			listViewerResources(archive, { limit: 100 }),
 			listResources(archive, { limit: 100 }),
 		]);
 		const viewerByUrl = new Map(viewerResult.items.map((i) => [i.url, i]));
-		const legacyByUrl = new Map(legacyResult.items.map((i) => [i.url, i]));
+		const liveByUrl = new Map(liveResult.items.map((i) => [i.url, i]));
 		for (const url of viewerByUrl.keys()) {
-			expect(viewerByUrl.get(url)?.referrerCount).toBe(
-				legacyByUrl.get(url)?.referrerCount,
-			);
+			expect(viewerByUrl.get(url)?.referrerCount).toBe(liveByUrl.get(url)?.referrerCount);
 		}
 		expect(viewerByUrl.get('https://example.com/a.css')?.referrerCount).toBe(2);
 		expect(viewerByUrl.get('https://example.com/b.js')?.referrerCount).toBe(0);

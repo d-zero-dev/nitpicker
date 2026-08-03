@@ -121,7 +121,7 @@ for (let i = 0; i < REFERRER_COUNT; i++) {
 }
 
 // Build the viewer read model before writing — `listInboundLinks` (unlike
-// most viewer_*-backed queries) has no legacy fallback, so `/api/pages/inbound-links`
+// most viewer_*-backed queries) has no live fallback, so `/api/pages/inbound-links`
 // would otherwise always respond `{ available: false }` against this
 // fixture. Kept in its own fixture (rather than adding this to the shared
 // `generate-fixture.mjs`) for the same reason `generate-directory-tree-fixture.mjs`

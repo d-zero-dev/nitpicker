@@ -59,7 +59,7 @@ const META = {
  * @param workingDir - Unique scratch directory for this fixture.
  * @param withReadModel - Whether to build the `viewer_pages` read model
  *   before opening read-only (exercises the fast path) or leave it unbuilt
- *   (exercises the legacy fallback path).
+ *   (exercises the live fallback path).
  * @param responseHeadersByLetter - Optional per-page response headers,
  *   keyed by the page's letter suffix. Defaults to no headers on every page.
  * @returns The app, archive, and manager — callers must close both in
@@ -294,10 +294,10 @@ describe('registerPagesRoute (integration)', () => {
 		});
 	});
 
-	describe('legacy fallback path (no read model built)', () => {
+	describe('live fallback path (no read model built)', () => {
 		const workingDir = path.resolve(
 			__dirname,
-			'__test_fixtures_register_pages_route_legacy_no_read_model__',
+			'__test_fixtures_register_pages_route_live_no_read_model__',
 		);
 		let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
@@ -322,9 +322,9 @@ describe('registerPagesRoute (integration)', () => {
 			]);
 		});
 
-		it('narrows a multi-value contentTypeCategory to its first element (legacy path has no OR equivalent)', async () => {
+		it('narrows a multi-value contentTypeCategory to its first element (live path has no OR equivalent)', async () => {
 			// Every fixture page is 'text/html' → category 'html'. Putting
-			// the non-matching 'other' category first proves the legacy
+			// the non-matching 'other' category first proves the live
 			// path uses only that first element rather than OR-ing across
 			// the whole array — if it did, the 'html' value later in the
 			// array would still make every page match.
@@ -336,10 +336,10 @@ describe('registerPagesRoute (integration)', () => {
 		});
 	});
 
-	describe('legacy fallback path (urlPattern forces legacy even though a read model exists)', () => {
+	describe('live fallback path (urlPattern forces the live path even though a read model exists)', () => {
 		const workingDir = path.resolve(
 			__dirname,
-			'__test_fixtures_register_pages_route_legacy_urlpattern__',
+			'__test_fixtures_register_pages_route_live_urlpattern__',
 		);
 		let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
@@ -369,7 +369,7 @@ describe('registerPagesRoute (integration)', () => {
 		});
 	});
 
-	describe('header-presence filter (hasCSP) forces legacy path even though a read model exists', () => {
+	describe('header-presence filter (hasCSP) forces live path even though a read model exists', () => {
 		const workingDir = path.resolve(
 			__dirname,
 			'__test_fixtures_register_pages_route_header_filter__',
@@ -423,7 +423,7 @@ describe('registerPagesRoute (integration)', () => {
 		});
 	});
 
-	describe('templateKey filter stays on the fast path (page_id-PK join to page_templates, no legacy fallback)', () => {
+	describe('templateKey filter stays on the fast path (page_id-PK join to page_templates, no live fallback)', () => {
 		const workingDir = path.resolve(
 			__dirname,
 			'__test_fixtures_register_pages_route_template_key_filter__',
@@ -458,7 +458,7 @@ describe('registerPagesRoute (integration)', () => {
 			expect(body.total).toBe(2);
 		});
 
-		it('mints an opaque base64url keyset cursor, not the legacy plain-decimal offset cursor (regression: forcing legacy would change the cursor format)', async () => {
+		it('mints an opaque base64url keyset cursor, not the live plain-decimal offset cursor (regression: forcing live would change the cursor format)', async () => {
 			const res = await fixture.app.request('/api/pages?templateKey=template-a&limit=1');
 			const body = (await res.json()) as { nextCursor: string | null };
 			expect(body.nextCursor).not.toBeNull();

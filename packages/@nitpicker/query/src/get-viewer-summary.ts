@@ -27,7 +27,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * if (await isViewerReadModelCurrent(accessor)) {
  *   return getViewerSummary(accessor);
  * }
- * return getSummary(accessor); // legacy fallback
+ * return getSummary(accessor); // live fallback
  */
 export async function getViewerSummary(
 	accessor: ArchiveAccessor,

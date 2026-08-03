@@ -1,5 +1,5 @@
-/** Inputs needed to compute the legacy path's pagination cursors. */
-export interface LegacyPagesCursorInput {
+/** Inputs needed to compute the live path's pagination cursors. */
+export interface LivePagesCursorInput {
 	/** The row offset this page was read from. */
 	offset: number;
 	/** How many items this page actually returned. */
@@ -10,8 +10,8 @@ export interface LegacyPagesCursorInput {
 	limit: number;
 }
 
-/** `nextCursor`/`prevCursor` for one legacy-path page. */
-export interface LegacyPagesCursors {
+/** `nextCursor`/`prevCursor` for one live-path page. */
+export interface LivePagesCursors {
 	/** Offset-string cursor for the next page, or `null` if this is the last page. */
 	nextCursor: string | null;
 	/** Offset-string cursor for the previous page, or `null` if this is the first page. */
@@ -19,7 +19,7 @@ export interface LegacyPagesCursors {
 }
 
 /**
- * Computes `nextCursor`/`prevCursor` for `/api/pages`'s legacy (offset-based)
+ * Computes `nextCursor`/`prevCursor` for `/api/pages`'s live (offset-based)
  * fallback path, so infinite-scroll pagination keeps working even when a
  * request can't use the `viewer_pages` fast path (a `urlPattern`/`directory`
  * filter, or a missing/stale read model).
@@ -28,13 +28,11 @@ export interface LegacyPagesCursors {
  * path's opaque keyset cursors — encoding the *next offset* as a plain
  * decimal string cursor lets `usePagesInfinite`'s `nextCursor`-only
  * continuation logic keep working transparently across both backends
- * (see `parseLegacyPagesCursor` for the inverse).
+ * (see `parseLivePagesCursor` for the inverse).
  * @param input - The current page's read parameters and result shape.
  * @returns The next/previous cursors for this page.
  */
-export function buildLegacyPagesCursors(
-	input: LegacyPagesCursorInput,
-): LegacyPagesCursors {
+export function buildLivePagesCursors(input: LivePagesCursorInput): LivePagesCursors {
 	const { offset, itemCount, total, limit } = input;
 	const nextOffset = offset + itemCount;
 	const nextCursor = itemCount > 0 && nextOffset < total ? String(nextOffset) : null;

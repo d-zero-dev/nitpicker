@@ -178,25 +178,25 @@ describe('getViewerErrorKinds', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('matches a getErrorKinds() (legacy) snapshot of the same archive', async () => {
-			const [viewerResult, legacyResult] = await Promise.all([
+		it('matches a getErrorKinds() (live) snapshot of the same archive', async () => {
+			const [viewerResult, liveResult] = await Promise.all([
 				getViewerErrorKinds(archive),
 				getErrorKinds(archive),
 			]);
 			// Both sort by count descending, but neither documents a tie-break
-			// rule for equal counts (legacy ties break by Map insertion order;
+			// rule for equal counts (live ties break by Map insertion order;
 			// the read model ties break by host/kind ascending) — sort by
 			// host+kind before comparing so the two equally-valid tie-break
 			// orders don't fail an otherwise-matching comparison. This
 			// fixture's two count=1 entries (api.example.org/connection-refused,
 			// example.com/timeout) tie.
-			const sortByHostKind = (r: typeof legacyResult) => ({
+			const sortByHostKind = (r: typeof liveResult) => ({
 				...r,
 				items: r.items.toSorted(
 					(a, b) => a.host.localeCompare(b.host) || a.kind.localeCompare(b.kind),
 				),
 			});
-			expect(sortByHostKind(viewerResult)).toEqual(sortByHostKind(legacyResult));
+			expect(sortByHostKind(viewerResult)).toEqual(sortByHostKind(liveResult));
 		});
 
 		it("computes the fixture's counts/host breakdown independently of getErrorKinds() (hardcoded expectations)", async () => {
@@ -230,7 +230,7 @@ describe('getViewerErrorKinds', () => {
 			// selection, not the raw, unvalidated sortBy — deriving it from the
 			// raw value makes an invalid sortBy silently return count-ascending
 			// instead of matching getErrorKinds()'s count-descending fallback.
-			const [viewerResult, legacyResult] = await Promise.all([
+			const [viewerResult, liveResult] = await Promise.all([
 				getViewerErrorKinds(archive, {
 					// eslint-disable-next-line @typescript-eslint/no-explicit-any -- simulating an out-of-range value from an untyped caller.
 					sortBy: 'bogus' as any,
@@ -245,7 +245,7 @@ describe('getViewerErrorKinds', () => {
 			// (which is where an 'asc' regression would actually surface: they'd
 			// flip to the end) land last, sorted by host+kind for the same
 			// tie-break-is-unspecified reason as the snapshot-match test above.
-			const sortByHostKind = (r: typeof legacyResult) => ({
+			const sortByHostKind = (r: typeof liveResult) => ({
 				...r,
 				items: r.items.toSorted(
 					(a, b) => a.host.localeCompare(b.host) || a.kind.localeCompare(b.kind),
@@ -256,24 +256,24 @@ describe('getViewerErrorKinds', () => {
 				kind: 'dns',
 				count: 2,
 			});
-			expect(sortByHostKind(viewerResult)).toEqual(sortByHostKind(legacyResult));
+			expect(sortByHostKind(viewerResult)).toEqual(sortByHostKind(liveResult));
 		});
 
 		it('filters by exact host and kind, matching getErrorKinds()', async () => {
-			const [viewerByHost, legacyByHost] = await Promise.all([
+			const [viewerByHost, liveByHost] = await Promise.all([
 				getViewerErrorKinds(archive, { host: 'ext.example.net' }),
 				getErrorKinds(archive, { host: 'ext.example.net' }),
 			]);
-			expect(viewerByHost).toEqual(legacyByHost);
+			expect(viewerByHost).toEqual(liveByHost);
 			expect(viewerByHost.items).toHaveLength(1);
 			// facets stay archive-wide, unaffected by the host filter.
 			expect(viewerByHost.facets.totalRecords).toBe(4);
 
-			const [viewerByKind, legacyByKind] = await Promise.all([
+			const [viewerByKind, liveByKind] = await Promise.all([
 				getViewerErrorKinds(archive, { kind: 'connection-refused' }),
 				getErrorKinds(archive, { kind: 'connection-refused' }),
 			]);
-			expect(viewerByKind).toEqual(legacyByKind);
+			expect(viewerByKind).toEqual(liveByKind);
 			expect(viewerByKind.items).toHaveLength(1);
 
 			const both = await getViewerErrorKinds(archive, {
@@ -298,11 +298,11 @@ describe('getViewerErrorKinds', () => {
 		});
 
 		it('sorts by host asc/desc, matching getErrorKinds()', async () => {
-			const [viewerAsc, legacyAsc] = await Promise.all([
+			const [viewerAsc, liveAsc] = await Promise.all([
 				getViewerErrorKinds(archive, { sortBy: 'host', sortOrder: 'asc' }),
 				getErrorKinds(archive, { sortBy: 'host', sortOrder: 'asc' }),
 			]);
-			expect(viewerAsc).toEqual(legacyAsc);
+			expect(viewerAsc).toEqual(liveAsc);
 			expect(viewerAsc.items.map((i) => i.host)).toEqual([
 				'api.example.org',
 				'example.com',
@@ -321,7 +321,7 @@ describe('getViewerErrorKinds', () => {
 		});
 
 		it('paginates with limit/offset, matching getErrorKinds()', async () => {
-			const [viewerPage, legacyPage] = await Promise.all([
+			const [viewerPage, livePage] = await Promise.all([
 				getViewerErrorKinds(archive, {
 					sortBy: 'host',
 					sortOrder: 'asc',
@@ -330,7 +330,7 @@ describe('getViewerErrorKinds', () => {
 				}),
 				getErrorKinds(archive, { sortBy: 'host', sortOrder: 'asc', limit: 1, offset: 1 }),
 			]);
-			expect(viewerPage).toEqual(legacyPage);
+			expect(viewerPage).toEqual(livePage);
 			expect(viewerPage.items).toHaveLength(1);
 			expect(viewerPage.items[0]!.host).toBe('example.com');
 			expect(viewerPage.total).toBe(3);
@@ -394,18 +394,18 @@ describe('getViewerErrorKinds', () => {
 		});
 
 		it('splits dns rows by attribution, matching getErrorKinds() exactly', async () => {
-			const [viewerResult, legacyResult] = await Promise.all([
+			const [viewerResult, liveResult] = await Promise.all([
 				getViewerErrorKinds(archive),
 				getErrorKinds(archive),
 			]);
-			const sortStable = (r: typeof legacyResult) => ({
+			const sortStable = (r: typeof liveResult) => ({
 				...r,
 				items: r.items.toSorted(
 					(a, b) =>
 						a.host.localeCompare(b.host) || a.attribution.localeCompare(b.attribution),
 				),
 			});
-			expect(sortStable(viewerResult)).toEqual(sortStable(legacyResult));
+			expect(sortStable(viewerResult)).toEqual(sortStable(liveResult));
 
 			const outageCaused = viewerResult.items.find(
 				(item) => item.host === 'outage-caused.example',
@@ -422,11 +422,11 @@ describe('getViewerErrorKinds', () => {
 		});
 
 		it('filters by attribution', async () => {
-			const [viewerNetwork, legacyNetwork] = await Promise.all([
+			const [viewerNetwork, liveNetwork] = await Promise.all([
 				getViewerErrorKinds(archive, { attribution: 'network' }),
 				getErrorKinds(archive, { attribution: 'network' }),
 			]);
-			expect(viewerNetwork).toEqual(legacyNetwork);
+			expect(viewerNetwork).toEqual(liveNetwork);
 			expect(viewerNetwork.items).toHaveLength(1);
 			expect(viewerNetwork.items[0]?.host).toBe('outage-caused.example');
 		});

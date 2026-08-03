@@ -11,7 +11,7 @@ import { toNumber } from '../query-params/to-number.js';
  * a bounded, cursor-paginated window of pages linking to a target page, plus
  * its total referrer count.
  *
- * There is no legacy fallback (unlike `/api/links` and most other
+ * There is no live fallback (unlike `/api/links` and most other
  * `viewer_*`-backed routes): `listInboundLinks` reads exclusively from
  * `viewer_anchor_facts`, so in stub mode — where that read model cannot
  * exist — this responds with {@link InboundLinksUnavailable} instead of

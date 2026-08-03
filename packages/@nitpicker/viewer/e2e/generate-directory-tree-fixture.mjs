@@ -119,7 +119,7 @@ await setSimplePage('https://example.com/blog/2023/07/22/post-a', 'Post A');
 
 // Build the viewer read model before writing — directory-tree's 3 query
 // functions (get-directory-tree.ts et al.) are gated on
-// `isViewerReadModelCurrent`, not `hasViewerReadModel`, and have no legacy
+// `isViewerReadModelCurrent`, not `hasViewerReadModel`, and have no live
 // fallback, so `/api/directory-tree` would otherwise always return an empty
 // `{ roots: [] }` against this fixture (see `ensure-viewer-read-model-quietly.ts`
 // for the same call in the crawl-completion path).

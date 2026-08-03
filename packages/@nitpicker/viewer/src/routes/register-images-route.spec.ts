@@ -57,7 +57,7 @@ const NOOP_META = {
  * @param workingDir - Unique scratch directory for this fixture.
  * @param withReadModel - Whether to build the `viewer_images` read model
  *   before opening read-only (exercises the fast path) or leave it unbuilt
- *   (exercises the legacy fallback path).
+ *   (exercises the live fallback path).
  * @returns The app and manager — callers must close the manager in `afterAll`.
  */
 async function buildFixture(workingDir: string, withReadModel: boolean) {
@@ -212,7 +212,7 @@ describe('registerImagesRoute — /api/images (integration)', () => {
 			expect(backToPage1.items.map((i) => i.src)).toEqual(page1.items.map((i) => i.src));
 		});
 
-		it('forces the legacy fallback when urlPattern is set', async () => {
+		it('forces the live fallback when urlPattern is set', async () => {
 			const res = await fixture.app.request(
 				`/api/images?urlPattern=${encodeURIComponent('%a.png%')}`,
 			);
@@ -221,17 +221,17 @@ describe('registerImagesRoute — /api/images (integration)', () => {
 			expect(body.items[0]!.src).toBe('https://example.com/a.png');
 		});
 
-		it('forces the legacy fallback for a sortBy the fast path does not index', async () => {
+		it('forces the live fallback for a sortBy the fast path does not index', async () => {
 			const res = await fixture.app.request('/api/images?sortBy=alt&sortOrder=desc');
 			const body = (await res.json()) as { items: { src: string }[] };
 			expect(body.items[0]!.src).toBe('https://example.com/a.png');
 		});
 	});
 
-	describe('legacy fallback path (no read model built)', () => {
+	describe('live fallback path (no read model built)', () => {
 		const workingDir = path.resolve(
 			__dirname,
-			'__test_fixtures_register_images_route_legacy__',
+			'__test_fixtures_register_images_route_live__',
 		);
 		let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
@@ -245,7 +245,7 @@ describe('registerImagesRoute — /api/images (integration)', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('returns the same shape via the legacy live query, with null cursors', async () => {
+		it('returns the same shape via the live query, with null cursors', async () => {
 			const res = await fixture.app.request('/api/images');
 			const body = (await res.json()) as {
 				items: { src: string }[];

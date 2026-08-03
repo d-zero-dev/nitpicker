@@ -6,7 +6,7 @@ import { toUrlSortKey } from '../to-url-sort-key.js';
 /**
  * Builds a `page_id → natural_url_rank` map: a dense, zero-based integer
  * ranking of every listable page in natural URL order — the same
- * `compareUrlSortKeys` algorithm the legacy (`listPages`) sort path and the
+ * `compareUrlSortKeys` algorithm the live (`listPages`) sort path and the
  * viewer's startup external merge sort both use, treating numeric path
  * segments numerically (`page2` before `page10`) rather than by byte value.
  *

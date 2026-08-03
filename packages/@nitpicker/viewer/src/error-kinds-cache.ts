@@ -10,7 +10,7 @@ import {
 	getErrorKindsFastPath,
 	matchesAnyFilterValue,
 	resolveErrorKindsSort,
-	resolveLegacyFilterValue,
+	resolveLiveFilterValue,
 	sortArrayItems,
 } from '@nitpicker/query';
 
@@ -129,7 +129,7 @@ function applyErrorKindsOptions(
  * snapshot to slice) keeps the Connection Failures view live during an
  * active crawl. `getErrorKinds` still filters `kind`/`attribution` by single-
  * value equality, so a multi-select `options.kind`/`options.attribution`
- * array is narrowed to its first element via `resolveLegacyFilterValue`
+ * array is narrowed to its first element via `resolveLiveFilterValue`
  * before being passed through — multi-select degrades to single-select
  * during an active crawl rather than matching nothing.
  *
@@ -149,8 +149,8 @@ export async function getCachedErrorKinds(
 		const accessor = context.manager.get(context.archiveId);
 		return getErrorKinds(accessor, {
 			...options,
-			kind: resolveLegacyFilterValue(options.kind),
-			attribution: resolveLegacyFilterValue(options.attribution),
+			kind: resolveLiveFilterValue(options.kind),
+			attribution: resolveLiveFilterValue(options.attribution),
 		});
 	}
 	const full = await lru.getOrLoad(context.archiveId, () => {

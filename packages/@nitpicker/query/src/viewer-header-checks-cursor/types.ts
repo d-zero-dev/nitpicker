@@ -1,6 +1,6 @@
 /**
  * The only keyset tuple this cursor family supports: `(url_sort_key,
- * page_id)`. `getHeaderChecksFastPath` bails to the legacy path for any
+ * page_id)`. `getHeaderChecksFastPath` bails to the live path for any
  * `sortBy` other than `'url'` — URL order is the only order
  * `viewer_header_checks` indexes (`vh_default`/`vh_missing`, see
  * `createViewerReadModelIndexes`) — so unlike

@@ -1,7 +1,7 @@
 /**
  * The only keyset tuple this cursor family supports: `(count_desc_key,
  * group_id)`. Unlike `HeaderChecksSortSpec`/`MismatchesSortSpec`, there is no
- * `sortOrder`-driven direction switch: legacy `findDuplicates` has no
+ * `sortOrder`-driven direction switch: live `findDuplicates` has no
  * `sortOrder` concept at all (it always returns most-duplicated-group-first),
  * so `viewer_duplicate_groups`'s single `vdg_field_count` index is always
  * walked ascending on `count_desc_key` (the sign-flipped `count`) to yield

@@ -21,7 +21,7 @@ import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model-schema-ver
  * if (await isViewerReadModelCurrent(accessor)) {
  *   return listViewerPages(accessor, options);
  * }
- * return listPages(accessor, options); // legacy fallback
+ * return listPages(accessor, options); // live fallback
  */
 export async function isViewerReadModelCurrent(
 	accessor: ArchiveAccessor,

@@ -61,13 +61,13 @@ describe('getSummaryFastPath', () => {
 		expect(getSummary).not.toHaveBeenCalled();
 	});
 
-	it('falls back to the legacy full aggregation when the read model is stale or absent', async () => {
+	it('falls back to the live full aggregation when the read model is stale or absent', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
-		vi.mocked(getSummary).mockResolvedValue(makeSummary('legacy'));
+		vi.mocked(getSummary).mockResolvedValue(makeSummary('live'));
 
 		const result = await getSummaryFastPath(accessor);
 
-		expect(result.baseUrl).toBe('legacy');
+		expect(result.baseUrl).toBe('live');
 		expect(getSummary).toHaveBeenCalledWith(accessor);
 		expect(getViewerSummary).not.toHaveBeenCalled();
 	});

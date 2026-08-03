@@ -28,7 +28,7 @@ const DEFAULT_PORT = 4324;
  * current. `viewer_pages.natural_url_rank` (built once at crawl/migration
  * completion, see `buildViewerReadModel`) now covers the fast path's default
  * URL order, so a current read model never needs the sort at all. The
- * legacy (stale/missing read model) query path still needs it, but prepares
+ * live (stale/missing read model) query path still needs it, but prepares
  * it lazily on its own first request via `ensureUrlSortTempTable` — see
  * `list-pages.ts` — rather than the viewer paying for it upfront on every
  * single start regardless of whether that path is even reached.

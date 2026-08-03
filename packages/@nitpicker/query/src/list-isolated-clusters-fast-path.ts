@@ -6,16 +6,16 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { listIsolatedClusters } from './list-isolated-clusters.js';
 import { listViewerIsolatedClusters } from './list-viewer-isolated-clusters.js';
-import { resolveLegacyFilterValue } from './resolve-legacy-filter-value.js';
+import { resolveLiveFilterValue } from './resolve-live-filter-value.js';
 import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
 
 /**
  * Dispatches `/api/isolated-clusters` reads to the read model when current,
- * otherwise falls back to the legacy union-find path. Takes {@link
+ * otherwise falls back to the live union-find path. Takes {@link
  * ListViewerIsolatedClustersOptions} (fast-path shape, `status` array-
- * capable): the legacy `listIsolatedClusters` still filters `status` by
+ * capable): the live `listIsolatedClusters` still filters `status` by
  * strict equality, so a multi-select `status` is narrowed to its first
- * element via `resolveLegacyFilterValue` on that branch — multi-select
+ * element via `resolveLiveFilterValue` on that branch — multi-select
  * degrades to single-select on a stale/absent read model rather than
  * matching nothing.
  * @param accessor - The archive accessor to query.
@@ -33,6 +33,6 @@ export async function listIsolatedClustersFastPath(
 		? listViewerIsolatedClusters(accessor, options)
 		: listIsolatedClusters(accessor, {
 				...options,
-				status: resolveLegacyFilterValue(options.status),
+				status: resolveLiveFilterValue(options.status),
 			});
 }

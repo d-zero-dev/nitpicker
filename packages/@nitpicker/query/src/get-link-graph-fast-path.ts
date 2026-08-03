@@ -8,7 +8,7 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
 /**
  * Dispatches link-graph reads to `getViewerLinkGraph` (the precomputed
  * `viewer_graph_nodes`/`viewer_graph_edges` read-model fast path) when the
- * read model is current, otherwise falls back to `getLinkGraph` (the legacy
+ * read model is current, otherwise falls back to `getLinkGraph` (the live
  * live anchor join). `options` passes through unchanged to whichever backend
  * answers — both implement the same contract, so the choice is purely "is
  * the read model current or not".
