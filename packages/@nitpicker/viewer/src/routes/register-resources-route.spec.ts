@@ -248,5 +248,15 @@ describe('registerResourcesRoute — /api/resources (integration)', () => {
 			expect(body.items.find((i) => i.url.endsWith('a.css'))?.referrerCount).toBe(1);
 			expect(body.nextCursor).toBeNull();
 		});
+
+		it('narrows a multi-value status to its first element (legacy path has no OR equivalent)', async () => {
+			const res = await fixture.app.request('/api/resources?status=200&status=404');
+			const body = (await res.json()) as { items: { url: string }[]; total: number };
+			expect(body.total).toBe(2);
+			expect(body.items.map((i) => i.url).toSorted()).toEqual([
+				'https://cdn.example.net/c.js',
+				'https://example.com/a.css',
+			]);
+		});
 	});
 });

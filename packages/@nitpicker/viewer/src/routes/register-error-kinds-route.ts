@@ -24,8 +24,9 @@ export function registerErrorKindsRoute(app: Hono, context: ArchiveContext): voi
 	app.get('/api/error-kinds', async (c) => {
 		const result = await getCachedErrorKinds(context, {
 			host: c.req.query('host'),
-			kind: c.req.query('kind') as ErrorKind | undefined,
-			attribution: c.req.query('attribution') as FailureAttribution | undefined,
+			// No `toMultiValue` validation: an invalid value only ever reaches a plain `===`/`.includes()` compare in `matchesAnyFilterValue`, never a SQL predicate or a lookup table, so it just yields zero matches instead of crashing.
+			kind: c.req.queries('kind') as ErrorKind[] | undefined,
+			attribution: c.req.queries('attribution') as FailureAttribution[] | undefined,
 			sortBy: c.req.query('sortBy') as 'host' | 'kind' | 'count' | undefined,
 			sortOrder: c.req.query('sortOrder') as 'asc' | 'desc' | undefined,
 			limit: toNumber(c.req.query('limit')),

@@ -173,6 +173,12 @@ describe('registerConsoleLogsRoute — /api/console-logs (integration)', () => {
 		expect(body.items[0]!.text).toBe('be careful');
 	});
 
+	it('OR-filters across a repeated type query param', async () => {
+		const res = await app.request('/api/console-logs?type=error&type=warn');
+		const body = (await res.json()) as { items: unknown[]; total: number };
+		expect(body.total).toBe(2);
+	});
+
 	it('sorts by text ascending', async () => {
 		const res = await app.request('/api/console-logs?sortBy=text&sortOrder=asc');
 		const body = (await res.json()) as { items: { text: string }[] };

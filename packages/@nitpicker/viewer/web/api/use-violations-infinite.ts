@@ -19,8 +19,8 @@ interface ViolationsPage {
 export interface ViolationsFilter {
 	/** Filter by validator name. */
 	validator?: string;
-	/** Filter by severity. */
-	severity?: string;
+	/** Filter by severity/severities (OR'd). */
+	severity?: string | readonly string[];
 	/** Filter by rule ID. */
 	rule?: string;
 }

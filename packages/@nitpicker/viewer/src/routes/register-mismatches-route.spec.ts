@@ -224,11 +224,25 @@ describe('registerMismatchesRoute — /api/mismatches (integration)', () => {
 			expect(body.total).toBe(2);
 		});
 
-		it('rejects an invalid or missing type with 400', async () => {
+		it('rejects an invalid type with 400', async () => {
 			const res = await fixture.app.request('/api/mismatches?type=bogus');
 			expect(res.status).toBe(400);
-			const missingRes = await fixture.app.request('/api/mismatches');
-			expect(missingRes.status).toBe(400);
+		});
+
+		it('lists every type when type is omitted', async () => {
+			const res = await fixture.app.request('/api/mismatches');
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as { total: number };
+			expect(body.total).toBe(2);
+		});
+
+		it('filters by an array of types, OR-ing them together', async () => {
+			const res = await fixture.app.request(
+				'/api/mismatches?type=canonical&type=og:title',
+			);
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as { total: number };
+			expect(body.total).toBe(2);
 		});
 	});
 
@@ -264,6 +278,20 @@ describe('registerMismatchesRoute — /api/mismatches (integration)', () => {
 			]);
 			expect(body.nextCursor).toBeNull();
 			expect(body.prevCursor).toBeNull();
+		});
+
+		it('defaults to canonical when type is omitted (legacy path has no OR/every-type equivalent)', async () => {
+			const res = await fixture.app.request('/api/mismatches');
+			const body = (await res.json()) as { total: number };
+			expect(body.total).toBe(2);
+		});
+
+		it('narrows a multi-type selection to canonical (legacy path has no OR equivalent)', async () => {
+			const res = await fixture.app.request(
+				'/api/mismatches?type=canonical&type=og:title',
+			);
+			const body = (await res.json()) as { total: number };
+			expect(body.total).toBe(2);
 		});
 	});
 });

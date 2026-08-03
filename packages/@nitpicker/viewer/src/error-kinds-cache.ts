@@ -2,13 +2,15 @@ import type { ArchiveContext } from './types.js';
 import type {
 	ErrorKindEntry,
 	ErrorKindsResult,
-	GetErrorKindsOptions,
+	GetViewerErrorKindsOptions,
 } from '@nitpicker/query';
 
 import {
 	getErrorKinds,
 	getErrorKindsFastPath,
+	matchesAnyFilterValue,
 	resolveErrorKindsSort,
+	resolveLegacyFilterValue,
 	sortArrayItems,
 } from '@nitpicker/query';
 
@@ -67,13 +69,14 @@ function sortErrorKindEntries(
 }
 
 /**
- * Applies `host`/`kind`/`attribution` filtering, `sortBy`/`sortOrder`
- * sorting, and `limit`/`offset` pagination to an already-computed,
- * unfiltered `ErrorKindsResult` — mirrors `getErrorKinds`'s own options
- * contract (see that function's docs) in plain JS, so `getCachedErrorKinds`
- * can serve any request's parameters from one cached "whole archive"
- * snapshot without re-running the expensive classify-and-aggregate pass per
- * request.
+ * Applies `host`/`kind`/`attribution` filtering (`kind`/`attribution` each
+ * accepting a single value or an array OR'd together via
+ * {@link matchesAnyFilterValue}), `sortBy`/`sortOrder` sorting, and
+ * `limit`/`offset` pagination to an already-computed, unfiltered
+ * `ErrorKindsResult` — mirrors `getErrorKinds`'s own options contract (see
+ * that function's docs) in plain JS, so `getCachedErrorKinds` can serve any
+ * request's parameters from one cached "whole archive" snapshot without
+ * re-running the expensive classify-and-aggregate pass per request.
  * `sortBy`/`sortOrder` are resolved via the same `resolveErrorKindsSort`
  * `getErrorKinds` and `getViewerErrorKinds` use, so an out-of-range `sortBy`
  * can't silently pick the wrong default direction here either.
@@ -84,18 +87,16 @@ function sortErrorKindEntries(
  */
 function applyErrorKindsOptions(
 	full: ErrorKindsResult,
-	options: GetErrorKindsOptions,
+	options: GetViewerErrorKindsOptions,
 ): ErrorKindsResult {
 	let items = full.items;
 	if (options.host) {
 		items = items.filter((item) => item.host === options.host);
 	}
-	if (options.kind) {
-		items = items.filter((item) => item.kind === options.kind);
-	}
-	if (options.attribution) {
-		items = items.filter((item) => item.attribution === options.attribution);
-	}
+	items = items.filter((item) => matchesAnyFilterValue(item.kind, options.kind));
+	items = items.filter((item) =>
+		matchesAnyFilterValue(item.attribution, options.attribution),
+	);
 
 	const { sortBy, sortOrder } = resolveErrorKindsSort(options);
 	items = sortErrorKindEntries(items, sortBy, sortOrder);
@@ -126,7 +127,11 @@ function applyErrorKindsOptions(
  * Recomputing every request via `getErrorKinds` directly (never
  * `getErrorKindsFastPath`, and with the caller's real `options` — no cached
  * snapshot to slice) keeps the Connection Failures view live during an
- * active crawl.
+ * active crawl. `getErrorKinds` still filters `kind`/`attribution` by single-
+ * value equality, so a multi-select `options.kind`/`options.attribution`
+ * array is narrowed to its first element via `resolveLegacyFilterValue`
+ * before being passed through — multi-select degrades to single-select
+ * during an active crawl rather than matching nothing.
  *
  * On computation failure the rejected promise is removed via the shared
  * LRU's reject-eviction so the next request retries cleanly.
@@ -138,11 +143,15 @@ function applyErrorKindsOptions(
  */
 export async function getCachedErrorKinds(
 	context: ArchiveContext,
-	options: GetErrorKindsOptions = {},
+	options: GetViewerErrorKindsOptions = {},
 ): Promise<ErrorKindsResult> {
 	if (context.mode === 'stub') {
 		const accessor = context.manager.get(context.archiveId);
-		return getErrorKinds(accessor, options);
+		return getErrorKinds(accessor, {
+			...options,
+			kind: resolveLegacyFilterValue(options.kind),
+			attribution: resolveLegacyFilterValue(options.attribution),
+		});
 	}
 	const full = await lru.getOrLoad(context.archiveId, () => {
 		const accessor = context.manager.get(context.archiveId);

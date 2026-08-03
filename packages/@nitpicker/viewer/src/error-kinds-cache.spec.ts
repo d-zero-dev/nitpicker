@@ -173,6 +173,24 @@ describe('getCachedErrorKinds', () => {
 		expect(getErrorKindsFastPath).not.toHaveBeenCalled();
 	});
 
+	it('narrows a multi-select kind/attribution array to its first element before calling getErrorKinds in stub mode', async () => {
+		vi.mocked(getErrorKinds).mockResolvedValueOnce(makeResult());
+		const stubContext: ArchiveContext = {
+			...makeContext('archive_stub_array'),
+			mode: 'stub',
+		};
+
+		await getCachedErrorKinds(stubContext, {
+			kind: ['dns', 'timeout'],
+			attribution: ['site', 'network'],
+		});
+
+		expect(getErrorKinds).toHaveBeenCalledWith(expect.anything(), {
+			kind: 'dns',
+			attribution: 'site',
+		});
+	});
+
 	it('drops a rejected entry so the next request retries instead of replaying the cached error', async () => {
 		const failure = new Error('transient error-kinds failure');
 		vi.mocked(getErrorKindsFastPath)
@@ -262,6 +280,14 @@ describe('getCachedErrorKinds', () => {
 			expect(networkOnly.items[0]).toMatchObject({ attribution: 'network', count: 2 });
 			// facets stay archive-wide, unaffected by the filter.
 			expect(networkOnly.facets.totalRecords).toBe(7);
+		});
+
+		it('filters by an array of kinds, OR-ing them together', async () => {
+			vi.mocked(getErrorKindsFastPath).mockResolvedValueOnce(FULL);
+			const context = makeContext('archive_opts_filter_kind_array');
+
+			const result = await getCachedErrorKinds(context, { kind: ['dns', 'timeout'] });
+			expect(result.total).toBe(3);
 		});
 
 		it('sorts by count descending by default', async () => {

@@ -236,6 +236,62 @@ describe('registerPagesRoute (integration)', () => {
 				'https://example.com/e',
 			]);
 		});
+
+		it('OR-filters across a repeated status query param', async () => {
+			const res = await fixture.app.request('/api/pages?status=200&status=404');
+			const body = (await res.json()) as { items: { url: string }[]; total: number };
+			expect(body.total).toBe(5);
+		});
+	});
+
+	describe('fast path — contentTypeCategory drops an invalid value from a repeated query param', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_register_pages_route_content_type_category__',
+		);
+		let fixture: Awaited<ReturnType<typeof buildFixture>>;
+
+		beforeAll(async () => {
+			fixture = await buildFixture(workingDir, true);
+			// `buildFixture`'s 5 pages are all 'text/html' → category
+			// 'html'. Add one 'application/pdf' page (category 'pdf') so a
+			// `contentTypeCategory=html` filter has a non-matching row to
+			// exclude — otherwise every fixture page being 'html' would
+			// make "the filter matched everything" indistinguishable from
+			// "no filter was applied at all".
+			await fixture.archive.setPage({
+				url: parseUrl('https://example.com/doc.pdf')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'application/pdf',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+			await buildViewerReadModel(fixture.archive);
+		});
+
+		afterAll(async () => {
+			await fixture.manager.closeAll();
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('keeps the valid html value and ignores the bogus one, excluding the pdf page', async () => {
+			const res = await fixture.app.request(
+				'/api/pages?contentTypeCategory=bogus&contentTypeCategory=html',
+			);
+			const body = (await res.json()) as { items: { url: string }[]; total: number };
+			expect(body.total).toBe(5);
+			expect(body.items.map((i) => i.url)).not.toContain('https://example.com/doc.pdf');
+		});
 	});
 
 	describe('legacy fallback path (no read model built)', () => {
@@ -264,6 +320,19 @@ describe('registerPagesRoute (integration)', () => {
 				'https://example.com/d',
 				'https://example.com/e',
 			]);
+		});
+
+		it('narrows a multi-value contentTypeCategory to its first element (legacy path has no OR equivalent)', async () => {
+			// Every fixture page is 'text/html' → category 'html'. Putting
+			// the non-matching 'other' category first proves the legacy
+			// path uses only that first element rather than OR-ing across
+			// the whole array — if it did, the 'html' value later in the
+			// array would still make every page match.
+			const res = await fixture.app.request(
+				'/api/pages?contentTypeCategory=other&contentTypeCategory=html',
+			);
+			const body = (await res.json()) as { items: unknown[]; total: number };
+			expect(body.total).toBe(0);
 		});
 	});
 
@@ -367,6 +436,7 @@ describe('registerPagesRoute (integration)', () => {
 				new Map([
 					['https://example.com/a', 'template-a'],
 					['https://example.com/b', 'template-a'],
+					['https://example.com/c', 'template-c'],
 				]),
 				new Map(),
 			);
@@ -402,6 +472,19 @@ describe('registerPagesRoute (integration)', () => {
 				1,
 			);
 			expect(urls).toEqual(['https://example.com/a', 'https://example.com/b']);
+		});
+
+		it('OR-filters across a repeated templateKey query param', async () => {
+			const res = await fixture.app.request(
+				'/api/pages?templateKey=template-a&templateKey=template-c',
+			);
+			const body = (await res.json()) as { items: { url: string }[]; total: number };
+			expect(body.items.map((i) => i.url).toSorted()).toEqual([
+				'https://example.com/a',
+				'https://example.com/b',
+				'https://example.com/c',
+			]);
+			expect(body.total).toBe(3);
 		});
 	});
 

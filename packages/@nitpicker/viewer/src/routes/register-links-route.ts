@@ -7,10 +7,12 @@ import {
 	listLinks,
 	listViewerBrokenLinks,
 	listViewerExternalLinks,
+	resolveLegacyFilterValue,
 } from '@nitpicker/query';
 
 import { buildLegacyPagesCursors } from '../query-params/build-legacy-pages-cursors.js';
 import { parseLegacyPagesCursor } from '../query-params/parse-legacy-pages-cursor.js';
+import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
 
 /** Valid `type` values for the links route. */
@@ -91,21 +93,28 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 		const limit = toNumber(q.limit);
 		const offset = toNumber(q.offset);
 		const urlPattern = q.urlPattern;
-		const status = toNumber(q.status);
+		const status = toMultiValue(c.req.queries('status'), toNumber);
 		const sortOrder = q.sortOrder as 'asc' | 'desc' | undefined;
 
 		if (type === 'external') {
-			const params = {
-				limit,
-				offset,
-				urlPattern,
-				status,
-				sortBy: q.sortBy as 'destUrl' | 'status' | 'referrerCount' | undefined,
-				sortOrder,
-			};
+			const sortBy = q.sortBy as 'destUrl' | 'status' | 'referrerCount' | undefined;
 			const result = (await isViewerReadModelCurrent(accessor))
-				? await listViewerExternalLinks(accessor, params)
-				: await listExternalLinks(accessor, params);
+				? await listViewerExternalLinks(accessor, {
+						limit,
+						offset,
+						urlPattern,
+						status,
+						sortBy,
+						sortOrder,
+					})
+				: await listExternalLinks(accessor, {
+						limit,
+						offset,
+						urlPattern,
+						status: resolveLegacyFilterValue(status),
+						sortBy,
+						sortOrder,
+					});
 			return c.json(result);
 		}
 
@@ -137,7 +146,7 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 			offset: legacyOffset,
 			includeRedirectSources,
 			urlPattern,
-			status,
+			status: resolveLegacyFilterValue(status),
 			sortBy: q.sortBy as
 				| 'sourceUrl'
 				| 'destUrl'

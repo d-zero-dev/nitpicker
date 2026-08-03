@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import { useConsoleLogsInfinite } from '../api/use-console-logs-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
 import {
-	addRadioFilter,
+	addChecklistFilter,
 	addSort,
 	createTableControls,
 } from '../components/create-table-controls.js';
@@ -28,7 +28,7 @@ export function ConsoleLogsView() {
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const filter = {
-		type: params.get('type') ?? undefined,
+		type: params.getAll('type'),
 		sortBy: params.get('sortBy') ?? undefined,
 		sortOrder: params.get('sortOrder') ?? undefined,
 	};
@@ -89,15 +89,21 @@ export function ConsoleLogsView() {
 		addSort(controls, context, 'text', 'text');
 		addSort(controls, context, 'pageCount', 'pageCount');
 		addSort(controls, context, 'totalCount', 'totalCount');
-		addRadioFilter(controls, context, 'type', 'type', t('views.consoleLogs.filterType'), [
-			{ value: '', label: t('common.all'), checked: false },
-			{ value: 'pageerror', label: 'pageerror', checked: false },
-			{ value: 'error', label: 'error', checked: false },
-			{ value: 'warn', label: 'warn', checked: false },
-			{ value: 'log', label: 'log', checked: false },
-			{ value: 'info', label: 'info', checked: false },
-			{ value: 'debug', label: 'debug', checked: false },
-		]);
+		addChecklistFilter(
+			controls,
+			context,
+			'type',
+			'type',
+			t('views.consoleLogs.filterType'),
+			[
+				{ value: 'pageerror', label: 'pageerror' },
+				{ value: 'error', label: 'error' },
+				{ value: 'warn', label: 'warn' },
+				{ value: 'log', label: 'log' },
+				{ value: 'info', label: 'info' },
+				{ value: 'debug', label: 'debug' },
+			],
+		);
 		return controls;
 	}, [params, t, updateMany]);
 

@@ -11,10 +11,10 @@ import { usePagedQuery } from './use-paged-query.js';
 export interface UseErrorKindsOptions {
 	/** Exact host to filter to — used by the detail pane's host×kind×attribution lookup. */
 	host?: string;
-	/** Exact kind to filter to — the list's kind column filter, or one third of the detail pane's lookup key. */
-	kind?: ErrorKind;
-	/** Exact attribution to filter to — the list's attribution column filter, or one third of the detail pane's lookup key. */
-	attribution?: FailureAttribution;
+	/** Kind(s) to filter to (OR'd) — the list's kind column filter, or one third of the detail pane's exact lookup key. */
+	kind?: ErrorKind | readonly ErrorKind[];
+	/** Attribution(s) to filter to (OR'd) — the list's attribution column filter, or one third of the detail pane's exact lookup key. */
+	attribution?: FailureAttribution | readonly FailureAttribution[];
 	/** Field to sort results by. */
 	sortBy?: 'host' | 'kind' | 'count';
 	/** Sort direction. */

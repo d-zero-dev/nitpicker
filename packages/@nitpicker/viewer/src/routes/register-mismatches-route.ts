@@ -1,5 +1,5 @@
 import type { ArchiveContext } from '../types.js';
-import type { FindMismatchesFastPathOptions } from '@nitpicker/query';
+import type { FindMismatchesFastPathOptions, MismatchType } from '@nitpicker/query';
 import type { Hono } from 'hono';
 
 import { getMismatchesFastPath } from '@nitpicker/query';
@@ -12,7 +12,9 @@ const VALID_MISMATCH_TYPES = ['canonical', 'og:title', 'og:description'] as cons
 
 /**
  * Registers `GET /api/mismatches?type=canonical|og:title|og:description&limit=&offset=&urlPattern=&sortBy=&sortOrder=&cursor=&direction=`
- * — paginated, filterable metadata mismatches (issue #115).
+ * — paginated, filterable metadata mismatches (issue #115). `type` may be
+ * repeated (`?type=canonical&type=og:title`) for an OR across several
+ * comparisons, or omitted entirely for every type.
  *
  * Dispatches through `getMismatchesFastPath`, the same helper the CLI
  * `query mismatches` sub-command and MCP `find_mismatches` tool use:
@@ -31,15 +33,16 @@ const VALID_MISMATCH_TYPES = ['canonical', 'og:title', 'og:description'] as cons
  */
 export function registerMismatchesRoute(app: Hono, context: ArchiveContext): void {
 	app.get('/api/mismatches', async (c) => {
-		const type = c.req.query('type');
-		if (!type || !(VALID_MISMATCH_TYPES as readonly string[]).includes(type)) {
+		const rawTypes = c.req.queries('type');
+		if (rawTypes?.some((t) => !(VALID_MISMATCH_TYPES as readonly string[]).includes(t))) {
 			return c.json(
 				{
-					error: `Invalid or missing type. Must be one of: ${VALID_MISMATCH_TYPES.join(', ')}`,
+					error: `Invalid type. Must be one of: ${VALID_MISMATCH_TYPES.join(', ')}`,
 				},
 				400,
 			);
 		}
+		const type = rawTypes as MismatchType[] | undefined;
 		const accessor = context.manager.get(context.archiveId);
 		const options: FindMismatchesFastPathOptions = {
 			limit: toNumber(c.req.query('limit')),
@@ -50,11 +53,7 @@ export function registerMismatchesRoute(app: Hono, context: ArchiveContext): voi
 			cursor: c.req.query('cursor') || undefined,
 			direction: c.req.query('direction') === 'prev' ? 'prev' : undefined,
 		};
-		const result = await getMismatchesFastPath(
-			accessor,
-			type as (typeof VALID_MISMATCH_TYPES)[number],
-			options,
-		);
+		const result = await getMismatchesFastPath(accessor, type, options);
 		return c.json(result);
 	});
 }

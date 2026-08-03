@@ -11,8 +11,8 @@ import { PAGE_SIZE } from './page-size.js';
 export interface ResourcesFilter {
 	/** URL pattern (SQL LIKE). */
 	urlPattern?: string;
-	/** Filter by HTTP status. */
-	status?: number;
+	/** Filter by HTTP status, or any of several (OR). */
+	status?: string | readonly string[];
 	/** Filter by content-type prefix. */
 	contentType?: string;
 	/** Filter by external/internal. */

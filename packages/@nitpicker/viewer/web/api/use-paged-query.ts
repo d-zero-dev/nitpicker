@@ -4,8 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 
 import { apiGet } from './api-client.js';
 
-/** A query-parameter value accepted by {@link usePagedQuery}. */
-type ParamValue = string | number | boolean | undefined;
+/**
+ * A query-parameter value accepted by {@link usePagedQuery}. An array
+ * serializes as a repeated key (see {@link apiGet}) for a multi-select
+ * checkbox filter's OR set.
+ */
+type ParamValue = string | number | boolean | readonly (string | number)[] | undefined;
 
 /** Options for {@link usePagedQuery}. */
 export interface UsePagedQueryOptions {

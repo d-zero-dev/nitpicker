@@ -11,8 +11,8 @@ import { PAGE_SIZE } from './page-size.js';
 export interface ExternalLinksFilter {
 	/** URL pattern applied to the destination URL. */
 	urlPattern?: string;
-	/** Filter by destination HTTP status. */
-	status?: number;
+	/** Filter by destination HTTP status, or any of several (OR). */
+	status?: string | readonly string[];
 	/** Sort field. */
 	sortBy?: string;
 	/** Sort direction. */

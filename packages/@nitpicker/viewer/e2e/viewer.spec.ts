@@ -277,14 +277,11 @@ test.describe('MPA ページネーション', () => {
 		expect(payload.facets?.types).toContain(false);
 	});
 
-	test('ステータス・言語・種別フィルタは動的 enum ラジオとして表示される', async ({
-		page,
-	}) => {
+	test('言語・種別フィルタは動的 enum ラジオとして表示される', async ({ page }) => {
 		await page.goto('/pages');
 		await expect(page.locator('.pt-row').first()).toBeVisible();
 
 		for (const target of [
-			{ button: 'Status', option: '200' },
 			{ button: 'Language', option: 'ja' },
 			{ button: 'Scope', option: 'Internal' },
 		]) {
@@ -294,6 +291,75 @@ test.describe('MPA ページネーション', () => {
 			await expect(dialog.getByRole('checkbox')).toHaveCount(0);
 			await dialog.getByRole('button', { name: 'Apply' }).click();
 		}
+	});
+
+	test('ステータスフィルタは複数選択チェックボックスとして表示され、論理 OR で絞り込める', async ({
+		page,
+	}) => {
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+
+		await page.getByRole('button', { name: 'Status' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Status' });
+		await expect(dialog.getByRole('checkbox', { name: '200' })).toBeVisible();
+		await expect(dialog.getByRole('radio')).toHaveCount(0);
+
+		await dialog.getByRole('checkbox', { name: '200' }).check();
+		await dialog.getByRole('checkbox', { name: '404' }).check();
+		await dialog.getByRole('button', { name: 'Apply' }).click();
+		await expect(page).toHaveURL(/status=200/);
+		await expect(page).toHaveURL(/status=404/);
+
+		// This fixture never builds the viewer_* read model, so /api/pages
+		// always falls back to the legacy path here — which reads only the
+		// first same-named query param (Hono's `c.req.query()`), not a true
+		// OR across both. Asserting the combined-vs-summed total would
+		// therefore just re-assert that limitation, not the OR behavior.
+		// The actual multi-value OR combination (fast path) is covered by
+		// apply-viewer-pages-filters.spec.ts and register-pages-route.spec.ts
+		// — this test only verifies the checkbox UI and its URL reflection.
+
+		await page.getByRole('button', { name: 'Status' }).click();
+		await expect(dialog.getByRole('checkbox', { name: '200' })).toBeChecked();
+		await expect(dialog.getByRole('checkbox', { name: '404' })).toBeChecked();
+		await dialog.getByRole('button', { name: 'None' }).click();
+		await dialog.getByRole('button', { name: 'Apply' }).click();
+		await expect(page).not.toHaveURL(/status=/);
+	});
+
+	test('Console Logs の Type フィルタも複数選択チェックボックスとして表示され、選択が URL に反映される', async ({
+		page,
+	}) => {
+		// The type options are a static list (not derived from fixture rows),
+		// so this exercises the checklist UI independently of the status
+		// filter above — confirming the checkbox behavior generalizes beyond
+		// a single view rather than being status-specific.
+		await page.goto('/console-logs');
+		await expect(
+			page.getByRole('heading', { name: 'Console Logs', level: 1 }),
+		).toBeVisible();
+
+		await page.getByRole('button', { name: 'Type' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Type' });
+		await expect(
+			dialog.getByRole('checkbox', { name: 'error', exact: true }),
+		).toBeVisible();
+		await expect(dialog.getByRole('radio')).toHaveCount(0);
+
+		await dialog.getByRole('checkbox', { name: 'error', exact: true }).check();
+		await dialog.getByRole('checkbox', { name: 'warn' }).check();
+		await dialog.getByRole('button', { name: 'Apply' }).click();
+		await expect(page).toHaveURL(/type=error/);
+		await expect(page).toHaveURL(/type=warn/);
+
+		await page.getByRole('button', { name: 'Type' }).click();
+		await expect(
+			dialog.getByRole('checkbox', { name: 'error', exact: true }),
+		).toBeChecked();
+		await expect(dialog.getByRole('checkbox', { name: 'warn' })).toBeChecked();
+		await dialog.getByRole('button', { name: 'None' }).click();
+		await dialog.getByRole('button', { name: 'Apply' }).click();
+		await expect(page).not.toHaveURL(/type=/);
 	});
 
 	test('Pages の URL ソートは初期表示で昇順 active になる', async ({ page }) => {

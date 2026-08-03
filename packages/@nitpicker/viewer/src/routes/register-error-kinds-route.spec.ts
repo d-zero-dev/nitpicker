@@ -223,6 +223,31 @@ describe.each([
 			expect(body.items.every((item) => item.attribution === 'site')).toBe(true);
 		});
 
+		// This fixture opens `archive.tmpDir` (never `archive.close()`d), which
+		// `classifySource` always resolves to `mode: 'stub'` regardless of
+		// `withReadModel` — and `getCachedErrorKinds` checks `mode === 'stub'`
+		// before anything else, always bypassing to legacy `getErrorKinds`
+		// there. So a multi-select narrows to its first element
+		// (`resolveLegacyFilterValue`) here in both `describe.each` branches,
+		// not just the "legacy fallback" one — see `get-viewer-error-kinds.spec.ts`
+		// for the true fast-path (`viewer_error_kind_entries` table) OR-filter
+		// coverage.
+		it('narrows a multi-select kind to its first element (this fixture always resolves to stub mode)', async () => {
+			const res = await fixture.app.request(
+				'/api/error-kinds?kind=dns&kind=connection-refused',
+			);
+			const body = (await res.json()) as ErrorKindsResponseBody;
+			expect(body.items.every((item) => item.kind === 'dns')).toBe(true);
+		});
+
+		it('narrows a multi-select attribution to its first element (this fixture always resolves to stub mode)', async () => {
+			const res = await fixture.app.request(
+				'/api/error-kinds?attribution=site&attribution=network',
+			);
+			const body = (await res.json()) as ErrorKindsResponseBody;
+			expect(body.items.every((item) => item.attribution === 'site')).toBe(true);
+		});
+
 		it('combines ?kind= and ?attribution= — matching only their intersection', async () => {
 			const res = await fixture.app.request(
 				'/api/error-kinds?kind=dns&attribution=network',

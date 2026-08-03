@@ -6,7 +6,7 @@ import { Link } from 'react-router';
 
 import { useErrorKinds } from '../api/use-error-kinds.js';
 import {
-	addRadioFilter,
+	addChecklistFilter,
 	addSort,
 	createTableControls,
 } from '../components/create-table-controls.js';
@@ -128,10 +128,8 @@ function ErrorListPane({
 	const { pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const filter = {
 		host: params.get('host') ?? undefined,
-		kind: (params.get('kind') ?? undefined) as ErrorKind | undefined,
-		attribution: (params.get('attribution') ?? undefined) as
-			| FailureAttribution
-			| undefined,
+		kind: params.getAll('kind') as ErrorKind[],
+		attribution: params.getAll('attribution') as FailureAttribution[],
 		sortBy: (params.get('sortBy') ?? undefined) as 'host' | 'kind' | 'count' | undefined,
 		sortOrder: (params.get('sortOrder') ?? undefined) as 'asc' | 'desc' | undefined,
 	};
@@ -190,28 +188,27 @@ function ErrorListPane({
 		addSort(controls, context, 'host', 'host');
 		addSort(controls, context, 'kind', 'kind');
 		addSort(controls, context, 'count', 'count', 'desc');
-		addRadioFilter(controls, context, 'kind', 'kind', t('views.errors.filterKind'), [
-			{ value: '', label: t('common.all'), checked: false },
-			...ERROR_KINDS.map((value) => ({
+		addChecklistFilter(
+			controls,
+			context,
+			'kind',
+			'kind',
+			t('views.errors.filterKind'),
+			ERROR_KINDS.map((value) => ({
 				value,
 				label: getErrorKindLabel(value, t),
-				checked: false,
 			})),
-		]);
-		addRadioFilter(
+		);
+		addChecklistFilter(
 			controls,
 			context,
 			'attribution',
 			'attribution',
 			t('views.errors.filterAttribution'),
-			[
-				{ value: '', label: t('common.all'), checked: false },
-				...ATTRIBUTIONS.map((value) => ({
-					value,
-					label: getAttributionLabel(value, t),
-					checked: false,
-				})),
-			],
+			ATTRIBUTIONS.map((value) => ({
+				value,
+				label: getAttributionLabel(value, t),
+			})),
 		);
 		return controls;
 	}, [params, t, updateMany]);

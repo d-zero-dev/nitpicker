@@ -15,6 +15,7 @@ import {
 import { buildLegacyPagesCursors } from '../query-params/build-legacy-pages-cursors.js';
 import { parseLegacyPagesCursor } from '../query-params/parse-legacy-pages-cursor.js';
 import { toBoolean } from '../query-params/to-boolean.js';
+import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
 import { toPageSortOrder } from '../query-params/to-page-sort-order.js';
 import { toResourcesSortBy } from '../query-params/to-resources-sort-by.js';
@@ -52,7 +53,7 @@ export function registerResourcesRoute(app: Hono, context: ArchiveContext): void
 		if (!usesWideTableOnlyFilter && (await isViewerReadModelCurrent(accessor))) {
 			const options: ListViewerResourcesOptions = {
 				isExternal: toBoolean(q.isExternal),
-				status: toNumber(q.status),
+				status: toMultiValue(c.req.queries('status'), toNumber),
 				sortBy: toResourcesSortBy(q.sortBy),
 				sortOrder: toPageSortOrder(q.sortOrder),
 				limit: toNumber(q.limit),

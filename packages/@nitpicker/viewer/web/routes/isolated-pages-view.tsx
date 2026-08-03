@@ -1,4 +1,4 @@
-import type { IsolatedPageEntry } from '@nitpicker/query';
+import type { IsolatedPageEntry, PageSource } from '@nitpicker/query';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { useMemo } from 'react';
@@ -7,7 +7,7 @@ import { useIsolatedPagesInfinite } from '../api/use-isolated-pages-infinite.js'
 import { usePagedQuery } from '../api/use-paged-query.js';
 import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
 import {
-	addRadioFilter,
+	addChecklistFilter,
 	addSort,
 	addTextFilter,
 	createTableControls,
@@ -30,12 +30,12 @@ export function IsolatedPagesView() {
 	const { t } = useI18n();
 	const { params, updateMany } = useUrlFilter();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
-	const status = params.get('status');
-	const statusValue = status == null ? undefined : Number(status);
+	const status = params.getAll('status');
+	const source = params.getAll('source') as PageSource[];
 	const filter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
-		status: Number.isFinite(statusValue) ? statusValue : undefined,
-		source: params.get('source') ?? undefined,
+		status,
+		source,
 		sortBy: params.get('sortBy') ?? undefined,
 		sortOrder: params.get('sortOrder') ?? undefined,
 	};
@@ -100,24 +100,22 @@ export function IsolatedPagesView() {
 			'urlPattern',
 			t('views.pages.filterUrlPattern'),
 		);
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			context,
 			'status',
 			'status',
 			t('views.isolatedPages.status'),
-			buildStatusFilterOptions(
-				paged.data?.items,
-				(item) => item.status,
-				status,
-				t('common.all'),
-			),
+			buildStatusFilterOptions({
+				items: paged.data?.items,
+				getStatus: (item) => item.status,
+				currentStatuses: status,
+			}),
 		);
-		addRadioFilter(controls, context, 'source', 'source', t('common.source'), [
-			{ value: '', label: t('common.all'), checked: false },
-			{ value: 'crawled', label: 'crawled', checked: false },
-			{ value: 'inventory-seed', label: 'inventory-seed', checked: false },
-			{ value: 'inventory-discovered', label: 'inventory-discovered', checked: false },
+		addChecklistFilter(controls, context, 'source', 'source', t('common.source'), [
+			{ value: 'crawled', label: 'crawled' },
+			{ value: 'inventory-seed', label: 'inventory-seed' },
+			{ value: 'inventory-discovered', label: 'inventory-discovered' },
 		]);
 		return controls;
 	}, [paged.data?.items, params, status, t, updateMany]);

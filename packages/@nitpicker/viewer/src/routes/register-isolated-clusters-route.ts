@@ -8,10 +8,13 @@ import {
 	isViewerReadModelCurrent,
 	listIsolatedClusters,
 	listIsolatedClustersFastPath,
+	resolveLegacyFilterValue,
 } from '@nitpicker/query';
 
 import { getCachedIsolatedClusters } from '../isolated-clusters-cache.js';
+import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
+import { toPageSource } from '../query-params/to-page-source.js';
 
 /**
  * Registers the isolated-clusters viewer endpoints:
@@ -32,9 +35,9 @@ import { toNumber } from '../query-params/to-number.js';
 export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext): void {
 	app.get('/api/isolated-clusters', async (c) => {
 		const accessor = context.manager.get(context.archiveId);
+		const status = toMultiValue(c.req.queries('status'), toNumber);
 		const sharedOptions = {
 			urlPattern: c.req.query('urlPattern'),
-			status: toNumber(c.req.query('status')),
 			sortBy: c.req.query('sortBy') as
 				| 'representativeUrl'
 				| 'representativeTitle'
@@ -49,9 +52,10 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 			context.mode === 'stub'
 				? await listIsolatedClusters(accessor, {
 						...sharedOptions,
+						status: resolveLegacyFilterValue(status),
 						precomputedComponents: await getCachedIsolatedClusters(context),
 					})
-				: await listIsolatedClustersFastPath(accessor, sharedOptions);
+				: await listIsolatedClustersFastPath(accessor, { ...sharedOptions, status });
 		return c.json(result);
 	});
 
@@ -60,14 +64,10 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 		const representativeUrl = c.req.param('representativeUrl');
 		const usesReadModel =
 			context.mode !== 'stub' && (await isViewerReadModelCurrent(accessor));
+		const status = toMultiValue(c.req.queries('status'), toNumber);
+		const source = toMultiValue(c.req.queries('source'), toPageSource);
 		const sharedOptions = {
 			urlPattern: c.req.query('urlPattern'),
-			status: toNumber(c.req.query('status')),
-			source: c.req.query('source') as
-				| 'crawled'
-				| 'inventory-seed'
-				| 'inventory-discovered'
-				| undefined,
 			sortBy: c.req.query('sortBy') as 'url' | 'title' | 'status' | 'source' | undefined,
 			sortOrder: c.req.query('sortOrder') as 'asc' | 'desc' | undefined,
 			limit: toNumber(c.req.query('limit')),
@@ -77,9 +77,15 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 			context.mode === 'stub'
 				? await getIsolatedCluster(accessor, representativeUrl, {
 						...sharedOptions,
+						status: resolveLegacyFilterValue(status),
+						source: resolveLegacyFilterValue(source),
 						precomputedComponents: await getCachedIsolatedClusters(context),
 					})
-				: await getIsolatedClusterFastPath(accessor, representativeUrl, sharedOptions);
+				: await getIsolatedClusterFastPath(accessor, representativeUrl, {
+						...sharedOptions,
+						status,
+						source,
+					});
 		if (result === null) {
 			// Distinguish "the URL maps to a singleton, you wanted
 			// /api/isolated-pages" from "the cluster collapsed". Deep-

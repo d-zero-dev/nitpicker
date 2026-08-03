@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import { usePagedQuery } from '../api/use-paged-query.js';
 import { useViolationsInfinite } from '../api/use-violations-infinite.js';
 import {
-	addRadioFilter,
+	addChecklistFilter,
 	addSort,
 	addTextFilter,
 	createTableControls,
@@ -29,7 +29,7 @@ export function ViolationsView() {
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const filter = {
 		validator: params.get('validator') ?? undefined,
-		severity: params.get('severity') ?? undefined,
+		severity: params.getAll('severity'),
 		rule: params.get('rule') ?? undefined,
 		urlPattern: params.get('urlPattern') ?? undefined,
 		sortBy: params.get('sortBy') ?? undefined,
@@ -91,21 +91,20 @@ export function ViolationsView() {
 		for (const key of ['severity', 'validator', 'rule', 'message', 'url']) {
 			addSort(controls, context, key, key);
 		}
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			context,
 			'severity',
 			'severity',
 			t('views.violations.filterSeverity'),
 			[
-				{ value: '', label: t('common.all'), checked: false },
-				{ value: 'error', label: 'error', checked: false },
-				{ value: 'warning', label: 'warning', checked: false },
-				{ value: 'info', label: 'info', checked: false },
-				{ value: 'minor', label: 'minor', checked: false },
-				{ value: 'moderate', label: 'moderate', checked: false },
-				{ value: 'serious', label: 'serious', checked: false },
-				{ value: 'critical', label: 'critical', checked: false },
+				{ value: 'error', label: 'error' },
+				{ value: 'warning', label: 'warning' },
+				{ value: 'info', label: 'info' },
+				{ value: 'minor', label: 'minor' },
+				{ value: 'moderate', label: 'moderate' },
+				{ value: 'serious', label: 'serious' },
+				{ value: 'critical', label: 'critical' },
 			],
 		);
 		addTextFilter(
