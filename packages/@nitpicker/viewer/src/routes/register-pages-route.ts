@@ -8,8 +8,8 @@ import type { Hono } from 'hono';
 
 import { isViewerReadModelCurrent, listPages, listViewerPages } from '@nitpicker/query';
 
-import { buildLegacyPagesCursors } from '../query-params/build-legacy-pages-cursors.js';
-import { parseLegacyPagesCursor } from '../query-params/parse-legacy-pages-cursor.js';
+import { buildLivePagesCursors } from '../query-params/build-live-pages-cursors.js';
+import { parseLivePagesCursor } from '../query-params/parse-live-pages-cursor.js';
 import { toBoolean } from '../query-params/to-boolean.js';
 import { toContentTypeCategory } from '../query-params/to-content-type-category.js';
 import { toMultiValue } from '../query-params/to-multi-value.js';
@@ -40,11 +40,11 @@ const DEFAULT_LIMIT = 100;
  *   DOES take the fast path too — see `ListViewerPagesOptions.directory`'s
  *   docs for why a prefix range scan stays within its contract unlike
  *   `urlPattern`.
- * - `listPages` (the legacy, offset-only, write-model path) otherwise —
+ * - `listPages` (the live, offset-only, write-model path) otherwise —
  *   covers archives predating the read model (issue #112's build-timing
  *   work is tracked separately) and the excluded-filter cases above. Its
  *   `cursor` is a plain decimal offset string (see
- *   `buildLegacyPagesCursors`), not the fast path's opaque keyset token, but
+ *   `buildLivePagesCursors`), not the fast path's opaque keyset token, but
  *   exposes the same `nextCursor`-only contract so `usePagesInfinite`'s
  *   virtual scroll keeps paginating past the first page regardless of which
  *   backend served it.
@@ -90,7 +90,7 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 		}
 
 		const limit = toNumber(q.limit) ?? DEFAULT_LIMIT;
-		const offset = parseLegacyPagesCursor(q.cursor, toNumber(q.offset) ?? 0);
+		const offset = parseLivePagesCursor(q.cursor, toNumber(q.offset) ?? 0);
 		const options: ListPagesOptions = {
 			status: toNumber(q.status),
 			statusMin: toNumber(q.statusMin),
@@ -113,14 +113,14 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 			limit,
 			offset,
 		};
-		const legacyResult = await listPages(accessor, options);
-		const { nextCursor, prevCursor } = buildLegacyPagesCursors({
+		const liveResult = await listPages(accessor, options);
+		const { nextCursor, prevCursor } = buildLivePagesCursors({
 			offset,
-			itemCount: legacyResult.items.length,
-			total: legacyResult.total,
-			limit: legacyResult.limit,
+			itemCount: liveResult.items.length,
+			total: liveResult.total,
+			limit: liveResult.limit,
 		});
-		const result: CursorPaginatedPageList = { ...legacyResult, nextCursor, prevCursor };
+		const result: CursorPaginatedPageList = { ...liveResult, nextCursor, prevCursor };
 		return c.json(result);
 	});
 }

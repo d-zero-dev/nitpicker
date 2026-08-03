@@ -4,7 +4,7 @@ import type { Hono } from 'hono';
 import {
 	listIsolatedPages,
 	listIsolatedPagesFastPath,
-	resolveLegacyFilterValue,
+	resolveLiveFilterValue,
 } from '@nitpicker/query';
 
 import { getCachedIsolatedClusters } from '../isolated-clusters-cache.js';
@@ -40,8 +40,8 @@ export function registerIsolatedPagesRoute(app: Hono, context: ArchiveContext): 
 			context.mode === 'stub'
 				? await listIsolatedPages(accessor, {
 						...sharedOptions,
-						status: resolveLegacyFilterValue(status),
-						source: resolveLegacyFilterValue(source),
+						status: resolveLiveFilterValue(status),
+						source: resolveLiveFilterValue(source),
 						precomputedComponents: await getCachedIsolatedClusters(context),
 					})
 				: await listIsolatedPagesFastPath(accessor, { ...sharedOptions, status, source });

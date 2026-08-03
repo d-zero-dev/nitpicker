@@ -19,7 +19,7 @@ const ALL_OUTAGES_LIMIT = 10_000;
  *
  * No cache layer, unlike `/api/summary` / `/api/error-kinds`: `listNetworkOutages`
  * is already a small, direct `network_outages` read with no separate
- * fast-path/legacy split to dispatch between, so there is no expensive
+ * fast-path/live split to dispatch between, so there is no expensive
  * aggregation here worth memoizing. Live in stub mode too — an outage
  * recorded moments ago by an in-progress crawl should show up immediately,
  * not be frozen out by a stale cache the way `getSummary`'s heavier

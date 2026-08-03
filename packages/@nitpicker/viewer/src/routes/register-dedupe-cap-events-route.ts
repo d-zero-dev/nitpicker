@@ -22,7 +22,7 @@ const ALL_DEDUPE_CAP_EVENTS_LIMIT = 10_000;
  *
  * No cache layer, same reasoning as `register-network-outages-route.ts`:
  * `listDedupeCapEvents` is already a small, direct `dedupe_cap_events` read
- * with no separate fast-path/legacy split. Live in stub mode too — a cap
+ * with no separate fast-path/live split. Live in stub mode too — a cap
  * confirmed moments ago by an in-progress crawl should show up immediately.
  * @param app - The Hono application.
  * @param context - The opened archive context.

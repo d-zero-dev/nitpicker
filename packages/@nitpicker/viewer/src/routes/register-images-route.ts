@@ -16,10 +16,10 @@ import { toPageSortOrder } from '../query-params/to-page-sort-order.js';
  * `viewer_images` (the read-model fast path) when current and the request
  * doesn't use `urlPattern` or a `src`/`alt` sort (the wide `images` table's
  * large text columns, never duplicated onto the read model), else the
- * legacy `listImages` write-model path. Unlike `registerResourcesRoute`, no
- * separate legacy-cursor shimming is needed here: `getImagesFastPath` always
+ * live `listImages` write-model path. Unlike `registerResourcesRoute`, no
+ * separate live-cursor shimming is needed here: `getImagesFastPath` always
  * returns a `CursorPaginatedImageList` (with `nextCursor`/`prevCursor` both
- * `null` on the legacy branch), so the frontend's existing offset-only
+ * `null` on the live branch), so the frontend's existing offset-only
  * `use-images-infinite.ts` keeps working unchanged either way.
  *
  * `cursor`/`direction` are read from the query string and forwarded

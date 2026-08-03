@@ -25,7 +25,7 @@ export type PageSortBy = (typeof PAGE_SORT_BY_VALUES)[number];
  *
  * Returns `undefined` for missing or unrecognised values, matching the
  * silent-drop convention `toContentTypeCategory` / `toPageSource` use in
- * this directory. This validation matters more here than on the legacy
+ * this directory. This validation matters more here than on the live
  * `listPages` path: the `viewer_pages` fast path embeds `sortBy` into every
  * cursor's identity (`buildViewerPagesFilterKey`), so an unvalidated garbage
  * value would get baked into a cursor and then permanently rejected by

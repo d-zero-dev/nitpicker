@@ -57,7 +57,7 @@ const NOOP_META = {
  * @param workingDir - Unique scratch directory for this fixture.
  * @param withReadModel - Whether to build the `viewer_header_checks` read
  *   model before opening read-only (exercises the fast path) or leave it
- *   unbuilt (exercises the legacy fallback path).
+ *   unbuilt (exercises the live fallback path).
  * @returns The app and manager — callers must close the manager in `afterAll`.
  */
 async function buildFixture(workingDir: string, withReadModel: boolean) {
@@ -188,17 +188,17 @@ describe('registerHeaderChecksRoute — /api/headers (integration)', () => {
 			expect(page2.nextCursor).toBeNull();
 		});
 
-		it('forces the legacy fallback for a sortBy the fast path does not index', async () => {
+		it('forces the live fallback for a sortBy the fast path does not index', async () => {
 			const res = await fixture.app.request('/api/headers?sortBy=hasCSP&sortOrder=desc');
 			const body = (await res.json()) as { items: { url: string }[] };
 			expect(body.items).toHaveLength(2);
 		});
 	});
 
-	describe('legacy fallback path (no read model built)', () => {
+	describe('live fallback path (no read model built)', () => {
 		const workingDir = path.resolve(
 			__dirname,
-			'__test_fixtures_register_header_checks_route_legacy__',
+			'__test_fixtures_register_header_checks_route_live__',
 		);
 		let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
@@ -212,7 +212,7 @@ describe('registerHeaderChecksRoute — /api/headers (integration)', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('returns the same shape via the legacy live query, with null cursors', async () => {
+		it('returns the same shape via the live query, with null cursors', async () => {
 			const res = await fixture.app.request('/api/headers');
 			const body = (await res.json()) as {
 				items: { url: string }[];

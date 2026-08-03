@@ -20,15 +20,15 @@ const VALID_DUPLICATE_FIELDS = ['title', 'description'] as const;
  *   — paginated duplicate-value groups, dispatched through
  *   `getDuplicatesFastPath` (the same helper the CLI `query duplicates`
  *   sub-command and MCP `find_duplicates` tool use): `viewer_duplicate_groups`
- *   (the read-model fast path) when current, else the legacy `findDuplicates`
+ *   (the read-model fast path) when current, else the live `findDuplicates`
  *   write-model path. Always returns a `CursorPaginatedDuplicateGroupList`
- *   (with `nextCursor`/`prevCursor` both `null` on the legacy branch).
+ *   (with `nextCursor`/`prevCursor` both `null` on the live branch).
  * - `GET /api/duplicates/:groupId/pages?limit=&cursor=&direction=&offset=`
  *   — the COMPLETE member-page list for one group, once the inline
  *   `pages` sample on the list endpoint runs out (`count > pages.length`).
- *   This endpoint has no legacy counterpart — `groupId` is a
+ *   This endpoint has no live counterpart — `groupId` is a
  *   `viewer_duplicate_groups`-only concept, so it 404s outright when the
- *   read model is not current instead of guessing a legacy equivalent.
+ *   read model is not current instead of guessing a live equivalent.
  * @param app - The Hono application.
  * @param context - The opened archive context.
  */
@@ -62,21 +62,21 @@ export function registerDuplicatesRoute(app: Hono, context: ArchiveContext): voi
 			return c.json({ error: 'Invalid groupId — must be a number' }, 400);
 		}
 		// A non-positive `groupId` can only ever be the negative sentinel
-		// `getDuplicatesFastPath`'s legacy-fallback branch mints (`-(index +
+		// `getDuplicatesFastPath`'s live-fallback branch mints (`-(index +
 		// 1)`), never a real `viewer_duplicate_groups.group_id` (an
 		// `INTEGER PRIMARY KEY` starting at 1). Reject it outright instead of
 		// forwarding to `listViewerDuplicateGroupPages`, which would otherwise
 		// happily return whatever real group the read model — possibly built
 		// AFTER the client's `/api/duplicates` call minted this sentinel —
 		// happens to have at that unrelated numeric id. See
-		// `getDuplicatesFastPath`'s docs for why the legacy branch never
+		// `getDuplicatesFastPath`'s docs for why the live branch never
 		// truncates `pages` in the first place, so there is nothing to drill
 		// into here anyway.
 		if (groupId <= 0) {
 			return c.json(
 				{
 					error:
-						'Invalid groupId — this group came from the non-paginated legacy fallback and has no separate page list to fetch (its `pages` array is already complete).',
+						'Invalid groupId — this group came from the non-paginated live fallback and has no separate page list to fetch (its `pages` array is already complete).',
 				},
 				404,
 			);

@@ -7,11 +7,11 @@ import {
 	listLinks,
 	listViewerBrokenLinks,
 	listViewerExternalLinks,
-	resolveLegacyFilterValue,
+	resolveLiveFilterValue,
 } from '@nitpicker/query';
 
-import { buildLegacyPagesCursors } from '../query-params/build-legacy-pages-cursors.js';
-import { parseLegacyPagesCursor } from '../query-params/parse-legacy-pages-cursor.js';
+import { buildLivePagesCursors } from '../query-params/build-live-pages-cursors.js';
+import { parseLivePagesCursor } from '../query-params/parse-live-pages-cursor.js';
 import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
 
@@ -27,7 +27,7 @@ const DEFAULT_LIMIT = 100;
  * `textContent`), since `viewer_anchor_facts` has no index on
  * `is_external_link` and stores no anchor text at all (see
  * `list-viewer-broken-links.ts`'s docs). A request for `isExternal`/
- * `textContent` must force the legacy fallback rather than silently
+ * `textContent` must force the live fallback rather than silently
  * falling through `getAnchorFactsSortSpec`'s `sourceUrl` default — a
  * bookmarked/shared `?sortBy=isExternal` URL must sort the same way
  * whether or not the read model happens to be current, not silently
@@ -55,9 +55,9 @@ const BROKEN_LINKS_FAST_PATH_SORT_KEYS = new Set(['sourceUrl', 'destUrl', 'statu
  *
  * - `external`: `listViewerExternalLinks` (the `viewer_external_links`
  *   read-model fast path) when the read model is current — no filter forces
- *   a legacy fallback here, since `urlPattern`/`status` both map directly
+ *   a live fallback here, since `urlPattern`/`status` both map directly
  *   onto `viewer_external_links` columns. Otherwise `listExternalLinks`
- *   (the legacy live `anchors` JOIN + `GROUP BY` query).
+ *   (the live `anchors` JOIN + `GROUP BY` query).
  * - `broken`: `listViewerBrokenLinks` (the `viewer_anchor_facts` read-model
  *   fast path, cursor-paginated) when the read model is current AND none of
  *   `urlPattern`, `includeRedirectSources`, or an unsupported `sortBy`
@@ -66,11 +66,11 @@ const BROKEN_LINKS_FAST_PATH_SORT_KEYS = new Set(['sourceUrl', 'destUrl', 'statu
  *   which no single index can satisfy; `includeRedirectSources` has no
  *   read-model equivalent (`viewer_anchor_facts` only ever stores the
  *   canonical destination); and the fast path's narrower `sortBy` union
- *   means an unsupported value must force the legacy fallback rather than
- *   silently resolving to a different sort. Otherwise `listLinks` (legacy,
+ *   means an unsupported value must force the live fallback rather than
+ *   silently resolving to a different sort. Otherwise `listLinks` (live,
  *   anchor-scan-bound, offset-based). The
- *   legacy path's `cursor` is a plain decimal offset string (see
- *   `buildLegacyPagesCursors`), not the fast path's opaque keyset token, but
+ *   live path's `cursor` is a plain decimal offset string (see
+ *   `buildLivePagesCursors`), not the fast path's opaque keyset token, but
  *   exposes the same `nextCursor`-only contract so `useLinksInfinite`'s
  *   virtual scroll keeps paginating past the first page regardless of which
  *   backend served it.
@@ -111,7 +111,7 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 						limit,
 						offset,
 						urlPattern,
-						status: resolveLegacyFilterValue(status),
+						status: resolveLiveFilterValue(status),
 						sortBy,
 						sortOrder,
 					});
@@ -138,15 +138,15 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 			return c.json(result);
 		}
 
-		const legacyLimit = limit ?? DEFAULT_LIMIT;
-		const legacyOffset = parseLegacyPagesCursor(q.cursor, offset ?? 0);
-		const legacyResult = await listLinks(accessor, {
+		const liveLimit = limit ?? DEFAULT_LIMIT;
+		const liveOffset = parseLivePagesCursor(q.cursor, offset ?? 0);
+		const liveResult = await listLinks(accessor, {
 			type: 'broken',
-			limit: legacyLimit,
-			offset: legacyOffset,
+			limit: liveLimit,
+			offset: liveOffset,
 			includeRedirectSources,
 			urlPattern,
-			status: resolveLegacyFilterValue(status),
+			status: resolveLiveFilterValue(status),
 			sortBy: q.sortBy as
 				| 'sourceUrl'
 				| 'destUrl'
@@ -156,12 +156,12 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 				| undefined,
 			sortOrder,
 		});
-		const { nextCursor, prevCursor } = buildLegacyPagesCursors({
-			offset: legacyOffset,
-			itemCount: legacyResult.items.length,
-			total: legacyResult.total,
-			limit: legacyLimit,
+		const { nextCursor, prevCursor } = buildLivePagesCursors({
+			offset: liveOffset,
+			itemCount: liveResult.items.length,
+			total: liveResult.total,
+			limit: liveLimit,
 		});
-		return c.json({ ...legacyResult, nextCursor, prevCursor });
+		return c.json({ ...liveResult, nextCursor, prevCursor });
 	});
 }

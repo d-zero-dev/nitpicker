@@ -15,9 +15,9 @@ import { toPageSortOrder } from '../query-params/to-page-sort-order.js';
  * Dispatches through `getHeaderChecksFastPath`, the same helper the CLI
  * `query headers` sub-command and MCP `check_headers` tool use:
  * `viewer_header_checks` (the read-model fast path) when current and
- * `sortBy` is `'url'` or unset, else the legacy `checkHeaders` write-model
+ * `sortBy` is `'url'` or unset, else the live `checkHeaders` write-model
  * path. Always returns a `CursorPaginatedHeaderCheckList` (with
- * `nextCursor`/`prevCursor` both `null` on the legacy branch), matching
+ * `nextCursor`/`prevCursor` both `null` on the live branch), matching
  * `registerImagesRoute`'s response-shape contract.
  *
  * `cursor`/`direction` are read from the query string and forwarded

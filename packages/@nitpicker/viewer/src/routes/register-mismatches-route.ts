@@ -19,9 +19,9 @@ const VALID_MISMATCH_TYPES = ['canonical', 'og:title', 'og:description'] as cons
  * Dispatches through `getMismatchesFastPath`, the same helper the CLI
  * `query mismatches` sub-command and MCP `find_mismatches` tool use:
  * `viewer_mismatches` (the read-model fast path) when current and neither
- * `sortBy` nor `urlPattern` is set, else the legacy `findMismatches`
+ * `sortBy` nor `urlPattern` is set, else the live `findMismatches`
  * write-model path. Always returns a `CursorPaginatedMismatchList` (with
- * `nextCursor`/`prevCursor` both `null` on the legacy branch), matching
+ * `nextCursor`/`prevCursor` both `null` on the live branch), matching
  * `registerHeaderChecksRoute`'s response-shape contract.
  *
  * `cursor`/`direction` are read from the query string and forwarded

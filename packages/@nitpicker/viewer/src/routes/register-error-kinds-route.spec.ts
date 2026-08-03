@@ -68,7 +68,7 @@ function crawlerError(
  * @param workingDir - Unique scratch directory for this fixture.
  * @param withReadModel - Whether to build the `viewer_error_kind_*` read
  *   model before opening read-only (exercises the fast path) or leave it
- *   unbuilt (exercises the legacy fallback path).
+ *   unbuilt (exercises the live fallback path).
  * @returns The app, archive, and manager — callers must close both in
  *   `afterAll`.
  */
@@ -142,13 +142,13 @@ async function buildFixture(workingDir: string, withReadModel: boolean) {
 
 describe.each([
 	{ label: 'fast path (viewer_error_kind_* read model built)', withReadModel: true },
-	{ label: 'legacy fallback path (no read model built)', withReadModel: false },
+	{ label: 'live fallback path (no read model built)', withReadModel: false },
 ])(
 	'registerErrorKindsRoute — /api/error-kinds (integration) — $label',
 	({ withReadModel }) => {
 		const workingDir = path.resolve(
 			__dirname,
-			`__test_fixtures_register_error_kinds_route_${withReadModel ? 'fast' : 'legacy'}__`,
+			`__test_fixtures_register_error_kinds_route_${withReadModel ? 'fast' : 'live'}__`,
 		);
 		let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
@@ -226,10 +226,10 @@ describe.each([
 		// This fixture opens `archive.tmpDir` (never `archive.close()`d), which
 		// `classifySource` always resolves to `mode: 'stub'` regardless of
 		// `withReadModel` — and `getCachedErrorKinds` checks `mode === 'stub'`
-		// before anything else, always bypassing to legacy `getErrorKinds`
+		// before anything else, always bypassing to live `getErrorKinds`
 		// there. So a multi-select narrows to its first element
-		// (`resolveLegacyFilterValue`) here in both `describe.each` branches,
-		// not just the "legacy fallback" one — see `get-viewer-error-kinds.spec.ts`
+		// (`resolveLiveFilterValue`) here in both `describe.each` branches,
+		// not just the "live fallback" one — see `get-viewer-error-kinds.spec.ts`
 		// for the true fast-path (`viewer_error_kind_entries` table) OR-filter
 		// coverage.
 		it('narrows a multi-select kind to its first element (this fixture always resolves to stub mode)', async () => {

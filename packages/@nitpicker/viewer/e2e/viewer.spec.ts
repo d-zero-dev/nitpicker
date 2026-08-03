@@ -117,7 +117,7 @@ test.describe('Nitpicker Viewer', () => {
 		// This suite's shared fixture (generate-fixture.mjs) never calls
 		// buildViewerReadModel (see its own docs — directory-tree's "no read
 		// model" empty-state test depends on that), and `listInboundLinks`
-		// has no legacy fallback, so the inbound-links count surfaces the
+		// has no live fallback, so the inbound-links count surfaces the
 		// actionable "run viewer-build" error here instead of a live count.
 		// The live count (2 internal pages link to this destination) and the
 		// full inbound-links list have their own coverage in
@@ -181,7 +181,7 @@ test.describe('Nitpicker Viewer', () => {
 	}) => {
 		// This suite's shared fixture (generate-fixture.mjs) never calls
 		// buildViewerReadModel, so directory-tree's 3 query functions (gated on
-		// isViewerReadModelCurrent with no legacy fallback) always return an
+		// isViewerReadModelCurrent with no live fallback) always return an
 		// empty `{ roots: [] }` against it — the natural place to exercise the
 		// "no read model" empty state without a dedicated fixture.
 		await page.goto('/directory-tree');
@@ -311,7 +311,7 @@ test.describe('MPA ページネーション', () => {
 		await expect(page).toHaveURL(/status=404/);
 
 		// This fixture never builds the viewer_* read model, so /api/pages
-		// always falls back to the legacy path here — which reads only the
+		// always falls back to the live path here — which reads only the
 		// first same-named query param (Hono's `c.req.query()`), not a true
 		// OR across both. Asserting the combined-vs-summed total would
 		// therefore just re-assert that limitation, not the OR behavior.

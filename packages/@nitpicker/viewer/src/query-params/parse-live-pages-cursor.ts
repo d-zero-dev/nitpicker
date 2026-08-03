@@ -1,10 +1,10 @@
 /**
- * Parses the `cursor` query param for `/api/pages`'s legacy (offset-based)
+ * Parses the `cursor` query param for `/api/pages`'s live (offset-based)
  * fallback path into the row offset to read from.
  *
- * The legacy path (`listPages`) has no keyset concept, so its `nextCursor`/
+ * The live path (`listPages`) has no keyset concept, so its `nextCursor`/
  * `prevCursor` are plain decimal offset strings rather than the fast path's
- * opaque base64 tokens (see `buildLegacyPagesCursors`) — this function is
+ * opaque base64 tokens (see `buildLivePagesCursors`) — this function is
  * their inverse. Missing, non-numeric, or negative values fall back to
  * `fallbackOffset` rather than throwing: an offset is just a starting point
  * for a `LIMIT`/`OFFSET` read, so a garbage cursor degrades to "start over"
@@ -13,7 +13,7 @@
  * @param fallbackOffset - The offset to use when `cursor` is absent or invalid.
  * @returns A non-negative integer offset.
  */
-export function parseLegacyPagesCursor(
+export function parseLivePagesCursor(
 	cursor: string | undefined,
 	fallbackOffset: number,
 ): number {

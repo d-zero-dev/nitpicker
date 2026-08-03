@@ -17,7 +17,7 @@ const PORT = 4329;
  * `playwright.directory-tree.config.ts` / `playwright.template-clusters.config.ts`:
  * same SPA, same CLI bin, but the `webServer` points at a fixture built with
  * `e2e/generate-inbound-links-fixture.mjs`, whose viewer read model is built
- * before writing — `listInboundLinks` has no legacy fallback (unlike most
+ * before writing — `listInboundLinks` has no live fallback (unlike most
  * `viewer_*`-backed queries), so `/api/pages/inbound-links` would otherwise
  * always respond `{ available: false }` against the shared
  * `generate-fixture.mjs` fixture, which intentionally never builds the read

@@ -39,7 +39,7 @@ const BASE_CONFIG = {
  * @param workingDir - Unique scratch directory for this fixture.
  * @param withReadModel - Whether to build the `viewer_resources` read model
  *   before opening read-only (exercises the fast path) or leave it unbuilt
- *   (exercises the legacy fallback path).
+ *   (exercises the live fallback path).
  * @returns The app and manager — callers must close the manager in `afterAll`.
  */
 async function buildFixture(workingDir: string, withReadModel: boolean) {
@@ -197,7 +197,7 @@ describe('registerResourcesRoute — /api/resources (integration)', () => {
 			expect(body.items[0]!.url).toBe('https://example.com/b.js');
 		});
 
-		it('forces the legacy fallback when urlPattern is set', async () => {
+		it('forces the live fallback when urlPattern is set', async () => {
 			const res = await fixture.app.request(
 				`/api/resources?urlPattern=${encodeURIComponent('%a.css%')}`,
 			);
@@ -206,7 +206,7 @@ describe('registerResourcesRoute — /api/resources (integration)', () => {
 			expect(body.items[0]!.url).toBe('https://example.com/a.css');
 		});
 
-		it('forces the legacy fallback for a sortBy the fast path does not index', async () => {
+		it('forces the live fallback for a sortBy the fast path does not index', async () => {
 			const res = await fixture.app.request(
 				'/api/resources?sortBy=referrerCount&sortOrder=desc',
 			);
@@ -215,10 +215,10 @@ describe('registerResourcesRoute — /api/resources (integration)', () => {
 		});
 	});
 
-	describe('legacy fallback path (no read model built)', () => {
+	describe('live fallback path (no read model built)', () => {
 		const workingDir = path.resolve(
 			__dirname,
-			'__test_fixtures_register_resources_route_legacy__',
+			'__test_fixtures_register_resources_route_live__',
 		);
 		let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
@@ -232,7 +232,7 @@ describe('registerResourcesRoute — /api/resources (integration)', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('returns the same shape via the legacy live query, with an offset-string nextCursor', async () => {
+		it('returns the same shape via the live query, with an offset-string nextCursor', async () => {
 			const res = await fixture.app.request('/api/resources');
 			const body = (await res.json()) as {
 				items: { url: string; referrerCount: number }[];
@@ -249,7 +249,7 @@ describe('registerResourcesRoute — /api/resources (integration)', () => {
 			expect(body.nextCursor).toBeNull();
 		});
 
-		it('narrows a multi-value status to its first element (legacy path has no OR equivalent)', async () => {
+		it('narrows a multi-value status to its first element (live path has no OR equivalent)', async () => {
 			const res = await fixture.app.request('/api/resources?status=200&status=404');
 			const body = (await res.json()) as { items: { url: string }[]; total: number };
 			expect(body.total).toBe(2);

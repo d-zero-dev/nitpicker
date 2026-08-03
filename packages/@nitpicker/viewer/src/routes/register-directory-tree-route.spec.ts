@@ -57,7 +57,7 @@ const META = {
  * `register-pages-route.spec.ts`'s `buildFixture`.
  * @param workingDir - Unique scratch directory for this fixture.
  * @param withReadModel - Whether to build the viewer read model before
- *   opening read-only. Unlike `/api/pages`, directory-tree has no legacy
+ *   opening read-only. Unlike `/api/pages`, directory-tree has no live
  *   fallback, so `false` exercises the "read model not built" empty-response
  *   path rather than an alternate query backend.
  * @returns The app, archive, and manager — callers must close both in `afterAll`.

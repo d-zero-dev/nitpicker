@@ -69,7 +69,7 @@ function makeMeta(overrides: Partial<Meta> = {}): Meta {
  * @param workingDir - Unique scratch directory for this fixture.
  * @param withReadModel - Whether to build the `viewer_duplicate_groups`/
  *   `viewer_duplicate_group_pages` read model before opening read-only
- *   (exercises the fast path) or leave it unbuilt (exercises the legacy
+ *   (exercises the fast path) or leave it unbuilt (exercises the live
  *   fallback path).
  * @returns The app and manager — callers must close the manager in `afterAll`.
  */
@@ -228,7 +228,7 @@ describe('registerDuplicatesRoute — /api/duplicates (integration)', () => {
 			expect(res.status).toBe(400);
 		});
 
-		it('rejects a non-positive groupId with 404 even though the read model IS current — it can only ever be a legacy-fallback sentinel', async () => {
+		it('rejects a non-positive groupId with 404 even though the read model IS current — it can only ever be a live-fallback sentinel', async () => {
 			const zero = await fixture.app.request('/api/duplicates/0/pages');
 			expect(zero.status).toBe(404);
 			const negative = await fixture.app.request('/api/duplicates/-1/pages');
@@ -236,10 +236,10 @@ describe('registerDuplicatesRoute — /api/duplicates (integration)', () => {
 		});
 	});
 
-	describe('legacy fallback path (no read model built)', () => {
+	describe('live fallback path (no read model built)', () => {
 		const workingDir = path.resolve(
 			__dirname,
-			'__test_fixtures_register_duplicates_route_legacy__',
+			'__test_fixtures_register_duplicates_route_live__',
 		);
 		let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
@@ -253,7 +253,7 @@ describe('registerDuplicatesRoute — /api/duplicates (integration)', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('returns the same shape via the legacy live query, with null cursors', async () => {
+		it('returns the same shape via the live query, with null cursors', async () => {
 			const res = await fixture.app.request('/api/duplicates?field=title');
 			const body = (await res.json()) as {
 				items: { value: string; count: number }[];

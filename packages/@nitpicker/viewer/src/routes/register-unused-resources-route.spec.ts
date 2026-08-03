@@ -39,7 +39,7 @@ const BASE_CONFIG = {
  * @param workingDir - Unique scratch directory for this fixture.
  * @param withReadModel - Whether to build the `viewer_resources` read model
  *   before opening read-only (exercises the fast path) or leave it unbuilt
- *   (exercises the legacy fallback path).
+ *   (exercises the live fallback path).
  * @returns The app and manager — callers must close the manager in `afterAll`.
  */
 async function buildFixture(workingDir: string, withReadModel: boolean) {
@@ -185,7 +185,7 @@ describe('registerUnusedResourcesRoute — /api/unused-resources (integration)',
 			expect(body.prevCursor).toBeNull();
 		});
 
-		it('forces the legacy fallback when urlPattern is set', async () => {
+		it('forces the live fallback when urlPattern is set', async () => {
 			const res = await fixture.app.request(
 				`/api/unused-resources?urlPattern=${encodeURIComponent('%orphan%')}`,
 			);
@@ -194,17 +194,17 @@ describe('registerUnusedResourcesRoute — /api/unused-resources (integration)',
 			expect(body.items[0]!.url).toBe('https://example.com/orphan.pdf');
 		});
 
-		it('forces the legacy fallback for a sortBy the fast path does not index', async () => {
+		it('forces the live fallback for a sortBy the fast path does not index', async () => {
 			const res = await fixture.app.request('/api/unused-resources?sortBy=contentLength');
 			const body = (await res.json()) as { items: { url: string }[] };
 			expect(body.items.map((i) => i.url)).toEqual(['https://example.com/orphan.pdf']);
 		});
 	});
 
-	describe('legacy fallback path (no read model built)', () => {
+	describe('live fallback path (no read model built)', () => {
 		const workingDir = path.resolve(
 			__dirname,
-			'__test_fixtures_register_unused_resources_route_legacy__',
+			'__test_fixtures_register_unused_resources_route_live__',
 		);
 		let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
@@ -218,7 +218,7 @@ describe('registerUnusedResourcesRoute — /api/unused-resources (integration)',
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('returns the same shape via the legacy live query, with an offset-string nextCursor', async () => {
+		it('returns the same shape via the live query, with an offset-string nextCursor', async () => {
 			const res = await fixture.app.request('/api/unused-resources');
 			const body = (await res.json()) as {
 				items: { url: string }[];
@@ -230,9 +230,9 @@ describe('registerUnusedResourcesRoute — /api/unused-resources (integration)',
 			expect(body.nextCursor).toBeNull();
 		});
 
-		it('narrows a multi-value status to its first element (legacy path has no OR equivalent)', async () => {
+		it('narrows a multi-value status to its first element (live path has no OR equivalent)', async () => {
 			// The only unused resource is status 200, and is a 'crawled'
-			// source. Putting a non-matching status first proves the legacy
+			// source. Putting a non-matching status first proves the live
 			// path uses only that first element rather than OR-ing across
 			// the whole array — if it did, the real 200 later in the array
 			// would still make this match.
@@ -243,7 +243,7 @@ describe('registerUnusedResourcesRoute — /api/unused-resources (integration)',
 			expect(body.total).toBe(0);
 		});
 
-		it('narrows a multi-value source to its first element (legacy path has no OR equivalent)', async () => {
+		it('narrows a multi-value source to its first element (live path has no OR equivalent)', async () => {
 			const res = await fixture.app.request(
 				'/api/unused-resources?source=inventory-seed&source=crawled',
 			);
