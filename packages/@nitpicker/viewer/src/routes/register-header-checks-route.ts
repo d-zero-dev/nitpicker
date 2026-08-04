@@ -2,11 +2,13 @@ import type { ArchiveContext } from '../types.js';
 import type { CheckHeadersOptions } from '@nitpicker/query';
 import type { Hono } from 'hono';
 
-import { getHeaderChecksFastPath } from '@nitpicker/query';
+import { getHeaderChecksFastPath, isViewerReadModelCurrent } from '@nitpicker/query';
 
 import { toBoolean } from '../query-params/to-boolean.js';
+import { toHeaderChecksSortBy } from '../query-params/to-header-checks-sort-by.js';
 import { toNumber } from '../query-params/to-number.js';
 import { toPageSortOrder } from '../query-params/to-page-sort-order.js';
+import { refuseIfStaleReadModel } from '../refuse-if-stale-read-model.js';
 
 /**
  * Registers `GET /api/headers` — paginated, filterable security-header check
@@ -37,13 +39,29 @@ export function registerHeaderChecksRoute(app: Hono, context: ArchiveContext): v
 			hasXFrameOptions: toBoolean(q.hasXFrameOptions),
 			hasXContentTypeOptions: toBoolean(q.hasXContentTypeOptions),
 			hasHSTS: toBoolean(q.hasHSTS),
-			sortBy: q.sortBy as CheckHeadersOptions['sortBy'],
+			// Allowlist-narrowed, never an unvalidated cast: an unknown value
+			// would flow into getHeaderChecksSortSpec's column lookup and
+			// crash the request with an opaque 500 (see toHeaderChecksSortBy).
+			sortBy: toHeaderChecksSortBy(q.sortBy),
 			sortOrder: toPageSortOrder(q.sortOrder),
 			limit: toNumber(q.limit),
 			offset: toNumber(q.offset),
 			cursor: q.cursor || undefined,
 			direction: q.direction === 'prev' ? 'prev' : undefined,
 		};
-		return c.json(await getHeaderChecksFastPath(accessor, options));
+
+		// No filter forces a live fallback for /api/headers (see
+		// getHeaderChecksFastPath's docs) — the only reason that function
+		// degrades to live is a stale/missing read model, which this gate
+		// turns into an actionable response instead. Decided here, one level
+		// above the shared CLI/MCP/viewer fast-path helper, so those
+		// non-interactive callers keep silently degrading.
+		const isReadModelCurrent = await isViewerReadModelCurrent(accessor);
+		const refused = refuseIfStaleReadModel(c, context.mode, isReadModelCurrent);
+		if (refused) {
+			return refused;
+		}
+
+		return c.json(await getHeaderChecksFastPath(accessor, options, isReadModelCurrent));
 	});
 }

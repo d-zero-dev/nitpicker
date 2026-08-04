@@ -2,10 +2,12 @@ import type { ArchiveContext } from '../types.js';
 import type { FindMismatchesFastPathOptions, MismatchType } from '@nitpicker/query';
 import type { Hono } from 'hono';
 
-import { getMismatchesFastPath } from '@nitpicker/query';
+import { getMismatchesFastPath, isViewerReadModelCurrent } from '@nitpicker/query';
 
+import { toMismatchesSortBy } from '../query-params/to-mismatches-sort-by.js';
 import { toNumber } from '../query-params/to-number.js';
 import { toPageSortOrder } from '../query-params/to-page-sort-order.js';
+import { refuseIfStaleReadModel } from '../refuse-if-stale-read-model.js';
 
 /** Valid `type` values for the mismatches route. */
 const VALID_MISMATCH_TYPES = ['canonical', 'og:title', 'og:description'] as const;
@@ -48,12 +50,33 @@ export function registerMismatchesRoute(app: Hono, context: ArchiveContext): voi
 			limit: toNumber(c.req.query('limit')),
 			offset: toNumber(c.req.query('offset')),
 			urlPattern: c.req.query('urlPattern'),
-			sortBy: c.req.query('sortBy') as FindMismatchesFastPathOptions['sortBy'],
+			// Allowlist-narrowed, never an unvalidated cast: an unknown value
+			// would fall through getMismatchesSortSpec's exhaustive switch and
+			// crash the request with an opaque 500 (see toMismatchesSortBy).
+			sortBy: toMismatchesSortBy(c.req.query('sortBy')),
 			sortOrder: toPageSortOrder(c.req.query('sortOrder')),
 			cursor: c.req.query('cursor') || undefined,
 			direction: c.req.query('direction') === 'prev' ? 'prev' : undefined,
 		};
-		const result = await getMismatchesFastPath(accessor, type, options);
+
+		// No filter forces a live fallback for /api/mismatches (see
+		// getMismatchesFastPath's docs) — the only reason that function
+		// degrades to live is a stale/missing read model, which this gate
+		// turns into an actionable response instead. Decided here, one level
+		// above the shared CLI/MCP/viewer fast-path helper, so those
+		// non-interactive callers keep silently degrading.
+		const isReadModelCurrent = await isViewerReadModelCurrent(accessor);
+		const refused = refuseIfStaleReadModel(c, context.mode, isReadModelCurrent);
+		if (refused) {
+			return refused;
+		}
+
+		const result = await getMismatchesFastPath(
+			accessor,
+			type,
+			options,
+			isReadModelCurrent,
+		);
 		return c.json(result);
 	});
 }

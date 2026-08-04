@@ -1,5 +1,15 @@
-/** Every `/api/resources` `sortBy` value the `viewer_resources` fast path indexes. */
-const RESOURCES_SORT_BY_VALUES = ['url', 'status'] as const;
+/** Every `/api/resources` `sortBy` value the `viewer_resources` fast path serves — the full `ListResourcesOptions.sortBy` surface. */
+const RESOURCES_SORT_BY_VALUES = [
+	'url',
+	'status',
+	'statusText',
+	'contentType',
+	'contentLength',
+	'isExternal',
+	'referrerCount',
+	'compress',
+	'cdn',
+] as const;
 
 /** A validated fast-path `/api/resources` sort field. */
 export type ResourcesSortBy = (typeof RESOURCES_SORT_BY_VALUES)[number];

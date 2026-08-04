@@ -2,11 +2,16 @@ import type { ArchiveContext } from '../types.js';
 import type { ListImagesOptions } from '@nitpicker/query';
 import type { Hono } from 'hono';
 
-import { getImagesFastPath } from '@nitpicker/query';
+import {
+	getImagesFastPath,
+	isImagesFastPathSortBy,
+	isViewerReadModelCurrent,
+} from '@nitpicker/query';
 
 import { toBoolean } from '../query-params/to-boolean.js';
 import { toNumber } from '../query-params/to-number.js';
 import { toPageSortOrder } from '../query-params/to-page-sort-order.js';
+import { refuseIfStaleReadModel } from '../refuse-if-stale-read-model.js';
 
 /**
  * Registers `GET /api/images` — paginated, filterable image list.
@@ -45,6 +50,22 @@ export function registerImagesRoute(app: Hono, context: ArchiveContext): void {
 			cursor: q.cursor || undefined,
 			direction: q.direction === 'prev' ? 'prev' : undefined,
 		};
-		return c.json(await getImagesFastPath(accessor, options));
+
+		// `isImagesFastPathSortBy` is the same predicate `getImagesFastPath`
+		// itself dispatches on — the refusal gate must never fire for a
+		// request that was always going to take the live path anyway
+		// (urlPattern / src / alt — structural, see getImagesFastPath's docs).
+		const usesWideTableOnlyFilter =
+			options.urlPattern != null ||
+			(options.sortBy != null && !isImagesFastPathSortBy(options.sortBy));
+		const isReadModelCurrent = await isViewerReadModelCurrent(accessor);
+		if (!usesWideTableOnlyFilter) {
+			const refused = refuseIfStaleReadModel(c, context.mode, isReadModelCurrent);
+			if (refused) {
+				return refused;
+			}
+		}
+
+		return c.json(await getImagesFastPath(accessor, options, isReadModelCurrent));
 	});
 }

@@ -64,3 +64,19 @@ export interface InboundLinksUnavailable {
 	/** Always `false` — the discriminant frontend code checks for. */
 	available: false;
 }
+
+/**
+ * Response shape a read-model-backed list route returns when the read
+ * model is missing/stale outside stub mode, instead of silently degrading
+ * to its (often 10-50x slower on a large archive) live SQL fallback — see
+ * `shouldRefuseStaleReadModel`'s docs for the three-way split this covers.
+ * The frontend renders a "run `viewer-build`" guidance panel for this shape
+ * instead of an empty table, the same way it already does for
+ * {@link InboundLinksUnavailable} in stub mode.
+ */
+export interface ReadModelUnavailable {
+	/** Always `false` — the discriminant frontend code checks for. */
+	available: false;
+	/** Always `'read-model-required'` — reserved for future unavailability reasons. */
+	reason: 'read-model-required';
+}

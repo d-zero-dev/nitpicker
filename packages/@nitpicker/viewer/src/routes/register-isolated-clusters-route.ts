@@ -15,6 +15,7 @@ import { getCachedIsolatedClusters } from '../isolated-clusters-cache.js';
 import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
 import { toPageSource } from '../query-params/to-page-source.js';
+import { refuseIfStaleReadModel } from '../refuse-if-stale-read-model.js';
 
 /**
  * Registers the isolated-clusters viewer endpoints:
@@ -48,6 +49,12 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 			limit: toNumber(c.req.query('limit')),
 			offset: toNumber(c.req.query('offset')),
 		};
+		const isReadModelCurrent = await isViewerReadModelCurrent(accessor);
+		const refused = refuseIfStaleReadModel(c, context.mode, isReadModelCurrent);
+		if (refused) {
+			return refused;
+		}
+
 		const result =
 			context.mode === 'stub'
 				? await listIsolatedClusters(accessor, {
@@ -55,15 +62,23 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 						status: resolveLiveFilterValue(status),
 						precomputedComponents: await getCachedIsolatedClusters(context),
 					})
-				: await listIsolatedClustersFastPath(accessor, { ...sharedOptions, status });
+				: await listIsolatedClustersFastPath(
+						accessor,
+						{ ...sharedOptions, status },
+						isReadModelCurrent,
+					);
 		return c.json(result);
 	});
 
 	app.get('/api/isolated-clusters/:representativeUrl', async (c) => {
 		const accessor = context.manager.get(context.archiveId);
 		const representativeUrl = c.req.param('representativeUrl');
-		const usesReadModel =
-			context.mode !== 'stub' && (await isViewerReadModelCurrent(accessor));
+		const isReadModelCurrent = await isViewerReadModelCurrent(accessor);
+		const usesReadModel = context.mode !== 'stub' && isReadModelCurrent;
+		const refused = refuseIfStaleReadModel(c, context.mode, isReadModelCurrent);
+		if (refused) {
+			return refused;
+		}
 		const status = toMultiValue(c.req.queries('status'), toNumber);
 		const source = toMultiValue(c.req.queries('source'), toPageSource);
 		const sharedOptions = {
@@ -81,11 +96,12 @@ export function registerIsolatedClustersRoute(app: Hono, context: ArchiveContext
 						source: resolveLiveFilterValue(source),
 						precomputedComponents: await getCachedIsolatedClusters(context),
 					})
-				: await getIsolatedClusterFastPath(accessor, representativeUrl, {
-						...sharedOptions,
-						status,
-						source,
-					});
+				: await getIsolatedClusterFastPath(
+						accessor,
+						representativeUrl,
+						{ ...sharedOptions, status, source },
+						isReadModelCurrent,
+					);
 		if (result === null) {
 			// Distinguish "the URL maps to a singleton, you wanted
 			// /api/isolated-pages" from "the cluster collapsed". Deep-

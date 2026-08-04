@@ -2,6 +2,7 @@ import type { ArchiveContext } from '../types.js';
 import type { Hono } from 'hono';
 
 import {
+	isViewerReadModelCurrent,
 	listIsolatedPages,
 	listIsolatedPagesFastPath,
 	resolveLiveFilterValue,
@@ -11,6 +12,7 @@ import { getCachedIsolatedClusters } from '../isolated-clusters-cache.js';
 import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
 import { toPageSource } from '../query-params/to-page-source.js';
+import { refuseIfStaleReadModel } from '../refuse-if-stale-read-model.js';
 
 /**
  * Registers `GET /api/isolated-pages` — internal HTML pages with no
@@ -36,6 +38,17 @@ export function registerIsolatedPagesRoute(app: Hono, context: ArchiveContext): 
 			limit: toNumber(c.req.query('limit')),
 			offset: toNumber(c.req.query('offset')),
 		};
+		// `listIsolatedPagesFastPath` has no forced-live filter of its own —
+		// its only live fallback reason is a stale/missing read model, and
+		// that live branch has no `precomputedComponents` cache to reuse,
+		// re-running the full union-find pass per request. Refuse instead of
+		// paying that cost silently.
+		const isReadModelCurrent = await isViewerReadModelCurrent(accessor);
+		const refused = refuseIfStaleReadModel(c, context.mode, isReadModelCurrent);
+		if (refused) {
+			return refused;
+		}
+
 		const result =
 			context.mode === 'stub'
 				? await listIsolatedPages(accessor, {
@@ -44,7 +57,11 @@ export function registerIsolatedPagesRoute(app: Hono, context: ArchiveContext): 
 						source: resolveLiveFilterValue(source),
 						precomputedComponents: await getCachedIsolatedClusters(context),
 					})
-				: await listIsolatedPagesFastPath(accessor, { ...sharedOptions, status, source });
+				: await listIsolatedPagesFastPath(
+						accessor,
+						{ ...sharedOptions, status, source },
+						isReadModelCurrent,
+					);
 		return c.json(result);
 	});
 }

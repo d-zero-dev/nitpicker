@@ -14,6 +14,7 @@ import { buildLivePagesCursors } from '../query-params/build-live-pages-cursors.
 import { parseLivePagesCursor } from '../query-params/parse-live-pages-cursor.js';
 import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
+import { refuseIfStaleReadModel } from '../refuse-if-stale-read-model.js';
 
 /** Valid `type` values for the links route. */
 const VALID_LINK_TYPES = ['broken', 'external'] as const;
@@ -24,16 +25,20 @@ const DEFAULT_LIMIT = 100;
 /**
  * `sortBy` values `listViewerBrokenLinks` supports — a strict subset of
  * `listLinks`'s 5 (`sourceUrl`/`destUrl`/`status`/`isExternal`/
- * `textContent`), since `viewer_anchor_facts` has no index on
- * `is_external_link` and stores no anchor text at all (see
- * `list-viewer-broken-links.ts`'s docs). A request for `isExternal`/
- * `textContent` must force the live fallback rather than silently
- * falling through `getAnchorFactsSortSpec`'s `sourceUrl` default — a
- * bookmarked/shared `?sortBy=isExternal` URL must sort the same way
- * whether or not the read model happens to be current, not silently
- * change order depending on internal cache state.
+ * `textContent`): `viewer_anchor_facts` stores no anchor text at all (see
+ * `list-viewer-broken-links.ts`'s docs), so a `textContent` request must
+ * force the live fallback rather than silently falling through
+ * `getAnchorFactsSortSpec`'s `sourceUrl` default — a bookmarked/shared
+ * `?sortBy=textContent` URL must sort the same way whether or not the read
+ * model happens to be current, not silently change order depending on
+ * internal cache state.
  */
-const BROKEN_LINKS_FAST_PATH_SORT_KEYS = new Set(['sourceUrl', 'destUrl', 'status']);
+const BROKEN_LINKS_FAST_PATH_SORT_KEYS = new Set([
+	'sourceUrl',
+	'destUrl',
+	'status',
+	'isExternal',
+]);
 
 /**
  * Registers `GET /api/links?type=broken|external` — link analysis.
@@ -59,16 +64,17 @@ const BROKEN_LINKS_FAST_PATH_SORT_KEYS = new Set(['sourceUrl', 'destUrl', 'statu
  *   onto `viewer_external_links` columns. Otherwise `listExternalLinks`
  *   (the live `anchors` JOIN + `GROUP BY` query).
  * - `broken`: `listViewerBrokenLinks` (the `viewer_anchor_facts` read-model
- *   fast path, cursor-paginated) when the read model is current AND none of
- *   `urlPattern`, `includeRedirectSources`, or an unsupported `sortBy`
+ *   fast path, cursor-paginated) when the read model is current AND neither
+ *   `includeRedirectSources` nor an unsupported `sortBy`
  *   (`isExternal`/`textContent` — see `BROKEN_LINKS_FAST_PATH_SORT_KEYS`) is
- *   set — `urlPattern` matches source OR destination across two columns,
- *   which no single index can satisfy; `includeRedirectSources` has no
- *   read-model equivalent (`viewer_anchor_facts` only ever stores the
- *   canonical destination); and the fast path's narrower `sortBy` union
- *   means an unsupported value must force the live fallback rather than
- *   silently resolving to a different sort. Otherwise `listLinks` (live,
- *   anchor-scan-bound, offset-based). The
+ *   set — `includeRedirectSources` has no read-model equivalent
+ *   (`viewer_anchor_facts` only ever stores the canonical destination); and
+ *   the fast path's narrower `sortBy` union means an unsupported value must
+ *   force the live fallback rather than silently resolving to a different
+ *   sort. `urlPattern` takes the fast path (a source/dest OR'd LIKE over
+ *   two 1:1 `viewer_url_refs` joins — see
+ *   `ListViewerBrokenLinksOptions.urlPattern`). Otherwise `listLinks`
+ *   (live, anchor-scan-bound, offset-based). The
  *   live path's `cursor` is a plain decimal offset string (see
  *   `buildLivePagesCursors`), not the fast path's opaque keyset token, but
  *   exposes the same `nextCursor`-only contract so `useLinksInfinite`'s
@@ -98,24 +104,35 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 
 		if (type === 'external') {
 			const sortBy = q.sortBy as 'destUrl' | 'status' | 'referrerCount' | undefined;
-			const result = (await isViewerReadModelCurrent(accessor))
-				? await listViewerExternalLinks(accessor, {
+			const isReadModelCurrent = await isViewerReadModelCurrent(accessor);
+			if (isReadModelCurrent) {
+				return c.json(
+					await listViewerExternalLinks(accessor, {
 						limit,
 						offset,
 						urlPattern,
 						status,
 						sortBy,
 						sortOrder,
-					})
-				: await listExternalLinks(accessor, {
-						limit,
-						offset,
-						urlPattern,
-						status: resolveLiveFilterValue(status),
-						sortBy,
-						sortOrder,
-					});
-			return c.json(result);
+					}),
+				);
+			}
+			// No filter forces a live fallback for `external` — the only
+			// reason to reach here is a stale/missing read model.
+			const refused = refuseIfStaleReadModel(c, context.mode, isReadModelCurrent);
+			if (refused) {
+				return refused;
+			}
+			return c.json(
+				await listExternalLinks(accessor, {
+					limit,
+					offset,
+					urlPattern,
+					status: resolveLiveFilterValue(status),
+					sortBy,
+					sortOrder,
+				}),
+			);
 		}
 
 		const includeRedirectSources = q.includeRedirectSources === 'true';
@@ -123,19 +140,32 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 			q.sortBy && !BROKEN_LINKS_FAST_PATH_SORT_KEYS.has(q.sortBy),
 		);
 		const usesWideTableOnlyFilter = Boolean(
-			urlPattern || includeRedirectSources || usesUnsupportedSort,
+			includeRedirectSources || usesUnsupportedSort,
 		);
-		if (!usesWideTableOnlyFilter && (await isViewerReadModelCurrent(accessor))) {
+		const isReadModelCurrent = await isViewerReadModelCurrent(accessor);
+		if (!usesWideTableOnlyFilter && isReadModelCurrent) {
 			const result = await listViewerBrokenLinks(accessor, {
 				limit,
 				offset,
 				status,
-				sortBy: q.sortBy as 'sourceUrl' | 'destUrl' | 'status' | undefined,
+				urlPattern,
+				sortBy: q.sortBy as 'sourceUrl' | 'destUrl' | 'status' | 'isExternal' | undefined,
 				sortOrder,
 				cursor: q.cursor || undefined,
 				direction: q.direction === 'prev' ? 'prev' : undefined,
 			});
 			return c.json(result);
+		}
+
+		// `includeRedirectSources`/unsupported-sort are permanently live
+		// (structural — see ARCHITECTURE.md's `includeRedirectSources`
+		// invariant), so only refuse when the fast path *would* have served
+		// this request had the read model been current.
+		if (!usesWideTableOnlyFilter) {
+			const refused = refuseIfStaleReadModel(c, context.mode, isReadModelCurrent);
+			if (refused) {
+				return refused;
+			}
 		}
 
 		const liveLimit = limit ?? DEFAULT_LIMIT;

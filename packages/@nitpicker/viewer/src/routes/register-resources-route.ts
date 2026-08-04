@@ -19,6 +19,7 @@ import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
 import { toPageSortOrder } from '../query-params/to-page-sort-order.js';
 import { toResourcesSortBy } from '../query-params/to-resources-sort-by.js';
+import { refuseIfStaleReadModel } from '../refuse-if-stale-read-model.js';
 
 /** Default page size, matching `listResources`/`listViewerResources`'s own default. */
 const DEFAULT_LIMIT = 100;
@@ -47,13 +48,13 @@ export function registerResourcesRoute(app: Hono, context: ArchiveContext): void
 		const q = c.req.query();
 		const accessor = context.manager.get(context.archiveId);
 
-		const usesWideTableOnlyFilter = Boolean(
-			q.urlPattern || q.contentType || (q.sortBy && !toResourcesSortBy(q.sortBy)),
-		);
-		if (!usesWideTableOnlyFilter && (await isViewerReadModelCurrent(accessor))) {
+		const isReadModelCurrent = await isViewerReadModelCurrent(accessor);
+		if (isReadModelCurrent) {
 			const options: ListViewerResourcesOptions = {
 				isExternal: toBoolean(q.isExternal),
 				status: toMultiValue(c.req.queries('status'), toNumber),
+				urlPattern: q.urlPattern || undefined,
+				contentType: q.contentType || undefined,
 				sortBy: toResourcesSortBy(q.sortBy),
 				sortOrder: toPageSortOrder(q.sortOrder),
 				limit: toNumber(q.limit),
@@ -62,6 +63,14 @@ export function registerResourcesRoute(app: Hono, context: ArchiveContext): void
 				offset: toNumber(q.offset),
 			};
 			return c.json(await listViewerResources(accessor, options));
+		}
+
+		// No filter forces a live fallback for /api/resources — the only way
+		// to reach here is a stale/missing read model (or stub mode, which
+		// refuseIfStaleReadModel lets through to live below).
+		const refused = refuseIfStaleReadModel(c, context.mode, isReadModelCurrent);
+		if (refused) {
+			return refused;
 		}
 
 		const limit = toNumber(q.limit) ?? DEFAULT_LIMIT;
