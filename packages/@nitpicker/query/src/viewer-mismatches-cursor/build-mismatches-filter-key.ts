@@ -11,5 +11,5 @@ import { buildFilterKey } from '../viewer-cursor-kit/build-filter-key.js';
 export function buildMismatchesFilterKey(
 	filters: MismatchesCursorFilterKeyInput,
 ): string {
-	return buildFilterKey({ type: filters.type });
+	return buildFilterKey({ type: filters.type, urlPattern: filters.urlPattern });
 }

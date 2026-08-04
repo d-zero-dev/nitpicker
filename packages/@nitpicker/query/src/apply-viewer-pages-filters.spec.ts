@@ -233,6 +233,205 @@ describe('applyViewerPagesFilters — templateKey', () => {
 	});
 });
 
+describe('applyViewerPagesFilters — lang and header presence', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_apply_viewer_pages_filters_lang_headers__',
+	);
+	const archiveFilePath = path.resolve(
+		workingDir,
+		'apply-filters-lang-headers-test.nitpicker',
+	);
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/ja-with-csp')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {
+				'content-security-policy': "default-src 'self'",
+				'strict-transport-security': 'max-age=31536000',
+			},
+			html: '<html></html>',
+			meta: { ...META, lang: 'ja', title: 'JA' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/en-no-headers')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, lang: 'en', title: 'EN' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		await buildViewerReadModel(archive);
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('filters by exact lang', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { lang: 'ja' });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual(['https://example.com/ja-with-csp']);
+	});
+
+	it('filters by header presence (hasCSP: true)', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { hasCSP: true });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual(['https://example.com/ja-with-csp']);
+	});
+
+	it('filters by header absence (hasCSP: false), including pages with no headers at all', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { hasCSP: false });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual(['https://example.com/en-no-headers']);
+	});
+
+	it('combines multiple header-presence filters (hasHSTS present, hasXFrameOptions absent)', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { hasHSTS: true, hasXFrameOptions: false });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual(['https://example.com/ja-with-csp']);
+	});
+});
+
+describe('applyViewerPagesFilters — urlPattern', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_apply_viewer_pages_filters_url_pattern__',
+	);
+	const archiveFilePath = path.resolve(
+		workingDir,
+		'apply-filters-url-pattern-test.nitpicker',
+	);
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/about-us')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html><head><title>About</title></head></html>',
+			meta: { ...META, title: 'About' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/target')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html><head><title>Target</title></head></html>',
+			meta: { ...META, title: 'Target' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setRedirect({
+			url: parseUrl('https://example.com/old-location')!,
+			redirectPaths: ['https://example.com/target'],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		await buildViewerReadModel(archive);
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('matches the canonical URL with a plain LIKE', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { urlPattern: '%about%' });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual(['https://example.com/about-us']);
+	});
+
+	it('surfaces the canonical row when the pattern matches only a redirect-source URL — parity with listPages', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { urlPattern: '%old-location%' });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual(['https://example.com/target']);
+	});
+
+	it('matches nothing for a pattern that hits neither canonical nor equivalent URLs', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { urlPattern: '%no-such-page%' });
+		const rows = await qb.select('url');
+		expect(rows).toEqual([]);
+	});
+});
+
 describe('applyViewerPagesFilters — directory', () => {
 	const workingDir = path.resolve(
 		__dirname,

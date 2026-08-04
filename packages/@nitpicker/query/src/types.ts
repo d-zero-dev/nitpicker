@@ -294,19 +294,26 @@ export interface PaginatedUnusedResourceList {
  * Filter and pagination options for {@link import('./list-viewer-unused-resources.js').listViewerUnusedResources}
  * — the `viewer_resources` read-model-backed counterpart of
  * {@link ListUnusedResourcesOptions}.
- *
- * Deliberately narrower than {@link ListUnusedResourcesOptions}: `urlPattern`
- * (LIKE-based) and `contentType` (raw MIME prefix, not the classified
- * `content_category` the read model stores) are excluded — callers that need
- * those fall back to `listUnusedResources` instead.
  */
 export interface ListViewerUnusedResourcesOptions {
 	/** Filter by exact HTTP status code, or any of several (OR). */
 	status?: number | number[];
 	/** Filter by provenance, or any of several (OR) — see {@link PageSource}. */
 	source?: PageSource | PageSource[];
+	/**
+	 * SQL LIKE pattern to match resource URLs against — a plain LIKE scan of
+	 * the inlined `url_sort_key` (which holds the URL verbatim), the same
+	 * shape as `ListViewerMismatchesOptions.urlPattern`.
+	 */
+	urlPattern?: string;
+	/**
+	 * Raw MIME-type prefix (e.g. `text/css`) — a prefix LIKE against the
+	 * inlined `content_type_raw` column, matching live
+	 * `listUnusedResources`'s `ctr.raw LIKE '<prefix>%'` semantics exactly.
+	 */
+	contentType?: string;
 	/** Field to sort results by. Defaults to `'url'`. */
-	sortBy?: 'url' | 'status' | 'source';
+	sortBy?: 'url' | 'status' | 'source' | 'contentType' | 'contentLength';
 	/** Sort direction. Defaults to `'asc'`. */
 	sortOrder?: SortOrder;
 	/** Maximum number of results to return. Defaults to 100. */
@@ -1068,13 +1075,23 @@ export interface ListViewerPagesOptions {
 	missingDescription?: boolean;
 	/** Filter to pages with noindex set. */
 	noindex?: boolean;
+	/** Filter by exact `<html lang>` value (e.g. `'ja'`). */
+	lang?: string;
+	/** Filter by Content-Security-Policy header presence — see `viewer_pages.has_csp`'s DDL comment. */
+	hasCSP?: boolean;
+	/** Filter by X-Frame-Options header presence. */
+	hasXFrameOptions?: boolean;
+	/** Filter by X-Content-Type-Options header presence. */
+	hasXContentTypeOptions?: boolean;
+	/** Filter by Strict-Transport-Security header presence. */
+	hasHSTS?: boolean;
 	/** Filter by provenance — see {@link PageSource}. */
 	source?: import('@nitpicker/crawler').PageSource;
 	/**
 	 * Filter by exact `--templates` DOM-structure classification group key,
-	 * or any of several (OR). Unlike `urlPattern`, this IS supported by the
-	 * fast path: `page_templates` is joined by `page_id` (its PK), never the
-	 * wide `pages` table — see `applyViewerPagesFilters`.
+	 * or any of several (OR). This IS supported by the fast path:
+	 * `page_templates` is joined by `page_id` (its PK), never the wide
+	 * `pages` table — see `applyViewerPagesFilters`.
 	 */
 	templateKey?: string | string[];
 	/**
@@ -1089,6 +1106,22 @@ export interface ListViewerPagesOptions {
 	 * under two different hosts is not disambiguated here either.
 	 */
 	directory?: string;
+	/**
+	 * SQL LIKE pattern to match page URLs against (e.g. `%blog%`).
+	 *
+	 * Matches the canonical page's own URL (`viewer_pages.url`, a plain LIKE
+	 * scan of the narrow read-model table — a substring LIKE can't seek an
+	 * index anyway, so no index is even attempted), OR any URL that resolves
+	 * to it via an HTTP redirect (`content_items.redirect_dest_id`) or a
+	 * URL-normalization alias (`content_items.alias_of_id`). The equivalence
+	 * arms replicate `listPages`'s own `urlPattern` contract (searching a
+	 * redirect-source or alias-member URL must surface the one canonical row
+	 * that survives — `viewer_pages` holds only canonical rows, so the LIKE
+	 * against it alone would miss those): two `UNION ALL`'d `IN` subqueries
+	 * against `content_items`+`url_refs`, the same narrow-adjunct-table
+	 * reach-through precedent `templateKey`'s `page_templates` subquery set.
+	 */
+	urlPattern?: string;
 	/** Field to sort results by. Defaults to `'url'`. */
 	sortBy?:
 		| 'url'
@@ -1793,19 +1826,26 @@ export interface LinkAnalysisResult {
  * Filter/sort/pagination options for {@link listViewerBrokenLinks} — the
  * `viewer_anchor_facts` read-model fast path for broken-link listing.
  *
- * `urlPattern` and `includeRedirectSources` are deliberately absent:
- * `urlPattern` matches source OR destination across two columns
- * (`ListLinksOptions`'s semantics), which no single index on
- * `viewer_anchor_facts` can satisfy, so callers with a `urlPattern` set
- * must use `listLinks` instead (see `register-links-route.ts`).
- * `includeRedirectSources` has no equivalent here: `viewer_anchor_facts`
- * only ever stores the canonical (redirect-resolved) destination.
+ * `includeRedirectSources` is deliberately absent: `viewer_anchor_facts`
+ * only ever stores the canonical (redirect-resolved) destination, so callers
+ * with that flag set must use `listLinks` instead (see
+ * `register-links-route.ts`).
  */
 export interface ListViewerBrokenLinksOptions {
 	/** Filter by destination HTTP status, or any of several (OR). Broken links are always `404`, so this is effectively a no-op unless set to a non-`404` value (which then matches nothing). */
 	status?: number | number[];
+	/**
+	 * SQL LIKE pattern matched against the source URL OR the destination URL
+	 * (`ListLinksOptions`'s semantics). No single index can satisfy an OR
+	 * across two columns, but none is needed: both `source_url_ref_id` and
+	 * `dest_url_ref_id` join 1:1 to `viewer_url_refs`, and the OR'd LIKE over
+	 * those two joins scans only the narrow read-model tables — far cheaper
+	 * than the live `anchor_edges`+`content_items` multi-join chain it used
+	 * to force (see `applyBrokenLinksFilters`).
+	 */
+	urlPattern?: string;
 	/** Field to sort results by. Defaults to `'sourceUrl'`. */
-	sortBy?: 'sourceUrl' | 'destUrl' | 'status';
+	sortBy?: 'sourceUrl' | 'destUrl' | 'status' | 'isExternal';
 	/** Sort direction. Defaults to `'asc'`. */
 	sortOrder?: SortOrder;
 	/** Maximum number of results to return. Defaults to 100. */
@@ -2000,21 +2040,36 @@ export interface PaginatedResourceList {
 /**
  * Filter and pagination options for {@link import('./list-viewer-resources.js').listViewerResources}
  * — the `viewer_resources` read-model-backed counterpart of
- * {@link ListResourcesOptions}.
- *
- * Deliberately narrower than {@link ListResourcesOptions}: `urlPattern`
- * (LIKE-based) and `contentType` (raw MIME prefix, not the classified
- * `content_category` the read model stores) are excluded, and `sortBy` is
- * restricted to the two columns the read model indexes — callers that need
- * anything else fall back to `listResources` instead.
+ * {@link ListResourcesOptions}, covering its full filter/sort surface.
  */
 export interface ListViewerResourcesOptions {
 	/** Filter by external (true) or internal (false) resources. */
 	isExternal?: boolean;
 	/** Filter by exact HTTP status code, or any of several (OR). */
 	status?: number | number[];
+	/**
+	 * SQL LIKE pattern to match resource URLs against — a plain LIKE scan of
+	 * the inlined `url_sort_key` (which holds the URL verbatim), the same
+	 * shape as `ListViewerMismatchesOptions.urlPattern`.
+	 */
+	urlPattern?: string;
+	/**
+	 * Raw MIME-type prefix (e.g. `text/css`) — a prefix LIKE against the
+	 * inlined `content_type_raw` column, matching live `listResources`'s
+	 * `ctr.raw LIKE '<prefix>%'` semantics exactly.
+	 */
+	contentType?: string;
 	/** Field to sort results by. Defaults to `'url'`. */
-	sortBy?: 'url' | 'status';
+	sortBy?:
+		| 'url'
+		| 'status'
+		| 'statusText'
+		| 'contentType'
+		| 'contentLength'
+		| 'isExternal'
+		| 'referrerCount'
+		| 'compress'
+		| 'cdn';
 	/** Sort direction. Defaults to `'asc'`. */
 	sortOrder?: SortOrder;
 	/** Maximum number of results to return. Defaults to 100. */
@@ -2529,7 +2584,25 @@ export interface ListViewerMismatchesOptions {
 	 * empty array means "every type".
 	 */
 	type?: MismatchType | MismatchType[];
-	/** Sort direction on `url_sort_key`. Defaults to `'asc'`. */
+	/**
+	 * SQL LIKE pattern to match page URLs against (e.g. `%blog%`). A plain
+	 * LIKE scan of `viewer_mismatches.url_sort_key`, which inlines the exact
+	 * page URL verbatim (see `compute-mismatch-rows.ts`) — no join or
+	 * equivalence arms needed, unlike `ListViewerPagesOptions.urlPattern`:
+	 * a mismatch row is about the page's own metadata, so `findMismatches`'s
+	 * live `urlPattern` never resolved redirect/alias equivalents either and
+	 * parity holds with the direct-column match alone.
+	 */
+	urlPattern?: string;
+	/**
+	 * Field to sort results by. Unset = plain BINARY URL order
+	 * (`url_sort_key`); explicit `'url'` = natural numeric-aware URL order
+	 * (`natural_url_rank`) — the same unset-vs-explicit split
+	 * `findMismatches` (live) has always had, preserved here so both orders
+	 * stay reachable on the fast path (see `MismatchesEffectiveSortBy`).
+	 */
+	sortBy?: 'url' | 'actual' | 'expected';
+	/** Sort direction. Defaults to `'asc'`. */
 	sortOrder?: SortOrder;
 	/** Maximum number of results to return. */
 	limit?: number;
@@ -2724,10 +2797,7 @@ export interface CheckHeadersOptions {
  * Filter and pagination options for
  * {@link import('./list-viewer-header-checks.js').listViewerHeaderChecks} —
  * the `viewer_header_checks` read-model counterpart of
- * {@link CheckHeadersOptions}. Omits `sortBy` values other than `'url'`
- * (the only order `viewer_header_checks` indexes — see
- * `getHeaderChecksSortSpec`); a request for any other `sortBy` is expected
- * to fall back to the live path before reaching this function.
+ * {@link CheckHeadersOptions}.
  */
 export interface ListViewerHeaderChecksOptions {
 	/** Filter to pages missing at least one tracked security header. */
@@ -2740,7 +2810,16 @@ export interface ListViewerHeaderChecksOptions {
 	hasXContentTypeOptions?: boolean;
 	/** Filter by Strict-Transport-Security header presence. */
 	hasHSTS?: boolean;
-	/** Sort direction on `url`. Defaults to `'asc'`. */
+	/**
+	 * Field to sort results by. Unset = plain BINARY URL order
+	 * (`url_sort_key`); explicit `'url'` = natural numeric-aware URL order
+	 * (`natural_url_rank`) — the same unset-vs-explicit split `checkHeaders`
+	 * (live) has always had, preserved here so both orders stay reachable on
+	 * the fast path (see `HeaderChecksEffectiveSortBy`). The four
+	 * {@link HeaderPresenceKey} values sort on their boolean columns.
+	 */
+	sortBy?: 'url' | HeaderPresenceKey;
+	/** Sort direction. Defaults to `'asc'`. */
 	sortOrder?: SortOrder;
 	/** Maximum number of results to return. Defaults to 100. */
 	limit?: number;

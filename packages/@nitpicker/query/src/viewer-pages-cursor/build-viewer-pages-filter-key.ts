@@ -22,8 +22,14 @@ export function buildViewerPagesFilterKey(
 		missingTitle: filters.missingTitle,
 		missingDescription: filters.missingDescription,
 		noindex: filters.noindex,
+		lang: filters.lang,
+		hasCSP: filters.hasCSP,
+		hasXFrameOptions: filters.hasXFrameOptions,
+		hasXContentTypeOptions: filters.hasXContentTypeOptions,
+		hasHSTS: filters.hasHSTS,
 		source: filters.source,
 		templateKey: filters.templateKey,
 		directory: filters.directory,
+		urlPattern: filters.urlPattern,
 	});
 }

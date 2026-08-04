@@ -60,9 +60,15 @@ export async function* computeResourceInsertRows(
 			status: number | null;
 			source: string;
 			url: string | null;
+			statusText: string | null;
+			contentTypeRaw: string | null;
+			contentLength: number | null;
+			compress: string | null;
+			cdn: string | null;
 			referrerCount: string | number | null;
 		}[] = await trx('resource_items as ri')
 			.leftJoin('url_refs as ur', 'ur.id', 'ri.url_id')
+			.leftJoin('content_type_refs as ctr', 'ctr.id', 'ri.content_type_id')
 			.leftJoin('resource_ref_edges as rre', 'rre.resource_id', 'ri.id')
 			.where('ri.id', '>', lastId)
 			.groupBy('ri.id')
@@ -74,6 +80,11 @@ export async function* computeResourceInsertRows(
 				'ri.status as status',
 				'ri.source as source',
 				'ur.url as url',
+				'ri.status_text as statusText',
+				'ctr.raw as contentTypeRaw',
+				'ri.content_length as contentLength',
+				'ri.compress as compress',
+				'ri.cdn as cdn',
 				trx.raw('coalesce(sum("rre"."count"), 0) as "referrerCount"'),
 			);
 
@@ -94,6 +105,15 @@ export async function* computeResourceInsertRows(
 				status_desc_key: -statusSortKey,
 				source: row.source as ResourceInsertRows['resources'][number]['source'],
 				is_unused: isExternal === 0 && referrerCount === 0 ? 1 : 0,
+				// NULL-sentinel substitution for keyset sortability — see
+				// `viewer_resources`'s DDL comment ('' / -1 sort where SQL
+				// NULLs would; display re-fetches the true nullable values).
+				status_text: row.statusText ?? '',
+				content_type_raw: row.contentTypeRaw ?? '',
+				content_length: row.contentLength ?? -1,
+				compress: row.compress ?? '',
+				cdn: row.cdn ?? '',
+				referrer_count: referrerCount,
 				// A blob-routed resource (identity is a large `data:` URI, not
 				// a URL) has `url === null`; sort_key is NOT NULL, so it falls
 				// back to the empty string, sorting first (mirrors

@@ -261,6 +261,7 @@ describe('createViewerReadModelTables', () => {
 			status_desc_key: -200,
 			source: 'crawled',
 			is_unused: 0,
+			referrer_count: 0,
 			url_sort_key: 'https://example.com/a.css',
 		});
 		await expect(
@@ -272,6 +273,7 @@ describe('createViewerReadModelTables', () => {
 				status_desc_key: -200,
 				source: 'crawled',
 				is_unused: 0,
+				referrer_count: 0,
 				url_sort_key: 'https://example.com/duplicate.css',
 			}),
 		).rejects.toThrow();
@@ -373,6 +375,7 @@ describe('createViewerReadModelTables', () => {
 				url_sort_key: 'https://example.com/a',
 				actual: 'https://example.com/a',
 				expected: 'https://example.com/canonical-a',
+				natural_url_rank: 0,
 			},
 			{
 				type: 'og:title',
@@ -380,6 +383,7 @@ describe('createViewerReadModelTables', () => {
 				url_sort_key: 'https://example.com/a',
 				actual: 'OG Title',
 				expected: 'Title',
+				natural_url_rank: 0,
 			},
 		]);
 		const rows = await knex('viewer_mismatches').select('mismatch_id', 'type');

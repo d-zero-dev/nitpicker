@@ -405,6 +405,22 @@ export interface ResourceInsertRow {
 	 * docs).
 	 */
 	is_unused: number;
+	/** `resource_items.status_text`, or `''` when null (keyset-sortable sentinel — see `viewer_resources`'s DDL comment). */
+	status_text: string;
+	/** `content_type_refs.raw` (or `''` when null) — backs the raw-MIME-prefix `contentType` filter and `contentType` sort. */
+	content_type_raw: string;
+	/** `resource_items.content_length`, or `-1` when null (sorts below any real length, like SQL's NULLs-first). */
+	content_length: number;
+	/** `resource_items.compress`, or `''` when null. */
+	compress: string;
+	/** `resource_items.cdn`, or `''` when null. */
+	cdn: string;
+	/**
+	 * Duplicated from {@link ResourceStatsInsertRow.referrer_count} for
+	 * sort-ability — an accepted denormalisation, see `viewer_resources`'s
+	 * DDL comment.
+	 */
+	referrer_count: number;
 	/**
 	 * The resource's URL, verbatim — copied at build time so indexed
 	 * `ORDER BY`/keyset comparisons don't need a pre-join, the same

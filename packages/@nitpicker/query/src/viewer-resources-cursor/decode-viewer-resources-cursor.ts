@@ -10,7 +10,7 @@ export interface ExpectedViewerResourcesCursor {
 	/** See `buildViewerResourcesFilterKey`. */
 	filterKey: string;
 	/** The current request's sort field. */
-	sortBy: 'url' | 'status';
+	sortBy: import('./get-viewer-resources-sort-spec.js').ViewerResourcesSortBy;
 	/** The current request's sort direction. */
 	sortOrder: 'asc' | 'desc';
 	/**

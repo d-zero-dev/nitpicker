@@ -7,6 +7,13 @@ export type ViewerResourcesSortColumn =
 	| 'url_sort_key'
 	| 'status_sort_key'
 	| 'status_desc_key'
+	| 'status_text'
+	| 'content_type_raw'
+	| 'content_length'
+	| 'is_external'
+	| 'compress'
+	| 'cdn'
+	| 'referrer_count'
 	| 'resource_id';
 
 /**
@@ -46,6 +53,10 @@ export interface ViewerResourcesCursorFilterKeyInput {
 	isExternal?: boolean;
 	/** See `ListViewerResourcesOptions.status`. */
 	status?: number | number[];
+	/** See `ListViewerResourcesOptions.urlPattern`. */
+	urlPattern?: string;
+	/** See `ListViewerResourcesOptions.contentType`. */
+	contentType?: string;
 }
 
 /**
@@ -62,7 +73,16 @@ export interface ViewerResourcesCursorPayload {
 	/** See `buildViewerResourcesFilterKey`. */
 	filterKey: string;
 	/** The sort field the cursor was minted under. */
-	sortBy: 'url' | 'status';
+	sortBy:
+		| 'url'
+		| 'status'
+		| 'statusText'
+		| 'contentType'
+		| 'contentLength'
+		| 'isExternal'
+		| 'referrerCount'
+		| 'compress'
+		| 'cdn';
 	/** The sort direction the cursor was minted under. */
 	sortOrder: 'asc' | 'desc';
 	/** The boundary row's keyset tuple values, in sort-spec column order. */

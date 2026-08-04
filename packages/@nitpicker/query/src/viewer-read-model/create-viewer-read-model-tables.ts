@@ -102,6 +102,20 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			-- display re-fetches the true (possibly NULL) value via
 			-- joinViewerPageIdsToListItems.
 			console_error_count integer not null default 0,
+			-- page_meta.lang verbatim (nullable — a page with no <html lang>).
+			-- Filter-only: the Pages view's Language dropdown sends ?lang=,
+			-- which the fast path silently ignored before this column existed.
+			lang text,
+			-- header_flags' four tracked security-header booleans (see
+			-- compute-header-flags.ts), coalesced to 0 for pages with no
+			-- header_set_id — the same has_*-boolean filter shape as
+			-- has_title/has_description above. Filter-only: display resolves
+			-- the same flags per-row via joinViewerPageIdsToListItems'
+			-- header_flags join.
+			has_csp integer not null default 0,
+			has_x_frame_options integer not null default 0,
+			has_x_content_type_options integer not null default 0,
+			has_hsts integer not null default 0,
 			url_sort_key text not null,
 			title_sort_key text not null,
 			path_sort_key text not null,
@@ -346,15 +360,29 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	// reuse `viewer_pages`/`viewer_anchor_facts`'s `NULL_STATUS_SENTINEL`
 	// convention, and `url_sort_key` is the URL copied verbatim — same
 	// rationale as `viewer_pages.url_sort_key` (kept as its own column so a
-	// future normalisation change doesn't require renaming the index). No
-	// `content_category` column (unlike `viewer_pages`): neither
-	// `ListViewerResourcesOptions` nor `ListViewerUnusedResourcesOptions`
-	// filters on it — `ListResourcesOptions.contentType` is a raw MIME prefix
-	// the read model doesn't classify, and bails to the live path regardless (see
-	// `register-resources-route.ts`). `is_unused` is duplicated onto this
-	// table (rather than living only in `viewer_resource_stats`) because
+	// future normalisation change doesn't require renaming the index).
+	// `content_type_raw` is `content_type_refs.raw` copied (NOT the
+	// classified category): `ListResourcesOptions.contentType` filters by
+	// raw-MIME prefix (`ctr.raw LIKE 'text/css%'`), so only the raw string
+	// reproduces identical filter semantics. `is_unused` is duplicated onto
+	// this table (rather than living only in `viewer_resource_stats`) because
 	// `/api/unused-resources` needs it as a pre-limit filter column, exactly
-	// like `viewer_anchor_facts.is_broken`.
+	// like `viewer_anchor_facts.is_broken`. `status_text`/`content_length`/
+	// `compress`/`cdn` are `resource_items`' scalar columns; together with
+	// `referrer_count` (duplicated from `viewer_resource_stats` — an accepted
+	// denormalisation, same idea as `is_unused` above) they back every
+	// `ListResourcesOptions` `sortBy` on the fast path. All sort-capable
+	// columns are NOT NULL with build-time sentinel substitution — keyset
+	// tuple comparison cannot tolerate NULL (SQL three-valued logic breaks
+	// the seek): text nulls become '' (the `title_sort_key` convention;
+	// sorts first like SQL NULLs do), `content_length` nulls become -1
+	// (below any real length, matching SQL's NULLs-first ascending order).
+	// Display values are re-fetched from the wide table by
+	// joinViewerResourceIdsToListItems, which preserves the true NULLs.
+	// Sort-only columns carry no dedicated indexes: this narrow table's TEMP
+	// B-TREE sort is cheap, and per ARCHITECTURE.md's
+	// "perf index の一括追加をしない" invariant an index is added only once a
+	// bench proves one necessary.
 	await trx.raw(`
 		CREATE TABLE viewer_resources (
 			resource_id integer primary key,
@@ -364,16 +392,22 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			status_desc_key integer not null,
 			source text not null,
 			is_unused integer not null,
+			status_text text not null default '',
+			content_type_raw text not null default '',
+			content_length integer not null default -1,
+			compress text not null default '',
+			cdn text not null default '',
+			referrer_count integer not null,
 			url_sort_key text not null
 		)
 	`);
 
 	// Split from `viewer_resources` (rather than a `referrer_count` column on
-	// it) to match issue #110's TO-BE table naming verbatim. No dedicated
-	// index: it is only ever joined by `resource_id` after `viewer_resources`
-	// has already limited the id set (see `joinViewerResourceIdsToListItems`),
-	// and no fast path currently sorts by `referrer_count` (see the comment
-	// above `viewer_resources`).
+	// it) to match issue #110's TO-BE table naming verbatim; the same value
+	// is now ALSO denormalised onto `viewer_resources.referrer_count` for
+	// sort-ability (see that table's comment). No dedicated index here: it is
+	// only ever joined by `resource_id` after `viewer_resources` has already
+	// limited the id set (see `joinViewerResourceIdsToListItems`).
 	await trx.raw(`
 		CREATE TABLE viewer_resource_stats (
 			resource_id integer primary key,
@@ -464,7 +498,12 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			has_x_content_type_options integer not null,
 			has_hsts integer not null,
 			missing_count integer not null,
-			is_missing integer not null
+			is_missing integer not null,
+			-- Natural URL order over this table's own row population (see
+			-- HeaderCheckInsertRow.natural_url_rank) — backs checkHeaders'
+			-- explicit sortBy:'url' (natural sort) on the fast path, the same
+			-- viewer_pages.natural_url_rank technique.
+			natural_url_rank integer not null
 		)
 	`);
 
@@ -541,7 +580,13 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			page_id integer not null,
 			url_sort_key text not null,
 			actual text,
-			expected text
+			expected text,
+			-- Natural URL order over the DISTINCT pages of the whole table
+			-- (every type combined — see MismatchInsertRow.natural_url_rank
+			-- for why whole-table ranking is load-bearing under multi-type
+			-- filters) — backs findMismatches' explicit sortBy:'url' (natural
+			-- sort) on the fast path.
+			natural_url_rank integer not null
 		)
 	`);
 }

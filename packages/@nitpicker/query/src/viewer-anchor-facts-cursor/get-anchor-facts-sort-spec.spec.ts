@@ -44,4 +44,15 @@ describe('getAnchorFactsSortSpec', () => {
 			scanDirection: 'asc',
 		});
 	});
+
+	it('sorts by isExternal using is_external_link with a source_url_ref_id tie-breaker', () => {
+		expect(getAnchorFactsSortSpec('isExternal', 'asc')).toEqual({
+			columns: ['is_external_link', 'source_url_ref_id', 'edge_id'],
+			scanDirection: 'asc',
+		});
+		expect(getAnchorFactsSortSpec('isExternal', 'desc')).toEqual({
+			columns: ['is_external_link', 'source_url_ref_id', 'edge_id'],
+			scanDirection: 'desc',
+		});
+	});
 });

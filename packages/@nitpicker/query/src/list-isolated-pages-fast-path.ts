@@ -16,6 +16,9 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
  * single-select on a stale/absent read model rather than matching nothing.
  * @param accessor - The archive accessor to query.
  * @param options - Filter, sort, and pagination options.
+ * @param precheckedReadModelCurrent - The caller's own already-computed
+ *   `isViewerReadModelCurrent` result, when it has one — avoids probing the
+ *   same tables a second time per request. Omit to let this function check.
  * @returns Matching isolated-page rows plus the total matching count.
  * @example
  * // Callers never need to know which path served the read:
@@ -24,8 +27,9 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
 export async function listIsolatedPagesFastPath(
 	accessor: ArchiveAccessor,
 	options: ListViewerIsolatedPagesOptions = {},
+	precheckedReadModelCurrent?: boolean,
 ): Promise<{ items: IsolatedPageEntry[]; total: number }> {
-	return (await isViewerReadModelCurrent(accessor))
+	return (precheckedReadModelCurrent ?? (await isViewerReadModelCurrent(accessor)))
 		? listViewerIsolatedPages(accessor, options)
 		: listIsolatedPages(accessor, {
 				...options,

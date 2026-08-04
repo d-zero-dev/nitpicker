@@ -7,12 +7,13 @@ import { encodeHeaderChecksCursor } from './encode-header-checks-cursor.js';
 
 const PAYLOAD_BASE = {
 	filterKey: '{"missingOnly":null}',
-	sortBy: 'url' as const,
+	sortBy: 'urlBinary' as const,
 	sortOrder: 'asc' as const,
 };
 
 const EXPECTED = {
 	filterKey: PAYLOAD_BASE.filterKey,
+	sortBy: PAYLOAD_BASE.sortBy,
 	sortOrder: PAYLOAD_BASE.sortOrder,
 };
 
@@ -74,5 +75,15 @@ describe('decodeHeaderChecksCursor', () => {
 		expect(() => decodeHeaderChecksCursor(cursor, EXPECTED)).toThrow(
 			/keyset value count/,
 		);
+	});
+
+	it('throws on a cursor minted under a different effective sort (urlBinary vs urlNatural)', () => {
+		const cursor = encodeHeaderChecksCursor({
+			v: VIEWER_READ_MODEL_SCHEMA_VERSION,
+			...PAYLOAD_BASE,
+			sortBy: 'urlNatural',
+			values: [3, 1],
+		});
+		expect(() => decodeHeaderChecksCursor(cursor, EXPECTED)).toThrow(/does not match/);
 	});
 });

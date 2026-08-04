@@ -23,16 +23,15 @@ import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model/viewer-rea
 interface MismatchWindowRow extends MismatchesKeysetRow {
 	/** See `viewer_mismatches.type`. Read per-row since a multi-`type` filter can mix types within one window. */
 	type: MismatchEntry['type'];
-	/** See `viewer_mismatches.actual`. */
-	actual: string | null;
-	/** See `viewer_mismatches.expected`. */
-	expected: string | null;
 }
 
 /**
- * Constrains a `viewer_mismatches` query builder to `type` — the only filter
- * `listViewerMismatches` supports. `undefined`/an empty array means "every
- * type" (see `ListViewerMismatchesOptions.type`'s docs).
+ * Constrains a `viewer_mismatches` query builder to the caller's filters:
+ * `type` (`undefined`/an empty array means "every type" — see
+ * `ListViewerMismatchesOptions.type`'s docs) and `urlPattern` (a plain LIKE
+ * against the inlined `url_sort_key` — see
+ * `ListViewerMismatchesOptions.urlPattern`'s docs for why no equivalence
+ * arms are needed here, unlike `applyViewerPagesFilters`).
  * @param qb - The query builder to constrain.
  * @param options - The caller's options.
  */
@@ -41,6 +40,9 @@ function applyMismatchesFilters(
 	options: ListViewerMismatchesOptions,
 ): void {
 	applyEqualityOrInFilter(qb, 'type', options.type);
+	if (options.urlPattern) {
+		qb.where('url_sort_key', 'like', options.urlPattern);
+	}
 }
 
 /**
@@ -88,7 +90,10 @@ async function readMismatchesWindow(
 		knex,
 		'viewer_mismatches',
 		(qb) => applyMismatchesFilters(qb, options),
-		['type', 'actual', 'expected'],
+		// Every MismatchesKeysetRow column is selected regardless of the
+		// active sort (readKeysetWindow dedupes against spec.columns), so one
+		// row shape serves display AND any sort's cursor extraction.
+		['type', 'actual', 'expected', 'url_sort_key', 'natural_url_rank'],
 		spec,
 		orderDirection,
 		limit,
@@ -145,7 +150,16 @@ export async function listViewerMismatches(
 	const knex = accessor.getKnex();
 	const limit = options.limit ?? 100;
 	const sortOrder = options.sortOrder ?? 'asc';
-	const spec = getMismatchesSortSpec(sortOrder);
+	// Unset sortBy = BINARY url order; explicit 'url' = natural order — the
+	// same two-distinct-orders contract findMismatches (live) has always had
+	// (its `useUrlSort = options.sortBy != null`). See MismatchesEffectiveSortBy.
+	const effectiveSortBy =
+		options.sortBy == null
+			? 'urlBinary'
+			: options.sortBy === 'url'
+				? 'urlNatural'
+				: options.sortBy;
+	const spec = getMismatchesSortSpec(effectiveSortBy, sortOrder);
 	const filterKey = buildMismatchesFilterKey(options);
 
 	const total = await countMismatchesTotal(knex, options);
@@ -171,7 +185,7 @@ export async function listViewerMismatches(
 				? encodeMismatchesCursor({
 						v: VIEWER_READ_MODEL_SCHEMA_VERSION,
 						filterKey,
-						sortBy: 'url',
+						sortBy: effectiveSortBy,
 						sortOrder,
 						values: extractMismatchesSortValues(spec, lastRow),
 					})
@@ -181,7 +195,7 @@ export async function listViewerMismatches(
 				? encodeMismatchesCursor({
 						v: VIEWER_READ_MODEL_SCHEMA_VERSION,
 						filterKey,
-						sortBy: 'url',
+						sortBy: effectiveSortBy,
 						sortOrder,
 						values: extractMismatchesSortValues(spec, firstRow),
 					})
@@ -190,7 +204,11 @@ export async function listViewerMismatches(
 	}
 
 	if (options.cursor) {
-		const decoded = decodeMismatchesCursor(options.cursor, { filterKey, sortOrder });
+		const decoded = decodeMismatchesCursor(options.cursor, {
+			filterKey,
+			sortBy: effectiveSortBy,
+			sortOrder,
+		});
 		if (options.direction === 'prev') {
 			const oppositeDirection = spec.scanDirection === 'asc' ? 'desc' : 'asc';
 			const fetched = await readMismatchesWindow(

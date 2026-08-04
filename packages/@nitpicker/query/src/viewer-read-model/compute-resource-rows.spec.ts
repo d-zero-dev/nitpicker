@@ -258,6 +258,32 @@ describe('computeResourceInsertRows', () => {
 		expect(timedOut.status_sort_key).toBeLessThan(100);
 	});
 
+	it('substitutes the "" / -1 sentinels for status_text/content_type_raw/content_length on an errored (null-metadata) resource', async () => {
+		const knex = archive.getKnex();
+		const { resources } = await knex.transaction((trx) => collectResourceInsertRows(trx));
+		const timedOut = resources.find(
+			(row) => row.url_sort_key === 'https://example.com/timed-out.gif',
+		)!;
+		expect(timedOut).toMatchObject({
+			status_text: '',
+			content_type_raw: '',
+			content_length: -1,
+		});
+	});
+
+	it('copies status_text/content_type_raw/content_length/referrer_count through verbatim for a resource with real metadata', async () => {
+		const knex = archive.getKnex();
+		const { resources } = await knex.transaction((trx) => collectResourceInsertRows(trx));
+		const shared = resources.find(
+			(row) => row.url_sort_key === 'https://example.com/shared.css',
+		)!;
+		expect(shared).toMatchObject({
+			status_text: 'OK',
+			content_type_raw: 'text/css; charset=utf-8',
+			referrer_count: 2,
+		});
+	});
+
 	it('produces one viewer_resources row and one viewer_resource_stats row per resource', async () => {
 		const knex = archive.getKnex();
 		const { resources, stats } = await knex.transaction((trx) =>
@@ -288,5 +314,69 @@ describe('computeResourceInsertRows', () => {
 		await expect(
 			knex.transaction((trx) => collectResourceInsertRows(trx, -1)),
 		).rejects.toThrow(RangeError);
+	});
+});
+
+/**
+ * Isolated into its own archive: `compress`/`cdn` are never actually NULL
+ * through any real writer path (`insertResource`/`insertInventoryResources`
+ * both coerce a falsy value to `0` before it reaches `resource_items`), so
+ * exercising the `?? ''` sentinel branch for those two columns requires a
+ * direct `resource_items` insert bypassing `archive.setResources()` — a
+ * fixture-only mutation into a state the column's own nullability allows but
+ * no current writer produces, the same kind of deliberate fixture-only
+ * mutation as forcing a stale read-model schema_version.
+ */
+describe('computeResourceInsertRows — compress/cdn NULL sentinel', () => {
+	const nullMetadataWorkingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_compute_resource_rows_null_metadata__',
+	);
+	let archive: InstanceType<typeof Archive>;
+	const nullMetadataArchiveFilePath = path.resolve(
+		nullMetadataWorkingDir,
+		'compute-resource-rows-null-metadata-test.nitpicker',
+	);
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(nullMetadataWorkingDir, { recursive: true });
+		archive = await Archive.create({
+			filePath: nullMetadataArchiveFilePath,
+			cwd: nullMetadataWorkingDir,
+		});
+		await archive.setConfig(BASE_CONFIG);
+
+		const knex = archive.getKnex();
+		const [urlRef] = await knex('url_refs')
+			.insert({ url: 'https://example.com/null-metadata.bin' })
+			.returning('id');
+		await knex('resource_items').insert({
+			url_id: (urlRef as { id: number }).id,
+			is_external: 0,
+			status: null,
+			status_text: null,
+			content_type_id: null,
+			content_length: null,
+			compress: null,
+			cdn: null,
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(nullMetadataWorkingDir, { recursive: true, force: true });
+	});
+
+	it('substitutes "" for a resource_items row with genuinely NULL compress/cdn columns', async () => {
+		const knex = archive.getKnex();
+		const { resources } = await knex.transaction((trx) => collectResourceInsertRows(trx));
+		const nullMetadata = resources.find(
+			(row) => row.url_sort_key === 'https://example.com/null-metadata.bin',
+		)!;
+		expect(nullMetadata).toMatchObject({ compress: '', cdn: '' });
 	});
 });

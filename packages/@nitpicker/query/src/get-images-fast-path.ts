@@ -5,19 +5,10 @@ import type {
 } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { isImagesFastPathSortBy } from './is-images-fast-path-sort-by.js';
 import { listImages } from './list-images.js';
 import { listViewerImages } from './list-viewer-images.js';
 import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
-
-/** Every `sortBy` value the `viewer_images` fast path indexes (excludes `src`/`alt`). */
-const FAST_PATH_SORT_BY_VALUES = new Set<ListImagesOptions['sortBy']>([
-	'pageUrl',
-	'width',
-	'height',
-	'naturalWidth',
-	'naturalHeight',
-	'isLazy',
-]);
 
 /**
  * Dispatches to `listViewerImages` (the `viewer_images` read-model fast
@@ -45,6 +36,10 @@ const FAST_PATH_SORT_BY_VALUES = new Set<ListImagesOptions['sortBy']>([
  * @param options - Filter, sort, and pagination options — the full
  *   `listImages` surface, including `urlPattern` and `src`/`alt` sorts that
  *   force the live fallback.
+ * @param precheckedReadModelCurrent - The caller's own already-computed
+ *   `isViewerReadModelCurrent` result, when it has one (viewer routes check
+ *   it first for their stale-refusal gate) — passing it avoids probing the
+ *   same tables a second time per request. Omit to let this function check.
  * @returns The image list, from whichever backend is currently valid.
  * @example
  * // Callers never need to check isViewerReadModelCurrent themselves:
@@ -53,12 +48,16 @@ const FAST_PATH_SORT_BY_VALUES = new Set<ListImagesOptions['sortBy']>([
 export async function getImagesFastPath(
 	accessor: ArchiveAccessor,
 	options: ListImagesOptions = {},
+	precheckedReadModelCurrent?: boolean,
 ): Promise<CursorPaginatedImageList> {
 	const usesWideTableOnlyFilter =
 		options.urlPattern != null ||
-		(options.sortBy != null && !FAST_PATH_SORT_BY_VALUES.has(options.sortBy));
+		(options.sortBy != null && !isImagesFastPathSortBy(options.sortBy));
 
-	if (!usesWideTableOnlyFilter && (await isViewerReadModelCurrent(accessor))) {
+	if (
+		!usesWideTableOnlyFilter &&
+		(precheckedReadModelCurrent ?? (await isViewerReadModelCurrent(accessor)))
+	) {
 		const viewerOptions: ListViewerImagesOptions = {
 			missingAlt: options.missingAlt,
 			missingDimensions: options.missingDimensions,

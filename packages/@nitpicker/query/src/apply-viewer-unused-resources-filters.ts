@@ -23,4 +23,13 @@ export function applyViewerUnusedResourcesFilters(
 	qb.where('is_unused', 1);
 	applyEqualityOrInFilter(qb, 'status_sort_key', options.status);
 	applyEqualityOrInFilter(qb, 'source', options.source);
+	if (options.urlPattern) {
+		// Same plain-LIKE-on-inlined-URL shape as `applyViewerResourcesFilters`.
+		qb.where('url_sort_key', 'like', options.urlPattern);
+	}
+	if (options.contentType) {
+		// Prefix match on the verbatim raw MIME string, matching live
+		// `listUnusedResources`'s `ctr.raw LIKE '<prefix>%'` semantics exactly.
+		qb.where('content_type_raw', 'like', `${options.contentType}%`);
+	}
 }

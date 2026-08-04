@@ -209,4 +209,106 @@ describe('computeMismatchInsertRows', () => {
 			knex.transaction((trx) => collectMismatchInsertRows(trx, -1)),
 		).rejects.toThrow(RangeError);
 	});
+
+	it('gives every mismatch row for the same page the same natural_url_rank, regardless of type', async () => {
+		const rows = await archive
+			.getKnex()
+			.transaction((trx) => collectMismatchInsertRows(trx));
+		// '/og-mismatch' fails both og:title and og:description — one row
+		// per type, but both are the same page and must share one rank.
+		const ogRows = rows.filter(
+			(r) => r.url_sort_key === 'https://example.com/og-mismatch',
+		);
+		expect(ogRows).toHaveLength(2);
+		expect(ogRows[0]!.natural_url_rank).toBe(ogRows[1]!.natural_url_rank);
+	});
+});
+
+/**
+ * Isolated into its own archive (rather than added to the main describe
+ * block's fixture) so the numeric-segment URLs don't perturb the main
+ * block's exact per-type row counts.
+ */
+describe('computeMismatchInsertRows — natural_url_rank natural order', () => {
+	const naturalSortWorkingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_compute_mismatch_rows_natural_sort__',
+	);
+	let archive: InstanceType<typeof Archive>;
+	const naturalSortArchiveFilePath = path.resolve(
+		naturalSortWorkingDir,
+		'compute-mismatch-rows-natural-sort-test.nitpicker',
+	);
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(naturalSortWorkingDir, { recursive: true });
+		archive = await Archive.create({
+			filePath: naturalSortArchiveFilePath,
+			cwd: naturalSortWorkingDir,
+		});
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// Two canonical mismatches with numeric-segment URLs, seeded in an
+		// order chosen so BINARY and natural collation disagree: BINARY
+		// puts '/page10' before '/page2' ('1' < '2' byte-wise), natural
+		// puts '/page2' before '/page10' (2 < 10 numerically).
+		for (const pathname of ['/page10', '/page2']) {
+			await archive.setPage({
+				url: parseUrl(`https://example.com${pathname}`)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: makeBeholderMeta({
+					title: 'Same',
+					link: { canonical: 'https://example.com/canonical-target' },
+				}),
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(naturalSortWorkingDir, { recursive: true, force: true });
+	});
+
+	it('ranks page2 below page10 in natural (numeric-aware) order, not BINARY order', async () => {
+		const rows = await archive
+			.getKnex()
+			.transaction((trx) => collectMismatchInsertRows(trx));
+		const page2 = rows.find((r) => r.url_sort_key === 'https://example.com/page2')!;
+		const page10 = rows.find((r) => r.url_sort_key === 'https://example.com/page10')!;
+		expect(page2.natural_url_rank).toBeLessThan(page10.natural_url_rank);
+	});
 });

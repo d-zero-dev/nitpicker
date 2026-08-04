@@ -20,8 +20,16 @@ import { readKeysetWindow } from './viewer-cursor-kit/read-keyset-window.js';
 import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model/viewer-read-model-schema-version.js';
 
 /**
- * Applies the (currently sole) filter — `status` — on top of the fixed
- * `is_broken = 1` predicate every read shares.
+ * Applies the caller's filters — `status` and `urlPattern` — on top of the
+ * fixed `is_broken = 1` predicate every read shares.
+ *
+ * `urlPattern` joins `viewer_url_refs` twice (source and dest aliases) and
+ * ORs a LIKE across both. INNER joins are safe: every `viewer_anchor_facts`
+ * row carries non-null `source_url_ref_id`/`dest_url_ref_id` referencing
+ * `viewer_url_refs(id)`, so no rows are dropped, and both joins are 1:1 so
+ * `countAnchorFactsTotal`'s `COUNT(*)` over the same builder stays correct.
+ * The join aliases' columns (`id`/`url`) don't collide with any of the bare
+ * column names `readKeysetWindow` selects from `viewer_anchor_facts`.
  * @param qb - The query builder to constrain.
  * @param options - The caller's filter options.
  */
@@ -31,6 +39,24 @@ function applyBrokenLinksFilters(
 ): void {
 	qb.where('is_broken', 1);
 	applyEqualityOrInFilter(qb, 'status', options.status);
+	if (options.urlPattern) {
+		const urlPattern = options.urlPattern;
+		qb.join(
+			'viewer_url_refs as filter_source_url',
+			'viewer_anchor_facts.source_url_ref_id',
+			'filter_source_url.id',
+		)
+			.join(
+				'viewer_url_refs as filter_dest_url',
+				'viewer_anchor_facts.dest_url_ref_id',
+				'filter_dest_url.id',
+			)
+			.where((sub) => {
+				sub
+					.where('filter_source_url.url', 'like', urlPattern)
+					.orWhere('filter_dest_url.url', 'like', urlPattern);
+			});
+	}
 }
 
 /**

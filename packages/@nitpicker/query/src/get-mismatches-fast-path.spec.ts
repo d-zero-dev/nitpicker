@@ -42,6 +42,8 @@ describe('getMismatchesFastPath', () => {
 		expect(result.total).toBe(1);
 		expect(listViewerMismatches).toHaveBeenCalledWith(accessor, {
 			type: 'canonical',
+			urlPattern: undefined,
+			sortBy: undefined,
 			sortOrder: undefined,
 			limit: 50,
 			cursor: undefined,
@@ -51,44 +53,30 @@ describe('getMismatchesFastPath', () => {
 		expect(findMismatches).not.toHaveBeenCalled();
 	});
 
-	it('forces the live path when sortBy is set, even if the read model is current', async () => {
+	it('serves an explicit sortBy on the fast path when the read model is current', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
-		vi.mocked(findMismatches).mockResolvedValue({
-			items: [],
-			total: 1,
-			limit: 100,
-			offset: 0,
-		});
+		vi.mocked(listViewerMismatches).mockResolvedValue(makeResult(1));
 
 		await getMismatchesFastPath(accessor, 'canonical', { sortBy: 'actual' });
 
-		expect(findMismatches).toHaveBeenCalledWith(accessor, 'canonical', {
-			limit: undefined,
-			offset: undefined,
-			urlPattern: undefined,
-			sortBy: 'actual',
-			sortOrder: undefined,
-		});
-		expect(listViewerMismatches).not.toHaveBeenCalled();
+		expect(listViewerMismatches).toHaveBeenCalledWith(
+			accessor,
+			expect.objectContaining({ sortBy: 'actual' }),
+		);
+		expect(findMismatches).not.toHaveBeenCalled();
 	});
 
-	it('forces the live path when urlPattern is set, even if the read model is current', async () => {
+	it('serves urlPattern on the fast path when the read model is current', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
-		vi.mocked(findMismatches).mockResolvedValue({
-			items: [],
-			total: 2,
-			limit: 100,
-			offset: 0,
-		});
+		vi.mocked(listViewerMismatches).mockResolvedValue(makeResult(2));
 
 		await getMismatchesFastPath(accessor, 'canonical', { urlPattern: '%foo%' });
 
-		expect(findMismatches).toHaveBeenCalledWith(
+		expect(listViewerMismatches).toHaveBeenCalledWith(
 			accessor,
-			'canonical',
 			expect.objectContaining({ urlPattern: '%foo%' }),
 		);
-		expect(listViewerMismatches).not.toHaveBeenCalled();
+		expect(findMismatches).not.toHaveBeenCalled();
 	});
 
 	it('forwards cursor/direction to the fast path', async () => {
@@ -107,7 +95,7 @@ describe('getMismatchesFastPath', () => {
 	});
 
 	it('narrows a multi-value type selection to canonical when forced onto the live path', async () => {
-		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
+		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
 		vi.mocked(findMismatches).mockResolvedValue({
 			items: [],
 			total: 1,
@@ -127,7 +115,7 @@ describe('getMismatchesFastPath', () => {
 	});
 
 	it('narrows an undefined ("every type") selection to canonical when forced onto the live path', async () => {
-		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
+		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
 		vi.mocked(findMismatches).mockResolvedValue({
 			items: [],
 			total: 1,
@@ -145,7 +133,7 @@ describe('getMismatchesFastPath', () => {
 	});
 
 	it('passes a single-element array type through unchanged when forced onto the live path', async () => {
-		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
+		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
 		vi.mocked(findMismatches).mockResolvedValue({
 			items: [],
 			total: 1,

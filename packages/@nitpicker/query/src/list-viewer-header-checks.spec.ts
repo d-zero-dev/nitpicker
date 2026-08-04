@@ -155,6 +155,25 @@ describe('listViewerHeaderChecks', () => {
 		expect(offsetPage2.items).toEqual(page2.items);
 	});
 
+	it('sorts by explicit sortBy: "url" (natural order) the same as the unset-sortBy default here', async () => {
+		// This fixture's URLs (/a, /b, /c) have no numeric segments, so
+		// natural and BINARY order coincide — the assertion still exercises
+		// the explicit `'url'` → `urlNatural` resolution path independently
+		// of the unset-sortBy `urlBinary` default (see `listViewerHeaderChecks`'s
+		// `effectiveSortBy` mapping).
+		const result = await listViewerHeaderChecks(archive, { sortBy: 'url' });
+		expect(result.items.map((item) => item.url)).toEqual([
+			'https://example.com/a',
+			'https://example.com/b',
+			'https://example.com/c',
+		]);
+	});
+
+	it('sorts by hasCSP ascending, missing (false) before present (true)', async () => {
+		const result = await listViewerHeaderChecks(archive, { sortBy: 'hasCSP' });
+		expect(result.items.map((item) => item.hasCSP)).toEqual([false, true, true]);
+	});
+
 	it('paginates backward via prevCursor', async () => {
 		const page2 = await listViewerHeaderChecks(archive, { limit: 2, offset: 2 });
 		expect(page2.prevCursor).not.toBeNull();
@@ -245,6 +264,7 @@ describe('listViewerHeaderChecks', () => {
 					has_hsts: 1,
 					missing_count: isMissing ? 1 : 0,
 					is_missing: isMissing,
+					natural_url_rank: i,
 				};
 			});
 			await knex('viewer_header_checks').insert(rows);

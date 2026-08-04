@@ -7,7 +7,7 @@ import type { AnchorFactsSortSpec } from './types.js';
  * @returns The resolved {@link AnchorFactsSortSpec}.
  */
 export function getAnchorFactsSortSpec(
-	sortBy: 'sourceUrl' | 'destUrl' | 'status',
+	sortBy: 'sourceUrl' | 'destUrl' | 'status' | 'isExternal',
 	sortOrder: 'asc' | 'desc',
 ): AnchorFactsSortSpec {
 	switch (sortBy) {
@@ -23,6 +23,16 @@ export function getAnchorFactsSortSpec(
 		}
 		case 'destUrl': {
 			return { columns: ['dest_url_ref_id', 'edge_id'], scanDirection: sortOrder };
+		}
+		case 'isExternal': {
+			// Boolean 0/1 primary column with a source-URL secondary — the same
+			// simple scanDirection reversal `destUrl`/`sourceUrl` use (ties
+			// reverse along with the primary in desc, unlike `status`'s
+			// negated-key trick; accepted for consistency with those cases).
+			return {
+				columns: ['is_external_link', 'source_url_ref_id', 'edge_id'],
+				scanDirection: sortOrder,
+			};
 		}
 		default: {
 			return { columns: ['source_url_ref_id', 'edge_id'], scanDirection: sortOrder };

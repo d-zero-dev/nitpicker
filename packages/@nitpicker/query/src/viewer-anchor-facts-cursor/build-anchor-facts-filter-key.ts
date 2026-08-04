@@ -13,5 +13,5 @@ import { buildFilterKey } from '../viewer-cursor-kit/build-filter-key.js';
 export function buildAnchorFactsFilterKey(
 	filters: AnchorFactsCursorFilterKeyInput,
 ): string {
-	return buildFilterKey({ status: filters.status });
+	return buildFilterKey({ status: filters.status, urlPattern: filters.urlPattern });
 }
