@@ -27,12 +27,26 @@ import { TemplateClustersView } from './routes/template-clusters-view.js';
 import { UnusedResourcesView } from './routes/unused-resources-view.js';
 import { ViolationsView } from './routes/violations-view.js';
 
-/** Shared TanStack Query client. Server data is read-only and rarely changes. */
+/**
+ * Shared TanStack Query client. Server data is read-only and rarely changes.
+ *
+ * Retry is disabled by default: the backend is a local resident server (no
+ * real network in between), so a thrown error is never a transient blip —
+ * it's either a deterministic `ReadModelUnavailable` refusal (see
+ * `apiGet`'s docs) or a genuine bug, and TanStack Query's default
+ * exponential-backoff retries would only delay the "run viewer-build"
+ * guidance surfacing for several seconds. `use-inbound-links.ts` and
+ * `use-isolated-cluster.ts` set this locally for the same reason; this
+ * default makes every other query (`use-paged-query.ts` and the `use-*
+ * -infinite.ts` hooks) consistent with them without repeating the option
+ * everywhere.
+ */
 const queryClient = new QueryClient({
 	defaultOptions: {
 		queries: {
 			refetchOnWindowFocus: false,
 			staleTime: 60_000,
+			retry: false,
 		},
 	},
 });

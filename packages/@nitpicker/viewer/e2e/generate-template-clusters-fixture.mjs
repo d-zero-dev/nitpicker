@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
+import { buildViewerReadModel } from '@nitpicker/query';
 
 const dirname = import.meta.dirname;
 const FIXTURE_PATH = path.resolve(dirname, '.fixture-template-clusters.nitpicker');
@@ -242,6 +243,13 @@ await archive.replacePageTemplates(
 		],
 	]),
 );
+
+// `/api/pages?templateKey=...` (the "view pages in this cluster" link)
+// refuses rather than falling back to live when the read model is missing
+// (see `refuse-if-stale-read-model.ts`), so this fixture must build one —
+// after `replacePageTemplates` above, so the classification it just wrote
+// is copied into `viewer_pages.template_key`.
+await buildViewerReadModel(archive);
 
 await archive.write();
 await archive.close();

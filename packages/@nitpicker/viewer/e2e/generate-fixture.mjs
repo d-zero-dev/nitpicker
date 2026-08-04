@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
+import { buildViewerReadModel } from '@nitpicker/query';
 
 const dirname = import.meta.dirname;
 const FIXTURE_PATH = path.resolve(dirname, '.fixture.nitpicker');
@@ -215,6 +216,14 @@ await archive.setPage({
 	imageList: [],
 	isSkipped: false,
 });
+
+// `/api/pages` and its siblings refuse rather than silently degrading to
+// live when the read model is missing (see `refuse-if-stale-read-model.ts`),
+// so this fixture must build one to reflect the real crawl → viewer-build →
+// viewer flow. The "no read model" empty state has its own dedicated
+// coverage against `generate-stub-fixture.mjs` in `viewer-stub.spec.ts`,
+// which genuinely can never have a read model (a live crawl in progress).
+await buildViewerReadModel(archive);
 
 await archive.write();
 await archive.close();
