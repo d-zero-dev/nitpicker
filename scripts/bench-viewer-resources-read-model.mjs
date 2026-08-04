@@ -2,33 +2,54 @@
 /**
  * Benchmarks `/api/resources`'s and `/api/unused-resources`'s
  * `viewer_resources`/`viewer_resource_stats` read-model fast path (issue
- * #110) on a synthetic archive — no real customer archive is ever read or
- * referenced.
+ * #110) on a synthetic archive with tens of thousands of resource
+ * records — no real customer archive is ever read or referenced.
  *
- * Records, mirroring `bench-viewer-error-kinds-read-model.mjs`'s Benchmark
+ * Records, mirroring `bench-viewer-pages-read-model.mjs`'s Benchmark
  * Contract:
  *
  *   - row count / read-model build time / added DB size
  *   - `listResources`/`listUnusedResources` (legacy, before) vs
  *     `listViewerResources`/`listViewerUnusedResources` (read-model, after)
- *     direct function-level cold timing
+ *     direct function-level cold timing, for the default (unfiltered) shape
  *   - `/api/resources` and `/api/unused-resources` cold HTTP timing through
  *     the real Hono app, once before and once after the read model exists
- *   - `EXPLAIN QUERY PLAN` for the default/filtered read shapes of
- *     `viewer_resources`
+ *   - warm (repeated-request) p50/p95 timing and `EXPLAIN QUERY PLAN` for a
+ *     filter/sort MATRIX run against `/api/resources` once the read model
+ *     exists — including `urlPattern`, the raw-MIME-prefix `contentType`,
+ *     and the `contentLength`/`referrerCount` `sortBy` values that moved
+ *     onto the `viewer_resources` fast path (previously only `url`/`status`
+ *     were fast-path-indexed sorts; `listResources`'s full `sortBy` surface
+ *     is now served directly by `viewer_resources`, see
+ *     `getViewerResourcesSortSpec`'s docs)
  *   - `/api/resources/referrers` is NOT read-model-dependent (see
- *     `get-resource-referrers.ts`'s docs — `resources-referrers` already has
- *     a `(resourceId, pageId)` index) — this script only confirms that via
+ *     `get-resource-referrers.ts`'s docs — `resource_ref_edges` already has
+ *     a `(resource_id, page_id)` primary key and a reverse-direction index
+ *     on `page_id`) — this script only confirms that via
  *     `EXPLAIN QUERY PLAN`, no before/after split.
+ *
+ * Seeds through the real write path (`Archive.setPage`/`Archive.setResources`/
+ * `Archive.setResourcesReferrers`, same as a live crawl) rather than raw
+ * `INSERT`s against a hand-picked table shape — the writer moved to the 0.13
+ * `content_items`/`resource_items`/`resource_ref_edges` entity tables (issue
+ * #196, 2026-07-16) and there is no `pages`/`resources`/`resources-referrers`
+ * table in a fresh archive to seed directly. This is slower to seed than a
+ * raw bulk `INSERT` but guarantees the synthetic archive matches what
+ * `buildViewerReadModel` and `listResources`/`listUnusedResources` actually
+ * read from in production.
  *
  * USAGE
  * -----
  *
  *     yarn build && node scripts/bench-viewer-resources-read-model.mjs
  *
- * Sizes default to {400,000}; override via `BENCH_SIZES=…` (comma
- * separated). Always disk-backed (never `:memory:`) — the whole point is
- * measuring realistic cold-cache I/O, which an in-memory DB can't produce.
+ * Sizes default to {20,000}; override via `BENCH_SIZES=…` (comma
+ * separated) — kept an order of magnitude below `bench-viewer-pages-read-model.mjs`'s
+ * default because seeding here costs two writes per referenced resource
+ * (`setResources` + `setResourcesReferrers`) plus the referring-page pool,
+ * all through the real write path with no bulk-insert shortcut. Always
+ * disk-backed (never `:memory:`) — the whole point is measuring realistic
+ * cold-cache I/O, which an in-memory DB can't produce.
  */
 
 /* eslint-disable no-console, import-x/no-extraneous-dependencies */
@@ -38,173 +59,320 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
-import knex from 'knex';
+import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
+import { Archive } from '@nitpicker/crawler';
 
-import { initSchema } from '../packages/@nitpicker/crawler/lib/archive/init-schema.js';
-import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
+import { applyViewerResourcesFilters } from '../packages/@nitpicker/query/lib/apply-viewer-resources-filters.js';
 import { listResources } from '../packages/@nitpicker/query/lib/list-resources.js';
 import { listUnusedResources } from '../packages/@nitpicker/query/lib/list-unused-resources.js';
 import { listViewerResources } from '../packages/@nitpicker/query/lib/list-viewer-resources.js';
 import { listViewerUnusedResources } from '../packages/@nitpicker/query/lib/list-viewer-unused-resources.js';
 import { buildViewerReadModel } from '../packages/@nitpicker/query/lib/viewer-read-model/build-viewer-read-model.js';
+import { getViewerResourcesSortSpec } from '../packages/@nitpicker/query/lib/viewer-resources-cursor/get-viewer-resources-sort-spec.js';
 import { createApp } from '../packages/@nitpicker/viewer/lib/create-app.js';
 
 const SIZES = process.env.BENCH_SIZES
 	? process.env.BENCH_SIZES.split(',').map((s) => Number(s.trim()))
-	: [400_000];
+	: [20_000];
 
-/** Fixed config payload every seeded archive reports via `accessor.getConfig()`. */
-const CONFIG = { baseUrl: 'https://example.com', roots: ['https://example.com'] };
+/** Repeated warm requests per matrix entry, for p50/p95. */
+const WARM_ITERATIONS = 20;
 
-/** Referring-page pool size — real `pages` rows are required for the `resources-referrers.pageId` foreign key. */
-const PAGE_POOL_SIZE = 2000;
+/** Referring-page pool size — real `content_items` rows for `resource_ref_edges.page_id`. */
+const PAGE_POOL_SIZE = 500;
 
-/** Rows per multi-row `INSERT` — libsql tops out around a few hundred bound values. */
-const CHUNK = 200;
+/** Raw MIME types cycled across seeded resources, with a matching file extension for readable URLs. */
+const CONTENT_TYPES = [
+	{ mime: 'application/javascript', ext: 'js' },
+	{ mime: 'text/css', ext: 'css' },
+	{ mime: 'image/png', ext: 'png' },
+	{ mime: 'font/woff2', ext: 'woff2' },
+];
 
 /**
- * Materialises a disk-backed synthetic archive DB with `n` `resources` rows
- * (a realistic mix: ~60% referenced internal, ~25% unreferenced internal —
- * the "unused" candidates, ~15% external) plus a small `pages` pool for
- * `resources-referrers` foreign keys.
- * @param {number} n - The number of resource rows to insert.
- * @returns {Promise<{db: import('knex').Knex, dbFilePath: string, cleanupDir: string}>}
- *   The seeded Knex instance and its backing file/dir (for size + cleanup).
+ * Filter/sort combinations benchmarked against `/api/resources` — the
+ * pre-existing `url`/`status` fast-path sorts plus every filter/sort this
+ * PR moves onto the `viewer_resources` fast path: the LIKE-based
+ * `urlPattern`, the raw-MIME-prefix `contentType`, and the
+ * `contentLength`/`referrerCount` `sortBy` values (previously live-only —
+ * see `getViewerResourcesSortSpec`'s docs).
+ */
+const RESOURCES_MATRIX = [
+	{ label: 'default', query: 'limit=100', options: {} },
+	{
+		label: 'urlPattern=%25resource-1%25',
+		query: 'limit=100&urlPattern=%25resource-1%25',
+		options: { urlPattern: '%resource-1%' },
+	},
+	{
+		label: 'contentType=application/javascript',
+		query: `limit=100&contentType=${encodeURIComponent('application/javascript')}`,
+		options: { contentType: 'application/javascript' },
+	},
+	{
+		label: 'isExternal=0',
+		query: 'limit=100&isExternal=false',
+		options: { isExternal: false },
+	},
+	{ label: 'status=200', query: 'limit=100&status=200', options: { status: 200 } },
+	{
+		label: 'sort=contentLength:desc',
+		query: 'limit=100&sortBy=contentLength&sortOrder=desc',
+		options: { sortBy: 'contentLength', sortOrder: 'desc' },
+	},
+	{
+		label: 'sort=referrerCount:desc',
+		query: 'limit=100&sortBy=referrerCount&sortOrder=desc',
+		options: { sortBy: 'referrerCount', sortOrder: 'desc' },
+	},
+	{
+		label: 'sort=status:asc',
+		query: 'limit=100&sortBy=status&sortOrder=asc',
+		options: { sortBy: 'status', sortOrder: 'asc' },
+	},
+];
+
+/**
+ * Materialises a disk-backed synthetic archive seeded through the real
+ * write path (`Archive.setPage` for the referring-page pool,
+ * `Archive.setResources`/`Archive.setResourcesReferrers` for the resources
+ * under test), spanning every facet `/api/resources`/`/api/unused-resources`
+ * support: a realistic mix of ~60% referenced-internal, ~25%
+ * unreferenced-internal (the "unused" candidates), ~15% external resources,
+ * a handful of raw MIME types, a minority 404 status, and a `compress`/`cdn`
+ * population.
+ * @param {number} n - The number of resource rows to seed.
+ * @returns {Promise<{accessor: import('@nitpicker/crawler').ArchiveAccessor, dbFilePath: string, cleanupDir: string}>}
+ *   The seeded, still-open archive (for `getKnex()`) and its backing dir (for size + cleanup).
  */
 async function makeDb(n) {
 	const cleanupDir = path.join(
 		tmpdir(),
 		`nitpicker-bench-viewer-resources-${n}-${process.pid}`,
 	);
+	const filePath = path.join(cleanupDir, 'archive.nitpicker');
 	rmSync(cleanupDir, { recursive: true, force: true });
 	mkdirSync(cleanupDir, { recursive: true });
-	const dbFilePath = path.join(cleanupDir, 'db.sqlite');
 
-	const db = knex({
-		client: LibsqlDialect,
-		connection: { filename: dbFilePath },
-		useNullAsDefault: true,
+	const archive = await Archive.create({ filePath, cwd: cleanupDir });
+	await archive.setConfig({
+		baseUrl: 'https://example.com',
+		name: 'bench-viewer-resources',
+		version: '0.13.0',
+		recursive: true,
+		interval: 0,
+		image: true,
+		fetchExternal: false,
+		parallels: 1,
+		roots: ['https://example.com'],
+		excludes: [],
+		excludeKeywords: [],
+		excludeUrls: [],
+		maxExcludedDepth: 0,
+		retry: 3,
+		fromList: false,
+		disableQueries: false,
+		userAgent: 'bench',
+		ignoreRobots: false,
 	});
-	await initSchema(db);
 
-	// Seed the referring-page pool first (resources-referrers.pageId FK).
-	let pageRows = [];
+	// Referring-page pool first — `Archive.setResourcesReferrers`'s
+	// `resolveContentItemId` silently creates a bare `content_items` stub for
+	// an unknown page URL, but seeding real pages here keeps the referrer
+	// graph the same shape a live crawl produces (a referrer is always a
+	// fully-scraped HTML page), matching this bench's "seed through the real
+	// write path" contract.
+	const pagePool = [];
 	for (let i = 0; i < PAGE_POOL_SIZE; i++) {
-		pageRows.push({ url: `https://example.com/page-${i}`, scraped: 1, isTarget: 1 });
-		if (pageRows.length >= CHUNK) {
-			await db('pages').insert(pageRows);
-			pageRows = [];
-		}
-	}
-	if (pageRows.length > 0) {
-		await db('pages').insert(pageRows);
+		const url = `https://example.com/referrer-page-${i}`;
+		await archive.setPage({
+			url: parseUrl(url),
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 1000,
+			responseHeaders: {},
+			html: `<html><head><title>Referrer ${i}</title></head><body>Referrer ${i}</body></html>`,
+			mainContents: null,
+			scrollHeight: null,
+			meta: { title: `Referrer Page ${i}` },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		pagePool.push(url);
 	}
 
-	// Bucket layout per 20-row cycle: [0,12) referenced-internal,
-	// [12,17) unreferenced-internal (the "unused" candidates), [17,20) external.
-	let resourceRows = [];
-	let referrerRows = [];
-	let chunkStartIndex = 0;
+	// Bucket layout per 20-row cycle: [0,12) referenced-internal, [12,17)
+	// unreferenced-internal (the "unused" candidates), [17,20) external —
+	// same proportions the pre-rewrite raw-`INSERT` seeding used.
 	for (let i = 0; i < n; i++) {
 		const bucket = i % 20;
 		const isExternal = bucket >= 17;
-		resourceRows.push({
-			url: `https://${isExternal ? 'cdn.example.net' : 'example.com'}/resource-${i}.js`,
-			isExternal: isExternal ? 1 : 0,
-			status: 200,
-			statusText: 'OK',
-			contentType: 'application/javascript',
-			contentLength: 1000,
-			compress: 0,
-			cdn: 0,
-			source: 'crawled',
+		const isReferenced = bucket < 12;
+		const { mime, ext } = CONTENT_TYPES[i % CONTENT_TYPES.length];
+		const isError = i % 25 === 0;
+		const url = `https://${isExternal ? 'cdn.example.net' : 'example.com'}/resource-${i}.${ext}`;
+		await archive.setResources({
+			url: parseUrl(url),
+			isExternal,
+			isError,
+			status: isError ? 404 : 200,
+			statusText: isError ? 'Not Found' : 'OK',
+			contentType: mime,
+			contentLength: 500 + ((i * 37) % 50_000),
+			compress: i % 4 === 0 ? 'gzip' : false,
+			cdn: i % 6 === 0 ? 'Cloudflare' : false,
+			headers: {},
 		});
-		if (resourceRows.length >= CHUNK) {
-			const inserted = await db('resources').insert(resourceRows).returning('id');
-			for (const [index, row] of inserted.entries()) {
-				const globalIndex = chunkStartIndex + index;
-				if (globalIndex % 20 < 12) {
-					referrerRows.push({
-						resourceId: row.id,
-						pageId: (globalIndex % PAGE_POOL_SIZE) + 1,
-					});
-				}
-			}
-			chunkStartIndex = i + 1;
-			resourceRows = [];
+		if (isReferenced) {
+			await archive.setResourcesReferrers({
+				url: pagePool[i % PAGE_POOL_SIZE],
+				src: url,
+			});
 		}
-		if (referrerRows.length >= CHUNK) {
-			await db('resources-referrers').insert(referrerRows);
-			referrerRows = [];
-		}
-	}
-	if (resourceRows.length > 0) {
-		const inserted = await db('resources').insert(resourceRows).returning('id');
-		for (const [index, row] of inserted.entries()) {
-			const globalIndex = chunkStartIndex + index;
-			if (globalIndex % 20 < 12) {
-				referrerRows.push({
-					resourceId: row.id,
-					pageId: (globalIndex % PAGE_POOL_SIZE) + 1,
-				});
-			}
-		}
-	}
-	if (referrerRows.length > 0) {
-		await db('resources-referrers').insert(referrerRows);
 	}
 
-	return { db, dbFilePath, cleanupDir };
+	// `Archive.create`'s tmpDir is `<cwd>/._nitpicker-<basename-without-ext>`
+	// (see `Archive.create`'s own `tmpDir` derivation) — same convention
+	// `bench-viewer-pages-read-model.mjs`'s `makeDb` documents.
+	const dbFilePath = path.join(cleanupDir, '._nitpicker-archive', 'db.sqlite');
+	return { accessor: archive, dbFilePath, cleanupDir };
 }
 
 /**
- * Builds a minimal accessor stub satisfying the surface
- * `listResources`/`listUnusedResources`/`listViewerResources`/
- * `listViewerUnusedResources`/`buildViewerReadModel` need.
- * @param {import('knex').Knex} db - The seeded/built Knex instance.
- * @returns {object} An `ArchiveAccessor`-shaped stub.
+ * Runs `EXPLAIN QUERY PLAN` for one `RESOURCES_MATRIX` entry's
+ * id-resolution query against `viewer_resources`, built the same way
+ * `list-viewer-resources.ts`'s `readViewerResourcesWindow` does (reusing the
+ * production `applyViewerResourcesFilters`/`getViewerResourcesSortSpec`
+ * helpers, not a hand-duplicated SQL string).
+ * @param {import('knex').Knex} db - The Knex instance.
+ * @param {object} options - The matrix entry's `ListViewerResourcesOptions`.
+ * @returns {Promise<string>} One `|`-joined line of `EXPLAIN QUERY PLAN` detail rows.
  */
-function makeAccessorStub(db) {
-	return { readOnly: false, getKnex: () => db, getConfig: async () => CONFIG };
+async function explainResourcesMatrixEntry(db, options) {
+	const sortBy = options.sortBy ?? 'url';
+	const sortOrder = options.sortOrder ?? 'asc';
+	const spec = getViewerResourcesSortSpec(sortBy, sortOrder);
+	const qb = db('viewer_resources');
+	applyViewerResourcesFilters(qb, options);
+	const selectColumns = [...new Set(['resource_id', ...spec.columns])];
+	const { sql, bindings } = qb
+		.select(selectColumns)
+		.orderBy(spec.columns.map((column) => ({ column, order: spec.scanDirection })))
+		.limit(101)
+		.toSQL();
+	const plan = await db.raw(`EXPLAIN QUERY PLAN ${sql}`, bindings);
+	return plan.map((row) => row.detail).join(' | ');
+}
+
+/**
+ * Times `iterations` sequential HTTP round-trips through the real Hono app
+ * for one query string, returning p50/p95 in milliseconds.
+ * @param {import('hono').Hono} app - The app under test.
+ * @param {string} query - The `/api/resources` query string (no leading `?`).
+ * @param {number} iterations - Number of warm requests to time.
+ * @returns {Promise<{p50: number, p95: number}>} Warm latency percentiles.
+ */
+async function timeWarmRequests(app, query, iterations) {
+	const timings = [];
+	for (let i = 0; i < iterations; i++) {
+		const start = process.hrtime.bigint();
+		const res = await app.request(`/api/resources?${query}`);
+		await res.text();
+		timings.push(Number(process.hrtime.bigint() - start) / 1e6);
+	}
+	timings.sort((a, b) => a - b);
+	const p50 = timings[Math.floor(timings.length * 0.5)];
+	const p95 = timings[Math.floor(timings.length * 0.95)];
+	return { p50, p95 };
+}
+
+/**
+ * Runs `RESOURCES_MATRIX` (EXPLAIN + cold/warm HTTP timing) against the
+ * fast-path app once the read model is built, printing a results table and
+ * a copy-pasteable Markdown summary block — same shape as
+ * `bench-viewer-pages-read-model.mjs`'s `runMatrix`.
+ * @param {import('knex').Knex} db - The archive's Knex instance.
+ * @param {import('hono').Hono} fastApp - The Hono app wired to the
+ *   read-model-backed accessor.
+ */
+async function runResourcesMatrix(db, fastApp) {
+	const results = [];
+	for (const entry of RESOURCES_MATRIX) {
+		const explain = await explainResourcesMatrixEntry(db, entry.options);
+		const coldStart = process.hrtime.bigint();
+		const coldRes = await fastApp.request(`/api/resources?${entry.query}`);
+		await coldRes.text();
+		const coldMs = Number(process.hrtime.bigint() - coldStart) / 1e6;
+		const { p50, p95 } = await timeWarmRequests(fastApp, entry.query, WARM_ITERATIONS);
+		results.push({ ...entry, coldMs, p50, p95, explain });
+	}
+
+	console.log('\n  /api/resources filter/sort                cold      p50      p95');
+	for (const r of results) {
+		console.log(
+			`  ${r.label.padEnd(40)} ${`${r.coldMs.toFixed(1)}ms`.padStart(8)} ${`${r.p50.toFixed(1)}ms`.padStart(8)} ${`${r.p95.toFixed(1)}ms`.padStart(8)}`,
+		);
+		console.log(`      EXPLAIN: ${r.explain}`);
+	}
+
+	console.log(
+		'\n### Markdown summary — /api/resources filter/sort matrix (paste into PR/ARCHITECTURE.md, no archive-identifying details)\n',
+	);
+	console.log('| filter/sort | cold | warm p50 | warm p95 | EXPLAIN QUERY PLAN |');
+	console.log('| --- | --- | --- | --- | --- |');
+	for (const r of results) {
+		console.log(
+			`| ${r.label} | ${r.coldMs.toFixed(1)}ms | ${r.p50.toFixed(1)}ms | ${r.p95.toFixed(1)}ms | ${r.explain} |`,
+		);
+	}
 }
 
 /**
  * Builds a Hono app wired to one `archiveId` mapped to the given accessor.
- * @param {object} accessorStub - The accessor to serve.
+ * @param {import('@nitpicker/crawler').ArchiveAccessor} accessor - The accessor to serve.
  * @param {string} archiveId - Unique id for this phase.
  * @returns {import('hono').Hono} The configured app.
  */
-function makeApp(accessorStub, archiveId) {
+function makeApp(accessor, archiveId) {
 	return createApp({
-		context: { archiveId, manager: { get: () => accessorStub }, mode: 'archive' },
+		context: { archiveId, manager: { get: () => accessor }, mode: 'archive' },
 		publicDir: '/tmp/no-such-dir-bench',
 	});
 }
 
 for (const n of SIZES) {
-	console.log(`\n══════════ ${n.toLocaleString()} resources ══════════`);
-	const { db, dbFilePath, cleanupDir } = await makeDb(n);
+	console.log(
+		`\n══════════ ${n.toLocaleString()} resources (seeded via Archive.setResources) ══════════`,
+	);
+	const seedStart = process.hrtime.bigint();
+	const { accessor, dbFilePath, cleanupDir } = await makeDb(n);
+	console.log(
+		`  seed time: ${(Number(process.hrtime.bigint() - seedStart) / 1e6).toFixed(0)}ms`,
+	);
 	try {
 		const seedSizeBytes = statSync(dbFilePath).size;
 		console.log(`  seeded DB size: ${(seedSizeBytes / 1024 / 1024).toFixed(1)} MiB`);
 
-		const accessorStub = makeAccessorStub(db);
-
 		// BEFORE: legacy direct calls (correlated subquery / anti-join).
 		const legacyResourcesStart = process.hrtime.bigint();
-		const legacyResources = await listResources(accessorStub, { limit: 100 });
+		const legacyResources = await listResources(accessor, { limit: 100 });
 		const legacyResourcesMs =
 			Number(process.hrtime.bigint() - legacyResourcesStart) / 1e6;
 		console.log(`  direct listResources() (legacy): ${legacyResourcesMs.toFixed(1)}ms`);
 
 		const legacyUnusedStart = process.hrtime.bigint();
-		const legacyUnused = await listUnusedResources(accessorStub, { limit: 100 });
+		const legacyUnused = await listUnusedResources(accessor, { limit: 100 });
 		const legacyUnusedMs = Number(process.hrtime.bigint() - legacyUnusedStart) / 1e6;
 		console.log(
 			`  direct listUnusedResources() (legacy): ${legacyUnusedMs.toFixed(1)}ms`,
 		);
 
-		const legacyApp = makeApp(accessorStub, 'bench-legacy');
+		const legacyApp = makeApp(accessor, 'bench-legacy');
 		const legacyHttpResourcesStart = process.hrtime.bigint();
 		const legacyResourcesRes = await legacyApp.request('/api/resources');
 		await legacyResourcesRes.text();
@@ -222,7 +390,7 @@ for (const n of SIZES) {
 		// Build the read model.
 		const sizeBeforeBytes = statSync(dbFilePath).size;
 		const buildStart = process.hrtime.bigint();
-		await buildViewerReadModel(accessorStub);
+		await buildViewerReadModel(accessor);
 		const buildMs = Number(process.hrtime.bigint() - buildStart) / 1e6;
 		const sizeAfterBytes = statSync(dbFilePath).size;
 		console.log(`  read-model build time: ${buildMs.toFixed(0)}ms`);
@@ -232,20 +400,20 @@ for (const n of SIZES) {
 
 		// AFTER: read-model direct calls.
 		const fastResourcesStart = process.hrtime.bigint();
-		const fastResources = await listViewerResources(accessorStub, { limit: 100 });
+		const fastResources = await listViewerResources(accessor, { limit: 100 });
 		const fastResourcesMs = Number(process.hrtime.bigint() - fastResourcesStart) / 1e6;
 		console.log(
 			`  direct listViewerResources() (read model): ${fastResourcesMs.toFixed(1)}ms`,
 		);
 
 		const fastUnusedStart = process.hrtime.bigint();
-		const fastUnused = await listViewerUnusedResources(accessorStub, { limit: 100 });
+		const fastUnused = await listViewerUnusedResources(accessor, { limit: 100 });
 		const fastUnusedMs = Number(process.hrtime.bigint() - fastUnusedStart) / 1e6;
 		console.log(
 			`  direct listViewerUnusedResources() (read model): ${fastUnusedMs.toFixed(1)}ms`,
 		);
 
-		const fastApp = makeApp(accessorStub, 'bench-read-model');
+		const fastApp = makeApp(accessor, 'bench-read-model');
 		const fastHttpResourcesStart = process.hrtime.bigint();
 		const fastResourcesRes = await fastApp.request('/api/resources');
 		await fastResourcesRes.text();
@@ -259,23 +427,18 @@ for (const n of SIZES) {
 			`  HTTP /api/resources (read model): ${fastHttpResourcesMs.toFixed(1)}ms  /api/unused-resources: ${fastHttpUnusedMs.toFixed(1)}ms`,
 		);
 
-		const defaultPlan = await db.raw(
-			'EXPLAIN QUERY PLAN select resource_id from viewer_resources order by url_sort_key, resource_id limit 100',
-		);
+		const db = accessor.getKnex();
 		const unusedPlan = await db.raw(
 			'EXPLAIN QUERY PLAN select resource_id from viewer_resources where is_unused = 1 order by url_sort_key, resource_id limit 100',
 		);
 		const referrersPlan = await db.raw(
-			'EXPLAIN QUERY PLAN select "pages"."url" from "resources-referrers" join "pages" on "pages"."id" = "resources-referrers"."pageId" where "resources-referrers"."resourceId" = 1 and "resources-referrers"."pageId" > 0 order by "resources-referrers"."pageId" asc limit 101',
-		);
-		console.log(
-			`  EXPLAIN (viewer_resources default): ${defaultPlan.map((row) => row.detail).join(' | ')}`,
+			'EXPLAIN QUERY PLAN select "page_ur"."url" from "resource_ref_edges" as "rre" join "content_items" as "ci" on "ci"."id" = "rre"."page_id" join "url_refs" as "page_ur" on "page_ur"."id" = "ci"."url_id" where "rre"."resource_id" = 1 and "rre"."page_id" > 0 order by "rre"."page_id" asc limit 101',
 		);
 		console.log(
 			`  EXPLAIN (viewer_resources is_unused=1): ${unusedPlan.map((row) => row.detail).join(' | ')}`,
 		);
 		console.log(
-			`  EXPLAIN (resources-referrers, unaffected by this read model): ${referrersPlan.map((row) => row.detail).join(' | ')}`,
+			`  EXPLAIN (resource_ref_edges referrers, unaffected by this read model): ${referrersPlan.map((row) => row.detail).join(' | ')}`,
 		);
 
 		// Sanity check — both backends must agree on total counts.
@@ -290,8 +453,12 @@ for (const n of SIZES) {
 			);
 		}
 
+		// Filter/sort matrix — including the urlPattern/contentType/new-sortBy
+		// entries the `viewer_resources` fast path serves.
+		await runResourcesMatrix(db, fastApp);
+
 		console.log(
-			'\n### Markdown summary (paste into PR/CLAUDE.md, no archive-identifying details)\n',
+			'\n### Markdown summary — before/after (paste into PR/CLAUDE.md, no archive-identifying details)\n',
 		);
 		console.log(
 			`\`${n.toLocaleString()} synthetic resources\` — viewer_resources/viewer_resource_stats fast path:\n`,
@@ -312,7 +479,11 @@ for (const n of SIZES) {
 		);
 		console.log(`\nread-model build time: ${buildMs.toFixed(0)}ms`);
 	} finally {
-		await db.destroy();
+		// `releaseHandle()` (not `close()`): this bench never needs the
+		// resulting `.nitpicker` tar, only the raw tmpDir's `db.sqlite` for
+		// size stats above — see `bench-viewer-pages-read-model.mjs`'s same
+		// cleanup comment for why `close()`'s implicit `write()` is unsafe here.
+		await accessor.releaseHandle();
 		rmSync(cleanupDir, { recursive: true, force: true });
 	}
 }
