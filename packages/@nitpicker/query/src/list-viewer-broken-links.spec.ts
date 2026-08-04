@@ -254,6 +254,44 @@ describe('listViewerBrokenLinks', () => {
 		]);
 	});
 
+	it('urlPattern matches on the source URL alone', async () => {
+		const result = await listViewerBrokenLinks(archive, { urlPattern: '%page-a%' });
+		expect(result.total).toBe(1);
+		expect(result.items[0]).toMatchObject({
+			sourceUrl: 'https://example.com/page-a',
+			destUrl: 'https://example.com/broken-a',
+		});
+	});
+
+	it('urlPattern matches on the destination URL alone', async () => {
+		const result = await listViewerBrokenLinks(archive, { urlPattern: '%broken-b%' });
+		expect(result.total).toBe(1);
+		expect(result.items[0]).toMatchObject({
+			sourceUrl: 'https://example.com/page-b',
+			destUrl: 'https://example.com/broken-b',
+		});
+	});
+
+	it('urlPattern matching neither source nor destination returns nothing', async () => {
+		const result = await listViewerBrokenLinks(archive, { urlPattern: '%no-such%' });
+		expect(result.total).toBe(0);
+		expect(result.items).toEqual([]);
+	});
+
+	it('rejects a cursor minted under a different urlPattern', async () => {
+		const page1 = await listViewerBrokenLinks(archive, {
+			urlPattern: '%example%',
+			limit: 1,
+		});
+		expect(page1.nextCursor).not.toBeNull();
+		await expect(
+			listViewerBrokenLinks(archive, {
+				urlPattern: '%other%',
+				cursor: page1.nextCursor!,
+			}),
+		).rejects.toThrow();
+	});
+
 	it('status ties (every broken link is 404) still paginate without duplicates or gaps, in both directions', async () => {
 		// Every row here has the exact same status_sort_key/status_desc_key —
 		// this is what the source_url_ref_id tie-breaker in the keyset
@@ -610,6 +648,16 @@ describe('listViewerBrokenLinks — a destination that is both broken and extern
 				sourceUrl: 'https://example.com/page-a',
 				destUrl: 'https://external.example.com/broken-ext',
 				status: 404,
+				isExternal: true,
+			}),
+		]);
+	});
+
+	it('accepts sortBy: "isExternal" without throwing, returning the same external broken link', async () => {
+		const result = await listViewerBrokenLinks(archive, { sortBy: 'isExternal' });
+		expect(result.items).toEqual([
+			expect.objectContaining({
+				destUrl: 'https://external.example.com/broken-ext',
 				isExternal: true,
 			}),
 		]);

@@ -15,11 +15,11 @@ describe('toUnusedResourcesSortBy', () => {
 		expect(toUnusedResourcesSortBy('url')).toBe('url');
 		expect(toUnusedResourcesSortBy('status')).toBe('status');
 		expect(toUnusedResourcesSortBy('source')).toBe('source');
+		expect(toUnusedResourcesSortBy('contentType')).toBe('contentType');
+		expect(toUnusedResourcesSortBy('contentLength')).toBe('contentLength');
 	});
 
-	it('returns undefined for sort fields the fast path does not index (silent drop)', () => {
-		expect(toUnusedResourcesSortBy('contentType')).toBeUndefined();
-		expect(toUnusedResourcesSortBy('contentLength')).toBeUndefined();
+	it('returns undefined for unrecognised sort fields (silent drop)', () => {
 		expect(toUnusedResourcesSortBy('bogus')).toBeUndefined();
 	});
 });

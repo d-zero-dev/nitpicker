@@ -8,7 +8,7 @@ import type { ViewerUnusedResourcesSortSpec } from './types.js';
  * @returns The resolved {@link ViewerUnusedResourcesSortSpec}.
  */
 export function getViewerUnusedResourcesSortSpec(
-	sortBy: 'url' | 'status' | 'source',
+	sortBy: 'url' | 'status' | 'source' | 'contentType' | 'contentLength',
 	sortOrder: 'asc' | 'desc',
 ): ViewerUnusedResourcesSortSpec {
 	switch (sortBy) {
@@ -25,6 +25,18 @@ export function getViewerUnusedResourcesSortSpec(
 		case 'source': {
 			return {
 				columns: ['source', 'url_sort_key', 'resource_id'],
+				scanDirection: sortOrder,
+			};
+		}
+		case 'contentType': {
+			return {
+				columns: ['content_type_raw', 'url_sort_key', 'resource_id'],
+				scanDirection: sortOrder,
+			};
+		}
+		case 'contentLength': {
+			return {
+				columns: ['content_length', 'url_sort_key', 'resource_id'],
 				scanDirection: sortOrder,
 			};
 		}

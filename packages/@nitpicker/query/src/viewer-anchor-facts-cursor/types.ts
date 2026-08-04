@@ -8,6 +8,7 @@ export type AnchorFactsSortColumn =
 	| 'dest_url_ref_id'
 	| 'status_sort_key'
 	| 'status_desc_key'
+	| 'is_external_link'
 	| 'edge_id';
 
 /**
@@ -51,6 +52,7 @@ const NUMERIC_ANCHOR_FACTS_SORT_COLUMNS: ReadonlySet<AnchorFactsSortColumn> = ne
 	'dest_url_ref_id',
 	'status_sort_key',
 	'status_desc_key',
+	'is_external_link',
 	'edge_id',
 ]);
 
@@ -69,16 +71,13 @@ export function isNumericAnchorFactsSortColumn(column: AnchorFactsSortColumn): b
  * match — used to build a cursor's `filterKey` so a cursor minted under one
  * filter/sort combination can't silently be replayed under another. Unlike
  * `viewer_pages`, `is_broken` itself is never variable here (this cursor
- * family only ever backs the broken-link listing), and `urlPattern` is
- * excluded entirely: it matches source OR destination across two columns
- * (`list-links.ts`'s semantics), which no single index here can satisfy, so
- * the caller (`register-links-route.ts`) forces the live fallback instead
- * of ever reaching this cursor machinery with a `urlPattern` set — the same
- * fallback `register-pages-route.ts` uses for `/api/pages`.
+ * family only ever backs the broken-link listing).
  */
 export interface AnchorFactsCursorFilterKeyInput {
 	/** See `ListViewerBrokenLinksOptions.status`. */
 	status?: number | number[];
+	/** See `ListViewerBrokenLinksOptions.urlPattern`. */
+	urlPattern?: string;
 }
 
 /**
@@ -95,7 +94,7 @@ export interface AnchorFactsCursorPayload {
 	/** See `buildAnchorFactsFilterKey`. */
 	filterKey: string;
 	/** The sort field the cursor was minted under. */
-	sortBy: 'sourceUrl' | 'destUrl' | 'status';
+	sortBy: 'sourceUrl' | 'destUrl' | 'status' | 'isExternal';
 	/** The sort direction the cursor was minted under. */
 	sortOrder: 'asc' | 'desc';
 	/** The boundary row's keyset tuple values, in sort-spec column order. */

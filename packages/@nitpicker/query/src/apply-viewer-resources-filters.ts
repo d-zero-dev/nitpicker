@@ -28,4 +28,15 @@ export function applyViewerResourcesFilters(
 	// what the indexes are built on, and is a strictly monotonic transform of
 	// `status` so equality semantics are unchanged).
 	applyEqualityOrInFilter(qb, 'status_sort_key', options.status);
+	if (options.urlPattern) {
+		// Plain LIKE scan of the inlined URL text — a substring LIKE can't
+		// seek an index anyway, and the narrow read model is what makes the
+		// scan cheap (same shape as `applyViewerPagesFilters`'s canonical arm).
+		qb.where('url_sort_key', 'like', options.urlPattern);
+	}
+	if (options.contentType) {
+		// Prefix match on the verbatim raw MIME string, matching live
+		// `listResources`'s `ctr.raw LIKE '<prefix>%'` semantics exactly.
+		qb.where('content_type_raw', 'like', `${options.contentType}%`);
+	}
 }

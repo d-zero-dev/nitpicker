@@ -1,6 +1,7 @@
 import type { BuildViewerReadModelOptions, PageSource } from '../types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { buildHeaderPresenceSelects } from '../build-header-presence-selects.js';
 import { classifyContentType } from '../classify-content-type.js';
 import { computeIsolatedClusters } from '../compute-isolated-clusters.js';
 import { excludeSkippedPages } from '../exclude-skipped-pages.js';
@@ -105,11 +106,19 @@ interface PagesSourceRow {
 	/** Provenance label — see {@link PageSource}. Always non-null (`NOT NULL DEFAULT 'crawled'` in `init-schema.ts`). */
 	source: PageSource;
 	/**
-	 * `<html lang>` tag value, or `null`/`''` when absent. Read only for
-	 * `computePageFacetBuckets`'s `lang` facet tally — never persisted onto
-	 * `viewer_pages` itself.
+	 * `<html lang>` tag value, or `null`/`''` when absent. Feeds both
+	 * `computePageFacetBuckets`'s `lang` facet tally and the persisted
+	 * `viewer_pages.lang` filter column.
 	 */
 	lang: string | null;
+	/** `header_flags.has_csp`, coalesced to `0` when the page has no `header_set_id` — see `buildHeaderPresenceSelects`. */
+	hasCSP: number;
+	/** `header_flags.has_x_frame_options`, same coalescing as {@link PagesSourceRow.hasCSP}. */
+	hasXFrameOptions: number;
+	/** `header_flags.has_x_content_type_options`, same coalescing as {@link PagesSourceRow.hasCSP}. */
+	hasXContentTypeOptions: number;
+	/** `header_flags.has_hsts`, same coalescing as {@link PagesSourceRow.hasCSP}. */
+	hasHSTS: number;
 }
 
 /** One row to insert into `viewer_pages`, derived from a {@link PagesSourceRow}. */
@@ -181,6 +190,16 @@ interface ViewerPageInsertRow {
 	scroll_height_mobile: number;
 	/** `PagesSourceRow.console_error_count`, defaulted to `0` when `null`. */
 	console_error_count: number;
+	/** Copied from `PagesSourceRow.lang` verbatim (nullable) — filter-only, see the DDL comment. */
+	lang: string | null;
+	/** Copied from `PagesSourceRow.hasCSP` — filter-only, see the DDL comment. */
+	has_csp: number;
+	/** Copied from `PagesSourceRow.hasXFrameOptions`. */
+	has_x_frame_options: number;
+	/** Copied from `PagesSourceRow.hasXContentTypeOptions`. */
+	has_x_content_type_options: number;
+	/** Copied from `PagesSourceRow.hasHSTS`. */
+	has_hsts: number;
 	/**
 	 * Case-preserving sort key for URL ordering — currently just `url`
 	 * verbatim, matching `listPages`'s plain `ORDER BY url` (SQLite's
@@ -275,6 +294,11 @@ function toViewerPageInsertRow(
 		scroll_height_desktop: row.scroll_height_desktop ?? 0,
 		scroll_height_mobile: row.scroll_height_mobile ?? 0,
 		console_error_count: row.console_error_count ?? 0,
+		lang: row.lang,
+		has_csp: row.hasCSP,
+		has_x_frame_options: row.hasXFrameOptions,
+		has_x_content_type_options: row.hasXContentTypeOptions,
+		has_hsts: row.hasHSTS,
 		url_sort_key: row.url,
 		title_sort_key: row.title ?? '',
 		path_sort_key: derivePathSortKey(row.url),
@@ -482,6 +506,10 @@ export async function buildViewerReadModel(
 				'pm.description_text_id',
 			)
 			.leftJoin('text_refs as og_title_ref', 'og_title_ref.id', 'pm.og_title_text_id')
+			// LEFT JOIN for the same "no header_set_id" reason as
+			// computeHeaderCheckInsertRows — buildHeaderPresenceSelects'
+			// coalesce(..., 0) turns the null-fill into flag 0.
+			.leftJoin('header_flags as hf', 'hf.header_set_id', 'ci.header_set_id')
 			.where('ci.scraped', 1)
 			.whereNull('ci.redirect_dest_id')
 			.whereNull('ci.alias_of_id')
@@ -513,6 +541,7 @@ export async function buildViewerReadModel(
 				'pm.scroll_height_mobile as scroll_height_mobile',
 				'pm.console_error_count as console_error_count',
 				'pm.lang as lang',
+				...buildHeaderPresenceSelects(trx),
 			);
 
 		const naturalUrlRankByPageId = buildPageNaturalUrlRankMap(sourceRows);

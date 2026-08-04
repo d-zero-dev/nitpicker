@@ -33,6 +33,7 @@ export { getDuplicatesFastPath } from './get-duplicates-fast-path.js';
 export { getErrorKindsFastPath } from './get-error-kinds-fast-path.js';
 export { getHeaderChecksFastPath } from './get-header-checks-fast-path.js';
 export { getImagesFastPath } from './get-images-fast-path.js';
+export { isImagesFastPathSortBy } from './is-images-fast-path-sort-by.js';
 export { getIsolatedClusterFastPath } from './get-isolated-cluster-fast-path.js';
 export { getIsolatedCluster } from './get-isolated-cluster.js';
 export { getLinkGraphFastPath } from './get-link-graph-fast-path.js';

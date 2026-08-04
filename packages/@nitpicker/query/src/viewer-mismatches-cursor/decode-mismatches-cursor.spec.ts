@@ -7,11 +7,15 @@ import { encodeMismatchesCursor } from './encode-mismatches-cursor.js';
 
 const PAYLOAD_BASE = {
 	filterKey: '{"type":"canonical"}',
-	sortBy: 'url' as const,
+	sortBy: 'urlBinary' as const,
 	sortOrder: 'asc' as const,
 };
 
-const EXPECTED = { filterKey: PAYLOAD_BASE.filterKey, sortOrder: PAYLOAD_BASE.sortOrder };
+const EXPECTED = {
+	filterKey: PAYLOAD_BASE.filterKey,
+	sortBy: PAYLOAD_BASE.sortBy,
+	sortOrder: PAYLOAD_BASE.sortOrder,
+};
 
 describe('decodeMismatchesCursor', () => {
 	it('decodes a cursor that matches the expected filter/sort', () => {
@@ -69,5 +73,15 @@ describe('decodeMismatchesCursor', () => {
 			values: ['https://example.com/a'],
 		});
 		expect(() => decodeMismatchesCursor(cursor, EXPECTED)).toThrow(/keyset value count/);
+	});
+
+	it('throws on a cursor minted under a different effective sort (urlBinary vs urlNatural)', () => {
+		const cursor = encodeMismatchesCursor({
+			v: VIEWER_READ_MODEL_SCHEMA_VERSION,
+			...PAYLOAD_BASE,
+			sortBy: 'urlNatural',
+			values: [3, 1],
+		});
+		expect(() => decodeMismatchesCursor(cursor, EXPECTED)).toThrow(/does not match/);
 	});
 });

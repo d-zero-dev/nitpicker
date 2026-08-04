@@ -31,17 +31,15 @@ function resolveLiveMismatchType(
 
 /**
  * Dispatches to `listViewerMismatches` (the `viewer_mismatches` read-model
- * fast path, issue #115) when the read model is current AND the request
- * uses none of the filters/sorts only the wide `pages` table can evaluate —
- * the LIKE-based `urlPattern` (matched against `pages.url`, a column the
- * read model duplicates as `url_sort_key` but never LIKE-indexes) or ANY
- * explicit `sortBy` (including `'url'`, mirroring `getHeaderChecksFastPath`'s
- * own `'url'`-forces-live rule): `viewer_mismatches` only indexes `(type,
- * url_sort_key, mismatch_id)` (see `vm_type_url`'s docs), so a request for
- * `sortBy: 'actual' | 'expected'` — or an explicit natural-sort `'url'`
- * request the live path's `applyListOrder` treats differently from its own
- * unset-`sortBy` default — falls back to `findMismatches` (the live,
- * offset-only, write-model path) instead.
+ * fast path, issue #115) whenever the read model is current. No filter or
+ * sort forces the live fallback: `urlPattern` is a plain LIKE
+ * against the inlined `url_sort_key` (identical semantics to the live
+ * path's `ur.url LIKE` — neither side resolves redirect/alias equivalents,
+ * see `ListViewerMismatchesOptions.urlPattern`), and every `sortBy` value
+ * (`'url'` natural sort via `natural_url_rank`, `'actual'`/`'expected'`
+ * directly, unset = BINARY `url_sort_key`) maps onto a read-model column —
+ * see `MismatchesEffectiveSortBy` for why the unset-vs-`'url'` split is kept
+ * distinct rather than collapsed.
  *
  * This is the single entry point every `findMismatches` consumer uses
  * instead of duplicating the dispatch decision: the CLI `query mismatches`
@@ -56,10 +54,14 @@ function resolveLiveMismatchType(
  * @param type - Which mismatch comparison(s) to list — a single value, an
  *   array (OR'd together, fast path only), or `undefined` for every type.
  *   A multi-value/`undefined` selection that falls back to the live path
- *   is narrowed to a single type first — see {@link resolveLiveMismatchType}.
+ *   (read model stale/absent) is narrowed to a single type first — see
+ *   {@link resolveLiveMismatchType}.
  * @param options - Filter, sort, and pagination options — the full
- *   `findMismatches` surface, including any explicit `sortBy`/`urlPattern`
- *   that forces the live fallback.
+ *   `findMismatches` surface.
+ * @param precheckedReadModelCurrent - The caller's own already-computed
+ *   `isViewerReadModelCurrent` result, when it has one (viewer routes check
+ *   it first for their stale-refusal gate) — passing it avoids probing the
+ *   same tables a second time per request. Omit to let this function check.
  * @returns The mismatch list, from whichever backend is currently valid.
  * @example
  * // Callers never need to check isViewerReadModelCurrent themselves:
@@ -69,12 +71,13 @@ export async function getMismatchesFastPath(
 	accessor: ArchiveAccessor,
 	type: MismatchType | MismatchType[] | undefined,
 	options: FindMismatchesFastPathOptions = {},
+	precheckedReadModelCurrent?: boolean,
 ): Promise<CursorPaginatedMismatchList> {
-	const usesWideTableOnlyFilter = options.sortBy != null || options.urlPattern != null;
-
-	if (!usesWideTableOnlyFilter && (await isViewerReadModelCurrent(accessor))) {
+	if (precheckedReadModelCurrent ?? (await isViewerReadModelCurrent(accessor))) {
 		return listViewerMismatches(accessor, {
 			type,
+			urlPattern: options.urlPattern,
+			sortBy: options.sortBy,
 			sortOrder: options.sortOrder,
 			limit: options.limit,
 			cursor: options.cursor,

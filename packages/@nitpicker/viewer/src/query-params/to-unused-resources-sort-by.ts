@@ -1,5 +1,11 @@
-/** Every `/api/unused-resources` `sortBy` value the `viewer_resources` fast path indexes. */
-const UNUSED_RESOURCES_SORT_BY_VALUES = ['url', 'status', 'source'] as const;
+/** Every `/api/unused-resources` `sortBy` value the `viewer_resources` fast path serves — the full `ListUnusedResourcesOptions.sortBy` surface. */
+const UNUSED_RESOURCES_SORT_BY_VALUES = [
+	'url',
+	'status',
+	'source',
+	'contentType',
+	'contentLength',
+] as const;
 
 /** A validated fast-path `/api/unused-resources` sort field. */
 export type UnusedResourcesSortBy = (typeof UNUSED_RESOURCES_SORT_BY_VALUES)[number];

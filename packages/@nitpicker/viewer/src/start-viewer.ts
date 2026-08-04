@@ -3,6 +3,7 @@ import type { ViewerOptions } from './types.js';
 import path from 'node:path';
 
 import { serve } from '@hono/node-server';
+import { isViewerReadModelCurrent } from '@nitpicker/query';
 
 import { createArchiveContext } from './archive-context.js';
 import { createApp } from './create-app.js';
@@ -42,6 +43,27 @@ export async function startViewer(options: ViewerOptions): Promise<void> {
 	// instead of a post-banner `EADDRINUSE` crash.
 	const port = await findFreePort(options.port ?? DEFAULT_PORT, host);
 	const context = await createArchiveContext(filePath);
+
+	// Stub mode can never have a current read model (it's built at
+	// crawl-end/`viewer-build`, neither of which has run yet for an
+	// in-progress crawl) — warning there would be permanent, unactionable
+	// noise, so this only fires for a finished `.nitpicker` archive. Routes
+	// (`shouldRefuseStaleReadModel`) refuse individual stale-read-model
+	// requests regardless of whether this banner was seen; this is purely a
+	// heads-up printed once at startup so the fix (`viewer-build`) is visible
+	// before the user has to hit a "read model required" response first.
+	if (context.mode !== 'stub') {
+		const accessor = context.manager.get(context.archiveId);
+		if (!(await isViewerReadModelCurrent(accessor))) {
+			// eslint-disable-next-line no-console
+			console.warn(
+				"\n  ⚠ This archive's viewer read model is missing or stale.\n" +
+					'    Pages/resources/links/images and similar list views will\n' +
+					'    respond with "read model required" until you rebuild it:\n\n' +
+					`      nitpicker viewer-build ${filePath}\n`,
+			);
+		}
+	}
 
 	// Assigned exactly once, right after this declaration — `let` is required
 	// because `shutdown` below must close over it before it exists, so it can

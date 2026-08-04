@@ -10,6 +10,8 @@ export type ViewerUnusedResourcesSortColumn =
 	| 'status_sort_key'
 	| 'status_desc_key'
 	| 'source'
+	| 'content_type_raw'
+	| 'content_length'
 	| 'resource_id';
 
 /**
@@ -49,6 +51,10 @@ export interface ViewerUnusedResourcesCursorFilterKeyInput {
 	status?: number | number[];
 	/** See `ListViewerUnusedResourcesOptions.source`. */
 	source?: PageSource | PageSource[];
+	/** See `ListViewerUnusedResourcesOptions.urlPattern`. */
+	urlPattern?: string;
+	/** See `ListViewerUnusedResourcesOptions.contentType`. */
+	contentType?: string;
 }
 
 /**
@@ -65,7 +71,7 @@ export interface ViewerUnusedResourcesCursorPayload {
 	/** See `buildViewerUnusedResourcesFilterKey`. */
 	filterKey: string;
 	/** The sort field the cursor was minted under. */
-	sortBy: 'url' | 'status' | 'source';
+	sortBy: 'url' | 'status' | 'source' | 'contentType' | 'contentLength';
 	/** The sort direction the cursor was minted under. */
 	sortOrder: 'asc' | 'desc';
 	/** The boundary row's keyset tuple values, in sort-spec column order. */

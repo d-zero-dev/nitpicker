@@ -106,6 +106,7 @@ async function readHeaderChecksWindow(
 		[
 			'page_id',
 			'url_sort_key',
+			'natural_url_rank',
 			'has_csp',
 			'has_x_frame_options',
 			'has_x_content_type_options',
@@ -179,7 +180,17 @@ export async function listViewerHeaderChecks(
 	const knex = accessor.getKnex();
 	const limit = options.limit ?? 100;
 	const sortOrder = options.sortOrder ?? 'asc';
-	const spec = getHeaderChecksSortSpec(sortOrder);
+	// Unset sortBy = BINARY url order; explicit 'url' = natural order — the
+	// same two-distinct-orders contract checkHeaders (live) has always had
+	// (its `useUrlSort = options.sortBy != null`). Header-flag sorts pass
+	// through. See HeaderChecksEffectiveSortBy.
+	const effectiveSortBy =
+		options.sortBy == null
+			? 'urlBinary'
+			: options.sortBy === 'url'
+				? 'urlNatural'
+				: options.sortBy;
+	const spec = getHeaderChecksSortSpec(effectiveSortBy, sortOrder);
 	const filterKey = buildHeaderChecksFilterKey(options);
 
 	const total = await countHeaderChecksTotal(knex, options);
@@ -205,7 +216,7 @@ export async function listViewerHeaderChecks(
 				? encodeHeaderChecksCursor({
 						v: VIEWER_READ_MODEL_SCHEMA_VERSION,
 						filterKey,
-						sortBy: 'url',
+						sortBy: effectiveSortBy,
 						sortOrder,
 						values: extractHeaderChecksSortValues(spec, lastRow),
 					})
@@ -215,7 +226,7 @@ export async function listViewerHeaderChecks(
 				? encodeHeaderChecksCursor({
 						v: VIEWER_READ_MODEL_SCHEMA_VERSION,
 						filterKey,
-						sortBy: 'url',
+						sortBy: effectiveSortBy,
 						sortOrder,
 						values: extractHeaderChecksSortValues(spec, firstRow),
 					})
@@ -224,7 +235,11 @@ export async function listViewerHeaderChecks(
 	}
 
 	if (options.cursor) {
-		const decoded = decodeHeaderChecksCursor(options.cursor, { filterKey, sortOrder });
+		const decoded = decodeHeaderChecksCursor(options.cursor, {
+			filterKey,
+			sortBy: effectiveSortBy,
+			sortOrder,
+		});
 		if (options.direction === 'prev') {
 			const oppositeDirection = spec.scanDirection === 'asc' ? 'desc' : 'asc';
 			const fetched = await readHeaderChecksWindow(

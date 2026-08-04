@@ -13,5 +13,10 @@ import { buildFilterKey } from '../viewer-cursor-kit/build-filter-key.js';
 export function buildViewerResourcesFilterKey(
 	filters: ViewerResourcesCursorFilterKeyInput,
 ): string {
-	return buildFilterKey({ isExternal: filters.isExternal, status: filters.status });
+	return buildFilterKey({
+		isExternal: filters.isExternal,
+		status: filters.status,
+		urlPattern: filters.urlPattern,
+		contentType: filters.contentType,
+	});
 }

@@ -63,6 +63,26 @@ test.describe('Nitpicker Viewer (stub mode)', () => {
 		await expect(page.getByText('Available once the crawl finishes.')).toBeVisible();
 	});
 
+	test('viewer read model 未構築のアーカイブでは空状態メッセージが表示される', async ({
+		page,
+	}) => {
+		// A stub (in-progress crawl) can never have a read model
+		// (`buildViewerReadModel` refuses read-only accessors, and
+		// `viewer-build` refuses stub directories), so directory-tree's 3
+		// query functions (gated on `isViewerReadModelCurrent` with no live
+		// fallback) always return an empty `{ roots: [] }` here — the natural
+		// place to exercise the "no read model" empty state.
+		await page.goto('/directory-tree');
+		await expect(
+			page.getByRole('heading', { name: 'Directory Tree', level: 1 }),
+		).toBeVisible();
+		await expect(
+			page.getByText(
+				'No directory data available. Run `nitpicker viewer-build` to generate it.',
+			),
+		).toBeVisible();
+	});
+
 	test('viewer 起動中も stub の tmpDir は残存し、.nitpicker は未生成', () => {
 		// Cross-check the user-facing invariant at the filesystem level: while
 		// the viewer is serving the stub, the directory must still be on disk

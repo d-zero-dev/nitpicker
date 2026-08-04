@@ -26,6 +26,22 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	await trx.raw(
 		'CREATE INDEX vp_default ON viewer_pages(is_external, content_category, natural_url_rank, page_id)',
 	);
+	// One wide covering index for "default sort + any filter subset" —
+	// vp_default's prefix plus every filter-only column, so a filtered
+	// default-sort read (status/missingTitle/noindex/source/lang/header
+	// flags, single or multi-select) stays a narrow covering-INDEX scan with
+	// residual predicates instead of falling to a full scan of the wide
+	// viewer_pages TABLE. Measured on a real 15.8GB archive: the table scan
+	// cost 805ms on first (cold) touch and ~135ms warm, vs ~60ms for
+	// vp_default's covering scan — the filter columns simply weren't in any
+	// covering index (the older vp_status/vp_missing_* family predates
+	// natural_url_rank and orders by url_sort_key, so it cannot cover the
+	// default sort). One combined index rather than per-filter twins keeps
+	// the planner surface small (ARCHITECTURE.md's
+	// "perf index の一括追加をしない" invariant).
+	await trx.raw(
+		'CREATE INDEX vp_default_filters ON viewer_pages(is_external, content_category, natural_url_rank, page_id, status_sort_key, has_title, has_description, robots_noindex, source, lang, has_csp, has_x_frame_options, has_x_content_type_options, has_hsts)',
+	);
 	await trx.raw(
 		'CREATE INDEX vp_status ON viewer_pages(is_external, content_category, status_sort_key, url_sort_key, page_id)',
 	);
@@ -249,14 +265,21 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	// indexes boolean flags like `has_title`, never a count, ahead of a sort
 	// key). `is_missing`'s equality predicate has no such problem. No indexes
 	// for the individual `has_csp`/`has_x_frame_options`/
-	// `has_x_content_type_options`/`has_hsts` equality filters — following
-	// #106/#118's evidence-before-indexing precedent, these are rarer filter
-	// combinations than `missingOnly`, and `getHeaderChecksFastPath` bails to
-	// the live path for any explicit `sortBy` regardless.
+	// `has_x_content_type_options`/`has_hsts` equality filters or the
+	// per-flag sorts — following #106/#118's evidence-before-indexing
+	// precedent, these are rarer combinations than `missingOnly`, and this
+	// narrow table's TEMP B-TREE sort is cheap; add an index only if a bench
+	// proves one necessary.
 	await trx.raw(
 		'CREATE INDEX vh_missing ON viewer_header_checks(is_missing, url_sort_key, page_id)',
 	);
 	await trx.raw('CREATE INDEX vh_default ON viewer_header_checks(url_sort_key, page_id)');
+	// Natural-URL-order twin of `vh_default`, backing checkHeaders' explicit
+	// `sortBy: 'url'` (natural sort) on the fast path — see
+	// `HeaderCheckInsertRow.natural_url_rank`.
+	await trx.raw(
+		'CREATE INDEX vh_natural_url ON viewer_header_checks(natural_url_rank, page_id)',
+	);
 
 	// Duplicate-metadata group read model (issue #115). `vdg_field_count`
 	// leads with `field` (an equality predicate every read always supplies —
@@ -289,23 +312,28 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	);
 
 	// Metadata-mismatch read model (issue #115). `vm_type_url` leads with
-	// `type` (an equality predicate every read always supplies — see
-	// `ListViewerMismatchesOptions.type`'s required, not optional, docs), the
-	// same "equality-then-sort-key" shape as `vdg_field_count`/`vh_default`
-	// above. No `status_desc_key`-style descending twin: fast-path listing
-	// only supports `sortBy` on `url_sort_key` (see
-	// `ListViewerMismatchesOptions`'s docs for why `actual`/`expected`
-	// sorting bails to the live `findMismatches` path instead), and a
-	// single ascending index scanned backward already serves `sortOrder:
-	// 'desc'` with no separate descending-key column needed — the exact
-	// `vel_*`/`vaf_*` distinction: `viewer_external_links` (offset
-	// pagination, no descending column) versus `viewer_anchor_facts` (keyset
-	// pagination, needs one). `viewer_mismatches` uses keyset pagination too,
-	// but keyset DESC over a single already-monotonic text column doesn't
-	// need a sign-flipped twin the way an INTEGER `status` column does — a
-	// `text` column has no arithmetic negation, so reversing scan direction
-	// (not a negated key) is how SQLite walks it backward.
+	// `type` (an equality predicate a single-type read supplies — the
+	// multi-type/every-type OR shapes fall back to a scan + TEMP B-TREE over
+	// this small failing-page-subset table, which is fine), the same
+	// "equality-then-sort-key" shape as `vdg_field_count`/`vh_default`
+	// above. No `status_desc_key`-style descending twin anywhere here:
+	// keyset DESC over a single already-monotonic column doesn't need a
+	// sign-flipped twin the way an INTEGER `status` column does — reversing
+	// scan direction (not a negated key) is how SQLite walks it backward.
 	await trx.raw(
 		'CREATE INDEX vm_type_url ON viewer_mismatches(type, url_sort_key, mismatch_id)',
+	);
+	// The three sibling orders `listViewerMismatches` now serves on the fast
+	// path (see `MismatchesEffectiveSortBy`): natural URL rank (explicit
+	// `sortBy: 'url'`), and the `actual`/`expected` column sorts. All three
+	// keep `vm_type_url`'s equality-then-sort-key shape.
+	await trx.raw(
+		'CREATE INDEX vm_type_natural_url ON viewer_mismatches(type, natural_url_rank, mismatch_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vm_type_actual ON viewer_mismatches(type, actual, mismatch_id)',
+	);
+	await trx.raw(
+		'CREATE INDEX vm_type_expected ON viewer_mismatches(type, expected, mismatch_id)',
 	);
 }

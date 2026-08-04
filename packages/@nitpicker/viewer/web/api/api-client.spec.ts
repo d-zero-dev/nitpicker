@@ -56,4 +56,22 @@ describe('apiGet', () => {
 		await apiGet('/api/pages', { status: ['200', '404'], sortBy: 'url' });
 		expect(requestedSearch()).toBe('?status=200&status=404&sortBy=url');
 	});
+
+	it('throws a viewer-build guidance message for a read-model-required unavailable payload', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve({ available: false, reason: 'read-model-required' }),
+		});
+		await expect(apiGet('/api/pages')).rejects.toThrow(/viewer-build/);
+	});
+
+	it('passes through a reason-less unavailable payload instead of throwing (stub-mode inbound-links shape)', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve({ available: false }),
+		});
+		await expect(apiGet('/api/pages/inbound-links')).resolves.toEqual({
+			available: false,
+		});
+	});
 });

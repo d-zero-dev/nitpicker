@@ -53,6 +53,10 @@ const DEFAULT_LIMIT = 50;
  * so there is nothing left to page through anyway.
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
+ * @param precheckedReadModelCurrent - The caller's own already-computed
+ *   `isViewerReadModelCurrent` result, when it has one (viewer routes check
+ *   it first for their stale-refusal gate) — passing it avoids probing the
+ *   same tables a second time per request. Omit to let this function check.
  * @returns The duplicate-group list, from whichever backend is currently valid.
  * @example
  * // Callers never need to check isViewerReadModelCurrent themselves:
@@ -61,12 +65,13 @@ const DEFAULT_LIMIT = 50;
 export async function getDuplicatesFastPath(
 	accessor: ArchiveAccessor,
 	options: GetDuplicatesFastPathOptions = {},
+	precheckedReadModelCurrent?: boolean,
 ): Promise<CursorPaginatedDuplicateGroupList> {
 	const field = options.field ?? 'title';
 	const pagesLimit = options.pagesLimit ?? DEFAULT_PAGES_LIMIT;
 	const limit = options.limit ?? DEFAULT_LIMIT;
 
-	if (await isViewerReadModelCurrent(accessor)) {
+	if (precheckedReadModelCurrent ?? (await isViewerReadModelCurrent(accessor))) {
 		return listViewerDuplicateGroups(accessor, {
 			field,
 			pagesLimit,

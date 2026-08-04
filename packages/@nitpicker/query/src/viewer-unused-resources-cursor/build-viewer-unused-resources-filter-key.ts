@@ -13,5 +13,10 @@ import { buildFilterKey } from '../viewer-cursor-kit/build-filter-key.js';
 export function buildViewerUnusedResourcesFilterKey(
 	filters: ViewerUnusedResourcesCursorFilterKeyInput,
 ): string {
-	return buildFilterKey({ status: filters.status, source: filters.source });
+	return buildFilterKey({
+		status: filters.status,
+		source: filters.source,
+		urlPattern: filters.urlPattern,
+		contentType: filters.contentType,
+	});
 }

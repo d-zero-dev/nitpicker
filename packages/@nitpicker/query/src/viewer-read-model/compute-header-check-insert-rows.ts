@@ -4,6 +4,8 @@ import type { Knex } from 'knex';
 import { buildHeaderPresenceSelects } from '../build-header-presence-selects.js';
 import { HEADER_PRESENCE_KEYS } from '../header-presence-sql.js';
 
+import { buildPageNaturalUrlRankMap } from './build-page-natural-url-rank-map.js';
+
 /** One row projected from `content_items` + refs, just the columns this computation needs. */
 type HeaderCheckSourceRow = Record<HeaderPresenceKey, 0 | 1> & {
 	/** `content_items.id` — becomes `viewer_header_checks.page_id`. */
@@ -33,6 +35,17 @@ export interface HeaderCheckInsertRow {
 	 * `listViewerHeaderChecks`'s `missingOnly` filter actually queries.
 	 */
 	is_missing: 0 | 1;
+	/**
+	 * Dense, zero-based rank in natural URL order across THIS table's own row
+	 * population (see {@link buildPageNaturalUrlRankMap}) — what
+	 * `checkHeaders`'s explicit `sortBy: 'url'` (natural sort via
+	 * `orderByUrlRank`) orders by, persisted here so the fast path can serve
+	 * that request. Ranked independently of
+	 * `viewer_pages.natural_url_rank`: this table's predicate
+	 * (internal + text/html, no `alias_of_id IS NULL` restriction) selects a
+	 * different row set, so reusing the pages-level map could miss entries.
+	 */
+	natural_url_rank: number;
 }
 
 /**
@@ -69,6 +82,7 @@ export async function computeHeaderCheckInsertRows(
 			...buildHeaderPresenceSelects(trx, 'hf'),
 		)) as HeaderCheckSourceRow[];
 
+	const naturalUrlRankByPageId = buildPageNaturalUrlRankMap(rows);
 	return rows.map((row) => {
 		const missingCount = HEADER_PRESENCE_KEYS.reduce(
 			(count, key) => count + (row[key] ? 0 : 1),
@@ -83,6 +97,9 @@ export async function computeHeaderCheckInsertRows(
 			has_hsts: row.hasHSTS ? 1 : 0,
 			missing_count: missingCount,
 			is_missing: missingCount > 0 ? 1 : 0,
+			// Non-null assertion is safe: the map is built from this exact
+			// `rows` array, so every row.id has an entry.
+			natural_url_rank: naturalUrlRankByPageId.get(row.id)!,
 		};
 	});
 }

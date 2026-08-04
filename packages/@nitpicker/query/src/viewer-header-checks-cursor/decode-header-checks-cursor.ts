@@ -1,4 +1,4 @@
-import type { HeaderChecksCursorPayload } from './types.js';
+import type { HeaderChecksCursorPayload, HeaderChecksEffectiveSortBy } from './types.js';
 
 import { decodeCursorEnvelope } from '../viewer-cursor-kit/decode-cursor-envelope.js';
 
@@ -8,6 +8,8 @@ import { decodeCursorEnvelope } from '../viewer-cursor-kit/decode-cursor-envelop
 export interface ExpectedHeaderChecksCursor {
 	/** See `buildHeaderChecksFilterKey`. */
 	filterKey: string;
+	/** The current request's effective sort field — see {@link HeaderChecksEffectiveSortBy}. */
+	sortBy: HeaderChecksEffectiveSortBy;
 	/** The current request's sort direction. */
 	sortOrder: 'asc' | 'desc';
 }
@@ -17,8 +19,8 @@ export interface ExpectedHeaderChecksCursor {
  * filters/sort. Rejects cursors minted under a different schema version or a
  * different effective filter/sort combination — replaying a cursor across a
  * changed query would silently seek to a nonsensical position. Thin wrapper
- * over the shared {@link decodeCursorEnvelope}; the keyset tuple is always
- * `(url_sort_key, page_id)` (see `HeaderChecksSortSpec`'s docs), so unlike
+ * over the shared {@link decodeCursorEnvelope}; both keyset tuples are 2
+ * values ending in `page_id` (see `getHeaderChecksSortSpec`), so unlike
  * `viewer-anchor-facts-cursor` no per-position type check is needed —
  * `expectedValueCount: 2` alone catches a malformed `values` array.
  * @param cursor - The opaque cursor string from the request.
@@ -35,7 +37,7 @@ export function decodeHeaderChecksCursor(
 		cursor,
 		{
 			filterKey: expected.filterKey,
-			sortBy: 'url',
+			sortBy: expected.sortBy,
 			sortOrder: expected.sortOrder,
 			expectedValueCount: 2,
 		},

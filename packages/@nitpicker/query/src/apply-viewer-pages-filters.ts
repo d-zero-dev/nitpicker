@@ -1,8 +1,9 @@
-import type { ListViewerPagesOptions } from './types.js';
+import type { HeaderPresence, ListViewerPagesOptions } from './types.js';
 import type { Knex } from 'knex';
 
 import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 import { hasFilterValue } from './has-filter-value.js';
+import { HEADER_FLAG_COLUMN } from './header-presence-sql.js';
 
 /**
  * Applies every `ListViewerPagesOptions` filter as `WHERE` predicates on a
@@ -61,6 +62,17 @@ export function applyViewerPagesFilters(
 	if (options.noindex) {
 		qb.where('robots_noindex', 1);
 	}
+	if (options.lang) {
+		qb.where('lang', options.lang);
+	}
+	// `viewer_pages` copies header_flags' snake column names verbatim, so
+	// the shared HEADER_FLAG_COLUMN mapping resolves them here too.
+	for (const key of Object.keys(HEADER_FLAG_COLUMN) as (keyof HeaderPresence)[]) {
+		const expected = options[key];
+		if (expected != null) {
+			qb.where(HEADER_FLAG_COLUMN[key], expected ? 1 : 0);
+		}
+	}
 	if (options.source) {
 		qb.where('source', options.source);
 	}
@@ -90,5 +102,39 @@ export function applyViewerPagesFilters(
 		// bound is `dir` plus the highest BMP code point (`￿`), a
 		// sentinel no real path segment sorts past.
 		qb.where('path_sort_key', '>=', dir).where('path_sort_key', '<', `${dir}￿`);
+	}
+	if (options.urlPattern) {
+		const urlPattern = options.urlPattern;
+		// Canonical-URL LIKE against the narrow `viewer_pages.url` column, OR
+		// the redirect-source / alias-member equivalence arms — `viewer_pages`
+		// holds only canonical rows, so without the arms a search for a
+		// redirect-source URL (e.g. `https://example.com` redirecting to
+		// `/index.html`) or an alias-member URL would silently miss the one
+		// surviving row, breaking `listPages`'s urlPattern contract (see
+		// `ListViewerPagesOptions.urlPattern`'s docs). Each arm mirrors
+		// `list-pages.ts`'s own implementation verbatim: `IN` subqueries (not
+		// correlated `EXISTS` — computed once as a LIST SUBQUERY) combined by
+		// `UNION ALL` (a row is never both a redirect source and an alias
+		// member, so no double-counting; each arm keeps its own index-backed
+		// plan instead of collapsing into the `OR`-across-nullable-columns
+		// full-scan pitfall documented in ARCHITECTURE.md).
+		qb.where((outer) => {
+			outer.where('url', 'like', urlPattern).orWhereIn('page_id', (sub) => {
+				sub
+					.select('redirect_ci.redirect_dest_id')
+					.from('content_items as redirect_ci')
+					.join('url_refs as redirect_ur', 'redirect_ur.id', 'redirect_ci.url_id')
+					.whereNotNull('redirect_ci.redirect_dest_id')
+					.andWhere('redirect_ur.url', 'like', urlPattern)
+					.unionAll((aliasArm) => {
+						aliasArm
+							.select('alias_ci.alias_of_id')
+							.from('content_items as alias_ci')
+							.join('url_refs as alias_ur', 'alias_ur.id', 'alias_ci.url_id')
+							.whereNotNull('alias_ci.alias_of_id')
+							.andWhere('alias_ur.url', 'like', urlPattern);
+					});
+			});
+		});
 	}
 }

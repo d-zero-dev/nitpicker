@@ -9,6 +9,7 @@ import {
 } from '@nitpicker/query';
 
 import { toNumber } from '../query-params/to-number.js';
+import { refuseIfStaleReadModel } from '../refuse-if-stale-read-model.js';
 
 /** Valid `field` values for the duplicates route. */
 const VALID_DUPLICATE_FIELDS = ['title', 'description'] as const;
@@ -53,7 +54,16 @@ export function registerDuplicatesRoute(app: Hono, context: ArchiveContext): voi
 			direction: c.req.query('direction') === 'prev' ? 'prev' : undefined,
 			offset: toNumber(c.req.query('offset')),
 		};
-		return c.json(await getDuplicatesFastPath(accessor, options));
+
+		// `getDuplicatesFastPath` has no forced-live filter of its own — its
+		// only live fallback reason is a stale/missing read model.
+		const isReadModelCurrent = await isViewerReadModelCurrent(accessor);
+		const refused = refuseIfStaleReadModel(c, context.mode, isReadModelCurrent);
+		if (refused) {
+			return refused;
+		}
+
+		return c.json(await getDuplicatesFastPath(accessor, options, isReadModelCurrent));
 	});
 
 	app.get('/api/duplicates/:groupId/pages', async (c) => {

@@ -6,13 +6,19 @@ import type { HeaderPresence } from './types.js';
  * 0.13 by `packages/@nitpicker/crawler/src/archive/populate-ref-tables/compute-header-flags.ts`,
  * which mirrors the same detection rules the old LIKE-based
  * `pages.responseHeaders` scan used before 0.13.
+ *
+ * The read-model tables that copy these flags (`viewer_pages`,
+ * `viewer_header_checks`) reuse the exact same snake column names, so this
+ * single mapping serves their filter/sort column resolution too — every
+ * consumer imports it rather than re-declaring the four pairs, keeping a
+ * fifth tracked header a one-place change.
  */
-const HEADER_FLAG_COLUMN: Record<keyof HeaderPresence, string> = {
+export const HEADER_FLAG_COLUMN = {
 	hasCSP: 'has_csp',
 	hasXFrameOptions: 'has_x_frame_options',
 	hasXContentTypeOptions: 'has_x_content_type_options',
 	hasHSTS: 'has_hsts',
-};
+} as const satisfies Record<keyof HeaderPresence, string>;
 
 /**
  * The four {@link HeaderPresence} keys, in a stable order. Single source of

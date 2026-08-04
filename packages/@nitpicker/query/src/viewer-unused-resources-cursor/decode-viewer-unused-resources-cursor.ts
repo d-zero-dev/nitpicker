@@ -10,7 +10,7 @@ export interface ExpectedViewerUnusedResourcesCursor {
 	/** See `buildViewerUnusedResourcesFilterKey`. */
 	filterKey: string;
 	/** The current request's sort field. */
-	sortBy: 'url' | 'status' | 'source';
+	sortBy: 'url' | 'status' | 'source' | 'contentType' | 'contentLength';
 	/** The current request's sort direction. */
 	sortOrder: 'asc' | 'desc';
 	/**

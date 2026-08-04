@@ -74,12 +74,24 @@ export interface ViewerPagesCursorFilterKeyInput {
 	missingDescription?: boolean;
 	/** See `ListViewerPagesOptions.noindex`. */
 	noindex?: boolean;
+	/** See `ListViewerPagesOptions.lang`. */
+	lang?: string;
+	/** See `ListViewerPagesOptions.hasCSP`. */
+	hasCSP?: boolean;
+	/** See `ListViewerPagesOptions.hasXFrameOptions`. */
+	hasXFrameOptions?: boolean;
+	/** See `ListViewerPagesOptions.hasXContentTypeOptions`. */
+	hasXContentTypeOptions?: boolean;
+	/** See `ListViewerPagesOptions.hasHSTS`. */
+	hasHSTS?: boolean;
 	/** See `ListViewerPagesOptions.source`. */
 	source?: string;
 	/** See `ListViewerPagesOptions.templateKey`. */
 	templateKey?: string | string[];
 	/** See `ListViewerPagesOptions.directory`. */
 	directory?: string;
+	/** See `ListViewerPagesOptions.urlPattern`. */
+	urlPattern?: string;
 }
 
 /**

@@ -229,4 +229,78 @@ describe('registerHeaderChecksRoute — /api/headers (integration)', () => {
 			expect(body.prevCursor).toBeNull();
 		});
 	});
+
+	describe('stale read model on a finished archive (not stub) refuses /api/headers instead of silently degrading to the live query', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_register_header_checks_route_stale_read_model__',
+		);
+		let archive: InstanceType<typeof Archive>;
+		let app: ReturnType<typeof createApp>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({
+				filePath: path.resolve(workingDir, 'fixture.nitpicker'),
+				cwd: workingDir,
+			});
+			await archive.setConfig(BASE_CONFIG);
+			await archive.setPage({
+				url: parseUrl('https://example.com/a')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: NOOP_META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+			await buildViewerReadModel(archive);
+
+			// Simulates a schema-version bump invalidating an already-built
+			// read model (see `should-refuse-stale-read-model.ts`'s "#196 →
+			// v22" example) — a fixture-only mutation that forces the stale
+			// branch; production code never decrements this column.
+			await archive
+				.getKnex()('viewer_read_model_meta')
+				.where({ id: 1 })
+				.decrement('schema_version', 1);
+
+			// Constructed directly instead of via `ArchiveManager.open`
+			// (which always classifies a bare tmpDir as `'stub'`, and
+			// `shouldRefuseStaleReadModel` never refuses in stub mode) so
+			// `mode: 'archive'` is reachable here — the same pattern
+			// `register-isolated-pages-route.spec.ts` uses to force
+			// archive-mode without an actual tar round-trip.
+			app = createApp({
+				context: {
+					manager: { get: () => archive } as unknown as ArchiveManager,
+					archiveId: 'test-headers-stale',
+					filePath: workingDir,
+					mode: 'archive',
+					crawlerLockHolder: null,
+				},
+				publicDir: '/tmp/no-such-dir-register-header-checks-route-stale-spec',
+			});
+		});
+
+		afterAll(async () => {
+			await archive.close();
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('returns {available:false, reason:"read-model-required"} instead of silently degrading to the live query', async () => {
+			const res = await app.request('/api/headers');
+			const body = await res.json();
+			expect(body).toEqual({ available: false, reason: 'read-model-required' });
+		});
+	});
 });

@@ -20,6 +20,9 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
  * @param representativeUrl - The cluster's representative URL, as returned
  *   by `listIsolatedClustersFastPath` / `listViewerIsolatedClusters`.
  * @param options - Member filter, sort, and pagination options.
+ * @param precheckedReadModelCurrent - The caller's own already-computed
+ *   `isViewerReadModelCurrent` result, when it has one — avoids probing the
+ *   same tables a second time per request. Omit to let this function check.
  * @returns The cluster detail from whichever backend is currently valid, or
  *   `null` when no cluster matches `representativeUrl`.
  * @example
@@ -34,8 +37,9 @@ export async function getIsolatedClusterFastPath(
 	accessor: ArchiveAccessor,
 	representativeUrl: string,
 	options: GetViewerIsolatedClusterOptions = {},
+	precheckedReadModelCurrent?: boolean,
 ): Promise<IsolatedClusterDetail | null> {
-	return (await isViewerReadModelCurrent(accessor))
+	return (precheckedReadModelCurrent ?? (await isViewerReadModelCurrent(accessor)))
 		? getViewerIsolatedCluster(accessor, representativeUrl, options)
 		: getIsolatedCluster(accessor, representativeUrl, {
 				...options,

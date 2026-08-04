@@ -83,7 +83,7 @@ async function buildCursorPaginatedResult(
 	context: {
 		spec: ViewerUnusedResourcesSortSpec;
 		filterKey: string;
-		sortBy: 'url' | 'status' | 'source';
+		sortBy: 'url' | 'status' | 'source' | 'contentType' | 'contentLength';
 		sortOrder: 'asc' | 'desc';
 		total: number;
 		hasMoreAfter: boolean;

@@ -15,7 +15,10 @@ import { buildViewerResourcesFilterKey } from './viewer-resources-cursor/build-v
 import { decodeViewerResourcesCursor } from './viewer-resources-cursor/decode-viewer-resources-cursor.js';
 import { encodeViewerResourcesCursor } from './viewer-resources-cursor/encode-viewer-resources-cursor.js';
 import { extractSortValues } from './viewer-resources-cursor/extract-sort-values.js';
-import { getViewerResourcesSortSpec } from './viewer-resources-cursor/get-viewer-resources-sort-spec.js';
+import {
+	getViewerResourcesSortSpec,
+	type ViewerResourcesSortBy,
+} from './viewer-resources-cursor/get-viewer-resources-sort-spec.js';
 
 /**
  * Runs one `viewer_resources` id-resolution read via the shared
@@ -81,7 +84,7 @@ async function buildCursorPaginatedResult(
 	context: {
 		spec: ViewerResourcesSortSpec;
 		filterKey: string;
-		sortBy: 'url' | 'status';
+		sortBy: ViewerResourcesSortBy;
 		sortOrder: 'asc' | 'desc';
 		total: number;
 		limit: number;

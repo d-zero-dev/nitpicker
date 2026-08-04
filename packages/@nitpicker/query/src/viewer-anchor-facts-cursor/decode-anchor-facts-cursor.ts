@@ -11,7 +11,7 @@ export interface ExpectedAnchorFactsCursor {
 	/** See `buildAnchorFactsFilterKey`. */
 	filterKey: string;
 	/** The current request's sort field. */
-	sortBy: 'sourceUrl' | 'destUrl' | 'status';
+	sortBy: 'sourceUrl' | 'destUrl' | 'status' | 'isExternal';
 	/** The current request's sort direction. */
 	sortOrder: 'asc' | 'desc';
 	/**

@@ -46,6 +46,7 @@ describe('getHeaderChecksFastPath', () => {
 			hasXFrameOptions: undefined,
 			hasXContentTypeOptions: undefined,
 			hasHSTS: undefined,
+			sortBy: undefined,
 			sortOrder: undefined,
 			limit: undefined,
 			offset: undefined,
@@ -55,19 +56,17 @@ describe('getHeaderChecksFastPath', () => {
 		expect(checkHeaders).not.toHaveBeenCalled();
 	});
 
-	it('forces the live path when sortBy is explicitly "url" — checkHeaders treats this as a request for natural sort, which the fast path cannot provide', async () => {
+	it('serves an explicit sortBy "url" (natural sort) on the fast path — see HeaderChecksEffectiveSortBy for the urlBinary/urlNatural split that used to force this live', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
-		vi.mocked(checkHeaders).mockResolvedValue({
-			items: [],
-			total: 1,
-			offset: 0,
-			limit: 100,
-		});
+		vi.mocked(listViewerHeaderChecks).mockResolvedValue(makeResult(1));
 
 		await getHeaderChecksFastPath(accessor, { sortBy: 'url' });
 
-		expect(checkHeaders).toHaveBeenCalledWith(accessor, { sortBy: 'url' });
-		expect(listViewerHeaderChecks).not.toHaveBeenCalled();
+		expect(listViewerHeaderChecks).toHaveBeenCalledWith(
+			accessor,
+			expect.objectContaining({ sortBy: 'url' }),
+		);
+		expect(checkHeaders).not.toHaveBeenCalled();
 	});
 
 	it('forwards cursor/direction to the fast path', async () => {
@@ -104,20 +103,18 @@ describe('getHeaderChecksFastPath', () => {
 	});
 
 	it.each(['hasCSP', 'hasXFrameOptions', 'hasXContentTypeOptions', 'hasHSTS'] as const)(
-		'forces the live path when sortBy is %s, even if the read model is current',
+		'serves a %s sort on the fast path when the read model is current',
 		async (sortBy) => {
 			vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
-			vi.mocked(checkHeaders).mockResolvedValue({
-				items: [],
-				total: 3,
-				offset: 0,
-				limit: 100,
-			});
+			vi.mocked(listViewerHeaderChecks).mockResolvedValue(makeResult(3));
 
 			await getHeaderChecksFastPath(accessor, { sortBy });
 
-			expect(checkHeaders).toHaveBeenCalledWith(accessor, { sortBy });
-			expect(listViewerHeaderChecks).not.toHaveBeenCalled();
+			expect(listViewerHeaderChecks).toHaveBeenCalledWith(
+				accessor,
+				expect.objectContaining({ sortBy }),
+			);
+			expect(checkHeaders).not.toHaveBeenCalled();
 		},
 	);
 });

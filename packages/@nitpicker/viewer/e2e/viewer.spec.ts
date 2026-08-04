@@ -114,17 +114,12 @@ test.describe('Nitpicker Viewer', () => {
 		await expect(
 			page.getByRole('heading', { name: 'Page detail', level: 1 }),
 		).toBeVisible();
-		// This suite's shared fixture (generate-fixture.mjs) never calls
-		// buildViewerReadModel (see its own docs — directory-tree's "no read
-		// model" empty-state test depends on that), and `listInboundLinks`
-		// has no live fallback, so the inbound-links count surfaces the
-		// actionable "run viewer-build" error here instead of a live count.
-		// The live count (2 internal pages link to this destination) and the
-		// full inbound-links list have their own coverage in
-		// `inbound-links.spec.ts`, against a fixture that builds the read
-		// model.
-		await expect(page.getByRole('heading', { name: 'Inbound links' })).toBeVisible();
-		await expect(page.getByText(/viewer-build/)).toBeVisible();
+		// Two internal pages (0 and 1) link to this destination — see the
+		// fixture's anchorList setup above. The full inbound-links list and
+		// its own dedicated fixture have their own coverage in
+		// `inbound-links.spec.ts`; this only checks the count surfaces on
+		// Page Detail for an external destination.
+		await expect(page.getByText('Inbound links (2)')).toBeVisible();
 		// External pages are never scraped — the HTML snapshot / outbound
 		// links sections are not meaningful and must not render.
 		await expect(page.getByRole('heading', { name: /Outbound links/ })).toHaveCount(0);
@@ -174,25 +169,6 @@ test.describe('Nitpicker Viewer', () => {
 		// description confirms the route, nav link, API wiring, and render
 		// path all resolve.
 		await expect(page.locator('.view-header .view-description')).toBeVisible();
-	});
-
-	test('viewer read model 未構築のアーカイブでは空状態メッセージが表示される', async ({
-		page,
-	}) => {
-		// This suite's shared fixture (generate-fixture.mjs) never calls
-		// buildViewerReadModel, so directory-tree's 3 query functions (gated on
-		// isViewerReadModelCurrent with no live fallback) always return an
-		// empty `{ roots: [] }` against it — the natural place to exercise the
-		// "no read model" empty state without a dedicated fixture.
-		await page.goto('/directory-tree');
-		await expect(
-			page.getByRole('heading', { name: 'Directory Tree', level: 1 }),
-		).toBeVisible();
-		await expect(
-			page.getByText(
-				'No directory data available. Run `nitpicker viewer-build` to generate it.',
-			),
-		).toBeVisible();
 	});
 });
 
@@ -310,14 +286,10 @@ test.describe('MPA ページネーション', () => {
 		await expect(page).toHaveURL(/status=200/);
 		await expect(page).toHaveURL(/status=404/);
 
-		// This fixture never builds the viewer_* read model, so /api/pages
-		// always falls back to the live path here — which reads only the
-		// first same-named query param (Hono's `c.req.query()`), not a true
-		// OR across both. Asserting the combined-vs-summed total would
-		// therefore just re-assert that limitation, not the OR behavior.
-		// The actual multi-value OR combination (fast path) is covered by
-		// apply-viewer-pages-filters.spec.ts and register-pages-route.spec.ts
-		// — this test only verifies the checkbox UI and its URL reflection.
+		// The actual multi-value OR combination against the read model is
+		// covered by apply-viewer-pages-filters.spec.ts and
+		// register-pages-route.spec.ts — this test only verifies the
+		// checkbox UI and its URL reflection.
 
 		await page.getByRole('button', { name: 'Status' }).click();
 		await expect(dialog.getByRole('checkbox', { name: '200' })).toBeChecked();

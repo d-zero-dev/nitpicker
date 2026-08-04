@@ -14,11 +14,16 @@ describe('toResourcesSortBy', () => {
 	it('returns the narrowed value for every fast-path sort field', () => {
 		expect(toResourcesSortBy('url')).toBe('url');
 		expect(toResourcesSortBy('status')).toBe('status');
+		expect(toResourcesSortBy('statusText')).toBe('statusText');
+		expect(toResourcesSortBy('contentType')).toBe('contentType');
+		expect(toResourcesSortBy('contentLength')).toBe('contentLength');
+		expect(toResourcesSortBy('isExternal')).toBe('isExternal');
+		expect(toResourcesSortBy('referrerCount')).toBe('referrerCount');
+		expect(toResourcesSortBy('compress')).toBe('compress');
+		expect(toResourcesSortBy('cdn')).toBe('cdn');
 	});
 
-	it('returns undefined for sort fields the fast path does not index (silent drop)', () => {
-		expect(toResourcesSortBy('referrerCount')).toBeUndefined();
-		expect(toResourcesSortBy('contentType')).toBeUndefined();
+	it('returns undefined for unrecognised sort fields (silent drop)', () => {
 		expect(toResourcesSortBy('bogus')).toBeUndefined();
 	});
 });

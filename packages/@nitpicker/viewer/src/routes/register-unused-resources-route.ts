@@ -19,6 +19,7 @@ import { toNumber } from '../query-params/to-number.js';
 import { toPageSortOrder } from '../query-params/to-page-sort-order.js';
 import { toPageSource } from '../query-params/to-page-source.js';
 import { toUnusedResourcesSortBy } from '../query-params/to-unused-resources-sort-by.js';
+import { refuseIfStaleReadModel } from '../refuse-if-stale-read-model.js';
 
 /** Default page size, matching `listUnusedResources`/`listViewerUnusedResources`'s own default. */
 const DEFAULT_LIMIT = 100;
@@ -47,13 +48,13 @@ export function registerUnusedResourcesRoute(app: Hono, context: ArchiveContext)
 		const q = c.req.query();
 		const accessor = context.manager.get(context.archiveId);
 
-		const usesWideTableOnlyFilter = Boolean(
-			q.urlPattern || q.contentType || (q.sortBy && !toUnusedResourcesSortBy(q.sortBy)),
-		);
-		if (!usesWideTableOnlyFilter && (await isViewerReadModelCurrent(accessor))) {
+		const isReadModelCurrent = await isViewerReadModelCurrent(accessor);
+		if (isReadModelCurrent) {
 			const options: ListViewerUnusedResourcesOptions = {
 				status: toMultiValue(c.req.queries('status'), toNumber),
 				source: toMultiValue(c.req.queries('source'), toPageSource),
+				urlPattern: q.urlPattern || undefined,
+				contentType: q.contentType || undefined,
 				sortBy: toUnusedResourcesSortBy(q.sortBy),
 				sortOrder: toPageSortOrder(q.sortOrder),
 				limit: toNumber(q.limit),
@@ -62,6 +63,14 @@ export function registerUnusedResourcesRoute(app: Hono, context: ArchiveContext)
 				offset: toNumber(q.offset),
 			};
 			return c.json(await listViewerUnusedResources(accessor, options));
+		}
+
+		// No filter forces a live fallback for /api/unused-resources — the
+		// only way to reach here is a stale/missing read model (or stub mode,
+		// which refuseIfStaleReadModel lets through to live below).
+		const refused = refuseIfStaleReadModel(c, context.mode, isReadModelCurrent);
+		if (refused) {
+			return refused;
 		}
 
 		const limit = toNumber(q.limit) ?? DEFAULT_LIMIT;
