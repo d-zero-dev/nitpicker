@@ -402,6 +402,46 @@ describe('registerPagesRoute (integration)', () => {
 			const body = (await res.json()) as { items: { url: string }[] };
 			expect(body.items.map((i) => i.url)).toEqual(['https://example.com/a']);
 		});
+
+		it('OR-filters across a repeated hasCSP query param, matching every page', async () => {
+			const res = await fixture.app.request('/api/pages?hasCSP=true&hasCSP=false');
+			const body = (await res.json()) as { total: number };
+			expect(body.total).toBe(5);
+		});
+	});
+
+	describe('isExternal/missingTitle filters OR-combine across a repeated query param', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_register_pages_route_bool_or__',
+		);
+		let fixture: Awaited<ReturnType<typeof buildFixture>>;
+
+		beforeAll(async () => {
+			fixture = await buildFixture(workingDir, true);
+		});
+
+		afterAll(async () => {
+			await fixture.manager.closeAll();
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('matches every page when isExternal is both true and false', async () => {
+			const res = await fixture.app.request(
+				'/api/pages?isExternal=true&isExternal=false',
+			);
+			const body = (await res.json()) as { total: number };
+			expect(body.total).toBe(5);
+		});
+
+		it('matches every page when missingTitle is both true and false', async () => {
+			const res = await fixture.app.request(
+				'/api/pages?missingTitle=true&missingTitle=false',
+			);
+			const body = (await res.json()) as { total: number };
+			expect(body.total).toBe(5);
+		});
 	});
 
 	describe('fast path (viewer_pages read model built, no header filter)', () => {
@@ -633,6 +673,12 @@ describe('registerPagesRoute (integration)', () => {
 			const body = (await res.json()) as { items: { url: string }[]; total: number };
 			expect(body.items.map((i) => i.url)).toEqual(['https://example.com/ja']);
 			expect(body.total).toBe(1);
+		});
+
+		it('OR-filters across a repeated lang query param, matching both pages', async () => {
+			const res = await fixture.app.request('/api/pages?lang=ja&lang=en');
+			const body = (await res.json()) as { total: number };
+			expect(body.total).toBe(2);
 		});
 	});
 

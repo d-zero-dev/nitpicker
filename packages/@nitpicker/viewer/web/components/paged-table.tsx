@@ -27,7 +27,7 @@ export interface TableFilterOption {
 
 export interface TableFilterControl {
 	label: string;
-	kind: 'radio' | 'checklist' | 'text';
+	kind: 'checklist' | 'text';
 	value?: string;
 	options?: TableFilterOption[];
 	onApply: (next: string | string[] | undefined) => void;
@@ -192,35 +192,29 @@ function FilterButton({ control }: { control: TableFilterControl }) {
 					/>
 				) : (
 					<>
-						{control.kind === 'checklist' && (
-							<div className="pt-filter-actions">
-								<button
-									type="button"
-									onClick={() => {
-										setSelected(new Set(control.options?.map((option) => option.value)));
-									}}>
-									{t('tableControls.selectAll')}
-								</button>
-								<button
-									type="button"
-									onClick={() => {
-										setSelected(new Set());
-									}}>
-									{t('tableControls.selectNone')}
-								</button>
-							</div>
-						)}
+						<div className="pt-filter-actions">
+							<button
+								type="button"
+								onClick={() => {
+									setSelected(new Set(control.options?.map((option) => option.value)));
+								}}>
+								{t('tableControls.selectAll')}
+							</button>
+							<button
+								type="button"
+								onClick={() => {
+									setSelected(new Set());
+								}}>
+								{t('tableControls.selectNone')}
+							</button>
+						</div>
 						<div className="pt-filter-list">
 							{control.options?.map((option) => (
 								<label key={option.value} className="pt-filter-option">
 									<input
-										type={control.kind === 'radio' ? 'radio' : 'checkbox'}
+										type="checkbox"
 										checked={selected.has(option.value)}
 										onChange={(event) => {
-											if (control.kind === 'radio') {
-												setSelected(new Set([option.value]));
-												return;
-											}
 											const next = new Set(selected);
 											if (event.target.checked) {
 												next.add(option.value);
@@ -250,8 +244,6 @@ function FilterButton({ control }: { control: TableFilterControl }) {
 						onClick={() => {
 							if (control.kind === 'text') {
 								control.onApply(textValue || undefined);
-							} else if (control.kind === 'radio') {
-								control.onApply([...selected][0]);
 							} else {
 								control.onApply([...selected]);
 							}

@@ -172,6 +172,14 @@ describe('registerImagesRoute — /api/images (integration)', () => {
 			expect(body.items[0]!.src).toBe('https://example.com/b.png');
 		});
 
+		it('OR-filters across a repeated missingAlt query param, matching every image', async () => {
+			const res = await fixture.app.request(
+				'/api/images?missingAlt=true&missingAlt=false',
+			);
+			const body = (await res.json()) as { total: number };
+			expect(body.total).toBe(2);
+		});
+
 		it('paginates forward via cursor/direction query params — regression test for unreachable cursor pagination', async () => {
 			const page1Res = await fixture.app.request('/api/images?limit=1');
 			const page1 = (await page1Res.json()) as {
@@ -260,6 +268,15 @@ describe('registerImagesRoute — /api/images (integration)', () => {
 			]);
 			expect(body.nextCursor).toBeNull();
 			expect(body.prevCursor).toBeNull();
+		});
+
+		it('narrows a multi-value missingAlt to its first element (live path has no OR equivalent)', async () => {
+			const res = await fixture.app.request(
+				'/api/images?missingAlt=false&missingAlt=true',
+			);
+			const body = (await res.json()) as { items: { src: string }[]; total: number };
+			expect(body.total).toBe(1);
+			expect(body.items[0]!.src).toBe('https://example.com/a.png');
 		});
 	});
 });

@@ -9,10 +9,10 @@ import { PAGE_SIZE } from './page-size.js';
 
 /** Filter state for the images view. */
 export interface ImagesFilter {
-	/** Filter to images missing alt text. */
-	missingAlt?: boolean;
-	/** Filter to images missing explicit dimensions. */
-	missingDimensions?: boolean;
+	/** Filter to images missing/having alt text, or both (OR). */
+	missingAlt?: string | readonly string[];
+	/** Filter to images missing/having explicit dimensions, or both (OR). */
+	missingDimensions?: string | readonly string[];
 	/** Filter to images whose intrinsic size exceeds this threshold. */
 	oversizedThreshold?: number;
 	/** URL pattern to filter source URLs. */

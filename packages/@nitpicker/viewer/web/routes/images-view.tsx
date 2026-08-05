@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import { useImagesInfinite } from '../api/use-images-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
 import {
-	addRadioFilter,
+	addChecklistFilter,
 	addSort,
 	addTextFilter,
 	createTableControls,
@@ -27,9 +27,11 @@ export function ImagesView() {
 	const { params, updateMany } = useUrlFilter();
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
+	const missingAlt = params.getAll('missingAlt');
+	const missingDimensions = params.getAll('missingDimensions');
 	const filter = {
-		missingAlt: params.get('missingAlt') === 'true' ? true : undefined,
-		missingDimensions: params.get('missingDimensions') === 'true' ? true : undefined,
+		missingAlt,
+		missingDimensions,
 		urlPattern: params.get('urlPattern') ?? undefined,
 		sortBy: params.get('sortBy') ?? undefined,
 		sortOrder: params.get('sortOrder') ?? undefined,
@@ -106,34 +108,46 @@ export function ImagesView() {
 			'urlPattern',
 			t('views.images.filterUrlPattern'),
 		);
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			context,
 			'alt',
 			'missingAlt',
 			t('views.images.filterMissingAlt'),
 			[
-				{ value: '', label: t('common.all'), checked: false },
-				{ value: 'true', label: t('views.images.filterMissingAlt'), checked: false },
+				{
+					value: 'true',
+					label: t('views.images.filterMissingAlt'),
+					checked: missingAlt.includes('true'),
+				},
+				{
+					value: 'false',
+					label: t('common.present'),
+					checked: missingAlt.includes('false'),
+				},
 			],
 		);
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			context,
 			'natural',
 			'missingDimensions',
 			t('views.images.filterMissingDimensions'),
 			[
-				{ value: '', label: t('common.all'), checked: false },
 				{
 					value: 'true',
 					label: t('views.images.filterMissingDimensions'),
-					checked: false,
+					checked: missingDimensions.includes('true'),
+				},
+				{
+					value: 'false',
+					label: t('common.present'),
+					checked: missingDimensions.includes('false'),
 				},
 			],
 		);
 		return controls;
-	}, [params, t, updateMany]);
+	}, [missingAlt, missingDimensions, params, t, updateMany]);
 
 	return (
 		<div className="view">

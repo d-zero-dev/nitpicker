@@ -253,7 +253,9 @@ test.describe('MPA ページネーション', () => {
 		expect(payload.facets?.types).toContain(false);
 	});
 
-	test('言語・種別フィルタは動的 enum ラジオとして表示される', async ({ page }) => {
+	test('言語・種別フィルタは動的 enum チェックボックスとして表示される', async ({
+		page,
+	}) => {
 		await page.goto('/pages');
 		await expect(page.locator('.pt-row').first()).toBeVisible();
 
@@ -263,10 +265,34 @@ test.describe('MPA ページネーション', () => {
 		]) {
 			await page.getByRole('button', { name: target.button }).click();
 			const dialog = page.getByRole('dialog', { name: target.button });
-			await expect(dialog.getByRole('radio', { name: target.option })).toBeVisible();
-			await expect(dialog.getByRole('checkbox')).toHaveCount(0);
+			await expect(dialog.getByRole('checkbox', { name: target.option })).toBeVisible();
+			await expect(dialog.getByRole('radio')).toHaveCount(0);
 			await dialog.getByRole('button', { name: 'Apply' }).click();
 		}
+	});
+
+	test('Scope フィルタは URL に isExternal が無いとき Internal のみ既定でチェックされ、論理 OR で外部ページも含められる', async ({
+		page,
+	}) => {
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+
+		await page.getByRole('button', { name: 'Scope' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Scope' });
+		await expect(dialog.getByRole('checkbox', { name: 'Internal' })).toBeChecked();
+		await expect(dialog.getByRole('checkbox', { name: 'External' })).not.toBeChecked();
+
+		await dialog.getByRole('checkbox', { name: 'External' }).check();
+		await dialog.getByRole('button', { name: 'Apply' }).click();
+		await expect(page).toHaveURL(/isExternal=false/);
+		await expect(page).toHaveURL(/isExternal=true/);
+
+		await page.getByRole('button', { name: 'Scope' }).click();
+		await expect(dialog.getByRole('checkbox', { name: 'Internal' })).toBeChecked();
+		await expect(dialog.getByRole('checkbox', { name: 'External' })).toBeChecked();
+		await dialog.getByRole('button', { name: 'None' }).click();
+		await dialog.getByRole('button', { name: 'Apply' }).click();
+		await expect(page).not.toHaveURL(/isExternal=/);
 	});
 
 	test('ステータスフィルタは複数選択チェックボックスとして表示され、論理 OR で絞り込める', async ({

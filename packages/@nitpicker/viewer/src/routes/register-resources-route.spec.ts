@@ -190,6 +190,14 @@ describe('registerResourcesRoute — /api/resources (integration)', () => {
 			expect(body.items[0]!.url).toBe('https://cdn.example.net/c.js');
 		});
 
+		it('OR-filters across a repeated isExternal query param, matching every resource', async () => {
+			const res = await fixture.app.request(
+				'/api/resources?isExternal=true&isExternal=false',
+			);
+			const body = (await res.json()) as { total: number };
+			expect(body.total).toBe(3);
+		});
+
 		it('filters by status via the fast path — regression test for a dropped status filter', async () => {
 			const res = await fixture.app.request('/api/resources?status=404');
 			const body = (await res.json()) as { items: { url: string }[]; total: number };

@@ -1,5 +1,5 @@
 import type { ArchiveContext } from '../types.js';
-import type { ListImagesOptions } from '@nitpicker/query';
+import type { GetImagesFastPathOptions } from '@nitpicker/query';
 import type { Hono } from 'hono';
 
 import {
@@ -9,6 +9,7 @@ import {
 } from '@nitpicker/query';
 
 import { toBoolean } from '../query-params/to-boolean.js';
+import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
 import { toPageSortOrder } from '../query-params/to-page-sort-order.js';
 import { refuseIfStaleReadModel } from '../refuse-if-stale-read-model.js';
@@ -38,12 +39,12 @@ export function registerImagesRoute(app: Hono, context: ArchiveContext): void {
 	app.get('/api/images', async (c) => {
 		const q = c.req.query();
 		const accessor = context.manager.get(context.archiveId);
-		const options: ListImagesOptions = {
-			missingAlt: toBoolean(q.missingAlt),
-			missingDimensions: toBoolean(q.missingDimensions),
+		const options: GetImagesFastPathOptions = {
+			missingAlt: toMultiValue(c.req.queries('missingAlt'), toBoolean),
+			missingDimensions: toMultiValue(c.req.queries('missingDimensions'), toBoolean),
 			oversizedThreshold: toNumber(q.oversizedThreshold),
 			urlPattern: q.urlPattern,
-			sortBy: q.sortBy as ListImagesOptions['sortBy'],
+			sortBy: q.sortBy as GetImagesFastPathOptions['sortBy'],
 			sortOrder: toPageSortOrder(q.sortOrder),
 			limit: toNumber(q.limit),
 			offset: toNumber(q.offset),
