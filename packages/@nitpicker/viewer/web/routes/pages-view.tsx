@@ -48,8 +48,8 @@ const HEADER_PRESENCE_LABELS: Record<keyof HeaderPresence, string> = {
 /**
  * The page list: a filterable, sortable table backed by the user's chosen
  * pagination mode (MPA `?page=` by default, opt-in virtual scroll). Internal
- * pages only by default; check "Include external" to show all. Columns are
- * ordered to match the google-sheets "Page List" sheet.
+ * pages only by default; check "External" in the Scope filter to include
+ * them too. Columns are ordered to match the google-sheets "Page List" sheet.
  * @returns The pages view element.
  */
 export function PagesView() {
