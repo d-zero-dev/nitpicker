@@ -6,22 +6,33 @@ import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
 
 /**
  * Shorthand for a {@link DirectoryTreeSourceRow} fixture row — `isExternal`
- * defaults to `0` (internal) and `contentType` defaults to `'text/html'`
+ * defaults to `0` (internal), `contentType` defaults to `'text/html'`
  * (so existing fixtures count toward `*_html_page_count` unless a test
- * explicitly overrides it) when omitted.
- * @param id - The row's `pages.id`.
- * @param url - The row's URL.
- * @param isExternal - Optional `isExternal` override.
- * @param contentType - Optional raw MIME override.
+ * explicitly overrides it), and `status` defaults to `200` when omitted.
+ * Defaults apply only when a key is absent — an explicit `null` (the
+ * legacy-row shape several tests pin) is passed through as-is.
+ * @param params - The row's fields; only `id` and `url` are required.
+ * @param params.id - The row's `pages.id`.
+ * @param params.url - The row's URL.
+ * @param params.isExternal - Optional `isExternal` override.
+ * @param params.contentType - Optional raw MIME override.
+ * @param params.status - Optional HTTP status override.
  * @returns The fixture row.
  */
-function row(
-	id: number,
-	url: string,
-	isExternal: number | null = 0,
-	contentType: string | null = 'text/html',
-): DirectoryTreeSourceRow {
-	return { id, url, isExternal, contentType };
+function row(params: {
+	id: number;
+	url: string;
+	isExternal?: number | null;
+	contentType?: string | null;
+	status?: number | null;
+}): DirectoryTreeSourceRow {
+	return {
+		id: params.id,
+		url: params.url,
+		isExternal: params.isExternal === undefined ? 0 : params.isExternal,
+		contentType: params.contentType === undefined ? 'text/html' : params.contentType,
+		status: params.status === undefined ? 200 : params.status,
+	};
 }
 
 describe('buildDirectoryTreeRows', () => {
@@ -30,7 +41,9 @@ describe('buildDirectoryTreeRows', () => {
 	});
 
 	it('creates exactly one depth-0 root node for a single root-only page', () => {
-		const { nodes, pages } = buildDirectoryTreeRows([row(1, 'https://example.com/')]);
+		const { nodes, pages } = buildDirectoryTreeRows([
+			row({ id: 1, url: 'https://example.com/' }),
+		]);
 		expect(nodes).toHaveLength(1);
 		expect(nodes[0]).toMatchObject({
 			parent_node_id: null,
@@ -58,8 +71,8 @@ describe('buildDirectoryTreeRows', () => {
 
 	it('lands a no-trailing-slash page and a trailing-slash page on the same directory node', () => {
 		const { nodes, pages } = buildDirectoryTreeRows([
-			row(1, 'https://example.com/blog/2024/post-1'),
-			row(2, 'https://example.com/blog/2024/'),
+			row({ id: 1, url: 'https://example.com/blog/2024/post-1' }),
+			row({ id: 2, url: 'https://example.com/blog/2024/' }),
 		]);
 		const leaf = nodes.find((n) => n.path === '/blog/2024/');
 		expect(leaf).toMatchObject({ depth: 2, direct_page_count: 2 });
@@ -68,7 +81,7 @@ describe('buildDirectoryTreeRows', () => {
 
 	it('creates intermediate directories with zero direct pages of their own', () => {
 		const { nodes } = buildDirectoryTreeRows([
-			row(1, 'https://example.com/a/b/c/d/page'),
+			row({ id: 1, url: 'https://example.com/a/b/c/d/page' }),
 		]);
 		const byPath = new Map(nodes.map((n) => [n.path, n]));
 		expect(byPath.get('/')).toMatchObject({
@@ -100,9 +113,9 @@ describe('buildDirectoryTreeRows', () => {
 
 	it('propagates descendant counts bottom-up through every ancestor', () => {
 		const { nodes } = buildDirectoryTreeRows([
-			row(1, 'https://example.com/blog/2024/post-1'),
-			row(2, 'https://example.com/blog/2024/post-2'),
-			row(3, 'https://example.com/blog/'),
+			row({ id: 1, url: 'https://example.com/blog/2024/post-1' }),
+			row({ id: 2, url: 'https://example.com/blog/2024/post-2' }),
+			row({ id: 3, url: 'https://example.com/blog/' }),
 		]);
 		const byPath = new Map(nodes.map((n) => [n.path, n]));
 		expect(byPath.get('/blog/2024/')).toMatchObject({
@@ -121,8 +134,8 @@ describe('buildDirectoryTreeRows', () => {
 
 	it('splits descendant counts into internal/external, summing to descendant_page_count', () => {
 		const { nodes } = buildDirectoryTreeRows([
-			row(1, 'https://example.com/'),
-			row(2, 'https://example.com/legacy/old.html', 1),
+			row({ id: 1, url: 'https://example.com/' }),
+			row({ id: 2, url: 'https://example.com/legacy/old.html', isExternal: 1 }),
 		]);
 		const root = nodes.find((n) => n.path === '/')!;
 		expect(root).toMatchObject({
@@ -140,8 +153,8 @@ describe('buildDirectoryTreeRows', () => {
 
 	it('includes a same-host, out-of-scope (external) page in its host tree once the host qualifies', () => {
 		const { nodes, pages } = buildDirectoryTreeRows([
-			row(1, 'https://example.com/'),
-			row(2, 'https://example.com/legacy/old.html', 1),
+			row({ id: 1, url: 'https://example.com/' }),
+			row({ id: 2, url: 'https://example.com/legacy/old.html', isExternal: 1 }),
 		]);
 		expect(nodes.some((n) => n.root_key === 'example.com' && n.path === '/legacy/')).toBe(
 			true,
@@ -151,30 +164,36 @@ describe('buildDirectoryTreeRows', () => {
 
 	it('excludes a host with zero internal pages entirely — no nodes, no pages', () => {
 		const { nodes, pages } = buildDirectoryTreeRows([
-			row(1, 'https://twitter.com/someaccount', 1),
+			row({ id: 1, url: 'https://twitter.com/someaccount', isExternal: 1 }),
 		]);
 		expect(nodes).toEqual([]);
 		expect(pages).toEqual([]);
 	});
 
 	it('treats a null isExternal as internal (legacy pre-backfill rows)', () => {
-		const { nodes } = buildDirectoryTreeRows([row(1, 'https://example.com/', null)]);
+		const { nodes } = buildDirectoryTreeRows([
+			row({ id: 1, url: 'https://example.com/', isExternal: null }),
+		]);
 		expect(nodes.some((n) => n.root_key === 'example.com')).toBe(true);
 		const root = nodes.find((n) => n.path === '/')!;
 		expect(root.internal_descendant_page_count).toBe(1);
 	});
 
 	it('skips a row with an unparseable URL without throwing', () => {
-		expect(() => buildDirectoryTreeRows([row(1, 'not a valid url')])).not.toThrow();
-		const { nodes, pages } = buildDirectoryTreeRows([row(1, 'not a valid url')]);
+		expect(() =>
+			buildDirectoryTreeRows([row({ id: 1, url: 'not a valid url' })]),
+		).not.toThrow();
+		const { nodes, pages } = buildDirectoryTreeRows([
+			row({ id: 1, url: 'not a valid url' }),
+		]);
 		expect(nodes).toEqual([]);
 		expect(pages).toEqual([]);
 	});
 
 	it('builds two independent, non-colliding trees for two qualifying hosts', () => {
 		const { nodes } = buildDirectoryTreeRows([
-			row(1, 'https://example.com/'),
-			row(2, 'https://example.org/'),
+			row({ id: 1, url: 'https://example.com/' }),
+			row({ id: 2, url: 'https://example.org/' }),
 		]);
 		expect(nodes).toHaveLength(2);
 		const nodeIds = nodes.map((n) => n.node_id);
@@ -186,8 +205,8 @@ describe('buildDirectoryTreeRows', () => {
 
 	it('merges two different subpaths of the same host into one tree as siblings (multi-root crawl)', () => {
 		const { nodes } = buildDirectoryTreeRows([
-			row(1, 'https://example.com/blog/index'),
-			row(2, 'https://example.com/news/index'),
+			row({ id: 1, url: 'https://example.com/blog/index' }),
+			row({ id: 2, url: 'https://example.com/news/index' }),
 		]);
 		const roots = nodes.filter((n) => n.parent_node_id === null);
 		expect(roots).toHaveLength(1);
@@ -199,7 +218,9 @@ describe('buildDirectoryTreeRows', () => {
 	});
 
 	it('sets has_children to 0 for a leaf directory that has direct pages but no child directories', () => {
-		const { nodes } = buildDirectoryTreeRows([row(1, 'https://example.com/a/b')]);
+		const { nodes } = buildDirectoryTreeRows([
+			row({ id: 1, url: 'https://example.com/a/b' }),
+		]);
 		// No trailing slash: 'b' is a page filename, so '/a/' is the leaf
 		// directory here — it has 1 direct page and 0 child directories.
 		const a = nodes.find((n) => n.path === '/a/')!;
@@ -211,7 +232,9 @@ describe('buildDirectoryTreeRows', () => {
 	});
 
 	it('sets has_children to 1 for a directory that has a child directory, even with zero direct pages of its own', () => {
-		const { nodes } = buildDirectoryTreeRows([row(1, 'https://example.com/a/b/c')]);
+		const { nodes } = buildDirectoryTreeRows([
+			row({ id: 1, url: 'https://example.com/a/b/c' }),
+		]);
 		const a = nodes.find((n) => n.path === '/a/')!;
 		expect(a).toMatchObject({
 			direct_child_dir_count: 1,
@@ -222,9 +245,17 @@ describe('buildDirectoryTreeRows', () => {
 
 	it('counts only html-classified rows toward direct_html_page_count, unlike direct_page_count', () => {
 		const { nodes } = buildDirectoryTreeRows([
-			row(1, 'https://example.com/docs/page.html', 0, 'text/html'),
-			row(2, 'https://example.com/docs/photo.jpg', 0, 'image/jpeg'),
-			row(3, 'https://example.com/docs/doc.pdf', 0, 'application/pdf'),
+			row({ id: 1, url: 'https://example.com/docs/page.html' }),
+			row({
+				id: 2,
+				url: 'https://example.com/docs/photo.jpg',
+				contentType: 'image/jpeg',
+			}),
+			row({
+				id: 3,
+				url: 'https://example.com/docs/doc.pdf',
+				contentType: 'application/pdf',
+			}),
 		]);
 		const docs = nodes.find((n) => n.path === '/docs/')!;
 		expect(docs).toMatchObject({
@@ -237,8 +268,12 @@ describe('buildDirectoryTreeRows', () => {
 
 	it('propagates descendant_html_page_count bottom-up, excluding non-html descendants that still count toward descendant_page_count', () => {
 		const { nodes } = buildDirectoryTreeRows([
-			row(1, 'https://example.com/blog/2024/post.html', 0, 'text/html'),
-			row(2, 'https://example.com/blog/2024/banner.jpg', 0, 'image/jpeg'),
+			row({ id: 1, url: 'https://example.com/blog/2024/post.html' }),
+			row({
+				id: 2,
+				url: 'https://example.com/blog/2024/banner.jpg',
+				contentType: 'image/jpeg',
+			}),
 		]);
 		const byPath = new Map(nodes.map((n) => [n.path, n]));
 		expect(byPath.get('/blog/2024/')).toMatchObject({
@@ -257,9 +292,51 @@ describe('buildDirectoryTreeRows', () => {
 		});
 	});
 
+	it('excludes a 404 row entirely — no counts, no page membership', () => {
+		const { nodes, pages } = buildDirectoryTreeRows([
+			row({ id: 1, url: 'https://example.com/' }),
+			row({ id: 2, url: 'https://example.com/gone', status: 404 }),
+		]);
+		const root = nodes.find((n) => n.path === '/')!;
+		expect(root).toMatchObject({
+			direct_page_count: 1,
+			descendant_page_count: 1,
+			internal_descendant_page_count: 1,
+			direct_html_page_count: 1,
+			descendant_html_page_count: 1,
+		});
+		expect(pages.some((p) => p.page_id === 2)).toBe(false);
+	});
+
+	it('creates no node for a directory whose pages are all 404s', () => {
+		const { nodes } = buildDirectoryTreeRows([
+			row({ id: 1, url: 'https://example.com/' }),
+			row({ id: 2, url: 'https://example.com/removed/old-1', status: 404 }),
+			row({ id: 3, url: 'https://example.com/removed/old-2', status: 404 }),
+		]);
+		expect(nodes.some((n) => n.path === '/removed/')).toBe(false);
+	});
+
+	it('does not let an internal 404 qualify its host — a host with only 404 internal pages has no tree', () => {
+		const { nodes, pages } = buildDirectoryTreeRows([
+			row({ id: 1, url: 'https://example.com/gone', status: 404 }),
+			row({ id: 2, url: 'https://example.com/linked-from-elsewhere', isExternal: 1 }),
+		]);
+		expect(nodes).toEqual([]);
+		expect(pages).toEqual([]);
+	});
+
+	it('keeps a NULL-status legacy row — only a literal 404 is excluded', () => {
+		const { nodes, pages } = buildDirectoryTreeRows([
+			row({ id: 1, url: 'https://example.com/', status: null }),
+		]);
+		expect(nodes.find((n) => n.path === '/')).toMatchObject({ direct_page_count: 1 });
+		expect(pages).toHaveLength(1);
+	});
+
 	it('ignores query strings and hashes when resolving the directory chain', () => {
 		const { nodes } = buildDirectoryTreeRows([
-			row(1, 'https://example.com/blog/2024/post-1?utm_source=x#section'),
+			row({ id: 1, url: 'https://example.com/blog/2024/post-1?utm_source=x#section' }),
 		]);
 		expect(nodes.some((n) => n.path === '/blog/2024/')).toBe(true);
 		expect(nodes.find((n) => n.path === '/blog/2024/')).toMatchObject({

@@ -112,13 +112,18 @@ describe('getSummary', () => {
 			isSkipped: false,
 		});
 
+		// 403, not 404: unlike a 404 (excluded from every total — see the
+		// dedicated "404 exclusion" describe below), a 403 page exists and
+		// must keep counting, which is exactly the legacy counting path this
+		// fixture pins: an errored-but-existing HTML page counts as a page,
+		// shows in the histogram, and stays in the metadata denominator.
 		await archive.setPage({
-			url: parseUrl('https://example.com/404')!,
+			url: parseUrl('https://example.com/403')!,
 			redirectPaths: [],
 			isExternal: false,
 			isTarget: true,
-			status: 404,
-			statusText: 'Not Found',
+			status: 403,
+			statusText: 'Forbidden',
 			contentType: 'text/html',
 			contentLength: 100,
 			responseHeaders: {},
@@ -328,7 +333,7 @@ describe('getSummary', () => {
 		   the same HTML-or-null filter, so adding the external PDF doesn't
 		   bump this. */
 		expect(result.statusDistribution).toContainEqual({ status: 200, count: 3 });
-		expect(result.statusDistribution).toContainEqual({ status: 404, count: 1 });
+		expect(result.statusDistribution).toContainEqual({ status: 403, count: 1 });
 		// Metadata denominator stays 3 (HTML pages only): neither the PDF nor the
 		// errored page dilutes it (otherwise title would be 2/4 or 2/5).
 		expect(result.metadataFulfillment.title).toBeCloseTo(2 / 3);
@@ -370,6 +375,279 @@ describe('getSummary', () => {
 		expect(result.externalContents).toBe(2);
 		expect(result.internalContents).toBeGreaterThanOrEqual(result.internalPages);
 		expect(result.externalContents).toBeGreaterThanOrEqual(result.externalPages);
+	});
+});
+
+describe('getSummary: 404 exclusion', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_summary_404_exclusion__');
+	const archiveFilePath = path.resolve(dir, 'summary-404-exclusion.nitpicker');
+
+	/**
+	 * Insert an HTML page with the minimal meta shape `setPage` requires.
+	 * @param params - The page's varying fields.
+	 * @param params.url - The page URL.
+	 * @param params.status - The HTTP status.
+	 * @param params.isExternal - Whether the page is external.
+	 * @param params.title - The page title, or `null` for none.
+	 */
+	async function insertHtmlPage(params: {
+		url: string;
+		status: number;
+		isExternal: boolean;
+		title: string | null;
+	}): Promise<void> {
+		await archive.setPage({
+			url: parseUrl(params.url)!,
+			redirectPaths: [],
+			isExternal: params.isExternal,
+			isTarget: !params.isExternal,
+			status: params.status,
+			statusText: params.status === 200 ? 'OK' : 'Not Found',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: `<html><head><title>${params.title ?? ''}</title></head><body></body></html>`,
+			meta: {
+				lang: null,
+				title: params.title,
+				description: null,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': null,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+	}
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		await insertHtmlPage({
+			url: 'https://example.com/',
+			status: 200,
+			isExternal: false,
+			title: 'Home',
+		});
+		// Fix-target 404s (source stays `setPage`'s default `'crawled'`):
+		// one internal, one external — both must vanish from every total
+		// while merging into the single plain 404 histogram row.
+		await insertHtmlPage({
+			url: 'https://example.com/gone',
+			status: 404,
+			isExternal: false,
+			title: null,
+		});
+		await insertHtmlPage({
+			url: 'https://other.example/dead',
+			status: 404,
+			isExternal: true,
+			title: null,
+		});
+		// An inventory-seed 404 (an input mistake — the URL came from a
+		// `crawl --inventory` list and never existed). Relabelled directly
+		// (same precedent as the alias_of_id describe above): `setPage`
+		// always writes `'crawled'`, and going through the full
+		// `--inventory` orchestration here would drown the fixture in
+		// unrelated setup.
+		await insertHtmlPage({
+			url: 'https://example.com/ghost',
+			status: 404,
+			isExternal: false,
+			title: null,
+		});
+		const knex = archive.getKnex();
+		await knex('content_items')
+			.whereIn('url_id', (qb) => {
+				qb.select('id').from('url_refs').where('url', 'https://example.com/ghost');
+			})
+			.update({ source: 'inventory-seed' });
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('excludes every 404 from page/content totals regardless of provenance', async () => {
+		const result = await getSummary(archive);
+		// Only the 200 home page counts — /gone (crawled), /ghost
+		// (inventory-seed) and the external /dead are all 404s.
+		expect(result.totalPages).toBe(1);
+		expect(result.internalPages).toBe(1);
+		expect(result.externalPages).toBe(0);
+		expect(result.internalContents).toBe(1);
+		expect(result.externalContents).toBe(0);
+		expect(result.contentTypeDistribution).toEqual([
+			{ category: 'html', internal: 1, external: 0 },
+		]);
+	});
+
+	it('splits the 404 histogram row by provenance, trailing the inventory-seed row last', async () => {
+		const result = await getSummary(archive);
+		// The plain row merges the two fix-target 404s (internal + external);
+		// `toContainEqual` is exact-equality per element, so the two-field
+		// literal can only match the plain row — the seed row carries the
+		// extra `inventorySeed: true`.
+		expect(result.statusDistribution).toContainEqual({ status: 404, count: 2 });
+		expect(result.statusDistribution.at(-1)).toEqual({
+			status: 404,
+			count: 1,
+			inventorySeed: true,
+		});
+	});
+
+	it('keeps fix-target 404s in the metadata denominator but drops inventory-seed 404s', async () => {
+		const result = await getSummary(archive);
+		// Denominator = home + /gone (a fix-target page still owes its
+		// metadata) = 2; /ghost is an input mistake and leaves. Only home
+		// has a title: 1/2. An all-404 exclusion would read 1/1 and a
+		// no-exclusion would read 1/3 — 1/2 pins the asymmetric rule.
+		expect(result.metadataFulfillment.title).toBeCloseTo(1 / 2);
+	});
+});
+
+describe('getSummary: statusDistribution ordering with a null-status legacy row', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_summary_null_status_order__');
+	const archiveFilePath = path.resolve(dir, 'summary-null-status-order.nitpicker');
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		for (const page of [
+			{ url: 'https://example.com/', status: 200 },
+			{ url: 'https://example.com/ghost', status: 404 },
+		]) {
+			await archive.setPage({
+				url: parseUrl(page.url)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: page.status,
+				statusText: page.status === 200 ? 'OK' : 'Not Found',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: {
+					lang: null,
+					title: null,
+					description: null,
+					keywords: null,
+					noindex: false,
+					nofollow: false,
+					noarchive: false,
+					canonical: null,
+					alternate: null,
+					'og:type': null,
+					'og:title': null,
+					'og:site_name': null,
+					'og:description': null,
+					'og:url': null,
+					'og:image': null,
+					'twitter:card': null,
+				},
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+		const knex = archive.getKnex();
+		await knex('content_items')
+			.whereIn('url_id', (qb) => {
+				qb.select('id').from('url_refs').where('url', 'https://example.com/ghost');
+			})
+			.update({ source: 'inventory-seed' });
+		// A raw legacy-shaped row with NO status (and no content type):
+		// `setPage` cannot produce one, so insert directly — the same
+		// technique build-viewer-read-model.spec uses for its unparseable-URL
+		// row.
+		const [urlRef] = await knex('url_refs')
+			.insert({ url: 'https://example.com/legacy-null' })
+			.returning('id');
+		await knex('content_items').insert({
+			url_id: urlRef.id,
+			scraped: 1,
+			is_target: 1,
+			is_external: 0,
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('orders rows: numeric statuses, then the inventory-seed 404, then the null trailer', async () => {
+		const result = await getSummary(archive);
+		expect(result.statusDistribution).toEqual([
+			{ status: 200, count: 1 },
+			{ status: 404, count: 1, inventorySeed: true },
+			{ status: null, count: 1 },
+		]);
 	});
 });
 

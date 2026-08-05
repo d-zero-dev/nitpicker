@@ -111,13 +111,16 @@ describe('getViewerSummary', () => {
 				isSkipped: false,
 			});
 
+			// 403, not 404: unlike a 404 (excluded from every total — see
+			// getSummary), a 403 page exists and must keep counting, which is
+			// exactly the legacy counting path this fixture pins.
 			await archive.setPage({
 				url: parseUrl('https://example.net/')!,
 				redirectPaths: [],
 				isExternal: true,
 				isTarget: false,
-				status: 404,
-				statusText: 'Not Found',
+				status: 403,
+				statusText: 'Forbidden',
 				contentType: 'text/html',
 				contentLength: 0,
 				responseHeaders: {},
@@ -152,7 +155,7 @@ describe('getViewerSummary', () => {
 			// two implementations agree, but would not catch a bug shared by
 			// both. These hardcoded literals pin the actual expected values
 			// independently, derived by hand from the fixture above (home:
-			// 200/internal/html/title+description, example.net: 404/external/html).
+			// 200/internal/html/title+description, example.net: 403/external/html).
 			const result = await getViewerSummary(archive);
 			expect(result).toMatchObject({
 				totalPages: 2,
@@ -162,7 +165,7 @@ describe('getViewerSummary', () => {
 				externalContents: 1,
 				statusDistribution: [
 					{ status: 200, count: 1 },
-					{ status: 404, count: 1 },
+					{ status: 403, count: 1 },
 				],
 				contentTypeDistribution: [{ category: 'html', internal: 1, external: 1 }],
 				metadataFulfillment: {
@@ -284,6 +287,80 @@ describe('getViewerSummary', () => {
 				attribution: 'site',
 				count: 1,
 			});
+		});
+	});
+
+	describe('with an inventory-seed 404 in the archive', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_get_viewer_summary_seed_404__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'seed-404-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			for (const page of [
+				{ url: 'https://example.com/', status: 200 },
+				{ url: 'https://example.com/gone', status: 404 },
+				{ url: 'https://example.com/ghost', status: 404 },
+			]) {
+				await archive.setPage({
+					url: parseUrl(page.url)!,
+					redirectPaths: [],
+					isExternal: false,
+					isTarget: true,
+					status: page.status,
+					statusText: page.status === 200 ? 'OK' : 'Not Found',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					html: '',
+					meta: META,
+					anchorList: [],
+					imageList: [],
+					isSkipped: false,
+				});
+			}
+			// Relabel /ghost's provenance directly — `setPage` always writes
+			// `'crawled'`, and the full `--inventory` orchestration would
+			// drown this fixture in unrelated setup.
+			await archive
+				.getKnex()('content_items')
+				.whereIn('url_id', (qb) => {
+					qb.select('id').from('url_refs').where('url', 'https://example.com/ghost');
+				})
+				.update({ source: 'inventory-seed' });
+
+			await buildViewerReadModel(archive);
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('round-trips the inventorySeed split row through viewer_summary.status_json intact', async () => {
+			const [viewerSummary, liveSummary] = await Promise.all([
+				getViewerSummary(archive),
+				getSummary(archive),
+			]);
+			expect(viewerSummary).toEqual(liveSummary);
+			// Hardcoded literals so a serialisation bug shared by both
+			// implementations cannot hide: the crawled /gone stays in the
+			// plain 404 row, the seed /ghost splits into the trailer.
+			expect(viewerSummary.statusDistribution).toEqual([
+				{ status: 200, count: 1 },
+				{ status: 404, count: 1 },
+				{ status: 404, count: 1, inventorySeed: true },
+			]);
 		});
 	});
 });

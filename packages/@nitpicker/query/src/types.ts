@@ -556,7 +556,10 @@ export interface SummaryResult {
 	/**
 	 * Total number of HTML pages (internal + external) — the historical
 	 * "pages" count, restricted to `contentType IS NULL OR text/html` so
-	 * PDFs / images / archives don't inflate it. Kept on the API for
+	 * PDFs / images / archives don't inflate it, and excluding every
+	 * `status = 404` row regardless of provenance (a 404 URL has no page
+	 * behind it; the 404s themselves stay visible in
+	 * {@link SummaryResult.statusDistribution}). Kept on the API for
 	 * backward compatibility (CLI / MCP consumers may surface it
 	 * directly); the viewer dashboard now prefers
 	 * {@link SummaryResult.internalPages} / {@link SummaryResult.internalContents} /
@@ -565,40 +568,56 @@ export interface SummaryResult {
 	totalPages: number;
 	/**
 	 * Number of internal HTML pages (`isExternal = 0` AND
-	 * `contentType IS NULL OR text/html`). This is the "real pages we
-	 * crawled and rendered" number, excluding non-HTML targets like
-	 * PDFs or downloads.
+	 * `contentType IS NULL OR text/html` AND `status != 404`). This is the
+	 * "real pages we crawled and rendered" number, excluding non-HTML
+	 * targets like PDFs or downloads and excluding 404s (no page exists
+	 * behind a 404 URL).
 	 */
 	internalPages: number;
 	/**
-	 * Number of external HTML pages (`isExternal = 1` AND HTML-or-null).
-	 * Kept for backward compatibility; the viewer now prefers
-	 * {@link SummaryResult.externalContents} which counts every external link
-	 * regardless of MIME.
+	 * Number of external HTML pages (`isExternal = 1` AND HTML-or-null AND
+	 * `status != 404`). Kept for backward compatibility; the viewer now
+	 * prefers {@link SummaryResult.externalContents} which counts every
+	 * external link regardless of MIME.
 	 */
 	externalPages: number;
 	/**
 	 * Number of internal **content rows** (every `isExternal = 0` page
 	 * in the archive — HTML pages plus typed non-HTML targets such as
-	 * PDFs, CSVs, ZIPs, Office docs). This is the broader "how much
-	 * stuff lives under the in-scope domains" number, with no MIME
-	 * filter. Always `>= internalPages`.
+	 * PDFs, CSVs, ZIPs, Office docs), excluding `status = 404` rows. This
+	 * is the broader "how much stuff lives under the in-scope domains"
+	 * number, with no MIME filter. Always `>= internalPages`.
 	 */
 	internalContents: number;
 	/**
 	 * Number of external **content rows** (every `isExternal = 1` page
-	 * in the archive, any MIME). This is the "how many distinct
-	 * outbound links did we find" number. Always `>= externalPages`.
+	 * in the archive, any MIME, excluding `status = 404` rows). This is
+	 * the "how many distinct outbound links did we find" number. Always
+	 * `>= externalPages`.
 	 */
 	externalContents: number;
-	/** Distribution of HTTP status codes across all pages. */
+	/**
+	 * Distribution of HTTP status codes across all pages. 404s are counted
+	 * here (and only here — every total above excludes them), split into two
+	 * rows by provenance: the plain `status === 404` row counts fix-target
+	 * 404s, and a trailing {@link StatusCount.inventorySeed} row counts
+	 * `source = 'inventory-seed'` input mistakes.
+	 */
 	statusDistribution: StatusCount[];
-	/** Metadata fulfillment rates for internal pages. */
+	/**
+	 * Metadata fulfillment rates for internal pages. The denominator
+	 * excludes `status = 404 AND source = 'inventory-seed'` rows (input
+	 * mistakes — no such page should exist, so its missing metadata is not
+	 * a quality signal) but KEEPS every other 404 (a fix-target broken page
+	 * still owes its metadata) — deliberately asymmetric with the count
+	 * fields above, which exclude all 404s as "not real pages".
+	 */
 	metadataFulfillment: MetadataFulfillment;
 	/**
 	 * Distribution of {@link ContentTypeCategory} across all in-scope rows
-	 * (HTML pages plus known non-HTML targets such as PDFs). Sorted by total
-	 * count descending so the dominant types lead the chart.
+	 * (HTML pages plus known non-HTML targets such as PDFs), excluding
+	 * `status = 404` rows the same way the count fields above do. Sorted by
+	 * total count descending so the dominant types lead the chart.
 	 */
 	contentTypeDistribution: ContentTypeCount[];
 	/**
@@ -635,6 +654,17 @@ export interface StatusCount {
 	status: number | null;
 	/** Number of pages with this status code. */
 	count: number;
+	/**
+	 * Present (and always `true`) only on the extra `status === 404` row that
+	 * counts `source = 'inventory-seed'` rows — URLs that came straight from a
+	 * `crawl --inventory` list and turned out not to exist, i.e. input
+	 * mistakes rather than pages the site ever linked to. The plain
+	 * `status === 404` row counts every OTHER 404 (fix-target broken pages).
+	 * The two rows never merge; this one is ordered after every regular
+	 * status row (but before the `status === null` row, when present) so the
+	 * histogram reads "real statuses first, input noise last".
+	 */
+	inventorySeed?: true;
 	/**
 	 * Per-cause breakdown of the `status === -1` bucket, classified by
 	 * {@link import('@nitpicker/crawler').classifyErrorKind} on the underlying message.
@@ -3071,6 +3101,12 @@ export interface BuildViewerReadModelOptions {
  * and {@link listDirectoryChildren}. `parentNodeId` is the only structural
  * link — callers reconstruct the nested UI tree client-side from this flat
  * list, since neither endpoint recurses server-side.
+ *
+ * Every count column excludes `status = 404` rows — no page exists behind a
+ * 404 URL, so it is neither counted nor attached as a membership, and a
+ * directory whose pages are all 404s has no node at all (the build-time
+ * rule lives in `buildDirectoryTreeRows`; 404s remain reachable through the
+ * Pages view's status filter).
  */
 export interface DirectoryTreeNode {
 	/** This node's unique id — stable across `getDirectoryTree`/`listDirectoryChildren` calls. */
