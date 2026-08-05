@@ -50,7 +50,7 @@ export type ViewerResourcesKeysetRow = Record<
  */
 export interface ViewerResourcesCursorFilterKeyInput {
 	/** See `ListViewerResourcesOptions.isExternal`. */
-	isExternal?: boolean;
+	isExternal?: boolean | boolean[];
 	/** See `ListViewerResourcesOptions.status`. */
 	status?: number | number[];
 	/** See `ListViewerResourcesOptions.urlPattern`. */

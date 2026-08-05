@@ -2,22 +2,38 @@ import type { ListPagesOptions } from '@nitpicker/query';
 
 /**
  * Page-list filter state (everything except pagination, which the hook
- * owns). `status`/`contentTypeCategory`/`templateKey` accept a repeated
- * array of raw query-string values (multi-select checkbox, OR'd
- * server-side) in addition to `ListPagesOptions`'s single value — the
- * server's `toMultiValue`/`toNumber`/`toContentTypeCategory` parse each
+ * owns). Every checkbox-driven field accepts a repeated array of raw
+ * query-string values (multi-select checkbox, OR'd server-side) in addition
+ * to `ListPagesOptions`'s single value — the server's
+ * `toMultiValue`/`toNumber`/`toContentTypeCategory`/`toBoolean` parse each
  * array element, so the client sends strings rather than pre-converting
  * (matching every other list view's filter type, e.g. `ResourcesFilter`).
- * `lang` stays a single value since it has no fast-path equivalent (see
- * `ListViewerPagesOptions` in `@nitpicker/query`).
  */
 export type PagesFilter = Omit<
 	ListPagesOptions,
-	'limit' | 'offset' | 'status' | 'contentTypeCategory' | 'templateKey'
+	| 'limit'
+	| 'offset'
+	| 'status'
+	| 'contentTypeCategory'
+	| 'templateKey'
+	| 'isExternal'
+	| 'lang'
+	| 'missingTitle'
+	| 'hasCSP'
+	| 'hasXFrameOptions'
+	| 'hasXContentTypeOptions'
+	| 'hasHSTS'
 > & {
 	status?: string | readonly string[];
 	contentTypeCategory?: string | readonly string[];
 	templateKey?: string | readonly string[];
+	isExternal?: string | readonly string[];
+	lang?: string | readonly string[];
+	missingTitle?: string | readonly string[];
+	hasCSP?: string | readonly string[];
+	hasXFrameOptions?: string | readonly string[];
+	hasXContentTypeOptions?: string | readonly string[];
+	hasHSTS?: string | readonly string[];
 };
 
 /**

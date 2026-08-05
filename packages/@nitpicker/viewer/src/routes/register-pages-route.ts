@@ -59,7 +59,7 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 		const isReadModelCurrent = await isViewerReadModelCurrent(accessor);
 		if (isReadModelCurrent) {
 			const options: ListViewerPagesOptions = {
-				isExternal: toBoolean(q.isExternal),
+				isExternal: toMultiValue(c.req.queries('isExternal'), toBoolean),
 				contentTypeCategory: toMultiValue(
 					c.req.queries('contentTypeCategory'),
 					toContentTypeCategory,
@@ -67,14 +67,17 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 				status: toMultiValue(c.req.queries('status'), toNumber),
 				statusMin: toNumber(q.statusMin),
 				statusMax: toNumber(q.statusMax),
-				missingTitle: toBoolean(q.missingTitle),
+				missingTitle: toMultiValue(c.req.queries('missingTitle'), toBoolean),
 				missingDescription: toBoolean(q.missingDescription),
 				noindex: toBoolean(q.noindex),
-				lang: q.lang || undefined,
-				hasCSP: toBoolean(q.hasCSP),
-				hasXFrameOptions: toBoolean(q.hasXFrameOptions),
-				hasXContentTypeOptions: toBoolean(q.hasXContentTypeOptions),
-				hasHSTS: toBoolean(q.hasHSTS),
+				lang: toMultiValue(c.req.queries('lang'), (value) => value || undefined),
+				hasCSP: toMultiValue(c.req.queries('hasCSP'), toBoolean),
+				hasXFrameOptions: toMultiValue(c.req.queries('hasXFrameOptions'), toBoolean),
+				hasXContentTypeOptions: toMultiValue(
+					c.req.queries('hasXContentTypeOptions'),
+					toBoolean,
+				),
+				hasHSTS: toMultiValue(c.req.queries('hasHSTS'), toBoolean),
 				source: toPageSource(q.source),
 				templateKey: c.req.queries('templateKey'),
 				directory: q.directory || undefined,

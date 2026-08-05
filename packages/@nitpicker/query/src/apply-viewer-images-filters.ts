@@ -1,6 +1,9 @@
 import type { ListViewerImagesOptions } from './types.js';
 import type { Knex } from 'knex';
 
+import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
+import { toFlagValues } from './to-flag-values.js';
+
 /**
  * Applies every `ListViewerImagesOptions` filter as `WHERE` predicates on a
  * `viewer_images`-scoped query builder. Shared by the id-resolution query
@@ -32,12 +35,12 @@ export function applyViewerImagesFilters(
 	qb: Knex.QueryBuilder,
 	options: ListViewerImagesOptions,
 ): void {
-	if (options.missingAlt != null) {
-		qb.where('missing_alt', options.missingAlt ? 1 : 0);
-	}
-	if (options.missingDimensions != null) {
-		qb.where('missing_dimensions', options.missingDimensions ? 1 : 0);
-	}
+	applyEqualityOrInFilter(qb, 'missing_alt', toFlagValues(options.missingAlt));
+	applyEqualityOrInFilter(
+		qb,
+		'missing_dimensions',
+		toFlagValues(options.missingDimensions),
+	);
 	if (options.oversizedThreshold != null) {
 		const threshold = options.oversizedThreshold;
 		qb.where((inner) => {

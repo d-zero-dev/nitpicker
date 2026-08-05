@@ -285,6 +285,22 @@ describe('applyViewerPagesFilters — lang and header presence', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		await archive.setPage({
+			url: parseUrl('https://cdn.example.net/fr-external-missing-title')!,
+			redirectPaths: [],
+			isExternal: true,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, lang: 'fr', title: null },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
 
 		await buildViewerReadModel(archive);
 	});
@@ -318,7 +334,10 @@ describe('applyViewerPagesFilters — lang and header presence', () => {
 		const qb = knex('viewer_pages');
 		applyViewerPagesFilters(qb, { hasCSP: false });
 		const rows = await qb.select('url');
-		expect(rows.map((r) => r.url)).toEqual(['https://example.com/en-no-headers']);
+		expect(rows.map((r) => r.url).toSorted()).toEqual([
+			'https://cdn.example.net/fr-external-missing-title',
+			'https://example.com/en-no-headers',
+		]);
 	});
 
 	it('combines multiple header-presence filters (hasHSTS present, hasXFrameOptions absent)', async () => {
@@ -327,6 +346,104 @@ describe('applyViewerPagesFilters — lang and header presence', () => {
 		applyViewerPagesFilters(qb, { hasHSTS: true, hasXFrameOptions: false });
 		const rows = await qb.select('url');
 		expect(rows.map((r) => r.url)).toEqual(['https://example.com/ja-with-csp']);
+	});
+
+	it('filters by an array of lang values, OR-ing them together', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { lang: ['ja', 'fr'] });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url).toSorted()).toEqual([
+			'https://cdn.example.net/fr-external-missing-title',
+			'https://example.com/ja-with-csp',
+		]);
+	});
+
+	it('applies no lang restriction when the array is empty — regression test for a truthy-check-on-[] bug', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { lang: [] });
+		const rows = await qb.select('url');
+		expect(rows).toHaveLength(3);
+	});
+
+	it('filters to external pages only when isExternal is true', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { isExternal: true });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual([
+			'https://cdn.example.net/fr-external-missing-title',
+		]);
+	});
+
+	it('applies no restriction when isExternal is both true and false, OR-ed together', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { isExternal: [true, false] });
+		const rows = await qb.select('url');
+		expect(rows).toHaveLength(3);
+	});
+
+	it('applies no isExternal restriction when the array is empty — regression test for a truthy-check-on-[] bug', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { isExternal: [] });
+		const rows = await qb.select('url');
+		expect(rows).toHaveLength(3);
+	});
+
+	it('filters to pages missing title only when missingTitle is true', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { missingTitle: true });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual([
+			'https://cdn.example.net/fr-external-missing-title',
+		]);
+	});
+
+	it('filters to pages with a title only when missingTitle is false', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { missingTitle: false });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url).toSorted()).toEqual([
+			'https://example.com/en-no-headers',
+			'https://example.com/ja-with-csp',
+		]);
+	});
+
+	it('applies no restriction when missingTitle is both true and false, OR-ed together', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { missingTitle: [true, false] });
+		const rows = await qb.select('url');
+		expect(rows).toHaveLength(3);
+	});
+
+	it('applies no missingTitle restriction when the array is empty — regression test for a truthy-check-on-[] bug', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { missingTitle: [] });
+		const rows = await qb.select('url');
+		expect(rows).toHaveLength(3);
+	});
+
+	it('filters by an array of header-presence values, OR-ing them together', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { hasCSP: [true, false] });
+		const rows = await qb.select('url');
+		expect(rows).toHaveLength(3);
+	});
+
+	it('applies no hasCSP restriction when the array is empty — regression test for a truthy-check-on-[] bug', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { hasCSP: [] });
+		const rows = await qb.select('url');
+		expect(rows).toHaveLength(3);
 	});
 });
 

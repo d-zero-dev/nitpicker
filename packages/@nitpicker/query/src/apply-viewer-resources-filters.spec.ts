@@ -140,4 +140,20 @@ describe('applyViewerResourcesFilters', () => {
 			'https://cdn.example.net/external.js',
 		]);
 	});
+
+	it('applies no restriction when isExternal is both true and false, OR-ed together', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_resources');
+		applyViewerResourcesFilters(qb, { isExternal: [true, false] });
+		const rows = await qb.select('url_sort_key');
+		expect(rows).toHaveLength(3);
+	});
+
+	it('applies no isExternal restriction when the array is empty — regression test for a truthy-check-on-[] bug', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_resources');
+		applyViewerResourcesFilters(qb, { isExternal: [] });
+		const rows = await qb.select('url_sort_key');
+		expect(rows).toHaveLength(3);
+	});
 });

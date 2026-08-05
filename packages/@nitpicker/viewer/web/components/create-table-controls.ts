@@ -90,49 +90,6 @@ export function addTextFilter(
 }
 
 /**
- * Represents single-choice enum filters as radios, including implicit defaults
- * such as the Pages view's internal-only scope.
- * @param controls
- * @param context
- * @param columnId
- * @param key
- * @param label
- * @param options
- * @param defaultValue - Selected value when the URL omits the filter key.
- * @example
- * addRadioFilter(controls, context, 'status', 'status', 'Status', [
- *   { value: '', label: 'All' },
- *   { value: '200', label: '200' },
- * ]);
- */
-export function addRadioFilter(
-	controls: TableColumnControls,
-	context: UrlControlContext,
-	columnId: string,
-	key: string,
-	label: string,
-	options: TableFilterOption[],
-	defaultValue = '',
-) {
-	controls.filter ??= {};
-	const current =
-		context.params.get(key) ??
-		options.find((option) => option.checked)?.value ??
-		defaultValue;
-	controls.filter[columnId] = {
-		label,
-		kind: 'radio',
-		options: options.map((option) => ({
-			...option,
-			checked: option.value === current,
-		})),
-		onApply: (next) => {
-			context.updateMany([[key, typeof next === 'string' ? next : '']]);
-		},
-	};
-}
-
-/**
  * Stores multi-select filters as repeated query parameters (`?key=a&key=b`)
  * so the server can evaluate them as an OR (any-of) filter without inventing
  * a custom delimiter — the same shape `URLSearchParams.getAll` reads back and
@@ -143,6 +100,9 @@ export function addRadioFilter(
  * @param key
  * @param label
  * @param options
+ * @param defaultValues - Values checked when the URL omits the filter key
+ *   entirely — e.g. the Pages view's internal-only default scope. Once the
+ *   key is present (even as an empty selection), the URL always wins.
  * @example
  * addChecklistFilter(controls, context, 'status', 'status', 'Status', [
  *   { value: '200', label: '200' },
@@ -156,9 +116,12 @@ export function addChecklistFilter(
 	key: string,
 	label: string,
 	options: readonly Pick<TableFilterOption, 'value' | 'label'>[],
+	defaultValues: readonly string[] = [],
 ) {
 	controls.filter ??= {};
-	const current = new Set(context.params.getAll(key));
+	const current = new Set(
+		context.params.has(key) ? context.params.getAll(key) : defaultValues,
+	);
 	controls.filter[columnId] = {
 		label,
 		kind: 'checklist',

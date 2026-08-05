@@ -4,6 +4,7 @@ import type { Knex } from 'knex';
 import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 import { hasFilterValue } from './has-filter-value.js';
 import { HEADER_FLAG_COLUMN } from './header-presence-sql.js';
+import { toFlagValues } from './to-flag-values.js';
 
 /**
  * Applies every `ListViewerPagesOptions` filter as `WHERE` predicates on a
@@ -23,9 +24,7 @@ export function applyViewerPagesFilters(
 	qb: Knex.QueryBuilder,
 	options: ListViewerPagesOptions,
 ): void {
-	if (options.isExternal != null) {
-		qb.where('is_external', options.isExternal ? 1 : 0);
-	}
+	applyEqualityOrInFilter(qb, 'is_external', toFlagValues(options.isExternal));
 	if (hasFilterValue(options.contentTypeCategory)) {
 		applyEqualityOrInFilter(qb, 'content_category', options.contentTypeCategory);
 	} else {
@@ -53,25 +52,20 @@ export function applyViewerPagesFilters(
 	if (options.statusMax != null) {
 		qb.where('status_sort_key', '<=', options.statusMax);
 	}
-	if (options.missingTitle) {
-		qb.where('has_title', 0);
-	}
+	// `missingTitle: true` selects `has_title = 0` — inverted polarity, so
+	// `toFlagValues` maps `true`→`0`/`false`→`1` rather than its 1/0 default.
+	applyEqualityOrInFilter(qb, 'has_title', toFlagValues(options.missingTitle, 0, 1));
 	if (options.missingDescription) {
 		qb.where('has_description', 0);
 	}
 	if (options.noindex) {
 		qb.where('robots_noindex', 1);
 	}
-	if (options.lang) {
-		qb.where('lang', options.lang);
-	}
+	applyEqualityOrInFilter(qb, 'lang', options.lang);
 	// `viewer_pages` copies header_flags' snake column names verbatim, so
 	// the shared HEADER_FLAG_COLUMN mapping resolves them here too.
 	for (const key of Object.keys(HEADER_FLAG_COLUMN) as (keyof HeaderPresence)[]) {
-		const expected = options[key];
-		if (expected != null) {
-			qb.where(HEADER_FLAG_COLUMN[key], expected ? 1 : 0);
-		}
+		applyEqualityOrInFilter(qb, HEADER_FLAG_COLUMN[key], toFlagValues(options[key]));
 	}
 	if (options.source) {
 		qb.where('source', options.source);

@@ -13,7 +13,6 @@ import { usePagedQuery } from '../api/use-paged-query.js';
 import { usePagesInfinite } from '../api/use-pages-infinite.js';
 import {
 	addChecklistFilter,
-	addRadioFilter,
 	addSort,
 	addTextFilter,
 	createTableControls,
@@ -34,17 +33,6 @@ function textCell(info: CellContext<PageListItem, unknown>) {
 }
 
 /**
- * Parses a `?hasCSP=` style URL param into a filter value.
- * @param value - The raw URL query param value.
- * @returns `true`/`false` for `'true'`/`'false'`, `undefined` otherwise (no filter).
- */
-function parseHeaderFilterParam(value: string | null): boolean | undefined {
-	if (value === 'true') return true;
-	if (value === 'false') return false;
-	return undefined;
-}
-
-/**
  * Human-readable labels for the tracked security headers, keyed by
  * {@link HeaderPresence} field name. These are the conventional protocol
  * names (not translated) — the same convention already used for these
@@ -60,8 +48,8 @@ const HEADER_PRESENCE_LABELS: Record<keyof HeaderPresence, string> = {
 /**
  * The page list: a filterable, sortable table backed by the user's chosen
  * pagination mode (MPA `?page=` by default, opt-in virtual scroll). Internal
- * pages only by default; check "Include external" to show all. Columns are
- * ordered to match the google-sheets "Page List" sheet.
+ * pages only by default; check "External" in the Scope filter to include
+ * them too. Columns are ordered to match the google-sheets "Page List" sheet.
  * @returns The pages view element.
  */
 export function PagesView() {
@@ -70,7 +58,14 @@ export function PagesView() {
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 
-	const scope = params.get('isExternal') ?? 'false';
+	// URL omits `isExternal` entirely (fresh visit, no filter applied yet) ->
+	// default to internal-only, matching this view's historical default scope.
+	// Once the key is present — even as an explicitly empty selection — the
+	// URL always wins (see `addChecklistFilter`'s `defaultValues` doc).
+	const isExternal = useMemo(
+		() => (params.has('isExternal') ? params.getAll('isExternal') : ['false']),
+		[params],
+	);
 	const status = params.getAll('status');
 	const contentTypeCategory = params
 		.getAll('contentTypeCategory')
@@ -78,18 +73,24 @@ export function PagesView() {
 			(CONTENT_TYPE_CATEGORIES as readonly string[]).includes(value),
 		);
 	const templateKey = params.getAll('templateKey');
+	const lang = params.getAll('lang');
+	const missingTitle = params.getAll('missingTitle');
+	const hasCSP = params.getAll('hasCSP');
+	const hasXFrameOptions = params.getAll('hasXFrameOptions');
+	const hasXContentTypeOptions = params.getAll('hasXContentTypeOptions');
+	const hasHSTS = params.getAll('hasHSTS');
 	const filter: PagesFilter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
 		directory: params.get('directory') ?? undefined,
 		status,
-		isExternal: scope === 'all' ? undefined : scope === 'true',
-		lang: params.get('lang') ?? undefined,
+		isExternal,
+		lang,
 		contentTypeCategory,
-		missingTitle: params.get('missingTitle') === 'true' ? true : undefined,
-		hasCSP: parseHeaderFilterParam(params.get('hasCSP')),
-		hasXFrameOptions: parseHeaderFilterParam(params.get('hasXFrameOptions')),
-		hasXContentTypeOptions: parseHeaderFilterParam(params.get('hasXContentTypeOptions')),
-		hasHSTS: parseHeaderFilterParam(params.get('hasHSTS')),
+		missingTitle,
+		hasCSP,
+		hasXFrameOptions,
+		hasXContentTypeOptions,
+		hasHSTS,
 		templateKey,
 		sortBy: (params.get('sortBy') as PagesFilter['sortBy']) || 'url',
 		sortOrder: (params.get('sortOrder') as PagesFilter['sortOrder']) || 'asc',
@@ -356,36 +357,30 @@ export function PagesView() {
 				checked: status.includes(String(value)),
 			})),
 		);
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			{ params, updateMany },
 			'isExternal',
 			'isExternal',
 			'Scope',
-			[
-				{ value: 'all', label: t('common.all'), checked: scope === 'all' },
-				...(facets?.types ?? []).map((value) => ({
-					value: String(value),
-					label: value ? t('common.external') : t('common.internal'),
-					checked:
-						(scope !== 'all' && scope !== 'true' && !value) || scope === String(value),
-				})),
-			],
+			(facets?.types ?? []).map((value) => ({
+				value: String(value),
+				label: value ? t('common.external') : t('common.internal'),
+				checked: isExternal.includes(String(value)),
+			})),
+			['false'],
 		);
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			{ params, updateMany },
 			'lang',
 			'lang',
 			t('views.pages.colLang'),
-			[
-				{ value: '', label: t('common.all'), checked: !filter.lang },
-				...(facets?.langs ?? []).map((value) => ({
-					value,
-					label: value,
-					checked: filter.lang === value,
-				})),
-			],
+			(facets?.langs ?? []).map((value) => ({
+				value,
+				label: value,
+				checked: lang.includes(value),
+			})),
 		);
 		addChecklistFilter(
 			controls,
@@ -399,30 +394,34 @@ export function PagesView() {
 				checked: contentTypeCategory.includes(category),
 			})),
 		);
-		addRadioFilter(
+		addChecklistFilter(
 			controls,
 			{ params, updateMany },
 			'title',
 			'missingTitle',
 			t('views.pages.filterMissingTitle'),
 			[
-				{ value: '', label: t('common.all'), checked: !filter.missingTitle },
 				{
 					value: 'true',
 					label: t('views.pages.filterMissingTitle'),
-					checked: !!filter.missingTitle,
+					checked: missingTitle.includes('true'),
+				},
+				{
+					value: 'false',
+					label: t('common.present'),
+					checked: missingTitle.includes('false'),
 				},
 			],
 		);
-		const headerPresenceFilter: Record<keyof HeaderPresence, boolean | undefined> = {
-			hasCSP: filter.hasCSP,
-			hasXFrameOptions: filter.hasXFrameOptions,
-			hasXContentTypeOptions: filter.hasXContentTypeOptions,
-			hasHSTS: filter.hasHSTS,
+		const headerPresenceValues: Record<keyof HeaderPresence, readonly string[]> = {
+			hasCSP,
+			hasXFrameOptions,
+			hasXContentTypeOptions,
+			hasHSTS,
 		};
 		for (const key of HEADER_PRESENCE_KEYS) {
 			addSort(controls, { params, updateMany }, key, key);
-			addRadioFilter(
+			addChecklistFilter(
 				controls,
 				{ params, updateMany },
 				key,
@@ -430,19 +429,14 @@ export function PagesView() {
 				HEADER_PRESENCE_LABELS[key],
 				[
 					{
-						value: '',
-						label: t('common.all'),
-						checked: headerPresenceFilter[key] == null,
-					},
-					{
 						value: 'true',
 						label: t('common.yes'),
-						checked: headerPresenceFilter[key] === true,
+						checked: headerPresenceValues[key].includes('true'),
 					},
 					{
 						value: 'false',
 						label: t('common.none'),
-						checked: headerPresenceFilter[key] === false,
+						checked: headerPresenceValues[key].includes('false'),
 					},
 				],
 			);
@@ -466,14 +460,14 @@ export function PagesView() {
 		facets?.statuses,
 		facets?.templateKeys,
 		facets?.types,
-		filter.hasCSP,
-		filter.hasHSTS,
-		filter.hasXContentTypeOptions,
-		filter.hasXFrameOptions,
-		filter.lang,
-		filter.missingTitle,
+		hasCSP,
+		hasHSTS,
+		hasXContentTypeOptions,
+		hasXFrameOptions,
+		isExternal,
+		lang,
+		missingTitle,
 		params,
-		scope,
 		status,
 		t,
 		templateKey,

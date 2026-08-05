@@ -51,7 +51,7 @@ export function registerResourcesRoute(app: Hono, context: ArchiveContext): void
 		const isReadModelCurrent = await isViewerReadModelCurrent(accessor);
 		if (isReadModelCurrent) {
 			const options: ListViewerResourcesOptions = {
-				isExternal: toBoolean(q.isExternal),
+				isExternal: toMultiValue(c.req.queries('isExternal'), toBoolean),
 				status: toMultiValue(c.req.queries('status'), toNumber),
 				urlPattern: q.urlPattern || undefined,
 				contentType: q.contentType || undefined,

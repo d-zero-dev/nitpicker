@@ -8,7 +8,6 @@ import { useResourcesInfinite } from '../api/use-resources-infinite.js';
 import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
 import {
 	addChecklistFilter,
-	addRadioFilter,
 	addSort,
 	addTextFilter,
 	createTableControls,
@@ -29,13 +28,19 @@ export function ResourcesView() {
 	const { params, updateMany } = useUrlFilter();
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
-	const scope = params.get('isExternal') ?? 'false';
+	// URL omits `isExternal` entirely (fresh visit) -> default to internal-only,
+	// matching this view's historical default scope — see the same contract
+	// documented on the Pages view's `isExternal` derivation.
+	const isExternal = useMemo(
+		() => (params.has('isExternal') ? params.getAll('isExternal') : ['false']),
+		[params],
+	);
 	const status = params.getAll('status');
 	const filter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
 		status: status.length > 0 ? status : undefined,
 		contentType: params.get('contentType') ?? undefined,
-		isExternal: scope === 'all' ? undefined : scope === 'true',
+		isExternal,
 		sortBy: params.get('sortBy') ?? undefined,
 		sortOrder: params.get('sortOrder') ?? undefined,
 	};
@@ -142,13 +147,28 @@ export function ResourcesView() {
 			'contentType',
 			t('views.resources.filterContentType'),
 		);
-		addRadioFilter(controls, context, 'isExternal', 'isExternal', t('common.type'), [
-			{ value: 'all', label: t('common.all'), checked: scope === 'all' },
-			{ value: 'false', label: t('common.internal'), checked: scope === 'false' },
-			{ value: 'true', label: t('common.external'), checked: scope === 'true' },
-		]);
+		addChecklistFilter(
+			controls,
+			context,
+			'isExternal',
+			'isExternal',
+			t('common.type'),
+			[
+				{
+					value: 'false',
+					label: t('common.internal'),
+					checked: isExternal.includes('false'),
+				},
+				{
+					value: 'true',
+					label: t('common.external'),
+					checked: isExternal.includes('true'),
+				},
+			],
+			['false'],
+		);
 		return controls;
-	}, [paged.data?.items, params, scope, status, t, updateMany]);
+	}, [isExternal, paged.data?.items, params, status, t, updateMany]);
 
 	return (
 		<div className="view">

@@ -15,8 +15,8 @@ export interface ResourcesFilter {
 	status?: string | readonly string[];
 	/** Filter by content-type prefix. */
 	contentType?: string;
-	/** Filter by external/internal. */
-	isExternal?: boolean;
+	/** Filter by external/internal, or any of several (OR). */
+	isExternal?: string | readonly string[];
 	/** Sort field. */
 	sortBy?: string;
 	/** Sort direction. */
