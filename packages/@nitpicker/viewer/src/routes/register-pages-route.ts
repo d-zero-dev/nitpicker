@@ -70,7 +70,7 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 				missingTitle: toMultiValue(c.req.queries('missingTitle'), toBoolean),
 				missingDescription: toBoolean(q.missingDescription),
 				noindex: toBoolean(q.noindex),
-				lang: c.req.queries('lang'),
+				lang: toMultiValue(c.req.queries('lang'), (value) => value || undefined),
 				hasCSP: toMultiValue(c.req.queries('hasCSP'), toBoolean),
 				hasXFrameOptions: toMultiValue(c.req.queries('hasXFrameOptions'), toBoolean),
 				hasXContentTypeOptions: toMultiValue(

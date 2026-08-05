@@ -680,6 +680,12 @@ describe('registerPagesRoute (integration)', () => {
 			const body = (await res.json()) as { total: number };
 			expect(body.total).toBe(2);
 		});
+
+		it("treats an empty lang value as no filter rather than matching zero rows (regression: c.req.queries returns [''] for ?lang=)", async () => {
+			const res = await fixture.app.request('/api/pages?lang=');
+			const body = (await res.json()) as { total: number };
+			expect(body.total).toBe(2);
+		});
 	});
 
 	describe('stale read model on a finished archive (not stub) refuses /api/pages instead of silently degrading to the live query', () => {
