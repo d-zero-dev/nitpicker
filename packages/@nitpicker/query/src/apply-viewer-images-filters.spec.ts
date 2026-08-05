@@ -209,6 +209,14 @@ describe('applyViewerImagesFilters', () => {
 		expect(rows).toHaveLength(4);
 	});
 
+	it('applies no missingDimensions restriction when the array is empty — regression test for a truthy-check-on-[] bug', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_images');
+		applyViewerImagesFilters(qb, { missingDimensions: [] });
+		const rows = await qb.select('image_id');
+		expect(rows).toHaveLength(4);
+	});
+
 	it('filters to images exceeding an arbitrary oversized threshold at request time', async () => {
 		const knex = archive.getKnex();
 

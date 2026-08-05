@@ -385,6 +385,14 @@ describe('applyViewerPagesFilters — lang and header presence', () => {
 		expect(rows).toHaveLength(3);
 	});
 
+	it('applies no isExternal restriction when the array is empty — regression test for a truthy-check-on-[] bug', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { isExternal: [] });
+		const rows = await qb.select('url');
+		expect(rows).toHaveLength(3);
+	});
+
 	it('filters to pages missing title only when missingTitle is true', async () => {
 		const knex = archive.getKnex();
 		const qb = knex('viewer_pages');
@@ -410,6 +418,14 @@ describe('applyViewerPagesFilters — lang and header presence', () => {
 		const knex = archive.getKnex();
 		const qb = knex('viewer_pages');
 		applyViewerPagesFilters(qb, { missingTitle: [true, false] });
+		const rows = await qb.select('url');
+		expect(rows).toHaveLength(3);
+	});
+
+	it('applies no missingTitle restriction when the array is empty — regression test for a truthy-check-on-[] bug', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { missingTitle: [] });
 		const rows = await qb.select('url');
 		expect(rows).toHaveLength(3);
 	});
