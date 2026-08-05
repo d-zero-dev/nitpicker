@@ -1,5 +1,6 @@
 import type {
 	CursorPaginatedImageList,
+	GetImagesFastPathOptions,
 	ListImagesOptions,
 	ListViewerImagesOptions,
 } from './types.js';
@@ -8,6 +9,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import { isImagesFastPathSortBy } from './is-images-fast-path-sort-by.js';
 import { listImages } from './list-images.js';
 import { listViewerImages } from './list-viewer-images.js';
+import { resolveLiveFilterValue } from './resolve-live-filter-value.js';
 import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
 
 /**
@@ -34,8 +36,9 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
  * route uses them when the fast path is live.
  * @param accessor - The archive accessor to query.
  * @param options - Filter, sort, and pagination options — the full
- *   `listImages` surface, including `urlPattern` and `src`/`alt` sorts that
- *   force the live fallback.
+ *   `listImages` surface (with `missingAlt`/`missingDimensions` widened to
+ *   accept an array, see {@link GetImagesFastPathOptions}), including
+ *   `urlPattern` and `src`/`alt` sorts that force the live fallback.
  * @param precheckedReadModelCurrent - The caller's own already-computed
  *   `isViewerReadModelCurrent` result, when it has one (viewer routes check
  *   it first for their stale-refusal gate) — passing it avoids probing the
@@ -47,7 +50,7 @@ import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-mod
  */
 export async function getImagesFastPath(
 	accessor: ArchiveAccessor,
-	options: ListImagesOptions = {},
+	options: GetImagesFastPathOptions = {},
 	precheckedReadModelCurrent?: boolean,
 ): Promise<CursorPaginatedImageList> {
 	const usesWideTableOnlyFilter =
@@ -72,6 +75,13 @@ export async function getImagesFastPath(
 		return listViewerImages(accessor, viewerOptions);
 	}
 
-	const liveResult = await listImages(accessor, options);
+	// The live `listImages` path has no OR concept — an array collapses to
+	// its first element (see `resolveLiveFilterValue`'s docs).
+	const liveOptions: ListImagesOptions = {
+		...options,
+		missingAlt: resolveLiveFilterValue(options.missingAlt),
+		missingDimensions: resolveLiveFilterValue(options.missingDimensions),
+	};
+	const liveResult = await listImages(accessor, liveOptions);
 	return { ...liveResult, nextCursor: null, prevCursor: null };
 }

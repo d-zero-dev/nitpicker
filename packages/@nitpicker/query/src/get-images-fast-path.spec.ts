@@ -137,4 +137,44 @@ describe('getImagesFastPath', () => {
 			expect(listImages).not.toHaveBeenCalled();
 		},
 	);
+
+	it('passes missingAlt/missingDimensions arrays through unchanged to the fast path', async () => {
+		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(true);
+		vi.mocked(listViewerImages).mockResolvedValue(makeResult(6));
+
+		await getImagesFastPath(accessor, {
+			missingAlt: [true, false],
+			missingDimensions: [true, false],
+		});
+
+		expect(listViewerImages).toHaveBeenCalledWith(
+			accessor,
+			expect.objectContaining({
+				missingAlt: [true, false],
+				missingDimensions: [true, false],
+			}),
+		);
+		expect(listImages).not.toHaveBeenCalled();
+	});
+
+	it('collapses missingAlt/missingDimensions arrays to their first element on the live path', async () => {
+		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
+		vi.mocked(listImages).mockResolvedValue({
+			items: [],
+			total: 7,
+			offset: 0,
+			limit: 100,
+		});
+
+		await getImagesFastPath(accessor, {
+			missingAlt: [true, false],
+			missingDimensions: [false, true],
+		});
+
+		expect(listImages).toHaveBeenCalledWith(
+			accessor,
+			expect.objectContaining({ missingAlt: true, missingDimensions: false }),
+		);
+		expect(listViewerImages).not.toHaveBeenCalled();
+	});
 });

@@ -185,6 +185,30 @@ describe('applyViewerImagesFilters', () => {
 		expect(rows.every((row) => row.missing_dimensions === 0)).toBe(true);
 	});
 
+	it('applies no restriction when missingAlt is both true and false, OR-ed together', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_images');
+		applyViewerImagesFilters(qb, { missingAlt: [true, false] });
+		const rows = await qb.select('image_id');
+		expect(rows).toHaveLength(4);
+	});
+
+	it('applies no missingAlt restriction when the array is empty — regression test for a truthy-check-on-[] bug', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_images');
+		applyViewerImagesFilters(qb, { missingAlt: [] });
+		const rows = await qb.select('image_id');
+		expect(rows).toHaveLength(4);
+	});
+
+	it('applies no restriction when missingDimensions is both true and false, OR-ed together', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_images');
+		applyViewerImagesFilters(qb, { missingDimensions: [true, false] });
+		const rows = await qb.select('image_id');
+		expect(rows).toHaveLength(4);
+	});
+
 	it('filters to images exceeding an arbitrary oversized threshold at request time', async () => {
 		const knex = archive.getKnex();
 

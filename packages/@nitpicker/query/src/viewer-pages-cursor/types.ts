@@ -59,7 +59,7 @@ export type ViewerPagesKeysetRow = Record<ViewerPagesSortColumn, string | number
  */
 export interface ViewerPagesCursorFilterKeyInput {
 	/** See `ListViewerPagesOptions.isExternal`. */
-	isExternal?: boolean;
+	isExternal?: boolean | boolean[];
 	/** See `ListViewerPagesOptions.contentTypeCategory`. */
 	contentTypeCategory?: string | string[];
 	/** See `ListViewerPagesOptions.status`. */
@@ -69,21 +69,21 @@ export interface ViewerPagesCursorFilterKeyInput {
 	/** See `ListViewerPagesOptions.statusMax`. */
 	statusMax?: number;
 	/** See `ListViewerPagesOptions.missingTitle`. */
-	missingTitle?: boolean;
+	missingTitle?: boolean | boolean[];
 	/** See `ListViewerPagesOptions.missingDescription`. */
 	missingDescription?: boolean;
 	/** See `ListViewerPagesOptions.noindex`. */
 	noindex?: boolean;
 	/** See `ListViewerPagesOptions.lang`. */
-	lang?: string;
+	lang?: string | string[];
 	/** See `ListViewerPagesOptions.hasCSP`. */
-	hasCSP?: boolean;
+	hasCSP?: boolean | boolean[];
 	/** See `ListViewerPagesOptions.hasXFrameOptions`. */
-	hasXFrameOptions?: boolean;
+	hasXFrameOptions?: boolean | boolean[];
 	/** See `ListViewerPagesOptions.hasXContentTypeOptions`. */
-	hasXContentTypeOptions?: boolean;
+	hasXContentTypeOptions?: boolean | boolean[];
 	/** See `ListViewerPagesOptions.hasHSTS`. */
-	hasHSTS?: boolean;
+	hasHSTS?: boolean | boolean[];
 	/** See `ListViewerPagesOptions.source`. */
 	source?: string;
 	/** See `ListViewerPagesOptions.templateKey`. */

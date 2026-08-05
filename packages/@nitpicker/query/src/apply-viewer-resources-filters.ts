@@ -2,6 +2,7 @@ import type { ListViewerResourcesOptions } from './types.js';
 import type { Knex } from 'knex';
 
 import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
+import { toFlagValues } from './to-flag-values.js';
 
 /**
  * Applies every `ListViewerResourcesOptions` filter as `WHERE` predicates on
@@ -20,9 +21,7 @@ export function applyViewerResourcesFilters(
 	qb: Knex.QueryBuilder,
 	options: ListViewerResourcesOptions,
 ): void {
-	if (options.isExternal != null) {
-		qb.where('is_external', options.isExternal ? 1 : 0);
-	}
+	applyEqualityOrInFilter(qb, 'is_external', toFlagValues(options.isExternal));
 	// Filter on `status_sort_key`, not the raw `status` column — same
 	// `applyViewerPagesFilters` rationale (the sentinel-substituted column is
 	// what the indexes are built on, and is a strictly monotonic transform of

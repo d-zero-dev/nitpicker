@@ -1054,8 +1054,8 @@ export interface PageListFacets {
  * doesn't need the LIKE/header-presence exclusion's rationale either.
  */
 export interface ListViewerPagesOptions {
-	/** Filter by external (true) or internal (false) pages. */
-	isExternal?: boolean;
+	/** Filter by external (true) or internal (false) pages, or both (OR — equivalent to no filter). */
+	isExternal?: boolean | boolean[];
 	/**
 	 * Restrict results to one or more {@link ContentTypeCategory} values (OR
 	 * across an array). Omit to keep the default (`'html'` + `'unknown'` —
@@ -1069,22 +1069,22 @@ export interface ListViewerPagesOptions {
 	statusMin?: number;
 	/** Filter by maximum HTTP status code (inclusive). */
 	statusMax?: number;
-	/** Filter to pages missing title metadata. */
-	missingTitle?: boolean;
+	/** Filter to pages missing (true) or having (false) title metadata, or both (OR — equivalent to no filter). */
+	missingTitle?: boolean | boolean[];
 	/** Filter to pages missing description metadata. */
 	missingDescription?: boolean;
 	/** Filter to pages with noindex set. */
 	noindex?: boolean;
-	/** Filter by exact `<html lang>` value (e.g. `'ja'`). */
-	lang?: string;
-	/** Filter by Content-Security-Policy header presence — see `viewer_pages.has_csp`'s DDL comment. */
-	hasCSP?: boolean;
-	/** Filter by X-Frame-Options header presence. */
-	hasXFrameOptions?: boolean;
-	/** Filter by X-Content-Type-Options header presence. */
-	hasXContentTypeOptions?: boolean;
-	/** Filter by Strict-Transport-Security header presence. */
-	hasHSTS?: boolean;
+	/** Filter by exact `<html lang>` value, or any of several (OR — e.g. `['ja', 'en']`). */
+	lang?: string | string[];
+	/** Filter by Content-Security-Policy header presence, or both (OR — equivalent to no filter). See `viewer_pages.has_csp`'s DDL comment. */
+	hasCSP?: boolean | boolean[];
+	/** Filter by X-Frame-Options header presence, or both (OR — equivalent to no filter). */
+	hasXFrameOptions?: boolean | boolean[];
+	/** Filter by X-Content-Type-Options header presence, or both (OR — equivalent to no filter). */
+	hasXContentTypeOptions?: boolean | boolean[];
+	/** Filter by Strict-Transport-Security header presence, or both (OR — equivalent to no filter). */
+	hasHSTS?: boolean | boolean[];
 	/** Filter by provenance — see {@link PageSource}. */
 	source?: import('@nitpicker/crawler').PageSource;
 	/**
@@ -2043,8 +2043,8 @@ export interface PaginatedResourceList {
  * {@link ListResourcesOptions}, covering its full filter/sort surface.
  */
 export interface ListViewerResourcesOptions {
-	/** Filter by external (true) or internal (false) resources. */
-	isExternal?: boolean;
+	/** Filter by external (true) or internal (false) resources, or both (OR — equivalent to no filter). */
+	isExternal?: boolean | boolean[];
 	/** Filter by exact HTTP status code, or any of several (OR). */
 	status?: number | number[];
 	/**
@@ -2252,10 +2252,10 @@ export interface PaginatedImageList {
  * that need either fall back to `listImages` instead.
  */
 export interface ListViewerImagesOptions {
-	/** Filter to images missing alt attribute. */
-	missingAlt?: boolean;
-	/** Filter to images missing explicit width/height attributes. */
-	missingDimensions?: boolean;
+	/** Filter to images missing (true) or having (false) alt attribute, or both (OR — equivalent to no filter). */
+	missingAlt?: boolean | boolean[];
+	/** Filter to images missing (true) or having (false) explicit width/height attributes, or both (OR — equivalent to no filter). */
+	missingDimensions?: boolean | boolean[];
 	/** Filter to images with naturalWidth or naturalHeight exceeding this threshold. */
 	oversizedThreshold?: number;
 	/** Field to sort results by. Defaults to `'pageUrl'`. */
@@ -2704,6 +2704,25 @@ export interface GetDuplicatesFastPathOptions {
 	direction?: 'next' | 'prev';
 	/** Row offset for page-number jumps. Ignored by the live path. */
 	offset?: number;
+}
+
+/**
+ * Options for `getImagesFastPath` — {@link ListImagesOptions} with
+ * `missingAlt`/`missingDimensions` widened to accept an array (OR across
+ * several values), matching the fast-path-only widening every other
+ * `listViewer*` filter type applies over its live counterpart. The live
+ * `listImages` path this function falls back to has no OR concept, so an
+ * array collapses to its first element (`resolveLiveFilterValue`) before
+ * reaching it.
+ */
+export interface GetImagesFastPathOptions extends Omit<
+	ListImagesOptions,
+	'missingAlt' | 'missingDimensions'
+> {
+	/** Filter to images missing (true) or having (false) alt attribute, or both (OR — equivalent to no filter). */
+	missingAlt?: boolean | boolean[];
+	/** Filter to images missing (true) or having (false) explicit width/height attributes, or both (OR — equivalent to no filter). */
+	missingDimensions?: boolean | boolean[];
 }
 
 /**

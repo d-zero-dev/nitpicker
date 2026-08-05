@@ -43,9 +43,9 @@ export type ViewerImagesKeysetRow = Record<ViewerImagesSortColumn, string | numb
  */
 export interface ViewerImagesCursorFilterKeyInput {
 	/** See `ListViewerImagesOptions.missingAlt`. */
-	missingAlt?: boolean;
+	missingAlt?: boolean | boolean[];
 	/** See `ListViewerImagesOptions.missingDimensions`. */
-	missingDimensions?: boolean;
+	missingDimensions?: boolean | boolean[];
 	/** See `ListViewerImagesOptions.oversizedThreshold`. */
 	oversizedThreshold?: number;
 }
