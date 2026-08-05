@@ -88,6 +88,14 @@ export interface DirectoryTreeSourceRow {
 	 * without conflating them with crawled images/PDFs/etc.
 	 */
 	contentType: string | null;
+	/**
+	 * `content_items.status`. Rows with a literal `404` are excluded from
+	 * the tree entirely — no counts, no `viewer_directory_pages` membership,
+	 * no host qualification — because no page exists behind a 404 URL (the
+	 * same rule `getSummary` applies to its totals). `null` (legacy rows
+	 * predating the column) is NOT a 404 and stays included.
+	 */
+	status: number | null;
 }
 
 /**

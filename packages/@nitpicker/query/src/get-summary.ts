@@ -6,7 +6,7 @@ import type {
 	StatusCount,
 	SummaryResult,
 } from './types.js';
-import type { ArchiveAccessor, ErrorKind } from '@nitpicker/crawler';
+import type { ArchiveAccessor, ErrorKind, PageSource } from '@nitpicker/crawler';
 
 import { classifyErrorKind, isWithinOutageWindow } from '@nitpicker/crawler';
 
@@ -31,6 +31,16 @@ import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
  * excludes `redirect_dest_id`-having rows — a page merged into another via
  * URL-normalization is no more "its own page" for counting purposes than an
  * HTTP redirect source is.
+ *
+ * `status = 404` rows are excluded from every page/content total and from
+ * `contentTypeDistribution` regardless of provenance — no page exists behind
+ * a 404 URL. They remain visible only in `statusDistribution`, split into
+ * two rows: the plain `404` row (fix-target broken pages) and a trailing
+ * {@link StatusCount.inventorySeed} row (`source = 'inventory-seed'` — URLs
+ * that came from a `crawl --inventory` list and never existed, i.e. input
+ * mistakes). `metadataFulfillment` applies a narrower, deliberately
+ * asymmetric rule: only the inventory-seed 404s leave the denominator —
+ * fix-target 404s still owe their metadata (see {@link SummaryResult}).
  *
  * Each `errorKindBreakdown` entry (on the `status === -1` row) carries a
  * {@link FailureAttribution}: `'site'` unless the failure's message
@@ -85,7 +95,11 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 	] = await Promise.all([
 		knex('content_items as ci')
 			.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
-			.select('ci.is_external as isExternal', 'ci.status as status')
+			.select(
+				'ci.is_external as isExternal',
+				'ci.status as status',
+				'ci.source as source',
+			)
 			.count('ci.id as count')
 			.where('ci.scraped', 1)
 			.whereNull('ci.redirect_dest_id')
@@ -94,12 +108,34 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 			.where((qb) => {
 				qb.whereNull('ctr.raw').orWhere('ctr.raw', 'text/html');
 			})
-			.groupBy('ci.is_external', 'ci.status') as Promise<
-			{ isExternal: 0 | 1; status: number | null; count: number | string }[]
+			// `source` in the grouping key only serves the 404 seed/non-seed
+			// split below — for every other status the JS accumulator merges
+			// the per-source rows right back together.
+			.groupBy('ci.is_external', 'ci.status', 'ci.source') as Promise<
+			{
+				isExternal: 0 | 1;
+				status: number | null;
+				// PageSource (not string) so a typo in the JS-side
+				// 'inventory-seed' comparison below is a TS no-overlap error
+				// instead of a silently-never-matching branch.
+				source: PageSource;
+				count: number | string;
+			}[]
 		>,
 		knex('content_items as ci')
 			.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
 			.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
+			// Inventory-seed 404s (input mistakes — no such page should
+			// exist) must not dilute the fulfillment rates, but every OTHER
+			// 404 stays: a fix-target broken page still owes its metadata.
+			// NULL-status legacy rows fall through the first branch and stay
+			// counted. (`source` is NOT NULL DEFAULT 'crawled', so it needs
+			// no NULL branch of its own.)
+			.where((qb) => {
+				qb.whereNull('ci.status')
+					.orWhereNot('ci.status', 404)
+					.orWhereNot('ci.source', 'inventory-seed');
+			})
 			.select(
 				knex.raw('COUNT(*) as total'),
 				knex.raw(
@@ -132,6 +168,12 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 			.whereNull('ci.redirect_dest_id')
 			.whereNull('ci.alias_of_id')
 			.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
+			// No page exists behind a 404 URL, whatever its provenance, so
+			// content totals skip them entirely. NULL-status legacy rows are
+			// not 404s and stay counted.
+			.where((qb) => {
+				qb.whereNull('ci.status').orWhereNot('ci.status', 404);
+			})
 			.groupBy('ctr.raw', 'ci.is_external') as Promise<
 			{
 				contentType: string | null;
@@ -148,9 +190,22 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 	let totalNum = 0;
 	let internalNum = 0;
 	let externalNum = 0;
+	let inventorySeed404Num = 0;
 	const statusAcc = new Map<number | null, number>();
 	for (const row of pageRows) {
 		const n = Number(row.count);
+		// 404s never count as pages (no page exists behind a 404 URL) but
+		// they DO stay in the status histogram — split by provenance so
+		// inventory-list input mistakes don't masquerade as fix-target
+		// broken pages.
+		if (row.status === 404) {
+			if (row.source === 'inventory-seed') {
+				inventorySeed404Num += n;
+			} else {
+				statusAcc.set(404, (statusAcc.get(404) ?? 0) + n);
+			}
+			continue;
+		}
 		totalNum += n;
 		if (row.isExternal === 1) {
 			externalNum += n;
@@ -159,17 +214,37 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		}
 		statusAcc.set(row.status, (statusAcc.get(row.status) ?? 0) + n);
 	}
-	const statusDistribution: StatusCount[] = [...statusAcc.entries()]
-		.map(([status, count]) => ({ status, count }))
-		.toSorted((a, b) => {
-			if (a.status === null) {
-				return 1;
-			}
-			if (b.status === null) {
-				return -1;
-			}
-			return a.status - b.status;
-		});
+	/**
+	 * Sort tier of one status row: `0` for regular numeric statuses,
+	 * `1` for the inventory-seed 404 trailer, `2` for the `null`-status
+	 * trailer — "real statuses first, input noise last, unknown last of
+	 * all" (see {@link StatusCount.inventorySeed}). NOT plain
+	 * `a.status - b.status`: that would slot the seed row between 403 and
+	 * 405 instead of after every regular row.
+	 * @param entry - The row to rank.
+	 * @returns The tier.
+	 */
+	function statusSortTier(entry: StatusCount): number {
+		if (entry.status === null) {
+			return 2;
+		}
+		return entry.inventorySeed ? 1 : 0;
+	}
+	const statusDistribution: StatusCount[] = [
+		...[...statusAcc.entries()].map(([status, count]) => ({ status, count })),
+		...(inventorySeed404Num > 0
+			? [{ status: 404, count: inventorySeed404Num, inventorySeed: true as const }]
+			: []),
+	].toSorted((a, b) => {
+		const tierDelta = statusSortTier(a) - statusSortTier(b);
+		if (tierDelta !== 0) {
+			return tierDelta;
+		}
+		// Within tier 0, ascending by status; tiers 1 and 2 hold at most
+		// one row each (single seed bucket, single null bucket), so the
+		// 0-fallback never reorders anything real.
+		return (a.status ?? 0) - (b.status ?? 0);
+	});
 
 	const minusOneEntry = statusDistribution.find((e) => e.status === -1);
 	let networkOutageAffectedFailures = 0;

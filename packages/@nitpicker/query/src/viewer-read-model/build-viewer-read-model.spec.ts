@@ -1056,6 +1056,28 @@ describe('buildViewerReadModel', () => {
 				});
 			}
 
+			// A 404 page in a directory of its own — must be excluded from the
+			// tree end-to-end (SELECT → source-row mapping → builder): no
+			// /removed/ node, no membership row. Every count assertion in this
+			// describe doubles as the regression net: if the exclusion broke,
+			// this page would create a node and shift the totals below.
+			await archive.setPage({
+				url: parseUrl('https://example.com/removed/gone')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 404,
+				statusText: 'Not Found',
+				contentType: 'text/html',
+				contentLength: 0,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
 			await buildViewerReadModel(archive);
 		});
 
@@ -1190,8 +1212,28 @@ describe('buildViewerReadModel', () => {
 				count: '*',
 			});
 			// 7 attached pages: root, blog x1, blog/2024 x2, legacy, news, a/b/c/d —
-			// the unparseable-URL row and the twitter.com row contribute none.
+			// the unparseable-URL row, the twitter.com row and the 404
+			// /removed/gone row contribute none.
 			expect(Number(total[0]?.count)).toBe(7);
+		});
+
+		it('excludes a 404 page from the tree end-to-end — no node for its directory, no membership row', async () => {
+			const knex = archive.getKnex();
+			// The page still exists as an ordinary viewer_pages row (the Pages
+			// view keeps listing 404s) — only the directory tree drops it.
+			const pages = await knex('viewer_pages')
+				.where('url', 'https://example.com/removed/gone')
+				.select('page_id');
+			expect(pages).toHaveLength(1);
+
+			expect(
+				await knex('viewer_directory_nodes').where('path', '/removed/').select('*'),
+			).toEqual([]);
+			expect(
+				await knex('viewer_directory_pages')
+					.where('page_id', pages[0].page_id)
+					.select('*'),
+			).toEqual([]);
 		});
 
 		it('rebuilds the directory tree idempotently — a second build leaves the same node/page counts and root counts', async () => {
@@ -1570,13 +1612,16 @@ describe('buildViewerReadModel', () => {
 				isSkipped: false,
 			});
 
+			// 403, not 404: unlike a 404 (excluded from every total — see
+			// getSummary), a 403 page exists and must keep counting, which is
+			// exactly the legacy counting path this fixture pins.
 			await archive.setPage({
 				url: parseUrl('https://example.net/')!,
 				redirectPaths: [],
 				isExternal: true,
 				isTarget: false,
-				status: 404,
-				statusText: 'Not Found',
+				status: 403,
+				statusText: 'Forbidden',
 				contentType: 'text/html',
 				contentLength: 0,
 				responseHeaders: {},
@@ -1649,7 +1694,7 @@ describe('buildViewerReadModel', () => {
 			// proves the two implementations agree, but would not catch a bug
 			// shared by both. These hardcoded literals — derived by hand from
 			// the 3-page fixture above (home: 200/internal/html/full-metadata,
-			// example.net: 404/external/html, broken: -1/internal/null-contentType)
+			// example.net: 403/external/html, broken: -1/internal/null-contentType)
 			// — pin the actual expected values independently.
 			await buildViewerReadModel(archive);
 			const row = await archive.getKnex()('viewer_summary').where('id', 1).first();
@@ -1670,7 +1715,7 @@ describe('buildViewerReadModel', () => {
 			).toEqual([
 				{ status: -1, count: 1 },
 				{ status: 200, count: 1 },
-				{ status: 404, count: 1 },
+				{ status: 403, count: 1 },
 			]);
 
 			const contentTypeDistribution: {

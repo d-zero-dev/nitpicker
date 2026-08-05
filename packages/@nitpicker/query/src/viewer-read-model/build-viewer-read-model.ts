@@ -577,6 +577,7 @@ export async function buildViewerReadModel(
 				url: row.url,
 				isExternal: row.isExternal,
 				contentType: row.contentType,
+				status: row.status,
 			})),
 		);
 		for (let start = 0; start < directoryNodes.length; start += INSERT_CHUNK_SIZE) {

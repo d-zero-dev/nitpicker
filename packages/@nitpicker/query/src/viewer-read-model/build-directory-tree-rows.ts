@@ -259,11 +259,18 @@ function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): vo
  * request time — all derivation cost is paid once at build time, keeping
  * reads to plain indexed SELECTs.
  *
- * A host is included in the output ONLY if at least one of its rows has
- * `isExternal` falsy (an "internal" page) — hosts that exist purely as
- * external link targets (e.g. a social-media profile linked from the site)
- * are excluded entirely, since a directory tree of a domain the crawl never
- * actually visited has no value. Once a host qualifies, BOTH its internal
+ * `status = 404` rows are dropped before anything else — no counts, no
+ * `viewer_directory_pages` membership, no host qualification. No page exists
+ * behind a 404 URL, so a directory whose pages are all 404s gets no node and
+ * a host whose internal rows are all 404s gets no tree (the fix-target 404s
+ * remain reachable through the Pages view's status filter, just not through
+ * this feature).
+ *
+ * A host is included in the output ONLY if at least one of its (non-404)
+ * rows has `isExternal` falsy (an "internal" page) — hosts that exist purely
+ * as external link targets (e.g. a social-media profile linked from the
+ * site) are excluded entirely, since a directory tree of a domain the crawl
+ * never actually visited has no value. Once a host qualifies, BOTH its internal
  * and external rows are included in that host's tree: crawl scope is a
  * `(hostname, port, path)` triple (see `@nitpicker/crawler`'s
  * `find-scope-entry.ts`), so a same-host, out-of-scope subpath is
@@ -292,6 +299,12 @@ export function buildDirectoryTreeRows(
 ): DirectoryTreeBuildResult {
 	const parsedRows: ParsedPageRow[] = [];
 	for (const row of rows) {
+		// A 404 URL has no page behind it, whatever its provenance — drop it
+		// before host eligibility so a host whose only internal rows are
+		// 404s builds no tree at all. NULL-status legacy rows are not 404s.
+		if (row.status === 404) {
+			continue;
+		}
 		const parsed = parsePageRow(row);
 		if (parsed) {
 			parsedRows.push(parsed);

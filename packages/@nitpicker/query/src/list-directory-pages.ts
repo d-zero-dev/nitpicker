@@ -78,6 +78,10 @@ async function joinDirectoryPageIdsToListItems(
  * `page_id` tie-breaker) — forward-only, unlike `listViewerPages`'s
  * bidirectional keyset, since this endpoint has no virtual-scroll-upward
  * requirement.
+ *
+ * `status = 404` pages never appear here: they are dropped at read-model
+ * build time (see `buildDirectoryTreeRows`), not filtered per request — use
+ * the Pages view's status filter to locate 404s.
  * @param accessor - The archive accessor to query.
  * @param options - See {@link ListDirectoryPagesOptions}.
  * @returns Up to `limit` pages plus a `nextCursor` for continuation, or
