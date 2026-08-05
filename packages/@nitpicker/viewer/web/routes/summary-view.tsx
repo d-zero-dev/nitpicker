@@ -1,6 +1,7 @@
 import type { MetadataFulfillment } from '@nitpicker/query';
 
 import { useSummary } from '../api/use-summary.js';
+import { buildStatusRowDescriptor } from '../components/build-status-row-descriptor.js';
 import { ContentTypeStackedBar } from '../components/content-type-stacked-bar.js';
 import { ViewHeader } from '../components/view-header.js';
 import { getAttributionLabel } from '../i18n/get-attribution-label.js';
@@ -72,6 +73,12 @@ const METADATA_LABELS: { key: keyof MetadataFulfillment; label: string }[] = [
  * glance, the same way the macOS / iOS storage view does. All percent
  * labels go through {@link formatPercent} so precision and the
  * sub-0.1%-but-non-zero edge case read consistently across groups.
+ *
+ * The status group can contain two 404 rows: the plain `404` row
+ * (fix-target broken pages) and a trailing `404 (inventory-seed)` row
+ * (input mistakes from a `crawl --inventory` list — see
+ * `StatusCount.inventorySeed`). The card totals above never include 404s
+ * of either kind, so the histogram is the only place they surface here.
  * @returns The summary view element.
  */
 export function SummaryView() {
@@ -156,13 +163,14 @@ export function SummaryView() {
 			<div className="bars">
 				{data.statusDistribution.map((entry) => {
 					const ratio = computeRatio(entry.count, statusTotal);
+					const { key, label } = buildStatusRowDescriptor(entry);
 					const showBreakdown =
 						entry.status === -1 &&
 						entry.errorKindBreakdown !== undefined &&
 						entry.errorKindBreakdown.length > 0;
 					return (
 						<div
-							key={entry.status ?? 'none'}
+							key={key}
 							role={showBreakdown ? 'group' : undefined}
 							aria-label={
 								showBreakdown
@@ -172,7 +180,10 @@ export function SummaryView() {
 									: undefined
 							}>
 							<div className="bar-row">
-								<span style={{ width: 60 }}>{entry.status ?? '—'}</span>
+								{/* Fixed width 60 for every row keeps the bar tracks
+								    aligned; the long inventory-seed label wraps inside
+								    it instead of pushing its bar out of column. */}
+								<span style={{ width: 60 }}>{label}</span>
 								<span className="bar-track">
 									<span className="bar-fill" style={{ width: `${ratio * 100}%` }} />
 								</span>
