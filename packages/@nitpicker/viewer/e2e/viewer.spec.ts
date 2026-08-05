@@ -271,7 +271,7 @@ test.describe('MPA ページネーション', () => {
 		}
 	});
 
-	test('Scope フィルタは URL に isExternal が無いとき Internal のみ既定でチェックされ、論理 OR で外部ページも含められる', async ({
+	test('Scope フィルタは URL に isExternal が無いとき Internal のみ既定でチェックされ、論理 OR で外部ページも含められる。全解除は「全件表示」ではなく既定（Internal のみ）に戻る', async ({
 		page,
 	}) => {
 		await page.goto('/pages');
@@ -293,6 +293,14 @@ test.describe('MPA ページネーション', () => {
 		await dialog.getByRole('button', { name: 'None' }).click();
 		await dialog.getByRole('button', { name: 'Apply' }).click();
 		await expect(page).not.toHaveURL(/isExternal=/);
+
+		// `isExternal` has a non-neutral default (Internal-only), unlike every
+		// other checklist filter here — deleting the URL key doesn't mean "show
+		// everything", it means "back to the default". Re-opening the dialog
+		// must show Internal checked again, not both boxes empty.
+		await page.getByRole('button', { name: 'Scope' }).click();
+		await expect(dialog.getByRole('checkbox', { name: 'Internal' })).toBeChecked();
+		await expect(dialog.getByRole('checkbox', { name: 'External' })).not.toBeChecked();
 	});
 
 	test('ステータスフィルタは複数選択チェックボックスとして表示され、論理 OR で絞り込める', async ({
