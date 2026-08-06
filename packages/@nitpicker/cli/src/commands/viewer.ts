@@ -13,14 +13,17 @@ import { formatCliError } from '../format-cli-error.js';
  */
 export const commandDef = {
 	desc: 'Launch a local browser viewer for a .nitpicker archive or a crawl stub directory',
+	usage: '<file-or-stub-dir> [options]',
 	flags: {
 		port: {
 			type: 'number',
 			shortFlag: 'p',
+			valueName: 'port',
 			desc: 'Port to listen on (default: 4324, falls back to a free port)',
 		},
 		host: {
 			type: 'string',
+			valueName: 'host',
 			desc: 'Hostname to bind to (default: localhost)',
 		},
 		open: {

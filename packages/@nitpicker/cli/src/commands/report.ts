@@ -11,22 +11,26 @@ import { verbosely } from '../report/debug.js';
  */
 export const commandDef = {
 	desc: 'Generate a Google Sheets report',
+	usage: '<file> --sheet <URL> [options]',
 	flags: {
 		sheet: {
 			shortFlag: 'S',
 			type: 'string',
 			isRequired: true,
+			valueName: 'URL',
 			desc: 'Google Sheets URL',
 		},
 		credentials: {
 			shortFlag: 'C',
 			type: 'string',
 			default: './credentials.json',
+			valueName: 'path',
 			desc: 'Path to credentials file (keep this file secure and out of version control)',
 		},
 		config: {
 			shortFlag: 'c',
 			type: 'string',
+			valueName: 'path',
 			desc: 'Path to config file',
 		},
 		limit: {

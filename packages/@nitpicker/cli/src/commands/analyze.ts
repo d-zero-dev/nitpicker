@@ -21,14 +21,16 @@ const { prompt } = enquirer;
  */
 export const commandDef = {
 	desc: 'Analyze a .nitpicker archive',
+	usage: '<file> [options]',
 	flags: {
 		all: {
 			type: 'boolean',
-			desc: 'Run all analysis plugins',
+			desc: 'Run all analysis plugins without the interactive prompt',
 		},
 		plugin: {
 			type: 'string',
 			isMultiple: true,
+			valueName: 'name',
 			desc: 'Specify plugins to run (e.g. --plugin @nitpicker/analyze-axe --plugin @nitpicker/analyze-textlint)',
 		},
 		verbose: {
@@ -38,14 +40,17 @@ export const commandDef = {
 		searchKeywords: {
 			type: 'string',
 			isMultiple: true,
+			valueName: 'keyword',
 			desc: 'Keywords for analyze-search plugin (overrides config file)',
 		},
 		searchScope: {
 			type: 'string',
+			valueName: 'selector',
 			desc: 'CSS selector to narrow search scope for analyze-search plugin (overrides config file)',
 		},
 		axeLang: {
 			type: 'string',
+			valueName: 'lang',
 			desc: 'BCP 47 language tag for analyze-axe plugin (overrides config file)',
 		},
 		templates: {

@@ -22,10 +22,23 @@ import { formatCliError } from '../format-cli-error.js';
  */
 export const commandDef = {
 	desc: 'List or clear on-disk viewer caches (tar-extraction cache and the analyze table cache)',
+	usage: ['list [options]', 'clear [archive]'],
 	flags: {
 		json: {
 			type: 'boolean',
-			desc: 'For `list`: output as JSON instead of a human-readable table',
+			desc: 'Output as JSON instead of a human-readable table',
+		},
+	},
+	subCommands: {
+		list: {
+			desc: 'List cache entries with their size and last-updated time',
+			usage: 'list [options]',
+			flags: ['json'],
+		},
+		clear: {
+			desc: 'Delete all caches, or only the caches of the given archive',
+			usage: 'clear [archive]',
+			flags: [],
 		},
 	},
 } as const satisfies CommandDef;
@@ -55,8 +68,8 @@ type CacheSubCommand = (typeof VALID_SUB_COMMANDS)[number];
  *   Exits with code 1 if the sub-command is missing/invalid or an error occurs.
  * @example
  * ```sh
- * nitpicker cache list --json
- * nitpicker cache clear ./site.nitpicker
+ * npx @nitpicker/cli cache list --json
+ * npx @nitpicker/cli cache clear ./site.nitpicker
  * ```
  */
 export async function cache(args: string[], flags: CacheFlags): Promise<void> {

@@ -166,3 +166,35 @@ describe('query command', () => {
 		expect(exitSpy).toHaveBeenCalledWith(1);
 	});
 });
+
+describe('query commandDef sub-command metadata', () => {
+	it('lists exactly the dispatchable sub-commands', async () => {
+		const { commandDef } = await import('./query.js');
+		const { VALID_SUB_COMMANDS } = await import('../query/types.js');
+
+		expect(Object.keys(commandDef.subCommands).toSorted()).toEqual(
+			[...VALID_SUB_COMMANDS].toSorted(),
+		);
+	});
+
+	it('references only defined flags in every sub-command flag list', async () => {
+		const { commandDef } = await import('./query.js');
+		const flagKeys = new Set(Object.keys(commandDef.flags));
+
+		for (const [name, sub] of Object.entries(commandDef.subCommands)) {
+			for (const key of sub.flags) {
+				expect(flagKeys.has(key), `sub-command ${name} references ${key}`).toBe(true);
+			}
+		}
+	});
+
+	it('keeps --pretty as the only flag shared by all sub-commands', async () => {
+		const { commandDef } = await import('./query.js');
+		const referenced = new Set(
+			Object.values(commandDef.subCommands).flatMap((sub) => [...sub.flags]),
+		);
+		const common = Object.keys(commandDef.flags).filter((key) => !referenced.has(key));
+
+		expect(common).toEqual(['pretty']);
+	});
+});
