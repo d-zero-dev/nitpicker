@@ -185,7 +185,7 @@ export async function query(args: string[], flags: QueryFlags) {
 		// eslint-disable-next-line no-console
 		console.error('Error: No .nitpicker file specified.');
 		// eslint-disable-next-line no-console
-		console.error('Usage: nitpicker query <file> <sub-command> [options]');
+		console.error('Usage: npx @nitpicker/cli query <file> <sub-command> [options]');
 		process.exit(1);
 	}
 

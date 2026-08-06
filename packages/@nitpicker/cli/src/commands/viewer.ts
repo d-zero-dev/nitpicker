@@ -54,7 +54,7 @@ export async function viewer(args: string[], flags: ViewerFlags) {
 			'Error: No source specified. Pass a .nitpicker file or a crawl stub directory.',
 		);
 		// eslint-disable-next-line no-console
-		console.error('Usage: nitpicker viewer <file-or-stub-dir> [options]');
+		console.error('Usage: npx @nitpicker/cli viewer <file-or-stub-dir> [options]');
 		process.exit(ExitCode.Fatal);
 	}
 

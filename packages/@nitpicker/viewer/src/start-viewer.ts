@@ -60,7 +60,7 @@ export async function startViewer(options: ViewerOptions): Promise<void> {
 				"\n  ⚠ This archive's viewer read model is missing or stale.\n" +
 					'    Pages/resources/links/images and similar list views will\n' +
 					'    respond with "read model required" until you rebuild it:\n\n' +
-					`      nitpicker viewer-build ${filePath}\n`,
+					`      npx @nitpicker/cli viewer-build ${filePath}\n`,
 			);
 		}
 	}

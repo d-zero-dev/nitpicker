@@ -60,8 +60,8 @@ export async function apiGet<T>(
 	) {
 		throw new Error(
 			"This view requires the archive's viewer read model, which is missing or stale. " +
-				'Run `nitpicker viewer-build <archive>` once, then restart the viewer. ' +
-				'このビューにはviewer read modelが必要です。`nitpicker viewer-build <archive>` を実行してからviewerを再起動してください。',
+				'Run `npx @nitpicker/cli viewer-build <archive>` once, then restart the viewer. ' +
+				'このビューにはviewer read modelが必要です。`npx @nitpicker/cli viewer-build <archive>` を実行してからviewerを再起動してください。',
 		);
 	}
 	return payload;

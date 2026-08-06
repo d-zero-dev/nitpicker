@@ -183,7 +183,7 @@ describe('report command', () => {
 
 		expect(consoleErrorSpy).toHaveBeenCalledWith('Error: No .nitpicker file specified.');
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'Usage: nitpicker report <file> [options]',
+			'Usage: npx @nitpicker/cli report <file> [options]',
 		);
 		expect(exitSpy).toHaveBeenCalledWith(1);
 		expect(runReport).not.toHaveBeenCalled();

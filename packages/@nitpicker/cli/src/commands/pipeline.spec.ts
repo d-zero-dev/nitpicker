@@ -96,7 +96,7 @@ describe('pipeline command', () => {
 
 		expect(consoleErrorSpy).toHaveBeenCalledWith('Error: No URL specified.');
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'Usage: nitpicker pipeline <URL> [options]',
+			'Usage: npx @nitpicker/cli pipeline <URL> [options]',
 		);
 		expect(exitSpy).toHaveBeenCalledWith(ExitCode.Fatal);
 	});

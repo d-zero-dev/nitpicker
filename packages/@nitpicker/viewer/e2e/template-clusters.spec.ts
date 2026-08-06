@@ -17,7 +17,7 @@ test.describe('Nitpicker Viewer template clusters (unclassified fixture)', () =>
 			page.getByRole('heading', { name: 'Template Clusters', level: 1 }),
 		).toBeVisible();
 		await expect(page.locator('.state code')).toHaveText(
-			'nitpicker analyze <archive> --templates',
+			'npx @nitpicker/cli analyze <archive> --templates',
 		);
 		await expect(page.locator('details')).toHaveCount(0);
 	});
