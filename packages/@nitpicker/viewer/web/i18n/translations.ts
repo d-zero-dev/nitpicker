@@ -17,7 +17,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				'A crawler process is currently writing this directory. The view is a snapshot taken when the viewer started; the underlying data is still moving.',
 			interruptedCrawlBadge: 'Interrupted crawl stub',
 			interruptedCrawlBadgeTitle:
-				'This is a stub directory left behind by a stopped crawl. Read-only — you can resume the crawl with `nitpicker crawl --resume`.',
+				'This is a stub directory left behind by a stopped crawl. Read-only — you can resume the crawl with `npx @nitpicker/cli crawl --resume`.',
 		},
 		nav: {
 			summary: 'Summary',
@@ -183,7 +183,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				expandNode: 'Expand {name}',
 				collapseNode: 'Collapse {name}',
 				noRoots:
-					'No directory data available. Run `nitpicker viewer-build` to generate it.',
+					'No directory data available. Run `npx @nitpicker/cli viewer-build` to generate it.',
 				collapseDepthInputLabel: 'Depth',
 				collapseToDepth: 'Collapse to depth',
 				sortOrderLabel: 'Sort order',
@@ -387,7 +387,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 					'Every DOM-structure template cluster found by `--templates`, with the top directories by page count and common stylesheet set computed from its member pages — the raw template key is an opaque blocking key and is not human-readable on its own.',
 				notClassified:
 					'This archive has no DOM-structure template classification yet. Run the following, then re-open the viewer:',
-				notClassifiedCommandHint: 'nitpicker analyze <archive> --templates',
+				notClassifiedCommandHint: 'npx @nitpicker/cli analyze <archive> --templates',
 				noClusters: 'No template clusters found.',
 				pageCount: '{count} pages',
 				commonDirectories: 'Top directories',
@@ -415,7 +415,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				siblingsCaveat:
 					'Clusters that split off from the same blocking group as this one.',
 				noReason: 'No cluster-selection evidence was captured for this cluster.',
-				noReasonCommandHint: 'nitpicker analyze <archive> --templates',
+				noReasonCommandHint: 'npx @nitpicker/cli analyze <archive> --templates',
 			},
 			consoleLogs: {
 				title: 'Console Logs',
@@ -456,7 +456,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				'クロールプロセスがこのディレクトリに書き込み中です。表示は viewer 起動時点のスナップショットで、実データは更新され続けています。',
 			interruptedCrawlBadge: '中断クロールのスタブ',
 			interruptedCrawlBadgeTitle:
-				'停止されたクロールのスタブディレクトリです。読み取り専用 — `nitpicker crawl --resume` で再開できます。',
+				'停止されたクロールのスタブディレクトリです。読み取り専用 — `npx @nitpicker/cli crawl --resume` で再開できます。',
 		},
 		nav: {
 			summary: 'サマリー',
@@ -622,7 +622,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				expandNode: '{name} を展開',
 				collapseNode: '{name} を折りたたむ',
 				noRoots:
-					'ディレクトリデータがありません。`nitpicker viewer-build` を実行して生成してください。',
+					'ディレクトリデータがありません。`npx @nitpicker/cli viewer-build` を実行して生成してください。',
 				collapseDepthInputLabel: '階層数',
 				collapseToDepth: '階層まで全て閉じる',
 				sortOrderLabel: '並び順',
@@ -826,7 +826,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 					'`--templates` で検出したDOM構造テンプレートクラスタの一覧。各クラスタの所属ページ数が多いディレクトリ上位と共通CSSファイルを算出して表示します — 生のテンプレートキーはブロッキング用の内部識別子で、それ自体は人間には読めません。',
 				notClassified:
 					'このアーカイブはまだテンプレート分類を実行していません。以下を実行してからビューアを再度開いてください:',
-				notClassifiedCommandHint: 'nitpicker analyze <archive> --templates',
+				notClassifiedCommandHint: 'npx @nitpicker/cli analyze <archive> --templates',
 				noClusters: 'テンプレートクラスタが見つかりません。',
 				pageCount: '{count} ページ',
 				commonDirectories: '主要ディレクトリ',
@@ -853,7 +853,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				siblings: '兄弟クラスタ',
 				siblingsCaveat: '同じブロッキンググループから分岐したクラスタ。',
 				noReason: 'このクラスタのクラスタ選定理由は保存されていません。',
-				noReasonCommandHint: 'nitpicker analyze <archive> --templates',
+				noReasonCommandHint: 'npx @nitpicker/cli analyze <archive> --templates',
 			},
 			consoleLogs: {
 				title: 'コンソールログ',

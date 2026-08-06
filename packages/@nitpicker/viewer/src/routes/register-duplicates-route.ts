@@ -96,7 +96,7 @@ export function registerDuplicatesRoute(app: Hono, context: ArchiveContext): voi
 			return c.json(
 				{
 					error:
-						'Duplicate-group member pages require the viewer read model, which is not built or is stale for this archive. Rebuild it with `nitpicker viewer-build`.',
+						'Duplicate-group member pages require the viewer read model, which is not built or is stale for this archive. Rebuild it with `npx @nitpicker/cli viewer-build`.',
 				},
 				404,
 			);

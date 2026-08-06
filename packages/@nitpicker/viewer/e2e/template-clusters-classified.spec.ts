@@ -120,7 +120,7 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 			'No cluster-selection evidence was captured for this cluster.',
 		);
 		await expect(sectionsCluster).toContainText(
-			'nitpicker analyze <archive> --templates',
+			'npx @nitpicker/cli analyze <archive> --templates',
 		);
 	});
 });

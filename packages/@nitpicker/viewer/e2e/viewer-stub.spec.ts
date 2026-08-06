@@ -78,7 +78,7 @@ test.describe('Nitpicker Viewer (stub mode)', () => {
 		).toBeVisible();
 		await expect(
 			page.getByText(
-				'No directory data available. Run `nitpicker viewer-build` to generate it.',
+				'No directory data available. Run `npx @nitpicker/cli viewer-build` to generate it.',
 			),
 		).toBeVisible();
 	});
