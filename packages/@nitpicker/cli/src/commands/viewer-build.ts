@@ -95,7 +95,7 @@ export async function viewerBuild(
 		// eslint-disable-next-line no-console
 		console.error('Error: No .nitpicker file specified.');
 		// eslint-disable-next-line no-console
-		console.error('Usage: nitpicker viewer-build <archive> [--force]');
+		console.error('Usage: npx @nitpicker/cli viewer-build <archive> [--force]');
 		process.exit(ExitCode.Fatal);
 	}
 

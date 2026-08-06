@@ -84,7 +84,7 @@ export async function report(args: string[], flags: ReportFlags) {
 		// eslint-disable-next-line no-console
 		console.error('Error: No .nitpicker file specified.');
 		// eslint-disable-next-line no-console
-		console.error('Usage: nitpicker report <file> [options]');
+		console.error('Usage: npx @nitpicker/cli report <file> [options]');
 		process.exit(1);
 	}
 

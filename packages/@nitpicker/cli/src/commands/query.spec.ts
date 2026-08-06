@@ -63,7 +63,7 @@ describe('query command', () => {
 
 		expect(consoleErrorSpy).toHaveBeenCalledWith('Error: No .nitpicker file specified.');
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'Usage: nitpicker query <file> <sub-command> [options]',
+			'Usage: npx @nitpicker/cli query <file> <sub-command> [options]',
 		);
 		expect(exitSpy).toHaveBeenCalledWith(1);
 	});

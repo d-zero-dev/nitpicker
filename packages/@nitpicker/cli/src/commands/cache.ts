@@ -70,7 +70,7 @@ export async function cache(args: string[], flags: CacheFlags): Promise<void> {
 		);
 		// eslint-disable-next-line no-console
 		console.error(
-			`Usage: nitpicker cache <${VALID_SUB_COMMANDS.join('|')}> [archive] [--json]`,
+			`Usage: npx @nitpicker/cli cache <${VALID_SUB_COMMANDS.join('|')}> [archive] [--json]`,
 		);
 		process.exit(ExitCode.Fatal);
 	}
@@ -162,7 +162,7 @@ async function runClear(
 				? `Removed cache entry for ${absArchivePath}: ${cacheDir}`
 				: `No cache entry matches the current content of ${absArchivePath} (nothing to clear here). ` +
 						`Note: stale entries from a previous version of this file are not found by ` +
-						`content-addressed lookup — use 'nitpicker cache list' + 'nitpicker cache clear' ` +
+						`content-addressed lookup — use 'npx @nitpicker/cli cache list' + 'npx @nitpicker/cli cache clear' ` +
 						`(no argument) to remove them.`,
 		);
 	} catch (error) {

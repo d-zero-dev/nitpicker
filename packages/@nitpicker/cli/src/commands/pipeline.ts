@@ -209,7 +209,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 		// eslint-disable-next-line no-console
 		console.error('Error: No URL specified.');
 		// eslint-disable-next-line no-console
-		console.error('Usage: nitpicker pipeline <URL> [options]');
+		console.error('Usage: npx @nitpicker/cli pipeline <URL> [options]');
 		process.exit(ExitCode.Fatal);
 	}
 

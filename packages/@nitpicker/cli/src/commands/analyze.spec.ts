@@ -118,7 +118,7 @@ describe('analyze command', () => {
 
 		expect(consoleErrorSpy).toHaveBeenCalledWith('Error: No .nitpicker file specified.');
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'Usage: nitpicker analyze <file> [options]',
+			'Usage: npx @nitpicker/cli analyze <file> [options]',
 		);
 		expect(exitSpy).toHaveBeenCalledWith(1);
 	});
