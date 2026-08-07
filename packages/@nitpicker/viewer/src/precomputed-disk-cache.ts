@@ -48,12 +48,21 @@ const PRECOMPUTED_DIR_NAME = 'precomputed';
  *   `"isolated-clusters"`). Used as the on-disk filename.
  * @param compute - Loader invoked on cache miss. Its return value is
  *   what gets persisted; subsequent reads return the parsed JSON.
+ * @param isValid - Optional shape guard run against a cache hit before
+ *   it is returned. A cached artefact from an older nitpicker build can
+ *   be missing fields a newer `compute()` shape requires (the archive's
+ *   content-hash key only invalidates on archive mutation, not on a
+ *   nitpicker version upgrade) — returning it as-is would hand callers
+ *   an object that doesn't match `T` at runtime. When `isValid` returns
+ *   `false` the hit is treated exactly like corrupt JSON: fall through
+ *   to `compute()` and overwrite.
  * @returns The cached or freshly-computed artefact.
  */
 export async function getOrComputeOnDisk<T>(
 	cacheDir: string,
 	name: string,
 	compute: () => Promise<T>,
+	isValid?: (value: T) => boolean,
 ): Promise<T> {
 	const dir = path.join(cacheDir, PRECOMPUTED_DIR_NAME);
 	const file = path.join(dir, `${name}.json`);
@@ -67,16 +76,20 @@ export async function getOrComputeOnDisk<T>(
 	let isCorrupt = false;
 	try {
 		const raw = await fs.readFile(file, 'utf8');
-		return JSON.parse(raw) as T;
+		const parsed = JSON.parse(raw) as T;
+		if (isValid && !isValid(parsed)) {
+			throw new Error('stale cache shape');
+		}
+		return parsed;
 	} catch (error) {
 		const code = (error as NodeJS.ErrnoException).code;
 		if (code !== 'ENOENT') {
 			// Either an ENOENT we did not anticipate (handled below by
-			// treating as miss) or a parse error — both fall through
-			// to compute. We only flag corruption when the file was
-			// reachable but the JSON did not parse, so the post-compute
-			// race-check overwrites the bad data.
-			isCorrupt = !code; // SyntaxError has no .code
+			// treating as miss), a parse error, or a failed `isValid`
+			// check — all fall through to compute. We only flag
+			// corruption when the file was reachable but unusable, so
+			// the post-compute race-check overwrites the bad data.
+			isCorrupt = !code; // SyntaxError / isValid failure has no .code
 		}
 	}
 

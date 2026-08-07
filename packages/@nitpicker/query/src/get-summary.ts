@@ -67,8 +67,8 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 	const knex = accessor.getKnex();
 	await requireAliasOfIdColumn(knex);
 	const config = await accessor.getConfig();
-	const baseUrl = config.baseUrl;
-	const roots = config.roots;
+	const { baseUrl, roots, excludes, excludeKeywords, excludeUrls, maxExcludedDepth } =
+		config;
 
 	const consoleLogCountsPromise = countConsoleLogsByType(knex);
 	const failedPageIdRowsPromise = knex('content_items')
@@ -340,6 +340,10 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 	return {
 		baseUrl,
 		roots,
+		excludes,
+		excludeKeywords,
+		excludeUrls,
+		maxExcludedDepth,
 		totalPages: totalNum,
 		internalPages: internalNum,
 		externalPages: externalNum,

@@ -127,6 +127,32 @@ describe('getOrComputeOnDisk', () => {
 		expect(onDisk).toBe(siblingArtefact);
 	});
 
+	it('regenerates the artefact when a cache hit fails the isValid shape guard', async () => {
+		// Simulates a cache file written by an older nitpicker build whose
+		// `compute()` shape has since grown new required fields — the
+		// content-hash cache key doesn't change on a version upgrade, so
+		// the stale shape must be treated like corruption, not a hit.
+		const cacheDir = path.join(baseDir, 'stale-shape');
+		const precomputedDir = path.join(cacheDir, 'precomputed');
+		await fs.mkdir(precomputedDir, { recursive: true });
+		await fs.writeFile(
+			path.join(precomputedDir, 'shaped.json'),
+			JSON.stringify({ old: true }),
+		);
+
+		const compute = vi.fn().mockResolvedValueOnce({ old: true, fresh: true });
+		const result = await getOrComputeOnDisk(
+			cacheDir,
+			'shaped',
+			compute,
+			(value: { fresh?: boolean }) => value.fresh === true,
+		);
+		expect(result).toEqual({ old: true, fresh: true });
+		expect(compute).toHaveBeenCalledTimes(1);
+		const onDisk = await fs.readFile(path.join(precomputedDir, 'shaped.json'), 'utf8');
+		expect(JSON.parse(onDisk)).toEqual({ old: true, fresh: true });
+	});
+
 	it('reconstructs round-tripped Map shapes when callers serialise via entries arrays', async () => {
 		// Map<K, V> is not natively JSON-serialisable; callers that cache a
 		// Map serialise it as [[k,v],...] entries. Verify the disk layer

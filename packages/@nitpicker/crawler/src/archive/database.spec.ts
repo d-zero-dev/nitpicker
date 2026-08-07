@@ -3443,6 +3443,47 @@ describe('getJSON (getConfig 経由)', () => {
 
 		await db2.destroy();
 	});
+
+	it('info.maxExcludedDepth が NULL の場合フォールバック値 0 を返す（issue #261）', async () => {
+		// `maxExcludedDepth` is a plain integer column, not a JSON column
+		// like `excludes`, so it needs its own NULL-fallback coverage —
+		// getJSON's fallback path above does not exercise it.
+		const nullDepthDbPath = path.resolve(
+			workingDir,
+			'null-max-excluded-depth-test.sqlite',
+		);
+		const db = await Database.connect({ filename: nullDepthDbPath });
+
+		const config: Config = {
+			version: '0.13.0',
+			name: 'test',
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			recursive: false,
+			interval: 500,
+			image: false,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 3,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		};
+
+		await db.setConfig(config);
+		await db.getKnex()('info').update({ maxExcludedDepth: null });
+
+		const retrieved = await db.getConfig();
+		expect(retrieved.maxExcludedDepth).toBe(0);
+
+		await db.destroy();
+		await remove(nullDepthDbPath);
+	});
 });
 
 describe('insertPageError', () => {

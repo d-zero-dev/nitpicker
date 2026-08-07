@@ -25,6 +25,10 @@ function makeSummary(baseUrl: string): SummaryResult {
 	return {
 		baseUrl,
 		roots: [],
+		excludes: [],
+		excludeKeywords: [],
+		excludeUrls: [],
+		maxExcludedDepth: 0,
 		totalPages: 0,
 		internalPages: 0,
 		externalPages: 0,
@@ -40,6 +44,8 @@ function makeSummary(baseUrl: string): SummaryResult {
 			ogImage: 0,
 		},
 		contentTypeDistribution: [],
+		networkOutageAffectedFailures: 0,
+		consoleLogCounts: { pageerror: 0, error: 0, warn: 0 },
 	};
 }
 

@@ -24,6 +24,7 @@ vi.mock('./precomputed-disk-cache.js', () => ({
 }));
 
 const { getSummary, getSummaryFastPath } = await import('@nitpicker/query');
+const { getOrComputeOnDisk } = await import('./precomputed-disk-cache.js');
 
 afterEach(() => {
 	vi.clearAllMocks();
@@ -60,6 +61,10 @@ function makeSummary(baseUrl: string): SummaryResult {
 	return {
 		baseUrl,
 		roots: [],
+		excludes: [],
+		excludeKeywords: [],
+		excludeUrls: [],
+		maxExcludedDepth: 0,
 		totalPages: 0,
 		internalPages: 0,
 		externalPages: 0,
@@ -75,6 +80,8 @@ function makeSummary(baseUrl: string): SummaryResult {
 			ogImage: 0,
 		},
 		contentTypeDistribution: [],
+		networkOutageAffectedFailures: 0,
+		consoleLogCounts: { pageerror: 0, error: 0, warn: 0 },
 	};
 }
 
@@ -164,5 +171,32 @@ describe('getCachedSummary', () => {
 		const recovered = await getCachedSummary(context);
 		expect(recovered.baseUrl).toBe('recovered');
 		expect(getSummaryFastPath).toHaveBeenCalledTimes(2);
+	});
+
+	it('passes an isValid guard to getOrComputeOnDisk that rejects a disk cache missing exclude-setting fields (issue #261)', async () => {
+		// The disk cache's content-hash key does not change on a nitpicker
+		// version upgrade, so a `summary.json` written before issue #261
+		// could otherwise be replayed as-is and crash the Summary view's
+		// `data.excludes.length` read. Verify the guard summary-cache.ts
+		// wires into getOrComputeOnDisk actually enforces the new shape.
+		vi.mocked(getSummaryFastPath).mockResolvedValueOnce(makeSummary('guarded'));
+		const context = makeContext('archive_guard');
+
+		await getCachedSummary(context);
+
+		const isValid = vi.mocked(getOrComputeOnDisk).mock.calls[0]?.[3] as
+			| ((value: SummaryResult) => boolean)
+			| undefined;
+		expect(isValid).toBeInstanceOf(Function);
+		expect(isValid?.(makeSummary('complete'))).toBe(true);
+		expect(
+			isValid?.({ ...makeSummary('stale'), excludes: undefined } as SummaryResult),
+		).toBe(false);
+		expect(
+			isValid?.({
+				...makeSummary('stale'),
+				maxExcludedDepth: undefined,
+			} as SummaryResult),
+		).toBe(false);
 	});
 });

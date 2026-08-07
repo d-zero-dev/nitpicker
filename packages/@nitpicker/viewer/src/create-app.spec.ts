@@ -33,10 +33,10 @@ describe('createApp', () => {
 			fetchExternal: false,
 			parallels: 1,
 			roots: ['https://example.com'],
-			excludes: [],
-			excludeKeywords: [],
-			excludeUrls: [],
-			maxExcludedDepth: 0,
+			excludes: ['/admin/*'],
+			excludeKeywords: ['draft'],
+			excludeUrls: ['https://example.com/temp'],
+			maxExcludedDepth: 3,
 			retry: 3,
 			fromList: false,
 			disableQueries: false,
@@ -180,6 +180,10 @@ describe('createApp', () => {
 			externalPages: number;
 			internalContents: number;
 			externalContents: number;
+			excludes: string[];
+			excludeKeywords: string[];
+			excludeUrls: string[];
+			maxExcludedDepth: number;
 		};
 		expect(body.totalPages).toBeGreaterThanOrEqual(2);
 		/* `internalContents`/`externalContents` must pass through the API
@@ -190,6 +194,14 @@ describe('createApp', () => {
 		   documented in the SummaryResult JSDoc. */
 		expect(body.internalContents).toBeGreaterThanOrEqual(body.internalPages);
 		expect(body.externalContents).toBeGreaterThanOrEqual(body.externalPages);
+		/* End-to-end coverage for issue #261: exclude settings written via
+		   `archive.setConfig()` (crawler package) must survive the full
+		   config → getSummaryFastPath (query package) → HTTP JSON
+		   (viewer package) pipeline, not just the query-layer unit tests. */
+		expect(body.excludes).toEqual(['/admin/*']);
+		expect(body.excludeKeywords).toEqual(['draft']);
+		expect(body.excludeUrls).toEqual(['https://example.com/temp']);
+		expect(body.maxExcludedDepth).toBe(3);
 	});
 
 	it('GET /api/pages はページ一覧を返す', async () => {

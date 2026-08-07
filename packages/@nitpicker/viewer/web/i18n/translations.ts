@@ -92,6 +92,10 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				title: 'Summary',
 				description:
 					'Site-wide overview: page counts, HTTP status distribution, and metadata fulfillment.',
+				excludes: 'Excludes',
+				excludeKeywords: 'Exclude keywords',
+				excludeUrls: 'Exclude URLs',
+				maxExcludedDepth: 'Max excluded depth',
 				internalContents: 'Internal contents (all)',
 				internalPages: 'Internal pages (HTML)',
 				externalContents: 'External contents (all)',
@@ -531,6 +535,10 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				title: 'サマリー',
 				description:
 					'サイト全体の概要：ページ数、HTTP ステータス分布、メタデータの充足率を表示します。',
+				excludes: '除外パターン',
+				excludeKeywords: '除外キーワード',
+				excludeUrls: '除外URL',
+				maxExcludedDepth: '除外の最大深度',
 				internalContents: '総コンテンツ数（内部）',
 				internalPages: '総ページ数（内部）',
 				externalContents: '外部リンク（外部コンテンツ）',

@@ -12,9 +12,11 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * `JSON.parse` calls, replacing `getSummary`'s multi-second full-table
  * aggregation on archives where the read model is current.
  *
- * `baseUrl`/`roots` are not stored in `viewer_summary` (they come from
- * `accessor.getConfig()`, independent of `pages` aggregation and already
- * cheap) — this function merges them back in at read time.
+ * `baseUrl`/`roots`/exclude settings (`excludes`, `excludeKeywords`,
+ * `excludeUrls`, `maxExcludedDepth`) are not stored in `viewer_summary`
+ * (they come from `accessor.getConfig()`, independent of `pages`
+ * aggregation and already cheap) — this function merges them back in at
+ * read time.
  *
  * Callers are responsible for guarding with `isViewerReadModelCurrent`
  * first, the same convention `listViewerPages` uses — this function does
@@ -44,6 +46,10 @@ export async function getViewerSummary(
 	return {
 		baseUrl: config.baseUrl,
 		roots: config.roots,
+		excludes: config.excludes,
+		excludeKeywords: config.excludeKeywords,
+		excludeUrls: config.excludeUrls,
+		maxExcludedDepth: config.maxExcludedDepth,
 		totalPages: Number(row.total_pages),
 		internalPages: Number(row.internal_pages),
 		externalPages: Number(row.external_pages),
