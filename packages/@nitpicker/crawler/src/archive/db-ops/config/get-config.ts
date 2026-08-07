@@ -23,6 +23,7 @@ export async function getConfig(knex: Knex): Promise<Config> {
 		excludeUrls: getJSON<string[]>(config.excludeUrls, []),
 		roots: getJSON<string[]>(config.roots, []),
 		retry: config.retry ?? 3,
+		maxExcludedDepth: config.maxExcludedDepth ?? 0,
 	};
 	// @ts-expect-error — `id` is the primary key, not part of the public Config shape
 	delete opt.id;
