@@ -427,4 +427,99 @@ describe('mapFlagsToQueryOptions', () => {
 			'--url is required for the page-console-logs sub-command.',
 		);
 	});
+
+	it('reads exactly the flags listed in the query commandDef sub-command metadata', async () => {
+		const { commandDef } = await import('../commands/query.js');
+		const { VALID_SUB_COMMANDS } = await import('./types.js');
+
+		// Required flags per sub-command, with values that pass validation.
+		const requiredFlags: Record<string, Record<string, unknown>> = {
+			'page-detail': { url: 'https://example.com/a' },
+			'inbound-links': { url: 'https://example.com/a' },
+			html: { url: 'https://example.com/a' },
+			links: { type: 'broken' },
+			mismatches: { type: 'canonical' },
+			'resource-referrers': { url: 'https://example.com/a' },
+			'pages-by-tag': { provider: 'gtm' },
+			'count-pages-by-tag': { provider: 'gtm' },
+			'pages-by-jsonld-type': { type: 'Article' },
+			'count-pages-by-jsonld-type': { type: 'Article' },
+			'page-jsonld': { url: 'https://example.com/a' },
+			'page-jsonld-overview': { url: 'https://example.com/a' },
+			'page-tags': { url: 'https://example.com/a' },
+			'get-isolated-cluster': { representativeUrl: 'https://example.com/a' },
+			'page-console-logs': { url: 'https://example.com/a' },
+		};
+
+		// One valid non-default value per flag, used to probe whether the
+		// mapper's output reacts to that flag.
+		const probeValues: Record<string, unknown> = {
+			limit: 101,
+			offset: 102,
+			pagesLimit: 103,
+			minCount: 104,
+			maxLength: 105,
+			status: 201,
+			statusMin: 202,
+			statusMax: 203,
+			oversizedThreshold: 301,
+			cursor: 'cursor-1',
+			direction: 'prev',
+			url: 'https://example.com/other',
+			urlPattern: '%news%',
+			directory: '/news/',
+			sortBy: 'status',
+			sortOrder: 'desc',
+			type: 'external',
+			contentType: 'text/css',
+			contentTypeCategory: 'pdf',
+			isExternal: true,
+			missingTitle: true,
+			missingDescription: true,
+			noindex: true,
+			missingAlt: true,
+			missingDimensions: true,
+			validator: 'axe',
+			severity: 'critical',
+			rule: 'rule-1',
+			field: 'description',
+			missingOnly: true,
+			provider: 'ga4',
+			externalId: 'GTM-1234',
+			full: true,
+			representativeUrl: 'https://example.com/other',
+			includeRedirectSources: true,
+			pretty: true,
+		};
+
+		// Sub-commands that validate enum-shaped flags need probe values from
+		// their own vocabulary.
+		const probeOverrides: Record<string, Record<string, unknown>> = {
+			mismatches: { type: 'og:title' },
+			'console-logs': { sortBy: 'text', type: 'error' },
+			'pages-by-jsonld-type': { type: 'BlogPosting' },
+			'count-pages-by-jsonld-type': { type: 'BlogPosting' },
+		};
+
+		for (const subCommand of VALID_SUB_COMMANDS) {
+			const base = { ...requiredFlags[subCommand] };
+			const baseOptions = JSON.stringify(
+				mapFlagsToQueryOptions(subCommand, base as never),
+			);
+			const readFlags = Object.keys(commandDef.flags).filter((key) => {
+				const probed = {
+					...base,
+					[key]: probeOverrides[subCommand]?.[key] ?? probeValues[key],
+				};
+				const probedOptions = JSON.stringify(
+					mapFlagsToQueryOptions(subCommand, probed as never),
+				);
+				return probedOptions !== baseOptions;
+			});
+
+			expect(readFlags.toSorted(), `sub-command ${subCommand}`).toEqual(
+				[...commandDef.subCommands[subCommand].flags].toSorted(),
+			);
+		}
+	});
 });

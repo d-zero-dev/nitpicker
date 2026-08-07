@@ -22,6 +22,7 @@ import { formatViewerReadModelProgress } from '../format-viewer-read-model-progr
  */
 export const commandDef = {
 	desc: "Build (or rebuild) a .nitpicker archive's persistent viewer read model",
+	usage: '<archive> [options]',
 	flags: {
 		force: {
 			type: 'boolean',

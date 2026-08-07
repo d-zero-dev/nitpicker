@@ -16,7 +16,10 @@ import { formatCliError } from './format-cli-error.js';
 process.title = 'Nitpicker CLI';
 
 const cli = parseCli({
-	name: 'nitpicker',
+	// WHY not the bare binary name: the CLI is published as a scoped package
+	// with no global install story, so help/usage must show the invocation
+	// that actually works in a terminal.
+	name: 'npx @nitpicker/cli',
 	version: pkg.version,
 	commands: {
 		crawl: crawlDef,

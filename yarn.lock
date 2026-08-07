@@ -1271,12 +1271,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/roar@npm:2.1.3":
-  version: 2.1.3
-  resolution: "@d-zero/roar@npm:2.1.3"
+"@d-zero/roar@npm:2.2.0":
+  version: 2.2.0
+  resolution: "@d-zero/roar@npm:2.2.0"
   dependencies:
     yargs-parser: "npm:22.0.0"
-  checksum: 10c0/992d6e010c0c74593c2a87d1c171db87e9c232beb367d44a9af61beca11df44f1982e257480de4ef0847be2bfb486d30f4f4bc06b24142d93c28a76a631c6ac6
+  checksum: 10c0/d2dbedaa8afb4c7c41beaea9750ed93200f1c4cd369ed13b21ffc3d6404b780f7bcfc2bf9b1b9a075d8d55919aa5e7ba07202f06e6c57a14b93828b8a02cd2be
   languageName: node
   linkType: hard
 
@@ -2954,7 +2954,7 @@ __metadata:
   dependencies:
     "@d-zero/dealer": "npm:1.9.4"
     "@d-zero/readtext": "npm:1.2.0"
-    "@d-zero/roar": "npm:2.1.3"
+    "@d-zero/roar": "npm:2.2.0"
     "@d-zero/shared": "npm:0.22.2"
     "@nitpicker/analyze-axe": "npm:0.16.0"
     "@nitpicker/analyze-lighthouse": "npm:0.16.0"

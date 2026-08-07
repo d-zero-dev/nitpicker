@@ -256,4 +256,23 @@ describe('cache command', () => {
 			expect(mockClearArchiveCacheRoot).not.toHaveBeenCalled();
 		});
 	});
+
+	describe('commandDef sub-command metadata', () => {
+		it('lists exactly the dispatchable sub-commands', async () => {
+			const { commandDef } = await import('./cache.js');
+
+			expect(Object.keys(commandDef.subCommands).toSorted()).toEqual(['clear', 'list']);
+		});
+
+		it('references only defined flags in every sub-command flag list', async () => {
+			const { commandDef } = await import('./cache.js');
+			const flagKeys = new Set(Object.keys(commandDef.flags));
+
+			for (const [name, sub] of Object.entries(commandDef.subCommands)) {
+				for (const key of sub.flags) {
+					expect(flagKeys.has(key), `sub-command ${name} references ${key}`).toBe(true);
+				}
+			}
+		});
+	});
 });
