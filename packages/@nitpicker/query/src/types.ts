@@ -553,6 +553,14 @@ export interface SummaryResult {
 	baseUrl: string;
 	/** All user-provided root URLs. Single-root archives report `[baseUrl]`. */
 	roots: string[];
+	/** Maximum directory depth for excluded paths. */
+	maxExcludedDepth: number;
+	/** Keywords used to exclude pages from crawling. */
+	excludeKeywords: string[];
+	/** URL patterns to exclude from crawling. */
+	excludes: string[];
+	/** URL prefixes to exclude from crawling. */
+	excludeUrls: string[];
 	/**
 	 * Total number of HTML pages (internal + external) — the historical
 	 * "pages" count, restricted to `contentType IS NULL OR text/html` so

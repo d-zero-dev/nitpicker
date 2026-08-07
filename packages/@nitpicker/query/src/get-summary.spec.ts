@@ -1106,3 +1106,42 @@ describe('getSummary: console log counts (issue #228)', () => {
 		rmSync(dir, { recursive: true, force: true });
 	});
 });
+
+describe('getSummary: exclude settings (issue #261)', () => {
+	it('passes through excludes/excludeKeywords/excludeUrls/maxExcludedDepth from config', async () => {
+		const dir = path.resolve(__dirname, '__test_fixtures_summary_excludes__');
+		const archiveFilePath = path.resolve(dir, 'summary-excludes.nitpicker');
+		const { mkdirSync, rmSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		const archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: ['/admin/*'],
+			excludeKeywords: ['draft'],
+			excludeUrls: ['https://example.com/temp'],
+			maxExcludedDepth: 3,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		const result = await getSummary(archive);
+		expect(result.excludes).toEqual(['/admin/*']);
+		expect(result.excludeKeywords).toEqual(['draft']);
+		expect(result.excludeUrls).toEqual(['https://example.com/temp']);
+		expect(result.maxExcludedDepth).toBe(3);
+
+		await archive.close();
+		rmSync(dir, { recursive: true, force: true });
+	});
+});

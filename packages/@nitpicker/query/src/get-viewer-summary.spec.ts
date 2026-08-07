@@ -179,10 +179,14 @@ describe('getViewerSummary', () => {
 			});
 		});
 
-		it('reads baseUrl/roots from the archive config, not from the read model', async () => {
+		it('reads baseUrl/roots/exclude settings from the archive config, not from the read model', async () => {
 			const result = await getViewerSummary(archive);
 			expect(result.baseUrl).toBe('https://example.com');
 			expect(result.roots).toEqual(['https://example.com']);
+			expect(result.excludes).toEqual([]);
+			expect(result.excludeKeywords).toEqual([]);
+			expect(result.excludeUrls).toEqual([]);
+			expect(result.maxExcludedDepth).toBe(0);
 		});
 	});
 
@@ -361,6 +365,45 @@ describe('getViewerSummary', () => {
 				{ status: 404, count: 1 },
 				{ status: 404, count: 1, inventorySeed: true },
 			]);
+		});
+	});
+
+	describe('with non-empty exclude settings (issue #261)', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_get_viewer_summary_excludes__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'excludes-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig({
+				...BASE_CONFIG,
+				excludes: ['/admin/*'],
+				excludeKeywords: ['draft'],
+				excludeUrls: ['https://example.com/temp'],
+				maxExcludedDepth: 3,
+			});
+			await buildViewerReadModel(archive);
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('surfaces non-empty exclude settings from config, not hardcoded defaults', async () => {
+			const result = await getViewerSummary(archive);
+			expect(result.excludes).toEqual(['/admin/*']);
+			expect(result.excludeKeywords).toEqual(['draft']);
+			expect(result.excludeUrls).toEqual(['https://example.com/temp']);
+			expect(result.maxExcludedDepth).toBe(3);
 		});
 	});
 });
