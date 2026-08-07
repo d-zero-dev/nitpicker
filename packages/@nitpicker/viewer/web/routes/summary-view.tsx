@@ -118,6 +118,26 @@ export function SummaryView() {
 					{root}
 				</p>
 			))}
+			{/* Exclude settings, same <p> row style as roots above. Each row is
+			    suppressed when its value is empty/zero — most archives crawl
+			    without exclusions, so an always-shown block would be noise the
+			    same way the console-log cards below are gated on non-zero. */}
+			{[
+				{ key: 'excludes', text: data.excludes.join(', ') || null },
+				{ key: 'excludeKeywords', text: data.excludeKeywords.join(', ') || null },
+				{ key: 'excludeUrls', text: data.excludeUrls.join(', ') || null },
+				{
+					key: 'maxExcludedDepth',
+					text: data.maxExcludedDepth > 0 ? String(data.maxExcludedDepth) : null,
+				},
+			].map(
+				(row) =>
+					row.text !== null && (
+						<p key={row.key} className="state">
+							{t(`views.summary.${row.key}`)}: {row.text}
+						</p>
+					),
+			)}
 			{/* Three cards (was four). "Roots" is dropped because the root URL
 			    list is already rendered above as `<p>` rows — a count card is
 			    redundant. The remaining three give the user the three numbers

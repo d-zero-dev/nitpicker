@@ -74,8 +74,31 @@ export async function getCachedSummary(context: ArchiveContext): Promise<Summary
 	}
 	return lru.getOrLoad(context.archiveId, () => {
 		const accessor = context.manager.get(context.archiveId);
-		return getOrComputeOnDisk(accessor.tmpDir, 'summary', () =>
-			getSummaryFastPath(accessor),
+		return getOrComputeOnDisk(
+			accessor.tmpDir,
+			'summary',
+			() => getSummaryFastPath(accessor),
+			isCompleteSummaryResult,
 		);
 	});
+}
+
+/**
+ * Guards against a disk-cached `summary.json` written by a nitpicker
+ * build that predates the exclude-settings fields (issue #261) — the
+ * archive's content-hash cache key does not change on a nitpicker
+ * version upgrade, so an old-shaped artefact would otherwise be
+ * returned as-is and crash `summary-view.tsx`'s `data.excludes.length`
+ * read.
+ * @param value - A parsed disk-cache hit to validate.
+ * @returns Whether `value` has every exclude-settings field the current
+ *   `SummaryResult` shape requires.
+ */
+function isCompleteSummaryResult(value: SummaryResult): boolean {
+	return (
+		Array.isArray(value.excludes) &&
+		Array.isArray(value.excludeKeywords) &&
+		Array.isArray(value.excludeUrls) &&
+		typeof value.maxExcludedDepth === 'number'
+	);
 }
