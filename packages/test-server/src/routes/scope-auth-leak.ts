@@ -1,6 +1,8 @@
 import type { PortRef } from '../server.js';
 import type { Hono } from 'hono';
 
+import { basicAuth } from 'hono/basic-auth';
+
 /**
  * In-memory record of every `Authorization` header the external (scope-out)
  * endpoint received during a crawl. Module-level so each E2E test can read
@@ -41,15 +43,12 @@ const externalReceivedAuthHeaders: (string | null)[] = [];
  *   build the self-referencing "external" (127.0.0.1) URL below.
  */
 export function scopeAuthLeakRoutes(app: Hono, portRef: PortRef) {
-	const expectedScopeAuth = 'Basic ' + btoa('scope-user:scope-pass');
+	app.use(
+		'/scope-auth-leak/main',
+		basicAuth({ username: 'scope-user', password: 'scope-pass', realm: 'scope' }),
+	);
 
-	app.get('/scope-auth-leak/main', (c) => {
-		const auth = c.req.header('authorization');
-		if (auth !== expectedScopeAuth) {
-			return c.body(null, 401, {
-				'WWW-Authenticate': 'Basic realm="scope"',
-			});
-		}
+	app.get('/scope-auth-leak/main', (c) =>
 		// Sub-resource URL points at `127.0.0.1` (different hostname from
 		// `localhost` even though both resolve to 127.0.0.1) so the
 		// crawler's scope map — keyed on hostname — treats it as off-scope.
@@ -58,13 +57,13 @@ export function scopeAuthLeakRoutes(app: Hono, portRef: PortRef) {
 		// up the DOMContentLoaded race (a 401 on a script src is still
 		// surfaced as a load failure, but the auth challenge fires on the
 		// way to that failure either way — which is all the test needs).
-		return c.html(
+		c.html(
 			'<!doctype html><html lang="en"><head><title>Scope Auth Leak Main</title></head><body>' +
 				'<p>Scope main</p>' +
 				`<img src="http://127.0.0.1:${portRef.port}/scope-auth-leak/external-asset.png" alt="external" width="1" height="1">` +
 				'</body></html>',
-		);
-	});
+		),
+	);
 
 	app.get('/scope-auth-leak/external-asset.png', (c) => {
 		const auth = c.req.header('authorization');

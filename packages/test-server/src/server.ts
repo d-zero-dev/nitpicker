@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import { basicRoutes } from './routes/basic.js';
 import { consoleLogsRoutes } from './routes/console-logs.js';
 import { dedupeCapTrapRoutes } from './routes/dedupe-cap-trap.js';
+import { emptyPasswordAuthRoutes } from './routes/empty-password-auth.js';
 import { errorStatusRoutes } from './routes/error-status.js';
 import { excludeRoutes } from './routes/exclude.js';
 import { flakyRoutes } from './routes/flaky.js';
@@ -21,6 +22,7 @@ import { resourceReuseRoutes } from './routes/resource-reuse.js';
 import { scopeAuthLeakRoutes } from './routes/scope-auth-leak.js';
 import { scopeRoutes } from './routes/scope.js';
 import { scrollJackRoutes } from './routes/scroll-jack.js';
+import { specialCharAuthRoutes } from './routes/special-char-auth.js';
 
 /**
  * Mutable holder for the server's actual listening port.
@@ -53,6 +55,8 @@ export function createApp(portRef: PortRef) {
 	errorStatusRoutes(app);
 	scopeRoutes(app);
 	scopeAuthLeakRoutes(app, portRef);
+	specialCharAuthRoutes(app);
+	emptyPasswordAuthRoutes(app);
 	paginationRoutes(app);
 	scrollJackRoutes(app);
 	resourceReuseRoutes(app, portRef);
