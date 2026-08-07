@@ -15,10 +15,12 @@ import { TEST_SERVER_ORIGIN, TEST_SERVER_PORT } from './test-server-port.js';
  * The baseline reaches `/`, `/about`, and a handful of resource URLs — but
  * NOT the `/inventory/*` fixture routes (they are deliberately unlinked).
  * @param urls - One or more URLs to crawl.
+ * @param options - Extra crawl config merged over the defaults (e.g. `excludes` persisted into the archive).
  * @returns Paths to the produced archive and its cwd.
  */
 async function crawlAndPersist(
 	urls: string[],
+	options: Parameters<typeof CrawlerOrchestrator.crawling>[1] = {},
 ): Promise<{ filePath: string; cwd: string }> {
 	const cwd = path.join(os.tmpdir(), `nitpicker-inventory-${crypto.randomUUID()}`);
 	await fs.mkdir(cwd, { recursive: true });
@@ -29,6 +31,7 @@ async function crawlAndPersist(
 		parallels: 1,
 		image: false,
 		fetchExternal: false,
+		...options,
 	});
 	const filePath = orchestrator.archive.filePath;
 	await orchestrator.write();
@@ -162,6 +165,7 @@ describe('Inventory crawl', () => {
 			new_pages: 1,
 			new_resources: 1,
 			scope_skipped: 0,
+			exclude_skipped: 0,
 		});
 		expect(items[0]?.list_label).toMatch(/^inventory-/);
 		expect(typeof items[0]?.id).toBe('number');
@@ -185,6 +189,7 @@ describe('Inventory crawl', () => {
 			new_pages: number | null;
 			new_resources: number | null;
 			scope_skipped: number | null;
+			exclude_skipped: number | null;
 			notes: string | null;
 		}>;
 		expect(rows).toHaveLength(1);
@@ -195,6 +200,7 @@ describe('Inventory crawl', () => {
 		expect(row.new_pages).toBe(1);
 		expect(row.new_resources).toBe(1);
 		expect(row.scope_skipped).toBe(0);
+		expect(row.exclude_skipped).toBe(0);
 		// `source_file_sha256` is populated by the CLI's `inventoryCrawl`
 		// plumbing, which the test invokes directly at the orchestrator
 		// level — expected NULL for this programmatic call. sha256
@@ -668,5 +674,130 @@ describe('Inventory crawl noop run (all URLs already in archive)', () => {
 		const knex = accessor.getKnex();
 		const rows = await knex('inventory_runs').select('id');
 		expect(rows).toHaveLength(0);
+	});
+});
+
+describe('Inventory crawl applies the archived excludes / excludeUrls (issue #260)', () => {
+	// The ingestion-side counterpart of `exclude.e2e.ts`: URLs matching
+	// the archive's exclusion config must reach the same terminal state
+	// through `--inventory` that a link-discovered excluded URL reaches
+	// in a normal crawl — a skipped page row, never an imported one.
+	// Non-HTML URLs are the critical case: they are written to
+	// `resources` without ever passing the crawler's fetch-time
+	// `shouldSkipUrl` gate, so only the classification in `inventory()`
+	// can stop them. The excluded URLs deliberately have no test-server
+	// routes: nothing may ever fetch them.
+	let filePath: string;
+	let cwd: string;
+	let accessor: Archive;
+
+	beforeAll(async () => {
+		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/`], {
+			excludes: ['/inventory/private/*'],
+			excludeUrls: [`${TEST_SERVER_ORIGIN}/inventory/legacy`],
+		});
+		filePath = baseline.filePath;
+		cwd = baseline.cwd;
+
+		// One glob-excluded non-HTML URL, one prefix-excluded HTML-looking
+		// URL, one kept non-HTML URL. No surviving HTML seed → the
+		// orchestrator takes the non-HTML-only branch and never launches a
+		// browser, keeping this suite cheap.
+		const orchestrator = await CrawlerOrchestrator.inventory(
+			filePath,
+			[
+				`${TEST_SERVER_ORIGIN}/inventory/private/secret.pdf`,
+				`${TEST_SERVER_ORIGIN}/inventory/legacy/old-page`,
+				`${TEST_SERVER_ORIGIN}/inventory/orphan.pdf`,
+			],
+			{ cwd },
+		);
+		await orchestrator.write();
+		await orchestrator.archive.close();
+		orchestrator.garbageCollect();
+
+		accessor = await Archive.open({ filePath, cwd });
+	}, 60_000);
+
+	afterAll(async () => {
+		if (accessor) {
+			await accessor.close();
+		}
+		await fs.rm(cwd, { recursive: true, force: true });
+	});
+
+	it('records a glob-excluded non-HTML URL as a skipped page, not as a resource', async () => {
+		const knex = accessor.getKnex();
+		const resourceRows = await knex('resource_items as ri')
+			.join('url_refs as ur', 'ri.url_id', 'ur.id')
+			.select('ur.url as url')
+			.where('ur.url', `${TEST_SERVER_ORIGIN}/inventory/private/secret.pdf`);
+		expect(resourceRows).toHaveLength(0);
+
+		const [pageRow] = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ci.url_id', 'ur.id')
+			.select(
+				'ci.scraped as scraped',
+				'ci.is_skipped as isSkipped',
+				'ci.skip_reason as skipReason',
+				'ci.source as source',
+			)
+			.where('ur.url', `${TEST_SERVER_ORIGIN}/inventory/private/secret.pdf`)) as Array<{
+			scraped: number;
+			isSkipped: number;
+			skipReason: string | null;
+			source: string;
+		}>;
+		expect(pageRow, 'secret.pdf must be recorded as a skipped page').toBeDefined();
+		expect(pageRow.scraped).toBe(1);
+		expect(pageRow.isSkipped).toBe(1);
+		expect(pageRow.skipReason).toBe('excluded');
+		expect(pageRow.source).toBe('inventory-seed');
+	});
+
+	it('records a prefix-excluded HTML URL as a skipped page, not as a pending inventory seed', async () => {
+		const knex = accessor.getKnex();
+		const [pageRow] = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ci.url_id', 'ur.id')
+			.select(
+				'ci.scraped as scraped',
+				'ci.is_skipped as isSkipped',
+				'ci.skip_reason as skipReason',
+				'ci.source as source',
+			)
+			.where('ur.url', `${TEST_SERVER_ORIGIN}/inventory/legacy/old-page`)) as Array<{
+			scraped: number;
+			isSkipped: number;
+			skipReason: string | null;
+			source: string;
+		}>;
+		expect(pageRow, 'legacy/old-page must be recorded as a skipped page').toBeDefined();
+		// `scraped=1` pins the "terminal, not pending" contract: a later
+		// `--resume` must not try to fetch this operator-excluded URL.
+		expect(pageRow.scraped).toBe(1);
+		expect(pageRow.isSkipped).toBe(1);
+		expect(pageRow.skipReason).toBe('excluded');
+		expect(pageRow.source).toBe('inventory-seed');
+	});
+
+	it('still ingests the non-excluded URL from the same list', async () => {
+		const rows = await listUnusedResources(accessor, { limit: 50 });
+		const orphan = rows.items.find(
+			(row) => row.url === `${TEST_SERVER_ORIGIN}/inventory/orphan.pdf`,
+		);
+		expect(orphan, 'orphan.pdf must be present in unused resources').toBeDefined();
+		expect(orphan?.source).toBe('inventory-seed');
+	});
+
+	it('separates the drop reasons on the audit row (exclude_skipped vs scope_skipped)', async () => {
+		const { items, total } = await listInventoryRuns(accessor);
+		expect(total).toBe(1);
+		expect(items[0]).toMatchObject({
+			total_lines: 3,
+			new_pages: 0,
+			new_resources: 1,
+			scope_skipped: 0,
+			exclude_skipped: 2,
+		});
 	});
 });
