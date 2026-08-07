@@ -19,6 +19,8 @@ export interface InventoryRunAggregates {
 	nonHtmlCount: number;
 	/** URLs dropped because they fell outside the archived scope. Stored as `scope_skipped`. */
 	outOfScope: number;
+	/** Novel in-scope URLs recorded as terminal skipped pages (`is_skipped=1`, `skip_reason='excluded'`) instead of being imported, because they matched the effective `excludes` / `excludeUrls` config — the same inputs the scrape phase's fetch-time `shouldSkipUrl` gate uses. Stored as `exclude_skipped`. */
+	excludeSkipped: number;
 	/**
 	 * SHA-256 hex digest of the source `.txt`, **pre-computed by the caller**
 	 * (typically the CLI's `inventoryCrawl`). Stored verbatim as

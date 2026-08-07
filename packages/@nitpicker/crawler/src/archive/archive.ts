@@ -322,6 +322,26 @@ export default class Archive extends ArchiveAccessor {
 		dbLog('Insert inventory seeds: %d URL(s)', urls.length);
 		await this.#db.insertInventorySeeds(urls.map((u) => u.withoutHashAndAuth));
 	}
+
+	/**
+	 * Records exclude-matched inventory URLs as terminal skipped pages —
+	 * the same `is_skipped=1, skip_reason='excluded'` state the normal
+	 * crawl's fetch-time gate writes for link-discovered excluded URLs,
+	 * labelled `source='inventory-seed'`. Thin facade over
+	 * {@link Database.insertInventorySkippedPages} — see the underlying
+	 * op's JSDoc for the parity rationale and crawled-wins safety.
+	 *
+	 * `ExURL` inputs are normalised to `withoutHashAndAuth` here for the
+	 * same storage-key consistency reason as {@link insertInventorySeeds}.
+	 * @param urls - Exclude-matched URLs to record. No-op when empty.
+	 */
+	async insertInventorySkippedPages(urls: readonly ExURL[]): Promise<void> {
+		if (urls.length === 0) {
+			return;
+		}
+		dbLog('Insert inventory skipped pages: %d URL(s)', urls.length);
+		await this.#db.insertInventorySkippedPages(urls.map((u) => u.withoutHashAndAuth));
+	}
 	/**
 	 * Appends one open row to the `network_outages` journal.
 	 *

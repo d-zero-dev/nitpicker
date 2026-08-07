@@ -381,6 +381,8 @@ export interface InventoryRunEntry {
 	new_resources: number | null;
 	/** Number of input URLs dropped because they fell outside the archived scope. */
 	scope_skipped: number | null;
+	/** Number of novel in-scope input URLs recorded as terminal skipped pages (`is_skipped=1`, `skip_reason='excluded'`) instead of being imported, because they matched the archive's `excludes` / `excludeUrls` config. `null` on rows written before ingestion-side exclusion existed — those runs imported their excluded URLs as real pages/resources. */
+	exclude_skipped: number | null;
 	/** Number of source-file lines the CLI warned-and-dropped for failing URL validation. `null` for programmatic callers that built the URL list in-memory. */
 	invalid_skipped: number | null;
 	/** Free-form annotation from a backfill or manual `INSERT`. */

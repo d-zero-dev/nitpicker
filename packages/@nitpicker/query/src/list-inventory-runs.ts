@@ -18,8 +18,9 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * call this unconditionally and a "no such table" exception would break
  * the viewer / MCP flows.
  *
- * Also tolerates a missing `invalid_skipped` column specifically (added
- * after the table itself): self-healing column migrations only run on a
+ * Also tolerates missing `invalid_skipped` / `exclude_skipped` columns
+ * specifically (both added after the table itself): self-healing column
+ * migrations only run on a
  * writer connection (`db-ops/lifecycle/init.ts`), and this table can be
  * read from an archive that never took that path again after upgrading —
  * a `readOnly` stub connection, or a tar-cache entry whose cache key
@@ -71,10 +72,10 @@ export async function listInventoryRuns(
 	}[];
 	const total = countResult[0]?.total ?? 0;
 
-	const hasInvalidSkipped = await knex.schema.hasColumn(
-		'inventory_runs',
-		'invalid_skipped',
-	);
+	const [hasInvalidSkipped, hasExcludeSkipped] = await Promise.all([
+		knex.schema.hasColumn('inventory_runs', 'invalid_skipped'),
+		knex.schema.hasColumn('inventory_runs', 'exclude_skipped'),
+	]);
 
 	const rows = (await knex('inventory_runs')
 		.select(
@@ -86,6 +87,7 @@ export async function listInventoryRuns(
 			'new_pages',
 			'new_resources',
 			'scope_skipped',
+			...(hasExcludeSkipped ? ['exclude_skipped'] : []),
 			...(hasInvalidSkipped ? ['invalid_skipped'] : []),
 			'notes',
 		)
@@ -94,10 +96,14 @@ export async function listInventoryRuns(
 		.offset(offset)) as InventoryRunEntry[];
 
 	return {
-		// Normalize `invalid_skipped` to `null` when the column was absent
-		// (rather than `undefined`), matching every other optional field's
+		// Normalize the late-added columns to `null` when absent (rather
+		// than `undefined`), matching every other optional field's
 		// NULL-tolerant contract on `InventoryRunEntry`.
-		items: rows.map((row) => ({ ...row, invalid_skipped: row.invalid_skipped ?? null })),
+		items: rows.map((row) => ({
+			...row,
+			exclude_skipped: row.exclude_skipped ?? null,
+			invalid_skipped: row.invalid_skipped ?? null,
+		})),
 		total: Number(total),
 	};
 }

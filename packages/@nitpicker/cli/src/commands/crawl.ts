@@ -64,7 +64,7 @@ export const commandDef = {
 			type: 'string',
 			valueName: 'file',
 			group: 'Crawl modes',
-			desc: 'Inventory crawl: take a server-side URL list file and import only URLs that the positional archive does not yet track. HTML responses are rendered + recursively crawled; non-HTML URLs are HEAD-probed and stored directly. Use with `query isolated-pages` / `unused-resources` to surface orphan pages / unused files.',
+			desc: "Inventory crawl: take a server-side URL list file and import only URLs that the positional archive does not yet track. The archive's --exclude / --exclude-url filters apply — matching URLs are recorded as skipped pages instead of being imported, same as excluded URLs in a normal crawl (--exclude-keyword still applies at render time, since it matches page content, not URLs). HTML URLs are rendered + recursively crawled; non-HTML URLs are stored directly without probing. Use with `query isolated-pages` / `unused-resources` to surface orphan pages / unused files.",
 		},
 		single: {
 			type: 'boolean',
