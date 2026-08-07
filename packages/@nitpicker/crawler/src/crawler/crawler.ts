@@ -38,6 +38,7 @@ import { buildRedirectEvent } from './build-redirect-event.js';
 import { captureImageDomPaths } from './capture-image-dom-paths.js';
 import { chooseProbeHost } from './choose-probe-host.js';
 import { createChangePhaseHandler } from './create-change-phase-handler.js';
+import { decodeAuthCredential } from './decode-auth-credential.js';
 import { computeMetaSignature } from './dedupe/compute-meta-signature.js';
 import { computeShapeKey } from './dedupe/compute-shape-key.js';
 import DedupeCapTracker from './dedupe/dedupe-cap-tracker.js';
@@ -2088,9 +2089,15 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			// Verified by `scope-auth-leak.e2e.ts`: removing either piece
 			// causes that test to fail (without auth → main 401 hangs;
 			// without strip → scope cred leaks to off-scope sub-resource).
+			//
+			// The ExURL fields keep the WHATWG percent-encoded form, but
+			// `page.authenticate` sends its arguments verbatim — decode
+			// first or a password containing `[`/`]`/`{`/`}`/`=` etc.
+			// authenticates with the wrong literal (see
+			// `decode-auth-credential.ts`).
 			await page.authenticate({
-				username: url.username ?? '',
-				password: url.password ?? '',
+				username: decodeAuthCredential(url.username),
+				password: decodeAuthCredential(url.password),
 			});
 			// Re-parse from `withoutHashAndAuth` rather than mutating the
 			// re-parsed `url.href` object: ExURL pre-computes `href`,
