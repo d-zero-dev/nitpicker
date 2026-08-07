@@ -101,6 +101,7 @@ describe('listInventoryRuns', () => {
 			new_pages: 10,
 			new_resources: 5,
 			scope_skipped: 2,
+			exclude_skipped: 3,
 			invalid_skipped: 4,
 			notes: 'first applied list',
 		});
@@ -114,6 +115,7 @@ describe('listInventoryRuns', () => {
 			new_pages: 10,
 			new_resources: 5,
 			scope_skipped: 2,
+			exclude_skipped: 3,
 			invalid_skipped: 4,
 			notes: 'first applied list',
 		});
@@ -124,12 +126,12 @@ describe('listInventoryRuns', () => {
 		expect(result.items[0]).not.toHaveProperty('source_file_path');
 	});
 
-	it('tolerates a missing invalid_skipped column (pre-#99 archive, stub / stale tar-cache read)', async () => {
+	it('tolerates missing invalid_skipped / exclude_skipped columns (pre-#99 / pre-#260 archive, stub / stale tar-cache read)', async () => {
 		// Self-healing column migrations only run on a writer connection —
 		// a read-only stub or a stale tar-cache entry can reach this table
-		// without ever picking up `invalid_skipped`. Simulate that shape by
-		// recording a row, then dropping the column the normal writer path
-		// would have added.
+		// without ever picking up the late-added columns. Simulate that
+		// shape by recording a row, then dropping the columns the normal
+		// writer path would have added.
 		await archive.recordInventoryRun({
 			ran_at: '2026-06-21T00:00:00Z',
 			list_label: 'pre-invalid-skipped',
@@ -137,9 +139,13 @@ describe('listInventoryRuns', () => {
 		});
 		await archive.getKnex().schema.table('inventory_runs', (t) => {
 			t.dropColumn('invalid_skipped');
+			t.dropColumn('exclude_skipped');
 		});
 		expect(
 			await archive.getKnex().schema.hasColumn('inventory_runs', 'invalid_skipped'),
+		).toBe(false);
+		expect(
+			await archive.getKnex().schema.hasColumn('inventory_runs', 'exclude_skipped'),
 		).toBe(false);
 
 		const result = await listInventoryRuns(archive);
@@ -148,6 +154,7 @@ describe('listInventoryRuns', () => {
 		expect(result.items[0]).toMatchObject({
 			list_label: 'pre-invalid-skipped',
 			scope_skipped: 1,
+			exclude_skipped: null,
 			invalid_skipped: null,
 		});
 	});
