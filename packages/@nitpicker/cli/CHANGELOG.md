@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.16.0](https://github.com/d-zero-dev/nitpicker/compare/v0.15.0...v0.16.0) (2026-08-07)
+
+### Bug Fixes
+
+- **cli:** show npx @nitpicker/cli in usage and cache hints ([95f7b27](https://github.com/d-zero-dev/nitpicker/commit/95f7b273296ded400ef5bcadb15cbeccd37a76b8))
+
+### Features
+
+- **cli:** add --dedupe-cap flags and duplicate-clusters/dedupe-cap-events subcommands ([ef46282](https://github.com/d-zero-dev/nitpicker/commit/ef4628228a8c0747655311cd3ee1eb65d31ab53b)), closes [#208](https://github.com/d-zero-dev/nitpicker/issues/208)
+- **cli:** fail fast when Chrome is missing before crawl/pipeline runs ([e304e30](https://github.com/d-zero-dev/nitpicker/commit/e304e30ce42dc58069deb76839ad47bb2ffbeca2))
+
 # [0.15.0](https://github.com/d-zero-dev/nitpicker/compare/v0.14.0...v0.15.0) (2026-07-30)
 
 ### Features

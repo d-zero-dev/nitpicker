@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.16.0](https://github.com/d-zero-dev/nitpicker/compare/v0.15.0...v0.16.0) (2026-08-07)
+
+### Features
+
+- **mcp-server:** add find_duplicate_clusters and list_dedupe_cap_events tools ([e41a423](https://github.com/d-zero-dev/nitpicker/commit/e41a4230e6b8b9ba1315ef9dd8b922c642e5cbeb)), closes [#208](https://github.com/d-zero-dev/nitpicker/issues/208)
+
 # [0.15.0](https://github.com/d-zero-dev/nitpicker/compare/v0.14.0...v0.15.0) (2026-07-30)
 
 ### Features

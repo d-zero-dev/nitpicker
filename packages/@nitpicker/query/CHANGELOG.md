@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.16.0](https://github.com/d-zero-dev/nitpicker/compare/v0.15.0...v0.16.0) (2026-08-07)
+
+### Bug Fixes
+
+- **query:** validate limit/offset and batch duplicate-cluster URL fetches ([112c6cd](https://github.com/d-zero-dev/nitpicker/commit/112c6cd6e1aaa955b712e21e70b8071a392aef24)), closes [#208](https://github.com/d-zero-dev/nitpicker/issues/208)
+
+### Features
+
+- **query:** add duplicate-body-cluster and dedupe-cap-event queries ([7c5fd9a](https://github.com/d-zero-dev/nitpicker/commit/7c5fd9a3585a5a27d457871ea482aec8b32a00f9)), closes [#208](https://github.com/d-zero-dev/nitpicker/issues/208)
+- **query:** exclude 404 pages from summary totals and the directory tree ([6065ba0](https://github.com/d-zero-dev/nitpicker/commit/6065ba0234c3a96a68a1c724140f9f11c6f6c720))
+- **query:** OR-combine boolean/lang filters on the viewer fast path ([f98028d](https://github.com/d-zero-dev/nitpicker/commit/f98028d069f59e91d2dbed2043ea0d3faff3ee4e))
+- **query:** OR-combine multi-value enum filters on the fast path ([9891406](https://github.com/d-zero-dev/nitpicker/commit/98914064e34a084cf3caa276cc59971b4856dfa4))
+- **query:** serve every viewer filter/sort from the read model fast path ([89c3165](https://github.com/d-zero-dev/nitpicker/commit/89c316580fc3907ff322814e80b07628291effa9))
+
 # [0.15.0](https://github.com/d-zero-dev/nitpicker/compare/v0.14.0...v0.15.0) (2026-07-30)
 
 ### Bug Fixes

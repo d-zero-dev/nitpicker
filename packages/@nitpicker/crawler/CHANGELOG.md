@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.16.0](https://github.com/d-zero-dev/nitpicker/compare/v0.15.0...v0.16.0) (2026-08-07)
+
+### Bug Fixes
+
+- **crawler:** decode percent-encoded basic auth credentials before forwarding ([d4cc182](https://github.com/d-zero-dev/nitpicker/commit/d4cc1828cffd6ce9fe23bcd217740a23d1944754))
+- **crawler:** fix rejected_count finalization gap, stale body_hash comparison, and gate inconsistency ([e8dcf76](https://github.com/d-zero-dev/nitpicker/commit/e8dcf76cd7b7afe1610ef4ce3dbcb3725b2376f7)), closes [#208](https://github.com/d-zero-dev/nitpicker/issues/208)
+
+### Features
+
+- **crawler:** add assertChromeIsInstalled preflight check ([2462172](https://github.com/d-zero-dev/nitpicker/commit/2462172f7b1a03b157a3e14e405b8e76a72b99b0))
+- **crawler:** classify redirect loops as a distinct error kind ([72d044d](https://github.com/d-zero-dev/nitpicker/commit/72d044dcbf02c544bb9ccb991224882ffbaddcc5))
+- **crawler:** fix self-generating pagination URLs and add dedupe-cap soft cap ([f3d9fb8](https://github.com/d-zero-dev/nitpicker/commit/f3d9fb8cb0edece62177f168f797382ab9e3d540)), closes [#208](https://github.com/d-zero-dev/nitpicker/issues/208)
+
 # [0.15.0](https://github.com/d-zero-dev/nitpicker/compare/v0.14.0...v0.15.0) (2026-07-30)
 
 ### Bug Fixes

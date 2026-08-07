@@ -3,6 +3,23 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.16.0](https://github.com/d-zero-dev/nitpicker/compare/v0.15.0...v0.16.0) (2026-08-07)
+
+### Bug Fixes
+
+- **viewer:** build the e2e read model and stop retrying deterministic refusals ([5a3247a](https://github.com/d-zero-dev/nitpicker/commit/5a3247a5dec63476b13a747c3adff94166282443))
+- **viewer:** show npx @nitpicker/cli in command hints ([4780b7a](https://github.com/d-zero-dev/nitpicker/commit/4780b7af01009a79b00f01501ec8921d26af2612))
+- **viewer:** treat an empty ?lang= value as no filter, not zero rows ([f2a2253](https://github.com/d-zero-dev/nitpicker/commit/f2a2253b4a587f1e814d1aa6e9db9aaedb1fcf30)), closes [#252](https://github.com/d-zero-dev/nitpicker/issues/252)
+
+### Features
+
+- **viewer:** add Duplicate Clusters view for issue [#208](https://github.com/d-zero-dev/nitpicker/issues/208) ([7cb87f1](https://github.com/d-zero-dev/nitpicker/commit/7cb87f1027d382dda36dd10c2ebee9d583d0f8d1))
+- **viewer:** add redirect-loop error kind label (en/ja) ([65a55f3](https://github.com/d-zero-dev/nitpicker/commit/65a55f3e5ffe21f0888e89e1a7dcaf70cf8e0783))
+- **viewer:** convert remaining boolean/lang filters from radio to OR checkboxes ([09ea0e9](https://github.com/d-zero-dev/nitpicker/commit/09ea0e9c04dc78d42437b0e1261a1098aeda8832))
+- **viewer:** refuse stale read models with guidance instead of silent live fallback ([35fa0ab](https://github.com/d-zero-dev/nitpicker/commit/35fa0ab0df7f4e64434e0712c3529f22079929c8))
+- **viewer:** render the inventory-seed 404 row in the summary status histogram ([6ed9f08](https://github.com/d-zero-dev/nitpicker/commit/6ed9f08e02d8d771eea3e6a97cf78ca62101d681))
+- **viewer:** switch enum table filters from radio to OR checkboxes ([6a4e68e](https://github.com/d-zero-dev/nitpicker/commit/6a4e68ec420a6b1b6b4f51a421659c4075da0b5a))
+
 # [0.15.0](https://github.com/d-zero-dev/nitpicker/compare/v0.14.0...v0.15.0) (2026-07-30)
 
 ### Bug Fixes

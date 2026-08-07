@@ -3,6 +3,39 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.16.0](https://github.com/d-zero-dev/nitpicker/compare/v0.15.0...v0.16.0) (2026-08-07)
+
+### Bug Fixes
+
+- **cli:** show npx @nitpicker/cli in usage and cache hints ([95f7b27](https://github.com/d-zero-dev/nitpicker/commit/95f7b273296ded400ef5bcadb15cbeccd37a76b8))
+- **crawler:** decode percent-encoded basic auth credentials before forwarding ([d4cc182](https://github.com/d-zero-dev/nitpicker/commit/d4cc1828cffd6ce9fe23bcd217740a23d1944754))
+- **crawler:** fix rejected_count finalization gap, stale body_hash comparison, and gate inconsistency ([e8dcf76](https://github.com/d-zero-dev/nitpicker/commit/e8dcf76cd7b7afe1610ef4ce3dbcb3725b2376f7)), closes [#208](https://github.com/d-zero-dev/nitpicker/issues/208)
+- **query:** validate limit/offset and batch duplicate-cluster URL fetches ([112c6cd](https://github.com/d-zero-dev/nitpicker/commit/112c6cd6e1aaa955b712e21e70b8071a392aef24)), closes [#208](https://github.com/d-zero-dev/nitpicker/issues/208)
+- **repo:** forbid client info from leaking into PR body ([f57cd2b](https://github.com/d-zero-dev/nitpicker/commit/f57cd2bd8f603eb7d1108e3023b600b6e35b7373))
+- **viewer:** build the e2e read model and stop retrying deterministic refusals ([5a3247a](https://github.com/d-zero-dev/nitpicker/commit/5a3247a5dec63476b13a747c3adff94166282443))
+- **viewer:** show npx @nitpicker/cli in command hints ([4780b7a](https://github.com/d-zero-dev/nitpicker/commit/4780b7af01009a79b00f01501ec8921d26af2612))
+- **viewer:** treat an empty ?lang= value as no filter, not zero rows ([f2a2253](https://github.com/d-zero-dev/nitpicker/commit/f2a2253b4a587f1e814d1aa6e9db9aaedb1fcf30)), closes [#252](https://github.com/d-zero-dev/nitpicker/issues/252)
+
+### Features
+
+- **cli:** add --dedupe-cap flags and duplicate-clusters/dedupe-cap-events subcommands ([ef46282](https://github.com/d-zero-dev/nitpicker/commit/ef4628228a8c0747655311cd3ee1eb65d31ab53b)), closes [#208](https://github.com/d-zero-dev/nitpicker/issues/208)
+- **cli:** fail fast when Chrome is missing before crawl/pipeline runs ([e304e30](https://github.com/d-zero-dev/nitpicker/commit/e304e30ce42dc58069deb76839ad47bb2ffbeca2))
+- **crawler:** add assertChromeIsInstalled preflight check ([2462172](https://github.com/d-zero-dev/nitpicker/commit/2462172f7b1a03b157a3e14e405b8e76a72b99b0))
+- **crawler:** classify redirect loops as a distinct error kind ([72d044d](https://github.com/d-zero-dev/nitpicker/commit/72d044dcbf02c544bb9ccb991224882ffbaddcc5))
+- **crawler:** fix self-generating pagination URLs and add dedupe-cap soft cap ([f3d9fb8](https://github.com/d-zero-dev/nitpicker/commit/f3d9fb8cb0edece62177f168f797382ab9e3d540)), closes [#208](https://github.com/d-zero-dev/nitpicker/issues/208)
+- **mcp-server:** add find_duplicate_clusters and list_dedupe_cap_events tools ([e41a423](https://github.com/d-zero-dev/nitpicker/commit/e41a4230e6b8b9ba1315ef9dd8b922c642e5cbeb)), closes [#208](https://github.com/d-zero-dev/nitpicker/issues/208)
+- **query:** add duplicate-body-cluster and dedupe-cap-event queries ([7c5fd9a](https://github.com/d-zero-dev/nitpicker/commit/7c5fd9a3585a5a27d457871ea482aec8b32a00f9)), closes [#208](https://github.com/d-zero-dev/nitpicker/issues/208)
+- **query:** exclude 404 pages from summary totals and the directory tree ([6065ba0](https://github.com/d-zero-dev/nitpicker/commit/6065ba0234c3a96a68a1c724140f9f11c6f6c720))
+- **query:** OR-combine boolean/lang filters on the viewer fast path ([f98028d](https://github.com/d-zero-dev/nitpicker/commit/f98028d069f59e91d2dbed2043ea0d3faff3ee4e))
+- **query:** OR-combine multi-value enum filters on the fast path ([9891406](https://github.com/d-zero-dev/nitpicker/commit/98914064e34a084cf3caa276cc59971b4856dfa4))
+- **query:** serve every viewer filter/sort from the read model fast path ([89c3165](https://github.com/d-zero-dev/nitpicker/commit/89c316580fc3907ff322814e80b07628291effa9))
+- **viewer:** add Duplicate Clusters view for issue [#208](https://github.com/d-zero-dev/nitpicker/issues/208) ([7cb87f1](https://github.com/d-zero-dev/nitpicker/commit/7cb87f1027d382dda36dd10c2ebee9d583d0f8d1))
+- **viewer:** add redirect-loop error kind label (en/ja) ([65a55f3](https://github.com/d-zero-dev/nitpicker/commit/65a55f3e5ffe21f0888e89e1a7dcaf70cf8e0783))
+- **viewer:** convert remaining boolean/lang filters from radio to OR checkboxes ([09ea0e9](https://github.com/d-zero-dev/nitpicker/commit/09ea0e9c04dc78d42437b0e1261a1098aeda8832))
+- **viewer:** refuse stale read models with guidance instead of silent live fallback ([35fa0ab](https://github.com/d-zero-dev/nitpicker/commit/35fa0ab0df7f4e64434e0712c3529f22079929c8))
+- **viewer:** render the inventory-seed 404 row in the summary status histogram ([6ed9f08](https://github.com/d-zero-dev/nitpicker/commit/6ed9f08e02d8d771eea3e6a97cf78ca62101d681))
+- **viewer:** switch enum table filters from radio to OR checkboxes ([6a4e68e](https://github.com/d-zero-dev/nitpicker/commit/6a4e68ec420a6b1b6b4f51a421659c4075da0b5a))
+
 # [0.15.0](https://github.com/d-zero-dev/nitpicker/compare/v0.14.0...v0.15.0) (2026-07-30)
 
 ### Bug Fixes
