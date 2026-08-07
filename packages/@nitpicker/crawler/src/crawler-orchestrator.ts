@@ -25,6 +25,7 @@ import { isLikelyHtmlUrl } from './crawler/is-likely-html-url.js';
 import { networkOutageSummaryCounter } from './crawler/network-outage-summary-counter.js';
 import { PreloadShortCircuitError } from './crawler/preload-short-circuit-error.js';
 import { protocolAgnosticKey } from './crawler/protocol-agnostic-key.js';
+import { shouldSkipUrl } from './crawler/should-skip-url.js';
 import { crawlerLog, log } from './debug.js';
 import { normalizeToArray } from './normalize-to-array.js';
 import { resolveOutputPath } from './resolve-output-path.js';
@@ -864,9 +865,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * 1. Open the archive (writer mode, takes the archive lock).
 	 * 2. Reject list-mode archives — they hold metadata-only rows that
 	 *    inventory has no business touching.
-	 * 3. Reject archives with unfinished `pending` URLs — those would inherit
-	 *    the inventory `source` label by mistake. Operator must resume /
-	 *    retry-failed first.
+	 * 3. Warn (but proceed) on archives with unfinished `pending` URLs —
+	 *    crawled-wins source priority keeps their labels stable; the
+	 *    operator can `--resume` first if they want the prior work
+	 *    finalized.
 	 * 4. If `source` is given, archive its exact bytes under
 	 *    `inventory/<sha256>.txt` (see {@link Archive.saveInventorySourceList}).
 	 *    Done before scope classification so even a run that discards every
@@ -879,17 +881,33 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * 6. Subtract URLs that already exist in `pages` or `resources` so the
 	 *    second (and N-th) inventory pass is a no-op for known rows — keeps
 	 *    `'inventory-seed'` rows from being silently demoted.
-	 * 7. Make `<archive>.bak`. Anything thrown beyond this point restores
+	 * 7. Split the remaining novel URLs on the effective `excludes` /
+	 *    `excludeUrls` (archived config overlaid with this run's
+	 *    overrides — the same inputs the crawl's fetch-time
+	 *    `shouldSkipUrl` gate uses). Matching URLs are recorded as
+	 *    terminal skipped pages (`is_skipped=1`,
+	 *    `skip_reason='excluded'`, `source='inventory-seed'`) instead of
+	 *    being imported — the same end state a link-discovered excluded
+	 *    URL reaches in a normal crawl — and counted as
+	 *    `exclude_skipped` (issue #260). Running this after step 6 keeps
+	 *    previously crawled rows that newly match the exclusion config
+	 *    untouched (crawled-wins). `excludeKeywords` does not
+	 *    participate here: it matches rendered page content, which a URL
+	 *    list does not have — HTML seeds still get it at render time via
+	 *    the browser verdict.
+	 * 8. Make `<archive>.bak`. Anything thrown beyond this point restores
 	 *    from the backup.
-	 * 8. HEAD-probe each novel URL. Responses classified as HTML are queued
-	 *    as Crawler seeds (`'inventory-seed'`); everything else is recorded
-	 *    in `resources` directly as `'inventory-seed'` (no browser launch).
-	 * 9. If any HTML seeds exist, start a Crawler with
+	 * 9. Classify each importable novel URL by URL-extension heuristic
+	 *    (no probe — see the in-body rationale). HTML-looking URLs are
+	 *    queued as Crawler seeds (`'inventory-seed'`); everything else is
+	 *    recorded in `resources` directly as `'inventory-seed'` (no
+	 *    browser launch, no HEAD).
+	 * 10. If any HTML seeds exist, start a Crawler with
 	 *    `inventoryMode = { seedUrls }` so the rendered page and every newly
 	 *    discovered downstream link is labelled correctly. `resume` is fed
 	 *    the existing `scraped` / `resources` sets so links into already-
 	 *    crawled pages stop at the seen-gate without re-rendering.
-	 * 10. Drop the backup on success; restore it on any throw.
+	 * 11. Drop the backup on success; restore it on any throw.
 	 *
 	 * Mutually exclusive with `--append` / `--retry-failed` / `--resume` /
 	 * `--diff` / `--list` / `--list-file` / `--single` / `--output` — the
@@ -912,7 +930,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 *   `inventoryUrls` in-memory; the audit row's `source_file_sha256`
 	 *   column will be `NULL` and no source list is archived.
 	 * @returns The orchestrator instance after a successful inventory pass.
-	 * @throws {Error} When `inventoryUrls` is empty, the archive is in list mode, or pending URLs from a previous crawl remain unresolved.
+	 * @throws {Error} When `inventoryUrls` is empty or the archive is in list mode. Unresolved pending URLs from a previous crawl do NOT throw — see step 3.
 	 */
 	static async inventory(
 		archivePath: string,
@@ -1024,17 +1042,52 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				novelUrls.length,
 			);
 
+			// Split the novel URLs on the exclusion config BEFORE the
+			// HTML/non-HTML classification, so an exclude-matched URL is
+			// recorded as a terminal skipped page instead of being imported
+			// (issue #260). The inputs mirror the scrape phase's fetch-time
+			// gate (`shouldSkipUrl` in `crawler.ts` fed by the constructor's
+			// merge): archived config overlaid with this run's overrides,
+			// and `DEFAULT_EXCLUDED_EXTERNAL_URLS` merged ahead of the
+			// user's prefixes — classification and gate must never disagree
+			// about the same URL. Running this AFTER the known-URL filter is
+			// deliberate: a previously crawled row that newly matches the
+			// exclusion config stays untouched (crawled-wins), matching how
+			// `getExistingPageUrls` shields known rows from re-labelling.
+			// `excludeKeywords` is deliberately absent: it matches rendered
+			// page content, which a URL list does not have — HTML seeds
+			// still get it at render time via the browser verdict.
+			const effectiveConfig = { ...archived, ...cleanObject(options) };
+			const excludes = normalizeToArray(effectiveConfig.excludes);
+			const excludeUrls = [
+				...DEFAULT_EXCLUDED_EXTERNAL_URLS,
+				...normalizeToArray(effectiveConfig.excludeUrls),
+			];
+			const excludedNovelUrls: ExURL[] = [];
+			const importableNovelUrls: ExURL[] = [];
+			for (const url of novelUrls) {
+				if (shouldSkipUrl({ url, excludes, excludeUrls, options: effectiveConfig })) {
+					excludedNovelUrls.push(url);
+				} else {
+					importableNovelUrls.push(url);
+				}
+			}
+			if (excludedNovelUrls.length > 0) {
+				log(
+					'[inventory] %d URL(s) recorded as skipped (matched excludes / excludeUrls)',
+					excludedNovelUrls.length,
+				);
+			}
+
 			if (novelUrls.length === 0) {
 				// Nothing to do — release the archive cleanly without taking a
 				// backup. The orchestrator returned here is empty; the caller
-				// should only invoke `close` on it.
-				const noopConfig: Config = {
-					...archived,
-					...cleanObject(options),
-				};
-				const orchestrator = new CrawlerOrchestrator(archive, noopConfig);
+				// should only invoke `close` on it. `effectiveConfig` is the
+				// same archived-plus-overrides merge every other path in this
+				// method sees.
+				const orchestrator = new CrawlerOrchestrator(archive, effectiveConfig);
 				if (initializedCallback) {
-					await initializedCallback(orchestrator, noopConfig);
+					await initializedCallback(orchestrator, effectiveConfig);
 				}
 				return orchestrator;
 			}
@@ -1052,7 +1105,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			// clause). This flag steers the catch below.
 			let ingestionComplete = false;
 			try {
-				// Classify novel URLs by URL-extension heuristic (no I/O).
+				// Classify importable novel URLs by URL-extension heuristic (no I/O).
 				// Source file lists come from `ls` on the doc-root, so the
 				// extension reflects the real file type — a HEAD pre-flight
 				// here would be pure wasted I/O. Edge cases:
@@ -1083,7 +1136,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// null as "not probed" rather than "failed".
 				const rawHtmlSeeds: ExURL[] = [];
 				const nonHtmlSeeds: ExURL[] = [];
-				for (const url of novelUrls) {
+				for (const url of importableNovelUrls) {
 					if (isLikelyHtmlUrl(url)) {
 						rawHtmlSeeds.push(url);
 					} else {
@@ -1122,10 +1175,19 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// these rows up on the next `--resume` via the
 				// `OR p.source != 'crawled'` clause.
 				await archive.insertInventorySeeds(htmlSeeds);
+				// Record exclude-matched novel URLs as terminal skipped pages
+				// (`is_skipped=1`, `skip_reason='excluded'`,
+				// `source='inventory-seed'`) — the same end state the normal
+				// crawl's fetch-time gate produces for link-discovered
+				// excluded URLs, so the archive looks identical no matter
+				// how the URL was discovered. Inside the `.bak` window for
+				// the same all-or-nothing reason as the seed inserts above.
+				await archive.insertInventorySkippedPages(excludedNovelUrls);
 				log(
-					'[inventory] %d HTML seed(s), %d non-HTML resource(s) recorded',
+					'[inventory] %d HTML seed(s), %d non-HTML resource(s), %d skipped page(s) recorded',
 					htmlSeeds.length,
 					nonHtmlSeeds.length,
+					excludedNovelUrls.length,
 				);
 				// Audit row is written *inside* the `.bak` window: a libsql
 				// hiccup or transient lock on the INSERT aborts the ingestion
@@ -1140,6 +1202,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					htmlSeedsCount: htmlSeeds.length,
 					nonHtmlCount: nonHtmlSeeds.length,
 					outOfScope,
+					excludeSkipped: excludedNovelUrls.length,
 					sourceFileSha256: source?.sha256 ?? null,
 					invalidSkipped: source?.invalidLineCount ?? null,
 				});
@@ -1160,8 +1223,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// (matches the rest of the orchestrator's public surface —
 				// no inventory bookkeeping leaks out).
 				const baseConfig: Config = {
-					...archived,
-					...cleanObject(options),
+					...effectiveConfig,
 					recursive: true,
 					fromList: false,
 				};
@@ -1524,6 +1586,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			new_pages: aggregates.htmlSeedsCount,
 			new_resources: aggregates.nonHtmlCount,
 			scope_skipped: aggregates.outOfScope,
+			exclude_skipped: aggregates.excludeSkipped,
 			invalid_skipped: aggregates.invalidSkipped,
 		});
 	}

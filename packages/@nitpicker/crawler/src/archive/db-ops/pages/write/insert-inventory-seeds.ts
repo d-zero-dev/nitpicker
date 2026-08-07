@@ -1,9 +1,7 @@
 import type { WriteRefCaches } from '../../_shared/types.js';
 import type { Knex } from 'knex';
 
-import { eachSplitted } from '../../../../utils/array/each-splitted.js';
-import { resolveUrlRefs } from '../../../populate-entity-tables/resolve-url-refs.js';
-import { decomposeUrl } from '../../../populate-ref-tables/decompose-url.js';
+import { insertInventoryContentItems } from './insert-inventory-content-items.js';
 
 /**
  * Pre-insert inventory HTML seeds into `content_items` as `scraped = 0`,
@@ -28,15 +26,14 @@ import { decomposeUrl } from '../../../populate-ref-tables/decompose-url.js';
  * behaviour (a seed that turned out to be reachable is not an orphan
  * and should not retain the inventory label).
  *
- * Chunked into 500-URL batches so SQLite's bound-parameter limit
- * (`SQLITE_MAX_VARIABLE_NUMBER`) cannot be hit even on a
- * tens-of-thousands inventory list.
- *
  * Called by `CrawlerOrchestrator.inventory` during the
  * `.bak`-protected ingestion phase, so any failure here aborts the run
- * and restores from backup — the operator reruns from scratch.
+ * and restores from backup — the operator reruns from scratch. The
+ * chunking / conflict-ignore / cache-population plumbing lives in
+ * {@link insertInventoryContentItems}, shared with
+ * `insertInventorySkippedPages`.
  * @param knex - Knex query builder connected to the archive DB.
- * @param caches
+ * @param caches - The connection's write-side id caches.
  * @param urls - URL strings already in `withoutHashAndAuth` form.
  */
 export async function insertInventorySeeds(
@@ -44,41 +41,16 @@ export async function insertInventorySeeds(
 	caches: WriteRefCaches,
 	urls: readonly string[],
 ): Promise<void> {
-	if (urls.length === 0) {
-		return;
-	}
-	await eachSplitted([...urls], 500, async (chunk) => {
-		await knex('url_refs')
-			.insert(chunk.map((url) => ({ url, ...decomposeUrl(url) })))
-			.onConflict('url')
-			.ignore();
-		const urlIds = await resolveUrlRefs(knex, chunk);
-		const rows = chunk.map((url) => {
-			const urlId = urlIds.get(url);
-			if (urlId === undefined) {
-				throw new Error(`insertInventorySeeds: url_refs.id not resolved for ${url}`);
-			}
-			caches.urlIds.set(url, urlId);
-			return {
-				url_id: urlId,
-				scraped: 0,
-				is_external: 0,
-				is_target: 0,
-				source: 'inventory-seed',
-			};
-		});
-		await knex('content_items').insert(rows).onConflict('url_id').ignore();
-		const inserted = (await knex
-			.select('ci.id', 'ci.source', 'ur.url')
-			.from('content_items as ci')
-			.join('url_refs as ur', 'ur.id', 'ci.url_id')
-			.whereIn('ur.url', chunk)) as {
-			id: number;
-			source: 'inventory-seed';
-			url: string;
-		}[];
-		for (const row of inserted) {
-			caches.contentItems.set(row.url, { id: row.id, source: row.source });
-		}
+	await insertInventoryContentItems({
+		knex,
+		caches,
+		urls,
+		row: {
+			scraped: 0,
+			is_external: 0,
+			is_target: 0,
+			source: 'inventory-seed',
+		},
+		opName: 'insertInventorySeeds',
 	});
 }

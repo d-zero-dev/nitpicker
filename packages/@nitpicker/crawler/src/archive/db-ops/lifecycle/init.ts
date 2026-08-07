@@ -5,6 +5,7 @@ import { assertCompatibleVersion } from '../../meta/assert-compatible-version.js
 import { migrateContentItemsAliasOfId } from '../../migrate-content-items-alias-of-id.js';
 import { migrateInfoMainContentSelector } from '../../migrate-info-main-content-selector.js';
 import { migrateInfoRoots } from '../../migrate-info-roots.js';
+import { migrateInventoryRunsExcludeSkipped } from '../../migrate-inventory-runs-exclude-skipped.js';
 import { migrateInventoryRunsInvalidSkipped } from '../../migrate-inventory-runs-invalid-skipped.js';
 import { migrateMainContentsColumns } from '../../migrate-main-contents-columns.js';
 import { migratePageMetaBodyHash } from '../../migrate-page-meta-body-hash.js';
@@ -14,7 +15,8 @@ import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-networ
 /**
  * Initializes the database schema if tables do not exist, then runs the
  * remaining lightweight migrations (`info.roots`, `info.mainContentSelector`,
- * `page_meta.main_content_*`, `inventory_runs.invalid_skipped`).
+ * `page_meta.main_content_*`, `inventory_runs.invalid_skipped`,
+ * `inventory_runs.exclude_skipped`).
  *
  * There is deliberately no per-table *table-creation* migration chain here:
  * `assertCompatibleVersion` (called below, before any schema work) rejects
@@ -31,7 +33,8 @@ import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-networ
  * needs an explicit `hasColumn`-guarded `ALTER TABLE` here (`migrateInfoRoots`,
  * `migrateMainContentsColumns`, `migratePageMetaBodyHash`,
  * `migratePageMetaConsoleErrorCount`, `migrateContentItemsAliasOfId`,
- * `migrateInventoryRunsInvalidSkipped`) rather than a DDL-string change alone.
+ * `migrateInventoryRunsInvalidSkipped`, `migrateInventoryRunsExcludeSkipped`)
+ * rather than a DDL-string change alone.
  *
  * `closeStaleOpenNetworkOutages` is not a schema migration (no columns
  * change) but belongs at this same boot phase for the same reason the
@@ -70,5 +73,6 @@ export async function init(knex: Knex, readOnly: boolean): Promise<void> {
 	await migratePageMetaConsoleErrorCount(knex);
 	await migrateContentItemsAliasOfId(knex);
 	await migrateInventoryRunsInvalidSkipped(knex);
+	await migrateInventoryRunsExcludeSkipped(knex);
 	await closeStaleOpenNetworkOutages(knex);
 }

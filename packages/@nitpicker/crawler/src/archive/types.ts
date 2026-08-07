@@ -129,6 +129,7 @@ export type PageSource = 'crawled' | 'inventory-seed' | 'inventory-discovered';
  *   new_pages: 1234,
  *   new_resources: 56,
  *   scope_skipped: 7,
+ *   exclude_skipped: 3,
  * });
  */
 export interface InventoryRunMeta {
@@ -146,6 +147,8 @@ export interface InventoryRunMeta {
 	new_resources?: number | null;
 	/** Number of input URLs dropped because they fell outside the archived scope. */
 	scope_skipped?: number | null;
+	/** Number of novel in-scope input URLs recorded as terminal skipped pages (`is_skipped=1`, `skip_reason='excluded'`) instead of being imported, because they matched the effective `excludes` / `excludeUrls` config. Pure audit output like every other count on this row — written once per run, read back only by `listInventoryRuns` display surfaces, never consumed by any runtime decision. `null` on rows written before the column existed (those runs predate ingestion-side exclusion — their excluded URLs were imported as real pages/resources, not counted). */
+	exclude_skipped?: number | null;
 	/** Number of source-file lines dropped by the CLI for failing URL validation, before this row's `total_lines` was counted. `null` for programmatic callers that built the URL list in-memory (no source file to have invalid lines). */
 	invalid_skipped?: number | null;
 	/** Free-form text for backfill annotations or operator notes. */

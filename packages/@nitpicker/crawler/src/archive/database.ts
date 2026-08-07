@@ -86,6 +86,7 @@ import { getScrapedHtmlPageCount as getScrapedHtmlPageCountOp } from './db-ops/p
 import { repromoteExternalPages as repromoteExternalPagesOp } from './db-ops/pages/reset/repromote-external-pages.js';
 import { resetFailedPages as resetFailedPagesOp } from './db-ops/pages/reset/reset-failed-pages.js';
 import { insertInventorySeeds as insertInventorySeedsOp } from './db-ops/pages/write/insert-inventory-seeds.js';
+import { insertInventorySkippedPages as insertInventorySkippedPagesOp } from './db-ops/pages/write/insert-inventory-skipped-pages.js';
 import { recordRedirect as recordRedirectOp } from './db-ops/pages/write/record-redirect.js';
 import { setSkippedPage as setSkippedPageOp } from './db-ops/pages/write/set-skipped-page.js';
 import { updatePage as updatePageOp } from './db-ops/pages/write/update-page.js';
@@ -691,6 +692,24 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			'Database.insertInventorySeeds',
 			async () =>
 				await insertInventorySeedsOp(this.#instance, this.#writeRefCaches, urls),
+			retrySetting,
+		);
+	}
+
+	/**
+	 * Records exclude-matched inventory URLs as terminal skipped pages
+	 * (`scraped=1`, `is_skipped=1`, `skip_reason='excluded'`,
+	 * `source='inventory-seed'`). Delegates to
+	 * {@link insertInventorySkippedPagesOp} — see that op's JSDoc for the
+	 * normal-crawl parity rationale.
+	 * @param urls - URL strings already in `withoutHashAndAuth` form.
+	 */
+	async insertInventorySkippedPages(urls: readonly string[]): Promise<void> {
+		return emitErrorAndRetry(
+			this,
+			'Database.insertInventorySkippedPages',
+			async () =>
+				await insertInventorySkippedPagesOp(this.#instance, this.#writeRefCaches, urls),
 			retrySetting,
 		);
 	}

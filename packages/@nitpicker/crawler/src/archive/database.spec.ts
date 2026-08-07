@@ -3905,6 +3905,110 @@ describe('insertInventorySeeds', () => {
 	});
 });
 
+describe('insertInventorySkippedPages', () => {
+	it('inserts terminal skipped rows with scraped=1 is_skipped=1 skip_reason=excluded source=inventory-seed', async () => {
+		// The end state must be indistinguishable from what the normal
+		// crawl's fetch-time gate (`setSkippedPage`) writes for a
+		// link-discovered excluded URL, apart from the inventory-seed
+		// provenance label.
+		const dbPath = path.resolve(workingDir, 'insert-skipped-basic.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.insertInventorySkippedPages([
+				'http://localhost/excluded-a',
+				'http://localhost/excluded-b.pdf',
+			]);
+			const pages = await db.getPages();
+			expect(pages.map((p) => p.url).toSorted()).toEqual([
+				'http://localhost/excluded-a',
+				'http://localhost/excluded-b.pdf',
+			]);
+			for (const page of pages) {
+				expect(page.scraped).toBe(1);
+				expect(page.isSkipped).toBe(1);
+				expect(page.skipReason).toBe('excluded');
+				expect(page.isExternal).toBe(0);
+				expect(page.isTarget).toBe(0);
+				expect(page.source).toBe('inventory-seed');
+			}
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('rows do NOT land in the strict pending set (scraped=1 keeps --resume away from operator-excluded URLs)', async () => {
+		const dbPath = path.resolve(workingDir, 'insert-skipped-not-pending.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.insertInventorySkippedPages(['http://localhost/excluded']);
+			const { pending } = await db.getCrawlingState();
+			expect(pending).toEqual([]);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('is idempotent when called twice with the same URL (onConflict ignore)', async () => {
+		const dbPath = path.resolve(workingDir, 'insert-skipped-idempotent.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.insertInventorySkippedPages(['http://localhost/excluded']);
+			await db.insertInventorySkippedPages(['http://localhost/excluded']);
+			const pages = await db.getPages();
+			expect(pages.length).toBe(1);
+			expect(pages[0]?.isSkipped).toBe(1);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('does not downgrade an existing crawled row to skipped', async () => {
+		// Crawled-wins: a page that was successfully crawled before the
+		// exclusion pattern was added must survive an inventory pass that
+		// re-includes its URL. The orchestrator pre-filters known URLs, but
+		// the raw method must be safe even if that filter is bypassed.
+		const dbPath = path.resolve(workingDir, 'insert-skipped-no-overwrite.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.updatePage(
+				{
+					url: parseUrl('http://localhost/already-crawled')!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 1,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'already-crawled' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				true,
+				true,
+			);
+			await db.insertInventorySkippedPages(['http://localhost/already-crawled']);
+			const pages = await db.getPages();
+			expect(pages.length).toBe(1);
+			expect(pages[0]?.source).toBe('crawled');
+			expect(pages[0]?.isSkipped).toBe(0);
+			expect(pages[0]?.status).toBe(200);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+});
+
 describe('insertInventoryResources', () => {
 	it('is a no-op when the input array is empty', async () => {
 		const dbPath = path.resolve(workingDir, 'insert-resources-empty.sqlite');
@@ -5369,6 +5473,7 @@ describe('inventory run audit log', () => {
 				new_pages: 1234,
 				new_resources: 56,
 				scope_skipped: 7,
+				exclude_skipped: 3,
 				invalid_skipped: 12,
 				notes: 'first prod run',
 			});
@@ -5387,6 +5492,7 @@ describe('inventory run audit log', () => {
 					'new_pages',
 					'new_resources',
 					'scope_skipped',
+					'exclude_skipped',
 					'invalid_skipped',
 					'notes',
 				)
@@ -5400,6 +5506,7 @@ describe('inventory run audit log', () => {
 				new_pages: 1234,
 				new_resources: 56,
 				scope_skipped: 7,
+				exclude_skipped: 3,
 				invalid_skipped: 12,
 				notes: 'first prod run',
 			});
@@ -5429,6 +5536,7 @@ describe('inventory run audit log', () => {
 			expect(row.new_pages).toBeNull();
 			expect(row.new_resources).toBeNull();
 			expect(row.scope_skipped).toBeNull();
+			expect(row.exclude_skipped).toBeNull();
 			expect(row.invalid_skipped).toBeNull();
 			expect(row.notes).toBeNull();
 		} finally {

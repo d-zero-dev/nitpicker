@@ -804,6 +804,7 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 			close: vi.fn(() => Promise.resolve()),
 			setResources: vi.fn(() => Promise.resolve()),
 			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn((urls: readonly { href: string }[]) => {
 				insertInventoryResourcesCalls.push({ urls: urls.map((u) => u.href) });
 				return Promise.resolve();
@@ -920,6 +921,7 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 			close: vi.fn(() => Promise.resolve()),
 			setResources: vi.fn(() => Promise.resolve()),
 			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn((urls: readonly { href: string }[]) => {
 				insertInventoryResourcesCalls.push({ urls: urls.map((u) => u.href) });
 				return Promise.resolve();
@@ -1002,6 +1004,7 @@ describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => 
 			close: vi.fn(() => Promise.resolve()),
 			setResources: vi.fn(() => Promise.resolve()),
 			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn(() => Promise.resolve()),
 			addError: vi.fn(() => Promise.resolve()),
 			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
@@ -1034,6 +1037,260 @@ describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => 
 		expect(fakeArchive.getScrapedHtmlPageCount).toHaveBeenCalledTimes(1);
 		expect(fakeCrawlerResumeCalls).toHaveLength(1);
 		expect(fakeCrawlerResumeCalls[0]?.pagesScrapedOffset).toBe(140_000);
+	});
+});
+
+describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue #260)', () => {
+	/**
+	 * Builds the mocked Archive shared by the exclusion-filter tests. Every
+	 * write-side method is a spy so the tests can assert exactly which URLs
+	 * were ingested.
+	 * @param config - Overrides merged into the archived config (e.g. `excludes`).
+	 * @returns The fake Archive instance.
+	 */
+	function buildFakeArchive(config: Record<string, unknown>) {
+		return {
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+					...config,
+				}),
+			),
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			getExistingPageUrls: vi.fn(() => Promise.resolve([])),
+			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+			setResources: vi.fn(() => Promise.resolve()),
+			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
+			insertInventoryResources: vi.fn(() => Promise.resolve()),
+			addError: vi.fn(() => Promise.resolve()),
+			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
+		} as unknown as Archive;
+	}
+
+	it('アーカイブ設定の excludes / excludeUrls にマッチする URL は seed / resource ではなく skipped ページとして記録され exclude_skipped に計上される', async () => {
+		// Without the ingestion-side split, the glob-excluded PDF would land
+		// in `resources` as a REAL resource row (non-HTML URLs never reach
+		// the crawler's fetch-time `shouldSkipUrl` gate), and the
+		// prefix-excluded HTML URL would be pre-inserted as a pending
+		// `inventory-seed` page. Both must instead reach the same terminal
+		// state a link-discovered excluded URL gets in a normal crawl: a
+		// skipped page row, written via `insertInventorySkippedPages`.
+		const fakeArchive = buildFakeArchive({
+			excludes: ['/private/*'],
+			excludeUrls: ['https://example.com/legacy'],
+		});
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		// The surviving HTML seed drives the HTML-seed branch; emit `crawlEnd`
+		// immediately so `inventory` resolves without a real crawl.
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = path.resolve('/tmp/inventory-exclude-filter-test');
+		await fs.mkdir(testCwd, { recursive: true });
+		const fixturePath = path.join(testCwd, 'fixture.nitpicker');
+		await fs.writeFile(fixturePath, '');
+
+		try {
+			await CrawlerOrchestrator.inventory(
+				'fixture.nitpicker',
+				[
+					'https://example.com/private/doc.pdf',
+					'https://example.com/legacy/page.html',
+					'https://example.com/keep.pdf',
+					'https://example.com/keep.html',
+					'https://other.example/out.pdf',
+				],
+				{ cwd: testCwd },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		// Only the non-excluded, in-scope URLs are imported…
+		const resourceCalls = vi.mocked(fakeArchive.insertInventoryResources).mock.calls;
+		expect(resourceCalls).toHaveLength(1);
+		expect(resourceCalls[0]![0].map((u: { href: string }) => u.href)).toEqual([
+			'https://example.com/keep.pdf',
+		]);
+		const seedCalls = vi.mocked(fakeArchive.insertInventorySeeds).mock.calls;
+		expect(seedCalls).toHaveLength(1);
+		expect(seedCalls[0]![0].map((u: { href: string }) => u.href)).toEqual([
+			'https://example.com/keep.html',
+		]);
+		// …and the excluded ones are recorded as skipped pages instead
+		// (HTML and non-HTML alike — the split happens before the
+		// extension classification).
+		const skippedCalls = vi.mocked(fakeArchive.insertInventorySkippedPages).mock.calls;
+		expect(skippedCalls).toHaveLength(1);
+		expect(skippedCalls[0]![0].map((u: { href: string }) => u.href).toSorted()).toEqual([
+			'https://example.com/legacy/page.html',
+			'https://example.com/private/doc.pdf',
+		]);
+
+		// The audit row separates the three drop reasons.
+		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
+		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
+		const [meta] = recordInventoryRunMock.mock.calls[0]!;
+		expect(meta.total_lines).toBe(5);
+		expect(meta.new_pages).toBe(1);
+		expect(meta.new_resources).toBe(1);
+		expect(meta.scope_skipped).toBe(1);
+		expect(meta.exclude_skipped).toBe(2);
+	});
+
+	it('スコープ外かつ除外一致の URL は scope_skipped にのみ計上される（二重計上しない）', async () => {
+		// The classification order is a documented contract: scope first,
+		// exclusion second. A URL that is both out-of-scope AND
+		// exclude-matching must land in exactly one audit bucket, or the
+		// audit row's counts stop reconciling against `total_lines`.
+		const fakeArchive = buildFakeArchive({
+			excludes: ['/private/*'],
+		});
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		const testCwd = path.resolve('/tmp/inventory-exclude-precedence-test');
+		await fs.mkdir(testCwd, { recursive: true });
+		const fixturePath = path.join(testCwd, 'fixture.nitpicker');
+		await fs.writeFile(fixturePath, '');
+
+		try {
+			await CrawlerOrchestrator.inventory(
+				'fixture.nitpicker',
+				['https://other.example/private/both.pdf', 'https://example.com/ok.pdf'],
+				{ cwd: testCwd },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		// The out-of-scope URL is dropped entirely, never recorded as a
+		// skipped page (the skipped-page write receives an empty list).
+		const skippedCalls = vi.mocked(fakeArchive.insertInventorySkippedPages).mock.calls;
+		expect(skippedCalls).toHaveLength(1);
+		expect(skippedCalls[0]![0]).toEqual([]);
+
+		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
+		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
+		const [meta] = recordInventoryRunMock.mock.calls[0]!;
+		expect(meta.scope_skipped).toBe(1);
+		expect(meta.exclude_skipped).toBe(0);
+		expect(meta.new_resources).toBe(1);
+	});
+
+	it('既存 URL は除外判定より先に既知として除去され、skipped 上書きされない（crawled-wins）', async () => {
+		// Ordering contract: known-URL subtraction runs BEFORE the
+		// exclusion split. A previously crawled page whose URL newly
+		// matches the exclusion config must stay untouched — neither
+		// re-imported nor re-labelled as skipped — and must not inflate
+		// `exclude_skipped`.
+		const fakeArchive = buildFakeArchive({
+			excludes: ['/private/*'],
+		});
+		vi.mocked(fakeArchive.getExistingPageUrls).mockResolvedValue([
+			'https://example.com/private/known.html',
+		]);
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		const testCwd = path.resolve('/tmp/inventory-exclude-known-test');
+		await fs.mkdir(testCwd, { recursive: true });
+		const fixturePath = path.join(testCwd, 'fixture.nitpicker');
+		await fs.writeFile(fixturePath, '');
+
+		try {
+			await CrawlerOrchestrator.inventory(
+				'fixture.nitpicker',
+				['https://example.com/private/known.html', 'https://example.com/ok.pdf'],
+				{ cwd: testCwd },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		const skippedCalls = vi.mocked(fakeArchive.insertInventorySkippedPages).mock.calls;
+		expect(skippedCalls).toHaveLength(1);
+		expect(skippedCalls[0]![0]).toEqual([]);
+
+		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
+		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
+		const [meta] = recordInventoryRunMock.mock.calls[0]!;
+		expect(meta.exclude_skipped).toBe(0);
+		expect(meta.new_resources).toBe(1);
+	});
+
+	it('実行時 options の excludes 上書きも適用される（アーカイブ設定に無いパターンでも弾く）', async () => {
+		// Parity with the scrape phase: the orchestrator constructor merges
+		// run-time overrides over the archived config before building the
+		// Crawler's fetch-time gate, so the ingestion-side filter must honour
+		// the same merge.
+		const fakeArchive = buildFakeArchive({});
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		const testCwd = path.resolve('/tmp/inventory-exclude-override-test');
+		await fs.mkdir(testCwd, { recursive: true });
+		const fixturePath = path.join(testCwd, 'fixture.nitpicker');
+		await fs.writeFile(fixturePath, '');
+
+		try {
+			await CrawlerOrchestrator.inventory(
+				'fixture.nitpicker',
+				['https://example.com/blocked/a.pdf', 'https://example.com/ok.pdf'],
+				{ cwd: testCwd, excludes: ['/blocked/*'] },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		const resourceCalls = vi.mocked(fakeArchive.insertInventoryResources).mock.calls;
+		expect(resourceCalls).toHaveLength(1);
+		expect(resourceCalls[0]![0].map((u: { href: string }) => u.href)).toEqual([
+			'https://example.com/ok.pdf',
+		]);
+		const skippedCalls = vi.mocked(fakeArchive.insertInventorySkippedPages).mock.calls;
+		expect(skippedCalls).toHaveLength(1);
+		expect(skippedCalls[0]![0].map((u: { href: string }) => u.href)).toEqual([
+			'https://example.com/blocked/a.pdf',
+		]);
+
+		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
+		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
+		const [meta] = recordInventoryRunMock.mock.calls[0]!;
+		expect(meta.new_resources).toBe(1);
+		expect(meta.exclude_skipped).toBe(1);
+		expect(meta.scope_skipped).toBe(0);
 	});
 });
 
@@ -1219,6 +1476,7 @@ describe('CrawlerOrchestrator.inventory: dedupeCap sticky preload wiring (issue 
 			close: vi.fn(() => Promise.resolve()),
 			setResources: vi.fn(() => Promise.resolve()),
 			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn(() => Promise.resolve()),
 			addError: vi.fn(() => Promise.resolve()),
 			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
@@ -1429,6 +1687,7 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 			close: vi.fn(() => Promise.resolve()),
 			setResources: vi.fn(() => Promise.resolve()),
 			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn(() => Promise.resolve()),
 			addError: vi.fn(() => Promise.resolve()),
 			recordInventoryRun,
@@ -1492,6 +1751,7 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 			close: vi.fn(() => Promise.resolve()),
 			setResources: vi.fn(() => Promise.resolve()),
 			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn(() => Promise.resolve()),
 			addError: vi.fn(() => Promise.resolve()),
 			recordInventoryRun,
