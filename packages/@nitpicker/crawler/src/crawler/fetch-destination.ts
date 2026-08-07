@@ -6,6 +6,7 @@ import type { ClientRequest, IncomingMessage, RequestOptions } from 'node:http';
 import { delay } from '@d-zero/shared/delay';
 import redirects from 'follow-redirects';
 
+import { decodeAuthCredential } from './decode-auth-credential.js';
 import { destinationCache } from './destination-cache.js';
 import NetTimeoutError from './net-timeout-error.js';
 import { shouldGetFallbackOnHeadFailure } from './should-get-fallback-on-head-failure.js';
@@ -209,8 +210,19 @@ async function _fetchHead(
 			},
 		};
 
-		if (url.username && url.password) {
-			request.auth = `${url.username}:${url.password}`;
+		// `||`, not `&&`: ExURL rounds an empty userinfo component to null,
+		// so `http://user:@host/` (legal empty-password Basic auth) has
+		// `password: null`. Requiring both would leave this pre-flight
+		// unauthenticated while the browser path (`page.authenticate`, which
+		// always runs and treats null as '') succeeds — and for non-HTML
+		// content the browser never runs, so the HEAD 401 would become the
+		// page's final recorded status.
+		if (url.username || url.password) {
+			// ExURL fields are WHATWG percent-encoded; `auth` is base64'd
+			// verbatim into the Authorization header, so decode first —
+			// mirroring what Node's own `urlToOptions` does for
+			// `http.request(url)` (see `decode-auth-credential.ts`).
+			request.auth = `${decodeAuthCredential(url.username)}:${decodeAuthCredential(url.password)}`;
 		}
 
 		let req: RedirectableRequest<ClientRequest, IncomingMessage>;
