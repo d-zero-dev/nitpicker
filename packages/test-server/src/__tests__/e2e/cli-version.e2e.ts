@@ -87,13 +87,20 @@ describe('CLI version flag', () => {
 	it('引数なしで実行するとヘルプを stderr に出して exit 1', async () => {
 		const { stdout, stderr, code } = await runCli([]);
 		expect(stdout).toBe('');
-		expect(stderr).toContain('Usage: nitpicker <command>');
+		expect(stderr).toContain('Usage: npx @nitpicker/cli <command>');
 		expect(code).toBe(1);
+	});
+
+	it('--help はコマンド一覧を stdout に出して exit 0', async () => {
+		const { stdout, code } = await runCli(['--help']);
+		expect(stdout).toContain('Usage: npx @nitpicker/cli <command>');
+		expect(stdout).toContain('Commands:');
+		expect(code).toBe(0);
 	});
 
 	it('crawl --help はサブコマンドのヘルプを出して exit 0（version は混入しない）', async () => {
 		const { stdout, code } = await runCli(['crawl', '--help']);
-		expect(stdout).toContain('Usage: nitpicker crawl');
+		expect(stdout).toContain('Usage: npx @nitpicker/cli crawl');
 		expect(stdout).not.toContain(pkgVersion);
 		expect(code).toBe(0);
 	});
