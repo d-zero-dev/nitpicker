@@ -76,7 +76,11 @@ jobs:
     # flaky failures would require re-running anyway.
     strategy:
       fail-fast: false
-      # LPT-balanced as of 2026-06-26 measurement (1340 s total, target 335 s/shard).
+      # LPT-balanced as of 2026-06-26 measurement (1340 s total, target 335 s/shard);
+      # `dedupe-cap.e2e.ts` (a full crawl -> viewer-read-model-build -> query
+      # pipeline test) was placed on `append-pipeline` rather than
+      # `inventory-snapshot` since the latter was already the heaviest shard
+      # and adding it there pushed the job past the 15-minute timeout.
       # If a shard starts overshooting in the Actions UI, redo the bin-packing
       # by hand from a recent run's per-file timings.
       matrix:
@@ -105,7 +109,6 @@ jobs:
                 special-char-auth.e2e.ts,
                 empty-password-auth.e2e.ts,
                 main-contents.e2e.ts,
-                dedupe-cap.e2e.ts,
               ]
           - id: retry-exclude
             files:
@@ -131,6 +134,7 @@ jobs:
                 cli-process-exit.e2e.ts,
                 cli-version.e2e.ts,
                 viewer-migrated-archive.e2e.ts,
+                dedupe-cap.e2e.ts,
               ]
     steps:
       - uses: actions/checkout@v7.0.0
