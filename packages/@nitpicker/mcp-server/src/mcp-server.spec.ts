@@ -865,4 +865,25 @@ describe('createServer: find_duplicate_clusters / list_dedupe_cap_events with re
 			observed_count: 2,
 		});
 	});
+
+	it('list_pages は isDedupeCapped:true で dedupe-cap トラップに属する3ページのみ返す', async () => {
+		const result = await callTool(server, 'list_pages', {
+			archiveId,
+			isDedupeCapped: true,
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.total).toBe(3);
+	});
+
+	it('get_page_detail は dedupe-cap でマークされたページの shape key を返す', async () => {
+		const result = await callTool(server, 'get_page_detail', {
+			archiveId,
+			url: 'https://trap.example.com/news/date/0/',
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.isDedupeCapped).toBe(true);
+		expect(data.dedupeCapShapeKey).toBe('trap.example.com/news/date/{n}/');
+	});
 });

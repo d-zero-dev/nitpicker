@@ -54,7 +54,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'list_pages',
 		description:
-			'List pages with rich filtering: by status code (exact or range), missing metadata (title, description), noindex flag, security header presence (CSP / X-Frame-Options / X-Content-Type-Options / HSTS), URL patterns, directory paths. Supports sorting and pagination. Use for questions like "show me all 404 pages", "pages without descriptions", or "internal pages missing CSP". For large sites, set `limit` to keep the response bounded — to dump the whole list use the CLI (`nitpicker query pages`) and pipe through `jq` instead of pulling everything through MCP.',
+			'List pages with rich filtering: by status code (exact or range), missing metadata (title, description), noindex flag, security header presence (CSP / X-Frame-Options / X-Content-Type-Options / HSTS), dedupe-cap trap membership, URL patterns, directory paths. Supports sorting and pagination. Use for questions like "show me all 404 pages", "pages without descriptions", "internal pages missing CSP", or "which pages got swept up in a --dedupe-cap trap". For large sites, set `limit` to keep the response bounded — to dump the whole list use the CLI (`nitpicker query pages`) and pipe through `jq` instead of pulling everything through MCP.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -81,6 +81,11 @@ export const toolDefinitions: Tool[] = [
 					description: 'Filter to pages missing description',
 				},
 				noindex: { type: 'boolean', description: 'Filter to pages with noindex set' },
+				isDedupeCapped: {
+					type: 'boolean',
+					description:
+						'Filter to pages whose URL shape --dedupe-cap captured as a same-cluster crawl trap during crawl (see dedupe_cap_events)',
+				},
 				hasCSP: {
 					type: 'boolean',
 					description: 'Filter by Content-Security-Policy header presence',
@@ -146,7 +151,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'get_page_detail',
 		description:
-			"Get full details for a specific page URL: ~47 flat meta fields (title, description, OG, Twitter, robots, link, charset, manifest, themeColor, fb_app_id, verification_google, format_detection, og:image:alt/width/height, og:locale, og:article timestamps, twitter:site/creator, etc.), `metaExtras` JSON (referrer, viewport parsed, httpEquiv, apple, msapplication, verification.{bing|yandex|...}, geo, citation, hreflang alternates, others.*, originTrial), JSON-LD/SpeculationRules **summary** (count + unique @types + parseErrorCount), Wappalyzer tag **summary** (count + provider→ids map), main-content **aggregate counts only** (mainContentSelector, mainContentWordCount/BodyWordCount, mainContentHeadingCount/ImageCount/TableCount/ButtonCount/IframeCount/VideoCount/AudioCount/CanvasCount, scrollHeightDesktop/Mobile — null when the page was never rendered), outbound links, redirect sources, response headers, and within-archive timestamps (firstCrawledAt / lastCrawledAt). Inbound links are NOT included here — a page's referrer count can reach the hundreds of thousands on a large site; use `list_inbound_links` instead. Raw JSON-LD entries, full tag rows, and the main-content child-entity arrays are also NOT included — fetch them via `get_page_jsonld` / `get_page_tags` / `get_page_main_contents`. Use when drilling down into a specific page.",
+			"Get full details for a specific page URL: ~47 flat meta fields (title, description, OG, Twitter, robots, link, charset, manifest, themeColor, fb_app_id, verification_google, format_detection, og:image:alt/width/height, og:locale, og:article timestamps, twitter:site/creator, etc.), `metaExtras` JSON (referrer, viewport parsed, httpEquiv, apple, msapplication, verification.{bing|yandex|...}, geo, citation, hreflang alternates, others.*, originTrial), JSON-LD/SpeculationRules **summary** (count + unique @types + parseErrorCount), Wappalyzer tag **summary** (count + provider→ids map), main-content **aggregate counts only** (mainContentSelector, mainContentWordCount/BodyWordCount, mainContentHeadingCount/ImageCount/TableCount/ButtonCount/IframeCount/VideoCount/AudioCount/CanvasCount, scrollHeightDesktop/Mobile — null when the page was never rendered), outbound links, redirect sources, response headers, `isDedupeCapped`/`dedupeCapShapeKey` (whether --dedupe-cap captured this page's URL shape as a same-cluster crawl trap, and which shape), and within-archive timestamps (firstCrawledAt / lastCrawledAt). Inbound links are NOT included here — a page's referrer count can reach the hundreds of thousands on a large site; use `list_inbound_links` instead. Raw JSON-LD entries, full tag rows, and the main-content child-entity arrays are also NOT included — fetch them via `get_page_jsonld` / `get_page_tags` / `get_page_main_contents`. Use when drilling down into a specific page.",
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
