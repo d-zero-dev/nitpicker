@@ -306,6 +306,12 @@ export function PagesView() {
 				size: 140,
 				cell: textCell,
 			},
+			{
+				accessorKey: 'isDedupeCapped',
+				header: t('views.pages.filterDedupeCapped'),
+				size: 130,
+				cell: boolCell,
+			},
 		];
 	}, [navigate, t]);
 	const columnControls = useMemo(() => {
