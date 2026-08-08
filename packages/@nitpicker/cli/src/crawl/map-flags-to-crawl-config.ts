@@ -29,7 +29,16 @@ export function mapFlagsToCrawlConfig(flags: CrawlFlagInput) {
 		excludes: flags.exclude,
 		excludeKeywords: flags.excludeKeyword,
 		excludeUrls: flags.excludeUrl,
-		dedupeCap: flags.dedupeCap ?? null,
+		// `0` means "disabled" here, not "cap after 0 observations" — the only
+		// way to reach `dedupeCap: 0` is `--no-dedupe-cap` (yargs-parser's
+		// boolean-negation numeric coercion) or an explicit `--dedupeCap 0`,
+		// both of which mean "turn this off." `DedupeCapTracker`'s own
+		// `computeEffectiveThreshold` floors any positive threshold at 1, so
+		// passing `0` through unchanged would cap on the very first
+		// observation — the opposite of disabling. `null` is the sentinel
+		// every downstream `!== null` gate (`crawler.ts`, `crawler-orchestrator.ts`)
+		// already treats as "tracker not constructed."
+		dedupeCap: flags.dedupeCap || null,
 		dedupeMapCap: flags.dedupeMapCap,
 	};
 }

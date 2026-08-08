@@ -134,6 +134,11 @@ describe('pipeline command', () => {
 		);
 	});
 
+	it('dedupeCap フラグは commandDef 側も default: 10 で crawl.ts と揃えている（手書き複製ゆえの同期漏れガード）', async () => {
+		const { commandDef } = await import('./pipeline.js');
+		expect(commandDef.flags.dedupeCap.default).toBe(10);
+	});
+
 	it("forwards --dedupe-cap/--dedupe-map-cap to startCrawl (pipeline.ts hand-writes its own flags object rather than reusing crawl.ts's mapper, see the TODO on commandDef.flags)", async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
 		vi.mocked(analyzeFn).mockResolvedValue();
