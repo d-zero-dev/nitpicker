@@ -61,6 +61,7 @@ export function applyViewerPagesFilters(
 	if (options.noindex) {
 		qb.where('robots_noindex', 1);
 	}
+	applyEqualityOrInFilter(qb, 'is_dedupe_capped', toFlagValues(options.isDedupeCapped));
 	applyEqualityOrInFilter(qb, 'lang', options.lang);
 	// `viewer_pages` copies header_flags' snake column names verbatim, so
 	// the shared HEADER_FLAG_COLUMN mapping resolves them here too.

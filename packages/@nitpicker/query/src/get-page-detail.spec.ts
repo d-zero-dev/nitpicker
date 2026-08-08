@@ -449,3 +449,109 @@ describe('getPageDetail: content_items.alias_of_id handling', () => {
 		});
 	});
 });
+
+describe('getPageDetail: dedupe_cap_events (--dedupe-cap post-hoc marking)', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_get_page_detail_dedupe_cap__');
+	const archiveFilePath = path.resolve(dir, 'page-detail-dedupe-cap.nitpicker');
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		for (const url of ['https://example.com/capped', 'https://example.com/not-capped']) {
+			await archive.setPage({
+				url: parseUrl(url)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html><body>Page</body></html>',
+				meta: makeBeholderMeta({ title: 'Page' }),
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+
+		const eventId = await archive.insertDedupeCapEvent({
+			shapeKey: 'example.com/capped',
+			sampleUrl: 'https://example.com/capped',
+			bodyHash: Buffer.from('test-body-hash'),
+			effectiveThreshold: 8,
+			observedCount: 8,
+			detectedAt: 1_700_000_000_000,
+		});
+		const knex = archive.getKnex();
+		// A plain `.join().update()` chain silently drops the JOIN when
+		// compiled for SQLite (knex has no UPDATE...JOIN support for this
+		// dialect); a `whereIn` subquery avoids the join entirely.
+		await knex('content_items')
+			.whereIn(
+				'url_id',
+				knex('url_refs').select('id').where('url', 'https://example.com/capped'),
+			)
+			.update({ dedupe_cap_event_id: eventId });
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('reports isDedupeCapped: true and the capturing shape key for a marked page', async () => {
+		const result = await getPageDetail(archive, 'https://example.com/capped');
+		expect(result!.isDedupeCapped).toBe(true);
+		expect(result!.dedupeCapShapeKey).toBe('example.com/capped');
+	});
+
+	it('reports isDedupeCapped: false and a null shape key for an unmarked page', async () => {
+		const result = await getPageDetail(archive, 'https://example.com/not-capped');
+		expect(result!.isDedupeCapped).toBe(false);
+		expect(result!.dedupeCapShapeKey).toBeNull();
+	});
+
+	it('degrades to isDedupeCapped: false without throwing when the column does not exist (pre-feature archive)', async () => {
+		const knex = archive.getKnex();
+		await knex.schema.alterTable('content_items', (t) => {
+			t.dropColumn('dedupe_cap_event_id');
+		});
+
+		const result = await getPageDetail(archive, 'https://example.com/capped');
+		expect(result!.isDedupeCapped).toBe(false);
+		expect(result!.dedupeCapShapeKey).toBeNull();
+
+		// Restore the column so afterAll's close()/other tests are unaffected.
+		await knex.schema.alterTable('content_items', (t) => {
+			t.integer('dedupe_cap_event_id');
+		});
+	});
+});

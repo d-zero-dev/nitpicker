@@ -750,6 +750,137 @@ describe('listPages: content_items.alias_of_id handling', () => {
 	});
 });
 
+describe('listPages: isDedupeCapped filter', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_list_pages_dedupe_cap__');
+	const archiveFilePath = path.resolve(dir, 'list-pages-dedupe-cap-test.nitpicker');
+
+	const META = {
+		lang: null,
+		title: null,
+		description: null,
+		keywords: null,
+		noindex: false,
+		nofollow: false,
+		noarchive: false,
+		canonical: null,
+		alternate: null,
+		'og:type': null,
+		'og:title': null,
+		'og:site_name': null,
+		'og:description': null,
+		'og:url': null,
+		'og:image': null,
+		'twitter:card': null,
+	};
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		for (const url of ['https://example.com/capped', 'https://example.com/not-capped']) {
+			await archive.setPage({
+				url: parseUrl(url)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+
+		const eventId = await archive.insertDedupeCapEvent({
+			shapeKey: 'example.com/capped',
+			sampleUrl: 'https://example.com/capped',
+			bodyHash: Buffer.from('test-body-hash'),
+			effectiveThreshold: 8,
+			observedCount: 8,
+			detectedAt: 1_700_000_000_000,
+		});
+		const knex = archive.getKnex();
+		// A plain `.join().update()` chain silently drops the JOIN when
+		// compiled for SQLite (knex has no UPDATE...JOIN support for this
+		// dialect); a `whereIn` subquery avoids the join entirely.
+		await knex('content_items')
+			.whereIn(
+				'url_id',
+				knex('url_refs').select('id').where('url', 'https://example.com/capped'),
+			)
+			.update({ dedupe_cap_event_id: eventId });
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('isDedupeCapped: true returns only the marked page', async () => {
+		const result = await listPages(archive, { isDedupeCapped: true });
+		expect(result.items.map((p) => p.url)).toEqual(['https://example.com/capped']);
+	});
+
+	it('isDedupeCapped: false returns only the unmarked page', async () => {
+		const result = await listPages(archive, { isDedupeCapped: false });
+		expect(result.items.map((p) => p.url)).toEqual(['https://example.com/not-capped']);
+	});
+
+	it('omitting isDedupeCapped returns both pages', async () => {
+		const result = await listPages(archive);
+		expect(result.total).toBe(2);
+	});
+
+	it('isDedupeCapped: true deterministically returns zero rows when the column does not exist (pre-feature archive)', async () => {
+		const knex = archive.getKnex();
+		await knex.schema.alterTable('content_items', (t) => {
+			t.dropColumn('dedupe_cap_event_id');
+		});
+
+		await expect(listPages(archive, { isDedupeCapped: true })).resolves.toMatchObject({
+			total: 0,
+		});
+		await expect(listPages(archive, { isDedupeCapped: false })).resolves.toMatchObject({
+			total: 2,
+		});
+
+		// Restore the column so afterAll's close()/other tests are unaffected.
+		await knex.schema.alterTable('content_items', (t) => {
+			t.integer('dedupe_cap_event_id');
+		});
+	});
+});
+
 describe('listPages: urlPattern matches a redirect-source URL too', () => {
 	const dir = path.resolve(__dirname, '__test_fixtures_list_pages_redirect__');
 	const archiveFilePath = path.resolve(dir, 'list-pages-redirect-test.nitpicker');

@@ -3,7 +3,9 @@ import type { ArchiveAccessor, JsonLdRow, TagRow } from '@nitpicker/crawler';
 
 import { decodeJsonRef, loadResponseHeadersBySetIds } from '@nitpicker/crawler';
 
+import { dedupeCapShapeKeySelectColumn } from './dedupe-cap-shape-key-select-column.js';
 import { getPageConsoleLogs } from './get-page-console-logs.js';
+import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
 import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 import { resolveAliasAndRedirectChain } from './resolve-alias-and-redirect-chain.js';
@@ -68,6 +70,11 @@ function summarizeTagRows(rows: readonly TagRow[]): PageDetail['tags'] {
  * an observed HTTP 3xx, the other is a same-body/URL-shape inference with no
  * server-side redirect involved) but both collapse to "this URL's real page
  * is that other row" for the caller's purposes.
+ *
+ * `isDedupeCapped`/`dedupeCapShapeKey` degrade to `false`/`null` on an
+ * archive that predates the `--dedupe-cap` post-hoc marking feature (no
+ * `content_items.dedupe_cap_event_id` column) — see
+ * `hasDedupeCapEventIdColumn`.
  * @param accessor - The archive accessor to query.
  * @param url - The URL of the page to retrieve.
  * @returns Detailed page information, or null if the page is not found.
@@ -86,6 +93,7 @@ export async function getPageDetail(
 	const knex = accessor.getKnex();
 	await requireAliasOfIdColumn(knex);
 	const hasPageTemplates = await hasPageTemplatesTable(knex);
+	const hasDedupeCapColumn = await hasDedupeCapEventIdColumn(knex);
 
 	const candidate = await knex('content_items as ci')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
@@ -140,6 +148,13 @@ export async function getPageDetail(
 		.leftJoin('json_refs as extras_ref', 'extras_ref.id', 'pm.meta_extras_json_id');
 	if (hasPageTemplates) {
 		query = query.leftJoin('page_templates as pt', 'pt.page_id', 'ci.id');
+	}
+	if (hasDedupeCapColumn) {
+		query = query.leftJoin(
+			'dedupe_cap_events as dce',
+			'dce.id',
+			'ci.dedupe_cap_event_id',
+		);
 	}
 	const [page] = await query
 		.select(
@@ -223,6 +238,7 @@ export async function getPageDetail(
 			'pm.scroll_height_desktop as scroll_height_desktop',
 			'pm.scroll_height_mobile as scroll_height_mobile',
 			templateKeySelectColumn(knex, hasPageTemplates),
+			dedupeCapShapeKeySelectColumn(knex, hasDedupeCapColumn),
 		)
 		.where('ci.id', targetId)
 		.limit(1);
@@ -316,6 +332,8 @@ export async function getPageDetail(
 		isExternal: !!page.isExternal,
 		isSkipped: !!page.isSkipped,
 		skipReason: page.skipReason,
+		isDedupeCapped: page.dedupeCapShapeKey != null,
+		dedupeCapShapeKey: page.dedupeCapShapeKey,
 		title: page.title,
 		description: page.description,
 		keywords: page.keywords,

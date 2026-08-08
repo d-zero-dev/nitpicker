@@ -233,6 +233,102 @@ describe('applyViewerPagesFilters — templateKey', () => {
 	});
 });
 
+describe('applyViewerPagesFilters — isDedupeCapped', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_apply_viewer_pages_filters_dedupe_cap__',
+	);
+	const archiveFilePath = path.resolve(
+		workingDir,
+		'apply-filters-dedupe-cap-test.nitpicker',
+	);
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		for (const url of ['https://example.com/capped', 'https://example.com/not-capped']) {
+			await archive.setPage({
+				url: parseUrl(url)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+
+		const eventId = await archive.insertDedupeCapEvent({
+			shapeKey: 'example.com/capped',
+			sampleUrl: 'https://example.com/capped',
+			bodyHash: Buffer.from('test-body-hash'),
+			effectiveThreshold: 8,
+			observedCount: 8,
+			detectedAt: 1_700_000_000_000,
+		});
+		const knex = archive.getKnex();
+		// A plain `.join().update()` chain silently drops the JOIN when
+		// compiled for SQLite (knex has no UPDATE...JOIN support for this
+		// dialect), producing invalid SQL that references the joined
+		// alias with no FROM/JOIN clause to back it. A `whereIn` subquery
+		// avoids the join entirely.
+		await knex('content_items')
+			.whereIn(
+				'url_id',
+				knex('url_refs').select('id').where('url', 'https://example.com/capped'),
+			)
+			.update({ dedupe_cap_event_id: eventId });
+
+		await buildViewerReadModel(archive);
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('filters to only the marked page when isDedupeCapped is true', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { isDedupeCapped: true });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual(['https://example.com/capped']);
+	});
+
+	it('filters to only the unmarked page when isDedupeCapped is false', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { isDedupeCapped: false });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual(['https://example.com/not-capped']);
+	});
+
+	it('applies no restriction when isDedupeCapped is an array of both values — OR-equivalent to no filter', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { isDedupeCapped: [true, false] });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url).toSorted()).toEqual([
+			'https://example.com/capped',
+			'https://example.com/not-capped',
+		]);
+	});
+});
+
 describe('applyViewerPagesFilters — lang and header presence', () => {
 	const workingDir = path.resolve(
 		__dirname,

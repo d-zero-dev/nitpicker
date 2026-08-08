@@ -2284,3 +2284,75 @@ describe('buildViewerReadModel: content_items.alias_of_id end-to-end', () => {
 		expect(member.aliasOfId).not.toBeNull();
 	});
 });
+
+describe('buildViewerReadModel: dedupe_cap_events end-to-end', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_build_read_model_dedupe_cap__',
+	);
+	const archiveFilePath = path.resolve(workingDir, 'build-dedupe-cap-test.nitpicker');
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		for (const url of [
+			'https://example.com/search/?ssp=1',
+			'https://example.com/search/?ssp=2',
+			'https://example.com/other/',
+		]) {
+			await archive.setPage({
+				url: parseUrl(url)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html><body>Search</body></html>',
+				meta: { ...META, title: 'Search' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+
+		// Simulates what `--dedupe-cap` writes mid-crawl: a journal row
+		// naming the URL shape it captured as a same-cluster trap.
+		await archive.insertDedupeCapEvent({
+			shapeKey: 'example.com/search/?ssp={v}',
+			sampleUrl: 'https://example.com/search/?ssp=1',
+			bodyHash: Buffer.from('test-body-hash'),
+			effectiveThreshold: 8,
+			observedCount: 8,
+			detectedAt: 1_700_000_000_000,
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('marks viewer_pages.is_dedupe_capped for pages matching a captured shape', async () => {
+		await buildViewerReadModel(archive);
+		const knex = archive.getKnex();
+
+		const pages = await knex('viewer_pages')
+			.select('url', 'is_dedupe_capped')
+			.orderBy('url');
+		expect(pages).toEqual([
+			{ url: 'https://example.com/other/', is_dedupe_capped: 0 },
+			{ url: 'https://example.com/search/?ssp=1', is_dedupe_capped: 1 },
+			{ url: 'https://example.com/search/?ssp=2', is_dedupe_capped: 1 },
+		]);
+	});
+});
