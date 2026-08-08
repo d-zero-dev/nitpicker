@@ -333,6 +333,31 @@ test.describe('MPA ページネーション', () => {
 		await expect(page).not.toHaveURL(/status=/);
 	});
 
+	test('Dedupe-cap trap フィルタは true/false のチェックボックスとして表示され、選択が URL に反映される', async ({
+		page,
+	}) => {
+		// The actual filtering behavior against the read model is covered by
+		// apply-viewer-pages-filters.spec.ts and register-pages-route.spec.ts
+		// — this test only verifies the checkbox UI and its URL reflection
+		// (same scope as the Status filter test above).
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+
+		await page.getByRole('button', { name: 'Dedupe-cap trap' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Dedupe-cap trap' });
+		await expect(dialog.getByRole('checkbox', { name: 'yes' })).not.toBeChecked();
+
+		await dialog.getByRole('checkbox', { name: 'yes' }).check();
+		await dialog.getByRole('button', { name: 'Apply' }).click();
+		await expect(page).toHaveURL(/isDedupeCapped=true/);
+
+		await page.getByRole('button', { name: 'Dedupe-cap trap' }).click();
+		await expect(dialog.getByRole('checkbox', { name: 'yes' })).toBeChecked();
+		await dialog.getByRole('button', { name: 'None' }).click();
+		await dialog.getByRole('button', { name: 'Apply' }).click();
+		await expect(page).not.toHaveURL(/isDedupeCapped=/);
+	});
+
 	test('Console Logs の Type フィルタも複数選択チェックボックスとして表示され、選択が URL に反映される', async ({
 		page,
 	}) => {

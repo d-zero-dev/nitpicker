@@ -177,6 +177,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				filterMissingTitle: 'Missing title',
 				filterExternal: 'External pages',
 				filterContentType: 'Content-Type',
+				filterDedupeCapped: 'Dedupe-cap trap',
 				directoryFilterNotice: 'Showing pages under {directory}',
 			},
 			directoryTree: {
@@ -201,6 +202,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				description:
 					'Full metadata, outbound links, redirects, and the stored HTML snapshot for one page. Inbound links are shown by count, with a link to the full list.',
 				skipReason: 'Skipped (reason)',
+				dedupeCapShapeKey: 'Dedupe-cap trap shape',
 				status: 'Status',
 				contentType: 'Content-Type',
 				title2: 'Title',
@@ -620,6 +622,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				filterMissingTitle: 'タイトル欠損',
 				filterExternal: '外部ページ',
 				filterContentType: 'Content-Type',
+				filterDedupeCapped: 'Dedupe-capトラップ',
 				directoryFilterNotice: '「{directory}」配下のページを表示中',
 			},
 			directoryTree: {
@@ -644,6 +647,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				description:
 					'1 ページの全メタデータ、発リンク、リダイレクト、保存された HTML スナップショットを表示します。被リンクは件数のみ表示し、一覧は別画面へのリンクから確認できます。',
 				skipReason: '除外理由',
+				dedupeCapShapeKey: 'Dedupe-capトラップ形状',
 				status: 'ステータス',
 				contentType: 'Content-Type',
 				title2: 'タイトル',

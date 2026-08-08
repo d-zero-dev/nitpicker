@@ -79,6 +79,7 @@ export function PagesView() {
 	const hasXFrameOptions = params.getAll('hasXFrameOptions');
 	const hasXContentTypeOptions = params.getAll('hasXContentTypeOptions');
 	const hasHSTS = params.getAll('hasHSTS');
+	const isDedupeCapped = params.getAll('isDedupeCapped');
 	const filter: PagesFilter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
 		directory: params.get('directory') ?? undefined,
@@ -91,6 +92,7 @@ export function PagesView() {
 		hasXFrameOptions,
 		hasXContentTypeOptions,
 		hasHSTS,
+		isDedupeCapped,
 		templateKey,
 		sortBy: (params.get('sortBy') as PagesFilter['sortBy']) || 'url',
 		sortOrder: (params.get('sortOrder') as PagesFilter['sortOrder']) || 'asc',
@@ -453,6 +455,25 @@ export function PagesView() {
 				checked: templateKey.includes(value),
 			})),
 		);
+		addChecklistFilter(
+			controls,
+			{ params, updateMany },
+			'isDedupeCapped',
+			'isDedupeCapped',
+			t('views.pages.filterDedupeCapped'),
+			[
+				{
+					value: 'true',
+					label: t('common.yes'),
+					checked: isDedupeCapped.includes('true'),
+				},
+				{
+					value: 'false',
+					label: t('common.none'),
+					checked: isDedupeCapped.includes('false'),
+				},
+			],
+		);
 		return controls;
 	}, [
 		contentTypeCategory,
@@ -464,6 +485,7 @@ export function PagesView() {
 		hasHSTS,
 		hasXContentTypeOptions,
 		hasXFrameOptions,
+		isDedupeCapped,
 		isExternal,
 		lang,
 		missingTitle,

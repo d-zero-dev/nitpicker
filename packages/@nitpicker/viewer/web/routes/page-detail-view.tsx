@@ -75,6 +75,12 @@ export function PageDetailView() {
 						<dd>{data.skipReason ?? '—'}</dd>
 					</>
 				)}
+				{data.isDedupeCapped && (
+					<>
+						<dt>{t('views.pageDetail.dedupeCapShapeKey')}</dt>
+						<dd>{data.dedupeCapShapeKey ?? '—'}</dd>
+					</>
+				)}
 				<dt>{t('views.pageDetail.status')}</dt>
 				<dd>
 					{data.status ?? '—'} {data.statusText ?? ''}

@@ -23,6 +23,7 @@ export type PagesFilter = Omit<
 	| 'hasXFrameOptions'
 	| 'hasXContentTypeOptions'
 	| 'hasHSTS'
+	| 'isDedupeCapped'
 > & {
 	status?: string | readonly string[];
 	contentTypeCategory?: string | readonly string[];
@@ -34,6 +35,7 @@ export type PagesFilter = Omit<
 	hasXFrameOptions?: string | readonly string[];
 	hasXContentTypeOptions?: string | readonly string[];
 	hasHSTS?: string | readonly string[];
+	isDedupeCapped?: string | readonly string[];
 };
 
 /**
