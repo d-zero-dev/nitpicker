@@ -147,4 +147,27 @@ describe('joinViewerPageIdsToListItems', () => {
 		const items = await joinViewerPageIdsToListItems(knex, [idA, idB]);
 		expect(items.map((i) => i.templateKey)).toEqual([null, null]);
 	});
+
+	it('re-derives isDedupeCapped from the live content_items column, not a stale read-model snapshot', async () => {
+		const knex = archive.getKnex();
+		const eventId = await archive.insertDedupeCapEvent({
+			shapeKey: 'example.com/a',
+			sampleUrl: 'https://example.com/a',
+			bodyHash: Buffer.from('test-body-hash'),
+			effectiveThreshold: 5,
+			observedCount: 5,
+			detectedAt: 1_700_000_000_000,
+		});
+		await knex('content_items').where('id', idA).update({ dedupe_cap_event_id: eventId });
+
+		const items = await joinViewerPageIdsToListItems(knex, [idA, idB]);
+		expect(items[0]).toMatchObject({
+			url: 'https://example.com/a',
+			isDedupeCapped: true,
+		});
+		expect(items[1]).toMatchObject({
+			url: 'https://example.com/b',
+			isDedupeCapped: false,
+		});
+	});
 });

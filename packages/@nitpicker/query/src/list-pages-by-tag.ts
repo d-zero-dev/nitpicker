@@ -2,6 +2,8 @@ import type { ListPagesByTagOptions, PageListItem, PageListRow } from './types.j
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
+import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
+import { isDedupeCappedSelectColumn } from './is-dedupe-capped-select-column.js';
 import {
 	PAGE_LIST_SELECT_COLUMNS,
 	mapPageRowToListItem,
@@ -36,6 +38,7 @@ export async function listPagesByTag(
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 	const hasPageTemplates = await hasPageTemplatesTable(knex);
+	const hasDedupeCapColumn = await hasDedupeCapEventIdColumn(knex);
 	let q = knex('content_items as ci')
 		.join('page_tags', 'page_tags.pageId', '=', 'ci.id')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
@@ -72,6 +75,7 @@ export async function listPagesByTag(
 		.distinct(
 			...PAGE_LIST_SELECT_COLUMNS,
 			templateKeySelectColumn(knex, hasPageTemplates),
+			isDedupeCappedSelectColumn(knex, hasDedupeCapColumn),
 			'ci.id',
 			...buildHeaderPresenceSelects(knex, 'hf'),
 		)

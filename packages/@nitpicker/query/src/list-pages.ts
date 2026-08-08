@@ -12,6 +12,7 @@ import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
 import { applyCategoryFilter } from './content-type-rules.js';
 import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
 import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presence-sql.js';
+import { isDedupeCappedSelectColumn } from './is-dedupe-capped-select-column.js';
 import {
 	PAGE_LIST_SELECT_COLUMNS,
 	mapPageRowToListItem,
@@ -271,6 +272,7 @@ export async function listPages(
 					q.select(
 						...PAGE_LIST_SELECT_COLUMNS,
 						templateKeySelectColumn(knex, hasPageTemplates),
+						isDedupeCappedSelectColumn(knex, hasDedupeCapColumn),
 						...buildHeaderPresenceSelects(knex, 'hf'),
 					),
 					knex,

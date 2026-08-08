@@ -920,6 +920,7 @@ export interface PageListRow {
 	hasXContentTypeOptions: 0 | 1;
 	hasHSTS: 0 | 1;
 	templateKey: string | null;
+	isDedupeCapped: 0 | 1;
 }
 
 /**
@@ -1052,6 +1053,8 @@ export interface PageListItem {
 	hasHSTS: boolean;
 	/** DOM-structure template group key from `--templates` classification, or null if never classified. */
 	templateKey: string | null;
+	/** Whether this page's URL shape matches a `--dedupe-cap` trap captured by any `dedupe_cap_events` row. */
+	isDedupeCapped: boolean;
 }
 
 /**

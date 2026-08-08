@@ -849,16 +849,21 @@ describe('listPages: isDedupeCapped filter', () => {
 	it('isDedupeCapped: true returns only the marked page', async () => {
 		const result = await listPages(archive, { isDedupeCapped: true });
 		expect(result.items.map((p) => p.url)).toEqual(['https://example.com/capped']);
+		expect(result.items[0]!.isDedupeCapped).toBe(true);
 	});
 
 	it('isDedupeCapped: false returns only the unmarked page', async () => {
 		const result = await listPages(archive, { isDedupeCapped: false });
 		expect(result.items.map((p) => p.url)).toEqual(['https://example.com/not-capped']);
+		expect(result.items[0]!.isDedupeCapped).toBe(false);
 	});
 
-	it('omitting isDedupeCapped returns both pages', async () => {
+	it('omitting isDedupeCapped returns both pages with the field set per-row', async () => {
 		const result = await listPages(archive);
 		expect(result.total).toBe(2);
+		const byUrl = new Map(result.items.map((p) => [p.url, p.isDedupeCapped]));
+		expect(byUrl.get('https://example.com/capped')).toBe(true);
+		expect(byUrl.get('https://example.com/not-capped')).toBe(false);
 	});
 
 	it('isDedupeCapped: true deterministically returns zero rows when the column does not exist (pre-feature archive)', async () => {
@@ -870,9 +875,9 @@ describe('listPages: isDedupeCapped filter', () => {
 		await expect(listPages(archive, { isDedupeCapped: true })).resolves.toMatchObject({
 			total: 0,
 		});
-		await expect(listPages(archive, { isDedupeCapped: false })).resolves.toMatchObject({
-			total: 2,
-		});
+		const unmarked = await listPages(archive, { isDedupeCapped: false });
+		expect(unmarked.total).toBe(2);
+		expect(unmarked.items.every((p) => p.isDedupeCapped === false)).toBe(true);
 
 		// Restore the column so afterAll's close()/other tests are unaffected.
 		await knex.schema.alterTable('content_items', (t) => {
