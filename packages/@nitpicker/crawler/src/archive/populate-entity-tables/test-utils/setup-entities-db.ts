@@ -1,5 +1,6 @@
 import knex from 'knex';
 
+import { createAdjunctTables } from '../../create-adjunct-tables.js';
 import { createEntityTables } from '../../create-entity-tables.js';
 import { createRefTables } from '../../create-ref-tables.js';
 import { LibsqlDialect } from '../../libsql-dialect.js';
@@ -13,6 +14,13 @@ import { LibsqlDialect } from '../../libsql-dialect.js';
  *   actually read.
  * - The 0.13 ref / header tables (via {@link createRefTables}).
  * - The 0.13 entity tables (via {@link createEntityTables}).
+ * - The 0.13 adjunct tables (via {@link createAdjunctTables}) — required
+ *   because `content_items.dedupe_cap_event_id REFERENCES
+ *   dedupe_cap_events(id)`; under `PRAGMA foreign_keys = ON` (enabled
+ *   below), inserting into `content_items` fails with `no such table:
+ *   dedupe_cap_events` if the adjunct tables were skipped. `initSchema`
+ *   always calls both create functions together, so this mirrors a real
+ *   archive's actual schema rather than an artificially incomplete one.
  *
  * Every 0.13 populate spec calls this to obtain a fresh DB. The
  * caller is responsible for `db.destroy()` (spec `afterEach`).
@@ -176,5 +184,6 @@ export async function setupMigrationDb(): Promise<ReturnType<typeof knex>> {
 	`);
 	await createRefTables(db);
 	await createEntityTables(db);
+	await createAdjunctTables(db);
 	return db;
 }

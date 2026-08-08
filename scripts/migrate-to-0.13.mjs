@@ -649,6 +649,19 @@ async function applyMigrations(dbPath) {
 		await migrateRefTables(db);
 		console.log('  ensure entity tables');
 		await migrateEntityTables(db);
+		// Must run before any entity-table data write below: `content_items.
+		// dedupe_cap_event_id REFERENCES dedupe_cap_events(id)` (added by
+		// `migrateEntityTables` above), and under `PRAGMA foreign_keys = ON`
+		// (set above) SQLite refuses to prepare an INSERT/UPDATE against
+		// `content_items` at all while the referenced table doesn't exist —
+		// not merely a deferred-constraint violation. `createAdjunctTables`
+		// is schema-only (`CREATE TABLE IF NOT EXISTS`, no data dependency),
+		// so moving it ahead of `populateEntityTables` below is safe; only
+		// the later FK *data* retarget (`retargetLegacyFkTables`) genuinely
+		// needs `content_items` already populated, and that still runs in
+		// its original place after the populate step.
+		console.log('  ensure adjunct tables');
+		await createAdjunctTables(db);
 
 		// `.every` rather than a single `hasTable('pages')`: the legacy
 		// dependent steps below (`ensureLegacySourceColumns`, ref/entity
@@ -694,9 +707,6 @@ async function applyMigrations(dbPath) {
 				'  legacy tables already dropped (resumed past that point) — skipping source-column backfill and ref/entity populate',
 			);
 		}
-
-		console.log('  ensure adjunct tables');
-		await createAdjunctTables(db);
 
 		// Retarget under enforcement so the data copy validates every
 		// pageId / page_id against content_items row by row.

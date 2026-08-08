@@ -49,6 +49,7 @@ describe('retargetLegacyFkTables', () => {
 		});
 		await createRefTables(db);
 		await createEntityTables(db);
+		await createAdjunctTables(db);
 		await setupLegacyFkDb(db);
 		await db.raw('PRAGMA foreign_keys = ON');
 	});

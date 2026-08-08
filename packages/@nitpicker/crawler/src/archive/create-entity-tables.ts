@@ -200,6 +200,7 @@ export async function createEntityTables(instance: Knex): Promise<void> {
 			header_set_id    INTEGER REFERENCES header_sets(id),
 			redirect_dest_id INTEGER REFERENCES content_items(id) DEFERRABLE INITIALLY DEFERRED,
 			alias_of_id      INTEGER REFERENCES content_items(id) DEFERRABLE INITIALLY DEFERRED,
+			dedupe_cap_event_id INTEGER REFERENCES dedupe_cap_events(id) DEFERRABLE INITIALLY DEFERRED,
 			source           TEXT NOT NULL DEFAULT 'crawled',
 			first_crawled_at INTEGER,
 			last_crawled_at  INTEGER,
@@ -226,6 +227,15 @@ export async function createEntityTables(instance: Knex): Promise<void> {
 	// `migrateContentItemsAliasOfId` instead, which runs after the
 	// column-add guard for both fresh and legacy archives (same reasoning as
 	// `page_meta.body_hash`'s index).
+	//
+	// `dedupe_cap_event_id` gets no index anywhere, not even in its own
+	// migration (`migrateContentItemsDedupeCapEventId`) — unlike
+	// `alias_of_id`, there is no known hot read path filtering on this
+	// column yet (`--dedupe-cap` is opt-in and the marked row count is
+	// small: capped shapes × matching URLs). Adding a speculative index
+	// without a measured query to justify it violates this archive's
+	// "no speculative index" rule; add one later with `EXPLAIN QUERY PLAN`
+	// evidence if a real hot path emerges.
 	await instance.raw(
 		'CREATE INDEX IF NOT EXISTS idx_content_items_content_type_id ON content_items(content_type_id)',
 	);

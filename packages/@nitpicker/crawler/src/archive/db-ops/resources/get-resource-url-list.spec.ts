@@ -3,6 +3,7 @@ import type { Knex } from 'knex';
 import knex from 'knex';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { createAdjunctTables } from '../../create-adjunct-tables.js';
 import { createEntityTables } from '../../create-entity-tables.js';
 import { createRefTables } from '../../create-ref-tables.js';
 import { LibsqlDialect } from '../../libsql-dialect.js';
@@ -30,6 +31,7 @@ describe('getResourceUrlList', () => {
 		});
 		await createRefTables(db);
 		await createEntityTables(db);
+		await createAdjunctTables(db);
 	});
 
 	afterEach(async () => {

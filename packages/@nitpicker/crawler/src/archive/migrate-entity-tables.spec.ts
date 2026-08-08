@@ -1,6 +1,7 @@
 import knex from 'knex';
 import { describe, it, expect } from 'vitest';
 
+import { createAdjunctTables } from './create-adjunct-tables.js';
 import { createRefTables } from './create-ref-tables.js';
 import { LibsqlDialect } from './libsql-dialect.js';
 import { migrateEntityTables } from './migrate-entity-tables.js';
@@ -70,6 +71,13 @@ describe('migrateEntityTables', () => {
 		await db.raw('PRAGMA foreign_keys = ON');
 		await seedPreviousPhaseArchive(db);
 		await migrateEntityTables(db);
+		// `content_items.dedupe_cap_event_id REFERENCES dedupe_cap_events(id)`
+		// needs this table to exist before any `content_items` INSERT can even
+		// be prepared under `foreign_keys = ON` — mirrors the real migration
+		// script's ordering fix in `scripts/migrate-to-0.13.mjs` (adjunct
+		// tables are created immediately after entity tables, before any
+		// entity-table data write).
+		await createAdjunctTables(db);
 
 		const [urlRefPage] = await db.raw(
 			"INSERT INTO url_refs (url) VALUES ('https://example.com/') RETURNING id",
