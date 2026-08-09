@@ -38,7 +38,7 @@
 	},
 	"dependencies": {
 		"@d-zero/dealer": "1.9.4",
-		"@hono/node-server": "2.0.8",
+		"@hono/node-server": "2.0.10",
 		"@nitpicker/query": "0.16.0",
 		"@tanstack/react-query": "5.101.2",
 		"@tanstack/react-table": "8.21.3",
@@ -48,7 +48,7 @@
 		"hono": "4.12.30",
 		"react": "19.2.7",
 		"react-dom": "19.2.7",
-		"react-router": "8.2.0",
+		"react-router": "8.3.0",
 		"sigma": "3.0.3"
 	},
 	"devDependencies": {
