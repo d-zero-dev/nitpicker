@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.17.0](https://github.com/d-zero-dev/nitpicker/compare/v0.16.0...v0.17.0) (2026-08-09)
+
+### Features
+
+- **cli:** default-enable --dedupe-cap and expose --isDedupeCapped on query pages ([7b31a4c](https://github.com/d-zero-dev/nitpicker/commit/7b31a4c0f8b77280d70e5a8007d6129605ba4f57))
+- **cli:** restructure --help output with usage lines, flag groups, and sub-command help ([d9fe791](https://github.com/d-zero-dev/nitpicker/commit/d9fe7911df4d8c441ba66e5e648e9e47ea8ecf51))
+
 # [0.16.0](https://github.com/d-zero-dev/nitpicker/compare/v0.15.0...v0.16.0) (2026-08-07)
 
 ### Bug Fixes

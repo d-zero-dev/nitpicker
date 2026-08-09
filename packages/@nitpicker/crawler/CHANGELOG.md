@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.17.0](https://github.com/d-zero-dev/nitpicker/compare/v0.16.0...v0.17.0) (2026-08-09)
+
+### Bug Fixes
+
+- **crawler:** normalize maxExcludedDepth to 0 when NULL in the info table ([e4501ce](https://github.com/d-zero-dev/nitpicker/commit/e4501ce56677fca54ba98f1c2343d1d0f5b23361))
+- **crawler:** provision adjunct tables in insert-inventory-content-items.spec.ts ([4e769dd](https://github.com/d-zero-dev/nitpicker/commit/4e769dd37850ba73d4931e02b93a2cfee9fb129c))
+- **crawler:** record exclude-matched inventory URLs as skipped pages ([6c9f30b](https://github.com/d-zero-dev/nitpicker/commit/6c9f30b4e5f154173097d13b4f0ba03d8b124104)), closes [#260](https://github.com/d-zero-dev/nitpicker/issues/260)
+
+### Features
+
+- **crawler:** add content_items.dedupe_cap_event_id for post-hoc trap marking ([b59fb17](https://github.com/d-zero-dev/nitpicker/commit/b59fb1720a61d741459e581a30035db66cacc957))
+
 # [0.16.0](https://github.com/d-zero-dev/nitpicker/compare/v0.15.0...v0.16.0) (2026-08-07)
 
 ### Bug Fixes

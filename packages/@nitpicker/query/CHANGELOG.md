@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.17.0](https://github.com/d-zero-dev/nitpicker/compare/v0.16.0...v0.17.0) (2026-08-09)
+
+### Bug Fixes
+
+- **query:** expose isDedupeCapped on PageListItem across all list paths ([4096b15](https://github.com/d-zero-dev/nitpicker/commit/4096b15f7df187e4d223801716e54fae4f6450f5))
+
+### Features
+
+- **query:** mark dedupe-cap trap pages after the fact via viewer-build ([73eaaeb](https://github.com/d-zero-dev/nitpicker/commit/73eaaeb7d8d6b9ae59ec8880aface0570a19d1bc))
+- **query:** return exclude_skipped from inventory-runs listings ([6e68284](https://github.com/d-zero-dev/nitpicker/commit/6e682843a733c1bedaa06fe704ce30b92d300a95)), closes [#260](https://github.com/d-zero-dev/nitpicker/issues/260)
+- **query:** surface crawl exclude settings in SummaryResult ([2f87e01](https://github.com/d-zero-dev/nitpicker/commit/2f87e01a49589e0e7bed7b407251b44d4bcb4403))
+
 # [0.16.0](https://github.com/d-zero-dev/nitpicker/compare/v0.15.0...v0.16.0) (2026-08-07)
 
 ### Bug Fixes

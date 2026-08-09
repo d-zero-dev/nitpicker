@@ -3,6 +3,29 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.17.0](https://github.com/d-zero-dev/nitpicker/compare/v0.16.0...v0.17.0) (2026-08-09)
+
+### Bug Fixes
+
+- **crawler:** normalize maxExcludedDepth to 0 when NULL in the info table ([e4501ce](https://github.com/d-zero-dev/nitpicker/commit/e4501ce56677fca54ba98f1c2343d1d0f5b23361))
+- **crawler:** provision adjunct tables in insert-inventory-content-items.spec.ts ([4e769dd](https://github.com/d-zero-dev/nitpicker/commit/4e769dd37850ba73d4931e02b93a2cfee9fb129c))
+- **crawler:** record exclude-matched inventory URLs as skipped pages ([6c9f30b](https://github.com/d-zero-dev/nitpicker/commit/6c9f30b4e5f154173097d13b4f0ba03d8b124104)), closes [#260](https://github.com/d-zero-dev/nitpicker/issues/260)
+- **github:** move dedupe-cap.e2e.ts off the already-heaviest e2e shard ([3ad7e5d](https://github.com/d-zero-dev/nitpicker/commit/3ad7e5d0e28b5598bd10aafe5f16aade940beb0f))
+- **query:** expose isDedupeCapped on PageListItem across all list paths ([4096b15](https://github.com/d-zero-dev/nitpicker/commit/4096b15f7df187e4d223801716e54fae4f6450f5))
+- **viewer:** add a real isDedupeCapped column so its filter button renders ([6f8f0b3](https://github.com/d-zero-dev/nitpicker/commit/6f8f0b3147283c5d2606dedee59fbbe0077c43f4))
+
+### Features
+
+- **cli:** default-enable --dedupe-cap and expose --isDedupeCapped on query pages ([7b31a4c](https://github.com/d-zero-dev/nitpicker/commit/7b31a4c0f8b77280d70e5a8007d6129605ba4f57))
+- **cli:** restructure --help output with usage lines, flag groups, and sub-command help ([d9fe791](https://github.com/d-zero-dev/nitpicker/commit/d9fe7911df4d8c441ba66e5e648e9e47ea8ecf51))
+- **crawler:** add content_items.dedupe_cap_event_id for post-hoc trap marking ([b59fb17](https://github.com/d-zero-dev/nitpicker/commit/b59fb1720a61d741459e581a30035db66cacc957))
+- **mcp-server:** expose isDedupeCapped on list_pages/get_page_detail ([41e0090](https://github.com/d-zero-dev/nitpicker/commit/41e0090b3b595ea6a8fb8983b6534cff78e13d69))
+- **query:** mark dedupe-cap trap pages after the fact via viewer-build ([73eaaeb](https://github.com/d-zero-dev/nitpicker/commit/73eaaeb7d8d6b9ae59ec8880aface0570a19d1bc))
+- **query:** return exclude_skipped from inventory-runs listings ([6e68284](https://github.com/d-zero-dev/nitpicker/commit/6e682843a733c1bedaa06fe704ce30b92d300a95)), closes [#260](https://github.com/d-zero-dev/nitpicker/issues/260)
+- **query:** surface crawl exclude settings in SummaryResult ([2f87e01](https://github.com/d-zero-dev/nitpicker/commit/2f87e01a49589e0e7bed7b407251b44d4bcb4403))
+- **viewer:** add isDedupeCapped filter and page-detail display ([962baee](https://github.com/d-zero-dev/nitpicker/commit/962baee427fb95c8333d7d2fafa7042c7b879505))
+- **viewer:** display crawl exclude settings on the summary view ([e400b40](https://github.com/d-zero-dev/nitpicker/commit/e400b403bfa6756d2c114807c34687b746a41cad))
+
 # [0.16.0](https://github.com/d-zero-dev/nitpicker/compare/v0.15.0...v0.16.0) (2026-08-07)
 
 ### Bug Fixes

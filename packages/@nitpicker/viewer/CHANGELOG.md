@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.17.0](https://github.com/d-zero-dev/nitpicker/compare/v0.16.0...v0.17.0) (2026-08-09)
+
+### Bug Fixes
+
+- **viewer:** add a real isDedupeCapped column so its filter button renders ([6f8f0b3](https://github.com/d-zero-dev/nitpicker/commit/6f8f0b3147283c5d2606dedee59fbbe0077c43f4))
+
+### Features
+
+- **viewer:** add isDedupeCapped filter and page-detail display ([962baee](https://github.com/d-zero-dev/nitpicker/commit/962baee427fb95c8333d7d2fafa7042c7b879505))
+- **viewer:** display crawl exclude settings on the summary view ([e400b40](https://github.com/d-zero-dev/nitpicker/commit/e400b403bfa6756d2c114807c34687b746a41cad))
+
 # [0.16.0](https://github.com/d-zero-dev/nitpicker/compare/v0.15.0...v0.16.0) (2026-08-07)
 
 ### Bug Fixes

@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.17.0](https://github.com/d-zero-dev/nitpicker/compare/v0.16.0...v0.17.0) (2026-08-09)
+
+### Features
+
+- **mcp-server:** expose isDedupeCapped on list_pages/get_page_detail ([41e0090](https://github.com/d-zero-dev/nitpicker/commit/41e0090b3b595ea6a8fb8983b6534cff78e13d69))
+
 # [0.16.0](https://github.com/d-zero-dev/nitpicker/compare/v0.15.0...v0.16.0) (2026-08-07)
 
 ### Features
