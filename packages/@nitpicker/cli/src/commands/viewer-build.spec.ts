@@ -30,12 +30,14 @@ const mockBuildViewerReadModel = vi.fn().mockResolvedValue();
 const mockEnsureViewerReadModel = vi.fn().mockResolvedValue();
 const mockBackfillBodyHashFromHtmlBlobs = vi.fn().mockResolvedValue();
 const mockBackfillAliasOfId = vi.fn().mockResolvedValue();
+const mockBackfillDedupeCapEventId = vi.fn().mockResolvedValue();
 
 vi.mock('@nitpicker/query', () => ({
 	buildViewerReadModel: mockBuildViewerReadModel,
 	ensureViewerReadModel: mockEnsureViewerReadModel,
 	backfillBodyHashFromHtmlBlobs: mockBackfillBodyHashFromHtmlBlobs,
 	backfillAliasOfId: mockBackfillAliasOfId,
+	backfillDedupeCapEventId: mockBackfillDedupeCapEventId,
 }));
 
 const mockFormatCliError = vi.fn();
@@ -269,6 +271,57 @@ describe('viewerBuild command', () => {
 
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
 			'[nitpicker] content_items.alias_of_id backfill: 2/5',
+		);
+	});
+
+	it('always calls backfillDedupeCapEventId regardless of the --force branch', async () => {
+		// Regression guard, same reasoning as backfillAliasOfId's: an
+		// already-current read model skips buildViewerReadModel entirely, but
+		// a later --append/--retry-failed re-crawl can still add new
+		// dedupe_cap_events rows or newly-discovered pages matching an
+		// existing shape, which only this unconditional call catches up.
+		const { viewerBuild } = await import('./viewer-build.js');
+		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+		expect(mockBackfillDedupeCapEventId).toHaveBeenCalledOnce();
+
+		vi.clearAllMocks();
+		mockCopyFile.mockResolvedValue();
+		mockUnlink.mockResolvedValue();
+		mockArchiveOpen.mockResolvedValue({
+			write: mockArchiveWrite,
+			close: mockArchiveClose,
+		});
+		mockArchiveWrite.mockResolvedValue();
+		mockArchiveClose.mockResolvedValue();
+		mockBackfillDedupeCapEventId.mockResolvedValue();
+		mockExistsSync.mockImplementation((p: string) => !p.endsWith('.bak'));
+		mockStatSync.mockReturnValue({ isFile: () => true });
+		const { viewerBuild: viewerBuildAgain } = await import('./viewer-build.js');
+		await viewerBuildAgain(['/tmp/existing.nitpicker'], { force: true } as never);
+		expect(mockBackfillDedupeCapEventId).toHaveBeenCalledOnce();
+	});
+
+	it('runs backfillDedupeCapEventId after backfillAliasOfId and before archive.write()', async () => {
+		const { viewerBuild } = await import('./viewer-build.js');
+		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+
+		const aliasOrder = mockBackfillAliasOfId.mock.invocationCallOrder[0];
+		const dedupeCapOrder = mockBackfillDedupeCapEventId.mock.invocationCallOrder[0];
+		const writeOrder = mockArchiveWrite.mock.invocationCallOrder[0];
+		expect(aliasOrder!).toBeLessThan(dedupeCapOrder!);
+		expect(dedupeCapOrder!).toBeLessThan(writeOrder!);
+	});
+
+	it('logs backfillDedupeCapEventId progress to stderr', async () => {
+		mockBackfillDedupeCapEventId.mockImplementation((_archive, onProgress) => {
+			onProgress(1, 3);
+			return Promise.resolve();
+		});
+		const { viewerBuild } = await import('./viewer-build.js');
+		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			'[nitpicker] content_items.dedupe_cap_event_id backfill: 1/3',
 		);
 	});
 

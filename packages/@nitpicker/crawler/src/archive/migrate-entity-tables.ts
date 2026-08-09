@@ -32,6 +32,16 @@ import { createEntityTables } from './create-entity-tables.js';
  * `scripts/migrate-to-0.13.mjs` orders the two calls statically so this
  * ordering is enforced there, not here.
  *
+ * `content_items` also declares `dedupe_cap_event_id REFERENCES
+ * dedupe_cap_events(id)` — an adjunct table (`createAdjunctTables`), not a
+ * ref table. This function only creates the empty tables (schema-only, see
+ * above), so it does not itself need `dedupe_cap_events` to exist. Callers
+ * that write data into `content_items` afterward do: under `PRAGMA
+ * foreign_keys = ON`, SQLite refuses to even prepare an INSERT/UPDATE
+ * against a table with an unresolvable `REFERENCES` target, so
+ * `scripts/migrate-to-0.13.mjs` creates adjunct tables immediately after
+ * this migration and before any entity-table data write.
+ *
  * **Idempotency**: `createEntityTables` itself uses
  * `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` for every
  * statement, so calling it multiple times against any DB state is safe.

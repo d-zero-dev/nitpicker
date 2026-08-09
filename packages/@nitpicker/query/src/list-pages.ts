@@ -10,7 +10,9 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import { applyListOrder } from './apply-list-order.js';
 import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
 import { applyCategoryFilter } from './content-type-rules.js';
+import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
 import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presence-sql.js';
+import { isDedupeCappedSelectColumn } from './is-dedupe-capped-select-column.js';
 import {
 	PAGE_LIST_SELECT_COLUMNS,
 	mapPageRowToListItem,
@@ -133,6 +135,7 @@ export async function listPages(
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 	const hasPageTemplates = await hasPageTemplatesTable(knex);
+	const hasDedupeCapColumn = await hasDedupeCapEventIdColumn(knex);
 
 	const baseQuery = createPageListBaseQuery(
 		knex,
@@ -167,6 +170,23 @@ export async function listPages(
 	}
 	if (options.noindex) {
 		baseQuery.where('pm.robots_noindex', 1);
+	}
+	if (options.isDedupeCapped != null) {
+		if (hasDedupeCapColumn) {
+			if (options.isDedupeCapped) {
+				baseQuery.whereNotNull('ci.dedupe_cap_event_id');
+			} else {
+				baseQuery.whereNull('ci.dedupe_cap_event_id');
+			}
+		} else if (options.isDedupeCapped) {
+			// No archive predating this feature has ever marked a page — a
+			// missing column deterministically yields zero rows for `true`
+			// instead of throwing on a reference to a column that doesn't
+			// exist. `false` needs no such guard: every row already
+			// satisfies "not capped" when the column is absent, so it's a
+			// no-op (same asymmetry as `templateKey`'s guard above).
+			baseQuery.whereRaw('0 = 1');
+		}
 	}
 	if (options.urlPattern) {
 		const urlPattern = options.urlPattern;
@@ -252,6 +272,7 @@ export async function listPages(
 					q.select(
 						...PAGE_LIST_SELECT_COLUMNS,
 						templateKeySelectColumn(knex, hasPageTemplates),
+						isDedupeCappedSelectColumn(knex, hasDedupeCapColumn),
 						...buildHeaderPresenceSelects(knex, 'hf'),
 					),
 					knex,

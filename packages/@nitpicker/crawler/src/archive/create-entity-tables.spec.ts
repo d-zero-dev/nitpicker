@@ -1,13 +1,20 @@
 import knex from 'knex';
 import { describe, it, expect } from 'vitest';
 
+import { createAdjunctTables } from './create-adjunct-tables.js';
 import { createEntityTables } from './create-entity-tables.js';
 import { createRefTables } from './create-ref-tables.js';
 import { LibsqlDialect } from './libsql-dialect.js';
 
 /**
  * Creates the 0.13 ref tables that the entity tables reference, then runs
- * the entity-table DDL against a fresh in-memory database.
+ * the entity-table DDL against a fresh in-memory database — plus the
+ * adjunct tables, since `content_items.dedupe_cap_event_id REFERENCES
+ * dedupe_cap_events(id)` needs that table to exist before any `content_items`
+ * write is even preparable (SQLite must resolve a declared FK's target
+ * table to compile the statement, independent of whether the enforcement
+ * pragma is on). Mirrors `initSchema`, which always creates entity and
+ * adjunct tables together.
  * @param options - `foreignKeys: true` enables `PRAGMA foreign_keys = ON`
  *   before the caller runs INSERTs (required for any test that exercises
  *   FK / CASCADE / DEFERRABLE / CHECK behaviour).
@@ -27,6 +34,7 @@ async function openDbWithEntityTables(
 	}
 	await createRefTables(db);
 	await createEntityTables(db);
+	await createAdjunctTables(db);
 	return db;
 }
 
@@ -103,6 +111,7 @@ describe('createEntityTables', () => {
 			'header_set_id',
 			'redirect_dest_id',
 			'alias_of_id',
+			'dedupe_cap_event_id',
 			'source',
 			'first_crawled_at',
 			'last_crawled_at',

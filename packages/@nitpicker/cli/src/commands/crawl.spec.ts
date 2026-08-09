@@ -211,6 +211,11 @@ describe('startCrawl', () => {
 		);
 	});
 
+	it('dedupeCap フラグは default: 10 で on-by-default （--no-dedupe-cap / --dedupeCap 0 で無効化できる前提）', async () => {
+		const { commandDef } = await import('./crawl.js');
+		expect(commandDef.flags.dedupeCap.default).toBe(10);
+	});
+
 	it('--list モードでも recursive: false になる', async () => {
 		const { startCrawl } = await import('./crawl.js');
 		await startCrawl(

@@ -1,4 +1,9 @@
-import { listDedupeCapEvents } from '@nitpicker/query';
+import {
+	buildViewerReadModel,
+	getPageDetail,
+	listDedupeCapEvents,
+	listPages,
+} from '@nitpicker/query';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
@@ -105,6 +110,33 @@ describe('dedupe-cap trap fixture — --dedupe-cap opt-in (issue #208)', () => {
 		expect(items[0]?.shape_key).toContain('/trap/date/{n}/');
 		expect(items[0]?.observed_count).toBe(2);
 		expect(items[0]?.effective_threshold).toBe(1);
+	}, 120_000);
+
+	it('cap発火後、backfillDedupeCapEventIdが同一shapeの全ページをcontent_items.dedupe_cap_event_idでマークする', async () => {
+		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/trap/date/`], {
+			parallels: 1,
+			dedupeCap: 3,
+		});
+
+		const { items } = await listDedupeCapEvents(result.accessor);
+		expect(items).toHaveLength(1);
+		const shapeKey = items[0]!.shape_key;
+
+		await buildViewerReadModel(result.archive);
+
+		const { total, items: cappedPages } = await listPages(result.accessor, {
+			isDedupeCapped: true,
+		});
+		// Same 3 pages (2 real + 1 pre-capped predicted) asserted by the
+		// preceding test — every one of them shares this trap's shape.
+		expect(total).toBe(3);
+		for (const page of cappedPages) {
+			expect(page.url).toMatch(/^http:\/\/localhost:\d+\/trap\/date\/\d+\/$/);
+		}
+
+		const detail = await getPageDetail(result.accessor, cappedPages[0]!.url);
+		expect(detail!.isDedupeCapped).toBe(true);
+		expect(detail!.dedupeCapShapeKey).toBe(shapeKey);
 	}, 120_000);
 
 	it('bodyがパラメータをエコーしてもmetaSigのみでcapする（body_hash加点が効かない変種）', async () => {

@@ -116,6 +116,16 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			has_x_frame_options integer not null default 0,
 			has_x_content_type_options integer not null default 0,
 			has_hsts integer not null default 0,
+			-- content_items.dedupe_cap_event_id IS NOT NULL, coalesced to 0.
+			-- Filter-only, same shape as has_csp etc. above: shape_key/event
+			-- detail are NOT copied here (display re-joins
+			-- content_items.dedupe_cap_event_id -> dedupe_cap_events live via
+			-- getPageDetail, since only page-detail — not the pages list —
+			-- shows it). No dedicated index: --dedupe-cap is opt-in and the
+			-- marked row count is small, so there is no measured hot path to
+			-- justify one yet (see create-entity-tables.ts's DDL comment on
+			-- content_items.dedupe_cap_event_id for the same reasoning).
+			is_dedupe_capped integer not null default 0,
 			url_sort_key text not null,
 			title_sort_key text not null,
 			path_sort_key text not null,

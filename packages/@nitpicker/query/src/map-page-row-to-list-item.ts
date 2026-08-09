@@ -79,6 +79,13 @@ export const PAGE_LIST_COLUMNS: readonly string[] = [
  * a fixed string, to fall back to a `NULL` literal when the table is
  * absent.
  *
+ * `isDedupeCapped` (from `content_items.dedupe_cap_event_id`) is excluded
+ * for the same reason: archives predating `--dedupe-cap`'s post-hoc marking
+ * lack the column, so every caller appends its own
+ * `isDedupeCappedSelectColumn(...)` result (`./is-dedupe-capped-select-column.js`)
+ * instead of a fixed string, to fall back to a `0` literal when the column
+ * is absent.
+ *
  * All three page-list queries (`listPages`, `listPagesByTag`,
  * `listPagesByJsonLdType`) share this projection so their emitted DTO shape
  * stays lock-step with {@link PAGE_LIST_COLUMNS}.
@@ -211,5 +218,6 @@ export function mapPageRowToListItem(row: PageListRow): PageListItem {
 		hasXContentTypeOptions: !!row.hasXContentTypeOptions,
 		hasHSTS: !!row.hasHSTS,
 		templateKey: row.templateKey,
+		isDedupeCapped: !!row.isDedupeCapped,
 	};
 }

@@ -47,6 +47,7 @@ export { computeBodyHash } from './archive/body-hash/compute-body-hash.js';
 export { decodeStoredBlob } from './archive/decode-html-blob.js';
 export { computeTierAAliasKey } from './archive/url-alias/compute-tier-a-alias-key.js';
 export { computeTierBAliasKey } from './archive/url-alias/compute-tier-b-alias-key.js';
+export { computeShapeKey } from './crawler/dedupe/compute-shape-key.js';
 
 // Core
 export {

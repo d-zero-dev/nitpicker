@@ -81,6 +81,10 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Filter to pages with noindex',
 		},
+		isDedupeCapped: {
+			type: 'boolean',
+			desc: 'Filter to pages whose URL shape --dedupe-cap captured as a same-cluster crawl trap',
+		},
 		urlPattern: {
 			type: 'string',
 			valueName: 'pattern',
@@ -205,6 +209,7 @@ export const commandDef = {
 				'missingTitle',
 				'missingDescription',
 				'noindex',
+				'isDedupeCapped',
 				'urlPattern',
 				'directory',
 				'sortBy',

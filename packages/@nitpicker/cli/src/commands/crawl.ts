@@ -129,13 +129,14 @@ export const commandDef = {
 		},
 		dedupeCap: {
 			type: 'number',
+			default: 10,
 			group: 'Scope & filtering',
-			desc: 'Same-cluster soft cap: stop enqueueing newly-discovered internal URLs whose shape (e.g. `/news/date/{n}/`) has accumulated this many matching-title/description/og-tag observations. Opt-in — omit to disable. Backstop against a site that keeps serving 2xx for a self-generating pager/query-parameter trap; see `query dedupe-cap-events` for what fired.',
+			desc: 'Same-cluster soft cap: stop enqueueing newly-discovered internal URLs whose shape (e.g. `/news/date/{n}/`) has accumulated this many matching-title/description/og-tag observations. On by default (10) as a backstop against a site that keeps serving 2xx for a self-generating pager/query-parameter trap — false positives on legitimate large sections are structurally prevented (each such page differs in title/og tags, so the majority-vote counter never accumulates). Use --no-dedupe-cap (or --dedupeCap 0) to disable. See `query dedupe-cap-events` for what fired.',
 		},
 		dedupeMapCap: {
 			type: 'number',
 			group: 'Scope & filtering',
-			desc: 'Hard cap on the number of distinct URL shapes --dedupe-cap tracks at once; the least-recently-touched shape is evicted beyond this. Only relevant when --dedupe-cap is set.',
+			desc: 'Hard cap on the number of distinct URL shapes --dedupe-cap tracks at once; the least-recently-touched shape is evicted beyond this. Only relevant when --dedupe-cap is enabled.',
 		},
 		interval: {
 			type: 'number',

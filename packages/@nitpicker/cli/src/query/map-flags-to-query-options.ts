@@ -69,6 +69,7 @@ export function mapFlagsToQueryOptions(
 				missingTitle: flags.missingTitle,
 				missingDescription: flags.missingDescription,
 				noindex: flags.noindex,
+				isDedupeCapped: flags.isDedupeCapped,
 				urlPattern: flags.urlPattern,
 				directory: flags.directory,
 				sortBy: flags.sortBy as 'url' | 'status' | 'title' | undefined,

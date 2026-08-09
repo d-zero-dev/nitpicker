@@ -2,6 +2,8 @@ import type { PageListItem, PageListRow } from './types.js';
 import type { Knex } from 'knex';
 
 import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
+import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
+import { isDedupeCappedSelectColumn } from './is-dedupe-capped-select-column.js';
 import {
 	PAGE_LIST_SELECT_COLUMNS,
 	mapPageRowToListItem,
@@ -28,6 +30,7 @@ export async function joinViewerPageIdsToListItems(
 		return [];
 	}
 	const hasPageTemplates = await hasPageTemplatesTable(knex);
+	const hasDedupeCapColumn = await hasDedupeCapEventIdColumn(knex);
 	let query = knex('content_items as ci')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
 		.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
@@ -65,6 +68,7 @@ export async function joinViewerPageIdsToListItems(
 			'ci.id as id',
 			...PAGE_LIST_SELECT_COLUMNS,
 			templateKeySelectColumn(knex, hasPageTemplates),
+			isDedupeCappedSelectColumn(knex, hasDedupeCapColumn),
 			...buildHeaderPresenceSelects(knex, 'hf'),
 		);
 	const rowsById = new Map(rows.map((row) => [row.id, row]));

@@ -773,6 +773,15 @@ export interface ListPagesOptions {
 	hasXContentTypeOptions?: boolean;
 	/** Filter by Strict-Transport-Security header presence. */
 	hasHSTS?: boolean;
+	/**
+	 * Filter to pages whose URL shape was captured by `--dedupe-cap` as a
+	 * same-cluster crawl trap (see `dedupe_cap_events`). On an archive that
+	 * predates this feature (no `content_items.dedupe_cap_event_id` column),
+	 * `true` deterministically matches zero rows rather than throwing — the
+	 * feature is opt-in, so a missing column means "nothing was ever
+	 * marked," not an error. See `hasDedupeCapEventIdColumn`.
+	 */
+	isDedupeCapped?: boolean;
 	/** URL pattern to search (SQL LIKE pattern). */
 	urlPattern?: string;
 	/** Directory path prefix to filter by. */
@@ -911,6 +920,7 @@ export interface PageListRow {
 	hasXContentTypeOptions: 0 | 1;
 	hasHSTS: 0 | 1;
 	templateKey: string | null;
+	isDedupeCapped: 0 | 1;
 }
 
 /**
@@ -1043,6 +1053,8 @@ export interface PageListItem {
 	hasHSTS: boolean;
 	/** DOM-structure template group key from `--templates` classification, or null if never classified. */
 	templateKey: string | null;
+	/** Whether this page's URL shape matches a `--dedupe-cap` trap captured by any `dedupe_cap_events` row. */
+	isDedupeCapped: boolean;
 }
 
 /**
@@ -1125,6 +1137,14 @@ export interface ListViewerPagesOptions {
 	hasXContentTypeOptions?: boolean | boolean[];
 	/** Filter by Strict-Transport-Security header presence, or both (OR — equivalent to no filter). */
 	hasHSTS?: boolean | boolean[];
+	/**
+	 * Filter to pages matching a `--dedupe-cap`-captured URL shape, or both
+	 * (OR — equivalent to no filter). Backed by `viewer_pages.is_dedupe_capped`
+	 * (always present — the read model schema bump backfills it to `0` on
+	 * archives that never used `--dedupe-cap`), so unlike {@link ListPagesOptions.isDedupeCapped}
+	 * this never needs a missing-column fallback.
+	 */
+	isDedupeCapped?: boolean | boolean[];
 	/** Filter by provenance — see {@link PageSource}. */
 	source?: import('@nitpicker/crawler').PageSource;
 	/**
@@ -1253,6 +1273,22 @@ export interface PageDetail {
 	isSkipped: boolean;
 	/** Why the crawler skipped this URL, or `null` if it was not skipped. */
 	skipReason: string | null;
+
+	/**
+	 * Whether this URL's shape was captured by `--dedupe-cap` as a
+	 * same-cluster crawl trap. Unlike {@link PageDetail.isSkipped}, a
+	 * dedupe-capped page WAS fetched — this only means its URL shape was
+	 * later recomputed to match a `dedupe_cap_events` row (see
+	 * `backfillDedupeCapEventId`), which can include pages crawled before
+	 * the cap fired (see `DedupeCapTracker`). `false` on an archive that
+	 * predates this feature (no `content_items.dedupe_cap_event_id` column).
+	 */
+	isDedupeCapped: boolean;
+	/**
+	 * The `--dedupe-cap` shape key that captured this page, or `null` when
+	 * {@link PageDetail.isDedupeCapped} is `false`.
+	 */
+	dedupeCapShapeKey: string | null;
 
 	/** The page title. */
 	title: string | null;

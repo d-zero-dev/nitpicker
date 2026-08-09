@@ -8,6 +8,7 @@ import { Archive } from '@nitpicker/crawler';
 import {
 	backfillAliasOfId,
 	backfillBodyHashFromHtmlBlobs,
+	backfillDedupeCapEventId,
 	buildViewerReadModel,
 	ensureViewerReadModel,
 } from '@nitpicker/query';
@@ -167,6 +168,22 @@ export async function viewerBuild(
 				// eslint-disable-next-line no-console
 				console.error(
 					`[nitpicker] content_items.alias_of_id backfill: ${processed}/${total}`,
+				);
+			});
+			// Unlike the two backfills above, `dedupe_cap_event_id`'s initial
+			// rollout IS covered by a read-model schema bump (`viewer_pages.
+			// is_dedupe_capped` needs one) — but the same gate-bypass problem
+			// resurfaces on every later `--append`/`--retry-failed` re-crawl
+			// of an already-current archive: new `dedupe_cap_events` rows or
+			// newly-discovered pages matching an existing shape would never
+			// get (re-)marked, since `ensureViewerReadModel`'s version check
+			// only answers "did the schema change," not "did the underlying
+			// data." Called unconditionally here for that ongoing-maintenance
+			// case, same as `backfillBodyHashFromHtmlBlobs`/`backfillAliasOfId`.
+			await backfillDedupeCapEventId(archive, (processed, total) => {
+				// eslint-disable-next-line no-console
+				console.error(
+					`[nitpicker] content_items.dedupe_cap_event_id backfill: ${processed}/${total}`,
 				);
 			});
 			await archive.write();

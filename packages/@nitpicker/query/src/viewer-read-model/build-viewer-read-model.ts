@@ -11,6 +11,7 @@ import { getSummary } from '../get-summary.js';
 import { backfillAliasOfId } from './backfill-alias-of-id.js';
 import { backfillAnalysisViolationsFromJson } from './backfill-analysis-violations-from-json.js';
 import { backfillBodyHashFromHtmlBlobs } from './backfill-body-hash-from-html-blobs.js';
+import { backfillDedupeCapEventId } from './backfill-dedupe-cap-event-id.js';
 import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
 import { buildIsolatedReadModelRows } from './build-isolated-read-model-rows.js';
 import { buildPageNaturalUrlRankMap } from './build-page-natural-url-rank-map.js';
@@ -119,6 +120,13 @@ interface PagesSourceRow {
 	hasXContentTypeOptions: number;
 	/** `header_flags.has_hsts`, same coalescing as {@link PagesSourceRow.hasCSP}. */
 	hasHSTS: number;
+	/**
+	 * `content_items.dedupe_cap_event_id`, or `null` when the page's URL
+	 * shape was never captured by `--dedupe-cap`. Only the presence/absence
+	 * is copied into `viewer_pages` (see {@link ViewerPageInsertRow.is_dedupe_capped});
+	 * the event detail itself is resolved live by `getPageDetail`.
+	 */
+	dedupeCapEventId: number | null;
 }
 
 /** One row to insert into `viewer_pages`, derived from a {@link PagesSourceRow}. */
@@ -200,6 +208,8 @@ interface ViewerPageInsertRow {
 	has_x_content_type_options: number;
 	/** Copied from `PagesSourceRow.hasHSTS`. */
 	has_hsts: number;
+	/** `1` iff `PagesSourceRow.dedupeCapEventId` is non-null — filter-only, see the DDL comment. */
+	is_dedupe_capped: number;
 	/**
 	 * Case-preserving sort key for URL ordering — currently just `url`
 	 * verbatim, matching `listPages`'s plain `ORDER BY url` (SQLite's
@@ -299,6 +309,7 @@ function toViewerPageInsertRow(
 		has_x_frame_options: row.hasXFrameOptions,
 		has_x_content_type_options: row.hasXContentTypeOptions,
 		has_hsts: row.hasHSTS,
+		is_dedupe_capped: row.dedupeCapEventId == null ? 0 : 1,
 		url_sort_key: row.url,
 		title_sort_key: row.title ?? '',
 		path_sort_key: derivePathSortKey(row.url),
@@ -460,6 +471,11 @@ export async function buildViewerReadModel(
 	// this backfill would otherwise see stale (still-NULL) body_hash values
 	// on an archive going through both catch-ups in the same build.
 	await backfillAliasOfId(accessor);
+	// Independent of the body_hash/alias_of_id catch-ups above — matches
+	// URLs against `dedupe_cap_events.shape_key`, no ordering dependency on
+	// either. Must still run before `sourceRows` below reads
+	// `ci.dedupe_cap_event_id`.
+	await backfillDedupeCapEventId(accessor);
 	const [summary, errorKinds, isolatedComponents] = await Promise.all([
 		getSummary(accessor),
 		getErrorKinds(accessor),
@@ -525,6 +541,7 @@ export async function buildViewerReadModel(
 				'og_title_ref.text as og_title',
 				'pm.robots_noindex as robots_noindex',
 				'ci.source as source',
+				'ci.dedupe_cap_event_id as dedupeCapEventId',
 				'pm.tag_count as tag_count',
 				'pm.jsonld_count as jsonld_count',
 				'pm.main_content_word_count as main_content_word_count',

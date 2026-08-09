@@ -2,6 +2,8 @@ import type { ListPagesByJsonLdTypeOptions, PageListItem, PageListRow } from './
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
+import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
+import { isDedupeCappedSelectColumn } from './is-dedupe-capped-select-column.js';
 import {
 	PAGE_LIST_SELECT_COLUMNS,
 	mapPageRowToListItem,
@@ -32,6 +34,7 @@ export async function listPagesByJsonLdType(
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 	const hasPageTemplates = await hasPageTemplatesTable(knex);
+	const hasDedupeCapColumn = await hasDedupeCapEventIdColumn(knex);
 	let query = knex('content_items as ci')
 		.join('page_jsonld', 'page_jsonld.pageId', '=', 'ci.id')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
@@ -68,6 +71,7 @@ export async function listPagesByJsonLdType(
 		.distinct(
 			...PAGE_LIST_SELECT_COLUMNS,
 			templateKeySelectColumn(knex, hasPageTemplates),
+			isDedupeCappedSelectColumn(knex, hasDedupeCapColumn),
 			'ci.id',
 			...buildHeaderPresenceSelects(knex, 'hf'),
 		)

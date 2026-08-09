@@ -90,7 +90,21 @@ describe('mapFlagsToCrawlConfig', () => {
 	});
 
 	it('dedupeCap 未指定は null（無効化）にマッピングする', () => {
+		// Real CLI usage never reaches this branch — roar/yargs-parser applies
+		// the flag's own `default: 10` before this function ever sees `flags`
+		// — but the function stays defensive for callers that construct
+		// `flags` directly (e.g. this test suite, or a future non-CLI caller).
 		const result = mapFlagsToCrawlConfig({});
+		expect(result.dedupeCap).toBeNull();
+	});
+
+	it('dedupeCap: 0 は null（無効化）にマッピングする — --no-dedupe-cap の実際の値', () => {
+		// yargs-parser's boolean-negation coercion turns `--no-dedupe-cap`
+		// into `dedupeCap: 0` (Number(false)), not `undefined`. Without this
+		// conversion, `0` would flow through to `DedupeCapTracker`, whose
+		// `computeEffectiveThreshold` floors any positive threshold at 1 —
+		// capping on the very first observation, the opposite of disabling.
+		const result = mapFlagsToCrawlConfig({ dedupeCap: 0 });
 		expect(result.dedupeCap).toBeNull();
 	});
 

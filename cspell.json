@@ -14,6 +14,9 @@
 		"Misra",
 		"Gries",
 
+		// SQLite PRAGMA table_info() column name
+		"dflt",
+
 		// nitpicker
 		"readtext",
 		"unanalyzed",

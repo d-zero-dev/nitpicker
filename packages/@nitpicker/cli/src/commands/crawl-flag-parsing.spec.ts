@@ -91,4 +91,24 @@ describe('crawl CLI flag parsing (parseCli integration)', () => {
 		]);
 		expect(result.flags.interval).toBe(5000);
 	});
+
+	it('defaults dedupeCap to 10 when the flag is not supplied', () => {
+		const result = runParse(['https://example.com/']);
+		expect(result.flags.dedupeCap).toBe(10);
+	});
+
+	it('--no-dedupe-cap parses to 0, not undefined — the sentinel mapFlagsToCrawlConfig converts to null', () => {
+		// Regression guard for the exact gotcha `map-flags-to-crawl-config.ts`
+		// documents: yargs-parser's boolean-negation coercion turns
+		// `--no-dedupe-cap` into `Number(false) === 0`, never `undefined`. If
+		// this ever changed (e.g. a roar upgrade), `mapFlagsToCrawlConfig`'s
+		// `flags.dedupeCap || null` conversion would need to change with it.
+		const result = runParse(['https://example.com/', '--no-dedupe-cap']);
+		expect(result.flags.dedupeCap).toBe(0);
+	});
+
+	it('accepts an explicit --dedupeCap value, overriding the default', () => {
+		const result = runParse(['https://example.com/', '--dedupeCap', '25']);
+		expect(result.flags.dedupeCap).toBe(25);
+	});
 });

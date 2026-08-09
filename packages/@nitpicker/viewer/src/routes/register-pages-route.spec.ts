@@ -761,4 +761,140 @@ describe('registerPagesRoute (integration)', () => {
 			expect(body).toEqual({ available: false, reason: 'read-model-required' });
 		});
 	});
+
+	describe('isDedupeCapped filter', () => {
+		/**
+		 * Builds a two-page archive (`/capped`, `/not-capped`), marks `/capped`
+		 * via a `dedupe_cap_events` row, and optionally builds the read model —
+		 * mirrors `buildFixture` but needs the mark written before the read
+		 * model build so `viewer_pages.is_dedupe_capped` reflects it.
+		 * @param workingDir - Unique scratch directory for this fixture.
+		 * @param withReadModel - Whether to build the viewer read model
+		 *   (fast path) or leave it unbuilt (live fallback path).
+		 */
+		async function buildDedupeCapFixture(workingDir: string, withReadModel: boolean) {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			const archive = await Archive.create({
+				filePath: path.resolve(workingDir, 'fixture.nitpicker'),
+				cwd: workingDir,
+			});
+			await archive.setConfig(BASE_CONFIG);
+			for (const url of [
+				'https://example.com/capped',
+				'https://example.com/not-capped',
+			]) {
+				await archive.setPage({
+					url: parseUrl(url)!,
+					redirectPaths: [],
+					isExternal: false,
+					isTarget: true,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					html: '<html></html>',
+					meta: META,
+					anchorList: [],
+					imageList: [],
+					isSkipped: false,
+				});
+			}
+
+			const eventId = await archive.insertDedupeCapEvent({
+				shapeKey: 'example.com/capped',
+				sampleUrl: 'https://example.com/capped',
+				bodyHash: Buffer.from('test-body-hash'),
+				effectiveThreshold: 8,
+				observedCount: 8,
+				detectedAt: 1_700_000_000_000,
+			});
+			const knex = archive.getKnex();
+			// A plain `.join().update()` chain silently drops the JOIN when
+			// compiled for SQLite (knex has no UPDATE...JOIN support for this
+			// dialect); a `whereIn` subquery avoids the join entirely.
+			await knex('content_items')
+				.whereIn(
+					'url_id',
+					knex('url_refs').select('id').where('url', 'https://example.com/capped'),
+				)
+				.update({ dedupe_cap_event_id: eventId });
+
+			if (withReadModel) {
+				await buildViewerReadModel(archive);
+			}
+
+			const manager = new ArchiveManager();
+			const { archiveId, mode } = await manager.open(archive.tmpDir);
+			const app = createApp({
+				context: {
+					manager,
+					archiveId,
+					filePath: archive.tmpDir,
+					mode,
+					crawlerLockHolder: null,
+				},
+				publicDir: '/tmp/no-such-dir-register-pages-route-dedupe-cap-spec',
+			});
+			return { app, archive, manager };
+		}
+
+		describe('fast path (viewer_pages read model built)', () => {
+			const workingDir = path.resolve(
+				__dirname,
+				'__test_fixtures_register_pages_route_dedupe_cap_fast__',
+			);
+			let fixture: Awaited<ReturnType<typeof buildDedupeCapFixture>>;
+
+			beforeAll(async () => {
+				fixture = await buildDedupeCapFixture(workingDir, true);
+			});
+
+			afterAll(async () => {
+				await fixture.manager.closeAll();
+				const { rmSync } = await import('node:fs');
+				rmSync(workingDir, { recursive: true, force: true });
+			});
+
+			it('filters to only the marked page when isDedupeCapped=true', async () => {
+				const res = await fixture.app.request('/api/pages?isDedupeCapped=true');
+				const body = (await res.json()) as { items: { url: string }[]; total: number };
+				expect(body.total).toBe(1);
+				expect(body.items[0]?.url).toBe('https://example.com/capped');
+			});
+
+			it('filters to only the unmarked page when isDedupeCapped=false', async () => {
+				const res = await fixture.app.request('/api/pages?isDedupeCapped=false');
+				const body = (await res.json()) as { items: { url: string }[]; total: number };
+				expect(body.total).toBe(1);
+				expect(body.items[0]?.url).toBe('https://example.com/not-capped');
+			});
+		});
+
+		describe('live fallback path (no read model built)', () => {
+			const workingDir = path.resolve(
+				__dirname,
+				'__test_fixtures_register_pages_route_dedupe_cap_live__',
+			);
+			let fixture: Awaited<ReturnType<typeof buildDedupeCapFixture>>;
+
+			beforeAll(async () => {
+				fixture = await buildDedupeCapFixture(workingDir, false);
+			});
+
+			afterAll(async () => {
+				await fixture.manager.closeAll();
+				const { rmSync } = await import('node:fs');
+				rmSync(workingDir, { recursive: true, force: true });
+			});
+
+			it('filters to only the marked page when isDedupeCapped=true', async () => {
+				const res = await fixture.app.request('/api/pages?isDedupeCapped=true');
+				const body = (await res.json()) as { items: { url: string }[]; total: number };
+				expect(body.total).toBe(1);
+				expect(body.items[0]?.url).toBe('https://example.com/capped');
+			});
+		});
+	});
 });
