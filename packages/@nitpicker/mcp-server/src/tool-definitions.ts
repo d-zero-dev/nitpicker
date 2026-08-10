@@ -86,6 +86,11 @@ export const toolDefinitions: Tool[] = [
 					description:
 						'Filter to pages whose URL shape --dedupe-cap captured as a same-cluster crawl trap during crawl (see dedupe_cap_events)',
 				},
+				dedupeCapEventId: {
+					type: 'number',
+					description:
+						'Filter to pages captured by one specific dedupe_cap_events row (its id) — see list_dedupe_cap_events',
+				},
 				hasCSP: {
 					type: 'boolean',
 					description: 'Filter by Content-Security-Policy header presence',

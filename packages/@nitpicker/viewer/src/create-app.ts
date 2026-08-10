@@ -9,7 +9,6 @@ import { registerDedupeCapEventsRoute } from './routes/register-dedupe-cap-event
 import { registerDirectoryTreeChildrenRoute } from './routes/register-directory-tree-children-route.js';
 import { registerDirectoryTreePagesRoute } from './routes/register-directory-tree-pages-route.js';
 import { registerDirectoryTreeRoute } from './routes/register-directory-tree-route.js';
-import { registerDuplicateClustersRoute } from './routes/register-duplicate-clusters-route.js';
 import { registerDuplicatesRoute } from './routes/register-duplicates-route.js';
 import { registerErrorKindsRoute } from './routes/register-error-kinds-route.js';
 import { registerGraphRoute } from './routes/register-graph-route.js';
@@ -68,7 +67,6 @@ export function createApp(options: CreateAppOptions): Hono {
 	registerHeaderChecksRoute(app, context);
 	registerViolationsRoute(app, context);
 	registerDuplicatesRoute(app, context);
-	registerDuplicateClustersRoute(app, context);
 	registerDedupeCapEventsRoute(app, context);
 	registerMismatchesRoute(app, context);
 	registerGraphRoute(app, context);

@@ -17,7 +17,7 @@ const NAV_ITEMS: NavItem[] = [
 	{ path: '/graph', labelKey: 'nav.graph' },
 	{ path: '/violations', labelKey: 'nav.violations' },
 	{ path: '/duplicates', labelKey: 'nav.duplicates' },
-	{ path: '/duplicate-clusters', labelKey: 'nav.duplicateClusters' },
+	{ path: '/crawl-suppression', labelKey: 'nav.crawlSuppression' },
 	{ path: '/mismatches', labelKey: 'nav.mismatches' },
 	{ path: '/errors', labelKey: 'nav.errors' },
 	{ path: '/isolated-pages', labelKey: 'nav.isolatedPages' },

@@ -188,6 +188,16 @@ export async function listPages(
 			baseQuery.whereRaw('0 = 1');
 		}
 	}
+	if (options.dedupeCapEventId != null) {
+		if (hasDedupeCapColumn) {
+			baseQuery.where('ci.dedupe_cap_event_id', options.dedupeCapEventId);
+		} else {
+			// Same reasoning as the isDedupeCapped guard above: an archive
+			// predating this feature has never marked any page, so a
+			// reference to a specific event id can only match zero rows.
+			baseQuery.whereRaw('0 = 1');
+		}
+	}
 	if (options.urlPattern) {
 		const urlPattern = options.urlPattern;
 		// Matches the canonical page's own URL, OR any URL that resolves to

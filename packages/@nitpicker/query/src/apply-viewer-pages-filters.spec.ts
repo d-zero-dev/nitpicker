@@ -243,6 +243,7 @@ describe('applyViewerPagesFilters — isDedupeCapped', () => {
 		'apply-filters-dedupe-cap-test.nitpicker',
 	);
 	let archive: InstanceType<typeof Archive>;
+	let eventId: number;
 
 	beforeAll(async () => {
 		const { mkdirSync } = await import('node:fs');
@@ -269,7 +270,7 @@ describe('applyViewerPagesFilters — isDedupeCapped', () => {
 			});
 		}
 
-		const eventId = await archive.insertDedupeCapEvent({
+		eventId = await archive.insertDedupeCapEvent({
 			shapeKey: 'example.com/capped',
 			sampleUrl: 'https://example.com/capped',
 			bodyHash: Buffer.from('test-body-hash'),
@@ -326,6 +327,22 @@ describe('applyViewerPagesFilters — isDedupeCapped', () => {
 			'https://example.com/capped',
 			'https://example.com/not-capped',
 		]);
+	});
+
+	it('filters to only the page captured by the matching dedupeCapEventId', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { dedupeCapEventId: eventId });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual(['https://example.com/capped']);
+	});
+
+	it('returns zero rows for a non-matching dedupeCapEventId', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { dedupeCapEventId: eventId + 999 });
+		const rows = await qb.select('url');
+		expect(rows).toEqual([]);
 	});
 });
 

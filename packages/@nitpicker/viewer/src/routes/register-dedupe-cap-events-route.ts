@@ -4,21 +4,19 @@ import type { Hono } from 'hono';
 import { listDedupeCapEvents } from '@nitpicker/query';
 
 /**
- * Effectively-unbounded page size — the Duplicate Clusters view needs every
- * recorded cap event for its "crawl confirmed N same-cluster traps" notice,
- * not a page of them. Mirrors `register-network-outages-route.ts`'s
- * identical rationale (`ALL_OUTAGES_LIMIT`).
+ * Effectively-unbounded page size — the Crawl Suppression view needs every
+ * recorded cap event, not a page of them. Mirrors
+ * `register-network-outages-route.ts`'s identical rationale
+ * (`ALL_OUTAGES_LIMIT`).
  */
 const ALL_DEDUPE_CAP_EVENTS_LIMIT = 10_000;
 
 /**
  * Registers `GET /api/dedupe-cap-events` — URL shapes the opt-in
  * `--dedupe-cap` crawl flag confirmed as self-generating traps (issue
- * #208), via `@nitpicker/query`'s `listDedupeCapEvents`. Backs the
- * Duplicate Clusters view's "crawl confirmed N same-cluster traps" notice —
- * deliberately not a standalone nav item, matching how
- * `register-network-outages-route.ts` backs a notice on the Summary view
- * rather than getting its own page.
+ * #208), via `@nitpicker/query`'s `listDedupeCapEvents`. Backs the Crawl
+ * Suppression view (`/crawl-suppression`), the viewer's dedicated nav item
+ * for this data.
  *
  * No cache layer, same reasoning as `register-network-outages-route.ts`:
  * `listDedupeCapEvents` is already a small, direct `dedupe_cap_events` read

@@ -8,8 +8,8 @@ import { TopBar } from './components/top-bar.js';
 import { I18nProvider } from './i18n/i18n-provider.js';
 import { BrokenLinksView } from './routes/broken-links-view.js';
 import { ConsoleLogsView } from './routes/console-logs-view.js';
+import { CrawlSuppressionView } from './routes/crawl-suppression-view.js';
 import { DirectoryTreeView } from './routes/directory-tree-view.js';
-import { DuplicateClustersView } from './routes/duplicate-clusters-view.js';
 import { DuplicatesView } from './routes/duplicates-view.js';
 import { ErrorsView } from './routes/errors-view.js';
 import { ExternalLinksView } from './routes/external-links-view.js';
@@ -85,7 +85,7 @@ export function App() {
 									<Route path="/graph" element={<GraphView />} />
 									<Route path="/violations" element={<ViolationsView />} />
 									<Route path="/duplicates" element={<DuplicatesView />} />
-									<Route path="/duplicate-clusters" element={<DuplicateClustersView />} />
+									<Route path="/crawl-suppression" element={<CrawlSuppressionView />} />
 									<Route path="/mismatches" element={<MismatchesView />} />
 									<Route path="/errors" element={<ErrorsView />} />
 									<Route path="/isolated-pages" element={<IsolatedPagesView />} />

@@ -126,6 +126,14 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			-- justify one yet (see create-entity-tables.ts's DDL comment on
 			-- content_items.dedupe_cap_event_id for the same reasoning).
 			is_dedupe_capped integer not null default 0,
+			-- content_items.dedupe_cap_event_id verbatim (nullable), for the
+			-- Crawl Suppression view's "N pages captured" link
+			-- (/pages?dedupeCapEventId=N). Unlike is_dedupe_capped above,
+			-- this is a link-landing filter target, not a display column — the
+			-- event's own detail (shape_key, sample_url, etc.) still lives
+			-- only in dedupe_cap_events. Same no-index rationale as
+			-- is_dedupe_capped.
+			dedupe_cap_event_id integer,
 			url_sort_key text not null,
 			title_sort_key text not null,
 			path_sort_key text not null,

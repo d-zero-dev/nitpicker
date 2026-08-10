@@ -472,6 +472,23 @@ export interface DedupeCapEventEntry {
 	 * `dedupe_cap_events`'s DDL JSDoc).
 	 */
 	rejected_count: number | null;
+	/**
+	 * Count of `content_items` rows the post-hoc marking backfill (issue
+	 * #264) pointed at this event — i.e. pages already in the archive when
+	 * this shape capped. Always `0` on an archive predating that feature (no
+	 * `content_items.dedupe_cap_event_id` column) — see
+	 * `hasDedupeCapEventIdColumn`. Backs the Crawl Suppression view's
+	 * "N pages captured" link to `/pages?dedupeCapEventId=<id>`.
+	 */
+	captured_page_count: number;
+	/**
+	 * Whether {@link DedupeCapEventEntry.sample_url} itself has a scraped
+	 * `content_items` row in this archive — the sample is recorded at the
+	 * instant the shape capped and is not guaranteed to have been crawled
+	 * (it may be one of the rejected anchors). `false` links nowhere; `true`
+	 * lets the Crawl Suppression view link the sample to its page detail.
+	 */
+	sample_url_archived: boolean;
 }
 
 /**
@@ -782,6 +799,14 @@ export interface ListPagesOptions {
 	 * marked," not an error. See `hasDedupeCapEventIdColumn`.
 	 */
 	isDedupeCapped?: boolean;
+	/**
+	 * Filter to pages captured by one specific `dedupe_cap_events` row (its
+	 * `id`), rather than any capped shape — the landing filter for the
+	 * viewer's Crawl Suppression view's "N pages captured" link. Same
+	 * missing-column degrade as {@link ListPagesOptions.isDedupeCapped}: an
+	 * archive predating this feature deterministically matches zero rows.
+	 */
+	dedupeCapEventId?: number;
 	/** URL pattern to search (SQL LIKE pattern). */
 	urlPattern?: string;
 	/** Directory path prefix to filter by. */
@@ -1145,6 +1170,16 @@ export interface ListViewerPagesOptions {
 	 * this never needs a missing-column fallback.
 	 */
 	isDedupeCapped?: boolean | boolean[];
+	/**
+	 * Filter to pages captured by one specific `dedupe_cap_events` row (its
+	 * `id`). Backed by `viewer_pages.dedupe_cap_event_id` (always present —
+	 * the read model schema bump backfills it to `null` on archives that
+	 * never used `--dedupe-cap`), so unlike {@link ListPagesOptions.dedupeCapEventId}
+	 * this never needs a missing-column fallback. Single-value only (not
+	 * OR'able like the other filters here) — it targets one specific event
+	 * as a link destination, not a facet.
+	 */
+	dedupeCapEventId?: number;
 	/** Filter by provenance — see {@link PageSource}. */
 	source?: import('@nitpicker/crawler').PageSource;
 	/**
@@ -1289,6 +1324,13 @@ export interface PageDetail {
 	 * {@link PageDetail.isDedupeCapped} is `false`.
 	 */
 	dedupeCapShapeKey: string | null;
+	/**
+	 * The `dedupe_cap_events.id` that captured this page, or `null` when
+	 * {@link PageDetail.isDedupeCapped} is `false` — lets the viewer link
+	 * back to that event's entry in the Crawl Suppression view
+	 * (`/crawl-suppression#event-<id>`).
+	 */
+	dedupeCapEventId: number | null;
 
 	/** The page title. */
 	title: string | null;

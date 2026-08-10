@@ -70,6 +70,7 @@ export function mapFlagsToQueryOptions(
 				missingDescription: flags.missingDescription,
 				noindex: flags.noindex,
 				isDedupeCapped: flags.isDedupeCapped,
+				dedupeCapEventId: flags.dedupeCapEventId,
 				urlPattern: flags.urlPattern,
 				directory: flags.directory,
 				sortBy: flags.sortBy as 'url' | 'status' | 'title' | undefined,

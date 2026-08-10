@@ -2292,6 +2292,7 @@ describe('buildViewerReadModel: dedupe_cap_events end-to-end', () => {
 	);
 	const archiveFilePath = path.resolve(workingDir, 'build-dedupe-cap-test.nitpicker');
 	let archive: InstanceType<typeof Archive>;
+	let eventId: number;
 
 	beforeAll(async () => {
 		const { mkdirSync } = await import('node:fs');
@@ -2324,7 +2325,7 @@ describe('buildViewerReadModel: dedupe_cap_events end-to-end', () => {
 
 		// Simulates what `--dedupe-cap` writes mid-crawl: a journal row
 		// naming the URL shape it captured as a same-cluster trap.
-		await archive.insertDedupeCapEvent({
+		eventId = await archive.insertDedupeCapEvent({
 			shapeKey: 'example.com/search/?ssp={v}',
 			sampleUrl: 'https://example.com/search/?ssp=1',
 			bodyHash: Buffer.from('test-body-hash'),
@@ -2353,6 +2354,20 @@ describe('buildViewerReadModel: dedupe_cap_events end-to-end', () => {
 			{ url: 'https://example.com/other/', is_dedupe_capped: 0 },
 			{ url: 'https://example.com/search/?ssp=1', is_dedupe_capped: 1 },
 			{ url: 'https://example.com/search/?ssp=2', is_dedupe_capped: 1 },
+		]);
+	});
+
+	it('copies content_items.dedupe_cap_event_id verbatim into viewer_pages', async () => {
+		await buildViewerReadModel(archive);
+		const knex = archive.getKnex();
+
+		const pages = await knex('viewer_pages')
+			.select('url', 'dedupe_cap_event_id')
+			.orderBy('url');
+		expect(pages).toEqual([
+			{ url: 'https://example.com/other/', dedupe_cap_event_id: null },
+			{ url: 'https://example.com/search/?ssp=1', dedupe_cap_event_id: eventId },
+			{ url: 'https://example.com/search/?ssp=2', dedupe_cap_event_id: eventId },
 		]);
 	});
 });
