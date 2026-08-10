@@ -29,7 +29,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: corepack enable
       - uses: actions/setup-node@v6.4.0
         with:
@@ -56,7 +56,7 @@ jobs:
     # mistake — that file would otherwise silently never run in CI.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify shard manifest covers all e2e files
         run: |
           expected=$(find packages/test-server/src/__tests__/e2e -name '*.e2e.ts' -printf '%f\n' | sort)
@@ -137,7 +137,7 @@ jobs:
                 dedupe-cap.e2e.ts,
               ]
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: corepack enable
       - uses: actions/setup-node@v6.4.0
         with:
