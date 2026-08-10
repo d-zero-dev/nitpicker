@@ -85,6 +85,11 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Filter to pages whose URL shape --dedupe-cap captured as a same-cluster crawl trap',
 		},
+		dedupeCapEventId: {
+			type: 'number',
+			valueName: 'id',
+			desc: 'Filter to pages captured by one specific dedupe-cap-events row (its id)',
+		},
 		urlPattern: {
 			type: 'string',
 			valueName: 'pattern',
@@ -210,6 +215,7 @@ export const commandDef = {
 				'missingDescription',
 				'noindex',
 				'isDedupeCapped',
+				'dedupeCapEventId',
 				'urlPattern',
 				'directory',
 				'sortBy',
