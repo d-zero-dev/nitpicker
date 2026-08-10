@@ -35,7 +35,8 @@ const DEFAULT_LIMIT = 100;
  *   redirect-source/alias-member equivalence arms (search parity with
  *   `listPages` — see `ListViewerPagesOptions.urlPattern`); `lang` and the
  *   header-presence flags (`hasCSP` etc.) read dedicated `viewer_pages`
- *   columns copied at build time.
+ *   columns copied at build time; `dedupeCapEventId` reads the dedicated
+ *   `viewer_pages.dedupe_cap_event_id` column copied at build time.
  * - a {@link ReadModelUnavailable} response (`shouldRefuseStaleReadModel`)
  *   when the read model is missing/stale outside stub mode: silently
  *   falling through to `listPages` instead would be 10-50x+ slower on a
@@ -79,6 +80,7 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 				),
 				hasHSTS: toMultiValue(c.req.queries('hasHSTS'), toBoolean),
 				isDedupeCapped: toMultiValue(c.req.queries('isDedupeCapped'), toBoolean),
+				dedupeCapEventId: toNumber(q.dedupeCapEventId),
 				source: toPageSource(q.source),
 				templateKey: c.req.queries('templateKey'),
 				directory: q.directory || undefined,
@@ -118,6 +120,7 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 			hasXContentTypeOptions: toBoolean(q.hasXContentTypeOptions),
 			hasHSTS: toBoolean(q.hasHSTS),
 			isDedupeCapped: toBoolean(q.isDedupeCapped),
+			dedupeCapEventId: toNumber(q.dedupeCapEventId),
 			urlPattern: q.urlPattern,
 			directory: q.directory,
 			templateKey: q.templateKey,

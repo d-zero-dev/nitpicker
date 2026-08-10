@@ -34,7 +34,7 @@
 		"test:e2e:directory-tree": "node ./e2e/generate-directory-tree-fixture.mjs && playwright test --config playwright.directory-tree.config.ts",
 		"test:e2e:template-clusters": "node ./e2e/generate-template-clusters-fixture.mjs && playwright test --config playwright.template-clusters.config.ts",
 		"test:e2e:inbound-links": "node ./e2e/generate-inbound-links-fixture.mjs && playwright test --config playwright.inbound-links.config.ts",
-		"test:e2e:duplicate-clusters": "node ./e2e/generate-duplicate-clusters-fixture.mjs && playwright test --config playwright.duplicate-clusters.config.ts"
+		"test:e2e:crawl-suppression": "node ./e2e/generate-crawl-suppression-fixture.mjs && playwright test --config playwright.crawl-suppression.config.ts"
 	},
 	"dependencies": {
 		"@d-zero/dealer": "1.10.2",

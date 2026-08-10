@@ -170,6 +170,19 @@ test.describe('Nitpicker Viewer', () => {
 		// path all resolve.
 		await expect(page.locator('.view-header .view-description')).toBeVisible();
 	});
+
+	test('Crawl Suppression: dedupe-cap未使用のクロールでは0件メッセージを表示する', async ({
+		page,
+	}) => {
+		await page.goto('/');
+		await page.getByRole('link', { name: 'Crawl Suppression' }).click();
+		await expect(
+			page.getByRole('heading', { name: 'Crawl Suppression', level: 1 }),
+		).toBeVisible();
+		await expect(
+			page.getByText('No crawl suppression events were detected.'),
+		).toBeVisible();
+	});
 });
 
 test.describe('MPA ページネーション', () => {
@@ -223,6 +236,14 @@ test.describe('MPA ページネーション', () => {
 		const payload = (await response.json()) as { items: unknown[]; total: number };
 		expect(payload.total).toBeGreaterThan(0);
 		expect(payload.items.length).toBeGreaterThan(0);
+	});
+
+	test('不正な dedupeCapEventId query（数値でない）でもPagesビューがエラーにならない', async ({
+		page,
+	}) => {
+		await page.goto('/pages?dedupeCapEventId=not-a-number');
+		await expect(page.getByRole('heading', { name: 'Pages', level: 1 })).toBeVisible();
+		await expect(page.locator('.state-error')).toHaveCount(0);
 	});
 
 	test('Pages API は URL 昇順をデフォルトにして動的 enum facets を返す', async ({

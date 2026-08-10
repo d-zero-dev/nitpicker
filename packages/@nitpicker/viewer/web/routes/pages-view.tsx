@@ -9,6 +9,7 @@ import { HEADER_PRESENCE_KEYS } from '@nitpicker/query/header-presence';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 
+import { useDedupeCapEvents } from '../api/use-dedupe-cap-events.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
 import { usePagesInfinite } from '../api/use-pages-infinite.js';
 import {
@@ -80,6 +81,23 @@ export function PagesView() {
 	const hasXContentTypeOptions = params.getAll('hasXContentTypeOptions');
 	const hasHSTS = params.getAll('hasHSTS');
 	const isDedupeCapped = params.getAll('isDedupeCapped');
+	const dedupeCapEventIdParam = params.get('dedupeCapEventId');
+	const parsedDedupeCapEventId = dedupeCapEventIdParam
+		? Number(dedupeCapEventIdParam)
+		: undefined;
+	// A malformed/stale `?dedupeCapEventId=` (hand-edited URL, old bookmark)
+	// must not reach the server as NaN — `toNumber` on the server throws on
+	// NaN, which would take down the whole view. Treat it as "no filter"
+	// instead, matching every other malformed-filter-value fallback here.
+	const dedupeCapEventId = Number.isNaN(parsedDedupeCapEventId)
+		? undefined
+		: parsedDedupeCapEventId;
+	const { data: dedupeCapEvents } = useDedupeCapEvents({
+		enabled: dedupeCapEventId != null,
+	});
+	const dedupeCapEventShapeKey = dedupeCapEvents?.items.find(
+		(event) => event.id === dedupeCapEventId,
+	)?.shape_key;
 	const filter: PagesFilter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
 		directory: params.get('directory') ?? undefined,
@@ -93,6 +111,7 @@ export function PagesView() {
 		hasXContentTypeOptions,
 		hasHSTS,
 		isDedupeCapped,
+		dedupeCapEventId,
 		templateKey,
 		sortBy: (params.get('sortBy') as PagesFilter['sortBy']) || 'url',
 		sortOrder: (params.get('sortOrder') as PagesFilter['sortOrder']) || 'asc',
@@ -508,6 +527,13 @@ export function PagesView() {
 			{filter.directory && (
 				<p className="filter-notice">
 					{t('views.pages.directoryFilterNotice', { directory: filter.directory })}
+				</p>
+			)}
+			{dedupeCapEventId != null && dedupeCapEventShapeKey && (
+				<p className="filter-notice">
+					{t('views.pages.dedupeCapEventFilterNotice', {
+						shapeKey: dedupeCapEventShapeKey,
+					})}
 				</p>
 			)}
 			{mode === 'mpa' ? (

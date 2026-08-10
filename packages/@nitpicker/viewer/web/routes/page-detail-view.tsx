@@ -78,7 +78,15 @@ export function PageDetailView() {
 				{data.isDedupeCapped && (
 					<>
 						<dt>{t('views.pageDetail.dedupeCapShapeKey')}</dt>
-						<dd>{data.dedupeCapShapeKey ?? '—'}</dd>
+						<dd>
+							{data.dedupeCapEventId == null ? (
+								(data.dedupeCapShapeKey ?? '—')
+							) : (
+								<Link to={`/crawl-suppression#event-${data.dedupeCapEventId}`}>
+									{data.dedupeCapShapeKey ?? '—'}
+								</Link>
+							)}
+						</dd>
 					</>
 				)}
 				<dt>{t('views.pageDetail.status')}</dt>

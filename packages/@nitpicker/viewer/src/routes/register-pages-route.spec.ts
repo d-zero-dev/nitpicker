@@ -837,7 +837,7 @@ describe('registerPagesRoute (integration)', () => {
 				},
 				publicDir: '/tmp/no-such-dir-register-pages-route-dedupe-cap-spec',
 			});
-			return { app, archive, manager };
+			return { app, archive, manager, eventId };
 		}
 
 		describe('fast path (viewer_pages read model built)', () => {
@@ -870,6 +870,23 @@ describe('registerPagesRoute (integration)', () => {
 				expect(body.total).toBe(1);
 				expect(body.items[0]?.url).toBe('https://example.com/not-capped');
 			});
+
+			it('filters to only the page captured by the matching dedupeCapEventId', async () => {
+				const res = await fixture.app.request(
+					`/api/pages?dedupeCapEventId=${fixture.eventId}`,
+				);
+				const body = (await res.json()) as { items: { url: string }[]; total: number };
+				expect(body.total).toBe(1);
+				expect(body.items[0]?.url).toBe('https://example.com/capped');
+			});
+
+			it('returns zero rows for a non-matching dedupeCapEventId', async () => {
+				const res = await fixture.app.request(
+					`/api/pages?dedupeCapEventId=${fixture.eventId + 999}`,
+				);
+				const body = (await res.json()) as { items: { url: string }[]; total: number };
+				expect(body.total).toBe(0);
+			});
 		});
 
 		describe('live fallback path (no read model built)', () => {
@@ -891,6 +908,15 @@ describe('registerPagesRoute (integration)', () => {
 
 			it('filters to only the marked page when isDedupeCapped=true', async () => {
 				const res = await fixture.app.request('/api/pages?isDedupeCapped=true');
+				const body = (await res.json()) as { items: { url: string }[]; total: number };
+				expect(body.total).toBe(1);
+				expect(body.items[0]?.url).toBe('https://example.com/capped');
+			});
+
+			it('filters to only the page captured by the matching dedupeCapEventId', async () => {
+				const res = await fixture.app.request(
+					`/api/pages?dedupeCapEventId=${fixture.eventId}`,
+				);
 				const body = (await res.json()) as { items: { url: string }[]; total: number };
 				expect(body.total).toBe(1);
 				expect(body.items[0]?.url).toBe('https://example.com/capped');

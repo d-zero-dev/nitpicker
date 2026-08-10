@@ -45,6 +45,8 @@ interface DedupeCapEventsResponseBody {
 		observed_count: number;
 		detected_at: number;
 		rejected_count: number | null;
+		captured_page_count: number;
+		sample_url_archived: boolean;
 	}[];
 	total: number;
 }
@@ -104,6 +106,8 @@ describe('registerDedupeCapEventsRoute — /api/dedupe-cap-events (integration)'
 			observed_count: 100,
 			detected_at: 1000,
 			rejected_count: 500,
+			captured_page_count: 0,
+			sample_url_archived: false,
 		});
 	});
 });
