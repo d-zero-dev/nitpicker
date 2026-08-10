@@ -87,6 +87,17 @@ describe('createViewerReadModelTables', () => {
 		expect(column?.dflt_value).toBe('0');
 	});
 
+	it('creates viewer_pages.dedupe_cap_event_id as a nullable integer', async () => {
+		const knex = archive.getKnex();
+
+		const columns = (await knex.raw("PRAGMA table_info('viewer_pages')")) as {
+			name: string;
+			notnull: number;
+		}[];
+		const column = columns.find((c) => c.name === 'dedupe_cap_event_id');
+		expect(column?.notnull).toBe(0);
+	});
+
 	it('viewer_query_profiles enforces a composite (scope, profile_key) key, not a single-column rowid', async () => {
 		const knex = archive.getKnex();
 		await knex('viewer_query_profiles').insert([

@@ -452,6 +452,7 @@ describe('getPageDetail: content_items.alias_of_id handling', () => {
 
 describe('getPageDetail: dedupe_cap_events (--dedupe-cap post-hoc marking)', () => {
 	let archive: InstanceType<typeof Archive>;
+	let eventId: number;
 	const dir = path.resolve(__dirname, '__test_fixtures_get_page_detail_dedupe_cap__');
 	const archiveFilePath = path.resolve(dir, 'page-detail-dedupe-cap.nitpicker');
 
@@ -499,7 +500,7 @@ describe('getPageDetail: dedupe_cap_events (--dedupe-cap post-hoc marking)', () 
 			});
 		}
 
-		const eventId = await archive.insertDedupeCapEvent({
+		eventId = await archive.insertDedupeCapEvent({
 			shapeKey: 'example.com/capped',
 			sampleUrl: 'https://example.com/capped',
 			bodyHash: Buffer.from('test-body-hash'),
@@ -539,6 +540,16 @@ describe('getPageDetail: dedupe_cap_events (--dedupe-cap post-hoc marking)', () 
 		expect(result!.dedupeCapShapeKey).toBeNull();
 	});
 
+	it('reports the capturing dedupeCapEventId for a marked page', async () => {
+		const result = await getPageDetail(archive, 'https://example.com/capped');
+		expect(result!.dedupeCapEventId).toBe(eventId);
+	});
+
+	it('reports a null dedupeCapEventId for an unmarked page', async () => {
+		const result = await getPageDetail(archive, 'https://example.com/not-capped');
+		expect(result!.dedupeCapEventId).toBeNull();
+	});
+
 	it('degrades to isDedupeCapped: false without throwing when the column does not exist (pre-feature archive)', async () => {
 		const knex = archive.getKnex();
 		await knex.schema.alterTable('content_items', (t) => {
@@ -548,6 +559,7 @@ describe('getPageDetail: dedupe_cap_events (--dedupe-cap post-hoc marking)', () 
 		const result = await getPageDetail(archive, 'https://example.com/capped');
 		expect(result!.isDedupeCapped).toBe(false);
 		expect(result!.dedupeCapShapeKey).toBeNull();
+		expect(result!.dedupeCapEventId).toBeNull();
 
 		// Restore the column so afterAll's close()/other tests are unaffected.
 		await knex.schema.alterTable('content_items', (t) => {

@@ -210,6 +210,8 @@ interface ViewerPageInsertRow {
 	has_hsts: number;
 	/** `1` iff `PagesSourceRow.dedupeCapEventId` is non-null — filter-only, see the DDL comment. */
 	is_dedupe_capped: number;
+	/** Copied from `PagesSourceRow.dedupeCapEventId` verbatim — see the DDL comment. */
+	dedupe_cap_event_id: number | null;
 	/**
 	 * Case-preserving sort key for URL ordering — currently just `url`
 	 * verbatim, matching `listPages`'s plain `ORDER BY url` (SQLite's
@@ -310,6 +312,7 @@ function toViewerPageInsertRow(
 		has_x_content_type_options: row.hasXContentTypeOptions,
 		has_hsts: row.hasHSTS,
 		is_dedupe_capped: row.dedupeCapEventId == null ? 0 : 1,
+		dedupe_cap_event_id: row.dedupeCapEventId,
 		url_sort_key: row.url,
 		title_sort_key: row.title ?? '',
 		path_sort_key: derivePathSortKey(row.url),

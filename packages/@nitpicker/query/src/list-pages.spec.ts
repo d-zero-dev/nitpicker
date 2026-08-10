@@ -752,6 +752,7 @@ describe('listPages: content_items.alias_of_id handling', () => {
 
 describe('listPages: isDedupeCapped filter', () => {
 	let archive: InstanceType<typeof Archive>;
+	let eventId: number;
 	const dir = path.resolve(__dirname, '__test_fixtures_list_pages_dedupe_cap__');
 	const archiveFilePath = path.resolve(dir, 'list-pages-dedupe-cap-test.nitpicker');
 
@@ -818,7 +819,7 @@ describe('listPages: isDedupeCapped filter', () => {
 			});
 		}
 
-		const eventId = await archive.insertDedupeCapEvent({
+		eventId = await archive.insertDedupeCapEvent({
 			shapeKey: 'example.com/capped',
 			sampleUrl: 'https://example.com/capped',
 			bodyHash: Buffer.from('test-body-hash'),
@@ -866,6 +867,16 @@ describe('listPages: isDedupeCapped filter', () => {
 		expect(byUrl.get('https://example.com/not-capped')).toBe(false);
 	});
 
+	it('dedupeCapEventId: matching id returns only the page marked with that event', async () => {
+		const result = await listPages(archive, { dedupeCapEventId: eventId });
+		expect(result.items.map((p) => p.url)).toEqual(['https://example.com/capped']);
+	});
+
+	it('dedupeCapEventId: non-matching id returns zero rows', async () => {
+		const result = await listPages(archive, { dedupeCapEventId: eventId + 999 });
+		expect(result.total).toBe(0);
+	});
+
 	it('isDedupeCapped: true deterministically returns zero rows when the column does not exist (pre-feature archive)', async () => {
 		const knex = archive.getKnex();
 		await knex.schema.alterTable('content_items', (t) => {
@@ -878,6 +889,24 @@ describe('listPages: isDedupeCapped filter', () => {
 		const unmarked = await listPages(archive, { isDedupeCapped: false });
 		expect(unmarked.total).toBe(2);
 		expect(unmarked.items.every((p) => p.isDedupeCapped === false)).toBe(true);
+
+		// Restore the column so afterAll's close()/other tests are unaffected.
+		await knex.schema.alterTable('content_items', (t) => {
+			t.integer('dedupe_cap_event_id');
+		});
+	});
+
+	it('dedupeCapEventId: deterministically returns zero rows when the column does not exist (pre-feature archive)', async () => {
+		const knex = archive.getKnex();
+		await knex.schema.alterTable('content_items', (t) => {
+			t.dropColumn('dedupe_cap_event_id');
+		});
+
+		await expect(
+			listPages(archive, { dedupeCapEventId: eventId }),
+		).resolves.toMatchObject({
+			total: 0,
+		});
 
 		// Restore the column so afterAll's close()/other tests are unaffected.
 		await knex.schema.alterTable('content_items', (t) => {

@@ -3,6 +3,7 @@ import type { ArchiveAccessor, JsonLdRow, TagRow } from '@nitpicker/crawler';
 
 import { decodeJsonRef, loadResponseHeadersBySetIds } from '@nitpicker/crawler';
 
+import { dedupeCapEventIdSelectColumn } from './dedupe-cap-event-id-select-column.js';
 import { dedupeCapShapeKeySelectColumn } from './dedupe-cap-shape-key-select-column.js';
 import { getPageConsoleLogs } from './get-page-console-logs.js';
 import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
@@ -239,6 +240,7 @@ export async function getPageDetail(
 			'pm.scroll_height_mobile as scroll_height_mobile',
 			templateKeySelectColumn(knex, hasPageTemplates),
 			dedupeCapShapeKeySelectColumn(knex, hasDedupeCapColumn),
+			dedupeCapEventIdSelectColumn(knex, hasDedupeCapColumn),
 		)
 		.where('ci.id', targetId)
 		.limit(1);
@@ -334,6 +336,7 @@ export async function getPageDetail(
 		skipReason: page.skipReason,
 		isDedupeCapped: page.dedupeCapShapeKey != null,
 		dedupeCapShapeKey: page.dedupeCapShapeKey,
+		dedupeCapEventId: page.dedupeCapEventId,
 		title: page.title,
 		description: page.description,
 		keywords: page.keywords,
