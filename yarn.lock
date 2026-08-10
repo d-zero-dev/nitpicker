@@ -1082,16 +1082,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/beholder@npm:4.1.0":
-  version: 4.1.0
-  resolution: "@d-zero/beholder@npm:4.1.0"
+"@d-zero/beholder@npm:4.1.1":
+  version: 4.1.1
+  resolution: "@d-zero/beholder@npm:4.1.1"
   dependencies:
-    "@d-zero/puppeteer-page-scan": "npm:4.6.5"
-    "@d-zero/shared": "npm:0.22.2"
+    "@d-zero/puppeteer-page-scan": "npm:4.6.6"
+    "@d-zero/shared": "npm:0.22.3"
     debug: "npm:4.4.3"
     puppeteer: "npm:25.3.0"
     simple-wappalyzer: "npm:1.1.100"
-  checksum: 10c0/5548bbde5914f71e49bf6e6c75db134b82db7a55dc68cdb9d531c684d910155a64023c03a1dc437827b82f4d45fda126bf96bb5ef92ff23cd267f1ffc07aa2db
+  checksum: 10c0/895d5e438b4be41bf333401c4beab1559908c3bc836a6e033bb3d7e027088b81030fdeb3742036b938a991946fc2951053562d2e2c52d8deb8a2770dd27a8871
   languageName: node
   linkType: hard
 
@@ -1120,16 +1120,6 @@ __metadata:
     "@d-zero/shared": "npm:0.22.3"
     ansi-colors: "npm:4.1.3"
   checksum: 10c0/12bee8088d31ccb123d294a81fcf4f451c71a347b29e2b1e5d9df527872e36ae94377bf537662088ce0a7a425df06184e54fe8d213841ccd5a7a1c4d49797c90
-  languageName: node
-  linkType: hard
-
-"@d-zero/dealer@npm:1.9.4":
-  version: 1.9.4
-  resolution: "@d-zero/dealer@npm:1.9.4"
-  dependencies:
-    "@d-zero/shared": "npm:0.22.2"
-    ansi-colors: "npm:4.1.3"
-  checksum: 10c0/26052d5d4571535c898460ce18efe294932eea24431368ca977fdd26e7ad693b84b523c0a9c7e0d4c3dee73d5a35e72cd2bce0ebe50822aa4c5f32dfe7eb59f7
   languageName: node
   linkType: hard
 
@@ -1173,16 +1163,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/google-sheets@npm:0.9.4":
-  version: 0.9.4
-  resolution: "@d-zero/google-sheets@npm:0.9.4"
+"@d-zero/google-sheets@npm:0.9.5":
+  version: 0.9.5
+  resolution: "@d-zero/google-sheets@npm:0.9.5"
   dependencies:
     "@d-zero/google-auth": "npm:0.7.5"
-    "@d-zero/shared": "npm:0.22.2"
+    "@d-zero/shared": "npm:0.22.3"
     debug: "npm:4.4.3"
     gaxios: "npm:7.1.5"
     googleapis: "npm:173.0.0"
-  checksum: 10c0/f7afa2f202bbe0b0ac1d08a36955dc85b7541a0e6baf50ad26b51e7f011efb6b420750f5ecfdd3df174c786cd3488894be1167ba79fb0643d7a19a26f352b2db
+  checksum: 10c0/75ed5bae90856bd2c45c867a2ab216b07bace99ad4faa2f92425251ac8da2904e91de14a1fd3cf101e2d8d2f48828d921889d812a66f598d5518127c00fc3e04
   languageName: node
   linkType: hard
 
@@ -1240,27 +1230,27 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-page-scan@npm:4.6.5":
-  version: 4.6.5
-  resolution: "@d-zero/puppeteer-page-scan@npm:4.6.5"
+"@d-zero/puppeteer-page-scan@npm:4.6.6":
+  version: 4.6.6
+  resolution: "@d-zero/puppeteer-page-scan@npm:4.6.6"
   dependencies:
     "@d-zero/puppeteer-general-actions": "npm:1.2.6"
-    "@d-zero/puppeteer-scroll": "npm:4.0.8"
-    "@d-zero/shared": "npm:0.22.2"
+    "@d-zero/puppeteer-scroll": "npm:4.0.9"
+    "@d-zero/shared": "npm:0.22.3"
   peerDependencies:
     puppeteer: 25.2.1
-  checksum: 10c0/392bbef0b060e1c4fdb2eb9aa4ffe23ec8ed068bef66ce05895e760224fc7c87ab1cc8af10e220b08e929afc2a761970b68554c375a92ef550ecc9f6ced87f82
+  checksum: 10c0/0257fe21786a55a2c59e3961c8551819a166d951b4a41f728cc37ea5e22093556c58e22ea97ad34a16235e6707744a73d1c50af5751d8bd2823ee17503054ef2
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-scroll@npm:4.0.8":
-  version: 4.0.8
-  resolution: "@d-zero/puppeteer-scroll@npm:4.0.8"
+"@d-zero/puppeteer-scroll@npm:4.0.9":
+  version: 4.0.9
+  resolution: "@d-zero/puppeteer-scroll@npm:4.0.9"
   dependencies:
-    "@d-zero/shared": "npm:0.22.2"
+    "@d-zero/shared": "npm:0.22.3"
   peerDependencies:
     puppeteer: 25.2.1
-  checksum: 10c0/c58c3660087b8dc6aaef268f36695f2ffe2dfcd001043a371d9a5358442e74e99c008d397e0bac5d5ac081fa82769cf148dd4407028856dc33cec3a55dfd122a
+  checksum: 10c0/5a6401b15368b233cc83cc66fcc7075f00db2dcba3e38560c8422408e067ea5c3fe569118ba90fd5bb6cdbcfaa327e6368654ab5372f0d6f33a27f186b17a80a
   languageName: node
   linkType: hard
 
@@ -1277,21 +1267,6 @@ __metadata:
   dependencies:
     yargs-parser: "npm:22.0.0"
   checksum: 10c0/d2dbedaa8afb4c7c41beaea9750ed93200f1c4cd369ed13b21ffc3d6404b780f7bcfc2bf9b1b9a075d8d55919aa5e7ba07202f06e6c57a14b93828b8a02cd2be
-  languageName: node
-  linkType: hard
-
-"@d-zero/shared@npm:0.22.2":
-  version: 0.22.2
-  resolution: "@d-zero/shared@npm:0.22.2"
-  dependencies:
-    "@holiday-jp/holiday_jp": "npm:2.5.1"
-    await-event-emitter: "npm:2.0.2"
-    dayjs: "npm:1.11.21"
-    escape-string-regexp: "npm:5.0.0"
-    front-matter: "npm:4.0.2"
-    micromatch: "npm:4.0.8"
-    sanitize-filename: "npm:1.6.4"
-  checksum: 10c0/fa114b93c983d9604b31e5a7b033ced64059b99b8bc150c688a8d240c327acbfaa786b7a988c8d07b684b3d618de504ee1cbfc3023248410837e1b806fad536a
   languageName: node
   linkType: hard
 
@@ -2899,7 +2874,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/analyze-search@workspace:packages/@nitpicker/analyze-search"
   dependencies:
-    "@d-zero/shared": "npm:0.22.2"
+    "@d-zero/shared": "npm:0.22.3"
     "@nitpicker/core": "npm:0.17.0"
     "@nitpicker/crawler": "npm:0.17.0"
     "@nitpicker/types": "npm:0.17.0"
@@ -2952,10 +2927,10 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/cli@workspace:packages/@nitpicker/cli"
   dependencies:
-    "@d-zero/dealer": "npm:1.9.4"
+    "@d-zero/dealer": "npm:1.10.2"
     "@d-zero/readtext": "npm:1.2.0"
     "@d-zero/roar": "npm:2.2.0"
-    "@d-zero/shared": "npm:0.22.2"
+    "@d-zero/shared": "npm:0.22.3"
     "@nitpicker/analyze-axe": "npm:0.17.0"
     "@nitpicker/analyze-lighthouse": "npm:0.17.0"
     "@nitpicker/analyze-markuplint": "npm:0.17.0"
@@ -2979,9 +2954,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/core@workspace:packages/@nitpicker/core"
   dependencies:
-    "@d-zero/dealer": "npm:1.9.4"
+    "@d-zero/dealer": "npm:1.10.2"
     "@d-zero/page-cluster": "npm:0.5.3"
-    "@d-zero/shared": "npm:0.22.2"
+    "@d-zero/shared": "npm:0.22.3"
     "@nitpicker/crawler": "npm:0.17.0"
     "@nitpicker/types": "npm:0.17.0"
     ansi-colors: "npm:4.1.3"
@@ -2994,10 +2969,10 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/crawler@workspace:packages/@nitpicker/crawler"
   dependencies:
-    "@d-zero/beholder": "npm:4.1.0"
-    "@d-zero/dealer": "npm:1.9.4"
+    "@d-zero/beholder": "npm:4.1.1"
+    "@d-zero/dealer": "npm:1.10.2"
     "@d-zero/fs": "npm:0.2.6"
-    "@d-zero/shared": "npm:0.22.2"
+    "@d-zero/shared": "npm:0.22.3"
     "@types/debug": "npm:4.1.13"
     "@types/follow-redirects": "npm:1.14.4"
     "@types/fs-extra": "npm:11.0.4"
@@ -3030,7 +3005,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/query@workspace:packages/@nitpicker/query"
   dependencies:
-    "@d-zero/shared": "npm:0.22.2"
+    "@d-zero/shared": "npm:0.22.3"
     "@nitpicker/crawler": "npm:0.17.0"
   languageName: unknown
   linkType: soft
@@ -3039,10 +3014,10 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/report-google-sheets@workspace:packages/@nitpicker/report-google-sheets"
   dependencies:
-    "@d-zero/dealer": "npm:1.9.4"
+    "@d-zero/dealer": "npm:1.10.2"
     "@d-zero/google-auth": "npm:0.7.5"
-    "@d-zero/google-sheets": "npm:0.9.4"
-    "@d-zero/shared": "npm:0.22.2"
+    "@d-zero/google-sheets": "npm:0.9.5"
+    "@d-zero/shared": "npm:0.22.3"
     "@nitpicker/crawler": "npm:0.17.0"
     "@nitpicker/query": "npm:0.17.0"
     "@nitpicker/types": "npm:0.17.0"
@@ -3067,8 +3042,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/viewer@workspace:packages/@nitpicker/viewer"
   dependencies:
-    "@d-zero/dealer": "npm:1.9.4"
-    "@d-zero/shared": "npm:0.22.2"
+    "@d-zero/dealer": "npm:1.10.2"
+    "@d-zero/shared": "npm:0.22.3"
     "@hono/node-server": "npm:2.0.10"
     "@nitpicker/crawler": "npm:0.17.0"
     "@nitpicker/query": "npm:0.17.0"
