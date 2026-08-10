@@ -863,6 +863,8 @@ describe('createServer: find_duplicate_clusters / list_dedupe_cap_events with re
 			sample_url: 'https://trap.example.com/news/date/0/',
 			effective_threshold: 1,
 			observed_count: 2,
+			captured_page_count: 3,
+			sample_url_archived: true,
 		});
 	});
 
@@ -876,7 +878,23 @@ describe('createServer: find_duplicate_clusters / list_dedupe_cap_events with re
 		expect(data.total).toBe(3);
 	});
 
-	it('get_page_detail は dedupe-cap でマークされたページの shape key を返す', async () => {
+	it('list_pages は dedupeCapEventId で該当イベントに取り込まれた3ページのみ返す', async () => {
+		const events = await callTool(server, 'list_dedupe_cap_events', { archiveId });
+		const eventId = JSON.parse(events.content[0]!.text).items[0].id;
+
+		const result = await callTool(server, 'list_pages', {
+			archiveId,
+			dedupeCapEventId: eventId,
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.total).toBe(3);
+	});
+
+	it('get_page_detail は dedupe-cap でマークされたページの shape key と event id を返す', async () => {
+		const events = await callTool(server, 'list_dedupe_cap_events', { archiveId });
+		const eventId = JSON.parse(events.content[0]!.text).items[0].id;
+
 		const result = await callTool(server, 'get_page_detail', {
 			archiveId,
 			url: 'https://trap.example.com/news/date/0/',
@@ -885,5 +903,6 @@ describe('createServer: find_duplicate_clusters / list_dedupe_cap_events with re
 		const data = JSON.parse(result.content[0]!.text);
 		expect(data.isDedupeCapped).toBe(true);
 		expect(data.dedupeCapShapeKey).toBe('trap.example.com/news/date/{n}/');
+		expect(data.dedupeCapEventId).toBe(eventId);
 	});
 });
