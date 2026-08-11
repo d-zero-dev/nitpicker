@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.18.0](https://github.com/d-zero-dev/nitpicker/compare/v0.17.0...v0.18.0) (2026-08-11)
+
+### Features
+
+- **cli:** expose --dedupeCapEventId on query pages ([1187ca8](https://github.com/d-zero-dev/nitpicker/commit/1187ca8901eb8ec1c093ade0b4b0469a57ce9d30))
+
 # [0.17.0](https://github.com/d-zero-dev/nitpicker/compare/v0.16.0...v0.17.0) (2026-08-09)
 
 ### Features

@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.18.0](https://github.com/d-zero-dev/nitpicker/compare/v0.17.0...v0.18.0) (2026-08-11)
+
+### Features
+
+- **mcp-server:** expose dedupeCapEventId filter on list_pages ([e4ddbf2](https://github.com/d-zero-dev/nitpicker/commit/e4ddbf29b6b914734ab5003141b21a144c8a3d31))
+
 # [0.17.0](https://github.com/d-zero-dev/nitpicker/compare/v0.16.0...v0.17.0) (2026-08-09)
 
 ### Features

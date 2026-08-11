@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.18.0](https://github.com/d-zero-dev/nitpicker/compare/v0.17.0...v0.18.0) (2026-08-11)
+
+### Features
+
+- **viewer:** replace Duplicate Clusters view with Crawl Suppression ([7c173ef](https://github.com/d-zero-dev/nitpicker/commit/7c173efcaa14d1bddb6b6e8fd9daf30b714cb7e2))
+
 # [0.17.0](https://github.com/d-zero-dev/nitpicker/compare/v0.16.0...v0.17.0) (2026-08-09)
 
 ### Bug Fixes

@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.18.0](https://github.com/d-zero-dev/nitpicker/compare/v0.17.0...v0.18.0) (2026-08-11)
+
+### Features
+
+- **cli:** expose --dedupeCapEventId on query pages ([1187ca8](https://github.com/d-zero-dev/nitpicker/commit/1187ca8901eb8ec1c093ade0b4b0469a57ce9d30))
+- **mcp-server:** expose dedupeCapEventId filter on list_pages ([e4ddbf2](https://github.com/d-zero-dev/nitpicker/commit/e4ddbf29b6b914734ab5003141b21a144c8a3d31))
+- **query:** add dedupeCapEventId filter and per-event derived fields ([95dae90](https://github.com/d-zero-dev/nitpicker/commit/95dae904d604eace8047a3c64be7eaaca5ec3fb7))
+- **viewer:** replace Duplicate Clusters view with Crawl Suppression ([7c173ef](https://github.com/d-zero-dev/nitpicker/commit/7c173efcaa14d1bddb6b6e8fd9daf30b714cb7e2))
+
 # [0.17.0](https://github.com/d-zero-dev/nitpicker/compare/v0.16.0...v0.17.0) (2026-08-09)
 
 ### Bug Fixes
