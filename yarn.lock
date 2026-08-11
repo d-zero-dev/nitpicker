@@ -1688,12 +1688,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hono/node-server@npm:2.0.10":
-  version: 2.0.10
-  resolution: "@hono/node-server@npm:2.0.10"
+"@hono/node-server@npm:2.1.0":
+  version: 2.1.0
+  resolution: "@hono/node-server@npm:2.1.0"
   peerDependencies:
     hono: ^4
-  checksum: 10c0/a7428b134bfd6dbacb12e0cf66b3ac0c4d7fd136fa9aa47049f5ed98cf2dabd678e8239275d26885f285d192d040b41e01f526ac72f8a62e136067752159f0f7
+  checksum: 10c0/907aa2cabb804cf6f9c6bc329a898803b0794992d1c2d1bea7e4ae803f5d205fd2733d684c9c87b28338964dc437341e3bee1544b4d504a6b19f9e65ba28b198
   languageName: node
   linkType: hard
 
@@ -3083,7 +3083,7 @@ __metadata:
   dependencies:
     "@d-zero/dealer": "npm:1.10.2"
     "@d-zero/shared": "npm:0.22.3"
-    "@hono/node-server": "npm:2.0.10"
+    "@hono/node-server": "npm:2.1.0"
     "@nitpicker/crawler": "npm:0.17.0"
     "@nitpicker/query": "npm:0.17.0"
     "@playwright/test": "npm:1.61.1"
@@ -3099,7 +3099,7 @@ __metadata:
     graphology: "npm:0.26.0"
     graphology-layout-forceatlas2: "npm:0.10.1"
     graphology-types: "npm:0.24.8"
-    hono: "npm:4.12.34"
+    hono: "npm:4.13.0"
     jsdom: "npm:29.1.1"
     react: "npm:19.2.7"
     react-dom: "npm:19.2.7"
@@ -10653,10 +10653,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"hono@npm:4.12.34":
-  version: 4.12.34
-  resolution: "hono@npm:4.12.34"
-  checksum: 10c0/9d184cb95bc630622d3a8885706feb8e98170556650ce139f09e54c96b9429b3194a296ad4fb0791e7b642a21a03acbf592cb0d19d906ab5e8b78a13337d61bc
+"hono@npm:4.13.0":
+  version: 4.13.0
+  resolution: "hono@npm:4.13.0"
+  checksum: 10c0/d7cfb4d1063be19bea1982ea2a6b3cfa1840e8403a03203e86d17278e76fed11e7483974738345257543e183a935ea73ffc6d4a1e6ad7f0008451f55cdf8be7b
   languageName: node
   linkType: hard
 
@@ -17685,14 +17685,14 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "test-server@workspace:packages/test-server"
   dependencies:
-    "@hono/node-server": "npm:2.0.10"
+    "@hono/node-server": "npm:2.1.0"
     "@nitpicker/analyze-search": "npm:0.17.0"
     "@nitpicker/core": "npm:0.17.0"
     "@nitpicker/crawler": "npm:0.17.0"
     "@nitpicker/query": "npm:0.17.0"
     "@nitpicker/types": "npm:0.17.0"
     await-event-emitter: "npm:2.0.2"
-    hono: "npm:4.12.34"
+    hono: "npm:4.13.0"
     knex: "npm:3.3.0"
     vitest: "npm:4.1.10"
   languageName: unknown
