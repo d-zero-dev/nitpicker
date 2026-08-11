@@ -31,10 +31,10 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@d-zero/dealer": "1.10.2",
+		"@d-zero/dealer": "1.10.4",
 		"@d-zero/readtext": "1.2.0",
 		"@d-zero/roar": "2.2.0",
-		"@d-zero/shared": "0.22.3",
+		"@d-zero/shared": "0.22.5",
 		"@nitpicker/analyze-axe": "0.17.0",
 		"@nitpicker/analyze-lighthouse": "0.17.0",
 		"@nitpicker/analyze-markuplint": "0.17.0",
