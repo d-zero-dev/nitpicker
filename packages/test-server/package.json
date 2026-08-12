@@ -15,7 +15,7 @@
 		"@nitpicker/core": "0.18.1",
 		"@nitpicker/crawler": "0.18.1",
 		"@nitpicker/query": "0.18.1",
-		"@nitpicker/types": "0.18.0",
+		"@nitpicker/types": "0.18.1",
 		"await-event-emitter": "2.0.2",
 		"knex": "3.3.0",
 		"vitest": "4.1.10"

@@ -28,7 +28,7 @@
 	},
 	"dependencies": {
 		"@nitpicker/core": "0.18.1",
-		"@nitpicker/types": "0.18.0",
+		"@nitpicker/types": "0.18.1",
 		"chrome-launcher": "1.2.1",
 		"lighthouse": "13.4.1"
 	},

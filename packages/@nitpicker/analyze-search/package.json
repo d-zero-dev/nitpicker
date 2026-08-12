@@ -30,7 +30,7 @@
 		"@d-zero/shared": "0.22.5",
 		"@nitpicker/core": "0.18.1",
 		"@nitpicker/crawler": "0.18.1",
-		"@nitpicker/types": "0.18.0",
+		"@nitpicker/types": "0.18.1",
 		"jsdom": "29.1.1"
 	},
 	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"

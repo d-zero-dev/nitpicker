@@ -2871,7 +2871,7 @@ __metadata:
   resolution: "@nitpicker/analyze-axe@workspace:packages/@nitpicker/analyze-axe"
   dependencies:
     "@nitpicker/core": "npm:0.18.1"
-    "@nitpicker/types": "npm:0.18.0"
+    "@nitpicker/types": "npm:0.18.1"
     axe-core: "npm:4.12.1"
   languageName: unknown
   linkType: soft
@@ -2881,7 +2881,7 @@ __metadata:
   resolution: "@nitpicker/analyze-lighthouse@workspace:packages/@nitpicker/analyze-lighthouse"
   dependencies:
     "@nitpicker/core": "npm:0.18.1"
-    "@nitpicker/types": "npm:0.18.0"
+    "@nitpicker/types": "npm:0.18.1"
     chrome-launcher: "npm:1.2.1"
     lighthouse: "npm:13.4.1"
   languageName: unknown
@@ -2892,7 +2892,7 @@ __metadata:
   resolution: "@nitpicker/analyze-markuplint@workspace:packages/@nitpicker/analyze-markuplint"
   dependencies:
     "@nitpicker/core": "npm:0.18.1"
-    "@nitpicker/types": "npm:0.18.0"
+    "@nitpicker/types": "npm:0.18.1"
     markuplint: "npm:4.18.3"
   languageName: unknown
   linkType: soft
@@ -2904,7 +2904,7 @@ __metadata:
     "@d-zero/shared": "npm:0.22.5"
     "@nitpicker/core": "npm:0.18.1"
     "@nitpicker/crawler": "npm:0.18.1"
-    "@nitpicker/types": "npm:0.18.0"
+    "@nitpicker/types": "npm:0.18.1"
     jsdom: "npm:29.1.1"
   languageName: unknown
   linkType: soft
@@ -2914,7 +2914,7 @@ __metadata:
   resolution: "@nitpicker/analyze-textlint@workspace:packages/@nitpicker/analyze-textlint"
   dependencies:
     "@nitpicker/core": "npm:0.18.1"
-    "@nitpicker/types": "npm:0.18.0"
+    "@nitpicker/types": "npm:0.18.1"
     "@textlint-ja/textlint-rule-no-insert-dropping-sa": "npm:2.0.1"
     "@textlint-ja/textlint-rule-no-synonyms": "npm:1.3.0"
     "@textlint/kernel": "npm:15.7.1"
@@ -2985,7 +2985,7 @@ __metadata:
     "@d-zero/page-cluster": "npm:0.5.7"
     "@d-zero/shared": "npm:0.22.5"
     "@nitpicker/crawler": "npm:0.18.1"
-    "@nitpicker/types": "npm:0.18.0"
+    "@nitpicker/types": "npm:0.18.1"
     ansi-colors: "npm:4.1.3"
     cosmiconfig: "npm:9.0.2"
     jsdom: "npm:29.1.1"
@@ -3047,7 +3047,7 @@ __metadata:
     "@d-zero/shared": "npm:0.22.5"
     "@nitpicker/crawler": "npm:0.18.1"
     "@nitpicker/query": "npm:0.18.1"
-    "@nitpicker/types": "npm:0.18.0"
+    "@nitpicker/types": "npm:0.18.1"
     "@types/debug": "npm:4.1.13"
     "@types/jsdom": "npm:28.0.3"
     ansi-colors: "npm:4.1.3"
@@ -3059,7 +3059,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nitpicker/types@npm:0.18.0, @nitpicker/types@workspace:packages/@nitpicker/types":
+"@nitpicker/types@npm:0.18.1, @nitpicker/types@workspace:packages/@nitpicker/types":
   version: 0.0.0-use.local
   resolution: "@nitpicker/types@workspace:packages/@nitpicker/types"
   languageName: unknown
@@ -17800,7 +17800,7 @@ __metadata:
     "@nitpicker/core": "npm:0.18.1"
     "@nitpicker/crawler": "npm:0.18.1"
     "@nitpicker/query": "npm:0.18.1"
-    "@nitpicker/types": "npm:0.18.0"
+    "@nitpicker/types": "npm:0.18.1"
     await-event-emitter: "npm:2.0.2"
     hono: "npm:4.13.0"
     knex: "npm:3.3.0"
