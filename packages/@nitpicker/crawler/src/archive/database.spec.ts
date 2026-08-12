@@ -1389,6 +1389,202 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 	});
 });
 
+describe('is_external の降格ガード: スコープ外リクエストのリダイレクト先が既存の内部ページを上書きしない', () => {
+	it('scraped=1 かつ is_external=0 の行に外部リクエスト由来の isExternal=true が来ても is_external=0 を保つ', async () => {
+		const dbPath = path.resolve(workingDir, 'demote-guard-block.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const pageUrl = 'http://localhost/global/page';
+		try {
+			// 1 回目: スコープ内リクエストとして完全スクレイプ（is_target=1, is_external=0）。
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'In-scope target' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				true,
+				true,
+			);
+
+			// 2 回目: 同じ URL への redirect が、スコープ外リクエストの isExternal=true
+			// を運んできたケースを模す（update-page.ts が宛先行にリクエスタの
+			// isExternal を渡す経路）。setExternalPage 相当（writeHtml=false, isTarget=false）。
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [],
+					isExternal: true,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'In-scope target' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				false,
+				false,
+			);
+
+			const knex = db.getKnex();
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'content_items.is_external as isExternal',
+					'content_items.scraped as scraped',
+				)
+				.where('url_refs.url', pageUrl);
+
+			expect(page.isExternal).toBe(0);
+			expect(page.scraped).toBe(1);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('未スクレイプ（scraped=0）の行は通常どおり is_external を書き込める（昇格は妨げない）', async () => {
+		const dbPath = path.resolve(workingDir, 'demote-guard-promote.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const pageUrl = 'http://localhost/error-page';
+		try {
+			// リンク発見によりまだ未スクレイプの状態を模す — resolveContentItemId の
+			// placeholder INSERT は is_external=1（isExternal パラメータ）で作られる。
+			const knex = db.getKnex();
+			await knex.raw(
+				`INSERT INTO url_refs (url) VALUES (?) ON CONFLICT(url) DO NOTHING`,
+				[pageUrl],
+			);
+			const [urlRow] = await knex.from('url_refs').select('id').where('url', pageUrl);
+			await knex.raw(
+				`INSERT INTO content_items (url_id, scraped, is_target, is_external) VALUES (?, 0, 0, 1)`,
+				[urlRow.id],
+			);
+
+			// スコープ内リクエストが実際に対象として完全スクレイプする
+			// （ソフト404 ページが in-scope リクエストのリダイレクト先になる、
+			// build-directory-tree-rows.ts が仕様として依存しているケース）。
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'Promoted' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				true,
+				true,
+			);
+
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'content_items.is_external as isExternal',
+					'content_items.scraped as scraped',
+				)
+				.where('url_refs.url', pageUrl);
+
+			expect(page.isExternal).toBe(0);
+			expect(page.scraped).toBe(1);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('scraped=1 かつ is_external=1（metadata-only 完了済み）の行を external として再観測しても is_external=1 のまま', async () => {
+		// ガードの条件は `scraped = 1 AND is_external = 0` の複合であり、
+		// `scraped = 1` 単独で内部へ強制するわけではないことをピン留めする —
+		// そうでなければ、外部ページとして正しく完了済みの行が、再観測される
+		// 度に internal へ誤って化けてしまう。
+		const dbPath = path.resolve(workingDir, 'demote-guard-external-stays.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const pageUrl = 'http://localhost/other-domain-page';
+		try {
+			// 1 回目: external として metadata-only 完了（is_target=false, writeHtml=false）。
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [],
+					isExternal: true,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'External target' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				false,
+				false,
+			);
+
+			// 2 回目: 同じ URL を再度 external として観測（別ページからの再リンク等）。
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [],
+					isExternal: true,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'External target' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				false,
+				false,
+			);
+
+			const knex = db.getKnex();
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'content_items.is_external as isExternal',
+					'content_items.scraped as scraped',
+				)
+				.where('url_refs.url', pageUrl);
+
+			expect(page.isExternal).toBe(1);
+			expect(page.scraped).toBe(1);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+});
+
 describe('recordRedirect: 宛先を再保存せず辺だけ記録する（#73）', () => {
 	/**
 	 * Builds content page data for a directly-scraped destination page.
