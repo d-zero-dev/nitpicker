@@ -29,7 +29,7 @@
 	"dependencies": {
 		"@nitpicker/core": "0.18.1",
 		"@nitpicker/types": "0.18.1",
-		"axe-core": "4.12.1"
+		"axe-core": "4.13.0"
 	},
 	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
 }
