@@ -28,7 +28,7 @@
 	},
 	"dependencies": {
 		"@d-zero/dealer": "1.10.4",
-		"@d-zero/page-cluster": "0.5.6",
+		"@d-zero/page-cluster": "0.5.7",
 		"@d-zero/shared": "0.22.5",
 		"@nitpicker/crawler": "0.18.0",
 		"@nitpicker/types": "0.18.0",
