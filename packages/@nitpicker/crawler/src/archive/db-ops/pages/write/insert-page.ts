@@ -138,7 +138,17 @@ export async function insertPage(
 		.where('id', pageId)
 		.update({
 			scraped: 1,
-			is_target: isTarget ? 1 : 0,
+			// Once a row has been scraped as a real crawl target, no later call
+			// may flip it back off — same inheritance-from-the-requester bug as
+			// `is_external` below (`setExternalPage` always passes `isTarget:
+			// false`), and the same fix: guard on the row's own prior state
+			// instead of per-run memory. Demoting is_target away from an
+			// established value would under-count `getScrapedHtmlPageCount`'s
+			// resume offset and silently break the "isTarget=1 means covered by
+			// the crawl" contract `accessor.getPages('page')` documents.
+			is_target: qb.raw('CASE WHEN scraped = 1 AND is_target = 1 THEN 1 ELSE ? END', [
+				isTarget ? 1 : 0,
+			]),
 			// Once a row has been scraped as internal, no later call may flip it
 			// back to external — see this function's docs for why the write this
 			// guards against happens at all.

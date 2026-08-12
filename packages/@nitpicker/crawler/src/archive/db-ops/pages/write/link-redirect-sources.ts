@@ -24,7 +24,13 @@ import { resolveContentItemId } from '../../_shared/resolve-content-item-id.js';
  * @param destId - `content_items.id` of the redirect destination page.
  * @param destUrlNormalized - Normalised destination URL, used to detect and
  *   skip self-redirects.
- * @param isExternal - Whether the sources are external to the crawl scope.
+ * @param isExternal - Whether the sources are external to the crawl scope, as
+ *   a single value applied to every hop in `sources` — the same
+ *   requester-describes-a-different-row shape `insertPage` guards against
+ *   (see its docs in `insert-page.ts`), since a hop can independently be a
+ *   real, already-scraped internal page in its own right (reached earlier as
+ *   a direct crawl target) before it is later observed as an intermediate hop
+ *   in some other chain. The UPDATE below carries the same CASE guard.
  * @param chainLineageSource - Lineage label propagated to each intermediate
  *   hop's row (passed through to {@link resolveContentItemId}). Derived by
  *   the caller from the **originating** page's source (`page.url`), not from
@@ -72,7 +78,10 @@ export async function linkRedirectSources(
 			.update({
 				scraped: 1,
 				redirect_dest_id: destId,
-				is_external: isExternal ? 1 : 0,
+				is_external: trx.raw(
+					'CASE WHEN scraped = 1 AND is_external = 0 THEN 0 ELSE ? END',
+					[isExternal ? 1 : 0],
+				),
 			});
 		// Conditional `301 Moved Permanently` stamp — applied ONLY when the
 		// row carries no definitive status yet (NULL or the `-1`
