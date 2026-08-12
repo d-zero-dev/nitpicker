@@ -305,15 +305,17 @@ function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): vo
  * retained rather than removed so the read-model table and the public
  * `DirectoryTreeNode` shape stay stable.
  *
- * This trusts `is_external` completely, and the writer has a known defect that
- * can set it wrong in one direction (a page already taken on as a target being
- * flipped to external — see `insertPage`'s docs in
- * `crawler/src/archive/db-ops/pages/write/insert-page.ts` for the mechanism and
- * the fix that belongs there). Such a page silently loses its node here. Why
- * not compensate for it in this function: the only available signal is "the
- * row still has HTML", and keying off that would re-admit real link targets
- * whose HEAD happened to return HTML. A read model cannot repair a
- * mislabelled write, so this stays a writer fix.
+ * This trusts `is_external` completely. The writer guards against the one
+ * direction that would otherwise mislabel a real page as external (see
+ * `insertPage`'s docs in `crawler/src/archive/db-ops/pages/write/insert-page.ts`
+ * for the mechanism), but this function still has no way to tell a
+ * genuinely out-of-scope row from a mislabelled one written before that
+ * guard existed, or by some other path that bypasses it — such a row would
+ * silently lose its node here. Why not compensate for that in this function:
+ * the only available signal is "the row still has HTML", and keying off that
+ * would re-admit real link targets whose HEAD happened to return HTML. A read
+ * model cannot repair a mislabelled write, so any remaining case of this
+ * stays a writer fix, not a read-side heuristic.
  *
  * A root node's `descendant_page_count` therefore counts the pages the crawl
  * took on as targets, and does NOT match `getSummary`'s `totalPages` (which
