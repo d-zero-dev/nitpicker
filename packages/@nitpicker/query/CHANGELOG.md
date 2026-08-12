@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.18.1](https://github.com/d-zero-dev/nitpicker/compare/v0.18.0...v0.18.1) (2026-08-12)
+
+### Bug Fixes
+
+- **query:** exclude out-of-scope pages from the directory tree ([56a2c6b](https://github.com/d-zero-dev/nitpicker/commit/56a2c6b8fc83965165f76848a7221d754d63b5e8))
+
 # [0.18.0](https://github.com/d-zero-dev/nitpicker/compare/v0.17.0...v0.18.0) (2026-08-11)
 
 ### Features
