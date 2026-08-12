@@ -35,6 +35,26 @@ import { upsertUrlRef } from '../../_shared/upsert-url-ref.js';
  * anything reachable via the crawled chain must be labelled `'crawled'`
  * even if previously labelled `'inventory-*'`.
  *
+ * `is_external`, by contrast, IS overwritten on every call — but demotion is
+ * guarded. `updatePage` keys the row by the redirect DESTINATION url while
+ * passing the REQUESTING url's `isExternal`, so the value written here
+ * describes the requester, not necessarily this row. Inheriting it is
+ * deliberate when PROMOTING (an out-of-scope soft-404 page reached from an
+ * in-scope request counts as covered by the crawl, and the viewer relies on
+ * that — see `@nitpicker/query`'s `build-directory-tree-rows.ts`). It would be
+ * wrong when DEMOTING: an out-of-scope url redirecting to an in-scope page
+ * that was already taken on as a target must not flip that page to
+ * `is_external = 1` — no reading of the column justifies erasing a real
+ * observation with an inherited one. `crawler.ts`'s `#scrapedDestinations`
+ * blocks this within one run, but that is per-`#runDeal` memory, so a later
+ * `--append` / `--retry-failed` process starts blind to what the DB already
+ * knows — hence the CASE below, which checks the ROW's own prior state
+ * instead: once `scraped = 1 AND is_external = 0` is true, no later call can
+ * flip it back to `1`. Promotion (`0 → 1` before the row has been scraped, or
+ * `1 → 0` at any time) is untouched. This mirrors how `first_crawled_at`'s `COALESCE` below
+ * protects an established value — deliberately NOT by re-deriving scope from
+ * the destination url, which would also kill the wanted promoting case.
+ *
  * The page's response headers are decomposed and written into the
  * header dictionary tables here — per response, not deferred to
  * crawl-end — and the resulting `header_set_id` lands on the same
@@ -118,8 +138,23 @@ export async function insertPage(
 		.where('id', pageId)
 		.update({
 			scraped: 1,
-			is_target: isTarget ? 1 : 0,
-			is_external: page.isExternal ? 1 : 0,
+			// Once a row has been scraped as a real crawl target, no later call
+			// may flip it back off — same inheritance-from-the-requester bug as
+			// `is_external` below (`setExternalPage` always passes `isTarget:
+			// false`), and the same fix: guard on the row's own prior state
+			// instead of per-run memory. Demoting is_target away from an
+			// established value would under-count `getScrapedHtmlPageCount`'s
+			// resume offset and silently break the "isTarget=1 means covered by
+			// the crawl" contract `accessor.getPages('page')` documents.
+			is_target: qb.raw('CASE WHEN scraped = 1 AND is_target = 1 THEN 1 ELSE ? END', [
+				isTarget ? 1 : 0,
+			]),
+			// Once a row has been scraped as internal, no later call may flip it
+			// back to external — see this function's docs for why the write this
+			// guards against happens at all.
+			is_external: qb.raw('CASE WHEN scraped = 1 AND is_external = 0 THEN 0 ELSE ? END', [
+				page.isExternal ? 1 : 0,
+			]),
 			status: page.status,
 			status_text: page.statusText,
 			content_type_id: contentTypeId,

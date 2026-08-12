@@ -76,8 +76,15 @@ export interface DirectoryTreeSourceRow {
 	url: string;
 	/**
 	 * `1`/`0` when known, `null` on legacy rows written before this column
-	 * was backfilled — normalised the same way `toViewerPageInsertRow` does
-	 * (`null` counts as internal).
+	 * was backfilled — normalised by truthiness, the same way
+	 * `toViewerPageInsertRow` does, so `null` counts as internal. A truthy
+	 * value excludes the row from the tree entirely — no node, no counts, no
+	 * `viewer_directory_pages` membership — because the crawl never took that
+	 * URL on as a target. Note this is not a URL-path test: an out-of-scope
+	 * URL that an in-scope request redirects to is stored as internal and does
+	 * get a node (see {@link
+	 * import('./build-directory-tree-rows.js').buildDirectoryTreeRows} for the
+	 * full rule and its one known gap).
 	 */
 	isExternal: number | null;
 	/**
@@ -138,9 +145,19 @@ export interface DirectoryNodeInsertRow {
 	direct_page_count: number;
 	/** Total pages in this node's entire subtree, including its own `direct_page_count`. */
 	descendant_page_count: number;
-	/** Subset of `descendant_page_count` where the page's `isExternal` is falsy. */
+	/**
+	 * Subset of `descendant_page_count` where the page's `isExternal` is falsy
+	 * — which, since `buildDirectoryTreeRows` admits no external row, is every
+	 * page in the subtree. Equal to `descendant_page_count` by construction.
+	 */
 	internal_descendant_page_count: number;
-	/** Subset of `descendant_page_count` where the page's `isExternal` is truthy. */
+	/**
+	 * Subset of `descendant_page_count` where the page's `isExternal` is
+	 * truthy — structurally always `0`, since `buildDirectoryTreeRows` drops
+	 * external rows before any node exists (see its docs for why). Retained
+	 * rather than dropped to keep this table's shape and the public
+	 * `DirectoryTreeNode` API stable.
+	 */
 	external_descendant_page_count: number;
 	/**
 	 * Subset of `direct_page_count` classified as the `html` category by

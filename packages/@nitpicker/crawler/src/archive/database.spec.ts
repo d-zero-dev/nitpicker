@@ -21,6 +21,45 @@ async function removeIfExists(filePath: string): Promise<void> {
 	await fs.rm(filePath, { force: true, recursive: true });
 }
 
+/**
+ * Directly inserts a `content_items` row (via `url_refs`) to simulate
+ * placeholder / leak states that the public API does not let us produce
+ * cleanly.
+ * @param db - The connected database.
+ * @param row - The page fields to insert.
+ * @param row.url
+ * @param row.scraped
+ * @param row.isTarget
+ * @param row.isExternal
+ * @param row.source
+ * @returns The inserted `content_items.id`.
+ */
+async function insertRawPage(
+	db: Database,
+	row: {
+		url: string;
+		scraped: number;
+		isTarget: number;
+		isExternal: number;
+		source?: string;
+	},
+): Promise<number> {
+	const knex = db.getKnex();
+	const [urlRef] = await knex('url_refs').insert({ url: row.url }).returning('id');
+	const [inserted] = await knex('content_items')
+		.insert({
+			url_id: urlRef.id,
+			scraped: row.scraped,
+			is_target: row.isTarget,
+			is_external: row.isExternal,
+			...(row.source === undefined ? {} : { source: row.source }),
+		})
+		.returning('id');
+	return Number(
+		typeof inserted === 'object' ? (inserted as { id: number }).id : inserted,
+	);
+}
+
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
 const workingDir = path.resolve(__dirname, '__mock__');
@@ -1382,6 +1421,336 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 
 			// 3 回集約しても D のアンカーは 1 セット(2)。accumulation すると 6 に膨張する。
 			expect(Number(row.c)).toBe(2);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+});
+
+describe('is_external / is_target の降格ガード: スコープ外リクエストのリダイレクト先が既存の内部ページを上書きしない', () => {
+	it('scraped=1 かつ is_external=0/is_target=1 の行に外部リクエスト由来の isExternal=true, isTarget=false が来ても両方保つ', async () => {
+		const dbPath = path.resolve(workingDir, 'demote-guard-block.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const pageUrl = 'http://localhost/global/page';
+		try {
+			// 1 回目: スコープ内リクエストとして完全スクレイプ（is_target=1, is_external=0）。
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'In-scope target' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				true,
+				true,
+			);
+
+			// 2 回目: 同じ URL への redirect が、スコープ外リクエストの isExternal=true
+			// を運んできたケースを模す（update-page.ts が宛先行にリクエスタの
+			// isExternal を渡す経路）。setExternalPage 相当（writeHtml=false, isTarget=false）。
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [],
+					isExternal: true,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'In-scope target' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				false,
+				false,
+			);
+
+			const knex = db.getKnex();
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'content_items.is_external as isExternal',
+					'content_items.is_target as isTarget',
+					'content_items.scraped as scraped',
+				)
+				.where('url_refs.url', pageUrl);
+
+			expect(page.isExternal).toBe(0);
+			expect(page.isTarget).toBe(1);
+			expect(page.scraped).toBe(1);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('未スクレイプ（scraped=0）の行は通常どおり is_external を書き込める（昇格は妨げない）', async () => {
+		const dbPath = path.resolve(workingDir, 'demote-guard-promote.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const pageUrl = 'http://localhost/error-page';
+		try {
+			// リンク発見によりまだ未スクレイプの状態を模す — resolveContentItemId の
+			// placeholder INSERT は is_external=1（isExternal パラメータ）で作られる。
+			await insertRawPage(db, { url: pageUrl, scraped: 0, isTarget: 0, isExternal: 1 });
+			const knex = db.getKnex();
+
+			// スコープ内リクエストが実際に対象として完全スクレイプする
+			// （ソフト404 ページが in-scope リクエストのリダイレクト先になる、
+			// build-directory-tree-rows.ts が仕様として依存しているケース）。
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'Promoted' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				true,
+				true,
+			);
+
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'content_items.is_external as isExternal',
+					'content_items.scraped as scraped',
+				)
+				.where('url_refs.url', pageUrl);
+
+			expect(page.isExternal).toBe(0);
+			expect(page.scraped).toBe(1);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('scraped=1 かつ is_external=1（metadata-only 完了済み）の行を external として再観測しても is_external=1 のまま', async () => {
+		// ガードの条件は `scraped = 1 AND is_external = 0` の複合であり、
+		// `scraped = 1` 単独で内部へ強制するわけではないことをピン留めする —
+		// そうでなければ、外部ページとして正しく完了済みの行が、再観測される
+		// 度に internal へ誤って化けてしまう。
+		const dbPath = path.resolve(workingDir, 'demote-guard-external-stays.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const pageUrl = 'http://localhost/other-domain-page';
+		try {
+			// 1 回目: external として metadata-only 完了（is_target=false, writeHtml=false）。
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [],
+					isExternal: true,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'External target' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				false,
+				false,
+			);
+
+			// 2 回目: 同じ URL を再度 external として観測（別ページからの再リンク等）。
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [],
+					isExternal: true,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'External target' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				false,
+				false,
+			);
+
+			const knex = db.getKnex();
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'content_items.is_external as isExternal',
+					'content_items.scraped as scraped',
+				)
+				.where('url_refs.url', pageUrl);
+
+			expect(page.isExternal).toBe(1);
+			expect(page.scraped).toBe(1);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('scraped=1 かつ is_external=1 の行でも、その後 internal として観測されれば promote できる（scraped=1 が昇格自体を妨げるわけではない）', async () => {
+		// ガードは「一度 internal(is_external=0) が確定した行を external に戻さない」
+		// だけで、逆方向（external → internal）は scraped の値に関わらず常に許可
+		// されることをピン留めする。条件を `WHEN scraped = 1 THEN <established>`
+		// のように scraped 単独に誤って広げていないかを検出する。
+		const dbPath = path.resolve(workingDir, 'demote-guard-external-promotes.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const pageUrl = 'http://localhost/reclassified-page';
+		try {
+			// 1 回目: external として metadata-only 完了（scraped=1, is_external=1）。
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [],
+					isExternal: true,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'External target' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				false,
+				false,
+			);
+
+			// 2 回目: 同じ URL がスコープ内リクエストとして完全スクレイプされる
+			// （--append でスコープが広がった、あるいは同一ホストの別パス経由で
+			// 直接到達した等）。既に scraped=1 の行だが、internal への昇格は
+			// 妨げられてはならない。
+			await db.updatePage(
+				{
+					url: parseUrl(pageUrl)!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'Reclassified internal' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				true,
+				true,
+			);
+
+			const knex = db.getKnex();
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'content_items.is_external as isExternal',
+					'content_items.scraped as scraped',
+				)
+				.where('url_refs.url', pageUrl);
+
+			expect(page.isExternal).toBe(0);
+			expect(page.scraped).toBe(1);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+});
+
+describe('linkRedirectSources の is_external 降格ガード: 既に完全スクレイプ済みの内部ページが、別チェーンの中間ホップとして観測されても external に降格しない', () => {
+	it('recordRedirect のチェーンに real な internal ページが中間ホップとして含まれても is_external=0 を保つ', async () => {
+		// insertPage の宛先行と同じ「requester の isExternal を別の行に書く」形。
+		// linkRedirectSources は sources 配列の全ホップに単一の isExternal 値を
+		// 適用するため、その中に「別の文脈で既に完全スクレイプ済みの実ページ」が
+		// 混ざっていると、そのページ自身の is_external を無条件に上書きしうる。
+		const dbPath = path.resolve(workingDir, 'link-redirect-sources-demote-guard.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const realTargetUrl = 'http://localhost/real-target';
+		try {
+			// real-target を独立した internal ページとして完全スクレイプ。
+			await db.updatePage(
+				{
+					url: parseUrl(realTargetUrl)!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'Real target' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				true,
+				true,
+			);
+
+			// スコープ外リクエストのリダイレクトチェーンが、たまたま real-target を
+			// 中間ホップとして経由し、最終宛先は別の URL である場合を模す。
+			await db.recordRedirect({
+				url: parseUrl('http://localhost/starts-external')!,
+				redirectPaths: [realTargetUrl, 'http://localhost/final-dest'],
+				isExternal: true,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 0,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: {},
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			});
+
+			const knex = db.getKnex();
+			const [page] = await knex
+				.from('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select(
+					'content_items.is_external as isExternal',
+					'content_items.scraped as scraped',
+				)
+				.where('url_refs.url', realTargetUrl);
+
+			expect(page.isExternal).toBe(0);
+			expect(page.scraped).toBe(1);
 		} finally {
 			await db.destroy();
 			await removeIfExists(dbPath);
@@ -4521,45 +4890,6 @@ describe('source priority (crawled > inventory-seed > inventory-discovered)', ()
 });
 
 describe('getCrawlingState: strict pending filter', () => {
-	/**
-	 * Directly inserts a `content_items` row (via `url_refs`) to simulate
-	 * placeholder / leak states that the public API does not let us produce
-	 * cleanly.
-	 * @param db - The connected database.
-	 * @param row - The page fields to insert.
-	 * @param row.url
-	 * @param row.scraped
-	 * @param row.isTarget
-	 * @param row.isExternal
-	 * @param row.source
-	 * @returns The inserted `content_items.id`.
-	 */
-	async function insertRawPage(
-		db: Database,
-		row: {
-			url: string;
-			scraped: number;
-			isTarget: number;
-			isExternal: number;
-			source?: string;
-		},
-	): Promise<number> {
-		const knex = db.getKnex();
-		const [urlRef] = await knex('url_refs').insert({ url: row.url }).returning('id');
-		const [inserted] = await knex('content_items')
-			.insert({
-				url_id: urlRef.id,
-				scraped: row.scraped,
-				is_target: row.isTarget,
-				is_external: row.isExternal,
-				...(row.source === undefined ? {} : { source: row.source }),
-			})
-			.returning('id');
-		return Number(
-			typeof inserted === 'object' ? (inserted as { id: number }).id : inserted,
-		);
-	}
-
 	/**
 	 * Minimal page-data factory for these tests. Every `pending` candidate
 	 * scenario is set up by either calling `updatePage` (which lands at
