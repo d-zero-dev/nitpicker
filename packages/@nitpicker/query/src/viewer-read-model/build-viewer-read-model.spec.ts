@@ -961,8 +961,8 @@ describe('buildViewerReadModel', () => {
 				isSkipped: false,
 			});
 
-			// Same host, out-of-scope subpath (isExternal: true) — must still
-			// belong to example.com's tree, counted as external.
+			// Same host, out-of-scope subpath (isExternal: true) — reached only
+			// as a link target, so it must not appear in example.com's tree.
 			await archive.setPage({
 				url: parseUrl('https://example.com/legacy/old.html')!,
 				redirectPaths: [],
@@ -1107,23 +1107,25 @@ describe('buildViewerReadModel', () => {
 			return row;
 		}
 
-		it('creates a root node (depth 0, path "/") with 4 direct child directories and 1 direct page', async () => {
+		it('creates a root node (depth 0, path "/") with 3 direct child directories and 1 direct page', async () => {
 			const root = await getNodeByPath('/');
 			expect(root).toMatchObject({
 				depth: 0,
 				parent_node_id: null,
-				direct_child_dir_count: 4,
+				// /blog/, /news/, /a/ — the external-only /legacy/ and the
+				// all-404 /removed/ contribute no child directory.
+				direct_child_dir_count: 3,
 				direct_page_count: 1,
 				has_children: 1,
 			});
 		});
 
-		it("sums the whole tree's internal/external pages onto the root's descendant counts", async () => {
+		it("sums the whole tree's pages onto the root's descendant counts, all of them internal", async () => {
 			const root = await getNodeByPath('/');
 			expect(root).toMatchObject({
 				internal_descendant_page_count: 6,
-				external_descendant_page_count: 1,
-				descendant_page_count: 7,
+				external_descendant_page_count: 0,
+				descendant_page_count: 6,
 			});
 		});
 
@@ -1164,15 +1166,23 @@ describe('buildViewerReadModel', () => {
 			});
 		});
 
-		it('counts a same-host, out-of-scope page as external on its own directory node', async () => {
-			const node = await getNodeByPath('/legacy/');
-			expect(node).toMatchObject({
-				depth: 1,
-				direct_page_count: 1,
-				internal_descendant_page_count: 0,
-				external_descendant_page_count: 1,
-				descendant_page_count: 1,
-			});
+		it('excludes a same-host, out-of-scope page end-to-end — no node for its directory, no membership row', async () => {
+			const knex = archive.getKnex();
+			// The page still exists as an ordinary viewer_pages row (the Pages
+			// view lists it under isExternal=true) — only the tree drops it.
+			const pages = await knex('viewer_pages')
+				.where('url', 'https://example.com/legacy/old.html')
+				.select('page_id');
+			expect(pages).toHaveLength(1);
+
+			expect(
+				await knex('viewer_directory_nodes').where('path', '/legacy/').select('*'),
+			).toEqual([]);
+			expect(
+				await knex('viewer_directory_pages')
+					.where('page_id', pages[0].page_id)
+					.select('*'),
+			).toEqual([]);
 		});
 
 		it('creates a sibling /news/ node under the same root rather than a separate tree', async () => {
@@ -1211,10 +1221,10 @@ describe('buildViewerReadModel', () => {
 			const total = await knex('viewer_directory_pages').count<{ count: string }[]>({
 				count: '*',
 			});
-			// 7 attached pages: root, blog x1, blog/2024 x2, legacy, news, a/b/c/d —
-			// the unparseable-URL row, the twitter.com row and the 404
-			// /removed/gone row contribute none.
-			expect(Number(total[0]?.count)).toBe(7);
+			// 6 attached pages: root, blog x1, blog/2024 x2, news, a/b/c/d — the
+			// unparseable-URL row, the external /legacy/old.html and
+			// twitter.com rows, and the 404 /removed/gone row contribute none.
+			expect(Number(total[0]?.count)).toBe(6);
 		});
 
 		it('excludes a 404 page from the tree end-to-end — no node for its directory, no membership row', async () => {

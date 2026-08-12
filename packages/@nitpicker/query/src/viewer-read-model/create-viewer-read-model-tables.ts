@@ -197,6 +197,9 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			direct_page_count integer not null,
 			descendant_page_count integer not null,
 			internal_descendant_page_count integer not null,
+			-- Always 0: buildDirectoryTreeRows admits no external row, so no
+			-- node can carry one. Kept so this table and the DirectoryTreeNode
+			-- API keep their shape.
 			external_descendant_page_count integer not null,
 			direct_html_page_count integer not null,
 			descendant_html_page_count integer not null,

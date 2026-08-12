@@ -16,8 +16,6 @@ interface ParsedPageRow {
 	host: string;
 	/** The directory segment chain this page's directory node lives at, root-to-leaf order. */
 	dirSegments: string[];
-	/** Normalised `0`/`1` form of the source row's `isExternal`. */
-	isExternal: 0 | 1;
 	/** Copied from the source row's `id`. */
 	id: number;
 	/** Copied from the source row's `url`. */
@@ -57,7 +55,6 @@ function parsePageRow(row: DirectoryTreeSourceRow): ParsedPageRow | null {
 	return {
 		host: parsedUrl.host,
 		dirSegments,
-		isExternal: row.isExternal ? 1 : 0,
 		id: row.id,
 		url: row.url,
 		isHtml: classifyContentType(row.contentType) === 'html',
@@ -198,15 +195,20 @@ function getOrCreateDirectoryNode(
 
 /**
  * Folds each node's own (direct-only, as set by the page-attachment loop)
- * `internal_descendant_page_count`/`external_descendant_page_count`/
- * `descendant_html_page_count` up into its parent — processing nodes from
- * deepest to shallowest so that, by the time a node is folded into ITS
- * parent, it already holds its full subtree total (every descendant at
- * every depth is added exactly once, since a node's children are always
- * exactly one depth below it and are therefore always processed in an
- * earlier iteration of this same pass). Also finalises `descendant_page_count`
- * (the sum of the internal/external pair) and `has_children` on every node.
- * Mutates every row in `nodes` in place.
+ * `internal_descendant_page_count`/`descendant_html_page_count` up into its
+ * parent — processing nodes from deepest to shallowest so that, by the time a
+ * node is folded into ITS parent, it already holds its full subtree total
+ * (every descendant at every depth is added exactly once, since a node's
+ * children are always exactly one depth below it and are therefore always
+ * processed in an earlier iteration of this same pass). Also finalises
+ * `descendant_page_count` (the sum of the internal/external pair) and
+ * `has_children` on every node. Mutates every row in `nodes` in place.
+ *
+ * `external_descendant_page_count` is not folded because it is structurally
+ * always `0` — `buildDirectoryTreeRows` drops external rows before any node
+ * exists, so no node ever carries a nonzero value to fold. The column itself
+ * is retained (at `0`) to keep the read-model table and the
+ * `DirectoryTreeNode` API shape stable.
  *
  * `direct_html_page_count` is NOT folded here — unlike
  * `descendant_html_page_count` (seeded with each node's own direct-HTML
@@ -225,9 +227,8 @@ function getOrCreateDirectoryNode(
  * rows), so `has_children` answers exactly the question that UI needs: does
  * this node have anything to expand into.
  * @param nodes - Every node across every host's tree. On entry,
- *   `internal_descendant_page_count`/`external_descendant_page_count`/
- *   `descendant_html_page_count` must hold only each node's OWN direct
- *   counts.
+ *   `internal_descendant_page_count`/`descendant_html_page_count` must hold
+ *   only each node's OWN direct counts.
  */
 function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): void {
 	const byId = new Map(nodes.map((node) => [node.node_id, node]));
@@ -241,7 +242,6 @@ function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): vo
 			continue;
 		}
 		parent.internal_descendant_page_count += node.internal_descendant_page_count;
-		parent.external_descendant_page_count += node.external_descendant_page_count;
 		parent.descendant_html_page_count += node.descendant_html_page_count;
 	}
 	for (const node of nodes) {
@@ -259,24 +259,68 @@ function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): vo
  * request time — all derivation cost is paid once at build time, keeping
  * reads to plain indexed SELECTs.
  *
- * `status = 404` rows are dropped before anything else — no counts, no
- * `viewer_directory_pages` membership, no host qualification. No page exists
- * behind a 404 URL, so a directory whose pages are all 404s gets no node and
- * a host whose internal rows are all 404s gets no tree (the fix-target 404s
- * remain reachable through the Pages view's status filter, just not through
- * this feature).
+ * Two classes of row are dropped up front, both for the same reason — no page
+ * the crawl actually covered sits behind them, so neither may invent a
+ * directory node, contribute to a count, or gain a `viewer_directory_pages`
+ * membership:
  *
- * A host is included in the output ONLY if at least one of its (non-404)
- * rows has `isExternal` falsy (an "internal" page) — hosts that exist purely
- * as external link targets (e.g. a social-media profile linked from the
- * site) are excluded entirely, since a directory tree of a domain the crawl
- * never actually visited has no value. Once a host qualifies, BOTH its internal
- * and external rows are included in that host's tree: crawl scope is a
- * `(hostname, port, path)` triple (see `@nitpicker/crawler`'s
- * `find-scope-entry.ts`), so a same-host, out-of-scope subpath is
- * legitimately `isExternal = 1` while still belonging to the host's own
- * tree — this is exactly why nodes track `internal_descendant_page_count`
- * and `external_descendant_page_count` separately.
+ * - **`status = 404`**: no page exists behind a 404 URL, so a directory whose
+ *   pages are all 404s gets no node (the fix-target 404s remain reachable
+ *   through the Pages view's status filter, just not through this feature).
+ * - **`isExternal` truthy**: `is_external` marks a URL the crawl never took on
+ *   as a target — with `fetchExternal` on (the default) such a row exists only
+ *   because something linked to it and the HEAD pre-flight recorded its
+ *   destination. It is NOT a pure "is this URL inside the scope path" test:
+ *   crawl scope is a `(hostname, port, path)` triple (see
+ *   `@nitpicker/crawler`'s `find-scope-entry.ts`), so `is_external = 1` covers
+ *   a different host AND a same-host subpath outside the scope path, while an
+ *   out-of-scope URL that an IN-scope request redirects to is deliberately
+ *   stored as internal — `updatePage` writes the redirect result under the
+ *   destination url carrying the requester's `isExternal`, so a soft-404 error
+ *   page at `example.com/error/` reached from `example.com/path/to/x` counts as
+ *   covered by the crawl and keeps its own tree node. That is intentional and
+ *   consistent with the Pages view, which lists the same row as internal.
+ *   Why not admit external rows and let `external_descendant_page_count` carry them:
+ *   a crawl scoped to `example.com/path/to/` would sprout a sibling
+ *   `example.com/others/` node built purely out of link targets, and its page
+ *   count would be unreachable through the tree's own UI — the tree links to
+ *   `/pages?directory=…`, which defaults to internal-only, so an
+ *   external-only directory would advertise N pages and then list none.
+ *   `null` (a legacy pre-backfill row) counts as internal, matching
+ *   `toViewerPageInsertRow`'s normalisation.
+ *
+ * A host therefore reaches the output only by having at least one internal,
+ * non-404 row — a domain present purely as a link target (a social-media
+ * profile linked from the site, say) contributes nothing, since a directory
+ * tree of a domain the crawl never visited has no value. Dropping external
+ * rows at the input is what makes that fall out for free rather than needing
+ * a separate host-qualification pass.
+ *
+ * Because the rule keys off "was this taken on as a target" rather than the URL
+ * path, the resulting tree can legitimately contain a directory outside the
+ * scope path (the redirect-destination case above). That is the intended
+ * reading, not a leak.
+ *
+ * `external_descendant_page_count` is consequently always `0`. The column is
+ * retained rather than removed so the read-model table and the public
+ * `DirectoryTreeNode` shape stay stable.
+ *
+ * This trusts `is_external` completely, and the writer has a known defect that
+ * can set it wrong in one direction (a page already taken on as a target being
+ * flipped to external — see `insertPage`'s docs in
+ * `crawler/src/archive/db-ops/pages/write/insert-page.ts` for the mechanism and
+ * the fix that belongs there). Such a page silently loses its node here. Why
+ * not compensate for it in this function: the only available signal is "the
+ * row still has HTML", and keying off that would re-admit real link targets
+ * whose HEAD happened to return HTML. A read model cannot repair a
+ * mislabelled write, so this stays a writer fix.
+ *
+ * A root node's `descendant_page_count` therefore counts the pages the crawl
+ * took on as targets, and does NOT match `getSummary`'s `totalPages` (which
+ * adds external pages back in). It is close to `getSummary`'s `internalPages`
+ * but not identical — that counts `is_external = 0` strictly, excluding the
+ * legacy `null` rows this function treats as internal, and it does not drop
+ * unparseable URLs.
  *
  * Node ids are assigned sequentially (1-based, in tree-build order) by this
  * function itself, so `parent_node_id` links are embedded in the returned
@@ -299,10 +343,15 @@ export function buildDirectoryTreeRows(
 ): DirectoryTreeBuildResult {
 	const parsedRows: ParsedPageRow[] = [];
 	for (const row of rows) {
-		// A 404 URL has no page behind it, whatever its provenance — drop it
-		// before host eligibility so a host whose only internal rows are
-		// 404s builds no tree at all. NULL-status legacy rows are not 404s.
+		// A 404 URL has no page behind it, whatever its provenance — drop it so
+		// a host whose only internal rows are 404s builds no tree at all.
+		// NULL-status legacy rows are not 404s.
 		if (row.status === 404) {
+			continue;
+		}
+		// Known only as a link target, never taken on as a crawl target, so it
+		// gets no node. Not a path test — see this function's docs.
+		if (row.isExternal) {
 			continue;
 		}
 		const parsed = parsePageRow(row);
@@ -311,26 +360,14 @@ export function buildDirectoryTreeRows(
 		}
 	}
 
-	const internalHosts = new Set<string>();
-	for (const row of parsedRows) {
-		if (row.isExternal === 0) {
-			internalHosts.add(row.host);
-		}
-	}
-
 	const state: DirectoryTreeBuilderState = { nextNodeId: 1, nodesByKey: new Map() };
 	const pages: DirectoryPageInsertRow[] = [];
 	for (const row of parsedRows) {
-		if (!internalHosts.has(row.host)) {
-			continue;
-		}
 		const node = getOrCreateDirectoryNode(state, row.host, row.dirSegments);
 		node.direct_page_count += 1;
-		if (row.isExternal === 0) {
-			node.internal_descendant_page_count += 1;
-		} else {
-			node.external_descendant_page_count += 1;
-		}
+		// Every surviving row is internal by construction, so this is the only
+		// counter that ever moves — external_descendant_page_count stays 0.
+		node.internal_descendant_page_count += 1;
 		if (row.isHtml) {
 			node.direct_html_page_count += 1;
 			// Seeded with this node's own direct-HTML count; propagateDescendantCounts

@@ -132,34 +132,67 @@ describe('buildDirectoryTreeRows', () => {
 		});
 	});
 
-	it('splits descendant counts into internal/external, summing to descendant_page_count', () => {
+	it('keeps external_descendant_page_count at 0 and internal equal to descendant_page_count', () => {
 		const { nodes } = buildDirectoryTreeRows([
 			row({ id: 1, url: 'https://example.com/' }),
-			row({ id: 2, url: 'https://example.com/legacy/old.html', isExternal: 1 }),
+			row({ id: 2, url: 'https://example.com/blog/post-1' }),
 		]);
 		const root = nodes.find((n) => n.path === '/')!;
 		expect(root).toMatchObject({
-			internal_descendant_page_count: 1,
-			external_descendant_page_count: 1,
+			internal_descendant_page_count: 2,
+			external_descendant_page_count: 0,
 			descendant_page_count: 2,
-		});
-		const legacy = nodes.find((n) => n.path === '/legacy/')!;
-		expect(legacy).toMatchObject({
-			internal_descendant_page_count: 0,
-			external_descendant_page_count: 1,
-			descendant_page_count: 1,
 		});
 	});
 
-	it('includes a same-host, out-of-scope (external) page in its host tree once the host qualifies', () => {
+	it('creates no node for a same-host directory reachable only as an out-of-scope link target', () => {
+		// Scope is example.com/path/to/, so example.com/others/ is isExternal
+		// even though the host matches — it must not appear as a sibling
+		// directory built purely out of link targets.
 		const { nodes, pages } = buildDirectoryTreeRows([
-			row({ id: 1, url: 'https://example.com/' }),
-			row({ id: 2, url: 'https://example.com/legacy/old.html', isExternal: 1 }),
+			row({ id: 1, url: 'https://example.com/path/to/' }),
+			row({ id: 2, url: 'https://example.com/others/page.html', isExternal: 1 }),
 		]);
-		expect(nodes.some((n) => n.root_key === 'example.com' && n.path === '/legacy/')).toBe(
-			true,
-		);
-		expect(pages.some((p) => p.page_id === 2)).toBe(true);
+		expect(nodes.map((n) => n.path).toSorted()).toEqual(['/', '/path/', '/path/to/']);
+		expect(pages.map((p) => p.page_id)).toEqual([1]);
+	});
+
+	it('leaves every count on an ancestor shared with an excluded external page untouched', () => {
+		// /path/ is a real node (it is on the in-scope page's chain), so this
+		// pins that the external sibling contributes to none of its counts —
+		// including the HTML counts the tree UI renders as "N pages".
+		const { nodes } = buildDirectoryTreeRows([
+			row({ id: 1, url: 'https://example.com/path/to/' }),
+			row({ id: 2, url: 'https://example.com/path/other/page.html', isExternal: 1 }),
+		]);
+		expect(nodes.find((n) => n.path === '/path/')).toMatchObject({
+			direct_child_dir_count: 1,
+			direct_page_count: 0,
+			descendant_page_count: 1,
+			internal_descendant_page_count: 1,
+			external_descendant_page_count: 0,
+			descendant_html_page_count: 1,
+		});
+	});
+
+	it('omits an external page from the direct counts of a node it shares with an internal page', () => {
+		// The node survives here (an internal page keeps it alive), so this pins
+		// the counts a surviving node reports: direct_page_count backs
+		// childCount and the /api/directory-tree/pages page count, and
+		// direct_html_page_count backs the "N pages" label.
+		const { nodes, pages } = buildDirectoryTreeRows([
+			row({ id: 1, url: 'https://example.com/docs/kept.html' }),
+			row({ id: 2, url: 'https://example.com/docs/dropped.html', isExternal: 1 }),
+		]);
+		expect(nodes.find((n) => n.path === '/docs/')).toMatchObject({
+			direct_page_count: 1,
+			direct_html_page_count: 1,
+			descendant_html_page_count: 1,
+			internal_descendant_page_count: 1,
+			external_descendant_page_count: 0,
+			descendant_page_count: 1,
+		});
+		expect(pages.map((p) => p.page_id)).toEqual([1]);
 	});
 
 	it('excludes a host with zero internal pages entirely — no nodes, no pages', () => {
@@ -190,7 +223,7 @@ describe('buildDirectoryTreeRows', () => {
 		expect(pages).toEqual([]);
 	});
 
-	it('builds two independent, non-colliding trees for two qualifying hosts', () => {
+	it('builds two independent, non-colliding trees for two internal hosts', () => {
 		const { nodes } = buildDirectoryTreeRows([
 			row({ id: 1, url: 'https://example.com/' }),
 			row({ id: 2, url: 'https://example.org/' }),
@@ -317,7 +350,7 @@ describe('buildDirectoryTreeRows', () => {
 		expect(nodes.some((n) => n.path === '/removed/')).toBe(false);
 	});
 
-	it('does not let an internal 404 qualify its host — a host with only 404 internal pages has no tree', () => {
+	it('builds no tree for a host whose only internal page is a 404 and whose rest is external', () => {
 		const { nodes, pages } = buildDirectoryTreeRows([
 			row({ id: 1, url: 'https://example.com/gone', status: 404 }),
 			row({ id: 2, url: 'https://example.com/linked-from-elsewhere', isExternal: 1 }),

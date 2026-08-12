@@ -79,9 +79,11 @@ async function joinDirectoryPageIdsToListItems(
  * bidirectional keyset, since this endpoint has no virtual-scroll-upward
  * requirement.
  *
- * `status = 404` pages never appear here: they are dropped at read-model
- * build time (see `buildDirectoryTreeRows`), not filtered per request — use
- * the Pages view's status filter to locate 404s.
+ * `status = 404` and out-of-scope (`isExternal`) pages never appear here:
+ * both are dropped at read-model build time (see `buildDirectoryTreeRows`),
+ * so they own no `viewer_directory_pages` membership row rather than being
+ * filtered per request. Use the Pages view's `status` / `isExternal` filters
+ * to locate them.
  * @param accessor - The archive accessor to query.
  * @param options - See {@link ListDirectoryPagesOptions}.
  * @returns Up to `limit` pages plus a `nextCursor` for continuation, or

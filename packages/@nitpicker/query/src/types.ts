@@ -3190,11 +3190,23 @@ export interface BuildViewerReadModelOptions {
  * link — callers reconstruct the nested UI tree client-side from this flat
  * list, since neither endpoint recurses server-side.
  *
- * Every count column excludes `status = 404` rows — no page exists behind a
- * 404 URL, so it is neither counted nor attached as a membership, and a
- * directory whose pages are all 404s has no node at all (the build-time
- * rule lives in `buildDirectoryTreeRows`; 404s remain reachable through the
- * Pages view's status filter).
+ * The tree covers only pages the crawl took on as targets: every count column
+ * excludes both `status = 404` rows (no page exists behind a 404 URL) and
+ * `isExternal` rows (URLs known only as link targets — for a scope of
+ * `example.com/path/to/` that includes same-host subpaths like
+ * `example.com/others/`). Such a row is neither counted nor attached as a
+ * membership, and a directory whose pages are all excluded has no node at all.
+ * The excluded pages remain reachable through the Pages view's `status` and
+ * `isExternal` filters.
+ *
+ * `isExternal` is not a URL-path test, so a node's `path` may legitimately sit
+ * outside the scope path: an out-of-scope URL that an in-scope request
+ * redirects to (a soft-404 error page, typically) is recorded as internal and
+ * gets its own node. The build-time rules live in `buildDirectoryTreeRows`.
+ *
+ * Because of that, a root node's `descendantPageCount` is NOT comparable to
+ * {@link SummaryResult}'s `totalPages`, which counts external pages too.
+ * Do not present the two as the same number.
  */
 export interface DirectoryTreeNode {
 	/** This node's unique id — stable across `getDirectoryTree`/`listDirectoryChildren` calls. */
@@ -3221,9 +3233,17 @@ export interface DirectoryTreeNode {
 	childCount: number;
 	/** Total pages in this node's entire subtree, including its own `directPageCount`. */
 	descendantPageCount: number;
-	/** Subset of `descendantPageCount` that is internal (in-scope). */
+	/**
+	 * Subset of `descendantPageCount` that is internal (in-scope) — every page
+	 * in the subtree, since out-of-scope pages never enter the tree. Equal to
+	 * `descendantPageCount`.
+	 */
 	internalDescendantPageCount: number;
-	/** Subset of `descendantPageCount` that is external (out-of-scope). */
+	/**
+	 * Subset of `descendantPageCount` that is external (out-of-scope) — always
+	 * `0`, since out-of-scope pages are excluded from the tree entirely.
+	 * Retained so this shape stays stable.
+	 */
 	externalDescendantPageCount: number;
 	/**
 	 * Subset of `directPageCount` classified as the `html` category by
