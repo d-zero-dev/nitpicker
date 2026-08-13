@@ -66,7 +66,7 @@ export function DirectoryTree({
 	return (
 		<div className="directory-tree">
 			<h3 className="directory-tree-host">{root.rootKey}</h3>
-			<ul className="tree-root">
+			<ul className="tree-root plain-list">
 				<DirectoryTreeNodeRow
 					node={rootNode}
 					childrenByParent={childrenByParent}

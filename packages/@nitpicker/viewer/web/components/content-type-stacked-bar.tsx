@@ -98,7 +98,7 @@ export function ContentTypeStackedBar(props: { entries: readonly ContentTypeCoun
 					/>
 				))}
 			</div>
-			<ul className="stacked-bar-legend">
+			<ul className="stacked-bar-legend plain-list">
 				{legendRows.map((row) => (
 					<LegendRow key={row.entry.category} entry={row.entry} ratio={row.ratio} />
 				))}

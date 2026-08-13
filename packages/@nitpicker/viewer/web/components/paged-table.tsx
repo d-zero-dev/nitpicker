@@ -310,9 +310,10 @@ function FilterButton({ control }: { control: TableFilterControl }) {
  *
  * Renders every row of the current page (`data.length === pageSize` for full
  * pages) so the browser holds at most `pageSize` rows of DOM — sufficient
- * even at the upper bound (200) and far smaller than virtual mode's
- * accumulated infinite scroll. Pagination state lives in the URL (`?page=`)
- * via {@link import('../hooks/use-current-page.js').useCurrentPage}.
+ * even at the upper bound ({@link import('../hooks/use-page-size.js').PAGE_SIZE_OPTIONS}'s
+ * max) and far smaller than virtual mode's accumulated infinite scroll.
+ * Pagination state lives in the URL (`?page=`) via
+ * {@link import('../hooks/use-current-page.js').useCurrentPage}.
  *
  * The ARIA grid metadata (`aria-rowcount`, `aria-colcount`, `aria-rowindex`,
  * `aria-colindex`) is re-emitted here because the CSS flexbox layout strips

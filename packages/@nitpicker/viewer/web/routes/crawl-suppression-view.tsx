@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
-import { Link, useLocation } from 'react-router';
+import { useLocation } from 'react-router';
 
 import { useDedupeCapEvents } from '../api/use-dedupe-cap-events.js';
+import { AppLink } from '../components/app-link.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
@@ -97,9 +98,9 @@ export function CrawlSuppressionView() {
 								{event.captured_page_count > 0 && (
 									<>
 										{' '}
-										<Link to={`/pages?dedupeCapEventId=${event.id}`}>
+										<AppLink to={`/pages?dedupeCapEventId=${event.id}`}>
 											{t('views.crawlSuppression.viewPages')}
-										</Link>
+										</AppLink>
 									</>
 								)}
 							</dd>
@@ -112,9 +113,10 @@ export function CrawlSuppressionView() {
 							<dt>{t('views.crawlSuppression.sampleUrl')}</dt>
 							<dd>
 								{event.sample_url_archived ? (
-									<Link to={`/pages/detail?url=${encodeURIComponent(event.sample_url)}`}>
+									<AppLink
+										to={`/pages/detail?url=${encodeURIComponent(event.sample_url)}`}>
 										{event.sample_url}
-									</Link>
+									</AppLink>
 								) : (
 									event.sample_url
 								)}

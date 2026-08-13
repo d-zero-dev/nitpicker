@@ -3,10 +3,11 @@ import type { InboundLinksResponse } from '../api/use-inbound-links.js';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { useMemo } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 
 import { useInboundLinksInfinite } from '../api/use-inbound-links-infinite.js';
 import { useInboundLinks } from '../api/use-inbound-links.js';
+import { AppLink } from '../components/app-link.js';
 import { DataTable } from '../components/data-table.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
@@ -96,9 +97,9 @@ export function InboundLinksView() {
 				titleKey="views.inboundLinks.title"
 				descriptionKey="views.inboundLinks.description"
 			/>
-			<Link to={`/pages/detail?url=${encodeURIComponent(url)}`}>
+			<AppLink to={`/pages/detail?url=${encodeURIComponent(url)}`}>
 				{t('common.back')} {t('views.pageDetail.title')}
-			</Link>
+			</AppLink>
 			<dl className="detail-grid">
 				<dt>URL</dt>
 				<dd>{url}</dd>

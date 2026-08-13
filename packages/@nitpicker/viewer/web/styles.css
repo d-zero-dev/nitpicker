@@ -68,6 +68,15 @@ a {
 	color: var(--accent);
 }
 
+/* Shared list reset: bare <ul>/<ol> displayed as a flex/column strip
+   rather than a bulleted list. Each specific list class below adds only
+   its own layout (direction/gap/etc.) on top of this. */
+.plain-list {
+	padding: 0;
+	margin: 0;
+	list-style: none;
+}
+
 /* Shell + top bar */
 .app-shell {
 	display: block flex;
@@ -385,6 +394,7 @@ h2 {
 	touch-action: none;
 	cursor: col-resize;
 	user-select: none;
+	background: var(--border);
 }
 
 .vt-resizer:hover,
@@ -656,6 +666,7 @@ h2 {
 	touch-action: none;
 	cursor: col-resize;
 	user-select: none;
+	background: var(--border);
 }
 
 .pt-resizer:hover,
@@ -726,9 +737,6 @@ h2 {
 	flex-wrap: wrap;
 	gap: 4px;
 	align-items: center;
-	padding: 0;
-	margin: 0;
-	list-style: none;
 }
 
 .pager-button {
@@ -868,6 +876,11 @@ h2 {
 	background: var(--accent);
 }
 
+.error-kind-breakdown-list {
+	padding-inline-start: 24px;
+	font-size: var(--font-size-xs);
+}
+
 .url-list {
 	padding-inline-start: 18px;
 	margin: 0;
@@ -937,10 +950,7 @@ h2 {
 	display: block flex;
 	flex-direction: column;
 	gap: 4px;
-	padding: 0;
-	margin: 0;
 	font-size: var(--font-size-base);
-	list-style: none;
 }
 
 .stacked-bar-legend-item {
@@ -1303,12 +1313,10 @@ h2 {
 	display: block flex;
 	flex-wrap: wrap;
 	gap: 12px 16px;
-	padding: 0;
 	margin-block: 0 6px;
 	margin-inline: 0;
 	font-size: var(--font-size-sm);
 	color: var(--text-dim);
-	list-style: none;
 }
 
 .graph-legend-row {
@@ -1452,13 +1460,6 @@ h2 {
 	color: var(--text-dim);
 }
 
-.tree-root,
-.tree-children {
-	padding: 0;
-	margin: 0;
-	list-style: none;
-}
-
 .tree-children {
 	/* A thin guide line down each nesting level (the classic file-tree
 	   affordance) reads the hierarchy at a glance without relying on
@@ -1488,10 +1489,10 @@ h2 {
 	inline-size: 26px;
 	block-size: 26px;
 
-	/* Pinned to the row's end regardless of how much space the label takes,
-	   so it reads as "expand this" after the name/count rather than
-	   leading with a control before the name is even visible. */
-	margin-inline-start: auto;
+	/* Sits immediately after `.tree-label` (the row's flex order), not
+	   pinned to the row's end — the toggle reads as part of the same
+	   clickable unit as the name/count instead of a disconnected control
+	   far to the row's right. */
 	text-align: center;
 }
 
@@ -1499,11 +1500,15 @@ h2 {
 	display: block flex;
 	align-items: center;
 	justify-content: center;
-	color: var(--text-dim);
+	color: var(--accent);
 	cursor: pointer;
 	background: none;
 	border: 0;
 	border-radius: 3px;
+}
+
+.tree-toggle:hover {
+	background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .tree-toggle:focus-visible {

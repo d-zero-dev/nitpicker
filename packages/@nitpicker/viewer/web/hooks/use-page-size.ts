@@ -6,6 +6,13 @@ import { useSearchParams } from 'react-router';
 import { parsePageSize } from './parse-page-size.js';
 import { PAGE_QUERY_KEY } from './use-current-page.js';
 
+/**
+ * Re-exported so existing callers (`Pager`, `PagedTable`) keep importing
+ * this hooks module rather than reaching into `types.js` directly — the
+ * canonical definition lives there, alongside {@link PageSize}.
+ */
+export { PAGE_SIZE_OPTIONS } from '../types.js';
+
 /** The URL query key that encodes the current page size. */
 export const PAGE_SIZE_QUERY_KEY = 'pageSize';
 
@@ -18,9 +25,6 @@ const STORAGE_KEY = 'nitpicker-page-size';
  * (virtual-mode infinite query) so the two modes feel symmetric.
  */
 const DEFAULT_PAGE_SIZE: PageSize = 100;
-
-/** Allowed page-size values in the MPA pager's `<select>`. */
-export const PAGE_SIZE_OPTIONS: readonly PageSize[] = [50, 100, 200];
 
 /**
  * Reads the persisted page-size hint from localStorage, falling back to the
