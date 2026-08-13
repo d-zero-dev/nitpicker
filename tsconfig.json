@@ -1,4 +1,7 @@
 {
 	"extends": ["@d-zero/tsconfig"],
+	"compilerOptions": {
+		"target": "ESNext"
+	},
 	"exclude": ["node_modules", "**/*.d.ts"]
 }
