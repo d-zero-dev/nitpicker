@@ -15,6 +15,26 @@ const READ_CHUNK_SIZE = 50_000;
 const MERGE_PROGRESS_INTERVAL = 100_000;
 
 /**
+ * Creates a temp directory via `mkdtemp`, tagged with `Symbol.asyncDispose`
+ * so the caller can `await using` it instead of a manual `try`/`finally`
+ * around `fs.rm(dir, { recursive: true, force: true })`.
+ * @param dir - Parent directory the temp directory is created under.
+ * @param prefix - Prefix forwarded to `fs.mkdtemp`.
+ */
+async function mkdtempDisposable(
+	dir: string,
+	prefix: string,
+): Promise<{ path: string } & AsyncDisposable> {
+	const dirPath = await fs.mkdtemp(path.join(dir, prefix));
+	return {
+		path: dirPath,
+		async [Symbol.asyncDispose]() {
+			await fs.rm(dirPath, { recursive: true, force: true });
+		},
+	};
+}
+
+/**
  * Options for {@link externalSortUrls}.
  */
 export interface ExternalSortUrlsOptions {
@@ -73,57 +93,54 @@ export async function externalSortUrls(
 	// `ensureUrlSortTempTable`'s `preparedConnections` guard has been
 	// populated — get distinct scratch directories instead of interleaving
 	// writes into (and one prematurely `rm -rf`-ing) the other's chunk files.
-	const tmpDir = accessor.readOnly
-		? await fs.mkdtemp(path.join(os.tmpdir(), 'nitpicker-url-sort-'))
-		: await fs.mkdtemp(path.join(accessor.tmpDir, 'url-sort-tmp-'));
+	await using tmpDirHandle = accessor.readOnly
+		? await mkdtempDisposable(os.tmpdir(), 'nitpicker-url-sort-')
+		: await mkdtempDisposable(accessor.tmpDir, 'url-sort-tmp-');
+	const tmpDir = tmpDirHandle.path;
 
-	try {
-		// A row-count estimate up front — cheap even on a multi-GB archive,
-		// since `COUNT(*)` on SQLite is a single index-only scan — is what
-		// turns the progress lines below into an actual percentage instead of
-		// a raw counter with no sense of how much work remains.
-		const knex = accessor.getKnex();
-		const [pagesCount, resourcesCount] = await Promise.all([
-			knex('content_items').count<{ count: number }[]>({ count: '*' }),
-			knex('resource_items').count<{ count: number }[]>({ count: '*' }),
-		]);
-		const totalRows =
-			Number(pagesCount[0]?.count ?? 0) + Number(resourcesCount[0]?.count ?? 0);
-		const percentOf = (done: number): number =>
-			totalRows > 0 ? Math.min(100, Math.floor((done / totalRows) * 100)) : 100;
+	// A row-count estimate up front — cheap even on a multi-GB archive,
+	// since `COUNT(*)` on SQLite is a single index-only scan — is what
+	// turns the progress lines below into an actual percentage instead of
+	// a raw counter with no sense of how much work remains.
+	const knex = accessor.getKnex();
+	const [pagesCount, resourcesCount] = await Promise.all([
+		knex('content_items').count<{ count: number }[]>({ count: '*' }),
+		knex('resource_items').count<{ count: number }[]>({ count: '*' }),
+	]);
+	const totalRows =
+		Number(pagesCount[0]?.count ?? 0) + Number(resourcesCount[0]?.count ?? 0);
+	const percentOf = (done: number): number =>
+		totalRows > 0 ? Math.min(100, Math.floor((done / totalRows) * 100)) : 100;
 
-		const chunkFiles: string[] = [];
-		let rowsReadSoFar = 0;
-		for (const table of ['pages', 'resources'] as const) {
-			let tableRows = 0;
-			for await (const urls of readUrlChunks(accessor, table, readChunkSize)) {
-				chunkFiles.push(await writeSortedUrlChunk(urls, tmpDir, chunkFiles.length));
-				tableRows += urls.length;
-				rowsReadSoFar += urls.length;
-				onProgress?.(
-					`Sorting URLs: reading ${table} — ${tableRows.toLocaleString()} rows ` +
-						`(${percentOf(rowsReadSoFar)}% overall, ${chunkFiles.length} chunk file(s) so far)`,
-				);
-			}
+	const chunkFiles: string[] = [];
+	let rowsReadSoFar = 0;
+	for (const table of ['pages', 'resources'] as const) {
+		let tableRows = 0;
+		for await (const urls of readUrlChunks(accessor, table, readChunkSize)) {
+			chunkFiles.push(await writeSortedUrlChunk(urls, tmpDir, chunkFiles.length));
+			tableRows += urls.length;
+			rowsReadSoFar += urls.length;
+			onProgress?.(
+				`Sorting URLs: reading ${table} — ${tableRows.toLocaleString()} rows ` +
+					`(${percentOf(rowsReadSoFar)}% overall, ${chunkFiles.length} chunk file(s) so far)`,
+			);
 		}
-		onProgress?.(`Sorting URLs: merging ${chunkFiles.length} chunk file(s)…`);
-
-		let rank = 0;
-		let rowsMergedSoFar = 0;
-		for await (const key of mergeSortedUrlChunks(chunkFiles, () => {
-			rowsMergedSoFar++;
-		})) {
-			await onRow(key.original, rank);
-			rank++;
-			if (rank % MERGE_PROGRESS_INTERVAL === 0) {
-				onProgress?.(
-					`Sorting URLs: merging — ${rank.toLocaleString()} distinct URLs so far ` +
-						`(${percentOf(rowsMergedSoFar)}%)`,
-				);
-			}
-		}
-		onProgress?.(`Sorting URLs: done — ${rank.toLocaleString()} distinct URLs ranked`);
-	} finally {
-		await fs.rm(tmpDir, { recursive: true, force: true });
 	}
+	onProgress?.(`Sorting URLs: merging ${chunkFiles.length} chunk file(s)…`);
+
+	let rank = 0;
+	let rowsMergedSoFar = 0;
+	for await (const key of mergeSortedUrlChunks(chunkFiles, () => {
+		rowsMergedSoFar++;
+	})) {
+		await onRow(key.original, rank);
+		rank++;
+		if (rank % MERGE_PROGRESS_INTERVAL === 0) {
+			onProgress?.(
+				`Sorting URLs: merging — ${rank.toLocaleString()} distinct URLs so far ` +
+					`(${percentOf(rowsMergedSoFar)}%)`,
+			);
+		}
+	}
+	onProgress?.(`Sorting URLs: done — ${rank.toLocaleString()} distinct URLs ranked`);
 }

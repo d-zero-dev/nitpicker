@@ -37,13 +37,7 @@ function baseConfig() {
 }
 
 describe('readPageErrors', () => {
-	let archive: InstanceType<typeof Archive> | undefined;
-
 	afterEach(async () => {
-		if (archive) {
-			await archive.close();
-			archive = undefined;
-		}
 		const { rmSync } = await import('node:fs');
 		rmSync(workingDir, { recursive: true, force: true });
 	});
@@ -51,7 +45,7 @@ describe('readPageErrors', () => {
 	it('returns an empty array when the page_errors table has no rows', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'capture.nitpicker'),
 			cwd: workingDir,
 		});
@@ -63,7 +57,7 @@ describe('readPageErrors', () => {
 	it('joins each page_errors row to its pages.url and returns one ErrorRecord per row', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'capture.nitpicker'),
 			cwd: workingDir,
 		});

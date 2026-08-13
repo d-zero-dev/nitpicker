@@ -57,13 +57,7 @@ function baseConfig() {
 }
 
 describe('readUrlChunks', () => {
-	let archive: InstanceType<typeof Archive> | undefined;
-
 	afterEach(async () => {
-		if (archive) {
-			await archive.close();
-			archive = undefined;
-		}
 		const { rmSync } = await import('node:fs');
 		rmSync(workingDir, { recursive: true, force: true });
 	});
@@ -71,7 +65,7 @@ describe('readUrlChunks', () => {
 	it('splits pages into multiple chunks of the requested size, in id order', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'chunks.nitpicker'),
 			cwd: workingDir,
 		});
@@ -115,7 +109,7 @@ describe('readUrlChunks', () => {
 	it('returns no chunks for an empty table', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'empty.nitpicker'),
 			cwd: workingDir,
 		});

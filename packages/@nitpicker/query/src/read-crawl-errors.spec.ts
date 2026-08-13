@@ -36,13 +36,7 @@ function baseConfig() {
 }
 
 describe('readCrawlErrors', () => {
-	let archive: InstanceType<typeof Archive> | undefined;
-
 	afterEach(async () => {
-		if (archive) {
-			await archive.close();
-			archive = undefined;
-		}
 		const { rmSync } = await import('node:fs');
 		rmSync(workingDir, { recursive: true, force: true });
 	});
@@ -50,7 +44,7 @@ describe('readCrawlErrors', () => {
 	it('returns an empty array when the crawl_errors table has no rows', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'capture.nitpicker'),
 			cwd: workingDir,
 		});
@@ -62,7 +56,7 @@ describe('readCrawlErrors', () => {
 	it('returns one ErrorRecord per crawl_errors row, preserving null url for process-level entries', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'capture.nitpicker'),
 			cwd: workingDir,
 		});

@@ -64,13 +64,7 @@ function insertFailedPage(
 }
 
 describe('resolveFailedPageMessages', () => {
-	let archive: InstanceType<typeof Archive> | undefined;
-
 	afterEach(async () => {
-		if (archive) {
-			await archive.close();
-			archive = undefined;
-		}
 		const { rmSync } = await import('node:fs');
 		rmSync(workingDir, { recursive: true, force: true });
 	});
@@ -78,7 +72,7 @@ describe('resolveFailedPageMessages', () => {
 	it('returns an empty map when no pageIds are passed', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'capture.nitpicker'),
 			cwd: workingDir,
 		});
@@ -91,7 +85,7 @@ describe('resolveFailedPageMessages', () => {
 	it('prefers page_errors over crawl_errors when both are present for the same URL', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'capture.nitpicker'),
 			cwd: workingDir,
 		});
@@ -119,7 +113,7 @@ describe('resolveFailedPageMessages', () => {
 	it('falls back to crawl_errors when page_errors has no row for the page', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'capture.nitpicker'),
 			cwd: workingDir,
 		});
@@ -142,7 +136,7 @@ describe('resolveFailedPageMessages', () => {
 	it('prefers the LATEST crawl_errors row when multiple rows share the same URL', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'capture.nitpicker'),
 			cwd: workingDir,
 		});
@@ -172,7 +166,7 @@ describe('resolveFailedPageMessages', () => {
 	it('returns a map without the pageId when no source records a message', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'capture.nitpicker'),
 			cwd: workingDir,
 		});
