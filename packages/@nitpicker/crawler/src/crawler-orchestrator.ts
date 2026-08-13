@@ -363,9 +363,9 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				void this.emit('error', error);
 			});
 
-			this.#crawler.on('page', ({ result, source }) => {
+			this.#crawler.on('page', ({ result, source, bodyHash }) => {
 				writeQueue
-					.enqueue(() => this.#archive.setPage(result, source))
+					.enqueue(() => this.#archive.setPage(result, source, bodyHash))
 					.catch((error) => reject(error));
 			});
 

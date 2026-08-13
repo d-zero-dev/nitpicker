@@ -348,6 +348,14 @@ export interface CrawlerEventTypes {
 		 * common case outside `crawl --inventory`. See {@link PageSource}.
 		 */
 		source?: PageSource;
+		/**
+		 * This page's body hash, precomputed by the crawler from `result.html`
+		 * (non-null whenever `result.html.length > 0`, since this event is only
+		 * emitted for internal pages). Forwarded through `Archive.setPage` to
+		 * `update-page.ts` so `page_meta.body_hash` is written from this value
+		 * instead of hashing the same html a second time.
+		 */
+		bodyHash?: Buffer | null;
 	};
 
 	/**

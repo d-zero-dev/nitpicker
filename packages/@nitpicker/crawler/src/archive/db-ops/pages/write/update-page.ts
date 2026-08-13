@@ -54,6 +54,9 @@ import { writePageHtmlBlob } from './write-page-html-blob.js';
  *   inserted. Existing rows keep their original `source` (this is why a
  *   second `crawl --inventory` does not "demote" an `'inventory-seed'` row
  *   that was discovered earlier).
+ * @param bodyHash - Precomputed body hash for the page's HTML (see
+ *   `CrawlerEventTypes.page.bodyHash`). `undefined`/`null` falls back to
+ *   computing it from the HTML instead.
  * @returns The database `pageId` (`content_items.id`) of the inserted or updated row.
  */
 export async function updatePage(
@@ -63,6 +66,7 @@ export async function updatePage(
 	writeHtml: boolean,
 	isTarget: boolean,
 	source?: PageSource,
+	bodyHash?: Buffer | null,
 ): Promise<number> {
 	const { destUrl, sources } = resolveRedirectChain(
 		page.url.withoutHashAndAuth,
@@ -87,6 +91,7 @@ export async function updatePage(
 				writeHtml,
 				isTarget,
 				source,
+				bodyHash,
 			);
 		});
 	} catch (error) {
@@ -114,6 +119,7 @@ export async function updatePage(
  * @param writeHtml - See {@link updatePage}.
  * @param isTarget - See {@link updatePage}.
  * @param source - See {@link updatePage}.
+ * @param bodyHash - See {@link updatePage}.
  * @returns The `content_items.id` of the inserted or updated row.
  */
 async function updatePageInTransaction(
@@ -126,6 +132,7 @@ async function updatePageInTransaction(
 	writeHtml: boolean,
 	isTarget: boolean,
 	source: PageSource | undefined,
+	bodyHash: Buffer | null | undefined,
 ): Promise<number> {
 	const pageId = await insertPage(
 		knex,
@@ -200,12 +207,17 @@ async function updatePageInTransaction(
 	// content check alone expresses the intent without a redundant term.
 	if (writeHtml && page.html.length > 0) {
 		await writePageHtmlBlob(pageId, page.html, trx);
-		// Computed from the same `page.html` written above, in the same
-		// transaction, so `page_meta.body_hash` never observably lags the
-		// snapshot it was derived from.
+		// Prefer the caller's precomputed hash (the crawler already hashed
+		// this exact `page.html` once, before this write path ever runs) —
+		// falling back to computing it here only when the caller has not
+		// (direct callers such as tests, or a future write path that has not
+		// adopted the precompute). Either way this stays derived from the
+		// same `page.html` written above, in the same transaction, so
+		// `page_meta.body_hash` never observably lags the snapshot it was
+		// derived from.
 		await trx('page_meta')
 			.where('page_id', pageId)
-			.update({ body_hash: computeBodyHash(page.html) });
+			.update({ body_hash: bodyHash ?? computeBodyHash(page.html) });
 	} else if (
 		writeHtml &&
 		page.contentType !== null &&
