@@ -570,11 +570,18 @@ export default class Archive extends ArchiveAccessor {
 	 * pages share a single `page_html_blobs` row.
 	 * @param pageInfo - The page data to store.
 	 * @param source - Provenance label for new rows. `undefined` leaves the DB DEFAULT (`'crawled'`).
+	 * @param bodyHash - Precomputed body hash for the page's HTML (see
+	 *   `CrawlerEventTypes.page.bodyHash`). `undefined`/`null` falls back to
+	 *   computing it from the HTML instead.
 	 * @returns The database ID of the stored page.
 	 */
-	async setPage(pageInfo: PageData, source?: PageSource): Promise<number> {
+	async setPage(
+		pageInfo: PageData,
+		source?: PageSource,
+		bodyHash?: Buffer | null,
+	): Promise<number> {
 		dbLog('Set page: %s', pageInfo.url.href);
-		return await this.#db.updatePage(pageInfo, true, pageInfo.isTarget, source);
+		return await this.#db.updatePage(pageInfo, true, pageInfo.isTarget, source, bodyHash);
 	}
 	/**
 	 * Records a redirect edge without re-storing the destination's content.

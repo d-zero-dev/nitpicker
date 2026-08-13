@@ -654,6 +654,48 @@ describe('body_hash: <body>内容ハッシュの書き込み', () => {
 			await removeIfExists(dbPath);
 		}
 	});
+
+	it('A precomputed bodyHash is written verbatim instead of being recomputed from html', async () => {
+		const dbPath = path.resolve(workingDir, 'body-hash-precomputed.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const url = 'http://localhost/precomputed';
+		try {
+			// Deliberately unrelated to the html below — if update-page.ts
+			// recomputed the hash from `page.html` instead of using the value
+			// passed in, the stored hash would NOT equal this sentinel.
+			const sentinelHash = Buffer.alloc(32, 170);
+			await db.updatePage(
+				makePage(url, 'text/html', '<html><body>real content</body></html>'),
+				true,
+				true,
+				undefined,
+				sentinelHash,
+			);
+			const row = await getBodyHashByUrl(db, url);
+			expect(Buffer.from(row!.bodyHash).equals(sentinelHash)).toBe(true);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('Omitting bodyHash falls back to computing it from html', async () => {
+		const dbPath = path.resolve(workingDir, 'body-hash-fallback.sqlite');
+		const db = await Database.connect({ filename: dbPath });
+		const url = 'http://localhost/fallback';
+		try {
+			await db.updatePage(
+				makePage(url, 'text/html', '<html><body>fallback content</body></html>'),
+				true,
+				true,
+			);
+			const row = await getBodyHashByUrl(db, url);
+			expect(Buffer.from(row!.bodyHash)).toHaveLength(32);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
 });
 
 describe('content-type の正規化（#72）', () => {

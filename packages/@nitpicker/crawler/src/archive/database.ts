@@ -1044,6 +1044,9 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param isTarget - Whether this page is a crawl target.
 	 * @param source - Provenance label written ONLY when the row is freshly
 	 *   inserted. Existing rows keep their original `source`.
+	 * @param bodyHash - Precomputed body hash for the page's HTML (see
+	 *   `CrawlerEventTypes.page.bodyHash`). `undefined`/`null` falls back to
+	 *   computing it from the HTML instead.
 	 * @returns The database `pageId` of the inserted/updated row.
 	 */
 	async updatePage(
@@ -1051,6 +1054,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		writeHtml: boolean,
 		isTarget: boolean,
 		source?: PageSource,
+		bodyHash?: Buffer | null,
 	): Promise<number> {
 		return emitErrorAndRetry(
 			this,
@@ -1063,6 +1067,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 					writeHtml,
 					isTarget,
 					source,
+					bodyHash,
 				),
 			retrySetting,
 		);

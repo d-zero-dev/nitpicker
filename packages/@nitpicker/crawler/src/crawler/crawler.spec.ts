@@ -988,6 +988,141 @@ describe('Crawler', () => {
 		});
 	});
 
+	describe('body hash computed once per page (regression: computeBodyHash double-counted)', () => {
+		/**
+		 * Minimal non-HTML PageData builder carrying real `html` content — a
+		 * non-HTML `contentType` makes `#scrapePage` return the HEAD pre-flight
+		 * result verbatim (same trick `nonHtmlPageData` above uses), so the
+		 * body-hash computation under test runs without needing a mocked
+		 * Chromium instance.
+		 * @param url - The page's own URL.
+		 * @param html - The page's body content.
+		 * @returns A PageData-shaped object for fetchDestination to resolve with.
+		 */
+		function htmlBodyPageData(url: ExURL, html: string) {
+			return {
+				url,
+				redirectPaths: [],
+				isTarget: true,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'application/xml',
+				contentLength: 0,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [],
+				imageList: [],
+				html,
+				isSkipped: false,
+			};
+		}
+
+		it('page イベントの payload に実 html から計算した body hash が乗る', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { computeBodyHash } =
+				await import('../archive/body-hash/compute-body-hash.js');
+
+			const origin = parseUrl('https://example.com/')!;
+			const html = '<html><body>hello</body></html>';
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue(
+				htmlBodyPageData(origin, html) as Awaited<
+					ReturnType<typeof fetchDestMod.fetchDestination>
+				>,
+			);
+
+			const crawler = new Crawler(defaultOptions);
+			const pages: CrawlerEventTypes['page'][] = [];
+			crawler.on('page', (p) => {
+				pages.push(p);
+			});
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			crawler.start([origin]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			expect(pages).toHaveLength(1);
+			expect(pages[0]!.bodyHash).toBeInstanceOf(Buffer);
+			expect(pages[0]!.bodyHash!.equals(computeBodyHash(html))).toBe(true);
+		});
+
+		it('--dedupe-cap 有効時も computeBodyHash は1ページにつき1回だけ呼ばれる', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const computeBodyHashMod =
+				await import('../archive/body-hash/compute-body-hash.js');
+			const computeBodyHashSpy = vi.spyOn(computeBodyHashMod, 'computeBodyHash');
+
+			const origin = parseUrl('https://example.com/')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue(
+				htmlBodyPageData(origin, '<html><body>hello</body></html>') as Awaited<
+					ReturnType<typeof fetchDestMod.fetchDestination>
+				>,
+			);
+
+			const crawler = new Crawler({ ...defaultOptions, dedupeCap: 100 });
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			crawler.start([origin]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			expect(computeBodyHashSpy).toHaveBeenCalledTimes(1);
+		});
+
+		it('外部ページでは html が非空でも computeBodyHash が呼ばれない（body_hash は外部ページに書き込まれないため不要）', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const computeBodyHashMod =
+				await import('../archive/body-hash/compute-body-hash.js');
+			const computeBodyHashSpy = vi.spyOn(computeBodyHashMod, 'computeBodyHash');
+
+			// Outside `defaultOptions.roots` (`https://example.com/`), so
+			// `findScopeEntry` classifies this as external — `fetchExternal`
+			// defaults to `true`, so it still renders through the normal
+			// (non-early-return) path instead of the `!fetchExternal` shortcut.
+			const externalUrl = parseUrl('https://external.example/')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				...htmlBodyPageData(externalUrl, '<html><body>external</body></html>'),
+				isExternal: true,
+			} as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>);
+
+			const crawler = new Crawler({ ...defaultOptions, dedupeCap: 100 });
+			const externalPages: CrawlerEventTypes['externalPage'][] = [];
+			crawler.on('externalPage', (p) => {
+				externalPages.push(p);
+			});
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			crawler.start([externalUrl]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			expect(externalPages).toHaveLength(1);
+			expect(computeBodyHashSpy).not.toHaveBeenCalled();
+		});
+	});
+
 	describe('predicted-page content-duplicate discard (always-on, issue #208)', () => {
 		/**
 		 * Minimal non-HTML PageData builder — a non-HTML `contentType` makes

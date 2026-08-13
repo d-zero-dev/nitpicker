@@ -628,10 +628,11 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 *   queue, prioritising likely-HTML URLs to the front (see {@link partitionUrlsByHtml}).
 	 *   Accepts a batch so a group of URLs (e.g. predicted pagination) keeps its order.
 	 * @param concurrency - Current concurrency level, used to determine predicted URL count
-	 * @param precomputedBodyHash - This page's body hash, if the caller already
-	 *   computed it (the predicted-content-duplicate check, A-3, computes it for
-	 *   every predicted page regardless of `--dedupe-cap`) — reused for the
-	 *   dedupe-cap observation below instead of hashing the same html twice.
+	 * @param precomputedBodyHash - This page's body hash, computed once by the
+	 *   caller for every internal page with a rendered HTML body (see the
+	 *   computation site's comment) — reused here for the dedupe-cap
+	 *   observation, and forwarded via the `page` event so `update-page.ts`
+	 *   does not hash the same html again.
 	 */
 	#handleResult(
 		result: ScrapeResult,
@@ -678,6 +679,14 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					const shapeKey = computeShapeKey(result.pageData.url.withoutHashAndAuth);
 					const metaSig = computeMetaSignature(result.pageData.meta);
 					if (shapeKey && metaSig) {
+						// `precomputedBodyHash` is non-null here in every reachable
+						// case: this branch's guard (`!isExternal && html.length > 0`,
+						// modulo the `isMetadataOnly` exclusion which only narrows it)
+						// is a subset of the unconditional computation site's condition
+						// above. The `??` fallback is not expected to ever fire — it is
+						// kept only as a defensive backstop against a future edit to
+						// either condition silently breaking that invariant, favouring
+						// a slow-but-correct recomputation over a crash.
 						const bodyHash = precomputedBodyHash ?? computeBodyHash(result.pageData.html);
 						const ogUrlMismatch = resolveOgUrlMismatch(
 							result.pageData.meta,
@@ -814,6 +823,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						void this.emit('page', {
 							result: result.pageData,
 							source: pageSource,
+							bodyHash: precomputedBodyHash,
 						});
 					}
 				}
@@ -863,7 +873,16 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 							source: pageSource,
 						});
 					} else {
-						void this.emit('page', { result: pageResult, source: pageSource });
+						// `pageResult` here always carries `html: ''` (`linkToPageData`'s
+						// error-fallback shape), so it never reaches `update-page.ts`'s
+						// `html.length > 0` write gate — `bodyHash: null` is explicit
+						// rather than relying on that gate to make an omitted field
+						// harmless, so this stays correct if that ever changes.
+						void this.emit('page', {
+							result: pageResult,
+							source: pageSource,
+							bodyHash: null,
+						});
 					}
 				}
 				void this.emit('error', {
@@ -1106,10 +1125,12 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					const markBrowserScrape = () => {
 						renderedInBrowser = true;
 					};
-					// Set by the predicted-content-duplicate check below (A-3) when it
-					// computes this page's body hash, so `#handleResult`'s dedupe-cap
-					// observation (also gated on this page's html) can reuse it instead
-					// of hashing the same html a second time.
+					// Set below for every internal page with a rendered HTML body
+					// (not just predicted ones — see the computation site's comment),
+					// so both `#handleResult`'s dedupe-cap observation and the `page`
+					// event's `bodyHash` payload (ultimately consumed by
+					// `update-page.ts`'s `page_meta.body_hash` write) reuse this one
+					// value instead of each hashing the same html again.
 					let precomputedBodyHash: Buffer | null = null;
 
 					try {
@@ -1289,32 +1310,45 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 							return;
 						}
 
-						// Discard a predicted URL whose rendered body is a
-						// byte-for-byte duplicate of the previous predicted page of the
-						// same shape, and stop generating further predictions for that
-						// shape (checked above, in the pagination-pattern branch). This
-						// is the always-on backstop against a site that returns 2xx for
-						// any extrapolated token but ignores it entirely (e.g. always
-						// serving the same "no results" template) — `shouldDiscardPredicted`
-						// alone cannot see this, since it only inspects HTTP status.
+						// Compute this page's body hash once, up front, for every
+						// internal page with a rendered HTML body — not just predicted
+						// ones. This condition intentionally mirrors `update-page.ts`'s
+						// `writeHtml && page.html.length > 0` write gate (internal pages
+						// are exactly the ones `setPage` — as opposed to
+						// `setExternalPage` — writes a body through), so the value
+						// computed here can be forwarded through the `page` event all
+						// the way to that write and reused there instead of hashing the
+						// same html a second time.
 						if (
-							isPredicted &&
 							result.type === 'success' &&
 							result.pageData &&
+							!result.pageData.isExternal &&
 							result.pageData.html.length > 0
 						) {
-							const shapeKey = computeShapeKey(url.withoutHashAndAuth);
-							if (shapeKey) {
-								const bodyHash = computeBodyHash(result.pageData.html);
-								precomputedBodyHash = bodyHash;
-								const lastBodyHash = this.#predictedShapeBodyHashes.get(shapeKey) ?? null;
-								if (isPredictedContentDuplicate(bodyHash, lastBodyHash)) {
-									this.#predictedShapeStopped.add(shapeKey);
-									handleIgnoreAndSkip(url, this.#linkList, this.#scope, this.#options);
-									log(c.dim('Predicted (content duplicate, discarded)'));
-									return;
+							precomputedBodyHash = computeBodyHash(result.pageData.html);
+
+							// Discard a predicted URL whose rendered body is a
+							// byte-for-byte duplicate of the previous predicted page of
+							// the same shape, and stop generating further predictions for
+							// that shape (checked above, in the pagination-pattern
+							// branch). This is the always-on backstop against a site
+							// that returns 2xx for any extrapolated token but ignores it
+							// entirely (e.g. always serving the same "no results"
+							// template) — `shouldDiscardPredicted` alone cannot see
+							// this, since it only inspects HTTP status.
+							if (isPredicted) {
+								const shapeKey = computeShapeKey(url.withoutHashAndAuth);
+								if (shapeKey) {
+									const lastBodyHash =
+										this.#predictedShapeBodyHashes.get(shapeKey) ?? null;
+									if (isPredictedContentDuplicate(precomputedBodyHash, lastBodyHash)) {
+										this.#predictedShapeStopped.add(shapeKey);
+										handleIgnoreAndSkip(url, this.#linkList, this.#scope, this.#options);
+										log(c.dim('Predicted (content duplicate, discarded)'));
+										return;
+									}
+									this.#predictedShapeBodyHashes.set(shapeKey, precomputedBodyHash);
 								}
-								this.#predictedShapeBodyHashes.set(shapeKey, bodyHash);
 							}
 						}
 
