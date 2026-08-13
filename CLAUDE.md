@@ -6,6 +6,10 @@ Nitpicker は Web サイト全体をヘッドレスブラウザでクロール�
 
 コードを読み始める前に **[ARCHITECTURE.md](./ARCHITECTURE.md)** を読むこと。全体地図・境界と所有権・依存方向・不変条件・負の知識・変更種別ごとの Reading paths（読むファイル順）を索引化してある。実装詳細の正は各ソースの JSDoc。
 
+## viewer UI 開発
+
+`@nitpicker/viewer` の `web/components/*` はデータ取得（react-query hooks・API 呼び出し）に直接関係しない UI のみの改善であれば、Storybook（`yarn workspace @nitpicker/viewer storybook`）で対象コンポーネントを単独表示しながら確認・改善すること。データ取得を伴う変更（画面・API の追加等）は ARCHITECTURE.md の Reading paths を参照。
+
 ## CLI コマンド
 
 ```sh

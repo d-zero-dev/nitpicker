@@ -198,6 +198,10 @@ DOM構造類似性によるページのテンプレート分類（`--templates` 
 4. キャッシュが要るなら `viewer/src/*-cache.ts` + `promise-lru.ts`（stub mode は bypass — live crawl 中は snapshot が永久 stale になるため）
 5. **frontend の consumer 探索は `src/` だけでなく `web/` も grep すること**
 
+### viewer UI コンポーネント改善（データ取得非依存）
+
+データ取得（react-query hooks・API レスポンス）に直接関係しない UI のみの改善は、Storybook（`.storybook/`、`web/components/*.stories.tsx`）で対象コンポーネントを隔離した状態で確認・改善する。`yarn workspace @nitpicker/viewer storybook` で dev サーバーを起動する。データ取得を伴う変更は「viewer のビュー / API 追加」を参照。
+
 ### viewer read model の変更
 
 1. `query/src/viewer-read-model/create-viewer-read-model-tables.ts`（テーブル定義）と `create-viewer-read-model-indexes.ts`（二次索引。index-after-load と evidence-before-indexing の不変条件を先に読む）

@@ -4,7 +4,13 @@
 		"@d-zero/stylelint-config/order",
 		"@d-zero/stylelint-config/values"
 	],
-	"ignoreFiles": ["**/lib/**", "**/dist/**", "**/node_modules/**", "**/coverage/**"],
+	"ignoreFiles": [
+		"**/lib/**",
+		"**/dist/**",
+		"**/node_modules/**",
+		"**/coverage/**",
+		"**/storybook-static/**"
+	],
 	"rules": {
 		"declaration-property-value-no-unknown": null
 	}

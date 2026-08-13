@@ -103,6 +103,10 @@
 			"matchPackageNames": ["vite", "@vitejs/plugin-react"]
 		},
 		{
+			"groupName": "storybook",
+			"matchPackageNames": ["storybook", "/^@storybook\\//"]
+		},
+		{
 			"groupName": "graphology",
 			"matchPackageNames": ["/^graphology/", "sigma"]
 		},
