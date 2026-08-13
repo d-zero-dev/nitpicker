@@ -51,11 +51,19 @@ export const Empty: Story = {
 /** The technologies query is still loading. */
 export const Loading: Story = { args: { data: undefined, isLoading: true, error: null } };
 
-/** The technologies query failed. */
+/**
+ * The technologies query failed.
+ *
+ * Built via `globalThis.Error`, not a bare `new Error(...)` — this story
+ * is itself named `Error`, and referencing the bare identifier inside its
+ * own initializer would try to read the local `Error` binding before it's
+ * assigned (a self-shadowing temporal-dead-zone reference), not the global
+ * constructor.
+ */
 export const Error: Story = {
 	args: {
 		data: undefined,
 		isLoading: false,
-		error: new Error('Failed to fetch page technologies.'),
+		error: new globalThis.Error('Failed to fetch page technologies.'),
 	},
 };
