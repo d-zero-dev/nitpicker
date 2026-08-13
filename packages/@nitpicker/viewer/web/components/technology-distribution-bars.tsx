@@ -1,10 +1,11 @@
 import type { TechnologyCount } from '@nitpicker/query';
 
-import { AppLink } from './app-link.js';
 import { useI18n } from '../i18n/use-i18n.js';
 import { clampRatio } from '../utils/clamp-ratio.js';
 import { computeRatio } from '../utils/compute-ratio.js';
 import { formatPercent } from '../utils/format-percent.js';
+
+import { AppLink } from './app-link.js';
 
 /** Cap on rows shown in the summary's technology stack section — the full list lives at `/technologies`. */
 const MAX_TECHNOLOGIES_DISPLAYED = 10;
