@@ -22,6 +22,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 		nav: {
 			summary: 'Summary',
 			pages: 'Pages',
+			technologies: 'Technologies',
 			templateClusters: 'Template Clusters',
 			directoryTree: 'Directory Tree',
 			resources: 'Resources',
@@ -110,6 +111,9 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				metadataFulfillment: 'Metadata fulfillment',
 				networkOutageNotice:
 					'{count} failure(s) may be caused by your own network during a detected outage, not the target site — they may clear after running `crawl --retry-failed`.',
+				technologyDistribution: 'Technology stack',
+				noTechnologies: 'No technologies detected in this archive.',
+				viewAllTechnologies: 'View all technologies',
 			},
 			errorKind: {
 				dns: 'DNS',
@@ -236,8 +240,18 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				mainContentVideos: 'Videos',
 				mainContentAudios: 'Audios',
 				mainContentCanvases: 'Canvases',
+				mainContentCustomElements: 'Web Components',
 				loadingMainContent: 'Loading main content…',
 				noMainContent: 'No main content data available.',
+				technologies: 'Technologies',
+				noTechnologies: 'No technologies detected for this page.',
+				loadingTechnologies: 'Loading technologies…',
+				colConfidence: 'Confidence',
+				colSignalCount: 'Signals',
+				colVersion: 'Version',
+				colSignalType: 'Signal type',
+				colEvidence: 'Evidence',
+				colWeight: 'Weight',
 			},
 			inboundLinks: {
 				title: 'Inbound links',
@@ -389,6 +403,22 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				contentLength: 'Content-Length',
 				source: 'Source',
 			},
+			technologies: {
+				title: 'Technologies',
+				description:
+					"Every technology detected across the archive — combining beholder's Wappalyzer pass with structural signals (URL patterns, HTML markers, scoped attributes, meta generator, JS license comments) into one confidence score per technology, per page. Click a row to see its directory distribution and page list.",
+				colTechnology: 'Technology',
+				colCategory: 'Category',
+				colPageCount: 'Pages',
+				colAvgConfidence: 'Avg. confidence',
+				empty: 'No technologies detected in this archive.',
+				directoryDistribution: 'Directory distribution',
+				directoryDistributionUnavailable:
+					'Directory distribution requires the viewer read model. Run `npx @nitpicker/cli viewer-build <archive>`.',
+				colDirectory: 'Directory',
+				pagesForTechnology: 'Pages using {technology}',
+				viewPageDetail: 'View page detail',
+			},
 			templateClusters: {
 				title: 'Template Clusters',
 				description:
@@ -472,6 +502,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 		nav: {
 			summary: 'サマリー',
 			pages: 'ページ',
+			technologies: '技術スタック',
 			templateClusters: 'テンプレートクラスタ',
 			directoryTree: 'ディレクトリツリー',
 			resources: 'リソース',
@@ -560,6 +591,9 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				metadataFulfillment: 'メタデータ充足率',
 				networkOutageNotice:
 					'{count} 件の失敗は、検出されたネットワーク断の間に発生しており、対象サイトではなくお使いのネットワーク側が原因の可能性があります。`crawl --retry-failed` で解消する場合があります。',
+				technologyDistribution: '技術スタック',
+				noTechnologies: 'このアーカイブでは技術が検出されていません。',
+				viewAllTechnologies: 'すべての技術スタックを見る',
 			},
 			errorKind: {
 				dns: 'DNS',
@@ -686,8 +720,18 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				mainContentVideos: '動画',
 				mainContentAudios: '音声',
 				mainContentCanvases: 'canvas',
+				mainContentCustomElements: 'Web Components',
 				loadingMainContent: 'メインコンテンツを読み込み中…',
 				noMainContent: 'メインコンテンツのデータがありません。',
+				technologies: '技術スタック',
+				noTechnologies: 'このページでは技術が検出されていません。',
+				loadingTechnologies: '技術スタックを読み込み中…',
+				colConfidence: '確信度',
+				colSignalCount: 'シグナル数',
+				colVersion: 'バージョン',
+				colSignalType: 'シグナル種別',
+				colEvidence: '根拠',
+				colWeight: '重み',
 			},
 			inboundLinks: {
 				title: '被リンク',
@@ -838,6 +882,22 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				contentType: 'Content-Type',
 				contentLength: 'Content-Length',
 				source: 'ソース',
+			},
+			technologies: {
+				title: '技術スタック',
+				description:
+					'アーカイブ全体で検出された技術スタックの一覧。beholderのWappalyzer検出と、nitpicker独自の構造シグナル（URLパターン・HTMLマーカー・スコープ付き属性・meta generator・JSライセンスコメント）を組み合わせ、技術ごと・ページごとに確信度を算出しています。行をクリックするとディレクトリ分布とページ一覧が表示されます。',
+				colTechnology: '技術',
+				colCategory: 'カテゴリ',
+				colPageCount: 'ページ数',
+				colAvgConfidence: '平均確信度',
+				empty: 'このアーカイブでは技術が検出されませんでした。',
+				directoryDistribution: 'ディレクトリ分布',
+				directoryDistributionUnavailable:
+					'ディレクトリ分布の表示にはviewer read modelが必要です。`npx @nitpicker/cli viewer-build <archive>` を実行してください。',
+				colDirectory: 'ディレクトリ',
+				pagesForTechnology: '{technology} を使用しているページ',
+				viewPageDetail: 'ページ詳細を見る',
 			},
 			templateClusters: {
 				title: 'テンプレートクラスタ',

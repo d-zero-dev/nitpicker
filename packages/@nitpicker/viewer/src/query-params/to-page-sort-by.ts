@@ -13,6 +13,7 @@ const PAGE_SORT_BY_VALUES = [
 	'mainContentVideoCount',
 	'mainContentAudioCount',
 	'mainContentCanvasCount',
+	'mainContentCustomElementCount',
 	'scrollHeightDesktop',
 	'scrollHeightMobile',
 ] as const;

@@ -3,6 +3,7 @@ import { ContentTypeStackedBar } from '../components/content-type-stacked-bar.js
 import { MetadataFulfillmentBars } from '../components/metadata-fulfillment-bars.js';
 import { StatusDistributionBars } from '../components/status-distribution-bars.js';
 import { SummaryCard } from '../components/summary-card.js';
+import { TechnologyDistributionBars } from '../components/technology-distribution-bars.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
@@ -146,6 +147,11 @@ export function SummaryView() {
 
 			<h2>{t('views.summary.metadataFulfillment')}</h2>
 			<MetadataFulfillmentBars fulfillment={data.metadataFulfillment} />
+
+			<TechnologyDistributionBars
+				technologyDistribution={data.technologyDistribution}
+				internalPages={data.internalPages}
+			/>
 		</div>
 	);
 }

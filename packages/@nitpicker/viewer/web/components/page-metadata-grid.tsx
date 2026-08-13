@@ -125,15 +125,6 @@ export function PageMetadataGrid(props: PageMetadataGridProps) {
 					<dd>{data.themeColor}</dd>
 				</>
 			)}
-			{(data.tagCount ?? 0) > 0 && (
-				<>
-					<dt>Wappalyzer tags</dt>
-					<dd>
-						{data.tagCount} entries
-						{data.tagsProvidersCsv ? ` (${data.tagsProvidersCsv})` : ''}
-					</dd>
-				</>
-			)}
 			{(data.jsonldCount ?? 0) > 0 && (
 				<>
 					<dt>JSON-LD</dt>
