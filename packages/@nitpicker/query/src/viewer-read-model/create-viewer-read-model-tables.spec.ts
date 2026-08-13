@@ -30,7 +30,7 @@ describe('createViewerReadModelTables', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('creates all 24 tables with no indexes yet (see createViewerReadModelIndexes)', async () => {
+	it('creates all 26 tables with no indexes yet (see createViewerReadModelIndexes)', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 
@@ -59,6 +59,8 @@ describe('createViewerReadModelTables', () => {
 			'viewer_duplicate_groups',
 			'viewer_duplicate_group_pages',
 			'viewer_mismatches',
+			'viewer_technology_summary',
+			'viewer_technology_directory_stats',
 		];
 		for (const table of tables) {
 			expect(await knex.schema.hasTable(table)).toBe(true);

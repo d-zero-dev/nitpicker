@@ -64,6 +64,7 @@ function createMockPage(overrides: Partial<Record<string, unknown>> = {}): Page 
 		mainContentVideoCount: null,
 		mainContentAudioCount: null,
 		mainContentCanvasCount: null,
+		mainContentCustomElementCount: null,
 		scrollHeightDesktop: null,
 		scrollHeightMobile: null,
 		// `metaFlat` mirrors the new ~47-column flat-meta projection on the
@@ -153,10 +154,10 @@ describe('createPageList', () => {
 		expect(hasLazyCell).toBe(true);
 	});
 
-	it('returns correct base headers (60 columns, v2 schema + main-content promotion)', () => {
+	it('returns correct base headers (61 columns, v2 schema + main-content promotion)', () => {
 		const sheet = createPageList([]);
 		const headers = sheet.createHeaders();
-		expect(headers).toHaveLength(60);
+		expect(headers).toHaveLength(61);
 		expect(headers[0]).toBe('Title');
 		expect(headers[1]).toBe('Full Title');
 		expect(headers[2]).toBe('URL');
@@ -186,7 +187,7 @@ describe('createPageList', () => {
 		expect(headers[41]).toBe('og:image');
 		expect(headers[45]).toBe('jsonld_count');
 		expect(headers[46]).toBe('tags_providers');
-		expect(headers.slice(47, 60)).toEqual([
+		expect(headers.slice(47, 61)).toEqual([
 			'main_content_selector',
 			'main_content_word_count',
 			'main_content_body_word_count',
@@ -198,12 +199,13 @@ describe('createPageList', () => {
 			'main_content_video_count',
 			'main_content_audio_count',
 			'main_content_canvas_count',
+			'main_content_custom_element_count',
 			'scroll_height_desktop',
 			'scroll_height_mobile',
 		]);
 	});
 
-	it('emits the 13 main-content cell values at columns 47-59, in header order', async () => {
+	it('emits the 14 main-content cell values at columns 47-60, in header order', async () => {
 		const page = createMockPage({
 			mainContentSelector: 'main.l-main',
 			mainContentWordCount: 100,
@@ -216,6 +218,7 @@ describe('createPageList', () => {
 			mainContentVideoCount: 0,
 			mainContentAudioCount: 0,
 			mainContentCanvasCount: 0,
+			mainContentCustomElementCount: 1,
 			scrollHeightDesktop: 3200,
 			scrollHeightMobile: 5400,
 		});
@@ -235,8 +238,9 @@ describe('createPageList', () => {
 		expect(cellValue(row[55])).toBe(0);
 		expect(cellValue(row[56])).toBe(0);
 		expect(cellValue(row[57])).toBe(0);
-		expect(cellValue(row[58])).toBe(3200);
-		expect(cellValue(row[59])).toBe(5400);
+		expect(cellValue(row[58])).toBe(1);
+		expect(cellValue(row[59])).toBe(3200);
+		expect(cellValue(row[60])).toBe(5400);
 	});
 
 	it('emits empty main-content cell values for an unrendered page', async () => {
@@ -250,6 +254,7 @@ describe('createPageList', () => {
 		expect(cellValue(row[48])).toBe('');
 		expect(cellValue(row[58])).toBe('');
 		expect(cellValue(row[59])).toBe('');
+		expect(cellValue(row[60])).toBe('');
 	});
 
 	it('appends plugin report headers', () => {
@@ -266,9 +271,9 @@ describe('createPageList', () => {
 		const sheet = createPageList(reports);
 		const headers = sheet.createHeaders();
 
-		expect(headers).toHaveLength(62);
-		expect(headers[60]).toBe('Plugin A Col 1');
-		expect(headers[61]).toBe('Plugin A Col 2');
+		expect(headers).toHaveLength(63);
+		expect(headers[61]).toBe('Plugin A Col 1');
+		expect(headers[62]).toBe('Plugin A Col 2');
 	});
 
 	it('skips external pages', async () => {
@@ -593,11 +598,11 @@ describe('createPageList', () => {
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
 		const row = rows![0];
-		// Plugin columns start after the 60 base columns (index 60+).
+		// Plugin columns start after the 61 base columns (index 61+).
 		// v2 layout: see `create-page-list.ts#createHeaders` for the full
 		// column inventory.
-		expect(cellValue(row[60])).toBe(95);
-		expect(cellValue(row[61])).toBe('A');
+		expect(cellValue(row[61])).toBe(95);
+		expect(cellValue(row[62])).toBe('A');
 	});
 
 	it('applies report pageData options (bold, fontFamily, fontSize, italic, strike, underline)', async () => {
@@ -630,7 +635,7 @@ describe('createPageList', () => {
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
 		const row = rows![0];
-		const provided = row[60].provide();
+		const provided = row[61].provide();
 		expect(provided.userEnteredFormat.textFormat).toEqual(
 			expect.objectContaining({
 				bold: true,
@@ -905,8 +910,8 @@ describe('createPageList', () => {
 		const sheet = createPageList(reports);
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
-		// Row should have base 60 columns only — no plugin column appended
-		expect(rows![0]).toHaveLength(60);
+		// Row should have base 61 columns only — no plugin column appended
+		expect(rows![0]).toHaveLength(61);
 	});
 
 	it('uses option.note when data.note is absent', async () => {
@@ -931,8 +936,8 @@ describe('createPageList', () => {
 		const sheet = createPageList(reports);
 		const rows = await sheet.eachPage!(page, 1, 1, null);
 
-		// Plugin column starts at index 60 (base columns = 60 in v2 layout).
-		const provided = rows![0][60].provide();
+		// Plugin column starts at index 61 (base columns = 61 in v2 layout).
+		const provided = rows![0][61].provide();
 		expect(provided.note).toBe('option note text');
 	});
 });

@@ -224,24 +224,30 @@ export function mapFlagsToQueryOptions(
 			// No options: the aggregation always covers the whole archive.
 			return {};
 		}
-		case 'pages-by-tag': {
-			if (!flags.provider) {
-				throw new Error('--provider is required for the pages-by-tag sub-command.');
+		case 'pages-by-technology': {
+			if (!flags.technology) {
+				throw new Error(
+					'--technology is required for the pages-by-technology sub-command.',
+				);
 			}
 			return {
-				provider: flags.provider,
-				externalId: flags.externalId,
+				technology: flags.technology,
+				minConfidence: flags.minConfidence,
+				signalType: flags.signalType,
 				limit: flags.limit,
 				offset: flags.offset,
 			};
 		}
-		case 'count-pages-by-tag': {
-			if (!flags.provider) {
-				throw new Error('--provider is required for the count-pages-by-tag sub-command.');
+		case 'count-pages-by-technology': {
+			if (!flags.technology) {
+				throw new Error(
+					'--technology is required for the count-pages-by-technology sub-command.',
+				);
 			}
 			return {
-				provider: flags.provider,
-				externalId: flags.externalId,
+				technology: flags.technology,
+				minConfidence: flags.minConfidence,
+				signalType: flags.signalType,
 			};
 		}
 		case 'pages-by-jsonld-type': {
@@ -262,7 +268,7 @@ export function mapFlagsToQueryOptions(
 			}
 			return { type: flags.type };
 		}
-		case 'tag-inventory': {
+		case 'technology-inventory': {
 			return {};
 		}
 		case 'page-jsonld': {
@@ -277,9 +283,9 @@ export function mapFlagsToQueryOptions(
 			}
 			return { url: flags.url };
 		}
-		case 'page-tags': {
+		case 'page-technologies': {
 			if (!flags.url) {
-				throw new Error('--url is required for the page-tags sub-command.');
+				throw new Error('--url is required for the page-technologies sub-command.');
 			}
 			return { url: flags.url };
 		}

@@ -288,6 +288,12 @@ export function PagesView() {
 				cell: textCell,
 			},
 			{
+				accessorKey: 'mainContentCustomElementCount',
+				header: '# custom elements',
+				size: 100,
+				cell: textCell,
+			},
+			{
 				accessorKey: 'scrollHeightDesktop',
 				header: 'scroll height (desktop)',
 				size: 130,
@@ -358,6 +364,7 @@ export function PagesView() {
 			'mainContentVideoCount',
 			'mainContentAudioCount',
 			'mainContentCanvasCount',
+			'mainContentCustomElementCount',
 			'scrollHeightDesktop',
 			'scrollHeightMobile',
 			'consoleErrorCount',

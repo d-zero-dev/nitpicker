@@ -1,4 +1,5 @@
 import type { DomPathCandidate } from './populate-entity-tables/types.js';
+import type { MainContentCustomElementCandidate } from '../crawler/types.js';
 import type { PageData } from '../utils/types/types.js';
 import type { ParseURLOptions } from '@d-zero/shared/parse-url';
 
@@ -14,6 +15,13 @@ import type { ParseURLOptions } from '@d-zero/shared/parse-url';
 export type PageDataWithDomPaths = PageData & {
 	/** In-browser dom-path capture for the rendered document's images. */
 	imageDomPaths?: readonly DomPathCandidate[];
+	/**
+	 * In-browser Web Component (custom element) capture for the rendered
+	 * document's main-content region (`crawler/capture-custom-elements.ts`).
+	 * `undefined` means capture was not attempted or failed — a distinct
+	 * state from "capture succeeded, zero elements found" (empty array).
+	 */
+	mainContentCustomElements?: readonly MainContentCustomElementCandidate[];
 };
 
 /**
@@ -431,6 +439,8 @@ export interface DB_Page {
 	main_content_audio_count: number | null;
 	/** Number of canvases within the main region, or null. */
 	main_content_canvas_count: number | null;
+	/** Number of Web Components (custom elements) within the main region, or null. */
+	main_content_custom_element_count: number | null;
 	/** `document.body.scrollHeight` at the desktop-compact preset, or null. */
 	scroll_height_desktop: number | null;
 	/** `document.body.scrollHeight` at the mobile-small preset, or null. */

@@ -188,6 +188,15 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	async getConfig(): Promise<Config> {
 		return this.#db.getConfig();
 	}
+	/**
+	 * Retrieves the Web Components (custom elements) within the given page's
+	 * detected main content region, from `page_main_content_custom_elements`.
+	 * @param pageId - The database id of the page.
+	 * @returns Ordered custom-element rows.
+	 */
+	async getCustomElementsOfPage(pageId: number) {
+		return this.#db.getCustomElementsOfPage(pageId);
+	}
 
 	/**
 	 * Reads custom data stored in the archive by name.
@@ -364,6 +373,15 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		}
 	}
 	/**
+	 * Retrieves the confidence-combined technology roll-up for the given
+	 * page, from the `page_technologies` table.
+	 * @param pageId - The database id of the page.
+	 * @returns Technology rows with category, version, confidence, signalCount.
+	 */
+	async getPageTechnologiesOfPage(pageId: number) {
+		return this.#db.getPageTechnologiesOfPage(pageId);
+	}
+	/**
 	 * Retrieves pages that link to the specified page (incoming links).
 	 * @param pageId - The database ID of the target page.
 	 * @returns An array of referrer records.
@@ -397,14 +415,15 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		return this.#db.getResourceUrlList();
 	}
 	/**
-	 * Retrieves the Wappalyzer tag entries for the given page, parsed back
-	 * from the `page_tags` table.
+	 * Retrieves the raw technology-detection signals for the given page,
+	 * from the `technology_signals` table.
 	 * @param pageId - The database id of the page.
-	 * @returns Ordered entries with provider, category, externalId, etc.
+	 * @returns Ordered signal rows with technology, signalType, evidence, weight.
 	 */
-	async getTagsOfPage(pageId: number) {
-		return this.#db.getTagsOfPage(pageId);
+	async getTechnologySignalsOfPage(pageId: number) {
+		return this.#db.getTechnologySignalsOfPage(pageId);
 	}
+
 	/**
 	 * Retrieves the videos within the given page's detected main content
 	 * region, from `page_main_content_videos`.

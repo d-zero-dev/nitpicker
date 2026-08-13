@@ -156,7 +156,8 @@ export async function resetFailedPages(knex: Knex): Promise<string[]> {
 		await knex('resource_ref_edges').whereIn('page_id', chunk).delete();
 		await knex('page_errors').whereIn('pageId', chunk).delete();
 		await knex('page_html_ref').whereIn('page_id', chunk).delete();
-		await knex('page_tags').whereIn('pageId', chunk).delete();
+		await knex('technology_signals').whereIn('pageId', chunk).delete();
+		await knex('page_technologies').whereIn('pageId', chunk).delete();
 		await knex('page_jsonld').whereIn('pageId', chunk).delete();
 		await knex('page_main_content_headings').whereIn('pageId', chunk).delete();
 		await knex('page_main_content_images').whereIn('pageId', chunk).delete();
@@ -166,6 +167,7 @@ export async function resetFailedPages(knex: Knex): Promise<string[]> {
 		await knex('page_main_content_videos').whereIn('pageId', chunk).delete();
 		await knex('page_main_content_audios').whereIn('pageId', chunk).delete();
 		await knex('page_main_content_canvases').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_custom_elements').whereIn('pageId', chunk).delete();
 	}
 	dbLog('Reset %d failed pages back to pending', urls.length);
 	return urls;

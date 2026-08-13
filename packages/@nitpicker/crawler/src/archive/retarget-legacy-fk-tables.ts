@@ -1,6 +1,9 @@
 import type { Knex } from 'knex';
 
+import { eachSplitted } from '../utils/array/each-splitted.js';
+
 import { createAdjunctTables } from './create-adjunct-tables.js';
+import { convertLegacyPageTagsToInserts } from './meta/technologies/convert-legacy-page-tags-to-inserts.js';
 
 /**
  * The adjunct tables whose FK declarations may still point at the legacy
@@ -9,10 +12,15 @@ import { createAdjunctTables } from './create-adjunct-tables.js';
  * {@link createAdjunctTables}, so a future column addition there cannot
  * silently drift from a hardcoded list (a missing column in the staged
  * copy fails the copy-back INSERT loudly instead of dropping data).
+ *
+ * `page_tags` is deliberately NOT here — it has no current-schema
+ * equivalent to retarget onto (removed in favor of `technology_signals` /
+ * `page_technologies`). {@link retargetLegacyFkTables} handles it as a
+ * special case: convert its rows, then drop it outright rather than
+ * recreating it. See that function's JSDoc.
  */
 const RETARGET_TABLES: readonly string[] = [
 	'page_html_ref',
-	'page_tags',
 	'page_jsonld',
 	'page_errors',
 	'analysis_violations',
@@ -37,21 +45,34 @@ const NULLABLE_ON_RETARGET: Readonly<Record<string, readonly string[]>> = {
 
 /**
  * Rewrites the FK declarations of the adjunct tables from the legacy
- * `pages(id)` to `content_items(id)` by rebuilding each table. SQLite has
- * no `ALTER TABLE … DROP CONSTRAINT`, so the only way to change an FK
- * target is to recreate the table:
+ * `pages(id)` to `content_items(id)` by rebuilding each table, AND converts
+ * `page_tags` (if present) into `technology_signals` / `page_technologies`.
+ * SQLite has no `ALTER TABLE … DROP CONSTRAINT`, so the only way to change
+ * an FK target is to recreate the table:
  *
- * 1. Stage each table's rows into a constraint-free `<table>__retarget`
- *    copy (`CREATE TABLE … AS SELECT *`) and drop the original, freeing
- *    its index names.
- * 2. Recreate every table through {@link createAdjunctTables} — the same
- *    DDL fresh archives get, so migrated archives end up identical in
- *    shape and index naming. Rebuilding the DDL inline here instead
- *    would recreate the exact drift this function repairs.
- * 3. Copy the staged rows back using the recreated table's own column
- *    list (read via `pragma_table_info`). A column the canonical DDL has
- *    but the input archive lacks aborts the INSERT with a clear error —
- *    never a silent data drop.
+ * 1. Stage each {@link RETARGET_TABLES} table's rows into a constraint-free
+ *    `<table>__retarget` copy (`CREATE TABLE … AS SELECT *`) and drop the
+ *    original, freeing its index names. `page_tags`, if present, is read
+ *    into memory here too (converted via `convertLegacyPageTagsToInserts` —
+ *    the same helper `migrate-page-tags-to-page-technologies.ts` uses for
+ *    already-0.13+ archives) but NOT staged the same way: it has no
+ *    current-schema table to retarget onto, so there is nothing to copy
+ *    back — only something to drop, once its data lives in the tables
+ *    from step 2.
+ * 2. Recreate every {@link RETARGET_TABLES} table through
+ *    {@link createAdjunctTables} — the same DDL fresh archives get, so
+ *    migrated archives end up identical in shape and index naming.
+ *    Rebuilding the DDL inline here instead would recreate the exact
+ *    drift this function repairs. This same call also creates
+ *    `technology_signals` / `page_technologies` (idempotent
+ *    `hasTable`-guarded DDL — a no-op if a prior partial run already
+ *    created them).
+ * 3. Copy the staged {@link RETARGET_TABLES} rows back using the recreated
+ *    table's own column list (read via `pragma_table_info`). A column the
+ *    canonical DDL has but the input archive lacks aborts the INSERT with
+ *    a clear error — never a silent data drop. The converted `page_tags`
+ *    signals/technologies are inserted here too, then `page_tags` itself
+ *    is dropped (not recreated).
  *
  * A rename-based recipe (`ALTER TABLE x RENAME TO x__retarget`, skip
  * copy #1) is deliberately NOT used: SQLite keeps the renamed table's
@@ -91,6 +112,25 @@ export async function retargetLegacyFkTables(trx: Knex): Promise<void> {
 		staged.push(table);
 	}
 
+	// `page_tags` has no current-schema table to retarget onto (removed —
+	// see the module JSDoc), so its rows are converted to
+	// `technology_signals` / `page_technologies` shape HERE, while
+	// `page_tags` still exists, then only dropped (not staged/recreated)
+	// after `createAdjunctTables` below provisions the tables that will
+	// receive them.
+	const hasLegacyPageTags = await trx.schema.hasTable('page_tags');
+	const legacyTagRows: Array<{
+		pageId: number;
+		provider: string;
+		version: string | null;
+		confidence: number | null;
+		categories: unknown;
+	}> = hasLegacyPageTags
+		? await trx
+				.select('pageId', 'provider', 'version', 'confidence', 'categories')
+				.from('page_tags')
+		: [];
+
 	await createAdjunctTables(trx);
 
 	for (const table of staged) {
@@ -114,5 +154,23 @@ export async function retargetLegacyFkTables(trx: Knex): Promise<void> {
 			`INSERT INTO "${table}" (${insertColumnList}) SELECT ${selectColumnList} FROM "${table}__retarget"`,
 		);
 		await trx.raw(`DROP TABLE "${table}__retarget"`);
+	}
+
+	if (hasLegacyPageTags) {
+		const { signalInserts, technologyInserts } =
+			convertLegacyPageTagsToInserts(legacyTagRows);
+
+		if (signalInserts.length > 0) {
+			await eachSplitted(signalInserts, 100, async (chunk) => {
+				await trx('technology_signals').insert(chunk);
+			});
+		}
+		if (technologyInserts.length > 0) {
+			await eachSplitted(technologyInserts, 100, async (chunk) => {
+				await trx('page_technologies').insert(chunk);
+			});
+		}
+
+		await trx.raw('DROP TABLE "page_tags"');
 	}
 }

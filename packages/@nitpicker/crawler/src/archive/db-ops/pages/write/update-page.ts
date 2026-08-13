@@ -20,13 +20,14 @@ import { resolveUrlOrBlob } from '../../_shared/resolve-url-or-blob.js';
 import { insertAudios } from './insert-audios.js';
 import { insertButtons } from './insert-buttons.js';
 import { insertCanvases } from './insert-canvases.js';
+import { insertCustomElements } from './insert-custom-elements.js';
 import { insertHeadings } from './insert-headings.js';
 import { insertIframes } from './insert-iframes.js';
 import { insertJsonLd } from './insert-jsonld.js';
 import { insertMainContentImages } from './insert-main-content-images.js';
 import { insertMainContentTables } from './insert-main-content-tables.js';
 import { insertPage } from './insert-page.js';
-import { insertTags } from './insert-tags.js';
+import { insertTechnologies } from './insert-technologies.js';
 import { insertVideos } from './insert-videos.js';
 import { linkRedirectSources } from './link-redirect-sources.js';
 import { writePageHtmlBlob } from './write-page-html-blob.js';
@@ -146,14 +147,16 @@ async function updatePageInTransaction(
 		source,
 	);
 
-	// Wappalyzer tag detection is HTML-body independent (relies on
-	// `<script src>` / `<iframe src>` / window globals / response
-	// headers) so it runs for every page including external /
-	// metadata-only. JSON-LD on the other hand lives inside the
-	// rendered HTML body, so we only write it when there is HTML to
-	// scrape — see the same `writeHtml` gate as `writePageHtmlBlob`
-	// below.
-	await insertTags(pageId, page.meta, trx);
+	// Technology detection combines a Wappalyzer signal source (HTML-body
+	// independent — relies on `<script src>` / `<iframe src>` / window
+	// globals / response headers, so it fires for every page including
+	// external / metadata-only) with structural signals that scan
+	// `page.html` (naturally a no-op against the empty string an
+	// external/metadata-only scrape leaves it as). Both run unconditionally,
+	// unlike JSON-LD below, which lives inside the rendered HTML body and
+	// is only written when there is HTML to scrape — see the same
+	// `writeHtml` gate as `writePageHtmlBlob` below.
+	await insertTechnologies(pageId, page.html, page.meta, trx);
 	if (writeHtml) {
 		await insertJsonLd(pageId, page.meta, trx);
 	}
@@ -169,6 +172,16 @@ async function updatePageInTransaction(
 		await insertVideos(pageId, page.mainContents, trx);
 		await insertAudios(pageId, page.mainContents, trx);
 		await insertCanvases(pageId, page.mainContents, trx);
+		// Unlike the eight calls above, the source here is nitpicker's own
+		// `capture-custom-elements.ts` capture, not `page.mainContents` — see
+		// `insert-custom-elements.ts`. That capture can fail independently
+		// of `page.mainContents` (a separate `page.evaluate()` call), so
+		// `undefined` (capture failed) must skip the call entirely — passing
+		// a defaulted `[]` would look identical to "found zero" and, per
+		// `insertCustomElements`'s docs, wipe stale-but-still-good rows.
+		if (page.mainContentCustomElements !== undefined) {
+			await insertCustomElements(pageId, page.mainContentCustomElements, trx);
+		}
 	}
 
 	// Chain lineage propagates FROM the originating URL

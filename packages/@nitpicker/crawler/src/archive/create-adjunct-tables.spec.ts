@@ -12,7 +12,9 @@ import { fkParentTables } from './test-utils/fk-parent-tables.js';
 const ADJUNCT_TABLES = [
 	'page_errors',
 	'crawl_errors',
-	'page_tags',
+	'technology_signals',
+	'page_technologies',
+	'technology_js_scan_cache',
 	'page_jsonld',
 	'page_main_content_headings',
 	'page_main_content_images',
@@ -22,6 +24,7 @@ const ADJUNCT_TABLES = [
 	'page_main_content_videos',
 	'page_main_content_audios',
 	'page_main_content_canvases',
+	'page_main_content_custom_elements',
 	'inventory_runs',
 	'network_outages',
 	'dedupe_cap_events',
@@ -37,7 +40,8 @@ const ADJUNCT_TABLES = [
 
 const CONTENT_ITEMS_FK_TABLES = [
 	'page_errors',
-	'page_tags',
+	'technology_signals',
+	'page_technologies',
 	'page_jsonld',
 	'page_main_content_headings',
 	'page_main_content_images',
@@ -47,6 +51,7 @@ const CONTENT_ITEMS_FK_TABLES = [
 	'page_main_content_videos',
 	'page_main_content_audios',
 	'page_main_content_canvases',
+	'page_main_content_custom_elements',
 	'analysis_violations',
 	'page_html_ref',
 	'page_console_logs',
@@ -94,13 +99,14 @@ describe('createAdjunctTables', () => {
 	});
 
 	it('fills only the missing tables on a partially-provisioned archive', async () => {
-		// Simulate an archive where `page_tags` was provisioned by an earlier
-		// path (its FK target does not matter here) but the rest is absent.
+		// Simulate an archive where `technology_signals` was provisioned by
+		// an earlier path (its FK target does not matter here) but the rest
+		// is absent.
 		await db.raw(`
-			CREATE TABLE page_tags (
+			CREATE TABLE technology_signals (
 				id INTEGER PRIMARY KEY,
 				pageId INTEGER NOT NULL,
-				provider TEXT NOT NULL,
+				technology TEXT NOT NULL,
 				marker TEXT
 			)
 		`);
@@ -109,7 +115,7 @@ describe('createAdjunctTables', () => {
 			expect(await db.schema.hasTable(table), table).toBe(true);
 		}
 		// The pre-existing table was left untouched (its custom column survives).
-		expect(await db.schema.hasColumn('page_tags', 'marker')).toBe(true);
+		expect(await db.schema.hasColumn('technology_signals', 'marker')).toBe(true);
 	});
 
 	it('gives analysis_violations nullable line/col columns on fresh creation', async () => {
@@ -257,6 +263,47 @@ describe('createAdjunctTables', () => {
 				size_stored: 2,
 			}),
 		).rejects.toThrow();
+	});
+
+	it('declares technology_signals with the expected columns', async () => {
+		await createAdjunctTables(db);
+		expect(await db.schema.hasColumn('technology_signals', 'technology')).toBe(true);
+		expect(await db.schema.hasColumn('technology_signals', 'signalType')).toBe(true);
+		expect(await db.schema.hasColumn('technology_signals', 'evidence')).toBe(true);
+		expect(await db.schema.hasColumn('technology_signals', 'weight')).toBe(true);
+	});
+
+	it('rejects a duplicate page_technologies (pageId, technology) pair', async () => {
+		await db.raw('PRAGMA foreign_keys = OFF');
+		await createAdjunctTables(db);
+		await db('page_technologies').insert({
+			pageId: 1,
+			technology: 'Next.js',
+			category: 'JavaScript frameworks',
+			version: null,
+			confidence: 80,
+			signalCount: 2,
+		});
+		await expect(
+			db('page_technologies').insert({
+				pageId: 1,
+				technology: 'Next.js',
+				category: 'JavaScript frameworks',
+				version: null,
+				confidence: 60,
+				signalCount: 1,
+			}),
+		).rejects.toThrow(/UNIQUE constraint failed/);
+	});
+
+	it('declares technology_js_scan_cache with resourceId as PK, FK to resource_items', async () => {
+		await createAdjunctTables(db);
+		expect(await db.schema.hasColumn('technology_js_scan_cache', 'resourceId')).toBe(
+			true,
+		);
+		expect(await db.schema.hasColumn('technology_js_scan_cache', 'scannedAt')).toBe(true);
+		const parents = await fkParentTables(db, 'technology_js_scan_cache');
+		expect(parents.has('resource_items')).toBe(true);
 	});
 
 	it('enforces the content_items FK on insert (PRAGMA foreign_keys = ON)', async () => {

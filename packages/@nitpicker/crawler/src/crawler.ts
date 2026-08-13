@@ -37,9 +37,11 @@ export type {
 	TagRow,
 	TagRowForInsert,
 	JsonLdSummary,
-	TagsSummary,
-	TagInventoryEntry,
 	PageDenormalizedColumns,
+	TechnologySignalRow,
+	TechnologySignalRowForInsert,
+	PageTechnologyRow,
+	PageTechnologyRowForInsert,
 } from './archive/meta/types.js';
 export { IncompatibleArchiveError } from './archive/meta/types.js';
 export { REQUIRED_FORMAT_VERSION } from './archive/meta/assert-compatible-version.js';
@@ -68,6 +70,12 @@ export { computeOutageClampTimestamp } from './archive/db-ops/outages/compute-ou
 export { chooseProbeHost } from './crawler/choose-probe-host.js';
 export { assertChromeIsInstalled } from './crawler/assert-chrome-installed.js';
 export { computeFileSha256 } from './utils/compute-file-sha256.js';
+export { scanJsResourceForLicenseComment } from './crawler/scan-js-resource-for-license-comment.js';
+export type {
+	ScanJsResourcesForTechnologySignalsOptions,
+	ScanJsResourcesForTechnologySignalsResult,
+} from './crawler/scan-js-resources-for-technology-signals.js';
+export { scanJsResourcesForTechnologySignals } from './crawler/scan-js-resources-for-technology-signals.js';
 
 // 0.13 ref-table population (issue #191, epic #103). Exposed as the
 // public seam that the migration script (`scripts/migrate-to-0.13.mjs`)

@@ -55,6 +55,12 @@ vi.mock('../crawl/ensure-viewer-read-model-quietly.js', () => ({
 	ensureViewerReadModelQuietly: mockEnsureViewerReadModelQuietly,
 }));
 
+const mockScanJsResourcesQuietly = vi.fn().mockResolvedValue();
+
+vi.mock('../crawl/scan-js-resources-quietly.js', () => ({
+	scanJsResourcesQuietly: mockScanJsResourcesQuietly,
+}));
+
 const mockReadList = vi.fn().mockResolvedValue(['https://example.com/from-file']);
 
 /**

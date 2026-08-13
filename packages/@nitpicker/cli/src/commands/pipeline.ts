@@ -157,6 +157,11 @@ export const commandDef = {
 			group: 'Crawl options',
 			desc: 'Hard cap on the number of distinct URL shapes --dedupe-cap tracks at once; the least-recently-touched shape is evicted beyond this. Only relevant when --dedupe-cap is enabled.',
 		},
+		skipTechnologyJsScan: {
+			type: 'boolean',
+			group: 'Crawl options',
+			desc: 'Skip the post-crawl JS resource scan for technology license comments (avoids the extra network requests it makes against already-discovered JS resources)',
+		},
 		// analyze flags
 		all: {
 			type: 'boolean',
@@ -309,6 +314,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			diff: undefined,
 			dedupeCap: flags.dedupeCap,
 			dedupeMapCap: flags.dedupeMapCap,
+			skipTechnologyJsScan: flags.skipTechnologyJsScan,
 		});
 	} catch (error) {
 		if (

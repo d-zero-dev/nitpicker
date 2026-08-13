@@ -11,11 +11,12 @@ import type {
 	GetDuplicatesFastPathOptions,
 	FindMismatchesFastPathOptions,
 	ListConsoleLogsOptions,
+	TechnologySignalEntry,
 } from '@nitpicker/query';
 
 import {
 	countPagesByJsonLdType,
-	countPagesByTag,
+	countPagesByTechnology,
 	findDuplicateBodies,
 	getDuplicatesFastPath,
 	getErrorKindsFastPath,
@@ -28,10 +29,10 @@ import {
 	getPageHtml,
 	getPageJsonLd,
 	getPageJsonLdOverview,
-	getPageTags,
+	getPageTechnologies,
 	getResourceReferrers,
 	getSummaryFastPath,
-	getTagInventory,
+	getTechnologyInventoryFastPath,
 	getViolations,
 	listConsoleLogs,
 	listDedupeCapEvents,
@@ -44,7 +45,7 @@ import {
 	listNetworkOutages,
 	listPages,
 	listPagesByJsonLdType,
-	listPagesByTag,
+	listPagesByTechnology,
 	listResources,
 	listUnusedResources,
 } from '@nitpicker/query';
@@ -181,21 +182,29 @@ export async function dispatchQuery(
 		case 'error-kinds': {
 			return getErrorKindsFastPath(accessor);
 		}
-		case 'pages-by-tag': {
-			const { provider, externalId, limit, offset } = options as {
-				provider: string;
-				externalId?: string;
+		case 'pages-by-technology': {
+			const { technology, minConfidence, signalType, limit, offset } = options as {
+				technology: string;
+				minConfidence?: number;
+				signalType?: TechnologySignalEntry['signalType'];
 				limit?: number;
 				offset?: number;
 			};
-			return listPagesByTag(accessor, { provider, externalId, limit, offset });
+			return listPagesByTechnology(accessor, {
+				technology,
+				minConfidence,
+				signalType,
+				limit,
+				offset,
+			});
 		}
-		case 'count-pages-by-tag': {
-			const { provider, externalId } = options as {
-				provider: string;
-				externalId?: string;
+		case 'count-pages-by-technology': {
+			const { technology, minConfidence, signalType } = options as {
+				technology: string;
+				minConfidence?: number;
+				signalType?: TechnologySignalEntry['signalType'];
 			};
-			return countPagesByTag(accessor, { provider, externalId });
+			return countPagesByTechnology(accessor, { technology, minConfidence, signalType });
 		}
 		case 'pages-by-jsonld-type': {
 			const { type, limit, offset } = options as {
@@ -209,8 +218,8 @@ export async function dispatchQuery(
 			const { type } = options as { type: string };
 			return countPagesByJsonLdType(accessor, { type });
 		}
-		case 'tag-inventory': {
-			return getTagInventory(accessor);
+		case 'technology-inventory': {
+			return getTechnologyInventoryFastPath(accessor);
 		}
 		case 'page-jsonld': {
 			const { url, full } = options as { url: string; full?: boolean };
@@ -250,9 +259,9 @@ export async function dispatchQuery(
 			const { limit, offset } = options as { limit?: number; offset?: number };
 			return listNetworkOutages(accessor, { limit, offset });
 		}
-		case 'page-tags': {
+		case 'page-technologies': {
 			const { url } = options as { url: string };
-			return getPageTags(accessor, url);
+			return getPageTechnologies(accessor, url);
 		}
 		case 'console-logs': {
 			return listConsoleLogs(accessor, options as ListConsoleLogsOptions);

@@ -3,8 +3,8 @@ import type { Hono } from 'hono';
 
 /**
  * Registers routes for testing HTML meta tag extraction across the v2
- * schema's flat columns + meta_extras catch-all + page_jsonld + page_tags
- * coverage. Each route renders a deterministic HTML snippet — the e2e
+ * schema's flat columns + meta_extras catch-all + page_jsonld coverage.
+ * Each route renders a deterministic HTML snippet — the e2e
  * tests in `meta.e2e.ts` assert against these exact strings.
  * @param app - The Hono application instance to register routes on.
  * @param portRef - Holder for the server's actual listening port, used to

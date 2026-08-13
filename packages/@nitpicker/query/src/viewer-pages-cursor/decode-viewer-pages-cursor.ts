@@ -23,6 +23,7 @@ export interface ExpectedViewerPagesCursor {
 		| 'mainContentVideoCount'
 		| 'mainContentAudioCount'
 		| 'mainContentCanvasCount'
+		| 'mainContentCustomElementCount'
 		| 'scrollHeightDesktop'
 		| 'scrollHeightMobile'
 		| 'consoleErrorCount';

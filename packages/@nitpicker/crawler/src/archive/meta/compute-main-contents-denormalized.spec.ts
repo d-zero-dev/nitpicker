@@ -52,9 +52,37 @@ describe('computeMainContentsDenormalized', () => {
 			main_content_video_count: null,
 			main_content_audio_count: null,
 			main_content_canvas_count: null,
+			main_content_custom_element_count: null,
 			scroll_height_desktop: null,
 			scroll_height_mobile: null,
 		});
+	});
+
+	it('returns null main_content_custom_element_count when mainContents is null even if customElementCount is passed', () => {
+		const result = computeMainContentsDenormalized(null, scrollHeight, 3);
+		expect(result.main_content_custom_element_count).toBeNull();
+	});
+
+	it('returns null main_content_custom_element_count when customElementCount is undefined or null', () => {
+		expect(
+			computeMainContentsDenormalized(makeMainContents(), scrollHeight)
+				.main_content_custom_element_count,
+		).toBeNull();
+		expect(
+			computeMainContentsDenormalized(makeMainContents(), scrollHeight, null)
+				.main_content_custom_element_count,
+		).toBeNull();
+	});
+
+	it('reflects the captured custom element count, including zero', () => {
+		expect(
+			computeMainContentsDenormalized(makeMainContents(), scrollHeight, 0)
+				.main_content_custom_element_count,
+		).toBe(0);
+		expect(
+			computeMainContentsDenormalized(makeMainContents(), scrollHeight, 2)
+				.main_content_custom_element_count,
+		).toBe(2);
 	});
 
 	it('returns null scroll heights when scrollHeight is null', () => {

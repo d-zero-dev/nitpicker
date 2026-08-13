@@ -35,6 +35,7 @@ import { crawlerLog } from '../debug.js';
 
 import { buildJsRedirectEdge } from './build-js-redirect-edge.js';
 import { buildRedirectEvent } from './build-redirect-event.js';
+import { captureCustomElements } from './capture-custom-elements.js';
 import { captureImageDomPaths } from './capture-image-dom-paths.js';
 import { chooseProbeHost } from './choose-probe-host.js';
 import { createChangePhaseHandler } from './create-change-phase-handler.js';
@@ -2175,19 +2176,44 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			// `image_items.dom_path_text_id` resolution at write time; a
 			// capture failure (or a page with no images) falls back to the
 			// synthetic `unknown/<n>` markers, so this stays best-effort.
-			if (
+			// Image dom-path capture and custom-element (Web Component)
+			// capture are two independent `page.evaluate()` round-trips over
+			// the same still-alive `page` — neither reads the other's
+			// output, so they run concurrently instead of paying both
+			// round-trips' latency in sequence. Each keeps its own
+			// pre-existing gate (image dom-paths on a non-empty imageList,
+			// custom elements on a resolved main-content region — unrelated
+			// to each other, so neither gate is relaxed by running together).
+			// Custom-element capture exists because beholder's
+			// `MainContentsData` has no `customElements` category, so
+			// nitpicker captures it itself.
+			const shouldCaptureImageDomPaths =
 				result.type === 'success' &&
-				result.pageData &&
-				result.pageData.imageList.length > 0
-			) {
-				const imageDomPaths = await captureImageDomPaths(page);
-				if (imageDomPaths !== undefined) {
-					const withDomPaths: PageDataWithDomPaths = {
-						...result.pageData,
-						imageDomPaths,
-					};
-					result.pageData = withDomPaths;
-				}
+				result.pageData !== undefined &&
+				result.pageData.imageList.length > 0;
+			const shouldCaptureCustomElements =
+				result.type === 'success' &&
+				result.pageData !== undefined &&
+				result.pageData.mainContents !== null;
+			const [imageDomPaths, mainContentCustomElements] = await Promise.all([
+				shouldCaptureImageDomPaths ? captureImageDomPaths(page) : undefined,
+				shouldCaptureCustomElements
+					? captureCustomElements(page, this.#options.mainContentSelector)
+					: undefined,
+			]);
+			if (imageDomPaths !== undefined && result.pageData) {
+				const withDomPaths: PageDataWithDomPaths = {
+					...result.pageData,
+					imageDomPaths,
+				};
+				result.pageData = withDomPaths;
+			}
+			if (mainContentCustomElements !== undefined && result.pageData) {
+				const withCustomElements: PageDataWithDomPaths = {
+					...result.pageData,
+					mainContentCustomElements,
+				};
+				result.pageData = withCustomElements;
 			}
 
 			update('Closing browser%dots%');

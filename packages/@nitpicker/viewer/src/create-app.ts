@@ -23,10 +23,12 @@ import { registerNetworkOutagesRoute } from './routes/register-network-outages-r
 import { registerPageDetailRoute } from './routes/register-page-detail-route.js';
 import { registerPageHtmlRoute } from './routes/register-page-html-route.js';
 import { registerPageMainContentsRoute } from './routes/register-page-main-contents-route.js';
+import { registerPageTechnologiesRoute } from './routes/register-page-technologies-route.js';
 import { registerPagesRoute } from './routes/register-pages-route.js';
 import { registerResourceReferrersRoute } from './routes/register-resource-referrers-route.js';
 import { registerResourcesRoute } from './routes/register-resources-route.js';
 import { registerSummaryRoute } from './routes/register-summary-route.js';
+import { registerTechnologiesRoute } from './routes/register-technologies-route.js';
 import { registerTemplateClustersRoute } from './routes/register-template-clusters-route.js';
 import { registerUnusedResourcesRoute } from './routes/register-unused-resources-route.js';
 import { registerViolationsRoute } from './routes/register-violations-route.js';
@@ -57,6 +59,8 @@ export function createApp(options: CreateAppOptions): Hono {
 	registerInboundLinksRoute(app, context);
 	registerPageHtmlRoute(app, context);
 	registerPageMainContentsRoute(app, context);
+	registerPageTechnologiesRoute(app, context);
+	registerTechnologiesRoute(app, context);
 	registerDirectoryTreeRoute(app, context);
 	registerDirectoryTreeChildrenRoute(app, context);
 	registerDirectoryTreePagesRoute(app, context);

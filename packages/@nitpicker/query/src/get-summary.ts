@@ -5,6 +5,7 @@ import type {
 	FailureAttribution,
 	StatusCount,
 	SummaryResult,
+	TechnologyCount,
 } from './types.js';
 import type { ArchiveAccessor, ErrorKind, PageSource } from '@nitpicker/crawler';
 
@@ -88,6 +89,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		pageRows,
 		metaRows,
 		contentTypeRows,
+		technologyRows,
 		failedPageIdRows,
 		failedPageMessages,
 		outageWindows,
@@ -180,6 +182,12 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 				isExternal: 0 | 1;
 				count: number | string;
 			}[]
+		>,
+		knex('page_technologies')
+			.select('technology')
+			.countDistinct({ pageCount: 'pageId' })
+			.groupBy('technology') as Promise<
+			{ technology: string; pageCount: number | string }[]
 		>,
 		failedPageIdRowsPromise,
 		failedPageMessagesPromise,
@@ -337,6 +345,18 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 			return a.category.localeCompare(b.category);
 		});
 
+	const technologyDistribution: TechnologyCount[] = technologyRows
+		.map((row) => ({
+			technology: row.technology,
+			pageCount:
+				typeof row.pageCount === 'number'
+					? row.pageCount
+					: Number.parseInt(row.pageCount, 10),
+		}))
+		.toSorted(
+			(a, b) => b.pageCount - a.pageCount || a.technology.localeCompare(b.technology),
+		);
+
 	return {
 		baseUrl,
 		roots,
@@ -352,6 +372,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		statusDistribution,
 		metadataFulfillment,
 		contentTypeDistribution,
+		technologyDistribution,
 		networkOutageAffectedFailures,
 		consoleLogCounts,
 	};

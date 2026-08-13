@@ -11,6 +11,8 @@ import { migrateInventoryRunsInvalidSkipped } from '../../migrate-inventory-runs
 import { migrateMainContentsColumns } from '../../migrate-main-contents-columns.js';
 import { migratePageMetaBodyHash } from '../../migrate-page-meta-body-hash.js';
 import { migratePageMetaConsoleErrorCount } from '../../migrate-page-meta-console-error-count.js';
+import { migratePageMetaCustomElementCount } from '../../migrate-page-meta-custom-element-count.js';
+import { migratePageTagsToPageTechnologies } from '../../migrate-page-tags-to-page-technologies.js';
 import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-network-outages.js';
 
 /**
@@ -33,7 +35,15 @@ import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-networ
  * additions to an existing 0.13 table are therefore the one case that still
  * needs an explicit `hasColumn`-guarded `ALTER TABLE` here (`migrateInfoRoots`,
  * `migrateMainContentsColumns`, `migratePageMetaBodyHash`,
- * `migratePageMetaConsoleErrorCount`, `migrateContentItemsAliasOfId`,
+ * `migratePageMetaConsoleErrorCount`, `migratePageMetaCustomElementCount`,
+ * `migrateContentItemsAliasOfId`,
+ *
+ * `migratePageTagsToPageTechnologies` is the one exception to "column adds
+ * only": it converts `page_tags` (removed) rows into `technology_signals`/
+ * `page_technologies` and DROPS the old table — a one-time table-level ETL,
+ * not a column add, but it belongs in this same boot phase for the same
+ * reason (self-healing an old archive's schema before any reader runs).
+ *
  * `migrateContentItemsDedupeCapEventId`, `migrateInventoryRunsInvalidSkipped`,
  * `migrateInventoryRunsExcludeSkipped`) rather than a DDL-string change alone.
  *
@@ -72,6 +82,10 @@ export async function init(knex: Knex, readOnly: boolean): Promise<void> {
 	await migrateMainContentsColumns(knex);
 	await migratePageMetaBodyHash(knex);
 	await migratePageMetaConsoleErrorCount(knex);
+	await migratePageMetaCustomElementCount(knex);
+	// Table-level migration (converts + drops page_tags), not a column
+	// add — see its own JSDoc for why it still belongs in this boot phase.
+	await migratePageTagsToPageTechnologies(knex);
 	await migrateContentItemsAliasOfId(knex);
 	// Runs after `initSchema` above, which already created
 	// `dedupe_cap_events` (an adjunct table) unconditionally — so the new

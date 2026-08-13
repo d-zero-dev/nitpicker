@@ -33,6 +33,7 @@ describe('main-content extraction (real headless-browser DOM heuristic, issue: b
 		expect(page.mainContentVideoCount).toBe(1);
 		expect(page.mainContentAudioCount).toBe(1);
 		expect(page.mainContentCanvasCount).toBe(1);
+		expect(page.mainContentCustomElementCount).toBe(1);
 		expect(page.mainContentWordCount).toBeGreaterThan(0);
 		expect(page.mainContentBodyWordCount).toBeGreaterThanOrEqual(
 			page.mainContentWordCount!,
@@ -41,7 +42,7 @@ describe('main-content extraction (real headless-browser DOM heuristic, issue: b
 		expect(page.scrollHeightMobile).toBeGreaterThan(0);
 	});
 
-	it('populates all 8 page_main_content_* child tables with real DOM values', async () => {
+	it('populates all 9 page_main_content_* child tables with real DOM values', async () => {
 		const pages = await result.accessor.getPages('page');
 		const page = pages.find((p) => p.url.pathname === '/main-content/')!;
 
@@ -88,5 +89,10 @@ describe('main-content extraction (real headless-browser DOM heuristic, issue: b
 
 		const canvases = await page.getCanvases();
 		expect(canvases).toEqual([expect.objectContaining({ width: 300, height: 150 })]);
+
+		const customElements = await page.getCustomElements();
+		expect(customElements).toHaveLength(1);
+		expect(customElements[0]!.nodeName).toBe('MY-WIDGET');
+		expect(customElements[0]!.elementId).toBe('widget-1');
 	});
 });

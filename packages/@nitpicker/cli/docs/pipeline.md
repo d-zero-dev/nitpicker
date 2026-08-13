@@ -23,28 +23,29 @@ crawlステップの前提条件（Puppeteer用Chromeが必要）は [crawl の�
 
 ### crawl系
 
-| オプション                                 | 型                 | 説明                                                  |
-| ------------------------------------------ | ------------------ | ----------------------------------------------------- |
-| `--interval`, `-I`                         | number             | リクエスト間隔をミリ秒で指定                          |
-| `--image` / `--no-image`                   | boolean            | 画像を取得するか。既定は有効                          |
-| `--fetch-external` / `--no-fetch-external` | boolean            | 外部リンクを取得するか。既定は有効                    |
-| `--parallels`, `-P`                        | number             | 並列スクレイピング数                                  |
-| `--recursive` / `--no-recursive`           | boolean            | 再帰クロールするか。既定は有効                        |
-| `--exclude`                                | string, repeatable | 除外するページURLパスのglob                           |
-| `--exclude-keyword`                        | string, repeatable | ページ本文に含まれる除外キーワード                    |
-| `--exclude-url`                            | string, repeatable | 除外する外部URL prefix                                |
-| `--disable-queries`, `-Q`                  | boolean            | URLのクエリ文字列を無効化                             |
-| `--image-file-size-threshold`              | number             | 画像ファイルサイズのしきい値                          |
-| `--single`                                 | boolean            | 単一ページモード                                      |
-| `--max-excluded-depth`                     | number             | 指定深さを超えるクロールを避ける                      |
-| `--retry`                                  | number             | URLごとのスクレイプ失敗リトライ回数。既定は `3`       |
-| `--list`                                   | string, repeatable | 指定URLリストだけをクロール                           |
-| `--list-file`                              | string             | URLリストファイルだけをクロール                       |
-| `--user-agent`                             | string             | HTTPリクエストのUser-Agent                            |
-| `--ignore-robots`                          | boolean            | robots.txt制限を無視                                  |
-| `--main-content-selector`                  | string             | メインコンテンツ領域の自動検出を上書きするCSSセレクタ |
-| `--output`, `-o`                           | string             | 出力 `.nitpicker` ファイルパス                        |
-| `--strict`                                 | boolean            | 外部リンクエラーを致命的エラーとして扱う              |
+| オプション                                 | 型                 | 説明                                                                                   |
+| ------------------------------------------ | ------------------ | -------------------------------------------------------------------------------------- |
+| `--interval`, `-I`                         | number             | リクエスト間隔をミリ秒で指定                                                           |
+| `--image` / `--no-image`                   | boolean            | 画像を取得するか。既定は有効                                                           |
+| `--fetch-external` / `--no-fetch-external` | boolean            | 外部リンクを取得するか。既定は有効                                                     |
+| `--parallels`, `-P`                        | number             | 並列スクレイピング数                                                                   |
+| `--recursive` / `--no-recursive`           | boolean            | 再帰クロールするか。既定は有効                                                         |
+| `--exclude`                                | string, repeatable | 除外するページURLパスのglob                                                            |
+| `--exclude-keyword`                        | string, repeatable | ページ本文に含まれる除外キーワード                                                     |
+| `--exclude-url`                            | string, repeatable | 除外する外部URL prefix                                                                 |
+| `--disable-queries`, `-Q`                  | boolean            | URLのクエリ文字列を無効化                                                              |
+| `--image-file-size-threshold`              | number             | 画像ファイルサイズのしきい値                                                           |
+| `--single`                                 | boolean            | 単一ページモード                                                                       |
+| `--max-excluded-depth`                     | number             | 指定深さを超えるクロールを避ける                                                       |
+| `--retry`                                  | number             | URLごとのスクレイプ失敗リトライ回数。既定は `3`                                        |
+| `--list`                                   | string, repeatable | 指定URLリストだけをクロール                                                            |
+| `--list-file`                              | string             | URLリストファイルだけをクロール                                                        |
+| `--user-agent`                             | string             | HTTPリクエストのUser-Agent                                                             |
+| `--ignore-robots`                          | boolean            | robots.txt制限を無視                                                                   |
+| `--skip-technology-js-scan`                | boolean            | クロール完了後のJSリソース再取得（技術スタックのライセンスコメントスキャン）をスキップ |
+| `--main-content-selector`                  | string             | メインコンテンツ領域の自動検出を上書きするCSSセレクタ                                  |
+| `--output`, `-o`                           | string             | 出力 `.nitpicker` ファイルパス                                                         |
+| `--strict`                                 | boolean            | 外部リンクエラーを致命的エラーとして扱う                                               |
 
 ### analyze系
 

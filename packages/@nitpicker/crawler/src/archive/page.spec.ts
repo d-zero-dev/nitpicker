@@ -110,6 +110,7 @@ function createRawPage(overrides: Partial<DB_Page> = {}): DB_Page {
 		main_content_video_count: null,
 		main_content_audio_count: null,
 		main_content_canvas_count: null,
+		main_content_custom_element_count: null,
 		scroll_height_desktop: null,
 		scroll_height_mobile: null,
 		meta_extras: null,
@@ -269,6 +270,7 @@ describe('Page', () => {
 					main_content_video_count: 1,
 					main_content_audio_count: 1,
 					main_content_canvas_count: 1,
+					main_content_custom_element_count: 2,
 				}),
 			);
 			expect(page.mainContentWordCount).toBe(100);
@@ -281,6 +283,7 @@ describe('Page', () => {
 			expect(page.mainContentVideoCount).toBe(1);
 			expect(page.mainContentAudioCount).toBe(1);
 			expect(page.mainContentCanvasCount).toBe(1);
+			expect(page.mainContentCustomElementCount).toBe(2);
 		});
 
 		it('returns null main-content aggregate counts for an unrendered page', () => {
@@ -295,6 +298,7 @@ describe('Page', () => {
 			expect(page.mainContentVideoCount).toBeNull();
 			expect(page.mainContentAudioCount).toBeNull();
 			expect(page.mainContentCanvasCount).toBeNull();
+			expect(page.mainContentCustomElementCount).toBeNull();
 		});
 
 		it('returns scrollHeightDesktop/Mobile from raw data', () => {

@@ -545,6 +545,22 @@ export interface CrawlerEventTypes {
 }
 
 /**
+ * One Web Component (custom element) found inside a page's main-content
+ * region by {@link ./collect-custom-elements.ts}. Unlike beholder's eight
+ * `MainContentsData` categories (headings/images/tables/buttons/iframes/
+ * videos/audios/canvases), this is captured independently by nitpicker
+ * itself — see {@link ./capture-custom-elements.ts} for why.
+ */
+export interface MainContentCustomElementCandidate {
+	/** The element's `nodeName` (always upper-cased in an HTML document, e.g. `MY-WIDGET`). */
+	nodeName: string;
+	/** The element's `id` attribute, or `null` when absent. */
+	elementId: string | null;
+	/** The element's class list, in DOM order. */
+	classList: string[];
+}
+
+/**
  * Tunables for `NetworkOutageDetector`.
  */
 export interface NetworkOutageDetectorOptions {

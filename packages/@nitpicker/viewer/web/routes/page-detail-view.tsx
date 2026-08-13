@@ -4,11 +4,13 @@ import { useInboundLinks } from '../api/use-inbound-links.js';
 import { usePageDetail } from '../api/use-page-detail.js';
 import { usePageHtml } from '../api/use-page-html.js';
 import { usePageMainContents } from '../api/use-page-main-contents.js';
+import { usePageTechnologies } from '../api/use-page-technologies.js';
 import { AppLink } from '../components/app-link.js';
 import { AudioList } from '../components/audio-list.js';
 import { ButtonList } from '../components/button-list.js';
 import { CanvasList } from '../components/canvas-list.js';
 import { ConsoleLogsList } from '../components/console-logs-list.js';
+import { CustomElementList } from '../components/custom-element-list.js';
 import { HeadingList } from '../components/heading-list.js';
 import { HtmlPreview } from '../components/html-preview.js';
 import { IframeList } from '../components/iframe-list.js';
@@ -19,6 +21,7 @@ import { OutboundLinksList } from '../components/outbound-links-list.js';
 import { PageMetadataGrid } from '../components/page-metadata-grid.js';
 import { RedirectFromList } from '../components/redirect-from-list.js';
 import { TableList } from '../components/table-list.js';
+import { TechnologyStarChart } from '../components/technology-star-chart.js';
 import { VideoList } from '../components/video-list.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useI18n } from '../i18n/use-i18n.js';
@@ -43,6 +46,7 @@ export function PageDetailView() {
 	// `data` is still undefined and its eventual `isExternal` value is unknown.
 	const html = usePageHtml(data && !data.isExternal ? url : '');
 	const mainContents = usePageMainContents(data && !data.isExternal ? url : '');
+	const technologies = usePageTechnologies(url);
 	// Count-only read (`limit: 0`) — the full inbound-link window lives at
 	// `/pages/inbound-links`, not here (see this component's docs).
 	const {
@@ -117,6 +121,7 @@ export function PageDetailView() {
 							<VideoList videos={mainContents.data.videos} />
 							<AudioList audios={mainContents.data.audios} />
 							<CanvasList canvases={mainContents.data.canvases} />
+							<CustomElementList customElements={mainContents.data.customElements} />
 						</>
 					) : (
 						!mainContents.isLoading && (
@@ -125,6 +130,12 @@ export function PageDetailView() {
 					)}
 				</>
 			)}
+
+			<TechnologyStarChart
+				data={technologies.data}
+				isLoading={technologies.isLoading}
+				error={technologies.error}
+			/>
 
 			{/*
 			 * Known limitation: gating on `isExternal` (rather than "does a

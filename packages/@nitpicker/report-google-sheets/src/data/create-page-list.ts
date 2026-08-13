@@ -137,6 +137,7 @@ export const createPageList: CreateSheet = (reports) => {
 				'main_content_video_count',
 				'main_content_audio_count',
 				'main_content_canvas_count',
+				'main_content_custom_element_count',
 				'scroll_height_desktop',
 				'scroll_height_mobile',
 			];
@@ -350,6 +351,7 @@ export const createPageList: CreateSheet = (reports) => {
 				createCellData({ value: page.mainContentVideoCount }, defaultCellFormat),
 				createCellData({ value: page.mainContentAudioCount }, defaultCellFormat),
 				createCellData({ value: page.mainContentCanvasCount }, defaultCellFormat),
+				createCellData({ value: page.mainContentCustomElementCount }, defaultCellFormat),
 				createCellData({ value: page.scrollHeightDesktop }, defaultCellFormat),
 				createCellData({ value: page.scrollHeightMobile }, defaultCellFormat),
 			];

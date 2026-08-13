@@ -17,12 +17,12 @@ export type QuerySubCommand =
 	| 'headers'
 	| 'resource-referrers'
 	| 'error-kinds'
-	| 'pages-by-tag'
+	| 'pages-by-technology'
 	| 'pages-by-jsonld-type'
-	| 'tag-inventory'
+	| 'technology-inventory'
 	| 'page-jsonld'
-	| 'page-tags'
-	| 'count-pages-by-tag'
+	| 'page-technologies'
+	| 'count-pages-by-technology'
 	| 'count-pages-by-jsonld-type'
 	| 'page-jsonld-overview'
 	| 'isolated-pages'
@@ -55,12 +55,12 @@ export const VALID_SUB_COMMANDS = [
 	'headers',
 	'resource-referrers',
 	'error-kinds',
-	'pages-by-tag',
+	'pages-by-technology',
 	'pages-by-jsonld-type',
-	'tag-inventory',
+	'technology-inventory',
 	'page-jsonld',
-	'page-tags',
-	'count-pages-by-tag',
+	'page-technologies',
+	'count-pages-by-technology',
 	'count-pages-by-jsonld-type',
 	'page-jsonld-overview',
 	'isolated-pages',

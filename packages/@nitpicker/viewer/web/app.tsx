@@ -23,6 +23,7 @@ import { PageDetailView } from './routes/page-detail-view.js';
 import { PagesView } from './routes/pages-view.js';
 import { ResourcesView } from './routes/resources-view.js';
 import { SummaryView } from './routes/summary-view.js';
+import { TechnologiesView } from './routes/technologies-view.js';
 import { TemplateClustersView } from './routes/template-clusters-view.js';
 import { UnusedResourcesView } from './routes/unused-resources-view.js';
 import { ViolationsView } from './routes/violations-view.js';
@@ -77,6 +78,7 @@ export function App() {
 									<Route path="/pages/detail" element={<PageDetailView />} />
 									<Route path="/pages/inbound-links" element={<InboundLinksView />} />
 									<Route path="/template-clusters" element={<TemplateClustersView />} />
+									<Route path="/technologies" element={<TechnologiesView />} />
 									<Route path="/directory-tree" element={<DirectoryTreeView />} />
 									<Route path="/resources" element={<ResourcesView />} />
 									<Route path="/images" element={<ImagesView />} />

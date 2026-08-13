@@ -28,6 +28,9 @@ describe('toPageSortBy', () => {
 		expect(toPageSortBy('mainContentVideoCount')).toBe('mainContentVideoCount');
 		expect(toPageSortBy('mainContentAudioCount')).toBe('mainContentAudioCount');
 		expect(toPageSortBy('mainContentCanvasCount')).toBe('mainContentCanvasCount');
+		expect(toPageSortBy('mainContentCustomElementCount')).toBe(
+			'mainContentCustomElementCount',
+		);
 		expect(toPageSortBy('scrollHeightDesktop')).toBe('scrollHeightDesktop');
 		expect(toPageSortBy('scrollHeightMobile')).toBe('scrollHeightMobile');
 	});

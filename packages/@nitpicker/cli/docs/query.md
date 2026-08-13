@@ -46,14 +46,14 @@ npx @nitpicker/cli query ./site.nitpicker page-detail --url https://example.com/
 | `headers`                    | セキュリティヘッダー確認                                               |
 | `resource-referrers`         | 指定リソースの参照元ページ                                             |
 | `error-kinds`                | クロール失敗原因の集計                                                 |
-| `pages-by-tag`               | Wappalyzerタグに一致するページ                                         |
-| `count-pages-by-tag`         | Wappalyzerタグに一致するページ数                                       |
+| `pages-by-technology`        | 検出された技術スタックに一致するページ                                 |
+| `count-pages-by-technology`  | 検出された技術スタックに一致するページ数                               |
 | `pages-by-jsonld-type`       | JSON-LD typeに一致するページ                                           |
 | `count-pages-by-jsonld-type` | JSON-LD typeに一致するページ数                                         |
-| `tag-inventory`              | 検出タグの一覧                                                         |
+| `technology-inventory`       | サイト全体の技術スタック検出一覧（技術別ページ数・平均確信度）         |
 | `page-jsonld`                | 指定URLのJSON-LD                                                       |
 | `page-jsonld-overview`       | 指定URLのJSON-LD概要                                                   |
-| `page-tags`                  | 指定URLの検出タグ                                                      |
+| `page-technologies`          | 指定URLの検出技術スタック（星取り表、confidence・signals明細付き）     |
 | `isolated-pages`             | inventory由来の完全孤立ページ                                          |
 | `isolated-clusters`          | inventory由来の孤立クラスタ                                            |
 | `get-isolated-cluster`       | 指定代表URLの孤立クラスタ詳細                                          |
@@ -246,19 +246,20 @@ npx @nitpicker/cli query ./site.nitpicker error-kinds --pretty
 
 追加オプションはありません。クロール失敗をhostとkind単位で集計します。
 
-### `pages-by-tag` / `count-pages-by-tag`
+### `pages-by-technology` / `count-pages-by-technology`
 
 ```sh
-npx @nitpicker/cli query ./site.nitpicker pages-by-tag --provider GoogleTagManager --pretty
-npx @nitpicker/cli query ./site.nitpicker count-pages-by-tag --provider GoogleTagManager --external-id GTM-XXXX
+npx @nitpicker/cli query ./site.nitpicker pages-by-technology --technology "Next.js" --pretty
+npx @nitpicker/cli query ./site.nitpicker count-pages-by-technology --technology "Next.js" --min-confidence 50
 ```
 
-| オプション       | 型               | 説明                          |
-| ---------------- | ---------------- | ----------------------------- |
-| `--provider`     | string, required | Wappalyzer provider名         |
-| `--external-id`  | string           | GTM-XXXXなどの外部識別子      |
-| `--limit`, `-l`  | number           | `pages-by-tag` の最大取得件数 |
-| `--offset`, `-o` | number           | `pages-by-tag` のスキップ件数 |
+| オプション         | 型               | 説明                                                                                                                                                 |
+| ------------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--technology`     | string, required | 技術名（例: `Next.js`, `Google Tag Manager`）                                                                                                        |
+| `--min-confidence` | number           | `page_technologies.confidence` の下限（0-100）                                                                                                       |
+| `--signal-type`    | string           | 検出シグナル種別で絞り込み（`wappalyzer` / `meta-generator` / `html-marker` / `url-pattern` / `scoped-attr` / `weak-marker` / `js-license-comment`） |
+| `--limit`, `-l`    | number           | `pages-by-technology` の最大取得件数                                                                                                                 |
+| `--offset`, `-o`   | number           | `pages-by-technology` のスキップ件数                                                                                                                 |
 
 ### `pages-by-jsonld-type` / `count-pages-by-jsonld-type`
 
@@ -273,13 +274,13 @@ npx @nitpicker/cli query ./site.nitpicker count-pages-by-jsonld-type --type Prod
 | `--limit`, `-l`  | number           | `pages-by-jsonld-type` の最大取得件数 |
 | `--offset`, `-o` | number           | `pages-by-jsonld-type` のスキップ件数 |
 
-### `tag-inventory`
+### `technology-inventory`
 
 ```sh
-npx @nitpicker/cli query ./site.nitpicker tag-inventory --pretty
+npx @nitpicker/cli query ./site.nitpicker technology-inventory --pretty
 ```
 
-追加オプションはありません。
+追加オプションはありません。サイト全体で検出された技術ごとにページ数と平均確信度を返します。
 
 ### `page-jsonld`
 
@@ -303,15 +304,17 @@ npx @nitpicker/cli query ./site.nitpicker page-jsonld-overview --url https://exa
 | ---------- | ---------------- | ------------- |
 | `--url`    | string, required | 対象ページURL |
 
-### `page-tags`
+### `page-technologies`
 
 ```sh
-npx @nitpicker/cli query ./site.nitpicker page-tags --url https://example.com/ --pretty
+npx @nitpicker/cli query ./site.nitpicker page-technologies --url https://example.com/ --pretty
 ```
 
 | オプション | 型               | 説明          |
 | ---------- | ---------------- | ------------- |
 | `--url`    | string, required | 対象ページURL |
+
+指定URLで検出された全技術をconfidence降順で返します（各技術のcategory/version、検出に使われた全signals明細を含む「星取り表」）。
 
 ### `isolated-pages`
 
@@ -405,39 +408,40 @@ npx @nitpicker/cli query ./site.nitpicker page-console-logs --url https://exampl
 
 ## 全オプション一覧
 
-| オプション                   | 型      | 主な用途                                                                                                                                     |
-| ---------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--limit`, `-l`              | number  | ページネーション                                                                                                                             |
-| `--offset`, `-o`             | number  | ページネーション                                                                                                                             |
-| `--cursor`                   | string  | `resource-referrers` / `duplicates` / `mismatches` / `inbound-links`                                                                         |
-| `--direction`                | string  | `duplicates` / `mismatches` / `inbound-links`（`--cursor` と併用）                                                                           |
-| `--url`                      | string  | `page-detail` / `inbound-links` / `html` / `resource-referrers` / `page-jsonld` / `page-jsonld-overview` / `page-tags` / `page-console-logs` |
-| `--status`                   | number  | `pages`                                                                                                                                      |
-| `--status-min`               | number  | `pages`                                                                                                                                      |
-| `--status-max`               | number  | `pages`                                                                                                                                      |
-| `--is-external`              | boolean | `pages` / `resources`                                                                                                                        |
-| `--missing-title`            | boolean | `pages`                                                                                                                                      |
-| `--missing-description`      | boolean | `pages`                                                                                                                                      |
-| `--noindex`                  | boolean | `pages`                                                                                                                                      |
-| `--url-pattern`              | string  | `pages` / `images`                                                                                                                           |
-| `--directory`                | string  | `pages`                                                                                                                                      |
-| `--sort-by`                  | string  | `pages` / `console-logs`                                                                                                                     |
-| `--sort-order`               | string  | `pages` / `console-logs`                                                                                                                     |
-| `--type`                     | string  | `links` / `mismatches` / JSON-LD type系 / `console-logs`                                                                                     |
-| `--content-type`             | string  | `resources`                                                                                                                                  |
-| `--content-type-category`    | string  | `pages`                                                                                                                                      |
-| `--missing-alt`              | boolean | `images`                                                                                                                                     |
-| `--missing-dimensions`       | boolean | `images`                                                                                                                                     |
-| `--oversized-threshold`      | number  | `images`                                                                                                                                     |
-| `--validator`                | string  | `violations`                                                                                                                                 |
-| `--severity`                 | string  | `violations`                                                                                                                                 |
-| `--rule`                     | string  | `violations`                                                                                                                                 |
-| `--field`                    | string  | `duplicates`                                                                                                                                 |
-| `--missing-only`             | boolean | `headers`                                                                                                                                    |
-| `--max-length`               | number  | `html`                                                                                                                                       |
-| `--provider`                 | string  | tag系                                                                                                                                        |
-| `--external-id`              | string  | tag系                                                                                                                                        |
-| `--full`                     | boolean | `page-jsonld`                                                                                                                                |
-| `--representative-url`       | string  | `get-isolated-cluster`                                                                                                                       |
-| `--include-redirect-sources` | boolean | `links`                                                                                                                                      |
-| `--pretty`                   | boolean | JSON整形                                                                                                                                     |
+| オプション                   | 型      | 主な用途                                                                                                                                             |
+| ---------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--limit`, `-l`              | number  | ページネーション                                                                                                                                     |
+| `--offset`, `-o`             | number  | ページネーション                                                                                                                                     |
+| `--cursor`                   | string  | `resource-referrers` / `duplicates` / `mismatches` / `inbound-links`                                                                                 |
+| `--direction`                | string  | `duplicates` / `mismatches` / `inbound-links`（`--cursor` と併用）                                                                                   |
+| `--url`                      | string  | `page-detail` / `inbound-links` / `html` / `resource-referrers` / `page-jsonld` / `page-jsonld-overview` / `page-technologies` / `page-console-logs` |
+| `--status`                   | number  | `pages`                                                                                                                                              |
+| `--status-min`               | number  | `pages`                                                                                                                                              |
+| `--status-max`               | number  | `pages`                                                                                                                                              |
+| `--is-external`              | boolean | `pages` / `resources`                                                                                                                                |
+| `--missing-title`            | boolean | `pages`                                                                                                                                              |
+| `--missing-description`      | boolean | `pages`                                                                                                                                              |
+| `--noindex`                  | boolean | `pages`                                                                                                                                              |
+| `--url-pattern`              | string  | `pages` / `images`                                                                                                                                   |
+| `--directory`                | string  | `pages`                                                                                                                                              |
+| `--sort-by`                  | string  | `pages` / `console-logs`                                                                                                                             |
+| `--sort-order`               | string  | `pages` / `console-logs`                                                                                                                             |
+| `--type`                     | string  | `links` / `mismatches` / JSON-LD type系 / `console-logs`                                                                                             |
+| `--content-type`             | string  | `resources`                                                                                                                                          |
+| `--content-type-category`    | string  | `pages`                                                                                                                                              |
+| `--missing-alt`              | boolean | `images`                                                                                                                                             |
+| `--missing-dimensions`       | boolean | `images`                                                                                                                                             |
+| `--oversized-threshold`      | number  | `images`                                                                                                                                             |
+| `--validator`                | string  | `violations`                                                                                                                                         |
+| `--severity`                 | string  | `violations`                                                                                                                                         |
+| `--rule`                     | string  | `violations`                                                                                                                                         |
+| `--field`                    | string  | `duplicates`                                                                                                                                         |
+| `--missing-only`             | boolean | `headers`                                                                                                                                            |
+| `--max-length`               | number  | `html`                                                                                                                                               |
+| `--technology`               | string  | 技術スタック系                                                                                                                                       |
+| `--min-confidence`           | number  | 技術スタック系                                                                                                                                       |
+| `--signal-type`              | string  | 技術スタック系                                                                                                                                       |
+| `--full`                     | boolean | `page-jsonld`                                                                                                                                        |
+| `--representative-url`       | string  | `get-isolated-cluster`                                                                                                                               |
+| `--include-redirect-sources` | boolean | `links`                                                                                                                                              |
+| `--pretty`                   | boolean | JSON整形                                                                                                                                             |

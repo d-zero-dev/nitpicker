@@ -9,6 +9,7 @@ const NAV_ITEMS: NavItem[] = [
 	{ path: '/', labelKey: 'nav.summary' },
 	{ path: '/pages', labelKey: 'nav.pages' },
 	{ path: '/template-clusters', labelKey: 'nav.templateClusters' },
+	{ path: '/technologies', labelKey: 'nav.technologies' },
 	{ path: '/directory-tree', labelKey: 'nav.directoryTree' },
 	{ path: '/resources', labelKey: 'nav.resources' },
 	{ path: '/images', labelKey: 'nav.images' },

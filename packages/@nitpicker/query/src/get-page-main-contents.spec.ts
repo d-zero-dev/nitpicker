@@ -111,6 +111,9 @@ describe('getPageMainContents', () => {
 				canvases: [{ width: 300, height: 150 }],
 			},
 			scrollHeight: { desktop: 3200, mobile: 5400 },
+			mainContentCustomElements: [
+				{ nodeName: 'MY-WIDGET', elementId: 'widget-1', classList: ['foo'] },
+			],
 		});
 
 		await archive.setPage({
@@ -180,6 +183,9 @@ describe('getPageMainContents', () => {
 		]);
 		expect(result!.audios).toEqual([{ src: 'https://example.com/a.mp3' }]);
 		expect(result!.canvases).toEqual([{ width: 300, height: 150 }]);
+		expect(result!.customElements).toEqual([
+			{ nodeName: 'MY-WIDGET', elementId: 'widget-1', classList: ['foo'] },
+		]);
 	});
 
 	it('returns null when the page has no mainContents (metadata-only scrape)', async () => {
