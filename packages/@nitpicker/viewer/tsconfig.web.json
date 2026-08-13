@@ -7,6 +7,6 @@
 		"moduleResolution": "Bundler",
 		"types": ["vite/client"]
 	},
-	"include": ["./web/**/*"],
+	"include": ["./web/**/*", "./.storybook/**/*"],
 	"exclude": ["node_modules", "lib"]
 }

@@ -3,3 +3,4 @@
 .fixture-stub-cwd/
 /test-results/
 /playwright-report/
+/storybook-static/

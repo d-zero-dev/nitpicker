@@ -34,7 +34,9 @@
 		"test:e2e:directory-tree": "node ./e2e/generate-directory-tree-fixture.mjs && playwright test --config playwright.directory-tree.config.ts",
 		"test:e2e:template-clusters": "node ./e2e/generate-template-clusters-fixture.mjs && playwright test --config playwright.template-clusters.config.ts",
 		"test:e2e:inbound-links": "node ./e2e/generate-inbound-links-fixture.mjs && playwright test --config playwright.inbound-links.config.ts",
-		"test:e2e:crawl-suppression": "node ./e2e/generate-crawl-suppression-fixture.mjs && playwright test --config playwright.crawl-suppression.config.ts"
+		"test:e2e:crawl-suppression": "node ./e2e/generate-crawl-suppression-fixture.mjs && playwright test --config playwright.crawl-suppression.config.ts",
+		"storybook": "storybook dev -p 6006",
+		"build-storybook": "storybook build"
 	},
 	"dependencies": {
 		"@d-zero/dealer": "1.10.4",
@@ -55,14 +57,18 @@
 		"@d-zero/shared": "0.22.5",
 		"@nitpicker/crawler": "0.18.1",
 		"@playwright/test": "1.62.1",
+		"@storybook/addon-a11y": "10.5.7",
+		"@storybook/react-vite": "10.5.7",
 		"@testing-library/dom": "10.4.1",
 		"@testing-library/jest-dom": "6.9.1",
 		"@testing-library/react": "16.3.2",
 		"@types/react": "19.2.18",
 		"@types/react-dom": "19.2.4",
 		"@vitejs/plugin-react": "6.0.5",
+		"eslint-plugin-storybook": "10.5.7",
 		"graphology-types": "0.24.8",
 		"jsdom": "29.1.1",
+		"storybook": "10.5.7",
 		"vite": "8.2.0"
 	}
 }
