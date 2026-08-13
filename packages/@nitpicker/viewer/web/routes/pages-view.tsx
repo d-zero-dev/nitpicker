@@ -164,7 +164,7 @@ export function PagesView() {
 			{
 				accessorKey: 'status',
 				header: t('views.pages.colStatus'),
-				size: 80,
+				size: 110,
 				cell: textCell,
 			},
 			{
@@ -174,7 +174,7 @@ export function PagesView() {
 				accessorFn: (row) =>
 					row.isExternal ? t('common.external') : t('common.internal'),
 			},
-			{ accessorKey: 'lang', header: t('views.pages.colLang'), size: 80, cell: textCell },
+			{ accessorKey: 'lang', header: t('views.pages.colLang'), size: 90, cell: textCell },
 			{ accessorKey: 'description', header: 'description', size: 280, cell: textCell },
 			{ accessorKey: 'keywords', header: 'keywords', size: 180, cell: textCell },
 			{ accessorKey: 'noindex', header: 'noindex', size: 80, cell: boolCell },
@@ -316,19 +316,19 @@ export function PagesView() {
 			{
 				accessorKey: 'consoleErrorCount',
 				header: t('views.pages.colConsoleErrorCount'),
-				size: 90,
+				size: 160,
 				cell: textCell,
 			},
 			{
 				accessorKey: 'templateKey',
 				header: t('views.pages.colTemplateKey'),
-				size: 140,
+				size: 150,
 				cell: textCell,
 			},
 			{
 				accessorKey: 'isDedupeCapped',
 				header: t('views.pages.filterDedupeCapped'),
-				size: 130,
+				size: 190,
 				cell: boolCell,
 			},
 		];

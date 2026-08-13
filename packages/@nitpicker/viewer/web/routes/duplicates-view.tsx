@@ -3,6 +3,7 @@ import type { DuplicateField } from '../api/use-duplicates.js';
 import { useSearchParams } from 'react-router';
 
 import { useDuplicates } from '../api/use-duplicates.js';
+import { DuplicateUrlList } from '../components/duplicate-url-list.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
@@ -55,11 +56,7 @@ export function DuplicatesView() {
 					<div style={{ fontWeight: 600, margin: '4px 0' }}>
 						{group.value || '(empty)'}
 					</div>
-					<ul>
-						{group.pages.map((url) => (
-							<li key={url}>{url}</li>
-						))}
-					</ul>
+					<DuplicateUrlList urls={group.pages} />
 					{group.count > group.pages.length && (
 						<div className="card-label">
 							{t('views.duplicates.moreHidden', {

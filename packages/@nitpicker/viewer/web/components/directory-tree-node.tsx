@@ -189,7 +189,7 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 				)}
 			</div>
 			{isExpanded && node.hasChildren && (
-				<ul className="tree-children">
+				<ul className="tree-children plain-list">
 					{needsFetch && childrenQuery.isLoading && (
 						<li className="tree-loading">{t('common.loading')}</li>
 					)}

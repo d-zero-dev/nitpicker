@@ -18,7 +18,7 @@ import { GRAPH_COLORS } from './graph-colors.js';
 export function GraphLegend() {
 	const { t } = useI18n();
 	return (
-		<ul className="graph-legend" aria-label={t('views.graph.legendLabel')}>
+		<ul className="graph-legend plain-list" aria-label={t('views.graph.legendLabel')}>
 			<li className="graph-legend-row">
 				<span
 					className="graph-legend-swatch"

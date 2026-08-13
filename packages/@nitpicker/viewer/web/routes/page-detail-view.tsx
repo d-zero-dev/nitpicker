@@ -1,14 +1,27 @@
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 
 import { useInboundLinks } from '../api/use-inbound-links.js';
 import { usePageDetail } from '../api/use-page-detail.js';
 import { usePageHtml } from '../api/use-page-html.js';
 import { usePageMainContents } from '../api/use-page-main-contents.js';
+import { AppLink } from '../components/app-link.js';
+import { AudioList } from '../components/audio-list.js';
+import { ButtonList } from '../components/button-list.js';
+import { CanvasList } from '../components/canvas-list.js';
+import { ConsoleLogsList } from '../components/console-logs-list.js';
+import { HeadingList } from '../components/heading-list.js';
 import { HtmlPreview } from '../components/html-preview.js';
+import { IframeList } from '../components/iframe-list.js';
+import { ImageList } from '../components/image-list.js';
+import { InboundLinksSummary } from '../components/inbound-links-summary.js';
+import { MainContentSummary } from '../components/main-content-summary.js';
+import { OutboundLinksList } from '../components/outbound-links-list.js';
+import { PageMetadataGrid } from '../components/page-metadata-grid.js';
+import { RedirectFromList } from '../components/redirect-from-list.js';
+import { TableList } from '../components/table-list.js';
+import { VideoList } from '../components/video-list.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useI18n } from '../i18n/use-i18n.js';
-
-const MAX_LINKS_DISPLAYED = 200;
 
 /**
  * Full detail for a single page: metadata, outbound links, redirects, and
@@ -63,211 +76,24 @@ export function PageDetailView() {
 				titleKey="views.pageDetail.title"
 				descriptionKey="views.pageDetail.description"
 			/>
-			<Link to="/pages">
+			<AppLink to="/pages">
 				{t('common.back')} {t('nav.pages')}
-			</Link>
-			<dl className="detail-grid">
-				<dt>URL</dt>
-				<dd>{data.url}</dd>
-				{data.isSkipped && (
-					<>
-						<dt>{t('views.pageDetail.skipReason')}</dt>
-						<dd>{data.skipReason ?? '—'}</dd>
-					</>
-				)}
-				{data.isDedupeCapped && (
-					<>
-						<dt>{t('views.pageDetail.dedupeCapShapeKey')}</dt>
-						<dd>
-							{data.dedupeCapEventId == null ? (
-								(data.dedupeCapShapeKey ?? '—')
-							) : (
-								<Link to={`/crawl-suppression#event-${data.dedupeCapEventId}`}>
-									{data.dedupeCapShapeKey ?? '—'}
-								</Link>
-							)}
-						</dd>
-					</>
-				)}
-				<dt>{t('views.pageDetail.status')}</dt>
-				<dd>
-					{data.status ?? '—'} {data.statusText ?? ''}
-				</dd>
-				<dt>{t('views.pageDetail.contentType')}</dt>
-				<dd>{data.contentType ?? '—'}</dd>
-				<dt>{t('views.pageDetail.title2')}</dt>
-				<dd>{data.title ?? '—'}</dd>
-				<dt>lang</dt>
-				<dd>{data.lang ?? '—'}</dd>
-				<dt>{t('views.pageDetail.descriptionField')}</dt>
-				<dd>{data.description ?? '—'}</dd>
-				<dt>{t('views.pageDetail.canonical')}</dt>
-				<dd>{data.canonical ?? '—'}</dd>
-				<dt>{t('views.pageDetail.robots')}</dt>
-				<dd>
-					{[
-						data.noindex && 'noindex',
-						data.nofollow && 'nofollow',
-						data.noarchive && 'noarchive',
-						data.noimageindex && 'noimageindex',
-					]
-						.filter(Boolean)
-						.join(', ') || '—'}
-				</dd>
-				{data.robotsRaw && (
-					<>
-						<dt>robots:raw</dt>
-						<dd>{data.robotsRaw}</dd>
-					</>
-				)}
-				<dt>{t('views.pageDetail.ogTitle')}</dt>
-				<dd>{data.ogTitle ?? '—'}</dd>
-				<dt>{t('views.pageDetail.ogImage')}</dt>
-				<dd>{data.ogImage ?? '—'}</dd>
-				{data.ogImageAlt && (
-					<>
-						<dt>og:image:alt</dt>
-						<dd>{data.ogImageAlt}</dd>
-					</>
-				)}
-				{data.ogLocale && (
-					<>
-						<dt>og:locale</dt>
-						<dd>{data.ogLocale}</dd>
-					</>
-				)}
-				{data.ogArticlePublishedTime && (
-					<>
-						<dt>og:article:published_time</dt>
-						<dd>{data.ogArticlePublishedTime}</dd>
-					</>
-				)}
-				{(data.twitterSite || data.twitterCreator) && (
-					<>
-						<dt>twitter:site / creator</dt>
-						<dd>
-							{[data.twitterSite, data.twitterCreator].filter(Boolean).join(' / ') || '—'}
-						</dd>
-					</>
-				)}
-				{data.charset && (
-					<>
-						<dt>charset</dt>
-						<dd>{data.charset}</dd>
-					</>
-				)}
-				{data.manifest && (
-					<>
-						<dt>manifest</dt>
-						<dd>{data.manifest}</dd>
-					</>
-				)}
-				{data.themeColor && (
-					<>
-						<dt>theme-color</dt>
-						<dd>{data.themeColor}</dd>
-					</>
-				)}
-				{(data.tagCount ?? 0) > 0 && (
-					<>
-						<dt>Wappalyzer tags</dt>
-						<dd>
-							{data.tagCount} entries
-							{data.tagsProvidersCsv ? ` (${data.tagsProvidersCsv})` : ''}
-						</dd>
-					</>
-				)}
-				{(data.jsonldCount ?? 0) > 0 && (
-					<>
-						<dt>JSON-LD</dt>
-						<dd>
-							{data.jsonldCount} entries
-							{data.jsonLd.types.length > 0 ? ` [${data.jsonLd.types.join(', ')}]` : ''}
-						</dd>
-					</>
-				)}
-			</dl>
+			</AppLink>
+			<PageMetadataGrid data={data} />
 
-			<h2>
-				{t('views.pageDetail.inbound')}
-				{inboundTotal == null ? '' : ` (${inboundTotal})`}
-			</h2>
-			{inboundUnavailable ? (
-				<p className="state">{t('views.inboundLinks.unavailable')}</p>
-			) : inboundIsError ? (
-				<p className="state state-error">{inboundError.message}</p>
-			) : inboundIsLoading ? (
-				<p className="state">{t('common.loading')}</p>
-			) : (
-				inboundTotal != null &&
-				inboundTotal > 0 && (
-					<Link to={`/pages/inbound-links?url=${encodeURIComponent(url)}`}>
-						{t('views.pageDetail.viewInboundLinks')}
-					</Link>
-				)
-			)}
+			<InboundLinksSummary
+				url={url}
+				total={inboundTotal}
+				isLoading={inboundIsLoading}
+				isUnavailable={inboundUnavailable}
+				errorMessage={inboundIsError ? inboundError.message : null}
+			/>
 
-			{data.outboundLinks.length > 0 && (
-				<>
-					<h2>
-						{t('views.pageDetail.outbound')} ({data.outboundLinks.length})
-					</h2>
-					<ul>
-						{data.outboundLinks.slice(0, MAX_LINKS_DISPLAYED).map((link, index) => (
-							<li key={`${link.url}-${index}`}>
-								<Link to={`/pages/detail?url=${encodeURIComponent(link.url)}`}>
-									{link.url}
-								</Link>{' '}
-								{link.status != null && <span className="state">[{link.status}]</span>}
-							</li>
-						))}
-					</ul>
-					{data.outboundLinks.length > MAX_LINKS_DISPLAYED && (
-						<p className="state">
-							{t('views.pageDetail.linksTruncated', {
-								max: MAX_LINKS_DISPLAYED,
-								total: data.outboundLinks.length,
-							})}
-						</p>
-					)}
-				</>
-			)}
+			<OutboundLinksList links={data.outboundLinks} />
 
-			{data.redirectFrom.length > 0 && (
-				<>
-					<h2>
-						{t('views.pageDetail.redirectedFrom')} ({data.redirectFrom.length})
-					</h2>
-					<ul>
-						{data.redirectFrom.map((from) => (
-							<li key={from}>{from}</li>
-						))}
-					</ul>
-				</>
-			)}
+			<RedirectFromList urls={data.redirectFrom} />
 
-			{data.consoleLogs.length > 0 && (
-				<>
-					<h2>
-						{t('views.pageDetail.consoleLogs')} ({data.consoleLogs.length})
-					</h2>
-					<ul>
-						{data.consoleLogs.map((entry, index) => (
-							<li key={`console-log-${index}`}>
-								<span className="state">[{entry.type}]</span>{' '}
-								{new Date(entry.ts).toLocaleString()} — {entry.text}
-								{entry.locationUrl && (
-									<span className="state">
-										{' '}
-										({entry.locationUrl}
-										{entry.locationLine == null ? '' : `:${entry.locationLine}`})
-									</span>
-								)}
-							</li>
-						))}
-					</ul>
-				</>
-			)}
+			<ConsoleLogsList entries={data.consoleLogs} />
 
 			{!data.isExternal && (
 				<>
@@ -277,152 +103,20 @@ export function PageDetailView() {
 					)}
 					{mainContents.data ? (
 						<>
-							<dl className="detail-grid">
-								<dt>{t('views.pageDetail.mainContentSelector')}</dt>
-								<dd>{mainContents.data.main?.selector ?? '—'}</dd>
-								<dt>{t('views.pageDetail.mainContentWordCount')}</dt>
-								<dd>{mainContents.data.wordCount}</dd>
-								<dt>{t('views.pageDetail.mainContentBodyWordCount')}</dt>
-								<dd>{mainContents.data.bodyWordCount}</dd>
-								<dt>{t('views.pageDetail.mainContentScrollHeight')}</dt>
-								<dd>
-									{mainContents.data.scrollHeight.desktop ?? '—'} /{' '}
-									{mainContents.data.scrollHeight.mobile ?? '—'}
-								</dd>
-							</dl>
-
-							{mainContents.data.headings.length > 0 && (
-								<>
-									<h3>
-										{t('views.pageDetail.mainContentHeadings')} (
-										{mainContents.data.headings.length})
-									</h3>
-									<ul>
-										{mainContents.data.headings.map((heading, index) => (
-											<li key={`heading-${index}`}>
-												H{heading.level}: {heading.text ?? '—'}
-											</li>
-										))}
-									</ul>
-								</>
-							)}
-
-							{mainContents.data.images.length > 0 && (
-								<>
-									<h3>
-										{t('views.pageDetail.mainContentImages')} (
-										{mainContents.data.images.length})
-									</h3>
-									<ul>
-										{mainContents.data.images.map((image, index) => (
-											<li key={`${image.src}-${index}`}>
-												{image.src}
-												{image.alt ? ` (alt: ${image.alt})` : ''}
-											</li>
-										))}
-									</ul>
-								</>
-							)}
-
-							{mainContents.data.tables.length > 0 && (
-								<>
-									<h3>
-										{t('views.pageDetail.mainContentTables')} (
-										{mainContents.data.tables.length})
-									</h3>
-									<ul>
-										{mainContents.data.tables.map((table, index) => (
-											<li key={`table-${index}`}>
-												{table.rows}×{table.cols}
-												{table.hasHeader ? ', header' : ''}
-												{table.hasFooter ? ', footer' : ''}
-												{table.hasMergedCell ? ', merged cells' : ''}
-											</li>
-										))}
-									</ul>
-								</>
-							)}
-
-							{mainContents.data.buttons.length > 0 && (
-								<>
-									<h3>
-										{t('views.pageDetail.mainContentButtons')} (
-										{mainContents.data.buttons.length})
-									</h3>
-									<ul>
-										{mainContents.data.buttons.map((button, index) => (
-											<li key={`button-${index}`}>
-												{button.nodeName}
-												{button.type ? `[${button.type}]` : ''}: {button.text ?? '—'}
-												{button.disabled ? ' (disabled)' : ''}
-											</li>
-										))}
-									</ul>
-								</>
-							)}
-
-							{mainContents.data.iframes.length > 0 && (
-								<>
-									<h3>
-										{t('views.pageDetail.mainContentIframes')} (
-										{mainContents.data.iframes.length})
-									</h3>
-									<ul>
-										{mainContents.data.iframes.map((iframe, index) => (
-											<li key={`${iframe.src}-${index}`}>
-												{iframe.src}
-												{iframe.title ? ` (${iframe.title})` : ''}
-											</li>
-										))}
-									</ul>
-								</>
-							)}
-
-							{mainContents.data.videos.length > 0 && (
-								<>
-									<h3>
-										{t('views.pageDetail.mainContentVideos')} (
-										{mainContents.data.videos.length})
-									</h3>
-									<ul>
-										{mainContents.data.videos.map((video, index) => (
-											<li key={`${video.src}-${index}`}>
-												{video.src} ({video.width}×{video.height})
-											</li>
-										))}
-									</ul>
-								</>
-							)}
-
-							{mainContents.data.audios.length > 0 && (
-								<>
-									<h3>
-										{t('views.pageDetail.mainContentAudios')} (
-										{mainContents.data.audios.length})
-									</h3>
-									<ul>
-										{mainContents.data.audios.map((audio, index) => (
-											<li key={`${audio.src}-${index}`}>{audio.src}</li>
-										))}
-									</ul>
-								</>
-							)}
-
-							{mainContents.data.canvases.length > 0 && (
-								<>
-									<h3>
-										{t('views.pageDetail.mainContentCanvases')} (
-										{mainContents.data.canvases.length})
-									</h3>
-									<ul>
-										{mainContents.data.canvases.map((canvas, index) => (
-											<li key={`canvas-${index}`}>
-												{canvas.width}×{canvas.height}
-											</li>
-										))}
-									</ul>
-								</>
-							)}
+							<MainContentSummary
+								selector={mainContents.data.main?.selector ?? null}
+								wordCount={mainContents.data.wordCount}
+								bodyWordCount={mainContents.data.bodyWordCount}
+								scrollHeight={mainContents.data.scrollHeight}
+							/>
+							<HeadingList headings={mainContents.data.headings} />
+							<ImageList images={mainContents.data.images} />
+							<TableList tables={mainContents.data.tables} />
+							<ButtonList buttons={mainContents.data.buttons} />
+							<IframeList iframes={mainContents.data.iframes} />
+							<VideoList videos={mainContents.data.videos} />
+							<AudioList audios={mainContents.data.audios} />
+							<CanvasList canvases={mainContents.data.canvases} />
 						</>
 					) : (
 						!mainContents.isLoading && (

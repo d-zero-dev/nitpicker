@@ -60,7 +60,7 @@ export function UnusedResourcesView() {
 			{
 				accessorKey: 'status',
 				header: t('views.unusedResources.status'),
-				size: 90,
+				size: 130,
 				cell: (i) => i.getValue<number | null>() ?? '—',
 			},
 			{

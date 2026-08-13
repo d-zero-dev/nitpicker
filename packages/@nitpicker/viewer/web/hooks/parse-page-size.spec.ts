@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { parsePageSize } from './parse-page-size.js';
 
 describe('parsePageSize', () => {
-	it('accepts the three canonical page sizes', () => {
+	it('accepts the six canonical page sizes', () => {
 		expect(parsePageSize(50)).toBe(50);
 		expect(parsePageSize(100)).toBe(100);
 		expect(parsePageSize(200)).toBe(200);
+		expect(parsePageSize(500)).toBe(500);
+		expect(parsePageSize(750)).toBe(750);
+		expect(parsePageSize(1000)).toBe(1000);
 	});
 
 	it('rejects nearby unsupported values (no fuzzy snap)', () => {
@@ -17,6 +20,12 @@ describe('parsePageSize', () => {
 		expect(parsePageSize(150)).toBeNull();
 		expect(parsePageSize(199)).toBeNull();
 		expect(parsePageSize(201)).toBeNull();
+		expect(parsePageSize(499)).toBeNull();
+		expect(parsePageSize(501)).toBeNull();
+		expect(parsePageSize(749)).toBeNull();
+		expect(parsePageSize(751)).toBeNull();
+		expect(parsePageSize(999)).toBeNull();
+		expect(parsePageSize(1001)).toBeNull();
 	});
 
 	it('rejects zero and negatives', () => {

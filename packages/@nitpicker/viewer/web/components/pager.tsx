@@ -83,7 +83,7 @@ export function Pager(props: PagerProps) {
 					aria-label={t('pagination.prev')}>
 					‹ {t('pagination.prev')}
 				</button>
-				<ol className="pager-list">
+				<ol className="pager-list plain-list">
 					{tokens.map((token) => renderToken(token, clamped, goTo, t))}
 				</ol>
 				<button
@@ -138,8 +138,9 @@ export function Pager(props: PagerProps) {
 						value={pageSize}
 						onChange={(event) => {
 							// Single source of truth — same validator the localStorage
-							// reader uses, so adding a new `PageSize` member only needs
-							// the type union and PAGE_SIZE_OPTIONS to be extended.
+							// reader uses, and both derive from `PAGE_SIZE_OPTIONS`
+							// (which `PageSize` itself is derived from), so adding a new
+							// size only needs that one array extended.
 							const next = parsePageSize(Number(event.target.value));
 							if (next !== null) {
 								onPageSizeChange(next);

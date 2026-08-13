@@ -8,7 +8,7 @@ import { usePaginationMode } from './use-pagination-mode.js';
 export interface ListPagination {
 	/** The user's pagination-mode preference. */
 	mode: PaginationMode;
-	/** The user's page-size preference (`50` / `100` / `200`). */
+	/** The user's page-size preference (one of {@link PageSize}). */
 	pageSize: PageSize;
 	/** The current 1-indexed page from `?page=` (always ≥ 1). */
 	currentPage: number;

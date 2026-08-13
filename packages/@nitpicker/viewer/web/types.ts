@@ -136,10 +136,19 @@ export interface DiffResult {
 export type PaginationMode = 'mpa' | 'virtual';
 
 /**
- * Allowed page-size values for MPA pagination. The default is `100` (matches
- * the historical `PAGE_SIZE` used by virtual-mode infinite queries).
+ * Allowed page-size values for MPA pagination, in ascending order (also the
+ * `<select>` option order). Declared as the single source of truth for
+ * {@link PageSize} — `use-page-size.ts` and `parse-page-size.ts` both derive
+ * from this array instead of independently re-listing the same six numbers,
+ * so adding/removing a size can't update one and silently miss the other.
  */
-export type PageSize = 50 | 100 | 200;
+export const PAGE_SIZE_OPTIONS = [50, 100, 200, 500, 750, 1000] as const;
+
+/**
+ * One of {@link PAGE_SIZE_OPTIONS}. The default is `100` (matches the
+ * historical `PAGE_SIZE` used by virtual-mode infinite queries).
+ */
+export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 
 /**
  * Directory-tree sibling ordering. `'path'` is the backend's native order
@@ -148,3 +157,6 @@ export type PageSize = 50 | 100 | 200;
  * on every node, so no additional request is needed.
  */
 export type DirectoryTreeSortOrder = 'path' | 'pagesDesc' | 'pagesAsc';
+
+/** Which source `buildClusterHeading` drew a template cluster's heading from. */
+export type ClusterHeadingSource = 'distinctive' | 'common' | 'directory' | 'raw';

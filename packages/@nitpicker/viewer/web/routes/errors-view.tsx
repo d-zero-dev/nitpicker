@@ -2,9 +2,9 @@ import type { ErrorKind, ErrorKindEntry, FailureAttribution } from '@nitpicker/q
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { useMemo } from 'react';
-import { Link } from 'react-router';
 
 import { useErrorKinds } from '../api/use-error-kinds.js';
+import { AppLink } from '../components/app-link.js';
 import {
 	addChecklistFilter,
 	addSort,
@@ -333,9 +333,9 @@ function ErrorDetailPane({
 						<ul className="url-list">
 							{entry.sampleUrls.map((url, index) => (
 								<li key={`${url}-${index}`}>
-									<Link to={`/pages/detail?url=${encodeURIComponent(url)}`}>
+									<AppLink to={`/pages/detail?url=${encodeURIComponent(url)}`}>
 										<code>{url}</code>
-									</Link>
+									</AppLink>
 								</li>
 							))}
 						</ul>

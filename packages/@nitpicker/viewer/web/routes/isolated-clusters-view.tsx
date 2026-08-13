@@ -17,9 +17,9 @@ import {
 	addTextFilter,
 	createTableControls,
 } from '../components/create-table-controls.js';
-import { DataTable } from '../components/data-table.js';
+import { IsolatedClusterDetailPane } from '../components/isolated-cluster-detail-pane.js';
+import { IsolatedClusterListPane } from '../components/isolated-cluster-list-pane.js';
 import { SourceBadge } from '../components/source-badge.js';
-import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
 import { useI18n } from '../i18n/use-i18n.js';
@@ -28,8 +28,10 @@ import { useI18n } from '../i18n/use-i18n.js';
  * **孤立集合** master-detail view. The list mode (no `?cluster=…` query
  * param) shows interconnected inventory-* cluster summaries; clicking a row
  * sets the param and switches to the detail mode where every cluster member
- * is listed. Both modes use the shared {@link DataTable} so the displayed
- * row count always matches the reported total in both pagination modes.
+ * is listed. Both modes render through {@link IsolatedClusterListPane} /
+ * {@link IsolatedClusterDetailPane}, which share the underlying `DataTable`
+ * dispatcher, so the displayed row count always matches the reported total
+ * in both pagination modes.
  * @returns The isolated clusters view element.
  */
 export function IsolatedClustersView() {
@@ -115,7 +117,7 @@ function ClusterListPane({
 			{
 				id: 'size',
 				header: t('views.isolatedClusters.size'),
-				size: 80,
+				size: 100,
 				accessorFn: (r) => r.size,
 			},
 			{
@@ -127,7 +129,7 @@ function ClusterListPane({
 			{
 				id: 'representativeStatus',
 				header: t('views.isolatedClusters.status'),
-				size: 90,
+				size: 130,
 				accessorFn: (r) => r.representativeStatus ?? '—',
 			},
 		],
@@ -166,45 +168,37 @@ function ClusterListPane({
 		return controls;
 	}, [paged.data?.items, params, status, t, updateMany]);
 
-	return (
-		<div className="view">
-			<ViewHeader
-				titleKey="views.isolatedClusters.title"
-				descriptionKey="views.isolatedClusters.description"
-			/>
-			{mode === 'mpa' ? (
-				<DataTable
-					mode="mpa"
-					columns={columns}
-					data={paged.data?.items ?? []}
-					total={paged.data?.total ?? 0}
-					currentPage={currentPage}
-					pageSize={pageSize}
-					onPageChange={setPage}
-					onPageSizeChange={setPageSize}
-					isFetching={paged.isFetching}
-					isLoading={paged.isLoading}
-					isError={paged.isError}
-					error={paged.error}
-					columnControls={columnControls}
-				/>
-			) : (
-				<DataTable
-					mode="virtual"
-					columns={columns}
-					data={infiniteRows}
-					total={infiniteTotal}
-					hasNextPage={infinite.hasNextPage}
-					isFetching={infinite.isFetching}
-					isLoading={infinite.isLoading}
-					isError={infinite.isError}
-					error={infinite.error}
-					onLoadMore={() => {
-						void infinite.fetchNextPage();
-					}}
-				/>
-			)}
-		</div>
+	return mode === 'mpa' ? (
+		<IsolatedClusterListPane
+			mode="mpa"
+			columns={columns}
+			data={paged.data?.items ?? []}
+			total={paged.data?.total ?? 0}
+			currentPage={currentPage}
+			pageSize={pageSize}
+			onPageChange={setPage}
+			onPageSizeChange={setPageSize}
+			isFetching={paged.isFetching}
+			isLoading={paged.isLoading}
+			isError={paged.isError}
+			error={paged.error}
+			columnControls={columnControls}
+		/>
+	) : (
+		<IsolatedClusterListPane
+			mode="virtual"
+			columns={columns}
+			data={infiniteRows}
+			total={infiniteTotal}
+			hasNextPage={infinite.hasNextPage}
+			isFetching={infinite.isFetching}
+			isLoading={infinite.isLoading}
+			isError={infinite.isError}
+			error={infinite.error}
+			onLoadMore={() => {
+				void infinite.fetchNextPage();
+			}}
+		/>
 	);
 }
 
@@ -263,13 +257,13 @@ function ClusterDetailPane({
 			{
 				id: 'status',
 				header: t('views.isolatedClusters.status'),
-				size: 90,
+				size: 130,
 				accessorFn: (r) => r.status ?? '—',
 			},
 			{
 				id: 'source',
 				header: t('views.isolatedClusters.memberSource'),
-				size: 110,
+				size: 130,
 				accessorFn: (r) => r.source,
 				cell: (info) => (
 					<SourceBadge source={info.getValue<IsolatedClusterMember['source']>()} />
@@ -314,49 +308,38 @@ function ClusterDetailPane({
 	const members = data?.members ?? [];
 	const total = data?.size ?? members.length;
 
-	return (
-		<div className="view">
-			<button type="button" className="link-button" onClick={onBack}>
-				{t('views.isolatedClusters.back')}
-			</button>
-			<ViewHeader
-				titleKey="views.isolatedClusters.detailTitle"
-				descriptionKey="views.isolatedClusters.description"
-			/>
-			<p>
-				<code>{representativeUrl}</code>
-			</p>
-			{/* Error rendering is delegated to <DataTable> (one banner per failed query). */}
-			{mode === 'mpa' ? (
-				<DataTable
-					mode="mpa"
-					columns={columns}
-					data={members}
-					total={total}
-					currentPage={currentPage}
-					pageSize={pageSize}
-					onPageChange={setPage}
-					onPageSizeChange={setPageSize}
-					isFetching={false}
-					isLoading={isLoading}
-					isError={isError}
-					error={error}
-					columnControls={columnControls}
-				/>
-			) : (
-				<DataTable
-					mode="virtual"
-					columns={columns}
-					data={members}
-					total={total}
-					hasNextPage={false}
-					isFetching={false}
-					isLoading={isLoading}
-					isError={isError}
-					error={error}
-					onLoadMore={() => {}}
-				/>
-			)}
-		</div>
+	return mode === 'mpa' ? (
+		<IsolatedClusterDetailPane
+			representativeUrl={representativeUrl}
+			onBack={onBack}
+			mode="mpa"
+			columns={columns}
+			data={members}
+			total={total}
+			currentPage={currentPage}
+			pageSize={pageSize}
+			onPageChange={setPage}
+			onPageSizeChange={setPageSize}
+			isFetching={false}
+			isLoading={isLoading}
+			isError={isError}
+			error={error}
+			columnControls={columnControls}
+		/>
+	) : (
+		<IsolatedClusterDetailPane
+			representativeUrl={representativeUrl}
+			onBack={onBack}
+			mode="virtual"
+			columns={columns}
+			data={members}
+			total={total}
+			hasNextPage={false}
+			isFetching={false}
+			isLoading={isLoading}
+			isError={isError}
+			error={error}
+			onLoadMore={() => {}}
+		/>
 	);
 }
