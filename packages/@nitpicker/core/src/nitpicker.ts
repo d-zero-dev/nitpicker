@@ -111,8 +111,8 @@ function formatTemplateClassificationProgress(event: ProgressEvent): string {
  * ```ts
  * import { Nitpicker } from '@nitpicker/core';
  *
- * // Open an existing archive
- * const nitpicker = await Nitpicker.open('./example.nitpicker');
+ * // Open an existing archive — `Symbol.asyncDispose` closes it on scope exit
+ * await using nitpicker = await Nitpicker.open('./example.nitpicker');
  *
  * // Run all configured analyze plugins
  * await nitpicker.analyze();
@@ -157,6 +157,14 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 	constructor(archive: Archive) {
 		super();
 		this.#archive = archive;
+	}
+
+	/**
+	 * Enables `await using nitpicker = ...`. Delegates to the wrapped
+	 * archive's `Symbol.asyncDispose` (i.e. {@link Archive.close}).
+	 */
+	async [Symbol.asyncDispose](): Promise<void> {
+		await this.#archive.close();
 	}
 
 	/**
