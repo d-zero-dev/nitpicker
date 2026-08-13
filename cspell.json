@@ -184,6 +184,17 @@
 		"Hirao",
 
 		// Claude Code effort levels (referenced in commit messages / CHANGELOG)
-		"xhigh"
+		"xhigh",
+
+		// Technology stack detection (Astro/Next.js/Vue/Angular structural signals)
+		"ngcontent", // Angular's `_ngcontent-*` scoped-attribute marker
+		"uncurated",
+
+		// query/src/list-pages-by-technology.ts (page_technologies alias, avoids
+		// colliding with page_templates' hardcoded `pt` alias)
+		"ptech",
+
+		// viewer_technology_directory_stats index name abbreviation
+		"vtds"
 	]
 }
