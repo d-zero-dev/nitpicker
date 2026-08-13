@@ -11,7 +11,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 24.18.0
+          node-version: 24.19.0
           cache: yarn
       - run: yarn install --immutable
       - run: yarn build
@@ -29,7 +29,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 24.18.0
+          node-version: 24.19.0
           cache: yarn
       - run: yarn install --immutable
       - uses: actions/download-artifact@v8.0.1
@@ -46,7 +46,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 24.18.0
+          node-version: 24.19.0
           cache: yarn
       - run: yarn install --immutable
       # Type-aware lint rules (e.g. @typescript-eslint/no-unnecessary-type-assertion)
