@@ -16,6 +16,8 @@ import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
 import { buildIsolatedReadModelRows } from './build-isolated-read-model-rows.js';
 import { buildPageNaturalUrlRankMap } from './build-page-natural-url-rank-map.js';
 import { buildPageUrlRankMap } from './build-page-url-rank-map.js';
+import { buildTechnologyDirectoryStatsRows } from './build-technology-directory-stats-rows.js';
+import { buildTechnologySummaryRows } from './build-technology-summary-rows.js';
 import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
 import { computeDuplicateGroupPageRows } from './compute-duplicate-group-page-rows.js';
 import { computeDuplicateGroupRows } from './compute-duplicate-group-rows.js';
@@ -94,6 +96,8 @@ interface PagesSourceRow {
 	main_content_audio_count: number | null;
 	/** Denormalised canvas count within the main region, or `null` when unrendered. */
 	main_content_canvas_count: number | null;
+	/** Denormalised custom-element count within the main region, or `null` when unrendered/unknown. */
+	main_content_custom_element_count: number | null;
 	/** Denormalised desktop-compact scroll height, or `null` when unrendered. */
 	scroll_height_desktop: number | null;
 	/** Denormalised mobile-small scroll height, or `null` when unrendered. */
@@ -192,6 +196,8 @@ interface ViewerPageInsertRow {
 	main_content_audio_count: number;
 	/** `PagesSourceRow.main_content_canvas_count`, defaulted to `0` when `null`. */
 	main_content_canvas_count: number;
+	/** `PagesSourceRow.main_content_custom_element_count`, defaulted to `0` when `null`. */
+	main_content_custom_element_count: number;
 	/** `PagesSourceRow.scroll_height_desktop`, defaulted to `0` when `null`. */
 	scroll_height_desktop: number;
 	/** `PagesSourceRow.scroll_height_mobile`, defaulted to `0` when `null`. */
@@ -303,6 +309,7 @@ function toViewerPageInsertRow(
 		main_content_video_count: row.main_content_video_count ?? 0,
 		main_content_audio_count: row.main_content_audio_count ?? 0,
 		main_content_canvas_count: row.main_content_canvas_count ?? 0,
+		main_content_custom_element_count: row.main_content_custom_element_count ?? 0,
 		scroll_height_desktop: row.scroll_height_desktop ?? 0,
 		scroll_height_mobile: row.scroll_height_mobile ?? 0,
 		console_error_count: row.console_error_count ?? 0,
@@ -345,7 +352,7 @@ function toViewerPageInsertRow(
  * unconditionally too for the same schema-version-gate reason as
  * `backfillBodyHashFromHtmlBlobs`. Computes a
  * `getSummary` snapshot (see below for why this happens outside the
- * transaction), then drops all 24 tables if present, recreates them,
+ * transaction), then drops all 26 tables if present, recreates them,
  * populates `viewer_pages`
  * from the current `pages` write-model table, populates
  * `viewer_directory_nodes`/`viewer_directory_pages` from that same page set
@@ -557,6 +564,7 @@ export async function buildViewerReadModel(
 				'pm.main_content_video_count as main_content_video_count',
 				'pm.main_content_audio_count as main_content_audio_count',
 				'pm.main_content_canvas_count as main_content_canvas_count',
+				'pm.main_content_custom_element_count as main_content_custom_element_count',
 				'pm.scroll_height_desktop as scroll_height_desktop',
 				'pm.scroll_height_mobile as scroll_height_mobile',
 				'pm.console_error_count as console_error_count',
@@ -565,6 +573,25 @@ export async function buildViewerReadModel(
 			);
 
 		const naturalUrlRankByPageId = buildPageNaturalUrlRankMap(sourceRows);
+
+		// Separate scan (not part of `sourceRows`, which only selects
+		// `pages`/`page_meta`) — one row per (page, technology) pair, joined
+		// to the page's URL for `buildTechnologyDirectoryStatsRows`'
+		// directory bucketing. Feeds `viewer_technology_summary` /
+		// `viewer_technology_directory_stats`.
+		const technologySourceRows = await trx('page_technologies as pt')
+			.join('content_items as tci', 'tci.id', 'pt.pageId')
+			.join('url_refs as tur', 'tur.id', 'tci.url_id')
+			.select<
+				Array<{
+					pageId: number;
+					url: string;
+					technology: string;
+					category: string | null;
+					confidence: number;
+				}>
+			>('pt.pageId as pageId', 'tur.url as url', 'pt.technology as technology', 'pt.category as category', 'pt.confidence as confidence');
+
 		const insertRows = sourceRows.map((row) =>
 			toViewerPageInsertRow(row, naturalUrlRankByPageId),
 		);
@@ -608,6 +635,30 @@ export async function buildViewerReadModel(
 		for (let start = 0; start < directoryPages.length; start += INSERT_CHUNK_SIZE) {
 			await trx('viewer_directory_pages').insert(
 				directoryPages.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
+
+		// Reuses `technologySourceRows` (already loaded above) instead of a
+		// second `page_technologies` scan.
+		const technologySummaryRows = buildTechnologySummaryRows(technologySourceRows);
+		for (
+			let start = 0;
+			start < technologySummaryRows.length;
+			start += INSERT_CHUNK_SIZE
+		) {
+			await trx('viewer_technology_summary').insert(
+				technologySummaryRows.slice(start, start + INSERT_CHUNK_SIZE),
+			);
+		}
+		const technologyDirectoryStatsRows =
+			buildTechnologyDirectoryStatsRows(technologySourceRows);
+		for (
+			let start = 0;
+			start < technologyDirectoryStatsRows.length;
+			start += INSERT_CHUNK_SIZE
+		) {
+			await trx('viewer_technology_directory_stats').insert(
+				technologyDirectoryStatsRows.slice(start, start + INSERT_CHUNK_SIZE),
 			);
 		}
 
@@ -811,6 +862,7 @@ export async function buildViewerReadModel(
 			external_contents: summary.externalContents,
 			status_json: JSON.stringify(summary.statusDistribution),
 			content_type_json: JSON.stringify(summary.contentTypeDistribution),
+			technology_json: JSON.stringify(summary.technologyDistribution),
 			metadata_json: JSON.stringify(summary.metadataFulfillment),
 			network_outage_affected_failures: summary.networkOutageAffectedFailures,
 			console_json: JSON.stringify(summary.consoleLogCounts),

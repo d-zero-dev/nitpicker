@@ -21,6 +21,7 @@ export function getViewerPagesSortSpec(
 		| 'mainContentVideoCount'
 		| 'mainContentAudioCount'
 		| 'mainContentCanvasCount'
+		| 'mainContentCustomElementCount'
 		| 'scrollHeightDesktop'
 		| 'scrollHeightMobile'
 		| 'consoleErrorCount',
@@ -100,6 +101,12 @@ export function getViewerPagesSortSpec(
 		case 'mainContentCanvasCount': {
 			return {
 				columns: ['main_content_canvas_count', 'url_sort_key', 'page_id'],
+				scanDirection: sortOrder,
+			};
+		}
+		case 'mainContentCustomElementCount': {
+			return {
+				columns: ['main_content_custom_element_count', 'url_sort_key', 'page_id'],
 				scanDirection: sortOrder,
 			};
 		}

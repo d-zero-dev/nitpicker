@@ -54,6 +54,7 @@ export const PAGE_LIST_COLUMNS: readonly string[] = [
 	'main_content_video_count',
 	'main_content_audio_count',
 	'main_content_canvas_count',
+	'main_content_custom_element_count',
 	'scroll_height_desktop',
 	'scroll_height_mobile',
 	'console_error_count',
@@ -86,7 +87,7 @@ export const PAGE_LIST_COLUMNS: readonly string[] = [
  * instead of a fixed string, to fall back to a `0` literal when the column
  * is absent.
  *
- * All three page-list queries (`listPages`, `listPagesByTag`,
+ * All three page-list queries (`listPages`, `listPagesByTechnology`,
  * `listPagesByJsonLdType`) share this projection so their emitted DTO shape
  * stays lock-step with {@link PAGE_LIST_COLUMNS}.
  */
@@ -138,6 +139,7 @@ export const PAGE_LIST_SELECT_COLUMNS: readonly string[] = [
 	'pm.main_content_video_count as main_content_video_count',
 	'pm.main_content_audio_count as main_content_audio_count',
 	'pm.main_content_canvas_count as main_content_canvas_count',
+	'pm.main_content_custom_element_count as main_content_custom_element_count',
 	'pm.scroll_height_desktop as scroll_height_desktop',
 	'pm.scroll_height_mobile as scroll_height_mobile',
 	'pm.console_error_count as console_error_count',
@@ -150,8 +152,8 @@ export const PAGE_LIST_SELECT_COLUMNS: readonly string[] = [
  * {@link PageListItem} DTO. Camel-cases column names, converts SQLite
  * 0/1 integers to booleans, and surfaces the denormalised aggregates as-is.
  *
- * Used by `listPages`, `listPagesByTag`, and `listPagesByJsonLdType` so the
- * three SQL paths produce an identical DTO shape.
+ * Used by `listPages`, `listPagesByTechnology`, and `listPagesByJsonLdType`
+ * so the three SQL paths produce an identical DTO shape.
  * @param row - One SQL row with the {@link PAGE_LIST_COLUMNS} columns.
  */
 export function mapPageRowToListItem(row: PageListRow): PageListItem {
@@ -208,6 +210,7 @@ export function mapPageRowToListItem(row: PageListRow): PageListItem {
 		mainContentVideoCount: row.main_content_video_count,
 		mainContentAudioCount: row.main_content_audio_count,
 		mainContentCanvasCount: row.main_content_canvas_count,
+		mainContentCustomElementCount: row.main_content_custom_element_count,
 		scrollHeightDesktop: row.scroll_height_desktop,
 		scrollHeightMobile: row.scroll_height_mobile,
 		consoleErrorCount: row.console_error_count,

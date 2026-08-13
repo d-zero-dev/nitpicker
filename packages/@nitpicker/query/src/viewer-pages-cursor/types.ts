@@ -19,6 +19,7 @@ export type ViewerPagesSortColumn =
 	| 'main_content_video_count'
 	| 'main_content_audio_count'
 	| 'main_content_canvas_count'
+	| 'main_content_custom_element_count'
 	| 'scroll_height_desktop'
 	| 'scroll_height_mobile'
 	| 'console_error_count'
@@ -122,6 +123,7 @@ export interface ViewerPagesCursorPayload {
 		| 'mainContentVideoCount'
 		| 'mainContentAudioCount'
 		| 'mainContentCanvasCount'
+		| 'mainContentCustomElementCount'
 		| 'scrollHeightDesktop'
 		| 'scrollHeightMobile'
 		| 'consoleErrorCount';

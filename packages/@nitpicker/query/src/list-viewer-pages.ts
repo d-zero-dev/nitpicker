@@ -102,6 +102,7 @@ async function buildCursorPaginatedResult(
 			| 'mainContentVideoCount'
 			| 'mainContentAudioCount'
 			| 'mainContentCanvasCount'
+			| 'mainContentCustomElementCount'
 			| 'scrollHeightDesktop'
 			| 'scrollHeightMobile'
 			| 'consoleErrorCount';

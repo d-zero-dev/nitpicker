@@ -565,6 +565,18 @@ export interface ContentTypeCount {
 }
 
 /**
+ * A count of distinct pages where a given technology was detected —
+ * `getSummary`'s live-query counterpart of `getTechnologyInventory`, scoped
+ * to page count only (no category/confidence — see `getTechnologyInventory`
+ * for the fuller inventory).
+ */
+export interface TechnologyCount {
+	technology: string;
+	/** Number of distinct pages where this technology was detected. */
+	pageCount: number;
+}
+
+/**
  * Site-wide summary statistics for a crawled archive.
  */
 export interface SummaryResult {
@@ -647,6 +659,13 @@ export interface SummaryResult {
 	 * total count descending so the dominant types lead the chart.
 	 */
 	contentTypeDistribution: ContentTypeCount[];
+	/**
+	 * Distribution of detected technologies across the whole archive
+	 * (`page_technologies`, one row per technology, live `GROUP BY`
+	 * — see `getTechnologyInventory` for the fuller per-technology
+	 * category/confidence inventory). Sorted by page count descending.
+	 */
+	technologyDistribution: TechnologyCount[];
 	/**
 	 * Count of currently-failed (`status = -1`) pages whose latest recorded
 	 * error falls inside a recorded `network_outages` window — i.e. failures
@@ -870,6 +889,7 @@ export interface ListPagesOptions {
 		| 'mainContentVideoCount'
 		| 'mainContentAudioCount'
 		| 'mainContentCanvasCount'
+		| 'mainContentCustomElementCount'
 		| 'scrollHeightDesktop'
 		| 'scrollHeightMobile'
 		| 'consoleErrorCount';
@@ -882,7 +902,7 @@ export interface ListPagesOptions {
 }
 
 /**
- * Raw row shape projected by `listPages` / `listPagesByTag` /
+ * Raw row shape projected by `listPages` / `listPagesByTechnology` /
  * `listPagesByJsonLdType` — the SQL columns each query selects from the
  * `pages` table. Kept here so all three callers project the same superset
  * and feed it to `mapPageRowToListItem`.
@@ -935,6 +955,7 @@ export interface PageListRow {
 	main_content_video_count: number | null;
 	main_content_audio_count: number | null;
 	main_content_canvas_count: number | null;
+	main_content_custom_element_count: number | null;
 	scroll_height_desktop: number | null;
 	scroll_height_mobile: number | null;
 	console_error_count: number | null;
@@ -1054,6 +1075,8 @@ export interface PageListItem {
 	mainContentAudioCount: number | null;
 	/** Number of canvases within the main region (denormalised). */
 	mainContentCanvasCount: number | null;
+	/** Number of Web Components (custom elements) within the main region (denormalised). */
+	mainContentCustomElementCount: number | null;
 	/** `document.body.scrollHeight` at the desktop-compact preset (denormalised). */
 	scrollHeightDesktop: number | null;
 	/** `document.body.scrollHeight` at the mobile-small preset (denormalised). */
@@ -1232,6 +1255,7 @@ export interface ListViewerPagesOptions {
 		| 'mainContentVideoCount'
 		| 'mainContentAudioCount'
 		| 'mainContentCanvasCount'
+		| 'mainContentCustomElementCount'
 		| 'scrollHeightDesktop'
 		| 'scrollHeightMobile'
 		| 'consoleErrorCount';
@@ -1281,10 +1305,10 @@ export interface CursorPaginatedPageList extends PaginatedPageList {
  * Detailed information about a single page.
  *
  * Includes the full flat meta column set, the `metaExtras` JSON catch-all,
- * and lightweight summaries of `page_jsonld` / `page_tags`. The raw JSON-LD
- * payload and full tag rows are fetched via the dedicated endpoints
- * (`getPageJsonLd(url)` / `getPageTags(url)`) so the page-detail response
- * stays token-bounded for MCP / LLM consumers.
+ * and lightweight summaries of `page_jsonld` / `page_technologies`. The raw
+ * JSON-LD payload and per-signal evidence are fetched via the dedicated
+ * endpoints (`getPageJsonLd(url)` / `getPageTechnologies(url)`) so the
+ * page-detail response stays token-bounded for MCP / LLM consumers.
  */
 export interface PageDetail {
 	/** The page URL. */
@@ -1470,6 +1494,8 @@ export interface PageDetail {
 	mainContentAudioCount: number | null;
 	/** Number of canvases within the main region (denormalised; full detail via `getPageMainContents`). */
 	mainContentCanvasCount: number | null;
+	/** Number of Web Components (custom elements) within the main region (denormalised; full detail via `getPageMainContents`). */
+	mainContentCustomElementCount: number | null;
 	/** `document.body.scrollHeight` at the desktop-compact preset (denormalised). */
 	scrollHeightDesktop: number | null;
 	/** `document.body.scrollHeight` at the mobile-small preset (denormalised). */
@@ -1481,8 +1507,8 @@ export interface PageDetail {
 	metaExtras: Record<string, unknown>;
 	/** Summary of JSON-LD entries (count + types + parseErrorCount). */
 	jsonLd: JsonLdSummaryDto;
-	/** Summary of Wappalyzer tags (count + provider→ids map). */
-	tags: TagsSummaryDto;
+	/** Confidence-combined technology roll-up, confidence descending. Fetch per-signal evidence via `getPageTechnologies`. */
+	technologies: readonly PageTechnologySummaryDto[];
 
 	/** Response headers as key-value pairs. */
 	responseHeaders: Record<string, string>;
@@ -1521,13 +1547,16 @@ export interface JsonLdSummaryDto {
 }
 
 /**
- * DTO mirror of {@link import('@nitpicker/crawler').TagsSummary}.
+ * DTO mirror of the confidence-combined technology roll-up returned by
+ * `getPageDetail` — a lightweight per-technology summary (no `signals`
+ * evidence array; fetch the full drill-down via `getPageTechnologies`).
  */
-export interface TagsSummaryDto {
-	/** Total tag rows for the page. */
-	count: number;
-	/** Provider → list of unique external IDs (sorted). */
-	providerIds: Readonly<Record<string, readonly string[]>>;
+export interface PageTechnologySummaryDto {
+	technology: string;
+	category: string | null;
+	version: string | null;
+	confidence: number;
+	signalCount: number;
 }
 
 /**
@@ -1554,23 +1583,38 @@ export interface PageJsonLdEntry {
 }
 
 /**
- * One tag entry returned by `getPageTags(url)`.
+ * One raw signal within `PageTechnologyEntry.signals` — the "why was this
+ * detected" evidence behind one technology's combined `confidence`.
  */
-export interface PageTagEntry {
-	/** Wappalyzer provider name. */
-	provider: string;
-	/** First category (convenience projection). */
+export interface TechnologySignalEntry {
+	signalType:
+		| 'wappalyzer'
+		| 'meta-generator'
+		| 'html-marker'
+		| 'url-pattern'
+		| 'scoped-attr'
+		| 'weak-marker'
+		| 'js-license-comment';
+	/** Matched fragment or raw value, or `null`. */
+	evidence: string | null;
+	/** This signal's confidence in isolation, 0-100. */
+	weight: number;
+}
+
+/**
+ * One technology entry returned by `getPageTechnologies(url)` — the
+ * confidence-combined roll-up plus every signal that contributed to it.
+ */
+export interface PageTechnologyEntry {
+	technology: string;
 	category: string | null;
-	/** Real external identifier (GTM-XXXX / G-XXXX / null). */
-	externalId: string | null;
-	/** Wappalyzer-reported version. */
 	version: string | null;
-	/** Wappalyzer-reported confidence (0-100). */
-	confidence: number | null;
-	/** Full categories list. */
-	categories: readonly string[];
-	/** Source details (script-src / inline / iframe-src / window-global / …). */
-	sources: ReadonlyArray<Record<string, unknown>>;
+	/** `combineTechnologyConfidence`'s noisy-OR result, 0-100. */
+	confidence: number;
+	/** Count of distinct `signalType`s that contributed to `confidence`. */
+	signalCount: number;
+	/** Every raw signal detected for this technology, in insertion order. */
+	signals: readonly TechnologySignalEntry[];
 }
 
 /**
@@ -1672,11 +1716,26 @@ export interface MainContentCanvasEntry {
 }
 
 /**
+ * A Web Component (custom element) entry within
+ * `PageMainContents.customElements`. Unlike its eight siblings, captured by
+ * nitpicker itself rather than derived from beholder's `MainContentsData`.
+ */
+export interface MainContentCustomElementEntry {
+	/** Element `nodeName` (e.g. `'MY-WIDGET'`). */
+	nodeName: string;
+	/** Element `id`, or `null`. */
+	elementId: string | null;
+	/** Element CSS classes. */
+	classList: string[];
+}
+
+/**
  * Full drill-down for a page's detected main-content region, returned by
- * `getPageMainContents(url)`. Bundles all eight `page_main_content_*` child
+ * `getPageMainContents(url)`. Bundles all nine `page_main_content_*` child
  * tables plus the detected element's identity and the page's scroll-height
- * measurements into one call — mirroring `getPageTags` / `getPageJsonLd`'s
- * grain, but as a single combined object since the eight arrays describe one
+ * measurements into one call — mirroring `getPageTechnologies` /
+ * `getPageJsonLd`'s grain, but as a single combined object since the nine
+ * arrays describe one
  * conceptual "main content" rather than independent detections.
  * @example
  * const mc = await getPageMainContents(accessor, 'https://example.com/');
@@ -1725,6 +1784,8 @@ export interface PageMainContents {
 	audios: MainContentAudioEntry[];
 	/** Canvases within the main region, in DOM order. */
 	canvases: MainContentCanvasEntry[];
+	/** Web Components (custom elements) within the main region, in DOM order. */
+	customElements: MainContentCustomElementEntry[];
 }
 
 /**
@@ -1744,24 +1805,45 @@ export interface PageJsonLdOverviewEntry {
 }
 
 /**
- * Result of `getTagInventory()` — one row per detected Wappalyzer provider
+ * Result of `getTechnologyInventory()` — one row per detected technology
  * across the whole archive.
  */
-export interface TagInventoryEntry {
-	/** Wappalyzer provider name. */
-	provider: string;
-	/** Number of distinct pages where the provider was detected. */
+export interface TechnologyInventoryEntry {
+	technology: string;
+	/** First non-null category among the technology's `page_technologies` rows, or `null`. */
+	category: string | null;
+	/** Number of distinct pages where the technology was detected. */
+	pageCount: number;
+	/** Mean `confidence` across the technology's `page_technologies` rows, 0-100. */
+	avgConfidence: number;
+}
+
+/**
+ * One (directory, technology) bucket returned by
+ * `getTechnologyDirectoryDistribution()` — the viewer's `/technologies`
+ * directory × technology matrix, read from the precomputed
+ * `viewer_technology_directory_stats` table (no live equivalent; returns
+ * `[]` when the read model is absent or stale — see that function's docs).
+ */
+export interface TechnologyDirectoryStatsEntry {
+	/** The page URL's origin (`<scheme>//<host>`). */
+	rootKey: string;
+	/** First-path-segment directory bucket, e.g. `https://example.com/blog/`. */
+	directory: string;
+	technology: string;
+	/** Distinct-page count for this (directory, technology) pair. */
 	pageCount: number;
 }
 
 /**
- * Filter options for `listPagesByTag(provider, externalId?, …)`.
+ * Filter options for `listPagesByTechnology(technology, …)`.
  */
-export interface ListPagesByTagOptions {
-	/** Wappalyzer provider name. */
-	provider: string;
-	/** Optional external ID (GTM-XXXX / G-XXXX / …). Omit for any. */
-	externalId?: string;
+export interface ListPagesByTechnologyOptions {
+	technology: string;
+	/** Minimum `page_technologies.confidence` (0-100). Omit for any. */
+	minConfidence?: number;
+	/** Restrict to pages where this specific signal type fired. Omit for any. */
+	signalType?: TechnologySignalEntry['signalType'];
 	/** Maximum number of results. */
 	limit?: number;
 	/** Number of results to skip. */
@@ -1781,7 +1863,7 @@ export interface ListPagesByJsonLdTypeOptions {
 }
 
 /**
- * Result of `countPagesByTag` / `countPagesByJsonLdType` — the lightweight
+ * Result of `countPagesByTechnology` / `countPagesByJsonLdType` — the lightweight
  * count-only sibling to the corresponding `list_pages_by_*` queries.
  */
 export interface PageCountResult {

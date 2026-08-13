@@ -37,7 +37,7 @@ describe('dropViewerReadModelTables', () => {
 		).resolves.toBeUndefined();
 	});
 
-	it('drops all 24 tables after they were created', async () => {
+	it('drops all 26 tables after they were created', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 		for (const table of [
@@ -65,6 +65,8 @@ describe('dropViewerReadModelTables', () => {
 			'viewer_duplicate_groups',
 			'viewer_duplicate_group_pages',
 			'viewer_mismatches',
+			'viewer_technology_summary',
+			'viewer_technology_directory_stats',
 		]) {
 			expect(await knex.schema.hasTable(table)).toBe(true);
 		}
@@ -95,6 +97,8 @@ describe('dropViewerReadModelTables', () => {
 			'viewer_duplicate_groups',
 			'viewer_duplicate_group_pages',
 			'viewer_mismatches',
+			'viewer_technology_summary',
+			'viewer_technology_directory_stats',
 		]) {
 			expect(await knex.schema.hasTable(table)).toBe(false);
 		}

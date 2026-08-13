@@ -1,7 +1,7 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 24 viewer-read-model tables against the given connection, with
+ * Creates all 26 viewer-read-model tables against the given connection, with
  * no indexes. Assumes none of the tables currently exist — callers
  * (`buildViewerReadModel`) are responsible for dropping any prior version
  * first, inside the same transaction, so this function is not itself
@@ -52,6 +52,7 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			external_contents integer not null,
 			status_json text not null,
 			content_type_json text not null,
+			technology_json text not null,
 			metadata_json text not null,
 			network_outage_affected_failures integer not null,
 			console_json text not null
@@ -94,6 +95,7 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			main_content_video_count integer not null default 0,
 			main_content_audio_count integer not null default 0,
 			main_content_canvas_count integer not null default 0,
+			main_content_custom_element_count integer not null default 0,
 			scroll_height_desktop integer not null default 0,
 			scroll_height_mobile integer not null default 0,
 			-- page_meta.console_error_count (pageerror+error occurrences,
@@ -608,6 +610,33 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			-- filters) — backs findMismatches' explicit sortBy:'url' (natural
 			-- sort) on the fast path.
 			natural_url_rank integer not null
+		)
+	`);
+
+	// Site-wide technology inventory, one row per detected technology —
+	// the read-model counterpart of `getTechnologyInventory`'s live query
+	// against `page_technologies`, produced by `buildTechnologySummaryRows`.
+	await trx.raw(`
+		CREATE TABLE viewer_technology_summary (
+			technology text primary key,
+			category text,
+			detected_page_count integer not null,
+			avg_confidence integer not null
+		)
+	`);
+
+	// Directory × technology distribution — one row per (directory,
+	// technology) pair, produced by `buildTechnologyDirectoryStatsRows`. A
+	// page contributes to one row per technology it was detected with
+	// (not limited to a single "primary" technology), so counts across a
+	// directory's rows can exceed its page count.
+	await trx.raw(`
+		CREATE TABLE viewer_technology_directory_stats (
+			id integer primary key,
+			root_key text not null,
+			directory text not null,
+			technology text not null,
+			page_count integer not null
 		)
 	`);
 }

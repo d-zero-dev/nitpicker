@@ -478,6 +478,49 @@ export interface ResourceInsertRows {
 }
 
 /**
+ * Minimal shape `buildTechnologySummaryRows` / `buildTechnologyDirectoryStatsRows`
+ * need from each `page_technologies` row (joined to its page's URL).
+ */
+export interface TechnologySourceRow {
+	/** The page's absolute URL — used only to derive its directory bucket. */
+	url: string;
+	technology: string;
+	category: string | null;
+	/** `page_technologies.confidence`, 0-100. */
+	confidence: number;
+}
+
+/**
+ * One row to insert into `viewer_technology_summary` — one row per detected
+ * technology across the whole archive, produced by `buildTechnologySummaryRows`.
+ */
+export interface TechnologySummaryInsertRow {
+	technology: string;
+	/** First non-null category seen for this technology, or `null`. */
+	category: string | null;
+	/** Distinct-page count for this technology. */
+	detected_page_count: number;
+	/** Mean `confidence` across this technology's rows, 0-100. */
+	avg_confidence: number;
+}
+
+/**
+ * One row to insert into `viewer_technology_directory_stats` — one
+ * (directory, technology) pair, produced by `buildTechnologyDirectoryStatsRows`.
+ * A page can contribute to multiple rows (once per detected technology) since
+ * `page_technologies` is not limited to a single "primary" technology per page.
+ */
+export interface TechnologyDirectoryStatsInsertRow {
+	/** The page URL's origin (`<scheme>//<host>`) — mirrors `computeDirectoryDistribution`'s grouping key. */
+	root_key: string;
+	/** First-path-segment directory bucket, e.g. `https://example.com/blog/`. */
+	directory: string;
+	technology: string;
+	/** Distinct-page count for this (directory, technology) pair. */
+	page_count: number;
+}
+
+/**
  * One row to insert into `viewer_images` (issue #113) — one row per
  * `images` row, produced by `computeImageInsertRows`. Deliberately excludes
  * `src`/`currentSrc`/`alt`/`sourceCode`: those large text columns are never

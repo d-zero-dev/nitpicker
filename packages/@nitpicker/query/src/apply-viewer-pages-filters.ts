@@ -75,8 +75,8 @@ export function applyViewerPagesFilters(
 	if (hasFilterValue(options.templateKey)) {
 		// `page_templates` is a narrow, `page_id`-PK'd auxiliary table
 		// populated by `--templates` (see `hasPageTemplatesTable`'s doc) —
-		// like `page_tags`/`page_jsonld`, it is not part of the read-model
-		// schema, so filtering by it needs no `viewer_pages` column and no
+		// like `page_technologies`/`page_jsonld`, it is not part of the
+		// read-model schema, so filtering by it needs no `viewer_pages` column and no
 		// `VIEWER_READ_MODEL_SCHEMA_VERSION` bump. A `whereIn` subquery (not
 		// a `JOIN`) keeps `page_templates` out of the FROM clause entirely —
 		// `readKeysetWindow`'s generic `SELECT page_id, ...` is shared by

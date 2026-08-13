@@ -4,8 +4,8 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 /**
  * Retrieves the full main-content drill-down for the page at the given URL:
  * the detected main element's identity, scalar word/scroll-height metrics,
- * and all eight `page_main_content_*` child tables (headings/images/tables/
- * buttons/iframes/videos/audios/canvases), in DOM order.
+ * and all nine `page_main_content_*` child tables (headings/images/tables/
+ * buttons/iframes/videos/audios/canvases/customElements), in DOM order.
  *
  * Returns `null` when the page was never fully rendered (external, non-HTML,
  * or metadata-only scrape) — `page_meta.main_content_word_count` being `null`
@@ -48,17 +48,27 @@ export async function getPageMainContents(
 		return null;
 	}
 
-	const [headings, images, tables, buttons, iframes, videos, audios, canvases] =
-		await Promise.all([
-			accessor.getHeadingsOfPage(page.id),
-			accessor.getMainContentImagesOfPage(page.id),
-			accessor.getMainContentTablesOfPage(page.id),
-			accessor.getButtonsOfPage(page.id),
-			accessor.getIframesOfPage(page.id),
-			accessor.getVideosOfPage(page.id),
-			accessor.getAudiosOfPage(page.id),
-			accessor.getCanvasesOfPage(page.id),
-		]);
+	const [
+		headings,
+		images,
+		tables,
+		buttons,
+		iframes,
+		videos,
+		audios,
+		canvases,
+		customElements,
+	] = await Promise.all([
+		accessor.getHeadingsOfPage(page.id),
+		accessor.getMainContentImagesOfPage(page.id),
+		accessor.getMainContentTablesOfPage(page.id),
+		accessor.getButtonsOfPage(page.id),
+		accessor.getIframesOfPage(page.id),
+		accessor.getVideosOfPage(page.id),
+		accessor.getAudiosOfPage(page.id),
+		accessor.getCanvasesOfPage(page.id),
+		accessor.getCustomElementsOfPage(page.id),
+	]);
 
 	return {
 		main:
@@ -108,5 +118,10 @@ export async function getPageMainContents(
 		})),
 		audios: audios.map((a) => ({ src: a.src })),
 		canvases: canvases.map((c) => ({ width: c.width, height: c.height })),
+		customElements: customElements.map((c) => ({
+			nodeName: c.nodeName,
+			elementId: c.elementId,
+			classList: c.classList === null ? [] : (JSON.parse(c.classList) as string[]),
+		})),
 	};
 }

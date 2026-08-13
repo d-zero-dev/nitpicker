@@ -336,4 +336,14 @@ export async function createViewerReadModelIndexes(trx: Knex): Promise<void> {
 	await trx.raw(
 		'CREATE INDEX vm_type_expected ON viewer_mismatches(type, expected, mismatch_id)',
 	);
+
+	// Backs the `/technologies` directory-distribution panel's lookup by
+	// directory (grouped by technology within it) and the site-wide
+	// per-technology roll-up across every directory.
+	await trx.raw(
+		'CREATE INDEX vtds_directory_technology ON viewer_technology_directory_stats(directory, technology)',
+	);
+	await trx.raw(
+		'CREATE INDEX vtds_technology ON viewer_technology_directory_stats(technology)',
+	);
 }

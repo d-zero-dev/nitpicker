@@ -3,12 +3,13 @@ import type {
 	MetadataFulfillment,
 	StatusCount,
 	SummaryResult,
+	TechnologyCount,
 } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 /**
  * Retrieves site-wide summary statistics from the precomputed
- * `viewer_summary` read-model row — a single-row `SELECT` plus three
+ * `viewer_summary` read-model row — a single-row `SELECT` plus a handful of
  * `JSON.parse` calls, replacing `getSummary`'s multi-second full-table
  * aggregation on archives where the read model is current.
  *
@@ -58,6 +59,7 @@ export async function getViewerSummary(
 		statusDistribution: JSON.parse(row.status_json) as StatusCount[],
 		metadataFulfillment: JSON.parse(row.metadata_json) as MetadataFulfillment,
 		contentTypeDistribution: JSON.parse(row.content_type_json) as ContentTypeCount[],
+		technologyDistribution: JSON.parse(row.technology_json) as TechnologyCount[],
 		networkOutageAffectedFailures: Number(row.network_outage_affected_failures),
 		consoleLogCounts: JSON.parse(row.console_json) as {
 			pageerror: number;

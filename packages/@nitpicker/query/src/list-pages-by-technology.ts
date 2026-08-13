@@ -1,4 +1,4 @@
-import type { ListPagesByTagOptions, PageListItem, PageListRow } from './types.js';
+import type { ListPagesByTechnologyOptions, PageListItem, PageListRow } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
@@ -12,26 +12,27 @@ import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates
 import { requireConsoleErrorCountColumn } from './require-console-error-count-column.js';
 
 /**
- * Lists pages that have a Wappalyzer-detected tag matching the given provider
- * (and optionally a specific external ID).
+ * Lists pages where the given technology was detected, optionally filtered
+ * by a minimum confidence and/or a specific contributing signal type.
  *
- * 0.13: reads through the 0.13 `content_items` + `page_meta`
- * + refs layout via {@link PAGE_LIST_SELECT_COLUMNS}. `page_tags` FKs still
- * reference the page id, which `content_items` preserves verbatim from
- * `pages.id` (0.13 guarantees id-equivalence).
+ * Direct replacement for `listPagesByTag` — joins `page_technologies`
+ * (the confidence-combined roll-up) rather than the removed `page_tags`.
+ * `signalType`, when given, additionally requires a matching
+ * `technology_signals` row so MCP/LLM consumers can ask "pages where
+ * Next.js was detected via `_next/` specifically" rather than any signal.
  * @param accessor - The archive accessor to query.
- * @param options - `provider` (required), optional `externalId`, `limit`, `offset`.
+ * @param options - `technology` (required), optional `minConfidence` / `signalType` / `limit` / `offset`.
  * @returns Matching page list items, in pageId order.
  * @example
- * // Every page carrying a specific GTM container:
- * const pages = await listPagesByTag(accessor, {
- *   provider: 'Google Tag Manager',
- *   externalId: 'GTM-XXXX',
+ * // Every page with Next.js detected at confidence >= 70:
+ * const pages = await listPagesByTechnology(accessor, {
+ *   technology: 'Next.js',
+ *   minConfidence: 70,
  * });
  */
-export async function listPagesByTag(
+export async function listPagesByTechnology(
 	accessor: ArchiveAccessor,
-	options: ListPagesByTagOptions,
+	options: ListPagesByTechnologyOptions,
 ): Promise<PageListItem[]> {
 	const knex = accessor.getKnex();
 	await requireConsoleErrorCountColumn(knex);
@@ -40,7 +41,7 @@ export async function listPagesByTag(
 	const hasPageTemplates = await hasPageTemplatesTable(knex);
 	const hasDedupeCapColumn = await hasDedupeCapEventIdColumn(knex);
 	let q = knex('content_items as ci')
-		.join('page_tags', 'page_tags.pageId', '=', 'ci.id')
+		.join('page_technologies as ptech', 'ptech.pageId', '=', 'ci.id')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
 		.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
 		.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
@@ -79,11 +80,21 @@ export async function listPagesByTag(
 			'ci.id',
 			...buildHeaderPresenceSelects(knex, 'hf'),
 		)
-		.where('page_tags.provider', options.provider)
+		.where('ptech.technology', options.technology)
 		.where('ci.scraped', 1)
 		.whereNull('ci.redirect_dest_id');
-	if (options.externalId !== undefined) {
-		q = q.where('page_tags.externalId', options.externalId);
+	if (options.minConfidence !== undefined) {
+		q = q.where('ptech.confidence', '>=', options.minConfidence);
+	}
+	if (options.signalType !== undefined) {
+		q = q.whereExists((subquery) =>
+			subquery
+				.select(1)
+				.from('technology_signals as ts')
+				.where('ts.pageId', '=', knex.raw('ptech.pageId'))
+				.where('ts.technology', '=', knex.raw('ptech.technology'))
+				.where('ts.signalType', options.signalType!),
+		);
 	}
 	const rows = (await q
 		.orderBy('ci.id', 'asc')

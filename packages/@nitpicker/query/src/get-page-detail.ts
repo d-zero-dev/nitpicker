@@ -1,5 +1,5 @@
 import type { PageDetail } from './types.js';
-import type { ArchiveAccessor, JsonLdRow, TagRow } from '@nitpicker/crawler';
+import type { ArchiveAccessor, JsonLdRow, PageTechnologyRow } from '@nitpicker/crawler';
 
 import { decodeJsonRef, loadResponseHeadersBySetIds } from '@nitpicker/crawler';
 
@@ -30,24 +30,23 @@ function summarizeJsonLdRows(rows: readonly JsonLdRow[]): PageDetail['jsonLd'] {
 }
 
 /**
- * Summarises tag rows for the page-detail response.
- * @param rows - The page's `page_tags` rows.
+ * Projects `page_technologies` rows into the page-detail response's
+ * lightweight technology summary (no `signals` evidence array — fetch the
+ * full drill-down via `getPageTechnologies`).
+ * @param rows - The page's `page_technologies` rows.
  */
-function summarizeTagRows(rows: readonly TagRow[]): PageDetail['tags'] {
-	const providerIds: Record<string, Set<string>> = {};
-	for (const row of rows) {
-		if (!(row.provider in providerIds)) {
-			providerIds[row.provider] = new Set<string>();
-		}
-		if (row.externalId !== null) {
-			providerIds[row.provider]!.add(row.externalId);
-		}
-	}
-	const sorted: Record<string, readonly string[]> = {};
-	for (const provider of Object.keys(providerIds).toSorted()) {
-		sorted[provider] = [...providerIds[provider]!].toSorted();
-	}
-	return { count: rows.length, providerIds: sorted };
+function summarizeTechnologyRows(
+	rows: readonly PageTechnologyRow[],
+): PageDetail['technologies'] {
+	return rows
+		.toSorted((a, b) => b.confidence - a.confidence)
+		.map((row) => ({
+			technology: row.technology,
+			category: row.category,
+			version: row.version,
+			confidence: row.confidence,
+			signalCount: row.signalCount,
+		}));
 }
 
 /**
@@ -236,6 +235,7 @@ export async function getPageDetail(
 			'pm.main_content_video_count as main_content_video_count',
 			'pm.main_content_audio_count as main_content_audio_count',
 			'pm.main_content_canvas_count as main_content_canvas_count',
+			'pm.main_content_custom_element_count as main_content_custom_element_count',
 			'pm.scroll_height_desktop as scroll_height_desktop',
 			'pm.scroll_height_mobile as scroll_height_mobile',
 			templateKeySelectColumn(knex, hasPageTemplates),
@@ -319,9 +319,9 @@ export async function getPageDetail(
 
 	const aliasUrls = aliasRows.map((row: { url: string }) => row.url);
 
-	const [jsonLdRows, tagRows, consoleLogs] = await Promise.all([
+	const [jsonLdRows, technologyRows, consoleLogs] = await Promise.all([
 		accessor.getJsonLdOfPage(page.id),
-		accessor.getTagsOfPage(page.id),
+		accessor.getPageTechnologiesOfPage(page.id),
 		getPageConsoleLogs(accessor, page.url),
 	]);
 
@@ -408,12 +408,13 @@ export async function getPageDetail(
 		mainContentVideoCount: page.main_content_video_count,
 		mainContentAudioCount: page.main_content_audio_count,
 		mainContentCanvasCount: page.main_content_canvas_count,
+		mainContentCustomElementCount: page.main_content_custom_element_count,
 		scrollHeightDesktop: page.scroll_height_desktop,
 		scrollHeightMobile: page.scroll_height_mobile,
 		templateKey: page.templateKey,
 		metaExtras,
 		jsonLd: summarizeJsonLdRows(jsonLdRows),
-		tags: summarizeTagRows(tagRows),
+		technologies: summarizeTechnologyRows(technologyRows),
 		responseHeaders,
 		outboundLinks,
 		redirectFrom,
