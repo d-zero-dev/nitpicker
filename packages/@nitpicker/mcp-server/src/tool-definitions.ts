@@ -39,7 +39,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'get_summary',
 		description:
-			'Get site-wide overview. Returns: internal/external HTML page counts (`internalPages` / `externalPages`), internal/external content-row counts across every MIME (`internalContents` / `externalContents` — HTML + PDF + Office docs + CSVs + archives + ...), HTTP status distribution, Content-Type distribution over 18 categories (html, pdf, csv, word, excel, powerpoint, image, css, javascript, json+yaml, xml, font, audio, video, archive, text, other, unknown), and metadata fulfillment rates (title, description, OG tags) for internal HTML pages only. Every page/content count and the Content-Type distribution exclude `status = 404` rows (no page exists behind a 404 URL); 404s appear only in the status distribution, split into a plain `404` row (fix-target broken pages) and a trailing `inventorySeed: true` row (`crawl --inventory` input mistakes). The metadata denominator excludes only the inventory-seed 404s. `internalContents` is always >= `internalPages` (the latter applies the historical HTML-or-null filter, the former does not). Use this first to understand the archive contents.',
+			'Get site-wide overview. Returns: internal/external HTML page counts (`internalPages` / `externalPages`), internal/external content-row counts across every MIME (`internalContents` / `externalContents` — HTML + PDF + Office docs + CSVs + archives + ...), HTTP status distribution, Content-Type distribution over 18 categories (html, pdf, csv, word, excel, powerpoint, image, css, javascript, json+yaml, xml, font, audio, video, archive, text, other, unknown), technology distribution (`technologyDistribution` — one entry per detected technology with its page count, page count descending; see `get_technology_inventory` for category/confidence detail), and metadata fulfillment rates (title, description, OG tags) for internal HTML pages only. Every page/content count and the Content-Type distribution exclude `status = 404` rows (no page exists behind a 404 URL); 404s appear only in the status distribution, split into a plain `404` row (fix-target broken pages) and a trailing `inventorySeed: true` row (`crawl --inventory` input mistakes). The metadata denominator excludes only the inventory-seed 404s. `internalContents` is always >= `internalPages` (the latter applies the historical HTML-or-null filter, the former does not). Use this first to understand the archive contents.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -156,7 +156,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'get_page_detail',
 		description:
-			"Get full details for a specific page URL: ~47 flat meta fields (title, description, OG, Twitter, robots, link, charset, manifest, themeColor, fb_app_id, verification_google, format_detection, og:image:alt/width/height, og:locale, og:article timestamps, twitter:site/creator, etc.), `metaExtras` JSON (referrer, viewport parsed, httpEquiv, apple, msapplication, verification.{bing|yandex|...}, geo, citation, hreflang alternates, others.*, originTrial), JSON-LD/SpeculationRules **summary** (count + unique @types + parseErrorCount), Wappalyzer tag **summary** (count + provider→ids map), main-content **aggregate counts only** (mainContentSelector, mainContentWordCount/BodyWordCount, mainContentHeadingCount/ImageCount/TableCount/ButtonCount/IframeCount/VideoCount/AudioCount/CanvasCount, scrollHeightDesktop/Mobile — null when the page was never rendered), outbound links, redirect sources, response headers, `isDedupeCapped`/`dedupeCapShapeKey` (whether --dedupe-cap captured this page's URL shape as a same-cluster crawl trap, and which shape), and within-archive timestamps (firstCrawledAt / lastCrawledAt). Inbound links are NOT included here — a page's referrer count can reach the hundreds of thousands on a large site; use `list_inbound_links` instead. Raw JSON-LD entries, full tag rows, and the main-content child-entity arrays are also NOT included — fetch them via `get_page_jsonld` / `get_page_tags` / `get_page_main_contents`. Use when drilling down into a specific page.",
+			"Get full details for a specific page URL: ~47 flat meta fields (title, description, OG, Twitter, robots, link, charset, manifest, themeColor, fb_app_id, verification_google, format_detection, og:image:alt/width/height, og:locale, og:article timestamps, twitter:site/creator, etc.), `metaExtras` JSON (referrer, viewport parsed, httpEquiv, apple, msapplication, verification.{bing|yandex|...}, geo, citation, hreflang alternates, others.*, originTrial), JSON-LD/SpeculationRules **summary** (count + unique @types + parseErrorCount), confidence-combined **technology roll-up** (technology/category/version/confidence/signalCount per detected technology, confidence descending — no per-signal evidence), main-content **aggregate counts only** (mainContentSelector, mainContentWordCount/BodyWordCount, mainContentHeadingCount/ImageCount/TableCount/ButtonCount/IframeCount/VideoCount/AudioCount/CanvasCount/CustomElementCount, scrollHeightDesktop/Mobile — null when the page was never rendered), outbound links, redirect sources, response headers, `isDedupeCapped`/`dedupeCapShapeKey` (whether --dedupe-cap captured this page's URL shape as a same-cluster crawl trap, and which shape), and within-archive timestamps (firstCrawledAt / lastCrawledAt). Inbound links are NOT included here — a page's referrer count can reach the hundreds of thousands on a large site; use `list_inbound_links` instead. Raw JSON-LD entries, per-signal technology evidence, and the main-content child-entity arrays are also NOT included — fetch them via `get_page_jsonld` / `get_page_technologies` / `get_page_main_contents`. Use when drilling down into a specific page.",
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -498,9 +498,9 @@ export const toolDefinitions: Tool[] = [
 		},
 	},
 	{
-		name: 'list_pages_by_tag',
+		name: 'list_pages_by_technology',
 		description:
-			'List pages that have a Wappalyzer-detected tag matching the given `provider` (and optionally a specific `externalId` like a GTM container ID or GA4 measurement ID). Returns the same shape as `list_pages`. Before pulling the full list, consider calling `count_pages_by_tag` to size-check — on a large site GTM may cover most pages and the response can run into MB. For full bulk extraction prefer the CLI: `nitpicker query pages-by-tag --provider "Google Tag Manager" | jq`.',
+			'List pages where the given technology was detected (Wappalyzer detections AND nitpicker\'s own structural signals — URL patterns, HTML markers, scoped attributes, meta generator, JS license comments — combine into one confidence score per technology; see `get_page_technologies` for the per-signal evidence). Optionally filter by a minimum `confidence` (0-100) and/or a specific `signalType`. Returns the same shape as `list_pages`. Before pulling the full list, consider calling `count_pages_by_technology` to size-check. For full bulk extraction prefer the CLI: `nitpicker query pages-by-technology --technology "Next.js" | jq`.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -508,26 +508,29 @@ export const toolDefinitions: Tool[] = [
 					type: 'string',
 					description: 'The archive ID returned by open_archive',
 				},
-				provider: {
+				technology: {
 					type: 'string',
-					description:
-						'Wappalyzer provider name (e.g. "Google Tag Manager", "Google Analytics 4")',
+					description: 'Technology name (e.g. "Next.js", "Google Tag Manager")',
 				},
-				externalId: {
+				minConfidence: {
+					type: 'number',
+					description: 'Minimum combined confidence (0-100). Omit for any.',
+				},
+				signalType: {
 					type: 'string',
 					description:
-						'Optional external identifier extracted from the page (GTM-XXXX / G-XXXX / …). Omit for any.',
+						'Restrict to pages where this specific signal type fired: wappalyzer / meta-generator / html-marker / url-pattern / scoped-attr / weak-marker / js-license-comment. Omit for any.',
 				},
 				limit: { type: 'number', description: 'Max results (default: 100)' },
 				offset: { type: 'number', description: 'Results to skip (default: 0)' },
 			},
-			required: ['archiveId', 'provider'],
+			required: ['archiveId', 'technology'],
 		},
 	},
 	{
-		name: 'count_pages_by_tag',
+		name: 'count_pages_by_technology',
 		description:
-			'Lightweight count-only sibling of `list_pages_by_tag`. Returns `{ pageCount }` for the given provider (and optional `externalId`). Use this to size-check before fetching the full list.',
+			'Lightweight count-only sibling of `list_pages_by_technology`. Returns `{ pageCount }` for the given technology (and optional `minConfidence` / `signalType`). Use this to size-check before fetching the full list.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -535,13 +538,17 @@ export const toolDefinitions: Tool[] = [
 					type: 'string',
 					description: 'The archive ID returned by open_archive',
 				},
-				provider: { type: 'string', description: 'Wappalyzer provider name' },
-				externalId: {
+				technology: { type: 'string', description: 'Technology name' },
+				minConfidence: {
+					type: 'number',
+					description: 'Minimum combined confidence (0-100). Omit for any.',
+				},
+				signalType: {
 					type: 'string',
-					description: 'Optional external identifier (GTM-XXXX / G-XXXX / …)',
+					description: 'Restrict to a specific detection signal type. Omit for any.',
 				},
 			},
-			required: ['archiveId', 'provider'],
+			required: ['archiveId', 'technology'],
 		},
 	},
 	{
@@ -582,9 +589,9 @@ export const toolDefinitions: Tool[] = [
 		},
 	},
 	{
-		name: 'get_tag_inventory',
+		name: 'get_technology_inventory',
 		description:
-			'Returns the site-wide Wappalyzer technology inventory: one entry per detected provider, with the count of distinct pages where it was found, sorted by page count desc. Use as a "what tech does this site use?" answer for audit kick-offs. On 1M-page archives this can be MB-sized; for bulk consumption prefer the CLI: `nitpicker query tag-inventory | jq`.',
+			'Returns the site-wide technology inventory: one entry per detected technology (frameworks detected via URL patterns/HTML markers/scoped attributes/meta generator/JS license comments, AND every Wappalyzer-detected technology — analytics, CMSes, etc.), with its category, the count of distinct pages where it was found, and mean confidence — sorted by page count desc. Use as a "what tech does this site use?" answer for audit kick-offs. On 1M-page archives this can be MB-sized; for bulk consumption prefer the CLI: `nitpicker query technology-inventory | jq`.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -634,9 +641,9 @@ export const toolDefinitions: Tool[] = [
 		},
 	},
 	{
-		name: 'get_page_tags',
+		name: 'get_page_technologies',
 		description:
-			'Returns the Wappalyzer tag rows for a page (one per provider × external-id), with `categories`, `version`, `confidence`, and `sources` preserved. Use after `get_page_detail` returned a tags summary and you need provider details. Bounded payload (KB-scale per page); no slim mode needed.',
+			'Returns the full technology star-chart for a page: every detected technology (confidence descending) with every raw signal that contributed to it (`signalType`, `evidence`, `weight`) — the "why was this detected" drill-down that `get_page_detail`\'s lightweight `technologies` summary omits. Use after `get_page_detail` returned a technologies summary and you need the evidence. Bounded payload (KB-scale per page); no slim mode needed.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -652,7 +659,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'get_page_main_contents',
 		description:
-			'Returns the detected main-content region for a page: its identity (nodeName, id, classList, role, a diagnostic selector), aggregate counts already available via get_page_detail (wordCount, bodyWordCount, scrollHeight at desktop/mobile), and full drill-down for all 8 child-entity arrays in DOM order - headings (text + level), images (src + alt), tables (rows/cols/hasHeader/hasFooter/hasMergedCell), buttons (nodeName/role/type/text/disabled), iframes (src/title/width/height), videos (src/poster/width/height), audios (src), canvases (width/height). Returns null only when the page was never rendered (external page, failed scrape). When the page was rendered but beholder found no main-content element, returns a full object with `main: null`, empty child arrays, and `wordCount: 0` (bodyWordCount and scrollHeight still reflect the whole document, since those are measured independently of main-region detection). Use after get_page_detail when you need the actual entries, not just the counts.',
+			'Returns the detected main-content region for a page: its identity (nodeName, id, classList, role, a diagnostic selector), aggregate counts already available via get_page_detail (wordCount, bodyWordCount, scrollHeight at desktop/mobile), and full drill-down for all 9 child-entity arrays in DOM order - headings (text + level), images (src + alt), tables (rows/cols/hasHeader/hasFooter/hasMergedCell), buttons (nodeName/role/type/text/disabled), iframes (src/title/width/height), videos (src/poster/width/height), audios (src), canvases (width/height), customElements (nodeName/elementId/classList - Web Components, detected by nitpicker itself rather than beholder). Returns null only when the page was never rendered (external page, failed scrape). When the page was rendered but beholder found no main-content element, returns a full object with `main: null`, empty child arrays, and `wordCount: 0` (bodyWordCount and scrollHeight still reflect the whole document, since those are measured independently of main-region detection). Use after get_page_detail when you need the actual entries, not just the counts.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {

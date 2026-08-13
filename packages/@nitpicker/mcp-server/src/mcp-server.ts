@@ -1,3 +1,5 @@
+import type { TechnologySignalEntry } from '@nitpicker/query';
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -7,7 +9,7 @@ import {
 import {
 	ArchiveManager,
 	countPagesByJsonLdType,
-	countPagesByTag,
+	countPagesByTechnology,
 	findDuplicateBodies,
 	getDuplicatesFastPath,
 	getHeaderChecksFastPath,
@@ -20,10 +22,10 @@ import {
 	getPageJsonLd,
 	getPageJsonLdOverview,
 	getPageMainContents,
-	getPageTags,
+	getPageTechnologies,
 	getResourceReferrers,
 	getSummaryFastPath,
-	getTagInventory,
+	getTechnologyInventoryFastPath,
 	getViolations,
 	listConsoleLogs,
 	listDedupeCapEvents,
@@ -35,7 +37,7 @@ import {
 	listNetworkOutages,
 	listPages,
 	listPagesByJsonLdType,
-	listPagesByTag,
+	listPagesByTechnology,
 	listResources,
 	listUnusedResources,
 } from '@nitpicker/query';
@@ -496,25 +498,31 @@ export function createServer() {
 							}),
 						);
 					}
-					case 'list_pages_by_tag': {
+					case 'list_pages_by_technology': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(
-							await listPagesByTag(accessor, {
-								provider: requireString(args, 'provider'),
-								externalId:
-									typeof args.externalId === 'string' ? args.externalId : undefined,
+							await listPagesByTechnology(accessor, {
+								technology: requireString(args, 'technology'),
+								minConfidence: optionalNumber(args, 'minConfidence'),
+								signalType:
+									typeof args.signalType === 'string'
+										? (args.signalType as TechnologySignalEntry['signalType'])
+										: undefined,
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
 							}),
 						);
 					}
-					case 'count_pages_by_tag': {
+					case 'count_pages_by_technology': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(
-							await countPagesByTag(accessor, {
-								provider: requireString(args, 'provider'),
-								externalId:
-									typeof args.externalId === 'string' ? args.externalId : undefined,
+							await countPagesByTechnology(accessor, {
+								technology: requireString(args, 'technology'),
+								minConfidence: optionalNumber(args, 'minConfidence'),
+								signalType:
+									typeof args.signalType === 'string'
+										? (args.signalType as TechnologySignalEntry['signalType'])
+										: undefined,
 							}),
 						);
 					}
@@ -536,9 +544,9 @@ export function createServer() {
 							}),
 						);
 					}
-					case 'get_tag_inventory': {
+					case 'get_technology_inventory': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						return jsonResult(await getTagInventory(accessor));
+						return jsonResult(await getTechnologyInventoryFastPath(accessor));
 					}
 					case 'get_page_jsonld': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
@@ -553,9 +561,11 @@ export function createServer() {
 							await getPageJsonLdOverview(accessor, requireString(args, 'url')),
 						);
 					}
-					case 'get_page_tags': {
+					case 'get_page_technologies': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						return jsonResult(await getPageTags(accessor, requireString(args, 'url')));
+						return jsonResult(
+							await getPageTechnologies(accessor, requireString(args, 'url')),
+						);
 					}
 					case 'get_page_main_contents': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
