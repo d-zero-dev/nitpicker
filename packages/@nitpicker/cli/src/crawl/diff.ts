@@ -15,8 +15,8 @@ import { Archive } from '@nitpicker/crawler';
  * @param b - File path to the second `.nitpicker` archive
  */
 export async function diff(a: string, b: string) {
-	const archiveA = await Archive.open({ filePath: a });
-	const archiveB = await Archive.open({ filePath: b });
+	await using archiveA = await Archive.open({ filePath: a });
+	await using archiveB = await Archive.open({ filePath: b });
 	const pagesA = await archiveA.getPages();
 	const pagesB = await archiveB.getPages();
 	const listA = pagesA.filter(isActive).map((page) => page.url.withoutHashAndAuth);
@@ -27,9 +27,6 @@ export async function diff(a: string, b: string) {
 
 	await fs.writeFile('a.txt', sortedA.join('\n'), 'utf8');
 	await fs.writeFile('b.txt', sortedB.join('\n'), 'utf8');
-
-	await archiveA.close();
-	await archiveB.close();
 }
 
 /**

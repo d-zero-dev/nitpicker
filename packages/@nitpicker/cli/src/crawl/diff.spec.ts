@@ -62,11 +62,13 @@ describe('diff', () => {
 				return Promise.resolve({
 					getPages: mockGetPagesB,
 					close: mockCloseB,
+					[Symbol.asyncDispose]: mockCloseB,
 				}) as never;
 			}
 			return Promise.resolve({
 				getPages: mockGetPagesA,
 				close: mockCloseA,
+				[Symbol.asyncDispose]: mockCloseA,
 			}) as never;
 		});
 	});

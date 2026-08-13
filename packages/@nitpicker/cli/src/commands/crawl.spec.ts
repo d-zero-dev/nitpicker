@@ -146,6 +146,12 @@ function setupFakeOrchestrator() {
 		garbageCollect: vi.fn(),
 		archive: { filePath: '/tmp/test.nitpicker', close: vi.fn().mockResolvedValue() },
 	} as unknown as OrchestratorType;
+	Object.assign(fakeOrchestrator, {
+		async [Symbol.asyncDispose]() {
+			await fakeOrchestrator.archive.close();
+			fakeOrchestrator.garbageCollect();
+		},
+	});
 
 	mockCrawling.mockImplementation((_urls, _opts, cb) => {
 		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });

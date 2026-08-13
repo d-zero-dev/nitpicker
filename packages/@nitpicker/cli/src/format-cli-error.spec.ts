@@ -74,4 +74,25 @@ describe('formatCliError', () => {
 
 		expect(consoleErrorSpy).toHaveBeenCalledWith('Error: undefined');
 	});
+
+	it('unwraps SuppressedError to print both the disposal error and the suppressed original error', () => {
+		const bodyError = new Error('write failed');
+		const disposalError = new Error('close failed');
+		const suppressed = new SuppressedError(
+			disposalError,
+			bodyError,
+			'An error was suppressed during disposal',
+		);
+
+		formatCliError(suppressed, false);
+
+		expect(consoleErrorSpy).toHaveBeenNthCalledWith(
+			1,
+			'Error: An error was suppressed during disposal',
+		);
+		expect(consoleErrorSpy).toHaveBeenNthCalledWith(2, 'Error during resource cleanup:');
+		expect(consoleErrorSpy).toHaveBeenNthCalledWith(3, 'Error: close failed');
+		expect(consoleErrorSpy).toHaveBeenNthCalledWith(4, 'Suppressed original error:');
+		expect(consoleErrorSpy).toHaveBeenNthCalledWith(5, 'Error: write failed');
+	});
 });

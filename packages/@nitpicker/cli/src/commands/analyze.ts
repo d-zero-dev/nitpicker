@@ -116,99 +116,97 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 			// eslint-disable-next-line no-console
 			console.log(`  📦 Extracting archive: ${absFilePath}`);
 		}
-		const nitpicker = await Nitpicker.open(absFilePath);
+		await using nitpicker = await Nitpicker.open(absFilePath);
 
-		try {
-			const pluginOverrides = buildPluginOverrides(flags);
-			if (Object.keys(pluginOverrides).length > 0) {
-				nitpicker.setPluginOverrides(pluginOverrides);
-			}
-
-			const config = await nitpicker.getConfig();
-			const plugins = config.analyze || [];
-
-			// `--templates` runs an opt-in core phase independent of the
-			// `@nitpicker/analyze-*` plugin system (see `AnalyzeOptions.classifyTemplates`),
-			// so a plugin-less config is only an error when templates aren't requested.
-			if (plugins.length === 0 && !flags.templates) {
-				throw new Error(
-					'No analyze plugins found. Install @nitpicker/analyze-* packages or configure them in .nitpickerrc.',
-				);
-			}
-
-			const pluginFlags = flags.plugin ?? [];
-
-			const filter =
-				plugins.length === 0
-					? []
-					: await selectPlugins({
-							all: flags.all ?? false,
-							pluginFlags,
-							plugins,
-							isTTY: !!isTTY,
-							async promptPlugins() {
-								const labels = await readPluginLabels(plugins);
-								const choices = plugins.map((plugin) => ({
-									name: plugin.name,
-									message: labels.get(plugin.name) || plugin.name,
-								}));
-								const res = await prompt<{ filter: string[] }>([
-									{
-										message: 'What do you analyze?',
-										name: 'filter',
-										type: 'multiselect',
-										choices,
-									},
-								]);
-								return res.filter;
-							},
-						});
-
-			// Warn about unknown plugin names specified via --plugin
-			if (pluginFlags.length > 0 && filter) {
-				const matched = new Set(filter);
-				const unknownPlugins = pluginFlags.filter((name) => !matched.has(name));
-				if (unknownPlugins.length > 0) {
-					const availableNames = plugins.map((p) => p.name).join(', ');
-					// eslint-disable-next-line no-console
-					console.error(
-						`Unknown plugin(s): ${unknownPlugins.join(', ')}\nAvailable plugins: ${availableNames}`,
-					);
-				}
-				// Same `--templates` bypass as the plugin-less guard above: an
-				// entirely-unmatched `--plugin` list is only a hard error when
-				// there's no other reason (template classification) for this
-				// run to proceed.
-				if (filter.length === 0 && !flags.templates) {
-					throw new Error('No valid plugins to run.');
-				}
-			}
-
-			const siteUrl = (await nitpicker.archive.getUrl()) || '<Unknown URL>';
-
-			if (!silent) {
-				log(
-					nitpicker,
-					[`🥢 ${siteUrl} (${filePath})`, `  📤 Read file: ${absFilePath}`],
-					verbose,
-				);
-			}
-
-			const lanes = silent ? undefined : new Lanes({ verbose, indent: '  ' });
-			try {
-				await nitpicker.analyze(filter, {
-					lanes,
-					verbose,
-					classifyTemplates: flags.templates,
-				});
-			} finally {
-				lanes?.close();
-			}
-
-			await nitpicker.write();
-		} finally {
-			await nitpicker.archive.close();
+		const pluginOverrides = buildPluginOverrides(flags);
+		if (Object.keys(pluginOverrides).length > 0) {
+			nitpicker.setPluginOverrides(pluginOverrides);
 		}
+
+		const config = await nitpicker.getConfig();
+		const plugins = config.analyze || [];
+
+		// `--templates` runs an opt-in core phase independent of the
+		// `@nitpicker/analyze-*` plugin system (see `AnalyzeOptions.classifyTemplates`),
+		// so a plugin-less config is only an error when templates aren't requested.
+		if (plugins.length === 0 && !flags.templates) {
+			throw new Error(
+				'No analyze plugins found. Install @nitpicker/analyze-* packages or configure them in .nitpickerrc.',
+			);
+		}
+
+		const pluginFlags = flags.plugin ?? [];
+
+		const filter =
+			plugins.length === 0
+				? []
+				: await selectPlugins({
+						all: flags.all ?? false,
+						pluginFlags,
+						plugins,
+						isTTY: !!isTTY,
+						async promptPlugins() {
+							const labels = await readPluginLabels(plugins);
+							const choices = plugins.map((plugin) => ({
+								name: plugin.name,
+								message: labels.get(plugin.name) || plugin.name,
+							}));
+							const res = await prompt<{ filter: string[] }>([
+								{
+									message: 'What do you analyze?',
+									name: 'filter',
+									type: 'multiselect',
+									choices,
+								},
+							]);
+							return res.filter;
+						},
+					});
+
+		// Warn about unknown plugin names specified via --plugin
+		if (pluginFlags.length > 0 && filter) {
+			const matched = new Set(filter);
+			const unknownPlugins = pluginFlags.filter((name) => !matched.has(name));
+			if (unknownPlugins.length > 0) {
+				const availableNames = plugins.map((p) => p.name).join(', ');
+				// eslint-disable-next-line no-console
+				console.error(
+					`Unknown plugin(s): ${unknownPlugins.join(', ')}\nAvailable plugins: ${availableNames}`,
+				);
+			}
+			// Same `--templates` bypass as the plugin-less guard above: an
+			// entirely-unmatched `--plugin` list is only a hard error when
+			// there's no other reason (template classification) for this
+			// run to proceed.
+			if (filter.length === 0 && !flags.templates) {
+				throw new Error('No valid plugins to run.');
+			}
+		}
+
+		const siteUrl = (await nitpicker.archive.getUrl()) || '<Unknown URL>';
+
+		if (!silent) {
+			log(
+				nitpicker,
+				[`🥢 ${siteUrl} (${filePath})`, `  📤 Read file: ${absFilePath}`],
+				verbose,
+			);
+		}
+
+		const lanes = silent ? undefined : new Lanes({ verbose, indent: '  ' });
+		// `Lanes` has no dispose protocol (sync `close()`, not `Symbol.dispose`),
+		// so this stays a manual `try`/`finally` unlike the archive lifecycle above.
+		try {
+			await nitpicker.analyze(filter, {
+				lanes,
+				verbose,
+				classifyTemplates: flags.templates,
+			});
+		} finally {
+			lanes?.close();
+		}
+
+		await nitpicker.write();
 	} catch (error) {
 		formatCliError(error, verbose);
 		process.exit(1);
