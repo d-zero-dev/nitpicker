@@ -13,7 +13,6 @@ import { setupLegacyFkDb } from './test-utils/setup-legacy-fk-db.js';
 
 const RETARGETED_TABLES = [
 	'page_html_ref',
-	'page_tags',
 	'page_jsonld',
 	'page_errors',
 	'analysis_violations',
@@ -73,6 +72,19 @@ describe('retargetLegacyFkTables', () => {
 		}
 	});
 
+	it('converts page_tags into technology_signals/page_technologies and drops it (no retarget)', async () => {
+		const parentsBefore = await fkParentTables(db, 'page_tags');
+		expect(parentsBefore.has('pages')).toBe(true);
+
+		await db.transaction(async (trx) => {
+			await retargetLegacyFkTables(trx);
+		});
+
+		expect(await db.schema.hasTable('page_tags')).toBe(false);
+		const parents = await fkParentTables(db, 'technology_signals');
+		expect(parents.has('content_items')).toBe(true);
+	});
+
 	it('carries every row across the rebuild', async () => {
 		await seedPageAndContentItem(db, 1, 'https://example.com/');
 		await db('page_errors').insert({
@@ -87,6 +99,7 @@ describe('retargetLegacyFkTables', () => {
 			category: 'CMS',
 			externalId: 'wp',
 			confidence: 100,
+			categories: JSON.stringify(['CMS']),
 		});
 		await db('page_jsonld').insert({
 			pageId: 1,
@@ -122,8 +135,12 @@ describe('retargetLegacyFkTables', () => {
 		expect(await db('page_errors').select('*')).toMatchObject([
 			{ pageId: 1, phase: 'screenshot', message: 'viewport switch failed' },
 		]);
-		expect(await db('page_tags').select('*')).toMatchObject([
-			{ pageId: 1, provider: 'WordPress', externalId: 'wp' },
+		expect(await db.schema.hasTable('page_tags')).toBe(false);
+		expect(await db('technology_signals').select('*')).toMatchObject([
+			{ pageId: 1, technology: 'WordPress', signalType: 'wappalyzer', weight: 100 },
+		]);
+		expect(await db('page_technologies').select('*')).toMatchObject([
+			{ pageId: 1, technology: 'WordPress', category: 'CMS', confidence: 100 },
 		]);
 		expect(await db('page_jsonld').select('*')).toMatchObject([
 			{ pageId: 1, kind: 'json-ld', type: 'Article' },

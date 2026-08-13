@@ -40,7 +40,8 @@ describe('initSchema', () => {
 			// Adjunct tables hanging off content_items + standalone logs.
 			'page_errors',
 			'crawl_errors',
-			'page_tags',
+			'technology_signals',
+			'page_technologies',
 			'page_jsonld',
 			'inventory_runs',
 			'analysis_text_refs',

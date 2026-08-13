@@ -4,12 +4,14 @@ import type {
 	MainContentAudioRow,
 	MainContentButtonRow,
 	MainContentCanvasRow,
+	MainContentCustomElementRow,
 	MainContentHeadingRow,
 	MainContentIframeRow,
 	MainContentImageRow,
 	MainContentTableRow,
 	MainContentVideoRow,
-	TagRow,
+	PageTechnologyRow,
+	TechnologySignalRow,
 } from './meta/types.js';
 import type {
 	Config,
@@ -65,12 +67,14 @@ import { init as initOp } from './db-ops/lifecycle/init.js';
 import { getAudiosOfPage as getAudiosOfPageOp } from './db-ops/meta/get-audios-of-page.js';
 import { getButtonsOfPage as getButtonsOfPageOp } from './db-ops/meta/get-buttons-of-page.js';
 import { getCanvasesOfPage as getCanvasesOfPageOp } from './db-ops/meta/get-canvases-of-page.js';
+import { getCustomElementsOfPage as getCustomElementsOfPageOp } from './db-ops/meta/get-custom-elements-of-page.js';
 import { getHeadingsOfPage as getHeadingsOfPageOp } from './db-ops/meta/get-headings-of-page.js';
 import { getIframesOfPage as getIframesOfPageOp } from './db-ops/meta/get-iframes-of-page.js';
 import { getJsonLdOfPage as getJsonLdOfPageOp } from './db-ops/meta/get-jsonld-of-page.js';
 import { getMainContentImagesOfPage as getMainContentImagesOfPageOp } from './db-ops/meta/get-main-content-images-of-page.js';
 import { getMainContentTablesOfPage as getMainContentTablesOfPageOp } from './db-ops/meta/get-main-content-tables-of-page.js';
-import { getTagsOfPage as getTagsOfPageOp } from './db-ops/meta/get-tags-of-page.js';
+import { getPageTechnologiesOfPage as getPageTechnologiesOfPageOp } from './db-ops/meta/get-page-technologies-of-page.js';
+import { getTechnologySignalsOfPage as getTechnologySignalsOfPageOp } from './db-ops/meta/get-technology-signals-of-page.js';
 import { getVideosOfPage as getVideosOfPageOp } from './db-ops/meta/get-videos-of-page.js';
 import { closeNetworkOutage as closeNetworkOutageOp } from './db-ops/outages/close-network-outage.js';
 import { insertNetworkOutage as insertNetworkOutageOp } from './db-ops/outages/insert-network-outage.js';
@@ -303,7 +307,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			retrySetting,
 		);
 	}
-
 	/**
 	 * Retrieves the current crawling state by listing scraped and pending URLs.
 	 * Delegates to {@link getCrawlingStateOp} — see the op for the strict
@@ -319,6 +322,20 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			retrySetting,
 		);
 	}
+	/**
+	 * Retrieves all `page_main_content_custom_elements` rows for the given
+	 * page id. Delegates to {@link getCustomElementsOfPageOp}.
+	 * @param pageId
+	 */
+	async getCustomElementsOfPage(pageId: number): Promise<MainContentCustomElementRow[]> {
+		return emitErrorAndRetry(
+			this,
+			'Database.getCustomElementsOfPage',
+			async () => await getCustomElementsOfPageOp(this.#instance, pageId),
+			retrySetting,
+		);
+	}
+
 	/**
 	 * Return the subset of `urls` that already exist in the `pages` table.
 	 * Delegates to {@link getExistingPageUrlsOp}.
@@ -510,6 +527,19 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		);
 	}
 	/**
+	 * Retrieves all `page_technologies` rows for the given page id.
+	 * Delegates to {@link getPageTechnologiesOfPageOp}.
+	 * @param pageId
+	 */
+	async getPageTechnologiesOfPage(pageId: number): Promise<PageTechnologyRow[]> {
+		return emitErrorAndRetry(
+			this,
+			'Database.getPageTechnologiesOfPage',
+			async () => await getPageTechnologiesOfPageOp(this.#instance, pageId),
+			retrySetting,
+		);
+	}
+	/**
 	 * Retrieves redirect sources for the given page IDs in bulk.
 	 * Delegates to {@link getRedirectsForPagesOp}.
 	 * @param pageIds - The database IDs of the destination pages.
@@ -609,18 +639,19 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		);
 	}
 	/**
-	 * Retrieves all `page_tags` rows for the given page id, parsed back into
-	 * {@link TagRow} shape. Delegates to {@link getTagsOfPageOp}.
+	 * Retrieves all `technology_signals` rows for the given page id.
+	 * Delegates to {@link getTechnologySignalsOfPageOp}.
 	 * @param pageId
 	 */
-	async getTagsOfPage(pageId: number): Promise<TagRow[]> {
+	async getTechnologySignalsOfPage(pageId: number): Promise<TechnologySignalRow[]> {
 		return emitErrorAndRetry(
 			this,
-			'Database.getTagsOfPage',
-			async () => await getTagsOfPageOp(this.#instance, pageId),
+			'Database.getTechnologySignalsOfPage',
+			async () => await getTechnologySignalsOfPageOp(this.#instance, pageId),
 			retrySetting,
 		);
 	}
+
 	/**
 	 * Retrieves all `page_main_content_videos` rows for the given page id.
 	 * Delegates to {@link getVideosOfPageOp}.

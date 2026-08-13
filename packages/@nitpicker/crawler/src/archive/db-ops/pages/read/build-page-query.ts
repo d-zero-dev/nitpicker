@@ -135,6 +135,7 @@ export function buildPageQuery(knex: Knex): Knex.QueryBuilder {
 			'pm.main_content_video_count as main_content_video_count',
 			'pm.main_content_audio_count as main_content_audio_count',
 			'pm.main_content_canvas_count as main_content_canvas_count',
+			'pm.main_content_custom_element_count as main_content_custom_element_count',
 			'pm.scroll_height_desktop as scroll_height_desktop',
 			'pm.scroll_height_mobile as scroll_height_mobile',
 			'extras_ref.json_text as extras_body',

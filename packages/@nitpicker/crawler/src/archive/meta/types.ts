@@ -142,6 +142,7 @@ export interface PageDenormalizedColumns {
  *   main_content_video_count: 0,
  *   main_content_audio_count: 0,
  *   main_content_canvas_count: 0,
+ *   main_content_custom_element_count: 0,
  *   scroll_height_desktop: 3200,
  *   scroll_height_mobile: 5400,
  * };
@@ -177,6 +178,16 @@ export interface MainContentsDenormalizedColumns {
 	main_content_audio_count: number | null;
 	/** Number of canvases within the main region, or `null`. */
 	main_content_canvas_count: number | null;
+	/**
+	 * Number of Web Components (custom elements) within the main region, or
+	 * `null`. Unlike its siblings above, `null` is not solely "page not
+	 * rendered" — it also covers "rendered, but nitpicker's own
+	 * `captureCustomElements` best-effort capture failed" (a distinct state
+	 * from "captured, zero found" = `0`), since this column is not sourced
+	 * from beholder's `MainContentsData` at all. See
+	 * `compute-main-contents-denormalized.ts`.
+	 */
+	main_content_custom_element_count: number | null;
 	/** `document.body.scrollHeight` at the desktop-compact preset, or `null`. */
 	scroll_height_desktop: number | null;
 	/** `document.body.scrollHeight` at the mobile-small preset, or `null`. */
@@ -386,6 +397,28 @@ export interface MainContentCanvasRow {
 }
 
 /**
+ * One row in the `page_main_content_custom_elements` table. Unlike its
+ * seven `MainContentXxxRow` siblings, the source data is not beholder's
+ * `MainContentsData` but nitpicker's own `capture-custom-elements.ts`.
+ * @example
+ * const row: MainContentCustomElementRow = { id: 1, pageId: 42, order: 0, nodeName: 'MY-WIDGET', elementId: 'widget-1', classList: '["foo"]' };
+ */
+export interface MainContentCustomElementRow {
+	/** Auto-increment primary key. */
+	id: number;
+	/** FK to `content_items.id`. */
+	pageId: number;
+	/** 0-based DOM traversal order within the main content region. */
+	order: number;
+	/** The element's `nodeName` (e.g. `'MY-WIDGET'`). */
+	nodeName: string;
+	/** The element's `id` attribute, or `null`. */
+	elementId: string | null;
+	/** JSON-encoded array of the element's CSS classes, or `null`. */
+	classList: string | null;
+}
+
+/**
  * One row in the `page_jsonld` table.
  *
  * Captures both `<script type="application/ld+json">` (`kind = 'ld+json'`) and
@@ -516,6 +549,82 @@ export interface TagRow {
 export type TagRowForInsert = Omit<TagRow, 'id'>;
 
 /**
+ * One row in the `technology_signals` table — one un-combined signal for
+ * one technology on one page. See
+ * `archive/meta/technologies/types.ts#TechnologySignalPartial` for the
+ * pre-insert shape (no `pageId`/`id`) this is built from.
+ * @example
+ * const row: TechnologySignalRow = {
+ *   id: 1,
+ *   pageId: 42,
+ *   technology: 'Next.js',
+ *   signalType: 'html-marker',
+ *   evidence: '<script id="__NEXT_DATA__"',
+ *   weight: 70,
+ * };
+ */
+export interface TechnologySignalRow {
+	/** Auto-increment primary key. */
+	id: number;
+	/** FK to `content_items.id`. */
+	pageId: number;
+	/** Normalized technology name (e.g. `'Next.js'`, `'Google Analytics'`). */
+	technology: string;
+	/** How this signal was detected. */
+	signalType:
+		| 'wappalyzer'
+		| 'meta-generator'
+		| 'html-marker'
+		| 'url-pattern'
+		| 'scoped-attr'
+		| 'weak-marker'
+		| 'js-license-comment';
+	/** Matched fragment or raw value, truncated to ~200 chars, or `null`. */
+	evidence: string | null;
+	/** This signal's confidence in isolation, 0-100. */
+	weight: number;
+}
+
+/** Insert shape for {@link TechnologySignalRow}. */
+export type TechnologySignalRowForInsert = Omit<TechnologySignalRow, 'id'>;
+
+/**
+ * One row in the `page_technologies` table — the confidence-combined
+ * roll-up of every {@link TechnologySignalRow} for one technology on one
+ * page. Read-optimised counterpart of `technology_signals`, analogous to
+ * `page_meta.tag_count` being the roll-up of `page_tags` — except here the
+ * roll-up is a full row, not just a count, because `confidence` is a
+ * per-technology computed value (`combineTechnologyConfidence`), not a
+ * simple count.
+ * @example
+ * const row: PageTechnologyRow = {
+ *   id: 1,
+ *   pageId: 42,
+ *   technology: 'Next.js',
+ *   category: 'JavaScript frameworks',
+ *   version: null,
+ *   confidence: 80,
+ *   signalCount: 2,
+ * };
+ */
+export interface PageTechnologyRow {
+	/** Auto-increment primary key. */
+	id: number;
+	/** FK to `content_items.id`. */
+	pageId: number;
+	technology: string;
+	category: string | null;
+	version: string | null;
+	/** `combineTechnologyConfidence`'s noisy-OR result, 0-100. */
+	confidence: number;
+	/** Count of distinct `signalType`s that contributed to `confidence`. */
+	signalCount: number;
+}
+
+/** Insert shape for {@link PageTechnologyRow}. */
+export type PageTechnologyRowForInsert = Omit<PageTechnologyRow, 'id'>;
+
+/**
  * Summary of one page's JSON-LD entries returned by `get-page-detail`.
  *
  * Keeps the response token-bounded for MCP / LLM consumers; the full `raw`
@@ -535,38 +644,6 @@ export interface JsonLdSummary {
 	types: readonly string[];
 	/** Number of entries that failed to parse (i.e. have a non-null `parseError`). */
 	parseErrorCount: number;
-}
-
-/**
- * Summary of one page's Wappalyzer tags returned by `get-page-detail`.
- * @see summarize-tags.ts
- * @example
- * const summary: TagsSummary = {
- *   count: 2,
- *   providerIds: { 'Google Analytics': ['G-XXXX'], YouTube: [] },
- * };
- */
-export interface TagsSummary {
-	/** Total tag rows for the page. */
-	count: number;
-	/** Provider → list of external IDs (unique, sorted). Providers with no IDs map to `[]`. */
-	providerIds: Readonly<Record<string, readonly string[]>>;
-}
-
-/**
- * One row of {@link import('@d-zero/beholder').Meta.tags.detected} after
- * archive-side flattening.
- *
- * Used by `get-tag-inventory` to return per-provider page counts across the
- * whole site.
- * @example
- * const entry: TagInventoryEntry = { provider: 'Google Tag Manager', pageCount: 120 };
- */
-export interface TagInventoryEntry {
-	/** Wappalyzer provider name. */
-	provider: string;
-	/** Number of distinct pages where the provider was detected. */
-	pageCount: number;
 }
 
 /**

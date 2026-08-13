@@ -84,7 +84,8 @@ export async function repromoteExternalPages(
 		// Deleting the `page_meta` row (rather than nulling every column)
 		// clears title / description / og:* / twitter:* / meta_extras /
 		// main_content_* in one statement; a re-scrape re-inserts it via
-		// `ON CONFLICT(page_id) DO UPDATE`. `page_tags` / `page_jsonld` /
+		// `ON CONFLICT(page_id) DO UPDATE`. `technology_signals` /
+		// `page_technologies` / `page_jsonld` /
 		// `page_main_content_*` are cleared explicitly even though all of
 		// them also carry ON DELETE CASCADE — we keep the existing pattern
 		// of explicit chunked DELETEs rather than relying on CASCADE
@@ -97,7 +98,8 @@ export async function repromoteExternalPages(
 		await knex('image_items').whereIn('page_id', chunk).delete();
 		await knex('resource_ref_edges').whereIn('page_id', chunk).delete();
 		await knex('page_html_ref').whereIn('page_id', chunk).delete();
-		await knex('page_tags').whereIn('pageId', chunk).delete();
+		await knex('technology_signals').whereIn('pageId', chunk).delete();
+		await knex('page_technologies').whereIn('pageId', chunk).delete();
 		await knex('page_jsonld').whereIn('pageId', chunk).delete();
 		await knex('page_main_content_headings').whereIn('pageId', chunk).delete();
 		await knex('page_main_content_images').whereIn('pageId', chunk).delete();
@@ -107,6 +109,7 @@ export async function repromoteExternalPages(
 		await knex('page_main_content_videos').whereIn('pageId', chunk).delete();
 		await knex('page_main_content_audios').whereIn('pageId', chunk).delete();
 		await knex('page_main_content_canvases').whereIn('pageId', chunk).delete();
+		await knex('page_main_content_custom_elements').whereIn('pageId', chunk).delete();
 	}
 	dbLog('Repromoted %d external pages back to pending', promotedUrls.length);
 	return promotedUrls;

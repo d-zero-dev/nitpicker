@@ -16,13 +16,25 @@ import type { MainContentsData, ScrollHeightData } from '@d-zero/beholder';
  * omit it (`.spec.ts` files are excluded from the `tsc` build, so this goes
  * uncaught at compile time) — `== null` tolerates both without forcing every
  * fixture to be updated.
+ *
+ * `customElementCount` is a separate parameter, not read off `mainContents`,
+ * because it is not one of beholder's `MainContentsData` categories —
+ * nitpicker captures Web Components itself (`crawler/capture-custom-elements.ts`)
+ * after `scrapeStart` returns. It carries three distinct states:
+ * `undefined`/capture-not-attempted and capture-failure both collapse to
+ * `null` (unknown — NOT the same as "captured, zero found"), while any
+ * number (including `0`) means capture succeeded.
  * @param mainContents - Beholder's per-page main-content metrics, or `null`/`undefined`.
  * @param scrollHeight - Beholder's per-page scroll-height measurements, or `null`/`undefined`.
- * @returns The seventeen denormalised columns.
+ * @param customElementCount - Count of Web Components nitpicker captured in
+ *   the main-content region, or `null`/`undefined` when capture was not
+ *   attempted or failed.
+ * @returns The eighteen denormalised columns.
  */
 export function computeMainContentsDenormalized(
 	mainContents: MainContentsData | null | undefined,
 	scrollHeight: ScrollHeightData | null | undefined,
+	customElementCount?: number | null,
 ): MainContentsDenormalizedColumns {
 	if (mainContents == null) {
 		return {
@@ -41,6 +53,7 @@ export function computeMainContentsDenormalized(
 			main_content_video_count: null,
 			main_content_audio_count: null,
 			main_content_canvas_count: null,
+			main_content_custom_element_count: null,
 			scroll_height_desktop: null,
 			scroll_height_mobile: null,
 		};
@@ -63,6 +76,7 @@ export function computeMainContentsDenormalized(
 		main_content_video_count: mainContents.videos.length,
 		main_content_audio_count: mainContents.audios.length,
 		main_content_canvas_count: mainContents.canvases.length,
+		main_content_custom_element_count: customElementCount ?? null,
 		scroll_height_desktop: scrollHeight?.desktop ?? null,
 		scroll_height_mobile: scrollHeight?.mobile ?? null,
 	};

@@ -149,7 +149,11 @@ import type { Knex } from 'knex';
  * through `text_refs` — the values are page-specific diagnostics with low
  * cross-page reuse, so the ref-table dedup machinery would add write-path
  * cost without a corresponding storage win. `main_content_class_list` holds
- * a JSON-encoded string array.
+ * a JSON-encoded string array. `main_content_custom_element_count` is the
+ * one exception to "derived from beholder's `MainContentsData`" — beholder
+ * has no `customElements` category, so nitpicker captures Web Components
+ * itself (`crawler/capture-custom-elements.ts`) after `scrapeStart`
+ * returns, the same way it captures image dom-paths.
  *
  * ### Index rationale
  *
@@ -313,6 +317,7 @@ export async function createEntityTables(instance: Knex): Promise<void> {
 			main_content_video_count    INTEGER,
 			main_content_audio_count    INTEGER,
 			main_content_canvas_count   INTEGER,
+			main_content_custom_element_count INTEGER,
 			scroll_height_desktop       INTEGER,
 			scroll_height_mobile        INTEGER,
 			body_hash                   BLOB,

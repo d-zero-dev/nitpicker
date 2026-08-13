@@ -49,11 +49,13 @@ describe('checkForeignKeyIntegrity', () => {
 		await expect(checkForeignKeyIntegrity(db)).resolves.toBeUndefined();
 	});
 
-	it('detects a dangling row in any FK-bearing table (page_tags)', async () => {
+	it('detects a dangling row in any FK-bearing table (technology_signals)', async () => {
 		await db.raw('PRAGMA foreign_keys = OFF');
-		await db('page_tags').insert({
+		await db('technology_signals').insert({
 			pageId: 99_999,
-			provider: 'WordPress',
+			technology: 'WordPress',
+			signalType: 'wappalyzer',
+			weight: 60,
 		});
 		let thrown: unknown = null;
 		try {
@@ -63,7 +65,7 @@ describe('checkForeignKeyIntegrity', () => {
 		}
 		expect(thrown).toBeInstanceOf(MigrationVerificationError);
 		expect((thrown as MigrationVerificationError).details.context).toMatchObject({
-			first_offending_table: 'page_tags',
+			first_offending_table: 'technology_signals',
 			first_offending_parent: 'content_items',
 		});
 	});

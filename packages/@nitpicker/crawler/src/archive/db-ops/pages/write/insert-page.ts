@@ -1,10 +1,9 @@
-import type { PageData } from '../../../../utils/types/types.js';
 import type {
 	FlatPageMetaColumns,
 	MainContentsDenormalizedColumns,
 	PageDenormalizedColumns,
 } from '../../../meta/types.js';
-import type { PageSource } from '../../../types.js';
+import type { PageDataWithDomPaths, PageSource } from '../../../types.js';
 import type { WriteRefCaches } from '../../_shared/types.js';
 import type { Knex } from 'knex';
 
@@ -66,7 +65,8 @@ import { upsertUrlRef } from '../../_shared/upsert-url-ref.js';
  * @param knex - Knex query builder connected to the archive DB. Used as the
  *   fallback when `trx` is not provided.
  * @param caches - The connection's write-side id caches.
- * @param page - The scraped page data.
+ * @param page - The scraped page data, optionally carrying nitpicker's own
+ *   in-browser custom-element capture (see {@link PageDataWithDomPaths}).
  * @param isTarget - Whether this page is a crawl target.
  * @param trx - Optional transaction all statements run through.
  * @param source - Inventory provenance for the INSERT path. Ignored on UPDATE
@@ -76,7 +76,7 @@ import { upsertUrlRef } from '../../_shared/upsert-url-ref.js';
 export async function insertPage(
 	knex: Knex,
 	caches: WriteRefCaches,
-	page: PageData,
+	page: PageDataWithDomPaths,
 	isTarget: boolean,
 	trx?: Knex.Transaction,
 	source?: PageSource,
@@ -94,6 +94,7 @@ export async function insertPage(
 	const mainContentsDenorm = computeMainContentsDenormalized(
 		page.mainContents,
 		page.scrollHeight,
+		page.mainContentCustomElements?.length,
 	);
 	const extras = deriveMetaExtras(page.meta);
 	const now = Date.now();

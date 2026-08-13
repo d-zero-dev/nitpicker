@@ -1,5 +1,10 @@
 import type { ArchiveAccessor } from './archive-accessor.js';
-import type { JsonLdRow, JsonLdSummary, TagRow, TagsSummary } from './meta/types.js';
+import type {
+	JsonLdRow,
+	JsonLdSummary,
+	PageTechnologyRow,
+	TechnologySignalRow,
+} from './meta/types.js';
 import type {
 	Anchor,
 	Redirect,
@@ -16,7 +21,6 @@ import { isHtmlContentType } from '../crawler/is-html-content-type.js';
 import { parseResponseHeaders } from '../utils/object/parse-response-headers.js';
 
 import { summarizeJsonLd } from './meta/summarize-jsonld.js';
-import { summarizeTags } from './meta/summarize-tags.js';
 
 /**
  * Subset of {@link DB_Page} that maps to the flat meta columns derived from
@@ -102,9 +106,10 @@ const FLAT_META_COLUMNS = [
  * iterable view over all ~47 flat meta columns and {@link Page.metaExtras} for
  * the JSON catch-all of nested sub-objects not flattened to columns.
  *
- * JSON-LD entries and Wappalyzer tag rows live in dedicated tables and are
- * fetched on demand via {@link Page.getJsonLd} / {@link Page.getTags} (lazy reads, same
- * pattern as {@link Page.getAnchors}).
+ * JSON-LD entries and detected technology signals live in dedicated tables
+ * and are fetched on demand via {@link Page.getJsonLd} /
+ * {@link Page.getTechnologySignals} / {@link Page.getPageTechnologies} (lazy
+ * reads, same pattern as {@link Page.getAnchors}).
  *
  * Instances are created by {@link ArchiveAccessor.getPages} or
  * {@link ArchiveAccessor.getPagesWithRefs}.
@@ -332,6 +337,15 @@ export default class Page {
 	}
 
 	/**
+	 * Number of Web Components (custom elements) within the main region
+	 * (denormalised aggregate), `null` when unknown (page not rendered, or
+	 * nitpicker's own capture failed — see `compute-main-contents-denormalized.ts`).
+	 */
+	get mainContentCustomElementCount() {
+		return this.#raw.main_content_custom_element_count;
+	}
+
+	/**
 	 * Iterable view over every flat meta column (~47 fields). Returns a frozen
 	 * record so consumers can pick fields by name without re-enumerating
 	 * typed getters.
@@ -502,8 +516,9 @@ export default class Page {
 
 	/**
 	 * Sorted unique Wappalyzer provider names, comma-separated, empty string
-	 * when no tags. Denormalised aggregate; for the structured form fetch
-	 * {@link Page.getTags} (lazy).
+	 * when no tags. Denormalised aggregate; for the structured form (with
+	 * confidence, category, and every raw signal) fetch
+	 * {@link Page.getTechnologySignals} / {@link Page.getPageTechnologies} (lazy).
 	 */
 	get tagsProvidersCsv() {
 		return this.#raw.tags_providers_csv ?? '';
@@ -613,6 +628,16 @@ export default class Page {
 	}
 
 	/**
+	 * Retrieves the Web Components (custom elements) within this page's
+	 * detected main content region from `page_main_content_custom_elements`.
+	 * Lazy — runs a single SELECT per call.
+	 * @returns Ordered custom-element rows.
+	 */
+	async getCustomElements() {
+		return this.#archive.getCustomElementsOfPage(this.#raw.id);
+	}
+
+	/**
 	 * Retrieves the headings within this page's detected main content region
 	 * from `page_main_content_headings`. Lazy — runs a single SELECT per call.
 	 * @returns Ordered heading rows.
@@ -676,6 +701,14 @@ export default class Page {
 	}
 
 	/**
+	 * Retrieves the confidence-combined technology roll-up for this page
+	 * from `page_technologies`. Lazy — runs a single SELECT per call.
+	 * @returns Technology rows, highest confidence first.
+	 */
+	async getPageTechnologies(): Promise<readonly PageTechnologyRow[]> {
+		return this.#archive.getPageTechnologiesOfPage(this.#raw.id);
+	}
+	/**
 	 * Retrieves the referrers (incoming links) pointing to this page.
 	 * Uses pre-loaded data if available, otherwise queries the database.
 	 * @returns An array of {@link Referrer} objects representing pages that link to this page.
@@ -715,12 +748,12 @@ export default class Page {
 		}));
 	}
 	/**
-	 * Retrieves the Wappalyzer tag rows for this page from `page_tags`.
-	 * Lazy — runs a single SELECT per call.
-	 * @returns Ordered tag rows.
+	 * Retrieves the raw technology-detection signals for this page from
+	 * `technology_signals`. Lazy — runs a single SELECT per call.
+	 * @returns Ordered signal rows.
 	 */
-	async getTags(): Promise<readonly TagRow[]> {
-		return this.#archive.getTagsOfPage(this.#raw.id);
+	async getTechnologySignals(): Promise<readonly TechnologySignalRow[]> {
+		return this.#archive.getTechnologySignalsOfPage(this.#raw.id);
 	}
 
 	/**
@@ -750,8 +783,11 @@ export default class Page {
 
 	/**
 	 * Serializes the page data to a plain JSON object including the full flat
-	 * meta column set, the `meta_extras` catch-all, and **summaries** of the
-	 * JSON-LD and tag rows.
+	 * meta column set, the `meta_extras` catch-all, a **summary** of the
+	 * JSON-LD rows, and the confidence-combined technology roll-up
+	 * (`page_technologies` — already compact, one row per detected
+	 * technology, so no further summarization is needed the way `page_tags`'
+	 * per-`externalId` granularity used to require).
 	 *
 	 * Summaries (not raw entries) are inlined so a Page detail payload stays
 	 * token-bounded for MCP / LLM consumers — the full `raw` JSON-LD payload
@@ -763,14 +799,13 @@ export default class Page {
 	 * @returns A plain object containing all page metadata and relationships.
 	 */
 	async toJSON() {
-		const [anchors, referrers, jsonLdRows, tagRows] = await Promise.all([
+		const [anchors, referrers, jsonLdRows, technologies] = await Promise.all([
 			this.getAnchors(),
 			this.getReferrers(),
 			this.getJsonLd(),
-			this.getTags(),
+			this.getPageTechnologies(),
 		]);
 		const jsonLdSummary: JsonLdSummary = summarizeJsonLd(jsonLdRows);
-		const tagsSummary: TagsSummary = summarizeTags(tagRows);
 		return {
 			url: this.url.href,
 			status: this.status,
@@ -787,7 +822,7 @@ export default class Page {
 			...this.metaFlat,
 			metaExtras: this.metaExtras,
 			jsonLd: jsonLdSummary,
-			tags: tagsSummary,
+			technologies,
 			redirectFrom: this.redirectFrom,
 			isPage: this.isPage(),
 			isInternalPage: this.isInternalPage(),

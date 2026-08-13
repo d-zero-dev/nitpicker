@@ -8,12 +8,22 @@ import type { Knex } from 'knex';
  * - `page_errors` — partial scrape failures, FK → `content_items(id)`
  * - `crawl_errors` — crawler-level error channel (no FK; the URL may be
  *   an external link that failed DNS, or null for a process-level error)
- * - `page_tags` — Wappalyzer detections, FK → `content_items(id)`
+ * - `technology_signals` — one un-combined technology-detection signal
+ *   (Wappalyzer or structural) per row, FK → `content_items(id)`
+ * - `page_technologies` — confidence-combined roll-up of
+ *   `technology_signals`, one row per (page, technology), FK →
+ *   `content_items(id)`. Supersedes the removed `page_tags` (Wappalyzer-only)
+ * - `technology_js_scan_cache` — resource-scoped cache for the post-crawl
+ *   JS license-comment scan, FK → `resource_items(id)`
  * - `page_jsonld` — JSON-LD / SpeculationRules, FK → `content_items(id)`
  * - `page_main_content_headings` / `_images` / `_tables` / `_buttons` /
  *   `_iframes` / `_videos` / `_audios` / `_canvases` — beholder
  *   `MainContentsData` sub-entity arrays, one row per DOM element, FK →
  *   `content_items(id)`
+ * - `page_main_content_custom_elements` — Web Components (custom elements)
+ *   found in the main-content region, one row per DOM element, FK →
+ *   `content_items(id)`. Unlike its eight siblings above, captured by
+ *   nitpicker itself (`crawler/capture-custom-elements.ts`), not beholder
  * - `inventory_runs` — `--inventory` audit log (no FK; append-only)
  * - `network_outages` — operator-network-outage journal (no FK; append-only
  *   except `ended_at`, which is written once on recovery)
@@ -51,7 +61,7 @@ import type { Knex } from 'knex';
  * Unlike `createRefTables` / `createEntityTables` (whose callers guard with
  * a single sentinel table), each table here is guarded individually because
  * the migration-script caller sees archives where any subset may already
- * exist (e.g. `page_tags` from the 0.10 migration but no `inventory_runs`).
+ * exist (e.g. `page_jsonld` from the 0.10 migration but no `inventory_runs`).
  * Index creation stays inside each guard: an existing table keeps whatever
  * indexes its creation path declared.
  * @param instance - The Knex query builder instance connected to the database.
@@ -98,41 +108,75 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 		});
 	}
 
-	if (!(await instance.schema.hasTable('page_tags'))) {
-		await instance.schema.createTable('page_tags', (t) => {
-			// Wappalyzer-derived technology detection. One row per
-			// (provider × externalId) tuple per page. `category` is the first
-			// element of `categories`; the full list lives in the JSON
-			// `categories` column. `sources` records where the provider was
-			// detected (script-src / inline / iframe-src / window-global / …).
+	if (!(await instance.schema.hasTable('technology_signals'))) {
+		await instance.schema.createTable('technology_signals', (t) => {
+			// One un-combined signal for one technology on one page — the
+			// source-of-truth granular evidence `page_technologies` rolls up.
+			// Supersedes `page_tags` (Wappalyzer-only; removed): `signalType`
+			// covers Wappalyzer AND nitpicker's own structural detections
+			// (URL patterns, HTML markers, scoped attributes, meta generator,
+			// JS license comments) in one unified model. See
+			// `archive/meta/technologies/`.
 			t.increments('id');
 			t.integer('pageId')
 				.notNullable()
 				.unsigned()
 				.references('content_items.id')
 				.onDelete('CASCADE');
-			t.string('provider').notNullable();
-			t.string('category');
-			t.string('externalId');
-			t.string('version');
-			t.integer('confidence');
-			t.json('categories');
-			t.json('sources');
+			t.string('technology').notNullable();
+			t.string('signalType').notNullable();
+			t.text('evidence');
+			t.integer('weight').notNullable();
 
 			t.index('pageId');
-			t.index('provider');
-			t.index('externalId');
 		});
-		// Compound indexes for the "find duplicate IDs across pages" and
-		// "list pages using provider X" hot paths. Knex's schema builder
-		// can't express compound indexes inline in a way that round-trips
-		// through libsql consistently, so raw SQL is used.
 		await instance.raw(
-			'CREATE INDEX page_tags_provider_extId ON page_tags(provider, externalId)',
+			'CREATE INDEX technology_signals_tech_type ON technology_signals(technology, signalType)',
 		);
-		await instance.raw(
-			'CREATE INDEX page_tags_provider_pageId ON page_tags(provider, pageId)',
-		);
+	}
+
+	if (!(await instance.schema.hasTable('page_technologies'))) {
+		await instance.schema.createTable('page_technologies', (t) => {
+			// Confidence-combined roll-up of `technology_signals`, one row
+			// per (page, technology) — the read-optimised projection every
+			// query/viewer/MCP consumer reads instead of re-combining
+			// `technology_signals` on every request. Always written in the
+			// same transaction as its `technology_signals` rows; see
+			// ARCHITECTURE.md's invariant that the two tables are updated
+			// as a pair.
+			t.increments('id');
+			t.integer('pageId')
+				.notNullable()
+				.unsigned()
+				.references('content_items.id')
+				.onDelete('CASCADE');
+			t.string('technology').notNullable();
+			t.string('category');
+			t.string('version');
+			t.integer('confidence').notNullable();
+			t.integer('signalCount').notNullable();
+
+			t.unique(['pageId', 'technology']);
+			t.index('technology');
+		});
+	}
+
+	if (!(await instance.schema.hasTable('technology_js_scan_cache'))) {
+		await instance.schema.createTable('technology_js_scan_cache', (t) => {
+			// Resource-scoped cache preventing "JSスキャン・エンリッチメント"
+			// (post-crawl network enrichment, see ARCHITECTURE.md) from
+			// re-fetching the same JS resource on `--append`/`--retry-failed`.
+			// `resourceId` is the PK (one scan outcome per resource, ever);
+			// `technology`/`evidence` are `null` on a non-match.
+			t.integer('resourceId')
+				.primary()
+				.unsigned()
+				.references('resource_items.id')
+				.onDelete('CASCADE');
+			t.integer('scannedAt').notNullable();
+			t.string('technology');
+			t.text('evidence');
+		});
 	}
 
 	if (!(await instance.schema.hasTable('page_jsonld'))) {
@@ -166,12 +210,16 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 	}
 
 	// Beholder `MainContentsData` sub-entities, one adjunct table per array
-	// (headings/images/tables/buttons/iframes/videos/audios/canvases). Same
-	// shape as `page_tags` / `page_jsonld`: `pageId` FK → `content_items(id)`
-	// ON DELETE CASCADE, individually guarded so any subset can pre-exist.
-	// `order` preserves the DOM traversal order beholder returns the array
-	// in (0-based); it is not itself an index target since these tables are
-	// always read whole-page via `WHERE pageId = ? ORDER BY "order"`.
+	// (headings/images/tables/buttons/iframes/videos/audios/canvases), plus
+	// `page_main_content_custom_elements` (Web Components) — the sole
+	// exception, captured by nitpicker itself rather than beholder (see
+	// `create-entity-tables.ts`'s `main_content_custom_element_count` JSDoc
+	// for why). Same shape as `page_tags` / `page_jsonld`: `pageId` FK →
+	// `content_items(id)` ON DELETE CASCADE, individually guarded so any
+	// subset can pre-exist. `order` preserves the DOM traversal order the
+	// source array is captured in (0-based); it is not itself an index
+	// target since these tables are always read whole-page via
+	// `WHERE pageId = ? ORDER BY "order"`.
 	if (!(await instance.schema.hasTable('page_main_content_headings'))) {
 		await instance.schema.createTable('page_main_content_headings', (t) => {
 			t.increments('id');
@@ -304,6 +352,23 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 			t.integer('order').notNullable();
 			t.integer('width').notNullable();
 			t.integer('height').notNullable();
+
+			t.index('pageId');
+		});
+	}
+
+	if (!(await instance.schema.hasTable('page_main_content_custom_elements'))) {
+		await instance.schema.createTable('page_main_content_custom_elements', (t) => {
+			t.increments('id');
+			t.integer('pageId')
+				.notNullable()
+				.unsigned()
+				.references('content_items.id')
+				.onDelete('CASCADE');
+			t.integer('order').notNullable();
+			t.string('nodeName').notNullable();
+			t.string('elementId');
+			t.text('classList');
 
 			t.index('pageId');
 		});

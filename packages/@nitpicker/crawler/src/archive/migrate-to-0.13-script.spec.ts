@@ -229,7 +229,6 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 				// Every adjunct FK declaration now targets content_items(id).
 				for (const table of [
 					'page_html_ref',
-					'page_tags',
 					'page_jsonld',
 					'page_errors',
 					'analysis_violations',
@@ -243,8 +242,15 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 				expect(await db('page_errors').select('*')).toMatchObject([
 					{ phase: 'screenshot', message: 'viewport switch failed' },
 				]);
-				expect(await db('page_tags').select('*')).toMatchObject([
-					{ provider: 'WordPress', externalId: 'wp' },
+				// page_tags has no current-schema equivalent to retarget onto —
+				// its row was converted to technology_signals/page_technologies
+				// and the table itself dropped.
+				expect(await db.schema.hasTable('page_tags')).toBe(false);
+				expect(await db('technology_signals').select('*')).toMatchObject([
+					{ technology: 'WordPress', signalType: 'wappalyzer' },
+				]);
+				expect(await db('page_technologies').select('*')).toMatchObject([
+					{ technology: 'WordPress' },
 				]);
 				expect(await db('page_jsonld').select('*')).toMatchObject([
 					{ kind: 'json-ld', type: 'Article' },
@@ -883,15 +889,11 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 				useNullAsDefault: true,
 			});
 			try {
-				for (const table of [
-					'page_html_ref',
-					'page_tags',
-					'page_jsonld',
-					'page_errors',
-				]) {
+				for (const table of ['page_html_ref', 'page_jsonld', 'page_errors']) {
 					const parents = await fkParentTables(outDb, table);
 					expect(parents.has('content_items'), `${table} → content_items`).toBe(true);
 				}
+				expect(await outDb.schema.hasTable('page_tags')).toBe(false);
 			} finally {
 				await outDb.destroy();
 			}
