@@ -8,6 +8,24 @@ import lighthouse from 'lighthouse';
 import { ReportUtils } from 'lighthouse/report/renderer/report-utils.js';
 
 /**
+ * Launches a headless Chrome instance the same way `chromeLauncher.launch`
+ * does, but tagged with `Symbol.asyncDispose` so callers can use `await
+ * using` instead of a manual `try`/`finally` around `chrome.kill()` —
+ * `chrome-launcher`'s own `LaunchedChrome` type has no dispose protocol.
+ * @param args - The same arguments accepted by `chromeLauncher.launch`.
+ */
+async function launchDisposableChrome(
+	...args: Parameters<typeof chromeLauncher.launch>
+): Promise<chromeLauncher.LaunchedChrome & AsyncDisposable> {
+	const chrome = await chromeLauncher.launch(...args);
+	return Object.assign(chrome, {
+		async [Symbol.asyncDispose]() {
+			await chrome.kill();
+		},
+	});
+}
+
+/**
  * Plugin options for the Lighthouse analysis.
  */
 type Options = {
@@ -63,58 +81,54 @@ export default definePlugin((options: Options) => {
 		},
 
 		async eachPage({ url }) {
-			const chrome = await chromeLauncher.launch({ chromeFlags: ['--headless'] });
+			await using chrome = await launchDisposableChrome({ chromeFlags: ['--headless'] });
 			const config = options.config as Config;
 
-			try {
-				const result = await lighthouse(url.href, { port: chrome.port }, config).catch(
-					(error: unknown) => toError(error),
-				);
+			const result = await lighthouse(url.href, { port: chrome.port }, config).catch(
+				(error: unknown) => toError(error),
+			);
 
-				if (!result || result instanceof Error) {
-					return {
-						page: {
-							performance: { value: 0, note: 'Error' },
-							accessibility: { value: 0, note: 'Error' },
-							'best-practices': { value: 0, note: 'Error' },
-							seo: { value: 0, note: 'Error' },
-						},
-					};
-				}
-
-				const report: LHReport = ReportUtils.prepareReportResult(result.lhr);
-
+			if (!result || result instanceof Error) {
 				return {
 					page: {
-						performance: {
-							value: Math.round(report.categories.performance.score * 100),
-							note: report.categories.performance.auditRefs
-								.map((a) => `${a.result.title}: ${a.result.description}`)
-								.join('\n'),
-						},
-						accessibility: {
-							value: Math.round(report.categories.accessibility.score * 100),
-							note: report.categories.accessibility.auditRefs
-								.map((a) => `${a.result.title}: ${a.result.description}`)
-								.join('\n'),
-						},
-						'best-practices': {
-							value: Math.round(report.categories['best-practices'].score * 100),
-							note: report.categories['best-practices'].auditRefs
-								.map((a) => `${a.result.title}: ${a.result.description}`)
-								.join('\n'),
-						},
-						seo: {
-							value: Math.round(report.categories.seo.score * 100),
-							note: report.categories.seo.auditRefs
-								.map((a) => `${a.result.title}: ${a.result.description}`)
-								.join('\n'),
-						},
+						performance: { value: 0, note: 'Error' },
+						accessibility: { value: 0, note: 'Error' },
+						'best-practices': { value: 0, note: 'Error' },
+						seo: { value: 0, note: 'Error' },
 					},
 				};
-			} finally {
-				await chrome.kill();
 			}
+
+			const report: LHReport = ReportUtils.prepareReportResult(result.lhr);
+
+			return {
+				page: {
+					performance: {
+						value: Math.round(report.categories.performance.score * 100),
+						note: report.categories.performance.auditRefs
+							.map((a) => `${a.result.title}: ${a.result.description}`)
+							.join('\n'),
+					},
+					accessibility: {
+						value: Math.round(report.categories.accessibility.score * 100),
+						note: report.categories.accessibility.auditRefs
+							.map((a) => `${a.result.title}: ${a.result.description}`)
+							.join('\n'),
+					},
+					'best-practices': {
+						value: Math.round(report.categories['best-practices'].score * 100),
+						note: report.categories['best-practices'].auditRefs
+							.map((a) => `${a.result.title}: ${a.result.description}`)
+							.join('\n'),
+					},
+					seo: {
+						value: Math.round(report.categories.seo.score * 100),
+						note: report.categories.seo.auditRefs
+							.map((a) => `${a.result.title}: ${a.result.description}`)
+							.join('\n'),
+					},
+				},
+			};
 		},
 	};
 });
