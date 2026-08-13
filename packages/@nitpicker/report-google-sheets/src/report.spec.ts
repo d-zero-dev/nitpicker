@@ -34,6 +34,10 @@ vi.mock('./archive.js', () => ({
 	getArchive: vi.fn().mockResolvedValue({
 		archive: { close: mockArchiveClose },
 		removeSignalHandlers: mockRemoveSignalHandlers,
+		async [Symbol.asyncDispose]() {
+			mockRemoveSignalHandlers();
+			await mockArchiveClose();
+		},
 	}),
 }));
 
