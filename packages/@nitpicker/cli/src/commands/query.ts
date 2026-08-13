@@ -165,15 +165,20 @@ export const commandDef = {
 			type: 'number',
 			desc: 'Maximum HTML length to return',
 		},
-		provider: {
+		technology: {
 			type: 'string',
 			valueName: 'name',
-			desc: 'Wappalyzer provider name',
+			desc: 'Technology name (e.g. Next.js, Google Tag Manager)',
 		},
-		externalId: {
+		minConfidence: {
+			type: 'number',
+			valueName: 'n',
+			desc: 'Minimum page_technologies.confidence (0-100)',
+		},
+		signalType: {
 			type: 'string',
-			valueName: 'id',
-			desc: 'External identifier (GTM-XXXX / G-XXXX / …)',
+			valueName: 'type',
+			desc: 'Restrict to a specific detection signal type (wappalyzer / meta-generator / html-marker / url-pattern / scoped-attr / weak-marker / js-license-comment)',
 		},
 		full: {
 			type: 'boolean',
@@ -305,19 +310,19 @@ export const commandDef = {
 			usage: '<file> error-kinds',
 			flags: [],
 		},
-		'pages-by-tag': {
-			desc: 'List pages using a given tag provider (e.g. Google Tag Manager)',
-			usage: '<file> pages-by-tag --provider <name> [options]',
-			flags: ['provider', 'externalId', 'limit', 'offset'],
+		'pages-by-technology': {
+			desc: 'List pages where a given technology was detected (e.g. Next.js)',
+			usage: '<file> pages-by-technology --technology <name> [options]',
+			flags: ['technology', 'minConfidence', 'signalType', 'limit', 'offset'],
 		},
 		'pages-by-jsonld-type': {
 			desc: 'List pages containing a given JSON-LD type',
 			usage: '<file> pages-by-jsonld-type --type <type> [options]',
 			flags: ['type', 'limit', 'offset'],
 		},
-		'tag-inventory': {
-			desc: 'Aggregate detected tags/trackers across the archive',
-			usage: '<file> tag-inventory',
+		'technology-inventory': {
+			desc: 'Aggregate detected technologies across the archive',
+			usage: '<file> technology-inventory',
 			flags: [],
 		},
 		'page-jsonld': {
@@ -325,15 +330,15 @@ export const commandDef = {
 			usage: '<file> page-jsonld --url <URL> [options]',
 			flags: ['url', 'full'],
 		},
-		'page-tags': {
-			desc: 'Return detected tags of a single page',
-			usage: '<file> page-tags --url <URL>',
+		'page-technologies': {
+			desc: 'Return the detected technologies of a single page, with evidence',
+			usage: '<file> page-technologies --url <URL>',
 			flags: ['url'],
 		},
-		'count-pages-by-tag': {
-			desc: 'Count pages using a given tag provider',
-			usage: '<file> count-pages-by-tag --provider <name> [options]',
-			flags: ['provider', 'externalId'],
+		'count-pages-by-technology': {
+			desc: 'Count pages where a given technology was detected',
+			usage: '<file> count-pages-by-technology --technology <name> [options]',
+			flags: ['technology', 'minConfidence', 'signalType'],
 		},
 		'count-pages-by-jsonld-type': {
 			desc: 'Count pages containing a given JSON-LD type',

@@ -20,6 +20,7 @@ import { formatInvalidInventoryUrlWarning } from '../crawl/format-invalid-invent
 import { formatInventorySkipSummary } from '../crawl/format-inventory-skip-summary.js';
 import { isValidUrl } from '../crawl/is-valid-url.js';
 import { mapFlagsToCrawlConfig } from '../crawl/map-flags-to-crawl-config.js';
+import { scanJsResourcesQuietly } from '../crawl/scan-js-resources-quietly.js';
 import { ExitCode } from '../exit-code.js';
 
 import { CrawlAggregateError } from './crawl-aggregate-error.js';
@@ -186,6 +187,11 @@ export const commandDef = {
 			group: 'Fetch behavior',
 			desc: 'Ignore robots.txt restrictions (use responsibly)',
 		},
+		skipTechnologyJsScan: {
+			type: 'boolean',
+			group: 'Fetch behavior',
+			desc: 'Skip the post-crawl JS resource scan for technology license comments (avoids the extra network requests it makes against already-discovered JS resources)',
+		},
 		mainContentSelector: {
 			type: 'string',
 			valueName: 'selector',
@@ -300,6 +306,9 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 	);
 
 	try {
+		if (!flags.skipTechnologyJsScan) {
+			await scanJsResourcesQuietly(orchestrator.archive);
+		}
 		await ensureViewerReadModelQuietly(orchestrator.archive);
 		await orchestrator.write();
 	} finally {
@@ -351,6 +360,9 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 	);
 
 	try {
+		if (!flags.skipTechnologyJsScan) {
+			await scanJsResourcesQuietly(orchestrator.archive);
+		}
 		await ensureViewerReadModelQuietly(orchestrator.archive);
 		await orchestrator.write();
 	} finally {
@@ -401,6 +413,9 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
 	);
 
 	try {
+		if (!flags.skipTechnologyJsScan) {
+			await scanJsResourcesQuietly(orchestrator.archive);
+		}
 		await ensureViewerReadModelQuietly(orchestrator.archive);
 		await orchestrator.write();
 	} finally {
@@ -487,6 +502,9 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 	);
 
 	try {
+		if (!flags.skipTechnologyJsScan) {
+			await scanJsResourcesQuietly(orchestrator.archive);
+		}
 		await ensureViewerReadModelQuietly(orchestrator.archive);
 		await orchestrator.write();
 	} finally {
@@ -535,6 +553,9 @@ async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
 	);
 
 	try {
+		if (!flags.skipTechnologyJsScan) {
+			await scanJsResourcesQuietly(orchestrator.archive);
+		}
 		await ensureViewerReadModelQuietly(orchestrator.archive);
 		await orchestrator.write();
 	} finally {
