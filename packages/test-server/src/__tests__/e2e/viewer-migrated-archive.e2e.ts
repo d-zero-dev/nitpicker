@@ -57,14 +57,23 @@ describe('viewer read path on a migrated archive', () => {
 		expect(urls).toContain('http://localhost/b');
 	});
 
-	it('FK retarget を経た adjunct データが読める（page_tags / analysis_violations）', async () => {
+	it('FK retarget を経た adjunct データが読める（analysis_violations）', async () => {
 		const knex = archive!.getKnex();
-		const tags = await knex('page_tags').select('provider', 'externalId');
-		expect(tags).toMatchObject([{ provider: 'WordPress', externalId: 'wp' }]);
 		const violations = await knex('analysis_violations').select('validator', 'rule');
 		expect(violations).toMatchObject([
 			{ validator: 'markuplint', rule: 'required-attr' },
 		]);
+	});
+
+	it('page_tags は technology_signals / page_technologies に変換され、テーブル自体は残らない', async () => {
+		const knex = archive!.getKnex();
+		expect(await knex.schema.hasTable('page_tags')).toBe(false);
+		const signals = await knex('technology_signals').select('technology', 'signalType');
+		expect(signals).toMatchObject([
+			{ technology: 'WordPress', signalType: 'wappalyzer' },
+		]);
+		const technologies = await knex('page_technologies').select('technology');
+		expect(technologies).toMatchObject([{ technology: 'WordPress' }]);
 	});
 
 	it('HTML スナップショットが migrated archive から取得できる', async () => {
