@@ -107,6 +107,19 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
+	 * Enables `await using accessor = ...`. Delegates to {@link close} with
+	 * the default timeout — callers that need a non-default `timeoutMs`
+	 * must call `close` explicitly instead of relying on disposal.
+	 *
+	 * Dispatches through the instance's own `close`, so an `Archive`
+	 * (which overrides `close`) gets its full teardown here too — this
+	 * method does not need to be re-implemented on subclasses.
+	 */
+	async [Symbol.asyncDispose](): Promise<void> {
+		await this.close();
+	}
+
+	/**
 	 * Closes the underlying database connection.
 	 *
 	 * This is the **read-only** close path: it releases the SQLite handle and
