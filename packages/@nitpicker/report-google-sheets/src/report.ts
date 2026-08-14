@@ -207,46 +207,44 @@ export async function report(params: ReportParams) {
 		console.log(`\nGenerating ${createSheetList.length} sheet(s)...\n`);
 	}
 
-	const lanes = silent
-		? null
-		: new Lanes({ verbose: !process.stdout.isTTY, indent: '  ' });
-	log('Lanes created (verbose: %s, silent: %s)', !process.stdout.isTTY, !!silent);
+	{
+		using lanes = silent
+			? null
+			: new Lanes({ verbose: !process.stdout.isTTY, indent: '  ' });
+		log('Lanes created (verbose: %s, silent: %s)', !process.stdout.isTTY, !!silent);
 
-	const RATE_LIMIT_LANE = 10_000;
-	let countdownSeq = 0;
-	let waitingCount = 0;
+		const RATE_LIMIT_LANE = 10_000;
+		let countdownSeq = 0;
+		let waitingCount = 0;
 
-	if (lanes) {
-		sheets.onLog = (message: ErrorHandlerMessage) => {
-			if (message.waiting && message.waitTime) {
-				waitingCount++;
-				const id = `rateLimit_${countdownSeq++}`;
-				const label =
-					message.message === 'TooManyRequestError'
-						? 'Too Many Requests (429)'
-						: message.message === 'UserRateLimitExceededError'
-							? 'Rate Limit Exceeded (403)'
-							: message.message === 'ServerError'
-								? `Server Error (${message.code ?? '5xx'})`
-								: 'Connection Reset';
-				lanes.update(
-					RATE_LIMIT_LANE,
-					c.yellow(`${label}: waiting %countdown(${message.waitTime}, ${id}, s)%s`),
-				);
-			} else {
-				waitingCount--;
-				if (waitingCount <= 0) {
-					waitingCount = 0;
-					lanes.delete(RATE_LIMIT_LANE);
+		if (lanes) {
+			sheets.onLog = (message: ErrorHandlerMessage) => {
+				if (message.waiting && message.waitTime) {
+					waitingCount++;
+					const id = `rateLimit_${countdownSeq++}`;
+					const label =
+						message.message === 'TooManyRequestError'
+							? 'Too Many Requests (429)'
+							: message.message === 'UserRateLimitExceededError'
+								? 'Rate Limit Exceeded (403)'
+								: message.message === 'ServerError'
+									? `Server Error (${message.code ?? '5xx'})`
+									: 'Connection Reset';
+					lanes.update(
+						RATE_LIMIT_LANE,
+						c.yellow(`${label}: waiting %countdown(${message.waitTime}, ${id}, s)%s`),
+					);
+				} else {
+					waitingCount--;
+					if (waitingCount <= 0) {
+						waitingCount = 0;
+						lanes.delete(RATE_LIMIT_LANE);
+					}
 				}
-			}
-		};
-	}
+			};
+		}
 
-	log('Reporting starts (limit: %d)', limit);
-	// `Lanes` has no dispose protocol (sync `close()`, not `Symbol.dispose`),
-	// so this stays a manual `try`/`finally` unlike the archive lifecycle above.
-	try {
+		log('Reporting starts (limit: %d)', limit);
 		await createSheets({
 			sheets,
 			archive,
@@ -255,8 +253,6 @@ export async function report(params: ReportParams) {
 			createSheetList,
 			options: lanes ? { lanes } : undefined,
 		});
-	} finally {
-		lanes?.close();
 	}
 	log('Reporting done');
 	if (!silent) {
