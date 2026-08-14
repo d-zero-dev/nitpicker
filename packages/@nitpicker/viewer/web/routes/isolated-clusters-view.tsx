@@ -1,9 +1,9 @@
+import type { ColumnDef } from '../types.js';
 import type {
 	IsolatedClusterMember,
 	IsolatedClusterSummary,
 	PageSource,
 } from '@nitpicker/query';
-import type { ColumnDef } from '@tanstack/react-table';
 
 import { useMemo } from 'react';
 

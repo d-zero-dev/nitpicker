@@ -1,4 +1,28 @@
+import type { viewerTableFeatures } from './table-features.js';
 import type { ListPagesOptions } from '@nitpicker/query';
+import type {
+	CellContext as TanstackCellContext,
+	ColumnDef as TanstackColumnDef,
+} from '@tanstack/react-table';
+
+/**
+ * {@link TanstackColumnDef} pinned to {@link viewerTableFeatures} — every view
+ * that builds table columns imports this instead of the raw TanStack type, so
+ * a single feature set change here does not require touching every call
+ * site's type arguments.
+ */
+export type ColumnDef<TData, TValue = unknown> = TanstackColumnDef<
+	typeof viewerTableFeatures,
+	TData,
+	TValue
+>;
+
+/** {@link TanstackCellContext} pinned to {@link viewerTableFeatures} — see {@link ColumnDef}. */
+export type CellContext<TData, TValue = unknown> = TanstackCellContext<
+	typeof viewerTableFeatures,
+	TData,
+	TValue
+>;
 
 /**
  * Page-list filter state (everything except pagination, which the hook

@@ -1,6 +1,6 @@
 import type { MismatchType } from '../api/use-mismatches.js';
+import type { ColumnDef } from '../types.js';
 import type { MismatchEntry } from '@nitpicker/query';
-import type { ColumnDef } from '@tanstack/react-table';
 
 import { useMemo } from 'react';
 

@@ -1,8 +1,7 @@
-import type { PagesFilter } from '../types.js';
+import type { CellContext, ColumnDef, PagesFilter } from '../types.js';
 import type { PageListFacets, PageListItem } from '@nitpicker/query';
 import type { ContentTypeCategory } from '@nitpicker/query/categories';
 import type { HeaderPresence } from '@nitpicker/query/header-presence';
-import type { CellContext, ColumnDef } from '@tanstack/react-table';
 
 import { CONTENT_TYPE_CATEGORIES } from '@nitpicker/query/categories';
 import { HEADER_PRESENCE_KEYS } from '@nitpicker/query/header-presence';

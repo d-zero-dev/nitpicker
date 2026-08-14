@@ -1,5 +1,5 @@
+import type { ColumnDef } from '../types.js';
 import type { ErrorKind, ErrorKindEntry, FailureAttribution } from '@nitpicker/query';
-import type { ColumnDef } from '@tanstack/react-table';
 
 import { useMemo } from 'react';
 

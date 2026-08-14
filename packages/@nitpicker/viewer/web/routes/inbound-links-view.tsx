@@ -1,6 +1,6 @@
 import type { InboundLinkRow } from '../api/use-inbound-links-infinite.js';
 import type { InboundLinksResponse } from '../api/use-inbound-links.js';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef } from '../types.js';
 
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';

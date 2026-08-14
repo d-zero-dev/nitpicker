@@ -1,5 +1,4 @@
-import type { ViolationEntry } from '../types.js';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef, ViolationEntry } from '../types.js';
 
 import { useMemo } from 'react';
 

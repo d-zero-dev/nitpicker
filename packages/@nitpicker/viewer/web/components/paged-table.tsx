@@ -1,12 +1,12 @@
-import type { PageSize } from '../types.js';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef, PageSize } from '../types.js';
 import type { CSSProperties } from 'react';
 
-import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { flexRender, useTable } from '@tanstack/react-table';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useI18n } from '../i18n/use-i18n.js';
+import { viewerTableFeatures } from '../table-features.js';
 
 import { Pager } from './pager.js';
 import { toAccessibleHeaderLabel } from './to-accessible-header-label.js';
@@ -337,10 +337,10 @@ export function PagedTable<T>(props: PagedTableProps<T>) {
 	} = props;
 	const { t } = useI18n();
 
-	const table = useReactTable({
+	const table = useTable({
+		features: viewerTableFeatures,
 		data,
 		columns,
-		getCoreRowModel: getCoreRowModel(),
 		columnResizeMode: 'onChange',
 		enableColumnResizing: true,
 		defaultColumn: { minSize: 60 },

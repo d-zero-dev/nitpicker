@@ -1,4 +1,4 @@
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef } from '../types.js';
 
 /** Minimal row shape shared by the DataTable/PagedTable/VirtualTable demo stories. */
 export interface DemoRow {

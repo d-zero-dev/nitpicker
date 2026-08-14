@@ -1,6 +1,5 @@
-import type { PageSize } from '../types.js';
+import type { ColumnDef, PageSize } from '../types.js';
 import type { TableColumnControls } from './paged-table.js';
-import type { ColumnDef } from '@tanstack/react-table';
 
 import { PagedTable } from './paged-table.js';
 import { VirtualTable } from './virtual-table.js';
