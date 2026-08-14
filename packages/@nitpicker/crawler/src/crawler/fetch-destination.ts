@@ -4,6 +4,7 @@ import type { FollowResponse, RedirectableRequest } from 'follow-redirects';
 import type { ClientRequest, IncomingMessage, RequestOptions } from 'node:http';
 
 import { delay } from '@d-zero/shared/delay';
+import { raceWithTimeout } from '@d-zero/shared/race-with-timeout';
 import redirects from 'follow-redirects';
 
 import { decodeAuthCredential } from './decode-auth-credential.js';
@@ -76,30 +77,24 @@ export async function fetchDestination(
 	const effectiveMethod = titleBytesLimit == null ? method : 'GET';
 	const raceTimeoutMs = timeout ?? DEFAULT_HEAD_TIMEOUT_MS;
 
-	// Race the fetch against the requested timeout. The losing timer is cleared
-	// explicitly so it never keeps the event loop alive after the race settles
-	// (a plain `delay()` in `Promise.race` would leak the timer until it fires).
-	let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-	const result = await Promise.race([
-		_fetchHead(
-			url,
-			isExternal,
-			effectiveMethod,
-			titleBytesLimit,
-			userAgent,
-			timeout,
-		).catch((error: unknown) =>
-			error instanceof Error ? error : new Error(String(error)),
-		),
-		new Promise<NetTimeoutError>((resolve) => {
-			timeoutHandle = setTimeout(
-				() => resolve(new NetTimeoutError(url.href)),
-				raceTimeoutMs,
-			);
-		}),
-	]).finally(() => {
-		if (timeoutHandle) clearTimeout(timeoutHandle);
-	});
+	// Race the fetch against the requested timeout via `raceWithTimeout`, which
+	// clears the losing timer internally so it never keeps the event loop
+	// alive after the race settles.
+	const { result: challengeResult, timeout: timedOut } = await raceWithTimeout(
+		() =>
+			_fetchHead(
+				url,
+				isExternal,
+				effectiveMethod,
+				titleBytesLimit,
+				userAgent,
+				timeout,
+			).catch((error: unknown) =>
+				error instanceof Error ? error : new Error(String(error)),
+			),
+		raceTimeoutMs,
+	);
+	const result = timedOut ? new NetTimeoutError(url.href) : challengeResult;
 
 	// HEAD failure fallback: a WAF / middlebox that silently drops HEAD will
 	// surface as NetTimeoutError / parse-error / connection-reset here even
