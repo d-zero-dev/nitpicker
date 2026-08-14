@@ -10,6 +10,8 @@ git clone https://github.com/d-zero-dev/nitpicker.git
 cd nitpicker
 
 # 依存関係をインストール（Yarn のみ使用、npm 厳禁）
+# Node 26 以降は corepack が同梱されないため、未導入の場合は先に入れる
+npm install -g corepack
 corepack enable
 yarn install --immutable
 
