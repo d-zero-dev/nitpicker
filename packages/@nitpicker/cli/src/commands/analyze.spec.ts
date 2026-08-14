@@ -10,8 +10,10 @@ import { formatCliError as formatCliErrorFn } from '../format-cli-error.js';
 import { analyze } from './analyze.js';
 
 vi.mock('@d-zero/dealer', () => ({
-	Lanes: vi.fn().mockImplementation(function (this: { close: ReturnType<typeof vi.fn> }) {
-		this.close = vi.fn();
+	Lanes: vi.fn().mockImplementation(function (this: {
+		[Symbol.dispose]: ReturnType<typeof vi.fn>;
+	}) {
+		this[Symbol.dispose] = vi.fn();
 	}),
 }));
 
