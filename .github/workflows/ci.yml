@@ -8,10 +8,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Node 26 dropped the bundled corepack, so install it explicitly first.
+      - run: npm install -g corepack
       - run: corepack enable
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24.19.0
+          node-version: 26.7.0
           cache: yarn
       - run: yarn install --immutable
       - run: yarn build
@@ -22,6 +24,29 @@ jobs:
           retention-days: 1
 
   test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Node 26 dropped the bundled corepack, so install it explicitly first.
+      - run: npm install -g corepack
+      - run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.7.0
+          cache: yarn
+      - run: yarn install --immutable
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: build-output
+          path: packages/
+      - run: yarn test
+
+  # Minimum-support check: the build artifact (tsc output) is Node-runtime
+  # agnostic, so it's reused as-is from the node26 build rather than
+  # rebuilding under node24 — this job only re-verifies runtime behavior
+  # (native deps, engine floors) on the oldest supported major.
+  test-node24:
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -43,10 +68,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Node 26 dropped the bundled corepack, so install it explicitly first.
+      - run: npm install -g corepack
       - run: corepack enable
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24.19.0
+          node-version: 26.7.0
           cache: yarn
       - run: yarn install --immutable
       # Type-aware lint rules (e.g. @typescript-eslint/no-unnecessary-type-assertion)
