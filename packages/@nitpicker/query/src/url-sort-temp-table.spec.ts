@@ -86,13 +86,7 @@ async function addPage(archive: InstanceType<typeof Archive>, url: string) {
 }
 
 describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', () => {
-	let archive: InstanceType<typeof Archive> | undefined;
-
 	afterEach(async () => {
-		if (archive) {
-			await archive.close();
-			archive = undefined;
-		}
 		const { rmSync } = await import('node:fs');
 		rmSync(workingDir, { recursive: true, force: true });
 	});
@@ -100,7 +94,7 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 	it('ranks pages and resources URLs in natural sort order, deduplicated', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'rank.nitpicker'),
 			cwd: workingDir,
 		});
@@ -138,7 +132,7 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 	it('orderByUrlRank sorts a query by natural URL order via the temp table', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'order.nitpicker'),
 			cwd: workingDir,
 		});
@@ -165,7 +159,7 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 	it('survives a duplicate URL insert against the already-prepared table without throwing', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'dup-insert.nitpicker'),
 			cwd: workingDir,
 		});
@@ -198,7 +192,7 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 	it('onRanked reports every row externalSortUrls ranks, in the same order as the insert', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'on-ranked.nitpicker'),
 			cwd: workingDir,
 		});
@@ -220,7 +214,7 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 	it('rankedUrls replays a caller-supplied source instead of running externalSortUrls', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'ranked-urls-source.nitpicker'),
 			cwd: workingDir,
 		});
@@ -255,7 +249,7 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 	it('ensureUrlSortTempTable only prepares the table once per connection', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'ensure.nitpicker'),
 			cwd: workingDir,
 		});

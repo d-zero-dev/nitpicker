@@ -20,6 +20,7 @@ const mockArchiveWrite = vi.fn().mockResolvedValue();
 const mockArchiveOpen = vi.fn().mockResolvedValue({
 	write: mockArchiveWrite,
 	close: mockArchiveClose,
+	[Symbol.asyncDispose]: mockArchiveClose,
 });
 
 vi.mock('@nitpicker/crawler', () => ({
@@ -67,6 +68,7 @@ describe('viewerBuild command', () => {
 		mockArchiveOpen.mockResolvedValue({
 			write: mockArchiveWrite,
 			close: mockArchiveClose,
+			[Symbol.asyncDispose]: mockArchiveClose,
 		});
 		mockArchiveWrite.mockResolvedValue();
 		mockArchiveClose.mockResolvedValue();
@@ -192,6 +194,7 @@ describe('viewerBuild command', () => {
 		expect(mockBackfillBodyHashFromHtmlBlobs.mock.calls[0]![0]).toEqual({
 			write: mockArchiveWrite,
 			close: mockArchiveClose,
+			[Symbol.asyncDispose]: mockArchiveClose,
 		});
 	});
 
@@ -239,6 +242,7 @@ describe('viewerBuild command', () => {
 		mockArchiveOpen.mockResolvedValue({
 			write: mockArchiveWrite,
 			close: mockArchiveClose,
+			[Symbol.asyncDispose]: mockArchiveClose,
 		});
 		mockArchiveWrite.mockResolvedValue();
 		mockArchiveClose.mockResolvedValue();
@@ -290,6 +294,7 @@ describe('viewerBuild command', () => {
 		mockArchiveOpen.mockResolvedValue({
 			write: mockArchiveWrite,
 			close: mockArchiveClose,
+			[Symbol.asyncDispose]: mockArchiveClose,
 		});
 		mockArchiveWrite.mockResolvedValue();
 		mockArchiveClose.mockResolvedValue();

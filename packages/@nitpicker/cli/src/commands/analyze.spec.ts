@@ -66,16 +66,18 @@ const DEFAULT_CONFIG = { analyze: [{ name: '@nitpicker/analyze-axe' }] };
  * @param config - The config to return from getConfig()
  */
 function createMockNitpicker(config = DEFAULT_CONFIG) {
+	const archive = {
+		getUrl: vi.fn().mockResolvedValue('https://example.com'),
+		close: vi.fn().mockResolvedValue(),
+	};
 	return {
-		archive: {
-			getUrl: vi.fn().mockResolvedValue('https://example.com'),
-			close: vi.fn().mockResolvedValue(),
-		},
+		archive,
 		getConfig: vi.fn().mockResolvedValue(config),
 		setPluginOverrides: vi.fn(),
 		analyze: vi.fn().mockResolvedValue(),
 		write: vi.fn().mockResolvedValue(),
 		on: vi.fn(),
+		[Symbol.asyncDispose]: () => archive.close(),
 	};
 }
 

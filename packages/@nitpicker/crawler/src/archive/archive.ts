@@ -46,16 +46,15 @@ import { safePath } from './safe-path.js';
  *
  * Use the static factory methods ({@link Archive.create}, {@link Archive.open},
  * {@link Archive.resume}, {@link Archive.connect}) to obtain instances.
- * The constructor is private.
+ * The constructor is private. Implements `Symbol.asyncDispose` (inherited
+ * from {@link ArchiveAccessor}) so callers can use `await using` instead of
+ * a manual `try`/`finally` around {@link close}.
  * @example
- * const archive = await Archive.create({ filePath: '/path/to/site.nitpicker' });
- * try {
- *   await archive.setConfig(config);
- *   const pageId = await archive.setPage(pageData);
- * } finally {
- *   // Writes the `.nitpicker` tar (if absent), removes tmpDir, releases the lock.
- *   await archive.close();
- * }
+ * await using archive = await Archive.create({ filePath: '/path/to/site.nitpicker' });
+ * await archive.setConfig(config);
+ * const pageId = await archive.setPage(pageData);
+ * // Writes the `.nitpicker` tar (if absent), removes tmpDir, releases the
+ * // lock — all on scope exit, whether by fallthrough or thrown error.
  */
 export default class Archive extends ArchiveAccessor {
 	/**
@@ -802,12 +801,9 @@ export default class Archive extends ArchiveAccessor {
 	 * @returns A read-only {@link ArchiveAccessor} backed by the cache directory.
 	 * @example
 	 * ```ts
-	 * const accessor = await Archive.openCached('/path/to/site.nitpicker');
-	 * try {
-	 *   const summary = await getSummary(accessor);
-	 * } finally {
-	 *   await accessor.close(); // tears down DB handle, cacheDir persists.
-	 * }
+	 * await using accessor = await Archive.openCached('/path/to/site.nitpicker');
+	 * const summary = await getSummary(accessor);
+	 * // tears down DB handle on scope exit; cacheDir persists.
 	 * ```
 	 */
 	static async openCached(

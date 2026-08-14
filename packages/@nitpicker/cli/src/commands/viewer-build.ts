@@ -136,60 +136,59 @@ export async function viewerBuild(
 		//
 		// See `ArchiveOpenOptions.openPluginData` for why this must be
 		// `true` (the `write()` below re-tars the whole tmpDir).
-		const archive = await Archive.open({ filePath: absFilePath, openPluginData: true });
-		try {
-			if (flags.force) {
-				await buildViewerReadModel(archive, { onProgress: logProgress });
-			} else {
-				await ensureViewerReadModel(archive, { onProgress: logProgress });
-			}
-			// Not folded into the branches above: `ensureViewerReadModel`'s
-			// schema-version gate answers "does the read model need a
-			// rebuild", which is the wrong question for this backfill —
-			// `body_hash` didn't change the read-model schema, so an archive
-			// whose read model is already current would otherwise never run
-			// it. Called unconditionally here so `viewer-build` (with or
-			// without `--force`) always catches up a legacy archive's
-			// `body_hash` values; its own row-count guard makes the
-			// `--force` branch's second call (buildViewerReadModel already
-			// ran it once above) a cheap no-op.
-			await backfillBodyHashFromHtmlBlobs(archive, (processed, total) => {
-				// eslint-disable-next-line no-console
-				console.error(`[nitpicker] page_meta.body_hash backfill: ${processed}/${total}`);
-			});
-			// Must run after the body_hash backfill above: alias_of_id's
-			// trailing-slash tier requires body_hash to already be computed
-			// for both candidate pages. Called unconditionally for the same
-			// schema-version-gate reason as backfillBodyHashFromHtmlBlobs —
-			// alias_of_id does not change the read-model schema either, so
-			// `ensureViewerReadModel` alone would never trigger this on an
-			// already-current archive.
-			await backfillAliasOfId(archive, (processed, total) => {
-				// eslint-disable-next-line no-console
-				console.error(
-					`[nitpicker] content_items.alias_of_id backfill: ${processed}/${total}`,
-				);
-			});
-			// Unlike the two backfills above, `dedupe_cap_event_id`'s initial
-			// rollout IS covered by a read-model schema bump (`viewer_pages.
-			// is_dedupe_capped` needs one) — but the same gate-bypass problem
-			// resurfaces on every later `--append`/`--retry-failed` re-crawl
-			// of an already-current archive: new `dedupe_cap_events` rows or
-			// newly-discovered pages matching an existing shape would never
-			// get (re-)marked, since `ensureViewerReadModel`'s version check
-			// only answers "did the schema change," not "did the underlying
-			// data." Called unconditionally here for that ongoing-maintenance
-			// case, same as `backfillBodyHashFromHtmlBlobs`/`backfillAliasOfId`.
-			await backfillDedupeCapEventId(archive, (processed, total) => {
-				// eslint-disable-next-line no-console
-				console.error(
-					`[nitpicker] content_items.dedupe_cap_event_id backfill: ${processed}/${total}`,
-				);
-			});
-			await archive.write();
-		} finally {
-			await archive.close();
+		await using archive = await Archive.open({
+			filePath: absFilePath,
+			openPluginData: true,
+		});
+		if (flags.force) {
+			await buildViewerReadModel(archive, { onProgress: logProgress });
+		} else {
+			await ensureViewerReadModel(archive, { onProgress: logProgress });
 		}
+		// Not folded into the branches above: `ensureViewerReadModel`'s
+		// schema-version gate answers "does the read model need a
+		// rebuild", which is the wrong question for this backfill —
+		// `body_hash` didn't change the read-model schema, so an archive
+		// whose read model is already current would otherwise never run
+		// it. Called unconditionally here so `viewer-build` (with or
+		// without `--force`) always catches up a legacy archive's
+		// `body_hash` values; its own row-count guard makes the
+		// `--force` branch's second call (buildViewerReadModel already
+		// ran it once above) a cheap no-op.
+		await backfillBodyHashFromHtmlBlobs(archive, (processed, total) => {
+			// eslint-disable-next-line no-console
+			console.error(`[nitpicker] page_meta.body_hash backfill: ${processed}/${total}`);
+		});
+		// Must run after the body_hash backfill above: alias_of_id's
+		// trailing-slash tier requires body_hash to already be computed
+		// for both candidate pages. Called unconditionally for the same
+		// schema-version-gate reason as backfillBodyHashFromHtmlBlobs —
+		// alias_of_id does not change the read-model schema either, so
+		// `ensureViewerReadModel` alone would never trigger this on an
+		// already-current archive.
+		await backfillAliasOfId(archive, (processed, total) => {
+			// eslint-disable-next-line no-console
+			console.error(
+				`[nitpicker] content_items.alias_of_id backfill: ${processed}/${total}`,
+			);
+		});
+		// Unlike the two backfills above, `dedupe_cap_event_id`'s initial
+		// rollout IS covered by a read-model schema bump (`viewer_pages.
+		// is_dedupe_capped` needs one) — but the same gate-bypass problem
+		// resurfaces on every later `--append`/`--retry-failed` re-crawl
+		// of an already-current archive: new `dedupe_cap_events` rows or
+		// newly-discovered pages matching an existing shape would never
+		// get (re-)marked, since `ensureViewerReadModel`'s version check
+		// only answers "did the schema change," not "did the underlying
+		// data." Called unconditionally here for that ongoing-maintenance
+		// case, same as `backfillBodyHashFromHtmlBlobs`/`backfillAliasOfId`.
+		await backfillDedupeCapEventId(archive, (processed, total) => {
+			// eslint-disable-next-line no-console
+			console.error(
+				`[nitpicker] content_items.dedupe_cap_event_id backfill: ${processed}/${total}`,
+			);
+		});
+		await archive.write();
 		await ignoreEnoent(unlink(backupPath));
 	} catch (error) {
 		try {

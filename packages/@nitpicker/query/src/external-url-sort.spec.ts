@@ -83,13 +83,7 @@ async function addPage(archive: InstanceType<typeof Archive>, url: string) {
 }
 
 describe('externalSortUrls', () => {
-	let archive: InstanceType<typeof Archive> | undefined;
-
 	afterEach(async () => {
-		if (archive) {
-			await archive.close();
-			archive = undefined;
-		}
 		const { rmSync } = await import('node:fs');
 		rmSync(workingDir, { recursive: true, force: true });
 	});
@@ -97,7 +91,7 @@ describe('externalSortUrls', () => {
 	it('ranks pages+resources URLs in natural order even when forced across many small chunks', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'sort.nitpicker'),
 			cwd: workingDir,
 		});
@@ -146,7 +140,7 @@ describe('externalSortUrls', () => {
 	it('emits each distinct URL exactly once when the same URL exists in both pages and resources', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'dedup.nitpicker'),
 			cwd: workingDir,
 		});
@@ -184,7 +178,7 @@ describe('externalSortUrls', () => {
 	it('produces no output and leaves no temp directory for an archive with no pages or resources', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'empty.nitpicker'),
 			cwd: workingDir,
 		});
@@ -209,7 +203,7 @@ describe('externalSortUrls', () => {
 	it('cleans up the temp directory even when onRow throws', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'cleanup-on-error.nitpicker'),
 			cwd: workingDir,
 		});

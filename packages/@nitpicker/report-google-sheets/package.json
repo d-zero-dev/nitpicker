@@ -4,6 +4,9 @@
 	"description": "Nitpicker reporter that outputs crawl and analysis results to Google Sheets",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
+	"engines": {
+		"node": ">=24.11.0"
+	},
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/d-zero-dev/nitpicker.git",

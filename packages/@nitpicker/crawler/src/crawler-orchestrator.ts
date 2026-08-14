@@ -178,10 +178,13 @@ interface InventorySource {
  * writes the final archive file. It emits events defined by {@link CrawlEvent}.
  *
  * Instances are created via the static factory methods {@link CrawlerOrchestrator.crawling}
- * or {@link CrawlerOrchestrator.resume}; the constructor is private.
+ * or {@link CrawlerOrchestrator.resume}; the constructor is private. Implements
+ * `Symbol.asyncDispose` so callers can use `await using` to close the archive
+ * and reap zombie Chromium processes on scope exit instead of a manual
+ * `try`/`finally` around `archive.close()` + `garbageCollect()`.
  * @example
  * ```ts
- * const orchestrator = await CrawlerOrchestrator.crawling(['https://example.com'], { recursive: true });
+ * await using orchestrator = await CrawlerOrchestrator.crawling(['https://example.com'], { recursive: true });
  * await orchestrator.write();
  * ```
  */
@@ -307,6 +310,18 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			// `CrawlConfig.preloadedStickyShapeKeys`'s JSDoc).
 			preloadedStickyShapeKeys: options?.preloadedStickyShapeKeys ?? [],
 		});
+	}
+
+	/**
+	 * Enables `await using orchestrator = ...`. Closes the archive (write
+	 * or remove tmpDir + release the lock, per {@link Archive.close}) and
+	 * then reaps any zombie Chromium processes via {@link garbageCollect} —
+	 * the same two-step teardown every CLI crawl command previously
+	 * repeated by hand in a `finally` block.
+	 */
+	async [Symbol.asyncDispose](): Promise<void> {
+		await this.#archive.close();
+		this.garbageCollect();
 	}
 
 	/**

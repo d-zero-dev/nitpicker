@@ -286,7 +286,7 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 	const errStack: (CrawlerError | Error)[] = [];
 
 	const isList = !!flags.list?.length;
-	const orchestrator = await CrawlerOrchestrator.crawling(
+	await using orchestrator = await CrawlerOrchestrator.crawling(
 		siteUrl,
 		{
 			...mapFlagsToCrawlConfig(flags),
@@ -305,16 +305,11 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 		},
 	);
 
-	try {
-		if (!flags.skipTechnologyJsScan) {
-			await scanJsResourcesQuietly(orchestrator.archive);
-		}
-		await ensureViewerReadModelQuietly(orchestrator.archive);
-		await orchestrator.write();
-	} finally {
-		await orchestrator.archive.close();
-		orchestrator.garbageCollect();
+	if (!flags.skipTechnologyJsScan) {
+		await scanJsResourcesQuietly(orchestrator.archive);
 	}
+	await ensureViewerReadModelQuietly(orchestrator.archive);
+	await orchestrator.write();
 
 	const archivePath = orchestrator.archive.filePath;
 
@@ -343,7 +338,7 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 		? stubFilePath
 		: path.resolve(process.cwd(), stubFilePath);
 
-	const orchestrator = await CrawlerOrchestrator.resume(
+	await using orchestrator = await CrawlerOrchestrator.resume(
 		absFilePath,
 		{
 			...mapFlagsToCrawlConfig(flags),
@@ -359,16 +354,11 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 		},
 	);
 
-	try {
-		if (!flags.skipTechnologyJsScan) {
-			await scanJsResourcesQuietly(orchestrator.archive);
-		}
-		await ensureViewerReadModelQuietly(orchestrator.archive);
-		await orchestrator.write();
-	} finally {
-		await orchestrator.archive.close();
-		orchestrator.garbageCollect();
+	if (!flags.skipTechnologyJsScan) {
+		await scanJsResourcesQuietly(orchestrator.archive);
 	}
+	await ensureViewerReadModelQuietly(orchestrator.archive);
+	await orchestrator.write();
 
 	if (errStack.length > 0) {
 		const error = new CrawlAggregateError(errStack);
@@ -395,7 +385,7 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
 	validateUrls(newUrls);
 	const errStack: (CrawlerError | Error)[] = [];
 
-	const orchestrator = await CrawlerOrchestrator.append(
+	await using orchestrator = await CrawlerOrchestrator.append(
 		archivePath,
 		newUrls,
 		{
@@ -412,16 +402,11 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
 		},
 	);
 
-	try {
-		if (!flags.skipTechnologyJsScan) {
-			await scanJsResourcesQuietly(orchestrator.archive);
-		}
-		await ensureViewerReadModelQuietly(orchestrator.archive);
-		await orchestrator.write();
-	} finally {
-		await orchestrator.archive.close();
-		orchestrator.garbageCollect();
+	if (!flags.skipTechnologyJsScan) {
+		await scanJsResourcesQuietly(orchestrator.archive);
 	}
+	await ensureViewerReadModelQuietly(orchestrator.archive);
+	await orchestrator.write();
 
 	if (errStack.length > 0) {
 		const error = new CrawlAggregateError(errStack);
@@ -483,7 +468,7 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 	const sha256 = computeFileSha256(bytes);
 	const errStack: (CrawlerError | Error)[] = [];
 
-	const orchestrator = await CrawlerOrchestrator.inventory(
+	await using orchestrator = await CrawlerOrchestrator.inventory(
 		archivePath,
 		valid,
 		{
@@ -501,16 +486,11 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 		{ sha256, bytes, invalidLineCount: invalid.length },
 	);
 
-	try {
-		if (!flags.skipTechnologyJsScan) {
-			await scanJsResourcesQuietly(orchestrator.archive);
-		}
-		await ensureViewerReadModelQuietly(orchestrator.archive);
-		await orchestrator.write();
-	} finally {
-		await orchestrator.archive.close();
-		orchestrator.garbageCollect();
+	if (!flags.skipTechnologyJsScan) {
+		await scanJsResourcesQuietly(orchestrator.archive);
 	}
+	await ensureViewerReadModelQuietly(orchestrator.archive);
+	await orchestrator.write();
 
 	if (errStack.length > 0) {
 		const error = new CrawlAggregateError(errStack);
@@ -536,7 +516,7 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
 	const errStack: (CrawlerError | Error)[] = [];
 
-	const orchestrator = await CrawlerOrchestrator.retryFailed(
+	await using orchestrator = await CrawlerOrchestrator.retryFailed(
 		archivePath,
 		{
 			...mapFlagsToCrawlConfig(flags),
@@ -552,16 +532,11 @@ async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
 		},
 	);
 
-	try {
-		if (!flags.skipTechnologyJsScan) {
-			await scanJsResourcesQuietly(orchestrator.archive);
-		}
-		await ensureViewerReadModelQuietly(orchestrator.archive);
-		await orchestrator.write();
-	} finally {
-		await orchestrator.archive.close();
-		orchestrator.garbageCollect();
+	if (!flags.skipTechnologyJsScan) {
+		await scanJsResourcesQuietly(orchestrator.archive);
 	}
+	await ensureViewerReadModelQuietly(orchestrator.archive);
+	await orchestrator.write();
 
 	if (errStack.length > 0) {
 		const error = new CrawlAggregateError(errStack);

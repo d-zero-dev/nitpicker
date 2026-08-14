@@ -37,7 +37,7 @@ afterEach(async () => {
 async function buildFakeArchive(archivePath: string, title = 'fixture'): Promise<void> {
 	const cwd = path.join(baseDir, `staging-${path.basename(archivePath)}-${Date.now()}`);
 	await fs.mkdir(cwd, { recursive: true });
-	const archive = await Archive.create({ filePath: archivePath, cwd });
+	await using archive = await Archive.create({ filePath: archivePath, cwd });
 	await archive.setConfig({
 		baseUrl: 'https://example.com',
 		name: title,
@@ -92,7 +92,6 @@ async function buildFakeArchive(archivePath: string, title = 'fixture'): Promise
 		isSkipped: false,
 	});
 	await archive.write();
-	await archive.close();
 }
 
 describe('extractArchiveToCache', () => {

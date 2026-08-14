@@ -55,13 +55,7 @@ function crawlerError(
 }
 
 describe('getErrorKinds', () => {
-	let archive: InstanceType<typeof Archive> | undefined;
-
 	afterEach(async () => {
-		if (archive) {
-			await archive.close();
-			archive = undefined;
-		}
 		const { rmSync } = await import('node:fs');
 		rmSync(workingDir, { recursive: true, force: true });
 	});
@@ -69,7 +63,7 @@ describe('getErrorKinds', () => {
 	it('classifies and aggregates page_errors + crawl_errors into host×kind rows, sourced from crawl_errors', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'capture.nitpicker'),
 			cwd: workingDir,
 		});
@@ -115,7 +109,7 @@ describe('getErrorKinds', () => {
 	it('normalizes to one row per host×kind pair — a host failing with two causes yields two rows', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'multi-kind-host.nitpicker'),
 			cwd: workingDir,
 		});
@@ -148,7 +142,7 @@ describe('getErrorKinds', () => {
 	it('items are sorted by count desc by default', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'sorted.nitpicker'),
 			cwd: workingDir,
 		});
@@ -173,7 +167,7 @@ describe('getErrorKinds', () => {
 	it('filters by exact host and kind', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'filter.nitpicker'),
 			cwd: workingDir,
 		});
@@ -211,7 +205,7 @@ describe('getErrorKinds', () => {
 	it('falls back to count-desc when sortBy is not a recognized field', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'bad-sortby.nitpicker'),
 			cwd: workingDir,
 		});
@@ -239,7 +233,7 @@ describe('getErrorKinds', () => {
 	it('sorts by host and kind in either direction', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'sort-fields.nitpicker'),
 			cwd: workingDir,
 		});
@@ -271,7 +265,7 @@ describe('getErrorKinds', () => {
 	it('paginates with limit/offset, and returns every row when limit is omitted', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'pagination.nitpicker'),
 			cwd: workingDir,
 		});
@@ -304,7 +298,7 @@ describe('getErrorKinds', () => {
 	it('caps sample URLs per host×kind pair and tracks overflow beyond the cap', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'overflow.nitpicker'),
 			cwd: workingDir,
 		});
@@ -340,7 +334,7 @@ describe('getErrorKinds', () => {
 	it('falls back to parsing error.log when the crawl_errors table is absent', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'legacy.nitpicker'),
 			cwd: workingDir,
 		});
@@ -374,7 +368,7 @@ describe('getErrorKinds', () => {
 	it('falls back to error.log when crawl_errors exists but is empty (migrated legacy archive)', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'migrated.nitpicker'),
 			cwd: workingDir,
 		});
@@ -399,7 +393,7 @@ describe('getErrorKinds', () => {
 	it('reports channelSource none and no items for a clean archive', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
-		archive = await Archive.create({
+		await using archive = await Archive.create({
 			filePath: path.resolve(workingDir, 'clean.nitpicker'),
 			cwd: workingDir,
 		});
