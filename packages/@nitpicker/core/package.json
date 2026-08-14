@@ -30,9 +30,9 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@d-zero/dealer": "1.10.4",
-		"@d-zero/page-cluster": "0.5.7",
-		"@d-zero/shared": "0.22.5",
+		"@d-zero/dealer": "1.11.0",
+		"@d-zero/page-cluster": "0.6.0",
+		"@d-zero/shared": "0.23.0",
 		"@nitpicker/crawler": "0.18.1",
 		"@nitpicker/types": "0.18.1",
 		"ansi-colors": "4.1.3",

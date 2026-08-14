@@ -1,3 +1,5 @@
+import { raceWithTimeout } from '@d-zero/shared/race-with-timeout';
+
 import { crawlerLog } from '../debug.js';
 
 import { killProcessTree } from './kill-process-tree.js';
@@ -56,9 +58,9 @@ export interface CloseBrowserSafelyDeps {
  * expiry guarantees the worker always completes and no orphan subprocesses are
  * left behind.
  *
- * The losing timer is cleared explicitly in `.finally()` so it never keeps the
- * event loop alive after the race settles (a plain `delay()` in `Promise.race`
- * would leak the timer until it fires).
+ * Timer cleanup is delegated to `raceWithTimeout` (`@d-zero/shared`), which
+ * clears the losing timer internally so it never keeps the event loop alive
+ * after the race settles.
  *
  * The tree-kill happens via {@link killProcessTree}, which enumerates
  * descendants through `ps` (POSIX) or delegates to `taskkill /T /F` (Windows).
@@ -83,20 +85,14 @@ export async function closeBrowserSafely(
 	// have no handle to tree-kill on timeout.
 	const childProcess = browser.process();
 
-	let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-	const timedOut = await Promise.race([
-		browser
-			.close()
-			.then(() => false)
-			.catch(() => false),
-		new Promise<boolean>((resolve) => {
-			timeoutHandle = setTimeout(() => resolve(true), timeoutMs);
-		}),
-	]).finally(() => {
-		if (timeoutHandle) {
-			clearTimeout(timeoutHandle);
-		}
-	});
+	const { timeout: timedOut } = await raceWithTimeout(
+		() =>
+			browser
+				.close()
+				.then(() => {})
+				.catch(() => {}),
+		timeoutMs,
+	);
 
 	if (timedOut && childProcess && !childProcess.killed) {
 		// Mark the Node ChildProcess as killed so Node's reaping logic treats

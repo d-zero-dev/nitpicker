@@ -94,7 +94,7 @@ describe('report', () => {
 	});
 
 	it('does not create Lanes when silent=true', async () => {
-		const lanesSpy = vi.spyOn(Lanes.prototype, 'close');
+		const lanesSpy = vi.spyOn(Lanes.prototype, Symbol.dispose);
 
 		await report({ ...baseParams, all: true, silent: true });
 
@@ -102,7 +102,7 @@ describe('report', () => {
 	});
 
 	it('creates Lanes when silent is not set', async () => {
-		const lanesSpy = vi.spyOn(Lanes.prototype, 'close');
+		const lanesSpy = vi.spyOn(Lanes.prototype, Symbol.dispose);
 
 		await report({ ...baseParams, all: true, silent: false });
 

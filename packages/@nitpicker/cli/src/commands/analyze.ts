@@ -193,17 +193,13 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 			);
 		}
 
-		const lanes = silent ? undefined : new Lanes({ verbose, indent: '  ' });
-		// `Lanes` has no dispose protocol (sync `close()`, not `Symbol.dispose`),
-		// so this stays a manual `try`/`finally` unlike the archive lifecycle above.
-		try {
+		{
+			using lanes = silent ? undefined : new Lanes({ verbose, indent: '  ' });
 			await nitpicker.analyze(filter, {
 				lanes,
 				verbose,
 				classifyTemplates: flags.templates,
 			});
-		} finally {
-			lanes?.close();
 		}
 
 		await nitpicker.write();

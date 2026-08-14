@@ -11,6 +11,7 @@ import type { ParseURLOptions } from '@d-zero/shared/parse-url';
 
 import path from 'node:path';
 
+import { raceWithTimeout } from '@d-zero/shared/race-with-timeout';
 import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-await-event-emitter';
 
 import { log } from './debug.js';
@@ -553,32 +554,22 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 			await this.#db.destroy();
 			return;
 		}
-		let timer: NodeJS.Timeout | null = null;
-		const timeout = new Promise<'timeout'>((resolve) => {
-			timer = setTimeout(() => resolve('timeout'), timeoutMs);
-		});
 		// Track destroy() so we can attach an error-suppressing handler if we
 		// give up waiting — otherwise a late rejection becomes an unhandled
 		// promise rejection on the process.
 		const destroy = this.#db.destroy().then(() => 'done' as const);
-		try {
-			const result = await Promise.race([destroy, timeout]);
-			if (result === 'timeout') {
+		const { timeout } = await raceWithTimeout(() => destroy, timeoutMs);
+		if (timeout) {
+			log(
+				'ArchiveAccessor.close: db.destroy() did not settle within %dms — giving up',
+				timeoutMs,
+			);
+			destroy.catch((error) => {
 				log(
-					'ArchiveAccessor.close: db.destroy() did not settle within %dms — giving up',
-					timeoutMs,
+					'ArchiveAccessor.close: late db.destroy() rejection (post-timeout): %O',
+					error,
 				);
-				destroy.catch((error) => {
-					log(
-						'ArchiveAccessor.close: late db.destroy() rejection (post-timeout): %O',
-						error,
-					);
-				});
-			}
-		} finally {
-			if (timer) {
-				clearTimeout(timer);
-			}
+			});
 		}
 	}
 }
