@@ -1,5 +1,5 @@
 import type { LinkRow } from '../api/use-links-infinite.js';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef } from '../types.js';
 
 import { useMemo } from 'react';
 

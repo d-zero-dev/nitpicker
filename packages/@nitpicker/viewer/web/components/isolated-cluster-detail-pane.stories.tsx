@@ -1,6 +1,6 @@
+import type { ColumnDef } from '../types.js';
 import type { IsolatedClusterMember } from '@nitpicker/query';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import type { ColumnDef } from '@tanstack/react-table';
 
 import { fn } from 'storybook/test';
 
