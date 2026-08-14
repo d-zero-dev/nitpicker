@@ -1,8 +1,8 @@
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
-import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
+
+import { mkdtempDisposable } from '@d-zero/shared/mkdtemp-disposable';
 
 import { mergeSortedUrlChunks } from './merge-sorted-url-chunks.js';
 import { readUrlChunks } from './read-url-chunks.js';
@@ -13,26 +13,6 @@ const READ_CHUNK_SIZE = 50_000;
 
 /** How often (in merged rows) to report merge-phase progress. */
 const MERGE_PROGRESS_INTERVAL = 100_000;
-
-/**
- * Creates a temp directory via `mkdtemp`, tagged with `Symbol.asyncDispose`
- * so the caller can `await using` it instead of a manual `try`/`finally`
- * around `fs.rm(dir, { recursive: true, force: true })`.
- * @param dir - Parent directory the temp directory is created under.
- * @param prefix - Prefix forwarded to `fs.mkdtemp`.
- */
-async function mkdtempDisposable(
-	dir: string,
-	prefix: string,
-): Promise<{ path: string } & AsyncDisposable> {
-	const dirPath = await fs.mkdtemp(path.join(dir, prefix));
-	return {
-		path: dirPath,
-		async [Symbol.asyncDispose]() {
-			await fs.rm(dirPath, { recursive: true, force: true });
-		},
-	};
-}
 
 /**
  * Options for {@link externalSortUrls}.
@@ -94,8 +74,8 @@ export async function externalSortUrls(
 	// populated — get distinct scratch directories instead of interleaving
 	// writes into (and one prematurely `rm -rf`-ing) the other's chunk files.
 	await using tmpDirHandle = accessor.readOnly
-		? await mkdtempDisposable(os.tmpdir(), 'nitpicker-url-sort-')
-		: await mkdtempDisposable(accessor.tmpDir, 'url-sort-tmp-');
+		? await mkdtempDisposable('nitpicker-url-sort-')
+		: await mkdtempDisposable(path.join(accessor.tmpDir, 'url-sort-tmp-'));
 	const tmpDir = tmpDirHandle.path;
 
 	// A row-count estimate up front — cheap even on a multi-GB archive,
