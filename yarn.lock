@@ -3437,7 +3437,7 @@ __metadata:
     graphology: "npm:0.26.0"
     graphology-layout-forceatlas2: "npm:0.10.1"
     graphology-types: "npm:0.24.8"
-    hono: "npm:4.13.0"
+    hono: "npm:4.13.1"
     jsdom: "npm:29.1.1"
     react: "npm:19.2.8"
     react-dom: "npm:19.2.8"
@@ -11868,10 +11868,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"hono@npm:4.13.0":
-  version: 4.13.0
-  resolution: "hono@npm:4.13.0"
-  checksum: 10c0/d7cfb4d1063be19bea1982ea2a6b3cfa1840e8403a03203e86d17278e76fed11e7483974738345257543e183a935ea73ffc6d4a1e6ad7f0008451f55cdf8be7b
+"hono@npm:4.13.1":
+  version: 4.13.1
+  resolution: "hono@npm:4.13.1"
+  checksum: 10c0/83524961f806293464e6c3b31a7fd2ab8cd8e9cb66e65dea1fbbefb70744844c13b7409ed9b49b43e8543e5c0f1b851f2586fa759eea9da0b69503b58cd0d985
   languageName: node
   linkType: hard
 
@@ -19355,7 +19355,7 @@ __metadata:
     "@nitpicker/query": "npm:0.18.1"
     "@nitpicker/types": "npm:0.18.1"
     await-event-emitter: "npm:2.0.2"
-    hono: "npm:4.13.0"
+    hono: "npm:4.13.1"
     knex: "npm:3.3.0"
     vitest: "npm:4.1.10"
   languageName: unknown
