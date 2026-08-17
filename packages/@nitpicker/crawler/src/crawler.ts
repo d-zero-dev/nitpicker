@@ -69,6 +69,7 @@ export { probeNetwork } from './crawler/probe-network.js';
 export { computeOutageClampTimestamp } from './archive/db-ops/outages/compute-outage-clamp-timestamp.js';
 export { chooseProbeHost } from './crawler/choose-probe-host.js';
 export { assertChromeIsInstalled } from './crawler/assert-chrome-installed.js';
+export { assertPuppeteerSharedWithBeholder } from './crawler/assert-puppeteer-shared-with-beholder.js';
 export { computeFileSha256 } from './utils/compute-file-sha256.js';
 export { scanJsResourceForLicenseComment } from './crawler/scan-js-resource-for-license-comment.js';
 export type {
