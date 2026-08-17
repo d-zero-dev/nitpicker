@@ -52,7 +52,12 @@
 		},
 		{
 			"groupName": "puppeteer",
-			"matchPackageNames": ["puppeteer", "puppeteer-core", "/^@puppeteer\\//"]
+			"matchPackageNames": [
+				"puppeteer",
+				"puppeteer-core",
+				"/^@puppeteer\\//",
+				"@d-zero/beholder"
+			]
 		},
 		{
 			"groupName": "react",
@@ -133,7 +138,6 @@
 		{
 			"groupName": "@d-zero runtime",
 			"matchPackageNames": [
-				"@d-zero/beholder",
 				"@d-zero/dealer",
 				"@d-zero/fs",
 				"@d-zero/google-auth",
