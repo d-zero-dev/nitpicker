@@ -1,6 +1,9 @@
 import type { CommandDef, InferFlags } from '@d-zero/roar';
 
-import { assertChromeIsInstalled } from '@nitpicker/crawler';
+import {
+	assertChromeIsInstalled,
+	assertPuppeteerSharedWithBeholder,
+} from '@nitpicker/crawler';
 
 import { ExitCode } from '../exit-code.js';
 import { formatCliError } from '../format-cli-error.js';
@@ -283,6 +286,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 		// Fails fast if Chrome is missing, before the crawl step does any
 		// archive I/O — see `assertChromeIsInstalled`'s JSDoc.
 		await assertChromeIsInstalled();
+		assertPuppeteerSharedWithBeholder();
 
 		archivePath = await startCrawl([siteUrl], {
 			interval: flags.interval,

@@ -16,6 +16,7 @@ const mockRetryFailed = vi.fn();
 const mockInventory = vi.fn();
 const mockComputeFileSha256 = vi.fn(() => 'd'.repeat(64));
 const mockAssertChromeIsInstalled = vi.fn().mockResolvedValue();
+const mockAssertPuppeteerSharedWithBeholder = vi.fn();
 
 vi.mock('@nitpicker/crawler', () => ({
 	CrawlerOrchestrator: {
@@ -27,6 +28,7 @@ vi.mock('@nitpicker/crawler', () => ({
 	},
 	computeFileSha256: mockComputeFileSha256,
 	assertChromeIsInstalled: mockAssertChromeIsInstalled,
+	assertPuppeteerSharedWithBeholder: mockAssertPuppeteerSharedWithBeholder,
 }));
 
 const mockEventAssignments = vi.fn().mockResolvedValue();
@@ -1081,6 +1083,35 @@ describe('crawl', () => {
 		await crawl(['a.nitpicker', 'b.nitpicker'], createFlags({ diff: true }));
 
 		expect(mockAssertChromeIsInstalled).not.toHaveBeenCalled();
+	});
+
+	it('クロール開始前に assertPuppeteerSharedWithBeholder を呼び出す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['https://example.com'], createFlags());
+
+		expect(mockAssertPuppeteerSharedWithBeholder).toHaveBeenCalled();
+		expect(
+			mockAssertPuppeteerSharedWithBeholder.mock.invocationCallOrder[0],
+		).toBeLessThan(mockCrawling.mock.invocationCallOrder[0]!);
+	});
+
+	it('assertPuppeteerSharedWithBeholder が失敗した場合、クロールを開始せずエラーを伝播する', async () => {
+		mockAssertPuppeteerSharedWithBeholder.mockImplementationOnce(() => {
+			throw new Error("crawler's puppeteer and @d-zero/beholder's puppeteer differ");
+		});
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl(['https://example.com'], createFlags())).rejects.toThrow(
+			"crawler's puppeteer and @d-zero/beholder's puppeteer differ",
+		);
+		expect(mockCrawling).not.toHaveBeenCalled();
+	});
+
+	it('--diff モードでは assertPuppeteerSharedWithBeholder を呼ばない', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['a.nitpicker', 'b.nitpicker'], createFlags({ diff: true }));
+
+		expect(mockAssertPuppeteerSharedWithBeholder).not.toHaveBeenCalled();
 	});
 
 	it('--resume モードでも assertChromeIsInstalled が失敗すればクロールを開始しない', async () => {
