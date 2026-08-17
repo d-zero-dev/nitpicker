@@ -35,7 +35,7 @@
 
 ## 境界と所有権
 
-- **スクレイプ実行は `@d-zero/beholder`（外部）**: `Scraper.scrapeStart()` が `ScrapeResult` を返す。ブラウザ（Puppeteer）の起動・クローズは crawler 側の責務。メタ抽出は beholder、**URL 列の絶対化（canonical / og_url 等）は nitpicker 側**（`crawler/src/archive/meta/derive-flat-from-meta.ts`）
+- **スクレイプ実行は `@d-zero/beholder`（外部）**: `Scraper.scrapeStart()` が `ScrapeResult` を返す。ブラウザ（Puppeteer）の起動・クローズは crawler 側の責務。メタ抽出は beholder、**URL 列の絶対化（canonical / og_url 等）は nitpicker 側**（`crawler/src/archive/meta/derive-flat-from-meta.ts`）。crawler が起動した `Page` をそのまま beholder に渡す境界のため、**crawler 自身の `puppeteer` pin は beholder が内部で要求する `puppeteer` と常に同一 install である必要がある**（ズレると型上は互換に見えても別クラスの `Page` になり `TS2345` で発覚する）。`assertPuppeteerSharedWithBeholder`（`crawler/src/crawler/assert-puppeteer-shared-with-beholder.ts`）がこの不変条件をテストで検証する。Renovate 側も両者を `puppeteer` グループに束ね、双方に更新がある場合は1つのPRにまとめる（`.github/renovate.json`。片方のみ更新可能な場合まで防げるわけではなく、`assertPuppeteerSharedWithBeholder` が最終防衛線）
 - **共有ユーティリティは `@d-zero/shared`**: `parseUrl` / `delay` / `isError` / `detectCompress` / `detectCDN` はサブパスエクスポートから使う。独自実装しない
 - **エラー分類（`classifyErrorKind` / `ErrorKind` union）の源泉は crawler**（`crawler/src/classify-error-kind.ts`, `types.ts`）。query は re-export のみ。kind を増やしたら `permanent-error-kinds.ts`（retry 収束）と `is-puppeteer-fallback-candidate.ts`（fallback 判定）の両派生定数を見直す
 - **Content-Type カテゴリ判定の源泉は `query/src/content-type-rules.ts` の 1 表**。JS classifier（`classifyContentType`）と SQL マッチャ（`applyCategoryFilter`）は両方ここから派生し、Summary の件数と Pages のフィルタ結果が構造的に一致する

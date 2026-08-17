@@ -1,6 +1,9 @@
 import type { CrawlerError } from '@nitpicker/crawler';
 
-import { assertChromeIsInstalled } from '@nitpicker/crawler';
+import {
+	assertChromeIsInstalled,
+	assertPuppeteerSharedWithBeholder,
+} from '@nitpicker/crawler';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { ExitCode } from '../exit-code.js';
@@ -19,6 +22,7 @@ vi.mock('./crawl.js', () => {
 
 vi.mock('@nitpicker/crawler', () => ({
 	assertChromeIsInstalled: vi.fn(),
+	assertPuppeteerSharedWithBeholder: vi.fn(),
 }));
 
 vi.mock('./analyze.js', () => ({
@@ -440,6 +444,30 @@ describe('pipeline command', () => {
 
 		await expect(pipeline(['https://example.com'], defaultFlags)).rejects.toThrow(
 			'Chrome executable not found at: /fake/chrome',
+		);
+		expect(startCrawlFn).not.toHaveBeenCalled();
+		expect(analyzeFn).not.toHaveBeenCalled();
+	});
+
+	it('crawl 開始前に assertPuppeteerSharedWithBeholder を呼び出す', async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+		vi.mocked(analyzeFn).mockResolvedValue();
+
+		await pipeline(['https://example.com'], defaultFlags);
+
+		expect(assertPuppeteerSharedWithBeholder).toHaveBeenCalled();
+		expect(
+			vi.mocked(assertPuppeteerSharedWithBeholder).mock.invocationCallOrder[0],
+		).toBeLessThan(vi.mocked(startCrawlFn).mock.invocationCallOrder[0]!);
+	});
+
+	it('assertPuppeteerSharedWithBeholder が失敗した場合、crawl を開始せずエラーを伝播する', async () => {
+		vi.mocked(assertPuppeteerSharedWithBeholder).mockImplementationOnce(() => {
+			throw new Error("crawler's puppeteer and @d-zero/beholder's puppeteer differ");
+		});
+
+		await expect(pipeline(['https://example.com'], defaultFlags)).rejects.toThrow(
+			"crawler's puppeteer and @d-zero/beholder's puppeteer differ",
 		);
 		expect(startCrawlFn).not.toHaveBeenCalled();
 		expect(analyzeFn).not.toHaveBeenCalled();

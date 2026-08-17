@@ -7,6 +7,7 @@ import path from 'node:path';
 import { readList, toListWithPosition } from '@d-zero/readtext/list';
 import {
 	assertChromeIsInstalled,
+	assertPuppeteerSharedWithBeholder,
 	computeFileSha256,
 	CrawlerOrchestrator,
 } from '@nitpicker/crawler';
@@ -577,6 +578,9 @@ function validateUrls(urls: readonly string[]) {
  * Every mode except `--diff` launches a browser, so
  * {@link assertChromeIsInstalled} runs once up front and fails fast if
  * Chrome is missing, rather than letting it surface per-page.
+ * {@link assertPuppeteerSharedWithBeholder} runs alongside it, catching a
+ * `puppeteer`/`@d-zero/beholder` version drift before it can surface as an
+ * opaque `Page` type mismatch mid-crawl.
  * @param args - Positional arguments (typically one or two URLs/file paths)
  * @param flags - Parsed CLI flags from the `crawl` command
  * @returns A promise that resolves when the dispatched mode completes.
@@ -625,6 +629,7 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		// instead of a per-page scrape error buried in a "completed with
 		// N error(s)" summary (see `assertChromeIsInstalled`'s JSDoc).
 		await assertChromeIsInstalled();
+		assertPuppeteerSharedWithBeholder();
 
 		if (flags.resume) {
 			if (flags.output) {
