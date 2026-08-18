@@ -160,4 +160,35 @@ describe('createViewerReadModelIndexes', () => {
 		const indexNames = await indexNamesOn('viewer_mismatches');
 		expect(indexNames.has('vm_type_url')).toBe(true);
 	});
+
+	it('reports progress after each CREATE INDEX statement, ending at completed === total (issue #294)', async () => {
+		const calls: { completed: number; total: number }[] = [];
+		const { rmSync, mkdirSync } = await import('node:fs');
+		const progressWorkingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_create_viewer_read_model_indexes_progress__',
+		);
+		mkdirSync(progressWorkingDir, { recursive: true });
+		const progressArchive = await Archive.create({
+			filePath: path.resolve(progressWorkingDir, 'progress-test.nitpicker'),
+			cwd: progressWorkingDir,
+		});
+		try {
+			await progressArchive.getKnex().transaction(async (trx) => {
+				await createViewerReadModelTables(trx);
+				await createViewerReadModelIndexes(trx, (completed, total) => {
+					calls.push({ completed, total });
+				});
+			});
+
+			expect(calls.length).toBeGreaterThan(0);
+			expect(calls.every((call, i) => call.completed === i + 1)).toBe(true);
+			const last = calls.at(-1)!;
+			expect(last.completed).toBe(last.total);
+			expect(calls.every((call) => call.total === last.total)).toBe(true);
+		} finally {
+			await progressArchive.releaseHandle();
+			rmSync(progressWorkingDir, { recursive: true, force: true });
+		}
+	});
 });

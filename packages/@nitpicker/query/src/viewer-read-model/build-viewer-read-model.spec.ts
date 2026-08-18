@@ -758,8 +758,19 @@ describe('buildViewerReadModel', () => {
 		});
 
 		it('reports the final chunk with insertedRows equal to totalRows', async () => {
+			// Filtered to the buildingPages phase: issue #294 reuses the same
+			// onProgress shape for creatingIndexes/buildingAnchorFacts too, so
+			// an unfiltered capture would see those phases' progress as well.
 			const calls: { insertedRows: number; totalRows: number }[] = [];
-			await buildViewerReadModel(archive, { onProgress: (p) => calls.push(p) });
+			let currentPhase: string | undefined;
+			await buildViewerReadModel(archive, {
+				onPhase: (phase) => {
+					currentPhase = phase;
+				},
+				onProgress: (p) => {
+					if (currentPhase === 'buildingPages') calls.push(p);
+				},
+			});
 
 			expect(calls.length).toBeGreaterThan(0);
 			const last = calls.at(-1)!;
@@ -768,6 +779,75 @@ describe('buildViewerReadModel', () => {
 		});
 
 		it('defaults to no progress reporting when onProgress is omitted', async () => {
+			await expect(buildViewerReadModel(archive)).resolves.toBeUndefined();
+		});
+	});
+
+	describe('onPhase', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_phase__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'phase-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+			await archive.setPage({
+				url: parseUrl('https://example.com/')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: { ...META, title: 'Home' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('reports every phase exactly once, in the fixed declared order (issue #294)', async () => {
+			const phases: string[] = [];
+			await buildViewerReadModel(archive, { onPhase: (phase) => phases.push(phase) });
+
+			expect(phases).toEqual([
+				'backfillingAnalysisViolations',
+				'backfillingBodyHash',
+				'backfillingAliasOfId',
+				'backfillingDedupeCapEventId',
+				'computingSummary',
+				'buildingPages',
+				'buildingDirectoryTree',
+				'buildingTechnologySummary',
+				'buildingIsolatedComponents',
+				'buildingAnchorFacts',
+				'buildingGraph',
+				'buildingResources',
+				'buildingImages',
+				'buildingHeaderChecks',
+				'buildingDuplicateGroups',
+				'buildingMismatches',
+				'creatingIndexes',
+			]);
+		});
+
+		it('defaults to no phase reporting when onPhase is omitted', async () => {
 			await expect(buildViewerReadModel(archive)).resolves.toBeUndefined();
 		});
 	});
@@ -831,8 +911,18 @@ describe('buildViewerReadModel', () => {
 		});
 
 		it('reports insertedRows strictly monotonically across multiple chunks, in order', async () => {
+			// Filtered to the buildingPages phase — see the same note in the
+			// 'onProgress' describe block above.
 			const calls: { insertedRows: number; totalRows: number }[] = [];
-			await buildViewerReadModel(archive, { onProgress: (p) => calls.push(p) });
+			let currentPhase: string | undefined;
+			await buildViewerReadModel(archive, {
+				onPhase: (phase) => {
+					currentPhase = phase;
+				},
+				onProgress: (p) => {
+					if (currentPhase === 'buildingPages') calls.push(p);
+				},
+			});
 
 			expect(calls).toEqual([
 				{ insertedRows: 500, totalRows: 750 },

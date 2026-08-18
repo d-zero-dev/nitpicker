@@ -3242,17 +3242,54 @@ export interface ErrorKindsResult {
 }
 
 /**
- * Progress snapshot reported while {@link buildViewerReadModel} populates
- * `viewer_pages`. Issued after each insert chunk completes, so callers can
- * render a percentage or row count for archives large enough (issue #112:
- * 400k pages take minutes) that a build must not look hung.
+ * Sub-progress snapshot reported while {@link buildViewerReadModel} runs
+ * whichever phase most recently started (see the `onPhase` callback and
+ * {@link ViewerReadModelBuildPhase}). Originally scoped to the `viewer_pages`
+ * insert only (issue #112: 400k pages take minutes, a build must not look
+ * hung) — issue #294 reused the same shape for two other multi-minute
+ * sub-phases that also have a natural N/M count: `creatingIndexes` (indexes
+ * created so far / total indexes) and `buildingAnchorFacts` (`content_items`
+ * id scanned up to / max id). The field names stayed put across that reuse
+ * to avoid a breaking type change; treat them as "units done" / "units
+ * total" for whichever phase is current, not literally `viewer_pages` rows
+ * unless that's the phase in progress.
  */
 export interface ViewerReadModelBuildProgress {
-	/** Rows inserted into `viewer_pages` so far, including this chunk. */
+	/** Units completed so far for the current phase, including this update. */
 	insertedRows: number;
-	/** Total rows that will be inserted, known upfront (single-pass build). */
+	/** Total units the current phase will process, known upfront. */
 	totalRows: number;
 }
+
+/**
+ * A named step within {@link buildViewerReadModel}'s single build pass, in
+ * the order they run — issue #294: most of these steps have no `onProgress`
+ * callback of their own (only `buildingPages`, `creatingIndexes`, and
+ * `buildingAnchorFacts` report sub-progress via
+ * {@link ViewerReadModelBuildProgress}), so a large archive can spend
+ * multi-minute stretches in the backfills, the summary/error-kinds/
+ * isolated-clusters computation, and the remaining read-model tables with no
+ * signal that phase has even started. Without `onPhase`, that stretch is
+ * indistinguishable from a hang.
+ */
+export type ViewerReadModelBuildPhase =
+	| 'backfillingAnalysisViolations'
+	| 'backfillingBodyHash'
+	| 'backfillingAliasOfId'
+	| 'backfillingDedupeCapEventId'
+	| 'computingSummary'
+	| 'buildingPages'
+	| 'buildingDirectoryTree'
+	| 'buildingTechnologySummary'
+	| 'buildingIsolatedComponents'
+	| 'buildingAnchorFacts'
+	| 'buildingGraph'
+	| 'buildingResources'
+	| 'buildingImages'
+	| 'buildingHeaderChecks'
+	| 'buildingDuplicateGroups'
+	| 'buildingMismatches'
+	| 'creatingIndexes';
 
 /**
  * Options for {@link buildViewerReadModel} and {@link ensureViewerReadModel}.
@@ -3264,6 +3301,14 @@ export interface BuildViewerReadModelOptions {
 	 * @param progress - The current insert progress.
 	 */
 	onProgress?: (progress: ViewerReadModelBuildProgress) => void;
+	/**
+	 * Called once at the start of each named phase, in the fixed order
+	 * {@link ViewerReadModelBuildPhase} lists them — see that type's docs for
+	 * why this exists alongside `onProgress`. Omit for a silent build (the
+	 * default).
+	 * @param phase - The phase that is starting.
+	 */
+	onPhase?: (phase: ViewerReadModelBuildPhase) => void;
 }
 
 /**

@@ -879,6 +879,28 @@ describe('computeAnchorFactRows — chunking', () => {
 			knex.transaction((trx) => collectAnchorFactRows(trx, -1)),
 		).rejects.toThrow(RangeError);
 	});
+
+	it('reports progress for every id range scanned, including empty ranges, ending at maxId (issue #294)', async () => {
+		const knex = archive.getKnex();
+		const calls: { scannedUpToId: number; maxId: number }[] = [];
+		await knex.transaction(async (trx) => {
+			for await (const chunk of computeAnchorFactRows(trx, 1, (scannedUpToId, maxId) => {
+				calls.push({ scannedUpToId, maxId });
+			})) {
+				expect(chunk.length).toBeGreaterThanOrEqual(0);
+			}
+		});
+
+		expect(calls.length).toBeGreaterThan(0);
+		const last = calls.at(-1)!;
+		expect(last.scannedUpToId).toBe(last.maxId);
+		expect(calls.every((call) => call.maxId === last.maxId)).toBe(true);
+		// Monotonically non-decreasing — each range's scanned-up-to id never
+		// regresses, even across empty ranges.
+		for (let i = 1; i < calls.length; i += 1) {
+			expect(calls[i]!.scannedUpToId).toBeGreaterThanOrEqual(calls[i - 1]!.scannedUpToId);
+		}
+	});
 });
 
 /**

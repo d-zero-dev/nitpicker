@@ -449,6 +449,8 @@ function toViewerPageInsertRow(
  * @param options.onProgress - Called after each insert chunk completes —
  *   see {@link BuildViewerReadModelOptions.onProgress}. Omit for a silent
  *   build (the default; e.g. tests and small archives).
+ * @param options.onPhase - Called once at the start of each named phase —
+ *   see {@link BuildViewerReadModelOptions.onPhase}. Omit for a silent build.
  * @throws {Error} When `accessor.readOnly` is `true`.
  * @example
  * // Typically called once, right after a crawl finishes writing `pages`:
@@ -467,31 +469,37 @@ export async function buildViewerReadModel(
 		);
 	}
 
-	const { onProgress } = options;
+	const { onProgress, onPhase } = options;
 	const knex = accessor.getKnex();
+	onPhase?.('backfillingAnalysisViolations');
 	await backfillAnalysisViolationsFromJson(accessor);
 	// Not wired to `onProgress`: that callback's contract is scoped to
 	// `viewer_pages` insert-chunk progress (`ViewerReadModelBuildProgress`),
 	// a different shape and a different phase of this build — reusing it
 	// here would report body-hash backfill counts under a callback that
 	// claims to describe `viewer_pages` rows.
+	onPhase?.('backfillingBodyHash');
 	await backfillBodyHashFromHtmlBlobs(accessor);
 	// Runs after body_hash: alias_of_id's Tier B (trailing-slash) grouping
 	// requires body_hash to already be computed for both candidate pages, so
 	// this backfill would otherwise see stale (still-NULL) body_hash values
 	// on an archive going through both catch-ups in the same build.
+	onPhase?.('backfillingAliasOfId');
 	await backfillAliasOfId(accessor);
 	// Independent of the body_hash/alias_of_id catch-ups above — matches
 	// URLs against `dedupe_cap_events.shape_key`, no ordering dependency on
 	// either. Must still run before `sourceRows` below reads
 	// `ci.dedupe_cap_event_id`.
+	onPhase?.('backfillingDedupeCapEventId');
 	await backfillDedupeCapEventId(accessor);
+	onPhase?.('computingSummary');
 	const [summary, errorKinds, isolatedComponents] = await Promise.all([
 		getSummary(accessor),
 		getErrorKinds(accessor),
 		computeIsolatedClusters(accessor),
 	]);
 	await knex.transaction(async (trx) => {
+		onPhase?.('buildingPages');
 		await dropViewerReadModelTables(trx);
 		await createViewerReadModelTables(trx);
 
@@ -618,6 +626,7 @@ export async function buildViewerReadModel(
 		// of issuing a second `pages` SELECT — see `buildDirectoryTreeRows`'s
 		// docs for the tree-building rules (host eligibility, trailing-slash
 		// directory/page boundary, count propagation).
+		onPhase?.('buildingDirectoryTree');
 		const { nodes: directoryNodes, pages: directoryPages } = buildDirectoryTreeRows(
 			sourceRows.map((row) => ({
 				id: row.id,
@@ -640,6 +649,7 @@ export async function buildViewerReadModel(
 
 		// Reuses `technologySourceRows` (already loaded above) instead of a
 		// second `page_technologies` scan.
+		onPhase?.('buildingTechnologySummary');
 		const technologySummaryRows = buildTechnologySummaryRows(technologySourceRows);
 		for (
 			let start = 0;
@@ -662,6 +672,7 @@ export async function buildViewerReadModel(
 			);
 		}
 
+		onPhase?.('buildingIsolatedComponents');
 		const isolatedRows = buildIsolatedReadModelRows(isolatedComponents, pageIdByUrl);
 		for (
 			let start = 0;
@@ -692,7 +703,14 @@ export async function buildViewerReadModel(
 		// JS across the whole build — see `deriveExternalLinkSummaryRows`'s
 		// docs for why a whole-build JS-side accumulator would defeat the
 		// bounded-memory guarantee the chunked read exists to provide.
-		for await (const anchorFactChunk of computeAnchorFactRows(trx)) {
+		onPhase?.('buildingAnchorFacts');
+		for await (const anchorFactChunk of computeAnchorFactRows(
+			trx,
+			undefined,
+			(scannedUpToId, maxId) => {
+				onProgress?.({ insertedRows: scannedUpToId, totalRows: maxId });
+			},
+		)) {
 			for (let start = 0; start < anchorFactChunk.length; start += INSERT_CHUNK_SIZE) {
 				await trx('viewer_anchor_facts').insert(
 					anchorFactChunk.slice(start, start + INSERT_CHUNK_SIZE),
@@ -701,6 +719,7 @@ export async function buildViewerReadModel(
 			await upsertExternalLinkRows(trx, deriveExternalLinkSummaryRows(anchorFactChunk));
 		}
 
+		onPhase?.('buildingGraph');
 		const graphIndegreeByPageId = new Map<number, number>();
 		for await (const graphEdgeChunk of computeGraphReadModelRows(trx)) {
 			for (const edge of graphEdgeChunk) {
@@ -736,6 +755,7 @@ export async function buildViewerReadModel(
 		// `computeResourceInsertRows`'s docs for the "one scan, two tables"
 		// pattern and its chunking rationale, the same technique as
 		// `viewer_anchor_facts`/`viewer_external_links` above).
+		onPhase?.('buildingResources');
 		for await (const {
 			resources: resourceChunk,
 			stats: statsChunk,
@@ -761,6 +781,7 @@ export async function buildViewerReadModel(
 		// `viewer_pages`'s `sourceRows` — it is read in bounded chunks (see
 		// `computeImageInsertRows`'s docs), the same OOM-avoidance pattern as
 		// `viewer_anchor_facts`/`viewer_resources` above.
+		onPhase?.('buildingImages');
 		const pageUrlRankById = buildPageUrlRankMap(sourceRows);
 		for await (const imageChunk of computeImageInsertRows(trx, pageUrlRankById)) {
 			for (let start = 0; start < imageChunk.length; start += INSERT_CHUNK_SIZE) {
@@ -777,6 +798,7 @@ export async function buildViewerReadModel(
 		// unfiltered set, so a shared row set would still need re-filtering —
 		// see `computeHeaderCheckInsertRows`'s docs for why this stays a plain
 		// array rather than a chunked read.
+		onPhase?.('buildingHeaderChecks');
 		const headerCheckRows = await computeHeaderCheckInsertRows(trx);
 		for (let start = 0; start < headerCheckRows.length; start += INSERT_CHUNK_SIZE) {
 			await trx('viewer_header_checks').insert(
@@ -794,6 +816,7 @@ export async function buildViewerReadModel(
 		// `groupIdByValue` lookup to attach every member page to its group(s)
 		// — a page duplicated on both `title` and `description` is attached to
 		// both.
+		onPhase?.('buildingDuplicateGroups');
 		const { groups: duplicateGroupRows, groupIdByValue } =
 			await computeDuplicateGroupRows(trx);
 		for (let start = 0; start < duplicateGroupRows.length; start += INSERT_CHUNK_SIZE) {
@@ -824,6 +847,7 @@ export async function buildViewerReadModel(
 		// `viewer_anchor_facts.edge_id` convention) — unlike
 		// `viewer_duplicate_groups.group_id` above, nothing else references a
 		// mismatch row by id before it is inserted.
+		onPhase?.('buildingMismatches');
 		for await (const mismatchChunk of computeMismatchInsertRows(trx)) {
 			for (let start = 0; start < mismatchChunk.length; start += INSERT_CHUNK_SIZE) {
 				await trx('viewer_mismatches').insert(
@@ -894,7 +918,10 @@ export async function buildViewerReadModel(
 		// maintaining indexes during the inserts puts the `viewer_anchor_facts`
 		// load at 29+ minutes, vs. well under 2 minutes with post-load
 		// indexing).
-		await createViewerReadModelIndexes(trx);
+		onPhase?.('creatingIndexes');
+		await createViewerReadModelIndexes(trx, (completed, totalIndexes) => {
+			onProgress?.({ insertedRows: completed, totalRows: totalIndexes });
+		});
 
 		await trx('viewer_read_model_meta').insert({
 			id: 1,

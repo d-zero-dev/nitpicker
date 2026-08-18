@@ -68,6 +68,11 @@ const READ_CHUNK_SIZE = 2000;
  *   works, e.g. in tests).
  * @param chunkSize - Width of the `source.id` range scanned per chunk. Must
  *   be positive.
+ * @param onProgress - Called once per range scanned (including empty ones),
+ *   with the id scanned up to so far and the max `content_items.id`
+ *   (issue #294: on a large archive this whole generator can run for
+ *   minutes with no other signal it hasn't hung). Omit for no reporting
+ *   (the default; e.g. tests).
  * @yields {AnchorFactInsertRow[]} One `source.id` range's rows, one per
  *   unique `(source_page_id, dest_page_id)` pair in that range.
  * @throws {RangeError} If `chunkSize` is not positive.
@@ -79,6 +84,7 @@ const READ_CHUNK_SIZE = 2000;
 export async function* computeAnchorFactRows(
 	trx: Knex,
 	chunkSize = READ_CHUNK_SIZE,
+	onProgress?: (scannedUpToId: number, maxId: number) => void,
 ): AsyncGenerator<AnchorFactInsertRow[]> {
 	if (chunkSize <= 0) {
 		throw new RangeError(
@@ -173,6 +179,7 @@ export async function* computeAnchorFactRows(
 			);
 
 		if (rows.length === 0) {
+			onProgress?.(Math.min(rangeEnd, maxId), maxId);
 			continue;
 		}
 
@@ -197,5 +204,6 @@ export async function* computeAnchorFactRows(
 				first_text_id: row.firstTextId,
 			};
 		});
+		onProgress?.(Math.min(rangeEnd, maxId), maxId);
 	}
 }
