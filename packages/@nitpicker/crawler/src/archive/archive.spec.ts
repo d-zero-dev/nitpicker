@@ -159,6 +159,90 @@ describe('write: archive layout', () => {
 			await reopened.close();
 		}
 	});
+
+	it('reports each write step in order via onStep (issue #294)', async () => {
+		const stepFilePath = path.resolve(workingDir, 'write-on-step-test.nitpicker');
+		const archive = await Archive.create({ filePath: stepFilePath, cwd: workingDir });
+		await archive.setPage(makePageData('/on-step', '<html></html>'));
+
+		const steps: string[] = [];
+		try {
+			await archive.write({ onStep: (step) => steps.push(step) });
+		} finally {
+			await remove(stepFilePath).catch(() => {});
+		}
+
+		expect(steps).toEqual(['checkpoint', 'rename', 'tar', 'remove']);
+	});
+
+	it('reports tar byte progress via onTarProgress (issue #294)', async () => {
+		const progressFilePath = path.resolve(
+			workingDir,
+			'write-on-tar-progress-test.nitpicker',
+		);
+		const archive = await Archive.create({ filePath: progressFilePath, cwd: workingDir });
+		await archive.setPage(
+			makePageData('/on-tar-progress', `<html>${'x'.repeat(500_000)}</html>`),
+		);
+
+		const calls: [number, number][] = [];
+		try {
+			await archive.write({
+				onTarProgress: (writtenBytes, totalBytes) => {
+					calls.push([writtenBytes, totalBytes]);
+				},
+			});
+		} finally {
+			await remove(progressFilePath).catch(() => {});
+		}
+
+		expect(calls.length).toBeGreaterThan(0);
+		const totalBytes = calls[0]![1];
+		expect(totalBytes).toBeGreaterThan(0);
+		expect(calls.at(-1)!).toEqual([totalBytes, totalBytes]);
+	});
+});
+
+describe('close: recovery-write progress (issue #294)', () => {
+	it("calls onRecoveryStart before write()'s own onStep/onTarProgress when the file does not exist yet", async () => {
+		const recoveryFilePath = path.resolve(workingDir, 'close-recovery-test.nitpicker');
+		const archive = await Archive.create({ filePath: recoveryFilePath, cwd: workingDir });
+		await archive.setPage(makePageData('/close-recovery', '<html></html>'));
+
+		const calls: string[] = [];
+		try {
+			// No explicit write() beforehand: the file genuinely doesn't
+			// exist yet, so close() must take the recovery-write branch.
+			await archive.close({
+				onRecoveryStart: () => calls.push('recoveryStart'),
+				onStep: (step) => calls.push(step),
+				onTarProgress: () => calls.push('tarProgress'),
+			});
+		} finally {
+			await remove(recoveryFilePath).catch(() => {});
+		}
+
+		expect(calls[0]).toBe('recoveryStart');
+		const steps = calls.filter((call) => call !== 'tarProgress');
+		expect(steps).toEqual(['recoveryStart', 'checkpoint', 'rename', 'tar', 'remove']);
+		expect(calls).toContain('tarProgress');
+	});
+
+	it('does not call onRecoveryStart when the archive was already written', async () => {
+		const writtenFilePath = path.resolve(workingDir, 'close-no-recovery-test.nitpicker');
+		const archive = await Archive.create({ filePath: writtenFilePath, cwd: workingDir });
+		await archive.setPage(makePageData('/close-no-recovery', '<html></html>'));
+		await archive.write();
+
+		const calls: string[] = [];
+		try {
+			await archive.close({ onRecoveryStart: () => calls.push('recoveryStart') });
+		} finally {
+			await remove(writtenFilePath).catch(() => {});
+		}
+
+		expect(calls).toEqual([]);
+	});
 });
 
 describe('open: rename-safe', () => {

@@ -248,4 +248,36 @@ describe('computeDuplicateGroupPageRows', () => {
 			}),
 		).rejects.toThrow(RangeError);
 	});
+
+	it('reports keyset scan progress up to the max content_items id (issue #294)', async () => {
+		const knex = archive.getKnex();
+		const calls: [number, number][] = [];
+		await knex.transaction(async (trx) => {
+			const { groupIdByValue } = await computeDuplicateGroupRows(trx);
+			for await (const chunk of computeDuplicateGroupPageRows(
+				trx,
+				groupIdByValue,
+				1,
+				(scannedUpToId, maxId) => {
+					calls.push([scannedUpToId, maxId]);
+				},
+			)) {
+				// A scanned page belonging to no duplicate group yields an
+				// empty chunk — only the scan progress matters here.
+				expect(Array.isArray(chunk)).toBe(true);
+			}
+		});
+
+		expect(calls.length).toBeGreaterThan(0);
+		const maxId = calls[0]![1];
+		expect(maxId).toBeGreaterThan(0);
+		for (const [scannedUpToId, total] of calls) {
+			expect(total).toBe(maxId);
+			expect(scannedUpToId).toBeLessThanOrEqual(maxId);
+		}
+		for (let i = 1; i < calls.length; i++) {
+			expect(calls[i]![0]).toBeGreaterThanOrEqual(calls[i - 1]![0]);
+		}
+		expect(calls.at(-1)![0]).toBe(maxId);
+	});
 });

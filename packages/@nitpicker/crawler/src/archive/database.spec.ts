@@ -4,11 +4,17 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { Database } from './database.js';
 import { remove } from './filesystem/remove.js';
 import { LibsqlDialect } from './libsql-dialect.js';
+
+vi.mock('./db-ops/resources/get-resource-url-list.js', () => ({
+	getResourceUrlList: vi.fn(),
+}));
+const { getResourceUrlList: getResourceUrlListOpMock } =
+	await import('./db-ops/resources/get-resource-url-list.js');
 
 /**
  * Force-remove a temp DB file. Unlike `remove()`, this is ENOENT-tolerant —
@@ -2419,9 +2425,18 @@ describe('repromoteExternalPages', () => {
 		);
 
 		const scope = new Map([['example.com', [parseUrl('https://example.com/blog/')!]]]);
-		const promoted = await db.repromoteExternalPages(scope);
+		const progressCalls: [number, number][] = [];
+		const promoted = await db.repromoteExternalPages(
+			scope,
+			undefined,
+			(processed, total) => {
+				progressCalls.push([processed, total]);
+			},
+		);
 
 		expect(promoted).toEqual(['https://example.com/blog/post-1']);
+		// One matching page → one chunk → one progress update (issue #294).
+		expect(progressCalls).toEqual([[1, 1]]);
 
 		// repromote は contentType を null にクリアするため、filter なしで全件取得して確認
 		const all = await db.getPages();
@@ -2876,7 +2891,10 @@ describe('resetFailedPages', () => {
 			contentType: 'text/html',
 		});
 
-		const reset = await db.resetFailedPages();
+		const progressCalls: [number, number][] = [];
+		const reset = await db.resetFailedPages((processed, total) => {
+			progressCalls.push([processed, total]);
+		});
 		expect(reset.toSorted()).toEqual([
 			'https://example.com/hard-error',
 			'https://example.com/null-ctype',
@@ -2884,6 +2902,9 @@ describe('resetFailedPages', () => {
 			'https://example.com/server-error',
 			'https://example.com/unavailable',
 		]);
+		// 5 matching pages → one chunk (well under the 500 chunk size) → one
+		// progress update (issue #294).
+		expect(progressCalls).toEqual([[5, 5]]);
 
 		// Every reset row is demoted to pending and stripped of scrape metadata.
 		const all = await db.getPages();
@@ -3796,6 +3817,44 @@ describe('DB_Page.order の再構築', () => {
 		const pages = await db.getPages();
 		expect(pages[0]).toHaveProperty('order');
 		expect(pages[0]!.order).toBeNull();
+	});
+
+	it('reports chunk progress via onProgress (issue #294)', async () => {
+		const db = await Database.connect({
+			filename: addOrderDbPath,
+		});
+
+		for (const path_ of ['/a', '/b', '/c']) {
+			await db.updatePage(
+				{
+					url: parseUrl(`http://localhost${path_}`)!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 100,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: path_ },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				},
+				false,
+				true,
+			);
+		}
+
+		const progressCalls: [number, number][] = [];
+		await db.setUrlOrder((processed, total) => {
+			progressCalls.push([processed, total]);
+		});
+		// This describe block shares its DB file across tests (only `afterAll`
+		// cleans up), so the prior test's `/order-test` page is still present
+		// alongside these 3 — 4 total, all under the 500-row chunk size, so a
+		// single progress update.
+		expect(progressCalls).toEqual([[4, 4]]);
 	});
 });
 
@@ -6051,6 +6110,46 @@ describe("Database.emit('error')", () => {
 			expect(seen).toHaveLength(1);
 			expect(seen[0]).toBeInstanceOf(Error);
 		} finally {
+			await removeIfExists(dbPath);
+		}
+	});
+});
+
+describe('getResourceUrlList: progress does not rewind across a retry (issue #294 code review)', () => {
+	it('clamps onProgress to a high-water mark when a retry restarts the scan from id 0', async () => {
+		// `getResourceUrlListOp`'s `lastId` is a local closure variable reset
+		// on every invocation, so a transient failure partway through the
+		// keyset scan — followed by `retryCall` re-invoking the whole
+		// operation — would otherwise report progress rewinding backwards
+		// before catching back up to where it left off.
+		const dbPath = path.resolve(workingDir, 'get-resource-url-list-retry.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			vi.mocked(getResourceUrlListOpMock).mockReset();
+			vi.mocked(getResourceUrlListOpMock)
+				.mockImplementationOnce((_knex, onProgress) => {
+					onProgress?.(100, 1000);
+					onProgress?.(700, 1000);
+					throw new Error('transient failure mid-scan');
+				})
+				.mockImplementationOnce((_knex, onProgress) => {
+					onProgress?.(50, 1000);
+					onProgress?.(1000, 1000);
+					return Promise.resolve(['https://example.com/a', 'https://example.com/b']);
+				});
+
+			const reported: number[] = [];
+			const urls = await db.getResourceUrlList((scannedUpToId) => {
+				reported.push(scannedUpToId);
+			});
+
+			expect(urls).toEqual(['https://example.com/a', 'https://example.com/b']);
+			// Monotonically non-decreasing — the retry's 50 must not appear
+			// after the first attempt's 700 high-water mark.
+			expect(reported).toEqual([100, 700, 700, 1000]);
+		} finally {
+			await db.destroy();
 			await removeIfExists(dbPath);
 		}
 	});

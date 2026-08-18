@@ -103,6 +103,32 @@ describe('dispatchQuery', () => {
 		expect(listPages).toHaveBeenCalledWith(mockAccessor, expect.any(Object));
 	});
 
+	it('forwards onSortProgress to listPages for the pages sub-command (issue #294)', async () => {
+		const { listPages } = await import('@nitpicker/query');
+		const onSortProgress = vi.fn();
+		await dispatchQuery(mockAccessor, 'pages', emptyFlags, onSortProgress);
+		expect(listPages).toHaveBeenCalledWith(
+			mockAccessor,
+			expect.objectContaining({ onSortProgress }),
+		);
+	});
+
+	it('forwards onSortProgress to getMismatchesFastPath for the mismatches sub-command (issue #294)', async () => {
+		const { getMismatchesFastPath } = await import('@nitpicker/query');
+		const onSortProgress = vi.fn();
+		await dispatchQuery(
+			mockAccessor,
+			'mismatches',
+			{ type: 'canonical' } as never,
+			onSortProgress,
+		);
+		expect(getMismatchesFastPath).toHaveBeenCalledWith(
+			mockAccessor,
+			'canonical',
+			expect.objectContaining({ onSortProgress }),
+		);
+	});
+
 	it('dispatches page-detail sub-command', async () => {
 		const { getPageDetail } = await import('@nitpicker/query');
 		const result = await dispatchQuery(mockAccessor, 'page-detail', {
@@ -296,6 +322,7 @@ describe('dispatchQuery', () => {
 			offset: undefined,
 			cursor: undefined,
 			direction: undefined,
+			onSortProgress: undefined,
 		});
 	});
 
@@ -313,6 +340,7 @@ describe('dispatchQuery', () => {
 			offset: 10,
 			cursor: 'xyz',
 			direction: 'next',
+			onSortProgress: undefined,
 		});
 	});
 

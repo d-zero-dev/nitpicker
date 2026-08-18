@@ -2,14 +2,14 @@ import { parseCli } from '@d-zero/roar';
 
 import pkg from '../package.json' with { type: 'json' };
 
-import { analyze, commandDef as analyzeDef } from './commands/analyze.js';
-import { cache, commandDef as cacheDef } from './commands/cache.js';
-import { crawl, commandDef as crawlDef } from './commands/crawl.js';
-import { pipeline, commandDef as pipelineDef } from './commands/pipeline.js';
-import { query, commandDef as queryDef } from './commands/query.js';
-import { report, commandDef as reportDef } from './commands/report.js';
-import { viewerBuild, commandDef as viewerBuildDef } from './commands/viewer-build.js';
-import { viewer, commandDef as viewerDef } from './commands/viewer.js';
+import { commandDef as analyzeDef } from './commands/analyze-def.js';
+import { commandDef as cacheDef } from './commands/cache-def.js';
+import { commandDef as crawlDef } from './commands/crawl-def.js';
+import { commandDef as pipelineDef } from './commands/pipeline-def.js';
+import { commandDef as queryDef } from './commands/query-def.js';
+import { commandDef as reportDef } from './commands/report-def.js';
+import { commandDef as viewerBuildDef } from './commands/viewer-build-def.js';
+import { commandDef as viewerDef } from './commands/viewer-def.js';
 import { ExitCode } from './exit-code.js';
 import { formatCliError } from './format-cli-error.js';
 
@@ -35,36 +35,53 @@ const cli = parseCli({
 });
 
 try {
+	// Each branch dynamically imports only the implementation module for the
+	// command actually invoked (issue #294) — `commandDef`s above are
+	// imported eagerly (lightweight flag/usage metadata, needed for every
+	// command's `--help`), but the implementations pull in the bulk of this
+	// CLI's dependency tree (puppeteer, every `@nitpicker/analyze-*` plugin,
+	// the Google Sheets auth stack, the React/jsdom-backed viewer server) —
+	// loading all eight unconditionally on every invocation added several
+	// seconds before the first byte of output, regardless of which single
+	// command was actually run.
 	switch (cli.command) {
 		case 'crawl': {
+			const { crawl } = await import('./commands/crawl.js');
 			await crawl(cli.args, cli.flags);
 			break;
 		}
 		case 'analyze': {
+			const { analyze } = await import('./commands/analyze.js');
 			await analyze(cli.args, cli.flags);
 			break;
 		}
 		case 'report': {
+			const { report } = await import('./commands/report.js');
 			await report(cli.args, cli.flags);
 			break;
 		}
 		case 'pipeline': {
+			const { pipeline } = await import('./commands/pipeline.js');
 			await pipeline(cli.args, cli.flags);
 			break;
 		}
 		case 'query': {
+			const { query } = await import('./commands/query.js');
 			await query(cli.args, cli.flags);
 			break;
 		}
 		case 'viewer': {
+			const { viewer } = await import('./commands/viewer.js');
 			await viewer(cli.args, cli.flags);
 			break;
 		}
 		case 'viewer-build': {
+			const { viewerBuild } = await import('./commands/viewer-build.js');
 			await viewerBuild(cli.args, cli.flags);
 			break;
 		}
 		case 'cache': {
+			const { cache } = await import('./commands/cache.js');
 			await cache(cli.args, cli.flags);
 			break;
 		}

@@ -82,4 +82,50 @@ describe('peekTarTopDir', () => {
 		created.push(tarPath);
 		expect(await peekTarTopDir(tarPath)).toBe('real-name');
 	});
+
+	it('reads a UTF-8 directory name via node-tar’s PAX extended header (issue #294 fast path)', async () => {
+		// UTF-8 multi-byte names don't fit ustar's ASCII-oriented 100-byte
+		// name field, so node-tar emits a PAX extended header ('x' typeflag,
+		// `path=` record) ahead of the real entry. This exercises the fast
+		// path's PAX branch specifically.
+		const tarPath = await buildTar('日本語ホスト名-テスト', 'x');
+		expect(await peekTarTopDir(tarPath)).toBe('日本語ホスト名-テスト');
+	});
+
+	it('reads a >100-byte directory name via node-tar’s PAX extended header (issue #294 fast path)', async () => {
+		// Names longer than ustar's 100-byte field also force a PAX extended
+		// header, independent of character set.
+		const longName = 'a'.repeat(150);
+		const tarPath = await buildTar(longName, 'x');
+		expect(await peekTarTopDir(tarPath)).toBe(longName);
+	});
+
+	it('throws the same not-found error as the list()-based path for a directory-less tar', async () => {
+		// A tar containing only a file at the root (no directory entry) must
+		// fail identically whichever path handles it — the fast path returns
+		// null (no directory found before EOF) and the caller falls back to
+		// list(), which throws.
+		await fs.mkdir(workingDir, { recursive: true });
+		const tarPath = path.resolve(workingDir, 'no-dir.nitpicker');
+		const { c: createTar } = await import('tar');
+		const filePath = path.resolve(workingDir, 'lone-file.txt');
+		await fs.writeFile(filePath, 'x');
+		await createTar({ file: tarPath, cwd: workingDir }, ['lone-file.txt']);
+		await fs.rm(filePath, { force: true });
+		created.push(tarPath);
+		await expect(peekTarTopDir(tarPath)).rejects.toThrow(/no top-level directory/);
+	});
+
+	it('falls back to the exhaustive scan instead of throwing on a non-tar file', async () => {
+		await fs.mkdir(workingDir, { recursive: true });
+		const notATar = path.resolve(workingDir, 'not-a-tar.nitpicker');
+		await fs.writeFile(
+			notATar,
+			'this is not a tar file, just plain text padding'.repeat(20),
+		);
+		created.push(notATar);
+		// Whatever the exhaustive path's exact error, it must not be an
+		// uncaught crash from the fast path's raw header parsing.
+		await expect(peekTarTopDir(notATar)).rejects.toThrow();
+	});
 });

@@ -3,6 +3,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { applyListOrder } from './apply-list-order.js';
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
+import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
 
 /**
  * Analyse links in the archive: **broken** (canonical destination resolved
@@ -141,8 +142,10 @@ export async function listLinks(
 		.sum('ae.count as total')) as { total: number | null }[];
 	const total = countResult[0]?.total ?? 0;
 
-	const dataQuery = baseQuery.clone();
-	applyListOrder(dataQuery, knex, sortBy, sortOrder, {
+	const sortColumns: Record<
+		'sourceUrl' | 'destUrl' | 'status' | 'isExternal' | 'textContent',
+		{ column: string; type?: 'url' | 'plain' }
+	> = {
 		sourceUrl: { column: '"source_ur"."url"', type: useUrlSort ? 'url' : 'plain' },
 		destUrl: {
 			column: destUrlExpression,
@@ -155,7 +158,14 @@ export async function listLinks(
 			column: isExternalExpression,
 		},
 		textContent: { column: '"text_ref"."text"' },
-	});
+	};
+
+	if (sortColumns[sortBy].type === 'url') {
+		await ensureUrlSortTempTable(accessor, options.onSortProgress);
+	}
+
+	const dataQuery = baseQuery.clone();
+	applyListOrder(dataQuery, knex, sortBy, sortOrder, sortColumns);
 
 	const rows = (await dataQuery.limit(limit).offset(offset)) as {
 		sourceUrl: string;

@@ -266,4 +266,37 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 		const rows = await archive.getKnex()(URL_SORT_TEMP_TABLE).select('url');
 		expect(rows.map((r: { url: string }) => r.url)).toEqual(['https://example.com']);
 	});
+
+	it('ensureUrlSortTempTable forwards onProgress to prepareUrlSortTempTable on a cold connection (issue #294)', async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		await using archive = await Archive.create({
+			filePath: path.resolve(workingDir, 'ensure-progress.nitpicker'),
+			cwd: workingDir,
+		});
+		await archive.setConfig(baseConfig());
+		await addPage(archive, 'https://example.com/');
+
+		const messages: string[] = [];
+		await ensureUrlSortTempTable(archive, (message) => messages.push(message));
+
+		expect(messages.length).toBeGreaterThan(0);
+	});
+
+	it('ensureUrlSortTempTable does not call onProgress on an already-prepared connection', async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		await using archive = await Archive.create({
+			filePath: path.resolve(workingDir, 'ensure-warm.nitpicker'),
+			cwd: workingDir,
+		});
+		await archive.setConfig(baseConfig());
+		await addPage(archive, 'https://example.com/');
+
+		await ensureUrlSortTempTable(archive);
+		const messages: string[] = [];
+		await ensureUrlSortTempTable(archive, (message) => messages.push(message));
+
+		expect(messages).toEqual([]);
+	});
 });

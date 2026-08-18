@@ -119,14 +119,21 @@ export async function prepareUrlSortTempTable(
  * Lazily prepares URL ranks for callers that enter query APIs without going
  * through the viewer startup path, such as MCP and isolated unit tests.
  * @param accessor - The opened archive accessor.
+ * @param onProgress - Forwarded to {@link prepareUrlSortTempTable} — see
+ *   {@link PrepareUrlSortTempTableOptions.onProgress}. Not called at all
+ *   when a TEMP table already exists on this connection (the common case
+ *   — nothing to report).
  * @example
  * await ensureUrlSortTempTable(accessor);
  * await listResources(accessor, { sortBy: 'url' });
  */
-export async function ensureUrlSortTempTable(accessor: ArchiveAccessor): Promise<void> {
+export async function ensureUrlSortTempTable(
+	accessor: ArchiveAccessor,
+	onProgress?: (message: string) => void,
+): Promise<void> {
 	const knex = accessor.getKnex();
 	if (preparedConnections.has(knex)) return;
-	await prepareUrlSortTempTable(accessor);
+	await prepareUrlSortTempTable(accessor, { onProgress });
 }
 
 /**

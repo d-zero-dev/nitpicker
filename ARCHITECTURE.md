@@ -142,6 +142,9 @@
 - **JS スキャン・エンリッチメント（"Flow 2"）は既存の post-hoc marking / backfill とは異なる第 3 のカテゴリ** — post-hoc marking（`dedupe_cap_event_id` 等）と backfill（`alias_of_id` / `body_hash` 等）はいずれもアーカイブ内データからの事後導出でネットワーク I/O を伴わないのに対し、JS スキャン・エンリッチメントは crawl 完了後に JS リソースを実際に再 GET する唯一の post-crawl ステップ（`crawler/src/crawler/scan-js-resources-for-technology-signals.ts`、CLI 配線は `ensureViewerReadModelQuietly` の直前）。ネットワーク I/O を伴う分、`--skip-technology-js-scan` で無効化できる・単一リソースの失敗が全体を止めない best-effort 設計（`scan-js-resource-for-license-comment.ts`）である点が他の 2 カテゴリと異なる
 - **JS リソース本文は byte-cap + 即時 `req.destroy()` で先頭数 KB のみ読み、本文を一切永続化しない**（`scan-js-resource-for-license-comment.ts`、`fetch-destination.ts` の `titleBytesLimit` と同型の技法）。マッチ結果（技術名・evidence 断片）のみ `technology_js_scan_cache` に残る
 - **`technology_signals` と `page_technologies` は常に同一トランザクションでペア更新する** — 片方だけを更新する write は禁止（DB スキーマ概要の該当項目に詳細）。既存シグナルに新規シグナルを追加する形の再合成（JS スキャン・エンリッチメント）でも、対象ページの両テーブルを一旦 DELETE してから全件 INSERT し直す Scoped-Replace を踏む
+- **`@d-zero/dealer` の `Lanes`/`Display` は同一ターミナルストリームで2インスタンス同時稼働できない**（issue #294） — 各インスタンスが自前でカーソル位置（`#lastWroteLineNum`）を追跡して上書き描画するため、2つが競合すると出力が破壊される。この制約が `cli/src/commands/crawl.ts` の設計を形作っている: setup フェーズ（`CrawlerOrchestrator` の static factory 内、インスタンス生成前）は `SetupProgressCallbacks`（プレーンコールバック、`cli/src/crawl/setup-lanes.ts`）で表示し、`initializedCallback` 発火時点で setup 用 `Lanes` を必ず `close()` してから deal 自身の `Lanes`（`event-assignments.ts`）に切り替える。`viewer.ts`/`report.ts` が `Lanes` を使わずプレーンな `process.stderr.write` に留めているのも同じ理由 — 呼び出し先（`startViewer`/`report-google-sheets`）内部で新たな `Lanes` が構築される正確なタイミングを呼び出し元から観測できないため、共有 `Lanes` を安全に閉じられない
+- **viewer read model のビルドは worker thread で実行する**（`query/src/viewer-read-model/worker/`、issue #294） — knex/libsql の SQL 実行はすべて呼び出しスレッド上で同期実行される（`libsql-dialect.ts` が libsql の同期 N-API バインディングを better-sqlite3 dialect 経由で使うため）。40 万ページ規模の `CREATE INDEX` や `GROUP BY` は数分間イベントループを止め、CLI の `Lanes` 描画と SIGINT ハンドラを同時に凍結させる。`viewer-read-model-worker-entry.ts` がジョブ全体をワーカー上で実行し、メインスレッドは `postMessage` 経由の `phase`/`progress`/`done`/`error` プロトコル（`run-viewer-read-model-worker-task.ts`）で中継を受けるだけに留める
+- **`@nitpicker/mcp-server` と `@nitpicker/cli` は互いに依存しない兄弟パッケージ**（全体地図参照。両者とも `@nitpicker/query` に依存するのみ） — 進捗表示フォーマットのロジック（バイト→MB丸め、`total===0` フロア処理等）を共有できないため、`cli/src/create-byte-progress-logger.ts` と `mcp-server/src/format-extract-progress-line.ts` は同じ丸め処理を意図的に別実装として保持している。一方を直すとき他方への反映漏れがないか確認すること（issue #294 で実際に不整合が生じた実績あり）
 
 ## Reading paths
 
@@ -155,6 +158,17 @@
 4. `crawler/src/crawler/link-list.ts`（キュー状態機械）と `fetch-destination.ts`（HEAD/GET）
 5. 分岐次第: スコープ（`find-scope-entry.ts`）/ キュー優先度（`is-likely-html-url.ts`）/ エラー分類（`classify-error-kind.ts`, `should-burn-host.ts`）/ JS redirect（`build-js-redirect-edge.ts` 系）/ ブラウザクローズ（`close-browser-safely.ts`, `kill-process-tree.ts`）
 6. 保存: `crawler/src/archive/database.ts`（updatePage / recordRedirect / insertPage）
+
+### CLI 進捗表示（無音区間ゼロ）の変更
+
+長時間処理コマンド（crawl / viewer-build / analyze / report / query / viewer / diff）向け「無音区間ゼロ」原則（`cli/CLAUDE.md`）の実装（issue #294）。
+
+1. `cli/src/create-byte-progress-logger.ts` / `create-count-progress-logger.ts` / `format-log-line.ts`（バイト/件数進捗のフォーマット共通化。`%braille%`/`%dots%` アニメーションプレースホルダーは `Lanes`/`Display` の `riffle()` が処理するため、`Lanes` を経由しないプレーンな `process.stderr.write` 呼び出し（`viewer.ts`/`report.ts`）では `animated: false` を渡してリテラル漏れを防ぐ）
+2. crawl の setup フェーズ（`resume`/`append`/`inventory`/`retryFailed` の static factory 内、インスタンス生成前）: `cli/src/crawl/setup-lanes.ts`（`SetupProgressCallbacks` を `Lanes` に接続）→ `crawler-orchestrator.ts` の各 static メソッドの `setupProgress` オプション。`crawl.ts` の `createOrchestratorClosingLanesOnFailure` ヘルパーが、factory が `initializedCallback` 発火前に throw した場合でも setup 用 `Lanes` を確実に `close()` する（不変条件の `Lanes` 単一稼働制約を参照）
+3. crawl のインスタンス寿命内（write の tar 進捗・flush 等）: `crawler-orchestrator.ts` の型付きイベントエミッタ（`CrawlEvent`）→ `cli/src/crawl/event-assignments.ts` が購読して deal 用 `Lanes` に描画
+4. read-only 系コマンド（query/viewer/analyze/report/diff）の cold connection 展開: `crawler/src/archive/cache/extract-archive-to-cache.ts` → `query/src/archive-manager.ts` の `onExtractProgress` 素通し → 各コマンドの `createByteProgressLogger` 配線
+5. viewer の URL 自然順ソート TEMP テーブル遅延構築: `query/src/url-sort-temp-table.ts`（`ensureUrlSortTempTable`）の `onSortProgress` を各 `list-*.ts`/`find-mismatches.ts` が転送し、viewer route（`register-*-route.ts`）が `console.error` に配線
+6. CLI 起動の遅延 import: `cli/src/cli.ts` は `commands/<name>-def.ts`（コマンド定義のみ、フラグ・ヘルプ文言）を静的 import し、実装本体は `switch` 内の `await import()` で遅延ロードする（毎コマンド起動時に puppeteer/react/jsdom 等の全依存を読み込む数秒のコストを回避）。新規コマンド追加時は `-def.ts` と実装ファイルの対応を `cli.ts` の switch に追加すること
 
 ### analyze プラグイン追加
 
@@ -235,7 +249,7 @@ Astro / Next.js / Vue / Nuxt / Svelte / SvelteKit / Remix / Gatsby / Angular 等
 ### viewer read model の変更
 
 1. `query/src/viewer-read-model/create-viewer-read-model-tables.ts`（テーブル定義）と `create-viewer-read-model-indexes.ts`（二次索引。index-after-load と evidence-before-indexing の不変条件を先に読む）
-2. `query/src/viewer-read-model/build-viewer-read-model.ts`（ビルドオーケストレーション）→ `compute-*-rows.ts`（各テーブルの行生成。chunk 化パターンは `compute-anchor-fact-rows.ts` が正）
+2. `query/src/viewer-read-model/build-viewer-read-model.ts`（ビルドオーケストレーション）→ `compute-*-rows.ts`（各テーブルの行生成。chunk 化パターンは `compute-anchor-fact-rows.ts` が正）。実行は `query/src/viewer-read-model/worker/`（worker thread、不変条件の該当項目参照）経由 — `build-viewer-read-model-in-worker.ts` / `run-viewer-read-model-backfills-in-worker.ts` が薄い公開面、`run-viewer-read-model-worker-task.ts` が `postMessage` プロトコルの共通配線
 3. 読み取り: `query/src/list-viewer-*.ts` / `get-viewer-*.ts` + cursor モジュール（`viewer-cursor-kit/` が共有基盤、`viewer-*-cursor/` が機能別）
 4. dispatch: `query/src/get-*-fast-path.ts`（fast path / live path の二層。強制 live 条件は関数ごとに異なる）→ viewer route（`viewer/src/routes/register-*-route.ts`）
 5. `VIEWER_READ_MODEL_SCHEMA_VERSION` を bump。対象はテーブル形状の変更**だけでなく投入ロジックの変更も含む**（どの行を入れるか・どう数えるかを変えた場合。bump しないと `isViewerReadModelCurrent` が既存 read model を current と判定し続け、修正が既存アーカイブに永久に届かない）。bump 後の旧 read model の扱いは機能ごとに異なり、自動 live fallback は既定ではない — 上記「live fallback が無い機能の guard」「viewer route は stale read model を silent live に落とさない」の 2 項を参照

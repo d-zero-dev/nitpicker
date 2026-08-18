@@ -128,6 +128,12 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 			sortOrder: toPageSortOrder(q.sortOrder),
 			limit,
 			offset,
+			// Issue #294: a cold connection's first `sortBy: 'url'` (the
+			// default) request lazily builds the URL natural-sort TEMP
+			// table, which can take a while on a large archive with no
+			// other signal it isn't hung.
+			// eslint-disable-next-line no-console
+			onSortProgress: (message) => console.error(message),
 		};
 		const liveResult = await listPages(accessor, options);
 		const { nextCursor, prevCursor } = buildLivePagesCursors({

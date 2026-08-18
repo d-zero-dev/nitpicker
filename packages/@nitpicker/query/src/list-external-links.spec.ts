@@ -572,3 +572,86 @@ describe('listExternalLinks — 未知の sortBy 値への耐性', () => {
 		]);
 	});
 });
+
+describe('listExternalLinks: onSortProgress (issue #294)', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_list_external_links_progress__');
+	const archiveFilePath = path.resolve(
+		dir,
+		'list-external-links-progress-test.nitpicker',
+	);
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/page')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: { ...META, title: 'Page' },
+			anchorList: [
+				{
+					href: parseUrl('https://external.example.com/')!,
+					isExternal: true,
+					title: null,
+					textContent: 'External',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+	});
+
+	afterAll(async () => {
+		await archive.close();
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it("forwards onSortProgress to ensureUrlSortTempTable on the default (sortBy: 'destUrl', url-typed) cold connection", async () => {
+		const messages: string[] = [];
+		await listExternalLinks(archive, {
+			onSortProgress: (message) => messages.push(message),
+		});
+
+		expect(messages.length).toBeGreaterThan(0);
+	});
+
+	it('does not call onSortProgress again once the connection is already prepared', async () => {
+		const messages: string[] = [];
+		await listExternalLinks(archive, {
+			onSortProgress: (message) => messages.push(message),
+		});
+
+		expect(messages).toEqual([]);
+	});
+});

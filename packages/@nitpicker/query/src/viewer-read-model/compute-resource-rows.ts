@@ -34,6 +34,10 @@ const READ_CHUNK_SIZE = 20_000;
  *   e.g. in tests).
  * @param chunkSize - Maximum `resource_items` rows read per chunk. Must be
  *   positive.
+ * @param onProgress - Called after each keyset chunk with the
+ *   `resource_items.id` scanned up to so far and the max id (issue #294: on
+ *   a large archive this scan runs for minutes with no other signal it
+ *   hasn't hung). Omit for no reporting (the default; e.g. tests).
  * @yields {ResourceInsertRows} One chunk's insert rows for `viewer_resources`
  *   and `viewer_resource_stats`, at most `chunkSize` resources long.
  * @throws {RangeError} If `chunkSize` is not positive.
@@ -45,11 +49,22 @@ const READ_CHUNK_SIZE = 20_000;
 export async function* computeResourceInsertRows(
 	trx: Knex,
 	chunkSize = READ_CHUNK_SIZE,
+	onProgress?: (scannedUpToId: number, maxId: number) => void,
 ): AsyncGenerator<ResourceInsertRows> {
 	if (chunkSize <= 0) {
 		throw new RangeError(
 			`computeResourceInsertRows: chunkSize must be positive, got ${chunkSize}`,
 		);
+	}
+
+	// MAX() over the keyset column is an O(1) index-tail read; only fetched
+	// when someone is listening.
+	let maxId = 0;
+	if (onProgress) {
+		const [maxRow] = await trx('resource_items').max<{ max: number | null }[]>({
+			max: 'id',
+		});
+		maxId = maxRow?.max ?? 0;
 	}
 
 	let lastId = 0;
@@ -89,9 +104,11 @@ export async function* computeResourceInsertRows(
 			);
 
 		if (rows.length === 0) {
+			onProgress?.(maxId, maxId);
 			return;
 		}
 		lastId = rows.at(-1)!.id;
+		onProgress?.(Math.min(lastId, maxId), maxId);
 
 		const resources = rows.map((row) => {
 			const isExternal = row.isExternal ? 1 : 0;

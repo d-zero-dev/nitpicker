@@ -1,7 +1,7 @@
 import type { Knex } from 'knex';
 
 import knex from 'knex';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createAdjunctTables } from './create-adjunct-tables.js';
 import { createEntityTables } from './create-entity-tables.js';
@@ -141,6 +141,29 @@ describe('migratePageTagsToPageTechnologies', () => {
 		await migratePageTagsToPageTechnologies(db);
 		await expect(migratePageTagsToPageTechnologies(db)).resolves.toBeUndefined();
 		expect(await db('technology_signals').select('*')).toHaveLength(1);
+	});
+
+	it('logs a row count before starting the conversion (issue #294)', async () => {
+		await db('page_tags').insert([
+			{
+				pageId: 1,
+				provider: 'Vue.js',
+				categories: JSON.stringify(['JavaScript frameworks']),
+			},
+			{
+				pageId: 1,
+				provider: 'Google Analytics',
+				categories: JSON.stringify(['Analytics']),
+			},
+		]);
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		await migratePageTagsToPageTechnologies(db);
+
+		expect(errorSpy).toHaveBeenCalledWith(
+			expect.stringContaining('converting 2 page_tags'),
+		);
+		errorSpy.mockRestore();
 	});
 
 	it('is a no-op (besides the drop) when page_tags has no rows', async () => {

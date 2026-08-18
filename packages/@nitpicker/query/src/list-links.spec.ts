@@ -2,9 +2,15 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { listLinks } from './list-links.js';
+
+vi.mock('./url-sort-temp-table.js', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('./url-sort-temp-table.js')>();
+	return { ...actual, ensureUrlSortTempTable: vi.fn(actual.ensureUrlSortTempTable) };
+});
+const { ensureUrlSortTempTable } = await import('./url-sort-temp-table.js');
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -355,6 +361,58 @@ describe('listLinks', () => {
 	it('ページネーションが機能する', async () => {
 		const result = await listLinks(archive, { type: 'broken', limit: 1, offset: 0 });
 		expect(result.items).toHaveLength(1);
+	});
+
+	it('sortBy: destUrl でクラッシュしない（destUrl は常に URL ソート TEMP テーブル経由）', async () => {
+		// Regression test: `destUrl` is unconditionally URL-typed in
+		// `listLinks`'s sort column map. Skipping `ensureUrlSortTempTable`
+		// before it crashes with `no such table: viewer_url_sort_keys` on a
+		// cold connection.
+		const result = await listLinks(archive, { type: 'broken', sortBy: 'destUrl' });
+		expect(result.items).toHaveLength(1);
+	});
+
+	it('明示的な sortBy: sourceUrl でクラッシュしない', async () => {
+		const result = await listLinks(archive, { type: 'broken', sortBy: 'sourceUrl' });
+		expect(result.items).toHaveLength(1);
+	});
+
+	it('type: external でも sortBy: destUrl でクラッシュしない（QA レビュー: broken 型でしか検証されていなかった）', async () => {
+		// The sort-column config (and thus the `ensureUrlSortTempTable` gate)
+		// is shared between `type: 'broken'` and `type: 'external'` — this
+		// pins that the gate also fires correctly on the `external` branch,
+		// not just `broken`.
+		const result = await listLinks(archive, { type: 'external', sortBy: 'destUrl' });
+		expect(result.items).toHaveLength(1);
+	});
+
+	it('does not build the URL-sort temp table for status/isExternal/textContent sorts', async () => {
+		vi.mocked(ensureUrlSortTempTable).mockClear();
+
+		await listLinks(archive, { type: 'broken', sortBy: 'status' });
+		await listLinks(archive, { type: 'broken', sortBy: 'isExternal' });
+		await listLinks(archive, { type: 'broken', sortBy: 'textContent' });
+
+		expect(ensureUrlSortTempTable).not.toHaveBeenCalled();
+	});
+
+	it('does build the URL-sort temp table for destUrl and explicit sourceUrl sorts', async () => {
+		vi.mocked(ensureUrlSortTempTable).mockClear();
+
+		await listLinks(archive, { type: 'broken', sortBy: 'destUrl' });
+		expect(ensureUrlSortTempTable).toHaveBeenCalledTimes(1);
+
+		await listLinks(archive, { type: 'broken', sortBy: 'sourceUrl' });
+		expect(ensureUrlSortTempTable).toHaveBeenCalledTimes(2);
+	});
+
+	it('forwards onSortProgress to ensureUrlSortTempTable (issue #294)', async () => {
+		vi.mocked(ensureUrlSortTempTable).mockClear();
+		const onSortProgress = vi.fn();
+
+		await listLinks(archive, { type: 'broken', sortBy: 'destUrl', onSortProgress });
+
+		expect(ensureUrlSortTempTable).toHaveBeenCalledWith(archive, onSortProgress);
 	});
 });
 

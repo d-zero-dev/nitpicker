@@ -29,11 +29,23 @@ import { convertLegacyPageTagsToInserts } from './meta/technologies/convert-lega
  * Idempotent: a no-op once `page_tags` is gone (either because this
  * function already ran, or because the archive was crawled after this
  * feature shipped and never had `page_tags` at all).
+ *
+ * Logs a row count before starting (issue #294): on a large legacy archive
+ * this SELECT-all-convert-drop runs as one transaction with no per-chunk
+ * progress, so without an upfront count it looks indistinguishable from a
+ * hang for however long the conversion actually takes.
  * @param instance - The Knex query builder instance connected to the database.
  */
 export async function migratePageTagsToPageTechnologies(instance: Knex): Promise<void> {
 	const hasPageTags = await instance.schema.hasTable('page_tags');
 	if (!hasPageTags) return;
+
+	const [row] = await instance('page_tags').count<[{ total: number }]>({ total: '*' });
+	const total = row?.total ?? 0;
+	// eslint-disable-next-line no-console
+	console.error(
+		`[migrate] converting ${total} page_tags row(s) to technology_signals/page_technologies…`,
+	);
 
 	await instance.transaction(async (trx) => {
 		const rows: Array<{

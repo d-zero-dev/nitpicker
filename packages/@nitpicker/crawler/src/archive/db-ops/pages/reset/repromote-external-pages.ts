@@ -25,12 +25,18 @@ import { dbLog } from '../../../debug.js';
  * @param knex - Knex query builder connected to the archive DB.
  * @param scopes - The hostname-indexed scope map after the new roots are merged.
  * @param options - URL parsing options forwarded to {@link findScopeEntry}.
+ * @param onProgress - Called after each chunk's DELETE/UPDATE statements
+ *   complete, with the pages processed so far and the total to promote
+ *   (issue #294: a large `--append` can promote thousands of pages across
+ *   14 tables, running for seconds to minutes with no other signal it
+ *   hasn't hung). Omit for no reporting (the default; e.g. tests).
  * @returns The URLs of the pages that were promoted.
  */
 export async function repromoteExternalPages(
 	knex: Knex,
 	scopes: ReadonlyMap<string, readonly ExURL[]>,
 	options?: ParseURLOptions,
+	onProgress?: (processed: number, total: number) => void,
 ): Promise<string[]> {
 	if (scopes.size === 0) {
 		return [];
@@ -110,6 +116,7 @@ export async function repromoteExternalPages(
 		await knex('page_main_content_audios').whereIn('pageId', chunk).delete();
 		await knex('page_main_content_canvases').whereIn('pageId', chunk).delete();
 		await knex('page_main_content_custom_elements').whereIn('pageId', chunk).delete();
+		onProgress?.(Math.min(i + chunkSize, promotedIds.length), promotedIds.length);
 	}
 	dbLog('Repromoted %d external pages back to pending', promotedUrls.length);
 	return promotedUrls;

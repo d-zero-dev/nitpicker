@@ -21,6 +21,14 @@ export interface FindMismatchesOptions {
 	sortBy?: 'url' | 'actual' | 'expected';
 	/** Sort direction. Defaults to `'asc'`. */
 	sortOrder?: 'asc' | 'desc';
+	/**
+	 * Called with human-readable status lines while a `'url'`-typed sort
+	 * lazily builds the URL natural-sort TEMP table on a cold connection
+	 * (issue #294) — see `ensureUrlSortTempTable`. Omit for silent (the
+	 * default; e.g. when the read model already covers URL order and this
+	 * never runs).
+	 */
+	onSortProgress?: (message: string) => void;
 }
 
 /**
@@ -80,7 +88,7 @@ export async function findMismatches(
 	const useUrlSort = options.sortBy != null;
 	const needsUrlSortTempTable = useUrlSort && (type === 'canonical' || sortBy === 'url');
 	if (needsUrlSortTempTable) {
-		await ensureUrlSortTempTable(accessor);
+		await ensureUrlSortTempTable(accessor, options.onSortProgress);
 	}
 
 	const baseQuery = knex('content_items as ci')

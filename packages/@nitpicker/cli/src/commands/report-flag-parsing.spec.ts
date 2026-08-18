@@ -1,8 +1,8 @@
 import { parseCli } from '@d-zero/roar';
 import { describe, expect, it } from 'vitest';
 
-import { commandDef as pipelineDef } from './pipeline.js';
-import { commandDef as reportDef } from './report.js';
+import { commandDef as pipelineDef } from './pipeline-def.js';
+import { commandDef as reportDef } from './report-def.js';
 
 /**
  * Run `parseCli` against a fabricated `process.argv` for the `report`

@@ -1,4 +1,5 @@
-import type { CommandDef, InferFlags } from '@d-zero/roar';
+import type { commandDef } from './cache-def.js';
+import type { InferFlags } from '@d-zero/roar';
 
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -15,33 +16,6 @@ import {
 import { ExitCode } from '../exit-code.js';
 import { formatCacheList } from '../format-cache-list.js';
 import { formatCliError } from '../format-cli-error.js';
-
-/**
- * Command definition for the `cache` sub-command.
- * @see {@link cache} for the main entry point
- */
-export const commandDef = {
-	desc: 'List or clear on-disk viewer caches (tar-extraction cache and the analyze table cache)',
-	usage: ['list [options]', 'clear [archive]'],
-	flags: {
-		json: {
-			type: 'boolean',
-			desc: 'Output as JSON instead of a human-readable table',
-		},
-	},
-	subCommands: {
-		list: {
-			desc: 'List cache entries with their size and last-updated time',
-			usage: 'list [options]',
-			flags: ['json'],
-		},
-		clear: {
-			desc: 'Delete all caches, or only the caches of the given archive',
-			usage: 'clear [archive]',
-			flags: [],
-		},
-	},
-} as const satisfies CommandDef;
 
 /** Parsed flag values for the `cache` CLI command. */
 type CacheFlags = InferFlags<typeof commandDef.flags>;

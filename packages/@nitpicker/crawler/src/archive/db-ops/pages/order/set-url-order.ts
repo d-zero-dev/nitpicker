@@ -9,8 +9,16 @@ import { dbLog } from '../../../debug.js';
  * all internal pages. Pages are sorted using {@link pathComparator} and
  * assigned sequential order numbers.
  * @param knex - Knex query builder connected to the archive DB.
+ * @param onProgress - Called after each chunk's UPDATE completes, with
+ *   pages ordered so far and the total (issue #294: a large archive's page
+ *   count can make this a multi-second-to-minutes pass — a single SELECT
+ *   plus a JS sort followed by chunked UPDATEs — with no other signal it
+ *   hasn't hung). Omit for no reporting (the default; e.g. tests).
  */
-export async function setUrlOrder(knex: Knex): Promise<void> {
+export async function setUrlOrder(
+	knex: Knex,
+	onProgress?: (processed: number, total: number) => void,
+): Promise<void> {
 	dbLog('Set URL Order');
 	const res = (await knex
 		.select('ci.id', 'ur.url')
@@ -36,5 +44,6 @@ export async function setUrlOrder(knex: Knex): Promise<void> {
 			`UPDATE content_items SET crawl_order = CASE id ${cases} END WHERE id IN (${placeholders})`,
 			[...bindings, ...ids],
 		);
+		onProgress?.(Math.min(i + BATCH_SIZE, sorted.length), sorted.length);
 	}
 }

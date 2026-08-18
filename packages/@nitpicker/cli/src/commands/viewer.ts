@@ -1,38 +1,13 @@
-import type { CommandDef, InferFlags } from '@d-zero/roar';
+import type { commandDef } from './viewer-def.js';
+import type { InferFlags } from '@d-zero/roar';
 
 import path from 'node:path';
 
 import { startViewer } from '@nitpicker/viewer';
 
+import { createByteProgressLogger } from '../create-byte-progress-logger.js';
 import { ExitCode } from '../exit-code.js';
 import { formatCliError } from '../format-cli-error.js';
-
-/**
- * Command definition for the `viewer` sub-command.
- * @see {@link viewer} for the main entry point
- */
-export const commandDef = {
-	desc: 'Launch a local browser viewer for a .nitpicker archive or a crawl stub directory',
-	usage: '<file-or-stub-dir> [options]',
-	flags: {
-		port: {
-			type: 'number',
-			shortFlag: 'p',
-			valueName: 'port',
-			desc: 'Port to listen on (default: 4324, falls back to a free port)',
-		},
-		host: {
-			type: 'string',
-			valueName: 'host',
-			desc: 'Hostname to bind to (default: localhost)',
-		},
-		open: {
-			type: 'boolean',
-			default: true,
-			desc: 'Open the default browser automatically (use --no-open to disable)',
-		},
-	},
-} as const satisfies CommandDef;
 
 /** Parsed flag values for the `viewer` CLI command. */
 type ViewerFlags = InferFlags<typeof commandDef.flags>;
@@ -71,6 +46,21 @@ export async function viewer(args: string[], flags: ViewerFlags) {
 			port: flags.port,
 			host: flags.host,
 			open: flags.open,
+			// `@nitpicker/viewer` stays UI-agnostic (issue #294): it only
+			// exposes a raw `(readBytes, totalBytes)` callback, so this
+			// command owns turning it into a display. Plain appended lines
+			// rather than a `Lanes` overwrite line — extraction fully
+			// completes (and stops calling this) before `startViewer` prints
+			// its own stale-read-model warning and startup banner, but
+			// nothing here can observe that boundary to close a shared
+			// `Lanes` at the right moment.
+			onExtractProgress: createByteProgressLogger(
+				(message) => {
+					process.stderr.write(`${message}\n`);
+				},
+				'Extracting archive',
+				{ animated: false },
+			),
 		});
 	} catch (error) {
 		formatCliError(error, false);

@@ -9,10 +9,14 @@ import { formatCliError as formatCliErrorFn } from '../format-cli-error.js';
 
 import { analyze } from './analyze.js';
 
+const mockLanesUpdate = vi.fn();
+
 vi.mock('@d-zero/dealer', () => ({
 	Lanes: vi.fn().mockImplementation(function (this: {
+		update: typeof mockLanesUpdate;
 		[Symbol.dispose]: ReturnType<typeof vi.fn>;
 	}) {
+		this.update = mockLanesUpdate;
 		this[Symbol.dispose] = vi.fn();
 	}),
 }));
@@ -207,6 +211,59 @@ describe('analyze command', () => {
 
 		expect(logFn).toHaveBeenCalledWith(mockNitpicker, expect.any(Array), false);
 		expect(Lanes).toHaveBeenCalledWith(expect.objectContaining({ verbose: false }));
+	});
+
+	it('forwards a byte-progress callback to Nitpicker.open and renders it through Lanes (issue #294)', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		const mockNitpicker = createMockNitpicker();
+		vi.mocked(Nitpicker.open).mockImplementation((_filePath, onExtractProgress) => {
+			onExtractProgress?.(50_000_000, 200_000_000);
+			return Promise.resolve(mockNitpicker as never);
+		});
+		vi.mocked(selectPluginsFn).mockResolvedValue();
+
+		await analyze(['test.nitpicker'], {
+			all: true,
+			plugin: undefined,
+			verbose: undefined,
+			searchKeywords: undefined,
+			searchScope: undefined,
+			axeLang: undefined,
+			templates: undefined,
+			silent: undefined,
+		});
+
+		expect(Nitpicker.open).toHaveBeenCalledWith(
+			expect.stringContaining('test.nitpicker'),
+			expect.any(Function),
+		);
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			'%braille% Extracting archive: 50/200 MB (25%)',
+		);
+	});
+
+	it('does not pass a progress callback to Nitpicker.open when --silent is set', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		const mockNitpicker = createMockNitpicker();
+		vi.mocked(Nitpicker.open).mockResolvedValue(mockNitpicker as never);
+		vi.mocked(selectPluginsFn).mockResolvedValue();
+
+		await analyze(['test.nitpicker'], {
+			all: true,
+			plugin: undefined,
+			verbose: undefined,
+			searchKeywords: undefined,
+			searchScope: undefined,
+			axeLang: undefined,
+			templates: undefined,
+			silent: true,
+		});
+
+		expect(Nitpicker.open).toHaveBeenCalledWith(
+			expect.stringContaining('test.nitpicker'),
+			undefined,
+		);
 	});
 
 	it('suppresses log output when --silent is set', async () => {

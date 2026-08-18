@@ -74,6 +74,7 @@
 
 		//
 		"untar",
+		"ustar", // tar archive format identifier (POSIX IEEE 1003.1)
 		"apng",
 		"whatwg",
 		"PHPSESSID",

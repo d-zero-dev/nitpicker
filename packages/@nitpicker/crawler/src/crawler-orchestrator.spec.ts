@@ -1782,3 +1782,265 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 		expect(meta.invalid_skipped).toBe(12);
 	});
 });
+
+describe('CrawlerOrchestrator.write', () => {
+	it("relays Archive.write()'s onStep/onTarProgress as writeStep/writeTarProgress events (issue #294)", async () => {
+		const fakeWrite = vi.fn(
+			(options?: {
+				onStep?: (step: 'checkpoint' | 'rename' | 'tar' | 'remove') => void;
+				onTarProgress?: (writtenBytes: number, totalBytes: number) => void;
+			}) => {
+				options?.onStep?.('checkpoint');
+				options?.onTarProgress?.(50, 100);
+				options?.onStep?.('remove');
+				return Promise.resolve();
+			},
+		);
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-write-test.nitpicker',
+			write: fakeWrite,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		const stepEvents: string[] = [];
+		const progressEvents: [number, number][] = [];
+
+		const orchestrator = await CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{ cwd: '/tmp', filePath: '/tmp/orchestrator-write-test.nitpicker' },
+			(o) => {
+				o.on('error', () => {});
+				o.on('writeStep', ({ step }) => stepEvents.push(step));
+				o.on('writeTarProgress', ({ writtenBytes, totalBytes }) => {
+					progressEvents.push([writtenBytes, totalBytes]);
+				});
+			},
+		);
+
+		await orchestrator.write();
+
+		expect(fakeWrite).toHaveBeenCalledWith({
+			onStep: expect.any(Function),
+			onTarProgress: expect.any(Function),
+		});
+		expect(stepEvents).toEqual(['checkpoint', 'remove']);
+		expect(progressEvents).toEqual([[50, 100]]);
+	});
+});
+
+describe('CrawlerOrchestrator[Symbol.asyncDispose]: recovery-write progress (issue #294)', () => {
+	it("relays Archive.close()'s onRecoveryStart/onStep/onTarProgress as recoveringArchiveWrite/writeStep/writeTarProgress events", async () => {
+		const fakeClose = vi.fn(
+			(options?: {
+				onRecoveryStart?: () => void;
+				onStep?: (step: 'checkpoint' | 'rename' | 'tar' | 'remove') => void;
+				onTarProgress?: (writtenBytes: number, totalBytes: number) => void;
+			}) => {
+				options?.onRecoveryStart?.();
+				options?.onStep?.('checkpoint');
+				options?.onTarProgress?.(50, 100);
+				options?.onStep?.('remove');
+				return Promise.resolve();
+			},
+		);
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-dispose-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+			close: fakeClose,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		const recoveryEvents: number[] = [];
+		const stepEvents: string[] = [];
+		const progressEvents: [number, number][] = [];
+
+		const orchestrator = await CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{ cwd: '/tmp', filePath: '/tmp/orchestrator-dispose-test.nitpicker' },
+			(o) => {
+				o.on('error', () => {});
+				o.on('recoveringArchiveWrite', () => recoveryEvents.push(1));
+				o.on('writeStep', ({ step }) => stepEvents.push(step));
+				o.on('writeTarProgress', ({ writtenBytes, totalBytes }) => {
+					progressEvents.push([writtenBytes, totalBytes]);
+				});
+			},
+		);
+
+		await orchestrator[Symbol.asyncDispose]();
+
+		expect(fakeClose).toHaveBeenCalledWith({
+			onRecoveryStart: expect.any(Function),
+			onStep: expect.any(Function),
+			onTarProgress: expect.any(Function),
+		});
+		expect(recoveryEvents).toEqual([1]);
+		expect(stepEvents).toEqual(['checkpoint', 'remove']);
+		expect(progressEvents).toEqual([[50, 100]]);
+	});
+
+	it('does not emit recovery events when Archive.close() takes the no-op branch (already written)', async () => {
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-dispose-no-recovery-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		const recoveryEvents: number[] = [];
+
+		const orchestrator = await CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{ cwd: '/tmp', filePath: '/tmp/orchestrator-dispose-no-recovery-test.nitpicker' },
+			(o) => {
+				o.on('error', () => {});
+				o.on('recoveringArchiveWrite', () => recoveryEvents.push(1));
+			},
+		);
+
+		await orchestrator[Symbol.asyncDispose]();
+
+		expect(recoveryEvents).toEqual([]);
+	});
+});
+
+describe('CrawlerOrchestrator.crawling: setUrlOrder progress', () => {
+	it("relays Archive.setUrlOrder()'s chunk progress as sortingUrls events (issue #294)", async () => {
+		const fakeSetUrlOrder = vi.fn(
+			(onProgress?: (processed: number, total: number) => void) => {
+				onProgress?.(500, 1200);
+				onProgress?.(1200, 1200);
+				return Promise.resolve();
+			},
+		);
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: fakeSetUrlOrder,
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-sorting-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		const progressEvents: [number, number][] = [];
+
+		await CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{ cwd: '/tmp', filePath: '/tmp/orchestrator-sorting-test.nitpicker' },
+			(o) => {
+				o.on('error', () => {});
+				o.on('sortingUrls', ({ processed, total }) => {
+					progressEvents.push([processed, total]);
+				});
+			},
+		);
+
+		expect(fakeSetUrlOrder).toHaveBeenCalledWith(expect.any(Function));
+		expect(progressEvents).toEqual([
+			[500, 1200],
+			[1200, 1200],
+		]);
+	});
+});
+
+describe('CrawlerOrchestrator.crawling: flushingPendingWrites (issue #294)', () => {
+	it('emits flushingPendingWrites with the pending count when crawlEnd fires while a write is still queued', async () => {
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			// The default FakeCrawler driver emits one `error` then
+			// `crawlEnd` synchronously — `addError` is enqueued onto the
+			// orchestrator's WriteQueue but its promise has no chance to
+			// settle before crawlEnd's handler reads `writeQueue.pending`.
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-flush-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		const flushEvents: number[] = [];
+
+		await CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{ cwd: '/tmp', filePath: '/tmp/orchestrator-flush-test.nitpicker' },
+			(o) => {
+				o.on('error', () => {});
+				o.on('flushingPendingWrites', ({ pending }) => {
+					flushEvents.push(pending);
+				});
+			},
+		);
+
+		expect(flushEvents).toEqual([1]);
+	});
+
+	it('does not emit flushingPendingWrites when the queue is already empty at crawlEnd', async () => {
+		const fakeArchive = {
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-no-flush-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		const flushEvents: number[] = [];
+		fakeCrawlerDriver = (crawler) => {
+			// No `error` this time — nothing is ever enqueued onto the
+			// WriteQueue before `crawlEnd` fires.
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{ cwd: '/tmp', filePath: '/tmp/orchestrator-no-flush-test.nitpicker' },
+			(o) => {
+				o.on('error', () => {});
+				o.on('flushingPendingWrites', ({ pending }) => {
+					flushEvents.push(pending);
+				});
+			},
+		);
+
+		expect(flushEvents).toEqual([]);
+	});
+});

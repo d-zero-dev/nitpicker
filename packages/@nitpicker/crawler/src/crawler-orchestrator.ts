@@ -1,10 +1,14 @@
 import type { Config } from './archive/types.js';
 import type { NetworkProbe } from './crawler/probe-network.js';
 import type { CrawlerOptions, InventoryMode } from './crawler/types.js';
-import type { CrawlEvent, InventoryRunAggregates } from './types.js';
+import type {
+	CrawlEvent,
+	InventoryRunAggregates,
+	SetupProgressCallbacks,
+} from './types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
-import { copyFile, unlink as unlinkFile } from 'node:fs/promises';
+import { unlink as unlinkFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -14,6 +18,7 @@ import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-awa
 import pkg from '../package.json' with { type: 'json' };
 
 import Archive from './archive/archive.js';
+import { copyFileWithProgress } from './archive/filesystem/copy-file-with-progress.js';
 import { REQUIRED_FORMAT_VERSION } from './archive/meta/assert-compatible-version.js';
 import { clearDestinationCache } from './crawler/clear-destination-cache.js';
 import { clearDnsBurnedHostCache } from './crawler/clear-dns-burned-host-cache.js';
@@ -318,9 +323,28 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * then reaps any zombie Chromium processes via {@link garbageCollect} —
 	 * the same two-step teardown every CLI crawl command previously
 	 * repeated by hand in a `finally` block.
+	 *
+	 * Relays `Archive.close()`'s recovery-write progress (issue #294) as
+	 * `recoveringArchiveWrite`/`writeStep`/`writeTarProgress` — the same
+	 * events `write()` emits — for the rare case where the file doesn't
+	 * exist on disk yet at dispose time (e.g. an explicit `write()` call
+	 * threw partway through). A CLI listener whose display is still open at
+	 * that point (it hadn't yet seen `writeFileEnd`) picks these up for
+	 * free; one that already tore down after the earlier failure silently
+	 * drops them, same as any other post-close display update.
 	 */
 	async [Symbol.asyncDispose](): Promise<void> {
-		await this.#archive.close();
+		await this.#archive.close({
+			onRecoveryStart: () => {
+				void this.emit('recoveringArchiveWrite', {});
+			},
+			onStep: (step) => {
+				void this.emit('writeStep', { step });
+			},
+			onTarProgress: (writtenBytes, totalBytes) => {
+				void this.emit('writeTarProgress', { writtenBytes, totalBytes });
+			},
+		});
 		this.garbageCollect();
 	}
 
@@ -530,6 +554,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			});
 
 			this.#crawler.on('crawlEnd', () => {
+				// Read BEFORE enqueuing the dedupeCap-finalize closure below
+				// (issue #294) so this reflects genuine backlog from the
+				// crawl's own page/resource writes, not the finalize
+				// closure's own, always-present entry.
+				if (writeQueue.pending > 0) {
+					void this.emit('flushingPendingWrites', { pending: writeQueue.pending });
+				}
 				// Deferred to INSIDE a queued closure, not read synchronously
 				// here, for the same reason `networkOutageRecovered`'s handler
 				// defers reading `#openNetworkOutageId`: a `dedupeCap` event's
@@ -630,13 +661,38 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * the time `write()` is called those tables are already populated.
 	 * This method just tars.
 	 *
-	 * Emits `writeFileStart` before writing and `writeFileEnd` after
-	 * the write completes successfully.
+	 * Emits `writeFileStart` before writing and `writeFileEnd` after the
+	 * write completes successfully. Also relays `Archive.write()`'s
+	 * per-step (`writeStep`) and tar-byte (`writeTarProgress`) progress
+	 * (issue #294) — tarring a 15 GB+ archive can take minutes, and without
+	 * these events a CLI listener has no way to show it isn't hung.
 	 */
 	async write() {
 		void this.emit('writeFileStart', { filePath: this.#archive.filePath });
-		await this.#archive.write();
+		await this.#archive.write({
+			onStep: (step) => {
+				void this.emit('writeStep', { step });
+			},
+			onTarProgress: (writtenBytes, totalBytes) => {
+				void this.emit('writeTarProgress', { writtenBytes, totalBytes });
+			},
+		});
 		void this.emit('writeFileEnd', { filePath: this.#archive.filePath });
+	}
+
+	/**
+	 * Assign natural URL sort order to every internal page, relaying chunk
+	 * progress through the `sortingUrls` event (issue #294). Always runs
+	 * after `crawling()` has returned, i.e. once `initializedCallback` has
+	 * already had a chance to attach listeners — unlike the setup-phase
+	 * work in `append`/`inventory`/`retryFailed`, this has an orchestrator
+	 * instance to emit from, so it goes through the event emitter rather
+	 * than a `SetupProgressCallbacks` callback.
+	 */
+	async #setUrlOrder() {
+		await this.#archive.setUrlOrder((processed, total) => {
+			void this.emit('sortingUrls', { processed, total });
+		});
 	}
 
 	/**
@@ -732,7 +788,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		log('Crawling completed');
 		CrawlerOrchestrator.#finalizeCrawlSession();
 		log('Set order natural URL sort');
-		await archive.setUrlOrder();
+		await orchestrator.#setUrlOrder();
 		log('Sorting done');
 		return orchestrator;
 	}
@@ -754,6 +810,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * @param newUrls - New root URLs to add and crawl.
 	 * @param options - Optional config overrides applied on top of the archived config.
 	 * @param initializedCallback - Optional callback invoked after initialization but before crawling resumes.
+	 * @param setupProgress - Optional progress callbacks for the setup phase
+	 *   (untar, `.bak` copy, repromote, state rebuild) that runs before
+	 *   `initializedCallback` — see {@link SetupProgressCallbacks} for why
+	 *   this can't go through the orchestrator's event emitter (issue #294).
 	 * @returns The orchestrator instance after the append crawl completes.
 	 * @throws {Error} When `newUrls` is empty, the archive is in list mode, or it cannot be parsed.
 	 */
@@ -762,6 +822,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		newUrls: string[],
 		options?: Partial<CrawlConfig>,
 		initializedCallback?: CrawlInitializedCallback,
+		setupProgress?: SetupProgressCallbacks,
 	) {
 		if (newUrls.length === 0) {
 			throw new Error('append: newUrls is empty');
@@ -773,16 +834,19 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 		// See `ArchiveOpenOptions.openPluginData` for why this must be `true`
 		// on every writer path that calls `write()`.
+		setupProgress?.onPhase?.('Extracting archive');
 		const archive = await Archive.open({
 			filePath: absFilePath,
 			cwd,
 			openPluginData: true,
+			onExtractProgress: setupProgress?.onExtractProgress,
 		});
 		// Any throw between here and the successful return must release the
 		// archive lock and clean up tmpDir; the caller's `close()` only runs on
 		// the happy path. Errors from `close()` itself are intentionally
 		// best-effort: the original error is what matters.
 		try {
+			setupProgress?.onPhase?.('Loading archive config');
 			const archived = await archive.getConfig();
 			if (archived.fromList) {
 				throw new Error(
@@ -806,7 +870,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			};
 
 			const backupPath = absFilePath + '.bak';
-			await copyFile(absFilePath, backupPath);
+			setupProgress?.onPhase?.('Backing up archive');
+			await copyFileWithProgress(absFilePath, backupPath, setupProgress?.onCopyProgress);
 
 			try {
 				await archive.updateConfig(mergedConfig);
@@ -818,20 +883,32 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					const existing = scopeMap.get(parsed.hostname) ?? [];
 					scopeMap.set(parsed.hostname, [...existing, parsed]);
 				}
-				await archive.repromoteExternalPages(scopeMap, archived);
+				setupProgress?.onPhase?.('Repromoting external pages');
+				await archive.repromoteExternalPages(
+					scopeMap,
+					archived,
+					setupProgress?.onChunkProgress,
+				);
 
 				// Seed the sticky set from prior sessions' confirmed traps so
 				// `--append` does not pay the cost of re-discovering them (see
 				// `DedupeCapTracker`'s constructor JSDoc).
+				setupProgress?.onPhase?.('Loading dedupe-cap shape keys');
 				const preloadedStickyShapeKeys = await archive.listDedupeCapShapeKeys();
 				const orchestrator = new CrawlerOrchestrator(archive, {
 					...mergedConfig,
 					roots: mergedRoots,
 					preloadedStickyShapeKeys,
 				});
+				setupProgress?.onPhase?.('Loading crawl state');
 				const { scraped, pending } = await archive.getCrawlingState();
-				const resources = await archive.getResourceUrlList();
+				setupProgress?.onPhase?.('Loading resource list');
+				const resources = await archive.getResourceUrlList(
+					setupProgress?.onChunkProgress,
+				);
+				setupProgress?.onPhase?.('Loading scraped page count');
 				const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
+				setupProgress?.onPhase?.('Restoring crawl state');
 				orchestrator.#crawler.resume(pending, scraped, resources, pagesScrapedOffset);
 				if (initializedCallback) {
 					await initializedCallback(orchestrator, mergedConfig);
@@ -843,12 +920,17 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 				await orchestrator.crawling(newParsed);
 				CrawlerOrchestrator.#finalizeCrawlSession();
-				await archive.setUrlOrder();
+				await orchestrator.#setUrlOrder();
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
 			} catch (error) {
 				try {
-					await copyFile(backupPath, absFilePath);
+					setupProgress?.onPhase?.('Restoring archive from backup');
+					await copyFileWithProgress(
+						backupPath,
+						absFilePath,
+						setupProgress?.onCopyProgress,
+					);
 					await ignoreEnoent(unlinkFile(backupPath));
 				} catch (restoreError) {
 					// Restore itself failed — surface both so the operator knows
@@ -944,6 +1026,11 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 *   URLs. Pass `null` for programmatic callers that built
 	 *   `inventoryUrls` in-memory; the audit row's `source_file_sha256`
 	 *   column will be `NULL` and no source list is archived.
+	 * @param setupProgress - Optional progress callbacks for the setup phase
+	 *   (untar, scope classification, bulk inserts, state rebuild) that runs
+	 *   before `initializedCallback` — see {@link SetupProgressCallbacks} for
+	 *   why this can't go through the orchestrator's event emitter (issue
+	 *   #294).
 	 * @returns The orchestrator instance after a successful inventory pass.
 	 * @throws {Error} When `inventoryUrls` is empty or the archive is in list mode. Unresolved pending URLs from a previous crawl do NOT throw — see step 3.
 	 */
@@ -953,6 +1040,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		options?: Partial<CrawlConfig>,
 		initializedCallback?: CrawlInitializedCallback,
 		source: InventorySource | null = null,
+		setupProgress?: SetupProgressCallbacks,
 	) {
 		if (inventoryUrls.length === 0) {
 			throw new Error('inventory: URL list is empty');
@@ -964,12 +1052,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 		// See `ArchiveOpenOptions.openPluginData` for why this must be `true`
 		// on every writer path that calls `write()`.
+		setupProgress?.onPhase?.('Extracting archive');
 		const archive = await Archive.open({
 			filePath: absFilePath,
 			cwd,
 			openPluginData: true,
+			onExtractProgress: setupProgress?.onExtractProgress,
 		});
 		try {
+			setupProgress?.onPhase?.('Loading archive config');
 			const archived = await archive.getConfig();
 			if (archived.fromList) {
 				throw new Error(
@@ -977,6 +1068,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				);
 			}
 
+			setupProgress?.onPhase?.('Loading crawl state');
 			const { pending } = await archive.getCrawlingState();
 			if (pending.length > 0) {
 				// `getCrawlingState` returns the STRICT pending set — in-scope,
@@ -1038,6 +1130,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			// to mirror what `resolveContentItemId` / `insertResource` actually store.
 			// Two independent reads — Promise.all halves the wait on large
 			// archives where each `WHERE url IN (?)` chunk costs real I/O.
+			setupProgress?.onPhase?.('Checking for already-known URLs');
 			const candidateUrls = inScope.map((u) => u.withoutHashAndAuth);
 			const [existingPageUrlList, existingResourceUrlList] = await Promise.all([
 				archive.getExistingPageUrls(candidateUrls),
@@ -1108,7 +1201,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			}
 
 			const backupPath = absFilePath + '.bak';
-			await copyFile(absFilePath, backupPath);
+			setupProgress?.onPhase?.('Backing up archive');
+			await copyFileWithProgress(absFilePath, backupPath, setupProgress?.onCopyProgress);
 
 			// Ingestion (pre-insert + audit) is `.bak`-protected — a failure
 			// there restores the archive and the operator reruns. Once
@@ -1182,6 +1276,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// inside the `.bak`-protected window on large inventory
 				// lists; the chunked bulk path collapses N round-trips
 				// to N/500.
+				setupProgress?.onPhase?.('Recording non-HTML resources');
 				await archive.insertInventoryResources(nonHtmlSeeds);
 				// Pre-insert HTML seeds as `scraped = 0`,
 				// `source = 'inventory-seed'` placeholders *before* the
@@ -1189,6 +1284,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// cannot lose the URL. The strict-pending set picks
 				// these rows up on the next `--resume` via the
 				// `OR p.source != 'crawled'` clause.
+				setupProgress?.onPhase?.('Recording HTML seed pages');
 				await archive.insertInventorySeeds(htmlSeeds);
 				// Record exclude-matched novel URLs as terminal skipped pages
 				// (`is_skipped=1`, `skip_reason='excluded'`,
@@ -1197,6 +1293,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// excluded URLs, so the archive looks identical no matter
 				// how the URL was discovered. Inside the `.bak` window for
 				// the same all-or-nothing reason as the seed inserts above.
+				setupProgress?.onPhase?.('Recording excluded pages');
 				await archive.insertInventorySkippedPages(excludedNovelUrls);
 				log(
 					'[inventory] %d HTML seed(s), %d non-HTML resource(s), %d skipped page(s) recorded',
@@ -1269,16 +1366,22 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					// `retryFailed` uses to drive the dealer from the
 					// pending set alone (see retryFailed's
 					// `crawling([], { recursive })` invocation).
+					setupProgress?.onPhase?.('Loading crawl state');
 					const { scraped: scrapedAfter, pending: pendingAfter } =
 						await archive.getCrawlingState();
-					const resources = await archive.getResourceUrlList();
+					setupProgress?.onPhase?.('Loading resource list');
+					const resources = await archive.getResourceUrlList(
+						setupProgress?.onChunkProgress,
+					);
 					// Pre-existing rendered HTML page count seeds the
 					// session-spanning `pagesScraped` counter so the progress
 					// header reads `internalDone(cumulative pagesScraped)`
 					// rather than session-only — matches the `append` /
 					// `retryFailed` / `resume` paths and avoids users reading
 					// the parenthesised number as "inner pages dropped to N".
+					setupProgress?.onPhase?.('Loading scraped page count');
 					const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
+					setupProgress?.onPhase?.('Restoring crawl state');
 					orchestrator.#crawler.resume(
 						pendingAfter,
 						scrapedAfter,
@@ -1297,7 +1400,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 					await orchestrator.crawling([], { recursive: true });
 					CrawlerOrchestrator.#finalizeCrawlSession();
-					await archive.setUrlOrder();
+					await orchestrator.#setUrlOrder();
 					return orchestrator;
 				}
 
@@ -1307,7 +1410,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				if (initializedCallback) {
 					await initializedCallback(orchestrator, baseConfig);
 				}
-				await archive.setUrlOrder();
+				await orchestrator.#setUrlOrder();
 				return orchestrator;
 			} catch (error) {
 				if (ingestionComplete) {
@@ -1327,6 +1430,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					// catch's `close()` becomes a no-op for the destructive
 					// step and only runs `releaseLock` cleanup.
 					try {
+						setupProgress?.onPhase?.('Persisting ingested inventory state');
 						await archive.write();
 						await archive.releaseHandle();
 					} catch (persistError) {
@@ -1338,7 +1442,12 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					throw error;
 				}
 				try {
-					await copyFile(backupPath, absFilePath);
+					setupProgress?.onPhase?.('Restoring archive from backup');
+					await copyFileWithProgress(
+						backupPath,
+						absFilePath,
+						setupProgress?.onCopyProgress,
+					);
 					await ignoreEnoent(unlinkFile(backupPath));
 				} catch (restoreError) {
 					throw new AggregateError(
@@ -1384,6 +1493,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * @param archivePath - Absolute or relative path to the existing `.nitpicker`.
 	 * @param options - Optional config overrides applied on top of the archived config.
 	 * @param initializedCallback - Optional callback invoked after initialization but before crawling resumes.
+	 * @param setupProgress - Optional progress callbacks for the setup phase
+	 *   (untar, `.bak` copy, reset, state rebuild) that runs before
+	 *   `initializedCallback` — see {@link SetupProgressCallbacks} for why
+	 *   this can't go through the orchestrator's event emitter (issue #294).
 	 * @returns The orchestrator instance after the retry crawl completes.
 	 * @throws {Error} When the archive is in list mode or has no parseable roots.
 	 */
@@ -1391,6 +1504,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		archivePath: string,
 		options?: Partial<CrawlConfig>,
 		initializedCallback?: CrawlInitializedCallback,
+		setupProgress?: SetupProgressCallbacks,
 	) {
 		const cwd = options?.cwd ?? process.cwd();
 		const absFilePath = path.isAbsolute(archivePath)
@@ -1399,15 +1513,18 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 		// See `ArchiveOpenOptions.openPluginData` for why this must be `true`
 		// on every writer path that calls `write()`.
+		setupProgress?.onPhase?.('Extracting archive');
 		const archive = await Archive.open({
 			filePath: absFilePath,
 			cwd,
 			openPluginData: true,
+			onExtractProgress: setupProgress?.onExtractProgress,
 		});
 		// Any throw between here and the successful return must release the
 		// archive lock and clean up tmpDir; the caller's `close()` only runs on
 		// the happy path.
 		try {
+			setupProgress?.onPhase?.('Loading archive config');
 			const archived = await archive.getConfig();
 			if (archived.fromList) {
 				throw new Error(
@@ -1429,10 +1546,12 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			};
 
 			const backupPath = absFilePath + '.bak';
-			await copyFile(absFilePath, backupPath);
+			setupProgress?.onPhase?.('Backing up archive');
+			await copyFileWithProgress(absFilePath, backupPath, setupProgress?.onCopyProgress);
 
 			try {
-				const resetUrls = await archive.resetFailedPages();
+				setupProgress?.onPhase?.('Resetting failed pages');
+				const resetUrls = await archive.resetFailedPages(setupProgress?.onChunkProgress);
 				log('Start retrying failed pages');
 				log('Archive %s', absFilePath);
 				log('Reset %d failed page(s)', resetUrls.length);
@@ -1440,14 +1559,21 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// Seed the sticky set from prior sessions' confirmed traps so
 				// `--retry-failed` does not pay the cost of re-discovering
 				// them (see `DedupeCapTracker`'s constructor JSDoc).
+				setupProgress?.onPhase?.('Loading dedupe-cap shape keys');
 				const preloadedStickyShapeKeys = await archive.listDedupeCapShapeKeys();
 				const orchestrator = new CrawlerOrchestrator(archive, {
 					...config,
 					preloadedStickyShapeKeys,
 				});
+				setupProgress?.onPhase?.('Loading crawl state');
 				const { scraped, pending } = await archive.getCrawlingState();
-				const resources = await archive.getResourceUrlList();
+				setupProgress?.onPhase?.('Loading resource list');
+				const resources = await archive.getResourceUrlList(
+					setupProgress?.onChunkProgress,
+				);
+				setupProgress?.onPhase?.('Loading scraped page count');
 				const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
+				setupProgress?.onPhase?.('Restoring crawl state');
 				orchestrator.#crawler.resume(pending, scraped, resources, pagesScrapedOffset);
 				if (initializedCallback) {
 					await initializedCallback(orchestrator, config);
@@ -1455,12 +1581,17 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 				await orchestrator.crawling([], { recursive: config.recursive });
 				CrawlerOrchestrator.#finalizeCrawlSession();
-				await archive.setUrlOrder();
+				await orchestrator.#setUrlOrder();
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
 			} catch (error) {
 				try {
-					await copyFile(backupPath, absFilePath);
+					setupProgress?.onPhase?.('Restoring archive from backup');
+					await copyFileWithProgress(
+						backupPath,
+						absFilePath,
+						setupProgress?.onCopyProgress,
+					);
 					await ignoreEnoent(unlinkFile(backupPath));
 				} catch (restoreError) {
 					// Restore itself failed — surface both so the operator knows
@@ -1488,6 +1619,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * @param stubPath - Path to the existing archive file to resume from.
 	 * @param options - Optional configuration overrides to apply on top of the archived config.
 	 * @param initializedCallback - Optional callback invoked after initialization but before crawling resumes.
+	 * @param setupProgress - Optional progress callbacks for the setup phase
+	 *   (self-healing migrations, state rebuild) that runs before
+	 *   `initializedCallback` — see {@link SetupProgressCallbacks} for why
+	 *   this can't go through the orchestrator's event emitter (issue #294).
+	 *   No `onExtractProgress`/`onCopyProgress`: unlike `append`/`inventory`/
+	 *   `retryFailed`, `resume` reconnects to an existing tmpDir (no untar)
+	 *   and takes no `.bak` (nothing to restore — the interrupted crawl's
+	 *   tmpDir IS the source of truth).
 	 * @returns A promise that resolves to the CrawlerOrchestrator instance after crawling completes.
 	 * @throws {Error} If the archived URL is invalid.
 	 */
@@ -1495,12 +1634,16 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		stubPath: string,
 		options?: Partial<CrawlConfig>,
 		initializedCallback?: CrawlInitializedCallback,
+		setupProgress?: SetupProgressCallbacks,
 	) {
+		setupProgress?.onPhase?.('Reconnecting to archive');
 		const archive = await Archive.resume(stubPath);
+		setupProgress?.onPhase?.('Loading archive config');
 		const archivedConfig = await archive.getConfig();
 		// Seed the sticky set from prior sessions' confirmed traps so
 		// `--resume` does not pay the cost of re-discovering them (see
 		// `DedupeCapTracker`'s constructor JSDoc).
+		setupProgress?.onPhase?.('Loading dedupe-cap shape keys');
 		const preloadedStickyShapeKeys = await archive.listDedupeCapShapeKeys();
 		const config = {
 			...archivedConfig,
@@ -1513,9 +1656,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		if (!url) {
 			throw new Error(`URL (${_url}) is invalid`);
 		}
+		setupProgress?.onPhase?.('Loading crawl state');
 		const { scraped, pending } = await archive.getCrawlingState();
-		const resources = await archive.getResourceUrlList();
+		setupProgress?.onPhase?.('Loading resource list');
+		const resources = await archive.getResourceUrlList(setupProgress?.onChunkProgress);
+		setupProgress?.onPhase?.('Loading scraped page count');
 		const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
+		setupProgress?.onPhase?.('Restoring crawl state');
 		orchestrator.#crawler.resume(pending, scraped, resources, pagesScrapedOffset);
 		if (initializedCallback) {
 			await initializedCallback(orchestrator, config);

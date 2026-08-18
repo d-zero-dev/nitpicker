@@ -57,6 +57,11 @@ interface DuplicateGroupPageSourceRow {
  *   this chunking exists to avoid). Defaults to {@link READ_CHUNK_SIZE};
  *   overridable for tests that need to exercise chunk boundaries against a
  *   small fixture.
+ * @param onProgress - Called after each keyset chunk with the
+ *   `content_items.id` scanned up to so far and the max id (issue #294: on a
+ *   large archive this scan runs for minutes with no other signal it hasn't
+ *   hung). Not called at all on the no-duplicate-groups early return. Omit
+ *   for no reporting (the default; e.g. tests).
  * @yields {DuplicateGroupPageInsertRow[]} One chunk's insert rows for
  *   `viewer_duplicate_group_pages` — up to `2 * chunkSize` rows long if every
  *   page in the chunk duplicates on both `title` and `description`.
@@ -70,6 +75,7 @@ export async function* computeDuplicateGroupPageRows(
 	trx: Knex,
 	groupIdByValue: DuplicateGroupIdIndex,
 	chunkSize = READ_CHUNK_SIZE,
+	onProgress?: (scannedUpToId: number, maxId: number) => void,
 ): AsyncGenerator<DuplicateGroupPageInsertRow[]> {
 	if (chunkSize <= 0) {
 		throw new RangeError(
@@ -84,6 +90,16 @@ export async function* computeDuplicateGroupPageRows(
 		(!descriptionGroups || descriptionGroups.size === 0)
 	) {
 		return;
+	}
+
+	// MAX() over the keyset column is an O(1) index-tail read; only fetched
+	// when someone is listening.
+	let maxId = 0;
+	if (onProgress) {
+		const [maxRow] = await trx('content_items').max<{ max: number | null }[]>({
+			max: 'id',
+		});
+		maxId = maxRow?.max ?? 0;
 	}
 
 	let lastId = 0;
@@ -111,9 +127,11 @@ export async function* computeDuplicateGroupPageRows(
 			);
 
 		if (rows.length === 0) {
+			onProgress?.(maxId, maxId);
 			return;
 		}
 		lastId = rows.at(-1)!.id;
+		onProgress?.(Math.min(lastId, maxId), maxId);
 
 		const chunk: DuplicateGroupPageInsertRow[] = [];
 		for (const row of rows) {

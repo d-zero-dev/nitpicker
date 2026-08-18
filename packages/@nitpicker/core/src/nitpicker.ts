@@ -679,6 +679,10 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 	 * the archive to a temporary directory, opens the SQLite database, and
 	 * enables plugin data access.
 	 * @param filePath - Path to the `.nitpicker` archive file.
+	 * @param onExtractProgress - Forwarded to `Archive.open` — called during
+	 *   the untar step with bytes read so far and the archive's total size
+	 *   (issue #294: a large archive's extraction can take tens of seconds
+	 *   with no other signal it isn't hung).
 	 * @returns A new Nitpicker instance backed by the opened archive.
 	 * @example
 	 * ```ts
@@ -687,8 +691,15 @@ export class Nitpicker extends EventEmitter<NitpickerEvent> {
 	 * await nitpicker.write();
 	 * ```
 	 */
-	static async open(filePath: string) {
-		const archive = await Archive.open({ filePath, openPluginData: true });
+	static async open(
+		filePath: string,
+		onExtractProgress?: (readBytes: number, totalBytes: number) => void,
+	) {
+		const archive = await Archive.open({
+			filePath,
+			openPluginData: true,
+			onExtractProgress,
+		});
 		return new Nitpicker(archive);
 	}
 }

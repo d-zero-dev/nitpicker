@@ -131,6 +131,12 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 					status: resolveLiveFilterValue(status),
 					sortBy,
 					sortOrder,
+					// Issue #294: a cold connection's first URL-typed sort
+					// lazily builds the URL natural-sort TEMP table, which
+					// can take a while on a large archive with no other
+					// signal it isn't hung.
+					// eslint-disable-next-line no-console
+					onSortProgress: (message) => console.error(message),
 				}),
 			);
 		}
@@ -185,6 +191,11 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 				| 'textContent'
 				| undefined,
 			sortOrder,
+			// Issue #294: a cold connection's first URL-typed sort lazily
+			// builds the URL natural-sort TEMP table, which can take a while
+			// on a large archive with no other signal it isn't hung.
+			// eslint-disable-next-line no-console
+			onSortProgress: (message) => console.error(message),
 		});
 		const { nextCursor, prevCursor } = buildLivePagesCursors({
 			offset: liveOffset,

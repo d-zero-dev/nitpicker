@@ -156,6 +156,10 @@ function buildMismatchSourceQuery(
  *   e.g. in tests that don't need transactional rollback).
  * @param chunkSize - Maximum rows read per source-scan chunk and yielded per
  *   insert chunk. Must be positive.
+ * @param onProgress - Called after each of the 6 keyset scans (2 passes × 3
+ *   types) completes, with the completed and total scan counts (issue #294)
+ *   — see the in-function comment for why the unit is scans, not ids. Omit
+ *   for no reporting (the default; e.g. tests).
  * @yields {MismatchInsertRow[]} One chunk's insert rows for
  *   `viewer_mismatches`, at most `chunkSize` long, for one `type` at a time.
  * @throws {RangeError} If `chunkSize` is not positive.
@@ -163,6 +167,7 @@ function buildMismatchSourceQuery(
 export async function* computeMismatchInsertRows(
 	trx: Knex,
 	chunkSize = READ_CHUNK_SIZE,
+	onProgress?: (completedScans: number, totalScans: number) => void,
 ): AsyncGenerator<MismatchInsertRow[]> {
 	if (chunkSize <= 0) {
 		throw new RangeError(
@@ -171,6 +176,13 @@ export async function* computeMismatchInsertRows(
 	}
 
 	const types = ['canonical', 'og:title', 'og:description'] as const;
+
+	// Progress unit = completed table scans (issue #294). This generator runs
+	// 2 passes × 3 types = 6 keyset scans; per-scan id progress would reset
+	// to zero five times (non-monotonic and confusing on a single-line
+	// display), so the coarser scan count is reported instead.
+	const totalScans = types.length * 2;
+	let completedScans = 0;
 
 	// Pass 1: rank map over the DISTINCT pages of the combined population.
 	// Dedupe by page_id: the same page can fail several comparisons (one
@@ -199,6 +211,8 @@ export async function* computeMismatchInsertRows(
 				distinctPages.set(row.id, { id: row.id, url: row.url });
 			}
 		}
+		completedScans += 1;
+		onProgress?.(completedScans, totalScans);
 	}
 	const naturalUrlRankByPageId = buildPageNaturalUrlRankMap([...distinctPages.values()]);
 
@@ -228,5 +242,7 @@ export async function* computeMismatchInsertRows(
 				natural_url_rank: naturalUrlRankByPageId.get(row.id)!,
 			}));
 		}
+		completedScans += 1;
+		onProgress?.(completedScans, totalScans);
 	}
 }

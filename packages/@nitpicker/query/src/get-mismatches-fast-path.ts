@@ -92,6 +92,7 @@ export async function getMismatchesFastPath(
 		urlPattern: options.urlPattern,
 		sortBy: options.sortBy,
 		sortOrder: options.sortOrder,
+		onSortProgress: options.onSortProgress,
 	});
 	return { ...liveResult, nextCursor: null, prevCursor: null };
 }

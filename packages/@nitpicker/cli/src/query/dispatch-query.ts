@@ -1,5 +1,5 @@
 import type { QuerySubCommand } from './types.js';
-import type { commandDef } from '../commands/query.js';
+import type { commandDef } from '../commands/query-def.js';
 import type { InferFlags } from '@d-zero/roar';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type {
@@ -64,6 +64,11 @@ type QueryFlags = InferFlags<typeof commandDef.flags>;
  * @param accessor - The opened archive accessor.
  * @param subCommand - The sub-command name.
  * @param flags - The parsed CLI flags.
+ * @param onSortProgress - Forwarded to `pages`/`mismatches`' underlying
+ *   `listPages`/`findMismatches` calls (issue #294) — see
+ *   `ListPagesOptions.onSortProgress`. Called with human-readable status
+ *   lines while a cold connection's `sortBy: 'url'` lazily builds the URL
+ *   natural-sort TEMP table. Omit for silent (the default).
  * @returns The query result as a JSON-serializable value.
  * @throws {Error} If a required resource is not found (page-detail, html, resource-referrers).
  */
@@ -71,6 +76,7 @@ export async function dispatchQuery(
 	accessor: ArchiveAccessor,
 	subCommand: QuerySubCommand,
 	flags: QueryFlags,
+	onSortProgress?: (message: string) => void,
 ): Promise<unknown> {
 	const options = mapFlagsToQueryOptions(subCommand, flags);
 
@@ -79,7 +85,7 @@ export async function dispatchQuery(
 			return getSummaryFastPath(accessor);
 		}
 		case 'pages': {
-			return listPages(accessor, options as ListPagesOptions);
+			return listPages(accessor, { ...(options as ListPagesOptions), onSortProgress });
 		}
 		case 'page-detail': {
 			const { url } = options as { url: string };
@@ -155,7 +161,7 @@ export async function dispatchQuery(
 			const { type, ...rest } = options as {
 				type: 'canonical' | 'og:title' | 'og:description';
 			} & FindMismatchesFastPathOptions;
-			return getMismatchesFastPath(accessor, type, rest);
+			return getMismatchesFastPath(accessor, type, { ...rest, onSortProgress });
 		}
 		case 'headers': {
 			return getHeaderChecksFastPath(

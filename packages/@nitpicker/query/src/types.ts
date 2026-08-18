@@ -899,6 +899,14 @@ export interface ListPagesOptions {
 	limit?: number;
 	/** Number of results to skip. Defaults to 0. */
 	offset?: number;
+	/**
+	 * Called with human-readable status lines while `sortBy: 'url'` (the
+	 * default) lazily builds the URL natural-sort TEMP table on a
+	 * cold connection (issue #294) — see `ensureUrlSortTempTable`. Omit
+	 * for silent (the default; e.g. when the read model already covers
+	 * URL order and this never runs).
+	 */
+	onSortProgress?: (message: string) => void;
 }
 
 /**
@@ -1994,6 +2002,15 @@ export interface ListLinksOptions {
 	sortBy?: 'sourceUrl' | 'destUrl' | 'status' | 'isExternal' | 'textContent';
 	/** Sort direction. */
 	sortOrder?: SortOrder;
+	/**
+	 * Called with human-readable status lines while a URL-typed sort (`destUrl`
+	 * always, `sourceUrl` when explicitly requested) lazily builds the URL
+	 * natural-sort TEMP table on a cold connection (issue #294) — see
+	 * `ensureUrlSortTempTable`. Omit for silent (the default; e.g. when
+	 * sorting by `status`/`isExternal`/`textContent`, which never routes
+	 * through the TEMP table).
+	 */
+	onSortProgress?: (message: string) => void;
 }
 
 /**
@@ -2115,6 +2132,14 @@ export interface ListExternalLinksOptions {
 	limit?: number;
 	/** Number of results to skip. */
 	offset?: number;
+	/**
+	 * Called with human-readable status lines while a `'url'`-typed sort
+	 * lazily builds the URL natural-sort TEMP table on a cold connection
+	 * (issue #294) — see `ensureUrlSortTempTable`. Omit for silent (the
+	 * default; e.g. when the read model already covers URL order and this
+	 * never runs).
+	 */
+	onSortProgress?: (message: string) => void;
 }
 
 /**
@@ -3242,28 +3267,91 @@ export interface ErrorKindsResult {
 }
 
 /**
- * Progress snapshot reported while {@link buildViewerReadModel} populates
- * `viewer_pages`. Issued after each insert chunk completes, so callers can
- * render a percentage or row count for archives large enough (issue #112:
- * 400k pages take minutes) that a build must not look hung.
+ * Sub-progress snapshot reported while {@link buildViewerReadModel} runs
+ * whichever phase most recently started (see the `onPhase` callback and
+ * {@link ViewerReadModelBuildPhase}). Originally scoped to the `viewer_pages`
+ * insert only (issue #112: 400k pages take minutes, a build must not look
+ * hung) — issue #294 reused the same shape for every other phase with a
+ * natural N/M count, and the unit therefore varies by phase: inserted rows
+ * (`buildingPages`, `buildingDirectoryTree`, `buildingTechnologySummary`,
+ * `buildingIsolatedComponents`, `buildingHeaderChecks`), backfilled pages
+ * (the three backfill phases), completed computations (`computingSummary`,
+ * always out of 3), keyset-cursor ids scanned up to / max id
+ * (`loadingPageRows`, `loadingTechnologyRows`, `buildingAnchorFacts`,
+ * `buildingGraph`, `buildingResources`, `buildingImages`,
+ * `buildingDuplicateGroups`), completed scan passes (`buildingMismatches`,
+ * always out of 6), and indexes created (`creatingIndexes`). The field names stayed put across that reuse to
+ * avoid a breaking type change; treat them as "units done" / "units total"
+ * for whichever phase is current, not literally `viewer_pages` rows unless
+ * that's the phase in progress.
  */
 export interface ViewerReadModelBuildProgress {
-	/** Rows inserted into `viewer_pages` so far, including this chunk. */
+	/** Units completed so far for the current phase, including this update. */
 	insertedRows: number;
-	/** Total rows that will be inserted, known upfront (single-pass build). */
+	/** Total units the current phase will process, known upfront. */
 	totalRows: number;
 }
+
+/**
+ * A named step within {@link buildViewerReadModel}'s single build pass, in
+ * the order they run (issue #294) — without `onPhase`, a multi-minute
+ * stretch in any step is indistinguishable from a hang. Almost every phase
+ * also reports sub-progress via `onProgress` (see
+ * {@link ViewerReadModelBuildProgress} for the per-phase unit); the
+ * exceptions are `backfillingAnalysisViolations` (a single all-or-nothing
+ * replace with no countable unit, and a fast no-op on any archive already
+ * backfilled once) and `committing`/`checkpointing` (a single transaction
+ * COMMIT and a single `wal_checkpoint` PRAGMA — one synchronous statement
+ * each, no countable unit, but long enough on a large archive to need their
+ * own labels; the libsql binding does not expose SQLite's progress-handler
+ * hook, so intra-statement progress is not implementable). `loadingPageRows`
+ * additionally begins with a short numberless stretch (table drop/create and
+ * the `viewer_url_refs` INSERT — single statements again) before its
+ * id-scan numbers start.
+ */
+export type ViewerReadModelBuildPhase =
+	| 'backfillingAnalysisViolations'
+	| 'backfillingBodyHash'
+	| 'backfillingAliasOfId'
+	| 'backfillingDedupeCapEventId'
+	| 'computingSummary'
+	| 'loadingPageRows'
+	| 'loadingTechnologyRows'
+	| 'buildingPages'
+	| 'buildingDirectoryTree'
+	| 'buildingTechnologySummary'
+	| 'buildingIsolatedComponents'
+	| 'buildingAnchorFacts'
+	| 'buildingGraph'
+	| 'buildingResources'
+	| 'buildingImages'
+	| 'buildingHeaderChecks'
+	| 'buildingDuplicateGroups'
+	| 'buildingMismatches'
+	| 'creatingIndexes'
+	| 'committing'
+	| 'checkpointing';
 
 /**
  * Options for {@link buildViewerReadModel} and {@link ensureViewerReadModel}.
  */
 export interface BuildViewerReadModelOptions {
 	/**
-	 * Called after each `viewer_pages` insert chunk completes. Omit to build
-	 * silently (the default for callers that don't need progress, e.g. tests).
-	 * @param progress - The current insert progress.
+	 * Called with sub-progress for whichever phase most recently started —
+	 * see {@link ViewerReadModelBuildProgress} for the per-phase unit. Omit
+	 * to build silently (the default for callers that don't need progress,
+	 * e.g. tests).
+	 * @param progress - The current sub-progress.
 	 */
 	onProgress?: (progress: ViewerReadModelBuildProgress) => void;
+	/**
+	 * Called once at the start of each named phase, in the fixed order
+	 * {@link ViewerReadModelBuildPhase} lists them — see that type's docs for
+	 * why this exists alongside `onProgress`. Omit for a silent build (the
+	 * default).
+	 * @param phase - The phase that is starting.
+	 */
+	onPhase?: (phase: ViewerReadModelBuildPhase) => void;
 }
 
 /**
