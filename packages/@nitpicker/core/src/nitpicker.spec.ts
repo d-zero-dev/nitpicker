@@ -141,6 +141,35 @@ afterEach(() => {
 	poolInstances.length = 0;
 });
 
+describe('Nitpicker.open', () => {
+	it('forwards onExtractProgress to Archive.open (issue #294)', async () => {
+		const { Archive } = await import('@nitpicker/crawler');
+		vi.mocked(Archive.open).mockResolvedValueOnce(createMockArchive());
+		const onExtractProgress = vi.fn();
+
+		await Nitpicker.open('/tmp/test.nitpicker', onExtractProgress);
+
+		expect(Archive.open).toHaveBeenCalledWith({
+			filePath: '/tmp/test.nitpicker',
+			openPluginData: true,
+			onExtractProgress,
+		});
+	});
+
+	it('omits onExtractProgress when not given', async () => {
+		const { Archive } = await import('@nitpicker/crawler');
+		vi.mocked(Archive.open).mockResolvedValueOnce(createMockArchive());
+
+		await Nitpicker.open('/tmp/test.nitpicker');
+
+		expect(Archive.open).toHaveBeenCalledWith({
+			filePath: '/tmp/test.nitpicker',
+			openPluginData: true,
+			onExtractProgress: undefined,
+		});
+	});
+});
+
 describe('setPluginOverrides', () => {
 	it('passes overrides to loadPluginSettings on first getConfig call', async () => {
 		const config: Config = { analyze: [] };
