@@ -1,3 +1,4 @@
+import { Lanes } from '@d-zero/dealer';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 const mockExistsSync = vi.fn();
@@ -25,6 +26,18 @@ const mockArchiveOpen = vi.fn().mockResolvedValue({
 
 vi.mock('@nitpicker/crawler', () => ({
 	Archive: { open: mockArchiveOpen },
+}));
+
+const mockLanesUpdate = vi.fn();
+
+vi.mock('@d-zero/dealer', () => ({
+	Lanes: vi.fn().mockImplementation(function (this: {
+		update: typeof mockLanesUpdate;
+		[Symbol.dispose]: ReturnType<typeof vi.fn>;
+	}) {
+		this.update = mockLanesUpdate;
+		this[Symbol.dispose] = vi.fn();
+	}),
 }));
 
 const mockBuildViewerReadModel = vi.fn().mockResolvedValue();
@@ -147,7 +160,7 @@ describe('viewerBuild command', () => {
 		expect(mockUnlink).toHaveBeenCalledWith(expect.stringContaining('.bak'));
 	});
 
-	it('logs each progress callback to stderr via the shared formatter', async () => {
+	it('displays each progress callback via the shared Lanes line', async () => {
 		mockEnsureViewerReadModel.mockImplementation((_archive, options) => {
 			options.onProgress({ insertedRows: 250, totalRows: 500 });
 			return Promise.resolve();
@@ -155,8 +168,64 @@ describe('viewerBuild command', () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
-		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'[nitpicker] building viewer read model: 250/500 pages',
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			expect.stringContaining('Building viewer read model: 250/500 pages'),
+		);
+	});
+
+	it('displays phase changes via the shared Lanes line (issue #294)', async () => {
+		mockEnsureViewerReadModel.mockImplementation((_archive, options) => {
+			options.onPhase('buildingAnchorFacts');
+			return Promise.resolve();
+		});
+		const { viewerBuild } = await import('./viewer-build.js');
+		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			expect.stringContaining('Building anchor facts'),
+		);
+	});
+
+	it('logs a start line and a completed line, with no timestamp by default', async () => {
+		const { viewerBuild } = await import('./viewer-build.js');
+		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			'Viewer read model build: starting',
+		);
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			'Viewer read model build: completed, writing archive…',
+		);
+	});
+
+	it('passes --verbose through to Lanes and prefixes every line with an ISO 8601 timestamp (issue #294)', async () => {
+		mockEnsureViewerReadModel.mockImplementation((_archive, options) => {
+			options.onPhase('buildingAnchorFacts');
+			options.onProgress({ insertedRows: 250, totalRows: 500 });
+			return Promise.resolve();
+		});
+		const { viewerBuild } = await import('./viewer-build.js');
+		await viewerBuild(['/tmp/existing.nitpicker'], { verbose: true } as never);
+
+		expect(Lanes).toHaveBeenCalledWith(expect.objectContaining({ verbose: true }));
+		const isoTimestamp = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/;
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			expect.stringMatching(new RegExp(`^${isoTimestamp.source} .*build: starting$`)),
+		);
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			expect.stringMatching(
+				new RegExp(`^${isoTimestamp.source} .*Building anchor facts`),
+			),
+		);
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			expect.stringMatching(new RegExp(`^${isoTimestamp.source} .*250/500 id ranges`)),
 		);
 	});
 
@@ -205,7 +274,7 @@ describe('viewerBuild command', () => {
 		expect(mockBackfillBodyHashFromHtmlBlobs).toHaveBeenCalledOnce();
 	});
 
-	it('logs backfillBodyHashFromHtmlBlobs progress to stderr', async () => {
+	it('displays backfillBodyHashFromHtmlBlobs progress via the shared Lanes line', async () => {
 		mockBackfillBodyHashFromHtmlBlobs.mockImplementation((_archive, onProgress) => {
 			onProgress(3, 10);
 			return Promise.resolve();
@@ -213,8 +282,9 @@ describe('viewerBuild command', () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
-		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'[nitpicker] page_meta.body_hash backfill: 3/10',
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			'Backfilling page content hashes: 3/10 pages (30%)',
 		);
 	});
 
@@ -265,7 +335,7 @@ describe('viewerBuild command', () => {
 		expect(aliasOrder!).toBeLessThan(writeOrder!);
 	});
 
-	it('logs backfillAliasOfId progress to stderr', async () => {
+	it('displays backfillAliasOfId progress via the shared Lanes line', async () => {
 		mockBackfillAliasOfId.mockImplementation((_archive, onProgress) => {
 			onProgress(2, 5);
 			return Promise.resolve();
@@ -273,8 +343,9 @@ describe('viewerBuild command', () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
-		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'[nitpicker] content_items.alias_of_id backfill: 2/5',
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			'Backfilling duplicate page links: 2/5 pages (40%)',
 		);
 	});
 
@@ -317,7 +388,7 @@ describe('viewerBuild command', () => {
 		expect(dedupeCapOrder!).toBeLessThan(writeOrder!);
 	});
 
-	it('logs backfillDedupeCapEventId progress to stderr', async () => {
+	it('displays backfillDedupeCapEventId progress via the shared Lanes line', async () => {
 		mockBackfillDedupeCapEventId.mockImplementation((_archive, onProgress) => {
 			onProgress(1, 3);
 			return Promise.resolve();
@@ -325,8 +396,9 @@ describe('viewerBuild command', () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
-		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'[nitpicker] content_items.dedupe_cap_event_id backfill: 1/3',
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			'Backfilling dedupe-cap markers: 1/3 pages (33%)',
 		);
 	});
 

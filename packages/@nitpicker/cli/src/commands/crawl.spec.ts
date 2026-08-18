@@ -327,7 +327,10 @@ describe('startCrawl', () => {
 		const { startCrawl } = await import('./crawl.js');
 		await startCrawl(['https://example.com'], createFlags());
 
-		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(fake.archive);
+		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(
+			fake.archive,
+			expect.anything(),
+		);
 
 		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
 		const buildOrder = mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0];
@@ -470,7 +473,10 @@ describe('crawl', () => {
 		expect(archivePath).toBe('/tmp/existing.nitpicker');
 		expect(urls).toEqual(['https://sample-b.example.com/']);
 		expect(mockCrawling).not.toHaveBeenCalled();
-		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(fake.archive);
+		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(
+			fake.archive,
+			expect.anything(),
+		);
 		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
 		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
 			writeMock.mock.invocationCallOrder[0]!,
@@ -576,7 +582,10 @@ describe('crawl', () => {
 		expect(archivePath).toBe('/tmp/existing.nitpicker');
 		expect(mockCrawling).not.toHaveBeenCalled();
 		expect(mockAppend).not.toHaveBeenCalled();
-		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(fake.archive);
+		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(
+			fake.archive,
+			expect.anything(),
+		);
 		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
 		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
 			writeMock.mock.invocationCallOrder[0]!,
@@ -676,7 +685,10 @@ describe('crawl', () => {
 			expect.any(Function),
 		);
 		expect(mockCrawling).not.toHaveBeenCalled();
-		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(fake.archive);
+		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(
+			fake.archive,
+			expect.anything(),
+		);
 		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
 		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
 			writeMock.mock.invocationCallOrder[0]!,
@@ -885,7 +897,10 @@ describe('crawl', () => {
 		// The file is read exactly once (no separate read-then-hash pass
 		// that could desync the archived copy from its own file name).
 		expect(mockReadFile).toHaveBeenCalledTimes(1);
-		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(fake.archive);
+		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(
+			fake.archive,
+			expect.anything(),
+		);
 		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
 		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
 			writeMock.mock.invocationCallOrder[0]!,

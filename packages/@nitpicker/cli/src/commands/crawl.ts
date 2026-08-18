@@ -309,7 +309,7 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 	if (!flags.skipTechnologyJsScan) {
 		await scanJsResourcesQuietly(orchestrator.archive);
 	}
-	await ensureViewerReadModelQuietly(orchestrator.archive);
+	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
 	await orchestrator.write();
 
 	const archivePath = orchestrator.archive.filePath;
@@ -358,7 +358,7 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 	if (!flags.skipTechnologyJsScan) {
 		await scanJsResourcesQuietly(orchestrator.archive);
 	}
-	await ensureViewerReadModelQuietly(orchestrator.archive);
+	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
 	await orchestrator.write();
 
 	if (errStack.length > 0) {
@@ -406,7 +406,7 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
 	if (!flags.skipTechnologyJsScan) {
 		await scanJsResourcesQuietly(orchestrator.archive);
 	}
-	await ensureViewerReadModelQuietly(orchestrator.archive);
+	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
 	await orchestrator.write();
 
 	if (errStack.length > 0) {
@@ -490,7 +490,7 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 	if (!flags.skipTechnologyJsScan) {
 		await scanJsResourcesQuietly(orchestrator.archive);
 	}
-	await ensureViewerReadModelQuietly(orchestrator.archive);
+	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
 	await orchestrator.write();
 
 	if (errStack.length > 0) {
@@ -536,7 +536,7 @@ async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
 	if (!flags.skipTechnologyJsScan) {
 		await scanJsResourcesQuietly(orchestrator.archive);
 	}
-	await ensureViewerReadModelQuietly(orchestrator.archive);
+	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
 	await orchestrator.write();
 
 	if (errStack.length > 0) {

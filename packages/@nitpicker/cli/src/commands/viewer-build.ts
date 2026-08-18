@@ -4,6 +4,7 @@ import { existsSync, statSync } from 'node:fs';
 import { copyFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 
+import { Lanes } from '@d-zero/dealer';
 import { Archive } from '@nitpicker/crawler';
 import {
 	backfillAliasOfId,
@@ -15,6 +16,8 @@ import {
 
 import { ExitCode } from '../exit-code.js';
 import { formatCliError } from '../format-cli-error.js';
+import { formatProgressCount } from '../format-progress-count.js';
+import { formatViewerReadModelPhase } from '../format-viewer-read-model-phase.js';
 import { formatViewerReadModelProgress } from '../format-viewer-read-model-progress.js';
 
 /**
@@ -29,6 +32,10 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Always rebuild, even if the read model is already current (default: only build when missing/stale)',
 		},
+		verbose: {
+			type: 'boolean',
+			desc: 'Append each progress/phase line with an ISO 8601 timestamp instead of overwriting a single line — for timing which step of a slow build is the bottleneck (issue #294)',
+		},
 	},
 } as const satisfies CommandDef;
 
@@ -36,16 +43,30 @@ export const commandDef = {
 type ViewerBuildFlags = InferFlags<typeof commandDef.flags>;
 
 /**
- * Logs a `buildViewerReadModel`/`ensureViewerReadModel` progress update to
- * stderr — large archives (issue #112: 400k pages) take minutes, and a
- * silent CLI would look hung.
- * @param progress - The current insert progress.
+ * The single `Lanes` line every progress update in this command overwrites —
+ * `buildViewerReadModel`/`ensureViewerReadModel` and the three backfills
+ * below run sequentially, never concurrently, so one lane is enough (issue
+ * #294: these used to each print their own stream of `console.error` lines,
+ * flooding the terminal on large archives instead of showing live progress).
  */
-function logProgress(
-	progress: Parameters<typeof formatViewerReadModelProgress>[0],
-): void {
-	// eslint-disable-next-line no-console
-	console.error(formatViewerReadModelProgress(progress));
+const PROGRESS_LANE_ID = 0;
+
+/**
+ * Updates the shared progress lane, prefixing with an ISO 8601 timestamp in
+ * `--verbose` mode (issue #294) — every phase/progress update in this
+ * command goes through this one function so `--verbose` times all of them
+ * consistently, not just a subset. Timestamps are omitted by default: a
+ * single overwriting `Lanes` line has no history of prior lines to
+ * correlate a timestamp against, so it would just flicker uselessly.
+ * @param lanes - The command's single-lane progress display.
+ * @param verbose - Whether to prefix with a timestamp (from `flags.verbose`).
+ * @param message - The line to display.
+ */
+function logLine(lanes: Lanes, verbose: boolean | undefined, message: string): void {
+	lanes.update(
+		PROGRESS_LANE_ID,
+		verbose ? `${new Date().toISOString()} ${message}` : message,
+	);
 }
 
 /**
@@ -83,6 +104,18 @@ async function ignoreEnoent(promise: Promise<unknown>): Promise<void> {
  * If the restore itself also fails, both errors are surfaced together (via
  * `AggregateError`) rather than letting the restore failure silently mask
  * why the build failed in the first place.
+ *
+ * The read-model build and the three backfills that follow it all share one
+ * `Lanes` line (issue #294): each used to print its own uncapped stream of
+ * `console.error` lines, which floods the terminal on a large archive
+ * instead of reading as live progress. Pass `--verbose` to switch that one
+ * line to appended, ISO-8601-timestamped lines instead — the only way to
+ * see which specific phase a slow build is spending its time in.
+ *
+ * Tracks the most-recently-started phase in `currentPhase` so `onProgress`
+ * updates (only `buildingPages`, `creatingIndexes`, and `buildingAnchorFacts`
+ * report sub-progress) are labeled with the right phase name and unit — e.g.
+ * `Creating indexes: 23/57 indexes`, not a bare, unlabeled `23/57`.
  * @param args - Positional arguments; first is the `.nitpicker` file path.
  * @param flags - Parsed CLI flags from the `viewer-build` command.
  * @returns Resolves when the build (or no-op) completes.
@@ -97,7 +130,9 @@ export async function viewerBuild(
 		// eslint-disable-next-line no-console
 		console.error('Error: No .nitpicker file specified.');
 		// eslint-disable-next-line no-console
-		console.error('Usage: npx @nitpicker/cli viewer-build <archive> [--force]');
+		console.error(
+			'Usage: npx @nitpicker/cli viewer-build <archive> [--force] [--verbose]',
+		);
 		process.exit(ExitCode.Fatal);
 	}
 
@@ -140,10 +175,30 @@ export async function viewerBuild(
 			filePath: absFilePath,
 			openPluginData: true,
 		});
+		using lanes = new Lanes({
+			verbose: flags.verbose,
+			indent: '  ',
+			stream: process.stderr,
+		});
+		logLine(lanes, flags.verbose, 'Viewer read model build: starting');
+		let currentPhase: Parameters<typeof formatViewerReadModelPhase>[0] | undefined;
+		const onPhase = (phase: Parameters<typeof formatViewerReadModelPhase>[0]) => {
+			currentPhase = phase;
+			logLine(lanes, flags.verbose, formatViewerReadModelPhase(phase));
+		};
+		const onProgress = (
+			progress: Parameters<typeof formatViewerReadModelProgress>[0],
+		) => {
+			logLine(
+				lanes,
+				flags.verbose,
+				formatViewerReadModelProgress(progress, currentPhase),
+			);
+		};
 		if (flags.force) {
-			await buildViewerReadModel(archive, { onProgress: logProgress });
+			await buildViewerReadModel(archive, { onPhase, onProgress });
 		} else {
-			await ensureViewerReadModel(archive, { onProgress: logProgress });
+			await ensureViewerReadModel(archive, { onPhase, onProgress });
 		}
 		// Not folded into the branches above: `ensureViewerReadModel`'s
 		// schema-version gate answers "does the read model need a
@@ -156,8 +211,11 @@ export async function viewerBuild(
 		// `--force` branch's second call (buildViewerReadModel already
 		// ran it once above) a cheap no-op.
 		await backfillBodyHashFromHtmlBlobs(archive, (processed, total) => {
-			// eslint-disable-next-line no-console
-			console.error(`[nitpicker] page_meta.body_hash backfill: ${processed}/${total}`);
+			logLine(
+				lanes,
+				flags.verbose,
+				`Backfilling page content hashes: ${formatProgressCount(processed, total)}`,
+			);
 		});
 		// Must run after the body_hash backfill above: alias_of_id's
 		// trailing-slash tier requires body_hash to already be computed
@@ -167,9 +225,10 @@ export async function viewerBuild(
 		// `ensureViewerReadModel` alone would never trigger this on an
 		// already-current archive.
 		await backfillAliasOfId(archive, (processed, total) => {
-			// eslint-disable-next-line no-console
-			console.error(
-				`[nitpicker] content_items.alias_of_id backfill: ${processed}/${total}`,
+			logLine(
+				lanes,
+				flags.verbose,
+				`Backfilling duplicate page links: ${formatProgressCount(processed, total)}`,
 			);
 		});
 		// Unlike the two backfills above, `dedupe_cap_event_id`'s initial
@@ -183,11 +242,13 @@ export async function viewerBuild(
 		// data." Called unconditionally here for that ongoing-maintenance
 		// case, same as `backfillBodyHashFromHtmlBlobs`/`backfillAliasOfId`.
 		await backfillDedupeCapEventId(archive, (processed, total) => {
-			// eslint-disable-next-line no-console
-			console.error(
-				`[nitpicker] content_items.dedupe_cap_event_id backfill: ${processed}/${total}`,
+			logLine(
+				lanes,
+				flags.verbose,
+				`Backfilling dedupe-cap markers: ${formatProgressCount(processed, total)}`,
 			);
 		});
+		logLine(lanes, flags.verbose, 'Viewer read model build: completed, writing archive…');
 		await archive.write();
 		await ignoreEnoent(unlink(backupPath));
 	} catch (error) {
