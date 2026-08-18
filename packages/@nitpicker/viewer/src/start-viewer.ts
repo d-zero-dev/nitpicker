@@ -37,12 +37,12 @@ const DEFAULT_PORT = 4324;
  * @returns Resolves only after the server has shut down gracefully.
  */
 export async function startViewer(options: ViewerOptions): Promise<void> {
-	const { filePath, host = 'localhost', open = true } = options;
+	const { filePath, host = 'localhost', open = true, onExtractProgress } = options;
 	// Probe the same host the server will bind to, so an occupied port on that
 	// interface (e.g. `::1` for `localhost`) triggers the ephemeral fallback
 	// instead of a post-banner `EADDRINUSE` crash.
 	const port = await findFreePort(options.port ?? DEFAULT_PORT, host);
-	const context = await createArchiveContext(filePath);
+	const context = await createArchiveContext(filePath, onExtractProgress);
 
 	// Stub mode can never have a current read model (it's built at
 	// crawl-end/`viewer-build`, neither of which has run yet for an

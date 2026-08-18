@@ -13,6 +13,14 @@ export interface ViewerOptions {
 	host?: string;
 	/** Whether to open the default browser automatically. Defaults to `true`. */
 	open?: boolean;
+	/**
+	 * Called during a cold startup's untar step with bytes read so far and
+	 * the archive's total size (issue #294: a large archive's first open can
+	 * take tens of seconds with no other signal it isn't hung). This package
+	 * stays UI-agnostic — the caller (the CLI's `viewer` command) owns
+	 * turning this into a display.
+	 */
+	onExtractProgress?: (readBytes: number, totalBytes: number) => void;
 }
 
 /**
