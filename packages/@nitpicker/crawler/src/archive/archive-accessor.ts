@@ -423,10 +423,12 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	}
 	/**
 	 * Retrieves a flat list of all resource URLs stored in the archive.
+	 * @param onProgress - Forwarded to {@link Database.getResourceUrlList} —
+	 *   see that method's docs.
 	 * @returns An array of resource URL strings.
 	 */
-	async getResourceUrlList() {
-		return this.#db.getResourceUrlList();
+	async getResourceUrlList(onProgress?: (scannedUpToId: number, maxId: number) => void) {
+		return this.#db.getResourceUrlList(onProgress);
 	}
 	/**
 	 * Retrieves the raw technology-detection signals for the given page,

@@ -65,9 +65,17 @@ import { listNetworkOutages } from '../../outages/list-network-outages.js';
  * SELECT and UPDATE/DELETE statements are chunked to stay below SQLite's
  * `SQLITE_LIMIT_VARIABLE_NUMBER`.
  * @param knex - Knex query builder connected to the archive DB.
+ * @param onProgress - Called after each chunk's DELETE/UPDATE statements
+ *   complete, with the pages processed so far and the total to reset (issue
+ *   #294: a large `--retry-failed` can reset thousands of pages across 13
+ *   tables, running for seconds to minutes with no other signal it hasn't
+ *   hung). Omit for no reporting (the default; e.g. tests).
  * @returns The URLs of the pages that were reset to pending.
  */
-export async function resetFailedPages(knex: Knex): Promise<string[]> {
+export async function resetFailedPages(
+	knex: Knex,
+	onProgress?: (processed: number, total: number) => void,
+): Promise<string[]> {
 	const candidates = await knex('content_items')
 		.join('url_refs', 'content_items.url_id', 'url_refs.id')
 		.select('content_items.id as id', 'url_refs.url as url')
@@ -168,6 +176,7 @@ export async function resetFailedPages(knex: Knex): Promise<string[]> {
 		await knex('page_main_content_audios').whereIn('pageId', chunk).delete();
 		await knex('page_main_content_canvases').whereIn('pageId', chunk).delete();
 		await knex('page_main_content_custom_elements').whereIn('pageId', chunk).delete();
+		onProgress?.(Math.min(i + chunkSize, ids.length), ids.length);
 	}
 	dbLog('Reset %d failed pages back to pending', urls.length);
 	return urls;

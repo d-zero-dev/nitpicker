@@ -111,6 +111,53 @@ describe('extractArchiveToCache', () => {
 		await expect(fs.access(path.join(cacheDir, 'db.sqlite'))).resolves.toBeUndefined();
 	});
 
+	it('forwards onExtractProgress to the untar step on a cold miss (issue #294)', async () => {
+		const archivePath = path.join(baseDir, 'progress.nitpicker');
+		await buildFakeArchive(archivePath, 'progress');
+		const cacheRoot = path.join(baseDir, 'cache');
+		const cacheKey = await computeArchiveCacheKey(archivePath);
+		const cacheDir = path.join(cacheRoot, `${cacheKey}-progress`);
+
+		const calls: [number, number][] = [];
+		await extractArchiveToCache(
+			archivePath,
+			cacheRoot,
+			cacheDir,
+			cacheKey,
+			(read, total) => {
+				calls.push([read, total]);
+			},
+		);
+
+		expect(calls.length).toBeGreaterThan(0);
+		const totalBytes = calls[0]![1];
+		expect(totalBytes).toBeGreaterThan(0);
+		expect(calls.at(-1)!).toEqual([totalBytes, totalBytes]);
+	});
+
+	it('never calls onExtractProgress on a cache hit (issue #294)', async () => {
+		const archivePath = path.join(baseDir, 'hit.nitpicker');
+		await buildFakeArchive(archivePath, 'hit');
+		const cacheRoot = path.join(baseDir, 'cache');
+		const cacheKey = await computeArchiveCacheKey(archivePath);
+		const cacheDir = path.join(cacheRoot, `${cacheKey}-hit`);
+
+		await extractArchiveToCache(archivePath, cacheRoot, cacheDir, cacheKey);
+
+		const calls: [number, number][] = [];
+		await extractArchiveToCache(
+			archivePath,
+			cacheRoot,
+			cacheDir,
+			cacheKey,
+			(read, total) => {
+				calls.push([read, total]);
+			},
+		);
+
+		expect(calls).toEqual([]);
+	});
+
 	it('short-circuits when the cache is already populated (cache hit skips untar entirely)', async () => {
 		const archivePath = path.join(baseDir, 'b.nitpicker');
 		await buildFakeArchive(archivePath, 'original');

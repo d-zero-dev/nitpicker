@@ -478,25 +478,30 @@ export default class Archive extends ArchiveAccessor {
 	 * internal pages on the next pass.
 	 * @param scopes - Hostname-indexed scope map representing the new scope.
 	 * @param options - URL parsing options forwarded to the scope-entry lookup.
+	 * @param onProgress - Forwarded to {@link Database.repromoteExternalPages}
+	 *   — see that method's docs.
 	 * @returns The URLs that were repromoted.
 	 */
 	async repromoteExternalPages(
 		scopes: ReadonlyMap<string, readonly ExURL[]>,
 		options?: ParseURLOptions,
+		onProgress?: (processed: number, total: number) => void,
 	) {
 		dbLog('Repromote external pages with %d hostnames in scope', scopes.size);
-		return this.#db.repromoteExternalPages(scopes, options);
+		return this.#db.repromoteExternalPages(scopes, options, onProgress);
 	}
 	/**
 	 * Reset previously-failed pages back to pending so a follow-up crawl re-fetches them.
 	 *
 	 * Delegates to {@link Database.resetFailedPages}. See that method for the
 	 * exact failure criteria (missing status / content type, or a 5xx status).
+	 * @param onProgress - Forwarded to {@link Database.resetFailedPages} —
+	 *   see that method's docs.
 	 * @returns The URLs of the pages that were reset to pending.
 	 */
-	async resetFailedPages() {
+	async resetFailedPages(onProgress?: (processed: number, total: number) => void) {
 		dbLog('Reset failed pages back to pending');
-		return this.#db.resetFailedPages();
+		return this.#db.resetFailedPages(onProgress);
 	}
 	/**
 	 * Persists the raw bytes of an `--inventory` source URL list into the
@@ -633,10 +638,12 @@ export default class Archive extends ArchiveAccessor {
 	/**
 	 * Assigns natural URL sort order values to all pages in the database
 	 * that do not yet have an `order` field set.
+	 * @param onProgress - Forwarded to {@link Database.setUrlOrder} — see that
+	 *   method's docs.
 	 */
-	async setUrlOrder() {
+	async setUrlOrder(onProgress?: (processed: number, total: number) => void) {
 		dbLog("Pages didn't have `order` field. So set URL order.");
-		await this.#db.setUrlOrder();
+		await this.#db.setUrlOrder(onProgress);
 	}
 	/**
 	 * Updates a subset of fields on the archive's `info` row. Used by the append
@@ -663,19 +670,41 @@ export default class Archive extends ArchiveAccessor {
 	 * `db.sqlite`, so a re-crawl (`append` / `inventory` / `retryFailed`)
 	 * opened without it would tar back a tmpDir missing those extra files,
 	 * silently dropping them from the rewritten archive.
+	 * @param options - Optional write settings.
+	 * @param options.onTarProgress - Called as archive bytes are written
+	 *   during the tar step, with the bytes written so far and the estimated
+	 *   total (issue #294: tarring a large archive takes minutes, and
+	 *   without this the CLI shows nothing until `write` returns). Omit for
+	 *   a silent write (the default).
+	 * @param options.onStep - Called once at the start of each of this
+	 *   method's four steps (issue #294): `checkpoint` (WAL fold-back —
+	 *   single synchronous PRAGMA, no countable progress) and `remove`
+	 *   (deleting the tarred-away tmpDir) have no progress signal of their
+	 *   own, so without this a large archive's write looks frozen between
+	 *   the `tar` step's byte updates and completion. `rename` is nearly
+	 *   instant (same-filesystem directory move) but included for
+	 *   completeness — a caller displaying phase labels shouldn't have a
+	 *   gap where the operation is silently between named steps.
 	 */
-	async write() {
+	async write(options?: {
+		onTarProgress?: (writtenBytes: number, totalBytes: number) => void;
+		onStep?: (step: 'checkpoint' | 'rename' | 'tar' | 'remove') => void;
+	}) {
 		saveLog('Starts: %s', this.#filePath);
+		options?.onStep?.('checkpoint');
 		await this.#db.checkpoint();
 		const filePathWithoutExt = path.resolve(
 			path.dirname(this.#filePath),
 			path.basename(this.#filePath, path.extname(this.#filePath)),
 		);
 		saveLog('Rename temporary dir: %s to %s', this.#tmpDir, filePathWithoutExt);
+		options?.onStep?.('rename');
 		await rename(this.#tmpDir, filePathWithoutExt, true);
 		saveLog('Tar temporary dir to file: %s to %s', filePathWithoutExt, this.#filePath);
-		await tar(filePathWithoutExt, this.#filePath);
+		options?.onStep?.('tar');
+		await tar(filePathWithoutExt, this.#filePath, options?.onTarProgress);
 		saveLog('Remove temporary dir: %s', filePathWithoutExt);
+		options?.onStep?.('remove');
 		await remove(filePathWithoutExt);
 		saveLog('Done: %s', this.#filePath);
 	}
@@ -684,18 +713,29 @@ export default class Archive extends ArchiveAccessor {
 	 * (write or remove), drops the DB handle via the base class, then
 	 * releases the lock in a `finally` so the lock never leaks even on
 	 * partial failure.
+	 * @param options - See {@link close}.
+	 * @param options.timeoutMs
+	 * @param options.onRecoveryStart
+	 * @param options.onTarProgress
+	 * @param options.onStep
 	 */
-	async #runFullClose(): Promise<void> {
+	async #runFullClose(options?: {
+		timeoutMs?: number;
+		onRecoveryStart?: () => void;
+		onTarProgress?: (writtenBytes: number, totalBytes: number) => void;
+		onStep?: (step: 'checkpoint' | 'rename' | 'tar' | 'remove') => void;
+	}): Promise<void> {
 		log('Closing');
 		try {
 			if (!exists(this.#filePath)) {
 				log("Save the file because it doesn't exist");
-				await this.write();
+				options?.onRecoveryStart?.();
+				await this.write(options);
 			} else if (exists(this.#tmpDir)) {
 				log('Remove temporary dir');
 				await remove(this.#tmpDir);
 			}
-			await super.close();
+			await super.close({ timeoutMs: options?.timeoutMs });
 		} finally {
 			await this.#releaseLock();
 		}
@@ -733,27 +773,38 @@ export default class Archive extends ArchiveAccessor {
 	 * on the user's tmpDir.
 	 *
 	 * `options.readOnly: false` is a narrow escape hatch for opening a
-	 * second, writable connection to a `tmpDir` that {@link Archive.openCached}
-	 * already extracted (and migrated) into an OS-temp cache directory —
-	 * never the caller's live/interrupted crawl tmpDir, which must stay
-	 * read-only. A read-only open (`Archive.openCached`/`ArchiveManager.open`)
-	 * must never take this path itself — blocking or writing during what
-	 * must be a read-only open is forbidden (issue #177). This escape
-	 * hatch has no current production caller; any future
-	 * one is responsible for its own cross-process coordination (see
-	 * `acquireArchiveLock`) — this method does not acquire any lock itself.
+	 * second, writable connection to a `tmpDir` the caller's own process
+	 * already owns and extracted itself. The one production caller is the
+	 * viewer-read-model worker thread (`@nitpicker/query`'s
+	 * `viewer-read-model-worker-entry.ts`, issue #294): the parent thread
+	 * holds the archive via `Archive.open` (lock included — worker threads
+	 * share the parent's PID, so the PID-based `acquireArchiveLock` guard
+	 * stays valid), sits idle awaiting the worker, and re-tars the tmpDir
+	 * afterward. What this hatch must NEVER target is a live/interrupted
+	 * crawl tmpDir owned by a *different* process (the stub-mode
+	 * `ArchiveManager.open` path attaches to exactly such directories, and
+	 * must stay read-only): writable connects run the self-healing
+	 * migrations, and mutating a directory out from under its owner is how
+	 * archives corrupt. A read-only open (`Archive.openCached`/
+	 * `ArchiveManager.open`) must never take this path itself — blocking or
+	 * writing during what must be a read-only open is forbidden (issue
+	 * #177). Any new caller is responsible for its own coordination with
+	 * the tmpDir's owner (see `acquireArchiveLock` for the cross-process
+	 * case) — this method does not acquire any lock itself.
 	 * @param tmpDir - The path to the temporary directory containing the database.
 	 * @param namespace - An optional namespace for scoping data access within the archive.
 	 * @param options - Connection options.
 	 * @param options.readOnly - Defaults to `true`. Pass `false` to obtain a
-	 *   writable accessor against an already-extracted cache directory.
+	 *   writable accessor against a tmpDir the calling process itself owns.
 	 * @returns An ArchiveAccessor instance for querying the archive data.
 	 * @example
 	 * // Default (read-only) — safe for stub mode and cache reads:
 	 * const accessor = await Archive.connect(tmpDir);
 	 * @example
-	 * // Writable escape hatch — only against a tar-cache extraction:
-	 * const writable = await Archive.connect(cacheDir, null, { readOnly: false });
+	 * // Writable escape hatch — only against a tmpDir this process owns
+	 * // (e.g. the viewer-read-model worker thread reconnecting to the
+	 * // parent's Archive.open extraction):
+	 * const writable = await Archive.connect(ownTmpDir, null, { readOnly: false });
 	 */
 	static async connect(
 		tmpDir: string,
@@ -798,6 +849,8 @@ export default class Archive extends ArchiveAccessor {
 	 * {@link Archive.open}.
 	 * @param filePath - Absolute path to the `.nitpicker` file.
 	 * @param namespace - Optional namespace forwarded to {@link ArchiveAccessor}.
+	 * @param onExtractProgress - Forwarded to {@link extractArchiveToCache} —
+	 *   see that function's docs for the cache-hit/miss contract.
 	 * @returns A read-only {@link ArchiveAccessor} backed by the cache directory.
 	 * @example
 	 * ```ts
@@ -809,12 +862,19 @@ export default class Archive extends ArchiveAccessor {
 	static async openCached(
 		filePath: string,
 		namespace: string | null = null,
+		onExtractProgress?: (readBytes: number, totalBytes: number) => void,
 	): Promise<ArchiveAccessor> {
 		const cacheRoot = getArchiveCacheRoot();
 		const cacheKey = await computeArchiveCacheKey(filePath);
 		const cacheDir = resolveArchiveCacheDir(cacheRoot, cacheKey, filePath);
 		log('Open cached: %s (cacheDir=%s)', filePath, cacheDir);
-		await extractArchiveToCache(filePath, cacheRoot, cacheDir, cacheKey);
+		await extractArchiveToCache(
+			filePath,
+			cacheRoot,
+			cacheDir,
+			cacheKey,
+			onExtractProgress,
+		);
 		return await Archive.connect(cacheDir, namespace);
 	}
 	/**
@@ -855,7 +915,7 @@ export default class Archive extends ArchiveAccessor {
 	 * @returns An Archive instance with the extracted data loaded.
 	 */
 	static async open(options: ArchiveOptions & ArchiveOpenOptions) {
-		const { filePath, openPluginData } = options;
+		const { filePath, openPluginData, onExtractProgress } = options;
 		const cwd = options.cwd ?? process.cwd();
 		log('Open: %O', {
 			filePath,
@@ -884,6 +944,7 @@ export default class Archive extends ArchiveAccessor {
 			await untar(filePath, {
 				cwd,
 				fileList: openFiles.length > 0 ? openFiles : undefined,
+				onProgress: onExtractProgress,
 			});
 			const extractedDir = path.resolve(cwd, innerDirName);
 			log('Move directory: %s to %s', extractedDir, tmpDir);
@@ -992,12 +1053,32 @@ export default class Archive extends ArchiveAccessor {
 	 * {@link ArchiveAccessor} (not an `Archive`), so `close()` resolves to
 	 * the safe base implementation — no `write()`, no `remove()`, no lock
 	 * release — leaving the tmpDir intact for the live crawler.
+	 * @param options - Optional close settings. `timeoutMs` is accepted for
+	 *   compatibility with {@link ArchiveAccessor.close}'s signature (forwarded
+	 *   to the base `super.close()` call below); the rest are progress
+	 *   callbacks (issue #294) forwarded to {@link write} when this call ends
+	 *   up taking the recovery-write branch (the archive file doesn't exist
+	 *   yet).
+	 * @param options.timeoutMs - See {@link ArchiveAccessor.close}.
+	 * @param options.onRecoveryStart - Called once, only when this `close()`
+	 *   is about to write the archive because the file doesn't exist on
+	 *   disk yet — e.g. a caller's own explicit `write()` threw before
+	 *   finishing, or was never called at all. Without this, a listener
+	 *   that already tore down its display after that earlier failure has
+	 *   no way to know a second, recovery write is happening.
+	 * @param options.onTarProgress - See {@link write}.
+	 * @param options.onStep - See {@link write}.
 	 */
-	override async close(): Promise<void> {
+	override async close(options?: {
+		timeoutMs?: number;
+		onRecoveryStart?: () => void;
+		onTarProgress?: (writtenBytes: number, totalBytes: number) => void;
+		onStep?: (step: 'checkpoint' | 'rename' | 'tar' | 'remove') => void;
+	}): Promise<void> {
 		if (this.#closeOnce) {
 			return this.#closeOnce;
 		}
-		this.#closeOnce = this.#runFullClose();
+		this.#closeOnce = this.#runFullClose(options);
 		return this.#closeOnce;
 	}
 
@@ -1038,4 +1119,14 @@ type ArchiveOpenOptions = {
 	 * dropping them from the rewritten archive.
 	 */
 	openPluginData?: boolean;
+	/**
+	 * Called as archive bytes are consumed during the initial tar
+	 * extraction, with the bytes read so far and the archive's total size
+	 * (issue #294: a large archive takes minutes to extract, and without
+	 * this the CLI shows nothing at all until `open` returns). Byte
+	 * granularity is the read-stream chunk size — throttle in the callback
+	 * for coarser display updates. Omit for a silent extraction (the
+	 * default).
+	 */
+	onExtractProgress?: (readBytes: number, totalBytes: number) => void;
 };

@@ -1,6 +1,56 @@
 import type { CrawlerError, PageData } from './utils/types/types.js';
 
 /**
+ * Progress callbacks for the setup phase of `CrawlerOrchestrator.append` /
+ * `inventory` / `retryFailed` / `resume` (issue #294) — everything from
+ * `Archive.open`'s untar through `Crawler#resume`'s in-memory state rebuild,
+ * which all runs **before** `initializedCallback` fires (before the CLI's
+ * event-based progress display — `eventAssignments` — has anything to
+ * subscribe to). A large archive's setup can itself take tens of seconds to
+ * minutes (untar, `.bak` copy, chunked page/resource re-scans), and without
+ * this it looked completely silent — including before the CLI's own
+ * "🐳 archive (...)" header line, which normally establishes that the
+ * process is even alive.
+ *
+ * Passed as a plain callback object (not routed through the orchestrator's
+ * event emitter) because the orchestrator instance the emitter lives on
+ * does not exist yet for most of this phase — `Archive.open`, the `.bak`
+ * copy, and the pre-`new CrawlerOrchestrator(...)` scope/repromote work all
+ * run before there is anything to attach a listener to.
+ */
+export interface SetupProgressCallbacks {
+	/**
+	 * Called once at the start of each named setup step that has no
+	 * countable progress of its own (a single query, an in-memory rebuild).
+	 * @param label - Human-readable description of the step starting.
+	 */
+	onPhase?: (label: string) => void;
+	/**
+	 * Called during `Archive.open`'s tar extraction, with bytes read so far
+	 * and the archive's total size.
+	 */
+	onExtractProgress?: (readBytes: number, totalBytes: number) => void;
+	/**
+	 * Called during a `.bak` backup or restore copy, with bytes copied so
+	 * far and the source file's total size — the pre-mutation backup and
+	 * the on-failure restore both go through this one callback; the
+	 * caller's own {@link SetupProgressCallbacks.onPhase} call immediately
+	 * before distinguishes which copy is running.
+	 */
+	onCopyProgress?: (copiedBytes: number, totalBytes: number) => void;
+	/**
+	 * Called for chunked/keyset-scan progress within whichever named phase
+	 * is currently running (`repromoteExternalPages`, `getResourceUrlList`,
+	 * `resetFailedPages`) — the unit varies by phase (pages processed vs.
+	 * ids scanned), so callers label it using the most recent `onPhase`
+	 * call.
+	 * @param processed - Units completed so far, including this update.
+	 * @param total - Total units this phase will process.
+	 */
+	onChunkProgress?: (processed: number, total: number) => void;
+}
+
+/**
  * Aggregate counts captured during a `--inventory` invocation, forwarded to
  * `#writeInventoryRunRow` so the audit log row is consistent between the
  * HTML-seed branch and the non-HTML-only branch of
@@ -131,6 +181,71 @@ export interface CrawlEvent {
 	writeFileEnd: {
 		/** Absolute path of the archive file that was written. */
 		filePath: string;
+	};
+
+	/**
+	 * Emitted once at the start of each of `Archive.write()`'s internal
+	 * steps (issue #294) — `checkpoint`/`remove` have no countable progress
+	 * of their own (a single synchronous PRAGMA and a directory removal),
+	 * so without this a large archive's write looks frozen between
+	 * `writeFileStart` and the `writeTarProgress` byte updates.
+	 */
+	writeStep: {
+		/** Which step of `Archive.write()` is starting. */
+		step: 'checkpoint' | 'rename' | 'tar' | 'remove';
+	};
+
+	/**
+	 * Emitted as archive bytes are written during `Archive.write()`'s tar
+	 * step (issue #294) — tarring a large (15 GB+) archive can take minutes,
+	 * and without this the CLI shows nothing between `writeStep: 'tar'` and
+	 * `writeFileEnd`.
+	 */
+	writeTarProgress: {
+		/** Bytes written so far. */
+		writtenBytes: number;
+		/** Estimated total bytes (sum of source file sizes; tar adds headers/padding). */
+		totalBytes: number;
+	};
+
+	/**
+	 * Emitted as pages are re-ordered after crawling completes (issue #294)
+	 * — `setUrlOrder()` loads every internal page, sorts it in JS, then
+	 * writes the result back in chunks, which can take seconds to minutes
+	 * on a large archive with no other signal it hasn't hung.
+	 */
+	sortingUrls: {
+		/** Pages assigned an order so far. */
+		processed: number;
+		/** Total internal pages being ordered. */
+		total: number;
+	};
+
+	/**
+	 * Emitted once, only when `[Symbol.asyncDispose]`'s call to
+	 * `Archive.close()` discovers the archive file doesn't exist on disk
+	 * yet and falls back to writing it there (issue #294) — e.g. the
+	 * caller's own explicit `CrawlerOrchestrator.write()` threw partway
+	 * through (network/disk error during tar) before finishing. Emitted
+	 * before the `writeStep`/`writeTarProgress` events this recovery write
+	 * reuses, so a listener knows why a fresh write is starting after one
+	 * already appeared to fail.
+	 */
+	recoveringArchiveWrite: Record<string, never>;
+
+	/**
+	 * Emitted once, right before `crawlEnd`'s final `WriteQueue.drain()`,
+	 * when that queue still has enqueued-but-not-yet-executed writes (issue
+	 * #294) — the deal's own per-page progress display has already stopped
+	 * updating by this point (the crawler itself is done), so a queue still
+	 * draining page/resource INSERTs would otherwise look like the process
+	 * hung between the last progress line and the archive write starting.
+	 * Not emitted when the queue is already empty — nothing to wait on, so
+	 * nothing to explain.
+	 */
+	flushingPendingWrites: {
+		/** Enqueued operations still waiting or executing at emission time. */
+		pending: number;
 	};
 
 	/**

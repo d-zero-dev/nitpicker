@@ -27,6 +27,7 @@ export { listArchiveCacheEntries } from './archive/cache/list-archive-cache-entr
 export { clearArchiveCacheRoot } from './archive/cache/clear-archive-cache-root.js';
 export { clearArchiveCacheEntry } from './archive/cache/clear-archive-cache-entry.js';
 export type { ArchiveCacheEntry, ArchiveCacheEntryKind } from './archive/cache/types.js';
+export { copyFileWithProgress } from './archive/filesystem/copy-file-with-progress.js';
 export { acquireArchiveLock, ArchiveLockError } from './archive/archive-lock.js';
 export { peekArchiveLockHolder } from './archive/peek-archive-lock.js';
 export type { ArchiveLockHolder } from './archive/peek-archive-lock.js';

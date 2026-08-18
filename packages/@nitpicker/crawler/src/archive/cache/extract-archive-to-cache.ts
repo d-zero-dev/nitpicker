@@ -93,6 +93,15 @@ const inFlightByCacheDir = new Map<string, Promise<void>>();
  * @param cacheDir - Absolute path the extracted contents should end up at.
  * @param cacheKey - The cache key used to derive `cacheDir`. Recomputed
  *   after extraction to detect concurrent writers; must match.
+ * @param onExtractProgress - Called during the untar step with bytes read
+ *   so far and the archive's total size (issue #294: a cold cache on a
+ *   large archive can take tens of seconds with no other signal it isn't
+ *   hung). Never called on a cache hit — {@link isCacheDirReady} short-
+ *   circuits before `untar` runs — so callers can treat "never invoked" as
+ *   the definition of a hit and skip printing a phase label until the
+ *   first call actually arrives. Only the first concurrent caller for a
+ *   given `cacheDir` sees callbacks; same-`cacheDir` callers deduped
+ *   through {@link inFlightByCacheDir} just await the shared promise.
  * @returns Resolves once `cacheDir` is ready to be opened read-only.
  */
 export async function extractArchiveToCache(
@@ -100,6 +109,7 @@ export async function extractArchiveToCache(
 	cacheRoot: string,
 	cacheDir: string,
 	cacheKey: string,
+	onExtractProgress?: (readBytes: number, totalBytes: number) => void,
 ): Promise<void> {
 	if (await isCacheDirReady(cacheDir)) {
 		return;
@@ -110,11 +120,15 @@ export async function extractArchiveToCache(
 		return existing;
 	}
 
-	const promise = runExtraction(archivePath, cacheRoot, cacheDir, cacheKey).finally(
-		() => {
-			inFlightByCacheDir.delete(cacheDir);
-		},
-	);
+	const promise = runExtraction(
+		archivePath,
+		cacheRoot,
+		cacheDir,
+		cacheKey,
+		onExtractProgress,
+	).finally(() => {
+		inFlightByCacheDir.delete(cacheDir);
+	});
 	inFlightByCacheDir.set(cacheDir, promise);
 	return promise;
 }
@@ -127,12 +141,14 @@ export async function extractArchiveToCache(
  * @param cacheRoot - Absolute path to the cache root directory.
  * @param cacheDir - Absolute path the extracted contents should end up at.
  * @param cacheKey - Pre-extraction cache key, re-verified post-extraction.
+ * @param onExtractProgress - See {@link extractArchiveToCache}.
  */
 async function runExtraction(
 	archivePath: string,
 	cacheRoot: string,
 	cacheDir: string,
 	cacheKey: string,
+	onExtractProgress?: (readBytes: number, totalBytes: number) => void,
 ): Promise<void> {
 	await fs.mkdir(cacheRoot, { recursive: true });
 
@@ -157,7 +173,7 @@ async function runExtraction(
 		await fs.rm(stagingDir, { recursive: true, force: true });
 		await fs.mkdir(stagingDir, { recursive: true });
 
-		await untar(archivePath, { cwd: stagingDir });
+		await untar(archivePath, { cwd: stagingDir, onProgress: onExtractProgress });
 
 		// Concurrent-writer detection: if the source archive changed
 		// during our untar, the contents we just landed do NOT match the

@@ -615,13 +615,29 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	/**
 	 * Retrieves a flat list of all resource URLs from the `resources` table.
 	 * Delegates to {@link getResourceUrlListOp}.
+	 *
+	 * `onProgress` is clamped to a high-water mark across retries: a
+	 * transient failure partway through the keyset scan restarts
+	 * {@link getResourceUrlListOp} from `id = 0` (its own `lastId` is a local
+	 * closure variable, reset on every `fn` invocation `retryCall` retries),
+	 * which would otherwise visibly rewind the reported progress backwards
+	 * before catching back up.
+	 * @param onProgress - Forwarded to {@link getResourceUrlListOp} — see
+	 *   that function's docs.
 	 * @returns An array of resource URL strings.
 	 */
-	async getResourceUrlList() {
+	async getResourceUrlList(onProgress?: (scannedUpToId: number, maxId: number) => void) {
+		let highWaterMark = 0;
+		const monotonicProgress = onProgress
+			? (scannedUpToId: number, maxId: number) => {
+					highWaterMark = Math.max(highWaterMark, scannedUpToId);
+					onProgress(highWaterMark, maxId);
+				}
+			: undefined;
 		return emitErrorAndRetry(
 			this,
 			'Database.getResourceUrlList',
-			async () => await getResourceUrlListOp(this.#instance),
+			async () => await getResourceUrlListOp(this.#instance, monotonicProgress),
 			retrySetting,
 		);
 	}
@@ -976,16 +992,20 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * Delegates to {@link repromoteExternalPagesOp}.
 	 * @param scopes - The hostname-indexed scope map after the new roots are merged.
 	 * @param options - URL parsing options forwarded to the scope matcher.
+	 * @param onProgress - Forwarded to {@link repromoteExternalPagesOp} — see
+	 *   that function's docs.
 	 * @returns The URLs of the pages that were promoted.
 	 */
 	async repromoteExternalPages(
 		scopes: ReadonlyMap<string, readonly ExURL[]>,
 		options?: ParseURLOptions,
+		onProgress?: (processed: number, total: number) => void,
 	): Promise<string[]> {
 		return emitErrorAndRetry(
 			this,
 			'Database.repromoteExternalPages',
-			async () => await repromoteExternalPagesOp(this.#instance, scopes, options),
+			async () =>
+				await repromoteExternalPagesOp(this.#instance, scopes, options, onProgress),
 			retrySetting,
 		);
 	}
@@ -995,13 +1015,17 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * follow-up crawl can re-fetch them from scratch. Delegates to
 	 * {@link resetFailedPagesOp} — see the op for the permanent-failure
 	 * exclusion rationale.
+	 * @param onProgress - Forwarded to {@link resetFailedPagesOp} — see that
+	 *   function's docs.
 	 * @returns The URLs of the pages that were reset to pending.
 	 */
-	async resetFailedPages(): Promise<string[]> {
+	async resetFailedPages(
+		onProgress?: (processed: number, total: number) => void,
+	): Promise<string[]> {
 		return emitErrorAndRetry(
 			this,
 			'Database.resetFailedPages',
-			async () => await resetFailedPagesOp(this.#instance),
+			async () => await resetFailedPagesOp(this.#instance, onProgress),
 			retrySetting,
 		);
 	}
@@ -1045,9 +1069,11 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	/**
 	 * Assigns natural URL sort order values to all internal pages.
 	 * Delegates to {@link setUrlOrderOp}.
+	 * @param onProgress - Forwarded to {@link setUrlOrderOp} — see that
+	 *   function's docs.
 	 */
-	async setUrlOrder() {
-		await setUrlOrderOp(this.#instance);
+	async setUrlOrder(onProgress?: (processed: number, total: number) => void) {
+		await setUrlOrderOp(this.#instance, onProgress);
 	}
 	/**
 	 * Update the single row in the `info` table with a partial config patch.
