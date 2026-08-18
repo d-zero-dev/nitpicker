@@ -210,6 +210,31 @@ describe('computeMismatchInsertRows', () => {
 		).rejects.toThrow(RangeError);
 	});
 
+	it('reports one progress update per completed scan pass, 6 in total (issue #294)', async () => {
+		const knex = archive.getKnex();
+		const calls: [number, number][] = [];
+		await knex.transaction(async (trx) => {
+			for await (const chunk of computeMismatchInsertRows(
+				trx,
+				undefined,
+				(completedScans, totalScans) => {
+					calls.push([completedScans, totalScans]);
+				},
+			)) {
+				expect(chunk.length).toBeGreaterThan(0);
+			}
+		});
+
+		expect(calls).toEqual([
+			[1, 6],
+			[2, 6],
+			[3, 6],
+			[4, 6],
+			[5, 6],
+			[6, 6],
+		]);
+	});
+
 	it('gives every mismatch row for the same page the same natural_url_rank, regardless of type', async () => {
 		const rows = await archive
 			.getKnex()

@@ -315,6 +315,34 @@ describe('computeResourceInsertRows', () => {
 			knex.transaction((trx) => collectResourceInsertRows(trx, -1)),
 		).rejects.toThrow(RangeError);
 	});
+
+	it('reports keyset scan progress up to the max resource_items id (issue #294)', async () => {
+		const knex = archive.getKnex();
+		const calls: [number, number][] = [];
+		await knex.transaction(async (trx) => {
+			for await (const chunk of computeResourceInsertRows(
+				trx,
+				1,
+				(scannedUpToId, maxId) => {
+					calls.push([scannedUpToId, maxId]);
+				},
+			)) {
+				expect(chunk.resources.length).toBeGreaterThan(0);
+			}
+		});
+
+		expect(calls.length).toBeGreaterThan(0);
+		const maxId = calls[0]![1];
+		expect(maxId).toBeGreaterThan(0);
+		for (const [scannedUpToId, total] of calls) {
+			expect(total).toBe(maxId);
+			expect(scannedUpToId).toBeLessThanOrEqual(maxId);
+		}
+		for (let i = 1; i < calls.length; i++) {
+			expect(calls[i]![0]).toBeGreaterThanOrEqual(calls[i - 1]![0]);
+		}
+		expect(calls.at(-1)![0]).toBe(maxId);
+	});
 });
 
 /**

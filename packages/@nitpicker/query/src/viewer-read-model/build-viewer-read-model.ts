@@ -40,6 +40,15 @@ import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model-schema-ver
 const INSERT_CHUNK_SIZE = 500;
 
 /**
+ * Rows read per keyset chunk while loading the `viewer_pages` source rows
+ * and the technology source rows (issue #294). The full row sets are still
+ * accumulated in memory exactly as the previous single-SELECT read did —
+ * chunking exists purely so the multi-minute scan can report progress, not
+ * to bound memory.
+ */
+const SOURCE_READ_CHUNK_SIZE = 2000;
+
+/**
  * Row shape read from the write-model `pages` table while populating
  * `viewer_pages`. Column names match `pages` verbatim (see
  * `@nitpicker/crawler`'s `init-schema.ts` and this package's
@@ -463,43 +472,67 @@ export async function buildViewerReadModel(
 	if (accessor.readOnly) {
 		throw new Error(
 			'buildViewerReadModel: cannot build the viewer read model on a read-only ' +
-				'ArchiveAccessor (stub-mode, or an accessor opened via Archive.connect / ' +
+				'ArchiveAccessor (stub-mode, or a read-only accessor opened via Archive.connect / ' +
 				'Archive.openCached). The read model may only be built against a writable ' +
-				'Archive (Archive.create / Archive.open), typically from the crawl-completion step.',
+				'connection (Archive.create / Archive.open, or the writable Archive.connect ' +
+				'the viewer-read-model worker thread opens), typically from the crawl-completion step.',
 		);
 	}
 
 	const { onProgress, onPhase } = options;
 	const knex = accessor.getKnex();
+	// Adapts the backfills' own `(processed, total)` callback shape to this
+	// build's phase-generic `onProgress` (issue #294) — the current phase
+	// (tracked by the caller via `onPhase`) tells the display which backfill
+	// the counts belong to.
+	const relayBackfillProgress = (processed: number, total: number) => {
+		onProgress?.({ insertedRows: processed, totalRows: total });
+	};
 	onPhase?.('backfillingAnalysisViolations');
+	// Not wired to `onProgress`: a single all-or-nothing `replaceAnalysisViolations`
+	// call with no countable unit, and a fast no-op on any archive already
+	// backfilled once — unlike the three per-page backfills below.
 	await backfillAnalysisViolationsFromJson(accessor);
-	// Not wired to `onProgress`: that callback's contract is scoped to
-	// `viewer_pages` insert-chunk progress (`ViewerReadModelBuildProgress`),
-	// a different shape and a different phase of this build — reusing it
-	// here would report body-hash backfill counts under a callback that
-	// claims to describe `viewer_pages` rows.
 	onPhase?.('backfillingBodyHash');
-	await backfillBodyHashFromHtmlBlobs(accessor);
+	await backfillBodyHashFromHtmlBlobs(accessor, relayBackfillProgress);
 	// Runs after body_hash: alias_of_id's Tier B (trailing-slash) grouping
 	// requires body_hash to already be computed for both candidate pages, so
 	// this backfill would otherwise see stale (still-NULL) body_hash values
 	// on an archive going through both catch-ups in the same build.
 	onPhase?.('backfillingAliasOfId');
-	await backfillAliasOfId(accessor);
+	await backfillAliasOfId(accessor, relayBackfillProgress);
 	// Independent of the body_hash/alias_of_id catch-ups above — matches
 	// URLs against `dedupe_cap_events.shape_key`, no ordering dependency on
 	// either. Must still run before `sourceRows` below reads
 	// `ci.dedupe_cap_event_id`.
 	onPhase?.('backfillingDedupeCapEventId');
-	await backfillDedupeCapEventId(accessor);
+	await backfillDedupeCapEventId(accessor, relayBackfillProgress);
 	onPhase?.('computingSummary');
+	// Progress unit = completed computations out of 3. The three run under
+	// one `Promise.all` but SQLite serializes them on this single connection
+	// anyway, so completion order is stable enough for a monotonic count —
+	// and each one is a multi-minute full-table aggregation on a large
+	// archive (issue #294), so even a coarse 1/3 → 3/3 beats silence.
+	let completedSummarySteps = 0;
+	const trackSummaryStep = async <T>(step: Promise<T>): Promise<T> => {
+		const result = await step;
+		completedSummarySteps += 1;
+		onProgress?.({ insertedRows: completedSummarySteps, totalRows: 3 });
+		return result;
+	};
 	const [summary, errorKinds, isolatedComponents] = await Promise.all([
-		getSummary(accessor),
-		getErrorKinds(accessor),
-		computeIsolatedClusters(accessor),
+		trackSummaryStep(getSummary(accessor)),
+		trackSummaryStep(getErrorKinds(accessor)),
+		trackSummaryStep(computeIsolatedClusters(accessor)),
 	]);
 	await knex.transaction(async (trx) => {
-		onPhase?.('buildingPages');
+		// Split from `buildingPages` (issue #294): the table drop/create and
+		// the `viewer_url_refs` INSERT below are single statements with no
+		// countable unit, and the source-row scan that follows counts scanned
+		// ids, not inserted rows. Giving the stretch its own phase label keeps
+		// `buildingPages` reserved for the insert loop that actually counts
+		// `viewer_pages` rows, instead of looking like a stalled insert.
+		onPhase?.('loadingPageRows');
 		await dropViewerReadModelTables(trx);
 		await createViewerReadModelTables(trx);
 
@@ -519,6 +552,14 @@ export async function buildViewerReadModel(
 			ORDER BY url
 		`);
 
+		// Progress axis for the two keyset scans below (source rows and
+		// technology rows) — both cursor over `content_items.id`. MAX() over
+		// the keyset column is an O(1) index-tail read.
+		const [maxContentItemRow] = await trx('content_items').max<{ max: number | null }[]>({
+			max: 'id',
+		});
+		const maxContentItemId = maxContentItemRow?.max ?? 0;
+
 		// `sourceRows` reads through the 0.13 entity tables.
 		// LEFT JOIN `page_meta` because the 0.13 format populates
 		// `page_meta` only for `scraped = 1` pages — the outer predicate
@@ -529,84 +570,150 @@ export async function buildViewerReadModel(
 		// scraped/non-scraped `content_items` row has a
 		// `content_type_id` — the 0.13 format routes missing content types
 		// through the "unknown" ref.
-		const sourceRows: PagesSourceRow[] = await trx('content_items as ci')
-			.join('url_refs as ur', 'ur.id', 'ci.url_id')
-			.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
-			.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
-			.leftJoin('text_refs as title_ref', 'title_ref.id', 'pm.title_text_id')
-			.leftJoin(
-				'text_refs as description_ref',
-				'description_ref.id',
-				'pm.description_text_id',
-			)
-			.leftJoin('text_refs as og_title_ref', 'og_title_ref.id', 'pm.og_title_text_id')
-			// LEFT JOIN for the same "no header_set_id" reason as
-			// computeHeaderCheckInsertRows — buildHeaderPresenceSelects'
-			// coalesce(..., 0) turns the null-fill into flag 0.
-			.leftJoin('header_flags as hf', 'hf.header_set_id', 'ci.header_set_id')
-			.where('ci.scraped', 1)
-			.whereNull('ci.redirect_dest_id')
-			.whereNull('ci.alias_of_id')
-			.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
-			.select(
-				'ci.id as id',
-				'ur.url as url',
-				'title_ref.text as title',
-				'ci.status as status',
-				'ctr.raw as contentType',
-				'ci.is_external as isExternal',
-				'description_ref.text as description',
-				'og_title_ref.text as og_title',
-				'pm.robots_noindex as robots_noindex',
-				'ci.source as source',
-				'ci.dedupe_cap_event_id as dedupeCapEventId',
-				'pm.tag_count as tag_count',
-				'pm.jsonld_count as jsonld_count',
-				'pm.main_content_word_count as main_content_word_count',
-				'pm.main_content_body_word_count as main_content_body_word_count',
-				'pm.main_content_heading_count as main_content_heading_count',
-				'pm.main_content_image_count as main_content_image_count',
-				'pm.main_content_table_count as main_content_table_count',
-				'pm.main_content_button_count as main_content_button_count',
-				'pm.main_content_iframe_count as main_content_iframe_count',
-				'pm.main_content_video_count as main_content_video_count',
-				'pm.main_content_audio_count as main_content_audio_count',
-				'pm.main_content_canvas_count as main_content_canvas_count',
-				'pm.main_content_custom_element_count as main_content_custom_element_count',
-				'pm.scroll_height_desktop as scroll_height_desktop',
-				'pm.scroll_height_mobile as scroll_height_mobile',
-				'pm.console_error_count as console_error_count',
-				'pm.lang as lang',
-				...buildHeaderPresenceSelects(trx),
-			);
+		//
+		// Read in id-keyset chunks (issue #294): the previous single SELECT
+		// held the build silent for minutes on a large archive with no way to
+		// report progress mid-statement. The chunks accumulate into the same
+		// full array the single SELECT produced (memory profile unchanged —
+		// see SOURCE_READ_CHUNK_SIZE's docs); only the scan becomes
+		// observable.
+		const sourceRows: PagesSourceRow[] = [];
+		let lastSourceId = 0;
+		for (;;) {
+			const chunk: PagesSourceRow[] = await trx('content_items as ci')
+				.join('url_refs as ur', 'ur.id', 'ci.url_id')
+				.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
+				.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
+				.leftJoin('text_refs as title_ref', 'title_ref.id', 'pm.title_text_id')
+				.leftJoin(
+					'text_refs as description_ref',
+					'description_ref.id',
+					'pm.description_text_id',
+				)
+				.leftJoin('text_refs as og_title_ref', 'og_title_ref.id', 'pm.og_title_text_id')
+				// LEFT JOIN for the same "no header_set_id" reason as
+				// computeHeaderCheckInsertRows — buildHeaderPresenceSelects'
+				// coalesce(..., 0) turns the null-fill into flag 0.
+				.leftJoin('header_flags as hf', 'hf.header_set_id', 'ci.header_set_id')
+				.where('ci.scraped', 1)
+				.whereNull('ci.redirect_dest_id')
+				.whereNull('ci.alias_of_id')
+				.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
+				.andWhere('ci.id', '>', lastSourceId)
+				.orderBy('ci.id', 'asc')
+				.limit(SOURCE_READ_CHUNK_SIZE)
+				.select(
+					'ci.id as id',
+					'ur.url as url',
+					'title_ref.text as title',
+					'ci.status as status',
+					'ctr.raw as contentType',
+					'ci.is_external as isExternal',
+					'description_ref.text as description',
+					'og_title_ref.text as og_title',
+					'pm.robots_noindex as robots_noindex',
+					'ci.source as source',
+					'ci.dedupe_cap_event_id as dedupeCapEventId',
+					'pm.tag_count as tag_count',
+					'pm.jsonld_count as jsonld_count',
+					'pm.main_content_word_count as main_content_word_count',
+					'pm.main_content_body_word_count as main_content_body_word_count',
+					'pm.main_content_heading_count as main_content_heading_count',
+					'pm.main_content_image_count as main_content_image_count',
+					'pm.main_content_table_count as main_content_table_count',
+					'pm.main_content_button_count as main_content_button_count',
+					'pm.main_content_iframe_count as main_content_iframe_count',
+					'pm.main_content_video_count as main_content_video_count',
+					'pm.main_content_audio_count as main_content_audio_count',
+					'pm.main_content_canvas_count as main_content_canvas_count',
+					'pm.main_content_custom_element_count as main_content_custom_element_count',
+					'pm.scroll_height_desktop as scroll_height_desktop',
+					'pm.scroll_height_mobile as scroll_height_mobile',
+					'pm.console_error_count as console_error_count',
+					'pm.lang as lang',
+					...buildHeaderPresenceSelects(trx),
+				);
+			if (chunk.length === 0) {
+				onProgress?.({ insertedRows: maxContentItemId, totalRows: maxContentItemId });
+				break;
+			}
+			lastSourceId = chunk.at(-1)!.id;
+			// Avoid `push(...chunk)`: the same V8 argument-spread limit note as
+			// compute-isolated-clusters.ts — a habit kept even at this chunk
+			// size so the pattern stays copy-safe.
+			for (const row of chunk) {
+				sourceRows.push(row);
+			}
+			onProgress?.({
+				insertedRows: Math.min(lastSourceId, maxContentItemId),
+				totalRows: maxContentItemId,
+			});
+		}
 
 		const naturalUrlRankByPageId = buildPageNaturalUrlRankMap(sourceRows);
+		const insertRows = sourceRows.map((row) =>
+			toViewerPageInsertRow(row, naturalUrlRankByPageId),
+		);
+		const pageIdByUrl = new Map(sourceRows.map((row) => [row.url, row.id]));
 
 		// Separate scan (not part of `sourceRows`, which only selects
 		// `pages`/`page_meta`) — one row per (page, technology) pair, joined
 		// to the page's URL for `buildTechnologyDirectoryStatsRows`'
 		// directory bucketing. Feeds `viewer_technology_summary` /
 		// `viewer_technology_directory_stats`.
-		const technologySourceRows = await trx('page_technologies as pt')
-			.join('content_items as tci', 'tci.id', 'pt.pageId')
-			.join('url_refs as tur', 'tur.id', 'tci.url_id')
-			.select<
-				Array<{
-					pageId: number;
-					url: string;
-					technology: string;
-					category: string | null;
-					confidence: number;
-				}>
-			>('pt.pageId as pageId', 'tur.url as url', 'pt.technology as technology', 'pt.category as category', 'pt.confidence as confidence');
-
-		const insertRows = sourceRows.map((row) =>
-			toViewerPageInsertRow(row, naturalUrlRankByPageId),
-		);
-		const pageIdByUrl = new Map(sourceRows.map((row) => [row.url, row.id]));
+		//
+		// Its own phase (issue #294): on a large archive this scan returns
+		// millions of rows and runs for minutes. Read in fixed `pt.pageId`
+		// ranges (the `compute-anchor-fact-rows.ts` window technique) rather
+		// than keyset-LIMIT: a LIMIT cursor on `pageId` could split one
+		// page's technology rows across chunks and then skip the remainder.
+		onPhase?.('loadingTechnologyRows');
+		const technologySourceRows: Array<{
+			pageId: number;
+			url: string;
+			technology: string;
+			category: string | null;
+			confidence: number;
+		}> = [];
+		for (
+			let rangeEnd = SOURCE_READ_CHUNK_SIZE;
+			maxContentItemId > 0;
+			rangeEnd += SOURCE_READ_CHUNK_SIZE
+		) {
+			const chunk = await trx('page_technologies as pt')
+				.join('content_items as tci', 'tci.id', 'pt.pageId')
+				.join('url_refs as tur', 'tur.id', 'tci.url_id')
+				.whereBetween('pt.pageId', [rangeEnd - SOURCE_READ_CHUNK_SIZE + 1, rangeEnd])
+				.select<
+					Array<{
+						pageId: number;
+						url: string;
+						technology: string;
+						category: string | null;
+						confidence: number;
+					}>
+				>(
+					'pt.pageId as pageId',
+					'tur.url as url',
+					'pt.technology as technology',
+					'pt.category as category',
+					'pt.confidence as confidence',
+				);
+			for (const row of chunk) {
+				technologySourceRows.push(row);
+			}
+			onProgress?.({
+				insertedRows: Math.min(rangeEnd, maxContentItemId),
+				totalRows: maxContentItemId,
+			});
+			if (rangeEnd >= maxContentItemId) {
+				break;
+			}
+		}
 		const totalRows = insertRows.length;
 		let insertedRows = 0;
 
+		onPhase?.('buildingPages');
 		// Sequential, not `eachSplitted`'s concurrent `Promise.all` — SQLite
 		// serializes writes on this single transaction's connection anyway,
 		// so concurrency buys no throughput here, only two real costs: all
@@ -636,57 +743,82 @@ export async function buildViewerReadModel(
 				status: row.status,
 			})),
 		);
+		const directoryTotalRows = directoryNodes.length + directoryPages.length;
+		let directoryInsertedRows = 0;
 		for (let start = 0; start < directoryNodes.length; start += INSERT_CHUNK_SIZE) {
-			await trx('viewer_directory_nodes').insert(
-				directoryNodes.slice(start, start + INSERT_CHUNK_SIZE),
-			);
+			const chunk = directoryNodes.slice(start, start + INSERT_CHUNK_SIZE);
+			await trx('viewer_directory_nodes').insert(chunk);
+			directoryInsertedRows += chunk.length;
+			onProgress?.({
+				insertedRows: directoryInsertedRows,
+				totalRows: directoryTotalRows,
+			});
 		}
 		for (let start = 0; start < directoryPages.length; start += INSERT_CHUNK_SIZE) {
-			await trx('viewer_directory_pages').insert(
-				directoryPages.slice(start, start + INSERT_CHUNK_SIZE),
-			);
+			const chunk = directoryPages.slice(start, start + INSERT_CHUNK_SIZE);
+			await trx('viewer_directory_pages').insert(chunk);
+			directoryInsertedRows += chunk.length;
+			onProgress?.({
+				insertedRows: directoryInsertedRows,
+				totalRows: directoryTotalRows,
+			});
 		}
 
 		// Reuses `technologySourceRows` (already loaded above) instead of a
 		// second `page_technologies` scan.
 		onPhase?.('buildingTechnologySummary');
 		const technologySummaryRows = buildTechnologySummaryRows(technologySourceRows);
+		const technologyDirectoryStatsRows =
+			buildTechnologyDirectoryStatsRows(technologySourceRows);
+		const technologyTotalRows =
+			technologySummaryRows.length + technologyDirectoryStatsRows.length;
+		let technologyInsertedRows = 0;
 		for (
 			let start = 0;
 			start < technologySummaryRows.length;
 			start += INSERT_CHUNK_SIZE
 		) {
-			await trx('viewer_technology_summary').insert(
-				technologySummaryRows.slice(start, start + INSERT_CHUNK_SIZE),
-			);
+			const chunk = technologySummaryRows.slice(start, start + INSERT_CHUNK_SIZE);
+			await trx('viewer_technology_summary').insert(chunk);
+			technologyInsertedRows += chunk.length;
+			onProgress?.({
+				insertedRows: technologyInsertedRows,
+				totalRows: technologyTotalRows,
+			});
 		}
-		const technologyDirectoryStatsRows =
-			buildTechnologyDirectoryStatsRows(technologySourceRows);
 		for (
 			let start = 0;
 			start < technologyDirectoryStatsRows.length;
 			start += INSERT_CHUNK_SIZE
 		) {
-			await trx('viewer_technology_directory_stats').insert(
-				technologyDirectoryStatsRows.slice(start, start + INSERT_CHUNK_SIZE),
-			);
+			const chunk = technologyDirectoryStatsRows.slice(start, start + INSERT_CHUNK_SIZE);
+			await trx('viewer_technology_directory_stats').insert(chunk);
+			technologyInsertedRows += chunk.length;
+			onProgress?.({
+				insertedRows: technologyInsertedRows,
+				totalRows: technologyTotalRows,
+			});
 		}
 
 		onPhase?.('buildingIsolatedComponents');
 		const isolatedRows = buildIsolatedReadModelRows(isolatedComponents, pageIdByUrl);
+		const isolatedTotalRows = isolatedRows.components.length + isolatedRows.pages.length;
+		let isolatedInsertedRows = 0;
 		for (
 			let start = 0;
 			start < isolatedRows.components.length;
 			start += INSERT_CHUNK_SIZE
 		) {
-			await trx('viewer_isolated_components').insert(
-				isolatedRows.components.slice(start, start + INSERT_CHUNK_SIZE),
-			);
+			const chunk = isolatedRows.components.slice(start, start + INSERT_CHUNK_SIZE);
+			await trx('viewer_isolated_components').insert(chunk);
+			isolatedInsertedRows += chunk.length;
+			onProgress?.({ insertedRows: isolatedInsertedRows, totalRows: isolatedTotalRows });
 		}
 		for (let start = 0; start < isolatedRows.pages.length; start += INSERT_CHUNK_SIZE) {
-			await trx('viewer_isolated_component_pages').insert(
-				isolatedRows.pages.slice(start, start + INSERT_CHUNK_SIZE),
-			);
+			const chunk = isolatedRows.pages.slice(start, start + INSERT_CHUNK_SIZE);
+			await trx('viewer_isolated_component_pages').insert(chunk);
+			isolatedInsertedRows += chunk.length;
+			onProgress?.({ insertedRows: isolatedInsertedRows, totalRows: isolatedTotalRows });
 		}
 
 		// Unlike `viewer_pages`/the directory tree, this needs its own `anchors`
@@ -721,7 +853,13 @@ export async function buildViewerReadModel(
 
 		onPhase?.('buildingGraph');
 		const graphIndegreeByPageId = new Map<number, number>();
-		for await (const graphEdgeChunk of computeGraphReadModelRows(trx)) {
+		for await (const graphEdgeChunk of computeGraphReadModelRows(
+			trx,
+			undefined,
+			(scannedUpToEdgeId, maxEdgeId) => {
+				onProgress?.({ insertedRows: scannedUpToEdgeId, totalRows: maxEdgeId });
+			},
+		)) {
 			for (const edge of graphEdgeChunk) {
 				graphIndegreeByPageId.set(
 					edge.target_page_id,
@@ -759,7 +897,9 @@ export async function buildViewerReadModel(
 		for await (const {
 			resources: resourceChunk,
 			stats: statsChunk,
-		} of computeResourceInsertRows(trx)) {
+		} of computeResourceInsertRows(trx, undefined, (scannedUpToId, maxId) => {
+			onProgress?.({ insertedRows: scannedUpToId, totalRows: maxId });
+		})) {
 			for (let start = 0; start < resourceChunk.length; start += INSERT_CHUNK_SIZE) {
 				await trx('viewer_resources').insert(
 					resourceChunk.slice(start, start + INSERT_CHUNK_SIZE),
@@ -783,7 +923,14 @@ export async function buildViewerReadModel(
 		// `viewer_anchor_facts`/`viewer_resources` above.
 		onPhase?.('buildingImages');
 		const pageUrlRankById = buildPageUrlRankMap(sourceRows);
-		for await (const imageChunk of computeImageInsertRows(trx, pageUrlRankById)) {
+		for await (const imageChunk of computeImageInsertRows(
+			trx,
+			pageUrlRankById,
+			undefined,
+			(scannedUpToId, maxId) => {
+				onProgress?.({ insertedRows: scannedUpToId, totalRows: maxId });
+			},
+		)) {
 			for (let start = 0; start < imageChunk.length; start += INSERT_CHUNK_SIZE) {
 				await trx('viewer_images').insert(
 					imageChunk.slice(start, start + INSERT_CHUNK_SIZE),
@@ -800,10 +947,15 @@ export async function buildViewerReadModel(
 		// array rather than a chunked read.
 		onPhase?.('buildingHeaderChecks');
 		const headerCheckRows = await computeHeaderCheckInsertRows(trx);
+		let headerCheckInsertedRows = 0;
 		for (let start = 0; start < headerCheckRows.length; start += INSERT_CHUNK_SIZE) {
-			await trx('viewer_header_checks').insert(
-				headerCheckRows.slice(start, start + INSERT_CHUNK_SIZE),
-			);
+			const chunk = headerCheckRows.slice(start, start + INSERT_CHUNK_SIZE);
+			await trx('viewer_header_checks').insert(chunk);
+			headerCheckInsertedRows += chunk.length;
+			onProgress?.({
+				insertedRows: headerCheckInsertedRows,
+				totalRows: headerCheckRows.length,
+			});
 		}
 
 		// Duplicate-metadata group read model (issue #115). `computeDuplicateGroupRows`
@@ -827,6 +979,10 @@ export async function buildViewerReadModel(
 		for await (const duplicateGroupPageChunk of computeDuplicateGroupPageRows(
 			trx,
 			groupIdByValue,
+			undefined,
+			(scannedUpToId, maxId) => {
+				onProgress?.({ insertedRows: scannedUpToId, totalRows: maxId });
+			},
 		)) {
 			for (
 				let start = 0;
@@ -848,7 +1004,13 @@ export async function buildViewerReadModel(
 		// `viewer_duplicate_groups.group_id` above, nothing else references a
 		// mismatch row by id before it is inserted.
 		onPhase?.('buildingMismatches');
-		for await (const mismatchChunk of computeMismatchInsertRows(trx)) {
+		for await (const mismatchChunk of computeMismatchInsertRows(
+			trx,
+			undefined,
+			(completedScans, totalScans) => {
+				onProgress?.({ insertedRows: completedScans, totalRows: totalScans });
+			},
+		)) {
 			for (let start = 0; start < mismatchChunk.length; start += INSERT_CHUNK_SIZE) {
 				await trx('viewer_mismatches').insert(
 					mismatchChunk.slice(start, start + INSERT_CHUNK_SIZE),
@@ -923,6 +1085,12 @@ export async function buildViewerReadModel(
 			onProgress?.({ insertedRows: completed, totalRows: totalIndexes });
 		});
 
+		// Fired before the last insert rather than after it: the phase's real
+		// cost is the implicit COMMIT when this transaction callback returns —
+		// the whole read model sits in the WAL at this point, and on a large
+		// archive flushing it takes long enough to look like a hang without
+		// its own label (issue #294).
+		onPhase?.('committing');
 		await trx('viewer_read_model_meta').insert({
 			id: 1,
 			schema_version: VIEWER_READ_MODEL_SCHEMA_VERSION,
@@ -930,4 +1098,16 @@ export async function buildViewerReadModel(
 			source_row_count: total,
 		});
 	});
+
+	// Fold the WAL back into db.sqlite here, while still on the build's own
+	// connection (issue #294): the build just wrote the entire read model
+	// into the WAL, and leaving the checkpoint to the caller's later
+	// `archive.write()` means a multi-minute synchronous PRAGMA on whichever
+	// thread that runs on — for the worker-offloaded build
+	// (`buildViewerReadModelInWorker`), that would be the main thread,
+	// re-freezing the display the offload exists to keep alive. Running it
+	// here keeps the cost on the build thread and turns the caller's own
+	// checkpoint into a near-no-op.
+	onPhase?.('checkpointing');
+	await knex.raw('PRAGMA wal_checkpoint(TRUNCATE)');
 }

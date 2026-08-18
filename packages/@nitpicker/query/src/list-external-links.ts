@@ -78,7 +78,7 @@ export async function listExternalLinks(
 	const total = Number(countResult[0]?.total ?? 0);
 
 	if (sortColumns[sortBy].type === 'url') {
-		await ensureUrlSortTempTable(accessor);
+		await ensureUrlSortTempTable(accessor, options.onSortProgress);
 	}
 
 	const dataQuery = baseQuery

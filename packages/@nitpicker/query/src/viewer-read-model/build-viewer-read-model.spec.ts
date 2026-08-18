@@ -832,6 +832,8 @@ describe('buildViewerReadModel', () => {
 				'backfillingAliasOfId',
 				'backfillingDedupeCapEventId',
 				'computingSummary',
+				'loadingPageRows',
+				'loadingTechnologyRows',
 				'buildingPages',
 				'buildingDirectoryTree',
 				'buildingTechnologySummary',
@@ -844,7 +846,92 @@ describe('buildViewerReadModel', () => {
 				'buildingDuplicateGroups',
 				'buildingMismatches',
 				'creatingIndexes',
+				'committing',
+				'checkpointing',
 			]);
+		});
+
+		it('reports loadingPageRows sub-progress as ids scanned up to the max content_items id (issue #294)', async () => {
+			let currentPhase: string | undefined;
+			const calls: { insertedRows: number; totalRows: number }[] = [];
+			await buildViewerReadModel(archive, {
+				onPhase: (phase) => {
+					currentPhase = phase;
+				},
+				onProgress: (p) => {
+					if (currentPhase === 'loadingPageRows') {
+						calls.push(p);
+					}
+				},
+			});
+
+			expect(calls.length).toBeGreaterThan(0);
+			const last = calls.at(-1)!;
+			expect(last.insertedRows).toBe(last.totalRows);
+			expect(last.totalRows).toBeGreaterThan(0);
+		});
+
+		it('reports loadingTechnologyRows sub-progress up to the max content_items id (issue #294 QA review)', async () => {
+			let currentPhase: string | undefined;
+			const calls: { insertedRows: number; totalRows: number }[] = [];
+			await buildViewerReadModel(archive, {
+				onPhase: (phase) => {
+					currentPhase = phase;
+				},
+				onProgress: (p) => {
+					if (currentPhase === 'loadingTechnologyRows') {
+						calls.push(p);
+					}
+				},
+			});
+
+			expect(calls.length).toBeGreaterThan(0);
+			const last = calls.at(-1)!;
+			expect(last.insertedRows).toBe(last.totalRows);
+			expect(last.totalRows).toBeGreaterThan(0);
+		});
+
+		it('reports computingSummary sub-progress as completed computations out of 3 (issue #294)', async () => {
+			let currentPhase: string | undefined;
+			const calls: { insertedRows: number; totalRows: number }[] = [];
+			await buildViewerReadModel(archive, {
+				onPhase: (phase) => {
+					currentPhase = phase;
+				},
+				onProgress: (p) => {
+					if (currentPhase === 'computingSummary') {
+						calls.push(p);
+					}
+				},
+			});
+
+			expect(calls).toEqual([
+				{ insertedRows: 1, totalRows: 3 },
+				{ insertedRows: 2, totalRows: 3 },
+				{ insertedRows: 3, totalRows: 3 },
+			]);
+		});
+
+		it('reports backfill sub-progress under the backfill phases (issue #294)', async () => {
+			// The body_hash backfill only processes rows whose body_hash is
+			// NULL (the crawl write path fills it eagerly), so null it out to
+			// guarantee this fixture has exactly one pending page.
+			await archive.getKnex()('page_meta').update({ body_hash: null });
+
+			let currentPhase: string | undefined;
+			const calls: { insertedRows: number; totalRows: number }[] = [];
+			await buildViewerReadModel(archive, {
+				onPhase: (phase) => {
+					currentPhase = phase;
+				},
+				onProgress: (p) => {
+					if (currentPhase === 'backfillingBodyHash') {
+						calls.push(p);
+					}
+				},
+			});
+
+			expect(calls).toEqual([{ insertedRows: 1, totalRows: 1 }]);
 		});
 
 		it('defaults to no phase reporting when onPhase is omitted', async () => {

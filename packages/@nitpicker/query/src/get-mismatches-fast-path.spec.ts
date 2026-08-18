@@ -150,6 +150,28 @@ describe('getMismatchesFastPath', () => {
 		);
 	});
 
+	it('forwards onSortProgress to the live findMismatches call (issue #294)', async () => {
+		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
+		vi.mocked(findMismatches).mockResolvedValue({
+			items: [],
+			total: 1,
+			limit: 100,
+			offset: 0,
+		});
+		const onSortProgress = vi.fn();
+
+		await getMismatchesFastPath(accessor, 'canonical', {
+			sortBy: 'url',
+			onSortProgress,
+		});
+
+		expect(findMismatches).toHaveBeenCalledWith(
+			accessor,
+			'canonical',
+			expect.objectContaining({ onSortProgress }),
+		);
+	});
+
 	it('falls back to the live path when the read model is stale or absent', async () => {
 		vi.mocked(isViewerReadModelCurrent).mockResolvedValue(false);
 		vi.mocked(findMismatches).mockResolvedValue({

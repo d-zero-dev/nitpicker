@@ -182,6 +182,15 @@ describe('findMismatches', () => {
 		await findMismatches(archive, 'canonical', { sortBy: 'actual' });
 		expect(ensureUrlSortTempTable).toHaveBeenCalledTimes(2);
 	});
+
+	it('forwards onSortProgress to ensureUrlSortTempTable (issue #294)', async () => {
+		vi.mocked(ensureUrlSortTempTable).mockClear();
+		const onSortProgress = vi.fn();
+
+		await findMismatches(archive, 'canonical', { sortBy: 'url', onSortProgress });
+
+		expect(ensureUrlSortTempTable).toHaveBeenCalledWith(archive, onSortProgress);
+	});
 });
 
 describe('findMismatches: content_items.alias_of_id handling', () => {

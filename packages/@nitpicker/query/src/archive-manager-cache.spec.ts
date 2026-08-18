@@ -261,3 +261,96 @@ describe('ArchiveManager cache-mode: a read-only open never builds a viewer read
 		}
 	});
 });
+
+describe('ArchiveManager cache-mode: onExtractProgress (issue #294)', () => {
+	// A separate archive so this describe block's cold-miss assertions
+	// aren't racing another describe block's already-cached fixture.
+	const archiveFilePath = path.resolve(workingDir, 'extract-progress.nitpicker');
+
+	beforeAll(async () => {
+		mkdirSync(workingDir, { recursive: true });
+		const archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'extract-progress-test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+		await archive.setPage({
+			url: parseUrl('https://example.com/')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { title: 'extract-progress' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.write();
+		await archive.close();
+	});
+
+	afterAll(() => {
+		rmSync(archiveFilePath, { force: true });
+	});
+
+	it('reports untar byte progress on a cold miss', async () => {
+		const calls: [number, number][] = [];
+		const manager = new ArchiveManager({
+			onExtractProgress: (readBytes, totalBytes) => {
+				calls.push([readBytes, totalBytes]);
+			},
+		});
+		try {
+			await manager.open(archiveFilePath);
+		} finally {
+			await manager.closeAll();
+		}
+
+		expect(calls.length).toBeGreaterThan(0);
+		const totalBytes = calls[0]![1];
+		expect(totalBytes).toBeGreaterThan(0);
+		expect(calls.at(-1)!).toEqual([totalBytes, totalBytes]);
+	});
+
+	it('never calls onExtractProgress on a cache hit', async () => {
+		// Warm the cache first with a plain manager.
+		const warmupManager = new ArchiveManager();
+		await warmupManager.open(archiveFilePath);
+		await warmupManager.closeAll();
+
+		const calls: [number, number][] = [];
+		const manager = new ArchiveManager({
+			onExtractProgress: (readBytes, totalBytes) => {
+				calls.push([readBytes, totalBytes]);
+			},
+		});
+		try {
+			await manager.open(archiveFilePath);
+		} finally {
+			await manager.closeAll();
+		}
+
+		expect(calls).toEqual([]);
+	});
+});

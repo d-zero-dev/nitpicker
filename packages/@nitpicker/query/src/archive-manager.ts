@@ -115,6 +115,16 @@ export type ArchiveManagerWarn = (message: string) => void;
 export interface ArchiveManagerOptions {
 	/** Override the default `console.warn` sink. */
 	onWarn?: ArchiveManagerWarn;
+	/**
+	 * Called during a cold `open()`'s untar step with bytes read so far and
+	 * the archive's total size (issue #294) — a large archive's first open
+	 * (or an open with `NITPICKER_DISABLE_TAR_CACHE=1`) can take tens of
+	 * seconds with no other signal it isn't hung. Never called on a cache
+	 * hit or a concurrent `open()` for a path another caller is already
+	 * opening — see `extractArchiveToCache`'s docs for the underlying
+	 * cache-hit/miss and dedup contract this inherits.
+	 */
+	onExtractProgress?: (readBytes: number, totalBytes: number) => void;
 }
 
 /**
@@ -151,6 +161,8 @@ export class ArchiveManager {
 
 	/** Counter for generating unique archive IDs. */
 	#nextId = 1;
+	/** Untar byte-progress sink — see {@link ArchiveManagerOptions.onExtractProgress}. */
+	readonly #onExtractProgress?: (readBytes: number, totalBytes: number) => void;
 	/** Warning sink — defaults to `console.warn`. */
 	readonly #onWarn: ArchiveManagerWarn;
 	/**
@@ -181,6 +193,7 @@ export class ArchiveManager {
 				// eslint-disable-next-line no-console
 				console.warn(message);
 			});
+		this.#onExtractProgress = options.onExtractProgress;
 	}
 
 	/**
@@ -440,7 +453,7 @@ export class ArchiveManager {
 			// intentionally left in place so the next reader of the same
 			// (unchanged) archive skips the untar. OS-level temp cleanup
 			// reclaims stale entries — we do not own eviction here.
-			const accessor = await Archive.openCached(realPath);
+			const accessor = await Archive.openCached(realPath, null, this.#onExtractProgress);
 			// A read-only open never builds or writes anything — an on-open
 			// opportunistic read-model build would mutate an archive the
 			// viewer must treat as read-only (issue #177). Archives with a
@@ -479,7 +492,11 @@ export class ArchiveManager {
 		// the user's cwd for the duration of the run. Forwarding cwd here
 		// (and exposing it on `ArchiveManager.open`) is the cleaner fix — out
 		// of scope for the surrounding work.
-		const archive = await Archive.open({ filePath: realPath, openPluginData: true });
+		const archive = await Archive.open({
+			filePath: realPath,
+			openPluginData: true,
+			onExtractProgress: this.#onExtractProgress,
+		});
 		// Capture both `tmpDir` and `archive.renamedDir` so a partial-failure
 		// rmSync recovery can clean either — `Archive.write()` renames the
 		// tmpDir to `renamedDir` before tarring, and a `tar()` failure

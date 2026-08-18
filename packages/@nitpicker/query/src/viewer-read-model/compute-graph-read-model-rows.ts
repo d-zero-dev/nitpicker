@@ -17,15 +17,30 @@ const READ_CHUNK_SIZE = 2000;
  * while excluding self-links.
  * @param trx - Open transaction / connection.
  * @param chunkSize - Rows per chunk, overridable for tests.
+ * @param onProgress - Called after each keyset chunk with the `edge_id`
+ *   scanned up to so far and the max `viewer_anchor_facts.edge_id` (issue
+ *   #294: on a large archive this scan runs for minutes with no other
+ *   signal it hasn't hung). Omit for no reporting (the default; e.g. tests).
  */
 export async function* computeGraphReadModelRows(
 	trx: Knex,
 	chunkSize = READ_CHUNK_SIZE,
+	onProgress?: (scannedUpToEdgeId: number, maxEdgeId: number) => void,
 ): AsyncGenerator<GraphEdgeInsertRow[]> {
 	if (chunkSize <= 0) {
 		throw new RangeError(
 			`computeGraphReadModelRows: chunkSize must be positive, got ${chunkSize}`,
 		);
+	}
+
+	// MAX() over the keyset column is an O(1) index-tail read; only fetched
+	// when someone is listening.
+	let maxEdgeId = 0;
+	if (onProgress) {
+		const [maxRow] = await trx('viewer_anchor_facts').max<{ max: number | null }[]>({
+			max: 'edge_id',
+		});
+		maxEdgeId = maxRow?.max ?? 0;
 	}
 
 	let lastEdgeId = 0;
@@ -50,10 +65,12 @@ export async function* computeGraphReadModelRows(
 			)) as { edgeId: number; sourcePageId: number; targetPageId: number }[];
 
 		if (rows.length === 0) {
+			onProgress?.(maxEdgeId, maxEdgeId);
 			return;
 		}
 
 		lastEdgeId = rows.at(-1)?.edgeId ?? lastEdgeId;
+		onProgress?.(Math.min(lastEdgeId, maxEdgeId), maxEdgeId);
 		yield rows.map((row) => ({
 			source_page_id: row.sourcePageId,
 			target_page_id: row.targetPageId,

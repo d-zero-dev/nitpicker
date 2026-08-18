@@ -270,7 +270,7 @@ export async function listPages(
 	const sortOrder = options.sortOrder ?? 'asc';
 	const useUrlSort = sortBy === 'url';
 	if (useUrlSort) {
-		await ensureUrlSortTempTable(accessor);
+		await ensureUrlSortTempTable(accessor, options.onSortProgress);
 	}
 
 	const [result, facets] = await Promise.all([
