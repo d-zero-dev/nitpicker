@@ -42,6 +42,7 @@ import {
 	listUnusedResources,
 } from '@nitpicker/query';
 
+import { formatExtractProgressLine } from './format-extract-progress-line.js';
 import { toolDefinitions } from './tool-definitions.js';
 
 /**
@@ -193,10 +194,32 @@ export function createServer() {
 	// `console.warn` already writes to stderr on Node, but going through onWarn
 	// gives us a single chokepoint to silence/redirect (e.g. when an MCP host
 	// surfaces stderr to the user as red error banners).
+	// Same chokepoint reasoning as `onWarn` below, applied to the two other
+	// diagnostic channels this server can emit through (issue #294):
+	// `onExtractProgress` for a cold `open_archive`'s untar, `onSortProgress`
+	// for `list_pages`/`find_mismatches`'s lazy URL-sort TEMP table build.
+	// Both are silent by default upstream — wiring them here is what makes a
+	// large archive's first open/first `sortBy: 'url'` call visible on
+	// stderr instead of looking hung.
+	// `onExtractProgress` fires once per ~64 KB stream chunk — dedup on the
+	// rendered MB figure so a 15 GB+ archive doesn't flood stderr with
+	// thousands of near-identical lines. See `formatExtractProgressLine` for
+	// the MB-rounding rationale (issue #294 code review finding #8).
+	let lastExtractProgressLine = '';
+	const onExtractProgress = (readBytes: number, totalBytes: number) => {
+		const line = formatExtractProgressLine(readBytes, totalBytes);
+		if (line === lastExtractProgressLine) return;
+		lastExtractProgressLine = line;
+		process.stderr.write(`${line}\n`);
+	};
+	const onSortProgress = (message: string) => {
+		process.stderr.write(`${message}\n`);
+	};
 	const manager = new ArchiveManager({
 		onWarn: (message) => {
 			process.stderr.write(`${message}\n`);
 		},
+		onExtractProgress,
 	});
 	const server = new Server(
 		{ name: 'nitpicker', version: '0.13.0' },
@@ -250,7 +273,12 @@ export function createServer() {
 					}
 					case 'list_pages': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						return jsonResult(await listPages(accessor, omit(args, 'archiveId')));
+						return jsonResult(
+							await listPages(accessor, {
+								...omit(args, 'archiveId'),
+								onSortProgress,
+							}),
+						);
 					}
 					case 'get_page_detail': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
@@ -420,6 +448,7 @@ export function createServer() {
 									| 'desc'
 									| undefined,
 								cursor: optionalString(args, 'cursor'),
+								onSortProgress,
 							}),
 						);
 					}
