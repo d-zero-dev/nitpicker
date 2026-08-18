@@ -431,7 +431,7 @@ describe('mapFlagsToQueryOptions', () => {
 	});
 
 	it('reads exactly the flags listed in the query commandDef sub-command metadata', async () => {
-		const { commandDef } = await import('../commands/query.js');
+		const { commandDef } = await import('../commands/query-def.js');
 		const { VALID_SUB_COMMANDS } = await import('./types.js');
 
 		// Required flags per sub-command, with values that pass validation.

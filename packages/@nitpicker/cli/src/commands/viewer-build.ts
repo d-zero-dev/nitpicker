@@ -1,52 +1,33 @@
-import type { CommandDef, InferFlags } from '@d-zero/roar';
+import type { commandDef } from './viewer-build-def.js';
+import type { InferFlags } from '@d-zero/roar';
 
 import { existsSync, statSync } from 'node:fs';
-import { copyFile, unlink } from 'node:fs/promises';
+import { unlink } from 'node:fs/promises';
 import path from 'node:path';
 
 import { Lanes } from '@d-zero/dealer';
-import { Archive } from '@nitpicker/crawler';
+import { Archive, copyFileWithProgress } from '@nitpicker/crawler';
 import {
-	backfillAliasOfId,
-	backfillBodyHashFromHtmlBlobs,
-	backfillDedupeCapEventId,
-	buildViewerReadModel,
-	ensureViewerReadModel,
+	buildViewerReadModelInWorker,
+	ensureViewerReadModelInWorker,
+	runViewerReadModelBackfillsInWorker,
 } from '@nitpicker/query';
 
+import { createByteProgressLogger } from '../create-byte-progress-logger.js';
 import { ExitCode } from '../exit-code.js';
 import { formatCliError } from '../format-cli-error.js';
-import { formatProgressCount } from '../format-progress-count.js';
 import { formatViewerReadModelPhase } from '../format-viewer-read-model-phase.js';
 import { formatViewerReadModelProgress } from '../format-viewer-read-model-progress.js';
-
-/**
- * Command definition for the `viewer-build` sub-command.
- * @see {@link viewerBuild} for the main entry point
- */
-export const commandDef = {
-	desc: "Build (or rebuild) a .nitpicker archive's persistent viewer read model",
-	usage: '<archive> [options]',
-	flags: {
-		force: {
-			type: 'boolean',
-			desc: 'Always rebuild, even if the read model is already current (default: only build when missing/stale)',
-		},
-		verbose: {
-			type: 'boolean',
-			desc: 'Append each progress/phase line with an ISO 8601 timestamp instead of overwriting a single line — for timing which step of a slow build is the bottleneck (issue #294)',
-		},
-	},
-} as const satisfies CommandDef;
+import { WRITE_STEP_LABELS } from '../write-step-labels.js';
 
 /** Parsed flag values for the `viewer-build` CLI command. */
 type ViewerBuildFlags = InferFlags<typeof commandDef.flags>;
 
 /**
  * The single `Lanes` line every progress update in this command overwrites —
- * `buildViewerReadModel`/`ensureViewerReadModel` and the three backfills
- * below run sequentially, never concurrently, so one lane is enough (issue
- * #294: these used to each print their own stream of `console.error` lines,
+ * the extraction, the worker tasks, and the archive write-back run
+ * sequentially, never concurrently, so one lane is enough (issue #294:
+ * these used to each print their own stream of `console.error` lines,
  * flooding the terminal on large archives instead of showing live progress).
  */
 const PROGRESS_LANE_ID = 0;
@@ -103,19 +84,42 @@ async function ignoreEnoent(promise: Promise<unknown>): Promise<void> {
  * corrupted/interrupted run never leaves the archive in a half-built state.
  * If the restore itself also fails, both errors are surfaced together (via
  * `AggregateError`) rather than letting the restore failure silently mask
- * why the build failed in the first place.
+ * why the build failed in the first place. Both the backup copy and the
+ * restore copy go through `copyFileWithProgress` with byte progress (issue
+ * #294) — a 15 GB+ archive's `.bak` copy alone can run for tens of seconds,
+ * and previously showed nothing at all (before the display even existed) on
+ * the way in, or nothing (`using lanes` already disposed by the time
+ * `catch` ran) on the way out.
  *
- * The read-model build and the three backfills that follow it all share one
- * `Lanes` line (issue #294): each used to print its own uncapped stream of
- * `console.error` lines, which floods the terminal on a large archive
- * instead of reading as live progress. Pass `--verbose` to switch that one
- * line to appended, ISO-8601-timestamped lines instead — the only way to
- * see which specific phase a slow build is spending its time in.
+ * `lanes` is declared before the `try` block, not inside it (issue #294):
+ * the catch clause's restore-from-backup copy needs the same display, and a
+ * `using` declared inside `try` is already disposed — its timers cleared —
+ * by the time `catch` runs.
+ *
+ * Every step shares one `Lanes` line (issue #294): each used to print its
+ * own uncapped stream of `console.error` lines, which floods the terminal
+ * on a large archive instead of reading as live progress. Pass `--verbose`
+ * to switch that one line to appended, ISO-8601-timestamped lines instead —
+ * the only way to see which specific phase a slow build is spending its
+ * time in.
+ *
+ * Every DB mutation runs in a worker thread (issue #294): the knex/libsql
+ * driver executes SQL synchronously on the calling thread, so any in-thread
+ * work would freeze that `Lanes` line — and the SIGINT handler — for the
+ * whole duration of each long statement (minutes per `CREATE INDEX` on a
+ * large archive). A rebuild goes through `buildViewerReadModelInWorker` /
+ * `ensureViewerReadModelInWorker`; when the schema-version gate skips the
+ * rebuild, the three unconditional backfills go through
+ * `runViewerReadModelBackfillsInWorker` instead (a build already includes
+ * them — see the dispatch comment at the call site). The main thread only
+ * relays worker messages into the display, extracts the tar on the way in,
+ * and re-tars it on the way out (both with byte progress).
  *
  * Tracks the most-recently-started phase in `currentPhase` so `onProgress`
- * updates (only `buildingPages`, `creatingIndexes`, and `buildingAnchorFacts`
- * report sub-progress) are labeled with the right phase name and unit — e.g.
- * `Creating indexes: 23/57 indexes`, not a bare, unlabeled `23/57`.
+ * updates (nearly every phase reports sub-progress — see
+ * `ViewerReadModelBuildProgress`'s docs for the per-phase unit) are labeled
+ * with the right phase name and unit — e.g. `Creating indexes: 23/59
+ * indexes`, not a bare, unlabeled `23/59`.
  * @param args - Positional arguments; first is the `.nitpicker` file path.
  * @param flags - Parsed CLI flags from the `viewer-build` command.
  * @returns Resolves when the build (or no-op) completes.
@@ -161,9 +165,28 @@ export async function viewerBuild(
 		process.exit(ExitCode.Fatal);
 	}
 
-	await copyFile(absFilePath, backupPath);
+	// Constructed before the `.bak` copy, not inside the `try` below (issue
+	// #294): a 15 GB+ archive's backup copy alone can take tens of seconds,
+	// and the display must already be alive to show it. Deliberately NOT
+	// scoped to the `try` block — the catch clause's restore-from-backup
+	// copy needs this same display, and a `using` declared inside `try`
+	// would already be disposed (timers cleared) by the time `catch` runs.
+	using lanes = new Lanes({
+		verbose: flags.verbose,
+		indent: '  ',
+		stream: process.stderr,
+	});
+	const log = (message: string) => logLine(lanes, flags.verbose, message);
+
+	log('%braille% Backing up archive%dots%');
+	await copyFileWithProgress(
+		absFilePath,
+		backupPath,
+		createByteProgressLogger(log, 'Backing up archive'),
+	);
 
 	try {
+		log('%braille% Extracting archive%dots%');
 		// No explicit `cwd`: matches every other Archive.open call site in
 		// this CLI (crawl.ts, diff.ts), which all default to process.cwd()
 		// for the transient extraction scratch dir regardless of where the
@@ -174,86 +197,52 @@ export async function viewerBuild(
 		await using archive = await Archive.open({
 			filePath: absFilePath,
 			openPluginData: true,
+			onExtractProgress: createByteProgressLogger(log, 'Extracting archive'),
 		});
-		using lanes = new Lanes({
-			verbose: flags.verbose,
-			indent: '  ',
-			stream: process.stderr,
-		});
-		logLine(lanes, flags.verbose, 'Viewer read model build: starting');
+		log('%braille% Viewer read model build: starting%dots%');
 		let currentPhase: Parameters<typeof formatViewerReadModelPhase>[0] | undefined;
 		const onPhase = (phase: Parameters<typeof formatViewerReadModelPhase>[0]) => {
 			currentPhase = phase;
-			logLine(lanes, flags.verbose, formatViewerReadModelPhase(phase));
+			log(formatViewerReadModelPhase(phase));
 		};
 		const onProgress = (
 			progress: Parameters<typeof formatViewerReadModelProgress>[0],
 		) => {
-			logLine(
-				lanes,
-				flags.verbose,
-				formatViewerReadModelProgress(progress, currentPhase),
-			);
+			log(formatViewerReadModelProgress(progress, currentPhase));
 		};
-		if (flags.force) {
-			await buildViewerReadModel(archive, { onPhase, onProgress });
-		} else {
-			await ensureViewerReadModel(archive, { onPhase, onProgress });
+		const built = flags.force
+			? (await buildViewerReadModelInWorker(archive, { onPhase, onProgress }), true)
+			: await ensureViewerReadModelInWorker(archive, { onPhase, onProgress });
+		// A build includes the three unconditional backfills (body_hash,
+		// alias_of_id, dedupe_cap_event_id) internally, so they only need
+		// their own pass when the schema-version gate skipped the build —
+		// the maintenance case these backfills exist for: none of them is
+		// covered by that gate (body_hash/alias_of_id never changed the
+		// read-model schema; dedupe_cap_event_id's data changes on every
+		// re-crawl without a schema change), so an already-current archive
+		// would otherwise never catch its data up. Run in a worker for the
+		// same reason as the build itself: their synchronous SQL — and the
+		// WAL checkpoint folding their writes back — would freeze the main
+		// thread's display for minutes on a large archive (issue #294).
+		if (!built) {
+			await runViewerReadModelBackfillsInWorker(archive, { onPhase, onProgress });
 		}
-		// Not folded into the branches above: `ensureViewerReadModel`'s
-		// schema-version gate answers "does the read model need a
-		// rebuild", which is the wrong question for this backfill —
-		// `body_hash` didn't change the read-model schema, so an archive
-		// whose read model is already current would otherwise never run
-		// it. Called unconditionally here so `viewer-build` (with or
-		// without `--force`) always catches up a legacy archive's
-		// `body_hash` values; its own row-count guard makes the
-		// `--force` branch's second call (buildViewerReadModel already
-		// ran it once above) a cheap no-op.
-		await backfillBodyHashFromHtmlBlobs(archive, (processed, total) => {
-			logLine(
-				lanes,
-				flags.verbose,
-				`Backfilling page content hashes: ${formatProgressCount(processed, total)}`,
-			);
+		log('Viewer read model build: completed');
+		await archive.write({
+			onStep: (step) => {
+				log(`%braille% ${WRITE_STEP_LABELS[step]}%dots%`);
+			},
+			onTarProgress: createByteProgressLogger(log, 'Writing archive'),
 		});
-		// Must run after the body_hash backfill above: alias_of_id's
-		// trailing-slash tier requires body_hash to already be computed
-		// for both candidate pages. Called unconditionally for the same
-		// schema-version-gate reason as backfillBodyHashFromHtmlBlobs —
-		// alias_of_id does not change the read-model schema either, so
-		// `ensureViewerReadModel` alone would never trigger this on an
-		// already-current archive.
-		await backfillAliasOfId(archive, (processed, total) => {
-			logLine(
-				lanes,
-				flags.verbose,
-				`Backfilling duplicate page links: ${formatProgressCount(processed, total)}`,
-			);
-		});
-		// Unlike the two backfills above, `dedupe_cap_event_id`'s initial
-		// rollout IS covered by a read-model schema bump (`viewer_pages.
-		// is_dedupe_capped` needs one) — but the same gate-bypass problem
-		// resurfaces on every later `--append`/`--retry-failed` re-crawl
-		// of an already-current archive: new `dedupe_cap_events` rows or
-		// newly-discovered pages matching an existing shape would never
-		// get (re-)marked, since `ensureViewerReadModel`'s version check
-		// only answers "did the schema change," not "did the underlying
-		// data." Called unconditionally here for that ongoing-maintenance
-		// case, same as `backfillBodyHashFromHtmlBlobs`/`backfillAliasOfId`.
-		await backfillDedupeCapEventId(archive, (processed, total) => {
-			logLine(
-				lanes,
-				flags.verbose,
-				`Backfilling dedupe-cap markers: ${formatProgressCount(processed, total)}`,
-			);
-		});
-		logLine(lanes, flags.verbose, 'Viewer read model build: completed, writing archive…');
-		await archive.write();
 		await ignoreEnoent(unlink(backupPath));
 	} catch (error) {
 		try {
-			await copyFile(backupPath, absFilePath);
+			log('%braille% Restoring archive from backup%dots%');
+			await copyFileWithProgress(
+				backupPath,
+				absFilePath,
+				createByteProgressLogger(log, 'Restoring archive from backup'),
+			);
 			await ignoreEnoent(unlink(backupPath));
 		} catch (restoreError) {
 			formatCliError(

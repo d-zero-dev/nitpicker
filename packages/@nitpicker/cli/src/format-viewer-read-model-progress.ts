@@ -15,8 +15,20 @@ import { VIEWER_READ_MODEL_PHASE_LABELS } from './viewer-read-model-phase-labels
  * {@link formatViewerReadModelProgress}.
  */
 const PROGRESS_UNIT_BY_PHASE: Partial<Record<ViewerReadModelBuildPhase, string>> = {
-	creatingIndexes: 'indexes',
+	computingSummary: 'steps',
+	loadingPageRows: 'ids',
+	loadingTechnologyRows: 'ids',
+	buildingDirectoryTree: 'rows',
+	buildingTechnologySummary: 'rows',
+	buildingIsolatedComponents: 'rows',
 	buildingAnchorFacts: 'id ranges',
+	buildingGraph: 'edge ids',
+	buildingResources: 'resource ids',
+	buildingImages: 'image ids',
+	buildingHeaderChecks: 'rows',
+	buildingDuplicateGroups: 'ids',
+	buildingMismatches: 'scans',
+	creatingIndexes: 'indexes',
 };
 
 /**
@@ -28,12 +40,20 @@ const PROGRESS_UNIT_BY_PHASE: Partial<Record<ViewerReadModelBuildPhase, string>>
  *
  * `onProgress` reports `{ insertedRows, totalRows }` regardless of which
  * phase is running (issue #294 extended it beyond its original
- * `viewer_pages`-only scope to `creatingIndexes` and `buildingAnchorFacts`
- * too — the field names stayed put to avoid a breaking type change, but the
- * meaning is "units done / units total for whichever phase is current").
- * Passing that phase here picks the matching label and unit noun instead of
- * always claiming to build "viewer read model" pages; omit it (or pass
+ * `viewer_pages`-only scope to nearly every phase — the field names stayed
+ * put to avoid a breaking type change, but the meaning is "units done /
+ * units total for whichever phase is current"; see
+ * `ViewerReadModelBuildProgress`'s docs for the per-phase unit). Passing
+ * that phase here picks the matching label and unit noun instead of always
+ * claiming to build "viewer read model" pages; omit it (or pass
  * `buildingPages`) for the original meaning.
+ *
+ * Starts with the `%braille%` spinner placeholder (issue #294): between
+ * sparse updates (e.g. `buildingMismatches` reports only 6 times) a plain
+ * progress line sits fully static, indistinguishable from a stall —
+ * `riffle()` animates the spinner in `Lanes`' non-verbose mode and strips
+ * it in `--verbose` mode, same as `formatViewerReadModelPhase`'s
+ * placeholders.
  *
  * No timestamp here: a `Lanes` line overwrites itself, so a timestamp would
  * just flicker uselessly instead of aiding correlation. Callers that need to
@@ -54,5 +74,5 @@ export function formatViewerReadModelProgress(
 			? VIEWER_READ_MODEL_PHASE_LABELS[phase]
 			: 'Building viewer read model';
 	const unit = (phase && PROGRESS_UNIT_BY_PHASE[phase]) || 'pages';
-	return `${label}: ${formatProgressCount(progress.insertedRows, progress.totalRows, unit)}`;
+	return `%braille% ${label}: ${formatProgressCount(progress.insertedRows, progress.totalRows, unit)}`;
 }

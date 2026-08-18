@@ -8,7 +8,7 @@ const mockCloseB = vi.fn().mockResolvedValue();
 
 vi.mock('@nitpicker/crawler', () => ({
 	Archive: {
-		open: vi.fn(),
+		openCached: vi.fn(),
 	},
 }));
 
@@ -26,6 +26,18 @@ vi.mock('node:fs/promises', () => ({
 	default: {
 		writeFile: (...args: unknown[]) => mockWriteFile(...args),
 	},
+}));
+
+const mockLanesUpdate = vi.fn();
+
+vi.mock('@d-zero/dealer', () => ({
+	Lanes: vi.fn().mockImplementation(function (this: {
+		update: typeof mockLanesUpdate;
+		[Symbol.dispose]: ReturnType<typeof vi.fn>;
+	}) {
+		this.update = mockLanesUpdate;
+		this[Symbol.dispose] = vi.fn();
+	}),
 }));
 
 import { diff } from './diff.js';
@@ -57,7 +69,7 @@ function createMockPage(
 describe('diff', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.mocked(Archive.open).mockImplementation(({ filePath }) => {
+		vi.mocked(Archive.openCached).mockImplementation((filePath) => {
 			if (typeof filePath === 'string' && filePath.includes('b')) {
 				return Promise.resolve({
 					getPages: mockGetPagesB,
@@ -195,13 +207,51 @@ describe('diff', () => {
 		expect(mockCloseB).toHaveBeenCalledTimes(1);
 	});
 
-	it('Archive.open にファイルパスを渡す', async () => {
+	it('Archive.openCached にファイルパスと onExtractProgress を渡す（issue #294: 読み取り専用・キャッシュ経由に変更）', async () => {
 		mockGetPagesA.mockResolvedValueOnce([]);
 		mockGetPagesB.mockResolvedValueOnce([]);
 
 		await diff('first.nitpicker', 'second-b.nitpicker');
 
-		expect(Archive.open).toHaveBeenCalledWith({ filePath: 'first.nitpicker' });
-		expect(Archive.open).toHaveBeenCalledWith({ filePath: 'second-b.nitpicker' });
+		expect(Archive.openCached).toHaveBeenCalledWith(
+			'first.nitpicker',
+			null,
+			expect.any(Function),
+		);
+		expect(Archive.openCached).toHaveBeenCalledWith(
+			'second-b.nitpicker',
+			null,
+			expect.any(Function),
+		);
+	});
+
+	it('抽出フェーズと比較フェーズのラベルを Lanes に表示する（issue #294）', async () => {
+		mockGetPagesA.mockResolvedValueOnce([]);
+		mockGetPagesB.mockResolvedValueOnce([]);
+
+		await diff('a.nitpicker', 'b.nitpicker');
+
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			'%braille% Extracting archive A%dots%',
+		);
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			'%braille% Extracting archive B%dots%',
+		);
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			'%braille% Comparing pages%dots%',
+		);
+	});
+
+	it('--silent のときは Lanes を作らない（issue #294）', async () => {
+		mockGetPagesA.mockResolvedValueOnce([]);
+		mockGetPagesB.mockResolvedValueOnce([]);
+
+		const { Lanes } = await import('@d-zero/dealer');
+		await diff('a.nitpicker', 'b.nitpicker', { silent: true });
+
+		expect(Lanes).not.toHaveBeenCalled();
 	});
 });

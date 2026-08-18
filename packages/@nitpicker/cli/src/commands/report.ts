@@ -1,62 +1,12 @@
-import type { CommandDef, InferFlags } from '@d-zero/roar';
+import type { commandDef } from './report-def.js';
+import type { InferFlags } from '@d-zero/roar';
 
 import { report as runReport } from '@nitpicker/report-google-sheets';
 
+import { createByteProgressLogger } from '../create-byte-progress-logger.js';
 import { formatCliError } from '../format-cli-error.js';
+import { formatLogLine } from '../format-log-line.js';
 import { verbosely } from '../report/debug.js';
-
-/**
- * Command definition for the `report` sub-command.
- * @see {@link report} for the main entry point
- */
-export const commandDef = {
-	desc: 'Generate a Google Sheets report',
-	usage: '<file> --sheet <URL> [options]',
-	flags: {
-		sheet: {
-			shortFlag: 'S',
-			type: 'string',
-			isRequired: true,
-			valueName: 'URL',
-			desc: 'Google Sheets URL',
-		},
-		credentials: {
-			shortFlag: 'C',
-			type: 'string',
-			default: './credentials.json',
-			valueName: 'path',
-			desc: 'Path to credentials file (keep this file secure and out of version control)',
-		},
-		config: {
-			shortFlag: 'c',
-			type: 'string',
-			valueName: 'path',
-			desc: 'Path to config file',
-		},
-		limit: {
-			shortFlag: 'l',
-			type: 'number',
-			default: 100_000,
-			desc: 'Limit number of rows',
-		},
-		all: {
-			type: 'boolean',
-			desc: 'Generate all sheets without interactive prompt',
-		},
-		dedupeResources: {
-			type: 'boolean',
-			desc: 'Collapse the Resources sheet by canonical URL (query values stripped) and add a Count column. Useful for archives dominated by per-request unique tracking-pixel URLs.',
-		},
-		verbose: {
-			type: 'boolean',
-			desc: 'Output verbose log to standard out',
-		},
-		silent: {
-			type: 'boolean',
-			desc: 'No output log to standard out',
-		},
-	},
-} as const satisfies CommandDef;
 
 /** Parsed flag values for the `report` CLI command. */
 type ReportFlags = InferFlags<typeof commandDef.flags>;
@@ -107,6 +57,24 @@ export async function report(args: string[], flags: ReportFlags) {
 	const all = flags.all || !isTTY;
 	const verbose = !!flags.verbose || !isTTY;
 
+	// `report-google-sheets` stays UI-agnostic (issue #294): it only exposes
+	// a raw `(readBytes, totalBytes)` callback, so this command owns turning
+	// it into a display. Plain appended lines rather than a `Lanes` overwrite
+	// line — the extraction fully completes (and stops calling this) before
+	// `report()` constructs its own `Lanes` for the sheet-generation phase,
+	// but nothing here can observe that boundary to close a shared `Lanes`
+	// at the right moment, so two independently-repainting `Lanes` instances
+	// racing for the same terminal region is a real risk this sidesteps.
+	const onExtractProgress = flags.silent
+		? undefined
+		: createByteProgressLogger(
+				(message) => {
+					process.stderr.write(`${formatLogLine(verbose, message)}\n`);
+				},
+				'Extracting archive',
+				{ animated: false },
+			);
+
 	try {
 		await runReport({
 			filePath,
@@ -117,6 +85,7 @@ export async function report(args: string[], flags: ReportFlags) {
 			all,
 			silent: flags.silent ?? false,
 			dedupeResources: flags.dedupeResources ?? false,
+			onExtractProgress,
 		});
 	} catch (error) {
 		formatCliError(error, verbose);

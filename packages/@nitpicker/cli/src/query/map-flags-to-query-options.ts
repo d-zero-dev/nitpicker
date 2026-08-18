@@ -1,5 +1,5 @@
 import type { QuerySubCommand } from './types.js';
-import type { commandDef } from '../commands/query.js';
+import type { commandDef } from '../commands/query-def.js';
 import type { InferFlags } from '@d-zero/roar';
 import type { ContentTypeCategory } from '@nitpicker/query';
 

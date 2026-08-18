@@ -3,11 +3,11 @@ import type { Archive } from '@nitpicker/crawler';
 import { Lanes } from '@d-zero/dealer';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-const mockBuildViewerReadModel = vi.fn();
+const mockBuildViewerReadModelInWorker = vi.fn();
 const mockLanesUpdate = vi.fn();
 
 vi.mock('@nitpicker/query', () => ({
-	buildViewerReadModel: mockBuildViewerReadModel,
+	buildViewerReadModelInWorker: mockBuildViewerReadModelInWorker,
 }));
 
 vi.mock('@d-zero/dealer', () => ({
@@ -28,20 +28,20 @@ describe('ensureViewerReadModelQuietly', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('unconditionally rebuilds via buildViewerReadModel with an onProgress callback', async () => {
-		// Not ensureViewerReadModel: that gate only checks schema_version, so
+	it('unconditionally rebuilds via buildViewerReadModelInWorker with an onProgress callback', async () => {
+		// Not the schema-version-gated variant: that gate only checks schema_version, so
 		// a re-crawl (--append / --retry-failed / --inventory) against an
 		// archive whose read model was already built once at the current
 		// schema would silently skip the rebuild and leave newly-written
 		// data unreflected. Correctness first — this is unconditional even
 		// though it means the same full-table rebuild cost as a fresh crawl.
-		mockBuildViewerReadModel.mockResolvedValue();
+		mockBuildViewerReadModelInWorker.mockResolvedValue();
 		const { ensureViewerReadModelQuietly } =
 			await import('./ensure-viewer-read-model-quietly.js');
 
 		await ensureViewerReadModelQuietly(fakeArchive);
 
-		expect(mockBuildViewerReadModel).toHaveBeenCalledWith(
+		expect(mockBuildViewerReadModelInWorker).toHaveBeenCalledWith(
 			fakeArchive,
 			expect.objectContaining({
 				onProgress: expect.any(Function),
@@ -51,7 +51,7 @@ describe('ensureViewerReadModelQuietly', () => {
 	});
 
 	it('displays progress via a single Lanes line, same convention as the crawl/analyze commands', async () => {
-		mockBuildViewerReadModel.mockImplementation((_archive, options) => {
+		mockBuildViewerReadModelInWorker.mockImplementation((_archive, options) => {
 			options.onProgress({ insertedRows: 50, totalRows: 100 });
 			return Promise.resolve();
 		});
@@ -67,7 +67,7 @@ describe('ensureViewerReadModelQuietly', () => {
 	});
 
 	it('displays phase changes via the same Lanes line (issue #294)', async () => {
-		mockBuildViewerReadModel.mockImplementation((_archive, options) => {
+		mockBuildViewerReadModelInWorker.mockImplementation((_archive, options) => {
 			options.onPhase('buildingAnchorFacts');
 			return Promise.resolve();
 		});
@@ -83,7 +83,7 @@ describe('ensureViewerReadModelQuietly', () => {
 	});
 
 	it('passes the verbose option through to Lanes so --verbose appends instead of overwriting', async () => {
-		mockBuildViewerReadModel.mockResolvedValue();
+		mockBuildViewerReadModelInWorker.mockResolvedValue();
 		const { ensureViewerReadModelQuietly } =
 			await import('./ensure-viewer-read-model-quietly.js');
 
@@ -93,7 +93,7 @@ describe('ensureViewerReadModelQuietly', () => {
 	});
 
 	it('logs a start line before the build and a completed line after it, with no timestamp by default', async () => {
-		mockBuildViewerReadModel.mockResolvedValue();
+		mockBuildViewerReadModelInWorker.mockResolvedValue();
 		const { ensureViewerReadModelQuietly } =
 			await import('./ensure-viewer-read-model-quietly.js');
 
@@ -110,7 +110,7 @@ describe('ensureViewerReadModelQuietly', () => {
 	});
 
 	it('prefixes every line with an ISO 8601 timestamp in --verbose mode (issue #294)', async () => {
-		mockBuildViewerReadModel.mockResolvedValue();
+		mockBuildViewerReadModelInWorker.mockResolvedValue();
 		const { ensureViewerReadModelQuietly } =
 			await import('./ensure-viewer-read-model-quietly.js');
 
@@ -128,7 +128,7 @@ describe('ensureViewerReadModelQuietly', () => {
 	});
 
 	it('swallows a build failure and logs a warning instead of throwing', async () => {
-		mockBuildViewerReadModel.mockRejectedValue(new Error('disk full'));
+		mockBuildViewerReadModelInWorker.mockRejectedValue(new Error('disk full'));
 		const { ensureViewerReadModelQuietly } =
 			await import('./ensure-viewer-read-model-quietly.js');
 

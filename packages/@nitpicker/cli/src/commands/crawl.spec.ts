@@ -63,6 +63,29 @@ vi.mock('../crawl/scan-js-resources-quietly.js', () => ({
 	scanJsResourcesQuietly: mockScanJsResourcesQuietly,
 }));
 
+const mockSetupLanesClose = vi.fn();
+const mockSetupProgress = { onPhase: vi.fn() };
+const mockCreateSetupLanes = vi.fn(() => ({
+	setupProgress: mockSetupProgress,
+	close: mockSetupLanesClose,
+}));
+
+vi.mock('../crawl/setup-lanes.js', () => ({
+	createSetupLanes: mockCreateSetupLanes,
+}));
+
+const mockCheckingLanesUpdate = vi.fn();
+
+vi.mock('@d-zero/dealer', () => ({
+	Lanes: vi.fn().mockImplementation(function (this: {
+		update: typeof mockCheckingLanesUpdate;
+		[Symbol.dispose]: ReturnType<typeof vi.fn>;
+	}) {
+		this.update = mockCheckingLanesUpdate;
+		this[Symbol.dispose] = vi.fn();
+	}),
+}));
+
 const mockReadList = vi.fn().mockResolvedValue(['https://example.com/from-file']);
 
 /**
@@ -226,7 +249,7 @@ describe('startCrawl', () => {
 	});
 
 	it('dedupeCap フラグは default: 10 で on-by-default （--no-dedupe-cap / --dedupeCap 0 で無効化できる前提）', async () => {
-		const { commandDef } = await import('./crawl.js');
+		const { commandDef } = await import('./crawl-def.js');
 		expect(commandDef.flags.dedupeCap.default).toBe(10);
 	});
 
@@ -396,7 +419,10 @@ describe('crawl', () => {
 		const { crawl } = await import('./crawl.js');
 		await crawl(['a.nitpicker', 'b.nitpicker'], createFlags({ diff: true }));
 
-		expect(mockDiff).toHaveBeenCalledWith('a.nitpicker', 'b.nitpicker');
+		expect(mockDiff).toHaveBeenCalledWith('a.nitpicker', 'b.nitpicker', {
+			verbose: undefined,
+			silent: undefined,
+		});
 		expect(mockCrawling).not.toHaveBeenCalled();
 	});
 
@@ -480,6 +506,59 @@ describe('crawl', () => {
 		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
 		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
 			writeMock.mock.invocationCallOrder[0]!,
+		);
+	});
+
+	it('--append: createSetupLanes に verbose を渡し、initializedCallback 内で run() より先に close() する（issue #294）', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['/tmp/existing.nitpicker'],
+			createFlags({ append: ['https://sample-b.example.com/'], verbose: true }),
+		);
+
+		expect(mockCreateSetupLanes).toHaveBeenCalledWith(true);
+		expect(mockSetupLanesClose.mock.invocationCallOrder[0]!).toBeLessThan(
+			mockEventAssignments.mock.invocationCallOrder[0]!,
+		);
+		expect(mockAppend).toHaveBeenCalledWith(
+			'/tmp/existing.nitpicker',
+			['https://sample-b.example.com/'],
+			expect.any(Object),
+			expect.any(Function),
+			mockSetupProgress,
+		);
+	});
+
+	it('--append: CrawlerOrchestrator.append が initializedCallback 前に throw したら setupLanes.close() が呼ばれる（issue #294 code review #1）', async () => {
+		mockAppend.mockImplementationOnce(() =>
+			Promise.reject(new Error('append setup failed before initializedCallback')),
+		);
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/existing.nitpicker'],
+				createFlags({ append: ['https://sample-b.example.com/'] }),
+			),
+		).rejects.toThrow('append setup failed before initializedCallback');
+
+		expect(mockSetupLanesClose).toHaveBeenCalledOnce();
+	});
+
+	it('--append --silent: setup 用 Lanes を作らない（issue #294）', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['/tmp/existing.nitpicker'],
+			createFlags({ append: ['https://sample-b.example.com/'], silent: true }),
+		);
+
+		expect(mockCreateSetupLanes).not.toHaveBeenCalled();
+		expect(mockAppend).toHaveBeenCalledWith(
+			'/tmp/existing.nitpicker',
+			['https://sample-b.example.com/'],
+			expect.any(Object),
+			expect.any(Function),
+			undefined,
 		);
 	});
 
@@ -592,6 +671,19 @@ describe('crawl', () => {
 		);
 	});
 
+	it('--retry-failed: CrawlerOrchestrator.retryFailed が initializedCallback 前に throw したら setupLanes.close() が呼ばれる（issue #294 code review #1）', async () => {
+		mockRetryFailed.mockImplementationOnce(() =>
+			Promise.reject(new Error('retry-failed setup failed before initializedCallback')),
+		);
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(['/tmp/existing.nitpicker'], createFlags({ retryFailed: true })),
+		).rejects.toThrow('retry-failed setup failed before initializedCallback');
+
+		expect(mockSetupLanesClose).toHaveBeenCalledOnce();
+	});
+
 	it('--retry-failed を指定したのに位置引数が無いとエラー', async () => {
 		const { crawl } = await import('./crawl.js');
 		await expect(crawl([], createFlags({ retryFailed: true }))).rejects.toThrow(
@@ -683,6 +775,7 @@ describe('crawl', () => {
 			'/absolute/stub',
 			expect.any(Object),
 			expect.any(Function),
+			mockSetupProgress,
 		);
 		expect(mockCrawling).not.toHaveBeenCalled();
 		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(
@@ -703,7 +796,21 @@ describe('crawl', () => {
 			path.resolve(process.cwd(), 'relative/stub'),
 			expect.any(Object),
 			expect.any(Function),
+			mockSetupProgress,
 		);
+	});
+
+	it('--resume: CrawlerOrchestrator.resume が initializedCallback 前に throw したら setupLanes.close() が呼ばれる（issue #294 code review #1）', async () => {
+		mockResume.mockImplementationOnce(() =>
+			Promise.reject(new Error('resume setup failed before initializedCallback')),
+		);
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl([], createFlags({ resume: '/absolute/stub' }))).rejects.toThrow(
+			'resume setup failed before initializedCallback',
+		);
+
+		expect(mockSetupLanesClose).toHaveBeenCalledOnce();
 	});
 
 	it('--resume と --output を同時指定した場合、エラーを投げる', async () => {
@@ -888,6 +995,9 @@ describe('crawl', () => {
 				bytes: Buffer.from('https://example.com/hidden\n'),
 				invalidLineCount: 0,
 			},
+			// 6th arg: setup-phase progress callbacks (issue #294), from the
+			// mocked `createSetupLanes`.
+			mockSetupProgress,
 		);
 		// And the CLI actually hashed the bytes it read — not the path,
 		// not a re-read of the file.
@@ -905,6 +1015,20 @@ describe('crawl', () => {
 		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
 			writeMock.mock.invocationCallOrder[0]!,
 		);
+	});
+
+	it('--inventory: CrawlerOrchestrator.inventory が initializedCallback 前に throw したら setupLanes.close() が呼ばれる（issue #294 code review #1）', async () => {
+		mockReadFile.mockResolvedValueOnce(Buffer.from('https://example.com/hidden\n'));
+		mockInventory.mockImplementationOnce(() =>
+			Promise.reject(new Error('inventory setup failed before initializedCallback')),
+		);
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(['/tmp/test.nitpicker'], createFlags({ inventory: '/tmp/urls.txt' })),
+		).rejects.toThrow('inventory setup failed before initializedCallback');
+
+		expect(mockSetupLanesClose).toHaveBeenCalledOnce();
 	});
 
 	it('--inventory で空ファイルの場合、エラーを投げる', async () => {
@@ -931,6 +1055,7 @@ describe('crawl', () => {
 			expect.any(Object),
 			expect.any(Function),
 			expect.objectContaining({ sha256: expect.any(String), invalidLineCount: 1 }),
+			mockSetupProgress,
 		);
 		// The invalid line is warned with its line:column and the offending
 		// text, and the operator-typed (not resolved) list-file string.
@@ -1079,6 +1204,27 @@ describe('crawl', () => {
 		expect(mockAssertChromeIsInstalled.mock.invocationCallOrder[0]).toBeLessThan(
 			mockCrawling.mock.invocationCallOrder[0]!,
 		);
+	});
+
+	it('assertChromeIsInstalled の前に "Checking browser" 行を表示する（issue #294）', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['https://example.com'], createFlags());
+
+		expect(mockCheckingLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			'%braille% Checking browser%dots%',
+		);
+		expect(mockCheckingLanesUpdate.mock.invocationCallOrder[0]!).toBeLessThan(
+			mockAssertChromeIsInstalled.mock.invocationCallOrder[0]!,
+		);
+	});
+
+	it('--silent のときは "Checking browser" 行を表示しない（issue #294）', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['https://example.com'], createFlags({ silent: true }));
+
+		expect(mockCheckingLanesUpdate).not.toHaveBeenCalled();
+		expect(mockAssertChromeIsInstalled).toHaveBeenCalled();
 	});
 
 	it('assertChromeIsInstalled が失敗した場合、クロールを開始せずエラーを伝播する', async () => {

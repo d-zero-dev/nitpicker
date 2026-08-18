@@ -139,7 +139,7 @@ describe('pipeline command', () => {
 	});
 
 	it('dedupeCap フラグは commandDef 側も default: 10 で crawl.ts と揃えている（手書き複製ゆえの同期漏れガード）', async () => {
-		const { commandDef } = await import('./pipeline.js');
+		const { commandDef } = await import('./pipeline-def.js');
 		expect(commandDef.flags.dedupeCap.default).toBe(10);
 	});
 

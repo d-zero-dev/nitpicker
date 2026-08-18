@@ -1,9 +1,12 @@
-import type { CommandDef, InferFlags } from '@d-zero/roar';
+import type { commandDef } from './crawl-def.js';
+import type { SetupLanesHandle } from '../crawl/setup-lanes.js';
+import type { InferFlags } from '@d-zero/roar';
 import type { Config, CrawlerError } from '@nitpicker/crawler';
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { Lanes } from '@d-zero/dealer';
 import { readList, toListWithPosition } from '@d-zero/readtext/list';
 import {
 	assertChromeIsInstalled,
@@ -22,208 +25,13 @@ import { formatInventorySkipSummary } from '../crawl/format-inventory-skip-summa
 import { isValidUrl } from '../crawl/is-valid-url.js';
 import { mapFlagsToCrawlConfig } from '../crawl/map-flags-to-crawl-config.js';
 import { scanJsResourcesQuietly } from '../crawl/scan-js-resources-quietly.js';
+import { createSetupLanes } from '../crawl/setup-lanes.js';
 import { ExitCode } from '../exit-code.js';
+import { formatLogLine } from '../format-log-line.js';
 
 import { CrawlAggregateError } from './crawl-aggregate-error.js';
 
-/**
- * Command definition for the `crawl` sub-command.
- * Defines all CLI flags with their types, defaults, and descriptions.
- * @see {@link crawl} for the main entry point that dispatches to startCrawl/resumeCrawl/diff
- */
-export const commandDef = {
-	desc: 'Crawl a website',
-	usage: [
-		'<URL> [<URL>...] [options]',
-		'<archive> --append <URL> [--append <URL>...] [options]',
-		'<archive> --retry-failed [options]',
-		'<archive> --inventory <urls.txt> [options]',
-		'--resume <stub-dir> [options]',
-		'--diff <archiveA> <archiveB>',
-	],
-	flags: {
-		resume: {
-			type: 'string',
-			shortFlag: 'R',
-			valueName: 'stub-dir',
-			group: 'Crawl modes',
-			desc: 'Resume an interrupted crawl from its stub file or temporary directory',
-		},
-		append: {
-			type: 'string',
-			shortFlag: 'A',
-			isMultiple: true,
-			valueName: 'URL',
-			group: 'Crawl modes',
-			desc: 'Append crawl: register the URL as a new recursive root for the positional archive (repeat for multiple URLs)',
-		},
-		retryFailed: {
-			type: 'boolean',
-			group: 'Crawl modes',
-			desc: 'Retry crawl: re-fetch failed pages (missing status/content-type or a 5xx status) in the positional archive; use --no-recursive to skip re-crawling newly found URLs',
-		},
-		inventory: {
-			type: 'string',
-			valueName: 'file',
-			group: 'Crawl modes',
-			desc: "Inventory crawl: take a server-side URL list file and import only URLs that the positional archive does not yet track. The archive's --exclude / --exclude-url filters apply — matching URLs are recorded as skipped pages instead of being imported, same as excluded URLs in a normal crawl (--exclude-keyword still applies at render time, since it matches page content, not URLs). HTML URLs are rendered + recursively crawled; non-HTML URLs are stored directly without probing. Use with `query isolated-pages` / `unused-resources` to surface orphan pages / unused files.",
-		},
-		single: {
-			type: 'boolean',
-			group: 'Crawl modes',
-			desc: 'Crawl only the given URL without following links',
-		},
-		list: {
-			type: 'string',
-			isMultiple: true,
-			valueName: 'URL',
-			group: 'Crawl modes',
-			desc: 'Crawl only the given page URLs (repeat for multiple URLs; disables recursion)',
-		},
-		listFile: {
-			type: 'string',
-			valueName: 'file',
-			group: 'Crawl modes',
-			desc: 'Crawl only the page URLs listed in the file, one per line (disables recursion)',
-		},
-		diff: {
-			type: 'boolean',
-			group: 'Crawl modes',
-			desc: 'Compare two archives: write their internal page URL lists to a.txt / b.txt for use with diff tools',
-		},
-		recursive: {
-			type: 'boolean',
-			default: true,
-			group: 'Scope & filtering',
-			desc: 'Follow links found on crawled pages (use --no-recursive to disable)',
-		},
-		exclude: {
-			type: 'string',
-			isMultiple: true,
-			valueName: 'glob',
-			group: 'Scope & filtering',
-			desc: 'Exclude page URL paths matching the glob pattern (repeatable)',
-		},
-		excludeKeyword: {
-			type: 'string',
-			isMultiple: true,
-			valueName: 'keyword',
-			group: 'Scope & filtering',
-			desc: 'Exclude pages whose document contains the keyword (repeatable)',
-		},
-		excludeUrl: {
-			type: 'string',
-			isMultiple: true,
-			valueName: 'prefix',
-			group: 'Scope & filtering',
-			desc: 'Exclude external URLs starting with the prefix (repeatable)',
-		},
-		disableQueries: {
-			type: 'boolean',
-			shortFlag: 'Q',
-			group: 'Scope & filtering',
-			desc: 'Strip query strings from URLs when crawling',
-		},
-		maxExcludedDepth: {
-			type: 'number',
-			group: 'Scope & filtering',
-			desc: 'Maximum directory depth for excluded paths. Defaults to 10.',
-		},
-		dedupeCap: {
-			type: 'number',
-			default: 10,
-			group: 'Scope & filtering',
-			desc: 'Same-cluster soft cap: stop enqueueing newly-discovered internal URLs whose shape (e.g. `/news/date/{n}/`) has accumulated this many matching-title/description/og-tag observations. On by default (10) as a backstop against a site that keeps serving 2xx for a self-generating pager/query-parameter trap — false positives on legitimate large sections are structurally prevented (each such page differs in title/og tags, so the majority-vote counter never accumulates). Use --no-dedupe-cap (or --dedupeCap 0) to disable. See `query dedupe-cap-events` for what fired.',
-		},
-		dedupeMapCap: {
-			type: 'number',
-			group: 'Scope & filtering',
-			desc: 'Hard cap on the number of distinct URL shapes --dedupe-cap tracks at once; the least-recently-touched shape is evicted beyond this. Only relevant when --dedupe-cap is enabled.',
-		},
-		interval: {
-			type: 'number',
-			shortFlag: 'I',
-			valueName: 'ms',
-			group: 'Fetch behavior',
-			desc: 'Wait time in milliseconds between requests',
-		},
-		parallels: {
-			type: 'number',
-			shortFlag: 'P',
-			group: 'Fetch behavior',
-			desc: 'Number of pages to scrape in parallel',
-		},
-		retry: {
-			type: 'number',
-			default: 3,
-			group: 'Fetch behavior',
-			desc: 'Number of retry attempts per URL on scrape failure',
-		},
-		image: {
-			type: 'boolean',
-			default: true,
-			group: 'Fetch behavior',
-			desc: 'Capture image resources (use --no-image to disable)',
-		},
-		fetchExternal: {
-			type: 'boolean',
-			default: true,
-			group: 'Fetch behavior',
-			desc: 'Fetch external links (use --no-fetch-external to disable)',
-		},
-		imageFileSizeThreshold: {
-			type: 'number',
-			valueName: 'bytes',
-			group: 'Fetch behavior',
-			desc: 'File-size threshold above which images are excluded',
-		},
-		userAgent: {
-			type: 'string',
-			valueName: 'string',
-			group: 'Fetch behavior',
-			desc: 'Custom User-Agent string for HTTP requests',
-		},
-		ignoreRobots: {
-			type: 'boolean',
-			group: 'Fetch behavior',
-			desc: 'Ignore robots.txt restrictions (use responsibly)',
-		},
-		skipTechnologyJsScan: {
-			type: 'boolean',
-			group: 'Fetch behavior',
-			desc: 'Skip the post-crawl JS resource scan for technology license comments (avoids the extra network requests it makes against already-discovered JS resources)',
-		},
-		mainContentSelector: {
-			type: 'string',
-			valueName: 'selector',
-			group: 'Fetch behavior',
-			desc: 'CSS selector overriding automatic main-content-region detection',
-		},
-		output: {
-			type: 'string',
-			shortFlag: 'o',
-			valueName: 'path',
-			group: 'Output',
-			desc: 'Output file path for the .nitpicker archive',
-		},
-		strict: {
-			type: 'boolean',
-			group: 'Output',
-			desc: 'Treat external link errors as fatal (exit code 1 instead of 2)',
-		},
-		verbose: {
-			type: 'boolean',
-			group: 'Output',
-			desc: 'Output verbose log to standard out',
-		},
-		silent: {
-			type: 'boolean',
-			group: 'Output',
-			desc: 'No output log to standard out',
-		},
-	},
-} as const satisfies CommandDef;
-
+/** Parsed flag values for the `crawl` CLI command. */
 type CrawlFlags = InferFlags<typeof commandDef.flags>;
 
 type LogType = 'verbose' | 'normal' | 'silent';
@@ -274,6 +82,31 @@ async function run(
 }
 
 /**
+ * Invokes a `CrawlerOrchestrator` static factory (`append`/`inventory`/
+ * `retryFailed`/`resume`), closing `setupLanes` if the factory throws
+ * before ever invoking its `initializedCallback` (issue #294 code review:
+ * that callback was the only place `setupLanes.close()` ran, so a failure
+ * during setup — before the callback fires — e.g. a `.bak` copy I/O error,
+ * left the `Lanes` line's self-rescheduling repaint timer running forever).
+ * `close()` is idempotent, so this is safe even when the callback already
+ * closed it on the success path.
+ * @param setupLanes - The setup-phase Lanes handle, or `null` under `--silent`.
+ * @param factory - Thunk invoking the orchestrator static factory method.
+ * @returns The orchestrator the factory resolved with.
+ */
+async function createOrchestratorClosingLanesOnFailure<T>(
+	setupLanes: SetupLanesHandle | null,
+	factory: () => Promise<T>,
+): Promise<T> {
+	try {
+		return await factory();
+	} catch (error) {
+		setupLanes?.close();
+		throw error;
+	}
+}
+
+/**
  * Starts a fresh crawl session for the given URLs.
  *
  * Creates a CrawlerOrchestrator, runs the crawl, writes the archive,
@@ -307,7 +140,7 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 	);
 
 	if (!flags.skipTechnologyJsScan) {
-		await scanJsResourcesQuietly(orchestrator.archive);
+		await scanJsResourcesQuietly(orchestrator.archive, { verbose: flags.verbose });
 	}
 	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
 	await orchestrator.write();
@@ -338,25 +171,32 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 	const absFilePath = path.isAbsolute(stubFilePath)
 		? stubFilePath
 		: path.resolve(process.cwd(), stubFilePath);
+	const setupLanes = flags.silent ? null : createSetupLanes(!!flags.verbose);
 
-	await using orchestrator = await CrawlerOrchestrator.resume(
-		absFilePath,
-		{
-			...mapFlagsToCrawlConfig(flags),
-			list: false,
-		},
-		(orchestrator, config) => {
-			run(
-				stubFilePath,
-				orchestrator,
-				config,
-				flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
-			).catch((error) => errStack.push(error));
-		},
+	await using orchestrator = await createOrchestratorClosingLanesOnFailure(
+		setupLanes,
+		() =>
+			CrawlerOrchestrator.resume(
+				absFilePath,
+				{
+					...mapFlagsToCrawlConfig(flags),
+					list: false,
+				},
+				(orchestrator, config) => {
+					setupLanes?.close();
+					run(
+						stubFilePath,
+						orchestrator,
+						config,
+						flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
+					).catch((error) => errStack.push(error));
+				},
+				setupLanes?.setupProgress,
+			),
 	);
 
 	if (!flags.skipTechnologyJsScan) {
-		await scanJsResourcesQuietly(orchestrator.archive);
+		await scanJsResourcesQuietly(orchestrator.archive, { verbose: flags.verbose });
 	}
 	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
 	await orchestrator.write();
@@ -385,26 +225,33 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlFlags) {
 	validateUrls(newUrls);
 	const errStack: (CrawlerError | Error)[] = [];
+	const setupLanes = flags.silent ? null : createSetupLanes(!!flags.verbose);
 
-	await using orchestrator = await CrawlerOrchestrator.append(
-		archivePath,
-		newUrls,
-		{
-			...mapFlagsToCrawlConfig(flags),
-			list: false,
-		},
-		(orchestrator, config) => {
-			run(
-				`${archivePath} (append: ${newUrls.join(', ')})`,
-				orchestrator,
-				config,
-				flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
-			).catch((error) => errStack.push(error));
-		},
+	await using orchestrator = await createOrchestratorClosingLanesOnFailure(
+		setupLanes,
+		() =>
+			CrawlerOrchestrator.append(
+				archivePath,
+				newUrls,
+				{
+					...mapFlagsToCrawlConfig(flags),
+					list: false,
+				},
+				(orchestrator, config) => {
+					setupLanes?.close();
+					run(
+						`${archivePath} (append: ${newUrls.join(', ')})`,
+						orchestrator,
+						config,
+						flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
+					).catch((error) => errStack.push(error));
+				},
+				setupLanes?.setupProgress,
+			),
 	);
 
 	if (!flags.skipTechnologyJsScan) {
-		await scanJsResourcesQuietly(orchestrator.archive);
+		await scanJsResourcesQuietly(orchestrator.archive, { verbose: flags.verbose });
 	}
 	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
 	await orchestrator.write();
@@ -468,27 +315,34 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 
 	const sha256 = computeFileSha256(bytes);
 	const errStack: (CrawlerError | Error)[] = [];
+	const setupLanes = flags.silent ? null : createSetupLanes(!!flags.verbose);
 
-	await using orchestrator = await CrawlerOrchestrator.inventory(
-		archivePath,
-		valid,
-		{
-			...mapFlagsToCrawlConfig(flags),
-			list: false,
-		},
-		(orchestrator, config) => {
-			run(
-				`${archivePath} (inventory: ${listFile})`,
-				orchestrator,
-				config,
-				flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
-			).catch((error) => errStack.push(error));
-		},
-		{ sha256, bytes, invalidLineCount: invalid.length },
+	await using orchestrator = await createOrchestratorClosingLanesOnFailure(
+		setupLanes,
+		() =>
+			CrawlerOrchestrator.inventory(
+				archivePath,
+				valid,
+				{
+					...mapFlagsToCrawlConfig(flags),
+					list: false,
+				},
+				(orchestrator, config) => {
+					setupLanes?.close();
+					run(
+						`${archivePath} (inventory: ${listFile})`,
+						orchestrator,
+						config,
+						flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
+					).catch((error) => errStack.push(error));
+				},
+				{ sha256, bytes, invalidLineCount: invalid.length },
+				setupLanes?.setupProgress,
+			),
 	);
 
 	if (!flags.skipTechnologyJsScan) {
-		await scanJsResourcesQuietly(orchestrator.archive);
+		await scanJsResourcesQuietly(orchestrator.archive, { verbose: flags.verbose });
 	}
 	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
 	await orchestrator.write();
@@ -516,25 +370,32 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
  */
 async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
 	const errStack: (CrawlerError | Error)[] = [];
+	const setupLanes = flags.silent ? null : createSetupLanes(!!flags.verbose);
 
-	await using orchestrator = await CrawlerOrchestrator.retryFailed(
-		archivePath,
-		{
-			...mapFlagsToCrawlConfig(flags),
-			list: false,
-		},
-		(orchestrator, config) => {
-			run(
-				`${archivePath} (retry-failed)`,
-				orchestrator,
-				config,
-				flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
-			).catch((error) => errStack.push(error));
-		},
+	await using orchestrator = await createOrchestratorClosingLanesOnFailure(
+		setupLanes,
+		() =>
+			CrawlerOrchestrator.retryFailed(
+				archivePath,
+				{
+					...mapFlagsToCrawlConfig(flags),
+					list: false,
+				},
+				(orchestrator, config) => {
+					setupLanes?.close();
+					run(
+						`${archivePath} (retry-failed)`,
+						orchestrator,
+						config,
+						flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
+					).catch((error) => errStack.push(error));
+				},
+				setupLanes?.setupProgress,
+			),
 	);
 
 	if (!flags.skipTechnologyJsScan) {
-		await scanJsResourcesQuietly(orchestrator.archive);
+		await scanJsResourcesQuietly(orchestrator.archive, { verbose: flags.verbose });
 	}
 	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
 	await orchestrator.write();
@@ -608,7 +469,7 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		if (args.length !== 2) {
 			throw new Error('--diff takes exactly two file paths to compare');
 		}
-		await diff(args[0]!, args[1]!);
+		await diff(args[0]!, args[1]!, { verbose: flags.verbose, silent: flags.silent });
 		return;
 	}
 
@@ -628,8 +489,21 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		// up front, turns a missing Chrome into an immediate fatal error
 		// instead of a per-page scrape error buried in a "completed with
 		// N error(s)" summary (see `assertChromeIsInstalled`'s JSDoc).
-		await assertChromeIsInstalled();
-		assertPuppeteerSharedWithBeholder();
+		// A dedicated, short-lived `Lanes` line covers just this check
+		// (issue #294): it's the very first thing the process does, before
+		// any archive/setup display exists, so without it a slow Chrome
+		// lookup looks like the process hasn't started at all.
+		{
+			using checkingLanes = flags.silent
+				? null
+				: new Lanes({ verbose: !!flags.verbose, indent: '  ', stream: process.stderr });
+			checkingLanes?.update(
+				0,
+				formatLogLine(!!flags.verbose, '%braille% Checking browser%dots%'),
+			);
+			await assertChromeIsInstalled();
+			assertPuppeteerSharedWithBeholder();
+		}
 
 		if (flags.resume) {
 			if (flags.output) {

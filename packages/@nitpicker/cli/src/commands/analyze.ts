@@ -1,4 +1,5 @@
-import type { CommandDef, InferFlags } from '@d-zero/roar';
+import type { commandDef } from './analyze-def.js';
+import type { InferFlags } from '@d-zero/roar';
 
 import path from 'node:path';
 
@@ -10,59 +11,12 @@ import { buildPluginOverrides } from '../analyze/build-plugin-overrides.js';
 import { verbosely } from '../analyze/debug.js';
 import { log } from '../analyze/log.js';
 import { selectPlugins } from '../analyze/select-plugins.js';
+import { createByteProgressLogger } from '../create-byte-progress-logger.js';
 import { formatCliError } from '../format-cli-error.js';
+import { formatLogLine } from '../format-log-line.js';
 
 /** Enquirer prompt function for interactive CLI dialogs. */
 const { prompt } = enquirer;
-
-/**
- * Command definition for the `analyze` sub-command.
- * @see {@link analyze} for the main entry point
- */
-export const commandDef = {
-	desc: 'Analyze a .nitpicker archive',
-	usage: '<file> [options]',
-	flags: {
-		all: {
-			type: 'boolean',
-			desc: 'Run all analysis plugins without the interactive prompt',
-		},
-		plugin: {
-			type: 'string',
-			isMultiple: true,
-			valueName: 'name',
-			desc: 'Specify plugins to run (e.g. --plugin @nitpicker/analyze-axe --plugin @nitpicker/analyze-textlint)',
-		},
-		verbose: {
-			type: 'boolean',
-			desc: 'Output logs verbosely',
-		},
-		searchKeywords: {
-			type: 'string',
-			isMultiple: true,
-			valueName: 'keyword',
-			desc: 'Keywords for analyze-search plugin (overrides config file)',
-		},
-		searchScope: {
-			type: 'string',
-			valueName: 'selector',
-			desc: 'CSS selector to narrow search scope for analyze-search plugin (overrides config file)',
-		},
-		axeLang: {
-			type: 'string',
-			valueName: 'lang',
-			desc: 'BCP 47 language tag for analyze-axe plugin (overrides config file)',
-		},
-		templates: {
-			type: 'boolean',
-			desc: 'Classify pages into templates by DOM structure similarity (uses @d-zero/page-cluster)',
-		},
-		silent: {
-			type: 'boolean',
-			desc: 'No output log to standard out',
-		},
-	},
-} as const satisfies CommandDef;
 
 /** Parsed flag values for the `analyze` CLI command. */
 type AnalyzeFlags = InferFlags<typeof commandDef.flags>;
@@ -112,11 +66,25 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 		const absFilePath = path.isAbsolute(filePath)
 			? filePath
 			: path.resolve(process.cwd(), filePath);
-		if (!silent) {
-			// eslint-disable-next-line no-console
-			console.log(`  📦 Extracting archive: ${absFilePath}`);
+		// `extractLanes` is scoped to this block, not the whole `try` (issue
+		// #294): a large archive's extraction can take tens of seconds and
+		// previously printed one static line with no progress; the plugin-run
+		// phase below prints its own plain `console.log` lines via `log()`,
+		// which would corrupt this Lanes' cursor-based redraw if both were
+		// alive at once.
+		let openedNitpicker: Nitpicker;
+		{
+			using extractLanes = silent ? null : new Lanes({ verbose, indent: '  ' });
+			const logExtract = (message: string) => {
+				extractLanes?.update(0, formatLogLine(verbose, message));
+			};
+			logExtract('%braille% Extracting archive%dots%');
+			openedNitpicker = await Nitpicker.open(
+				absFilePath,
+				silent ? undefined : createByteProgressLogger(logExtract, 'Extracting archive'),
+			);
 		}
-		await using nitpicker = await Nitpicker.open(absFilePath);
+		await using nitpicker = openedNitpicker;
 
 		const pluginOverrides = buildPluginOverrides(flags);
 		if (Object.keys(pluginOverrides).length > 0) {

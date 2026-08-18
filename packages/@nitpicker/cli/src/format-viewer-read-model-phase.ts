@@ -8,21 +8,25 @@ import { VIEWER_READ_MODEL_PHASE_LABELS } from './viewer-read-model-phase-labels
  * many multi-minute steps between the one step with real N/M progress
  * (`viewer_pages`) are indistinguishable from a hang.
  *
- * Ends with `%dots%`, the same `Lanes`/`Display` animation placeholder
- * `crawler.ts` uses for its own no-progress-number phases (`'Scraping%dots%'`,
- * `'HEAD request%dots%'`, etc.) — `riffle()` animates it in `Lanes`'
- * non-verbose (single overwriting line) mode, and strips it to nothing in
- * `--verbose` mode. Without it, a phase with no sub-progress (most of them —
- * only `buildingPages`/`creatingIndexes`/`buildingAnchorFacts` report
- * N/M) renders as fully static text for however long that phase actually
- * takes, indistinguishable from `Lanes`' redraw loop itself having stalled.
+ * Starts with the `%braille%` spinner and ends with `%dots%` — the same
+ * `Lanes`/`Display` animation placeholders `crawler.ts` uses for its own
+ * no-progress-number phases (`'Scraping%dots%'`, etc.) — `riffle()` animates
+ * them in `Lanes`' non-verbose (single overwriting line) mode, and strips
+ * them to nothing in `--verbose` mode. Without them, a phase with no
+ * sub-progress renders as fully static text for however long that phase
+ * actually takes, indistinguishable from `Lanes`' redraw loop itself having
+ * stalled. The `%braille%` prefix matches
+ * `formatViewerReadModelProgress`'s, so the label column doesn't jump when
+ * a phase line is replaced by its first progress line.
  * @param phase - The phase that just started.
- * @returns A one-line, human-readable phase message ending in `%dots%`.
+ * @returns A one-line, human-readable phase message wrapped in animation
+ *   placeholders.
  * @example
  * ```ts
- * formatViewerReadModelPhase('buildingAnchorFacts'); // "Building anchor facts%dots%"
+ * formatViewerReadModelPhase('buildingAnchorFacts');
+ * // "%braille% Building anchor facts%dots%"
  * ```
  */
 export function formatViewerReadModelPhase(phase: ViewerReadModelBuildPhase): string {
-	return `${VIEWER_READ_MODEL_PHASE_LABELS[phase]}%dots%`;
+	return `%braille% ${VIEWER_READ_MODEL_PHASE_LABELS[phase]}%dots%`;
 }

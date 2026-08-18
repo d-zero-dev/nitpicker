@@ -19,6 +19,8 @@ export const VIEWER_READ_MODEL_PHASE_LABELS: Record<ViewerReadModelBuildPhase, s
 	backfillingAliasOfId: 'Backfilling duplicate page links',
 	backfillingDedupeCapEventId: 'Backfilling dedupe-cap markers',
 	computingSummary: 'Computing summary',
+	loadingPageRows: 'Loading page rows',
+	loadingTechnologyRows: 'Loading technology rows',
 	buildingPages: 'Building pages',
 	buildingDirectoryTree: 'Building directory tree',
 	buildingTechnologySummary: 'Building technology summary',
@@ -31,4 +33,6 @@ export const VIEWER_READ_MODEL_PHASE_LABELS: Record<ViewerReadModelBuildPhase, s
 	buildingDuplicateGroups: 'Building duplicate groups',
 	buildingMismatches: 'Building mismatches',
 	creatingIndexes: 'Creating indexes',
+	committing: 'Committing read model',
+	checkpointing: 'Checkpointing database',
 };

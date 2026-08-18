@@ -20,6 +20,18 @@ vi.mock('@nitpicker/query', () => ({
 	}),
 }));
 
+const mockLanesUpdate = vi.fn();
+
+vi.mock('@d-zero/dealer', () => ({
+	Lanes: vi.fn().mockImplementation(function (this: {
+		update: typeof mockLanesUpdate;
+		[Symbol.dispose]: ReturnType<typeof vi.fn>;
+	}) {
+		this.update = mockLanesUpdate;
+		this[Symbol.dispose] = vi.fn();
+	}),
+}));
+
 vi.mock('../query/dispatch-query.js', () => ({
 	dispatchQuery: vi
 		.fn()
@@ -94,9 +106,40 @@ describe('query command', () => {
 			expect.anything(),
 			'summary',
 			expect.objectContaining({ pretty: undefined }),
+			expect.any(Function),
 		);
 		expect(consoleLogSpy).toHaveBeenCalledWith(
 			JSON.stringify({ baseUrl: 'https://example.com', totalPages: 5 }),
+		);
+	});
+
+	it('constructs ArchiveManager with an onExtractProgress callback that renders through a stderr Lanes line (issue #294)', async () => {
+		const { ArchiveManager } = await import('@nitpicker/query');
+
+		await query(['test.nitpicker', 'summary'], { pretty: undefined } as never);
+
+		const options = vi.mocked(ArchiveManager).mock.calls[0]?.[0];
+		expect(options?.onExtractProgress).toEqual(expect.any(Function));
+		options?.onExtractProgress?.(50_000_000, 200_000_000);
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			'%braille% Extracting archive: 50/200 MB (25%)',
+		);
+	});
+
+	it('writes onSortProgress messages to stderr (issue #294)', async () => {
+		const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+		vi.mocked(dispatchQueryFn).mockImplementationOnce(
+			(_accessor, _sub, _flags, onSortProgress) => {
+				onSortProgress?.('Sorting URLs: done — 3 distinct URLs ranked');
+				return Promise.resolve({ baseUrl: 'https://example.com', totalPages: 5 });
+			},
+		);
+
+		await query(['test.nitpicker', 'summary'], { pretty: undefined } as never);
+
+		expect(stderrSpy).toHaveBeenCalledWith(
+			'Sorting URLs: done — 3 distinct URLs ranked\n',
 		);
 	});
 
@@ -169,7 +212,7 @@ describe('query command', () => {
 
 describe('query commandDef sub-command metadata', () => {
 	it('lists exactly the dispatchable sub-commands', async () => {
-		const { commandDef } = await import('./query.js');
+		const { commandDef } = await import('./query-def.js');
 		const { VALID_SUB_COMMANDS } = await import('../query/types.js');
 
 		expect(Object.keys(commandDef.subCommands).toSorted()).toEqual(
@@ -178,7 +221,7 @@ describe('query commandDef sub-command metadata', () => {
 	});
 
 	it('references only defined flags in every sub-command flag list', async () => {
-		const { commandDef } = await import('./query.js');
+		const { commandDef } = await import('./query-def.js');
 		const flagKeys = new Set(Object.keys(commandDef.flags));
 
 		for (const [name, sub] of Object.entries(commandDef.subCommands)) {
@@ -189,7 +232,7 @@ describe('query commandDef sub-command metadata', () => {
 	});
 
 	it('keeps --pretty as the only flag shared by all sub-commands', async () => {
-		const { commandDef } = await import('./query.js');
+		const { commandDef } = await import('./query-def.js');
 		const referenced = new Set(
 			Object.values(commandDef.subCommands).flatMap((sub) => [...sub.flags]),
 		);

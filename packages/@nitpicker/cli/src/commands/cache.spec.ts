@@ -259,13 +259,13 @@ describe('cache command', () => {
 
 	describe('commandDef sub-command metadata', () => {
 		it('lists exactly the dispatchable sub-commands', async () => {
-			const { commandDef } = await import('./cache.js');
+			const { commandDef } = await import('./cache-def.js');
 
 			expect(Object.keys(commandDef.subCommands).toSorted()).toEqual(['clear', 'list']);
 		});
 
 		it('references only defined flags in every sub-command flag list', async () => {
-			const { commandDef } = await import('./cache.js');
+			const { commandDef } = await import('./cache-def.js');
 			const flagKeys = new Set(Object.keys(commandDef.flags));
 
 			for (const [name, sub] of Object.entries(commandDef.subCommands)) {

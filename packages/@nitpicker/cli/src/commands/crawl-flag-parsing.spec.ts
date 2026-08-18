@@ -1,7 +1,7 @@
 import { parseCli } from '@d-zero/roar';
 import { describe, expect, it } from 'vitest';
 
-import { commandDef } from './crawl.js';
+import { commandDef } from './crawl-def.js';
 
 /**
  * Run `parseCli` against a fabricated `process.argv` and return the parsed

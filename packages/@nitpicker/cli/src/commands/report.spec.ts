@@ -32,6 +32,7 @@ describe('report command', () => {
 	let originalIsTTY: boolean | undefined;
 	let exitSpy: ReturnType<typeof vi.spyOn>;
 	let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+	let stderrSpy: ReturnType<typeof vi.spyOn>;
 
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -40,6 +41,7 @@ describe('report command', () => {
 			throw new ExitError(code as number);
 		});
 		consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 	});
 
 	afterEach(() => {
@@ -132,6 +134,71 @@ describe('report command', () => {
 			}),
 		);
 		expect(exitSpy).not.toHaveBeenCalled();
+	});
+
+	it('passes an onExtractProgress callback when not silent (issue #294)', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+
+		await report(['test.nitpicker'], {
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			credentials: './credentials.json',
+			config: undefined,
+			limit: 100_000,
+			all: true,
+			verbose: undefined,
+			silent: undefined,
+		});
+
+		expect(runReport).toHaveBeenCalledWith(
+			expect.objectContaining({
+				onExtractProgress: expect.any(Function),
+			}),
+		);
+	});
+
+	it('omits onExtractProgress when --silent is set (issue #294)', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+
+		await report(['test.nitpicker'], {
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			credentials: './credentials.json',
+			config: undefined,
+			limit: 100_000,
+			all: true,
+			verbose: undefined,
+			silent: true,
+		});
+
+		expect(runReport).toHaveBeenCalledWith(
+			expect.objectContaining({
+				onExtractProgress: undefined,
+			}),
+		);
+	});
+
+	it('renders byte progress to stderr via the passed callback, with no %braille% placeholder leak (issue #294 code review #6)', async () => {
+		// Exact match, not `stringContaining`: this command bypasses `Lanes`
+		// and writes straight to `process.stderr`, so `createByteProgressLogger`
+		// must be called with `{ animated: false }` — a loose check would
+		// pass even if that option were dropped and the literal `%braille%`
+		// placeholder leaked into the output.
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		vi.mocked(runReport).mockImplementationOnce((options) => {
+			options.onExtractProgress?.(50_000_000, 200_000_000);
+			return Promise.resolve();
+		});
+
+		await report(['test.nitpicker'], {
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			credentials: './credentials.json',
+			config: undefined,
+			limit: 100_000,
+			all: true,
+			verbose: undefined,
+			silent: undefined,
+		});
+
+		expect(stderrSpy).toHaveBeenCalledWith('Extracting archive: 50/200 MB (25%)\n');
 	});
 
 	it('calls verbosely when --verbose is set without --silent', async () => {
