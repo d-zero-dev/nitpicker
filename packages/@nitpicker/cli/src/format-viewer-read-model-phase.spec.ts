@@ -5,29 +5,29 @@ import { formatViewerReadModelPhase } from './format-viewer-read-model-phase.js'
 describe('formatViewerReadModelPhase', () => {
 	it('formats a backfill phase with wording matching the standalone viewer-build backfill lines', () => {
 		expect(formatViewerReadModelPhase('backfillingBodyHash')).toBe(
-			'%braille% Backfilling page content hashes%dots%',
+			'Backfilling page content hashes',
 		);
 		expect(formatViewerReadModelPhase('backfillingAliasOfId')).toBe(
-			'%braille% Backfilling duplicate page links%dots%',
+			'Backfilling duplicate page links',
 		);
 		expect(formatViewerReadModelPhase('backfillingDedupeCapEventId')).toBe(
-			'%braille% Backfilling dedupe-cap markers%dots%',
+			'Backfilling dedupe-cap markers',
 		);
 	});
 
 	it('formats a build phase', () => {
 		expect(formatViewerReadModelPhase('buildingAnchorFacts')).toBe(
-			'%braille% Building anchor facts%dots%',
+			'Building anchor facts',
 		);
 	});
 
 	it('formats the final phase', () => {
-		expect(formatViewerReadModelPhase('creatingIndexes')).toBe(
-			'%braille% Creating indexes%dots%',
-		);
+		expect(formatViewerReadModelPhase('creatingIndexes')).toBe('Creating indexes');
 	});
 
-	it('ends with the %dots% Lanes animation placeholder (issue #294) so a phase with no sub-progress still animates', () => {
-		expect(formatViewerReadModelPhase('computingSummary')).toMatch(/%dots%$/);
+	it('renders no animation placeholder (issue #294) — the TaskList row icon animates instead', () => {
+		expect(formatViewerReadModelPhase('computingSummary')).not.toMatch(
+			/%dots%|%braille%/,
+		);
 	});
 });

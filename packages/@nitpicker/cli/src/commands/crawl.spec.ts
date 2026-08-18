@@ -1,3 +1,4 @@
+import type { attachCrawlDisplay as AttachCrawlDisplayFn } from '../crawl/attach-crawl-display.js';
 import type {
 	CrawlerOrchestrator as OrchestratorType,
 	CrawlerError,
@@ -5,6 +6,7 @@ import type {
 
 import path from 'node:path';
 
+import { TaskListStepError } from '@d-zero/dealer';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { ExitCode } from '../exit-code.js';
@@ -29,12 +31,39 @@ vi.mock('@nitpicker/crawler', () => ({
 	computeFileSha256: mockComputeFileSha256,
 	assertChromeIsInstalled: mockAssertChromeIsInstalled,
 	assertPuppeteerSharedWithBeholder: mockAssertPuppeteerSharedWithBeholder,
+	// Real content doesn't matter to this suite — `createSetupTaskList` is
+	// mocked wholesale below, so these are only ever forwarded as opaque
+	// values, never iterated for their actual phase labels.
+	RESUME_SETUP_PHASES: ['Reconnecting to archive'],
+	APPEND_SETUP_PHASES: ['Extracting archive'],
+	INVENTORY_SETUP_PHASES: ['Extracting archive'],
+	RETRY_FAILED_SETUP_PHASES: ['Extracting archive'],
 }));
 
-const mockEventAssignments = vi.fn().mockResolvedValue();
+/**
+ * Mocks `attachCrawlDisplay` to push `error` into the `errStack` array it's
+ * called with — the current equivalent of the pre-TaskList suite's
+ * `mockEventAssignments.mockRejectedValueOnce(error)`. `attachCrawlDisplay`
+ * is synchronous now (no promise to reject); a crawl-time error instead
+ * reaches `errStack` via the `'error'` event listener it registers, which
+ * this stands in for directly.
+ * @param error - The crawl-time error to simulate.
+ */
+function simulateCrawlTimeError(error: CrawlerError | Error) {
+	mockAttachCrawlDisplay.mockImplementationOnce(({ errStack }) => {
+		errStack.push(error);
+		return { close: mockAttachCrawlDisplayClose };
+	});
+}
 
-vi.mock('../crawl/event-assignments.js', () => ({
-	eventAssignments: mockEventAssignments,
+const mockAttachCrawlDisplayClose = vi.fn();
+const mockAttachCrawlDisplay = vi.fn<AttachCrawlDisplayFn>(() => ({
+	close: mockAttachCrawlDisplayClose,
+}));
+
+vi.mock('../crawl/attach-crawl-display.js', () => ({
+	attachCrawlDisplay: (...args: Parameters<AttachCrawlDisplayFn>) =>
+		mockAttachCrawlDisplay(...args),
 }));
 
 const mockVerbosely = vi.fn();
@@ -51,40 +80,56 @@ vi.mock('../crawl/diff.js', () => ({
 	diff: mockDiff,
 }));
 
-const mockEnsureViewerReadModelQuietly = vi.fn().mockResolvedValue();
+/**
+ * Stands in for the real post-crawl pipeline (scan JS resources → build
+ * viewer read model → write archive), collapsed to just `orchestrator.write()`
+ * — the one call downstream assertions in this suite (archive.close()/
+ * garbageCollect() ordering, write-failure propagation) actually depend on.
+ * The scan/read-model/write internal ordering and `--silent` behavior are
+ * covered by `run-post-crawl-task-list.spec.ts`, not here.
+ */
+const mockRunPostCrawlTaskList = vi.fn(async (orchestrator: OrchestratorType) => {
+	await orchestrator.write();
+});
 
-vi.mock('../crawl/ensure-viewer-read-model-quietly.js', () => ({
-	ensureViewerReadModelQuietly: mockEnsureViewerReadModelQuietly,
+vi.mock('../crawl/run-post-crawl-task-list.js', () => ({
+	runPostCrawlTaskList: (...args: Parameters<typeof mockRunPostCrawlTaskList>) =>
+		mockRunPostCrawlTaskList(...args),
 }));
 
-const mockScanJsResourcesQuietly = vi.fn().mockResolvedValue();
-
-vi.mock('../crawl/scan-js-resources-quietly.js', () => ({
-	scanJsResourcesQuietly: mockScanJsResourcesQuietly,
-}));
-
-const mockSetupLanesClose = vi.fn();
+const mockSetupTaskListFinish = vi.fn();
+const mockSetupTaskListFail = vi.fn();
 const mockSetupProgress = { onPhase: vi.fn() };
-const mockCreateSetupLanes = vi.fn(() => ({
+const mockCreateSetupTaskList = vi.fn(() => ({
 	setupProgress: mockSetupProgress,
-	close: mockSetupLanesClose,
+	taskListDone: Promise.resolve(),
+	finish: mockSetupTaskListFinish,
+	fail: mockSetupTaskListFail,
 }));
 
-vi.mock('../crawl/setup-lanes.js', () => ({
-	createSetupLanes: mockCreateSetupLanes,
+vi.mock('../crawl/create-setup-task-list.js', () => ({
+	createSetupTaskList: (...args: Parameters<typeof mockCreateSetupTaskList>) =>
+		mockCreateSetupTaskList(...args),
 }));
 
-const mockCheckingLanesUpdate = vi.fn();
+/** Records the task-list row name `crawl.ts`'s Chrome check builds, in call order. */
+const mockTaskListPipeName = vi.fn();
 
-vi.mock('@d-zero/dealer', () => ({
-	Lanes: vi.fn().mockImplementation(function (this: {
-		update: typeof mockCheckingLanesUpdate;
-		[Symbol.dispose]: ReturnType<typeof vi.fn>;
-	}) {
-		this.update = mockCheckingLanesUpdate;
-		this[Symbol.dispose] = vi.fn();
-	}),
-}));
+vi.mock('@d-zero/dealer', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('@d-zero/dealer')>();
+	return {
+		// Real `TaskListStepError` — `crawl.ts`'s `unwrapTaskListStepError`
+		// does an `instanceof` check against it, which needs the actual class
+		// (not a mock stand-in) to behave correctly.
+		TaskListStepError: actual.TaskListStepError,
+		TaskList: {
+			pipe: (name: string, fn: () => unknown) => {
+				mockTaskListPipeName(name);
+				return { run: () => Promise.resolve(fn()) };
+			},
+		},
+	};
+});
 
 const mockReadList = vi.fn().mockResolvedValue(['https://example.com/from-file']);
 
@@ -296,8 +341,8 @@ describe('startCrawl', () => {
 		expect(process.listenerCount('SIGINT')).toBe(before);
 	});
 
-	it('eventAssignments がエラーでもシグナルリスナーが解除される', async () => {
-		mockEventAssignments.mockRejectedValueOnce(new Error('scrape failed'));
+	it('crawl 中にエラーが起きてもシグナルリスナーが解除される', async () => {
+		simulateCrawlTimeError(new Error('scrape failed'));
 		const { startCrawl } = await import('./crawl.js');
 		const before = process.listenerCount('SIGINT');
 
@@ -307,7 +352,7 @@ describe('startCrawl', () => {
 	});
 
 	it('イベントエラー発生時に CrawlAggregateError をスローする', async () => {
-		mockEventAssignments.mockRejectedValueOnce(new Error('scrape failed'));
+		simulateCrawlTimeError(new Error('scrape failed'));
 
 		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
 		const { startCrawl } = await import('./crawl.js');
@@ -345,20 +390,32 @@ describe('startCrawl', () => {
 		expect(closeOrder!).toBeLessThan(gcOrder!);
 	});
 
-	it('builds the viewer read model against orchestrator.archive before write() tars it (issue #112)', async () => {
+	it('runs the post-crawl task list against the orchestrator with the right flags', async () => {
 		const fake = setupFakeOrchestrator();
 		const { startCrawl } = await import('./crawl.js');
-		await startCrawl(['https://example.com'], createFlags());
+		await startCrawl(['https://example.com'], createFlags({ verbose: true }));
 
-		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(
-			fake.archive,
-			expect.anything(),
+		expect(mockRunPostCrawlTaskList).toHaveBeenCalledWith(
+			fake,
+			expect.objectContaining({
+				verbose: true,
+				silent: false,
+				skipTechnologyJsScan: false,
+			}),
 		);
+	});
 
-		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
-		const buildOrder = mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0];
-		const writeOrder = writeMock.mock.invocationCallOrder[0];
-		expect(buildOrder!).toBeLessThan(writeOrder!);
+	it('runPostCrawlTaskList が TaskListStepError で reject しても、元の cause だけが伝播する（dealer のラップ文言を露出しない）', async () => {
+		setupFakeOrchestrator();
+		const cause = new Error('disk full');
+		mockRunPostCrawlTaskList.mockRejectedValueOnce(
+			new TaskListStepError('Write archive', 2, cause),
+		);
+		const { startCrawl } = await import('./crawl.js');
+
+		const rejection = startCrawl(['https://example.com'], createFlags());
+		await expect(rejection).rejects.toBe(cause);
+		await expect(rejection).rejects.not.toThrow(/Step "Write archive"/);
 	});
 
 	it('write() が失敗しても archive.close() と garbageCollect() が呼ばれる', async () => {
@@ -499,26 +556,25 @@ describe('crawl', () => {
 		expect(archivePath).toBe('/tmp/existing.nitpicker');
 		expect(urls).toEqual(['https://sample-b.example.com/']);
 		expect(mockCrawling).not.toHaveBeenCalled();
-		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(
-			fake.archive,
-			expect.anything(),
-		);
-		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
-		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
-			writeMock.mock.invocationCallOrder[0]!,
+		expect(mockRunPostCrawlTaskList).toHaveBeenCalledWith(
+			fake,
+			expect.objectContaining({ silent: false, skipTechnologyJsScan: false }),
 		);
 	});
 
-	it('--append: createSetupLanes に verbose を渡し、initializedCallback 内で run() より先に close() する（issue #294）', async () => {
+	it('--append: createSetupTaskList に verbose を渡し、initializedCallback 内で display 生成より先に finish() する（issue #294）', async () => {
 		const { crawl } = await import('./crawl.js');
 		await crawl(
 			['/tmp/existing.nitpicker'],
 			createFlags({ append: ['https://sample-b.example.com/'], verbose: true }),
 		);
 
-		expect(mockCreateSetupLanes).toHaveBeenCalledWith(true);
-		expect(mockSetupLanesClose.mock.invocationCallOrder[0]!).toBeLessThan(
-			mockEventAssignments.mock.invocationCallOrder[0]!,
+		expect(mockCreateSetupTaskList).toHaveBeenCalledWith(
+			expect.any(Array),
+			expect.objectContaining({ verbose: true }),
+		);
+		expect(mockSetupTaskListFinish.mock.invocationCallOrder[0]!).toBeLessThan(
+			mockAttachCrawlDisplay.mock.invocationCallOrder[0],
 		);
 		expect(mockAppend).toHaveBeenCalledWith(
 			'/tmp/existing.nitpicker',
@@ -529,7 +585,23 @@ describe('crawl', () => {
 		);
 	});
 
-	it('--append: CrawlerOrchestrator.append が initializedCallback 前に throw したら setupLanes.close() が呼ばれる（issue #294 code review #1）', async () => {
+	it('--append: シグナルハンドラは setupTaskList.finish()/taskListDone より前に登録される（issue #294 code review #3 — Ctrl-C 無防備な窓を作らない）', async () => {
+		const before = process.listenerCount('SIGINT');
+		let listenerCountAtFinish = -1;
+		mockSetupTaskListFinish.mockImplementationOnce(() => {
+			listenerCountAtFinish = process.listenerCount('SIGINT');
+		});
+		const { crawl } = await import('./crawl.js');
+
+		await crawl(
+			['/tmp/existing.nitpicker'],
+			createFlags({ append: ['https://sample-b.example.com/'] }),
+		);
+
+		expect(listenerCountAtFinish).toBeGreaterThan(before);
+	});
+
+	it('--append: CrawlerOrchestrator.append が initializedCallback 前に throw したら setupTaskList.fail() が呼ばれる（issue #294 code review #1）', async () => {
 		mockAppend.mockImplementationOnce(() =>
 			Promise.reject(new Error('append setup failed before initializedCallback')),
 		);
@@ -542,17 +614,17 @@ describe('crawl', () => {
 			),
 		).rejects.toThrow('append setup failed before initializedCallback');
 
-		expect(mockSetupLanesClose).toHaveBeenCalledOnce();
+		expect(mockSetupTaskListFail).toHaveBeenCalledOnce();
 	});
 
-	it('--append --silent: setup 用 Lanes を作らない（issue #294）', async () => {
+	it('--append --silent: setup 用 TaskList を作らない（issue #294）', async () => {
 		const { crawl } = await import('./crawl.js');
 		await crawl(
 			['/tmp/existing.nitpicker'],
 			createFlags({ append: ['https://sample-b.example.com/'], silent: true }),
 		);
 
-		expect(mockCreateSetupLanes).not.toHaveBeenCalled();
+		expect(mockCreateSetupTaskList).not.toHaveBeenCalled();
 		expect(mockAppend).toHaveBeenCalledWith(
 			'/tmp/existing.nitpicker',
 			['https://sample-b.example.com/'],
@@ -661,17 +733,10 @@ describe('crawl', () => {
 		expect(archivePath).toBe('/tmp/existing.nitpicker');
 		expect(mockCrawling).not.toHaveBeenCalled();
 		expect(mockAppend).not.toHaveBeenCalled();
-		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(
-			fake.archive,
-			expect.anything(),
-		);
-		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
-		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
-			writeMock.mock.invocationCallOrder[0]!,
-		);
+		expect(mockRunPostCrawlTaskList).toHaveBeenCalledWith(fake, expect.any(Object));
 	});
 
-	it('--retry-failed: CrawlerOrchestrator.retryFailed が initializedCallback 前に throw したら setupLanes.close() が呼ばれる（issue #294 code review #1）', async () => {
+	it('--retry-failed: CrawlerOrchestrator.retryFailed が initializedCallback 前に throw したら setupTaskList.fail() が呼ばれる（issue #294 code review #1）', async () => {
 		mockRetryFailed.mockImplementationOnce(() =>
 			Promise.reject(new Error('retry-failed setup failed before initializedCallback')),
 		);
@@ -681,7 +746,7 @@ describe('crawl', () => {
 			crawl(['/tmp/existing.nitpicker'], createFlags({ retryFailed: true })),
 		).rejects.toThrow('retry-failed setup failed before initializedCallback');
 
-		expect(mockSetupLanesClose).toHaveBeenCalledOnce();
+		expect(mockSetupTaskListFail).toHaveBeenCalledOnce();
 	});
 
 	it('--retry-failed を指定したのに位置引数が無いとエラー', async () => {
@@ -778,14 +843,7 @@ describe('crawl', () => {
 			mockSetupProgress,
 		);
 		expect(mockCrawling).not.toHaveBeenCalled();
-		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(
-			fake.archive,
-			expect.anything(),
-		);
-		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
-		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
-			writeMock.mock.invocationCallOrder[0]!,
-		);
+		expect(mockRunPostCrawlTaskList).toHaveBeenCalledWith(fake, expect.any(Object));
 	});
 
 	it('--resume に相対パスを指定した場合、resolve して渡す', async () => {
@@ -800,7 +858,7 @@ describe('crawl', () => {
 		);
 	});
 
-	it('--resume: CrawlerOrchestrator.resume が initializedCallback 前に throw したら setupLanes.close() が呼ばれる（issue #294 code review #1）', async () => {
+	it('--resume: CrawlerOrchestrator.resume が initializedCallback 前に throw したら setupTaskList.fail() が呼ばれる（issue #294 code review #1）', async () => {
 		mockResume.mockImplementationOnce(() =>
 			Promise.reject(new Error('resume setup failed before initializedCallback')),
 		);
@@ -810,7 +868,7 @@ describe('crawl', () => {
 			'resume setup failed before initializedCallback',
 		);
 
-		expect(mockSetupLanesClose).toHaveBeenCalledOnce();
+		expect(mockSetupTaskListFail).toHaveBeenCalledOnce();
 	});
 
 	it('--resume と --output を同時指定した場合、エラーを投げる', async () => {
@@ -996,7 +1054,7 @@ describe('crawl', () => {
 				invalidLineCount: 0,
 			},
 			// 6th arg: setup-phase progress callbacks (issue #294), from the
-			// mocked `createSetupLanes`.
+			// mocked `createSetupTaskList`.
 			mockSetupProgress,
 		);
 		// And the CLI actually hashed the bytes it read — not the path,
@@ -1007,17 +1065,10 @@ describe('crawl', () => {
 		// The file is read exactly once (no separate read-then-hash pass
 		// that could desync the archived copy from its own file name).
 		expect(mockReadFile).toHaveBeenCalledTimes(1);
-		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(
-			fake.archive,
-			expect.anything(),
-		);
-		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
-		expect(mockEnsureViewerReadModelQuietly.mock.invocationCallOrder[0]!).toBeLessThan(
-			writeMock.mock.invocationCallOrder[0]!,
-		);
+		expect(mockRunPostCrawlTaskList).toHaveBeenCalledWith(fake, expect.any(Object));
 	});
 
-	it('--inventory: CrawlerOrchestrator.inventory が initializedCallback 前に throw したら setupLanes.close() が呼ばれる（issue #294 code review #1）', async () => {
+	it('--inventory: CrawlerOrchestrator.inventory が initializedCallback 前に throw したら setupTaskList.fail() が呼ばれる（issue #294 code review #1）', async () => {
 		mockReadFile.mockResolvedValueOnce(Buffer.from('https://example.com/hidden\n'));
 		mockInventory.mockImplementationOnce(() =>
 			Promise.reject(new Error('inventory setup failed before initializedCallback')),
@@ -1028,7 +1079,7 @@ describe('crawl', () => {
 			crawl(['/tmp/test.nitpicker'], createFlags({ inventory: '/tmp/urls.txt' })),
 		).rejects.toThrow('inventory setup failed before initializedCallback');
 
-		expect(mockSetupLanesClose).toHaveBeenCalledOnce();
+		expect(mockSetupTaskListFail).toHaveBeenCalledOnce();
 	});
 
 	it('--inventory で空ファイルの場合、エラーを投げる', async () => {
@@ -1206,24 +1257,21 @@ describe('crawl', () => {
 		);
 	});
 
-	it('assertChromeIsInstalled の前に "Checking browser" 行を表示する（issue #294）', async () => {
+	it('assertChromeIsInstalled の前に "Checking browser" タスクリストを構築する（issue #294）', async () => {
 		const { crawl } = await import('./crawl.js');
 		await crawl(['https://example.com'], createFlags());
 
-		expect(mockCheckingLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Checking browser%dots%',
-		);
-		expect(mockCheckingLanesUpdate.mock.invocationCallOrder[0]!).toBeLessThan(
+		expect(mockTaskListPipeName).toHaveBeenCalledWith('Checking browser');
+		expect(mockTaskListPipeName.mock.invocationCallOrder[0]!).toBeLessThan(
 			mockAssertChromeIsInstalled.mock.invocationCallOrder[0]!,
 		);
 	});
 
-	it('--silent のときは "Checking browser" 行を表示しない（issue #294）', async () => {
+	it('--silent のときは "Checking browser" タスクリストを構築しない（issue #294）', async () => {
 		const { crawl } = await import('./crawl.js');
 		await crawl(['https://example.com'], createFlags({ silent: true }));
 
-		expect(mockCheckingLanesUpdate).not.toHaveBeenCalled();
+		expect(mockTaskListPipeName).not.toHaveBeenCalled();
 		expect(mockAssertChromeIsInstalled).toHaveBeenCalled();
 	});
 
@@ -1395,7 +1443,7 @@ describe('crawl exit codes', () => {
 
 	it('外部エラーのみの場合、サマリーに "external" を含む', async () => {
 		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-		mockEventAssignments.mockRejectedValueOnce(createCrawlerError(true));
+		simulateCrawlTimeError(createCrawlerError(true));
 
 		const { crawl } = await import('./crawl.js');
 
@@ -1411,7 +1459,7 @@ describe('crawl exit codes', () => {
 
 	it('内部エラーの場合、サマリーに "internal" を含む', async () => {
 		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-		mockEventAssignments.mockRejectedValueOnce(createCrawlerError(false));
+		simulateCrawlTimeError(createCrawlerError(false));
 
 		const { crawl } = await import('./crawl.js');
 
@@ -1426,7 +1474,7 @@ describe('crawl exit codes', () => {
 	});
 
 	it('--resume 経由の外部エラーでも exit code 2 で終了する', async () => {
-		mockEventAssignments.mockRejectedValueOnce(createCrawlerError(true));
+		simulateCrawlTimeError(createCrawlerError(true));
 
 		const { crawl } = await import('./crawl.js');
 
@@ -1437,7 +1485,7 @@ describe('crawl exit codes', () => {
 	});
 
 	it('外部エラーのみの場合、exit code 2 で終了する', async () => {
-		mockEventAssignments.mockRejectedValueOnce(createCrawlerError(true));
+		simulateCrawlTimeError(createCrawlerError(true));
 
 		const { crawl } = await import('./crawl.js');
 
@@ -1448,7 +1496,7 @@ describe('crawl exit codes', () => {
 	});
 
 	it('内部エラーを含む場合、exit code 1 で終了する', async () => {
-		mockEventAssignments.mockRejectedValueOnce(createCrawlerError(false));
+		simulateCrawlTimeError(createCrawlerError(false));
 
 		const { crawl } = await import('./crawl.js');
 
@@ -1459,7 +1507,7 @@ describe('crawl exit codes', () => {
 	});
 
 	it('--strict 指定時、外部エラーのみでも exit code 1 で終了する', async () => {
-		mockEventAssignments.mockRejectedValueOnce(createCrawlerError(true));
+		simulateCrawlTimeError(createCrawlerError(true));
 
 		const { crawl } = await import('./crawl.js');
 

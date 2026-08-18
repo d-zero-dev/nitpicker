@@ -1,4 +1,4 @@
-import { formatProgressCount } from './format-progress-count.js';
+import { formatByteProgress } from './format-byte-progress.js';
 
 /**
  * Builds a byte-progress callback that renders `<label>: N/M MB (x%)` lines,
@@ -52,12 +52,7 @@ export function createByteProgressLogger(
 	const prefix = (options?.animated ?? true) ? '%braille% ' : '';
 	let lastMessage = '';
 	return (bytes, totalBytes) => {
-		const totalMB = totalBytes > 0 ? Math.max(1, Math.round(totalBytes / 1_000_000)) : 0;
-		const bytesMB =
-			totalBytes > 0 && bytes >= totalBytes
-				? totalMB
-				: Math.min(totalMB, Math.round(bytes / 1_000_000));
-		const message = `${prefix}${label}: ${formatProgressCount(bytesMB, totalMB, 'MB')}`;
+		const message = `${prefix}${label}: ${formatByteProgress(bytes, totalBytes)}`;
 		if (message === lastMessage) {
 			return;
 		}

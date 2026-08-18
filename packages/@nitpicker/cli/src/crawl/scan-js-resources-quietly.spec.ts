@@ -8,18 +8,6 @@ vi.mock('@nitpicker/crawler', () => ({
 	scanJsResourcesForTechnologySignals: mockScanJsResourcesForTechnologySignals,
 }));
 
-const mockLanesUpdate = vi.fn();
-
-vi.mock('@d-zero/dealer', () => ({
-	Lanes: vi.fn().mockImplementation(function (this: {
-		update: typeof mockLanesUpdate;
-		[Symbol.dispose]: ReturnType<typeof vi.fn>;
-	}) {
-		this.update = mockLanesUpdate;
-		this[Symbol.dispose] = vi.fn();
-	}),
-}));
-
 const fakeArchive = {} as Archive;
 
 describe('scanJsResourcesQuietly', () => {
@@ -44,7 +32,31 @@ describe('scanJsResourcesQuietly', () => {
 		});
 	});
 
-	it('renders onProgress updates through a Lanes line (issue #294)', async () => {
+	it('reports onProgress updates through the injected callback (issue #294)', async () => {
+		mockScanJsResourcesForTechnologySignals.mockImplementation(
+			(
+				_archive: Archive,
+				options: { onProgress?: (done: number, total: number) => void },
+			) => {
+				options.onProgress?.(3, 10);
+				return Promise.resolve({
+					candidateCount: 10,
+					scannedCount: 10,
+					matchedCount: 1,
+					pagesUpdatedCount: 1,
+				});
+			},
+		);
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { scanJsResourcesQuietly } = await import('./scan-js-resources-quietly.js');
+		const onProgress = vi.fn();
+
+		await scanJsResourcesQuietly(fakeArchive, onProgress);
+
+		expect(onProgress).toHaveBeenCalledWith('3/10 resources (30%)');
+	});
+
+	it('does not throw when onProgress is omitted', async () => {
 		mockScanJsResourcesForTechnologySignals.mockImplementation(
 			(
 				_archive: Archive,
@@ -62,12 +74,7 @@ describe('scanJsResourcesQuietly', () => {
 		vi.spyOn(console, 'error').mockImplementation(() => {});
 		const { scanJsResourcesQuietly } = await import('./scan-js-resources-quietly.js');
 
-		await scanJsResourcesQuietly(fakeArchive);
-
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Scanning JS resources: 3/10 resources (30%)',
-		);
+		await expect(scanJsResourcesQuietly(fakeArchive)).resolves.toBeUndefined();
 	});
 
 	it('logs a one-line summary to stderr when at least one resource was scanned', async () => {

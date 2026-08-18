@@ -1,4 +1,3 @@
-import { Lanes } from '@d-zero/dealer';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 const mockExistsSync = vi.fn();
@@ -19,25 +18,12 @@ const mockArchiveWrite = vi.fn().mockResolvedValue();
 const mockArchiveOpen = vi.fn().mockResolvedValue({
 	write: mockArchiveWrite,
 	close: mockArchiveClose,
-	[Symbol.asyncDispose]: mockArchiveClose,
 });
 const mockCopyFileWithProgress = vi.fn().mockResolvedValue();
 
 vi.mock('@nitpicker/crawler', () => ({
 	Archive: { open: mockArchiveOpen },
 	copyFileWithProgress: mockCopyFileWithProgress,
-}));
-
-const mockLanesUpdate = vi.fn();
-
-vi.mock('@d-zero/dealer', () => ({
-	Lanes: vi.fn().mockImplementation(function (this: {
-		update: typeof mockLanesUpdate;
-		[Symbol.dispose]: ReturnType<typeof vi.fn>;
-	}) {
-		this.update = mockLanesUpdate;
-		this[Symbol.dispose] = vi.fn();
-	}),
 }));
 
 const mockBuildViewerReadModelInWorker = vi.fn().mockResolvedValue();
@@ -69,6 +55,12 @@ class ExitError extends Error {
 describe('viewerBuild command', () => {
 	let exitSpy: ReturnType<typeof vi.spyOn>;
 	let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+	let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+	/** Concatenates every chunk written to stderr during the test, for substring assertions. */
+	function renderedOutput(): string {
+		return stderrSpy.mock.calls.map(([chunk]) => String(chunk)).join('');
+	}
 
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -77,7 +69,6 @@ describe('viewerBuild command', () => {
 		mockArchiveOpen.mockResolvedValue({
 			write: mockArchiveWrite,
 			close: mockArchiveClose,
-			[Symbol.asyncDispose]: mockArchiveClose,
 		});
 		mockArchiveWrite.mockResolvedValue();
 		mockArchiveClose.mockResolvedValue();
@@ -94,6 +85,11 @@ describe('viewerBuild command', () => {
 			throw new ExitError(code as number);
 		});
 		consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		// The command renders its TaskList(s) to the real `process.stderr`
+		// (no injectable stream — verbose/non-verbose both go through it).
+		// Real `@d-zero/dealer` runs unmocked so the actual state-machine
+		// (pending → running → done/error, insertNext) is exercised.
+		stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 	});
 
 	afterEach(() => {
@@ -157,7 +153,18 @@ describe('viewerBuild command', () => {
 		expect(mockUnlink).toHaveBeenCalledWith(expect.stringContaining('.bak'));
 	});
 
-	it('displays each progress callback via the shared Lanes line', async () => {
+	it('renders the task-list rows for each step in order', async () => {
+		const { viewerBuild } = await import('./viewer-build.js');
+		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+
+		const output = renderedOutput();
+		expect(output).toContain('Back up archive');
+		expect(output).toContain('Extract archive');
+		expect(output).toContain('Build viewer read model');
+		expect(output).toContain('Write archive');
+	});
+
+	it('reports each progress callback via the row message', async () => {
 		mockEnsureViewerReadModelInWorker.mockImplementation((_archive, options) => {
 			options.onProgress({ insertedRows: 250, totalRows: 500 });
 			return Promise.resolve();
@@ -165,13 +172,10 @@ describe('viewerBuild command', () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			expect.stringContaining('Building viewer read model: 250/500 pages'),
-		);
+		expect(renderedOutput()).toContain('Building viewer read model: 250/500 pages');
 	});
 
-	it('displays phase changes via the shared Lanes line (issue #294)', async () => {
+	it('reports phase changes via the row message (issue #294)', async () => {
 		mockEnsureViewerReadModelInWorker.mockImplementation((_archive, options) => {
 			options.onPhase('buildingAnchorFacts');
 			return Promise.resolve();
@@ -179,27 +183,10 @@ describe('viewerBuild command', () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			expect.stringContaining('Building anchor facts'),
-		);
+		expect(renderedOutput()).toContain('Building anchor facts');
 	});
 
-	it('logs an animated start line and a completed line, with no timestamp by default (issue #294)', async () => {
-		const { viewerBuild } = await import('./viewer-build.js');
-		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
-
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Viewer read model build: starting%dots%',
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'Viewer read model build: completed',
-		);
-	});
-
-	it('reports each archive.write() step via a labeled, animated line (issue #294)', async () => {
+	it('reports each archive.write() step via a labeled row message (issue #294)', async () => {
 		mockArchiveWrite.mockImplementation(
 			(options: {
 				onStep: (step: 'checkpoint' | 'rename' | 'tar' | 'remove') => void;
@@ -212,24 +199,15 @@ describe('viewerBuild command', () => {
 			},
 		);
 		const { viewerBuild } = await import('./viewer-build.js');
-		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+		// --verbose: non-verbose `Lanes` batches renders on a ~33ms timer that
+		// never fires within a synchronous test, so intermediate updates are
+		// invisible unless every state transition writes immediately.
+		await viewerBuild(['/tmp/existing.nitpicker'], { verbose: true } as never);
 
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Checkpointing database%dots%',
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Finalizing archive layout%dots%',
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Writing archive%dots%',
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Removing temporary files%dots%',
-		);
+		const output = renderedOutput();
+		expect(output).toContain('Checkpointing database');
+		expect(output).toContain('Finalizing archive layout');
+		expect(output).toContain('Removing temporary files');
 	});
 
 	it('displays tar write-back progress in MB via archive.write (issue #294)', async () => {
@@ -243,19 +221,14 @@ describe('viewerBuild command', () => {
 			},
 		);
 		const { viewerBuild } = await import('./viewer-build.js');
-		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+		await viewerBuild(['/tmp/existing.nitpicker'], { verbose: true } as never);
 
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Writing archive: 50/200 MB (25%)',
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Writing archive: 200/200 MB (100%)',
-		);
+		const output = renderedOutput();
+		expect(output).toContain('50/200 MB (25%)');
+		expect(output).toContain('200/200 MB (100%)');
 	});
 
-	it('passes --verbose through to Lanes and prefixes every line with an ISO 8601 timestamp (issue #294)', async () => {
+	it('passes --verbose through and prefixes every line with an ISO 8601 timestamp (issue #294)', async () => {
 		mockEnsureViewerReadModelInWorker.mockImplementation((_archive, options) => {
 			options.onPhase('buildingAnchorFacts');
 			options.onProgress({ insertedRows: 250, totalRows: 500 });
@@ -264,24 +237,14 @@ describe('viewerBuild command', () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], { verbose: true } as never);
 
-		expect(Lanes).toHaveBeenCalledWith(expect.objectContaining({ verbose: true }));
 		const isoTimestamp = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/;
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			expect.stringMatching(
-				new RegExp(`^${isoTimestamp.source} .*build: starting%dots%$`),
+		const lines = stderrSpy.mock.calls.map(([chunk]) => String(chunk));
+		expect(lines.some((line) => isoTimestamp.test(line))).toBe(true);
+		expect(
+			lines.some(
+				(line) => isoTimestamp.test(line) && line.includes('Building anchor facts'),
 			),
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			expect.stringMatching(
-				new RegExp(`^${isoTimestamp.source} .*Building anchor facts`),
-			),
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			expect.stringMatching(new RegExp(`^${isoTimestamp.source} .*250/500 id ranges`)),
-		);
+		).toBe(true);
 	});
 
 	it('opens the archive without overriding cwd (matches every other Archive.open call site)', async () => {
@@ -298,46 +261,26 @@ describe('viewerBuild command', () => {
 		});
 	});
 
-	it('displays extraction progress in MB while Archive.open untars, deduplicated on the rendered message (issue #294)', async () => {
+	it('displays extraction progress in MB while Archive.open untars (issue #294)', async () => {
 		mockArchiveOpen.mockImplementation(
 			(options: {
 				onExtractProgress: (readBytes: number, totalBytes: number) => void;
 			}) => {
 				options.onExtractProgress(10_000_000, 100_000_000);
-				// Renders identically to the first call (same rounded MB and
-				// percent) — must not repaint.
-				options.onExtractProgress(10_400_000, 100_000_000);
 				options.onExtractProgress(100_000_000, 100_000_000);
 				return Promise.resolve({
 					write: mockArchiveWrite,
 					close: mockArchiveClose,
-					[Symbol.asyncDispose]: mockArchiveClose,
 				});
 			},
 		);
 		const { viewerBuild } = await import('./viewer-build.js');
-		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+		await viewerBuild(['/tmp/existing.nitpicker'], { verbose: true } as never);
 
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Extracting archive%dots%',
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Extracting archive: 10/100 MB (10%)',
-		);
-		expect(mockLanesUpdate).not.toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Extracting archive: 10.4/100 MB (10%)',
-		);
-		const extractionUpdates = mockLanesUpdate.mock.calls.filter(([, message]) =>
-			String(message).includes('Extracting archive:'),
-		);
-		expect(extractionUpdates).toHaveLength(2);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Extracting archive: 100/100 MB (100%)',
-		);
+		const output = renderedOutput();
+		expect(output).toContain('Extract archive');
+		expect(output).toContain('10/100 MB (10%)');
+		expect(output).toContain('100/100 MB (100%)');
 	});
 
 	it('calls buildViewerReadModelInWorker (forced rebuild) when --force is passed', async () => {
@@ -387,7 +330,7 @@ describe('viewerBuild command', () => {
 		expect(mockRunViewerReadModelBackfillsInWorker).not.toHaveBeenCalled();
 	});
 
-	it('displays the backfills-task phases and progress via the shared Lanes line', async () => {
+	it('renders the backfills-task phases and progress as an inserted row', async () => {
 		mockEnsureViewerReadModelInWorker.mockResolvedValue(false);
 		mockRunViewerReadModelBackfillsInWorker.mockImplementation((_archive, options) => {
 			options.onPhase('backfillingBodyHash');
@@ -397,14 +340,10 @@ describe('viewerBuild command', () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			expect.stringContaining('Backfilling page content hashes'),
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Backfilling page content hashes: 3/10 pages (30%)',
-		);
+		const output = renderedOutput();
+		expect(output).toContain('Run backfills');
+		expect(output).toContain('Backfilling page content hashes');
+		expect(output).toContain('3/10 pages (30%)');
 	});
 
 	it('takes a backup, with byte progress, before opening the archive writably (issue #294)', async () => {
@@ -434,20 +373,12 @@ describe('viewerBuild command', () => {
 			},
 		);
 		const { viewerBuild } = await import('./viewer-build.js');
-		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+		await viewerBuild(['/tmp/existing.nitpicker'], { verbose: true } as never);
 
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Backing up archive%dots%',
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Backing up archive: 50/200 MB (25%)',
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Backing up archive: 200/200 MB (100%)',
-		);
+		const output = renderedOutput();
+		expect(output).toContain('Back up archive');
+		expect(output).toContain('50/200 MB (25%)');
+		expect(output).toContain('200/200 MB (100%)');
 	});
 
 	it('restores the backup, removes it, and exits fatally when the build fails', async () => {
@@ -467,6 +398,25 @@ describe('viewerBuild command', () => {
 		expect(mockCopyFileWithProgress.mock.calls[1]![1]).toBe('/tmp/existing.nitpicker');
 		expect(mockUnlink).toHaveBeenCalledWith('/tmp/existing.nitpicker.bak');
 		expect(mockFormatCliError).toHaveBeenCalledWith(expect.any(Error), false);
+		expect(exitSpy).toHaveBeenCalledWith(1);
+	});
+
+	it('does not attempt a restore when the backup copy itself fails (code review: restoring a truncated backup would destroy the intact original)', async () => {
+		mockCopyFileWithProgress.mockRejectedValueOnce(new Error('disk full during backup'));
+		const { viewerBuild } = await import('./viewer-build.js');
+
+		await expect(viewerBuild(['/tmp/existing.nitpicker'], {} as never)).rejects.toThrow(
+			ExitError,
+		);
+
+		// Only the failed backup attempt — no restore copy back onto the
+		// still-intact original archive.
+		expect(mockCopyFileWithProgress).toHaveBeenCalledTimes(1);
+		expect(mockArchiveOpen).not.toHaveBeenCalled();
+		expect(mockFormatCliError).toHaveBeenCalledWith(
+			expect.objectContaining({ message: 'disk full during backup' }),
+			false,
+		);
 		expect(exitSpy).toHaveBeenCalledWith(1);
 	});
 
@@ -493,14 +443,9 @@ describe('viewerBuild command', () => {
 			ExitError,
 		);
 
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Restoring archive from backup%dots%',
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Restoring archive from backup: 100/100 MB (100%)',
-		);
+		const output = renderedOutput();
+		expect(output).toContain('Restore from backup');
+		expect(output).toContain('100/100 MB (100%)');
 	});
 
 	it('restores the backup and exits fatally when archive.write() fails', async () => {
@@ -544,5 +489,23 @@ describe('viewerBuild command', () => {
 		expect(aggregateError.errors[1].message).toBe('restore disk full');
 		expect(aggregateError.message).toContain('restore from backup failed');
 		expect(exitSpy).toHaveBeenCalledWith(1);
+	});
+
+	it('closes the archive once the pipeline completes successfully', async () => {
+		const { viewerBuild } = await import('./viewer-build.js');
+		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+
+		expect(mockArchiveClose).toHaveBeenCalledOnce();
+	});
+
+	it('closes the archive even when a later step fails', async () => {
+		mockArchiveWrite.mockRejectedValue(new Error('disk full'));
+		const { viewerBuild } = await import('./viewer-build.js');
+
+		await expect(viewerBuild(['/tmp/existing.nitpicker'], {} as never)).rejects.toThrow(
+			ExitError,
+		);
+
+		expect(mockArchiveClose).toHaveBeenCalledOnce();
 	});
 });

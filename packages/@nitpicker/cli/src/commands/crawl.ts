@@ -1,33 +1,36 @@
 import type { commandDef } from './crawl-def.js';
-import type { SetupLanesHandle } from '../crawl/setup-lanes.js';
+import type { CrawlDisplayHandle } from '../crawl/attach-crawl-display.js';
+import type { SetupTaskListHandle } from '../crawl/create-setup-task-list.js';
 import type { InferFlags } from '@d-zero/roar';
 import type { Config, CrawlerError } from '@nitpicker/crawler';
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { Lanes } from '@d-zero/dealer';
+import { TaskList, TaskListStepError } from '@d-zero/dealer';
 import { readList, toListWithPosition } from '@d-zero/readtext/list';
 import {
+	APPEND_SETUP_PHASES,
 	assertChromeIsInstalled,
 	assertPuppeteerSharedWithBeholder,
 	computeFileSha256,
 	CrawlerOrchestrator,
+	INVENTORY_SETUP_PHASES,
+	RESUME_SETUP_PHASES,
+	RETRY_FAILED_SETUP_PHASES,
 } from '@nitpicker/crawler';
 
+import { attachCrawlDisplay } from '../crawl/attach-crawl-display.js';
 import { classifyInventoryListItems } from '../crawl/classify-inventory-list-items.js';
+import { createSetupTaskList } from '../crawl/create-setup-task-list.js';
 import { log, verbosely } from '../crawl/debug.js';
 import { diff } from '../crawl/diff.js';
-import { ensureViewerReadModelQuietly } from '../crawl/ensure-viewer-read-model-quietly.js';
-import { eventAssignments } from '../crawl/event-assignments.js';
 import { formatInvalidInventoryUrlWarning } from '../crawl/format-invalid-inventory-url-warning.js';
 import { formatInventorySkipSummary } from '../crawl/format-inventory-skip-summary.js';
 import { isValidUrl } from '../crawl/is-valid-url.js';
 import { mapFlagsToCrawlConfig } from '../crawl/map-flags-to-crawl-config.js';
-import { scanJsResourcesQuietly } from '../crawl/scan-js-resources-quietly.js';
-import { createSetupLanes } from '../crawl/setup-lanes.js';
+import { runPostCrawlTaskList } from '../crawl/run-post-crawl-task-list.js';
 import { ExitCode } from '../exit-code.js';
-import { formatLogLine } from '../format-log-line.js';
 
 import { CrawlAggregateError } from './crawl-aggregate-error.js';
 
@@ -37,27 +40,19 @@ type CrawlFlags = InferFlags<typeof commandDef.flags>;
 type LogType = 'verbose' | 'normal' | 'silent';
 
 /**
- * Sets up signal handlers for graceful shutdown and starts event logging.
- *
- * Registers SIGINT/SIGBREAK/SIGHUP/SIGABRT handlers that abort the
- * crawl via {@link CrawlerOrchestrator.abort}, then kill zombie Chromium
- * processes and exit. The abort signal propagates through the dealer's
- * AbortSignal mechanism so no new workers are launched.
- *
- * Signal handlers are automatically removed in a `finally` block when
- * the event assignment pipeline completes or throws.
- * @param trigger - Display label for the crawl (URL or stub file path)
- * @param orchestrator - The initialized CrawlerOrchestrator instance
- * @param config - The resolved archive configuration
- * @param logType - Output verbosity level
- * @returns A promise that resolves when the event assignment pipeline completes.
+ * Registers SIGINT/SIGBREAK/SIGHUP/SIGABRT handlers that abort the crawl via
+ * {@link CrawlerOrchestrator.abort}, then kill zombie Chromium processes and
+ * exit. Call from `initializedCallback` — the earliest point the CLI has
+ * both the orchestrator instance and control before crawling actually
+ * starts — and call the returned cleanup once the post-crawl task list
+ * finishes. The span must cover the crawl body and the post-crawl task list
+ * alike (issue #294): both can run for minutes, and `orchestrator` already
+ * holds browser resources by the time this registers, so Ctrl-C anywhere in
+ * that window needs `orchestrator.abort()`, not Node's default handling.
+ * @param orchestrator - The initialized CrawlerOrchestrator instance.
+ * @returns A cleanup function that removes the handlers. Safe to call at most once.
  */
-async function run(
-	trigger: string,
-	orchestrator: CrawlerOrchestrator,
-	config: Config,
-	logType: LogType,
-) {
+function registerCrawlSignalHandlers(orchestrator: CrawlerOrchestrator): () => void {
 	const killed = () => {
 		orchestrator.abort();
 		orchestrator.garbageCollect();
@@ -67,43 +62,175 @@ async function run(
 	for (const signal of signals) {
 		process.on(signal, killed);
 	}
-
-	const head = [
-		`🐳 ${trigger} (New scraping)`,
-		...Object.entries(config).map(([key, value]) => `  ${key}: ${value}`),
-	];
-	try {
-		return await eventAssignments(orchestrator, head, logType);
-	} finally {
+	return () => {
 		for (const signal of signals) {
 			process.removeListener(signal, killed);
 		}
-	}
+	};
+}
+
+/**
+ * Builds the crawl-start header lines `attachCrawlDisplay` prints to stderr.
+ * @param trigger - Display label for the crawl (URL or stub file path).
+ * @param config - The resolved archive configuration.
+ * @returns Header lines, first entry bold and the rest dimmed.
+ */
+function buildCrawlHeader(trigger: string, config: Config): string[] {
+	return [
+		`🐳 ${trigger} (New scraping)`,
+		...Object.entries(config).map(([key, value]) => `  ${key}: ${value}`),
+	];
 }
 
 /**
  * Invokes a `CrawlerOrchestrator` static factory (`append`/`inventory`/
- * `retryFailed`/`resume`), closing `setupLanes` if the factory throws
- * before ever invoking its `initializedCallback` (issue #294 code review:
- * that callback was the only place `setupLanes.close()` ran, so a failure
- * during setup — before the callback fires — e.g. a `.bak` copy I/O error,
- * left the `Lanes` line's self-rescheduling repaint timer running forever).
- * `close()` is idempotent, so this is safe even when the callback already
- * closed it on the success path.
- * @param setupLanes - The setup-phase Lanes handle, or `null` under `--silent`.
+ * `retryFailed`/`resume`), failing `setupTaskList` if the factory throws
+ * before ever invoking its `initializedCallback` (issue #294 code review,
+ * carried over from the pre-`TaskList` `setupLanes.close()`-on-failure
+ * behavior: that call was the only place the setup display was ever
+ * released, so a failure during setup — before the callback fires — e.g. a
+ * `.bak` copy I/O error, left it open forever). `fail()` is idempotent, so
+ * this is safe even when `initializedCallback` already called `finish()` on
+ * the success path.
+ * @param setupTaskList - The setup-phase task list handle, or `null` under `--silent`.
  * @param factory - Thunk invoking the orchestrator static factory method.
  * @returns The orchestrator the factory resolved with.
  */
-async function createOrchestratorClosingLanesOnFailure<T>(
-	setupLanes: SetupLanesHandle | null,
+async function createOrchestratorFailingSetupOnError<T>(
+	setupTaskList: SetupTaskListHandle | null,
 	factory: () => Promise<T>,
 ): Promise<T> {
 	try {
 		return await factory();
 	} catch (error) {
-		setupLanes?.close();
+		setupTaskList?.fail(error);
+		await setupTaskList?.taskListDone.catch(() => {});
 		throw error;
 	}
+}
+
+/** Mutable handles threaded through one crawl mode's `initializedCallback` and cleanup. */
+interface CrawlLifecycle {
+	display: CrawlDisplayHandle | null;
+	unregisterSignalHandlers: (() => void) | null;
+}
+
+/**
+ * Creates a fresh {@link CrawlLifecycle}. A plain object, not two `let`s:
+ * TypeScript's narrowing otherwise treats each field as permanently `null`
+ * past this point, since the only reassignment is inside
+ * `initializedCallback`'s nested closure.
+ * @returns An empty {@link CrawlLifecycle}.
+ */
+function createCrawlLifecycle(): CrawlLifecycle {
+	return { display: null, unregisterSignalHandlers: null };
+}
+
+/**
+ * Builds the `initializedCallback` every crawl mode passes to its
+ * `CrawlerOrchestrator` factory (`crawling`/`resume`/`append`/`inventory`/
+ * `retryFailed`) — shared so the five modes can't drift on ordering.
+ *
+ * Registers the crawl-body signal handlers *before* touching `setupTaskList`
+ * (code review: registering them only after `finish()`/`taskListDone`
+ * resolved left a window — at least one microtask turn while dealer tears
+ * down the setup `Lanes` — where Ctrl-C fell through to Node's default
+ * handling instead of `orchestrator.abort()`, since `orchestrator` already
+ * exists and may already hold browser resources). `setupTaskList` is `null`
+ * for `startCrawl` (no setup phase), so `finish()`/`taskListDone` are no-ops
+ * there.
+ * @param setupTaskList - The setup-phase task list handle, or `null` for modes with no setup phase (`startCrawl`).
+ * @param crawlLifecycle - Mutable handles this callback fills in.
+ * @param logType - Verbosity level passed through to `attachCrawlDisplay`.
+ * @param errStack - Crawl-time errors are pushed here as they arrive.
+ * @param trigger - Display label for the crawl (URL or stub file path), or a
+ *   function of the resolved config for modes where the trigger isn't known
+ *   until then (`startCrawl`'s fresh-crawl `config.baseUrl`).
+ * @returns The `initializedCallback` to pass to the orchestrator factory.
+ */
+function createCrawlInitializedCallback(
+	setupTaskList: SetupTaskListHandle | null,
+	crawlLifecycle: CrawlLifecycle,
+	logType: LogType,
+	errStack: (CrawlerError | Error)[],
+	trigger: string | ((config: Config) => string),
+): (orchestrator: CrawlerOrchestrator, config: Config) => Promise<void> {
+	return async (orchestrator, config) => {
+		crawlLifecycle.unregisterSignalHandlers = registerCrawlSignalHandlers(orchestrator);
+		setupTaskList?.finish();
+		await setupTaskList?.taskListDone;
+		const triggerLabel = typeof trigger === 'function' ? trigger(config) : trigger;
+		crawlLifecycle.display = attachCrawlDisplay({
+			orchestrator,
+			initialLog: buildCrawlHeader(triggerLabel, config),
+			logType,
+			errStack,
+		});
+	};
+}
+
+/**
+ * Unwraps a `TaskListStepError` (thrown by `runPostCrawlTaskList` when e.g.
+ * `orchestrator.write()` fails inside its `'Write archive'` row) down to the
+ * original cause, so the operator sees the real error (`Error: disk full`)
+ * instead of dealer's step-wrapper text (`Error: Step "Write archive"
+ * (index: 2) failed: disk full`). Passes any other error through unchanged.
+ * @param error - The error `runPostCrawlTaskList` rejected with.
+ * @returns The unwrapped cause, or `error` itself if it isn't a `TaskListStepError`.
+ */
+function unwrapTaskListStepError(error: unknown): unknown {
+	return error instanceof TaskListStepError ? error.cause : error;
+}
+
+/**
+ * Runs the post-crawl task list and tears down the per-mode lifecycle
+ * shared by every crawl mode: closes the crawl display, runs
+ * `runPostCrawlTaskList`, unwraps a `TaskListStepError` down to its cause,
+ * releases the signal handlers, and finally throws a `CrawlAggregateError`
+ * if the crawl body collected any errors along the way.
+ * @param orchestrator - The orchestrator returned by the completed crawl.
+ * @param crawlLifecycle - The handles `createCrawlInitializedCallback` filled in.
+ * @param flags - Parsed CLI flags from the `crawl` command.
+ * @param errStack - Crawl-time errors collected by `attachCrawlDisplay`.
+ * @throws The unwrapped cause of a post-crawl task-list failure, or a {@link CrawlAggregateError}.
+ */
+async function finishCrawlMode(
+	orchestrator: CrawlerOrchestrator,
+	crawlLifecycle: CrawlLifecycle,
+	flags: CrawlFlags,
+	errStack: (CrawlerError | Error)[],
+): Promise<void> {
+	crawlLifecycle.display?.close();
+
+	try {
+		await runPostCrawlTaskList(orchestrator, {
+			verbose: !!flags.verbose,
+			silent: !!flags.silent,
+			skipTechnologyJsScan: !!flags.skipTechnologyJsScan,
+		});
+	} catch (error) {
+		throw unwrapTaskListStepError(error);
+	} finally {
+		crawlLifecycle.unregisterSignalHandlers?.();
+	}
+
+	if (errStack.length > 0) {
+		const error = new CrawlAggregateError(errStack);
+		// eslint-disable-next-line no-console
+		console.error(`\n${error.message}`);
+		throw error;
+	}
+}
+
+/**
+ * Runs the pre-crawl Chrome/puppeteer sanity check every mode needs before
+ * launching a browser (see {@link crawl}'s JSDoc for why it runs up front).
+ * Shared by both `--silent` and normal dispatch so a future third assertion
+ * can't be added to one branch and forgotten in the other.
+ */
+async function assertBrowserIsUsable(): Promise<void> {
+	await assertChromeIsInstalled();
+	assertPuppeteerSharedWithBeholder();
 }
 
 /**
@@ -118,6 +245,8 @@ async function createOrchestratorClosingLanesOnFailure<T>(
  */
 export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<string> {
 	const errStack: (CrawlerError | Error)[] = [];
+	const logType: LogType = flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal';
+	const crawlLifecycle = createCrawlLifecycle();
 
 	const isList = !!flags.list?.length;
 	await using orchestrator = await CrawlerOrchestrator.crawling(
@@ -129,32 +258,18 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 			// --single（単一ページモード）および --list モードでは再帰クロールを無効化
 			recursive: isList || flags.single ? false : flags.recursive,
 		},
-		(orchestrator, config) => {
-			run(
-				config.baseUrl,
-				orchestrator,
-				config,
-				flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
-			).catch((error) => errStack.push(error));
-		},
+		createCrawlInitializedCallback(
+			null,
+			crawlLifecycle,
+			logType,
+			errStack,
+			(config) => config.baseUrl,
+		),
 	);
 
-	if (!flags.skipTechnologyJsScan) {
-		await scanJsResourcesQuietly(orchestrator.archive, { verbose: flags.verbose });
-	}
-	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
-	await orchestrator.write();
+	await finishCrawlMode(orchestrator, crawlLifecycle, flags, errStack);
 
-	const archivePath = orchestrator.archive.filePath;
-
-	if (errStack.length > 0) {
-		const error = new CrawlAggregateError(errStack);
-		// eslint-disable-next-line no-console
-		console.error(`\n${error.message}`);
-		throw error;
-	}
-
-	return archivePath;
+	return orchestrator.archive.filePath;
 }
 
 /**
@@ -168,13 +283,17 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
  */
 async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 	const errStack: (CrawlerError | Error)[] = [];
+	const logType: LogType = flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal';
 	const absFilePath = path.isAbsolute(stubFilePath)
 		? stubFilePath
 		: path.resolve(process.cwd(), stubFilePath);
-	const setupLanes = flags.silent ? null : createSetupLanes(!!flags.verbose);
+	const setupTaskList = flags.silent
+		? null
+		: createSetupTaskList(RESUME_SETUP_PHASES, { verbose: !!flags.verbose });
+	const crawlLifecycle = createCrawlLifecycle();
 
-	await using orchestrator = await createOrchestratorClosingLanesOnFailure(
-		setupLanes,
+	await using orchestrator = await createOrchestratorFailingSetupOnError(
+		setupTaskList,
 		() =>
 			CrawlerOrchestrator.resume(
 				absFilePath,
@@ -182,31 +301,18 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 					...mapFlagsToCrawlConfig(flags),
 					list: false,
 				},
-				(orchestrator, config) => {
-					setupLanes?.close();
-					run(
-						stubFilePath,
-						orchestrator,
-						config,
-						flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
-					).catch((error) => errStack.push(error));
-				},
-				setupLanes?.setupProgress,
+				createCrawlInitializedCallback(
+					setupTaskList,
+					crawlLifecycle,
+					logType,
+					errStack,
+					stubFilePath,
+				),
+				setupTaskList?.setupProgress,
 			),
 	);
 
-	if (!flags.skipTechnologyJsScan) {
-		await scanJsResourcesQuietly(orchestrator.archive, { verbose: flags.verbose });
-	}
-	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
-	await orchestrator.write();
-
-	if (errStack.length > 0) {
-		const error = new CrawlAggregateError(errStack);
-		// eslint-disable-next-line no-console
-		console.error(`\n${error.message}`);
-		throw error;
-	}
+	await finishCrawlMode(orchestrator, crawlLifecycle, flags, errStack);
 }
 
 /**
@@ -225,10 +331,14 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlFlags) {
 	validateUrls(newUrls);
 	const errStack: (CrawlerError | Error)[] = [];
-	const setupLanes = flags.silent ? null : createSetupLanes(!!flags.verbose);
+	const logType: LogType = flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal';
+	const setupTaskList = flags.silent
+		? null
+		: createSetupTaskList(APPEND_SETUP_PHASES, { verbose: !!flags.verbose });
+	const crawlLifecycle = createCrawlLifecycle();
 
-	await using orchestrator = await createOrchestratorClosingLanesOnFailure(
-		setupLanes,
+	await using orchestrator = await createOrchestratorFailingSetupOnError(
+		setupTaskList,
 		() =>
 			CrawlerOrchestrator.append(
 				archivePath,
@@ -237,37 +347,24 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
 					...mapFlagsToCrawlConfig(flags),
 					list: false,
 				},
-				(orchestrator, config) => {
-					setupLanes?.close();
-					run(
-						`${archivePath} (append: ${newUrls.join(', ')})`,
-						orchestrator,
-						config,
-						flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
-					).catch((error) => errStack.push(error));
-				},
-				setupLanes?.setupProgress,
+				createCrawlInitializedCallback(
+					setupTaskList,
+					crawlLifecycle,
+					logType,
+					errStack,
+					`${archivePath} (append: ${newUrls.join(', ')})`,
+				),
+				setupTaskList?.setupProgress,
 			),
 	);
 
-	if (!flags.skipTechnologyJsScan) {
-		await scanJsResourcesQuietly(orchestrator.archive, { verbose: flags.verbose });
-	}
-	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
-	await orchestrator.write();
-
-	if (errStack.length > 0) {
-		const error = new CrawlAggregateError(errStack);
-		// eslint-disable-next-line no-console
-		console.error(`\n${error.message}`);
-		throw error;
-	}
+	await finishCrawlMode(orchestrator, crawlLifecycle, flags, errStack);
 }
 
 /**
  * Inventory-mode dispatch: read the URL list file, hand it to
  * {@link CrawlerOrchestrator.inventory}, and surface the result through
- * the same `run` progress reporter as the other crawl modes.
+ * the same `attachCrawlDisplay` progress reporter as the other crawl modes.
  *
  * The list file is read exactly once, as raw bytes — the same buffer feeds
  * the content-hash (`computeFileSha256`), the parsed URL list, and the copy
@@ -315,10 +412,14 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 
 	const sha256 = computeFileSha256(bytes);
 	const errStack: (CrawlerError | Error)[] = [];
-	const setupLanes = flags.silent ? null : createSetupLanes(!!flags.verbose);
+	const logType: LogType = flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal';
+	const setupTaskList = flags.silent
+		? null
+		: createSetupTaskList(INVENTORY_SETUP_PHASES, { verbose: !!flags.verbose });
+	const crawlLifecycle = createCrawlLifecycle();
 
-	await using orchestrator = await createOrchestratorClosingLanesOnFailure(
-		setupLanes,
+	await using orchestrator = await createOrchestratorFailingSetupOnError(
+		setupTaskList,
 		() =>
 			CrawlerOrchestrator.inventory(
 				archivePath,
@@ -327,32 +428,19 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 					...mapFlagsToCrawlConfig(flags),
 					list: false,
 				},
-				(orchestrator, config) => {
-					setupLanes?.close();
-					run(
-						`${archivePath} (inventory: ${listFile})`,
-						orchestrator,
-						config,
-						flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
-					).catch((error) => errStack.push(error));
-				},
+				createCrawlInitializedCallback(
+					setupTaskList,
+					crawlLifecycle,
+					logType,
+					errStack,
+					`${archivePath} (inventory: ${listFile})`,
+				),
 				{ sha256, bytes, invalidLineCount: invalid.length },
-				setupLanes?.setupProgress,
+				setupTaskList?.setupProgress,
 			),
 	);
 
-	if (!flags.skipTechnologyJsScan) {
-		await scanJsResourcesQuietly(orchestrator.archive, { verbose: flags.verbose });
-	}
-	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
-	await orchestrator.write();
-
-	if (errStack.length > 0) {
-		const error = new CrawlAggregateError(errStack);
-		// eslint-disable-next-line no-console
-		console.error(`\n${error.message}`);
-		throw error;
-	}
+	await finishCrawlMode(orchestrator, crawlLifecycle, flags, errStack);
 }
 
 /**
@@ -370,10 +458,14 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
  */
 async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
 	const errStack: (CrawlerError | Error)[] = [];
-	const setupLanes = flags.silent ? null : createSetupLanes(!!flags.verbose);
+	const logType: LogType = flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal';
+	const setupTaskList = flags.silent
+		? null
+		: createSetupTaskList(RETRY_FAILED_SETUP_PHASES, { verbose: !!flags.verbose });
+	const crawlLifecycle = createCrawlLifecycle();
 
-	await using orchestrator = await createOrchestratorClosingLanesOnFailure(
-		setupLanes,
+	await using orchestrator = await createOrchestratorFailingSetupOnError(
+		setupTaskList,
 		() =>
 			CrawlerOrchestrator.retryFailed(
 				archivePath,
@@ -381,31 +473,18 @@ async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
 					...mapFlagsToCrawlConfig(flags),
 					list: false,
 				},
-				(orchestrator, config) => {
-					setupLanes?.close();
-					run(
-						`${archivePath} (retry-failed)`,
-						orchestrator,
-						config,
-						flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal',
-					).catch((error) => errStack.push(error));
-				},
-				setupLanes?.setupProgress,
+				createCrawlInitializedCallback(
+					setupTaskList,
+					crawlLifecycle,
+					logType,
+					errStack,
+					`${archivePath} (retry-failed)`,
+				),
+				setupTaskList?.setupProgress,
 			),
 	);
 
-	if (!flags.skipTechnologyJsScan) {
-		await scanJsResourcesQuietly(orchestrator.archive, { verbose: flags.verbose });
-	}
-	await ensureViewerReadModelQuietly(orchestrator.archive, { verbose: flags.verbose });
-	await orchestrator.write();
-
-	if (errStack.length > 0) {
-		const error = new CrawlAggregateError(errStack);
-		// eslint-disable-next-line no-console
-		console.error(`\n${error.message}`);
-		throw error;
-	}
+	await finishCrawlMode(orchestrator, crawlLifecycle, flags, errStack);
 }
 
 /**
@@ -489,20 +568,17 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		// up front, turns a missing Chrome into an immediate fatal error
 		// instead of a per-page scrape error buried in a "completed with
 		// N error(s)" summary (see `assertChromeIsInstalled`'s JSDoc).
-		// A dedicated, short-lived `Lanes` line covers just this check
+		// A dedicated, single-step task list covers just this check
 		// (issue #294): it's the very first thing the process does, before
 		// any archive/setup display exists, so without it a slow Chrome
 		// lookup looks like the process hasn't started at all.
-		{
-			using checkingLanes = flags.silent
-				? null
-				: new Lanes({ verbose: !!flags.verbose, indent: '  ', stream: process.stderr });
-			checkingLanes?.update(
-				0,
-				formatLogLine(!!flags.verbose, '%braille% Checking browser%dots%'),
-			);
-			await assertChromeIsInstalled();
-			assertPuppeteerSharedWithBeholder();
+		if (flags.silent) {
+			await assertBrowserIsUsable();
+		} else {
+			await TaskList.pipe('Checking browser', assertBrowserIsUsable).run({
+				stream: process.stderr,
+				verbose: !!flags.verbose,
+			});
 		}
 
 		if (flags.resume) {
