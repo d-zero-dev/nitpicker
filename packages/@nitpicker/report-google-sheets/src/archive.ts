@@ -24,13 +24,21 @@ export interface ArchiveHandle extends AsyncDisposable {
  * and closes the archive together — prefer `await using` over calling
  * `removeSignalHandlers()` / `archive.close()` separately.
  * @param filePath - Path to the `.nitpicker` archive file
+ * @param onExtractProgress - Forwarded to `Archive.open` — called during the
+ *   untar step with bytes read so far and the archive's total size (issue
+ *   #294: a large archive's extraction can take tens of seconds with no
+ *   other signal it isn't hung).
  * @returns An {@link ArchiveHandle} containing the archive and a cleanup function.
  */
-export async function getArchive(filePath: string): Promise<ArchiveHandle> {
+export async function getArchive(
+	filePath: string,
+	onExtractProgress?: (readBytes: number, totalBytes: number) => void,
+): Promise<ArchiveHandle> {
 	archiveLog('Open file: %s', filePath);
 	const archive = await Archive.open({
 		filePath,
 		openPluginData: true,
+		onExtractProgress,
 	});
 	archiveLog('File open succeeded');
 

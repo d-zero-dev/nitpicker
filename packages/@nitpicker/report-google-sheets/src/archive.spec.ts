@@ -53,6 +53,19 @@ describe('getArchive', () => {
 		expect(process.listenerCount('SIGINT')).toBe(before);
 	});
 
+	it('onExtractProgress を Archive.open に転送する（issue #294）', async () => {
+		const { getArchive } = await import('./archive.js');
+		const onExtractProgress = vi.fn();
+
+		await getArchive('/tmp/test.nitpicker', onExtractProgress);
+
+		expect(mockOpen).toHaveBeenCalledWith({
+			filePath: '/tmp/test.nitpicker',
+			openPluginData: true,
+			onExtractProgress,
+		});
+	});
+
 	it('複数回呼び出してもリスナーが蓄積しない（removeSignalHandlers で解除した場合）', async () => {
 		const { getArchive } = await import('./archive.js');
 		const before = process.listenerCount('SIGINT');

@@ -93,6 +93,16 @@ describe('report', () => {
 		expect(promptSpy).toHaveBeenCalledTimes(1);
 	});
 
+	it('forwards onExtractProgress to getArchive (issue #294)', async () => {
+		vi.spyOn(enquirer, 'prompt').mockResolvedValue({ sheetName: ['Page List'] });
+		const { getArchive } = await import('./archive.js');
+		const onExtractProgress = vi.fn();
+
+		await report({ ...baseParams, all: true, onExtractProgress });
+
+		expect(getArchive).toHaveBeenCalledWith(baseParams.filePath, onExtractProgress);
+	});
+
 	it('does not create Lanes when silent=true', async () => {
 		const lanesSpy = vi.spyOn(Lanes.prototype, Symbol.dispose);
 

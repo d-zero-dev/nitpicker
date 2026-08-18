@@ -50,6 +50,15 @@ export interface ReportParams {
 	 * to `false` (raw mode).
 	 */
 	readonly dedupeResources?: boolean;
+	/**
+	 * Called during the archive-open untar step with bytes read so far and
+	 * the archive's total size (issue #294: a large archive's extraction can
+	 * take tens of seconds with no other signal it isn't hung). This
+	 * package stays UI-agnostic — the caller (the CLI's `report` command)
+	 * owns turning this into a `Lanes` display, the same way `Sheets.onLog`
+	 * lets the caller own the rate-limit countdown display below.
+	 */
+	readonly onExtractProgress?: (readBytes: number, totalBytes: number) => void;
 }
 
 /**
@@ -90,6 +99,7 @@ export async function report(params: ReportParams) {
 		all,
 		silent,
 		dedupeResources,
+		onExtractProgress,
 	} = params;
 	log('Initialization');
 
@@ -101,7 +111,7 @@ export async function report(params: ReportParams) {
 	log('Authentication succeeded');
 
 	log('Opening archive: %s', filePath);
-	await using archiveHandle = await getArchive(filePath);
+	await using archiveHandle = await getArchive(filePath, onExtractProgress);
 	const { archive } = archiveHandle;
 	log('Archive opened');
 
