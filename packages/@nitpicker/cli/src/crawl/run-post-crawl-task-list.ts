@@ -2,8 +2,11 @@ import type { StepContext } from '@d-zero/dealer';
 import type { CrawlerOrchestrator } from '@nitpicker/crawler';
 
 import { TaskList } from '@d-zero/dealer';
+import { buildViewerReadModelInWorker } from '@nitpicker/query';
 
+import { appendViewerReadModelPhaseRows } from '../append-viewer-read-model-phase-rows.js';
 import { createByteProgressLogger } from '../create-byte-progress-logger.js';
+import { VIEWER_READ_MODEL_FULL_BUILD_PHASES } from '../viewer-read-model-full-build-phases.js';
 import { WRITE_STEP_LABELS } from '../write-step-labels.js';
 
 import { createVerboseTimestampStream } from './create-verbose-timestamp-stream.js';
@@ -24,9 +27,20 @@ export interface RunPostCrawlTaskListOptions {
 
 /**
  * Runs the sequential post-crawl pipeline every `crawl` mode function
- * shares — `scanJsResourcesQuietly` → `ensureViewerReadModelQuietly` →
+ * shares — `scanJsResourcesQuietly` → the viewer read-model build →
  * `orchestrator.write()` — as a `TaskList`: one row per step, `[ ]` →
- * `[%taskSpin%]` → `done`/`error` in order.
+ * `[%taskSpin%]` → `done`/`error` in order. The read-model build is fully
+ * expanded into one row per internal phase via
+ * `appendViewerReadModelPhaseRows` (issue #294) rather than collapsed into a
+ * single `ensureViewerReadModelQuietly` row — `buildViewerReadModelInWorker`
+ * runs unconditionally here (bypassing the schema-version gate, same as
+ * `ensureViewerReadModelQuietly`'s own contract — see that function's docs
+ * for why), so the phase sequence rendered is always the full, static
+ * `VIEWER_READ_MODEL_FULL_BUILD_PHASES` array, never the shorter
+ * backfills-only one `viewer-build` sometimes uses. `onFailure` preserves
+ * the never-throws contract: a read-model failure reports a message on
+ * whichever row was active and lets the pipeline continue into
+ * `'Write archive'`, rather than aborting the whole task list.
  *
  * Deliberately separate from the crawl's own display (`attach-crawl-display.ts`):
  * the crawl body is driven by `@nitpicker/crawler`'s internal `deal()` call,
@@ -83,49 +97,51 @@ export async function runPostCrawlTaskList(
 			},
 		);
 	}
-	const finalPipeline = pipeline
-		.pipe(
-			'Build viewer read model',
-			async (orch: CrawlerOrchestrator, ctx: StepContext<CrawlerOrchestrator>) => {
-				await ensureViewerReadModelQuietly(orch.archive, (message) => {
+	pipeline = appendViewerReadModelPhaseRows(
+		pipeline,
+		VIEWER_READ_MODEL_FULL_BUILD_PHASES,
+		{
+			getArchive: (orch: CrawlerOrchestrator) => orch.archive,
+			runBuild: buildViewerReadModelInWorker,
+			onFailure: (error) =>
+				`Viewer read model build failed, writing the archive without it: ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+		},
+	);
+	const finalPipeline = pipeline.pipe(
+		'Write archive',
+		async (orch: CrawlerOrchestrator, ctx: StepContext<CrawlerOrchestrator>) => {
+			// Restores the archive path the pre-TaskList `event-assignments.ts`
+			// used to show (issue #294): for `startCrawl`'s auto-generated
+			// filenames, this line is the operator's only record of where the
+			// archive actually landed. `writeFileStart` fires immediately, so
+			// it's visible right away; `writeFileEnd`'s message becomes the
+			// row's final, permanent `done` state — the non-verbose overwrite
+			// display only ever shows the most recent message.
+			orch.on('writeFileStart', ({ filePath }) => {
+				ctx.progress(`Writing to: ${filePath}`);
+			});
+			orch.on('writeStep', ({ step }) => {
+				ctx.progress(WRITE_STEP_LABELS[step]);
+			});
+			const reportTarProgress = createByteProgressLogger(
+				(message) => {
 					ctx.progress(message);
-				});
-				return orch;
-			},
-		)
-		.pipe(
-			'Write archive',
-			async (orch: CrawlerOrchestrator, ctx: StepContext<CrawlerOrchestrator>) => {
-				// Restores the archive path the pre-TaskList `event-assignments.ts`
-				// used to show (issue #294): for `startCrawl`'s auto-generated
-				// filenames, this line is the operator's only record of where the
-				// archive actually landed. `writeFileStart` fires immediately, so
-				// it's visible right away; `writeFileEnd`'s message becomes the
-				// row's final, permanent `done` state — the non-verbose overwrite
-				// display only ever shows the most recent message.
-				orch.on('writeFileStart', ({ filePath }) => {
-					ctx.progress(`Writing to: ${filePath}`);
-				});
-				orch.on('writeStep', ({ step }) => {
-					ctx.progress(WRITE_STEP_LABELS[step]);
-				});
-				const reportTarProgress = createByteProgressLogger(
-					(message) => {
-						ctx.progress(message);
-					},
-					WRITE_STEP_LABELS.tar,
-					{ animated: false },
-				);
-				orch.on('writeTarProgress', ({ writtenBytes, totalBytes }) => {
-					reportTarProgress(writtenBytes, totalBytes);
-				});
-				orch.on('writeFileEnd', ({ filePath }) => {
-					ctx.progress(`Done: ${filePath}`);
-				});
-				await orch.write();
-				return orch;
-			},
-		);
+				},
+				WRITE_STEP_LABELS.tar,
+				{ animated: false },
+			);
+			orch.on('writeTarProgress', ({ writtenBytes, totalBytes }) => {
+				reportTarProgress(writtenBytes, totalBytes);
+			});
+			orch.on('writeFileEnd', ({ filePath }) => {
+				ctx.progress(`Done: ${filePath}`);
+			});
+			await orch.write();
+			return orch;
+		},
+	);
 
 	const baseStream = options.stream ?? process.stderr;
 	const stream = options.verbose ? createVerboseTimestampStream(baseStream) : baseStream;

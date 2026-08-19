@@ -1,5 +1,29 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
+import { VIEWER_READ_MODEL_BACKFILL_PHASES } from '../viewer-read-model-backfill-phases.js';
+import { VIEWER_READ_MODEL_FULL_BUILD_PHASES } from '../viewer-read-model-full-build-phases.js';
+
+/**
+ * Calls `onPhase` for each phase in order, yielding a microtask tick after
+ * each call — the same gap the real `buildViewerReadModel`/backfills worker
+ * always has before the next `onPhase` (each is followed by a genuinely
+ * awaited operation), needed here so dealer's `TaskListPipeline` has a
+ * chance to advance to the next row before the next call arrives (mirrors
+ * `create-setup-task-list.spec.ts`'s `tick()` helper).
+ * @param options
+ * @param options.onPhase
+ * @param phases
+ */
+async function driveOnPhase(
+	options: { onPhase: (phase: string) => void },
+	phases: readonly string[],
+): Promise<void> {
+	for (const phase of phases) {
+		options.onPhase(phase);
+		await Promise.resolve();
+	}
+}
+
 const mockExistsSync = vi.fn();
 const mockStatSync = vi.fn();
 const mockUnlink = vi.fn().mockResolvedValue();
@@ -27,13 +51,14 @@ vi.mock('@nitpicker/crawler', () => ({
 }));
 
 const mockBuildViewerReadModelInWorker = vi.fn().mockResolvedValue();
-const mockEnsureViewerReadModelInWorker = vi.fn().mockResolvedValue();
+const mockGetViewerReadModelVersion = vi.fn();
 const mockRunViewerReadModelBackfillsInWorker = vi.fn().mockResolvedValue();
 
 vi.mock('@nitpicker/query', () => ({
 	buildViewerReadModelInWorker: mockBuildViewerReadModelInWorker,
-	ensureViewerReadModelInWorker: mockEnsureViewerReadModelInWorker,
+	getViewerReadModelVersion: mockGetViewerReadModelVersion,
 	runViewerReadModelBackfillsInWorker: mockRunViewerReadModelBackfillsInWorker,
+	VIEWER_READ_MODEL_SCHEMA_VERSION: 29,
 }));
 
 const mockFormatCliError = vi.fn();
@@ -72,11 +97,23 @@ describe('viewerBuild command', () => {
 		});
 		mockArchiveWrite.mockResolvedValue();
 		mockArchiveClose.mockResolvedValue();
-		mockBuildViewerReadModelInWorker.mockResolvedValue();
-		// Default: the schema-version gate reports "already current" (no
-		// build ran), the branch where the backfills worker task fires.
-		mockEnsureViewerReadModelInWorker.mockResolvedValue(false);
-		mockRunViewerReadModelBackfillsInWorker.mockResolvedValue();
+		// Drives the real, full phase sequences by default so every row a
+		// call doesn't override still settles instead of hanging forever —
+		// `appendViewerReadModelPhaseRows` only resolves a row on the next
+		// `onPhase` call (or the final one via `runBuild`'s own resolution),
+		// exactly matching what the real worker tasks always do.
+		mockBuildViewerReadModelInWorker.mockImplementation(async (_archive, options) => {
+			await driveOnPhase(options, VIEWER_READ_MODEL_FULL_BUILD_PHASES);
+		});
+		// Default: the schema-version gate reports "already current" (matches
+		// the mocked VIEWER_READ_MODEL_SCHEMA_VERSION), the branch where the
+		// backfills worker task fires instead of a full rebuild.
+		mockGetViewerReadModelVersion.mockResolvedValue(29);
+		mockRunViewerReadModelBackfillsInWorker.mockImplementation(
+			async (_archive, options) => {
+				await driveOnPhase(options, VIEWER_READ_MODEL_BACKFILL_PHASES);
+			},
+		);
 		// Default: archive exists, no stale backup — the happy-path shape.
 		mockExistsSync.mockImplementation((p: string) => !p.endsWith('.bak'));
 		mockStatSync.mockReturnValue({ isFile: () => true });
@@ -142,46 +179,85 @@ describe('viewerBuild command', () => {
 		expect(exitSpy).toHaveBeenCalledWith(1);
 	});
 
-	it('calls ensureViewerReadModelInWorker (not buildViewerReadModelInWorker) by default', async () => {
+	it('checks the schema-version gate (not buildViewerReadModelInWorker) by default', async () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
-		expect(mockEnsureViewerReadModelInWorker).toHaveBeenCalledOnce();
+		expect(mockGetViewerReadModelVersion).toHaveBeenCalledOnce();
 		expect(mockBuildViewerReadModelInWorker).not.toHaveBeenCalled();
 		expect(mockArchiveWrite).toHaveBeenCalledOnce();
 		expect(mockArchiveClose).toHaveBeenCalledOnce();
 		expect(mockUnlink).toHaveBeenCalledWith(expect.stringContaining('.bak'));
 	});
 
-	it('renders the task-list rows for each step in order', async () => {
+	it('renders the task-list rows for each step in order, with every read-model phase fully expanded (issue #294)', async () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
 		const output = renderedOutput();
 		expect(output).toContain('Back up archive');
 		expect(output).toContain('Extract archive');
-		expect(output).toContain('Build viewer read model');
+		// Default gate: schema already current — the 4 backfill-only phases
+		// render as individual rows, never collapsed into a single row.
+		expect(output).not.toContain('Build viewer read model');
+		expect(output).not.toContain('Run backfills');
+		expect(output).toContain('Backfilling page content hashes');
+		expect(output).toContain('Backfilling duplicate page links');
+		expect(output).toContain('Backfilling dedupe-cap markers');
+		expect(output).toContain('Checkpointing read model');
 		expect(output).toContain('Write archive');
 	});
 
-	it('reports each progress callback via the row message', async () => {
-		mockEnsureViewerReadModelInWorker.mockImplementation((_archive, options) => {
-			options.onProgress({ insertedRows: 250, totalRows: 500 });
-			return Promise.resolve();
-		});
+	it('renders all 21 full-build phases as individual rows when --force is passed (issue #294)', async () => {
+		const { viewerBuild } = await import('./viewer-build.js');
+		await viewerBuild(['/tmp/existing.nitpicker'], { force: true } as never);
+
+		const output = renderedOutput();
+		for (const label of [
+			'Backfilling analysis violations',
+			'Computing summary',
+			'Building pages',
+			'Building anchor facts',
+			'Creating indexes',
+			'Committing read model',
+			'Checkpointing read model',
+		]) {
+			expect(output).toContain(label);
+		}
+	});
+
+	it('reports each progress callback via the row message, without repeating the row label', async () => {
+		mockRunViewerReadModelBackfillsInWorker.mockImplementation(
+			async (_archive, options) => {
+				options.onPhase('backfillingBodyHash');
+				await Promise.resolve();
+				options.onProgress({ insertedRows: 250, totalRows: 500 });
+				await driveOnPhase(options, [
+					'backfillingAliasOfId',
+					'backfillingDedupeCapEventId',
+					'checkpointing',
+				]);
+			},
+		);
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
-		expect(renderedOutput()).toContain('Building viewer read model: 250/500 pages');
+		const output = renderedOutput();
+		// dealer prefixes every row's message with its own name — that single
+		// prefix is expected. The bug this guards against is the row's
+		// *message* also embedding the label a second time, which would
+		// render as a doubled label.
+		expect(output).toContain('Backfilling page content hashes: 250/500 pages (50%)');
+		expect(output).not.toContain(
+			'Backfilling page content hashes: Backfilling page content hashes:',
+		);
 	});
 
 	it('reports phase changes via the row message (issue #294)', async () => {
-		mockEnsureViewerReadModelInWorker.mockImplementation((_archive, options) => {
-			options.onPhase('buildingAnchorFacts');
-			return Promise.resolve();
-		});
+		// Default mockBuildViewerReadModelInWorker already drives the full
+		// 21-phase sequence (including 'buildingAnchorFacts') to completion.
 		const { viewerBuild } = await import('./viewer-build.js');
-		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+		await viewerBuild(['/tmp/existing.nitpicker'], { force: true } as never);
 
 		expect(renderedOutput()).toContain('Building anchor facts');
 	});
@@ -252,13 +328,24 @@ describe('viewerBuild command', () => {
 	});
 
 	it('passes --verbose through and prefixes every line with an ISO 8601 timestamp (issue #294)', async () => {
-		mockEnsureViewerReadModelInWorker.mockImplementation((_archive, options) => {
-			options.onPhase('buildingAnchorFacts');
+		mockBuildViewerReadModelInWorker.mockImplementation(async (_archive, options) => {
+			const anchorIndex =
+				VIEWER_READ_MODEL_FULL_BUILD_PHASES.indexOf('buildingAnchorFacts');
+			await driveOnPhase(
+				options,
+				VIEWER_READ_MODEL_FULL_BUILD_PHASES.slice(0, anchorIndex + 1),
+			);
 			options.onProgress({ insertedRows: 250, totalRows: 500 });
-			return Promise.resolve();
+			await driveOnPhase(
+				options,
+				VIEWER_READ_MODEL_FULL_BUILD_PHASES.slice(anchorIndex + 1),
+			);
 		});
 		const { viewerBuild } = await import('./viewer-build.js');
-		await viewerBuild(['/tmp/existing.nitpicker'], { verbose: true } as never);
+		await viewerBuild(['/tmp/existing.nitpicker'], {
+			verbose: true,
+			force: true,
+		} as never);
 
 		const isoTimestamp = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/;
 		const lines = stderrSpy.mock.calls.map(([chunk]) => String(chunk));
@@ -281,6 +368,7 @@ describe('viewerBuild command', () => {
 			filePath: '/tmp/existing.nitpicker',
 			openPluginData: true,
 			onExtractProgress: expect.any(Function),
+			onLog: expect.any(Function),
 		});
 	});
 
@@ -306,20 +394,38 @@ describe('viewerBuild command', () => {
 		expect(output).toContain('100/100 MB (100%)');
 	});
 
-	it('calls buildViewerReadModelInWorker (forced rebuild) when --force is passed', async () => {
+	it('routes a legacy-archive migration notice through the Extract archive row instead of a bare console.error (issue #294)', async () => {
+		mockArchiveOpen.mockImplementation(
+			(options: { onLog?: (message: string) => void }) => {
+				options.onLog?.('[migrate] page_meta.body_hash column added');
+				return Promise.resolve({
+					write: mockArchiveWrite,
+					close: mockArchiveClose,
+				});
+			},
+		);
+		const { viewerBuild } = await import('./viewer-build.js');
+		await viewerBuild(['/tmp/existing.nitpicker'], { verbose: true } as never);
+
+		const output = renderedOutput();
+		expect(output).toContain('Extract archive');
+		expect(output).toContain('[migrate] page_meta.body_hash column added');
+	});
+
+	it('calls buildViewerReadModelInWorker (forced rebuild) when --force is passed, without checking the gate', async () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], { force: true } as never);
 
 		expect(mockBuildViewerReadModelInWorker).toHaveBeenCalledOnce();
-		expect(mockEnsureViewerReadModelInWorker).not.toHaveBeenCalled();
+		expect(mockGetViewerReadModelVersion).not.toHaveBeenCalled();
 	});
 
-	it('dispatches the backfills worker task when the schema-version gate skips the build', async () => {
+	it('dispatches the backfills worker task when the schema-version gate reports the read model is already current', async () => {
 		// The three unconditional backfills are not covered by the gate
 		// (body_hash/alias_of_id never changed the read-model schema;
 		// dedupe_cap_event_id's data changes on every re-crawl without one),
 		// so an already-current archive still needs this catch-up pass.
-		mockEnsureViewerReadModelInWorker.mockResolvedValue(false);
+		mockGetViewerReadModelVersion.mockResolvedValue(29);
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
@@ -337,11 +443,12 @@ describe('viewerBuild command', () => {
 		expect(backfillsOrder!).toBeLessThan(writeOrder!);
 	});
 
-	it('skips the backfills worker task when the gate actually built (the build includes them)', async () => {
-		mockEnsureViewerReadModelInWorker.mockResolvedValue(true);
+	it('skips the backfills worker task when the gate reports a stale schema (a full build includes them)', async () => {
+		mockGetViewerReadModelVersion.mockResolvedValue(1);
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
+		expect(mockBuildViewerReadModelInWorker).toHaveBeenCalledOnce();
 		expect(mockRunViewerReadModelBackfillsInWorker).not.toHaveBeenCalled();
 	});
 
@@ -353,18 +460,24 @@ describe('viewerBuild command', () => {
 		expect(mockRunViewerReadModelBackfillsInWorker).not.toHaveBeenCalled();
 	});
 
-	it('renders the backfills-task phases and progress as an inserted row', async () => {
-		mockEnsureViewerReadModelInWorker.mockResolvedValue(false);
-		mockRunViewerReadModelBackfillsInWorker.mockImplementation((_archive, options) => {
-			options.onPhase('backfillingBodyHash');
-			options.onProgress({ insertedRows: 3, totalRows: 10 });
-			return Promise.resolve();
-		});
+	it('renders each backfill phase as its own row, never collapsed under a parent row (issue #294)', async () => {
+		mockRunViewerReadModelBackfillsInWorker.mockImplementation(
+			async (_archive, options) => {
+				options.onPhase('backfillingBodyHash');
+				await Promise.resolve();
+				options.onProgress({ insertedRows: 3, totalRows: 10 });
+				await driveOnPhase(options, [
+					'backfillingAliasOfId',
+					'backfillingDedupeCapEventId',
+					'checkpointing',
+				]);
+			},
+		);
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
 		const output = renderedOutput();
-		expect(output).toContain('Run backfills');
+		expect(output).not.toContain('Run backfills');
 		expect(output).toContain('Backfilling page content hashes');
 		expect(output).toContain('3/10 pages (30%)');
 	});
@@ -405,7 +518,7 @@ describe('viewerBuild command', () => {
 	});
 
 	it('restores the backup, removes it, and exits fatally when the build fails', async () => {
-		mockEnsureViewerReadModelInWorker.mockRejectedValue(new Error('build broke'));
+		mockRunViewerReadModelBackfillsInWorker.mockRejectedValue(new Error('build broke'));
 		const { viewerBuild } = await import('./viewer-build.js');
 
 		await expect(viewerBuild(['/tmp/existing.nitpicker'], {} as never)).rejects.toThrow(
@@ -444,7 +557,7 @@ describe('viewerBuild command', () => {
 	});
 
 	it('displays restore progress in MB via copyFileWithProgress on failure (issue #294)', async () => {
-		mockEnsureViewerReadModelInWorker.mockRejectedValue(new Error('build broke'));
+		mockRunViewerReadModelBackfillsInWorker.mockRejectedValue(new Error('build broke'));
 		mockCopyFileWithProgress
 			.mockImplementationOnce(() => {
 				// backup succeeds silently
@@ -494,7 +607,7 @@ describe('viewerBuild command', () => {
 	});
 
 	it('surfaces both errors via AggregateError when the build fails AND the restore also fails', async () => {
-		mockEnsureViewerReadModelInWorker.mockRejectedValue(new Error('build broke'));
+		mockRunViewerReadModelBackfillsInWorker.mockRejectedValue(new Error('build broke'));
 		mockCopyFileWithProgress.mockImplementationOnce(() => Promise.resolve()); // backup succeeds
 		mockCopyFileWithProgress.mockImplementationOnce(() =>
 			Promise.reject(new Error('restore disk full')),

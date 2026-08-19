@@ -40,6 +40,18 @@ type CrawlFlags = InferFlags<typeof commandDef.flags>;
 type LogType = 'verbose' | 'normal' | 'silent';
 
 /**
+ * Derives the display verbosity level shared by every crawl mode's
+ * `attachCrawlDisplay` call from the raw `--verbose`/`--silent` flags —
+ * `--verbose` wins if both are somehow set. A single source of truth so the
+ * five mode functions can't drift on precedence.
+ * @param flags - Parsed CLI flags from the `crawl` command.
+ * @returns The resolved {@link LogType}.
+ */
+function deriveLogType(flags: CrawlFlags): LogType {
+	return flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal';
+}
+
+/**
  * Registers SIGINT/SIGBREAK/SIGHUP/SIGABRT handlers that abort the crawl via
  * {@link CrawlerOrchestrator.abort}, then kill zombie Chromium processes and
  * exit. Call from `initializedCallback` — the earliest point the CLI has
@@ -93,12 +105,16 @@ function buildCrawlHeader(trigger: string, config: Config): string[] {
  * this is safe even when `initializedCallback` already called `finish()` on
  * the success path.
  *
- * Also releases `crawlLifecycle`'s signal handlers on failure (issue #294):
- * `initializedCallback` may have already registered them (crawling itself
- * starts right after it returns), so a later failure inside the factory —
- * `crawling()` or `#setUrlOrder()` throwing — must not leak `process`-level
- * SIGINT/SIGBREAK/SIGHUP/SIGABRT listeners referencing an orchestrator that's
- * about to be disposed. A no-op when `initializedCallback` never ran.
+ * Also releases `crawlLifecycle`'s signal handlers and fails its crawl
+ * display's task list on failure (issue #294): `initializedCallback` may
+ * have already registered/attached them (crawling itself starts right after
+ * it returns), so a later failure inside the factory — `crawling()` or
+ * `#setUrlOrder()` throwing — must not leak `process`-level
+ * SIGINT/SIGBREAK/SIGHUP/SIGABRT listeners referencing an orchestrator
+ * that's about to be disposed, nor leave the crawl display's `TaskList` row
+ * `pending` forever (it settles the active row `error` instead, matching
+ * `setupTaskList.fail()`'s own contract). Both are no-ops when
+ * `initializedCallback` never ran.
  * @param setupTaskList - The setup-phase task list handle, or `null` under `--silent`.
  * @param crawlLifecycle - The handles `createCrawlInitializedCallback` fills in.
  * @param factory - Thunk invoking the orchestrator static factory method.
@@ -114,6 +130,8 @@ async function createOrchestratorFailingSetupOnError<T>(
 	} catch (error) {
 		setupTaskList?.fail(error);
 		await setupTaskList?.taskListDone.catch(() => {});
+		crawlLifecycle.display?.fail(error);
+		await crawlLifecycle.display?.taskListDone.catch(() => {});
 		crawlLifecycle.unregisterSignalHandlers?.();
 		throw error;
 	}
@@ -207,7 +225,7 @@ function toError(value: unknown): Error {
 
 /**
  * Runs the post-crawl task list and tears down the per-mode lifecycle
- * shared by every crawl mode: closes the crawl display, runs
+ * shared by every crawl mode: finishes the crawl display's task list, runs
  * `runPostCrawlTaskList`, releases the signal handlers, and throws a single
  * {@link CrawlAggregateError} covering both the crawl body's own errors
  * (`errStack`, collected by `attachCrawlDisplay`) and a post-crawl task-list
@@ -230,7 +248,8 @@ async function finishCrawlMode(
 	flags: CrawlFlags,
 	errStack: (CrawlerError | Error)[],
 ): Promise<void> {
-	crawlLifecycle.display?.close();
+	crawlLifecycle.display?.finish();
+	await crawlLifecycle.display?.taskListDone.catch(() => {});
 
 	try {
 		await runPostCrawlTaskList(orchestrator, {
@@ -275,26 +294,31 @@ async function assertBrowserIsUsable(): Promise<void> {
  */
 export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<string> {
 	const errStack: (CrawlerError | Error)[] = [];
-	const logType: LogType = flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal';
+	const logType: LogType = deriveLogType(flags);
 	const crawlLifecycle = createCrawlLifecycle();
 
 	const isList = !!flags.list?.length;
-	await using orchestrator = await CrawlerOrchestrator.crawling(
-		siteUrl,
-		{
-			...mapFlagsToCrawlConfig(flags),
-			filePath: flags.output,
-			list: isList,
-			// --single（単一ページモード）および --list モードでは再帰クロールを無効化
-			recursive: isList || flags.single ? false : flags.recursive,
-		},
-		createCrawlInitializedCallback(
-			null,
-			crawlLifecycle,
-			logType,
-			errStack,
-			(config) => config.baseUrl,
-		),
+	await using orchestrator = await createOrchestratorFailingSetupOnError(
+		null,
+		crawlLifecycle,
+		() =>
+			CrawlerOrchestrator.crawling(
+				siteUrl,
+				{
+					...mapFlagsToCrawlConfig(flags),
+					filePath: flags.output,
+					list: isList,
+					// --single（単一ページモード）および --list モードでは再帰クロールを無効化
+					recursive: isList || flags.single ? false : flags.recursive,
+				},
+				createCrawlInitializedCallback(
+					null,
+					crawlLifecycle,
+					logType,
+					errStack,
+					(config) => config.baseUrl,
+				),
+			),
 	);
 
 	await finishCrawlMode(orchestrator, crawlLifecycle, flags, errStack);
@@ -313,7 +337,7 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
  */
 async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 	const errStack: (CrawlerError | Error)[] = [];
-	const logType: LogType = flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal';
+	const logType: LogType = deriveLogType(flags);
 	const absFilePath = path.isAbsolute(stubFilePath)
 		? stubFilePath
 		: path.resolve(process.cwd(), stubFilePath);
@@ -362,7 +386,7 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlFlags) {
 	validateUrls(newUrls);
 	const errStack: (CrawlerError | Error)[] = [];
-	const logType: LogType = flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal';
+	const logType: LogType = deriveLogType(flags);
 	const setupTaskList = flags.silent
 		? null
 		: createSetupTaskList(APPEND_SETUP_PHASES, { verbose: !!flags.verbose });
@@ -444,7 +468,7 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 
 	const sha256 = computeFileSha256(bytes);
 	const errStack: (CrawlerError | Error)[] = [];
-	const logType: LogType = flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal';
+	const logType: LogType = deriveLogType(flags);
 	const setupTaskList = flags.silent
 		? null
 		: createSetupTaskList(INVENTORY_SETUP_PHASES, { verbose: !!flags.verbose });
@@ -491,7 +515,7 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
  */
 async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
 	const errStack: (CrawlerError | Error)[] = [];
-	const logType: LogType = flags.verbose ? 'verbose' : flags.silent ? 'silent' : 'normal';
+	const logType: LogType = deriveLogType(flags);
 	const setupTaskList = flags.silent
 		? null
 		: createSetupTaskList(RETRY_FAILED_SETUP_PHASES, { verbose: !!flags.verbose });

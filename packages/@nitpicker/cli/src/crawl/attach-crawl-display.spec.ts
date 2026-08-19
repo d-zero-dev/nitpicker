@@ -1,7 +1,6 @@
 import type { CrawlerOrchestrator } from '@nitpicker/crawler';
 
-import { Lanes } from '@d-zero/dealer';
-import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 
 import { attachCrawlDisplay } from './attach-crawl-display.js';
 
@@ -33,38 +32,40 @@ function createMockOrchestrator(): MockOrchestrator {
 	} as unknown as MockOrchestrator;
 }
 
-const mockLanesUpdate = vi.fn();
-const mockLanesClose = vi.fn();
+/** A minimal writable that records every chunk written to it, verbatim. */
+function createCapturingStream() {
+	const lines: string[] = [];
+	const stream: NodeJS.WritableStream = {
+		write: (chunk: string) => {
+			lines.push(chunk);
+			return true;
+		},
+		on: () => stream,
+		off: () => stream,
+	} as unknown as NodeJS.WritableStream;
+	return { stream, lines };
+}
 
-vi.mock('@d-zero/dealer', () => ({
-	Lanes: vi.fn().mockImplementation(function (this: {
-		update: typeof mockLanesUpdate;
-		close: typeof mockLanesClose;
-	}) {
-		this.update = mockLanesUpdate;
-		this.close = mockLanesClose;
-	}),
-}));
+/**
+ * Yields one microtask tick — the gap dealer's `TaskListPipeline` needs to
+ * advance to the next row once the currently-active one resolves (mirrors
+ * `create-setup-task-list.spec.ts`'s `tick()` helper).
+ */
+function tick() {
+	return Promise.resolve();
+}
+
+afterEach(() => {
+	vi.restoreAllMocks();
+});
 
 describe('attachCrawlDisplay', () => {
-	let stderrSpy: ReturnType<typeof vi.spyOn>;
-	let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
-
-	beforeEach(() => {
-		vi.clearAllMocks();
-		stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-		consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-	});
-
-	it('logType が silent の場合、購読も出力も行わない', () => {
+	it('logType が silent の場合、購読も出力も行わない', async () => {
 		const orchestrator = createMockOrchestrator();
+		const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 		const errStack: Error[] = [];
 
-		const { close } = attachCrawlDisplay({
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'silent',
@@ -73,28 +74,42 @@ describe('attachCrawlDisplay', () => {
 
 		expect(orchestrator.on).not.toHaveBeenCalled();
 		expect(stderrSpy).not.toHaveBeenCalled();
-		expect(() => close()).not.toThrow();
+		expect(() => finish()).not.toThrow();
+		await expect(taskListDone).resolves.toBeUndefined();
 	});
 
-	it('初期ログを stderr に出力する', () => {
+	it('初期ログを stderr に出力する', async () => {
 		const orchestrator = createMockOrchestrator();
-		attachCrawlDisplay({
+		const { stream } = createCapturingStream();
+		const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+			stream.write(chunk as string);
+			return true;
+		});
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['🐳 header', '  key: value'],
 			logType: 'normal',
 			errStack: [],
 		});
 
-		expect(stderrSpy).toHaveBeenCalledTimes(1);
+		// The header write is the first stderr write — later writes are the
+		// TaskList's own row rendering (issue #294), not part of this test.
 		const output = stderrSpy.mock.calls[0]![0] as string;
 		expect(output).toContain('header');
 		expect(output).toContain('key: value');
+
+		finish();
+		await taskListDone;
+
+		finish();
+		await taskListDone;
 	});
 
-	it('error イベントを errStack に積む', () => {
+	it('error イベントを errStack に積む', async () => {
 		const orchestrator = createMockOrchestrator();
+		vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 		const errStack: Error[] = [];
-		attachCrawlDisplay({
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'normal',
@@ -105,50 +120,136 @@ describe('attachCrawlDisplay', () => {
 		orchestrator.emit('error', error);
 
 		expect(errStack).toEqual([error]);
+
+		finish();
+		await taskListDone;
 	});
 
-	it('flushingPendingWrites イベントで残件数付きの行を表示する（issue #294）', () => {
+	it('renders Flushing pending writes then Sorting pages as individual rows, in order (issue #294)', async () => {
 		const orchestrator = createMockOrchestrator();
-		attachCrawlDisplay({
+		const { stream, lines } = createCapturingStream();
+		vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+			stream.write(chunk as string);
+			return true;
+		});
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
-			logType: 'normal',
+			logType: 'verbose',
 			errStack: [],
 		});
 
 		orchestrator.emit('flushingPendingWrites', { pending: 3 });
+		await tick();
+		orchestrator.emit('sortingUrls', { processed: 500, total: 1200 });
+		await tick();
+		orchestrator.emit('sortingUrls', { processed: 1200, total: 1200 });
+		finish();
 
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Flushing 3 pending write(s)%dots%',
+		await expect(taskListDone).resolves.toBeUndefined();
+		const rendered = lines.join('');
+		expect(rendered).toContain('Flushing pending writes: 3 pending write(s)');
+		expect(rendered).toContain('Sorting pages: 1,200/1,200 pages (100%)');
+	});
+
+	it('marks Flushing pending writes as skipped when nothing was pending, then still renders Sorting pages', async () => {
+		const orchestrator = createMockOrchestrator();
+		const { stream, lines } = createCapturingStream();
+		vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+			stream.write(chunk as string);
+			return true;
+		});
+		const { finish, taskListDone } = attachCrawlDisplay({
+			orchestrator,
+			initialLog: ['header'],
+			logType: 'verbose',
+			errStack: [],
+		});
+
+		orchestrator.emit('sortingUrls', { processed: 1, total: 1 });
+		await tick();
+		orchestrator.emit('sortingUrls', { processed: 2, total: 2 });
+		finish();
+
+		await expect(taskListDone).resolves.toBeUndefined();
+		const rendered = lines.join('');
+		expect(rendered).toContain('Flushing pending writes');
+		expect(rendered).toContain('skipped');
+		expect(rendered).toContain('Sorting pages: 2/2 pages (100%)');
+	});
+
+	it('renders a crawlSessionNotice on the active row, starting the pipeline if neither other event fired yet (issue #294 code review)', async () => {
+		const orchestrator = createMockOrchestrator();
+		const { stream, lines } = createCapturingStream();
+		vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+			stream.write(chunk as string);
+			return true;
+		});
+		const { finish, taskListDone } = attachCrawlDisplay({
+			orchestrator,
+			initialLog: ['header'],
+			logType: 'verbose',
+			errStack: [],
+		});
+
+		orchestrator.emit('crawlSessionNotice', {
+			message: '[preload] Short-circuited 2 URL(s) on DNS-burned hosts',
+		});
+		finish();
+
+		await expect(taskListDone).resolves.toBeUndefined();
+		const rendered = lines.join('');
+		expect(rendered).toContain(
+			'Flushing pending writes: [preload] Short-circuited 2 URL(s) on DNS-burned hosts',
 		);
 	});
 
-	it('sortingUrls イベントで件数進捗を表示する（issue #294）', () => {
+	it('finish() settles both rows as skipped when neither event ever fires (nothing to flush or sort)', async () => {
 		const orchestrator = createMockOrchestrator();
-		attachCrawlDisplay({
+		const { stream, lines } = createCapturingStream();
+		vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+			stream.write(chunk as string);
+			return true;
+		});
+		const { finish, taskListDone } = attachCrawlDisplay({
+			orchestrator,
+			initialLog: ['header'],
+			logType: 'verbose',
+			errStack: [],
+		});
+
+		finish();
+
+		await expect(taskListDone).resolves.toBeUndefined();
+		const rendered = lines.join('');
+		expect(rendered).toContain('Flushing pending writes');
+		expect(rendered).toContain('Sorting pages');
+	});
+
+	it('fail() rejects the active row with the given error', async () => {
+		const orchestrator = createMockOrchestrator();
+		vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+		const { fail, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'normal',
 			errStack: [],
 		});
 
-		orchestrator.emit('sortingUrls', { processed: 500, total: 1200 });
-		orchestrator.emit('sortingUrls', { processed: 1200, total: 1200 });
+		const boom = new Error('crawling failed');
+		fail(boom);
 
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Sorting pages: 500/1,200 pages (41%)',
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			'%braille% Sorting pages: 1,200/1,200 pages (100%)',
-		);
+		await expect(taskListDone).rejects.toMatchObject({ cause: boom });
 	});
 
-	it('logType が verbose のとき、Lanes に verbose: true を渡す（issue #294）', () => {
+	it('logType が verbose のとき、行ごとに ISO 8601 タイムスタンプを前置する（issue #294）', async () => {
 		const orchestrator = createMockOrchestrator();
-		attachCrawlDisplay({
+		const { stream, lines } = createCapturingStream();
+		vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+			stream.write(chunk as string);
+			return true;
+		});
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'verbose',
@@ -156,38 +257,26 @@ describe('attachCrawlDisplay', () => {
 		});
 
 		orchestrator.emit('flushingPendingWrites', { pending: 1 });
+		finish();
 
-		expect(Lanes).toHaveBeenCalledWith(expect.objectContaining({ verbose: true }));
+		await expect(taskListDone).resolves.toBeUndefined();
 		const isoTimestamp = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/;
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			expect.any(Number),
-			expect.stringMatching(new RegExp(`^${isoTimestamp.source} .*Flushing 1`)),
-		);
+		const rendered = lines.join('');
+		expect(isoTimestamp.test(rendered)).toBe(true);
 	});
 
-	it('close() は Lanes インスタンスを解放する', () => {
+	it('recoveringArchiveWrite イベントを console.error にフォールバック表示する（issue #294）', async () => {
 		const orchestrator = createMockOrchestrator();
-		const { close } = attachCrawlDisplay({
+		vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'normal',
 			errStack: [],
 		});
-
-		close();
-
-		expect(mockLanesClose).toHaveBeenCalledOnce();
-	});
-
-	it('recoveringArchiveWrite イベントを console.error にフォールバック表示する（issue #294）', () => {
-		const orchestrator = createMockOrchestrator();
-		const { close } = attachCrawlDisplay({
-			orchestrator,
-			initialLog: ['header'],
-			logType: 'normal',
-			errStack: [],
-		});
-		close();
+		finish();
+		await taskListDone;
 
 		orchestrator.emit('recoveringArchiveWrite', {});
 

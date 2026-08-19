@@ -11,17 +11,19 @@ import { TaskList, TaskListStepError } from '@d-zero/dealer';
 import { Archive, copyFileWithProgress } from '@nitpicker/crawler';
 import {
 	buildViewerReadModelInWorker,
-	ensureViewerReadModelInWorker,
+	getViewerReadModelVersion,
 	runViewerReadModelBackfillsInWorker,
+	VIEWER_READ_MODEL_SCHEMA_VERSION,
 } from '@nitpicker/query';
 
+import { appendViewerReadModelPhaseRows } from '../append-viewer-read-model-phase-rows.js';
 import { createVerboseTimestampStream } from '../crawl/create-verbose-timestamp-stream.js';
 import { dedupeProgressMessage } from '../dedupe-progress-message.js';
 import { ExitCode } from '../exit-code.js';
 import { formatByteProgress } from '../format-byte-progress.js';
 import { formatCliError } from '../format-cli-error.js';
-import { formatViewerReadModelPhase } from '../format-viewer-read-model-phase.js';
-import { formatViewerReadModelProgress } from '../format-viewer-read-model-progress.js';
+import { VIEWER_READ_MODEL_BACKFILL_PHASES } from '../viewer-read-model-backfill-phases.js';
+import { VIEWER_READ_MODEL_FULL_BUILD_PHASES } from '../viewer-read-model-full-build-phases.js';
 import { WRITE_STEP_LABELS } from '../write-step-labels.js';
 
 /** Parsed flag values for the `viewer-build` CLI command. */
@@ -81,32 +83,39 @@ function unwrapTaskListStepError(error: unknown): unknown {
  * restore copy go through `copyFileWithProgress` with byte progress (issue
  * #294) — a 15 GB+ archive's `.bak` copy alone can run for tens of seconds.
  *
- * Rendered as a `TaskList` (issue #294's original single-`Lanes`-line
- * design, migrated once `@d-zero/dealer` gained `TaskList`): `Back up
- * archive` → `Extract archive` → `Build viewer read model` → `Write
- * archive`, one row each. When the schema-version gate skips the rebuild,
- * the `Build viewer read model` step splices in a `Run backfills` row via
- * `ctx.insertNext` (a build already includes those backfills — see the
- * dispatch comment at the call site — so they only need their own pass here).
- * A failure stops the task list immediately (later rows stay `pending`) and
- * runs the `.bak` restore as a separate, single-row task list, since restore
- * is not part of the planned sequence that just failed.
+ * Rendered as three sequential `@d-zero/dealer` `TaskList`s (issue #294's
+ * original single-`Lanes`-line design, migrated once `TaskList` gained
+ * per-phase row expansion): `Back up archive` → `Extract archive` (list 1),
+ * then one row per internal read-model phase (list 2 — every
+ * `buildViewerReadModel` phase fully expanded, not collapsed into a single
+ * text-swapping row), then `Write archive` (list 3). Three separate
+ * `TaskList.run()` calls rather than one continuous pipeline because which
+ * phase array list 2 renders (`VIEWER_READ_MODEL_FULL_BUILD_PHASES` or
+ * `VIEWER_READ_MODEL_BACKFILL_PHASES`) depends on `getViewerReadModelVersion`,
+ * which can only be read once list 1 has extracted the archive — dealer's
+ * `Lanes` single-instance constraint only forbids two `TaskList`s (or a
+ * `TaskList` and `Lanes`/`deal()`) running *concurrently*, not several
+ * running one after another on the same stream. A failure stops whichever
+ * list is running immediately (later rows/lists never start) and runs the
+ * `.bak` restore as its own separate, single-row task list, since restore is
+ * not part of the planned sequence that just failed.
  *
  * Every DB mutation runs in a worker thread (issue #294): the knex/libsql
  * driver executes SQL synchronously on the calling thread, so any in-thread
  * work would freeze the display and the SIGINT handler for the whole
  * duration of each long statement (minutes per `CREATE INDEX` on a large
- * archive). A rebuild goes through `buildViewerReadModelInWorker` /
- * `ensureViewerReadModelInWorker`; the backfill fallback goes through
+ * archive). A rebuild goes through `buildViewerReadModelInWorker`; the
+ * backfill fallback (schema already current) goes through
  * `runViewerReadModelBackfillsInWorker`. The main thread only relays worker
  * messages into the display, extracts the tar on the way in, and re-tars it
  * on the way out (both with byte progress).
  *
- * Tracks the most-recently-started phase in `currentPhase` so `onProgress`
+ * `appendViewerReadModelPhaseRows` (`../append-viewer-read-model-phase-rows.js`)
+ * owns the per-phase row mechanics — each row settles in step with the
+ * single underlying worker call's `onPhase` progression, and `onProgress`
  * updates (nearly every phase reports sub-progress — see
- * `ViewerReadModelBuildProgress`'s docs for the per-phase unit) are labeled
- * with the right phase name and unit — e.g. `Creating indexes: 23/59
- * indexes`, not a bare, unlabeled `23/59`.
+ * `ViewerReadModelBuildProgress`'s docs for the per-phase unit) render on
+ * whichever row is currently active without repeating that row's own label.
  * @param args - Positional arguments; first is the `.nitpicker` file path.
  * @param flags - Parsed CLI flags from the `viewer-build` command.
  * @returns Resolves when the build (or no-op) completes.
@@ -178,7 +187,7 @@ export async function viewerBuild(
 	};
 
 	try {
-		await TaskList.pipe(
+		const archive = await TaskList.pipe(
 			'Back up archive',
 			async (_input: undefined, ctx: StepContext<void>) => {
 				const reportProgress = dedupeProgressMessage((message) => {
@@ -208,56 +217,43 @@ export async function viewerBuild(
 					onExtractProgress: (bytes, totalBytes) => {
 						reportProgress(formatByteProgress(bytes, totalBytes));
 					},
+					// A legacy archive's self-healing schema migrations run
+					// synchronously inside this call (issue #294) — without
+					// this, their `console.error` notices print mid-redraw
+					// of this very row, corrupting dealer's cursor tracking
+					// (visible as the whole task list re-rendering from
+					// scratch).
+					onLog: reportProgress,
 				});
 				lifecycle.archive = archive;
 				return archive;
 			})
-			.pipe(
-				'Build viewer read model',
-				async (archive: ArchiveType, ctx: StepContext<ArchiveType>) => {
-					let currentPhase: Parameters<typeof formatViewerReadModelPhase>[0] | undefined;
-					const onPhase = (phase: Parameters<typeof formatViewerReadModelPhase>[0]) => {
-						currentPhase = phase;
-						ctx.progress(formatViewerReadModelPhase(phase));
-					};
-					const onProgress = (
-						progress: Parameters<typeof formatViewerReadModelProgress>[0],
-					) => {
-						ctx.progress(formatViewerReadModelProgress(progress, currentPhase));
-					};
-					const built = flags.force
-						? (await buildViewerReadModelInWorker(archive, { onPhase, onProgress }), true)
-						: await ensureViewerReadModelInWorker(archive, { onPhase, onProgress });
-					// A build includes the three unconditional backfills
-					// (body_hash, alias_of_id, dedupe_cap_event_id) internally,
-					// so they only need their own pass when the schema-version
-					// gate skipped the build — the maintenance case these
-					// backfills exist for: none of them is covered by that
-					// gate (body_hash/alias_of_id never changed the read-model
-					// schema; dedupe_cap_event_id's data changes on every
-					// re-crawl without a schema change), so an already-current
-					// archive would otherwise never catch its data up.
-					if (!built) {
-						ctx.insertNext(
-							'Run backfills',
-							async (archive: ArchiveType, ctx2: StepContext<ArchiveType>) => {
-								await runViewerReadModelBackfillsInWorker(archive, {
-									onPhase: (phase) => {
-										currentPhase = phase;
-										ctx2.progress(formatViewerReadModelPhase(phase));
-									},
-									onProgress: (progress) => {
-										ctx2.progress(formatViewerReadModelProgress(progress, currentPhase));
-									},
-								});
-								return archive;
-							},
-						);
-					}
-					return archive;
-				},
-			)
-			.pipe('Write archive', async (archive: ArchiveType, ctx: StepContext<void>) => {
+			.run({ stream, verbose });
+
+		// Plain read, not a TaskList row: the schema-version gate can only be
+		// checked once the archive is extracted (above), but which phase array
+		// the next TaskList renders must be fixed before that TaskList is
+		// built — so the decision sits here, between the two lists, mirroring
+		// every other "TaskList front, plain throw" boundary in this file
+		// (issue #294).
+		const fullBuild =
+			!!flags.force ||
+			(await getViewerReadModelVersion(archive)) !== VIEWER_READ_MODEL_SCHEMA_VERSION;
+
+		await appendViewerReadModelPhaseRows(
+			TaskList.from(archive),
+			fullBuild ? VIEWER_READ_MODEL_FULL_BUILD_PHASES : VIEWER_READ_MODEL_BACKFILL_PHASES,
+			{
+				getArchive: (a: ArchiveType) => a,
+				runBuild: fullBuild
+					? buildViewerReadModelInWorker
+					: runViewerReadModelBackfillsInWorker,
+			},
+		).run({ stream, verbose });
+
+		await TaskList.pipe(
+			'Write archive',
+			async (_input: undefined, ctx: StepContext<void>) => {
 				const reportProgress = dedupeProgressMessage((message) => {
 					ctx.progress(message);
 				});
@@ -270,8 +266,8 @@ export async function viewerBuild(
 					},
 				});
 				await ignoreEnoent(unlink(backupPath));
-			})
-			.run({ stream, verbose });
+			},
+		).run({ stream, verbose });
 	} catch (error) {
 		const cause = unwrapTaskListStepError(error);
 		if (!lifecycle.backupComplete) {

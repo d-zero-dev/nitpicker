@@ -26,11 +26,15 @@ import { formatProgressCount } from '../format-progress-count.js';
  *
  * Never throws: a flaky JS CDN or DNS hiccup during this best-effort pass
  * must not prevent the archive itself from being written, mirroring
- * `ensureViewerReadModelQuietly`'s own contract. A failure is reported to
- * `onProgress` as a one-line message rather than being swallowed silently;
- * the completion summary (match/resource/page counts) is left to
- * `console.error` since it must survive after the row itself has already
- * settled to `done`.
+ * `ensureViewerReadModelQuietly`'s own contract. Both the completion summary
+ * (match/resource/page counts) and a failure are reported through
+ * `onProgress` when it's provided — never *also* through `console.error`
+ * (issue #294 code review: this function runs while the caller's own
+ * `'Scan JS resources'` `TaskList` row is still active, and a bare
+ * `console.error` there corrupts dealer's cursor tracking the same way the
+ * self-healing migration notices did). `onProgress` is only omitted under
+ * `--silent`, which has no display to corrupt — `console.error` is the
+ * fallback for that path only, so the operator still sees the outcome.
  * @param archive - The writable `Archive` instance about to be written to disk.
  * @param onProgress - Called with the rendered count fragment (e.g.
  *   `"3/10 resources (30%)"`) whenever it changes. Omit for no reporting.
@@ -49,20 +53,23 @@ export async function scanJsResourcesQuietly(
 			},
 		});
 		if (result.candidateCount > 0) {
-			// eslint-disable-next-line no-console
-			console.error(
-				`[nitpicker] JS resource technology scan: ${result.matchedCount} match(es) across ${result.candidateCount} resource(s), ${result.pagesUpdatedCount} page(s) updated`,
-			);
+			const message = `${result.matchedCount} match(es) across ${result.candidateCount} resource(s), ${result.pagesUpdatedCount} page(s) updated`;
+			if (onProgress) {
+				onProgress(message);
+			} else {
+				// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+				console.error(`[nitpicker] JS resource technology scan: ${message}`);
+			}
 		}
 	} catch (error) {
 		const message = `Scan JS resources failed, continuing without it: ${
 			error instanceof Error ? error.message : String(error)
 		}`;
-		// Reported to the row's own display too (issue #294), not just
-		// console.error — otherwise the TaskList row settles to `done` with
-		// no sign anything went wrong.
-		onProgress?.(message);
-		// eslint-disable-next-line no-console -- survives after the row settles, unlike onProgress
-		console.error(`[nitpicker] ${message}`);
+		if (onProgress) {
+			onProgress(message);
+		} else {
+			// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+			console.error(`[nitpicker] ${message}`);
+		}
 	}
 }

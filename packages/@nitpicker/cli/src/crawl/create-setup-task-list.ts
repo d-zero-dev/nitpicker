@@ -182,6 +182,14 @@ export function createSetupTaskList(
 			onChunkProgress: (processed, total) => {
 				active?.reportProgress(formatProgressCount(processed, total));
 			},
+			// A legacy archive's self-healing schema migrations run
+			// synchronously inside `Archive.open`/`Archive.resume` (issue
+			// #294) — without this, their `console.error` notices print
+			// mid-redraw of the active row, corrupting dealer's cursor
+			// tracking.
+			onLog: (message) => {
+				active?.reportProgress(message);
+			},
 		},
 		taskListDone,
 		finish() {

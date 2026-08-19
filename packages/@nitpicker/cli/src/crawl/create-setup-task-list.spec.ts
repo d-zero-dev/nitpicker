@@ -134,6 +134,22 @@ describe('createSetupTaskList', () => {
 		expect(rendered).toContain('3/10 pages');
 	});
 
+	it('routes onLog (self-healing migration notices) to the active row instead of a bare console.error (issue #294)', async () => {
+		const { stream, lines } = createCapturingStream();
+		const { setupProgress, taskListDone, finish } = createSetupTaskList(
+			['Extracting archive'],
+			{ verbose: true, stream },
+		);
+
+		setupProgress.onPhase?.('Extracting archive');
+		await tick();
+		setupProgress.onLog?.('[migrate] page_meta.body_hash column added');
+		finish();
+
+		await expect(taskListDone).resolves.toBeUndefined();
+		expect(lines.join('')).toContain('[migrate] page_meta.body_hash column added');
+	});
+
 	it('deduplicates identical byte-progress messages instead of re-rendering on every chunk (issue #294 code review)', async () => {
 		const { stream, lines } = createCapturingStream();
 		const { setupProgress, taskListDone, finish } = createSetupTaskList(
