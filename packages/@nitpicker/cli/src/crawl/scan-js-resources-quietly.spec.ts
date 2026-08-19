@@ -117,4 +117,15 @@ describe('scanJsResourcesQuietly', () => {
 		await expect(scanJsResourcesQuietly(fakeArchive)).resolves.toBeUndefined();
 		expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('DNS failure'));
 	});
+
+	it('reports a failure to onProgress too, so the TaskList row does not settle silently as done (issue #294 code review)', async () => {
+		mockScanJsResourcesForTechnologySignals.mockRejectedValue(new Error('DNS failure'));
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { scanJsResourcesQuietly } = await import('./scan-js-resources-quietly.js');
+		const onProgress = vi.fn();
+
+		await scanJsResourcesQuietly(fakeArchive, onProgress);
+
+		expect(onProgress).toHaveBeenCalledWith(expect.stringContaining('DNS failure'));
+	});
 });

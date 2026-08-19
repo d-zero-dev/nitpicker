@@ -4,6 +4,7 @@ import type { SetupPhaseLabel, SetupProgressCallbacks } from '@nitpicker/crawler
 import { TaskList } from '@d-zero/dealer';
 import { SETUP_RECOVERY_PHASE_LABELS } from '@nitpicker/crawler';
 
+import { dedupeProgressMessage } from '../dedupe-progress-message.js';
 import { formatByteProgress } from '../format-byte-progress.js';
 import { formatProgressCount } from '../format-progress-count.js';
 
@@ -14,6 +15,14 @@ const RECOVERY_LABELS: ReadonlySet<string> = new Set(SETUP_RECOVERY_PHASE_LABELS
 /** The task-list row currently accepting `onPhase`/progress updates. */
 interface ActiveStep {
 	readonly ctx: StepContext<undefined>;
+	/**
+	 * Deduplicated on the rendered message (issue #294): raw byte/count
+	 * callbacks fire once per ~64 KB chunk, far denser than a display needs —
+	 * same rationale as `createByteProgressLogger`/`createCountProgressLogger`).
+	 * Freshly created per row in `makeStep` so a new row's first message is
+	 * never suppressed by the previous row's last one.
+	 */
+	readonly reportProgress: (message: string) => void;
 	readonly resolve: (outcome: 'done' | 'skip') => void;
 	readonly reject: (error: unknown) => void;
 }
@@ -119,6 +128,9 @@ export function createSetupTaskList(
 				}
 				active = {
 					ctx,
+					reportProgress: dedupeProgressMessage((message) => {
+						ctx.progress(message);
+					}),
 					resolve: (outcome) => {
 						if (outcome === 'skip') {
 							ctx.progress('skipped');
@@ -159,7 +171,7 @@ export function createSetupTaskList(
 	};
 
 	const reportBytes = (readOrCopiedBytes: number, totalBytes: number) => {
-		active?.ctx.progress(formatByteProgress(readOrCopiedBytes, totalBytes));
+		active?.reportProgress(formatByteProgress(readOrCopiedBytes, totalBytes));
 	};
 
 	return {
@@ -168,7 +180,7 @@ export function createSetupTaskList(
 			onExtractProgress: reportBytes,
 			onCopyProgress: reportBytes,
 			onChunkProgress: (processed, total) => {
-				active?.ctx.progress(formatProgressCount(processed, total));
+				active?.reportProgress(formatProgressCount(processed, total));
 			},
 		},
 		taskListDone,

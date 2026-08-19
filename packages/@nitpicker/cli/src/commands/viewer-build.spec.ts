@@ -228,6 +228,29 @@ describe('viewerBuild command', () => {
 		expect(output).toContain('200/200 MB (100%)');
 	});
 
+	it('deduplicates identical byte-progress messages instead of re-rendering on every chunk (issue #294 code review)', async () => {
+		mockArchiveWrite.mockImplementation(
+			(options: {
+				onTarProgress: (writtenBytes: number, totalBytes: number) => void;
+			}) => {
+				// Two chunks that round to the same "50/200 MB (25%)" text — a
+				// multi-GB archive fires this every ~64 KB, so without
+				// deduplication this single value would re-render thousands of
+				// times per step.
+				options.onTarProgress(50_000_000, 200_000_000);
+				options.onTarProgress(50_100_000, 200_000_000);
+				options.onTarProgress(200_000_000, 200_000_000);
+				return Promise.resolve();
+			},
+		);
+		const { viewerBuild } = await import('./viewer-build.js');
+		await viewerBuild(['/tmp/existing.nitpicker'], { verbose: true } as never);
+
+		const lines = stderrSpy.mock.calls.map(([chunk]) => String(chunk));
+		const matchingLines = lines.filter((line) => line.includes('50/200 MB (25%)'));
+		expect(matchingLines).toHaveLength(1);
+	});
+
 	it('passes --verbose through and prefixes every line with an ISO 8601 timestamp (issue #294)', async () => {
 		mockEnsureViewerReadModelInWorker.mockImplementation((_archive, options) => {
 			options.onPhase('buildingAnchorFacts');
@@ -401,7 +424,7 @@ describe('viewerBuild command', () => {
 		expect(exitSpy).toHaveBeenCalledWith(1);
 	});
 
-	it('does not attempt a restore when the backup copy itself fails (code review: restoring a truncated backup would destroy the intact original)', async () => {
+	it('does not attempt a restore when the backup copy itself fails (issue #294: restoring a truncated backup would destroy the intact original)', async () => {
 		mockCopyFileWithProgress.mockRejectedValueOnce(new Error('disk full during backup'));
 		const { viewerBuild } = await import('./viewer-build.js');
 
@@ -489,6 +512,11 @@ describe('viewerBuild command', () => {
 		expect(aggregateError.errors[1].message).toBe('restore disk full');
 		expect(aggregateError.message).toContain('restore from backup failed');
 		expect(exitSpy).toHaveBeenCalledWith(1);
+		// issue #294 code review: process.exit() runs immediately and skips a
+		// sibling finally block, so close() must happen BEFORE it, not inside
+		// one — this is the one branch that regression previously slipped
+		// through untested.
+		expect(mockArchiveClose).toHaveBeenCalledOnce();
 	});
 
 	it('closes the archive once the pipeline completes successfully', async () => {

@@ -7,7 +7,7 @@ import { existsSync, statSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import path from 'node:path';
 
-import { TaskList } from '@d-zero/dealer';
+import { TaskList, TaskListStepError } from '@d-zero/dealer';
 import { Archive, copyFileWithProgress } from '@nitpicker/crawler';
 import {
 	buildViewerReadModelInWorker,
@@ -16,6 +16,7 @@ import {
 } from '@nitpicker/query';
 
 import { createVerboseTimestampStream } from '../crawl/create-verbose-timestamp-stream.js';
+import { dedupeProgressMessage } from '../dedupe-progress-message.js';
 import { ExitCode } from '../exit-code.js';
 import { formatByteProgress } from '../format-byte-progress.js';
 import { formatCliError } from '../format-cli-error.js';
@@ -43,6 +44,22 @@ async function ignoreEnoent(promise: Promise<unknown>): Promise<void> {
 			throw error;
 		}
 	}
+}
+
+/**
+ * Unwraps a `TaskListStepError` (thrown by `TaskList.run()` when one of its
+ * steps fails) down to the original cause, so the operator sees the real
+ * error (`Error: disk full`) instead of dealer's step-wrapper text (`Error:
+ * Step "Write archive" (index: 3) failed: disk full`). Passes any other
+ * error through unchanged (issue #294). Mirrors `crawl.ts`'s helper of the
+ * same name — an `instanceof` check, deliberately not a duck-typed
+ * `'cause' in error` test, which would also match any unrelated error that
+ * happens to carry a `cause`.
+ * @param error - The error a `TaskList.run()` call rejected with.
+ * @returns The unwrapped cause, or `error` itself if it isn't a `TaskListStepError`.
+ */
+function unwrapTaskListStepError(error: unknown): unknown {
+	return error instanceof TaskListStepError ? error.cause : error;
 }
 
 /**
@@ -164,13 +181,19 @@ export async function viewerBuild(
 		await TaskList.pipe(
 			'Back up archive',
 			async (_input: undefined, ctx: StepContext<void>) => {
+				const reportProgress = dedupeProgressMessage((message) => {
+					ctx.progress(message);
+				});
 				await copyFileWithProgress(absFilePath, backupPath, (bytes, totalBytes) => {
-					ctx.progress(formatByteProgress(bytes, totalBytes));
+					reportProgress(formatByteProgress(bytes, totalBytes));
 				});
 				lifecycle.backupComplete = true;
 			},
 		)
 			.pipe('Extract archive', async (_input: void, ctx: StepContext<ArchiveType>) => {
+				const reportProgress = dedupeProgressMessage((message) => {
+					ctx.progress(message);
+				});
 				// No explicit `cwd`: matches every other Archive.open call
 				// site in this CLI (crawl.ts, diff.ts), which all default
 				// to process.cwd() for the transient extraction scratch
@@ -183,7 +206,7 @@ export async function viewerBuild(
 					filePath: absFilePath,
 					openPluginData: true,
 					onExtractProgress: (bytes, totalBytes) => {
-						ctx.progress(formatByteProgress(bytes, totalBytes));
+						reportProgress(formatByteProgress(bytes, totalBytes));
 					},
 				});
 				lifecycle.archive = archive;
@@ -235,19 +258,22 @@ export async function viewerBuild(
 				},
 			)
 			.pipe('Write archive', async (archive: ArchiveType, ctx: StepContext<void>) => {
+				const reportProgress = dedupeProgressMessage((message) => {
+					ctx.progress(message);
+				});
 				await archive.write({
 					onStep: (step) => {
-						ctx.progress(WRITE_STEP_LABELS[step]);
+						reportProgress(WRITE_STEP_LABELS[step]);
 					},
 					onTarProgress: (writtenBytes, totalBytes) => {
-						ctx.progress(formatByteProgress(writtenBytes, totalBytes));
+						reportProgress(formatByteProgress(writtenBytes, totalBytes));
 					},
 				});
 				await ignoreEnoent(unlink(backupPath));
 			})
 			.run({ stream, verbose });
 	} catch (error) {
-		const cause = error instanceof Error && 'cause' in error ? error.cause : error;
+		const cause = unwrapTaskListStepError(error);
 		if (!lifecycle.backupComplete) {
 			// The backup itself never finished — nothing has been mutated yet
 			// (extraction/build/write all run after it), so there is nothing
@@ -259,16 +285,21 @@ export async function viewerBuild(
 		}
 		try {
 			await TaskList.pipe('Restore from backup', async (_input: undefined, ctx) => {
+				const reportProgress = dedupeProgressMessage((message) => {
+					ctx.progress(message);
+				});
 				await copyFileWithProgress(backupPath, absFilePath, (bytes, totalBytes) => {
-					ctx.progress(formatByteProgress(bytes, totalBytes));
+					reportProgress(formatByteProgress(bytes, totalBytes));
 				});
 				await ignoreEnoent(unlink(backupPath));
 			}).run({ stream, verbose });
 		} catch (restoreError) {
-			const restoreCause =
-				restoreError instanceof Error && 'cause' in restoreError
-					? restoreError.cause
-					: restoreError;
+			const restoreCause = unwrapTaskListStepError(restoreError);
+			// `close()` runs before `process.exit()`, not in a `finally`
+			// (issue #294): `process.exit()` terminates the process
+			// immediately, before a sibling `finally` block gets to run —
+			// a `finally` here would never actually release the handle.
+			await lifecycle.archive?.close().catch(() => {});
 			formatCliError(
 				new AggregateError(
 					[cause, restoreCause],
@@ -277,9 +308,8 @@ export async function viewerBuild(
 				false,
 			);
 			process.exit(ExitCode.Fatal);
-		} finally {
-			await lifecycle.archive?.close().catch(() => {});
 		}
+		await lifecycle.archive?.close().catch(() => {});
 		formatCliError(cause, false);
 		process.exit(ExitCode.Fatal);
 	}

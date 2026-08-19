@@ -2,6 +2,7 @@ import type { Archive } from '@nitpicker/crawler';
 
 import { scanJsResourcesForTechnologySignals } from '@nitpicker/crawler';
 
+import { dedupeProgressMessage } from '../dedupe-progress-message.js';
 import { formatProgressCount } from '../format-progress-count.js';
 
 /**
@@ -38,16 +39,13 @@ export async function scanJsResourcesQuietly(
 	archive: Archive,
 	onProgress?: (message: string) => void,
 ): Promise<void> {
+	const reportProgress = dedupeProgressMessage((message) => {
+		onProgress?.(message);
+	});
 	try {
-		let lastMessage = '';
 		const result = await scanJsResourcesForTechnologySignals(archive, {
 			onProgress: (processed, total) => {
-				const message = formatProgressCount(processed, total, 'resources');
-				if (message === lastMessage) {
-					return;
-				}
-				lastMessage = message;
-				onProgress?.(message);
+				reportProgress(formatProgressCount(processed, total, 'resources'));
 			},
 		});
 		if (result.candidateCount > 0) {
@@ -57,11 +55,14 @@ export async function scanJsResourcesQuietly(
 			);
 		}
 	} catch (error) {
-		// eslint-disable-next-line no-console
-		console.error(
-			`[nitpicker] JS resource technology scan failed, continuing without it: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		const message = `Scan JS resources failed, continuing without it: ${
+			error instanceof Error ? error.message : String(error)
+		}`;
+		// Reported to the row's own display too (issue #294), not just
+		// console.error — otherwise the TaskList row settles to `done` with
+		// no sign anything went wrong.
+		onProgress?.(message);
+		// eslint-disable-next-line no-console -- survives after the row settles, unlike onProgress
+		console.error(`[nitpicker] ${message}`);
 	}
 }

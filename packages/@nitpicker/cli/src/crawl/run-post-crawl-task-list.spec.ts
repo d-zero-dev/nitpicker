@@ -30,6 +30,9 @@ function createCapturingStream() {
 function createFakeOrchestrator() {
 	const listeners = new Map<string, (arg: unknown) => void>();
 	const write = vi.fn(() => {
+		listeners.get('writeFileStart')?.({
+			filePath: '/tmp/fake.nitpicker',
+		} satisfies CrawlEvent['writeFileStart']);
 		listeners.get('writeStep')?.({
 			step: 'checkpoint',
 		} satisfies CrawlEvent['writeStep']);
@@ -37,6 +40,9 @@ function createFakeOrchestrator() {
 			writtenBytes: 50_000_000,
 			totalBytes: 100_000_000,
 		} satisfies CrawlEvent['writeTarProgress']);
+		listeners.get('writeFileEnd')?.({
+			filePath: '/tmp/fake.nitpicker',
+		} satisfies CrawlEvent['writeFileEnd']);
 		return Promise.resolve();
 	});
 	const orchestrator = {
@@ -84,6 +90,25 @@ describe('runPostCrawlTaskList', () => {
 		expect(rendered).toContain('Write archive');
 		expect(rendered).toContain('Checkpointing database');
 		expect(rendered).toContain('50/100 MB');
+	});
+
+	it('shows the archive file path on write start and completion (issue #294 code review: restores the path event-assignments.ts used to show)', async () => {
+		mockScanJsResourcesQuietly.mockResolvedValue();
+		mockEnsureViewerReadModelQuietly.mockResolvedValue();
+		const { runPostCrawlTaskList } = await import('./run-post-crawl-task-list.js');
+		const orchestrator = createFakeOrchestrator();
+		const { stream, lines } = createCapturingStream();
+
+		await runPostCrawlTaskList(orchestrator as never, {
+			verbose: true,
+			silent: false,
+			skipTechnologyJsScan: false,
+			stream,
+		});
+
+		const rendered = lines.join('');
+		expect(rendered).toContain('Writing to: /tmp/fake.nitpicker');
+		expect(rendered).toContain('Done: /tmp/fake.nitpicker');
 	});
 
 	it('skips the Scan JS resources row when skipTechnologyJsScan is true', async () => {

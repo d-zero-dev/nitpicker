@@ -1,4 +1,5 @@
 import type { attachCrawlDisplay as AttachCrawlDisplayFn } from '../crawl/attach-crawl-display.js';
+import type * as DealerModule from '@d-zero/dealer';
 import type {
 	CrawlerOrchestrator as OrchestratorType,
 	CrawlerError,
@@ -116,7 +117,7 @@ vi.mock('../crawl/create-setup-task-list.js', () => ({
 const mockTaskListPipeName = vi.fn();
 
 vi.mock('@d-zero/dealer', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('@d-zero/dealer')>();
+	const actual = await importOriginal<typeof DealerModule>();
 	return {
 		// Real `TaskListStepError` — `crawl.ts`'s `unwrapTaskListStepError`
 		// does an `instanceof` check against it, which needs the actual class
@@ -405,32 +406,91 @@ describe('startCrawl', () => {
 		);
 	});
 
-	it('runPostCrawlTaskList が TaskListStepError で reject しても、元の cause だけが伝播する（dealer のラップ文言を露出しない）', async () => {
+	it('runPostCrawlTaskList が TaskListStepError で reject すると、元の cause を含む CrawlAggregateError になる（dealer のラップ文言を露出しない、issue #294 code review）', async () => {
 		setupFakeOrchestrator();
 		const cause = new Error('disk full');
 		mockRunPostCrawlTaskList.mockRejectedValueOnce(
 			new TaskListStepError('Write archive', 2, cause),
 		);
+		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
 		const { startCrawl } = await import('./crawl.js');
 
 		const rejection = startCrawl(['https://example.com'], createFlags());
-		await expect(rejection).rejects.toBe(cause);
-		await expect(rejection).rejects.not.toThrow(/Step "Write archive"/);
+		await expect(rejection).rejects.toBeInstanceOf(CrawlAggregateError);
+		try {
+			await rejection;
+			expect.unreachable();
+		} catch (error) {
+			expect((error as InstanceType<typeof CrawlAggregateError>).errors).toEqual([cause]);
+			expect((error as Error).message).not.toMatch(/Step "Write archive"/);
+		}
 	});
 
-	it('write() が失敗しても archive.close() と garbageCollect() が呼ばれる', async () => {
+	it('runPostCrawlTaskList が非 Error 値で reject しても、CrawlAggregateError.errors に Error として積まれる', async () => {
+		setupFakeOrchestrator();
+		mockRunPostCrawlTaskList.mockRejectedValueOnce(
+			new TaskListStepError('Write archive', 2, 'plain string cause'),
+		);
+		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
+		const { startCrawl } = await import('./crawl.js');
+
+		const rejection = startCrawl(['https://example.com'], createFlags());
+		await expect(rejection).rejects.toBeInstanceOf(CrawlAggregateError);
+		try {
+			await rejection;
+			expect.unreachable();
+		} catch (error) {
+			const [collected] = (error as InstanceType<typeof CrawlAggregateError>).errors;
+			expect(collected).toBeInstanceOf(Error);
+			expect((collected as Error).message).toBe('plain string cause');
+		}
+	});
+
+	it('write() が失敗しても archive.close() と garbageCollect() が呼ばれ、CrawlAggregateError として原因を保持する（issue #294 code review: post-crawl 失敗も errStack と同じ経路で報告する）', async () => {
 		const fake = setupFakeOrchestrator();
 		(fake.write as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
 			new Error('write failed'),
 		);
+		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
 		const { startCrawl } = await import('./crawl.js');
 
-		await expect(startCrawl(['https://example.com'], createFlags())).rejects.toThrow(
-			'write failed',
-		);
+		const rejection = startCrawl(['https://example.com'], createFlags());
+		await expect(rejection).rejects.toBeInstanceOf(CrawlAggregateError);
+		try {
+			await rejection;
+			expect.unreachable();
+		} catch (error) {
+			expect((error as InstanceType<typeof CrawlAggregateError>).errors[0]).toMatchObject(
+				{
+					message: 'write failed',
+				},
+			);
+		}
 
 		expect(fake.archive.close).toHaveBeenCalledOnce();
 		expect(fake.garbageCollect).toHaveBeenCalledOnce();
+	});
+
+	it('クロール中のページエラーと post-crawl 失敗が両方あっても、両方とも CrawlAggregateError に含める（issue #294 code review: 片方が他方を握り潰さない）', async () => {
+		const fake = setupFakeOrchestrator();
+		simulateCrawlTimeError(new Error('scrape failed'));
+		(fake.write as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+			new Error('write failed'),
+		);
+		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
+		const { startCrawl } = await import('./crawl.js');
+
+		const rejection = startCrawl(['https://example.com'], createFlags());
+		await expect(rejection).rejects.toBeInstanceOf(CrawlAggregateError);
+		try {
+			await rejection;
+			expect.unreachable();
+		} catch (error) {
+			const messages = (error as InstanceType<typeof CrawlAggregateError>).errors.map(
+				(e) => e.message,
+			);
+			expect(messages).toEqual(expect.arrayContaining(['scrape failed', 'write failed']));
+		}
 	});
 });
 
@@ -599,6 +659,22 @@ describe('crawl', () => {
 		);
 
 		expect(listenerCountAtFinish).toBeGreaterThan(before);
+	});
+
+	it('--append: initializedCallback 発火後に factory 自体が失敗しても、シグナルハンドラは蓄積しない（issue #294 code review: crawling()/#setUrlOrder() 自体の失敗はハンドラ登録後に起こり得る）', async () => {
+		const before = process.listenerCount('SIGINT');
+		mockAppend.mockImplementationOnce(async (_path, _urls, _opts, cb) => {
+			await cb?.({} as OrchestratorType, { baseUrl: 'https://example.com' } as never);
+			throw new Error('crawling() itself failed after initializedCallback');
+		});
+		const { crawl } = await import('./crawl.js');
+
+		await crawl(
+			['/tmp/existing.nitpicker'],
+			createFlags({ append: ['https://sample-b.example.com/'] }),
+		).catch(() => {});
+
+		expect(process.listenerCount('SIGINT')).toBe(before);
 	});
 
 	it('--append: CrawlerOrchestrator.append が initializedCallback 前に throw したら setupTaskList.fail() が呼ばれる（issue #294 code review #1）', async () => {
@@ -889,16 +965,25 @@ describe('crawl', () => {
 		expect(fake.archive.close).toHaveBeenCalledOnce();
 	});
 
-	it('--resume 経由で write() が失敗しても archive.close() が呼ばれる', async () => {
+	it('--resume 経由で write() が失敗しても archive.close() が呼ばれ、CrawlAggregateError として Fatal 終了する（issue #294 code review: post-crawl 失敗も errStack と同じ経路で報告する）', async () => {
 		const fake = setupFakeOrchestrator();
 		(fake.write as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
 			new Error('write failed'),
 		);
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+			throw new ExitError(code as number);
+		});
 		const { crawl } = await import('./crawl.js');
 
-		await expect(crawl([], createFlags({ resume: '/absolute/stub' }))).rejects.toThrow(
-			'write failed',
-		);
+		try {
+			await expect(crawl([], createFlags({ resume: '/absolute/stub' }))).rejects.toThrow(
+				ExitError,
+			);
+			expect(exitSpy).toHaveBeenCalledWith(ExitCode.Fatal);
+		} finally {
+			exitSpy.mockRestore();
+		}
 
 		expect(fake.archive.close).toHaveBeenCalledOnce();
 		expect(fake.garbageCollect).toHaveBeenCalledOnce();

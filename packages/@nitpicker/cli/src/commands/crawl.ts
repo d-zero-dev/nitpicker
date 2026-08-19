@@ -92,12 +92,21 @@ function buildCrawlHeader(trigger: string, config: Config): string[] {
  * `.bak` copy I/O error, left it open forever). `fail()` is idempotent, so
  * this is safe even when `initializedCallback` already called `finish()` on
  * the success path.
+ *
+ * Also releases `crawlLifecycle`'s signal handlers on failure (issue #294):
+ * `initializedCallback` may have already registered them (crawling itself
+ * starts right after it returns), so a later failure inside the factory —
+ * `crawling()` or `#setUrlOrder()` throwing — must not leak `process`-level
+ * SIGINT/SIGBREAK/SIGHUP/SIGABRT listeners referencing an orchestrator that's
+ * about to be disposed. A no-op when `initializedCallback` never ran.
  * @param setupTaskList - The setup-phase task list handle, or `null` under `--silent`.
+ * @param crawlLifecycle - The handles `createCrawlInitializedCallback` fills in.
  * @param factory - Thunk invoking the orchestrator static factory method.
  * @returns The orchestrator the factory resolved with.
  */
 async function createOrchestratorFailingSetupOnError<T>(
 	setupTaskList: SetupTaskListHandle | null,
+	crawlLifecycle: CrawlLifecycle,
 	factory: () => Promise<T>,
 ): Promise<T> {
 	try {
@@ -105,6 +114,7 @@ async function createOrchestratorFailingSetupOnError<T>(
 	} catch (error) {
 		setupTaskList?.fail(error);
 		await setupTaskList?.taskListDone.catch(() => {});
+		crawlLifecycle.unregisterSignalHandlers?.();
 		throw error;
 	}
 }
@@ -132,7 +142,7 @@ function createCrawlLifecycle(): CrawlLifecycle {
  * `retryFailed`) — shared so the five modes can't drift on ordering.
  *
  * Registers the crawl-body signal handlers *before* touching `setupTaskList`
- * (code review: registering them only after `finish()`/`taskListDone`
+ * (issue #294: registering them only after `finish()`/`taskListDone`
  * resolved left a window — at least one microtask turn while dealer tears
  * down the setup `Lanes` — where Ctrl-C fell through to Node's default
  * handling instead of `orchestrator.abort()`, since `orchestrator` already
@@ -170,12 +180,13 @@ function createCrawlInitializedCallback(
 }
 
 /**
- * Unwraps a `TaskListStepError` (thrown by `runPostCrawlTaskList` when e.g.
- * `orchestrator.write()` fails inside its `'Write archive'` row) down to the
- * original cause, so the operator sees the real error (`Error: disk full`)
- * instead of dealer's step-wrapper text (`Error: Step "Write archive"
- * (index: 2) failed: disk full`). Passes any other error through unchanged.
- * @param error - The error `runPostCrawlTaskList` rejected with.
+ * Unwraps a `TaskListStepError` (thrown by `runPostCrawlTaskList`, or by the
+ * pre-crawl `TaskList.pipe('Checking browser', ...)` check, when the
+ * underlying step fails) down to the original cause, so the operator sees
+ * the real error (`Error: disk full`) instead of dealer's step-wrapper text
+ * (`Error: Step "Write archive" (index: 2) failed: disk full`). Passes any
+ * other error through unchanged.
+ * @param error - The error a `TaskList.run()` call rejected with.
  * @returns The unwrapped cause, or `error` itself if it isn't a `TaskListStepError`.
  */
 function unwrapTaskListStepError(error: unknown): unknown {
@@ -183,16 +194,35 @@ function unwrapTaskListStepError(error: unknown): unknown {
 }
 
 /**
+ * Coerces an unwrapped, potentially non-`Error` thrown value into an
+ * `Error` so it can join {@link CrawlAggregateError}'s `(CrawlerError |
+ * Error)[]` list alongside genuine crawl-time errors.
+ * @param value - The value to coerce.
+ * @returns `value` unchanged if it's already an `Error`, otherwise a new
+ *   `Error` wrapping its string form.
+ */
+function toError(value: unknown): Error {
+	return value instanceof Error ? value : new Error(String(value));
+}
+
+/**
  * Runs the post-crawl task list and tears down the per-mode lifecycle
  * shared by every crawl mode: closes the crawl display, runs
- * `runPostCrawlTaskList`, unwraps a `TaskListStepError` down to its cause,
- * releases the signal handlers, and finally throws a `CrawlAggregateError`
- * if the crawl body collected any errors along the way.
+ * `runPostCrawlTaskList`, releases the signal handlers, and throws a single
+ * {@link CrawlAggregateError} covering both the crawl body's own errors
+ * (`errStack`, collected by `attachCrawlDisplay`) and a post-crawl task-list
+ * failure (unwrapped via {@link unwrapTaskListStepError}) if either
+ * occurred — folding the latter into `errStack` rather than throwing it
+ * separately, so a `runPostCrawlTaskList` failure (e.g. `orchestrator.write()`
+ * running out of disk) can never silently swallow crawl-time page errors
+ * that were already sitting in `errStack` (issue #294: the two used to be
+ * reported through separate, mutually-exclusive paths).
  * @param orchestrator - The orchestrator returned by the completed crawl.
  * @param crawlLifecycle - The handles `createCrawlInitializedCallback` filled in.
  * @param flags - Parsed CLI flags from the `crawl` command.
  * @param errStack - Crawl-time errors collected by `attachCrawlDisplay`.
- * @throws The unwrapped cause of a post-crawl task-list failure, or a {@link CrawlAggregateError}.
+ * @throws {CrawlAggregateError} If the crawl body and/or the post-crawl task
+ *   list produced any errors.
  */
 async function finishCrawlMode(
 	orchestrator: CrawlerOrchestrator,
@@ -209,7 +239,7 @@ async function finishCrawlMode(
 			skipTechnologyJsScan: !!flags.skipTechnologyJsScan,
 		});
 	} catch (error) {
-		throw unwrapTaskListStepError(error);
+		errStack.push(toError(unwrapTaskListStepError(error)));
 	} finally {
 		crawlLifecycle.unregisterSignalHandlers?.();
 	}
@@ -294,6 +324,7 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 
 	await using orchestrator = await createOrchestratorFailingSetupOnError(
 		setupTaskList,
+		crawlLifecycle,
 		() =>
 			CrawlerOrchestrator.resume(
 				absFilePath,
@@ -339,6 +370,7 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
 
 	await using orchestrator = await createOrchestratorFailingSetupOnError(
 		setupTaskList,
+		crawlLifecycle,
 		() =>
 			CrawlerOrchestrator.append(
 				archivePath,
@@ -420,6 +452,7 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 
 	await using orchestrator = await createOrchestratorFailingSetupOnError(
 		setupTaskList,
+		crawlLifecycle,
 		() =>
 			CrawlerOrchestrator.inventory(
 				archivePath,
@@ -466,6 +499,7 @@ async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
 
 	await using orchestrator = await createOrchestratorFailingSetupOnError(
 		setupTaskList,
+		crawlLifecycle,
 		() =>
 			CrawlerOrchestrator.retryFailed(
 				archivePath,
@@ -575,10 +609,17 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		if (flags.silent) {
 			await assertBrowserIsUsable();
 		} else {
-			await TaskList.pipe('Checking browser', assertBrowserIsUsable).run({
-				stream: process.stderr,
-				verbose: !!flags.verbose,
-			});
+			try {
+				await TaskList.pipe('Checking browser', assertBrowserIsUsable).run({
+					stream: process.stderr,
+					verbose: !!flags.verbose,
+				});
+			} catch (error) {
+				// Unwrapped so a missing-Chrome message stays actionable
+				// (install instructions) instead of dealer's generic
+				// step-wrapper text (issue #294).
+				throw unwrapTaskListStepError(error);
+			}
 		}
 
 		if (flags.resume) {

@@ -134,6 +134,58 @@ describe('createSetupTaskList', () => {
 		expect(rendered).toContain('3/10 pages');
 	});
 
+	it('deduplicates identical byte-progress messages instead of re-rendering on every chunk (issue #294 code review)', async () => {
+		const { stream, lines } = createCapturingStream();
+		const { setupProgress, taskListDone, finish } = createSetupTaskList(
+			['Extracting archive'],
+			{ verbose: true, stream },
+		);
+
+		setupProgress.onPhase?.('Extracting archive');
+		await tick();
+		// Two chunks that round to the same "50/100 MB (50%)" text — a large
+		// archive fires this every ~64 KB, so without deduplication this
+		// single value would re-render on every chunk. A final, distinct
+		// value before finish() keeps dealer's own done-transition re-render
+		// (which always shows the row's last message) from coincidentally
+		// duplicating the string under test.
+		setupProgress.onExtractProgress?.(50_000_000, 100_000_000);
+		setupProgress.onExtractProgress?.(50_100_000, 100_000_000);
+		setupProgress.onExtractProgress?.(100_000_000, 100_000_000);
+		finish();
+
+		await expect(taskListDone).resolves.toBeUndefined();
+		const matchingLines = lines.filter((line) => line.includes('50/100 MB (50%)'));
+		expect(matchingLines).toHaveLength(1);
+	});
+
+	it('does not suppress a new row’s first message just because it matches the previous row’s last one', async () => {
+		const { stream, lines } = createCapturingStream();
+		const { setupProgress, taskListDone, finish } = createSetupTaskList(
+			['Extracting archive', 'Backing up archive'],
+			{ verbose: true, stream },
+		);
+
+		setupProgress.onPhase?.('Extracting archive');
+		await tick();
+		setupProgress.onExtractProgress?.(50_000_000, 100_000_000);
+		// A distinct value before leaving this row, so its own done-transition
+		// re-render doesn't also match "50/100 MB (50%)".
+		setupProgress.onExtractProgress?.(100_000_000, 100_000_000);
+		setupProgress.onPhase?.('Backing up archive');
+		await tick();
+		// Same rendered fragment as the previous row's first message — must
+		// still show up on the new row, not be swallowed by a dedup check
+		// that spans across rows.
+		setupProgress.onCopyProgress?.(50_000_000, 100_000_000);
+		setupProgress.onCopyProgress?.(100_000_000, 100_000_000);
+		finish();
+
+		await expect(taskListDone).resolves.toBeUndefined();
+		const matchingLines = lines.filter((line) => line.includes('50/100 MB (50%)'));
+		expect(matchingLines).toHaveLength(2);
+	});
+
 	it('finish() and fail() are no-ops once the task list has already settled', async () => {
 		const { stream } = createCapturingStream();
 		const { setupProgress, taskListDone, finish, fail } = createSetupTaskList(

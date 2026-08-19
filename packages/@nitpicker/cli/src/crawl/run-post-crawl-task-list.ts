@@ -36,13 +36,16 @@ export interface RunPostCrawlTaskListOptions {
  * has resolved — i.e. after the crawl body's own `Lanes` has already closed
  * — so the two never render at once.
  *
- * The `'Write archive'` row subscribes to `orchestrator`'s `writeStep` /
- * `writeTarProgress` events for the duration of `orchestrator.write()` —
- * `attach-crawl-display.ts` deliberately does not relay these, since they
- * only fire from this later call. `TypedAwaitEventEmitter` has no `off()`,
- * but that's fine here: `orchestrator` is disposed (`await using`) by the
- * caller right after this function returns, so the listeners have nothing
- * left to fire on.
+ * The `'Write archive'` row subscribes to `orchestrator`'s `writeFileStart` /
+ * `writeStep` / `writeTarProgress` / `writeFileEnd` events for the duration
+ * of `orchestrator.write()` — `attach-crawl-display.ts` deliberately does
+ * not relay these, since they only fire from this later call.
+ * `writeFileStart`/`writeFileEnd` restore the archive path in the display
+ * (issue #294): for `startCrawl`'s auto-generated filenames it's the
+ * operator's only record of where the archive landed.
+ * `TypedAwaitEventEmitter` has no `off()`, but that's fine here:
+ * `orchestrator` is disposed (`await using`) by the caller right after this
+ * function returns, so the listeners have nothing left to fire on.
  * @param orchestrator - The orchestrator returned by a completed crawl.
  * @param options - See {@link RunPostCrawlTaskListOptions}.
  * @example
@@ -93,6 +96,16 @@ export async function runPostCrawlTaskList(
 		.pipe(
 			'Write archive',
 			async (orch: CrawlerOrchestrator, ctx: StepContext<CrawlerOrchestrator>) => {
+				// Restores the archive path the pre-TaskList `event-assignments.ts`
+				// used to show (issue #294): for `startCrawl`'s auto-generated
+				// filenames, this line is the operator's only record of where the
+				// archive actually landed. `writeFileStart` fires immediately, so
+				// it's visible right away; `writeFileEnd`'s message becomes the
+				// row's final, permanent `done` state — the non-verbose overwrite
+				// display only ever shows the most recent message.
+				orch.on('writeFileStart', ({ filePath }) => {
+					ctx.progress(`Writing to: ${filePath}`);
+				});
 				orch.on('writeStep', ({ step }) => {
 					ctx.progress(WRITE_STEP_LABELS[step]);
 				});
@@ -105,6 +118,9 @@ export async function runPostCrawlTaskList(
 				);
 				orch.on('writeTarProgress', ({ writtenBytes, totalBytes }) => {
 					reportTarProgress(writtenBytes, totalBytes);
+				});
+				orch.on('writeFileEnd', ({ filePath }) => {
+					ctx.progress(`Done: ${filePath}`);
 				});
 				await orch.write();
 				return orch;
