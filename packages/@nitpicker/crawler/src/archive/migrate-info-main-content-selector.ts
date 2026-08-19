@@ -8,8 +8,16 @@ import type { Knex } from 'knex';
  * idempotent, and self-healing for archives whose provisioning crashed
  * partway through.
  * @param instance - The Knex query builder instance connected to the database.
+ * @param onLog - Called instead of `console.error` when this migration
+ *   actually applies (issue #294: a bare `console.error` here can fire
+ *   while a `@d-zero/dealer` `Lanes`/`TaskList` display is mid-redraw during
+ *   `Archive.open`, corrupting its cursor tracking). Falls back to
+ *   `console.error` when omitted (direct/test callers).
  */
-export async function migrateInfoMainContentSelector(instance: Knex): Promise<void> {
+export async function migrateInfoMainContentSelector(
+	instance: Knex,
+	onLog?: (message: string) => void,
+): Promise<void> {
 	const hasInfo = await instance.schema.hasTable('info');
 	if (!hasInfo) {
 		return;
@@ -21,6 +29,11 @@ export async function migrateInfoMainContentSelector(instance: Knex): Promise<vo
 	await instance.schema.table('info', (t) => {
 		t.string('mainContentSelector');
 	});
-	// eslint-disable-next-line no-console
-	console.error('[migrate] info.mainContentSelector column added');
+	const message = '[migrate] info.mainContentSelector column added';
+	if (onLog) {
+		onLog(message);
+	} else {
+		// eslint-disable-next-line no-console
+		console.error(message);
+	}
 }

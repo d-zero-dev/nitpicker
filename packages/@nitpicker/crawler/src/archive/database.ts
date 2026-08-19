@@ -1135,9 +1135,11 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * lightweight migrations; in read-only mode both are skipped.
 	 * Delegates to {@link initOp}.
 	 * @param readOnly - When true, skip schema init + migrations.
+	 * @param onLog - Forwarded to {@link initOp} — see
+	 *   {@link DatabaseOption.onLog}'s docs.
 	 */
-	async #init(readOnly: boolean) {
-		await initOp(this.#instance, readOnly);
+	async #init(readOnly: boolean, onLog?: (message: string) => void) {
+		await initOp(this.#instance, readOnly, onLog);
 	}
 
 	/**
@@ -1174,7 +1176,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			mkdir(options.filename);
 		}
 		const db = new Database(options);
-		await db.#init(options.readOnly ?? false);
+		await db.#init(options.readOnly ?? false, options.onLog);
 		return db;
 	}
 }

@@ -12,8 +12,16 @@ import type { Knex } from 'knex';
  * performed), a single notice is written to stderr so the user knows the
  * file was upgraded.
  * @param instance - The Knex query builder instance connected to the database.
+ * @param onLog - Called instead of `console.error` when this migration
+ *   actually applies (issue #294: a bare `console.error` here can fire
+ *   while a `@d-zero/dealer` `Lanes`/`TaskList` display is mid-redraw during
+ *   `Archive.open`, corrupting its cursor tracking). Falls back to
+ *   `console.error` when omitted (direct/test callers).
  */
-export async function migrateInfoRoots(instance: Knex): Promise<void> {
+export async function migrateInfoRoots(
+	instance: Knex,
+	onLog?: (message: string) => void,
+): Promise<void> {
 	const hasInfo = await instance.schema.hasTable('info');
 	if (!hasInfo) {
 		return;
@@ -40,6 +48,11 @@ export async function migrateInfoRoots(instance: Knex): Promise<void> {
 		});
 		changes.push('scope dropped');
 	}
-	// eslint-disable-next-line no-console
-	console.error(`[migrate] info table upgraded (${changes.join(', ')})`);
+	const message = `[migrate] info table upgraded (${changes.join(', ')})`;
+	if (onLog) {
+		onLog(message);
+	} else {
+		// eslint-disable-next-line no-console
+		console.error(message);
+	}
 }

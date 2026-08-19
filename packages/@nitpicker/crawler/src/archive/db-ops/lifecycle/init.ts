@@ -59,8 +59,16 @@ import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-networ
  * crawl without rewriting the user's tmpDir.
  * @param knex - Knex query builder connected to the archive DB.
  * @param readOnly - When true, skip schema init + migrations.
+ * @param onLog - Forwarded to every `migrate*` call below (issue #294) —
+ *   see {@link import('../../migrate-page-meta-body-hash.js').migratePageMetaBodyHash}'s
+ *   docs for why a bare `console.error` at this point is unsafe (it can
+ *   fire while a caller's `Lanes`/`TaskList` display is mid-redraw).
  */
-export async function init(knex: Knex, readOnly: boolean): Promise<void> {
+export async function init(
+	knex: Knex,
+	readOnly: boolean,
+	onLog?: (message: string) => void,
+): Promise<void> {
 	// Connection-level PRAGMAs (foreign_keys, mmap_size, …) must be
 	// reapplied on every connect — they are not persisted across opens.
 	// They are safe in read-only mode because they don't write to the
@@ -77,22 +85,22 @@ export async function init(knex: Knex, readOnly: boolean): Promise<void> {
 		return;
 	}
 	await initSchema(knex);
-	await migrateInfoRoots(knex);
-	await migrateInfoMainContentSelector(knex);
-	await migrateMainContentsColumns(knex);
-	await migratePageMetaBodyHash(knex);
-	await migratePageMetaConsoleErrorCount(knex);
-	await migratePageMetaCustomElementCount(knex);
+	await migrateInfoRoots(knex, onLog);
+	await migrateInfoMainContentSelector(knex, onLog);
+	await migrateMainContentsColumns(knex, onLog);
+	await migratePageMetaBodyHash(knex, onLog);
+	await migratePageMetaConsoleErrorCount(knex, onLog);
+	await migratePageMetaCustomElementCount(knex, onLog);
 	// Table-level migration (converts + drops page_tags), not a column
 	// add — see its own JSDoc for why it still belongs in this boot phase.
-	await migratePageTagsToPageTechnologies(knex);
-	await migrateContentItemsAliasOfId(knex);
+	await migratePageTagsToPageTechnologies(knex, onLog);
+	await migrateContentItemsAliasOfId(knex, onLog);
 	// Runs after `initSchema` above, which already created
 	// `dedupe_cap_events` (an adjunct table) unconditionally — so the new
 	// column's `REFERENCES dedupe_cap_events(id)` target always exists by
 	// this point, for both fresh and legacy archives.
-	await migrateContentItemsDedupeCapEventId(knex);
-	await migrateInventoryRunsInvalidSkipped(knex);
-	await migrateInventoryRunsExcludeSkipped(knex);
+	await migrateContentItemsDedupeCapEventId(knex, onLog);
+	await migrateInventoryRunsInvalidSkipped(knex, onLog);
+	await migrateInventoryRunsExcludeSkipped(knex, onLog);
 	await closeStaleOpenNetworkOutages(knex);
 }

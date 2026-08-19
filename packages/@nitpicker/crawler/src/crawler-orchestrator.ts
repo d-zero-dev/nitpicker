@@ -451,8 +451,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 						triggerHostCount,
 					);
 
-					// event notice; mirrors `#finalizeCrawlSession`'s unconditional
-					// `console.error` for the DNS-burn short-circuit summary.
+					// Rare anomaly notice, printed unconditionally even though this
+					// fires while `deal()`'s own crawl-time `Lanes` is actively
+					// rendering (issue #294: unlike the crawl-tail notices reported
+					// via the `crawlSessionNotice` event, this one has no
+					// listener-based route available mid-crawl — visibility during
+					// the outage takes priority over the display glitch this
+					// causes).
 					console.error(
 						`[network] outage suspected — pausing workers (probe host: ${probeHost ?? 'none'})`,
 					);
@@ -794,7 +799,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		log('Config %O', config);
 		await orchestrator.crawling(list);
 		log('Crawling completed');
-		CrawlerOrchestrator.#finalizeCrawlSession();
+		CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);
 		log('Set order natural URL sort');
 		await orchestrator.#setUrlOrder();
 		log('Sorting done');
@@ -859,6 +864,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			cwd,
 			openPluginData: true,
 			onExtractProgress: setupProgress?.onExtractProgress,
+			onLog: setupProgress?.onLog,
 		});
 		// Any throw between here and the successful return must release the
 		// archive lock and clean up tmpDir; the caller's `close()` only runs on
@@ -938,7 +944,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				log('Merged roots %O', mergedRoots);
 				await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 				await orchestrator.crawling(newParsed);
-				CrawlerOrchestrator.#finalizeCrawlSession();
+				CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);
 				await orchestrator.#setUrlOrder();
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
@@ -1091,6 +1097,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			cwd,
 			openPluginData: true,
 			onExtractProgress: setupProgress?.onExtractProgress,
+			onLog: setupProgress?.onLog,
 		});
 		try {
 			setupProgress?.onPhase?.(PHASE_LOADING_CONFIG);
@@ -1115,10 +1122,27 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// enough — the inventory pass continues and the crawled-wins
 				// source priority keeps stale labels stable even if some of
 				// the strict-pending rows happen to land on inventory seeds.
-				// eslint-disable-next-line no-console -- operator-facing warning, must be visible regardless of DEBUG filters
-				console.warn(
-					`inventory: archive has ${pending.length} pending URLs from a previous crawl. Proceeding — crawled-wins priority keeps their labels stable. Consider \`--resume\` first if you want the prior work finalized.`,
-				);
+				//
+				// Routed through `setupProgress.onLog` (issue #294 code
+				// review), not a bare `console.warn`: the `'Loading crawl
+				// state'` row is active at this exact point (`onPhase` just
+				// above), and a direct stream write here corrupts the setup
+				// `TaskList`'s cursor tracking the same way self-healing
+				// migration notices did. `onLog` sets this row's message,
+				// which then freezes as its permanent `done` text once the
+				// next `onPhase` call moves past it — still visible in the
+				// final terminal output, just not printed as its own
+				// interrupting line. Falls back to `console.warn` under
+				// `--silent` (`setupProgress` is `null` there, so there is no
+				// row to set this on, and the warning would otherwise never
+				// surface at all).
+				const message = `inventory: archive has ${pending.length} pending URLs from a previous crawl. Proceeding — crawled-wins priority keeps their labels stable. Consider \`--resume\` first if you want the prior work finalized.`;
+				if (setupProgress?.onLog) {
+					setupProgress.onLog(message);
+				} else {
+					// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+					console.warn(message);
+				}
 			}
 
 			// Archive the exact source bytes before scope classification, so
@@ -1432,7 +1456,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					);
 					await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 					await orchestrator.crawling([], { recursive: true });
-					CrawlerOrchestrator.#finalizeCrawlSession();
+					CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);
 					await orchestrator.#setUrlOrder();
 					return orchestrator;
 				}
@@ -1563,6 +1587,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			cwd,
 			openPluginData: true,
 			onExtractProgress: setupProgress?.onExtractProgress,
+			onLog: setupProgress?.onLog,
 		});
 		// Any throw between here and the successful return must release the
 		// archive lock and clean up tmpDir; the caller's `close()` only runs on
@@ -1624,7 +1649,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				}
 				await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 				await orchestrator.crawling([], { recursive: config.recursive });
-				CrawlerOrchestrator.#finalizeCrawlSession();
+				CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);
 				await orchestrator.#setUrlOrder();
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
@@ -1690,7 +1715,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			PHASE_RESTORING_CRAWL_STATE,
 		] = RESUME_SETUP_PHASES;
 		setupProgress?.onPhase?.(PHASE_RECONNECTING);
-		const archive = await Archive.resume(stubPath);
+		const archive = await Archive.resume(stubPath, setupProgress?.onLog);
 		setupProgress?.onPhase?.(PHASE_LOADING_CONFIG);
 		const archivedConfig = await archive.getConfig();
 		// Seed the sticky set from prior sessions' confirmed traps so
@@ -1726,7 +1751,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		log('Config %O', config);
 		await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 		await orchestrator.crawling([url]);
-		CrawlerOrchestrator.#finalizeCrawlSession();
+		CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);
 		return orchestrator;
 	}
 
@@ -1807,23 +1832,30 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	}
 
 	/**
-	 * Tears down session-scoped crawler caches and prints a short-circuit
+	 * Tears down session-scoped crawler caches and reports a short-circuit
 	 * summary if any URL fetches were skipped. Invoked at every
 	 * crawl-session boundary (`crawling` / `append` / `inventory` /
-	 * `retryFailed` / `resume`).
+	 * `retryFailed` / `resume`), in the same crawl-tail window as
+	 * `flushingPendingWrites`/`sortingUrls` — reports through the
+	 * `crawlSessionNotice` event rather than a bare `console.error` (issue
+	 * #294 code review) for the same reason those two do: this runs while a
+	 * caller's `Lanes`/`TaskList` display can already be active, and a
+	 * direct stream write there corrupts its cursor tracking.
+	 * @param orchestrator - The session's orchestrator instance, to emit
+	 *   `crawlSessionNotice` from.
 	 */
-	static #finalizeCrawlSession(): void {
+	static #finalizeCrawlSession(orchestrator: CrawlerOrchestrator): void {
 		const skipped = dnsBurnedHostShortCircuitCounter.count;
 		if (skipped > 0) {
-			// eslint-disable-next-line no-console
-			console.error(`[preload] Short-circuited ${skipped} URL(s) on DNS-burned hosts`);
+			void orchestrator.emit('crawlSessionNotice', {
+				message: `[preload] Short-circuited ${skipped} URL(s) on DNS-burned hosts`,
+			});
 		}
 		const { confirmedCount, totalDurationMs } = networkOutageSummaryCounter;
 		if (confirmedCount > 0) {
-			// eslint-disable-next-line no-console
-			console.error(
-				`[network] ${confirmedCount} outage(s), ${Math.round(totalDurationMs / 1000)}s total`,
-			);
+			void orchestrator.emit('crawlSessionNotice', {
+				message: `[network] ${confirmedCount} outage(s), ${Math.round(totalDurationMs / 1000)}s total`,
+			});
 		}
 		networkOutageSummaryCounter.confirmedCount = 0;
 		networkOutageSummaryCounter.totalDurationMs = 0;

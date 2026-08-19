@@ -25,8 +25,16 @@ import type { Knex } from 'knex';
  *
  * Idempotent: adding the column is a no-op once it exists.
  * @param instance - The Knex query builder instance connected to the database.
+ * @param onLog - Called instead of `console.error` when this migration
+ *   actually applies (issue #294: a bare `console.error` here can fire
+ *   while a `@d-zero/dealer` `Lanes`/`TaskList` display is mid-redraw during
+ *   `Archive.open`, corrupting its cursor tracking). Falls back to
+ *   `console.error` when omitted (direct/test callers).
  */
-export async function migratePageMetaCustomElementCount(instance: Knex): Promise<void> {
+export async function migratePageMetaCustomElementCount(
+	instance: Knex,
+	onLog?: (message: string) => void,
+): Promise<void> {
 	const hasPageMeta = await instance.schema.hasTable('page_meta');
 	if (!hasPageMeta) {
 		return;
@@ -39,7 +47,12 @@ export async function migratePageMetaCustomElementCount(instance: Knex): Promise
 		await instance.schema.table('page_meta', (t) => {
 			t.integer('main_content_custom_element_count');
 		});
-		// eslint-disable-next-line no-console
-		console.error('[migrate] page_meta.main_content_custom_element_count column added');
+		const message = '[migrate] page_meta.main_content_custom_element_count column added';
+		if (onLog) {
+			onLog(message);
+		} else {
+			// eslint-disable-next-line no-console
+			console.error(message);
+		}
 	}
 }

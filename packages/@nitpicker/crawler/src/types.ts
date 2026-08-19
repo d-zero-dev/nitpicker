@@ -67,6 +67,15 @@ export interface SetupProgressCallbacks {
 	 * @param total - Total units this phase will process.
 	 */
 	onChunkProgress?: (processed: number, total: number) => void;
+	/**
+	 * Called instead of `console.error` for self-healing schema migration
+	 * notices that can fire during `Archive.open`/`Archive.resume` while
+	 * this setup phase's own `Lanes`/`TaskList` display is active (issue
+	 * #294) — a bare `console.error` there corrupts the display's cursor
+	 * tracking. Forwarded to {@link import('../archive/archive.js').ArchiveOpenOptions.onLog}.
+	 * Omit to fall back to `console.error`.
+	 */
+	onLog?: (message: string) => void;
 }
 
 /**
@@ -265,6 +274,21 @@ export interface CrawlEvent {
 	flushingPendingWrites: {
 		/** Enqueued operations still waiting or executing at emission time. */
 		pending: number;
+	};
+
+	/**
+	 * Emitted once per session-summary notice `#finalizeCrawlSession` has to
+	 * report — the DNS-burned-host short-circuit count and/or the
+	 * network-outage summary, each only when its count is nonzero (issue
+	 * #294 code review). Fires in the same crawl-tail window as
+	 * `flushingPendingWrites`/`sortingUrls` (after crawling finishes, before
+	 * the static factory method returns), so a listener can route it the
+	 * same way instead of a bare `console.error` corrupting whatever
+	 * `Lanes`/`TaskList` display happens to be active at that point.
+	 */
+	crawlSessionNotice: {
+		/** The formatted, ready-to-display notice text. */
+		message: string;
 	};
 
 	/**

@@ -44,8 +44,16 @@ import type { Knex } from 'knex';
  * runs (after `initSchema`, itself after `assertCompatibleVersion` rejects
  * pre-0.13 archives) the table is always present.
  * @param instance - The Knex query builder instance connected to the database.
+ * @param onLog - Called instead of `console.error` when this migration
+ *   actually applies (issue #294: a bare `console.error` here can fire
+ *   while a `@d-zero/dealer` `Lanes`/`TaskList` display is mid-redraw during
+ *   `Archive.open`, corrupting its cursor tracking). Falls back to
+ *   `console.error` when omitted (direct/test callers).
  */
-export async function migrateContentItemsAliasOfId(instance: Knex): Promise<void> {
+export async function migrateContentItemsAliasOfId(
+	instance: Knex,
+	onLog?: (message: string) => void,
+): Promise<void> {
 	const hasContentItems = await instance.schema.hasTable('content_items');
 	if (!hasContentItems) {
 		return;
@@ -55,8 +63,13 @@ export async function migrateContentItemsAliasOfId(instance: Knex): Promise<void
 		await instance.raw(
 			'ALTER TABLE content_items ADD COLUMN alias_of_id INTEGER REFERENCES content_items(id) DEFERRABLE INITIALLY DEFERRED',
 		);
-		// eslint-disable-next-line no-console
-		console.error('[migrate] content_items.alias_of_id column added');
+		const message = '[migrate] content_items.alias_of_id column added';
+		if (onLog) {
+			onLog(message);
+		} else {
+			// eslint-disable-next-line no-console
+			console.error(message);
+		}
 	}
 	await instance.raw(
 		'CREATE INDEX IF NOT EXISTS idx_content_items_alias_of_id ON content_items(alias_of_id)',

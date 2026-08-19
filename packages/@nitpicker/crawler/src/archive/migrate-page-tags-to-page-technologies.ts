@@ -35,17 +35,28 @@ import { convertLegacyPageTagsToInserts } from './meta/technologies/convert-lega
  * progress, so without an upfront count it looks indistinguishable from a
  * hang for however long the conversion actually takes.
  * @param instance - The Knex query builder instance connected to the database.
+ * @param onLog - Called instead of `console.error` for both the start and
+ *   end notices (issue #294: a bare `console.error` here can fire while a
+ *   `@d-zero/dealer` `Lanes`/`TaskList` display is mid-redraw during
+ *   `Archive.open`, corrupting its cursor tracking). Falls back to
+ *   `console.error` when omitted (direct/test callers).
  */
-export async function migratePageTagsToPageTechnologies(instance: Knex): Promise<void> {
+export async function migratePageTagsToPageTechnologies(
+	instance: Knex,
+	onLog?: (message: string) => void,
+): Promise<void> {
 	const hasPageTags = await instance.schema.hasTable('page_tags');
 	if (!hasPageTags) return;
 
 	const [row] = await instance('page_tags').count<[{ total: number }]>({ total: '*' });
 	const total = row?.total ?? 0;
-	// eslint-disable-next-line no-console
-	console.error(
-		`[migrate] converting ${total} page_tags row(s) to technology_signals/page_technologies…`,
-	);
+	const startMessage = `[migrate] converting ${total} page_tags row(s) to technology_signals/page_technologies…`;
+	if (onLog) {
+		onLog(startMessage);
+	} else {
+		// eslint-disable-next-line no-console
+		console.error(startMessage);
+	}
 
 	await instance.transaction(async (trx) => {
 		const rows: Array<{
@@ -73,8 +84,12 @@ export async function migratePageTagsToPageTechnologies(instance: Knex): Promise
 
 		await trx.schema.dropTable('page_tags');
 	});
-	// eslint-disable-next-line no-console
-	console.error(
-		'[migrate] page_tags converted to technology_signals/page_technologies and dropped',
-	);
+	const endMessage =
+		'[migrate] page_tags converted to technology_signals/page_technologies and dropped';
+	if (onLog) {
+		onLog(endMessage);
+	} else {
+		// eslint-disable-next-line no-console
+		console.error(endMessage);
+	}
 }

@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import knex from 'knex';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LibsqlDialect } from './libsql-dialect.js';
 import { migratePageMetaBodyHash } from './migrate-page-meta-body-hash.js';
@@ -39,6 +39,7 @@ afterEach(async () => {
 		'migrate-body-hash-idempotent.sqlite',
 		'migrate-body-hash-empty.sqlite',
 		'migrate-body-hash-fresh.sqlite',
+		'migrate-body-hash-on-log.sqlite',
 	]) {
 		await fs.rm(path.resolve(workingDir, name), { force: true });
 	}
@@ -104,6 +105,20 @@ describe('migratePageMetaBodyHash', () => {
 		expect(indexes.map((i) => i.name)).toContain('idx_page_meta_body_hash');
 
 		await instance.destroy();
+	});
+
+	it('routes the migration notice through onLog instead of console.error when provided (issue #294)', async () => {
+		const { instance } = await buildLegacyPageMeta('migrate-body-hash-on-log.sqlite');
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const onLog = vi.fn();
+
+		await migratePageMetaBodyHash(instance, onLog);
+
+		expect(onLog).toHaveBeenCalledWith('[migrate] page_meta.body_hash column added');
+		expect(consoleErrorSpy).not.toHaveBeenCalled();
+
+		await instance.destroy();
+		consoleErrorSpy.mockRestore();
 	});
 
 	it('returns silently when page_meta does not exist', async () => {
