@@ -62,6 +62,7 @@ export { getViewerIsolatedCluster } from './get-viewer-isolated-cluster.js';
 export { getViewerIsolatedComponentSize } from './get-viewer-isolated-component-size.js';
 export { getViewerLinkGraph } from './get-viewer-link-graph.js';
 export { getViewerReadModelVersion } from './viewer-read-model/get-viewer-read-model-version.js';
+export { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model/viewer-read-model-schema-version.js';
 export { getViewerSummary } from './get-viewer-summary.js';
 export { getViolations } from './get-violations.js';
 export { hasViewerReadModel } from './viewer-read-model/has-viewer-read-model.js';

@@ -28,7 +28,7 @@ import { runViewerReadModelWorkerTask } from './run-viewer-read-model-worker-tas
  * @throws {Error} When `accessor.readOnly` is `true`, or when the worker
  *   task fails.
  * @example
- * // viewer-build, when ensureViewerReadModelInWorker reports "already current":
+ * // viewer-build, when getViewerReadModelVersion reports the schema is already current:
  * await runViewerReadModelBackfillsInWorker(archive, { onPhase, onProgress });
  */
 export async function runViewerReadModelBackfillsInWorker(
