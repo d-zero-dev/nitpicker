@@ -17,8 +17,16 @@ import type { Knex } from 'knex';
  * only by `listInventoryRuns` display surfaces, never consumed by any
  * runtime decision — matching `scope_skipped` / `invalid_skipped`.
  * @param instance - The Knex query builder instance connected to the database.
+ * @param onLog - Called instead of `console.error` when this migration
+ *   actually applies (issue #294: a bare `console.error` here can fire
+ *   while a `@d-zero/dealer` `Lanes`/`TaskList` display is mid-redraw during
+ *   `Archive.open`, corrupting its cursor tracking). Falls back to
+ *   `console.error` when omitted (direct/test callers).
  */
-export async function migrateInventoryRunsExcludeSkipped(instance: Knex): Promise<void> {
+export async function migrateInventoryRunsExcludeSkipped(
+	instance: Knex,
+	onLog?: (message: string) => void,
+): Promise<void> {
 	const hasTable = await instance.schema.hasTable('inventory_runs');
 	if (!hasTable) {
 		return;
@@ -30,6 +38,11 @@ export async function migrateInventoryRunsExcludeSkipped(instance: Knex): Promis
 	await instance.schema.table('inventory_runs', (t) => {
 		t.integer('exclude_skipped');
 	});
-	// eslint-disable-next-line no-console
-	console.error('[migrate] inventory_runs.exclude_skipped column added');
+	const message = '[migrate] inventory_runs.exclude_skipped column added';
+	if (onLog) {
+		onLog(message);
+	} else {
+		// eslint-disable-next-line no-console
+		console.error(message);
+	}
 }

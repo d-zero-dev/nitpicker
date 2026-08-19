@@ -18,8 +18,16 @@ import type { Knex } from 'knex';
  * itself after `assertCompatibleVersion` rejects pre-0.13 archives) the
  * table is always present.
  * @param instance - The Knex query builder instance connected to the database.
+ * @param onLog - Called instead of `console.error` when this migration
+ *   actually applies (issue #294: a bare `console.error` here can fire
+ *   while a `@d-zero/dealer` `Lanes`/`TaskList` display is mid-redraw during
+ *   `Archive.open`, corrupting its cursor tracking). Falls back to
+ *   `console.error` when omitted (direct/test callers).
  */
-export async function migrateMainContentsColumns(instance: Knex): Promise<void> {
+export async function migrateMainContentsColumns(
+	instance: Knex,
+	onLog?: (message: string) => void,
+): Promise<void> {
 	const hasPageMeta = await instance.schema.hasTable('page_meta');
 	if (!hasPageMeta) {
 		return;
@@ -50,6 +58,11 @@ export async function migrateMainContentsColumns(instance: Knex): Promise<void> 
 		t.integer('scroll_height_desktop');
 		t.integer('scroll_height_mobile');
 	});
-	// eslint-disable-next-line no-console
-	console.error('[migrate] page_meta.main_content_* / scroll_height_* columns added');
+	const message = '[migrate] page_meta.main_content_* / scroll_height_* columns added';
+	if (onLog) {
+		onLog(message);
+	} else {
+		// eslint-disable-next-line no-console
+		console.error(message);
+	}
 }

@@ -1,21 +1,9 @@
 import type { Archive } from '@nitpicker/crawler';
 
-import { Lanes } from '@d-zero/dealer';
 import { scanJsResourcesForTechnologySignals } from '@nitpicker/crawler';
 
-import { createCountProgressLogger } from '../create-count-progress-logger.js';
-import { formatLogLine } from '../format-log-line.js';
-
-/** Options controlling {@link scanJsResourcesQuietly}'s progress display. */
-export interface ScanJsResourcesQuietlyOptions {
-	/**
-	 * When `true`, progress lines are appended (one per update) instead of
-	 * overwriting a single terminal line — same convention as
-	 * `ensureViewerReadModelQuietly`. Pass the crawl command's own
-	 * `--verbose` flag.
-	 */
-	verbose?: boolean;
-}
+import { dedupeProgressMessage } from '../dedupe-progress-message.js';
+import { formatProgressCount } from '../format-progress-count.js';
 
 /**
  * Runs the post-crawl JS license-comment enrichment pass ("Flow 2" —
@@ -27,52 +15,61 @@ export interface ScanJsResourcesQuietlyOptions {
  * `viewer_technology_directory_stats` rather than requiring a second
  * `viewer-build`.
  *
- * Wires `scanJsResourcesForTechnologySignals`'s `onProgress` into a `Lanes`
- * line (issue #294): re-fetching hundreds to thousands of already-discovered
- * JS resources over the network can take a while, and without this the pass
+ * Wires `scanJsResourcesForTechnologySignals`'s `onProgress` into `onProgress`
+ * (issue #294): re-fetching hundreds to thousands of already-discovered JS
+ * resources over the network can take a while, and without this the pass
  * looked completely silent between the crawl's own progress display ending
- * and this function's one-line completion summary.
+ * and this function's one-line completion summary. The caller owns display
+ * (a post-crawl task-list row's `ctx.progress`, or nothing under `--silent`)
+ * — this function only formats the count, never a label or animation marker,
+ * since the caller's own row already carries both.
  *
  * Never throws: a flaky JS CDN or DNS hiccup during this best-effort pass
  * must not prevent the archive itself from being written, mirroring
- * `ensureViewerReadModelQuietly`'s own contract. Failures and a one-line
- * summary are reported to stderr.
+ * `ensureViewerReadModelQuietly`'s own contract. Both the completion summary
+ * (match/resource/page counts) and a failure are reported through
+ * `onProgress` when it's provided — never *also* through `console.error`
+ * (issue #294 code review: this function runs while the caller's own
+ * `'Scan JS resources'` `TaskList` row is still active, and a bare
+ * `console.error` there corrupts dealer's cursor tracking the same way the
+ * self-healing migration notices did). `onProgress` is only omitted under
+ * `--silent`, which has no display to corrupt — `console.error` is the
+ * fallback for that path only, so the operator still sees the outcome.
  * @param archive - The writable `Archive` instance about to be written to disk.
- * @param options - See {@link ScanJsResourcesQuietlyOptions}.
+ * @param onProgress - Called with the rendered count fragment (e.g.
+ *   `"3/10 resources (30%)"`) whenever it changes. Omit for no reporting.
  */
 export async function scanJsResourcesQuietly(
 	archive: Archive,
-	options?: ScanJsResourcesQuietlyOptions,
+	onProgress?: (message: string) => void,
 ): Promise<void> {
-	using lanes = new Lanes({
-		verbose: options?.verbose,
-		indent: '  ',
-		stream: process.stderr,
+	const reportProgress = dedupeProgressMessage((message) => {
+		onProgress?.(message);
 	});
-	const log = (message: string) => {
-		lanes.update(0, formatLogLine(!!options?.verbose, message));
-	};
 	try {
-		const progressLogger = createCountProgressLogger(
-			log,
-			'Scanning JS resources',
-			'resources',
-		);
 		const result = await scanJsResourcesForTechnologySignals(archive, {
-			onProgress: progressLogger,
+			onProgress: (processed, total) => {
+				reportProgress(formatProgressCount(processed, total, 'resources'));
+			},
 		});
 		if (result.candidateCount > 0) {
-			// eslint-disable-next-line no-console
-			console.error(
-				`[nitpicker] JS resource technology scan: ${result.matchedCount} match(es) across ${result.candidateCount} resource(s), ${result.pagesUpdatedCount} page(s) updated`,
-			);
+			const message = `${result.matchedCount} match(es) across ${result.candidateCount} resource(s), ${result.pagesUpdatedCount} page(s) updated`;
+			if (onProgress) {
+				onProgress(message);
+			} else {
+				// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+				console.error(`[nitpicker] JS resource technology scan: ${message}`);
+			}
 		}
 	} catch (error) {
-		// eslint-disable-next-line no-console
-		console.error(
-			`[nitpicker] JS resource technology scan failed, continuing without it: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		const message = `Scan JS resources failed, continuing without it: ${
+			error instanceof Error ? error.message : String(error)
+		}`;
+		if (onProgress) {
+			onProgress(message);
+		} else {
+			// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+			console.error(`[nitpicker] ${message}`);
+		}
 	}
 }

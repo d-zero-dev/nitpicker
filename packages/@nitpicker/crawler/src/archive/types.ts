@@ -701,4 +701,12 @@ export interface DatabaseOption {
 	 * tmpDir, where any write would race the live crawler.
 	 */
 	readOnly?: boolean;
+	/**
+	 * Called instead of `console.error` for self-healing schema migration
+	 * notices (issue #294) — see
+	 * {@link import('./db-ops/lifecycle/init.js').init}'s `onLog` param for
+	 * why a bare `console.error` at this point is unsafe. Ignored when
+	 * `readOnly` is `true` (migrations never run there).
+	 */
+	onLog?: (message: string) => void;
 }

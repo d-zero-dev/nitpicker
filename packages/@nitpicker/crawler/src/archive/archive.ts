@@ -915,7 +915,7 @@ export default class Archive extends ArchiveAccessor {
 	 * @returns An Archive instance with the extracted data loaded.
 	 */
 	static async open(options: ArchiveOptions & ArchiveOpenOptions) {
-		const { filePath, openPluginData, onExtractProgress } = options;
+		const { filePath, openPluginData, onExtractProgress, onLog } = options;
 		const cwd = options.cwd ?? process.cwd();
 		log('Open: %O', {
 			filePath,
@@ -949,7 +949,7 @@ export default class Archive extends ArchiveAccessor {
 			const extractedDir = path.resolve(cwd, innerDirName);
 			log('Move directory: %s to %s', extractedDir, tmpDir);
 			await rename(extractedDir, tmpDir, true);
-			return await Archive.#init(filePath, tmpDir, releaseLock);
+			return await Archive.#init(filePath, tmpDir, releaseLock, onLog);
 		} catch (error) {
 			await releaseLock();
 			throw error;
@@ -959,16 +959,19 @@ export default class Archive extends ArchiveAccessor {
 	 * Resumes an archive from an existing temporary directory
 	 * (e.g., after an interrupted crawl session).
 	 * @param targetPath - The path to the temporary directory to resume from.
+	 * @param onLog - Forwarded to {@link Database.connect} — see
+	 *   {@link ArchiveOpenOptions.onLog}'s docs (this writable reconnect
+	 *   runs the same self-healing migrations `Archive.open` does).
 	 * @returns An Archive instance reconnected to the existing data.
 	 * @throws {Error} If the specified path is not a directory.
 	 */
-	static async resume(targetPath: string) {
+	static async resume(targetPath: string, onLog?: (message: string) => void) {
 		log('Resume: %s', targetPath);
 		if (await isDir(targetPath)) {
 			const tmpDir = targetPath;
 			const releaseLock = await acquireArchiveLock(tmpDir);
 			try {
-				const db = await Archive.#connectDB(tmpDir);
+				const db = await Archive.#connectDB(tmpDir, { onLog });
 				const name =
 					(await db.getName()) ||
 					path.basename(targetPath).replace(Archive.TMP_DIR_PREFIX, '');
@@ -1009,13 +1012,18 @@ export default class Archive extends ArchiveAccessor {
 	 *   `readOnly: true` so no migrations run and a missing tmpDir is not
 	 *   resurrected.
 	 * @param options.readOnly
+	 * @param options.onLog
 	 */
-	static async #connectDB(tmpDir: string, options?: { readOnly?: boolean }) {
+	static async #connectDB(
+		tmpDir: string,
+		options?: { readOnly?: boolean; onLog?: (message: string) => void },
+	) {
 		const dbPath = path.resolve(tmpDir, Archive.SQLITE_DB_FILE_NAME);
 		dbLog('connects database: %s (readOnly=%s)', dbPath, options?.readOnly ?? false);
 		return await Database.connect({
 			filename: dbPath,
 			readOnly: options?.readOnly,
+			onLog: options?.onLog,
 		});
 	}
 	/**
@@ -1027,9 +1035,16 @@ export default class Archive extends ArchiveAccessor {
 	 * @param filePath - Output `.nitpicker` file path
 	 * @param tmpDir - Temporary working directory path
 	 * @param releaseLock - Function returned by {@link acquireArchiveLock}.
+	 * @param onLog - Forwarded to {@link Database.connect} — see
+	 *   {@link ArchiveOpenOptions.onLog}'s docs.
 	 */
-	static async #init(filePath: string, tmpDir: string, releaseLock: () => Promise<void>) {
-		const db = await Archive.#connectDB(tmpDir);
+	static async #init(
+		filePath: string,
+		tmpDir: string,
+		releaseLock: () => Promise<void>,
+		onLog?: (message: string) => void,
+	) {
+		const db = await Archive.#connectDB(tmpDir, { onLog });
 		const archive = new Archive(filePath, tmpDir, db, releaseLock);
 		return archive;
 	}
@@ -1129,4 +1144,13 @@ type ArchiveOpenOptions = {
 	 * default).
 	 */
 	onExtractProgress?: (readBytes: number, totalBytes: number) => void;
+	/**
+	 * Called instead of `console.error` for self-healing schema migration
+	 * notices that fire while opening a legacy archive (issue #294) —
+	 * forwarded to {@link Database.connect}'s `onLog`. Without this, a
+	 * migration notice can print mid-redraw of a caller's `Lanes`/`TaskList`
+	 * display, corrupting its cursor tracking. Omit to fall back to
+	 * `console.error` (the pre-#294 behavior).
+	 */
+	onLog?: (message: string) => void;
 };

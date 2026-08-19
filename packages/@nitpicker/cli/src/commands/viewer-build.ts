@@ -1,54 +1,33 @@
 import type { commandDef } from './viewer-build-def.js';
+import type { StepContext } from '@d-zero/dealer';
 import type { InferFlags } from '@d-zero/roar';
+import type { Archive as ArchiveType } from '@nitpicker/crawler';
 
 import { existsSync, statSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import path from 'node:path';
 
-import { Lanes } from '@d-zero/dealer';
+import { TaskList, TaskListStepError } from '@d-zero/dealer';
 import { Archive, copyFileWithProgress } from '@nitpicker/crawler';
 import {
 	buildViewerReadModelInWorker,
-	ensureViewerReadModelInWorker,
+	getViewerReadModelVersion,
 	runViewerReadModelBackfillsInWorker,
+	VIEWER_READ_MODEL_SCHEMA_VERSION,
 } from '@nitpicker/query';
 
-import { createByteProgressLogger } from '../create-byte-progress-logger.js';
+import { appendViewerReadModelPhaseRows } from '../append-viewer-read-model-phase-rows.js';
+import { createVerboseTimestampStream } from '../crawl/create-verbose-timestamp-stream.js';
+import { dedupeProgressMessage } from '../dedupe-progress-message.js';
 import { ExitCode } from '../exit-code.js';
+import { formatByteProgress } from '../format-byte-progress.js';
 import { formatCliError } from '../format-cli-error.js';
-import { formatViewerReadModelPhase } from '../format-viewer-read-model-phase.js';
-import { formatViewerReadModelProgress } from '../format-viewer-read-model-progress.js';
+import { VIEWER_READ_MODEL_BACKFILL_PHASES } from '../viewer-read-model-backfill-phases.js';
+import { VIEWER_READ_MODEL_FULL_BUILD_PHASES } from '../viewer-read-model-full-build-phases.js';
 import { WRITE_STEP_LABELS } from '../write-step-labels.js';
 
 /** Parsed flag values for the `viewer-build` CLI command. */
 type ViewerBuildFlags = InferFlags<typeof commandDef.flags>;
-
-/**
- * The single `Lanes` line every progress update in this command overwrites —
- * the extraction, the worker tasks, and the archive write-back run
- * sequentially, never concurrently, so one lane is enough (issue #294:
- * these used to each print their own stream of `console.error` lines,
- * flooding the terminal on large archives instead of showing live progress).
- */
-const PROGRESS_LANE_ID = 0;
-
-/**
- * Updates the shared progress lane, prefixing with an ISO 8601 timestamp in
- * `--verbose` mode (issue #294) — every phase/progress update in this
- * command goes through this one function so `--verbose` times all of them
- * consistently, not just a subset. Timestamps are omitted by default: a
- * single overwriting `Lanes` line has no history of prior lines to
- * correlate a timestamp against, so it would just flicker uselessly.
- * @param lanes - The command's single-lane progress display.
- * @param verbose - Whether to prefix with a timestamp (from `flags.verbose`).
- * @param message - The line to display.
- */
-function logLine(lanes: Lanes, verbose: boolean | undefined, message: string): void {
-	lanes.update(
-		PROGRESS_LANE_ID,
-		verbose ? `${new Date().toISOString()} ${message}` : message,
-	);
-}
 
 /**
  * Await a filesystem promise but silently swallow only `ENOENT` errors. Any
@@ -70,6 +49,22 @@ async function ignoreEnoent(promise: Promise<unknown>): Promise<void> {
 }
 
 /**
+ * Unwraps a `TaskListStepError` (thrown by `TaskList.run()` when one of its
+ * steps fails) down to the original cause, so the operator sees the real
+ * error (`Error: disk full`) instead of dealer's step-wrapper text (`Error:
+ * Step "Write archive" (index: 3) failed: disk full`). Passes any other
+ * error through unchanged (issue #294). Mirrors `crawl.ts`'s helper of the
+ * same name — an `instanceof` check, deliberately not a duck-typed
+ * `'cause' in error` test, which would also match any unrelated error that
+ * happens to carry a `cause`.
+ * @param error - The error a `TaskList.run()` call rejected with.
+ * @returns The unwrapped cause, or `error` itself if it isn't a `TaskListStepError`.
+ */
+function unwrapTaskListStepError(error: unknown): unknown {
+	return error instanceof TaskListStepError ? error.cause : error;
+}
+
+/**
  * Main entry point for the `viewer-build` CLI command.
  *
  * Explicitly (re)builds the persistent viewer read model inside an existing
@@ -86,40 +81,41 @@ async function ignoreEnoent(promise: Promise<unknown>): Promise<void> {
  * `AggregateError`) rather than letting the restore failure silently mask
  * why the build failed in the first place. Both the backup copy and the
  * restore copy go through `copyFileWithProgress` with byte progress (issue
- * #294) — a 15 GB+ archive's `.bak` copy alone can run for tens of seconds,
- * and previously showed nothing at all (before the display even existed) on
- * the way in, or nothing (`using lanes` already disposed by the time
- * `catch` ran) on the way out.
+ * #294) — a 15 GB+ archive's `.bak` copy alone can run for tens of seconds.
  *
- * `lanes` is declared before the `try` block, not inside it (issue #294):
- * the catch clause's restore-from-backup copy needs the same display, and a
- * `using` declared inside `try` is already disposed — its timers cleared —
- * by the time `catch` runs.
- *
- * Every step shares one `Lanes` line (issue #294): each used to print its
- * own uncapped stream of `console.error` lines, which floods the terminal
- * on a large archive instead of reading as live progress. Pass `--verbose`
- * to switch that one line to appended, ISO-8601-timestamped lines instead —
- * the only way to see which specific phase a slow build is spending its
- * time in.
+ * Rendered as three sequential `@d-zero/dealer` `TaskList`s (issue #294's
+ * original single-`Lanes`-line design, migrated once `TaskList` gained
+ * per-phase row expansion): `Back up archive` → `Extract archive` (list 1),
+ * then one row per internal read-model phase (list 2 — every
+ * `buildViewerReadModel` phase fully expanded, not collapsed into a single
+ * text-swapping row), then `Write archive` (list 3). Three separate
+ * `TaskList.run()` calls rather than one continuous pipeline because which
+ * phase array list 2 renders (`VIEWER_READ_MODEL_FULL_BUILD_PHASES` or
+ * `VIEWER_READ_MODEL_BACKFILL_PHASES`) depends on `getViewerReadModelVersion`,
+ * which can only be read once list 1 has extracted the archive — dealer's
+ * `Lanes` single-instance constraint only forbids two `TaskList`s (or a
+ * `TaskList` and `Lanes`/`deal()`) running *concurrently*, not several
+ * running one after another on the same stream. A failure stops whichever
+ * list is running immediately (later rows/lists never start) and runs the
+ * `.bak` restore as its own separate, single-row task list, since restore is
+ * not part of the planned sequence that just failed.
  *
  * Every DB mutation runs in a worker thread (issue #294): the knex/libsql
  * driver executes SQL synchronously on the calling thread, so any in-thread
- * work would freeze that `Lanes` line — and the SIGINT handler — for the
- * whole duration of each long statement (minutes per `CREATE INDEX` on a
- * large archive). A rebuild goes through `buildViewerReadModelInWorker` /
- * `ensureViewerReadModelInWorker`; when the schema-version gate skips the
- * rebuild, the three unconditional backfills go through
- * `runViewerReadModelBackfillsInWorker` instead (a build already includes
- * them — see the dispatch comment at the call site). The main thread only
- * relays worker messages into the display, extracts the tar on the way in,
- * and re-tars it on the way out (both with byte progress).
+ * work would freeze the display and the SIGINT handler for the whole
+ * duration of each long statement (minutes per `CREATE INDEX` on a large
+ * archive). A rebuild goes through `buildViewerReadModelInWorker`; the
+ * backfill fallback (schema already current) goes through
+ * `runViewerReadModelBackfillsInWorker`. The main thread only relays worker
+ * messages into the display, extracts the tar on the way in, and re-tars it
+ * on the way out (both with byte progress).
  *
- * Tracks the most-recently-started phase in `currentPhase` so `onProgress`
+ * `appendViewerReadModelPhaseRows` (`../append-viewer-read-model-phase-rows.js`)
+ * owns the per-phase row mechanics — each row settles in step with the
+ * single underlying worker call's `onPhase` progression, and `onProgress`
  * updates (nearly every phase reports sub-progress — see
- * `ViewerReadModelBuildProgress`'s docs for the per-phase unit) are labeled
- * with the right phase name and unit — e.g. `Creating indexes: 23/59
- * indexes`, not a bare, unlabeled `23/59`.
+ * `ViewerReadModelBuildProgress`'s docs for the per-phase unit) render on
+ * whichever row is currently active without repeating that row's own label.
  * @param args - Positional arguments; first is the `.nitpicker` file path.
  * @param flags - Parsed CLI flags from the `viewer-build` command.
  * @returns Resolves when the build (or no-op) completes.
@@ -165,96 +161,153 @@ export async function viewerBuild(
 		process.exit(ExitCode.Fatal);
 	}
 
-	// Constructed before the `.bak` copy, not inside the `try` below (issue
-	// #294): a 15 GB+ archive's backup copy alone can take tens of seconds,
-	// and the display must already be alive to show it. Deliberately NOT
-	// scoped to the `try` block — the catch clause's restore-from-backup
-	// copy needs this same display, and a `using` declared inside `try`
-	// would already be disposed (timers cleared) by the time `catch` runs.
-	using lanes = new Lanes({
-		verbose: flags.verbose,
-		indent: '  ',
-		stream: process.stderr,
-	});
-	const log = (message: string) => logLine(lanes, flags.verbose, message);
+	const verbose = !!flags.verbose;
+	const baseStream = process.stderr;
+	const stream = verbose ? createVerboseTimestampStream(baseStream) : baseStream;
 
-	log('%braille% Backing up archive%dots%');
-	await copyFileWithProgress(
-		absFilePath,
-		backupPath,
-		createByteProgressLogger(log, 'Backing up archive'),
-	);
+	// Tracked outside the pipeline: a `TaskList` chain has no single lexical
+	// scope spanning every step (each `.pipe()` callback is its own closure),
+	// so the archive reference is captured here and closed in the `finally`
+	// below regardless of which step (if any past 'Extract archive') failed —
+	// releasing its lock no matter where the pipeline stopped. A failure from
+	// `close()` itself is swallowed rather than folded into the
+	// restore-from-backup `AggregateError`: that pairing isn't a deliberately
+	// designed behavior worth the added complexity, just what happens to be
+	// convenient here.
+	//
+	// `backupComplete` guards the restore-on-failure branch below: a failure
+	// *during* the backup copy itself can leave `backupPath` truncated/
+	// partial (`copyFileWithProgress` does not clean up on error), and
+	// restoring that broken copy back over `absFilePath` would destroy a
+	// still-intact original archive. Restoring must only run once the backup
+	// is known to have actually completed.
+	const lifecycle: { archive: ArchiveType | null; backupComplete: boolean } = {
+		archive: null,
+		backupComplete: false,
+	};
 
 	try {
-		log('%braille% Extracting archive%dots%');
-		// No explicit `cwd`: matches every other Archive.open call site in
-		// this CLI (crawl.ts, diff.ts), which all default to process.cwd()
-		// for the transient extraction scratch dir regardless of where the
-		// target archive itself lives.
-		//
-		// See `ArchiveOpenOptions.openPluginData` for why this must be
-		// `true` (the `write()` below re-tars the whole tmpDir).
-		await using archive = await Archive.open({
-			filePath: absFilePath,
-			openPluginData: true,
-			onExtractProgress: createByteProgressLogger(log, 'Extracting archive'),
-		});
-		log('%braille% Viewer read model build: starting%dots%');
-		let currentPhase: Parameters<typeof formatViewerReadModelPhase>[0] | undefined;
-		const onPhase = (phase: Parameters<typeof formatViewerReadModelPhase>[0]) => {
-			currentPhase = phase;
-			log(formatViewerReadModelPhase(phase));
-		};
-		const onProgress = (
-			progress: Parameters<typeof formatViewerReadModelProgress>[0],
-		) => {
-			log(formatViewerReadModelProgress(progress, currentPhase));
-		};
-		const built = flags.force
-			? (await buildViewerReadModelInWorker(archive, { onPhase, onProgress }), true)
-			: await ensureViewerReadModelInWorker(archive, { onPhase, onProgress });
-		// A build includes the three unconditional backfills (body_hash,
-		// alias_of_id, dedupe_cap_event_id) internally, so they only need
-		// their own pass when the schema-version gate skipped the build —
-		// the maintenance case these backfills exist for: none of them is
-		// covered by that gate (body_hash/alias_of_id never changed the
-		// read-model schema; dedupe_cap_event_id's data changes on every
-		// re-crawl without a schema change), so an already-current archive
-		// would otherwise never catch its data up. Run in a worker for the
-		// same reason as the build itself: their synchronous SQL — and the
-		// WAL checkpoint folding their writes back — would freeze the main
-		// thread's display for minutes on a large archive (issue #294).
-		if (!built) {
-			await runViewerReadModelBackfillsInWorker(archive, { onPhase, onProgress });
-		}
-		log('Viewer read model build: completed');
-		await archive.write({
-			onStep: (step) => {
-				log(`%braille% ${WRITE_STEP_LABELS[step]}%dots%`);
+		const archive = await TaskList.pipe(
+			'Back up archive',
+			async (_input: undefined, ctx: StepContext<void>) => {
+				const reportProgress = dedupeProgressMessage((message) => {
+					ctx.progress(message);
+				});
+				await copyFileWithProgress(absFilePath, backupPath, (bytes, totalBytes) => {
+					reportProgress(formatByteProgress(bytes, totalBytes));
+				});
+				lifecycle.backupComplete = true;
 			},
-			onTarProgress: createByteProgressLogger(log, 'Writing archive'),
-		});
-		await ignoreEnoent(unlink(backupPath));
+		)
+			.pipe('Extract archive', async (_input: void, ctx: StepContext<ArchiveType>) => {
+				const reportProgress = dedupeProgressMessage((message) => {
+					ctx.progress(message);
+				});
+				// No explicit `cwd`: matches every other Archive.open call
+				// site in this CLI (crawl.ts, diff.ts), which all default
+				// to process.cwd() for the transient extraction scratch
+				// dir regardless of where the target archive itself lives.
+				//
+				// See `ArchiveOpenOptions.openPluginData` for why this
+				// must be `true` (the `write()` below re-tars the whole
+				// tmpDir).
+				const archive = await Archive.open({
+					filePath: absFilePath,
+					openPluginData: true,
+					onExtractProgress: (bytes, totalBytes) => {
+						reportProgress(formatByteProgress(bytes, totalBytes));
+					},
+					// A legacy archive's self-healing schema migrations run
+					// synchronously inside this call (issue #294) — without
+					// this, their `console.error` notices print mid-redraw
+					// of this very row, corrupting dealer's cursor tracking
+					// (visible as the whole task list re-rendering from
+					// scratch).
+					onLog: reportProgress,
+				});
+				lifecycle.archive = archive;
+				return archive;
+			})
+			.run({ stream, verbose });
+
+		// Plain read, not a TaskList row: the schema-version gate can only be
+		// checked once the archive is extracted (above), but which phase array
+		// the next TaskList renders must be fixed before that TaskList is
+		// built — so the decision sits here, between the two lists, mirroring
+		// every other "TaskList front, plain throw" boundary in this file
+		// (issue #294).
+		const fullBuild =
+			!!flags.force ||
+			(await getViewerReadModelVersion(archive)) !== VIEWER_READ_MODEL_SCHEMA_VERSION;
+
+		await appendViewerReadModelPhaseRows(
+			TaskList.from(archive),
+			fullBuild ? VIEWER_READ_MODEL_FULL_BUILD_PHASES : VIEWER_READ_MODEL_BACKFILL_PHASES,
+			{
+				getArchive: (a: ArchiveType) => a,
+				runBuild: fullBuild
+					? buildViewerReadModelInWorker
+					: runViewerReadModelBackfillsInWorker,
+			},
+		).run({ stream, verbose });
+
+		await TaskList.pipe(
+			'Write archive',
+			async (_input: undefined, ctx: StepContext<void>) => {
+				const reportProgress = dedupeProgressMessage((message) => {
+					ctx.progress(message);
+				});
+				await archive.write({
+					onStep: (step) => {
+						reportProgress(WRITE_STEP_LABELS[step]);
+					},
+					onTarProgress: (writtenBytes, totalBytes) => {
+						reportProgress(formatByteProgress(writtenBytes, totalBytes));
+					},
+				});
+				await ignoreEnoent(unlink(backupPath));
+			},
+		).run({ stream, verbose });
 	} catch (error) {
+		const cause = unwrapTaskListStepError(error);
+		if (!lifecycle.backupComplete) {
+			// The backup itself never finished — nothing has been mutated yet
+			// (extraction/build/write all run after it), so there is nothing
+			// to restore. Restoring a partial `backupPath` here would destroy
+			// the still-intact original archive.
+			await lifecycle.archive?.close().catch(() => {});
+			formatCliError(cause, false);
+			process.exit(ExitCode.Fatal);
+		}
 		try {
-			log('%braille% Restoring archive from backup%dots%');
-			await copyFileWithProgress(
-				backupPath,
-				absFilePath,
-				createByteProgressLogger(log, 'Restoring archive from backup'),
-			);
-			await ignoreEnoent(unlink(backupPath));
+			await TaskList.pipe('Restore from backup', async (_input: undefined, ctx) => {
+				const reportProgress = dedupeProgressMessage((message) => {
+					ctx.progress(message);
+				});
+				await copyFileWithProgress(backupPath, absFilePath, (bytes, totalBytes) => {
+					reportProgress(formatByteProgress(bytes, totalBytes));
+				});
+				await ignoreEnoent(unlink(backupPath));
+			}).run({ stream, verbose });
 		} catch (restoreError) {
+			const restoreCause = unwrapTaskListStepError(restoreError);
+			// `close()` runs before `process.exit()`, not in a `finally`
+			// (issue #294): `process.exit()` terminates the process
+			// immediately, before a sibling `finally` block gets to run —
+			// a `finally` here would never actually release the handle.
+			await lifecycle.archive?.close().catch(() => {});
 			formatCliError(
 				new AggregateError(
-					[error, restoreError],
+					[cause, restoreCause],
 					`viewer-build failed AND restore from backup failed. Original archive backup is left at: ${backupPath}`,
 				),
 				false,
 			);
 			process.exit(ExitCode.Fatal);
 		}
-		formatCliError(error, false);
+		await lifecycle.archive?.close().catch(() => {});
+		formatCliError(cause, false);
 		process.exit(ExitCode.Fatal);
 	}
+	await lifecycle.archive?.close().catch(() => {});
 }

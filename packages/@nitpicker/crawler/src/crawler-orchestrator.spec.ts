@@ -698,6 +698,67 @@ describe('CrawlerOrchestrator.inventory: pending guard demote', () => {
 		);
 	});
 
+	it('routes the pending-URL warning through setupProgress.onLog instead of console.warn when a setup TaskList row is active (issue #294 code review)', async () => {
+		const fakeArchive = {
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+				}),
+			),
+			getCrawlingState: vi.fn(() =>
+				Promise.resolve({
+					scraped: [],
+					pending: ['https://example.com/leaked-placeholder'],
+				}),
+			),
+			getExistingPageUrls: vi.fn(() =>
+				Promise.resolve(['https://example.com/already-known']),
+			),
+			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const onLog = vi.fn();
+
+		await expect(
+			CrawlerOrchestrator.inventory(
+				'fixture.nitpicker',
+				['https://example.com/already-known'],
+				{ cwd: '/tmp/inventory-pending-on-log-test' },
+				undefined,
+				null,
+				{ onLog },
+			),
+		).resolves.toBeDefined();
+
+		expect(onLog).toHaveBeenCalledWith(
+			expect.stringMatching(/pending URLs from a previous crawl/),
+		);
+		expect(warnSpy).not.toHaveBeenCalled();
+	});
+
 	it('does NOT warn when the archive has no pending URLs', async () => {
 		// Regression guard: the warn message must only fire when there is an
 		// actual pending row. A stray warn on every inventory call would
