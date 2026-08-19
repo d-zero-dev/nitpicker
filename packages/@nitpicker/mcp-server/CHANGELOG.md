@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.19.0](https://github.com/d-zero-dev/nitpicker/compare/v0.18.1...v0.19.0) (2026-08-19)
+
+### Features
+
+- **mcp-server:** surface extract/sort progress on stderr (issue [#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([12d7b97](https://github.com/d-zero-dev/nitpicker/commit/12d7b973ee1d7acb1046eea3ef459904c530d56c))
+
 ## [0.18.1](https://github.com/d-zero-dev/nitpicker/compare/v0.18.0...v0.18.1) (2026-08-12)
 
 **Note:** Version bump only for package @nitpicker/mcp-server

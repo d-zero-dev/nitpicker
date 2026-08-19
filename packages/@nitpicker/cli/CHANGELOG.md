@@ -3,6 +3,34 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.19.0](https://github.com/d-zero-dev/nitpicker/compare/v0.18.1...v0.19.0) (2026-08-19)
+
+### Bug Fixes
+
+- **cli:** address code-review findings on TaskList progress migration ([0d98a78](https://github.com/d-zero-dev/nitpicker/commit/0d98a7889dca1b69c9846c3fefff3403a1f526c0)), closes [#294](https://github.com/d-zero-dev/nitpicker/issues/294) [#294](https://github.com/d-zero-dev/nitpicker/issues/294)
+
+- refactor(cli)!: use await using for archive/orchestrator lifecycle ([02b2722](https://github.com/d-zero-dev/nitpicker/commit/02b272265f7c6f561492e1133d252e4e1926dadf))
+
+### Features
+
+- **cli:** eliminate silent stretches and lazy-load command implementations (issue [#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([cd20a67](https://github.com/d-zero-dev/nitpicker/commit/cd20a67ba2bec72e2812c8854ac4085b2323a133))
+- **cli:** expand viewer read model build into individual TaskList rows ([c9567a3](https://github.com/d-zero-dev/nitpicker/commit/c9567a3a37890952173895852c67f0b506a3aaad))
+- **cli:** fail fast when puppeteer diverges from beholder's install ([93bcb41](https://github.com/d-zero-dev/nitpicker/commit/93bcb418df5fdb9921aef3acb8fc7c202216df47))
+- **cli:** migrate crawl/viewer-build progress display to dealer TaskList ([15ea441](https://github.com/d-zero-dev/nitpicker/commit/15ea441ba330fb27619f52a543c1e280f4d41809))
+- **cli:** show viewer read model build phase/progress on one Lanes line ([#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([b41c868](https://github.com/d-zero-dev/nitpicker/commit/b41c868f89b221eb12c53a4bdbd2310b718321ea))
+
+### BREAKING CHANGES
+
+- requires Node >=24.11.
+
+crawl/analyze/viewer-build/diff commands replace their try/finally
+close() blocks with `await using`, relying on the dispose
+implementations added to CrawlerOrchestrator, Nitpicker, and Archive.
+
+formatCliError now unwraps SuppressedError (thrown when a body error
+and a disposal error occur together) so both underlying causes are
+printed instead of the generic disposal message.
+
 ## [0.18.1](https://github.com/d-zero-dev/nitpicker/compare/v0.18.0...v0.18.1) (2026-08-12)
 
 **Note:** Version bump only for package @nitpicker/cli

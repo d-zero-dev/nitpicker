@@ -3,6 +3,60 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.19.0](https://github.com/d-zero-dev/nitpicker/compare/v0.18.1...v0.19.0) (2026-08-19)
+
+### Bug Fixes
+
+- **crawler:** compute page body hash once per page instead of twice ([f2fbda5](https://github.com/d-zero-dev/nitpicker/commit/f2fbda5246c6abf941d9b9f0b0174e398190cc7f))
+- **crawler:** route self-healing and session notices away from bare console.\* ([deb5684](https://github.com/d-zero-dev/nitpicker/commit/deb5684b2f1df748e912359d93eb872230cb9858))
+
+- feat(crawler)!: implement Symbol.asyncDispose for archive lifecycle ([de60624](https://github.com/d-zero-dev/nitpicker/commit/de60624e08fcd3d6ad9b2da6d7f146077247898e))
+- feat(crawler)!: replace Wappalyzer-only page_tags with technology detection ([4b81a47](https://github.com/d-zero-dev/nitpicker/commit/4b81a4793db36e898fd3f0d3f3c53dd7cecab4eb))
+
+### Features
+
+- **crawler:** assert puppeteer install is shared with beholder ([5cbf0ed](https://github.com/d-zero-dev/nitpicker/commit/5cbf0edf4879c1a9c5082d02c2213417be86febd))
+- **crawler:** eliminate silent stretches across archive I/O (issue [#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([eabdd07](https://github.com/d-zero-dev/nitpicker/commit/eabdd07ded4770e5db14ca6011c1e0d052c01e2a))
+- **crawler:** export setup-phase label sequences for TaskList consumers ([793b952](https://github.com/d-zero-dev/nitpicker/commit/793b952d6ed31b0a76b8f4e6f509444e48aaa858))
+- **crawler:** log page_tags row count before migration ([#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([5f535a7](https://github.com/d-zero-dev/nitpicker/commit/5f535a72cfbd6c1391996407bb30f0a896a68309))
+
+### BREAKING CHANGES
+
+- requires Node >=24.11 for native Explicit Resource
+  Management (`using`/`await using`) support.
+
+ArchiveAccessor (and, via polymorphism, Archive) and CrawlerOrchestrator
+now implement `Symbol.asyncDispose`, delegating to their existing
+close()/garbageCollect() logic. Callers can use `await using` instead
+of a manual try/finally around teardown.
+
+- `page_tags` is removed outright in favor of two new
+  tables: `technology_signals` (raw per-signal evidence, one row per
+  signal) and `page_technologies` (noisy-OR confidence-combined roll-up,
+  one row per page x technology). Existing archives are converted via a
+  read-time migration (`migrate-page-tags-to-page-technologies.ts` for
+  0.13+ archives, a special case in `retarget-legacy-fk-tables.ts` for the
+  0.10->0.13 upgrade path) that drops `page_tags` after conversion.
+  `Page.getTags()` and the `TagsSummary`/`TagInventoryEntry` types are
+  removed along with it; use `Page.getTechnologySignals()` /
+  `Page.getPageTechnologies()` instead.
+
+Also adds a post-crawl JS license-comment scan (`scanJsResourcesForTechnologySignals`)
+that re-fetches the leading bytes of not-yet-scanned internal JS
+resources to detect technologies whose signature lives in the JS body
+rather than the HTML — a distinct "post-crawl network enrichment"
+category from the existing post-hoc-marking and backfill patterns,
+since it is the only step that performs network I/O after the crawl
+itself finishes. Each resource is scanned at most once (recorded in
+`technology_js_scan_cache`), and a match folds into every page that
+references the resource by recombining that page's full signal set
+under the same Scoped-Replace invariant `insertTechnologies` uses.
+
+Also detects Web Components (custom elements, tag names containing a
+hyphen and not one of the 8 reserved SVG/MathML names) within the main
+content region, at the same grain as the existing button/table/etc.
+categories (`page_main_content_custom_elements`, `main_content_custom_element_count`).
+
 ## [0.18.1](https://github.com/d-zero-dev/nitpicker/compare/v0.18.0...v0.18.1) (2026-08-12)
 
 ### Bug Fixes

@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.19.0](https://github.com/d-zero-dev/nitpicker/compare/v0.18.1...v0.19.0) (2026-08-19)
+
+### Bug Fixes
+
+- **viewer:** avoid self-shadowing Error in technology-star-chart story ([bd98a64](https://github.com/d-zero-dev/nitpicker/commit/bd98a648f813c5fbefe7e8dc310fdc4641e94d33))
+
+### Features
+
+- **viewer:** add /technologies screen and technology drill-downs ([9bd1dad](https://github.com/d-zero-dev/nitpicker/commit/9bd1dad6ef57332d832b6ca2330f05166a346480))
+- **viewer:** add a Fetching story for TopBar loading indicator ([e4e8e02](https://github.com/d-zero-dev/nitpicker/commit/e4e8e02a8c9e561f27ee2c814a44a11533930b97))
+- **viewer:** add Storybook for presentational components ([80f5255](https://github.com/d-zero-dev/nitpicker/commit/80f5255ca3d270b3485f5ebafaff935ec30f73a7))
+- **viewer:** add Storybook stories for the new presentational components ([4bbef0d](https://github.com/d-zero-dev/nitpicker/commit/4bbef0d9205bc24f9c30e4f77e479beca4019781))
+- **viewer:** componentize views and improve table/tree UX ([096f6fd](https://github.com/d-zero-dev/nitpicker/commit/096f6fd89887733587829c84eb4e3834ffdd89a8))
+- **viewer:** migrate table components to TanStack Table v9 native API ([462d999](https://github.com/d-zero-dev/nitpicker/commit/462d999f8686e00c1b522e0dde230f43e79ad6db))
+- **viewer:** observe cold-connection archive extraction and URL sort (issue [#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([1e46c67](https://github.com/d-zero-dev/nitpicker/commit/1e46c67820f31c737e8090600a0452416c62de7a))
+
 ## [0.18.1](https://github.com/d-zero-dev/nitpicker/compare/v0.18.0...v0.18.1) (2026-08-12)
 
 **Note:** Version bump only for package @nitpicker/viewer

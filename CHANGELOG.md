@@ -3,6 +3,99 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.19.0](https://github.com/d-zero-dev/nitpicker/compare/v0.18.1...v0.19.0) (2026-08-19)
+
+### Bug Fixes
+
+- **cli:** address code-review findings on TaskList progress migration ([0d98a78](https://github.com/d-zero-dev/nitpicker/commit/0d98a7889dca1b69c9846c3fefff3403a1f526c0)), closes [#294](https://github.com/d-zero-dev/nitpicker/issues/294) [#294](https://github.com/d-zero-dev/nitpicker/issues/294)
+- **crawler:** compute page body hash once per page instead of twice ([f2fbda5](https://github.com/d-zero-dev/nitpicker/commit/f2fbda5246c6abf941d9b9f0b0174e398190cc7f))
+- **crawler:** route self-healing and session notices away from bare console.\* ([deb5684](https://github.com/d-zero-dev/nitpicker/commit/deb5684b2f1df748e912359d93eb872230cb9858))
+- **release:** include @nitpicker/types in the v0.18.1 version bump ([7017420](https://github.com/d-zero-dev/nitpicker/commit/70174203d67ab040d49f3a84f73f143fcbae6e7d))
+- **viewer:** avoid self-shadowing Error in technology-star-chart story ([bd98a64](https://github.com/d-zero-dev/nitpicker/commit/bd98a648f813c5fbefe7e8dc310fdc4641e94d33))
+
+- refactor(cli)!: use await using for archive/orchestrator lifecycle ([02b2722](https://github.com/d-zero-dev/nitpicker/commit/02b272265f7c6f561492e1133d252e4e1926dadf))
+- feat(core)!: implement Symbol.asyncDispose on Nitpicker ([8f90ff1](https://github.com/d-zero-dev/nitpicker/commit/8f90ff108eb692e65bd940fb755fed6b6d0f2eb8))
+- feat(crawler)!: implement Symbol.asyncDispose for archive lifecycle ([de60624](https://github.com/d-zero-dev/nitpicker/commit/de60624e08fcd3d6ad9b2da6d7f146077247898e))
+- feat(crawler)!: replace Wappalyzer-only page_tags with technology detection ([4b81a47](https://github.com/d-zero-dev/nitpicker/commit/4b81a4793db36e898fd3f0d3f3c53dd7cecab4eb))
+
+### Features
+
+- **cli:** eliminate silent stretches and lazy-load command implementations (issue [#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([cd20a67](https://github.com/d-zero-dev/nitpicker/commit/cd20a67ba2bec72e2812c8854ac4085b2323a133))
+- **cli:** expand viewer read model build into individual TaskList rows ([c9567a3](https://github.com/d-zero-dev/nitpicker/commit/c9567a3a37890952173895852c67f0b506a3aaad))
+- **cli:** fail fast when puppeteer diverges from beholder's install ([93bcb41](https://github.com/d-zero-dev/nitpicker/commit/93bcb418df5fdb9921aef3acb8fc7c202216df47))
+- **cli:** migrate crawl/viewer-build progress display to dealer TaskList ([15ea441](https://github.com/d-zero-dev/nitpicker/commit/15ea441ba330fb27619f52a543c1e280f4d41809))
+- **cli:** show viewer read model build phase/progress on one Lanes line ([#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([b41c868](https://github.com/d-zero-dev/nitpicker/commit/b41c868f89b221eb12c53a4bdbd2310b718321ea))
+- **core:** forward onExtractProgress through Nitpicker.open (issue [#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([5cd2c0e](https://github.com/d-zero-dev/nitpicker/commit/5cd2c0ead5087b60ce7f2ee5853a5fdbefda765b))
+- **crawler:** assert puppeteer install is shared with beholder ([5cbf0ed](https://github.com/d-zero-dev/nitpicker/commit/5cbf0edf4879c1a9c5082d02c2213417be86febd))
+- **crawler:** eliminate silent stretches across archive I/O (issue [#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([eabdd07](https://github.com/d-zero-dev/nitpicker/commit/eabdd07ded4770e5db14ca6011c1e0d052c01e2a))
+- **crawler:** export setup-phase label sequences for TaskList consumers ([793b952](https://github.com/d-zero-dev/nitpicker/commit/793b952d6ed31b0a76b8f4e6f509444e48aaa858))
+- **crawler:** log page_tags row count before migration ([#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([5f535a7](https://github.com/d-zero-dev/nitpicker/commit/5f535a72cfbd6c1391996407bb30f0a896a68309))
+- **mcp-server:** surface extract/sort progress on stderr (issue [#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([12d7b97](https://github.com/d-zero-dev/nitpicker/commit/12d7b973ee1d7acb1046eea3ef459904c530d56c))
+- **query:** export VIEWER_READ_MODEL_SCHEMA_VERSION from the package root ([5332eb5](https://github.com/d-zero-dev/nitpicker/commit/5332eb569d8df3f141623e7e983a619196af1925))
+- **query:** move viewer read model build to a worker thread (issue [#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([c9fbc69](https://github.com/d-zero-dev/nitpicker/commit/c9fbc6903f3edfb8edd78f81aab91530a683da8f))
+- **query:** report phase/progress signals during read model builds ([#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([75317d7](https://github.com/d-zero-dev/nitpicker/commit/75317d7d89fe578f59c4b84eeaca498f97482cf1))
+- **report-google-sheets:** renumber page-list columns for custom elements ([5d601e0](https://github.com/d-zero-dev/nitpicker/commit/5d601e0ce6405495cc730339d548d641af2c51b7))
+- **report-google-sheets:** surface archive extraction progress (issue [#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([0e99c8c](https://github.com/d-zero-dev/nitpicker/commit/0e99c8c2b06a5ef4684a999a0b4af7a78ce91217))
+- **viewer:** add /technologies screen and technology drill-downs ([9bd1dad](https://github.com/d-zero-dev/nitpicker/commit/9bd1dad6ef57332d832b6ca2330f05166a346480))
+- **viewer:** add a Fetching story for TopBar loading indicator ([e4e8e02](https://github.com/d-zero-dev/nitpicker/commit/e4e8e02a8c9e561f27ee2c814a44a11533930b97))
+- **viewer:** add Storybook for presentational components ([80f5255](https://github.com/d-zero-dev/nitpicker/commit/80f5255ca3d270b3485f5ebafaff935ec30f73a7))
+- **viewer:** add Storybook stories for the new presentational components ([4bbef0d](https://github.com/d-zero-dev/nitpicker/commit/4bbef0d9205bc24f9c30e4f77e479beca4019781))
+- **viewer:** componentize views and improve table/tree UX ([096f6fd](https://github.com/d-zero-dev/nitpicker/commit/096f6fd89887733587829c84eb4e3834ffdd89a8))
+- **viewer:** migrate table components to TanStack Table v9 native API ([462d999](https://github.com/d-zero-dev/nitpicker/commit/462d999f8686e00c1b522e0dde230f43e79ad6db))
+- **viewer:** observe cold-connection archive extraction and URL sort (issue [#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([1e46c67](https://github.com/d-zero-dev/nitpicker/commit/1e46c67820f31c737e8090600a0452416c62de7a))
+
+### BREAKING CHANGES
+
+- requires Node >=24.11.
+
+crawl/analyze/viewer-build/diff commands replace their try/finally
+close() blocks with `await using`, relying on the dispose
+implementations added to CrawlerOrchestrator, Nitpicker, and Archive.
+
+formatCliError now unwraps SuppressedError (thrown when a body error
+and a disposal error occur together) so both underlying causes are
+printed instead of the generic disposal message.
+
+- requires Node >=24.11.
+
+Delegates to the wrapped archive's close(), enabling `await using
+nitpicker = await Nitpicker.open(...)` instead of a manual try/finally.
+
+- requires Node >=24.11 for native Explicit Resource
+  Management (`using`/`await using`) support.
+
+ArchiveAccessor (and, via polymorphism, Archive) and CrawlerOrchestrator
+now implement `Symbol.asyncDispose`, delegating to their existing
+close()/garbageCollect() logic. Callers can use `await using` instead
+of a manual try/finally around teardown.
+
+- `page_tags` is removed outright in favor of two new
+  tables: `technology_signals` (raw per-signal evidence, one row per
+  signal) and `page_technologies` (noisy-OR confidence-combined roll-up,
+  one row per page x technology). Existing archives are converted via a
+  read-time migration (`migrate-page-tags-to-page-technologies.ts` for
+  0.13+ archives, a special case in `retarget-legacy-fk-tables.ts` for the
+  0.10->0.13 upgrade path) that drops `page_tags` after conversion.
+  `Page.getTags()` and the `TagsSummary`/`TagInventoryEntry` types are
+  removed along with it; use `Page.getTechnologySignals()` /
+  `Page.getPageTechnologies()` instead.
+
+Also adds a post-crawl JS license-comment scan (`scanJsResourcesForTechnologySignals`)
+that re-fetches the leading bytes of not-yet-scanned internal JS
+resources to detect technologies whose signature lives in the JS body
+rather than the HTML — a distinct "post-crawl network enrichment"
+category from the existing post-hoc-marking and backfill patterns,
+since it is the only step that performs network I/O after the crawl
+itself finishes. Each resource is scanned at most once (recorded in
+`technology_js_scan_cache`), and a match folds into every page that
+references the resource by recombining that page's full signal set
+under the same Scoped-Replace invariant `insertTechnologies` uses.
+
+Also detects Web Components (custom elements, tag names containing a
+hyphen and not one of the 8 reserved SVG/MathML names) within the main
+content region, at the same grain as the existing button/table/etc.
+categories (`page_main_content_custom_elements`, `main_content_custom_element_count`).
+
 ## [0.18.1](https://github.com/d-zero-dev/nitpicker/compare/v0.18.0...v0.18.1) (2026-08-12)
 
 ### Bug Fixes

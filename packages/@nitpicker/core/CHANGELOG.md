@@ -3,6 +3,25 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.19.0](https://github.com/d-zero-dev/nitpicker/compare/v0.18.1...v0.19.0) (2026-08-19)
+
+### Bug Fixes
+
+- **release:** include @nitpicker/types in the v0.18.1 version bump ([7017420](https://github.com/d-zero-dev/nitpicker/commit/70174203d67ab040d49f3a84f73f143fcbae6e7d))
+
+- feat(core)!: implement Symbol.asyncDispose on Nitpicker ([8f90ff1](https://github.com/d-zero-dev/nitpicker/commit/8f90ff108eb692e65bd940fb755fed6b6d0f2eb8))
+
+### Features
+
+- **core:** forward onExtractProgress through Nitpicker.open (issue [#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([5cd2c0e](https://github.com/d-zero-dev/nitpicker/commit/5cd2c0ead5087b60ce7f2ee5853a5fdbefda765b))
+
+### BREAKING CHANGES
+
+- requires Node >=24.11.
+
+Delegates to the wrapped archive's close(), enabling `await using
+nitpicker = await Nitpicker.open(...)` instead of a manual try/finally.
+
 ## [0.18.1](https://github.com/d-zero-dev/nitpicker/compare/v0.18.0...v0.18.1) (2026-08-12)
 
 **Note:** Version bump only for package @nitpicker/core

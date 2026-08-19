@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.19.0](https://github.com/d-zero-dev/nitpicker/compare/v0.18.1...v0.19.0) (2026-08-19)
+
+### Features
+
+- **query:** export VIEWER_READ_MODEL_SCHEMA_VERSION from the package root ([5332eb5](https://github.com/d-zero-dev/nitpicker/commit/5332eb569d8df3f141623e7e983a619196af1925))
+- **query:** move viewer read model build to a worker thread (issue [#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([c9fbc69](https://github.com/d-zero-dev/nitpicker/commit/c9fbc6903f3edfb8edd78f81aab91530a683da8f))
+- **query:** report phase/progress signals during read model builds ([#294](https://github.com/d-zero-dev/nitpicker/issues/294)) ([75317d7](https://github.com/d-zero-dev/nitpicker/commit/75317d7d89fe578f59c4b84eeaca498f97482cf1))
+
 ## [0.18.1](https://github.com/d-zero-dev/nitpicker/compare/v0.18.0...v0.18.1) (2026-08-12)
 
 ### Bug Fixes
