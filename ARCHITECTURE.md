@@ -29,7 +29,7 @@
 | `@nitpicker/viewer`               | Hono API + React SPA のローカルビューア（backend `src/` + frontend `web/` の単一パッケージ）                                                                                                    |
 | `@nitpicker/mcp-server`           | query の MCP 露出（stdio、`nitpicker-mcp`）                                                                                                                                                     |
 | `@nitpicker/analyze-*`            | axe / lighthouse / markuplint / textlint / search の各監査                                                                                                                                      |
-| `@nitpicker/report-google-sheets` | Google Sheets レポート出力（5 フェーズの `createSheets`）                                                                                                                                       |
+| `@nitpicker/report-google-sheets` | Google Sheets レポート出力（`@nitpicker/query` の viewer read model / streaming API に一本化、セル予算の優先順位順に逐次実行する `createSheets`）                                               |
 | `@nitpicker/types`                | 監査型定義（Report / ConfigJSON）                                                                                                                                                               |
 | `packages/test-server`            | E2E 用 Hono サーバー（OS割り当ての動的ポート、プロダクション非依存）                                                                                                                            |
 
@@ -39,8 +39,8 @@
 - **共有ユーティリティは `@d-zero/shared`**: `parseUrl` / `delay` / `isError` / `detectCompress` / `detectCDN` はサブパスエクスポートから使う。独自実装しない
 - **エラー分類（`classifyErrorKind` / `ErrorKind` union）の源泉は crawler**（`crawler/src/classify-error-kind.ts`, `types.ts`）。query は re-export のみ。kind を増やしたら `permanent-error-kinds.ts`（retry 収束）と `is-puppeteer-fallback-candidate.ts`（fallback 判定）の両派生定数を見直す
 - **Content-Type カテゴリ判定の源泉は `query/src/content-type-rules.ts` の 1 表**。JS classifier（`classifyContentType`）と SQL マッチャ（`applyCategoryFilter`）は両方ここから派生し、Summary の件数と Pages のフィルタ結果が構造的に一致する
-- **並列処理**: crawler = `deal()`（@d-zero/dealer）、core = プラグインごとの `WorkerPool`（並列度は `AnalyzePlugin.concurrency`、既定 `os.cpus().length`）、report = Phase 1/4/5 が全シート並列・Phase 2/3 はシート内逐次。進捗表示はすべて `Lanes`（analyze プラグイン内で `console.log` を使わない）
-- **Sheets 送信バッファは `@d-zero/google-sheets` の `Sheet`**（2500 行チャンク自動 flush・遅延セル検出）。集約シートは `finalizeResources` hook（`report-google-sheets/src/sheets/run-finalize-resources.ts`）
+- **並列処理**: crawler = `deal()`（@d-zero/dealer）、core = プラグインごとの `WorkerPool`（並列度は `AnalyzePlugin.concurrency`、既定 `os.cpus().length`）、report = シート作成（Phase 1）・書式適用（Phase 3）は全シート並列、データ投入（Phase 2）はセル予算の優先順位順（`report.ts` の `SHEET_PRIORITY_ORDER`）に 1 シートずつ逐次実行。進捗表示はすべて `Lanes`（analyze プラグイン内で `console.log` を使わない）
+- **Sheets 送信バッファは `@d-zero/google-sheets` の `Sheet`**（2500 行チャンク自動 flush）。遅延セル（`createCellData(() => ...)`）が 1 つでもバッチに混入すると自動 flush が止まり明示的な `flush()` まで無制限にメモリへ滞留するため、`report-google-sheets` の全シートで使用禁止（過去に大規模アーカイブでの OOM インシデントあり。`create-sheets.ts` の docs 参照）
 - **技術スタックの confidence 合成は `combine-technology-confidence.ts` が単一の正**（noisy-OR、`archive/meta/technologies/`）。構造シグナル・meta-generator・Wappalyzer・JS ライセンスコメントの 4 種の検出ロジックはすべてこの 1 関数に信号を集約するだけで、確信度計算を独自に持たない
 - **JS リソース本文のネットワーク再取得（JS スキャン・エンリッチメント）は crawler パッケージの crawl 完了後ステップとして実装し、query パッケージにはネットワーク I/O を追加しない** — query は read-only の SQL API という既存境界を保つ（`cli/src/crawl/scan-js-resources-quietly.ts` が CLI 層で crawler の関数を呼ぶ配線、`ensure-viewer-read-model-quietly.ts` と同じ「crawler は query に依存できない」制約の裏返し）
 
@@ -134,8 +134,9 @@
 - **タールキャッシュは誰も evict しない** — read-only open の展開先 `<os.tmpdir>/nitpicker/cache/` の寿命は OS の temp cleanup に委ねる設計。手動削除は `rm -rf` で安全（`archive.ts` の `openCached`）。`nitpicker cache list` / `cache clear` は同じ場所（tar 展開キャッシュ + analyze の `table` キャッシュ）を一覧・削除する診断用 CLI で、確認プロンプト無しの即時削除という設計思想も踏襲する（`cli/src/commands/cache.ts`）
 - **libsql 0.5.x の `readonly: true` は SQL 層で no-op** — read-only 安全性は migration スキップ + `setData` namespace ガード + 内部 review の 3 層で担保（`database.ts`）
 - **report の resources sort は派生文字列を 1 つも作らない** — `Intl.Collator` per-compare（分単位ブロック → Sheets keep-alive 切断）、ゼロパディング sort key 事前生成（数百 MB ヒープ）、比較関数内 `toLowerCase()`（GC 圧迫）はすべて実測で却下済み。`charCodeAt` 比較のみで書く（`report-google-sheets/src/utils/sort-resources-by-url.ts`）
-- **集約シートは `finalizeResources` hook を使う** — `eachResource` 内で「最後の resource か」を判定して emit する書き方は Phase 3 の並列化で壊れるため禁止（`sheets/run-finalize-resources.ts`。V8 引数上限 ~65k の既知の制約も同 JSDoc）
+- **report のシート生成はストリーミング専用・遅延セル全面禁止** — 各シートの `CreateSheetSetting.run()` は自分でカーソル/チャンクを回しながら生成した行を都度 `sheet.appendRow(...)` に渡す（`sheets/types.ts`）。遅延セル（`createCellData(() => ...)` の thunk）は `@d-zero/google-sheets` の 2500 行自動 flush を停止させ、明示的な `flush()` まで行全体を無制限にメモリへ滞留させる — 13 万ページ超のアーカイブでこれが実際の OOM 原因になったインシデントあり。集約が必要なシート（Resources dedupe mode）もシート横断の finalize hook は持たず `run()` 内のクロージャだけで完結させる（`data/create-resources.ts`）
 - **巨大集合のユニーク値カウントは sample set + overflowedCount** — cap 到達と観測落ちを区別する（`report-google-sheets/src/data/create-resources.ts` の `ParamValueTracker`）
+- **ディレクトリ単位の集計は `dirname` 単独ではなく `(hostname, port, dirname)` でグルーピングする** — マルチルートクロール（`crawl <URL> <URL>...`）は異なる起点が同一パスの index ページ（`/blog/` 等）を持ちうるため、`dirname` のみのキーは別サイトの被リンク数・タイトルを取り違えて合算する（`query/src/viewer-read-model/origin-dirname-key.ts` の `originDirnameKey` に共通化。`compute-dir-index-inbound-link-count-by-page-id.ts` / `compute-display-title-by-page-id.ts` が消費）
 - **`-v` / `--version` は `argv[0]` の位置でのみ判定**（@d-zero/roar の仕様）。`crawl -v` はサブコマンドのフラグ扱い
 - **pre-BLOB 時代の `._nitpicker-*` stub は捨てる** — read-only 経路では `page_html_*` テーブルの migration が走らず HTML 読み出しが落ちる
 - **beholder バンプ時は `--retry-failed` の手動 smoke を行う** — JS-redirect rescue（`build-js-redirect-edge.ts`）の発火条件が puppeteer のバージョンで変わり、E2E は rescue path を踏んでいない
@@ -266,9 +267,11 @@ Astro / Next.js / Vue / Nuxt / Svelte / SvelteKit / Remix / Gatsby / Angular 等
 
 ### report シート追加
 
-1. `report-google-sheets/src/sheets/types.ts`（`CreateSheetSetting`・hook 選択）
-2. 参考実装: `data/create-page-list.ts`（遅延セル）/ `data/create-resources.ts`（dedupe 集約 + `finalizeResources`）
-3. `sheets/create-sheets.ts`（Phase 1-5 オーケストレーション）
+1. `report-google-sheets/src/sheets/types.ts`（`CreateSheetSetting` 契約: `createHeaders` / `estimateRowCount` / `run(ctx)` / 任意の `updateSheet`。`requiresReadModel: true` を立てると `report.ts` が事前に `requireViewerReadModel` を要求する）
+2. データ取得は `@nitpicker/query` の `report-export/`（`streamAllContentItems` 等のチャンク・カーソル API）または viewer read model 系（`listViewerPages` 等）に一本化する — crawler の旧 API・jsdom は使わない。参考実装: `data/create-page-list.ts`（read model の事前計算列を直読み）/ `data/create-resources.ts`（dedupe 集約を `run()` 内クロージャで完結、finalize hook は無い）
+3. `open-report-archive.ts`（`@nitpicker/query` の `ArchiveManager` 経由で read-only accessor を得る。stub/live crawl ディレクトリは明示的に reject）
+4. `sheets/create-sheets.ts`（Phase 1 作成 → Phase 1.5 セル予算の事前警告 → Phase 2 優先順位順の逐次データ投入 → Phase 3 書式適用）と `sheets/estimate-cell-budget.ts`（10M セル上限に対する配分計算）
+5. 優先順位・シート選択の配線: `report.ts` の `SHEET_PRIORITY_ORDER`（固定順 = セル予算優先度。ユーザーの選択クリック順には依存しない）
 
 ### DB スキーマ変更
 
