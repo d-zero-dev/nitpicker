@@ -75,7 +75,12 @@ describe('createLinks', () => {
 
 		const setting = createLinks([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 
 		expect(mock.rows).toHaveLength(2);
 		assertNoLazyCells(mock.rows);
@@ -105,7 +110,12 @@ describe('createLinks', () => {
 
 		const setting = createLinks([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 
 		const row = mock.rows[0]!;
 		expect(cellValue(row[5]!)).toBe(1); // Redirect From count
@@ -131,8 +141,42 @@ describe('createLinks', () => {
 		);
 		const setting = createLinks([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: 2, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 2,
+			estimatedTotal: 5,
+			onProgress: () => {},
+		});
 		expect(mock.rows).toHaveLength(2);
 		expect(mock.flushCount).toBe(1);
+	});
+
+	it('reports onProgress against ctx.estimatedTotal, not maxRows (issue: misleading progress denominator)', async () => {
+		vi.mocked(streamAllContentItems).mockReturnValue(
+			oneChunk([
+				{
+					pageId: 1,
+					url: 'https://example.com/page',
+					title: 'Page',
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					isSkipped: false,
+					skipReason: null,
+					responseHeaders: {},
+					redirectFromUrls: [],
+				},
+			]),
+		);
+		const setting = createLinks([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		const onProgress = vi.fn();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 1_000_000, // far larger than estimatedTotal — must not leak into `total`
+			estimatedTotal: 1,
+			onProgress,
+		});
+		expect(onProgress).toHaveBeenCalledWith(1, 1);
 	});
 });

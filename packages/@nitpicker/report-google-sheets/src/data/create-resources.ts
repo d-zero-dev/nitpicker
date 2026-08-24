@@ -319,9 +319,9 @@ export function createResources(options?: CreateResourcesOptions): CreateSheet {
 				name: 'Resources',
 				createHeaders: () => [...RAW_HEADERS],
 				estimateRowCount: () => countResources(accessor),
-				async run({ sheet, maxRows, onProgress }) {
+				async run({ sheet, maxRows, estimatedTotal, onProgress }) {
 					let sent = 0;
-					const total = maxRows;
+					const total = estimatedTotal;
 					for await (const chunk of streamAllResourcesRaw(accessor)) {
 						const referrerUrlsByResourceId = await getResourceReferrerUrlsByResourceIds(
 							accessor,
@@ -411,7 +411,11 @@ export function createResources(options?: CreateResourcesOptions): CreateSheet {
 					naturalCompare(a.canonical, b.canonical),
 				);
 				let sent = 0;
-				const total = maxRows;
+				// Unlike raw mode, the true total is already known here — the
+				// aggregated output is much smaller than `estimateRowCount()`'s
+				// raw (pre-dedupe) resource count, so that estimate would
+				// understate progress rather than overstate it.
+				const total = Math.min(sortedEntries.length, maxRows);
 				for (const entry of sortedEntries) {
 					if (sent >= maxRows) {
 						break;

@@ -52,7 +52,12 @@ describe('createResourcesRelationalTable', () => {
 		);
 		const setting = createResourcesRelationalTable([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 
 		expect(mock.rows).toHaveLength(1);
 		assertNoLazyCells(mock.rows);
@@ -78,8 +83,38 @@ describe('createResourcesRelationalTable', () => {
 		);
 		const setting = createResourcesRelationalTable([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: 1, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 1,
+			estimatedTotal: 3,
+			onProgress: () => {},
+		});
 		expect(mock.rows).toHaveLength(1);
 		expect(mock.flushCount).toBe(1);
+	});
+
+	it('reports onProgress against ctx.estimatedTotal, not maxRows (issue: misleading progress denominator)', async () => {
+		vi.mocked(streamResourceReferrerEdges).mockReturnValue(
+			oneChunk([
+				{
+					pageUrl: 'https://example.com/page',
+					resourceUrl: 'https://example.com/style.css',
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/css',
+					contentLength: 1000,
+				},
+			]),
+		);
+		const setting = createResourcesRelationalTable([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		const onProgress = vi.fn();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 1_000_000, // far larger than estimatedTotal — must not leak into `total`
+			estimatedTotal: 1,
+			onProgress,
+		});
+		expect(onProgress).toHaveBeenCalledWith(1, 1);
 	});
 });

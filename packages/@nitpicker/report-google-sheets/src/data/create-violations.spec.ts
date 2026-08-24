@@ -71,7 +71,12 @@ describe('createViolations', () => {
 
 		const setting = createViolations([], makeAccessor(2));
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 
 		expect(mock.rows).toHaveLength(2);
 		assertNoLazyCells(mock.rows);
@@ -95,7 +100,12 @@ describe('createViolations', () => {
 		);
 		const setting = createViolations([], makeAccessor(1));
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 
 		const row = mock.rows[0]!;
 		expect(cellValue(row[0]!)).toBe('axe');
@@ -110,7 +120,12 @@ describe('createViolations', () => {
 		vi.mocked(streamAllViolations).mockReturnValue(oneChunk([]));
 		const setting = createViolations([], makeAccessor(0));
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 		expect(mock.rows).toHaveLength(0);
 	});
 
@@ -137,7 +152,37 @@ describe('createViolations', () => {
 		);
 		const setting = createViolations([], makeAccessor(2));
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: 1, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 1,
+			estimatedTotal: 2,
+			onProgress: () => {},
+		});
 		expect(mock.rows).toHaveLength(1);
+	});
+
+	it('reports onProgress against ctx.estimatedTotal, not maxRows (issue: misleading progress denominator)', async () => {
+		vi.mocked(streamAllViolations).mockReturnValue(
+			oneChunk([
+				{
+					validator: 'axe',
+					severity: 'serious',
+					rule: 'rule-1',
+					code: 'code-1',
+					message: 'msg-1',
+					url: 'https://example.com/a',
+				},
+			]),
+		);
+		const setting = createViolations([], makeAccessor(1));
+		const mock = createMockSheet();
+		const onProgress = vi.fn();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 1_000_000, // far larger than estimatedTotal — must not leak into `total`
+			estimatedTotal: 1,
+			onProgress,
+		});
+		expect(onProgress).toHaveBeenCalledWith(1, 1);
 	});
 });

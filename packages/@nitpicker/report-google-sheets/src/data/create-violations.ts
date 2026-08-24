@@ -36,9 +36,9 @@ export const createViolations: CreateSheet = (_reports, accessor) => {
 			return ['Validator', 'Severity', 'Rule', 'Code', 'Message', 'URL'];
 		},
 		estimateRowCount: () => countViolations(accessor),
-		async run({ sheet, maxRows, onProgress }) {
+		async run({ sheet, maxRows, estimatedTotal, onProgress }) {
 			let sent = 0;
-			const total = maxRows;
+			const total = estimatedTotal;
 			for await (const chunk of streamAllViolations(accessor)) {
 				for (const violation of chunk) {
 					if (sent >= maxRows) {

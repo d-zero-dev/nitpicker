@@ -55,9 +55,9 @@ export const createReferrersRelationalTable: CreateSheet = (_reports, accessor) 
 			);
 			return Number(row?.count ?? 0);
 		},
-		async run({ sheet, maxRows, onProgress }) {
+		async run({ sheet, maxRows, estimatedTotal, onProgress }) {
 			let sent = 0;
-			const total = maxRows;
+			const total = estimatedTotal;
 			for await (const chunk of streamAnchorFactEdges(accessor)) {
 				for (const edge of chunk) {
 					if (sent >= maxRows) {

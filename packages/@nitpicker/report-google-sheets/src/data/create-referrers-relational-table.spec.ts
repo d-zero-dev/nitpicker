@@ -55,7 +55,12 @@ describe('createReferrersRelationalTable', () => {
 		);
 		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 
 		expect(mock.rows).toHaveLength(1);
 		assertNoLazyCells(mock.rows);
@@ -85,7 +90,12 @@ describe('createReferrersRelationalTable', () => {
 		);
 		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 		expect(cellValue(mock.rows[0]![2]!)).toBe('__NO_TEXT_CONTENT__');
 	});
 
@@ -106,7 +116,12 @@ describe('createReferrersRelationalTable', () => {
 		);
 		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 		expect(cellNote(mock.rows[0]![0]!)).toBe('Redirected from: https://example.com/old');
 	});
 
@@ -127,7 +142,12 @@ describe('createReferrersRelationalTable', () => {
 		);
 		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 		expect(cellNote(mock.rows[0]![0]!)).toBeUndefined();
 	});
 
@@ -148,8 +168,40 @@ describe('createReferrersRelationalTable', () => {
 		);
 		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: 1, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 1,
+			estimatedTotal: 3,
+			onProgress: () => {},
+		});
 		expect(mock.rows).toHaveLength(1);
 		expect(mock.flushCount).toBe(1);
+	});
+
+	it('reports onProgress against ctx.estimatedTotal, not maxRows (issue: misleading progress denominator)', async () => {
+		vi.mocked(streamAnchorFactEdges).mockReturnValue(
+			oneChunk([
+				{
+					destUrl: 'https://example.com/target',
+					sourceUrl: 'https://example.com/referrer',
+					rawDestUrl: 'https://example.com/target',
+					textContent: 'text',
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					count: 1,
+				},
+			]),
+		);
+		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		const onProgress = vi.fn();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 1_000_000, // far larger than estimatedTotal — must not leak into `total`
+			estimatedTotal: 1,
+			onProgress,
+		});
+		expect(onProgress).toHaveBeenCalledWith(1, 1);
 	});
 });

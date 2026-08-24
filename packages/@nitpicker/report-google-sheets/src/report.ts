@@ -1,10 +1,7 @@
 import type { CreateSheet } from './sheets/types.js';
-import type { ErrorHandlerMessage } from '@d-zero/google-sheets';
 
-import { Lanes } from '@d-zero/dealer';
 import { authentication } from '@d-zero/google-auth';
 import { Sheets } from '@d-zero/google-sheets';
-import c from 'ansi-colors';
 import enquirer from 'enquirer';
 
 import { createDiscrepancies } from './data/create-discrepancies.js';
@@ -74,8 +71,7 @@ export interface ReportParams {
 	 * the archive's total size (issue #294: a large archive's extraction can
 	 * take tens of seconds with no other signal it isn't hung). This
 	 * package stays UI-agnostic — the caller (the CLI's `report` command)
-	 * owns turning this into a `Lanes` display, the same way `Sheets.onLog`
-	 * lets the caller own the rate-limit countdown display below.
+	 * owns turning this into a display.
 	 */
 	readonly onExtractProgress?: (readBytes: number, totalBytes: number) => void;
 }
@@ -93,16 +89,14 @@ export interface ReportParams {
  * 4. Presents an interactive multi-select prompt for the user to
  *    choose which sheets to generate.
  * 5. Delegates to `createSheets()` for cell-budget-aware, priority-ordered
- *    data generation and upload — see `create-sheets.ts`'s docs.
+ *    data generation and upload, including its `TaskList` progress display
+ *    and Google Sheets API rate-limit (429/403/5xx/ECONNRESET) backoff
+ *    display — see `create-sheets.ts`'s docs.
  *
- * Rate limiting from the Google Sheets API (429 / 403) is handled
- * gracefully via the `Sheets.onLog` callback, which displays a
- * countdown timer in the terminal using the `Lanes` progress display.
  * Cell-budget truncation warnings from `createSheets` are collected and
- * printed via `console.error` only after the `Lanes` display has closed
- * (mirroring this file's existing `console.log` calls, which likewise only
- * ever run outside the active `Lanes` window — see the `Lanes`/`Display`
- * single-instance constraint in ARCHITECTURE.md).
+ * printed via `console.error` only after `createSheets` (and its internal
+ * `TaskList` display) has finished, mirroring this file's `console.log`
+ * calls, which likewise only ever run outside that active display window.
  * @param params - レポート生成に必要なパラメータ
  * @example
  * ```ts
@@ -250,55 +244,17 @@ export async function report(params: ReportParams) {
 		console.log(`\nGenerating ${createSheetList.length} sheet(s)...\n`);
 	}
 
-	{
-		using lanes = silent
-			? null
-			: new Lanes({ verbose: !process.stdout.isTTY, indent: '  ' });
-		log('Lanes created (verbose: %s, silent: %s)', !process.stdout.isTTY, !!silent);
-
-		const RATE_LIMIT_LANE = 10_000;
-		let countdownSeq = 0;
-		let waitingCount = 0;
-
-		if (lanes) {
-			sheets.onLog = (message: ErrorHandlerMessage) => {
-				if (message.waiting && message.waitTime) {
-					waitingCount++;
-					const id = `rateLimit_${countdownSeq++}`;
-					const label =
-						message.message === 'TooManyRequestError'
-							? 'Too Many Requests (429)'
-							: message.message === 'UserRateLimitExceededError'
-								? 'Rate Limit Exceeded (403)'
-								: message.message === 'ServerError'
-									? `Server Error (${message.code ?? '5xx'})`
-									: 'Connection Reset';
-					lanes.update(
-						RATE_LIMIT_LANE,
-						c.yellow(`${label}: waiting %countdown(${message.waitTime}, ${id}, s)%s`),
-					);
-				} else {
-					waitingCount--;
-					if (waitingCount <= 0) {
-						waitingCount = 0;
-						lanes.delete(RATE_LIMIT_LANE);
-					}
-				}
-			};
-		}
-
-		log('Reporting starts');
-		await createSheets({
-			sheets,
-			accessor,
-			reports,
-			createSheetList,
-			options: {
-				lanes: lanes ?? undefined,
-				onWarn: (message) => warnings.push(message),
-			},
-		});
-	}
+	log('Reporting starts');
+	await createSheets({
+		sheets,
+		accessor,
+		reports,
+		createSheetList,
+		options: {
+			onWarn: (message) => warnings.push(message),
+			silent,
+		},
+	});
 	log('Reporting done');
 	for (const warning of warnings) {
 		// eslint-disable-next-line no-console

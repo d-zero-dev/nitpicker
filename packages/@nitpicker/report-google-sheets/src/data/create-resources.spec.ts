@@ -166,7 +166,12 @@ describe('createResources (raw mode)', () => {
 
 		const setting = createResources()([], makeAccessor(1));
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 
 		expect(mock.rows).toHaveLength(1);
 		assertNoLazyCells(mock.rows);
@@ -175,6 +180,20 @@ describe('createResources (raw mode)', () => {
 		expect(cellValue(row[4]!)).toBe(1000);
 		expect(cellValue(row[5]!)).toBe('2 pages');
 		expect(cellNote(row[5]!)).toContain('https://example.com/a');
+	});
+
+	it('reports onProgress against ctx.estimatedTotal, not maxRows (issue: misleading progress denominator)', async () => {
+		vi.mocked(streamAllResourcesRaw).mockReturnValue(oneChunk([makeRow()]));
+		const setting = createResources()([], makeAccessor(1));
+		const mock = createMockSheet();
+		const onProgress = vi.fn();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 1_000_000, // far larger than estimatedTotal — must not leak into `total`
+			estimatedTotal: 1,
+			onProgress,
+		});
+		expect(onProgress).toHaveBeenCalledWith(1, 1);
 	});
 
 	it('stops sending rows once maxRows is reached', async () => {
@@ -187,7 +206,12 @@ describe('createResources (raw mode)', () => {
 		);
 		const setting = createResources()([], makeAccessor(3));
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: 1, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 1,
+			estimatedTotal: 3,
+			onProgress: () => {},
+		});
 		expect(mock.rows).toHaveLength(1);
 		expect(mock.flushCount).toBe(1);
 	});
@@ -242,7 +266,12 @@ describe('createResources (dedupe mode)', () => {
 
 		const setting = createResources({ dedupe: true })([], makeAccessor(2));
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 
 		expect(mock.rows).toHaveLength(1);
 		assertNoLazyCells(mock.rows);
@@ -277,7 +306,12 @@ describe('createResources (dedupe mode)', () => {
 			makeAccessor(distinctRows.length),
 		);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 
 		expect(mock.rows).toHaveLength(1);
 		expect(cellValue(mock.rows[0]![7]!)).toBe(`id=${MAX_PARAM_VALUE_SAMPLES}`);
@@ -293,7 +327,12 @@ describe('createResources (dedupe mode)', () => {
 
 		const setting = createResources({ dedupe: true })([], makeAccessor(2));
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 		expect(mock.rows).toHaveLength(2);
 	});
 
@@ -306,7 +345,12 @@ describe('createResources (dedupe mode)', () => {
 		);
 		const setting = createResources({ dedupe: true })([], makeAccessor(2));
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 		expect(cellValue(mock.rows[0]![0]!)).toBe('https://example.com/a.js');
 		expect(cellValue(mock.rows[1]![0]!)).toBe('https://example.com/z.js');
 	});
@@ -320,7 +364,12 @@ describe('createResources (dedupe mode)', () => {
 		);
 		const setting = createResources({ dedupe: true })([], makeAccessor(2));
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
 		expect(mock.rows).toHaveLength(1);
 		expect(cellValue(mock.rows[0]![6]!)).toBe(2);
 	});
@@ -335,8 +384,36 @@ describe('createResources (dedupe mode)', () => {
 		);
 		const setting = createResources({ dedupe: true })([], makeAccessor(3));
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: 1, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 1,
+			estimatedTotal: 3,
+			onProgress: () => {},
+		});
 		expect(mock.rows).toHaveLength(1);
 		expect(cellValue(mock.rows[0]![0]!)).toBe('https://example.com/a.js');
+	});
+
+	it('reports onProgress against the real aggregated total, not the raw pre-dedupe estimate', async () => {
+		// 3 raw rows collapse to 1 dedupe entry — estimateRowCount() (via
+		// estimatedTotal) reflects the raw count, but the true total for this
+		// run is the much smaller aggregated output.
+		vi.mocked(streamAllResourcesRaw).mockReturnValue(
+			oneChunk([
+				makeRow({ resourceId: 1, url: 'https://example.com/pixel?id=1' }),
+				makeRow({ resourceId: 2, url: 'https://example.com/pixel?id=2' }),
+				makeRow({ resourceId: 3, url: 'https://example.com/pixel?id=3' }),
+			]),
+		);
+		const setting = createResources({ dedupe: true })([], makeAccessor(3));
+		const mock = createMockSheet();
+		const onProgress = vi.fn();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 3,
+			onProgress,
+		});
+		expect(onProgress).toHaveBeenCalledWith(1, 1);
 	});
 });

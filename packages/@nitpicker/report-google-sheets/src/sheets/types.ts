@@ -28,11 +28,24 @@ export interface RunSheetContext {
 	 */
 	readonly maxRows: number;
 	/**
-	 * Reports rows sent so far, out of the sheet's own estimated total
-	 * (from `estimateRowCount()`), for the Lanes progress line. Call this
+	 * This sheet's own `estimateRowCount()` result, captured once in Phase
+	 * 1.5 — the intended denominator for `onProgress`'s progress line.
+	 * **Not the same as `maxRows`**: `maxRows` is the cell-budget cap this
+	 * sheet may actually send (can be far smaller *or* far larger than the
+	 * true row count), so passing it to `onProgress` instead of this value
+	 * renders a misleading "X / cell-budget-cap" line that looks like a
+	 * real total. A sheet with no cheap live total available (a streaming
+	 * `report-export/` source with no per-chunk count) should use this
+	 * value; a sheet whose own paginated query already returns a live
+	 * total per page (e.g. `listViewerPages`) may use that instead — it is
+	 * at least as accurate.
+	 */
+	readonly estimatedTotal: number;
+	/**
+	 * Reports rows sent so far, for the Lanes progress line. Call this
 	 * periodically while iterating, not just once at the end.
 	 * @param sent - Rows sent so far.
-	 * @param total - This sheet's own estimated total row count.
+	 * @param total - This sheet's total row count, normally `ctx.estimatedTotal`.
 	 */
 	readonly onProgress: (sent: number, total: number) => void;
 }

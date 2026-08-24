@@ -84,6 +84,7 @@ describe('createSheets', () => {
 					run: () => Promise.resolve(),
 				}),
 			],
+			options: { silent: true },
 		});
 		expect(requireViewerReadModel).not.toHaveBeenCalled();
 	});
@@ -109,6 +110,7 @@ describe('createSheets', () => {
 					run: () => Promise.resolve(),
 				}),
 			],
+			options: { silent: true },
 		});
 		expect(requireViewerReadModel).toHaveBeenCalledTimes(1);
 		expect(requireViewerReadModel).toHaveBeenCalledWith(NO_ACCESSOR);
@@ -147,6 +149,7 @@ describe('createSheets', () => {
 					},
 				}),
 			],
+			options: { silent: true },
 		});
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
@@ -197,6 +200,7 @@ describe('createSheets', () => {
 					run: run('B', 0),
 				}),
 			],
+			options: { silent: true },
 		});
 
 		expect(receivedMaxRows.A).toBe(2); // floor(4 / 2)
@@ -228,7 +232,7 @@ describe('createSheets', () => {
 					},
 				}),
 			],
-			options: { onWarn },
+			options: { onWarn, silent: true },
 		});
 
 		// CELL_BUDGET_LIMIT=8, one 2-column sheet: header cost 2, remaining 6,
@@ -284,7 +288,7 @@ describe('createSheets', () => {
 					},
 				}),
 			],
-			options: { onWarn },
+			options: { onWarn, silent: true },
 		});
 
 		expect(getMock('B')?.rows).toHaveLength(2); // 1 real data row + 1 TRUNCATED marker
@@ -321,7 +325,7 @@ describe('createSheets', () => {
 					run: bRun,
 				}),
 			],
-			options: { onWarn },
+			options: { onWarn, silent: true },
 		});
 
 		// Budget 8, header cost 4, remaining 4 -> A gets maxRows=2 and consumes
@@ -332,6 +336,100 @@ describe('createSheets', () => {
 		// only Phase 2's row generation is skipped.
 		expect(getMock('B')?.rows).toHaveLength(0);
 		expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('skipped entirely'));
+	});
+
+	it('shows an immediate "uploading" message and real per-chunk progress during Upload', async () => {
+		// The Process step never calls the real flush() (it's deferred to
+		// Upload) — Upload must both (a) say something the instant it starts
+		// (flush() can be a single, multi-second network call with no
+		// progress signal until it resolves) and (b) show real numbers
+		// (via Sheet.onProgress) for a multi-chunk flush, not a static
+		// "uploading..." the whole time.
+		const chunks: string[] = [];
+		const stream = {
+			write: (chunk: string) => {
+				chunks.push(String(chunk));
+				return true;
+			},
+		} as never;
+
+		let onProgressHandler: ((sent: number, remaining: number) => void) | undefined;
+		const fakeSheet = {
+			setHeaders: () => Promise.resolve(),
+			appendRow: () => Promise.resolve(),
+			flush: () => {
+				// Simulate two chunk completions, as a real multi-chunk
+				// upload (e.g. dedupe mode's single large appendRow) would.
+				onProgressHandler?.(2000, 500);
+				onProgressHandler?.(2500, 0);
+				return Promise.resolve();
+			},
+			get sentCount() {
+				return 2500;
+			},
+			set onProgress(fn: ((sent: number, remaining: number) => void) | undefined) {
+				onProgressHandler = fn;
+			},
+		} as never;
+		const sheets = { create: () => Promise.resolve(fakeSheet) } as never;
+
+		await createSheets({
+			sheets,
+			accessor: NO_ACCESSOR,
+			reports: [],
+			createSheetList: [
+				makeCreateSheet({
+					name: 'A',
+					createHeaders: () => ['col1'],
+					estimateRowCount: () => Promise.resolve(2500),
+					run: () => Promise.resolve(),
+				}),
+			],
+			options: { stream, verbose: true },
+		});
+
+		const output = chunks.join('');
+		expect(output).toContain('uploading to Google Sheets...');
+		expect(output).toContain('2,000/2,500 rows (80%)');
+		expect(output).toContain('2,500/2,500 rows (100%)');
+	});
+
+	it('routes Google Sheets API rate-limit backoff messages to the currently running step', async () => {
+		const { sheets } = makeFakeSheets();
+		const chunks: string[] = [];
+		const stream = {
+			write: (chunk: string) => {
+				chunks.push(String(chunk));
+				return true;
+			},
+		} as never;
+
+		await createSheets({
+			sheets,
+			accessor: NO_ACCESSOR,
+			reports: [],
+			createSheetList: [
+				makeCreateSheet({
+					name: 'A',
+					createHeaders: () => ['col1'],
+					estimateRowCount: () => Promise.resolve(0),
+					run: () => {
+						// Simulate the Sheets client reporting a rate-limit wait
+						// while this sheet's "Process" step is the active row.
+						(sheets as { onLog?: (message: unknown) => void }).onLog?.({
+							message: 'TooManyRequestError',
+							waiting: true,
+							waitTime: 5000,
+							code: '429',
+						});
+						return Promise.resolve();
+					},
+				}),
+			],
+			options: { stream, verbose: true },
+		});
+
+		expect(chunks.join('')).toContain('Too Many Requests (429)');
 	});
 
 	it('calls updateSheet only for sheets that define it, after every run() has completed', async () => {
@@ -357,6 +455,7 @@ describe('createSheets', () => {
 					run: () => Promise.resolve(),
 				}),
 			],
+			options: { silent: true },
 		});
 
 		expect(updateA).toHaveBeenCalledTimes(1);

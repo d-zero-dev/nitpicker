@@ -61,13 +61,13 @@ export const createLinks: CreateSheet = (_reports, accessor) => {
 			});
 			return Number(row?.count ?? 0);
 		},
-		async run({ sheet, maxRows, onProgress }) {
+		async run({ sheet, maxRows, estimatedTotal, onProgress }) {
 			let sent = 0;
 			// No cheap running total from `streamAllContentItems` itself (unlike
 			// `getViolations`'s `page.total` or `listViewerPages`'s `page.total`)
-			// — `maxRows` (from `estimateRowCount`, clamped by the cell budget)
-			// doubles as the progress denominator instead.
-			const total = maxRows;
+			// — `estimatedTotal` (from `estimateRowCount()`, captured once in
+			// Phase 1.5) is the progress denominator instead.
+			const total = estimatedTotal;
 			for await (const chunk of streamAllContentItems(accessor)) {
 				const referrerUrlsByPageId = await getInboundReferrerUrlsByPageIds(
 					accessor,
