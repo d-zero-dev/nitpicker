@@ -1,15 +1,25 @@
-import type { CreateSheet, createCellTextFormat } from '../sheets/types.js';
-import type { Referrer } from '@nitpicker/crawler';
+import type { CreateSheet } from '../sheets/types.js';
 
 import { decodeURISafely } from '@d-zero/shared/decode-uri-safely';
+import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
+import {
+	buildRedirectFromUrlsByDestId,
+	getOutboundLinkFactsByPageIds,
+	listViewerPages,
+	resolvePageIdsByUrls,
+} from '@nitpicker/query';
 
 import { pLog, reportLog } from '../debug.js';
 import { createCellData } from '../sheets/create-cell-data.js';
 import { defaultCellFormat } from '../sheets/default-cell-format.js';
 import { booleanFormatError } from '../sheets/format.js';
+import { joinUrlsForNote } from '../utils/join-urls-for-note.js';
 import { nonNullFilter } from '../utils/non-null-filter.js';
 
 const log = pLog.extend('PageList');
+
+/** `listViewerPages` cursor page size while streaming rows. */
+const PAGE_SIZE = 500;
 
 /**
  * Creates the "Page List" sheet configuration -- the primary sitemap-style report.
@@ -21,9 +31,11 @@ const log = pLog.extend('PageList');
  *   for hierarchical filtering in the spreadsheet.
  * - **Title shortening**: Directory index titles are subtracted from child
  *   page titles to produce concise display titles (e.g. removing the site
- *   name suffix). The `indexTitles` map accumulates these across pages.
+ *   name suffix) — computed once at read-model build time, not per-batch
+ *   (see `PageListItem.displayTitle`'s docs).
  * - **Link quality**: Internal/external link counts with bad-link breakdowns
- *   (status >= 400, excluding 401 which is often auth-protected).
+ *   (status >= 400, excluding 401 which is often auth-protected) — fetched
+ *   per cursor batch via `getOutboundLinkFactsByPageIds`.
  * - **SEO metadata**: description, keywords, canonical, alternate, OGP, etc.
  * - **Plugin columns**: Dynamic columns from analyze plugin `pageData`.
  *
@@ -37,46 +49,33 @@ const log = pLog.extend('PageList');
  *
  * Unused path columns (beyond the deepest URL) are hidden automatically.
  *
- * ## Lazy thunk in "Internal Referrers"
+ * ## Streaming design (report OOM fix)
  *
- * The "Internal Referrers" column is emitted via `createCellData(() => ...)`
- * — a thunk that reads `parentRefs` / `indexRefs` at `provide()` time. The
- * thunk is deliberately deferred because sibling index pages mutate the
- * shared maps as the batch iterates, so the final referrer count is only
- * accurate after every page has been processed.
- *
- * `@d-zero/google-sheets` detects this lazy cell (via the
- * `Cell.prototype.provide` identity check) and switches the sheet's
- * `appendRow()` into buffered mode automatically. The buffered rows are
- * sent on the explicit `sheet.flush()` call at batch end, by which time
- * the maps are fully populated.
- *
- * If a future refactor removes the thunk pattern from this column, the
- * sheet can be sent as a pure stream — no per-sheet configuration change
- * is needed since the library auto-detects. The corresponding spec
- * (`create-page-list.spec.ts`) asserts the presence of at least one lazy
- * cell so the maintainer who removes the thunk will see the test fail and
- * be prompted to reconsider whether the change is intentional.
+ * Reads `listViewerPages` (the viewer read model, `requiresReadModel: true`)
+ * one cursor page at a time and sends each row via `sheet.appendRow(...)`
+ * immediately — no lazy (`createCellData(() => ...)`) cells anywhere in this
+ * file. The pre-rewrite version used a lazy thunk for "Internal Referrers"
+ * (its value depended on sibling index pages processed later in the same
+ * batch), which disabled `@d-zero/google-sheets`' automatic 2500-row flush
+ * for the entire batch — the direct cause of the OOM this rewrite fixes.
+ * That cross-page dependency no longer exists: `displayTitle`/
+ * `inboundLinkCount`/`dirIndexInboundLinkCount` are precomputed once, for
+ * every page, before the read model is queryable at all (see
+ * `build-viewer-read-model.ts`), so every column is known synchronously
+ * from the current row alone.
  * @param reports - Analyze plugin reports to extract per-page data columns from
+ * @param accessor - The archive accessor to query.
  */
-export const createPageList: CreateSheet = (reports) => {
-	const indexTitles = new Map<string, string>();
+export const createPageList: CreateSheet = (reports, accessor) => {
+	let maxDepth = 0;
 
-	const indexRefs = new Map<
-		string,
-		{
-			basename: string | null;
-			referrers: Referrer[];
-		}[]
-	>();
 	const reportPageData = reports
 		.map((r) => (r.pageData ? { name: r.name, pageData: r.pageData } : null))
 		.filter(nonNullFilter);
 
-	let maxDepth = 0;
-
 	return {
 		name: 'Page List',
+		requiresReadModel: true,
 		createHeaders() {
 			const headers = [
 				'Title',
@@ -150,269 +149,228 @@ export const createPageList: CreateSheet = (reports) => {
 
 			return headers;
 		},
-		async eachPage(page) {
-			if (!page.isInternalPage() || !page.isTarget) {
-				return;
-			}
+		async estimateRowCount() {
+			const { total } = await listViewerPages(accessor, { isExternal: false, limit: 0 });
+			return total;
+		},
+		async run({ sheet, maxRows, onProgress }) {
+			const redirectFromByDestId = await buildRedirectFromUrlsByDestId(accessor);
 
-			const url = page.url;
+			let sent = 0;
+			let cursor: string | undefined;
+			let total = 0;
+			for (;;) {
+				const page = await listViewerPages(accessor, {
+					isExternal: false,
+					limit: PAGE_SIZE,
+					cursor,
+				});
+				total = page.total;
 
-			maxDepth = Math.max(url.depth, maxDepth);
+				const pageIds = await resolvePageIdsByUrls(
+					accessor,
+					page.items.map((item) => item.url),
+				);
+				const linkFactsByPageId = await getOutboundLinkFactsByPageIds(accessor, [
+					...pageIds.values(),
+				]);
 
-			const paths = [...url.paths];
-			paths[paths.length - 1] = `${paths.at(-1)}${url.query ? `?${url.query}` : ''}`;
-			const [path1, path2, path3, path4, path5, path6, path7, path8, path9, path10] =
-				paths.map((p) => `/${decodeURISafely(p)}`);
-
-			const anchors = await page.getAnchors();
-			let iLinks = 0;
-			const iBadLinks: string[] = [];
-			let xLinks = 0;
-			const xBadLinks: string[] = [];
-			for (const anchor of anchors) {
-				if (anchor.isExternal) {
-					xLinks += 1;
-					if (!anchor.status || (anchor.status >= 400 && anchor.status !== 401)) {
-						const url =
-							anchor.href === anchor.url ? anchor.url : `${anchor.href} => ${anchor.url}`;
-						xBadLinks.push(
-							`${anchor.textContent} (${anchor.status} ${anchor.statusText} ${url})`,
-						);
+				for (const item of page.items) {
+					if (sent >= maxRows) {
+						await sheet.flush();
+						return;
 					}
-				} else {
-					iLinks += 1;
-					if (!anchor.status || (anchor.status >= 400 && anchor.status !== 401)) {
-						const url =
-							anchor.href === anchor.url ? anchor.url : `${anchor.href} => ${anchor.url}`;
-						iBadLinks.push(
-							`${anchor.textContent} (${anchor.status} ${anchor.statusText} ${url})`,
-						);
+					const url = parseUrl(item.url);
+					if (!url) {
+						continue;
 					}
-				}
-			}
+					maxDepth = Math.max(url.depth, maxDepth);
 
-			const refers = await page.getReferrers();
+					const paths = [...url.paths];
+					paths[paths.length - 1] = `${paths.at(-1)}${url.query ? `?${url.query}` : ''}`;
+					const [path1, path2, path3, path4, path5, path6, path7, path8, path9, path10] =
+						paths.map((p) => `/${decodeURISafely(p)}`);
 
-			let title = page.title;
-			const dirname = url.dirname || '/';
-			const parentDir = `/${url.paths.slice(0, -2).join('/')}`;
+					const pageId = pageIds.get(item.url);
+					const facts = pageId == null ? undefined : linkFactsByPageId.get(pageId);
+					const redirectFromUrls =
+						pageId == null ? [] : (redirectFromByDestId.get(pageId) ?? []);
 
-			const dirTitle = url.isIndex
-				? indexTitles.get(parentDir) || indexTitles.get(dirname)
-				: indexTitles.get(dirname) || indexTitles.get(parentDir);
+					const isRoot = url.dirname == null;
+					const depth = isRoot ? 0 : url.depth - (url.isIndex ? 1 : 0);
 
-			if (dirTitle && title.includes(dirTitle)) {
-				title = title.replace(dirTitle, '').replaceAll(/\||｜/g, '').trim();
-				if (!title) {
-					title = page.title;
-				}
-			}
+					const internalReferrers =
+						item.dirIndexInboundLinkCount ?? item.inboundLinkCount ?? 0;
 
-			const parentRefs = indexRefs.get(dirname);
+					const data = [
+						createCellData(
+							{
+								value: item.displayTitle ?? item.title,
+								cellFormat: { padding: { left: Math.max(depth, 0) * 20 + 3 } },
+								note: `Full-title:\n${item.title}`,
+							},
+							defaultCellFormat,
+						),
+						createCellData({ value: item.title }, defaultCellFormat),
+						createCellData(
+							{ value: item.url, textFormat: { link: { uri: item.url } } },
+							defaultCellFormat,
+						),
+						createCellData({ value: url.protocol }, defaultCellFormat),
+						createCellData({ value: url.hostname }, defaultCellFormat),
+						createCellData({ value: path1 || null }, defaultCellFormat),
+						createCellData({ value: path2 || null }, defaultCellFormat),
+						createCellData({ value: path3 || null }, defaultCellFormat),
+						createCellData({ value: path4 || null }, defaultCellFormat),
+						createCellData({ value: path5 || null }, defaultCellFormat),
+						createCellData({ value: path6 || null }, defaultCellFormat),
+						createCellData({ value: path7 || null }, defaultCellFormat),
+						createCellData({ value: path8 || null }, defaultCellFormat),
+						createCellData({ value: path9 || null }, defaultCellFormat),
+						createCellData({ value: path10 || null }, defaultCellFormat),
+						createCellData({ value: item.status ?? -1 }, defaultCellFormat),
+						createCellData(
+							{
+								value: redirectFromUrls.length,
+								note: joinUrlsForNote(redirectFromUrls),
+							},
+							defaultCellFormat,
+						),
+						createCellData({ value: item.lang || 'N/A' }, defaultCellFormat),
+						createCellData({ value: item.charset }, defaultCellFormat),
+						createCellData({ value: facts?.internalLinks ?? 0 }, defaultCellFormat),
+						createCellData(
+							{
+								value: facts?.internalBadLinks ?? 0,
+								note: facts?.internalBadLinkNote,
+							},
+							defaultCellFormat,
+						),
+						createCellData({ value: facts?.externalLinks ?? 0 }, defaultCellFormat),
+						createCellData(
+							{
+								value: facts?.externalBadLinks ?? 0,
+								note: facts?.externalBadLinkNote,
+							},
+							defaultCellFormat,
+						),
+						createCellData({ value: internalReferrers }, defaultCellFormat),
+						createCellData({ value: item.description }, defaultCellFormat),
+						createCellData({ value: item.keywords }, defaultCellFormat),
+						createCellData({ value: item.noindex }, defaultCellFormat),
+						createCellData({ value: item.nofollow }, defaultCellFormat),
+						createCellData({ value: item.noarchive }, defaultCellFormat),
+						createCellData({ value: item.robotsRaw }, defaultCellFormat),
+						createCellData({ value: item.canonical }, defaultCellFormat),
+						createCellData({ value: item.manifest }, defaultCellFormat),
+						createCellData({ value: item.themeColor }, defaultCellFormat),
+						createCellData({ value: item.twitterCard }, defaultCellFormat),
+						createCellData({ value: item.twitterSite }, defaultCellFormat),
+						createCellData({ value: item.twitterCreator }, defaultCellFormat),
+						createCellData({ value: item.ogSiteName }, defaultCellFormat),
+						createCellData(
+							{ value: item.ogUrl, textFormat: { link: { uri: item.ogUrl ?? '' } } },
+							defaultCellFormat,
+						),
+						createCellData({ value: item.ogTitle }, defaultCellFormat),
+						createCellData({ value: item.ogDescription }, defaultCellFormat),
+						createCellData({ value: item.ogType }, defaultCellFormat),
+						createCellData({ value: item.ogImage }, defaultCellFormat),
+						createCellData({ value: item.ogImageAlt }, defaultCellFormat),
+						createCellData({ value: item.ogLocale }, defaultCellFormat),
+						createCellData({ value: item.ogArticlePublishedTime }, defaultCellFormat),
+						// Denormalised aggregates: written at scrape time so no per-page
+						// GROUP BY is needed here. `tagsProvidersCsv` is comma-separated
+						// for native Google Sheets list rendering.
+						createCellData({ value: item.jsonldCount }, defaultCellFormat),
+						createCellData({ value: item.tagsProvidersCsv }, defaultCellFormat),
+						// beholder MainContentsData / ScrollHeightData denormalised
+						// aggregates. `null` (page never fully rendered) or `0` (rendered,
+						// no main region / no elements of that kind found) render as
+						// blank / 0 respectively — no special-casing needed here.
+						createCellData({ value: item.mainContentSelector }, defaultCellFormat),
+						createCellData({ value: item.mainContentWordCount }, defaultCellFormat),
+						createCellData({ value: item.mainContentBodyWordCount }, defaultCellFormat),
+						createCellData({ value: item.mainContentHeadingCount }, defaultCellFormat),
+						createCellData({ value: item.mainContentImageCount }, defaultCellFormat),
+						createCellData({ value: item.mainContentTableCount }, defaultCellFormat),
+						createCellData({ value: item.mainContentButtonCount }, defaultCellFormat),
+						createCellData({ value: item.mainContentIframeCount }, defaultCellFormat),
+						createCellData({ value: item.mainContentVideoCount }, defaultCellFormat),
+						createCellData({ value: item.mainContentAudioCount }, defaultCellFormat),
+						createCellData({ value: item.mainContentCanvasCount }, defaultCellFormat),
+						createCellData(
+							{ value: item.mainContentCustomElementCount },
+							defaultCellFormat,
+						),
+						createCellData({ value: item.scrollHeightDesktop }, defaultCellFormat),
+						createCellData({ value: item.scrollHeightMobile }, defaultCellFormat),
+					];
 
-			if (url.isIndex) {
-				indexTitles.set(dirname, page.title);
+					for (const report of reportPageData) {
+						const tableData = report.pageData.data[item.url];
+						const options = report.pageData.options
+							? report.pageData.options[item.url]
+							: null;
 
-				if (parentRefs) {
-					parentRefs.push({
-						basename: url.basename,
-						referrers: refers,
-					});
-					// return;
-				} else {
-					indexRefs.set(dirname, [
-						{
-							basename: url.basename,
-							referrers: refers,
-						},
-					]);
-				}
-			}
-
-			const isRoot = url.dirname == null;
-			const depth = isRoot ? 0 : url.depth - (url.isIndex ? 1 : 0);
-
-			const data = [
-				createCellData(
-					{
-						value: title,
-						cellFormat: { padding: { left: Math.max(depth, 0) * 20 + 3 } },
-						note: `Full-title:\n${page.title}`,
-					},
-					defaultCellFormat,
-				),
-				createCellData({ value: page.title }, defaultCellFormat),
-				createCellData(
-					{
-						value: page.url.href,
-						textFormat: { link: { uri: page.url.href } },
-					},
-					defaultCellFormat,
-				),
-				createCellData({ value: url.protocol }, defaultCellFormat),
-				createCellData({ value: url.hostname }, defaultCellFormat),
-				createCellData({ value: path1 || null }, defaultCellFormat),
-				createCellData({ value: path2 || null }, defaultCellFormat),
-				createCellData({ value: path3 || null }, defaultCellFormat),
-				createCellData({ value: path4 || null }, defaultCellFormat),
-				createCellData({ value: path5 || null }, defaultCellFormat),
-				createCellData({ value: path6 || null }, defaultCellFormat),
-				createCellData({ value: path7 || null }, defaultCellFormat),
-				createCellData({ value: path8 || null }, defaultCellFormat),
-				createCellData({ value: path9 || null }, defaultCellFormat),
-				createCellData({ value: path10 || null }, defaultCellFormat),
-				createCellData({ value: page.status || -1 }, defaultCellFormat),
-				createCellData(
-					{
-						value: page.redirectFrom.length,
-						note: page.redirectFrom.map((r) => r.url).join('\n'),
-					},
-					defaultCellFormat,
-				),
-				createCellData({ value: page.lang || 'N/A' }, defaultCellFormat),
-				createCellData({ value: page.charset }, defaultCellFormat),
-				createCellData({ value: iLinks }, defaultCellFormat),
-				createCellData(
-					{ value: iBadLinks.length, note: iBadLinks.join('\n') },
-					defaultCellFormat,
-				),
-				createCellData({ value: xLinks }, defaultCellFormat),
-				createCellData(
-					{ value: xBadLinks.length, note: xBadLinks.join('\n') },
-					defaultCellFormat,
-				),
-				createCellData(
-					() => ({
-						value:
-							url.isIndex && parentRefs
-								? parentRefs.reduce((prev, ref) => prev + ref.referrers.length, 0)
-								: refers.length,
-						note:
-							url.isIndex && parentRefs
-								? parentRefs
-										.map(
-											(ref) =>
-												`[[/${ref.basename || ''}]]\n${ref.referrers
-													.map((ref) => ref.url)
-													.join('\n')}`,
-										)
-										.join('\n\n')
-								: refers.map((ref) => ref.url).join('\n'),
-					}),
-					defaultCellFormat,
-				),
-				createCellData({ value: page.description }, defaultCellFormat),
-				createCellData({ value: page.keywords }, defaultCellFormat),
-				createCellData({ value: page.robots_noindex }, defaultCellFormat),
-				createCellData({ value: page.robots_nofollow }, defaultCellFormat),
-				createCellData({ value: page.robots_noarchive }, defaultCellFormat),
-				createCellData({ value: page.robots_raw }, defaultCellFormat),
-				createCellData({ value: page.canonical }, defaultCellFormat),
-				createCellData({ value: page.metaFlat.manifest }, defaultCellFormat),
-				createCellData({ value: page.metaFlat.themeColor }, defaultCellFormat),
-				createCellData({ value: page.twitter_card }, defaultCellFormat),
-				createCellData({ value: page.metaFlat.twitter_site }, defaultCellFormat),
-				createCellData({ value: page.metaFlat.twitter_creator }, defaultCellFormat),
-				createCellData({ value: page.og_site_name }, defaultCellFormat),
-				createCellData(
-					{
-						value: page.og_url,
-						textFormat: { link: { uri: page.og_url } },
-					},
-					defaultCellFormat,
-				),
-				createCellData({ value: page.og_title }, defaultCellFormat),
-				createCellData({ value: page.og_description }, defaultCellFormat),
-				createCellData({ value: page.og_type }, defaultCellFormat),
-				createCellData({ value: page.og_image }, defaultCellFormat),
-				createCellData({ value: page.metaFlat.og_image_alt }, defaultCellFormat),
-				createCellData({ value: page.metaFlat.og_locale }, defaultCellFormat),
-				createCellData(
-					{ value: page.metaFlat.og_article_published_time },
-					defaultCellFormat,
-				),
-				// Denormalised aggregates: written at scrape time so no per-page
-				// GROUP BY is needed here. `tagsProvidersCsv` is comma-separated
-				// for native Google Sheets list rendering.
-				createCellData({ value: page.jsonldCount }, defaultCellFormat),
-				createCellData({ value: page.tagsProvidersCsv }, defaultCellFormat),
-				// beholder MainContentsData / ScrollHeightData denormalised
-				// aggregates. `null` (page never fully rendered) or `0` (rendered,
-				// no main region / no elements of that kind found) render as
-				// blank / 0 respectively — no special-casing needed here.
-				createCellData({ value: page.mainContentSelector }, defaultCellFormat),
-				createCellData({ value: page.mainContentWordCount }, defaultCellFormat),
-				createCellData({ value: page.mainContentBodyWordCount }, defaultCellFormat),
-				createCellData({ value: page.mainContentHeadingCount }, defaultCellFormat),
-				createCellData({ value: page.mainContentImageCount }, defaultCellFormat),
-				createCellData({ value: page.mainContentTableCount }, defaultCellFormat),
-				createCellData({ value: page.mainContentButtonCount }, defaultCellFormat),
-				createCellData({ value: page.mainContentIframeCount }, defaultCellFormat),
-				createCellData({ value: page.mainContentVideoCount }, defaultCellFormat),
-				createCellData({ value: page.mainContentAudioCount }, defaultCellFormat),
-				createCellData({ value: page.mainContentCanvasCount }, defaultCellFormat),
-				createCellData({ value: page.mainContentCustomElementCount }, defaultCellFormat),
-				createCellData({ value: page.scrollHeightDesktop }, defaultCellFormat),
-				createCellData({ value: page.scrollHeightMobile }, defaultCellFormat),
-			];
-
-			for (const report of reportPageData) {
-				const tableData = report.pageData.data[page.url.href];
-				const options = report.pageData.options
-					? report.pageData.options[page.url.href]
-					: null;
-
-				if (!tableData) {
-					reportLog("%s did'nt have table of %s", report.name, page.url);
-					continue;
-				}
-
-				reportLog('Add %s to table from %s', page.url.href, report.name);
-				data.push(
-					...Object.keys(report.pageData.headers).map((key) => {
-						const option = options ? options[key] || null : null;
-						const data = tableData[key];
-
-						const format: createCellTextFormat = {};
-						let note: string | undefined;
-
-						if (option) {
-							if (option.bold) {
-								format.bold = !!option.bold;
-							}
-							if (option.fontFamily != null) {
-								format.fontFamily = `${option.fontFamily}`;
-							}
-							if (option.fontSize != null) {
-								format.fontSize = +option.fontSize;
-							}
-							if (option.color != null) {
-								// format.foregroundColor = option.color;
-							}
-							if (option.italic != null) {
-								format.italic = !!option.italic;
-							}
-							if (option.strike != null) {
-								format.strikethrough = !!option.strike;
-							}
-							if (option.underline != null) {
-								format.underline = !!option.underline;
-							}
-
-							note = data?.note || `${option.note || ''}`;
+						if (!tableData) {
+							reportLog("%s did'nt have table of %s", report.name, item.url);
+							continue;
 						}
 
-						const value = data?.value;
+						reportLog('Add %s to table from %s', item.url, report.name);
+						data.push(
+							...Object.keys(report.pageData.headers).map((key) => {
+								const option = options ? options[key] || null : null;
+								const cellData = tableData[key];
 
-						return createCellData(
-							{ value, textFormat: format, note, ifNull: false },
-							defaultCellFormat,
+								const format: Record<string, unknown> = {};
+								let note: string | undefined;
+
+								if (option) {
+									if (option.bold) {
+										format.bold = !!option.bold;
+									}
+									if (option.fontFamily != null) {
+										format.fontFamily = `${option.fontFamily}`;
+									}
+									if (option.fontSize != null) {
+										format.fontSize = +option.fontSize;
+									}
+									if (option.italic != null) {
+										format.italic = !!option.italic;
+									}
+									if (option.strike != null) {
+										format.strikethrough = !!option.strike;
+									}
+									if (option.underline != null) {
+										format.underline = !!option.underline;
+									}
+
+									note = cellData?.note || `${option.note || ''}`;
+								}
+
+								const value = cellData?.value;
+
+								return createCellData(
+									{ value, textFormat: format, note, ifNull: false },
+									defaultCellFormat,
+								);
+							}),
 						);
-					}),
-				);
-			}
+					}
 
-			return [data];
+					await sheet.appendRow(data);
+					sent++;
+					onProgress(sent, total);
+				}
+
+				if (!page.nextCursor) {
+					break;
+				}
+				cursor = page.nextCursor;
+			}
+			await sheet.flush();
 		},
 		async updateSheet(sheet) {
 			await sheet.frozen(1, 1);

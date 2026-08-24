@@ -1,3 +1,4 @@
+import type { CreateSheet } from '../../sheets/types.js';
 import type { Auth } from '@d-zero/google-auth';
 import type { Report } from '@nitpicker/types';
 
@@ -69,16 +70,15 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('violations');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestViolations = () => {
-			const setting = createViolations(emptyReports);
+		const createTestViolations: CreateSheet = (reports, accessor) => {
+			const setting = createViolations(reports, accessor);
 			return { ...setting, name: sheetName };
 		};
 
 		await createSheets({
 			sheets,
-			archive: crawlResult.archive,
+			accessor: crawlResult.archive,
 			reports: emptyReports,
-			limit: 100,
 			createSheetList: [createTestViolations],
 		});
 
@@ -109,16 +109,15 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('pagelist');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestPageList = () => {
-			const setting = createPageList(emptyReports);
+		const createTestPageList: CreateSheet = (reports, accessor) => {
+			const setting = createPageList(reports, accessor);
 			return { ...setting, name: sheetName };
 		};
 
 		await createSheets({
 			sheets,
-			archive: crawlResult.archive,
+			accessor: crawlResult.archive,
 			reports: emptyReports,
-			limit: 100,
 			createSheetList: [createTestPageList],
 		});
 
@@ -165,16 +164,15 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('links');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestLinks = () => {
-			const setting = createLinks(emptyReports);
+		const createTestLinks: CreateSheet = (reports, accessor) => {
+			const setting = createLinks(reports, accessor);
 			return { ...setting, name: sheetName };
 		};
 
 		await createSheets({
 			sheets,
-			archive: crawlResult.archive,
+			accessor: crawlResult.archive,
 			reports: emptyReports,
-			limit: 100,
 			createSheetList: [createTestLinks],
 		});
 
@@ -185,7 +183,7 @@ describe('createSheets pipeline', () => {
 		const headerValues = await readSheetValues(
 			auth,
 			SPREADSHEET_ID,
-			`'${sheetName}'!A1:H1`,
+			`'${sheetName}'!A1:I1`,
 		);
 		expect(headerValues[0]).toEqual([
 			'URL',
@@ -196,6 +194,7 @@ describe('createSheets pipeline', () => {
 			'Redirect From',
 			'Referrers',
 			'Headers',
+			'Remarks',
 		]);
 
 		// Verify data rows exist (links from test server pages)
@@ -211,16 +210,15 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('resources');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestResources = () => {
-			const setting = createResources()(emptyReports);
+		const createTestResources: CreateSheet = (reports, accessor) => {
+			const setting = createResources()(reports, accessor);
 			return { ...setting, name: sheetName };
 		};
 
 		await createSheets({
 			sheets,
-			archive: crawlResult.archive,
+			accessor: crawlResult.archive,
 			reports: emptyReports,
-			limit: 100,
 			createSheetList: [createTestResources],
 		});
 
@@ -247,16 +245,15 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('resources-dedupe');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestResources = () => {
-			const setting = createResources({ dedupe: true })(emptyReports);
+		const createTestResources: CreateSheet = (reports, accessor) => {
+			const setting = createResources({ dedupe: true })(reports, accessor);
 			return { ...setting, name: sheetName };
 		};
 
 		await createSheets({
 			sheets,
-			archive: crawlResult.archive,
+			accessor: crawlResult.archive,
 			reports: emptyReports,
-			limit: 100,
 			createSheetList: [createTestResources],
 		});
 
@@ -266,7 +263,7 @@ describe('createSheets pipeline', () => {
 		const headerValues = await readSheetValues(
 			auth,
 			SPREADSHEET_ID,
-			`'${sheetName}'!A1:G1`,
+			`'${sheetName}'!A1:H1`,
 		);
 		expect(headerValues[0]).toEqual([
 			'URL',
@@ -276,12 +273,13 @@ describe('createSheets pipeline', () => {
 			'Content Length',
 			'Referrers',
 			'Count',
+			'Query Pattern',
 		]);
 
 		// Body must have at least 1 data row (the e2e test server publishes
 		// several sub-resources). All URLs should appear canonicalized — they
 		// must not contain any '=' since query values are stripped.
-		const body = await readSheetValues(auth, SPREADSHEET_ID, `'${sheetName}'!A2:G500`);
+		const body = await readSheetValues(auth, SPREADSHEET_ID, `'${sheetName}'!A2:H500`);
 		expect(body.length).toBeGreaterThan(0);
 		for (const row of body) {
 			const url = String(row[0] ?? '');

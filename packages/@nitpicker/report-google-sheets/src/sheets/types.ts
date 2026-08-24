@@ -1,5 +1,5 @@
-import type { Cell, Sheet } from '@d-zero/google-sheets';
-import type { Page, ArchiveResource as Resource } from '@nitpicker/crawler';
+import type { Sheet } from '@d-zero/google-sheets';
+import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type { Report } from '@nitpicker/types';
 import type { sheets_v4 } from 'googleapis';
 
@@ -13,123 +13,124 @@ export type HeaderCell = string;
 export type createCellTextFormat = sheets_v4.Schema$TextFormat;
 
 /**
- * Factory function that produces a {@link CreateSheetSetting} for one sheet.
- *
- * Receives the analyze plugin reports so that sheets like "Violations" or
- * "Discrepancies" can incorporate plugin data alongside crawler data.
- * @example
- * ```ts
- * const createMySheet: CreateSheet = (reports) => ({
- *   name: 'My Sheet',
- *   createHeaders: () => ['URL', 'Title'],
- *   eachPage: (page) => [[
- *     createCellData({ value: page.url.href }, defaultCellFormat),
- *     createCellData({ value: page.title }, defaultCellFormat),
- *   ]],
- * });
- * ```
+ * Per-sheet context passed to {@link CreateSheetSetting.run}.
  */
-export type CreateSheet = (reports: Report[]) => Promiseable<CreateSheetSetting>;
+export interface RunSheetContext {
+	/** The Google Sheets API wrapper for this tab. `appendRow`/`flush` drive the streaming send. */
+	readonly sheet: Sheet;
+	/**
+	 * The maximum number of data rows this sheet may send, decided by the
+	 * shared cell-budget allocation (`estimate-cell-budget.ts`) — see
+	 * `create-sheets.ts`'s Phase 2 docs. `run()` must stop generating rows
+	 * once it has sent this many (a `break` out of its own loop), not rely
+	 * on the caller to truncate for it — the row source is a streaming
+	 * generator the caller cannot safely interrupt mid-row.
+	 */
+	readonly maxRows: number;
+	/**
+	 * Reports rows sent so far, out of the sheet's own estimated total
+	 * (from `estimateRowCount()`), for the Lanes progress line. Call this
+	 * periodically while iterating, not just once at the end.
+	 * @param sent - Rows sent so far.
+	 * @param total - This sheet's own estimated total row count.
+	 */
+	readonly onProgress: (sent: number, total: number) => void;
+}
 
 /**
  * Configuration for a single Google Sheet tab within the report.
  *
- * The `createSheets` pipeline calls these hooks in a defined order:
+ * The `createSheets` pipeline calls these in order:
  *
- * 1. `createHeaders()` - Called once to set the header row.
- * 2. `preEachPage()` - (Phase 2) Called per page for pre-processing
- *    (e.g. accumulating state). No row data is returned.
- * 3. `eachPage()` - (Phase 2) Called per page to generate row data.
- *    Returns `Cell[][]` (one or more rows per page), `null` to skip,
- *    or `void` if this sheet does not use page data.
- * 4. `eachResource()` - (Phase 3) Called per network resource.
- *    Same return semantics as `eachPage`.
- * 5. `addRows()` - (Phase 4) Called once to add plugin-derived data
- *    that does not come from page/resource iteration (e.g. Violations).
- *    Runs in parallel with Phases 2-3.
- * 6. `updateSheet()` - (Phase 5) Called once after all data is written,
- *    for formatting (frozen rows, conditional formatting, etc.).
+ * 1. `createHeaders()` - Called once to set the header row (Phase 1).
+ * 2. `estimateRowCount()` - Called once, before generation, for the
+ *    cell-budget warning and the `run()` progress denominator.
+ * 3. `run()` - Called once to generate and send every row (Phase 2, run in
+ *    priority order — see `report.ts`'s `SHEET_PRIORITY_ORDER`).
+ * 4. `updateSheet()` - Called once after every sheet's `run()` has
+ *    completed, for formatting (frozen rows, conditional formatting, etc.).
+ *
+ * `run()` is expected to stream: generate a row, `sheet.appendRow(...)` it,
+ * repeat. It must never accumulate the full row set in memory before
+ * sending — that reintroduces the OOM class this contract exists to close.
+ * Lazy (`createCellData(() => ...)`) cells are forbidden for the same
+ * reason (see `create-cell-data.ts`'s docs): a single lazy cell disables
+ * `@d-zero/google-sheets`' automatic 2500-row flush for the rest of the
+ * sheet's rows.
  */
 export interface CreateSheetSetting {
 	/** Display name of the sheet tab in Google Sheets. */
 	name: string;
+	/**
+	 * `true` iff `run()` reads from the viewer read model (`viewer_pages`,
+	 * `viewer_anchor_facts`, `viewer_images`, etc.) — `report.ts` only calls
+	 * `requireViewerReadModel` once, up front, when at least one selected
+	 * sheet sets this. Sheets that read only write-model tables (Links,
+	 * Resources, Violations) must leave this `false`/omitted so a report
+	 * limited to those sheets never requires a `viewer-build` run. Defaults
+	 * to `false`.
+	 */
+	requiresReadModel?: boolean;
 	/** Returns the header row cell values. */
 	createHeaders: () => Promiseable<HeaderCell[]>;
 	/**
-	 * Pre-processing hook called for each page before `eachPage`.
-	 * Useful for accumulating state (e.g. index titles, referrer maps)
-	 * that subsequent `eachPage` calls depend on.
-	 * @param page - The current page object.
-	 * @param num - 1-based page number within the total.
-	 * @param total - Total number of pages.
-	 * @param prevPage - The previous page in iteration order, or `null` for the first.
+	 * Estimates this sheet's total data row count, for the cell-budget
+	 * warning (`estimate-cell-budget.ts`) and the `run()` progress
+	 * denominator. An approximation is fine (a `COUNT(*)`-style query) —
+	 * `run()` is the source of truth for what actually gets sent.
 	 */
-	preEachPage?: (
-		page: Page,
-		num: number,
-		total: number,
-		prevPage: Page | null,
-	) => Promiseable<void>;
+	estimateRowCount: () => Promiseable<number>;
 	/**
-	 * Generates row data for a single page.
-	 * @param page - The current page object.
-	 * @param num - 1-based page number within the total.
-	 * @param total - Total number of pages.
-	 * @param prevPage - The previous page, or `null` for the first.
-	 * @returns Row data (one or more rows), `null`/`void` to skip.
+	 * Generates and sends every row for this sheet, via `ctx.sheet.appendRow(...)`.
+	 * Must stream (never build a full in-memory row array) and must stop
+	 * once it has sent `ctx.maxRows` rows.
+	 * @param ctx - See {@link RunSheetContext}.
 	 */
-	eachPage?: (
-		page: Page,
-		num: number,
-		total: number,
-		prevPage: Page | null,
-	) => Promiseable<Cell[][] | null | void>;
+	run: (ctx: RunSheetContext) => Promise<void>;
 	/**
-	 * Generates row data for a single network resource.
-	 *
-	 * To accumulate state across all resources and emit aggregated rows
-	 * once at the end, use {@link CreateSheetSetting.finalizeResources}
-	 * instead of trying to detect the final iteration here.
-	 * @param resource - The resource record from the archive.
-	 * @returns Row data, `null`/`void` to skip.
-	 */
-	eachResource?: (resource: Resource) => Promiseable<Cell[][] | null | void>;
-	/**
-	 * When `true`, the Phase 3 dispatcher does **not** sort the
-	 * resources array before calling `eachResource`; the setting takes
-	 * full responsibility for ordering its own output (typically by
-	 * sorting the aggregated rows inside `finalizeResources`).
-	 *
-	 * Useful for dedupe-style settings where sorting the raw 1M+
-	 * resource list up front is wasted work — the aggregated output
-	 * is orders of magnitude smaller, so sorting *after* aggregation
-	 * is far cheaper. Defaults to `false` (sorted insertion order).
-	 */
-	skipSortResources?: boolean;
-	/**
-	 * Phase 3 terminator hook called exactly once after the entire
-	 * `eachResource` loop completes (before the final
-	 * `sheet.flush()`). Use for factories that accumulate state during
-	 * `eachResource` and want to emit aggregated rows in one batch —
-	 * e.g. dedupe-by-canonical-URL aggregation.
-	 *
-	 * Decoupled from `eachResource` so the contract does not depend on
-	 * the Phase 3 implementation (sequential vs. parallel iteration,
-	 * exact `num/total` semantics, etc.).
-	 * @returns Row data to append, `null`/`void` to emit nothing.
-	 */
-	finalizeResources?: () => Promiseable<Cell[][] | null | void>;
-	/**
-	 * Generates additional rows from plugin report data.
-	 * Called once after the factory, not per-page. Runs in parallel
-	 * with page/resource phases so it does not block them.
-	 */
-	addRows?: () => Promiseable<Cell[][] | null | void>;
-	/**
-	 * Post-data formatting hook. Called after all rows have been sent.
-	 * Typically used for freezing rows/columns, conditional formatting,
-	 * and hiding unused columns.
+	 * Post-data formatting hook. Called after every sheet's `run()` has
+	 * completed. Typically used for freezing rows/columns, conditional
+	 * formatting, and hiding unused columns.
 	 * @param sheet - The Google Sheets API wrapper for this tab.
 	 */
 	updateSheet?: (sheet: Sheet) => Promiseable<void>;
 }
+
+/**
+ * Factory function that produces a {@link CreateSheetSetting} for one sheet.
+ *
+ * Receives the analyze plugin reports (for sheets like "Violations" or
+ * "Discrepancies" that incorporate plugin data) and the archive accessor
+ * (for `run()`/`estimateRowCount()` to query against).
+ * @example
+ * ```ts
+ * const createMySheet: CreateSheet = (reports, accessor) => ({
+ *   name: 'My Sheet',
+ *   createHeaders: () => ['URL', 'Title'],
+ *   estimateRowCount: async () => (await listViewerPages(accessor, { limit: 1 })).total,
+ *   async run({ sheet, maxRows, onProgress }) {
+ *     let sent = 0;
+ *     let cursor: string | undefined;
+ *     for (;;) {
+ *       const page = await listViewerPages(accessor, { limit: 500, cursor });
+ *       for (const item of page.items) {
+ *         if (sent >= maxRows) return;
+ *         await sheet.appendRow([
+ *           createCellData({ value: item.url }, defaultCellFormat),
+ *           createCellData({ value: item.title }, defaultCellFormat),
+ *         ]);
+ *         sent++;
+ *         onProgress(sent, page.total);
+ *       }
+ *       if (!page.nextCursor) break;
+ *       cursor = page.nextCursor;
+ *     }
+ *     await sheet.flush();
+ *   },
+ * });
+ * ```
+ */
+export type CreateSheet = (
+	reports: Report[],
+	accessor: ArchiveAccessor,
+) => Promiseable<CreateSheetSetting>;

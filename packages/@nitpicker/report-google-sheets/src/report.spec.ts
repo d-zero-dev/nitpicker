@@ -25,18 +25,16 @@ vi.mock('@d-zero/google-sheets', () => ({
 	},
 }));
 
-const { mockArchiveClose, mockRemoveSignalHandlers } = vi.hoisted(() => ({
-	mockArchiveClose: vi.fn(),
-	mockRemoveSignalHandlers: vi.fn(),
+const { mockAsyncDispose } = vi.hoisted(() => ({
+	mockAsyncDispose: vi.fn(),
 }));
 
-vi.mock('./archive.js', () => ({
-	getArchive: vi.fn().mockResolvedValue({
-		archive: { close: mockArchiveClose },
-		removeSignalHandlers: mockRemoveSignalHandlers,
+vi.mock('./open-report-archive.js', () => ({
+	openReportArchive: vi.fn().mockResolvedValue({
+		accessor: {},
+		removeSignalHandlers: vi.fn(),
 		async [Symbol.asyncDispose]() {
-			mockRemoveSignalHandlers();
-			await mockArchiveClose();
+			await mockAsyncDispose();
 		},
 	}),
 }));
@@ -53,17 +51,12 @@ vi.mock('./sheets/create-sheets.js', () => ({
 	createSheets: vi.fn().mockResolvedValue(),
 }));
 
-vi.mock('./data/add-to-summary.js', () => ({
-	addToSummary: vi.fn().mockResolvedValue(),
-}));
-
 describe('report', () => {
 	const baseParams = {
 		filePath: './test.nitpicker',
 		sheetUrl: 'https://docs.google.com/spreadsheets/d/xxx/edit',
 		credentialFilePath: './credentials.json',
 		configPath: null,
-		limit: 100_000,
 	};
 
 	beforeEach(() => {
@@ -93,14 +86,17 @@ describe('report', () => {
 		expect(promptSpy).toHaveBeenCalledTimes(1);
 	});
 
-	it('forwards onExtractProgress to getArchive (issue #294)', async () => {
+	it('forwards onExtractProgress to openReportArchive (issue #294)', async () => {
 		vi.spyOn(enquirer, 'prompt').mockResolvedValue({ sheetName: ['Page List'] });
-		const { getArchive } = await import('./archive.js');
+		const { openReportArchive } = await import('./open-report-archive.js');
 		const onExtractProgress = vi.fn();
 
 		await report({ ...baseParams, all: true, onExtractProgress });
 
-		expect(getArchive).toHaveBeenCalledWith(baseParams.filePath, onExtractProgress);
+		expect(openReportArchive).toHaveBeenCalledWith(
+			baseParams.filePath,
+			onExtractProgress,
+		);
 	});
 
 	it('does not create Lanes when silent=true', async () => {
@@ -119,24 +115,22 @@ describe('report', () => {
 		expect(lanesSpy).toHaveBeenCalled();
 	});
 
-	it('正常完了時に removeSignalHandlers と archive.close を呼び出す', async () => {
+	it('disposes the archive handle (removeSignalHandlers + manager close) on normal completion', async () => {
 		await report({ ...baseParams, all: true });
 
-		expect(mockRemoveSignalHandlers).toHaveBeenCalledTimes(1);
-		expect(mockArchiveClose).toHaveBeenCalledTimes(1);
+		expect(mockAsyncDispose).toHaveBeenCalledTimes(1);
 	});
 
-	it('createSheets が例外をスローしても removeSignalHandlers と archive.close を呼び出す', async () => {
+	it('disposes the archive handle even when createSheets throws', async () => {
 		const { createSheets } = await import('./sheets/create-sheets.js');
 		vi.mocked(createSheets).mockRejectedValueOnce(new Error('sheets error'));
 
 		await expect(report({ ...baseParams, all: true })).rejects.toThrow('sheets error');
 
-		expect(mockRemoveSignalHandlers).toHaveBeenCalledTimes(1);
-		expect(mockArchiveClose).toHaveBeenCalledTimes(1);
+		expect(mockAsyncDispose).toHaveBeenCalledTimes(1);
 	});
 
-	it('passes all 9 sheets to createSheets when all=true', async () => {
+	it('passes 8 sheets to createSheets when all=true (Summary is a no-op)', async () => {
 		const { createSheets } = await import('./sheets/create-sheets.js');
 
 		await report({ ...baseParams, all: true });
@@ -156,8 +150,31 @@ describe('report', () => {
 			}),
 		);
 		const call = vi.mocked(createSheets).mock.calls[0]?.[0];
-		// 8 sheets (Summary is handled separately via addToSummary)
 		expect(call?.createSheetList).toHaveLength(8);
+	});
+
+	it('warns and generates no sheet when "Summary" is selected (not yet implemented)', async () => {
+		vi.spyOn(enquirer, 'prompt').mockResolvedValue({ sheetName: ['Summary'] });
+		const { createSheets } = await import('./sheets/create-sheets.js');
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		await report({ ...baseParams, all: false });
+
+		const call = vi.mocked(createSheets).mock.calls[0]?.[0];
+		expect(call?.createSheetList).toHaveLength(0);
+		expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Summary'));
+	});
+
+	it('builds createSheetList in fixed SHEET_PRIORITY_ORDER regardless of selection order', async () => {
+		vi.spyOn(enquirer, 'prompt').mockResolvedValue({
+			sheetName: ['Resources', 'Page List', 'Links'],
+		});
+		const { createSheets } = await import('./sheets/create-sheets.js');
+
+		await report({ ...baseParams, all: false });
+
+		const call = vi.mocked(createSheets).mock.calls[0]?.[0];
+		expect(call?.createSheetList).toHaveLength(3);
 	});
 });
 
@@ -167,7 +184,6 @@ describe('report onLog label', () => {
 		sheetUrl: 'https://docs.google.com/spreadsheets/d/xxx/edit',
 		credentialFilePath: './credentials.json',
 		configPath: null,
-		limit: 100_000,
 	};
 
 	beforeEach(() => {

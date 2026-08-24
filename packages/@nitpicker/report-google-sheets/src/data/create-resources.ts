@@ -1,10 +1,16 @@
-import type { CreateSheet, CreateSheetSetting } from '../sheets/types.js';
-import type { ArchiveResource as Resource } from '@nitpicker/crawler';
+import type { CreateSheet } from '../sheets/types.js';
+import type { ArchiveAccessor } from '@nitpicker/crawler';
+
+import {
+	getResourceReferrerUrlsByResourceIds,
+	streamAllResourcesRaw,
+} from '@nitpicker/query';
 
 import { reportLog } from '../debug.js';
 import { createCellData } from '../sheets/create-cell-data.js';
 import { defaultCellFormat } from '../sheets/default-cell-format.js';
 import { canonicalizeUrl, extractQueryPairs } from '../utils/canonicalize-url.js';
+import { joinUrlsForNote } from '../utils/join-urls-for-note.js';
 import { naturalCompare } from '../utils/sort-resources-by-url.js';
 
 /**
@@ -45,13 +51,6 @@ const DEDUPE_HEADERS = [
 	'Count',
 	'Query Pattern',
 ] as const;
-
-/**
- * Safety cap for the joined referrer URL list inserted into a cell note.
- * Google Sheets caps cell content / notes around 50,000 characters; we
- * truncate well below that to leave room for the "and N more" suffix.
- */
-export const NOTE_MAX_LENGTH = 49_000;
 
 /**
  * Maximum number of unique values to keep per query parameter key in
@@ -143,40 +142,6 @@ export function dedupeKey(
 }
 
 /**
- * Joins referrer URLs into a single newline-separated string, truncating
- * at `maxLength` to stay within Google Sheets' note size cap. When
- * truncated, appends a `... and N more` line where `N` counts every URL
- * that did not fit, including the one whose insertion would have
- * crossed the limit.
- * @param referrers - The set of unique referrer page URLs.
- * @param maxLength - Optional override for the character cap (defaults to {@link NOTE_MAX_LENGTH}).
- */
-export function joinReferrersForNote(
-	referrers: ReadonlySet<string>,
-	maxLength: number = NOTE_MAX_LENGTH,
-): string {
-	const total = referrers.size;
-	if (total === 0) {
-		return '';
-	}
-	const kept: string[] = [];
-	let used = 0;
-	let seen = 0;
-	for (const url of referrers) {
-		seen++;
-		const next = used + url.length + (kept.length > 0 ? 1 : 0);
-		if (next > maxLength) {
-			const remaining = total - seen + 1;
-			kept.push(`... and ${remaining} more`);
-			break;
-		}
-		kept.push(url);
-		used = next;
-	}
-	return kept.join('\n');
-}
-
-/**
  * Records a single `(key, value)` pair from a raw resource URL into
  * the entry's per-key value tracker. New keys allocate a tracker; the
  * value Set stops growing past {@link MAX_PARAM_VALUE_SAMPLES}, after
@@ -191,6 +156,11 @@ function recordParamValue(entry: DedupeEntry, key: string, value: string): void 
 	if (!tracker) {
 		tracker = { values: new Set<string>(), overflowedCount: 0 };
 		entry.paramValues.set(key, tracker);
+	}
+	if (tracker.values.has(value)) {
+		// Already sampled — a repeat observation of a known value, not a
+		// lost one, so it must not count toward `overflowedCount`.
+		return;
 	}
 	if (tracker.values.size < MAX_PARAM_VALUE_SAMPLES) {
 		tracker.values.add(value);
@@ -266,34 +236,12 @@ function dedupeEntryToRow(entry: DedupeEntry) {
 		createCellData(
 			{
 				value: `${entry.referrers.size} pages`,
-				note: joinReferrersForNote(entry.referrers),
+				note: joinUrlsForNote(entry.referrers),
 			},
 			defaultCellFormat,
 		),
 		createCellData({ value: entry.count }, defaultCellFormat),
 		createCellData({ value: formatQueryPattern(entry) }, defaultCellFormat),
-	];
-}
-
-/**
- * Builds the cell row for a single raw resource (raw mode).
- * @param resource - The resource record from the archive.
- * @param referrers - The referrer URLs associated with the resource.
- */
-function rawResourceToRow(resource: Resource, referrers: string[]) {
-	return [
-		createCellData({ value: resource.url }, defaultCellFormat),
-		createCellData({ value: resource.status }, defaultCellFormat),
-		createCellData({ value: resource.statusText }, defaultCellFormat),
-		createCellData({ value: resource.contentType }, defaultCellFormat),
-		createCellData({ value: resource.contentLength }, defaultCellFormat),
-		createCellData(
-			{
-				value: `${referrers.length} pages`,
-				note: referrers.join('\n'),
-			},
-			defaultCellFormat,
-		),
 	];
 }
 
@@ -304,8 +252,13 @@ function rawResourceToRow(resource: Resource, referrers: string[]) {
  * inspectable function.
  * @param entry - The existing entry being merged into.
  * @param resource - The new raw resource being folded into the entry.
+ * @param resource.statusText
+ * @param resource.contentLength
  */
-function mergeIntoEntry(entry: DedupeEntry, resource: Resource): void {
+function mergeIntoEntry(
+	entry: DedupeEntry,
+	resource: { statusText: string | null; contentLength: number | null },
+): void {
 	if (entry.statusText == null && resource.statusText != null) {
 		entry.statusText = resource.statusText;
 	}
@@ -318,6 +271,18 @@ function mergeIntoEntry(entry: DedupeEntry, resource: Resource): void {
 			entry.contentLengthMax = len;
 		}
 	}
+}
+
+/**
+ * Counts every `resource_items` row, for `estimateRowCount()`.
+ * @param accessor - The archive accessor to query.
+ */
+async function countResources(accessor: ArchiveAccessor): Promise<number> {
+	const knex = accessor.getKnex();
+	const [row] = await knex('resource_items').count<{ count: string | number }[]>({
+		count: '*',
+	});
+	return Number(row?.count ?? 0);
 }
 
 /**
@@ -337,92 +302,126 @@ function mergeIntoEntry(entry: DedupeEntry, resource: Resource): void {
  *   per-request unique URLs that would otherwise exceed the Google
  *   Sheets 10M-cell document limit.
  *
- * In dedupe mode the factory accumulates state inside `eachResource`
- * and emits the aggregated rows once via the `finalizeResources` hook,
- * which Phase 3 calls exactly once after the per-resource loop completes.
+ * Both modes stream `streamAllResourcesRaw` once. Raw mode sends a row per
+ * chunk item immediately; dedupe mode accumulates into `entries` while
+ * streaming and only sends rows once, after the full scan, sorted by
+ * canonical URL — the aggregated output (tens of thousands of rows) is
+ * orders of magnitude smaller than the raw input (potentially millions),
+ * so sorting after aggregation is far cheaper than sorting the raw stream.
  * @param options - Optional configuration. See {@link CreateResourcesOptions}.
  */
 export function createResources(options?: CreateResourcesOptions): CreateSheet {
 	const dedupe = options?.dedupe === true;
 
-	return () => {
+	return (_reports, accessor) => {
 		if (!dedupe) {
-			const setting: CreateSheetSetting = {
+			return {
 				name: 'Resources',
 				createHeaders: () => [...RAW_HEADERS],
-				async eachResource(resource) {
-					reportLog(`Read: Resource referrers (Search: ${resource.url})`);
-					const referrers = await resource.getReferrers();
-					return [rawResourceToRow(resource, referrers)];
+				estimateRowCount: () => countResources(accessor),
+				async run({ sheet, maxRows, onProgress }) {
+					let sent = 0;
+					const total = maxRows;
+					for await (const chunk of streamAllResourcesRaw(accessor)) {
+						const referrerUrlsByResourceId = await getResourceReferrerUrlsByResourceIds(
+							accessor,
+							chunk.map((row) => row.resourceId),
+						);
+						for (const row of chunk) {
+							if (sent >= maxRows) {
+								await sheet.flush();
+								return;
+							}
+							const referrerUrls = referrerUrlsByResourceId.get(row.resourceId) ?? [];
+							await sheet.appendRow([
+								createCellData({ value: row.url }, defaultCellFormat),
+								createCellData({ value: row.status }, defaultCellFormat),
+								createCellData({ value: row.statusText }, defaultCellFormat),
+								createCellData({ value: row.contentType }, defaultCellFormat),
+								createCellData({ value: row.contentLength }, defaultCellFormat),
+								createCellData(
+									{
+										value: `${referrerUrls.length} pages`,
+										note: joinUrlsForNote(referrerUrls),
+									},
+									defaultCellFormat,
+								),
+							]);
+							sent++;
+							onProgress(sent, total);
+						}
+					}
+					await sheet.flush();
 				},
 			};
-			return setting;
 		}
 
-		const entries = new Map<string, DedupeEntry>();
-
-		const setting: CreateSheetSetting = {
+		return {
 			name: 'Resources',
-			// Sorting the 1M+ raw resource list before aggregation is
-			// wasted work: the 63K-row aggregated output is orders of
-			// magnitude smaller, and we sort it inside finalizeResources
-			// instead. This single flag flip turns a multi-minute sort
-			// into a sub-second one on million-resource archives.
-			skipSortResources: true,
 			createHeaders: () => [...DEDUPE_HEADERS],
-			async eachResource(resource) {
-				// A blob-routed resource (identity is a large `data:` URI, not a
-				// URL — see `create-entity-tables.ts`'s `resource_items url /
-				// blob mutual-exclusion CHECK`) has `url === null`; group all
-				// such resources under one degenerate empty-string key rather
-				// than crashing the report.
-				const canonical = canonicalizeUrl(resource.url ?? '');
-				const key = dedupeKey(canonical, resource.status, resource.contentType);
-				let entry = entries.get(key);
-				if (entry) {
-					mergeIntoEntry(entry, resource);
-				} else {
-					entry = {
-						canonical,
-						status: resource.status,
-						statusText: resource.statusText,
-						contentType: resource.contentType,
-						contentLengthMin: resource.contentLength,
-						contentLengthMax: resource.contentLength,
-						count: 0,
-						referrers: new Set<string>(),
-						paramValues: new Map<string, ParamValueTracker>(),
-					};
-					entries.set(key, entry);
-				}
-				entry.count++;
+			estimateRowCount: () => countResources(accessor),
+			async run({ sheet, maxRows, onProgress }) {
+				const entries = new Map<string, DedupeEntry>();
+				for await (const chunk of streamAllResourcesRaw(accessor)) {
+					const referrerUrlsByResourceId = await getResourceReferrerUrlsByResourceIds(
+						accessor,
+						chunk.map((row) => row.resourceId),
+					);
+					for (const row of chunk) {
+						// A blob-routed resource (identity is a large `data:` URI, not a
+						// URL — see `create-entity-tables.ts`'s `resource_items url /
+						// blob mutual-exclusion CHECK`) has `url === null`; group all
+						// such resources under one degenerate empty-string key rather
+						// than crashing the report.
+						const canonical = canonicalizeUrl(row.url ?? '');
+						const key = dedupeKey(canonical, row.status, row.contentType);
+						let entry = entries.get(key);
+						if (entry) {
+							mergeIntoEntry(entry, row);
+						} else {
+							entry = {
+								canonical,
+								status: row.status,
+								statusText: row.statusText,
+								contentType: row.contentType,
+								contentLengthMin: row.contentLength,
+								contentLengthMax: row.contentLength,
+								count: 0,
+								referrers: new Set<string>(),
+								paramValues: new Map<string, ParamValueTracker>(),
+							};
+							entries.set(key, entry);
+						}
+						entry.count++;
 
-				for (const { key: paramKey, value } of extractQueryPairs(resource.url ?? '')) {
-					recordParamValue(entry, paramKey, value);
+						for (const { key: paramKey, value } of extractQueryPairs(row.url ?? '')) {
+							recordParamValue(entry, paramKey, value);
+						}
+
+						reportLog(`Read: Resource referrers (Search: ${row.url})`);
+						const referrerUrls = referrerUrlsByResourceId.get(row.resourceId) ?? [];
+						for (const referrerUrl of referrerUrls) {
+							entry.referrers.add(referrerUrl);
+						}
+					}
 				}
 
-				reportLog(`Read: Resource referrers (Search: ${resource.url})`);
-				const referrers = await resource.getReferrers();
-				for (const ref of referrers) {
-					entry.referrers.add(ref);
-				}
-
-				return null;
-			},
-			finalizeResources() {
 				reportLog(`Dedupe complete: ${entries.size} canonical group(s) accumulated`);
-				// Sort the aggregated entries by canonical URL in natural
-				// order. This is N=tens-of-thousands rather than the
-				// millions in `entries`, so the cost is negligible
-				// compared to sorting the raw list up front.
 				const sortedEntries = [...entries.values()].toSorted((a, b) =>
 					naturalCompare(a.canonical, b.canonical),
 				);
-				const rows = sortedEntries.map(dedupeEntryToRow);
-				entries.clear();
-				return rows;
+				let sent = 0;
+				const total = maxRows;
+				for (const entry of sortedEntries) {
+					if (sent >= maxRows) {
+						break;
+					}
+					await sheet.appendRow(dedupeEntryToRow(entry));
+					sent++;
+					onProgress(sent, total);
+				}
+				await sheet.flush();
 			},
 		};
-		return setting;
 	};
 }

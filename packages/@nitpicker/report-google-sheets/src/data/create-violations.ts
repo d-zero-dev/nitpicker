@@ -1,37 +1,51 @@
 import type { CreateSheet } from '../sheets/types.js';
-import type { Cell } from '@d-zero/google-sheets';
+import type { ArchiveAccessor } from '@nitpicker/crawler';
 
-import { pLog } from '../debug.js';
+import { streamAllViolations } from '@nitpicker/query';
+
 import { createCellData } from '../sheets/create-cell-data.js';
 import { defaultCellFormat } from '../sheets/default-cell-format.js';
 
-const log = pLog.extend('Violations');
+/**
+ * Counts every `analysis_violations` row, for `estimateRowCount()`.
+ * @param accessor - The archive accessor to query.
+ */
+async function countViolations(accessor: ArchiveAccessor): Promise<number> {
+	const knex = accessor.getKnex();
+	const [row] = await knex('analysis_violations').count<{ count: string | number }[]>({
+		count: '*',
+	});
+	return Number(row?.count ?? 0);
+}
 
 /**
  * Creates the "Violations" sheet configuration.
  *
- * Aggregates all violations from analyze plugin reports into a single
- * flat table. Uses `addRows` (Phase 4) rather than `eachPage` because
- * violation data comes from the report objects, not from per-page
- * archive iteration. This means it runs in parallel with page/resource
- * processing phases.
- * @param reports
+ * Streams `streamAllViolations` — a plain `analysis_violations.id` keyset
+ * pass, unlike the pre-rewrite version, which pre-loaded every violation
+ * into a `Report.violations` array before generation started (via
+ * `getPluginReports`). No read-model dependency: `analysis_violations` is a
+ * write-model table.
+ * @param _reports - Unused; the Violations sheet has no plugin-report dependency.
+ * @param accessor - The archive accessor to query.
  */
-export const createViolations: CreateSheet = (reports) => {
+export const createViolations: CreateSheet = (_reports, accessor) => {
 	return {
 		name: 'Violations',
 		createHeaders() {
 			return ['Validator', 'Severity', 'Rule', 'Code', 'Message', 'URL'];
 		},
-		addRows: () => {
-			const data: Cell[][] = [];
-			for (const report of reports) {
-				if (!report.violations) {
-					continue;
-				}
-				log('From %s', report.name);
-				for (const violation of report.violations) {
-					data.push([
+		estimateRowCount: () => countViolations(accessor),
+		async run({ sheet, maxRows, onProgress }) {
+			let sent = 0;
+			const total = maxRows;
+			for await (const chunk of streamAllViolations(accessor)) {
+				for (const violation of chunk) {
+					if (sent >= maxRows) {
+						await sheet.flush();
+						return;
+					}
+					await sheet.appendRow([
 						createCellData({ value: violation.validator }, defaultCellFormat),
 						createCellData({ value: violation.severity }, defaultCellFormat),
 						createCellData({ value: violation.rule }, defaultCellFormat),
@@ -39,9 +53,11 @@ export const createViolations: CreateSheet = (reports) => {
 						createCellData({ value: violation.message }, defaultCellFormat),
 						createCellData({ value: violation.url }, defaultCellFormat),
 					]);
+					sent++;
+					onProgress(sent, total);
 				}
 			}
-			return data;
+			await sheet.flush();
 		},
 	};
 };

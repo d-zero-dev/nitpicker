@@ -1,16 +1,17 @@
 import type { CreateSheet } from './types.js';
 import type { Lanes } from '@d-zero/dealer';
 import type { Sheets } from '@d-zero/google-sheets';
-import type { Archive, Page } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type { Report } from '@nitpicker/types';
 
+import { requireViewerReadModel } from '@nitpicker/query';
 import c from 'ansi-colors';
 
 import { sheetLog } from '../debug.js';
-import { hasPropFilter } from '../utils/has-prop-filter.js';
-import { sortResourcesByUrl } from '../utils/sort-resources-by-url.js';
 
-import { runFinalizeResources } from './run-finalize-resources.js';
+import { createCellData } from './create-cell-data.js';
+import { defaultCellFormat } from './default-cell-format.js';
+import { CELL_BUDGET_LIMIT, estimateCellBudget } from './estimate-cell-budget.js';
 
 /**
  * Parameters for {@link createSheets}.
@@ -18,18 +19,25 @@ import { runFinalizeResources } from './run-finalize-resources.js';
 export interface CreateSheetsParams {
 	/** Google Sheets API ラッパー */
 	readonly sheets: Sheets;
-	/** クロール結果のアーカイブ */
-	readonly archive: Archive;
+	/** アーカイブへの read-only アクセサ */
+	readonly accessor: ArchiveAccessor;
 	/** 監査プラグインのレポート配列 */
 	readonly reports: Report[];
-	/** getPagesWithRefs のバッチサイズ（デフォルト 100,000） */
-	readonly limit: number;
-	/** シート設定のファクトリ関数配列 */
+	/**
+	 * シート設定のファクトリ関数配列。**配列の順序がそのままセル予算の優先順位になる**
+	 * — 呼び出し元（`report.ts`）がユーザー選択をこの優先順位で並べ替えてから渡す。
+	 */
 	readonly createSheetList: CreateSheet[];
 	/** Lanes インスタンスを含むオプション */
 	readonly options?: {
 		/** Lanes instance for terminal progress display. */
-		readonly lanes: Lanes;
+		readonly lanes?: Lanes;
+		/**
+		 * Plain-text warning sink (e.g. cell-budget truncation notices).
+		 * `report.ts` wires this to `process.stderr.write` — `create-sheets.ts`
+		 * itself stays UI-agnostic.
+		 */
+		readonly onWarn?: (message: string) => void;
 	};
 }
 
@@ -38,52 +46,42 @@ export interface CreateSheetsParams {
  *
  * ## 処理フェーズ
  *
- * 5つのフェーズで構成され、Phase 2+3 と Phase 4 は並列実行される:
- *
  * ```
- * Phase 1 (Creating sheets)
- *   → Phase 2 (Processing pages) ─→ Phase 3 (Processing resources)
- *   → Phase 4 (Plugin data / addRows)  ← Phase 2+3 と並列
- * → Phase 5 (Formatting sheets)
+ * Phase 1 (Creating sheets)      -- 全シート並列
+ *   → Phase 2 (Processing sheets) -- 優先順位順に直列実行
+ * → Phase 3 (Formatting sheets)   -- 全シート並列
  * ```
  *
- * ## 行送信戦略
+ * ## セル予算配分（report OOM 修正・Google Sheets 10M セル上限対策）
  *
- * Phase 2 / 3 はページ・リソースを反復しながら、生成した行を都度
- * `sheet.appendRow(...rows)` に渡してストリーミング送信する。`sheet.appendRow()` は
- * `@d-zero/google-sheets` 側で 2500 行ごとに自動 flush する（呼び出し元は
- * チャンクサイズを意識しない）。バッチ終端で `sheet.flush()` を呼んで残余を排出する。
+ * Phase 2 の直前に `estimateCellBudget` で全シートの見積もり行数から超過見込みを
+ * 警告表示する（`options.onWarn`）。実際の予算執行は Phase 2 の直列ループ内で
+ * 残セル数を実測（`sheet.sentCount`）でデクリメントしながら行う —
+ * `maxRows = floor(残セル数 / 列数)` を各シート開始時に確定し、優先順位の高い
+ * シートの未使用分が後続シートに回る。`run()` が `maxRows` に達すると自身の
+ * ループを打ち切り、打ち切られたシートには TRUNCATED マーカー行を追記する。
  *
- * 遅延セル（`createCellData(() => ...)` の thunk）を含む行が混ざった場合、
- * `appendRow()` はその時点で自動 flush を停止し、明示的な `flush()` 呼び出しまで
- * バッファに保留する（順序保証）。Page List の「Internal Referrers」列がこの
- * 仕組みに乗っており、バッチ終端の `flush()` で初めて評価される。
+ * ## 行送信戦略（lazy cell 全廃）
  *
- * ## Lanes 進捗表示
- *
- * ### ヘッダー: 加重平均による集計
- *
- * Phase 2/3 のヘッダーは全子タスク（シート）の進捗 (`pageNum / max`) の
- * 平均をパーセント表示する。生成と送信が同一の `appendRow` 呼び出しで一体化
- * しているため、ヘッダーは単一の fraction で済む（旧実装にあった生成 0〜50% /
- * 送信 50〜100% の二段重み付けは不要になった）。
- *
- * ### レーン: フェーズ遷移に応じた状態表示
- *
- * - **アクティブフェーズ内で完了 + 将来フェーズあり**: `c.green("Sent (N rows)")`
- * - **アクティブフェーズ内で完了 + 全フェーズ完了**: `c.green("Done (N rows)")`
- * - **非アクティブ + 完了済み**: `c.dim` で同じテキスト（色だけ変化、Waiting に戻らない）
- * - **非アクティブ + 未着手**: `c.dim("Waiting...")`
+ * 各シートの `run()` はページ/リソース/違反等を自分でストリームしながら、生成した
+ * 行を都度 `sheet.appendRow(...)` に渡す。`sheet.appendRow()` は
+ * `@d-zero/google-sheets` 側で 2500 行ごとに自動 flush する。遅延セル
+ * （`createCellData(() => ...)` の thunk）はこの契約では一切使わない — 遅延セルが
+ * 1つでもバッチに混入すると、明示的な `flush()` を呼ぶまで自動 flush が停止し、
+ * バッチ全体が無制限にメモリへ滞留する（`create-cell-data.ts` の docs 参照）。
+ * 各列の値は現在のカーソル行 1 件だけから同期的に決定できるため、この停止条件は
+ * 構造的に発生しない。
  * @param params - シート作成に必要なパラメータ
  */
 export async function createSheets(params: CreateSheetsParams) {
-	const { sheets, archive, reports, limit, createSheetList, options } = params;
+	const { sheets, accessor, reports, createSheetList, options } = params;
 	if (!createSheetList) {
 		sheetLog('createSheetList is empty');
 		return;
 	}
 
 	const lanes = options?.lanes;
+	const onWarn = options?.onWarn;
 	let lineId = 0;
 	const sheetIds = new Map<string, number>();
 
@@ -103,141 +101,36 @@ export async function createSheets(params: CreateSheetsParams) {
 
 	sheetLog('Initializing %d sheet setting(s)', createSheetList.length);
 	const settings = await Promise.all(
-		createSheetList.map((createSheet) => createSheet(reports)),
+		createSheetList.map((createSheet) => createSheet(reports, accessor)),
 	);
 	sheetLog(
 		'Sheet settings initialized: %O',
 		settings.map((s) => s.name),
 	);
 
-	// Filter variables (early declaration for phase counting)
-	const preEachPageRoutineList = settings.filter(hasPropFilter('preEachPage'));
-	const eachPageRoutineList = settings.filter(hasPropFilter('eachPage'));
-	const eachResourceRoutineList = settings.filter(hasPropFilter('eachResource'));
-	const addRowsSettings = settings.filter((s) => s.addRows);
+	if (settings.some((s) => s.requiresReadModel)) {
+		sheetLog('At least one selected sheet requires the viewer read model — checking');
+		await requireViewerReadModel(accessor);
+	}
+
 	const updateSheetSettings = settings.filter((s) => s.updateSheet);
-	const needsPageIteration =
-		preEachPageRoutineList.length > 0 || eachPageRoutineList.length > 0;
-
-	sheetLog(
-		'Routines: preEachPage=%d, eachPage=%d, eachResource=%d',
-		preEachPageRoutineList.length,
-		eachPageRoutineList.length,
-		eachResourceRoutineList.length,
-	);
-
-	// Phase tracking
-	const phaseLabels: string[] = ['Creating sheets'];
-	if (needsPageIteration) phaseLabels.push('Processing pages');
-	if (eachResourceRoutineList.length > 0) phaseLabels.push('Processing resources');
-	if (updateSheetSettings.length > 0) phaseLabels.push('Formatting sheets');
-	const totalPhases = phaseLabels.length;
+	const totalPhases = 2 + (updateSheetSettings.length > 0 ? 1 : 0);
 	let currentPhase = 0;
 
 	/**
 	 * Advances to the next phase and updates the Lanes header line.
 	 * @param detail - Optional custom text; defaults to the phase label.
 	 */
-	function setPhaseHeader(detail?: string) {
+	function setPhaseHeader(detail: string) {
 		currentPhase++;
-		const prefix = c.bold(`[${currentPhase}/${totalPhases}]`);
-		lanes?.header(`${prefix} ${detail ?? phaseLabels[currentPhase - 1]}`);
-	}
-
-	/**
-	 * Updates the Lanes header text without advancing the phase counter.
-	 * @param detail - New header text (e.g. progress percentage).
-	 */
-	function updatePhaseHeader(detail: string) {
 		const prefix = c.bold(`[${currentPhase}/${totalPhases}]`);
 		lanes?.header(`${prefix} ${detail}`);
 	}
 
-	// Completion tracking
-	const completionDetails = new Map<string, string>();
-	let phase4Complete = false;
-
-	/**
-	 * Returns the sequential phase numbers (2, 3, 5) that the named sheet
-	 * participates in. Used to determine whether a sheet has future work
-	 * remaining (for "Sent" vs "Done" labeling).
-	 * @param name - The sheet display name.
-	 */
-	function getSeqPhases(name: string): number[] {
-		const phases: number[] = [];
-		if (
-			eachPageRoutineList.some((s) => s.name === name) ||
-			preEachPageRoutineList.some((s) => s.name === name)
-		)
-			phases.push(2);
-		if (eachResourceRoutineList.some((s) => s.name === name)) phases.push(3);
-		if (updateSheetSettings.some((s) => s.name === name)) phases.push(5);
-		return phases;
-	}
-
-	/**
-	 * Marks a sheet as completed for the current phase and updates its
-	 * lane display. Shows "Sent" if future phases remain, "Done" otherwise.
-	 * @param name - The sheet display name.
-	 * @param detail - Optional detail text (e.g. row count).
-	 */
-	function markDone(name: string, detail?: string) {
-		completionDetails.set(name, detail ?? '');
-		const id = getSheetId(name);
-		const hasFuture = getSeqPhases(name).some((p) => p > currentPhase);
-		if (hasFuture) {
-			lanes?.update(id, c.green(`${name}: Sent${detail ? ` (${detail})` : ''}`));
-		} else {
-			lanes?.update(id, c.green(`${name}: Done${detail ? ` (${detail})` : ''}`));
-		}
-	}
-
-	/**
-	 * Formats a status string for a completed sheet, choosing
-	 * "Sent" or "Done" based on whether future phases remain.
-	 * @param name - The sheet display name.
-	 */
-	function formatSheetStatus(name: string): string {
-		const detail = completionDetails.get(name);
-		const hasFuture = getSeqPhases(name).some((p) => p > currentPhase);
-		if (hasFuture) {
-			return `${name}: Sent${detail ? ` (${detail})` : ''}`;
-		}
-		return `${name}: Done${detail ? ` (${detail})` : ''}`;
-	}
-
-	/**
-	 * Dims lane displays for sheets that are not active in the given phase.
-	 * Completed sheets show their status in dim color; unstarted sheets
-	 * show "Waiting...". Phase 4 (addRows) sheets are left bright while
-	 * that phase is still running since it executes in parallel.
-	 * @param seqPhaseNum - The current sequential phase number (2, 3, or 5).
-	 */
-	function dimInactiveSheets(seqPhaseNum: number) {
-		for (const setting of settings) {
-			const name = setting.name;
-			const seqPhases = getSeqPhases(name);
-
-			// このフェーズでアクティブ → スキップ
-			if (seqPhases.includes(seqPhaseNum)) continue;
-
-			// Phase 4 がまだ実行中のシート → スキップ
-			const inPhase4 = addRowsSettings.some((s) => s.name === name);
-			if (inPhase4 && !phase4Complete) continue;
-
-			const id = getSheetId(name);
-
-			if (completionDetails.has(name)) {
-				lanes?.update(id, c.dim(formatSheetStatus(name)));
-			} else {
-				lanes?.update(id, c.dim(`${name}: Waiting...`));
-			}
-		}
-	}
-
 	// Phase 1: Create sheets + set headers
 	sheetLog('Phase 1: Creating %d sheet(s) and setting headers', settings.length);
-	setPhaseHeader();
+	setPhaseHeader('Creating sheets');
+	const headerColumnsByName = new Map<string, number>();
 	await Promise.all(
 		settings.map(async (setting) => {
 			const name = setting.name;
@@ -249,234 +142,117 @@ export async function createSheets(params: CreateSheetsParams) {
 			lanes?.update(id, `${name}: Setting headers%dots%`);
 			const headers = await setting.createHeaders();
 			await sheet.setHeaders(headers);
+			headerColumnsByName.set(name, headers.length);
 			sheetLog('[%s] Headers set (%d columns)', name, headers.length);
 			lanes?.update(id, `${name}: Ready`);
 		}),
 	);
 	sheetLog('Phase 1 complete');
 
-	await Promise.all([
-		(async () => {
-			// Phase 2: Page processing (preEachPage + eachPage unified)
-			if (needsPageIteration) {
-				sheetLog('Phase 2: Starting page iteration');
-				setPhaseHeader();
-				dimInactiveSheets(2);
-				sheetLog('Loading pages from archive (limit=%d)', limit);
-				const sheetProgress = new Map<string, number>();
-				for (const setting of preEachPageRoutineList) {
-					sheetProgress.set(setting.name, 0);
-				}
-				for (const setting of eachPageRoutineList) {
-					sheetProgress.set(setting.name, 0);
-				}
+	// Phase 1.5: Cell-budget advisory warning (informational only — see
+	// estimate-cell-budget.ts's docs for why the real enforcement below
+	// uses live sentCount instead of these estimates).
+	sheetLog('Phase 1.5: Estimating cell budget for %d sheet(s)', settings.length);
+	const estimates = await Promise.all(
+		settings.map(async (setting) => ({
+			name: setting.name,
+			columns: headerColumnsByName.get(setting.name) ?? 0,
+			estimatedRows: await setting.estimateRowCount(),
+		})),
+	);
+	const allocations = estimateCellBudget(estimates);
+	const estimatedRowsByName = new Map(allocations.map((a) => [a.name, a.estimatedRows]));
+	const anyTruncated = allocations.some((a) => a.truncated);
+	if (anyTruncated) {
+		const summary = allocations
+			.filter((a) => a.truncated)
+			.map(
+				(a) =>
+					`  - ${a.name}: ~${a.estimatedRows} rows estimated, budget allows ~${a.maxRows}`,
+			)
+			.join('\n');
+		onWarn?.(
+			`Warning: this report's estimated size exceeds Google Sheets' 10,000,000-cell ` +
+				`document limit. The following sheet(s) will be truncated:\n${summary}\n`,
+		);
+	}
+	sheetLog('Phase 1.5 complete (any truncated: %o)', anyTruncated);
 
-				/**
-				 * Recalculates and displays the weighted-average progress
-				 * across all page-processing sheets for the Phase 2 header.
-				 */
-				function updatePhase2Header() {
-					if (sheetProgress.size === 0) return;
-					const avg =
-						[...sheetProgress.values()].reduce((a, b) => a + b, 0) / sheetProgress.size;
-					const pct = Math.round(avg * 100);
-					updatePhaseHeader(`Processing pages (${pct}%)`);
-				}
+	// Phase 2: run every sheet's `run()` in priority order (array order),
+	// sequentially — each sheet's actual sent-row count decrements the
+	// shared remaining-cell budget before the next sheet starts, so an
+	// earlier sheet sending fewer rows than its allocation lets the
+	// remainder roll over to the next sheet in priority order.
+	sheetLog('Phase 2: Processing %d sheet(s) in priority order', settings.length);
+	setPhaseHeader('Processing sheets');
+	// Header-row cost for every selected sheet is already spent in Phase 1,
+	// unconditionally — subtracted up front, mirroring
+	// estimate-cell-budget.ts's own up-front header deduction.
+	const headerCost = allocations.reduce((sum, a) => sum + a.columns, 0);
+	let remainingCells = Math.max(0, CELL_BUDGET_LIMIT - headerCost);
 
-				await archive.getPagesWithRefs(limit, async (pages, offset, max) => {
-					sheetLog(
-						'Batch received: %d pages (offset=%d, total=%d)',
-						pages.length,
-						offset,
-						max,
-					);
-					updatePhase2Header();
+	let processed = 0;
+	for (const setting of settings) {
+		processed++;
+		const name = setting.name;
+		const id = getSheetId(name);
+		const columns = headerColumnsByName.get(name) ?? 0;
+		const maxRows = columns > 0 ? Math.max(0, Math.floor(remainingCells / columns)) : 0;
+		lanes?.header(
+			`${c.bold(`[${currentPhase}/${totalPhases}]`)} Processing sheets (${processed}/${settings.length})`,
+		);
 
-					// preEachPage first
-					if (preEachPageRoutineList.length > 0) {
-						sheetLog(
-							'Running preEachPage for %d routine(s)',
-							preEachPageRoutineList.length,
-						);
-						await Promise.all(
-							preEachPageRoutineList.map(async (setting) => {
-								const id = getSheetId(setting.name);
-								let num = 1;
-								let prevPage: Page | null = null;
-								for (const page of pages) {
-									const pageNum = offset + num;
-									lanes?.update(
-										id,
-										`${setting.name}: Pre-processing ${pageNum}/${max}%dots%`,
-									);
-									sheetProgress.set(setting.name, pageNum / max);
-									updatePhase2Header();
-									await setting.preEachPage(page, pageNum, max, prevPage);
-									prevPage = page;
-									num++;
-								}
-							}),
-						);
-						sheetLog('preEachPage complete for batch (offset=%d)', offset);
-					}
+		if (maxRows <= 0) {
+			sheetLog('[%s] Skipped: cell budget exhausted', name);
+			lanes?.update(id, c.yellow(`${name}: Skipped (cell budget exhausted)`));
+			onWarn?.(
+				`Warning: "${name}" was skipped entirely — the cell budget was already exhausted by higher-priority sheets.\n`,
+			);
+			continue;
+		}
 
-					// eachPage second
-					if (eachPageRoutineList.length > 0) {
-						sheetLog('Running eachPage for %d routine(s)', eachPageRoutineList.length);
-						await Promise.all(
-							eachPageRoutineList.map(async (setting) => {
-								const id = getSheetId(setting.name);
-								const name = setting.name;
-								const sheet = await sheets.create(name);
-								let num = 1;
-								let prevPage: Page | null = null;
-								for (const page of pages) {
-									const pageNum = offset + num;
-									lanes?.update(
-										id,
-										`${name}: Processing ${pageNum}/${max} (sent ${sheet.sentCount})%dots%`,
-									);
-									sheetProgress.set(name, pageNum / max);
-									updatePhase2Header();
-									const data = await setting.eachPage(page, pageNum, max, prevPage);
-									prevPage = page;
-									if (data) {
-										await sheet.appendRow(...data);
-									}
-									num++;
-								}
-								await sheet.flush();
-								sheetLog(
-									'[%s] Send complete (offset=%d, %d rows)',
-									name,
-									offset,
-									sheet.sentCount,
-								);
-								sheetProgress.set(name, 1);
-								updatePhase2Header();
-								markDone(name, `${sheet.sentCount} rows`);
-							}),
-						);
-					}
-				});
-				sheetLog('Phase 2 complete');
-			}
+		sheetLog('[%s] Running (maxRows=%d)', name, maxRows);
+		const sheet = await sheets.create(name);
+		let sent = 0;
+		const onProgress = (progressSent: number, total: number) => {
+			sent = progressSent;
+			lanes?.update(
+				id,
+				`${name}: Processing ${sent}/${total} (sent ${sheet.sentCount})%dots%`,
+			);
+		};
+		await setting.run({ sheet, maxRows, onProgress });
 
-			// Phase 3: Resource processing
-			if (eachResourceRoutineList.length > 0) {
-				sheetLog('Phase 3: Starting resource processing');
-				setPhaseHeader();
-				dimInactiveSheets(3);
-				const rawResources = await archive.getResources();
-				sheetLog('Resources loaded: %d', rawResources.length);
-				// Resources は DB の挿入順で返るため、出力前に URL の自然順に
-				// 並び替える。ただし `skipSortResources: true` を宣言した setting
-				// は自分で集約してから sort する責任を持つ（dedupe mode のような
-				// 「1M 件を sort してから 63K に集約」は無駄なので、集約後に
-				// 小さな集合だけ sort する）。少なくとも 1 つの setting が
-				// sort を必要とするなら、ループ前に 1 度だけ実行して共有する。
-				const needsSort = eachResourceRoutineList.some((s) => !s.skipSortResources);
-				let sortedResources: typeof rawResources | null = null;
-				if (needsSort) {
-					updatePhaseHeader('Sorting resources by URL');
-					sortedResources = sortResourcesByUrl(rawResources);
-					sheetLog('Resources sorted by natural URL order');
-				}
-				const resourceProgress = new Map<string, number>();
-				for (const setting of eachResourceRoutineList) {
-					resourceProgress.set(setting.name, 0);
-				}
+		// Truncation is decided live, against this sheet's own maxRows as
+		// actually computed above — not against Phase 1.5's advisory
+		// `truncated` flag, which can go stale: an earlier sheet sending
+		// more or fewer rows than *its own* estimate predicted shifts how
+		// much budget later sheets really get, so a sheet the advisory pass
+		// scored as "not truncated" can still be cut short for real here.
+		const estimatedRows = estimatedRowsByName.get(name) ?? 0;
+		if (sent >= maxRows && estimatedRows > maxRows) {
+			await sheet.appendRow([
+				createCellData(
+					{
+						value: `TRUNCATED: this sheet was cut off at ${sent} rows to stay under Google Sheets' 10,000,000-cell document limit.`,
+					},
+					defaultCellFormat,
+				),
+			]);
+			await sheet.flush();
+			onWarn?.(`Warning: "${name}" was truncated at ${sent} rows (cell budget).\n`);
+		}
 
-				/**
-				 * Recalculates and displays the weighted-average progress
-				 * across all resource-processing sheets for the Phase 3 header.
-				 */
-				function updatePhase3Header() {
-					if (resourceProgress.size === 0) return;
-					const avg =
-						[...resourceProgress.values()].reduce((a, b) => a + b, 0) /
-						resourceProgress.size;
-					const pct = Math.round(avg * 100);
-					updatePhaseHeader(`Processing resources (${pct}%)`);
-				}
+		remainingCells = Math.max(0, remainingCells - sheet.sentCount * columns);
+		sheetLog('[%s] Done (%d rows sent)', name, sheet.sentCount);
+		lanes?.update(id, c.green(`${name}: Done (${sheet.sentCount} rows)`));
+	}
+	sheetLog('Phase 2 complete');
 
-				await Promise.all(
-					eachResourceRoutineList.map(async (setting) => {
-						const id = getSheetId(setting.name);
-						const name = setting.name;
-						const sheet = await sheets.create(name);
-						const resources =
-							setting.skipSortResources || !sortedResources
-								? rawResources
-								: sortedResources;
-						let i = 0;
-						for (const resource of resources) {
-							i++;
-							lanes?.update(
-								id,
-								`${name}: Processing ${i}/${resources.length} (sent ${sheet.sentCount})%dots%`,
-							);
-							resourceProgress.set(name, i / resources.length);
-							updatePhase3Header();
-							const resourceData = await setting.eachResource(resource);
-							if (resourceData) {
-								await sheet.appendRow(...resourceData);
-							}
-						}
-						await runFinalizeResources({
-							setting,
-							sheet,
-							lanes,
-							laneId: id,
-							sheetName: name,
-						});
-						await sheet.flush();
-						sheetLog('[%s] Resource send complete (%d rows)', name, sheet.sentCount);
-						resourceProgress.set(name, 1);
-						updatePhase3Header();
-						markDone(name, `${sheet.sentCount} rows`);
-					}),
-				);
-				sheetLog('Phase 3 complete');
-			}
-		})(),
-		(async () => {
-			// Phase 4: Plugin data (addRows)
-			if (addRowsSettings.length > 0) {
-				sheetLog('Phase 4: Processing %d addRows routine(s)', addRowsSettings.length);
-				await Promise.all(
-					addRowsSettings.map(async (setting) => {
-						const name = setting.name;
-						const id = getSheetId(name);
-						sheetLog('[%s] Creating plugin data', name);
-						lanes?.update(id, `${name}: Writing plugin data%dots%`);
-						const data = await setting.addRows!();
-						if (!data) {
-							sheetLog('[%s] Plugin data is empty', name);
-							return;
-						}
-						const sheet = await sheets.create(name);
-						sheetLog('[%s] Sending %d rows', name, data.length);
-						lanes?.update(id, `${name}: Sending ${data.length} rows%dots%`);
-						await sheet.appendRow(...data);
-						await sheet.flush();
-						sheetLog('[%s] Plugin data send complete', name);
-						if (!completionDetails.has(name)) {
-							markDone(name, `${data.length} rows`);
-						}
-					}),
-				);
-				phase4Complete = true;
-				sheetLog('Phase 4 complete');
-			}
-		})(),
-	]);
-
-	// Phase 5: Formatting
+	// Phase 3: Formatting
 	if (updateSheetSettings.length > 0) {
-		sheetLog('Phase 5: Formatting %d sheet(s)', updateSheetSettings.length);
-		setPhaseHeader();
-		dimInactiveSheets(5);
+		sheetLog('Phase 3: Formatting %d sheet(s)', updateSheetSettings.length);
+		setPhaseHeader('Formatting sheets');
 		await Promise.all(
 			updateSheetSettings.map(async (setting) => {
 				const name = setting.name;
@@ -487,9 +263,9 @@ export async function createSheets(params: CreateSheetsParams) {
 				await setting.updateSheet!(sheet);
 				await sheet.overwriteHeaderFormat();
 				sheetLog('[%s] Formatting complete', name);
-				markDone(name);
+				lanes?.update(id, c.green(`${name}: Formatted`));
 			}),
 		);
-		sheetLog('Phase 5 complete');
+		sheetLog('Phase 3 complete');
 	}
 }

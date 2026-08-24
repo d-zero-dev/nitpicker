@@ -1,55 +1,33 @@
-import type { Archive } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/crawler';
 import type { Report } from '@nitpicker/types';
-
-import { getViolations } from '@nitpicker/query';
 
 import { reportLog } from '../debug.js';
 
-const VIOLATION_CHUNK_SIZE = 5000;
-
 /**
- * Retrieves analyze plugin reports stored in the archive.
- * Returns an empty array if no reports are found.
- * @param archive - The opened archive to read plugin reports from
- * @returns An array of plugin report data
+ * Retrieves analyze plugin reports stored in the archive's `analysis/report`
+ * namespace file — the `pageData`/`discrepancies` source for the Page List
+ * and Discrepancies sheets. Returns an empty array if none is found.
+ *
+ * Violations are deliberately NOT loaded here (unlike the pre-rewrite
+ * version, which pre-fetched every `getViolations` page into a synthetic
+ * `{ name: 'violations', violations }` report entry): the Violations sheet
+ * now calls `getViolations` directly inside its own `run()`, streaming
+ * pages as it sends rows instead of holding the full violation set in
+ * memory before the first row goes out.
+ * @param accessor - The opened archive to read plugin reports from.
+ * @returns An array of plugin report data (0 or 1 entries).
  */
-export async function getPluginReports(archive: Archive) {
+export async function getPluginReports(accessor: ArchiveAccessor): Promise<Report[]> {
 	const reports: Report[] = [];
 
 	reportLog('Load');
 	try {
-		const report = await archive.getData<Report>('analysis/report');
+		const report = await accessor.getData<Report>('analysis/report');
 		if (report) {
 			reports.push(report);
 		}
 	} catch {
 		reportLog('Failed: report is not found');
-	}
-
-	try {
-		const violations = [];
-		let offset = 0;
-		let total = 0;
-		do {
-			const page = await getViolations(archive, {
-				limit: VIOLATION_CHUNK_SIZE,
-				offset,
-			});
-			total = page.total;
-			violations.push(...page.items);
-			if (page.items.length === 0) {
-				break;
-			}
-			offset += page.items.length;
-		} while (offset < total);
-		if (violations.length > 0) {
-			reports.push({
-				name: 'violations',
-				violations,
-			});
-		}
-	} catch {
-		reportLog('Failed: violations are not found');
 	}
 
 	return reports;
