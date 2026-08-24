@@ -13,7 +13,20 @@ import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates
 /**
  * Joins an already ID-limited, already-ordered `page_id` list back to the
  * 0.13 write-model entity graph (`content_items` + `page_meta` + refs)
- * for full-metadata display.
+ * for full-metadata display, PLUS an unconditional `viewer_pages` join for
+ * the three read-model-only computed columns
+ * (`displayTitle`/`inboundLinkCount`/`dirIndexInboundLinkCount` — see those
+ * fields' docs on `PageListItem`).
+ *
+ * The `viewer_pages` join is deliberately unconditional (no `hasTable`/
+ * `hasColumn` existence guard the way `templateKeySelectColumn`/
+ * `isDedupeCappedSelectColumn` guard their write-model columns): both of
+ * this function's call sites (`listViewerPages`, `list-directory-pages.ts`)
+ * already require the read model to be current before calling this (see
+ * their own docs), so `viewer_pages` — and these three columns on it — are
+ * guaranteed to exist here. A `LEFT JOIN` is still used (not `JOIN`) purely
+ * for resilience against a `page_id` racing out of `viewer_pages` between
+ * the caller's read and this one, not as a schema-absence guard.
  *
  * The `IN (...)` fetch does not preserve `pageIds`' order (SQLite gives no
  * such guarantee), so the result is re-sorted in JS by `pageIds`' order
@@ -36,6 +49,7 @@ export async function joinViewerPageIdsToListItems(
 		.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
 		.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
 		.leftJoin('header_flags as hf', 'hf.header_set_id', 'ci.header_set_id')
+		.leftJoin('viewer_pages as vp', 'vp.page_id', 'ci.id')
 		.leftJoin('text_refs as title_ref', 'title_ref.id', 'pm.title_text_id')
 		.leftJoin(
 			'text_refs as description_ref',
@@ -70,6 +84,9 @@ export async function joinViewerPageIdsToListItems(
 			templateKeySelectColumn(knex, hasPageTemplates),
 			isDedupeCappedSelectColumn(knex, hasDedupeCapColumn),
 			...buildHeaderPresenceSelects(knex, 'hf'),
+			'vp.display_title as displayTitle',
+			'vp.inbound_link_count as inboundLinkCount',
+			'vp.dir_index_inbound_link_count as dirIndexInboundLinkCount',
 		);
 	const rowsById = new Map(rows.map((row) => [row.id, row]));
 	return pageIds

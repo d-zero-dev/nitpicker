@@ -14,6 +14,8 @@ import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 import { requireViewerReadModel } from './require-viewer-read-model.js';
 import { resolveAliasAndRedirectChain } from './resolve-alias-and-redirect-chain.js';
 import { readKeysetWindow } from './viewer-cursor-kit/read-keyset-window.js';
+import { resolveTextRefs } from './viewer-cursor-kit/resolve-text-refs.js';
+import { resolveViewerUrlRefs } from './viewer-cursor-kit/resolve-viewer-url-refs.js';
 import { buildInboundLinksFilterKey } from './viewer-inbound-links-cursor/build-inbound-links-filter-key.js';
 import { decodeInboundLinksCursor } from './viewer-inbound-links-cursor/decode-inbound-links-cursor.js';
 import { encodeInboundLinksCursor } from './viewer-inbound-links-cursor/encode-inbound-links-cursor.js';
@@ -90,46 +92,6 @@ async function readInboundLinksWindow(
 		keyset,
 		offset,
 	);
-}
-
-/**
- * Loads URL strings for the limited inbound-link window.
- * @param knex - Query connection for the opened archive.
- * @param refIds - `viewer_url_refs` ids selected by the keyset window.
- * @returns A map from `viewer_url_refs.id` to URL.
- */
-async function readUrlRefs(
-	knex: Knex,
-	refIds: readonly number[],
-): Promise<Map<number, string>> {
-	if (refIds.length === 0) {
-		return new Map();
-	}
-	const rows: { id: number; url: string }[] = await knex('viewer_url_refs')
-		.whereIn('id', [...new Set(refIds)])
-		.select('id', 'url');
-	return new Map(rows.map((row) => [row.id, row.url]));
-}
-
-/**
- * Loads anchor text for the limited inbound-link window.
- * @param knex - Query connection for the opened archive.
- * @param textIds - `text_refs` ids selected by the keyset window, `null`
- *   entries (anchors with no text) filtered out before the query.
- * @returns A map from `text_refs.id` to anchor text.
- */
-async function readTextRefs(
-	knex: Knex,
-	textIds: readonly (number | null)[],
-): Promise<Map<number, string>> {
-	const ids = [...new Set(textIds.filter((id): id is number => id != null))];
-	if (ids.length === 0) {
-		return new Map();
-	}
-	const rows: { id: number; text: string }[] = await knex('text_refs')
-		.whereIn('id', ids)
-		.select('id', 'text');
-	return new Map(rows.map((row) => [row.id, row.text]));
 }
 
 /**
@@ -220,11 +182,11 @@ export async function listInboundLinks(
 		hasMoreBefore: boolean,
 	): Promise<InboundLinkList> {
 		const [urlByRefId, textByRefId] = await Promise.all([
-			readUrlRefs(
+			resolveViewerUrlRefs(
 				knex,
 				window.map((row) => row.source_url_ref_id),
 			),
-			readTextRefs(
+			resolveTextRefs(
 				knex,
 				window.map((row) => row.first_text_id),
 			),

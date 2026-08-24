@@ -214,13 +214,6 @@ export const commandDef = {
 			group: 'Report options',
 			desc: 'Path to config file',
 		},
-		limit: {
-			shortFlag: 'l',
-			type: 'number',
-			default: 100_000,
-			group: 'Report options',
-			desc: 'Limit number of rows',
-		},
 		dedupeResources: {
 			type: 'boolean',
 			group: 'Report options',

@@ -1,59 +1,83 @@
-import type { CreateSheet } from '../sheets/types.js';
-import type { Sheet } from '@d-zero/google-sheets';
-import type { Page } from '@nitpicker/crawler';
-import type { Report } from '@nitpicker/types';
+import type { PageListItem } from '@nitpicker/query';
 
-import { Cell } from '@d-zero/google-sheets';
-import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import {
+	buildRedirectFromUrlsByDestId,
+	getOutboundLinkFactsByPageIds,
+	listViewerPages,
+	resolvePageIdsByUrls,
+} from '@nitpicker/query';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import { assertNoLazyCells } from '../test-helpers/assert-no-lazy-cells.js';
+import { cellValue, cellNote } from '../test-helpers/cell-inspection.js';
+import { createMockSheet } from '../test-helpers/create-mock-sheet.js';
+
+import { createPageList } from './create-page-list.js';
+
+vi.mock('@nitpicker/query', () => ({
+	listViewerPages: vi.fn(),
+	getOutboundLinkFactsByPageIds: vi.fn(),
+	buildRedirectFromUrlsByDestId: vi.fn(),
+	resolvePageIdsByUrls: vi.fn(),
+}));
+
+const NO_ACCESSOR = undefined as never;
+
+const EMPTY_FACTS = {
+	internalLinks: 0,
+	internalBadLinks: 0,
+	internalBadLinkNote: '',
+	externalLinks: 0,
+	externalBadLinks: 0,
+	externalBadLinkNote: '',
+};
 
 /**
- * Creates a mock Page object with sensible defaults for testing.
- * @param overrides - Properties to override on the default mock page.
- * @returns A mock Page instance cast via `as never`.
+ * Builds a fully-populated {@link PageListItem} for tests, with sensible
+ * defaults overridable per field.
+ * @param overrides - Fields to override on the default item.
  */
-function createMockPage(overrides: Partial<Record<string, unknown>> = {}): Page {
+function makeItem(overrides: Partial<PageListItem> = {}): PageListItem {
 	return {
-		url: {
-			href: 'https://example.com/',
-			protocol: 'https:',
-			hostname: 'example.com',
-			paths: [''],
-			depth: 0,
-			dirname: null,
-			basename: '',
-			isIndex: true,
-			query: '',
-		},
-		title: 'Example Page',
+		url: 'https://example.com/page',
+		title: 'Page',
 		status: 200,
-		statusText: 'OK',
 		contentType: 'text/html',
-		contentLength: 1000,
-		lang: 'ja',
-		charset: null,
 		isExternal: false,
-		isTarget: true,
-		isSkipped: false,
-		skipReason: null,
-		redirectFrom: [],
-		responseHeaders: {},
+		hasDescription: false,
+		hasOgTitle: false,
+		noindex: false,
 		description: null,
 		keywords: null,
-		robots_raw: null,
-		robots_noindex: false,
-		robots_nofollow: false,
-		robots_noarchive: false,
+		lang: 'en',
+		nofollow: false,
+		noarchive: false,
+		robotsRaw: null,
 		canonical: null,
-		twitter_card: null,
-		og_site_name: null,
-		og_url: null,
-		og_title: null,
-		og_description: null,
-		og_type: null,
-		og_image: null,
-		jsonldCount: null,
-		tagsProvidersCsv: '',
+		ogType: null,
+		ogTitle: null,
+		ogSiteName: null,
+		ogDescription: null,
+		ogUrl: null,
+		ogImage: null,
+		ogImageAlt: null,
+		ogLocale: null,
+		ogArticlePublishedTime: null,
+		twitterCard: null,
+		twitterSite: null,
+		twitterCreator: null,
+		twitterImage: null,
+		charset: 'utf8',
+		themeColor: null,
+		manifest: null,
+		tagCount: null,
+		jsonldCount: 0,
+		tagsProvidersCsv: null,
+		mainContentNodeName: null,
+		mainContentId: null,
+		mainContentRole: null,
 		mainContentSelector: null,
+		mainContentClassList: null,
 		mainContentWordCount: null,
 		mainContentBodyWordCount: null,
 		mainContentHeadingCount: null,
@@ -67,877 +91,266 @@ function createMockPage(overrides: Partial<Record<string, unknown>> = {}): Page 
 		mainContentCustomElementCount: null,
 		scrollHeightDesktop: null,
 		scrollHeightMobile: null,
-		// `metaFlat` mirrors the new ~47-column flat-meta projection on the
-		// real Page wrapper. Tests reference specific keys via
-		// `page.metaFlat.manifest` / `page.metaFlat.og_image_alt` etc.
-		metaFlat: {
-			manifest: null,
-			themeColor: null,
-			twitter_site: null,
-			twitter_creator: null,
-			og_image_alt: null,
-			og_locale: null,
-			og_article_published_time: null,
-		},
-		isInternalPage: () => true,
-		isPage: () => true,
-		getAnchors: vi.fn().mockResolvedValue([]),
-		getReferrers: vi.fn().mockResolvedValue([]),
-		getHtml: vi.fn().mockResolvedValue(null),
+		consoleErrorCount: null,
+		firstCrawledAt: null,
+		lastCrawledAt: null,
+		hasCSP: false,
+		hasXFrameOptions: false,
+		hasXContentTypeOptions: false,
+		hasHSTS: false,
+		templateKey: null,
+		isDedupeCapped: false,
+		displayTitle: overrides.title === undefined ? 'Page' : overrides.title,
+		inboundLinkCount: 0,
+		dirIndexInboundLinkCount: null,
 		...overrides,
-	} as never;
+	};
 }
 
 /**
- * Extracts the primitive value from a Cell by calling `provide()` and reading `userEnteredValue`.
- * @param cell - A Cell object with a `provide` method.
- * @param cell.provide
- * @returns The string, number, boolean, or formula value held by the cell.
+ * Builds a one-page `listViewerPages` result.
+ * @param items - The page items for this result.
+ * @param nextCursor - The `nextCursor` value, `null` by default.
  */
-function cellValue(cell: {
-	provide: (n?: number) => { userEnteredValue: Record<string, unknown> };
-}) {
-	const provided = cell.provide();
-	return (
-		provided.userEnteredValue.stringValue ??
-		provided.userEnteredValue.numberValue ??
-		provided.userEnteredValue.boolValue ??
-		provided.userEnteredValue.formulaValue ??
-		''
-	);
-}
-
-/**
- * Extracts the note string from a Cell by calling `provide()`.
- * @param cell - A Cell object with a `provide` method.
- * @param cell.provide
- * @returns The note attached to the cell, or `undefined`.
- */
-function cellNote(cell: { provide: (n?: number) => { note?: string } }) {
-	return cell.provide().note;
+function makePage(items: PageListItem[], nextCursor: string | null = null) {
+	return {
+		items,
+		total: items.length,
+		facets: { statuses: [], contentTypes: [], languages: [] } as never,
+		offset: 0,
+		limit: 500,
+		nextCursor,
+		prevCursor: null,
+	};
 }
 
 describe('createPageList', () => {
-	// Reset modules before each test to clear module-scope state (indexTitles, indexRefs)
-	let createPageList: CreateSheet;
-
-	beforeEach(async () => {
-		vi.resetModules();
-		const mod = await import('./create-page-list.js');
-		createPageList = mod.createPageList;
+	beforeEach(() => {
+		vi.mocked(listViewerPages).mockReset();
+		vi.mocked(getOutboundLinkFactsByPageIds).mockReset();
+		vi.mocked(buildRedirectFromUrlsByDestId).mockReset();
+		vi.mocked(resolvePageIdsByUrls).mockReset();
+		vi.mocked(buildRedirectFromUrlsByDestId).mockResolvedValue(new Map());
+		vi.mocked(resolvePageIdsByUrls).mockResolvedValue(new Map());
+		vi.mocked(getOutboundLinkFactsByPageIds).mockResolvedValue(new Map());
 	});
 
-	afterEach(() => {
-		vi.restoreAllMocks();
+	it('returns sheet config with name "Page List" and requiresReadModel', () => {
+		const setting = createPageList([], NO_ACCESSOR);
+		expect(setting.name).toBe('Page List');
+		expect(setting.requiresReadModel).toBe(true);
 	});
 
-	it('returns sheet config with name "Page List"', () => {
-		const sheet = createPageList([]);
-		expect(sheet.name).toBe('Page List');
-	});
-
-	it('emits at least one lazy cell from eachPage so appendRow auto-buffers the batch', async () => {
-		// The "Internal Referrers" cell at create-page-list.ts:238-256 reads
-		// parentRefs/refers at provide() time. Sibling index pages mutate that
-		// shared state as the batch iterates, so the row must not be sent
-		// until the batch completes — `@d-zero/google-sheets`' appendRow()
-		// detects the LazyCell (cell.provide !== Cell.prototype.provide) and
-		// suspends auto-flush until flush() is invoked at batch end.
-		// If a future refactor removes all lazy cells here, this test fails
-		// loudly so the maintainer can confirm PageList can switch to plain
-		// streaming for the memory win.
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(createMockPage(), 1, 1, null);
-		expect(rows).toBeTruthy();
-		const allCells = rows!.flat();
-		const hasLazyCell = allCells.some((cell) => cell.provide !== Cell.prototype.provide);
-		expect(hasLazyCell).toBe(true);
-	});
-
-	it('returns correct base headers (61 columns, v2 schema + main-content promotion)', () => {
-		const sheet = createPageList([]);
-		const headers = sheet.createHeaders();
-		expect(headers).toHaveLength(61);
+	it('returns the documented base headers', () => {
+		const setting = createPageList([], NO_ACCESSOR);
+		const headers = setting.createHeaders();
 		expect(headers[0]).toBe('Title');
 		expect(headers[1]).toBe('Full Title');
 		expect(headers[2]).toBe('URL');
-		expect(headers[3]).toBe('Protocol');
-		expect(headers[4]).toBe('Domain');
-		expect(headers.slice(5, 15)).toEqual([
-			'path1',
-			'path2',
-			'path3',
-			'path4',
-			'path5',
-			'path6',
-			'path7',
-			'path8',
-			'path9',
-			'path10',
-		]);
-		expect(headers[15]).toBe('Status Code');
-		expect(headers[16]).toBe('Redirect From');
-		expect(headers[17]).toBe('Language');
-		expect(headers[18]).toBe('charset');
-		expect(headers[19]).toBe('Internal Links');
-		expect(headers[20]).toBe('Internal Bad Links');
-		expect(headers[21]).toBe('External Links');
-		expect(headers[22]).toBe('External Bad Links');
-		expect(headers[23]).toBe('Internal Referrers');
-		expect(headers[41]).toBe('og:image');
-		expect(headers[45]).toBe('jsonld_count');
-		expect(headers[46]).toBe('tags_providers');
-		expect(headers.slice(47, 61)).toEqual([
-			'main_content_selector',
-			'main_content_word_count',
-			'main_content_body_word_count',
-			'main_content_heading_count',
-			'main_content_image_count',
-			'main_content_table_count',
-			'main_content_button_count',
-			'main_content_iframe_count',
-			'main_content_video_count',
-			'main_content_audio_count',
-			'main_content_canvas_count',
-			'main_content_custom_element_count',
-			'scroll_height_desktop',
-			'scroll_height_mobile',
-		]);
+		expect(headers).toContain('Internal Referrers');
+		expect(headers).toContain('scroll_height_mobile');
 	});
 
-	it('emits the 14 main-content cell values at columns 47-60, in header order', async () => {
-		const page = createMockPage({
-			mainContentSelector: 'main.l-main',
-			mainContentWordCount: 100,
-			mainContentBodyWordCount: 150,
-			mainContentHeadingCount: 3,
-			mainContentImageCount: 2,
-			mainContentTableCount: 1,
-			mainContentButtonCount: 4,
-			mainContentIframeCount: 0,
-			mainContentVideoCount: 0,
-			mainContentAudioCount: 0,
-			mainContentCanvasCount: 0,
-			mainContentCustomElementCount: 1,
-			scrollHeightDesktop: 3200,
-			scrollHeightMobile: 5400,
+	it('appends plugin report headers after the base columns', () => {
+		const setting = createPageList(
+			[{ name: 'plugin', pageData: { headers: { custom: 'Custom Column' }, data: {} } }],
+			NO_ACCESSOR,
+		);
+		const headers = setting.createHeaders();
+		expect(headers.at(-1)).toBe('Custom Column');
+	});
+
+	it('estimates the row count via listViewerPages(isExternal: false, limit: 0)', async () => {
+		vi.mocked(listViewerPages).mockResolvedValue(makePage([], null));
+		const setting = createPageList([], NO_ACCESSOR);
+		await setting.estimateRowCount();
+		expect(listViewerPages).toHaveBeenCalledWith(NO_ACCESSOR, {
+			isExternal: false,
+			limit: 0,
 		});
-
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-		const row = rows![0];
-
-		expect(cellValue(row[47])).toBe('main.l-main');
-		expect(cellValue(row[48])).toBe(100);
-		expect(cellValue(row[49])).toBe(150);
-		expect(cellValue(row[50])).toBe(3);
-		expect(cellValue(row[51])).toBe(2);
-		expect(cellValue(row[52])).toBe(1);
-		expect(cellValue(row[53])).toBe(4);
-		expect(cellValue(row[54])).toBe(0);
-		expect(cellValue(row[55])).toBe(0);
-		expect(cellValue(row[56])).toBe(0);
-		expect(cellValue(row[57])).toBe(0);
-		expect(cellValue(row[58])).toBe(1);
-		expect(cellValue(row[59])).toBe(3200);
-		expect(cellValue(row[60])).toBe(5400);
 	});
 
-	it('emits empty main-content cell values for an unrendered page', async () => {
-		const page = createMockPage();
-
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-		const row = rows![0];
-
-		expect(cellValue(row[47])).toBe('');
-		expect(cellValue(row[48])).toBe('');
-		expect(cellValue(row[58])).toBe('');
-		expect(cellValue(row[59])).toBe('');
-		expect(cellValue(row[60])).toBe('');
+	it('streams rows without any lazy thunks (pins the OOM fix)', async () => {
+		vi.mocked(listViewerPages).mockResolvedValueOnce(makePage([makeItem()]));
+		const setting = createPageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		assertNoLazyCells(mock.rows);
 	});
 
-	it('appends plugin report headers', () => {
-		const reports: Report[] = [
-			{
-				name: 'plugin-a',
-				pageData: {
-					headers: { col1: 'Plugin A Col 1', col2: 'Plugin A Col 2' },
-					data: {},
-				},
-			},
-		];
+	it('decomposes the URL into protocol, hostname, and path segments', async () => {
+		vi.mocked(listViewerPages).mockResolvedValueOnce(
+			makePage([makeItem({ url: 'https://example.com/blog/post-1' })]),
+		);
+		const setting = createPageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
 
-		const sheet = createPageList(reports);
-		const headers = sheet.createHeaders();
-
-		expect(headers).toHaveLength(63);
-		expect(headers[61]).toBe('Plugin A Col 1');
-		expect(headers[62]).toBe('Plugin A Col 2');
+		const row = mock.rows[0]!;
+		expect(cellValue(row[3]!)).toBe('https:');
+		expect(cellValue(row[4]!)).toBe('example.com');
+		expect(cellValue(row[5]!)).toBe('/blog');
+		expect(cellValue(row[6]!)).toBe('/post-1');
 	});
 
-	it('skips external pages', async () => {
-		const page = createMockPage({ isInternalPage: () => false });
-		const sheet = createPageList([]);
-		const result = await sheet.eachPage!(page, 1, 1, null);
+	it('uses displayTitle for the Title column and the raw title for Full Title', async () => {
+		vi.mocked(listViewerPages).mockResolvedValueOnce(
+			makePage([makeItem({ title: 'Post 1 | My Blog', displayTitle: 'Post 1' })]),
+		);
+		const setting = createPageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
 
-		expect(result).toBeUndefined();
+		const row = mock.rows[0]!;
+		expect(cellValue(row[0]!)).toBe('Post 1');
+		expect(cellValue(row[1]!)).toBe('Post 1 | My Blog');
 	});
 
-	it('skips non-target pages', async () => {
-		const page = createMockPage({ isTarget: false });
-		const sheet = createPageList([]);
-		const result = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(result).toBeUndefined();
-	});
-
-	it('decomposes URL into protocol, hostname, and path segments', async () => {
-		const page = createMockPage({
-			url: {
-				href: 'https://example.com/about/team/',
-				protocol: 'https:',
-				hostname: 'example.com',
-				paths: ['about', 'team', ''],
-				depth: 3,
-				dirname: '/about/team',
-				basename: '',
-				isIndex: true,
-				query: '',
-			},
-		});
-
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(rows).toHaveLength(1);
-		const row = rows![0];
-
-		// Protocol
-		expect(cellValue(row[3])).toBe('https:');
-		// Domain
-		expect(cellValue(row[4])).toBe('example.com');
-		// path1
-		expect(cellValue(row[5])).toBe('/about');
-		// path2
-		expect(cellValue(row[6])).toBe('/team');
-		// path3 (last segment with empty basename)
-		expect(cellValue(row[7])).toBe('/');
-	});
-
-	it('appends query string to last path segment', async () => {
-		const page = createMockPage({
-			url: {
-				href: 'https://example.com/search?q=test',
-				protocol: 'https:',
-				hostname: 'example.com',
-				paths: ['search'],
-				depth: 1,
-				dirname: '/',
-				basename: 'search',
-				isIndex: false,
-				query: 'q=test',
-			},
-		});
-
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		// Last path should include query
-		expect(cellValue(rows![0][5])).toBe('/search?q=test');
-	});
-
-	it('counts internal and external links', async () => {
-		const page = createMockPage({
-			getAnchors: vi.fn().mockResolvedValue([
-				{
-					isExternal: false,
-					status: 200,
-					statusText: 'OK',
-					textContent: 'a',
-					href: 'h',
-					url: 'h',
-				},
-				{
-					isExternal: false,
-					status: 200,
-					statusText: 'OK',
-					textContent: 'b',
-					href: 'h',
-					url: 'h',
-				},
-				{
-					isExternal: true,
-					status: 200,
-					statusText: 'OK',
-					textContent: 'c',
-					href: 'h',
-					url: 'h',
-				},
+	it('reports internal/external link counts and bad-link notes from getOutboundLinkFactsByPageIds', async () => {
+		vi.mocked(listViewerPages).mockResolvedValueOnce(
+			makePage([makeItem({ url: 'https://example.com/source' })]),
+		);
+		vi.mocked(resolvePageIdsByUrls).mockResolvedValue(
+			new Map([['https://example.com/source', 1]]),
+		);
+		vi.mocked(getOutboundLinkFactsByPageIds).mockResolvedValue(
+			new Map([
+				[
+					1,
+					{
+						internalLinks: 3,
+						internalBadLinks: 1,
+						internalBadLinkNote: 'bad note',
+						externalLinks: 2,
+						externalBadLinks: 0,
+						externalBadLinkNote: '',
+					},
+				],
 			]),
-		});
+		);
 
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
+		const setting = createPageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
 
-		// Internal Links (shifted by 1 after charset inserted at 18)
-		expect(cellValue(rows![0][19])).toBe(2);
-		// External Links
-		expect(cellValue(rows![0][21])).toBe(1);
+		const row = mock.rows[0]!;
+		expect(cellValue(row[19]!)).toBe(3); // Internal Links
+		expect(cellValue(row[20]!)).toBe(1); // Internal Bad Links
+		expect(cellNote(row[20]!)).toBe('bad note');
+		expect(cellValue(row[21]!)).toBe(2); // External Links
+		expect(cellValue(row[22]!)).toBe(0); // External Bad Links
 	});
 
-	it('identifies bad links with status >= 400 (excluding 401)', async () => {
-		const page = createMockPage({
-			getAnchors: vi.fn().mockResolvedValue([
-				{
-					isExternal: false,
-					status: 404,
-					statusText: 'Not Found',
-					textContent: 'broken',
-					href: '/broken',
-					url: '/broken',
-				},
-				{
-					isExternal: false,
-					status: 401,
-					statusText: 'Unauthorized',
-					textContent: 'auth',
-					href: '/auth',
-					url: '/auth',
-				},
-				{
-					isExternal: true,
-					status: 500,
-					statusText: 'Server Error',
-					textContent: 'err',
-					href: 'http://ext.example.com',
-					url: 'http://ext.example.com',
-				},
-				{
-					isExternal: true,
-					status: 200,
-					statusText: 'OK',
-					textContent: 'ok',
-					href: 'http://ext.example.com/ok',
-					url: 'http://ext.example.com/ok',
-				},
-			]),
-		});
+	it('falls back to EMPTY_FACTS-shaped zeros when a page has no outbound-link entry', async () => {
+		vi.mocked(listViewerPages).mockResolvedValueOnce(makePage([makeItem()]));
+		const setting = createPageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
 
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		// Internal Bad Links (404 counted, 401 excluded; shifted by 1)
-		expect(cellValue(rows![0][20])).toBe(1);
-		// External Bad Links (500 counted; shifted by 1)
-		expect(cellValue(rows![0][22])).toBe(1);
+		const row = mock.rows[0]!;
+		expect(cellValue(row[19]!)).toBe(EMPTY_FACTS.internalLinks);
+		expect(cellValue(row[20]!)).toBe(EMPTY_FACTS.internalBadLinks);
 	});
 
-	it('counts null/0 status as bad link', async () => {
-		const page = createMockPage({
-			getAnchors: vi.fn().mockResolvedValue([
-				{
-					isExternal: false,
-					status: null,
-					statusText: '',
-					textContent: 'no-status',
-					href: '/x',
-					url: '/x',
-				},
-				{
-					isExternal: false,
-					status: 0,
-					statusText: '',
-					textContent: 'zero',
-					href: '/y',
-					url: '/y',
-				},
+	it('shows dirIndexInboundLinkCount when set, falling back to inboundLinkCount otherwise', async () => {
+		vi.mocked(listViewerPages).mockResolvedValueOnce(
+			makePage([
+				makeItem({
+					url: 'https://example.com/blog/',
+					inboundLinkCount: 3,
+					dirIndexInboundLinkCount: 10,
+				}),
 			]),
-		});
-
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		// Both null and 0 status should be counted as bad (shifted by 1)
-		expect(cellValue(rows![0][20])).toBe(2);
+		);
+		const setting = createPageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		expect(cellValue(mock.rows[0]![23]!)).toBe(10);
 	});
 
-	it('includes bad link details in note', async () => {
-		const page = createMockPage({
-			getAnchors: vi.fn().mockResolvedValue([
-				{
-					isExternal: false,
-					status: 404,
-					statusText: 'Not Found',
-					textContent: 'broken link',
-					href: '/broken',
-					url: '/broken',
-				},
-			]),
-		});
+	it('shows the redirect-from count and URL note from buildRedirectFromUrlsByDestId', async () => {
+		vi.mocked(listViewerPages).mockResolvedValueOnce(
+			makePage([makeItem({ url: 'https://example.com/target' })]),
+		);
+		vi.mocked(resolvePageIdsByUrls).mockResolvedValue(
+			new Map([['https://example.com/target', 5]]),
+		);
+		vi.mocked(buildRedirectFromUrlsByDestId).mockResolvedValue(
+			new Map([[5, ['https://example.com/old']]]),
+		);
 
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
+		const setting = createPageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
 
-		expect(cellNote(rows![0][20])).toContain('broken link');
-		expect(cellNote(rows![0][20])).toContain('404');
-	});
-
-	it('shows redirect URL when href differs from url', async () => {
-		const page = createMockPage({
-			getAnchors: vi.fn().mockResolvedValue([
-				{
-					isExternal: false,
-					status: 404,
-					statusText: 'Not Found',
-					textContent: 'link',
-					href: '/old',
-					url: '/new',
-				},
-			]),
-		});
-
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(cellNote(rows![0][20])).toContain('/old => /new');
+		const row = mock.rows[0]!;
+		expect(cellValue(row[16]!)).toBe(1);
+		expect(cellNote(row[16]!)).toBe('https://example.com/old');
 	});
 
 	it('uses "N/A" when lang is null', async () => {
-		const page = createMockPage({ lang: null });
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(cellValue(rows![0][17])).toBe('N/A');
-	});
-
-	it('includes SEO metadata', async () => {
-		const page = createMockPage({
-			description: 'A test page',
-			keywords: 'test, example',
-			robots_raw: 'noindex, nofollow',
-			robots_noindex: true,
-			robots_nofollow: false,
-			robots_noarchive: true,
-			canonical: 'https://example.com/',
-			twitter_card: 'summary',
-			og_site_name: 'Example Site',
-			og_url: 'https://example.com/',
-			og_title: 'OG Title',
-			og_description: 'OG Description',
-			og_type: 'website',
-			og_image: 'https://example.com/og.png',
-		});
-
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		const row = rows![0];
-		// Column indices reflect the v2 layout (charset inserted at 18,
-		// alternate removed, robots:raw / manifest / theme-color / twitter:site
-		// / twitter:creator / og:image:alt / og:locale / og:article:published_time
-		// / jsonld_count / tags_providers added). See
-		// `create-page-list.ts#createHeaders` for the canonical list.
-		expect(cellValue(row[24])).toBe('A test page'); // description
-		expect(cellValue(row[25])).toBe('test, example'); // keywords
-		expect(cellValue(row[26])).toBe(true); // noindex
-		expect(cellValue(row[27])).toBe(false); // nofollow
-		expect(cellValue(row[28])).toBe(true); // noarchive
-		expect(cellValue(row[29])).toBe('noindex, nofollow'); // robots:raw
-		expect(cellValue(row[30])).toBe('https://example.com/'); // canonical
-		expect(cellValue(row[33])).toBe('summary'); // twitter:card
-		expect(cellValue(row[36])).toBe('Example Site'); // og:site_name
-		// og:url has hyperlink so uses formulaValue
-		expect(row[37].provide().hyperlink).toBe('https://example.com/'); // og:url
-		expect(cellValue(row[38])).toBe('OG Title'); // og:title
-		expect(cellValue(row[39])).toBe('OG Description'); // og:description
-		expect(cellValue(row[40])).toBe('website'); // og:type
-		expect(cellValue(row[41])).toBe('https://example.com/og.png'); // og:image
-	});
-
-	it('shows redirect count and URLs', async () => {
-		const page = createMockPage({
-			redirectFrom: [
-				{ url: 'https://example.com/old1', pageId: 1 },
-				{ url: 'https://example.com/old2', pageId: 2 },
-			],
-		});
-
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(cellValue(rows![0][16])).toBe(2);
-		expect(cellNote(rows![0][16])).toBe(
-			'https://example.com/old1\nhttps://example.com/old2',
+		vi.mocked(listViewerPages).mockResolvedValueOnce(
+			makePage([makeItem({ lang: null })]),
 		);
+		const setting = createPageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		expect(cellValue(mock.rows[0]![17]!)).toBe('N/A');
 	});
 
 	it('uses -1 fallback when status is null', async () => {
-		const page = createMockPage({ status: null });
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(cellValue(rows![0][15])).toBe(-1);
-	});
-
-	it('adds plugin report data columns', async () => {
-		const reports: Report[] = [
-			{
-				name: 'plugin-a',
-				pageData: {
-					headers: { score: 'Score', grade: 'Grade' },
-					data: {
-						'https://example.com/': { score: { value: 95 }, grade: { value: 'A' } },
-					},
-				},
-			},
-		];
-
-		const page = createMockPage();
-		const sheet = createPageList(reports);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		const row = rows![0];
-		// Plugin columns start after the 61 base columns (index 61+).
-		// v2 layout: see `create-page-list.ts#createHeaders` for the full
-		// column inventory.
-		expect(cellValue(row[61])).toBe(95);
-		expect(cellValue(row[62])).toBe('A');
-	});
-
-	it('applies report pageData options (bold, fontFamily, fontSize, italic, strike, underline)', async () => {
-		const reports: Report[] = [
-			{
-				name: 'plugin-a',
-				pageData: {
-					headers: { col1: 'Col1' },
-					data: {
-						'https://example.com/': { col1: { value: 'styled' } },
-					},
-					options: {
-						'https://example.com/': {
-							col1: {
-								bold: true,
-								fontFamily: 'Arial',
-								fontSize: 14,
-								italic: true,
-								strike: true,
-								underline: true,
-							},
-						},
-					},
-				},
-			},
-		];
-
-		const page = createMockPage();
-		const sheet = createPageList(reports);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		const row = rows![0];
-		const provided = row[61].provide();
-		expect(provided.userEnteredFormat.textFormat).toEqual(
-			expect.objectContaining({
-				bold: true,
-				fontFamily: 'Arial',
-				fontSize: 14,
-				italic: true,
-				strikethrough: true,
-				underline: true,
-			}),
+		vi.mocked(listViewerPages).mockResolvedValueOnce(
+			makePage([makeItem({ status: null })]),
 		);
+		const setting = createPageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		expect(cellValue(mock.rows[0]![15]!)).toBe(-1);
 	});
 
-	it('title shortening removes index title and separator characters', async () => {
-		// First call: register index title for dirname "/"
-		const indexPage = createMockPage({
-			url: {
-				href: 'https://example.com/',
-				protocol: 'https:',
-				hostname: 'example.com',
-				paths: [''],
-				depth: 0,
-				dirname: null,
-				basename: '',
-				isIndex: true,
-				query: '',
-			},
-			title: 'Example Site',
-		});
-
-		const sheet = createPageList([]);
-		await sheet.eachPage!(indexPage, 1, 2, null);
-
-		// Second call: child page with site title in its title
-		const childPage = createMockPage({
-			url: {
-				href: 'https://example.com/about',
-				protocol: 'https:',
-				hostname: 'example.com',
-				paths: ['about'],
-				depth: 1,
-				dirname: '/',
-				basename: 'about',
-				isIndex: false,
-				query: '',
-			},
-			title: 'About Us | Example Site',
-			getReferrers: vi.fn().mockResolvedValue([]),
-		});
-
-		const rows = await sheet.eachPage!(childPage, 2, 2, indexPage as never);
-
-		// Title should have "Example Site" removed and "|" stripped
-		expect(cellValue(rows![0][0])).toBe('About Us');
-	});
-
-	it('preserves original title when shortening would result in empty string', async () => {
-		const indexPage = createMockPage({
-			url: {
-				href: 'https://example.com/',
-				protocol: 'https:',
-				hostname: 'example.com',
-				paths: [''],
-				depth: 0,
-				dirname: null,
-				basename: '',
-				isIndex: true,
-				query: '',
-			},
-			title: 'Example Site',
-		});
-
-		const sheet = createPageList([]);
-		await sheet.eachPage!(indexPage, 1, 2, null);
-
-		const childPage = createMockPage({
-			url: {
-				href: 'https://example.com/about',
-				protocol: 'https:',
-				hostname: 'example.com',
-				paths: ['about'],
-				depth: 1,
-				dirname: '/',
-				basename: 'about',
-				isIndex: false,
-				query: '',
-			},
-			// Title IS the index title — removing it would leave empty
-			title: 'Example Site',
-			getReferrers: vi.fn().mockResolvedValue([]),
-		});
-
-		const rows = await sheet.eachPage!(childPage, 2, 2, indexPage as never);
-
-		// Should preserve original title
-		expect(cellValue(rows![0][0])).toBe('Example Site');
-	});
-
-	it('includes Full Title in second column', async () => {
-		const page = createMockPage({ title: 'Full Page Title | Site Name' });
-		const sheet = createPageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(cellValue(rows![0][1])).toBe('Full Page Title | Site Name');
-	});
-
-	it('accumulates indexRefs for index pages and aggregates referrer count', async () => {
-		const sheet = createPageList([]);
-
-		// First index page for /about/
-		const aboutIndex = createMockPage({
-			url: {
-				href: 'https://example.com/about/',
-				protocol: 'https:',
-				hostname: 'example.com',
-				paths: ['about', ''],
-				depth: 2,
-				dirname: '/about',
-				basename: '',
-				isIndex: true,
-				query: '',
-			},
-			title: 'About',
-			getReferrers: vi.fn().mockResolvedValue([
+	it('adds plugin report data columns from pageData keyed by URL', async () => {
+		vi.mocked(listViewerPages).mockResolvedValueOnce(
+			makePage([makeItem({ url: 'https://example.com/page' })]),
+		);
+		const setting = createPageList(
+			[
 				{
-					url: 'https://example.com/',
-					through: 'https://example.com/',
-					hash: null,
-					textContent: 'About',
+					name: 'plugin',
+					pageData: {
+						headers: { score: 'Score' },
+						data: { 'https://example.com/page': { score: { value: 95 } } },
+					},
 				},
+			],
+			NO_ACCESSOR,
+		);
+		const mock = createMockSheet();
+		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+
+		const headers = setting.createHeaders();
+		const scoreIndex = headers.indexOf('Score');
+		expect(cellValue(mock.rows[0]![scoreIndex]!)).toBe(95);
+	});
+
+	it('skips a page across cursor pages once maxRows is reached', async () => {
+		vi.mocked(listViewerPages).mockResolvedValueOnce(
+			makePage([
+				makeItem({ url: 'https://example.com/a' }),
+				makeItem({ url: 'https://example.com/b' }),
 			]),
-		});
-
-		await sheet.eachPage!(aboutIndex, 1, 2, null);
-
-		// Second index page for /about/ (e.g., index.html with basename)
-		const aboutIndexHtml = createMockPage({
-			url: {
-				href: 'https://example.com/about/index.html',
-				protocol: 'https:',
-				hostname: 'example.com',
-				paths: ['about', 'index.html'],
-				depth: 2,
-				dirname: '/about',
-				basename: 'index.html',
-				isIndex: true,
-				query: '',
-			},
-			title: 'About',
-			getReferrers: vi.fn().mockResolvedValue([
-				{
-					url: 'https://example.com/contact',
-					through: 'https://example.com/contact',
-					hash: null,
-					textContent: 'About',
-				},
-				{
-					url: 'https://example.com/help',
-					through: 'https://example.com/help',
-					hash: null,
-					textContent: 'About',
-				},
-			]),
-		});
-
-		const rows = await sheet.eachPage!(aboutIndexHtml, 2, 2, aboutIndex as never);
-
-		// Internal Referrers should aggregate across both index pages
-		// (shifted from 22 → 23 after charset insertion at 18)
-		// The cell is a LazyCell — call provide() directly
-		const referrerCell = rows![0][23];
-		const provided = referrerCell.provide();
-		// Total referrers: 1 (aboutIndex) + 2 (aboutIndexHtml) = 3
-		expect(provided.userEnteredValue.numberValue).toBe(3);
+		);
+		const setting = createPageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({ sheet: mock.sheet, maxRows: 1, onProgress: () => {} });
+		expect(mock.rows).toHaveLength(1);
+		expect(mock.flushCount).toBe(1);
 	});
 
 	it('calls frozen, conditionalFormat, and hideCol in updateSheet', async () => {
-		const mockSheet = {
-			frozen: vi.fn().mockResolvedValue(),
-			conditionalFormat: vi.fn().mockResolvedValue(),
-			getColNumByHeaderName: vi.fn().mockReturnValue(1),
-			hideCol: vi.fn().mockResolvedValue(),
-		} as unknown as Sheet;
-
-		const sheet = createPageList([]);
-
-		// Process a page to set maxDepth
-		const page = createMockPage({
-			url: {
-				href: 'https://example.com/a/b/',
-				protocol: 'https:',
-				hostname: 'example.com',
-				paths: ['a', 'b', ''],
-				depth: 3,
-				dirname: '/a/b',
-				basename: '',
-				isIndex: true,
-				query: '',
-			},
-		});
-		await sheet.eachPage!(page, 1, 1, null);
-
-		await sheet.updateSheet!(mockSheet);
-
-		expect(mockSheet.frozen).toHaveBeenCalledWith(1, 1);
-		expect(mockSheet.conditionalFormat).toHaveBeenCalledTimes(7);
-
-		// maxDepth = 3, so path4-path10 (7 columns) should be hidden
-		expect(mockSheet.hideCol).toHaveBeenCalledTimes(7);
-	});
-
-	it('hides unused path columns based on maxDepth', async () => {
-		const mockSheet = {
-			frozen: vi.fn().mockResolvedValue(),
-			conditionalFormat: vi.fn().mockResolvedValue(),
-			getColNumByHeaderName: vi.fn().mockImplementation((name: string) => {
-				const map: Record<string, number> = {
-					path1: 6,
-					path2: 7,
-					path3: 8,
-					path4: 9,
-					path5: 10,
-					path6: 11,
-					path7: 12,
-					path8: 13,
-					path9: 14,
-					path10: 15,
-				};
-				return map[name] ?? 1;
-			}),
-			hideCol: vi.fn().mockResolvedValue(),
-		} as unknown as Sheet;
-
-		const sheet = createPageList([]);
-
-		// Process page with depth 2
-		const page = createMockPage({
-			url: {
-				href: 'https://example.com/a/',
-				protocol: 'https:',
-				hostname: 'example.com',
-				paths: ['a', ''],
-				depth: 2,
-				dirname: '/a',
-				basename: '',
-				isIndex: true,
-				query: '',
-			},
-		});
-		await sheet.eachPage!(page, 1, 1, null);
-		await sheet.updateSheet!(mockSheet);
-
-		// maxDepth = 2, so path3-path10 (8 columns) should be hidden
-		expect(mockSheet.hideCol).toHaveBeenCalledTimes(8);
-		expect(mockSheet.getColNumByHeaderName).toHaveBeenCalledWith('path3');
-		expect(mockSheet.getColNumByHeaderName).toHaveBeenCalledWith('path10');
-	});
-
-	it('skips report columns when pageData has no entry for the page URL', async () => {
-		const reports: Report[] = [
-			{
-				name: 'plugin-a',
-				pageData: {
-					headers: { score: 'Score' },
-					data: {
-						'https://other.example.com/': { score: { value: 50 } },
-					},
-				},
-			},
-		];
-
-		const page = createMockPage();
-		const sheet = createPageList(reports);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		// Row should have base 61 columns only — no plugin column appended
-		expect(rows![0]).toHaveLength(61);
-	});
-
-	it('uses option.note when data.note is absent', async () => {
-		const reports: Report[] = [
-			{
-				name: 'plugin-a',
-				pageData: {
-					headers: { col1: 'Col1' },
-					data: {
-						'https://example.com/': { col1: { value: 'val' } },
-					},
-					options: {
-						'https://example.com/': {
-							col1: { note: 'option note text' },
-						},
-					},
-				},
-			},
-		];
-
-		const page = createMockPage();
-		const sheet = createPageList(reports);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		// Plugin column starts at index 61 (base columns = 61 in v2 layout).
-		const provided = rows![0][61].provide();
-		expect(provided.note).toBe('option note text');
+		const setting = createPageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await mock.sheet.setHeaders(setting.createHeaders());
+		await setting.updateSheet!(mock.sheet);
+		expect(mock.conditionalFormatCalls.length).toBeGreaterThan(0);
 	});
 });

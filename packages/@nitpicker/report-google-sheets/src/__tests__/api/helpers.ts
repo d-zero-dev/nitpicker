@@ -9,6 +9,7 @@ import path from 'node:path';
 
 import { authentication } from '@d-zero/google-auth';
 import { CrawlerOrchestrator } from '@nitpicker/crawler';
+import { buildViewerReadModel } from '@nitpicker/query';
 import { google } from 'googleapis';
 
 const SPREADSHEET_ID = (() => {
@@ -105,7 +106,10 @@ export interface CrawlResult {
 }
 
 /**
- *
+ * Crawls the given URLs and builds the viewer read model against the
+ * resulting archive before returning — `createPageList`/`createLinks`
+ * (`requiresReadModel: true`) throw via `requireViewerReadModel` otherwise,
+ * since a plain post-crawl archive has no read model yet.
  * @param urls
  * @param options
  */
@@ -131,6 +135,8 @@ export async function crawlTestServer(
 			});
 		},
 	);
+
+	await buildViewerReadModel(orchestrator.archive);
 
 	return {
 		archive: orchestrator.archive,

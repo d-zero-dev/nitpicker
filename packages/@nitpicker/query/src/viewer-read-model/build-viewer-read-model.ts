@@ -19,6 +19,8 @@ import { buildPageUrlRankMap } from './build-page-url-rank-map.js';
 import { buildTechnologyDirectoryStatsRows } from './build-technology-directory-stats-rows.js';
 import { buildTechnologySummaryRows } from './build-technology-summary-rows.js';
 import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
+import { computeDirIndexInboundLinkCountByPageId } from './compute-dir-index-inbound-link-count-by-page-id.js';
+import { computeDisplayTitleByPageId } from './compute-display-title-by-page-id.js';
 import { computeDuplicateGroupPageRows } from './compute-duplicate-group-page-rows.js';
 import { computeDuplicateGroupRows } from './compute-duplicate-group-rows.js';
 import { computeErrorKindInsertRows } from './compute-error-kind-insert-rows.js';
@@ -227,6 +229,12 @@ interface ViewerPageInsertRow {
 	is_dedupe_capped: number;
 	/** Copied from `PagesSourceRow.dedupeCapEventId` verbatim — see the DDL comment. */
 	dedupe_cap_event_id: number | null;
+	/** From `computeDisplayTitleByPageId` — see the DDL comment for why this has no write-model source. */
+	display_title: string | null;
+	/** From the `viewer_anchor_facts` build's in-memory tally, defaulted to `0` when the page received no internal links — see the DDL comment. */
+	inbound_link_count: number;
+	/** From `computeDirIndexInboundLinkCountByPageId` — `null` for non-index pages, see that function's docs. */
+	dir_index_inbound_link_count: number | null;
 	/**
 	 * Case-preserving sort key for URL ordering — currently just `url`
 	 * verbatim, matching `listPages`'s plain `ORDER BY url` (SQLite's
@@ -285,11 +293,19 @@ function derivePathSortKey(url: string): string {
  * @param row - The source row read from `pages`.
  * @param naturalUrlRankByPageId - Rank map from {@link buildPageNaturalUrlRankMap},
  *   computed once across every `sourceRows` entry.
+ * @param displayTitleByPageId - From {@link computeDisplayTitleByPageId}.
+ * @param inboundLinkCountByPageId - The `viewer_anchor_facts` build's
+ *   in-memory per-destination tally.
+ * @param dirIndexInboundLinkCountByPageId - From
+ *   {@link computeDirIndexInboundLinkCountByPageId}.
  * @returns The corresponding `viewer_pages` insert row.
  */
 function toViewerPageInsertRow(
 	row: PagesSourceRow,
 	naturalUrlRankByPageId: ReadonlyMap<number, number>,
+	displayTitleByPageId: ReadonlyMap<number, string | null>,
+	inboundLinkCountByPageId: ReadonlyMap<number, number>,
+	dirIndexInboundLinkCountByPageId: ReadonlyMap<number, number>,
 ): ViewerPageInsertRow {
 	const statusSortKey = row.status ?? NULL_STATUS_SENTINEL;
 	return {
@@ -329,6 +345,9 @@ function toViewerPageInsertRow(
 		has_hsts: row.hasHSTS,
 		is_dedupe_capped: row.dedupeCapEventId == null ? 0 : 1,
 		dedupe_cap_event_id: row.dedupeCapEventId,
+		display_title: displayTitleByPageId.get(row.id) ?? null,
+		inbound_link_count: inboundLinkCountByPageId.get(row.id) ?? 0,
+		dir_index_inbound_link_count: dirIndexInboundLinkCountByPageId.get(row.id) ?? null,
 		url_sort_key: row.url,
 		title_sort_key: row.title ?? '',
 		path_sort_key: derivePathSortKey(row.url),
@@ -362,15 +381,21 @@ function toViewerPageInsertRow(
  * `backfillBodyHashFromHtmlBlobs`. Computes a
  * `getSummary` snapshot (see below for why this happens outside the
  * transaction), then drops all 26 tables if present, recreates them,
- * populates `viewer_pages`
- * from the current `pages` write-model table, populates
+ * populates `viewer_anchor_facts` from a single `anchors` aggregation query
+ * (see `computeAnchorFactRows` — unlike the directory tree, this cannot
+ * reuse `sourceRows`, since link data lives on `anchors`, not `pages`),
+ * derives `viewer_external_links` from those same in-memory rows with no
+ * second `anchors` scan (see `deriveExternalLinkSummaryRows`), and tallies
+ * each destination's inbound-link count in memory along the way (issue:
+ * report-google-sheets rewrite) — deliberately run **before** `viewer_pages`
+ * (see the "moved ahead of `buildingPages`" comment at its call site) so
+ * `viewer_pages.inbound_link_count`/`dir_index_inbound_link_count` (from
+ * `computeDisplayTitleByPageId`/`computeDirIndexInboundLinkCountByPageId`)
+ * can be written in the same insert pass as every other `viewer_pages`
+ * column, rather than a second UPDATE sweep after the fact. Populates
+ * `viewer_pages` from the current `pages` write-model table, populates
  * `viewer_directory_nodes`/`viewer_directory_pages` from that same page set
  * (see `buildDirectoryTreeRows` for the tree-building rules), populates
- * `viewer_anchor_facts` from a single `anchors` aggregation query (see
- * `computeAnchorFactRows` — unlike the directory tree, this cannot reuse
- * `sourceRows`, since link data lives on `anchors`, not `pages`) and derives
- * `viewer_external_links` from those same in-memory rows with no second
- * `anchors` scan (see `deriveExternalLinkSummaryRows`), populates
  * `viewer_resources`/`viewer_resource_stats` from a single
  * `resources`/`resources-referrers` aggregation query (see
  * `computeResourceInsertRows` — issue #110, independent of `pages`/`anchors`
@@ -651,9 +676,6 @@ export async function buildViewerReadModel(
 		}
 
 		const naturalUrlRankByPageId = buildPageNaturalUrlRankMap(sourceRows);
-		const insertRows = sourceRows.map((row) =>
-			toViewerPageInsertRow(row, naturalUrlRankByPageId),
-		);
 		const pageIdByUrl = new Map(sourceRows.map((row) => [row.url, row.id]));
 
 		// Separate scan (not part of `sourceRows`, which only selects
@@ -710,6 +732,81 @@ export async function buildViewerReadModel(
 				break;
 			}
 		}
+
+		// Moved ahead of `buildingPages` (report-google-sheets rewrite,
+		// issue: OOM on large archives): building `viewer_anchor_facts` first
+		// lets `viewer_pages.inbound_link_count`/`dir_index_inbound_link_count`
+		// (below) be computed once, in memory, and written as part of the same
+		// `viewer_pages` insert, instead of a second full-archive query after
+		// the fact. `buildingGraph` further down INNER JOINs both this table
+		// and `viewer_pages` (see `compute-graph-read-model-rows.ts`), so this
+		// reordering must keep both phases ahead of it — moving
+		// `buildingAnchorFacts` earlier preserves that constraint as long as
+		// `buildingPages` still runs before `buildingGraph`, which it does.
+		//
+		// Unlike `viewer_pages`/the directory tree, this needs its own `anchors`
+		// query — `sourceRows` (loaded from `pages` only) has no anchor/link
+		// data. Runs once, here, instead of on every `/api/links?type=broken`
+		// request — see `computeAnchorFactRows`'s docs for the SQLite
+		// performance rationale, and for why it yields `source.id`-range
+		// chunks rather than every row at once (a large archive's `anchors`
+		// table can hold millions of edges — materialising them into one
+		// array risks the same OOM class PR #168 fixed for URL sorting).
+		// Each chunk's external-link summary is folded into
+		// `viewer_external_links` via `upsertExternalLinkRows`'s `ON CONFLICT`
+		// upsert, rather than accumulating a running per-destination tally in
+		// JS across the whole build — see `deriveExternalLinkSummaryRows`'s
+		// docs for why a whole-build JS-side accumulator would defeat the
+		// bounded-memory guarantee the chunked read exists to provide.
+		//
+		// `inboundLinkCountByPageId` IS a whole-build JS-side accumulator, but
+		// a bounded one: one integer per page that receives at least one
+		// internal link (at most `sourceRows.length` entries), not one entry
+		// per edge or per link occurrence — the same bounded-by-page-count
+		// shape as `naturalUrlRankByPageId`/`pageIdByUrl` above.
+		onPhase?.('buildingAnchorFacts');
+		const inboundLinkCountByPageId = new Map<number, number>();
+		for await (const anchorFactChunk of computeAnchorFactRows(
+			trx,
+			undefined,
+			(scannedUpToId, maxId) => {
+				onProgress?.({ insertedRows: scannedUpToId, totalRows: maxId });
+			},
+		)) {
+			for (let start = 0; start < anchorFactChunk.length; start += INSERT_CHUNK_SIZE) {
+				await trx('viewer_anchor_facts').insert(
+					anchorFactChunk.slice(start, start + INSERT_CHUNK_SIZE),
+				);
+			}
+			await upsertExternalLinkRows(trx, deriveExternalLinkSummaryRows(anchorFactChunk));
+			for (const fact of anchorFactChunk) {
+				inboundLinkCountByPageId.set(
+					fact.dest_page_id,
+					(inboundLinkCountByPageId.get(fact.dest_page_id) ?? 0) + 1,
+				);
+			}
+		}
+
+		// Page List report support: computed here, after `viewer_anchor_facts`
+		// exists but before the `viewer_pages` insert below, so both land in
+		// the same insert pass rather than a second UPDATE sweep. See each
+		// function's docs for why this needs a full-archive view
+		// `joinViewerPageIdsToListItems`'s per-page-id lookup cannot provide.
+		const displayTitleByPageId = computeDisplayTitleByPageId(sourceRows);
+		const dirIndexInboundLinkCountByPageId = computeDirIndexInboundLinkCountByPageId(
+			sourceRows,
+			inboundLinkCountByPageId,
+		);
+		const insertRows = sourceRows.map((row) =>
+			toViewerPageInsertRow(
+				row,
+				naturalUrlRankByPageId,
+				displayTitleByPageId,
+				inboundLinkCountByPageId,
+				dirIndexInboundLinkCountByPageId,
+			),
+		);
+
 		const totalRows = insertRows.length;
 		let insertedRows = 0;
 
@@ -819,36 +916,6 @@ export async function buildViewerReadModel(
 			await trx('viewer_isolated_component_pages').insert(chunk);
 			isolatedInsertedRows += chunk.length;
 			onProgress?.({ insertedRows: isolatedInsertedRows, totalRows: isolatedTotalRows });
-		}
-
-		// Unlike `viewer_pages`/the directory tree, this needs its own `anchors`
-		// query — `sourceRows` (loaded from `pages` only) has no anchor/link
-		// data. Runs once, here, instead of on every `/api/links?type=broken`
-		// request — see `computeAnchorFactRows`'s docs for the SQLite
-		// performance rationale, and for why it yields `source.id`-range
-		// chunks rather than every row at once (a large archive's `anchors`
-		// table can hold millions of edges — materialising them into one
-		// array risks the same OOM class PR #168 fixed for URL sorting).
-		// Each chunk's external-link summary is folded into
-		// `viewer_external_links` via `upsertExternalLinkRows`'s `ON CONFLICT`
-		// upsert, rather than accumulating a running per-destination tally in
-		// JS across the whole build — see `deriveExternalLinkSummaryRows`'s
-		// docs for why a whole-build JS-side accumulator would defeat the
-		// bounded-memory guarantee the chunked read exists to provide.
-		onPhase?.('buildingAnchorFacts');
-		for await (const anchorFactChunk of computeAnchorFactRows(
-			trx,
-			undefined,
-			(scannedUpToId, maxId) => {
-				onProgress?.({ insertedRows: scannedUpToId, totalRows: maxId });
-			},
-		)) {
-			for (let start = 0; start < anchorFactChunk.length; start += INSERT_CHUNK_SIZE) {
-				await trx('viewer_anchor_facts').insert(
-					anchorFactChunk.slice(start, start + INSERT_CHUNK_SIZE),
-				);
-			}
-			await upsertExternalLinkRows(trx, deriveExternalLinkSummaryRows(anchorFactChunk));
 		}
 
 		onPhase?.('buildingGraph');

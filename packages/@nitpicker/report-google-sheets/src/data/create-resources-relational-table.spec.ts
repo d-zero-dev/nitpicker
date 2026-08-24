@@ -1,74 +1,33 @@
-import type { Sheet } from '@d-zero/google-sheets';
-import type { ArchiveResource as Resource } from '@nitpicker/crawler';
+import { streamResourceReferrerEdges } from '@nitpicker/query';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { Cell } from '@d-zero/google-sheets';
-import { describe, it, expect, vi } from 'vitest';
+import { assertNoLazyCells } from '../test-helpers/assert-no-lazy-cells.js';
+import { cellValue } from '../test-helpers/cell-inspection.js';
+import { createMockSheet } from '../test-helpers/create-mock-sheet.js';
+import { oneChunk } from '../test-helpers/one-chunk.js';
 
 import { createResourcesRelationalTable } from './create-resources-relational-table.js';
 
-/**
- * Creates a mock ArchiveResource object with sensible defaults for testing.
- * @param overrides - Properties to override on the default mock resource.
- * @returns A mock Resource instance cast via `as never`.
- */
-function createMockResource(overrides: Partial<Record<string, unknown>> = {}): Resource {
-	return {
-		url: 'https://example.com/style.css',
-		status: 200,
-		statusText: 'OK',
-		contentType: 'text/css',
-		contentLength: 5000,
-		isExternal: false,
-		getReferrers: vi.fn().mockResolvedValue([]),
-		...overrides,
-	} as never;
-}
+vi.mock('@nitpicker/query', () => ({
+	streamResourceReferrerEdges: vi.fn(),
+}));
 
-/**
- * Extracts the primitive value from a Cell by calling `provide()` and reading `userEnteredValue`.
- * @param cell - A Cell object with a `provide` method.
- * @param cell.provide
- * @returns The string, number, boolean, or formula value held by the cell.
- */
-function cellValue(cell: {
-	provide: (n?: number) => { userEnteredValue: Record<string, unknown> };
-}) {
-	const provided = cell.provide();
-	return (
-		provided.userEnteredValue.stringValue ??
-		provided.userEnteredValue.numberValue ??
-		provided.userEnteredValue.boolValue ??
-		provided.userEnteredValue.formulaValue ??
-		''
-	);
-}
+const NO_ACCESSOR = { getKnex: () => ({}) } as never;
 
 describe('createResourcesRelationalTable', () => {
-	it('returns sheet config with name "Resources Relational Table"', () => {
-		const sheet = createResourcesRelationalTable([]);
-		expect(sheet.name).toBe('Resources Relational Table');
+	beforeEach(() => {
+		vi.mocked(streamResourceReferrerEdges).mockReset();
 	});
 
-	it('uses only eager cells from eachResource so appendRow can stream', async () => {
-		// See create-links.spec.ts for the rationale.
-		const resource = createMockResource({
-			getReferrers: vi.fn().mockResolvedValue(['https://example.com/page1']),
-		});
-		const sheet = createResourcesRelationalTable([]);
-		const rows = await sheet.eachResource!(resource);
-		expect(rows).toBeTruthy();
-		expect(rows!.length).toBeGreaterThan(0);
-		for (const row of rows!) {
-			for (const cell of row) {
-				expect(cell.provide).toBe(Cell.prototype.provide);
-			}
-		}
+	it('returns sheet config with name "Resources Relational Table", no read-model dependency', () => {
+		const setting = createResourcesRelationalTable([], NO_ACCESSOR);
+		expect(setting.name).toBe('Resources Relational Table');
+		expect(setting.requiresReadModel).toBeFalsy();
 	});
 
 	it('returns correct headers', () => {
-		const sheet = createResourcesRelationalTable([]);
-		const headers = sheet.createHeaders();
-		expect(headers).toEqual([
+		const setting = createResourcesRelationalTable([], NO_ACCESSOR);
+		expect(setting.createHeaders()).toEqual([
 			'Referred Page (From)',
 			'Resource (To)',
 			'Resource Status Code',
@@ -78,120 +37,84 @@ describe('createResourcesRelationalTable', () => {
 		]);
 	});
 
-	it('generates one row per referrer', async () => {
-		const resource = createMockResource({
-			getReferrers: vi
-				.fn()
-				.mockResolvedValue([
-					'https://example.com/',
-					'https://example.com/about',
-					'https://example.com/contact',
-				]),
+	it('streams one row per (resource, page) edge without lazy thunks', async () => {
+		vi.mocked(streamResourceReferrerEdges).mockReturnValue(
+			oneChunk([
+				{
+					pageUrl: 'https://example.com/page',
+					resourceUrl: 'https://example.com/style.css',
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/css',
+					contentLength: 1000,
+				},
+			]),
+		);
+		const setting = createResourcesRelationalTable([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
 		});
 
-		const sheet = createResourcesRelationalTable([]);
-		const rows = await sheet.eachResource!(resource);
-
-		expect(rows).toHaveLength(3);
+		expect(mock.rows).toHaveLength(1);
+		assertNoLazyCells(mock.rows);
+		const row = mock.rows[0]!;
+		expect(cellValue(row[0]!)).toContain('https://example.com/page');
+		expect(cellValue(row[1]!)).toBe('https://example.com/style.css');
+		expect(cellValue(row[2]!)).toBe(200);
+		expect(cellValue(row[5]!)).toBe(1000);
 	});
 
-	it('includes referrer URL and resource metadata in each row', async () => {
-		const resource = createMockResource({
-			url: 'https://cdn.example.com/app.js',
-			status: 304,
-			statusText: 'Not Modified',
-			contentType: 'application/javascript',
-			contentLength: 12_345,
-			getReferrers: vi.fn().mockResolvedValue(['https://example.com/']),
+	it('stops sending rows once maxRows is reached', async () => {
+		vi.mocked(streamResourceReferrerEdges).mockReturnValue(
+			oneChunk(
+				Array.from({ length: 3 }, () => ({
+					pageUrl: 'https://example.com/page',
+					resourceUrl: 'https://example.com/style.css',
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/css',
+					contentLength: 1000,
+				})),
+			),
+		);
+		const setting = createResourcesRelationalTable([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 1,
+			estimatedTotal: 3,
+			onProgress: () => {},
 		});
-
-		const sheet = createResourcesRelationalTable([]);
-		const rows = await sheet.eachResource!(resource);
-
-		expect(rows).toHaveLength(1);
-		const row = rows![0];
-		expect(row).toHaveLength(6);
-
-		// Referred Page (From) - has hyperlink
-		expect(row[0].provide().hyperlink).toBe('https://example.com/');
-		// Resource (To)
-		expect(cellValue(row[1])).toBe('https://cdn.example.com/app.js');
-		// Resource Status Code
-		expect(cellValue(row[2])).toBe(304);
-		// Resource Status Text
-		expect(cellValue(row[3])).toBe('Not Modified');
-		// Resource Content Type
-		expect(cellValue(row[4])).toBe('application/javascript');
-		// Resource Size
-		expect(cellValue(row[5])).toBe(12_345);
+		expect(mock.rows).toHaveLength(1);
+		expect(mock.flushCount).toBe(1);
 	});
 
-	it('returns empty array when resource has no referrers', async () => {
-		const resource = createMockResource();
-		const sheet = createResourcesRelationalTable([]);
-		const rows = await sheet.eachResource!(resource);
-
-		expect(rows).toEqual([]);
-	});
-
-	it('calls frozen and conditionalFormat in updateSheet', async () => {
-		const mockSheet = {
-			frozen: vi.fn().mockResolvedValue(),
-			conditionalFormat: vi.fn().mockResolvedValue(),
-			getColNumByHeaderName: vi.fn().mockReturnValue(3),
-		} as unknown as Sheet;
-
-		const sheet = createResourcesRelationalTable([]);
-		await sheet.updateSheet!(mockSheet);
-
-		expect(mockSheet.frozen).toHaveBeenCalledWith(2, 1);
-		expect(mockSheet.conditionalFormat).toHaveBeenCalledTimes(2);
-		expect(mockSheet.getColNumByHeaderName).toHaveBeenCalledWith('Resource Status Code');
-	});
-
-	it('applies NUMBER_GREATER_THAN_EQ 400 conditional format', async () => {
-		const mockSheet = {
-			frozen: vi.fn().mockResolvedValue(),
-			conditionalFormat: vi.fn().mockResolvedValue(),
-			getColNumByHeaderName: vi.fn().mockReturnValue(3),
-		} as unknown as Sheet;
-
-		const sheet = createResourcesRelationalTable([]);
-		await sheet.updateSheet!(mockSheet);
-
-		const firstCall = vi.mocked(mockSheet.conditionalFormat).mock.calls[0];
-		expect(firstCall[1]).toEqual(
-			expect.objectContaining({
-				booleanRule: expect.objectContaining({
-					condition: expect.objectContaining({
-						type: 'NUMBER_GREATER_THAN_EQ',
-						values: [{ userEnteredValue: '400' }],
-					}),
-				}),
-			}),
+	it('reports onProgress against ctx.estimatedTotal, not maxRows (issue: misleading progress denominator)', async () => {
+		vi.mocked(streamResourceReferrerEdges).mockReturnValue(
+			oneChunk([
+				{
+					pageUrl: 'https://example.com/page',
+					resourceUrl: 'https://example.com/style.css',
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/css',
+					contentLength: 1000,
+				},
+			]),
 		);
-	});
-
-	it('applies NUMBER_NOT_BETWEEN 200-399 conditional format', async () => {
-		const mockSheet = {
-			frozen: vi.fn().mockResolvedValue(),
-			conditionalFormat: vi.fn().mockResolvedValue(),
-			getColNumByHeaderName: vi.fn().mockReturnValue(3),
-		} as unknown as Sheet;
-
-		const sheet = createResourcesRelationalTable([]);
-		await sheet.updateSheet!(mockSheet);
-
-		const secondCall = vi.mocked(mockSheet.conditionalFormat).mock.calls[1];
-		expect(secondCall[1]).toEqual(
-			expect.objectContaining({
-				booleanRule: expect.objectContaining({
-					condition: expect.objectContaining({
-						type: 'NUMBER_NOT_BETWEEN',
-						values: [{ userEnteredValue: '200' }, { userEnteredValue: '399' }],
-					}),
-				}),
-			}),
-		);
+		const setting = createResourcesRelationalTable([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		const onProgress = vi.fn();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 1_000_000, // far larger than estimatedTotal — must not leak into `total`
+			estimatedTotal: 1,
+			onProgress,
+		});
+		expect(onProgress).toHaveBeenCalledWith(1, 1);
 	});
 });

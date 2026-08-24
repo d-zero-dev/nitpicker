@@ -38,7 +38,8 @@ export async function listImages(
 		.join('url_refs as page_ur', 'page_ur.id', 'ci.url_id')
 		.leftJoin('url_refs as src_ur', 'src_ur.id', 'ii.src_url_id')
 		.leftJoin('url_refs as current_src_ur', 'current_src_ur.id', 'ii.current_src_url_id')
-		.leftJoin('text_refs as alt_ref', 'alt_ref.id', 'ii.alt_text_id');
+		.leftJoin('text_refs as alt_ref', 'alt_ref.id', 'ii.alt_text_id')
+		.leftJoin('text_refs as dom_path_ref', 'dom_path_ref.id', 'ii.dom_path_text_id');
 
 	if (options.missingAlt != null) {
 		if (options.missingAlt) {
@@ -90,6 +91,7 @@ export async function listImages(
 			naturalWidth: number;
 			naturalHeight: number;
 			isLazy: number | null;
+			domPath: string | null;
 		},
 		ImageEntry
 	>({
@@ -106,6 +108,7 @@ export async function listImages(
 				'ii.natural_width as naturalWidth',
 				'ii.natural_height as naturalHeight',
 				'ii.is_lazy as isLazy',
+				'dom_path_ref.text as domPath',
 			);
 			return applyListOrder(q, knex, sortBy, sortOrder, {
 				pageUrl: { column: '"page_ur"."url"', type: useUrlSort ? 'url' : 'plain' },
@@ -130,6 +133,7 @@ export async function listImages(
 			naturalWidth: row.naturalWidth,
 			naturalHeight: row.naturalHeight,
 			isLazy: !!row.isLazy,
+			domPath: row.domPath,
 		}),
 	});
 }

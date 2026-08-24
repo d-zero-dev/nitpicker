@@ -241,6 +241,14 @@ export interface AnchorFactInsertRow {
 	source_url_ref_id: number;
 	/** URL reference for `COALESCE(canonical.url, dest.url)`. */
 	dest_url_ref_id: number;
+	/**
+	 * URL reference for the immediate `anchor_edges.href_page_id` target,
+	 * before redirect/alias resolution — deliberately distinct from
+	 * {@link dest_url_ref_id}. `MIN()`-selected when a group spans multiple
+	 * raw hrefs collapsed onto the same resolved destination (same
+	 * determinism rationale as {@link first_text_id}).
+	 */
+	raw_dest_url_ref_id: number;
 	/** `COALESCE(canonical.status, dest.status)` — the canonical destination's HTTP status, or `null` if unknown. */
 	status: number | null;
 	/** `status`, or `NULL_STATUS_SENTINEL` when `status` is `null` — see that constant's docs. */

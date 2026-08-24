@@ -1,84 +1,32 @@
-import type { Page } from '@nitpicker/crawler';
+import { listViewerImages } from '@nitpicker/query';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { Cell } from '@d-zero/google-sheets';
-import { describe, it, expect, vi } from 'vitest';
+import { assertNoLazyCells } from '../test-helpers/assert-no-lazy-cells.js';
+import { cellValue } from '../test-helpers/cell-inspection.js';
+import { createMockSheet } from '../test-helpers/create-mock-sheet.js';
 
 import { createImageList } from './create-image-list.js';
 
-/**
- * Creates a mock Page object with sensible defaults for testing.
- * @param overrides - Properties to override on the default mock page.
- * @returns A mock Page instance cast via `as never`.
- */
-function createMockPage(overrides: Partial<Record<string, unknown>> = {}): Page {
-	return {
-		url: { href: 'https://example.com/' },
-		title: 'Example Page',
-		status: 200,
-		statusText: 'OK',
-		contentType: 'text/html',
-		isExternal: false,
-		isTarget: true,
-		isSkipped: false,
-		redirectFrom: [],
-		isInternalPage: () => true,
-		isPage: () => true,
-		getAnchors: vi.fn().mockResolvedValue([]),
-		getReferrers: vi.fn().mockResolvedValue([]),
-		getHtml: vi.fn().mockResolvedValue(null),
-		...overrides,
-	} as never;
-}
+vi.mock('@nitpicker/query', () => ({
+	listViewerImages: vi.fn(),
+}));
 
-/**
- * Extracts the primitive value from a Cell by calling `provide()` and reading `userEnteredValue`.
- * @param cell - A Cell object with a `provide` method.
- * @param cell.provide
- * @returns The string, number, boolean, or formula value held by the cell.
- */
-function cellValue(cell: {
-	provide: (n?: number) => { userEnteredValue: Record<string, unknown> };
-}) {
-	const provided = cell.provide();
-	return (
-		provided.userEnteredValue.stringValue ??
-		provided.userEnteredValue.numberValue ??
-		provided.userEnteredValue.boolValue ??
-		provided.userEnteredValue.formulaValue ??
-		''
-	);
-}
+const NO_ACCESSOR = undefined as never;
 
 describe('createImageList', () => {
-	it('returns sheet config with name "Images"', () => {
-		const sheet = createImageList([]);
-		expect(sheet.name).toBe('Images');
+	beforeEach(() => {
+		vi.mocked(listViewerImages).mockReset();
 	});
 
-	it('uses only eager cells from eachPage so appendRow can stream', async () => {
-		// See create-links.spec.ts for the rationale.
-		const page = createMockPage({
-			getHtml: vi
-				.fn()
-				.mockResolvedValue(
-					'<html><body><img src="/a.png" alt="A" width="100" height="50"></body></html>',
-				),
-		});
-		const sheet = createImageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-		expect(rows).toBeTruthy();
-		expect(rows!.length).toBeGreaterThan(0);
-		for (const row of rows!) {
-			for (const cell of row) {
-				expect(cell.provide).toBe(Cell.prototype.provide);
-			}
-		}
+	it('returns sheet config with name "Images" and requiresReadModel', () => {
+		const setting = createImageList([], NO_ACCESSOR);
+		expect(setting.name).toBe('Images');
+		expect(setting.requiresReadModel).toBe(true);
 	});
 
-	it('returns correct headers', () => {
-		const sheet = createImageList([]);
-		const headers = sheet.createHeaders();
-		expect(headers).toEqual([
+	it('returns correct headers, with DOM Path replacing Source Code', () => {
+		const setting = createImageList([], NO_ACCESSOR);
+		expect(setting.createHeaders()).toEqual([
 			'Page URL',
 			'Image path (src)',
 			'Image Path (currentSrc)',
@@ -86,148 +34,121 @@ describe('createImageList', () => {
 			'Displayed Width',
 			'Displayed Height',
 			'Lazy Loading',
-			'Source Code',
+			'DOM Path',
 		]);
 	});
 
-	it('extracts img elements from HTML', async () => {
-		const html = `
-			<html><body>
-				<img src="https://example.com/img1.png" alt="Image 1" width="100" height="50">
-				<img src="https://example.com/img2.jpg" alt="Image 2" width="200" height="150">
-			</body></html>
-		`;
-		const page = createMockPage({
-			getHtml: vi.fn().mockResolvedValue(html),
+	it('estimates the row count via listViewerImages(limit: 0)', async () => {
+		vi.mocked(listViewerImages).mockResolvedValue({
+			items: [],
+			total: 7,
+			limit: 0,
+			offset: 0,
+			nextCursor: null,
+			prevCursor: null,
 		});
-
-		const sheet = createImageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(rows).toHaveLength(2);
-		expect(rows![0]).toHaveLength(8);
-		expect(rows![1]).toHaveLength(8);
+		const setting = createImageList([], NO_ACCESSOR);
+		await expect(setting.estimateRowCount()).resolves.toBe(7);
 	});
 
-	it('includes page URL in each row', async () => {
-		const html = '<html><body><img src="test.png" alt="test"></body></html>';
-		const page = createMockPage({
-			url: { href: 'https://example.com/page' },
-			getHtml: vi.fn().mockResolvedValue(html),
-		});
+	it('streams rows across cursor pages without lazy thunks', async () => {
+		vi.mocked(listViewerImages)
+			.mockResolvedValueOnce({
+				items: [
+					{
+						pageUrl: 'https://example.com/',
+						src: 'https://example.com/a.png',
+						currentSrc: 'https://example.com/a.png',
+						alt: 'A',
+						width: 100,
+						height: 50,
+						naturalWidth: 100,
+						naturalHeight: 50,
+						isLazy: true,
+						domPath: 'html/body[1]/img[1]',
+					},
+				],
+				total: 2,
+				limit: 1,
+				offset: 0,
+				nextCursor: 'next',
+				prevCursor: null,
+			})
+			.mockResolvedValueOnce({
+				items: [
+					{
+						pageUrl: 'https://example.com/about',
+						src: 'https://example.com/b.png',
+						currentSrc: null,
+						alt: null,
+						width: 10,
+						height: 10,
+						naturalWidth: 10,
+						naturalHeight: 10,
+						isLazy: false,
+						domPath: null,
+					},
+				],
+				total: 2,
+				limit: 1,
+				offset: 1,
+				nextCursor: null,
+				prevCursor: 'prev',
+			});
 
-		const sheet = createImageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
+		const setting = createImageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
 
-		expect(cellValue(rows![0][0])).toBe('https://example.com/page');
+		expect(mock.rows).toHaveLength(2);
+		assertNoLazyCells(mock.rows);
+		const row = mock.rows[0]!;
+		expect(cellValue(row[0]!)).toBe('https://example.com/');
+		expect(cellValue(row[1]!)).toBe('https://example.com/a.png');
+		expect(cellValue(row[6]!)).toBe(true);
+		expect(cellValue(row[7]!)).toBe('html/body[1]/img[1]');
 	});
 
-	it('extracts alt text correctly', async () => {
-		const html =
-			'<html><body><img src="test.png" alt="Descriptive alt text"></body></html>';
-		const page = createMockPage({
-			getHtml: vi.fn().mockResolvedValue(html),
+	it('stops sending rows once maxRows is reached, without following nextCursor', async () => {
+		vi.mocked(listViewerImages).mockResolvedValueOnce({
+			items: [
+				{
+					pageUrl: 'https://example.com/',
+					src: 'https://example.com/a.png',
+					currentSrc: null,
+					alt: null,
+					width: 1,
+					height: 1,
+					naturalWidth: 1,
+					naturalHeight: 1,
+					isLazy: false,
+					domPath: 'html/body[1]/img[1]',
+				},
+				{
+					pageUrl: 'https://example.com/',
+					src: 'https://example.com/b.png',
+					currentSrc: null,
+					alt: null,
+					width: 1,
+					height: 1,
+					naturalWidth: 1,
+					naturalHeight: 1,
+					isLazy: false,
+					domPath: 'html/body[1]/img[2]',
+				},
+			],
+			total: 2,
+			limit: 2,
+			offset: 0,
+			nextCursor: 'next',
+			prevCursor: null,
 		});
 
-		const sheet = createImageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(cellValue(rows![0][3])).toBe('Descriptive alt text');
-	});
-
-	it('detects lazy loading attribute', async () => {
-		const html = `
-			<html><body>
-				<img src="lazy.png" alt="" loading="lazy">
-				<img src="eager.png" alt="" loading="eager">
-			</body></html>
-		`;
-		const page = createMockPage({
-			getHtml: vi.fn().mockResolvedValue(html),
-		});
-
-		const sheet = createImageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(cellValue(rows![0][6])).toBe(true);
-		expect(cellValue(rows![1][6])).toBe(false);
-	});
-
-	it('includes img outerHTML in source code column', async () => {
-		const html = '<html><body><img src="test.png" alt="test" class="hero"></body></html>';
-		const page = createMockPage({
-			getHtml: vi.fn().mockResolvedValue(html),
-		});
-
-		const sheet = createImageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		const sourceCode = cellValue(rows![0][7]);
-		expect(sourceCode).toBe('<img src="test.png" alt="test" class="hero">');
-	});
-
-	it('skips external pages', async () => {
-		const page = createMockPage({
-			isInternalPage: () => false,
-			getHtml: vi
-				.fn()
-				.mockResolvedValue('<html><body><img src="test.png"></body></html>'),
-		});
-
-		const sheet = createImageList([]);
-		const result = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(result).toBeUndefined();
-	});
-
-	it('skips pages with null HTML', async () => {
-		const page = createMockPage({
-			getHtml: vi.fn().mockResolvedValue(null),
-		});
-
-		const sheet = createImageList([]);
-		const result = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(result).toBeUndefined();
-	});
-
-	it('returns empty array for pages with no images', async () => {
-		const html = '<html><body><p>No images here</p></body></html>';
-		const page = createMockPage({
-			getHtml: vi.fn().mockResolvedValue(html),
-		});
-
-		const sheet = createImageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(rows).toEqual([]);
-	});
-
-	it('resolves relative src using page URL as JSDOM base', async () => {
-		const html = '<html><body><img src="/images/photo.png" alt="Photo"></body></html>';
-		const page = createMockPage({
-			url: { href: 'https://example.com/page/' },
-			getHtml: vi.fn().mockResolvedValue(html),
-		});
-
-		const sheet = createImageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		// JSDOM resolves relative src against the base URL
-		expect(cellValue(rows![0][1])).toBe('https://example.com/images/photo.png');
-	});
-
-	it('extracts width and height attributes', async () => {
-		const html =
-			'<html><body><img src="test.png" alt="" width="300" height="200"></body></html>';
-		const page = createMockPage({
-			getHtml: vi.fn().mockResolvedValue(html),
-		});
-
-		const sheet = createImageList([]);
-		const rows = await sheet.eachPage!(page, 1, 1, null);
-
-		expect(cellValue(rows![0][4])).toBe(300);
-		expect(cellValue(rows![0][5])).toBe(200);
+		const setting = createImageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({ sheet: mock.sheet, maxRows: 1, onProgress: () => {} });
+		expect(mock.rows).toHaveLength(1);
+		expect(listViewerImages).toHaveBeenCalledTimes(1);
+		expect(mock.flushCount).toBe(1);
 	});
 });

@@ -13,6 +13,7 @@ interface ImageJoinRow {
 	naturalWidth: number;
 	naturalHeight: number;
 	isLazy: number | null;
+	domPath: string | null;
 }
 
 /**
@@ -38,6 +39,7 @@ export async function joinViewerImageIdsToListItems(
 		.leftJoin('url_refs as src_ur', 'src_ur.id', 'ii.src_url_id')
 		.leftJoin('url_refs as current_src_ur', 'current_src_ur.id', 'ii.current_src_url_id')
 		.leftJoin('text_refs as alt_ref', 'alt_ref.id', 'ii.alt_text_id')
+		.leftJoin('text_refs as dom_path_ref', 'dom_path_ref.id', 'ii.dom_path_text_id')
 		.whereIn('ii.id', imageIds)
 		.select(
 			'ii.id as id',
@@ -50,6 +52,7 @@ export async function joinViewerImageIdsToListItems(
 			'ii.natural_width as naturalWidth',
 			'ii.natural_height as naturalHeight',
 			'ii.is_lazy as isLazy',
+			'dom_path_ref.text as domPath',
 		);
 	const rowsById = new Map(rows.map((row) => [row.id, row]));
 	return imageIds
@@ -65,5 +68,6 @@ export async function joinViewerImageIdsToListItems(
 			naturalWidth: row.naturalWidth,
 			naturalHeight: row.naturalHeight,
 			isLazy: !!row.isLazy,
+			domPath: row.domPath,
 		}));
 }

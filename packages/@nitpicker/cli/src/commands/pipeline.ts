@@ -132,7 +132,6 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			sheet: flags.sheet,
 			credentials: flags.credentials,
 			config: flags.config,
-			limit: flags.limit,
 			all: flags.all,
 			dedupeResources: flags.dedupeResources,
 			verbose: flags.verbose,

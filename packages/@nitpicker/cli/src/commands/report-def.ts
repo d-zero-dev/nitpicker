@@ -34,12 +34,6 @@ export const commandDef = {
 			valueName: 'path',
 			desc: 'Path to config file',
 		},
-		limit: {
-			shortFlag: 'l',
-			type: 'number',
-			default: 100_000,
-			desc: 'Limit number of rows',
-		},
 		all: {
 			type: 'boolean',
 			desc: 'Generate all sheets without interactive prompt',

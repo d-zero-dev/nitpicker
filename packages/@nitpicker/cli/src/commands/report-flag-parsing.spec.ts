@@ -74,12 +74,9 @@ describe('report CLI flag parsing (parseCli integration)', () => {
 			'https://docs.google.com/spreadsheets/d/x',
 			'--dedupe-resources',
 			'--all',
-			'-l',
-			'5000',
 		]);
 		expect(result.flags.dedupeResources).toBe(true);
 		expect(result.flags.all).toBe(true);
-		expect(result.flags.limit).toBe(5000);
 	});
 });
 

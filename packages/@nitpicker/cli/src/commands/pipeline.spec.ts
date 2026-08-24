@@ -77,7 +77,6 @@ describe('pipeline command', () => {
 		sheet: undefined,
 		credentials: './credentials.json',
 		config: undefined,
-		limit: 100_000,
 		verbose: undefined,
 		silent: undefined,
 	} as const;
@@ -187,7 +186,6 @@ describe('pipeline command', () => {
 			expect.objectContaining({
 				sheet: sheetUrl,
 				credentials: './credentials.json',
-				limit: 100_000,
 				all: true,
 			}),
 		);

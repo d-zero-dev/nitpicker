@@ -1,14 +1,9 @@
 import type { CreateSheet } from './sheets/types.js';
-import type { ErrorHandlerMessage } from '@d-zero/google-sheets';
 
-import { Lanes } from '@d-zero/dealer';
 import { authentication } from '@d-zero/google-auth';
 import { Sheets } from '@d-zero/google-sheets';
-import c from 'ansi-colors';
 import enquirer from 'enquirer';
 
-import { getArchive } from './archive.js';
-import { addToSummary } from './data/add-to-summary.js';
 import { createDiscrepancies } from './data/create-discrepancies.js';
 import { createImageList } from './data/create-image-list.js';
 import { createLinks } from './data/create-links.js';
@@ -19,8 +14,31 @@ import { createResources } from './data/create-resources.js';
 import { createViolations } from './data/create-violations.js';
 import { log } from './debug.js';
 import { loadConfig } from './load-config.js';
+import { openReportArchive } from './open-report-archive.js';
 import { getPluginReports } from './reports/get-plugin-reports.js';
 import { createSheets } from './sheets/create-sheets.js';
+
+/**
+ * Every generatable sheet name, in **priority order** — the order
+ * `createSheetList` is built in below, which `create-sheets.ts`'s Phase 2
+ * treats as the cell-budget allocation priority (see that file's docs).
+ * User-visible, more universally useful sheets first; the two relational
+ * tables last since their row counts (one row per edge, not per page) are
+ * the most likely to explode past the Google Sheets 10M-cell limit.
+ */
+const SHEET_PRIORITY_ORDER = [
+	'Page List',
+	'Links',
+	'Violations',
+	'Discrepancies',
+	'Resources',
+	'Images',
+	'Referrers Relational Table',
+	'Resources Relational Table',
+	'Summary',
+] as const;
+
+type SheetName = (typeof SHEET_PRIORITY_ORDER)[number];
 
 /**
  * Parameters for {@link report}.
@@ -34,8 +52,6 @@ export interface ReportParams {
 	readonly credentialFilePath: string;
 	/** Path to the nitpicker config file, or `null` for defaults. */
 	readonly configPath: string | null;
-	/** Batch size for `getPagesWithRefs()` pagination (default: 100,000). */
-	readonly limit: number;
 	/** When `true`, generate all sheets without interactive prompt. */
 	readonly all?: boolean;
 	/** When `true`, suppress progress display output. */
@@ -55,8 +71,7 @@ export interface ReportParams {
 	 * the archive's total size (issue #294: a large archive's extraction can
 	 * take tens of seconds with no other signal it isn't hung). This
 	 * package stays UI-agnostic — the caller (the CLI's `report` command)
-	 * owns turning this into a `Lanes` display, the same way `Sheets.onLog`
-	 * lets the caller own the rate-limit countdown display below.
+	 * owns turning this into a display.
 	 */
 	readonly onExtractProgress?: (readBytes: number, totalBytes: number) => void;
 }
@@ -68,15 +83,20 @@ export interface ReportParams {
  * It orchestrates the full reporting pipeline:
  *
  * 1. Authenticates with Google Sheets API using OAuth2 credentials.
- * 2. Opens the `.nitpicker` archive and loads its configuration.
+ * 2. Opens the `.nitpicker` archive (read-only, via `openReportArchive` —
+ *    see that function's docs for why this replaced `Archive.open`).
  * 3. Loads analyze plugin reports from the archive.
  * 4. Presents an interactive multi-select prompt for the user to
  *    choose which sheets to generate.
- * 5. Delegates to `createSheets()` for phased data generation and upload.
+ * 5. Delegates to `createSheets()` for cell-budget-aware, priority-ordered
+ *    data generation and upload, including its `TaskList` progress display
+ *    and Google Sheets API rate-limit (429/403/5xx/ECONNRESET) backoff
+ *    display — see `create-sheets.ts`'s docs.
  *
- * Rate limiting from the Google Sheets API (429 / 403) is handled
- * gracefully via the `Sheets.onLog` callback, which displays a
- * countdown timer in the terminal using the `Lanes` progress display.
+ * Cell-budget truncation warnings from `createSheets` are collected and
+ * printed via `console.error` only after `createSheets` (and its internal
+ * `TaskList` display) has finished, mirroring this file's `console.log`
+ * calls, which likewise only ever run outside that active display window.
  * @param params - レポート生成に必要なパラメータ
  * @example
  * ```ts
@@ -85,7 +105,6 @@ export interface ReportParams {
  *   sheetUrl: 'https://docs.google.com/spreadsheets/d/xxx/edit',
  *   credentialFilePath: './credentials.json',
  *   configPath: './nitpicker.config.json',
- *   limit: 100_000,
  * });
  * ```
  */
@@ -95,7 +114,6 @@ export async function report(params: ReportParams) {
 		sheetUrl,
 		credentialFilePath,
 		configPath,
-		limit,
 		all,
 		silent,
 		dedupeResources,
@@ -111,8 +129,8 @@ export async function report(params: ReportParams) {
 	log('Authentication succeeded');
 
 	log('Opening archive: %s', filePath);
-	await using archiveHandle = await getArchive(filePath, onExtractProgress);
-	const { archive } = archiveHandle;
+	await using archiveHandle = await openReportArchive(filePath, onExtractProgress);
+	const { accessor } = archiveHandle;
 	log('Archive opened');
 
 	log('Loading config');
@@ -125,40 +143,27 @@ export async function report(params: ReportParams) {
 	log('Loaded plugins: %O', plugins);
 
 	log('Loading plugin reports');
-	const reports = await getPluginReports(archive /*plugins*/);
+	const reports = await getPluginReports(accessor);
 	log('Plugin reports loaded: %d', reports.length);
 
 	const sheets = new Sheets(sheetUrl, auth);
 
 	log('Reporting starts');
 
-	const sheetNames = [
-		'Page List' as const,
-		'Links' as const,
-		'Resources' as const,
-		'Images' as const,
-		'Violations' as const,
-		'Discrepancies' as const,
-		'Summary' as const,
-		'Referrers Relational Table' as const,
-		'Resources Relational Table' as const,
-	];
-	type SheetNames = typeof sheetNames;
-
-	let selectedSheetNames: SheetNames;
+	let selectedSheetNames: SheetName[];
 
 	if (all) {
 		log('All sheets selected (--all or non-TTY)');
-		selectedSheetNames = sheetNames;
+		selectedSheetNames = [...SHEET_PRIORITY_ORDER];
 	} else {
 		log('Choice creating data');
 		const chosenSheets = await enquirer
-			.prompt<{ sheetName: SheetNames }>([
+			.prompt<{ sheetName: SheetName[] }>([
 				{
 					message: 'What do you report?',
 					name: 'sheetName',
 					type: 'multiselect',
-					choices: sheetNames,
+					choices: [...SHEET_PRIORITY_ORDER],
 				},
 			])
 			.catch(() => {
@@ -178,38 +183,60 @@ export async function report(params: ReportParams) {
 
 	log('Chosen sheets: %O', selectedSheetNames);
 
+	const warnings: string[] = [];
+
+	// Priority order is the fixed SHEET_PRIORITY_ORDER, not the user's
+	// selection-click order — createSheets's Phase 2 treats array order as
+	// the cell-budget allocation priority (see that file's docs).
 	const createSheetList: CreateSheet[] = [];
-
-	if (selectedSheetNames.includes('Page List')) {
-		createSheetList.push(createPageList);
-	}
-
-	if (selectedSheetNames.includes('Links')) {
-		createSheetList.push(createLinks);
-	}
-
-	if (selectedSheetNames.includes('Discrepancies')) {
-		createSheetList.push(createDiscrepancies);
-	}
-
-	if (selectedSheetNames.includes('Violations')) {
-		createSheetList.push(createViolations);
-	}
-
-	if (selectedSheetNames.includes('Referrers Relational Table')) {
-		createSheetList.push(createReferrersRelationalTable);
-	}
-
-	if (selectedSheetNames.includes('Resources Relational Table')) {
-		createSheetList.push(createResourcesRelationalTable);
-	}
-
-	if (selectedSheetNames.includes('Resources')) {
-		createSheetList.push(createResources({ dedupe: dedupeResources }));
-	}
-
-	if (selectedSheetNames.includes('Images')) {
-		createSheetList.push(createImageList);
+	for (const name of SHEET_PRIORITY_ORDER) {
+		if (!selectedSheetNames.includes(name)) {
+			continue;
+		}
+		switch (name) {
+			case 'Page List': {
+				createSheetList.push(createPageList);
+				break;
+			}
+			case 'Links': {
+				createSheetList.push(createLinks);
+				break;
+			}
+			case 'Violations': {
+				createSheetList.push(createViolations);
+				break;
+			}
+			case 'Discrepancies': {
+				createSheetList.push(createDiscrepancies);
+				break;
+			}
+			case 'Resources': {
+				createSheetList.push(createResources({ dedupe: dedupeResources }));
+				break;
+			}
+			case 'Images': {
+				createSheetList.push(createImageList);
+				break;
+			}
+			case 'Referrers Relational Table': {
+				createSheetList.push(createReferrersRelationalTable);
+				break;
+			}
+			case 'Resources Relational Table': {
+				createSheetList.push(createResourcesRelationalTable);
+				break;
+			}
+			case 'Summary': {
+				// No-op: the Summary sheet has no generator yet (out of scope
+				// for the report rewrite — see `data/add-to-summary.ts`). Warn
+				// so a user who explicitly picked it (or ran --all) isn't left
+				// wondering why the tab never showed up.
+				warnings.push(
+					'Warning: "Summary" was selected but is not implemented yet — no Summary sheet will be generated.\n',
+				);
+				break;
+			}
+		}
 	}
 
 	if (!silent) {
@@ -217,60 +244,24 @@ export async function report(params: ReportParams) {
 		console.log(`\nGenerating ${createSheetList.length} sheet(s)...\n`);
 	}
 
-	{
-		using lanes = silent
-			? null
-			: new Lanes({ verbose: !process.stdout.isTTY, indent: '  ' });
-		log('Lanes created (verbose: %s, silent: %s)', !process.stdout.isTTY, !!silent);
-
-		const RATE_LIMIT_LANE = 10_000;
-		let countdownSeq = 0;
-		let waitingCount = 0;
-
-		if (lanes) {
-			sheets.onLog = (message: ErrorHandlerMessage) => {
-				if (message.waiting && message.waitTime) {
-					waitingCount++;
-					const id = `rateLimit_${countdownSeq++}`;
-					const label =
-						message.message === 'TooManyRequestError'
-							? 'Too Many Requests (429)'
-							: message.message === 'UserRateLimitExceededError'
-								? 'Rate Limit Exceeded (403)'
-								: message.message === 'ServerError'
-									? `Server Error (${message.code ?? '5xx'})`
-									: 'Connection Reset';
-					lanes.update(
-						RATE_LIMIT_LANE,
-						c.yellow(`${label}: waiting %countdown(${message.waitTime}, ${id}, s)%s`),
-					);
-				} else {
-					waitingCount--;
-					if (waitingCount <= 0) {
-						waitingCount = 0;
-						lanes.delete(RATE_LIMIT_LANE);
-					}
-				}
-			};
-		}
-
-		log('Reporting starts (limit: %d)', limit);
-		await createSheets({
-			sheets,
-			archive,
-			reports,
-			limit,
-			createSheetList,
-			options: lanes ? { lanes } : undefined,
-		});
-	}
+	log('Reporting starts');
+	await createSheets({
+		sheets,
+		accessor,
+		reports,
+		createSheetList,
+		options: {
+			onWarn: (message) => warnings.push(message),
+			silent,
+		},
+	});
 	log('Reporting done');
+	for (const warning of warnings) {
+		// eslint-disable-next-line no-console
+		console.error(warning);
+	}
 	if (!silent) {
 		// eslint-disable-next-line no-console
 		console.log('\nReport complete.');
-	}
-
-	if (selectedSheetNames.includes('Summary')) {
-		await addToSummary(/*sheets, archive, reports*/);
 	}
 }
