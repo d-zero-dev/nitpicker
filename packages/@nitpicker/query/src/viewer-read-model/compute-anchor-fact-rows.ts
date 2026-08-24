@@ -120,6 +120,7 @@ export async function* computeAnchorFactRows(
 			destPageId: number;
 			sourceUrlRefId: number | null;
 			destUrlRefId: number | null;
+			rawDestUrlRefId: number | null;
 			status: number | null;
 			isExternal: 0 | 1;
 			count: number;
@@ -164,6 +165,17 @@ export async function* computeAnchorFactRows(
 			.leftJoin('viewer_url_refs as dest_ref', function () {
 				this.on(trx.raw(`"dest_ref"."url" = ${destUrlExpression}`));
 			})
+			// Raw (pre-redirect/alias) href target, keyed on `dest_url` — the
+			// immediate `anchor_edges.href_page_id` URL joined above — as
+			// opposed to `dest_ref`, which is keyed on the resolved-canonical
+			// `destUrlExpression`. See `raw_dest_url_ref_id`'s DDL comment for
+			// why outbound-link auditing wants this unresolved value.
+			.leftJoin(
+				'viewer_url_refs as raw_dest_ref',
+				'dest_url.url',
+				'=',
+				'raw_dest_ref.url',
+			)
 			.where('source.id', '>', rangeStart)
 			.andWhere('source.id', '<=', rangeEnd)
 			.groupBy('source.id', trx.raw(destIdExpression))
@@ -172,6 +184,12 @@ export async function* computeAnchorFactRows(
 				trx.raw(`${destIdExpression} as "destPageId"`),
 				'source_ref.id as sourceUrlRefId',
 				'dest_ref.id as destUrlRefId',
+				// MIN(), not a bare column: a group can span multiple distinct
+				// `anchor_edges` rows collapsed onto the same resolved dest
+				// (see the class docs' `first_text_id` discussion), each with
+				// its own raw href target — same determinism rationale as
+				// `first_text_id`'s `MIN()` below.
+				trx.raw('min("raw_dest_ref"."id") as "rawDestUrlRefId"'),
 				trx.raw(`${statusExpression} as "status"`),
 				trx.raw(`${isExternalExpression} as "isExternal"`),
 				trx.raw('sum("ae"."count") as "count"'),
@@ -185,7 +203,11 @@ export async function* computeAnchorFactRows(
 
 		yield rows.map((row) => {
 			const statusSortKey = row.status ?? NULL_STATUS_SENTINEL;
-			if (row.sourceUrlRefId == null || row.destUrlRefId == null) {
+			if (
+				row.sourceUrlRefId == null ||
+				row.destUrlRefId == null ||
+				row.rawDestUrlRefId == null
+			) {
 				throw new Error(
 					`computeAnchorFactRows: missing viewer_url_refs entry for source=${row.sourcePageId}, dest=${row.destPageId}`,
 				);
@@ -195,6 +217,7 @@ export async function* computeAnchorFactRows(
 				dest_page_id: row.destPageId,
 				source_url_ref_id: row.sourceUrlRefId,
 				dest_url_ref_id: row.destUrlRefId,
+				raw_dest_url_ref_id: row.rawDestUrlRefId,
 				status: row.status,
 				status_sort_key: statusSortKey,
 				status_desc_key: -statusSortKey,

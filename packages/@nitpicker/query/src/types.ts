@@ -975,6 +975,17 @@ export interface PageListRow {
 	hasHSTS: 0 | 1;
 	templateKey: string | null;
 	isDedupeCapped: 0 | 1;
+	/**
+	 * `viewer_pages.display_title` — `undefined` on the three live-only
+	 * paths (`listPages`/`listPagesByTechnology`/`listPagesByJsonLdType`),
+	 * which never join `viewer_pages` (see `PageListItem.displayTitle`'s
+	 * docs for why). Only `joinViewerPageIdsToListItems` selects it.
+	 */
+	displayTitle?: string | null;
+	/** `viewer_pages.inbound_link_count` — same live-path caveat as {@link displayTitle}. */
+	inboundLinkCount?: number | null;
+	/** `viewer_pages.dir_index_inbound_link_count` — same live-path caveat as {@link displayTitle}. */
+	dirIndexInboundLinkCount?: number | null;
 }
 
 /**
@@ -1111,6 +1122,35 @@ export interface PageListItem {
 	templateKey: string | null;
 	/** Whether this page's URL shape matches a `--dedupe-cap` trap captured by any `dedupe_cap_events` row. */
 	isDedupeCapped: boolean;
+	/**
+	 * The page's title with its directory index page's title prefix
+	 * stripped (see `computeDisplayTitleByPageId`'s docs) — a
+	 * read-model-only computed value with no write-model source, unlike
+	 * every other field above. `null` when the read model has not computed
+	 * it: either the source `title` was itself `null`, or this came from
+	 * one of the three live-only paths (`listPages`/`listPagesByTechnology`/
+	 * `listPagesByJsonLdType`), which never join `viewer_pages` — mixing a
+	 * read-model dependency into those would make this data vanish exactly
+	 * where those paths exist to keep working (stub mode, an unbuilt read
+	 * model). Only `listViewerPages`/`listDirectoryPages` (via
+	 * `joinViewerPageIdsToListItems`) populate this.
+	 */
+	displayTitle: string | null;
+	/**
+	 * Distinct-referrer count from `viewer_anchor_facts`
+	 * (`viewer_pages.inbound_link_count`) — same read-model-only caveat as
+	 * {@link displayTitle}. `null` on the three live-only paths; otherwise
+	 * always a number (`0` for a page with no inbound links).
+	 */
+	inboundLinkCount: number | null;
+	/**
+	 * For a directory-index page, the combined `inboundLinkCount` of every
+	 * index page sharing its directory (`viewer_pages.dir_index_inbound_link_count`,
+	 * see `computeDirIndexInboundLinkCountByPageId`'s docs) — same
+	 * read-model-only caveat as {@link displayTitle}. `null` for a
+	 * non-index page, or on the three live-only paths.
+	 */
+	dirIndexInboundLinkCount: number | null;
 }
 
 /**
@@ -2451,6 +2491,14 @@ export interface ImageEntry {
 	naturalHeight: number;
 	/** Whether the image uses lazy loading. */
 	isLazy: boolean;
+	/**
+	 * The image's DOM position within the page (e.g. `body > main > img`),
+	 * derived from the crawled `<img>`'s `outerHTML` at populate time — see
+	 * `image_items.dom_path_text_id`'s DDL comment. Replaces the legacy
+	 * `images.sourceCode` (full serialized `outerHTML`), which the 0.13
+	 * schema deliberately dropped.
+	 */
+	domPath: string | null;
 }
 
 /**

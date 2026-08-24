@@ -17,6 +17,7 @@ import { encodeAnchorFactsCursor } from './viewer-anchor-facts-cursor/encode-anc
 import { extractAnchorFactsSortValues } from './viewer-anchor-facts-cursor/extract-anchor-facts-sort-values.js';
 import { getAnchorFactsSortSpec } from './viewer-anchor-facts-cursor/get-anchor-facts-sort-spec.js';
 import { readKeysetWindow } from './viewer-cursor-kit/read-keyset-window.js';
+import { resolveViewerUrlRefs } from './viewer-cursor-kit/resolve-viewer-url-refs.js';
 import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model/viewer-read-model-schema-version.js';
 
 /**
@@ -164,27 +165,8 @@ function toLinkEntry(row: {
 }
 
 /**
- * Loads URL strings for the limited broken-link window.
- * @param knex - Query connection for the opened archive.
- * @param refIds - URL reference ids selected by the keyset window.
- * @returns A map from `viewer_url_refs.id` to URL.
- */
-async function readUrlRefs(
-	knex: Knex,
-	refIds: readonly number[],
-): Promise<Map<number, string>> {
-	if (refIds.length === 0) {
-		return new Map();
-	}
-	const rows: { id: number; url: string }[] = await knex('viewer_url_refs')
-		.whereIn('id', [...new Set(refIds)])
-		.select('id', 'url');
-	return new Map(rows.map((row) => [row.id, row.url]));
-}
-
-/**
  * Reads one URL from a post-window `viewer_url_refs` lookup result.
- * @param urlByRefId - Lookup map returned by {@link readUrlRefs}.
+ * @param urlByRefId - Lookup map returned by {@link resolveViewerUrlRefs}.
  * @param refId - The URL reference id required by one result row.
  * @returns The URL string for `refId`.
  * @throws {Error} If the read model references a missing URL row.
@@ -252,7 +234,7 @@ export async function listViewerBrokenLinks(
 		hasMoreAfter: boolean,
 		hasMoreBefore: boolean,
 	): Promise<CursorPaginatedLinkList> {
-		const urlByRefId = await readUrlRefs(
+		const urlByRefId = await resolveViewerUrlRefs(
 			knex,
 			window.flatMap((row) => [row.source_url_ref_id, row.dest_url_ref_id]),
 		);

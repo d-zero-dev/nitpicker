@@ -136,6 +136,28 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			-- only in dedupe_cap_events. Same no-index rationale as
 			-- is_dedupe_capped.
 			dedupe_cap_event_id integer,
+			-- The three columns below are report/read-model-only computed
+			-- values with no write-model source column to re-fetch from -- the
+			-- one narrow exception to "display re-fetches from page_meta"
+			-- above (same precedent as templateKey/isDedupeCapped's
+			-- write-model-column-absent case, but computed here at build time
+			-- rather than read live, since both require a cross-page
+			-- aggregation joinViewerPageIdsToListItems's per-page-id lookup
+			-- cannot perform). Populated during buildingPages from
+			-- computeDisplayTitleByPageId /
+			-- computeDirIndexInboundLinkCountByPageId (see those functions'
+			-- docs) plus a plain viewer_anchor_facts tally, and joined back
+			-- into PageListItem unconditionally by
+			-- joinViewerPageIdsToListItems (its two call sites both already
+			-- guarantee read-model freshness -- see that function's docs).
+			-- Deliberately NOT exposed on listPages/listPagesByTechnology/
+			-- listPagesByJsonLdType, the three live-only paths stub mode and
+			-- unbuilt archives rely on: mixing a read-model dependency into
+			-- those would make this data vanish exactly where those paths
+			-- exist to keep working.
+			display_title text,
+			inbound_link_count integer not null default 0,
+			dir_index_inbound_link_count integer,
 			url_sort_key text not null,
 			title_sort_key text not null,
 			path_sort_key text not null,
@@ -266,6 +288,16 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			dest_page_id integer not null,
 			source_url_ref_id integer not null references viewer_url_refs(id),
 			dest_url_ref_id integer not null references viewer_url_refs(id),
+			-- The immediate href-target URL (anchor_edges.href_page_id's own
+			-- URL), before redirect/alias resolution -- deliberately NOT the
+			-- same value as dest_url_ref_id above, which is the resolved
+			-- canonical destination. Report-style outbound-link auditing wants
+			-- the raw href a page actually points to (e.g. "this page links to
+			-- the pre-redirect URL"), matching the existing invariant that
+			-- outbound links are never resolved while inbound links are (see
+			-- ARCHITECTURE.md's redirect-resolution asymmetry note). Always
+			-- populated (every anchor_edges row has a non-null href target).
+			raw_dest_url_ref_id integer not null references viewer_url_refs(id),
 			status integer,
 			status_sort_key integer not null,
 			status_desc_key integer not null,

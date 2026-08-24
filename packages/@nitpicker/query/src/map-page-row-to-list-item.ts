@@ -222,5 +222,13 @@ export function mapPageRowToListItem(row: PageListRow): PageListItem {
 		hasHSTS: !!row.hasHSTS,
 		templateKey: row.templateKey,
 		isDedupeCapped: !!row.isDedupeCapped,
+		// `undefined` on the three live-only paths (PAGE_LIST_SELECT_COLUMNS
+		// never selects these) — defaulted to `null` here so every caller
+		// gets a uniformly-shaped PageListItem regardless of path. Only
+		// `joinViewerPageIdsToListItems` actually populates non-null values,
+		// via its own extra `viewer_pages` join — see these fields' docs.
+		displayTitle: row.displayTitle ?? null,
+		inboundLinkCount: row.inboundLinkCount ?? null,
+		dirIndexInboundLinkCount: row.dirIndexInboundLinkCount ?? null,
 	};
 }

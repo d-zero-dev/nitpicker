@@ -628,6 +628,44 @@ describe('computeAnchorFactRows — redirect resolution', () => {
 			expect(row).toMatchObject({ status: 404, is_broken: 1, count: 1 });
 		}
 	});
+
+	it('keeps raw_dest_url_ref_id pointing at the immediate href target, not the resolved canonical', async () => {
+		const knex = archive.getKnex();
+		const { rows, urlByRefId } = await knex.transaction((trx) =>
+			collectAnchorFactRows(trx),
+		);
+		const direct = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com/direct')
+			.first();
+		const viaRedirect = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id')
+			.where('ur.url', 'https://example.com/via-redirect')
+			.first();
+		const targetRows = rows.filter(
+			(row) =>
+				urlByRefId.get(row.dest_url_ref_id) === 'https://example.com/canonical-target',
+		);
+		const directRow = targetRows.find((row) => row.source_page_id === direct.id)!;
+		const viaRedirectRow = targetRows.find(
+			(row) => row.source_page_id === viaRedirect.id,
+		)!;
+		// The anchor on /direct points straight at the canonical destination,
+		// so raw and resolved coincide.
+		expect(urlByRefId.get(directRow.raw_dest_url_ref_id)).toBe(
+			'https://example.com/canonical-target',
+		);
+		// The anchor on /via-redirect points at the redirect source (/old) —
+		// raw stays unresolved even though dest_url_ref_id is resolved.
+		expect(urlByRefId.get(viaRedirectRow.raw_dest_url_ref_id)).toBe(
+			'https://example.com/old',
+		);
+		expect(urlByRefId.get(viaRedirectRow.dest_url_ref_id)).toBe(
+			'https://example.com/canonical-target',
+		);
+	});
 });
 
 /**

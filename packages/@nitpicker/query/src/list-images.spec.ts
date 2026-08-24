@@ -159,4 +159,24 @@ describe('listImages', () => {
 		expect(result.total).toBe(1);
 		expect(result.items[0]!.src).toBe('https://example.com/logo.png');
 	});
+
+	it('resolves domPath from image_items.dom_path_text_id via text_refs', async () => {
+		const knex = archive.getKnex();
+		const result = await listImages(archive);
+		const logo = result.items.find(
+			(item) => item.src === 'https://example.com/logo.png',
+		)!;
+
+		const stored: { domPathTextId: number } = await knex('image_items as ii')
+			.join('url_refs as ur', 'ur.id', 'ii.src_url_id')
+			.where('ur.url', 'https://example.com/logo.png')
+			.select('ii.dom_path_text_id as domPathTextId')
+			.first();
+		const textRow: { text: string } = await knex('text_refs')
+			.where('id', stored.domPathTextId)
+			.select('text')
+			.first();
+
+		expect(logo.domPath).toBe(textRow.text);
+	});
 });

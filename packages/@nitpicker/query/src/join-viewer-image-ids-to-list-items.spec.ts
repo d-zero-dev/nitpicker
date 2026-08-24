@@ -161,4 +161,19 @@ describe('joinViewerImageIdsToListItems', () => {
 		expect(items[0]).toMatchObject({ isLazy: true });
 		expect(items[1]).toMatchObject({ isLazy: false });
 	});
+
+	it('resolves domPath from image_items.dom_path_text_id via text_refs', async () => {
+		const knex = archive.getKnex();
+		const stored: { domPathTextId: number } = await knex('image_items')
+			.where('id', idA)
+			.select('dom_path_text_id as domPathTextId')
+			.first();
+		const textRow: { text: string } = await knex('text_refs')
+			.where('id', stored.domPathTextId)
+			.select('text')
+			.first();
+
+		const items = await joinViewerImageIdsToListItems(knex, [idA]);
+		expect(items[0]!.domPath).toBe(textRow.text);
+	});
 });

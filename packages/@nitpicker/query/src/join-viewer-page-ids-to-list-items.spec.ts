@@ -5,6 +5,7 @@ import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { joinViewerPageIdsToListItems } from './join-viewer-page-ids-to-list-items.js';
+import { buildViewerReadModel } from './viewer-read-model/build-viewer-read-model.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -104,6 +105,13 @@ describe('joinViewerPageIdsToListItems', () => {
 			.select('content_items.id as id', 'url_refs.url as url');
 		idA = rows.find((r) => r.url === 'https://example.com/a')!.id;
 		idB = rows.find((r) => r.url === 'https://example.com/b')!.id;
+
+		// Both real call sites (list-viewer-pages.ts, list-directory-pages.ts)
+		// require the read model to be current before calling this function
+		// — it unconditionally joins `viewer_pages` for
+		// displayTitle/inboundLinkCount/dirIndexInboundLinkCount, with no
+		// existence guard (see the function's docs for why).
+		await buildViewerReadModel(archive);
 	});
 
 	afterAll(async () => {
@@ -127,6 +135,19 @@ describe('joinViewerPageIdsToListItems', () => {
 			'https://example.com/a',
 		]);
 		expect(items[1]).toMatchObject({ title: 'A', ogTitle: 'OG A' });
+	});
+
+	it('joins displayTitle/inboundLinkCount/dirIndexInboundLinkCount from viewer_pages', async () => {
+		const knex = archive.getKnex();
+		const items = await joinViewerPageIdsToListItems(knex, [idA, idB]);
+		// Neither page is a directory index, so displayTitle passes the
+		// title through unchanged and dirIndexInboundLinkCount stays null —
+		// see computeDisplayTitleByPageId/computeDirIndexInboundLinkCountByPageId's
+		// docs for the full behavior, exercised there directly.
+		expect(items[0]).toMatchObject({ displayTitle: 'A', dirIndexInboundLinkCount: null });
+		expect(items[1]).toMatchObject({ displayTitle: 'B', dirIndexInboundLinkCount: null });
+		expect(items[0]!.inboundLinkCount).toBe(0);
+		expect(items[1]!.inboundLinkCount).toBe(0);
 	});
 
 	it('computes header-presence flags on the joined row, not just the write-model columns', async () => {
