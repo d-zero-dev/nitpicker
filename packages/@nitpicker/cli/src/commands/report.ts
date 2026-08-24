@@ -52,7 +52,6 @@ export async function report(args: string[], flags: ReportFlags) {
 
 	const credentialFilePath = flags.credentials;
 	const configFilePath = flags.config || null;
-	const limit = flags.limit;
 	const isTTY = process.stdout.isTTY;
 	const all = flags.all || !isTTY;
 	const verbose = !!flags.verbose || !isTTY;
@@ -81,7 +80,6 @@ export async function report(args: string[], flags: ReportFlags) {
 			sheetUrl,
 			credentialFilePath,
 			configPath: configFilePath,
-			limit,
 			all,
 			silent: flags.silent ?? false,
 			dedupeResources: flags.dedupeResources ?? false,
