@@ -7,6 +7,7 @@ import { createCellData } from '../sheets/create-cell-data.js';
 import { defaultCellFormat } from '../sheets/default-cell-format.js';
 import { booleanFormatError } from '../sheets/format.js';
 import { joinUrlsForNote } from '../utils/join-urls-for-note.js';
+import { truncateNoteText } from '../utils/truncate-note-text.js';
 
 const log = pLog.extend('Links');
 
@@ -107,7 +108,7 @@ export const createLinks: CreateSheet = (_reports, accessor) => {
 						createCellData(
 							{
 								value: '{}',
-								note: JSON.stringify(row.responseHeaders, null, 2),
+								note: truncateNoteText(JSON.stringify(row.responseHeaders, null, 2)),
 							},
 							defaultCellFormat,
 						),

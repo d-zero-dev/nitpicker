@@ -2,7 +2,7 @@ import { getInboundReferrerUrlsByPageIds, streamAllContentItems } from '@nitpick
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { assertNoLazyCells } from '../test-helpers/assert-no-lazy-cells.js';
-import { cellValue } from '../test-helpers/cell-inspection.js';
+import { cellNote, cellValue } from '../test-helpers/cell-inspection.js';
 import { createMockSheet } from '../test-helpers/create-mock-sheet.js';
 import { oneChunk } from '../test-helpers/one-chunk.js';
 
@@ -85,6 +85,38 @@ describe('createLinks', () => {
 		expect(mock.rows).toHaveLength(2);
 		assertNoLazyCells(mock.rows);
 		expect(cellValue(mock.rows[1]![8]!)).toBe('excluded');
+	});
+
+	it('truncates the Headers note when responseHeaders serializes to an extremely long string', async () => {
+		vi.mocked(streamAllContentItems).mockReturnValue(
+			oneChunk([
+				{
+					pageId: 1,
+					url: 'https://example.com/page',
+					title: 'Page',
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					isSkipped: false,
+					skipReason: null,
+					responseHeaders: { 'set-cookie': 'x'.repeat(10_000) },
+					redirectFromUrls: [],
+				},
+			]),
+		);
+
+		const setting = createLinks([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
+
+		const note = cellNote(mock.rows[0]![7]!)!;
+		expect(note.length).toBeLessThan(10_000);
+		expect(note).toContain('truncated');
 	});
 
 	it('shows the referrer count and redirect-from count in their respective columns', async () => {

@@ -62,8 +62,11 @@ export interface ReportParams {
 	 * one row per `(canonical URL, status, contentType)` combination,
 	 * with an added `Count` column. Useful for archives where tracking
 	 * pixels generate millions of per-request unique URLs that would
-	 * otherwise exceed Google Sheets' 10M-cell document limit. Defaults
-	 * to `false` (raw mode).
+	 * otherwise exceed Google Sheets' 10M-cell document limit. This field
+	 * has no default of its own (omitting it maps to raw mode, like
+	 * `false`) — the CLI's `report`/`pipeline` commands default their
+	 * `--dedupe-resources` flag to `true` and always pass an explicit
+	 * value here.
 	 */
 	readonly dedupeResources?: boolean;
 	/**

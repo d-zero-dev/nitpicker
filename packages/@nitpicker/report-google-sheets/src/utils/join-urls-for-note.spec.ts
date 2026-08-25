@@ -43,4 +43,13 @@ describe('joinUrlsForNote', () => {
 		expect(joinUrlsForNote(['x', 'y', 'z'])).toBe('x\ny\nz');
 		expect(NOTE_MAX_LENGTH).toBeGreaterThan(1000);
 	});
+
+	it("stays under Cell.provide()'s hard 5,000-character cut so our own truncation notice survives", () => {
+		// @d-zero/google-sheets's Cell.provide() re-cuts any note longer than
+		// 5,000 characters with its own blunter marker, regardless of what
+		// this module produces — NOTE_MAX_LENGTH must stay below that so the
+		// "... and N more" suffix this module builds is what actually reaches
+		// the spreadsheet.
+		expect(NOTE_MAX_LENGTH).toBeLessThan(5000);
+	});
 });

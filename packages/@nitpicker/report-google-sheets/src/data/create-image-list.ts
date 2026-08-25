@@ -1,27 +1,45 @@
 import type { CreateSheet } from '../sheets/types.js';
+import type { ArchiveAccessor } from '@nitpicker/crawler';
 
-import { listViewerImages } from '@nitpicker/query';
+import { streamAllImages } from '@nitpicker/query';
 
 import { createCellData } from '../sheets/create-cell-data.js';
 import { defaultCellFormat } from '../sheets/default-cell-format.js';
 
-/** `listViewerImages` cursor page size while streaming rows. */
-const PAGE_SIZE = 500;
+/**
+ * Counts every `image_items` row, for `estimateRowCount()`.
+ * @param accessor - The archive accessor to query.
+ */
+async function countImages(accessor: ArchiveAccessor): Promise<number> {
+	const knex = accessor.getKnex();
+	const [row] = await knex('image_items').count<{ count: string | number }[]>({
+		count: '*',
+	});
+	return Number(row?.count ?? 0);
+}
 
 /**
  * Creates the "Images" sheet configuration.
  *
  * Reports every `<img>` element's attributes (src, currentSrc, alt,
- * dimensions, lazy loading, DOM position) via `listViewerImages` — the
- * `image_items` read model, populated at crawl time.
+ * dimensions, lazy loading, DOM position) via `streamAllImages` — a plain
+ * `image_items` keyset sweep (write-model, populated at crawl time; see
+ * that function's docs for why it bypasses the viewer UI's
+ * `listViewerImages`/`viewer_images`).
  *
  * The pre-rewrite version instead re-fetched each internal page's full
  * HTML snapshot and re-parsed it with `jsdom` per page (`page.getHtml()` +
  * `new JSDOM(html)`), to resolve `src`/`currentSrc` after base-URL
  * resolution — the only sheet that did so. `image_items` already stores
  * those resolved values from crawl time, so this sheet no longer needs
- * `jsdom` or HTML-blob decompression at all: replaced by the read model's
- * `requiresReadModel: true` dependency instead.
+ * `jsdom` or HTML-blob decompression at all.
+ *
+ * `requiresReadModel: true` holds regardless of `streamAllImages`' own
+ * write-model-only dependency: this flag governs the `viewer-build`
+ * gate `report.ts` enforces before running any selected sheet (see
+ * `sheets/types.ts`), not each sheet's individual data source, so it is
+ * set independently of which tables a given sheet's `run()` happens to
+ * read.
  *
  * `Source Code` (the `<img>`'s `outerHTML`) is dropped: the 0.13 schema
  * deliberately does not store it (see `image_items.dom_path_text_id`'s DDL
@@ -47,19 +65,12 @@ export const createImageList: CreateSheet = (_reports, accessor) => {
 				'DOM Path',
 			];
 		},
-		async estimateRowCount() {
-			const { total } = await listViewerImages(accessor, { limit: 0 });
-			return total;
-		},
-		async run({ sheet, maxRows, onProgress }) {
+		estimateRowCount: () => countImages(accessor),
+		async run({ sheet, maxRows, estimatedTotal, onProgress }) {
 			let sent = 0;
-			let cursor: string | undefined;
-			let total = 0;
-			for (;;) {
-				const page = await listViewerImages(accessor, { limit: PAGE_SIZE, cursor });
-				total = page.total;
-
-				for (const item of page.items) {
+			const total = estimatedTotal;
+			for await (const chunk of streamAllImages(accessor)) {
+				for (const item of chunk) {
 					if (sent >= maxRows) {
 						await sheet.flush();
 						return;
@@ -77,11 +88,6 @@ export const createImageList: CreateSheet = (_reports, accessor) => {
 					sent++;
 					onProgress(sent, total);
 				}
-
-				if (!page.nextCursor) {
-					break;
-				}
-				cursor = page.nextCursor;
 			}
 			await sheet.flush();
 		},
