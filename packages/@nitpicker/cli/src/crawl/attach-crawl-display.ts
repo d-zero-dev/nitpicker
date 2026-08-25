@@ -244,7 +244,7 @@ export function attachCrawlDisplay({
 			return;
 		}
 		bridge.started = true;
-		pipeline.run({ stream, verbose }).then(
+		pipeline.run({ stream, verbose, keepElapsed: true }).then(
 			() => bridge.resolveTaskListDone?.(),
 			(error: unknown) => bridge.rejectTaskListDone?.(error),
 		);

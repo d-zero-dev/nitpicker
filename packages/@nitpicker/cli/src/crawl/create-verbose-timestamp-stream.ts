@@ -20,7 +20,11 @@
  *   identity for every operation except `write()`.
  * @example
  * ```ts
- * await pipeline.run({ stream: createVerboseTimestampStream(process.stderr), verbose: true });
+ * await pipeline.run({
+ *   stream: createVerboseTimestampStream(process.stderr),
+ *   verbose: true,
+ *   keepElapsed: true,
+ * });
  * // "2026-08-18T00:00:00.000Z ✔ Extracting archive (1.2s)"
  * ```
  */

@@ -16,6 +16,7 @@
   - `TaskList` の行は `[%taskSpin%]` アイコン自体がスピナーなので、`ctx.progress()` に渡すメッセージに `%braille%`/`%dots%` を埋め込まない（二重アニメーションになる）。行の名前（`name: message` の `name` 部分）は dealer が自動整形するので、message 側にラベルを重複させない
   - `TaskList.pipe()`/`.pipe()` の各ステップ関数は、`(input, ctx)` の型を明示的に注釈する（`StepContext<R>` 等）。無注釈だと TypeScript が `ctx: StepContext<R>` と戻り値の相互参照から `R` を `unknown` に落とすことがある
   - クロージャ内でのみ代入する `let` 変数（例: `initializedCallback` の中で埋める display ハンドル）は、TypeScript の narrowing が `never` に落とすことがあるため、単一の `let` ではなくオブジェクトの property として持つ（`const state = { display: null as X | null }`）
+  - **すべての `TaskList.run()` 呼び出しに `keepElapsed: true` を渡す** — `done`/`error` で確定した行から経過時間表示が消えず、そのステップに何秒かかったかが完了後も残る（dealer 1.13.0 で追加。既定は `false` で消える側）
 - **並列処理（`@nitpicker/crawler` の `deal()` が駆動する crawl 本体）は現行の `Lanes` 単一行上書き表示のまま** — `deal()` 自体が並列レーン表示を持ち、逐次前提の `TaskList` は適用できない。CLI 側は `crawl/attach-crawl-display.ts` が `deal()` 完了までの `error`/`flushingPendingWrites`/`sortingUrls` イベントだけを中継する
 - **`TaskList` と `Lanes`/`deal()` の同時稼働は禁止**（`Lanes`/`Display` の単一インスタンス制約、下記 ARCHITECTURE.md 参照）。`TaskList.run()` の pipe コールバック内で新しい `Lanes`/`deal()` を起動しない。crawl コマンドは `TaskList(起動ログ) → close → deal(crawl本体) → close → TaskList(後処理)` の厳密な逐次で、区間が重ならないことを都度確認する
 

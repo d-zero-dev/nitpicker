@@ -49,7 +49,7 @@
 - `crawler → query` は**禁止**（query → crawler の一方向。writer 経路が error.log を読めないのはこの制約による意図的なトレードオフ）
 - **CLI は全 analyze プラグインに直接依存する**（`npx` 実行時の動的 `import()` 解決のため）。新規プラグイン追加時は `@nitpicker/cli/package.json` の `dependencies` にも追加すること
 - viewer / mcp-server は query 経由でのみアーカイブに触れる（read-only）
-- `@d-zero/dealer` は crawler（`deal()`）のほか cli / core / report-google-sheets（`Lanes` 型）も依存。**crawler は dealer 1.9.0 で追加された `deal()` setup 第 6 引数 `unshift` に依存しており、1.9.0 未満へのダウングレード不可。cli は 1.12.0 で追加された `TaskList`（setup 表示・crawl 後処理・`viewer-build` のタスクリスト化）に依存しており、1.12.0 未満へのダウングレード不可**
+- `@d-zero/dealer` は crawler（`deal()`）のほか cli / core / report-google-sheets（`Lanes` 型）も依存。**crawler は dealer 1.9.0 で追加された `deal()` setup 第 6 引数 `unshift` に依存しており、1.9.0 未満へのダウングレード不可。cli は 1.12.0 で追加された `TaskList`（setup 表示・crawl 後処理・`viewer-build` のタスクリスト化）と 1.13.0 で追加された `TaskListRunOptions.keepElapsed`（`done`/`error` 確定行に最終経過時間を残す）に依存しており、1.13.0 未満へのダウングレード不可**
 
 ## アーカイブ（DB スキーマ概要）
 

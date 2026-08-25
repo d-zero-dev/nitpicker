@@ -637,6 +637,7 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 				await TaskList.pipe('Checking browser', assertBrowserIsUsable).run({
 					stream: process.stderr,
 					verbose: !!flags.verbose,
+					keepElapsed: true,
 				});
 			} catch (error) {
 				// Unwrapped so a missing-Chrome message stays actionable

@@ -150,7 +150,9 @@ export function createSetupTaskList(
 
 	const baseStream = options.stream ?? process.stderr;
 	const stream = options.verbose ? createVerboseTimestampStream(baseStream) : baseStream;
-	const taskListDone = pipeline.run({ stream, verbose: options.verbose }).then(() => {});
+	const taskListDone = pipeline
+		.run({ stream, verbose: options.verbose, keepElapsed: true })
+		.then(() => {});
 
 	const advancePastActive = (label: SetupPhaseLabel) => {
 		if (finished) {
