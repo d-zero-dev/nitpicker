@@ -82,11 +82,11 @@ interface ActiveRow<T> {
  * ```ts
  * const archive = await TaskList.from(archive)
  *   .pipe(...)
- *   .run({ stream, verbose });
+ *   .run({ stream, verbose, keepElapsed: true });
  * await appendViewerReadModelPhaseRows(TaskList.from(archive), VIEWER_READ_MODEL_FULL_BUILD_PHASES, {
  *   getArchive: (a) => a,
  *   runBuild: buildViewerReadModelInWorker,
- * }).run({ stream, verbose });
+ * }).run({ stream, verbose, keepElapsed: true });
  * ```
  */
 export function appendViewerReadModelPhaseRows<T>(

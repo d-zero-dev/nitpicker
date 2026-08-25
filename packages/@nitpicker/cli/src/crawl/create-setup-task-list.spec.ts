@@ -46,6 +46,27 @@ describe('createSetupTaskList', () => {
 		await expect(taskListDone).resolves.toBeUndefined();
 	});
 
+	it('keeps the elapsed time on a row once it settles (keepElapsed)', async () => {
+		const { stream, lines } = createCapturingStream();
+		const { setupProgress, taskListDone, finish } = createSetupTaskList(
+			['Extracting archive', 'Loading archive config'],
+			{ verbose: true, stream },
+		);
+
+		setupProgress.onPhase?.('Extracting archive');
+		await tick();
+		setupProgress.onPhase?.('Loading archive config');
+		await tick();
+		finish();
+
+		await expect(taskListDone).resolves.toBeUndefined();
+		const rendered = lines.join('');
+		// `pipeline.run()` passes `keepElapsed: true` (dealer 1.13.0+) — without
+		// it, dealer drops the elapsed-time suffix the moment a row settles
+		// instead of keeping it on the row's final `done` line.
+		expect(rendered).toMatch(/Extracting archive \(\d+\.\ds\)/);
+	});
+
 	it('marks pre-built rows never announced as skipped when finish() runs early', async () => {
 		const { stream, lines } = createCapturingStream();
 		const { setupProgress, taskListDone, finish } = createSetupTaskList(

@@ -228,7 +228,7 @@ export async function viewerBuild(
 				lifecycle.archive = archive;
 				return archive;
 			})
-			.run({ stream, verbose });
+			.run({ stream, verbose, keepElapsed: true });
 
 		// Plain read, not a TaskList row: the schema-version gate can only be
 		// checked once the archive is extracted (above), but which phase array
@@ -249,7 +249,7 @@ export async function viewerBuild(
 					? buildViewerReadModelInWorker
 					: runViewerReadModelBackfillsInWorker,
 			},
-		).run({ stream, verbose });
+		).run({ stream, verbose, keepElapsed: true });
 
 		await TaskList.pipe(
 			'Write archive',
@@ -267,7 +267,7 @@ export async function viewerBuild(
 				});
 				await ignoreEnoent(unlink(backupPath));
 			},
-		).run({ stream, verbose });
+		).run({ stream, verbose, keepElapsed: true });
 	} catch (error) {
 		const cause = unwrapTaskListStepError(error);
 		if (!lifecycle.backupComplete) {
@@ -288,7 +288,7 @@ export async function viewerBuild(
 					reportProgress(formatByteProgress(bytes, totalBytes));
 				});
 				await ignoreEnoent(unlink(backupPath));
-			}).run({ stream, verbose });
+			}).run({ stream, verbose, keepElapsed: true });
 		} catch (restoreError) {
 			const restoreCause = unwrapTaskListStepError(restoreError);
 			// `close()` runs before `process.exit()`, not in a `finally`

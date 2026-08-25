@@ -145,5 +145,5 @@ export async function runPostCrawlTaskList(
 
 	const baseStream = options.stream ?? process.stderr;
 	const stream = options.verbose ? createVerboseTimestampStream(baseStream) : baseStream;
-	await finalPipeline.run({ stream, verbose: options.verbose });
+	await finalPipeline.run({ stream, verbose: options.verbose, keepElapsed: true });
 }
