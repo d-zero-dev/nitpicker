@@ -369,5 +369,6 @@ export async function createSheets(params: CreateSheetsParams) {
 	await pipeline.run({
 		stream: options?.silent ? NULL_STREAM : (options?.stream ?? process.stderr),
 		verbose: options?.verbose ?? !process.stdout.isTTY,
+		keepElapsed: true,
 	});
 }
