@@ -1,30 +1,22 @@
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
-import { resolveTextRefs } from '../viewer-cursor-kit/resolve-text-refs.js';
-
 /** Per-source-page outbound link tallies for the Page List report sheet. */
 export interface OutboundLinkFacts {
 	/** Total occurrences of internal links from this page (sum of `viewer_anchor_facts.count`). */
 	internalLinks: number;
 	/** Occurrences of internal links to a "bad" destination (see the module docs for the threshold). */
 	internalBadLinks: number;
-	/** One line per distinct bad internal destination, `\n`-joined. */
-	internalBadLinkNote: string;
 	/** Total occurrences of external links from this page. */
 	externalLinks: number;
 	/** Occurrences of external links to a "bad" destination. */
 	externalBadLinks: number;
-	/** One line per distinct bad external destination, `\n`-joined. */
-	externalBadLinkNote: string;
 }
 
 const EMPTY_FACTS: OutboundLinkFacts = {
 	internalLinks: 0,
 	internalBadLinks: 0,
-	internalBadLinkNote: '',
 	externalLinks: 0,
 	externalBadLinks: 0,
-	externalBadLinkNote: '',
 };
 
 /**
@@ -44,8 +36,8 @@ function isBadStatus(status: number | null): boolean {
 }
 
 /**
- * Fetches internal/external link counts and bad-link notes for a batch of
- * source pages, from `viewer_anchor_facts`.
+ * Fetches internal/external link counts for a batch of source pages, from
+ * `viewer_anchor_facts`.
  *
  * Reads the fully redirect/alias-resolved (source, dest) pairs — same
  * semantics as every other `viewer_anchor_facts` consumer (`listLinks`,
@@ -56,13 +48,10 @@ function isBadStatus(status: number | null): boolean {
  * occurrence instead of two, and the "bad" judgment uses the final
  * destination's status rather than a redirect source's transient one.
  *
- * The bad-link note lists one line per distinct bad *destination*
- * (first-wins anchor text per destination — the same grain
- * `viewer_anchor_facts.first_text_id` already carries), not one line per
- * raw anchor occurrence: the read model has no per-occurrence detail to
- * recover. The numeric `internalBadLinks`/`externalBadLinks` counts do stay
- * occurrence-level (`SUM(count)`), matching the legacy report's counting
- * unit.
+ * Per-destination detail (which URLs are bad, their anchor text) is not
+ * carried here — that's the Referrers Relational Table sheet's job
+ * (`create-referrers-relational-table.ts`). This function only sums
+ * occurrence counts.
  * @param accessor - The archive accessor to query. Callers are responsible
  *   for confirming the read model is built and current (see
  *   `isViewerReadModelCurrent`) before calling this — it assumes
@@ -78,8 +67,7 @@ function isBadStatus(status: number | null): boolean {
  * @example
  * const facts = await getOutboundLinkFactsByPageIds(accessor, [1, 2, 3]);
  * const forPage1 = facts.get(1) ?? {
- *   internalLinks: 0, internalBadLinks: 0, internalBadLinkNote: '',
- *   externalLinks: 0, externalBadLinks: 0, externalBadLinkNote: '',
+ *   internalLinks: 0, internalBadLinks: 0, externalLinks: 0, externalBadLinks: 0,
  * };
  */
 export async function getOutboundLinkFactsByPageIds(
@@ -95,31 +83,15 @@ export async function getOutboundLinkFactsByPageIds(
 		sourcePageId: number;
 		isExternalLink: 0 | 1;
 		status: number | null;
-		statusText: string | null;
 		count: number;
-		firstTextId: number | null;
-		rawDestUrl: string;
-		resolvedDestUrl: string;
-	}[] = await knex('viewer_anchor_facts as vaf')
-		.join('viewer_url_refs as raw_ref', 'raw_ref.id', 'vaf.raw_dest_url_ref_id')
-		.join('viewer_url_refs as dest_ref', 'dest_ref.id', 'vaf.dest_url_ref_id')
-		.leftJoin('content_items as dest_ci', 'dest_ci.id', 'vaf.dest_page_id')
-		.whereIn('vaf.source_page_id', [...pageIds])
+	}[] = await knex('viewer_anchor_facts')
+		.whereIn('source_page_id', [...pageIds])
 		.select(
-			'vaf.source_page_id as sourcePageId',
-			'vaf.is_external_link as isExternalLink',
-			'vaf.status as status',
-			'dest_ci.status_text as statusText',
-			'vaf.count as count',
-			'vaf.first_text_id as firstTextId',
-			'raw_ref.url as rawDestUrl',
-			'dest_ref.url as resolvedDestUrl',
+			'source_page_id as sourcePageId',
+			'is_external_link as isExternalLink',
+			'status as status',
+			'count as count',
 		);
-
-	const textByRefId = await resolveTextRefs(
-		knex,
-		rows.map((row) => row.firstTextId),
-	);
 
 	const result = new Map<number, OutboundLinkFacts>();
 	for (const row of rows) {
@@ -127,27 +99,13 @@ export async function getOutboundLinkFactsByPageIds(
 		const bad = isBadStatus(row.status);
 		if (row.isExternalLink) {
 			facts.externalLinks += row.count;
+			if (bad) {
+				facts.externalBadLinks += row.count;
+			}
 		} else {
 			facts.internalLinks += row.count;
-		}
-		if (bad) {
-			const text =
-				row.firstTextId == null ? '' : (textByRefId.get(row.firstTextId) ?? '');
-			const urlDisplay =
-				row.rawDestUrl === row.resolvedDestUrl
-					? row.resolvedDestUrl
-					: `${row.rawDestUrl} => ${row.resolvedDestUrl}`;
-			const line = `${text} (${row.status ?? ''} ${row.statusText ?? ''} ${urlDisplay})`;
-			if (row.isExternalLink) {
-				facts.externalBadLinks += row.count;
-				facts.externalBadLinkNote = facts.externalBadLinkNote
-					? `${facts.externalBadLinkNote}\n${line}`
-					: line;
-			} else {
+			if (bad) {
 				facts.internalBadLinks += row.count;
-				facts.internalBadLinkNote = facts.internalBadLinkNote
-					? `${facts.internalBadLinkNote}\n${line}`
-					: line;
 			}
 		}
 		result.set(row.sourcePageId, facts);

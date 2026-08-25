@@ -1,7 +1,7 @@
 import type { Knex } from 'knex';
 
 /**
- * Creates all 26 viewer-read-model tables against the given connection, with
+ * Creates all 27 viewer-read-model tables against the given connection, with
  * no indexes. Assumes none of the tables currently exist — callers
  * (`buildViewerReadModel`) are responsible for dropping any prior version
  * first, inside the same transaction, so this function is not itself
@@ -158,6 +158,28 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			display_title text,
 			inbound_link_count integer not null default 0,
 			dir_index_inbound_link_count integer,
+			-- URL decomposition for the Page List report sheet (Protocol/Domain/
+			-- path1..path10 columns) -- same "report/read-model-only, no
+			-- write-model source column" category as display_title/
+			-- inbound_link_count above, computed once at build time instead of
+			-- report-google-sheets re-parsing url with tryParseUrl +
+			-- decodeURISafely on every report run. Fixed columns (not a single
+			-- JSON/delimited column) to match this table's existing convention
+			-- of storing display-ready scalars directly. All nullable: a page
+			-- whose url fails tryParseUrl (should not normally happen for a
+			-- listable page) leaves every one of these NULL.
+			protocol text,
+			hostname text,
+			path1 text,
+			path2 text,
+			path3 text,
+			path4 text,
+			path5 text,
+			path6 text,
+			path7 text,
+			path8 text,
+			path9 text,
+			path10 text,
 			url_sort_key text not null,
 			title_sort_key text not null,
 			path_sort_key text not null,
@@ -467,6 +489,38 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 		CREATE TABLE viewer_resource_stats (
 			resource_id integer primary key,
 			referrer_count integer not null
+		)
+	`);
+
+	// Resources report "dedupe" mode, precomputed (report-google-sheets
+	// performance fix): one row per `(canonical URL, status, contentType)`
+	// group, folding together every raw `resource_items` row that shares
+	// that combination -- computed once here by `computeResourceGroupRows`
+	// instead of report-google-sheets' `create-resources.ts` re-aggregating
+	// the entire archive's resources on every `report` run. `group_id` is a
+	// plain AUTOINCREMENT id assigned in the natural-URL-sorted insert
+	// order `computeResourceGroupRows` already produces, so a report-side
+	// keyset stream ordered by `group_id` reproduces that order without a
+	// text sort key. `referrer_count` is the exact distinct-referring-page
+	// count (see `compute-resource-group-rows.ts`'s docs for why this is
+	// exact, not sampled, unlike `query_pattern`'s per-key value tracking).
+	// `referrer_note`/`query_pattern` are pre-formatted display strings
+	// (bounded samples), not further denormalised into separate tables --
+	// this table has no reader other than the Resources report sheet, so
+	// there is no fast-path/live-path split to keep narrow for.
+	await trx.raw(`
+		CREATE TABLE viewer_resource_groups (
+			group_id integer primary key,
+			canonical_url text not null,
+			status integer,
+			status_text text,
+			content_type text,
+			content_length_min integer,
+			content_length_max integer,
+			count integer not null,
+			referrer_count integer not null,
+			referrer_note text,
+			query_pattern text
 		)
 	`);
 

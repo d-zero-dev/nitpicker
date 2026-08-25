@@ -230,5 +230,17 @@ export function mapPageRowToListItem(row: PageListRow): PageListItem {
 		displayTitle: row.displayTitle ?? null,
 		inboundLinkCount: row.inboundLinkCount ?? null,
 		dirIndexInboundLinkCount: row.dirIndexInboundLinkCount ?? null,
+		protocol: row.protocol ?? null,
+		hostname: row.hostname ?? null,
+		path1: row.path1 ?? null,
+		path2: row.path2 ?? null,
+		path3: row.path3 ?? null,
+		path4: row.path4 ?? null,
+		path5: row.path5 ?? null,
+		path6: row.path6 ?? null,
+		path7: row.path7 ?? null,
+		path8: row.path8 ?? null,
+		path9: row.path9 ?? null,
+		path10: row.path10 ?? null,
 	};
 }

@@ -20,6 +20,8 @@ import { applyViewerPagesFilters } from './apply-viewer-pages-filters.js';
  * @param knex - The archive's Knex instance.
  * @param options - The caller's filter/sort options.
  * @returns The total number of matching rows.
+ * @example
+ * const total = await countViewerPagesTotal(knex, { isExternal: false });
  */
 export async function countViewerPagesTotal(
 	knex: Knex,

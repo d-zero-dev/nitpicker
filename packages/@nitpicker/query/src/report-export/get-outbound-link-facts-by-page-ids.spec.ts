@@ -198,13 +198,6 @@ describe('getOutboundLinkFactsByPageIds', () => {
 		expect(facts.externalBadLinks).toBe(0);
 	});
 
-	it('includes the destination URL and anchor text in the bad-link note', async () => {
-		const result = await getOutboundLinkFactsByPageIds(archive, [sourcePageId]);
-		const facts = result.get(sourcePageId)!;
-		expect(facts.internalBadLinkNote).toContain('https://example.com/broken');
-		expect(facts.internalBadLinkNote).toContain('404');
-	});
-
 	it('returns no entry for a page with no outbound links', async () => {
 		const knex = archive.getKnex();
 		const okRow = await knex('content_items as ci')

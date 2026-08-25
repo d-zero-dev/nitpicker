@@ -150,6 +150,17 @@ describe('joinViewerPageIdsToListItems', () => {
 		expect(items[1]!.inboundLinkCount).toBe(0);
 	});
 
+	it('joins protocol/hostname/path1..path10 from viewer_pages', async () => {
+		const knex = archive.getKnex();
+		const items = await joinViewerPageIdsToListItems(knex, [idA]);
+		expect(items[0]).toMatchObject({
+			protocol: 'https:',
+			hostname: 'example.com',
+			path1: '/a',
+			path2: null,
+		});
+	});
+
 	it('computes header-presence flags on the joined row, not just the write-model columns', async () => {
 		const knex = archive.getKnex();
 		const items = await joinViewerPageIdsToListItems(knex, [idA, idB]);

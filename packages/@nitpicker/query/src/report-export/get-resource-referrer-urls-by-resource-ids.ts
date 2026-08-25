@@ -1,5 +1,7 @@
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { getResourceReferrerEdges } from '../get-resource-referrer-edges.js';
+
 import { groupValuesById } from './group-values-by-id.js';
 
 /**
@@ -28,15 +30,7 @@ export async function getResourceReferrerUrlsByResourceIds(
 	if (resourceIds.length === 0) {
 		return new Map();
 	}
-	const knex = accessor.getKnex();
-
-	const rows: { resourceId: number; pageUrl: string }[] = await knex(
-		'resource_ref_edges as rre',
-	)
-		.join('content_items as ci', 'ci.id', 'rre.page_id')
-		.join('url_refs as ur', 'ur.id', 'ci.url_id')
-		.whereIn('rre.resource_id', [...resourceIds])
-		.select('rre.resource_id as resourceId', 'ur.url as pageUrl');
+	const rows = await getResourceReferrerEdges(accessor.getKnex(), resourceIds);
 
 	return groupValuesById(
 		rows,
