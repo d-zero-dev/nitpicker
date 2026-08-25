@@ -208,7 +208,7 @@ describe('viewerBuild command', () => {
 		expect(output).toContain('Write archive');
 	});
 
-	it('renders all 21 full-build phases as individual rows when --force is passed (issue #294)', async () => {
+	it('renders all 22 full-build phases as individual rows when --force is passed (issue #294)', async () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], { force: true } as never);
 
@@ -255,7 +255,7 @@ describe('viewerBuild command', () => {
 
 	it('reports phase changes via the row message (issue #294)', async () => {
 		// Default mockBuildViewerReadModelInWorker already drives the full
-		// 21-phase sequence (including 'buildingAnchorFacts') to completion.
+		// 22-phase sequence (including 'buildingAnchorFacts') to completion.
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], { force: true } as never);
 

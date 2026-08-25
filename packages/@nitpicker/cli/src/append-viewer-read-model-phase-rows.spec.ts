@@ -52,7 +52,7 @@ async function driveOnPhase(
 }
 
 describe('appendViewerReadModelPhaseRows', () => {
-	it('renders every phase in the full 21-phase build array as its own row, in order', async () => {
+	it('renders every phase in the full 22-phase build array as its own row, in order', async () => {
 		const runBuild = vi.fn(
 			async (_accessor: ArchiveAccessor, options: BuildViewerReadModelOptions) => {
 				await driveOnPhase(options, VIEWER_READ_MODEL_FULL_BUILD_PHASES);

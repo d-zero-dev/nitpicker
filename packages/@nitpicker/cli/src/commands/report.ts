@@ -82,7 +82,7 @@ export async function report(args: string[], flags: ReportFlags) {
 			configPath: configFilePath,
 			all,
 			silent: flags.silent ?? false,
-			dedupeResources: flags.dedupeResources ?? false,
+			dedupeResources: flags.dedupeResources,
 			onExtractProgress,
 		});
 	} catch (error) {

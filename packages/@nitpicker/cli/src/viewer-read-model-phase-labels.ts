@@ -33,6 +33,7 @@ export const VIEWER_READ_MODEL_PHASE_LABELS: Record<ViewerReadModelBuildPhase, s
 	buildingAnchorFacts: 'Building anchor facts',
 	buildingGraph: 'Building link graph',
 	buildingResources: 'Building resources',
+	buildingResourceGroups: 'Building resource groups',
 	buildingImages: 'Building images',
 	buildingHeaderChecks: 'Building header checks',
 	buildingDuplicateGroups: 'Building duplicate groups',
