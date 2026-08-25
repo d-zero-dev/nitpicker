@@ -14,16 +14,17 @@ import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates
  * Joins an already ID-limited, already-ordered `page_id` list back to the
  * 0.13 write-model entity graph (`content_items` + `page_meta` + refs)
  * for full-metadata display, PLUS an unconditional `viewer_pages` join for
- * the three read-model-only computed columns
- * (`displayTitle`/`inboundLinkCount`/`dirIndexInboundLinkCount` — see those
- * fields' docs on `PageListItem`).
+ * its read-model-only computed columns
+ * (`displayTitle`/`inboundLinkCount`/`dirIndexInboundLinkCount`/
+ * `protocol`/`hostname`/`path1`..`path10` — see those fields' docs on
+ * `PageListItem`).
  *
  * The `viewer_pages` join is deliberately unconditional (no `hasTable`/
  * `hasColumn` existence guard the way `templateKeySelectColumn`/
  * `isDedupeCappedSelectColumn` guard their write-model columns): both of
  * this function's call sites (`listViewerPages`, `list-directory-pages.ts`)
  * already require the read model to be current before calling this (see
- * their own docs), so `viewer_pages` — and these three columns on it — are
+ * their own docs), so `viewer_pages` — and these columns on it — are
  * guaranteed to exist here. A `LEFT JOIN` is still used (not `JOIN`) purely
  * for resilience against a `page_id` racing out of `viewer_pages` between
  * the caller's read and this one, not as a schema-absence guard.
@@ -33,17 +34,28 @@ import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates
  * afterward — cheap, since this only ever runs over a `limit`-bounded page.
  * @param knex - The archive's Knex instance.
  * @param pageIds - The page IDs to fetch.
+ * @param schemaFlags - Pre-resolved {@link hasPageTemplatesTable}/
+ *   {@link hasDedupeCapEventIdColumn} results, for a caller (e.g.
+ *   `streamPageListRows`) that calls this function once per batch across
+ *   many batches and wants to resolve these schema-presence checks once for
+ *   the whole run instead of once per batch. Omit to self-resolve both
+ *   (this function's original, single-call-site behavior).
+ * @param schemaFlags.hasPageTemplates
+ * @param schemaFlags.hasDedupeCapColumn
  * @returns The corresponding {@link PageListItem} rows, in `pageIds` order.
  */
 export async function joinViewerPageIdsToListItems(
 	knex: Knex,
 	pageIds: number[],
+	schemaFlags?: { hasPageTemplates: boolean; hasDedupeCapColumn: boolean },
 ): Promise<PageListItem[]> {
 	if (pageIds.length === 0) {
 		return [];
 	}
-	const hasPageTemplates = await hasPageTemplatesTable(knex);
-	const hasDedupeCapColumn = await hasDedupeCapEventIdColumn(knex);
+	const hasPageTemplates =
+		schemaFlags?.hasPageTemplates ?? (await hasPageTemplatesTable(knex));
+	const hasDedupeCapColumn =
+		schemaFlags?.hasDedupeCapColumn ?? (await hasDedupeCapEventIdColumn(knex));
 	let query = knex('content_items as ci')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
 		.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
@@ -87,6 +99,18 @@ export async function joinViewerPageIdsToListItems(
 			'vp.display_title as displayTitle',
 			'vp.inbound_link_count as inboundLinkCount',
 			'vp.dir_index_inbound_link_count as dirIndexInboundLinkCount',
+			'vp.protocol as protocol',
+			'vp.hostname as hostname',
+			'vp.path1 as path1',
+			'vp.path2 as path2',
+			'vp.path3 as path3',
+			'vp.path4 as path4',
+			'vp.path5 as path5',
+			'vp.path6 as path6',
+			'vp.path7 as path7',
+			'vp.path8 as path8',
+			'vp.path9 as path9',
+			'vp.path10 as path10',
 		);
 	const rowsById = new Map(rows.map((row) => [row.id, row]));
 	return pageIds

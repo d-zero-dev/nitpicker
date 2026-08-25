@@ -64,25 +64,25 @@ export interface CreateSheetsParams {
  * ```
  * Create sheet: <name>  ×N（ヘッダ設定まで）
  * Estimate cell budget   ×1（`estimateCellBudget` の事前警告 + 予算初期値の算出）
- * Process: <name>       ×N（行生成のみ。flush はしない）
- * Upload: <name>        ×N（`Process` が `ctx.insertNext` で動的挿入。実際の
+ * Build rows: <name>    ×N（行生成のみ。flush はしない）
+ * Upload rows: <name>   ×N（`Build rows` が `ctx.insertNext` で動的挿入。実際の
  *                            flush = Sheets API 送信を行う別ステップ）
- * Format: <name>        ×M（`updateSheet` を持つシートのみ）
+ * Format sheet: <name>  ×M（`updateSheet` を持つシートのみ）
  * ```
  *
  * 全ステップが厳密に逐次実行されるため、Google Sheets API へのリクエストが並列に
  * 飛ばない（レート制限への配慮）のと同時に、シート作成順・書式適用順も予測可能になる。
- * 行生成（メモリ内処理）と実送信（ネットワーク往復）は別プロセスなので、`Process`
+ * 行生成（メモリ内処理）と実送信（ネットワーク往復）は別プロセスなので、`Build rows`
  * ステップ内で `sheet.flush` を no-op に差し替えて `run()` からの明示的な flush
  * 呼び出しを無効化し（`appendRow()` 自身の 2500 行自動 flush は影響を受けない）、
- * `run()` 完了後に `Upload: <name>` を挿入して実際の flush をそこで行う —
- * セル予算のデクリメント（`sheet.sentCount` 実測）もこの `Upload` ステップの
- * 戻り値で行うため、`Process` の戻り値は暫定値のまま次段へ渡る。
+ * `run()` 完了後に `Upload rows: <name>` を挿入して実際の flush をそこで行う —
+ * セル予算のデクリメント（`sheet.sentCount` 実測）もこの `Upload rows` ステップの
+ * 戻り値で行うため、`Build rows` の戻り値は暫定値のまま次段へ渡る。
  *
  * ## セル予算配分（report OOM 修正・Google Sheets 10M セル上限対策）
  *
  * `Estimate cell budget` ステップで全シートの見積もり行数から超過見込みを警告表示する
- * （`options.onWarn`）。実際の予算執行は `Upload: <name>` ステップ間でパイプラインの
+ * （`options.onWarn`）。実際の予算執行は `Upload rows: <name>` ステップ間でパイプラインの
  * 搬送値（残セル数）を実測（`sheet.sentCount`）でデクリメントしながら受け渡す —
  * `maxRows = floor(残セル数 / 列数)` を各シート開始時に確定し、優先順位の高い
  * シートの未使用分が後続シートに回る。`run()` が `maxRows` に達すると自身の
@@ -94,7 +94,7 @@ export interface CreateSheetsParams {
  * `ctx.estimatedTotal`（`estimateRowCount()` の結果）が正——`maxRows`（セル予算の
  * 打ち切り上限）ではない。`formatProgressCount` で `"1,234/5,000 rows (25%)"`
  * 形式に整形し、`dedupeProgressMessage` で同一文字列の連続再描画を間引く
- * （百万行規模のシートで毎行再描画するとターミナルが埋まる）。`Upload: <name>`
+ * （百万行規模のシートで毎行再描画するとターミナルが埋まる）。`Upload rows: <name>`
  * ステップ自身も「uploading to Google Sheets...」を表示するため、行生成完了から
  * 実送信完了までの間が無音区間にならない。
  *
@@ -172,7 +172,7 @@ export async function createSheets(params: CreateSheetsParams) {
 	// Carries the remaining cell budget (in cells) between steps, threaded
 	// through the whole pipeline as a `number` — Phase 1's "Create sheet"
 	// steps and Phase 3's "Format" steps don't care about it and pass it
-	// through unchanged; only "Estimate cell budget" and Phase 2's "Process"
+	// through unchanged; only "Estimate cell budget" and Phase 2's "Build rows"
 	// steps actually read/update it. A single consistent carried type avoids
 	// the `StepFn<T, R>` mismatches a per-phase type change would cause when
 	// reassigning back into one `let pipeline` across the loop below (see
@@ -199,7 +199,7 @@ export async function createSheets(params: CreateSheetsParams) {
 
 	// Advisory warning (informational only — see estimate-cell-budget.ts's
 	// docs for why the real enforcement below uses live sentCount instead of
-	// these estimates) + the initial cell budget every "Process" step decrements.
+	// these estimates) + the initial cell budget every "Build rows" step decrements.
 	pipeline = pipeline.pipe(
 		'Estimate cell budget',
 		async (_input: number, ctx: StepContext<number>): Promise<number> => {
@@ -244,15 +244,15 @@ export async function createSheets(params: CreateSheetsParams) {
 	// before the next sheet starts, so an earlier sheet sending fewer rows
 	// than its allocation lets the remainder roll over to the next sheet.
 	for (const setting of settings) {
-		// Row generation ("Process") and the network upload ("Upload") are
-		// different processes (in-memory computation vs. a Sheets API round
+		// Row generation ("Build rows") and the network upload ("Upload rows")
+		// are different processes (in-memory computation vs. a Sheets API round
 		// trip) — both are always-present, known-ahead-of-time steps for
 		// every sheet (not a conditional/unplanned branch), so both are
 		// pre-built here as regular sequential `.pipe()` steps, matching
-		// Phase 1/3's "Create sheet"/"Format" steps. `ctx.insertNext` is
+		// Phase 1/3's "Create sheet"/"Format sheet" steps. `ctx.insertNext` is
 		// reserved for genuinely dynamic insertions (see `create-setup-task-
 		// list.ts`'s recovery-label handling) — this pairing isn't that.
-		// State that only "Upload" needs is handed off via this closure
+		// State that only "Upload rows" needs is handed off via this closure
 		// variable rather than threading it through the pipeline's own
 		// carried value, which stays a plain `number` (remaining budget)
 		// throughout.
@@ -265,7 +265,7 @@ export async function createSheets(params: CreateSheetsParams) {
 		} | null = null;
 
 		pipeline = pipeline.pipe(
-			`Process: ${setting.name}`,
+			`Build rows: ${setting.name}`,
 			async (remainingCells: number, ctx: StepContext<number>): Promise<number> => {
 				active = dedupeProgressMessage((message) => ctx.progress(message));
 				const columns = headerColumnsByName.get(setting.name) ?? 0;
@@ -327,7 +327,7 @@ export async function createSheets(params: CreateSheetsParams) {
 		);
 
 		pipeline = pipeline.pipe(
-			`Upload: ${setting.name}`,
+			`Upload rows: ${setting.name}`,
 			async (input: number, ctx: StepContext<number>): Promise<number> => {
 				active = dedupeProgressMessage((message) => ctx.progress(message));
 				if (!handoff) {
@@ -354,7 +354,7 @@ export async function createSheets(params: CreateSheetsParams) {
 	// Phase 3: formatting.
 	for (const setting of updateSheetSettings) {
 		pipeline = pipeline.pipe(
-			`Format: ${setting.name}`,
+			`Format sheet: ${setting.name}`,
 			async (input: number, ctx: StepContext<number>): Promise<number> => {
 				active = dedupeProgressMessage((message) => ctx.progress(message));
 				active('applying formatting...');

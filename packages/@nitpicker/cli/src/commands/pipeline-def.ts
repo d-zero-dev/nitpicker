@@ -216,8 +216,9 @@ export const commandDef = {
 		},
 		dedupeResources: {
 			type: 'boolean',
+			default: true,
 			group: 'Report options',
-			desc: 'Collapse the Resources sheet by canonical URL (query values stripped) and add a Count column. Useful for archives dominated by per-request unique tracking-pixel URLs.',
+			desc: 'Collapse the Resources sheet by canonical URL (query values stripped) and add a Count column. Useful for archives dominated by per-request unique tracking-pixel URLs. Pass --no-dedupe-resources for one row per raw resource URL instead.',
 		},
 		// shared flags
 		verbose: {

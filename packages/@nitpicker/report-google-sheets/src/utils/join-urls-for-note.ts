@@ -1,9 +1,16 @@
 /**
- * Safety cap for a joined URL list inserted into a cell note. Google Sheets
- * caps cell content / notes around 50,000 characters; this stays well below
- * that to leave room for the "and N more" suffix.
+ * Safety cap for a cell note produced by this package. `@d-zero/google-sheets`'s
+ * `Cell.provide()` — which every `sheet.appendRow()` call goes through — hard-slices
+ * any note longer than 5,000 characters (its `noteMaxLength` default) and appends
+ * its own `"\n\n...\nToo Large Text"` marker. There is currently no call path from
+ * this package (no `CellData`/`Sheet` option) that overrides that default, so any
+ * note built above ~5,000 characters is silently re-cut by that layer regardless of
+ * what this module does. Staying comfortably under that value ensures the
+ * informative suffix this module builds (`"... and N more"` / a truncation notice)
+ * is what actually reaches the spreadsheet, instead of being itself chopped
+ * mid-string by `Cell.provide()`'s blunter default cut.
  */
-export const NOTE_MAX_LENGTH = 49_000;
+export const NOTE_MAX_LENGTH = 4800;
 
 /**
  * Joins URLs into a single newline-separated string, truncating at

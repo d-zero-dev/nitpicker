@@ -6,6 +6,7 @@ import { Sheets } from '@d-zero/google-sheets';
 import { google } from 'googleapis';
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest';
 
+import { createImageList } from '../../data/create-image-list.js';
 import { createLinks } from '../../data/create-links.js';
 import { createPageList } from '../../data/create-page-list.js';
 import { createResources } from '../../data/create-resources.js';
@@ -239,6 +240,55 @@ describe('createSheets pipeline', () => {
 			'Content Length',
 			'Referrers',
 		]);
+	});
+
+	it('Images シートを正しく生成できる（画像未取得のためヘッダーのみ）', async () => {
+		const sheetName = testSheetName('images');
+		const sheets = new Sheets(SPREADSHEET_URL, auth);
+
+		const createTestImageList: CreateSheet = (reports, accessor) => {
+			const setting = createImageList(reports, accessor);
+			return { ...setting, name: sheetName };
+		};
+
+		await createSheets({
+			sheets,
+			accessor: crawlResult.archive,
+			reports: emptyReports,
+			createSheetList: [createTestImageList],
+		});
+
+		const sheet = await sheets.create(sheetName);
+		createdSheetIds.push(sheet.id);
+
+		// Verify headers
+		const headerValues = await readSheetValues(
+			auth,
+			SPREADSHEET_ID,
+			`'${sheetName}'!A1:H1`,
+		);
+		expect(headerValues[0]).toEqual([
+			'Page URL',
+			'Image path (src)',
+			'Image Path (currentSrc)',
+			'Alternative Text',
+			'Displayed Width',
+			'Displayed Height',
+			'Lazy Loading',
+			'DOM Path',
+		]);
+
+		// crawlTestServer's shared crawl runs with `image: false` (see
+		// helpers.ts), so `image_items` is empty for this archive — only the
+		// header row is expected. `streamAllImages`/`requiresReadModel`'s
+		// wiring through the real `createSheets` orchestration is still
+		// exercised end-to-end even with zero rows.
+		const allValues = await readSheetValues(
+			auth,
+			SPREADSHEET_ID,
+			`'${sheetName}'!A1:A100`,
+		);
+		expect(allValues.length).toBe(1); // header only
 	});
 
 	it('Resources シート (dedupe mode) に Count 列を含むヘッダーが出力される', async () => {

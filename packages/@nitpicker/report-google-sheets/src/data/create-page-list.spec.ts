@@ -1,24 +1,25 @@
-import type { PageListItem } from '@nitpicker/query';
+import type { PageListItem, PageListStreamRow } from '@nitpicker/query';
 
 import {
 	buildRedirectFromUrlsByDestId,
+	countViewerPagesTotal,
 	getOutboundLinkFactsByPageIds,
-	listViewerPages,
-	resolvePageIdsByUrls,
+	streamPageListRows,
 } from '@nitpicker/query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { assertNoLazyCells } from '../test-helpers/assert-no-lazy-cells.js';
 import { cellValue, cellNote } from '../test-helpers/cell-inspection.js';
 import { createMockSheet } from '../test-helpers/create-mock-sheet.js';
+import { oneChunk } from '../test-helpers/one-chunk.js';
 
 import { createPageList } from './create-page-list.js';
 
 vi.mock('@nitpicker/query', () => ({
-	listViewerPages: vi.fn(),
+	streamPageListRows: vi.fn(),
+	countViewerPagesTotal: vi.fn(),
 	getOutboundLinkFactsByPageIds: vi.fn(),
 	buildRedirectFromUrlsByDestId: vi.fn(),
-	resolvePageIdsByUrls: vi.fn(),
 }));
 
 const NO_ACCESSOR = undefined as never;
@@ -26,10 +27,8 @@ const NO_ACCESSOR = undefined as never;
 const EMPTY_FACTS = {
 	internalLinks: 0,
 	internalBadLinks: 0,
-	internalBadLinkNote: '',
 	externalLinks: 0,
 	externalBadLinks: 0,
-	externalBadLinkNote: '',
 };
 
 /**
@@ -103,35 +102,41 @@ function makeItem(overrides: Partial<PageListItem> = {}): PageListItem {
 		displayTitle: overrides.title === undefined ? 'Page' : overrides.title,
 		inboundLinkCount: 0,
 		dirIndexInboundLinkCount: null,
+		protocol: 'https:',
+		hostname: 'example.com',
+		path1: '/page',
+		path2: null,
+		path3: null,
+		path4: null,
+		path5: null,
+		path6: null,
+		path7: null,
+		path8: null,
+		path9: null,
+		path10: null,
 		...overrides,
 	};
 }
 
 /**
- * Builds a one-page `listViewerPages` result.
- * @param items - The page items for this result.
- * @param nextCursor - The `nextCursor` value, `null` by default.
+ * Builds a {@link PageListStreamRow} for tests: a {@link PageListItem} plus
+ * the `pageId` `streamPageListRows` attaches.
+ * @param overrides - Fields to override on the default item/pageId.
  */
-function makePage(items: PageListItem[], nextCursor: string | null = null) {
-	return {
-		items,
-		total: items.length,
-		facets: { statuses: [], contentTypes: [], languages: [] } as never,
-		offset: 0,
-		limit: 500,
-		nextCursor,
-		prevCursor: null,
-	};
+function makeStreamRow(
+	overrides: Partial<PageListItem> & { pageId?: number } = {},
+): PageListStreamRow {
+	const { pageId = 1, ...itemOverrides } = overrides;
+	return { ...makeItem(itemOverrides), pageId };
 }
 
 describe('createPageList', () => {
 	beforeEach(() => {
-		vi.mocked(listViewerPages).mockReset();
+		vi.mocked(streamPageListRows).mockReset();
+		vi.mocked(countViewerPagesTotal).mockReset();
 		vi.mocked(getOutboundLinkFactsByPageIds).mockReset();
 		vi.mocked(buildRedirectFromUrlsByDestId).mockReset();
-		vi.mocked(resolvePageIdsByUrls).mockReset();
 		vi.mocked(buildRedirectFromUrlsByDestId).mockResolvedValue(new Map());
-		vi.mocked(resolvePageIdsByUrls).mockResolvedValue(new Map());
 		vi.mocked(getOutboundLinkFactsByPageIds).mockResolvedValue(new Map());
 	});
 
@@ -160,31 +165,48 @@ describe('createPageList', () => {
 		expect(headers.at(-1)).toBe('Custom Column');
 	});
 
-	it('estimates the row count via listViewerPages(isExternal: false, limit: 0)', async () => {
-		vi.mocked(listViewerPages).mockResolvedValue(makePage([], null));
-		const setting = createPageList([], NO_ACCESSOR);
-		await setting.estimateRowCount();
-		expect(listViewerPages).toHaveBeenCalledWith(NO_ACCESSOR, {
-			isExternal: false,
-			limit: 0,
-		});
+	it('estimates the row count via countViewerPagesTotal(isExternal: false)', async () => {
+		vi.mocked(countViewerPagesTotal).mockResolvedValue(42);
+		const knex = 'fake-knex' as never;
+		const accessor = { getKnex: () => knex } as never;
+		const setting = createPageList([], accessor);
+		await expect(setting.estimateRowCount()).resolves.toBe(42);
+		expect(countViewerPagesTotal).toHaveBeenCalledWith(knex, { isExternal: false });
 	});
 
 	it('streams rows without any lazy thunks (pins the OOM fix)', async () => {
-		vi.mocked(listViewerPages).mockResolvedValueOnce(makePage([makeItem()]));
+		vi.mocked(streamPageListRows).mockReturnValueOnce(oneChunk([makeStreamRow()]));
 		const setting = createPageList([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
 		assertNoLazyCells(mock.rows);
 	});
 
-	it('decomposes the URL into protocol, hostname, and path segments', async () => {
-		vi.mocked(listViewerPages).mockResolvedValueOnce(
-			makePage([makeItem({ url: 'https://example.com/blog/post-1' })]),
+	it('passes through the read-model-precomputed protocol/hostname/path segments unchanged', async () => {
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([
+				makeStreamRow({
+					url: 'https://example.com/blog/post-1',
+					protocol: 'https:',
+					hostname: 'example.com',
+					path1: '/blog',
+					path2: '/post-1',
+				}),
+			]),
 		);
 		const setting = createPageList([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
 
 		const row = mock.rows[0]!;
 		expect(cellValue(row[3]!)).toBe('https:');
@@ -194,24 +216,46 @@ describe('createPageList', () => {
 	});
 
 	it('uses displayTitle for the Title column and the raw title for Full Title', async () => {
-		vi.mocked(listViewerPages).mockResolvedValueOnce(
-			makePage([makeItem({ title: 'Post 1 | My Blog', displayTitle: 'Post 1' })]),
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([makeStreamRow({ title: 'Post 1 | My Blog', displayTitle: 'Post 1' })]),
 		);
 		const setting = createPageList([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
 
 		const row = mock.rows[0]!;
 		expect(cellValue(row[0]!)).toBe('Post 1');
 		expect(cellValue(row[1]!)).toBe('Post 1 | My Blog');
 	});
 
-	it('reports internal/external link counts and bad-link notes from getOutboundLinkFactsByPageIds', async () => {
-		vi.mocked(listViewerPages).mockResolvedValueOnce(
-			makePage([makeItem({ url: 'https://example.com/source' })]),
+	it('truncates the Title column note when the full title is extremely long', async () => {
+		const longTitle = 'a'.repeat(10_000);
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([makeStreamRow({ title: longTitle })]),
 		);
-		vi.mocked(resolvePageIdsByUrls).mockResolvedValue(
-			new Map([['https://example.com/source', 1]]),
+		const setting = createPageList([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
+
+		const row = mock.rows[0]!;
+		const note = cellNote(row[0]!)!;
+		expect(note.length).toBeLessThan(10_000);
+		expect(note).toContain('truncated');
+	});
+
+	it('reports internal/external link counts from getOutboundLinkFactsByPageIds, with no note attached', async () => {
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([makeStreamRow({ url: 'https://example.com/source', pageId: 1 })]),
 		);
 		vi.mocked(getOutboundLinkFactsByPageIds).mockResolvedValue(
 			new Map([
@@ -220,10 +264,8 @@ describe('createPageList', () => {
 					{
 						internalLinks: 3,
 						internalBadLinks: 1,
-						internalBadLinkNote: 'bad note',
 						externalLinks: 2,
 						externalBadLinks: 0,
-						externalBadLinkNote: '',
 					},
 				],
 			]),
@@ -231,21 +273,32 @@ describe('createPageList', () => {
 
 		const setting = createPageList([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
 
 		const row = mock.rows[0]!;
 		expect(cellValue(row[19]!)).toBe(3); // Internal Links
 		expect(cellValue(row[20]!)).toBe(1); // Internal Bad Links
-		expect(cellNote(row[20]!)).toBe('bad note');
+		expect(cellNote(row[20]!)).toBeUndefined();
 		expect(cellValue(row[21]!)).toBe(2); // External Links
 		expect(cellValue(row[22]!)).toBe(0); // External Bad Links
+		expect(cellNote(row[22]!)).toBeUndefined();
 	});
 
 	it('falls back to EMPTY_FACTS-shaped zeros when a page has no outbound-link entry', async () => {
-		vi.mocked(listViewerPages).mockResolvedValueOnce(makePage([makeItem()]));
+		vi.mocked(streamPageListRows).mockReturnValueOnce(oneChunk([makeStreamRow()]));
 		const setting = createPageList([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
 
 		const row = mock.rows[0]!;
 		expect(cellValue(row[19]!)).toBe(EMPTY_FACTS.internalLinks);
@@ -253,9 +306,9 @@ describe('createPageList', () => {
 	});
 
 	it('shows dirIndexInboundLinkCount when set, falling back to inboundLinkCount otherwise', async () => {
-		vi.mocked(listViewerPages).mockResolvedValueOnce(
-			makePage([
-				makeItem({
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([
+				makeStreamRow({
 					url: 'https://example.com/blog/',
 					inboundLinkCount: 3,
 					dirIndexInboundLinkCount: 10,
@@ -264,16 +317,18 @@ describe('createPageList', () => {
 		);
 		const setting = createPageList([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
 		expect(cellValue(mock.rows[0]![23]!)).toBe(10);
 	});
 
 	it('shows the redirect-from count and URL note from buildRedirectFromUrlsByDestId', async () => {
-		vi.mocked(listViewerPages).mockResolvedValueOnce(
-			makePage([makeItem({ url: 'https://example.com/target' })]),
-		);
-		vi.mocked(resolvePageIdsByUrls).mockResolvedValue(
-			new Map([['https://example.com/target', 5]]),
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([makeStreamRow({ url: 'https://example.com/target', pageId: 5 })]),
 		);
 		vi.mocked(buildRedirectFromUrlsByDestId).mockResolvedValue(
 			new Map([[5, ['https://example.com/old']]]),
@@ -281,7 +336,12 @@ describe('createPageList', () => {
 
 		const setting = createPageList([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
 
 		const row = mock.rows[0]!;
 		expect(cellValue(row[16]!)).toBe(1);
@@ -289,28 +349,38 @@ describe('createPageList', () => {
 	});
 
 	it('uses "N/A" when lang is null', async () => {
-		vi.mocked(listViewerPages).mockResolvedValueOnce(
-			makePage([makeItem({ lang: null })]),
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([makeStreamRow({ lang: null })]),
 		);
 		const setting = createPageList([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
 		expect(cellValue(mock.rows[0]![17]!)).toBe('N/A');
 	});
 
 	it('uses -1 fallback when status is null', async () => {
-		vi.mocked(listViewerPages).mockResolvedValueOnce(
-			makePage([makeItem({ status: null })]),
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([makeStreamRow({ status: null })]),
 		);
 		const setting = createPageList([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
 		expect(cellValue(mock.rows[0]![15]!)).toBe(-1);
 	});
 
 	it('adds plugin report data columns from pageData keyed by URL', async () => {
-		vi.mocked(listViewerPages).mockResolvedValueOnce(
-			makePage([makeItem({ url: 'https://example.com/page' })]),
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([makeStreamRow({ url: 'https://example.com/page' })]),
 		);
 		const setting = createPageList(
 			[
@@ -325,23 +395,66 @@ describe('createPageList', () => {
 			NO_ACCESSOR,
 		);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: Infinity, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
 
 		const headers = setting.createHeaders();
 		const scoreIndex = headers.indexOf('Score');
 		expect(cellValue(mock.rows[0]![scoreIndex]!)).toBe(95);
 	});
 
+	it('truncates an extremely long plugin-supplied note', async () => {
+		const longNote = 'x'.repeat(10_000);
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([makeStreamRow({ url: 'https://example.com/page' })]),
+		);
+		const setting = createPageList(
+			[
+				{
+					name: 'plugin',
+					pageData: {
+						headers: { score: 'Score' },
+						data: { 'https://example.com/page': { score: { value: 95 } } },
+						options: { 'https://example.com/page': { score: { note: longNote } } },
+					},
+				},
+			],
+			NO_ACCESSOR,
+		);
+		const mock = createMockSheet();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
+
+		const headers = setting.createHeaders();
+		const scoreIndex = headers.indexOf('Score');
+		const note = cellNote(mock.rows[0]![scoreIndex]!)!;
+		expect(note.length).toBeLessThan(10_000);
+		expect(note).toContain('truncated');
+	});
+
 	it('skips a page across cursor pages once maxRows is reached', async () => {
-		vi.mocked(listViewerPages).mockResolvedValueOnce(
-			makePage([
-				makeItem({ url: 'https://example.com/a' }),
-				makeItem({ url: 'https://example.com/b' }),
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([
+				makeStreamRow({ url: 'https://example.com/a', pageId: 1 }),
+				makeStreamRow({ url: 'https://example.com/b', pageId: 2 }),
 			]),
 		);
 		const setting = createPageList([], NO_ACCESSOR);
 		const mock = createMockSheet();
-		await setting.run({ sheet: mock.sheet, maxRows: 1, onProgress: () => {} });
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: 1,
+			estimatedTotal: 2,
+			onProgress: () => {},
+		});
 		expect(mock.rows).toHaveLength(1);
 		expect(mock.flushCount).toBe(1);
 	});

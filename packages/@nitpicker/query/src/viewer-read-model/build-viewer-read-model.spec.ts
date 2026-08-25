@@ -578,6 +578,21 @@ describe('buildViewerReadModel', () => {
 				status_sort_key: -32_768,
 				status_desc_key: 32_768,
 				source: 'crawled',
+				// deriveUrlDecomposition's own unparseable-URL fallback (see
+				// the "URL decomposition" describe block for the parseable
+				// case) — same defensive branch as derivePathSortKey above.
+				protocol: null,
+				hostname: null,
+				path1: null,
+				path2: null,
+				path3: null,
+				path4: null,
+				path5: null,
+				path6: null,
+				path7: null,
+				path8: null,
+				path9: null,
+				path10: null,
 			});
 		});
 	});
@@ -718,6 +733,104 @@ describe('buildViewerReadModel', () => {
 		});
 	});
 
+	describe('URL decomposition (protocol/hostname/path1..path10)', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_url_decomposition__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'url-decomposition-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			await archive.setPage({
+				url: parseUrl('https://example.com/blog/2024/post-1?ref=home')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			await archive.setPage({
+				url: parseUrl('https://example.com/')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('splits a deep URL with a query string into protocol/hostname/path1..N, appending the query to the last segment', async () => {
+			await buildViewerReadModel(archive);
+			const knex = archive.getKnex();
+
+			const row = await knex('viewer_pages')
+				.where('url', 'https://example.com/blog/2024/post-1?ref=home')
+				.first();
+			expect(row).toMatchObject({
+				protocol: 'https:',
+				hostname: 'example.com',
+				path1: '/blog',
+				path2: '/2024',
+				path3: '/post-1?ref=home',
+				path4: null,
+				path5: null,
+				path6: null,
+				path7: null,
+				path8: null,
+				path9: null,
+				path10: null,
+			});
+		});
+
+		it('splits the root URL into a single path segment', async () => {
+			await buildViewerReadModel(archive);
+			const knex = archive.getKnex();
+
+			// setPage() normalizes the bare root's href by stripping the
+			// trailing slash (url_refs stores "https://example.com", not
+			// "https://example.com/") — unrelated to this column, just this
+			// fixture's stored value.
+			const row = await knex('viewer_pages').where('url', 'https://example.com').first();
+			expect(row).toMatchObject({
+				protocol: 'https:',
+				hostname: 'example.com',
+				path1: '/',
+				path2: null,
+			});
+		});
+	});
+
 	describe('onProgress', () => {
 		const workingDir = path.resolve(
 			__dirname,
@@ -841,6 +954,7 @@ describe('buildViewerReadModel', () => {
 				'buildingIsolatedComponents',
 				'buildingGraph',
 				'buildingResources',
+				'buildingResourceGroups',
 				'buildingImages',
 				'buildingHeaderChecks',
 				'buildingDuplicateGroups',

@@ -58,13 +58,23 @@ describe('report CLI flag parsing (parseCli integration)', () => {
 		expect(result.flags.dedupeResources).toBe(true);
 	});
 
-	it('leaves dedupeResources undefined when the flag is omitted', () => {
+	it('defaults dedupeResources to true when the flag is omitted', () => {
 		const result = runReportParse([
 			'./archive.nitpicker',
 			'-S',
 			'https://docs.google.com/spreadsheets/d/x',
 		]);
-		expect(result.flags.dedupeResources).toBeUndefined();
+		expect(result.flags.dedupeResources).toBe(true);
+	});
+
+	it('interprets --no-dedupe-resources as false (raw mode opt-out)', () => {
+		const result = runReportParse([
+			'./archive.nitpicker',
+			'-S',
+			'https://docs.google.com/spreadsheets/d/x',
+			'--no-dedupe-resources',
+		]);
+		expect(result.flags.dedupeResources).toBe(false);
 	});
 
 	it('keeps other flags untouched when --dedupe-resources is set', () => {
@@ -92,12 +102,22 @@ describe('pipeline CLI flag parsing (parseCli integration)', () => {
 		expect(result.flags.dedupeResources).toBe(true);
 	});
 
-	it('leaves dedupeResources undefined when the flag is omitted', () => {
+	it('defaults dedupeResources to true when the flag is omitted', () => {
 		const result = runPipelineParse([
 			'https://example.com/',
 			'-S',
 			'https://docs.google.com/spreadsheets/d/x',
 		]);
-		expect(result.flags.dedupeResources).toBeUndefined();
+		expect(result.flags.dedupeResources).toBe(true);
+	});
+
+	it('interprets --no-dedupe-resources as false (raw mode opt-out)', () => {
+		const result = runPipelineParse([
+			'https://example.com/',
+			'-S',
+			'https://docs.google.com/spreadsheets/d/x',
+			'--no-dedupe-resources',
+		]);
+		expect(result.flags.dedupeResources).toBe(false);
 	});
 });

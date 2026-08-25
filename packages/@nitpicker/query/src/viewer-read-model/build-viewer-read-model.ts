@@ -1,5 +1,9 @@
 import type { BuildViewerReadModelOptions, PageSource } from '../types.js';
+import type { ExURL } from '@d-zero/shared/parse-url';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
+
+import { decodeURISafely } from '@d-zero/shared/decode-uri-safely';
+import { tryParseUrl } from '@d-zero/shared/parse-url';
 
 import { buildHeaderPresenceSelects } from '../build-header-presence-selects.js';
 import { classifyContentType } from '../classify-content-type.js';
@@ -29,6 +33,7 @@ import { computeHeaderCheckInsertRows } from './compute-header-check-insert-rows
 import { computeImageInsertRows } from './compute-image-insert-rows.js';
 import { computeMismatchInsertRows } from './compute-mismatch-rows.js';
 import { computePageFacetBuckets } from './compute-page-facet-buckets.js';
+import { computeResourceGroupRows } from './compute-resource-group-rows.js';
 import { computeResourceInsertRows } from './compute-resource-rows.js';
 import { createViewerReadModelIndexes } from './create-viewer-read-model-indexes.js';
 import { createViewerReadModelTables } from './create-viewer-read-model-tables.js';
@@ -235,6 +240,30 @@ interface ViewerPageInsertRow {
 	inbound_link_count: number;
 	/** From `computeDirIndexInboundLinkCountByPageId` — `null` for non-index pages, see that function's docs. */
 	dir_index_inbound_link_count: number | null;
+	/** From {@link deriveUrlDecomposition} — `null` when `url` fails to parse. */
+	protocol: string | null;
+	/** From {@link deriveUrlDecomposition} — `null` when `url` fails to parse. */
+	hostname: string | null;
+	/** From {@link deriveUrlDecomposition} — `null` when `url` fails to parse or has no segment at this depth. */
+	path1: string | null;
+	/** See {@link path1}. */
+	path2: string | null;
+	/** See {@link path1}. */
+	path3: string | null;
+	/** See {@link path1}. */
+	path4: string | null;
+	/** See {@link path1}. */
+	path5: string | null;
+	/** See {@link path1}. */
+	path6: string | null;
+	/** See {@link path1}. */
+	path7: string | null;
+	/** See {@link path1}. */
+	path8: string | null;
+	/** See {@link path1}. */
+	path9: string | null;
+	/** See {@link path1}. */
+	path10: string | null;
 	/**
 	 * Case-preserving sort key for URL ordering — currently just `url`
 	 * verbatim, matching `listPages`'s plain `ORDER BY url` (SQLite's
@@ -274,18 +303,86 @@ interface ViewerPageInsertRow {
 
 /**
  * Derives the path-only sort key used for directory-prefix filtering.
- * Falls back to the full URL string when it cannot be parsed as a URL
- * (defensive only — every URL in `pages` was already parsed once during
- * crawling, so this branch should not be reachable in practice).
+ * Falls back to the full URL string when `parsed` is `null` (defensive
+ * only — every URL in `pages` was already parsed once during crawling, so
+ * this branch should not be reachable in practice). Takes the already-parsed
+ * result (shared with {@link deriveUrlDecomposition}) rather than
+ * re-parsing `url` itself, since both derive from the same source string.
  * @param url - The page's absolute URL.
+ * @param parsed - `tryParseUrl(url)`'s result, or `null` if unparseable.
  * @returns The URL's pathname, or `url` itself if unparseable.
  */
-function derivePathSortKey(url: string): string {
-	try {
-		return new URL(url).pathname;
-	} catch {
-		return url;
+function derivePathSortKey(url: string, parsed: ExURL | null): string {
+	return parsed?.pathname ?? url;
+}
+
+/** The `protocol`/`hostname`/`path1`..`path10` slice of a {@link ViewerPageInsertRow}. */
+type UrlDecomposition = Pick<
+	ViewerPageInsertRow,
+	| 'protocol'
+	| 'hostname'
+	| 'path1'
+	| 'path2'
+	| 'path3'
+	| 'path4'
+	| 'path5'
+	| 'path6'
+	| 'path7'
+	| 'path8'
+	| 'path9'
+	| 'path10'
+>;
+
+const EMPTY_URL_DECOMPOSITION: UrlDecomposition = {
+	protocol: null,
+	hostname: null,
+	path1: null,
+	path2: null,
+	path3: null,
+	path4: null,
+	path5: null,
+	path6: null,
+	path7: null,
+	path8: null,
+	path9: null,
+	path10: null,
+};
+
+/**
+ * Splits a page's URL into `protocol`/`hostname`/up-to-10 path segments, for
+ * the Page List report sheet's Protocol/Domain/path1..path10 columns (see
+ * the `viewer_pages` DDL comment for why these are precomputed here instead
+ * of report-google-sheets re-parsing `url` on every `report` run). The last
+ * path segment carries the query string appended, matching the legacy
+ * per-row computation this replaces. Returns all-`null` when `parsed` is
+ * `null` (defensive only — every URL in `pages` was already parsed once
+ * during crawling). Takes the already-parsed result (shared with
+ * {@link derivePathSortKey}) rather than re-parsing `url` itself, since
+ * both derive from the same source string.
+ * @param parsed - `tryParseUrl(url)`'s result, or `null` if unparseable.
+ */
+function deriveUrlDecomposition(parsed: ExURL | null): UrlDecomposition {
+	if (!parsed) {
+		return EMPTY_URL_DECOMPOSITION;
 	}
+	const paths = [...parsed.paths];
+	paths[paths.length - 1] = `${paths.at(-1)}${parsed.query ? `?${parsed.query}` : ''}`;
+	const [path1, path2, path3, path4, path5, path6, path7, path8, path9, path10] =
+		paths.map((p) => `/${decodeURISafely(p)}`);
+	return {
+		protocol: parsed.protocol,
+		hostname: parsed.hostname,
+		path1: path1 || null,
+		path2: path2 || null,
+		path3: path3 || null,
+		path4: path4 || null,
+		path5: path5 || null,
+		path6: path6 || null,
+		path7: path7 || null,
+		path8: path8 || null,
+		path9: path9 || null,
+		path10: path10 || null,
+	};
 }
 
 /**
@@ -308,6 +405,7 @@ function toViewerPageInsertRow(
 	dirIndexInboundLinkCountByPageId: ReadonlyMap<number, number>,
 ): ViewerPageInsertRow {
 	const statusSortKey = row.status ?? NULL_STATUS_SENTINEL;
+	const parsedUrl = tryParseUrl(row.url);
 	return {
 		page_id: row.id,
 		url: row.url,
@@ -348,9 +446,10 @@ function toViewerPageInsertRow(
 		display_title: displayTitleByPageId.get(row.id) ?? null,
 		inbound_link_count: inboundLinkCountByPageId.get(row.id) ?? 0,
 		dir_index_inbound_link_count: dirIndexInboundLinkCountByPageId.get(row.id) ?? null,
+		...deriveUrlDecomposition(parsedUrl),
 		url_sort_key: row.url,
 		title_sort_key: row.title ?? '',
-		path_sort_key: derivePathSortKey(row.url),
+		path_sort_key: derivePathSortKey(row.url, parsedUrl),
 		// Non-null assertion is safe: naturalUrlRankByPageId is built from
 		// this exact sourceRows set, so every row.id has an entry.
 		natural_url_rank: naturalUrlRankByPageId.get(row.id)!,
@@ -380,7 +479,7 @@ function toViewerPageInsertRow(
  * unconditionally too for the same schema-version-gate reason as
  * `backfillBodyHashFromHtmlBlobs`. Computes a
  * `getSummary` snapshot (see below for why this happens outside the
- * transaction), then drops all 26 tables if present, recreates them,
+ * transaction), then drops all 27 tables if present, recreates them,
  * populates `viewer_anchor_facts` from a single `anchors` aggregation query
  * (see `computeAnchorFactRows` — unlike the directory tree, this cannot
  * reuse `sourceRows`, since link data lives on `anchors`, not `pages`),
@@ -977,6 +1076,36 @@ export async function buildViewerReadModel(
 					statsChunk.slice(start, start + INSERT_CHUNK_SIZE),
 				);
 			}
+		}
+
+		// Resources report "dedupe" mode, precomputed (report-google-sheets
+		// performance fix). A second, independent `resource_items` scan (not
+		// folded into the `buildingResources` loop above): that loop streams
+		// insert rows chunk-by-chunk because each output row corresponds to
+		// exactly one input row, but a canonical group's constituent raw
+		// resources can appear anywhere across the whole id range, so this
+		// pass must finish scanning before any group row is known final (see
+		// `computeResourceGroupRows`'s docs). This costs a second full
+		// `resource_items` JOIN scan rather than piggybacking on
+		// `computeResourceInsertRows`'s already-fetched rows above — accepted
+		// because the two loops' row shapes and lifetimes differ enough
+		// (streamed 1:1 inserts vs. cross-chunk-accumulated groups) that
+		// threading one through the other would tangle two independently
+		// testable functions together for a build-time-only saving, while
+		// the report-time saving (no re-aggregation per `report` run) that
+		// motivated this table already dominates.
+		onPhase?.('buildingResourceGroups');
+		const resourceGroupRows = await computeResourceGroupRows(
+			trx,
+			undefined,
+			(scannedUpToId, maxId) => {
+				onProgress?.({ insertedRows: scannedUpToId, totalRows: maxId });
+			},
+		);
+		for (let start = 0; start < resourceGroupRows.length; start += INSERT_CHUNK_SIZE) {
+			await trx('viewer_resource_groups').insert(
+				resourceGroupRows.slice(start, start + INSERT_CHUNK_SIZE),
+			);
 		}
 
 		// Image-list read model (issue #113). `pageUrlRankById` reuses

@@ -986,6 +986,30 @@ export interface PageListRow {
 	inboundLinkCount?: number | null;
 	/** `viewer_pages.dir_index_inbound_link_count` — same live-path caveat as {@link displayTitle}. */
 	dirIndexInboundLinkCount?: number | null;
+	/** `viewer_pages.protocol` — same live-path caveat as {@link displayTitle}. */
+	protocol?: string | null;
+	/** `viewer_pages.hostname` — same live-path caveat as {@link displayTitle}. */
+	hostname?: string | null;
+	/** `viewer_pages.path1` — same live-path caveat as {@link displayTitle}. */
+	path1?: string | null;
+	/** `viewer_pages.path2` — same live-path caveat as {@link displayTitle}. */
+	path2?: string | null;
+	/** `viewer_pages.path3` — same live-path caveat as {@link displayTitle}. */
+	path3?: string | null;
+	/** `viewer_pages.path4` — same live-path caveat as {@link displayTitle}. */
+	path4?: string | null;
+	/** `viewer_pages.path5` — same live-path caveat as {@link displayTitle}. */
+	path5?: string | null;
+	/** `viewer_pages.path6` — same live-path caveat as {@link displayTitle}. */
+	path6?: string | null;
+	/** `viewer_pages.path7` — same live-path caveat as {@link displayTitle}. */
+	path7?: string | null;
+	/** `viewer_pages.path8` — same live-path caveat as {@link displayTitle}. */
+	path8?: string | null;
+	/** `viewer_pages.path9` — same live-path caveat as {@link displayTitle}. */
+	path9?: string | null;
+	/** `viewer_pages.path10` — same live-path caveat as {@link displayTitle}. */
+	path10?: string | null;
 }
 
 /**
@@ -1151,6 +1175,40 @@ export interface PageListItem {
 	 * non-index page, or on the three live-only paths.
 	 */
 	dirIndexInboundLinkCount: number | null;
+	/**
+	 * The URL's scheme, e.g. `"https:"` (`viewer_pages.protocol`) — same
+	 * read-model-only caveat as {@link displayTitle}. `null` when the read
+	 * model has not computed it (live-only paths), or when `url` failed to
+	 * parse at build time.
+	 */
+	protocol: string | null;
+	/** The URL's host name (`viewer_pages.hostname`) — same caveat as {@link protocol}. */
+	hostname: string | null;
+	/**
+	 * The URL's first path segment (including a leading `/`), with the
+	 * query string appended to whichever segment is last
+	 * (`viewer_pages.path1`) — same caveat as {@link protocol}. `null` when
+	 * the URL has no segment at this depth.
+	 */
+	path1: string | null;
+	/** See {@link path1}. */
+	path2: string | null;
+	/** See {@link path1}. */
+	path3: string | null;
+	/** See {@link path1}. */
+	path4: string | null;
+	/** See {@link path1}. */
+	path5: string | null;
+	/** See {@link path1}. */
+	path6: string | null;
+	/** See {@link path1}. */
+	path7: string | null;
+	/** See {@link path1}. */
+	path8: string | null;
+	/** See {@link path1}. */
+	path9: string | null;
+	/** See {@link path1}. */
+	path10: string | null;
 }
 
 /**
@@ -3326,8 +3384,8 @@ export interface ErrorKindsResult {
  * (the three backfill phases), completed computations (`computingSummary`,
  * always out of 3), keyset-cursor ids scanned up to / max id
  * (`loadingPageRows`, `loadingTechnologyRows`, `buildingAnchorFacts`,
- * `buildingGraph`, `buildingResources`, `buildingImages`,
- * `buildingDuplicateGroups`), completed scan passes (`buildingMismatches`,
+ * `buildingGraph`, `buildingResources`, `buildingResourceGroups`,
+ * `buildingImages`, `buildingDuplicateGroups`), completed scan passes (`buildingMismatches`,
  * always out of 6), and indexes created (`creatingIndexes`). The field names stayed put across that reuse to
  * avoid a breaking type change; treat them as "units done" / "units total"
  * for whichever phase is current, not literally `viewer_pages` rows unless
@@ -3372,6 +3430,7 @@ export type ViewerReadModelBuildPhase =
 	| 'buildingAnchorFacts'
 	| 'buildingGraph'
 	| 'buildingResources'
+	| 'buildingResourceGroups'
 	| 'buildingImages'
 	| 'buildingHeaderChecks'
 	| 'buildingDuplicateGroups'

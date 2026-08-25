@@ -23,6 +23,7 @@ export const VIEWER_READ_MODEL_FULL_BUILD_PHASES: readonly ViewerReadModelBuildP
 	'buildingIsolatedComponents',
 	'buildingGraph',
 	'buildingResources',
+	'buildingResourceGroups',
 	'buildingImages',
 	'buildingHeaderChecks',
 	'buildingDuplicateGroups',

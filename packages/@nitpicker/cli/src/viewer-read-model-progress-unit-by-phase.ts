@@ -19,6 +19,7 @@ export const PROGRESS_UNIT_BY_PHASE: Partial<Record<ViewerReadModelBuildPhase, s
 		buildingAnchorFacts: 'id ranges',
 		buildingGraph: 'edge ids',
 		buildingResources: 'resource ids',
+		buildingResourceGroups: 'resource ids',
 		buildingImages: 'image ids',
 		buildingHeaderChecks: 'rows',
 		buildingDuplicateGroups: 'ids',

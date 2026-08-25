@@ -1,12 +1,11 @@
 import type { CreateSheet } from '../sheets/types.js';
 
-import { decodeURISafely } from '@d-zero/shared/decode-uri-safely';
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import {
 	buildRedirectFromUrlsByDestId,
+	countViewerPagesTotal,
 	getOutboundLinkFactsByPageIds,
-	listViewerPages,
-	resolvePageIdsByUrls,
+	streamPageListRows,
 } from '@nitpicker/query';
 
 import { pLog, reportLog } from '../debug.js';
@@ -15,11 +14,9 @@ import { defaultCellFormat } from '../sheets/default-cell-format.js';
 import { booleanFormatError } from '../sheets/format.js';
 import { joinUrlsForNote } from '../utils/join-urls-for-note.js';
 import { nonNullFilter } from '../utils/non-null-filter.js';
+import { truncateNoteText } from '../utils/truncate-note-text.js';
 
 const log = pLog.extend('PageList');
-
-/** `listViewerPages` cursor page size while streaming rows. */
-const PAGE_SIZE = 500;
 
 /**
  * Creates the "Page List" sheet configuration -- the primary sitemap-style report.
@@ -27,8 +24,9 @@ const PAGE_SIZE = 500;
  * This is the most complex sheet, combining crawler metadata with analyze
  * plugin data into a comprehensive per-page inventory:
  *
- * - **URL decomposition**: Protocol, domain, and up to 10 path segments
- *   for hierarchical filtering in the spreadsheet.
+ * - **URL decomposition**: Protocol, domain, and up to 10 path segments for
+ *   hierarchical filtering in the spreadsheet — computed once at read-model
+ *   build time, not per-batch (see `PageListItem.path1`'s docs).
  * - **Title shortening**: Directory index titles are subtracted from child
  *   page titles to produce concise display titles (e.g. removing the site
  *   name suffix) — computed once at read-model build time, not per-batch
@@ -51,18 +49,20 @@ const PAGE_SIZE = 500;
  *
  * ## Streaming design (report OOM fix)
  *
- * Reads `listViewerPages` (the viewer read model, `requiresReadModel: true`)
- * one cursor page at a time and sends each row via `sheet.appendRow(...)`
- * immediately — no lazy (`createCellData(() => ...)`) cells anywhere in this
- * file. The pre-rewrite version used a lazy thunk for "Internal Referrers"
- * (its value depended on sibling index pages processed later in the same
- * batch), which disabled `@d-zero/google-sheets`' automatic 2500-row flush
- * for the entire batch — the direct cause of the OOM this rewrite fixes.
- * That cross-page dependency no longer exists: `displayTitle`/
- * `inboundLinkCount`/`dirIndexInboundLinkCount` are precomputed once, for
- * every page, before the read model is queryable at all (see
- * `build-viewer-read-model.ts`), so every column is known synchronously
- * from the current row alone.
+ * Reads `streamPageListRows` (a `viewer_pages` keyset sweep,
+ * `requiresReadModel: true` — see that function's docs for why it exists
+ * instead of reusing the viewer UI's `listViewerPages`) one chunk at a time
+ * and sends each row via `sheet.appendRow(...)` immediately — no lazy
+ * (`createCellData(() => ...)`) cells anywhere in this file. The pre-rewrite
+ * version used a lazy thunk for "Internal Referrers" (its value depended on
+ * sibling index pages processed later in the same batch), which disabled
+ * `@d-zero/google-sheets`' automatic 2500-row flush for the entire batch —
+ * the direct cause of the OOM this rewrite fixes. That cross-page dependency
+ * no longer exists: `displayTitle`/`inboundLinkCount`/
+ * `dirIndexInboundLinkCount`/`protocol`/`hostname`/`path1`..`path10` are all
+ * precomputed once, for every page, before the read model is queryable at
+ * all (see `build-viewer-read-model.ts`), so every column is known
+ * synchronously from the current row alone.
  * @param reports - Analyze plugin reports to extract per-page data columns from
  * @param accessor - The archive accessor to query.
  */
@@ -150,54 +150,39 @@ export const createPageList: CreateSheet = (reports, accessor) => {
 			return headers;
 		},
 		async estimateRowCount() {
-			const { total } = await listViewerPages(accessor, { isExternal: false, limit: 0 });
-			return total;
+			return countViewerPagesTotal(accessor.getKnex(), { isExternal: false });
 		},
-		async run({ sheet, maxRows, onProgress }) {
+		async run({ sheet, maxRows, estimatedTotal, onProgress }) {
 			const redirectFromByDestId = await buildRedirectFromUrlsByDestId(accessor);
 
 			let sent = 0;
-			let cursor: string | undefined;
-			let total = 0;
-			for (;;) {
-				const page = await listViewerPages(accessor, {
-					isExternal: false,
-					limit: PAGE_SIZE,
-					cursor,
-				});
-				total = page.total;
-
-				const pageIds = await resolvePageIdsByUrls(
+			const total = estimatedTotal;
+			for await (const chunk of streamPageListRows(accessor)) {
+				const linkFactsByPageId = await getOutboundLinkFactsByPageIds(
 					accessor,
-					page.items.map((item) => item.url),
+					chunk.map((item) => item.pageId),
 				);
-				const linkFactsByPageId = await getOutboundLinkFactsByPageIds(accessor, [
-					...pageIds.values(),
-				]);
 
-				for (const item of page.items) {
+				for (const item of chunk) {
 					if (sent >= maxRows) {
 						await sheet.flush();
 						return;
 					}
-					const url = parseUrl(item.url);
-					if (!url) {
+					// Only for the Title column's indentation depth below --
+					// protocol/hostname/path1..10 come precomputed from the read
+					// model (item.*) and no longer need a per-row parse.
+					const parsedForDepth = parseUrl(item.url);
+					if (!parsedForDepth) {
 						continue;
 					}
-					maxDepth = Math.max(url.depth, maxDepth);
+					maxDepth = Math.max(parsedForDepth.depth, maxDepth);
+					const isRoot = parsedForDepth.dirname == null;
+					const depth = isRoot
+						? 0
+						: parsedForDepth.depth - (parsedForDepth.isIndex ? 1 : 0);
 
-					const paths = [...url.paths];
-					paths[paths.length - 1] = `${paths.at(-1)}${url.query ? `?${url.query}` : ''}`;
-					const [path1, path2, path3, path4, path5, path6, path7, path8, path9, path10] =
-						paths.map((p) => `/${decodeURISafely(p)}`);
-
-					const pageId = pageIds.get(item.url);
-					const facts = pageId == null ? undefined : linkFactsByPageId.get(pageId);
-					const redirectFromUrls =
-						pageId == null ? [] : (redirectFromByDestId.get(pageId) ?? []);
-
-					const isRoot = url.dirname == null;
-					const depth = isRoot ? 0 : url.depth - (url.isIndex ? 1 : 0);
+					const facts = linkFactsByPageId.get(item.pageId);
+					const redirectFromUrls = redirectFromByDestId.get(item.pageId) ?? [];
 
 					const internalReferrers =
 						item.dirIndexInboundLinkCount ?? item.inboundLinkCount ?? 0;
@@ -207,7 +192,7 @@ export const createPageList: CreateSheet = (reports, accessor) => {
 							{
 								value: item.displayTitle ?? item.title,
 								cellFormat: { padding: { left: Math.max(depth, 0) * 20 + 3 } },
-								note: `Full-title:\n${item.title}`,
+								note: truncateNoteText(`Full-title:\n${item.title}`),
 							},
 							defaultCellFormat,
 						),
@@ -216,18 +201,18 @@ export const createPageList: CreateSheet = (reports, accessor) => {
 							{ value: item.url, textFormat: { link: { uri: item.url } } },
 							defaultCellFormat,
 						),
-						createCellData({ value: url.protocol }, defaultCellFormat),
-						createCellData({ value: url.hostname }, defaultCellFormat),
-						createCellData({ value: path1 || null }, defaultCellFormat),
-						createCellData({ value: path2 || null }, defaultCellFormat),
-						createCellData({ value: path3 || null }, defaultCellFormat),
-						createCellData({ value: path4 || null }, defaultCellFormat),
-						createCellData({ value: path5 || null }, defaultCellFormat),
-						createCellData({ value: path6 || null }, defaultCellFormat),
-						createCellData({ value: path7 || null }, defaultCellFormat),
-						createCellData({ value: path8 || null }, defaultCellFormat),
-						createCellData({ value: path9 || null }, defaultCellFormat),
-						createCellData({ value: path10 || null }, defaultCellFormat),
+						createCellData({ value: item.protocol }, defaultCellFormat),
+						createCellData({ value: item.hostname }, defaultCellFormat),
+						createCellData({ value: item.path1 }, defaultCellFormat),
+						createCellData({ value: item.path2 }, defaultCellFormat),
+						createCellData({ value: item.path3 }, defaultCellFormat),
+						createCellData({ value: item.path4 }, defaultCellFormat),
+						createCellData({ value: item.path5 }, defaultCellFormat),
+						createCellData({ value: item.path6 }, defaultCellFormat),
+						createCellData({ value: item.path7 }, defaultCellFormat),
+						createCellData({ value: item.path8 }, defaultCellFormat),
+						createCellData({ value: item.path9 }, defaultCellFormat),
+						createCellData({ value: item.path10 }, defaultCellFormat),
 						createCellData({ value: item.status ?? -1 }, defaultCellFormat),
 						createCellData(
 							{
@@ -239,21 +224,9 @@ export const createPageList: CreateSheet = (reports, accessor) => {
 						createCellData({ value: item.lang || 'N/A' }, defaultCellFormat),
 						createCellData({ value: item.charset }, defaultCellFormat),
 						createCellData({ value: facts?.internalLinks ?? 0 }, defaultCellFormat),
-						createCellData(
-							{
-								value: facts?.internalBadLinks ?? 0,
-								note: facts?.internalBadLinkNote,
-							},
-							defaultCellFormat,
-						),
+						createCellData({ value: facts?.internalBadLinks ?? 0 }, defaultCellFormat),
 						createCellData({ value: facts?.externalLinks ?? 0 }, defaultCellFormat),
-						createCellData(
-							{
-								value: facts?.externalBadLinks ?? 0,
-								note: facts?.externalBadLinkNote,
-							},
-							defaultCellFormat,
-						),
+						createCellData({ value: facts?.externalBadLinks ?? 0 }, defaultCellFormat),
 						createCellData({ value: internalReferrers }, defaultCellFormat),
 						createCellData({ value: item.description }, defaultCellFormat),
 						createCellData({ value: item.keywords }, defaultCellFormat),
@@ -347,7 +320,7 @@ export const createPageList: CreateSheet = (reports, accessor) => {
 										format.underline = !!option.underline;
 									}
 
-									note = cellData?.note || `${option.note || ''}`;
+									note = truncateNoteText(cellData?.note || `${option.note || ''}`);
 								}
 
 								const value = cellData?.value;
@@ -364,11 +337,6 @@ export const createPageList: CreateSheet = (reports, accessor) => {
 					sent++;
 					onProgress(sent, total);
 				}
-
-				if (!page.nextCursor) {
-					break;
-				}
-				cursor = page.nextCursor;
 			}
 			await sheet.flush();
 		},

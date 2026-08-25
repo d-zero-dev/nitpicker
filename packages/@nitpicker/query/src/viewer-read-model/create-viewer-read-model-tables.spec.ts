@@ -30,7 +30,7 @@ describe('createViewerReadModelTables', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('creates all 26 tables with no indexes yet (see createViewerReadModelIndexes)', async () => {
+	it('creates all 27 tables with no indexes yet (see createViewerReadModelIndexes)', async () => {
 		const knex = archive.getKnex();
 		await knex.transaction((trx) => createViewerReadModelTables(trx));
 
@@ -54,6 +54,7 @@ describe('createViewerReadModelTables', () => {
 			'viewer_graph_edges',
 			'viewer_resources',
 			'viewer_resource_stats',
+			'viewer_resource_groups',
 			'viewer_images',
 			'viewer_header_checks',
 			'viewer_duplicate_groups',
@@ -98,6 +99,35 @@ describe('createViewerReadModelTables', () => {
 		}[];
 		const column = columns.find((c) => c.name === 'dedupe_cap_event_id');
 		expect(column?.notnull).toBe(0);
+	});
+
+	it('creates viewer_pages.protocol/hostname/path1..path10 as nullable text columns', async () => {
+		const knex = archive.getKnex();
+
+		const columns = (await knex.raw("PRAGMA table_info('viewer_pages')")) as {
+			name: string;
+			type: string;
+			notnull: number;
+		}[];
+		const expectedColumns = [
+			'protocol',
+			'hostname',
+			'path1',
+			'path2',
+			'path3',
+			'path4',
+			'path5',
+			'path6',
+			'path7',
+			'path8',
+			'path9',
+			'path10',
+		];
+		for (const name of expectedColumns) {
+			const column = columns.find((c) => c.name === name);
+			expect(column?.type.toLowerCase()).toBe('text');
+			expect(column?.notnull).toBe(0);
+		}
 	});
 
 	it('viewer_query_profiles enforces a composite (scope, profile_key) key, not a single-column rowid', async () => {

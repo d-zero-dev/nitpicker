@@ -1,0 +1,167 @@
+import { mkdirSync, rmSync } from 'node:fs';
+import path from 'node:path';
+
+import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
+import { Archive } from '@nitpicker/crawler';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { streamAllImages } from './stream-all-images.js';
+
+const __filename = new URL(import.meta.url).pathname;
+const __dirname = path.dirname(__filename);
+const workingDir = path.resolve(__dirname, '__test_fixtures_stream_all_images__');
+
+const BASE_CONFIG = {
+	baseUrl: 'https://example.com',
+	name: 'test',
+	version: '0.13.0',
+	recursive: true,
+	interval: 0,
+	image: true,
+	fetchExternal: false,
+	parallels: 1,
+	roots: ['https://example.com'],
+	excludes: [],
+	excludeKeywords: [],
+	excludeUrls: [],
+	maxExcludedDepth: 0,
+	retry: 3,
+	fromList: false,
+	disableQueries: false,
+	userAgent: 'test',
+	ignoreRobots: false,
+};
+
+const META = {
+	lang: null,
+	title: null,
+	description: null,
+	keywords: null,
+	noindex: false,
+	nofollow: false,
+	noarchive: false,
+	canonical: null,
+	alternate: null,
+	'og:type': null,
+	'og:title': null,
+	'og:site_name': null,
+	'og:description': null,
+	'og:url': null,
+	'og:image': null,
+	'twitter:card': null,
+};
+
+/**
+ * Drains every {@link streamAllImages} chunk into a single flat array.
+ * @param accessor - The archive accessor to query.
+ * @param chunkSize - Forwarded to {@link streamAllImages}.
+ * @returns All chunks' rows, concatenated in scan order.
+ */
+async function collect(
+	accessor: Parameters<typeof streamAllImages>[0],
+	chunkSize?: number,
+) {
+	const rows = [];
+	for await (const chunk of streamAllImages(accessor, chunkSize)) {
+		rows.push(...chunk);
+	}
+	return rows;
+}
+
+describe('streamAllImages', () => {
+	let archive: InstanceType<typeof Archive>;
+	const archiveFilePath = path.resolve(workingDir, 'stream-all-images-test.nitpicker');
+
+	beforeAll(async () => {
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/page-a')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: { ...META, title: 'Page A' },
+			anchorList: [],
+			imageList: [
+				{
+					src: 'https://example.com/a1.png',
+					currentSrc: 'https://example.com/a1-current.png',
+					alt: 'A1',
+					width: 100,
+					height: 100,
+					naturalWidth: 100,
+					naturalHeight: 100,
+					isLazy: true,
+					viewportWidth: 1200,
+					sourceCode: '<img src="a1.png" alt="A1">',
+				},
+				{
+					src: 'https://example.com/a2.png',
+					currentSrc: 'https://example.com/a2.png',
+					alt: '',
+					width: 300,
+					height: 300,
+					naturalWidth: 300,
+					naturalHeight: 300,
+					isLazy: false,
+					viewportWidth: 1200,
+					sourceCode: '<img src="a2.png">',
+				},
+			],
+			isSkipped: false,
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('lists every image', async () => {
+		const rows = await collect(archive);
+		expect(rows).toHaveLength(2);
+	});
+
+	it('carries the display fields verbatim', async () => {
+		const rows = await collect(archive);
+		const row = rows.find((r) => r.src === 'https://example.com/a1.png')!;
+		expect(row).toMatchObject({
+			pageUrl: 'https://example.com/page-a',
+			src: 'https://example.com/a1.png',
+			currentSrc: 'https://example.com/a1-current.png',
+			alt: 'A1',
+			width: 100,
+			height: 100,
+			isLazy: true,
+		});
+	});
+
+	it('defaults isLazy to false when not set', async () => {
+		const rows = await collect(archive);
+		const row = rows.find((r) => r.src === 'https://example.com/a2.png')!;
+		expect(row.isLazy).toBe(false);
+	});
+
+	it('is independent of chunk size', async () => {
+		const baseline = await collect(archive);
+		const chunked = await collect(archive, 1);
+		const bySrc = (rows: typeof baseline) =>
+			rows.toSorted((a, b) => (a.src ?? '').localeCompare(b.src ?? ''));
+		expect(bySrc(chunked)).toEqual(bySrc(baseline));
+	});
+
+	it('throws on a non-positive chunkSize instead of hanging forever', async () => {
+		await expect(collect(archive, 0)).rejects.toThrow(RangeError);
+		await expect(collect(archive, -1)).rejects.toThrow(RangeError);
+	});
+});
