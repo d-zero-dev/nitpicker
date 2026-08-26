@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
-import { TEST_SERVER_ORIGIN } from './test-server-port.js';
+import { TEST_SERVER_EXTERNAL_ORIGIN, TEST_SERVER_ORIGIN } from './test-server-port.js';
 
 describe('Redirect handling', () => {
 	let result: CrawlResult;
@@ -195,5 +195,47 @@ describe('metadataOnly のリダイレクト元が描画済み宛先を上書き
 		expect(canonical).toBeDefined();
 		expect(canonical!.title).toBe('Clobber Canonical');
 		expect(canonical!.isTarget).toBe(true);
+	});
+});
+
+describe('クロスホストリダイレクト先の観測データは記録されない（external 反転前に張られたリスナーの取りこぼし対策）', () => {
+	let result: CrawlResult;
+
+	beforeAll(async () => {
+		result = await crawl([`${TEST_SERVER_ORIGIN}/cross-host/`]);
+	}, 60_000);
+
+	afterAll(async () => {
+		await cleanup(result);
+	});
+
+	it('リダイレクト先ホストの console.warn が記録されない', async () => {
+		const knex = result.accessor.getKnex();
+		const rows = await knex('page_console_logs as pcl')
+			.join('content_items as ci', 'ci.id', 'pcl.pageId')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.where('ur.url', `${TEST_SERVER_EXTERNAL_ORIGIN}/cross-host/dest`)
+			.select('pcl.pageId as pageId');
+		expect(rows).toHaveLength(0);
+	});
+
+	it('リダイレクト先ホストが読み込んだ CSS がリソースとして記録されない', async () => {
+		const knex = result.accessor.getKnex();
+		const rows = await knex('resource_items as ri')
+			.join('url_refs as ur', 'ur.id', 'ri.url_id')
+			.where('ur.url', `${TEST_SERVER_EXTERNAL_ORIGIN}/cross-host/dest.css`)
+			.select('ri.id as id');
+		expect(rows).toHaveLength(0);
+	});
+
+	it('リダイレクト辺自体は通常どおり記録される（positive pin）', async () => {
+		const pages = await result.accessor.getPages();
+		const dest = pages.find(
+			(p) => p.url.hostname === '127.0.0.1' && p.url.pathname === '/cross-host/dest',
+		);
+		expect(dest).toBeDefined();
+		expect(
+			dest!.redirectFrom.some((r) => new URL(r.url).pathname === '/cross-host/start'),
+		).toBe(true);
 	});
 });
