@@ -1,3 +1,4 @@
+import type { ContentItemStreamRow } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { loadResponseHeadersBySetIds } from '@nitpicker/crawler';
@@ -6,34 +7,6 @@ import { buildRedirectFromUrlsByDestId } from './build-redirect-from-urls-by-des
 
 /** `content_items` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 2000;
-
-/** One page's data for the Links report sheet — every `content_items` row, skipped or not. */
-export interface ContentItemStreamRow {
-	/** `content_items.id`. */
-	pageId: number;
-	/** The page's absolute URL. */
-	url: string;
-	/** The page's `<title>` text, or `null` when absent/never rendered. */
-	title: string | null;
-	/** HTTP status code, or `null` for not-yet-classified/errored rows. */
-	status: number | null;
-	/** HTTP status text (e.g. `"Not Found"`), or `null` when unknown. */
-	statusText: string | null;
-	/** Raw `Content-Type` response header value, or `null`. */
-	contentType: string | null;
-	/** `content_items.is_skipped`. */
-	isSkipped: boolean;
-	/** `content_items.skip_reason`, or `null` when not skipped / unrecorded. */
-	skipReason: string | null;
-	/** Decoded response headers for this page's `header_set_id`, or `{}` when it has none. */
-	responseHeaders: Record<string, string>;
-	/**
-	 * URLs of every page whose `redirect_dest_id` resolves (after 0.13's
-	 * write-time pre-flattening) to this page — i.e. every page that
-	 * redirects here. Empty when nothing redirects to this page.
-	 */
-	redirectFromUrls: readonly string[];
-}
 
 /**
  * Streams every `content_items` row — internal, external, skipped, and

@@ -1,4 +1,4 @@
-import type { PageListItem } from '../types.js';
+import type { PageListStreamRow } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { applyViewerPagesFilters } from '../apply-viewer-pages-filters.js';
@@ -8,12 +8,6 @@ import { hasPageTemplatesTable } from '../page-templates-join.js';
 
 /** `viewer_pages` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 2000;
-
-/** One page's full display fields for the Page List report sheet, plus its id. */
-export interface PageListStreamRow extends PageListItem {
-	/** The page's `content_items.id` — lets callers resolve link facts/redirects without a second URL-based lookup. */
-	pageId: number;
-}
 
 /**
  * Streams every listable page for the Page List report sheet, in

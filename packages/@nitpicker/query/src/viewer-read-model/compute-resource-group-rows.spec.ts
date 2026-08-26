@@ -363,13 +363,29 @@ describe('computeResourceGroupRows — referrer sample cap', () => {
 		expect(group.referrer_count).toBe(REFERRER_COUNT);
 	});
 
-	it('caps the referrer_note sample at 200 lines even with 201 referrers', async () => {
+	it('caps the referrer_note sample at 200 lines and marks every referrer left out beyond the cap', async () => {
 		const knex = archive.getKnex();
 		const rows = await knex.transaction((trx) => computeResourceGroupRows(trx));
 		const group = rows.find(
 			(r) => r.canonical_url === 'https://example.com/widely-used.js',
 		)!;
-		const sampledLines = group.referrer_note!.split('\n');
-		expect(sampledLines).toHaveLength(200);
+		const lines = group.referrer_note!.split('\n');
+		// At most 200 sample URL lines, plus a trailing "... and N more"
+		// marker whenever any referrer was left out — either by the
+		// 200-sample cap, or by the note's own character-length cap (200
+		// URLs this long already exceeds it), or both. Asserting on the
+		// exact line count here would be brittle against that character
+		// arithmetic, so instead check the invariant the fix guarantees:
+		// every referrer not shown as its own line is accounted for by the
+		// marker. The pre-fix behavior silently dropped the sample-cap
+		// overflow with no marker at all, understating the true count the
+		// note implied.
+		const urlLines = lines.filter((line) => !line.startsWith('... and '));
+		expect(urlLines.length).toBeLessThanOrEqual(200);
+		const markerLine = lines.at(-1)!;
+		const match = /^\.\.\. and (\d+) more$/.exec(markerLine);
+		expect(match).not.toBeNull();
+		const hiddenCount = Number(match![1]);
+		expect(urlLines.length + hiddenCount).toBe(REFERRER_COUNT);
 	});
 });

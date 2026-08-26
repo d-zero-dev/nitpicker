@@ -1,31 +1,8 @@
+import type { ResourceGroupStreamRow } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 /** `viewer_resource_groups` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 5000;
-
-/** One resource group's display fields for the Resources report sheet's dedupe mode. */
-export interface ResourceGroupStreamRow {
-	/** The group's canonicalized URL (query values stripped, keys sorted). */
-	canonicalUrl: string;
-	/** HTTP status code shared by every resource folded into this group. */
-	status: number | null;
-	/** HTTP status text — first non-null value observed at build time. */
-	statusText: string | null;
-	/** Raw `Content-Type` header value shared by every resource in this group. */
-	contentType: string | null;
-	/** Smallest non-null content length observed. */
-	contentLengthMin: number | null;
-	/** Largest non-null content length observed. */
-	contentLengthMax: number | null;
-	/** Number of raw resources collapsed into this group. */
-	count: number;
-	/** Exact count of distinct pages referencing this group (see `compute-resource-group-rows.ts`'s docs). */
-	referrerCount: number;
-	/** Newline-joined sample of referrer page URLs (bounded; see `compute-resource-group-rows.ts`), or `null` for a group with no referrers. */
-	referrerNote: string | null;
-	/** Precomputed `key=N` query-parameter cardinality summary, or `null` for a group with no query string. */
-	queryPattern: string | null;
-}
 
 /**
  * Streams every `viewer_resource_groups` row for the Resources report

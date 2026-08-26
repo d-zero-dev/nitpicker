@@ -1,16 +1,9 @@
+import type { OutboundLinkFacts } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
-/** Per-source-page outbound link tallies for the Page List report sheet. */
-export interface OutboundLinkFacts {
-	/** Total occurrences of internal links from this page (sum of `viewer_anchor_facts.count`). */
-	internalLinks: number;
-	/** Occurrences of internal links to a "bad" destination (see the module docs for the threshold). */
-	internalBadLinks: number;
-	/** Total occurrences of external links from this page. */
-	externalLinks: number;
-	/** Occurrences of external links to a "bad" destination. */
-	externalBadLinks: number;
-}
+import { eachSplitted } from '@nitpicker/crawler';
+
+import { SQLITE_IN_CHUNK } from '../sqlite-in-chunk.js';
 
 const EMPTY_FACTS: OutboundLinkFacts = {
 	internalLinks: 0,
@@ -79,36 +72,38 @@ export async function getOutboundLinkFactsByPageIds(
 	}
 	const knex = accessor.getKnex();
 
-	const rows: {
-		sourcePageId: number;
-		isExternalLink: 0 | 1;
-		status: number | null;
-		count: number;
-	}[] = await knex('viewer_anchor_facts')
-		.whereIn('source_page_id', [...pageIds])
-		.select(
-			'source_page_id as sourcePageId',
-			'is_external_link as isExternalLink',
-			'status as status',
-			'count as count',
-		);
-
 	const result = new Map<number, OutboundLinkFacts>();
-	for (const row of rows) {
-		const facts = result.get(row.sourcePageId) ?? { ...EMPTY_FACTS };
-		const bad = isBadStatus(row.status);
-		if (row.isExternalLink) {
-			facts.externalLinks += row.count;
-			if (bad) {
-				facts.externalBadLinks += row.count;
+	await eachSplitted(pageIds, SQLITE_IN_CHUNK, async (chunk) => {
+		const rows: {
+			sourcePageId: number;
+			isExternalLink: 0 | 1;
+			status: number | null;
+			count: number;
+		}[] = await knex('viewer_anchor_facts')
+			.whereIn('source_page_id', chunk)
+			.select(
+				'source_page_id as sourcePageId',
+				'is_external_link as isExternalLink',
+				'status as status',
+				'count as count',
+			);
+
+		for (const row of rows) {
+			const facts = result.get(row.sourcePageId) ?? { ...EMPTY_FACTS };
+			const bad = isBadStatus(row.status);
+			if (row.isExternalLink) {
+				facts.externalLinks += row.count;
+				if (bad) {
+					facts.externalBadLinks += row.count;
+				}
+			} else {
+				facts.internalLinks += row.count;
+				if (bad) {
+					facts.internalBadLinks += row.count;
+				}
 			}
-		} else {
-			facts.internalLinks += row.count;
-			if (bad) {
-				facts.internalBadLinks += row.count;
-			}
+			result.set(row.sourcePageId, facts);
 		}
-		result.set(row.sourcePageId, facts);
-	}
+	});
 	return result;
 }

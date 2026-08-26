@@ -132,6 +132,50 @@ describe('getInboundReferrerUrlsByPageIds', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+
+		// Links through a redirect source (/old-target -> /target), for the
+		// `redirectedFromUrl` field — matches the legacy report's
+		// `[REDIRECTED FROM] ...` note.
+		await archive.setPage({
+			url: parseUrl('https://example.com/referrer-c')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: { ...META, title: 'Referrer C' },
+			anchorList: [
+				{
+					href: parseUrl('https://example.com/old-target')!,
+					isExternal: false,
+					title: null,
+					textContent: 'To old target',
+				},
+			],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setRedirect({
+			url: parseUrl('https://example.com/old-target')!,
+			redirectPaths: ['https://example.com/target'],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
 		await archive.setPage({
 			url: parseUrl('https://example.com/lonely')!,
 			redirectPaths: [],
@@ -179,14 +223,39 @@ describe('getInboundReferrerUrlsByPageIds', () => {
 		expect(result.size).toBe(0);
 	});
 
-	it('lists every referrer page URL for a destination', async () => {
+	it('lists every referrer page URL for a destination, with anchor text and no redirect', async () => {
 		const result = await getInboundReferrerUrlsByPageIds(archive, [targetId]);
-		const urls = result.get(targetId)!;
-		expect(urls).toHaveLength(2);
-		expect(urls).toEqual(
+		const details = result.get(targetId)!;
+		expect(details).toHaveLength(3);
+		expect(details).toEqual(
 			expect.arrayContaining([
-				'https://example.com/referrer-a',
-				'https://example.com/referrer-b',
+				expect.objectContaining({
+					url: 'https://example.com/referrer-a',
+					textContent: 'To target',
+					count: 1,
+					redirectedFromUrl: null,
+				}),
+				expect.objectContaining({
+					url: 'https://example.com/referrer-b',
+					textContent: 'To target too',
+					count: 1,
+					redirectedFromUrl: null,
+				}),
+			]),
+		);
+	});
+
+	it('sets redirectedFromUrl when the referrer linked through a redirect source', async () => {
+		const result = await getInboundReferrerUrlsByPageIds(archive, [targetId]);
+		const details = result.get(targetId)!;
+		expect(details).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					url: 'https://example.com/referrer-c',
+					textContent: 'To old target',
+					count: 1,
+					redirectedFromUrl: 'https://example.com/old-target',
+				}),
 			]),
 		);
 	});

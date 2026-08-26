@@ -1,38 +1,8 @@
+import type { ResourceStreamRow } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 /** `resource_items` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 20_000;
-
-/** One resource's metadata for the Resources report sheet. */
-export interface ResourceStreamRow {
-	/** `resource_items.id`. */
-	resourceId: number;
-	/**
-	 * The resource's URL, or `null` for a blob-routed resource (identity is
-	 * a large `data:` URI, not a URL — see `resource_items`' url/blob
-	 * mutual-exclusion CHECK). Callers decide how to display this case
-	 * (the legacy report grouped all such resources under one degenerate
-	 * key in dedupe mode).
-	 */
-	url: string | null;
-	/** HTTP status code, or `null` if unknown. */
-	status: number | null;
-	/** HTTP status text, or `null` if unknown. */
-	statusText: string | null;
-	/** Raw `Content-Type` response header value, or `null`. */
-	contentType: string | null;
-	/** Response body size in bytes, or `null` if unknown. */
-	contentLength: number | null;
-	/**
-	 * Number of distinct internal pages referencing this resource — the
-	 * same `SUM(resource_ref_edges.count)` semantics `list-resources.ts`
-	 * uses (0.13 populates one edge row per unique referrer with
-	 * `count = 1`, so the sum equals the referrer-page count). Referrer
-	 * URLs* are a separate lookup — see
-	 * `getResourceReferrerUrlsByResourceIds`.
-	 */
-	referrerCount: number;
-}
 
 /**
  * Streams every `resource_items` row for the Resources report sheet.

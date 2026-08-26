@@ -424,6 +424,107 @@ describe('buildViewerReadModel', () => {
 		});
 	});
 
+	describe('is_target exclusion', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_build_read_model_is_target__',
+		);
+		const archiveFilePath = path.resolve(workingDir, 'is-target-test.nitpicker');
+		let archive: InstanceType<typeof Archive>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+			await archive.setConfig(BASE_CONFIG);
+
+			await archive.setPage({
+				url: parseUrl('https://example.com/')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: { ...META, title: 'Home' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// Internal but title-only (the crawler's `metadataOnly` mode
+			// writes `isTarget: false` for internal pages too, not just
+			// external ones — see `crawler.ts`'s `isMetadataOnly` handling).
+			// `scraped = 1` and not `is_skipped`, so it must be excluded by
+			// `is_target` specifically, not by any of the other predicates.
+			await archive.setPage({
+				url: parseUrl('https://example.com/title-only')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: { ...META, title: 'Title Only' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			// External pages are always written with `isTarget: false` too
+			// (`link-to-page-data.ts`/`resource-to-page-data.ts`/
+			// `fetch-destination.ts` all set `isTarget: !isExternal`) — must
+			// stay listed despite `is_target = 0`, unlike the internal
+			// title-only page above.
+			await archive.setPage({
+				url: parseUrl('https://example.net/')!,
+				redirectPaths: [],
+				isExternal: true,
+				isTarget: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		});
+
+		afterAll(async () => {
+			if (archive) {
+				await archive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('excludes an internal title-only (isTarget=false) page from viewer_pages, but keeps external pages despite their own isTarget=false', async () => {
+			await buildViewerReadModel(archive);
+			const knex = archive.getKnex();
+
+			const rows = await knex('viewer_pages').select('url').orderBy('url');
+			expect(rows.map((r) => r.url)).toEqual([
+				'https://example.com',
+				'https://example.net',
+			]);
+
+			const titleOnly = await knex('viewer_pages')
+				.where('url', 'https://example.com/title-only')
+				.first();
+			expect(titleOnly).toBeUndefined();
+		});
+	});
+
 	describe('isSkipped exclusion', () => {
 		const workingDir = path.resolve(
 			__dirname,
@@ -780,6 +881,23 @@ describe('buildViewerReadModel', () => {
 				imageList: [],
 				isSkipped: false,
 			});
+
+			await archive.setPage({
+				url: parseUrl('https://example.com/a/b/c/d/e/f/g/h/i/j/k?foo=bar')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
 		});
 
 		afterAll(async () => {
@@ -810,6 +928,35 @@ describe('buildViewerReadModel', () => {
 				path8: null,
 				path9: null,
 				path10: null,
+			});
+		});
+
+		it('appends the query string to path10 (not the true last segment) for a URL with more than 10 segments', async () => {
+			// Regression test: `deriveUrlDecomposition` used to append the
+			// query string to the URL's true last segment *before* slicing
+			// to 10 columns, so for a URL with 11+ segments that segment
+			// (and the query string riding along with it) fell outside the
+			// path1..path10 range and vanished entirely — path10 kept
+			// whatever landed there unmodified. The fix truncates to 10
+			// segments first, so the query string always survives on
+			// whichever segment ends up in path10.
+			await buildViewerReadModel(archive);
+			const knex = archive.getKnex();
+
+			const row = await knex('viewer_pages')
+				.where('url', 'https://example.com/a/b/c/d/e/f/g/h/i/j/k?foo=bar')
+				.first();
+			expect(row).toMatchObject({
+				path1: '/a',
+				path2: '/b',
+				path3: '/c',
+				path4: '/d',
+				path5: '/e',
+				path6: '/f',
+				path7: '/g',
+				path8: '/h',
+				path9: '/i',
+				path10: '/j?foo=bar',
 			});
 		});
 

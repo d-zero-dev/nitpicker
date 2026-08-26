@@ -137,7 +137,25 @@ describe('createLinks', () => {
 			]),
 		);
 		vi.mocked(getInboundReferrerUrlsByPageIds).mockResolvedValue(
-			new Map([[1, ['https://example.com/a', 'https://example.com/b']]]),
+			new Map([
+				[
+					1,
+					[
+						{
+							url: 'https://example.com/a',
+							textContent: 'Link A',
+							count: 1,
+							redirectedFromUrl: null,
+						},
+						{
+							url: 'https://example.com/b',
+							textContent: 'Link B',
+							count: 1,
+							redirectedFromUrl: null,
+						},
+					],
+				],
+			]),
 		);
 
 		const setting = createLinks([], NO_ACCESSOR);
@@ -152,6 +170,103 @@ describe('createLinks', () => {
 		const row = mock.rows[0]!;
 		expect(cellValue(row[5]!)).toBe(1); // Redirect From count
 		expect(cellValue(row[6]!)).toBe('2 Elements'); // Referrers
+	});
+
+	it('sums per-referrer occurrence counts (not distinct referrer count) into the Elements value', async () => {
+		vi.mocked(streamAllContentItems).mockReturnValue(
+			oneChunk([
+				{
+					pageId: 1,
+					url: 'https://example.com/target',
+					title: 'Target',
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					isSkipped: false,
+					skipReason: null,
+					responseHeaders: {},
+					redirectFromUrls: [],
+				},
+			]),
+		);
+		vi.mocked(getInboundReferrerUrlsByPageIds).mockResolvedValue(
+			new Map([
+				[
+					1,
+					[
+						// One referring page, but 3 anchors from it to this
+						// destination — the pre-fix code counted this as
+						// "1 Elements" (referrer array length); the correct
+						// count is the summed occurrence tally.
+						{
+							url: 'https://example.com/a',
+							textContent: 'Link A',
+							count: 3,
+							redirectedFromUrl: null,
+						},
+					],
+				],
+			]),
+		);
+
+		const setting = createLinks([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
+
+		expect(cellValue(mock.rows[0]![6]!)).toBe('3 Elements');
+	});
+
+	it('marks a redirected referrer in the note as "[REDIRECTED FROM] ..."', async () => {
+		vi.mocked(streamAllContentItems).mockReturnValue(
+			oneChunk([
+				{
+					pageId: 1,
+					url: 'https://example.com/target',
+					title: 'Target',
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					isSkipped: false,
+					skipReason: null,
+					responseHeaders: {},
+					redirectFromUrls: [],
+				},
+			]),
+		);
+		vi.mocked(getInboundReferrerUrlsByPageIds).mockResolvedValue(
+			new Map([
+				[
+					1,
+					[
+						{
+							url: 'https://example.com/referrer-c',
+							textContent: 'To old target',
+							count: 1,
+							redirectedFromUrl: 'https://example.com/old-target',
+						},
+					],
+				],
+			]),
+		);
+
+		const setting = createLinks([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 999,
+			onProgress: () => {},
+		});
+
+		const note = cellNote(mock.rows[0]![6]!)!;
+		expect(note).toBe(
+			'To old target (https://example.com/referrer-c => [REDIRECTED FROM] https://example.com/old-target)',
+		);
 	});
 
 	it('stops sending rows once maxRows is reached', async () => {
