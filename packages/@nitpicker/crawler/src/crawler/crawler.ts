@@ -77,6 +77,7 @@ import { PreloadShortCircuitError } from './preload-short-circuit-error.js';
 import { probeNetwork } from './probe-network.js';
 import { protocolAgnosticKey } from './protocol-agnostic-key.js';
 import { redirectDestKey } from './redirect-dest-key.js';
+import { resolveResultWentOffHost } from './resolve-result-went-off-host.js';
 import { resourceToPageData } from './resource-to-page-data.js';
 import { RobotsChecker } from './robots-checker.js';
 import { shouldBurnHost } from './should-burn-host.js';
@@ -724,13 +725,16 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						// below. Deliberately NOT also excluding `opts?.metadataOnly`
 						// (unlike the tracker's observation side, which does skip
 						// metadata-only pages — they carry no reliable signature): with
-						// `--recursive=false`, `handle-scrape-end.ts` marks EVERY anchor
-						// metadata-only, internal or not, so excluding them here would
-						// silently disable `--dedupe-cap` for anchor discovery whenever
-						// `--recursive=false` is set — while gate 2 (the JS-redirect
-						// direct enqueue below) has no such exclusion and would still
-						// cap the very same shape, an inconsistency between the two
-						// discovery paths.
+						// `--recursive=false`, every INTERNAL anchor that reaches this
+						// closure is metadata-only (`handle-scrape-end.ts` never issues
+						// a full-scrape `addUrl` call outside recursive mode; external
+						// anchors reach it too when `--fetch-external` is on, but those
+						// are already filtered by the scope check below), so excluding
+						// `opts?.metadataOnly` here would silently disable
+						// `--dedupe-cap` for anchor discovery whenever `--recursive=false`
+						// is set — while gate 2 (the JS-redirect direct enqueue below)
+						// has no such exclusion and would still cap the very same
+						// shape, an inconsistency between the two discovery paths.
 						if (
 							this.#options.dedupeCap !== null &&
 							findScopeEntry(newUrl, this.#scope, this.#options) !== null
@@ -1363,13 +1367,38 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 
 						log('Saving results%dots%');
 						this.#handleResult(result, url, enqueue, concurrency, precomputedBodyHash);
-						const parentSource = await this.#resolveParentSource(url);
-						this.#handleResources(result.resources, parentSource);
-						this.#handleConsoleLogs(
-							result.consoleLogs,
-							url,
-							result.pageData?.redirectPaths ?? [],
-						);
+						// Skip sub-resources / console logs for a result that turned out
+						// external — NOT the same as this worker's own `isExternal`
+						// (computed from `url` before navigation). Beholder decides
+						// `isExternal: false` before navigating and only flips it to
+						// `true` after seeing the destination's hostname, so a
+						// same-host source that redirects cross-host still has its
+						// request/response/console listeners attached under the
+						// pre-navigation `isExternal: false` for the whole trip. Those
+						// listeners keep capturing the destination's sub-resources and
+						// console output even after the flip, so without this guard a
+						// cross-host redirect leaks the OFF-SCOPE destination's data
+						// into this archive: its console output would be recorded as
+						// this page's quality signal, and its resources would leave a
+						// `resource_ref_edges` row on the (now content-less) redirect
+						// SOURCE — `linkRedirectSources` deletes that source's
+						// `anchor_edges` / `image_items` but not `resource_ref_edges`.
+						// A genuinely external URL never reaches this branch with
+						// non-empty `resources` / `consoleLogs` in the first place —
+						// beholder never attaches these listeners for one, per the
+						// `isExternal` gate in `#fetchData` — so this guard is a no-op
+						// outside the cross-host-redirect case. See
+						// `resolveResultWentOffHost`'s JSDoc for how it answers this for
+						// a `type: 'error'` result, which has no `pageData` to read.
+						if (!resolveResultWentOffHost(result, url)) {
+							const parentSource = await this.#resolveParentSource(url);
+							this.#handleResources(result.resources, parentSource);
+							this.#handleConsoleLogs(
+								result.consoleLogs,
+								url,
+								result.pageData?.redirectPaths ?? [],
+							);
+						}
 						log(formatResultSummary(result));
 
 						// Phase errors must be emitted AFTER 'page' / 'externalPage'
