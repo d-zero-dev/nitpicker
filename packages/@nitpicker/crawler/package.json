@@ -31,7 +31,7 @@
 	},
 	"dependencies": {
 		"@d-zero/beholder": "4.2.3",
-		"@d-zero/dealer": "1.13.0",
+		"@d-zero/dealer": "1.13.1",
 		"@d-zero/fs": "0.2.7",
 		"@d-zero/shared": "0.23.0",
 		"ansi-colors": "4.1.3",
