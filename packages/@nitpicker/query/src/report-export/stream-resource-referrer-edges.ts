@@ -1,26 +1,8 @@
+import type { ResourceReferrerEdgeStreamRow } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 /** `resource_ref_edges` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 20_000;
-
-/** One (resource, referring page) pair for the Resources Relational Table report sheet. */
-export interface ResourceReferrerEdgeStreamRow {
-	/** The referring page's URL. */
-	pageUrl: string;
-	/**
-	 * The resource's URL, or `null` for a blob-routed resource (identity is
-	 * a large `data:` URI, not a URL).
-	 */
-	resourceUrl: string | null;
-	/** The resource's HTTP status, or `null` if unknown. */
-	status: number | null;
-	/** The resource's HTTP status text, or `null` if unknown. */
-	statusText: string | null;
-	/** The resource's raw `Content-Type` header value, or `null`. */
-	contentType: string | null;
-	/** The resource's response body size in bytes, or `null` if unknown. */
-	contentLength: number | null;
-}
 
 /**
  * Streams every `(resource, referring page)` pair for the Resources

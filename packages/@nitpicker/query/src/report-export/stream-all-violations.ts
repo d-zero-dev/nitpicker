@@ -1,23 +1,8 @@
+import type { ViolationStreamRow } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 /** `analysis_violations` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 5000;
-
-/** One violation's display fields for the Violations report sheet. */
-export interface ViolationStreamRow {
-	/** Reporting validator name (e.g. "axe", "markuplint"). */
-	validator: string;
-	/** Severity label as reported by the validator. */
-	severity: string;
-	/** Rule identifier within the validator. */
-	rule: string;
-	/** Offending code snippet, or `''` when the validator reported none. */
-	code: string;
-	/** Human-readable violation message. */
-	message: string;
-	/** The page URL the violation was reported against. */
-	url: string;
-}
 
 /**
  * Streams every `analysis_violations` row for the Violations report sheet.

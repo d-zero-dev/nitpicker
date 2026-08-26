@@ -1,37 +1,8 @@
+import type { AnchorFactEdgeStreamRow } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 /** `viewer_anchor_facts` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 2000;
-
-/** One `viewer_anchor_facts` edge, resolved for the Referrers Relational Table report sheet. */
-export interface AnchorFactEdgeStreamRow {
-	/** The resolved (redirect/alias-followed) destination page's URL. */
-	destUrl: string;
-	/** The referring page's URL. */
-	sourceUrl: string;
-	/**
-	 * The immediate, pre-resolution href target. Equal to {@link destUrl}
-	 * unless the referrer linked to a redirect source or alias member —
-	 * callers wanting the legacy report's `[REDIRECTED FROM]` note can
-	 * compare the two.
-	 */
-	rawDestUrl: string;
-	/** First-wins anchor text for this (source, dest) pair, or `null`. */
-	textContent: string | null;
-	/** The destination page's HTTP status, or `null` if unknown. */
-	status: number | null;
-	/** The destination page's HTTP status text, or `null` if unknown. */
-	statusText: string | null;
-	/** The destination page's raw `Content-Type` header value, or `null`. */
-	contentType: string | null;
-	/**
-	 * Occurrence count collapsed into this edge (see
-	 * `AnchorFactInsertRow.count`'s docs) — new in the report rewrite,
-	 * replacing the legacy report's one-row-per-raw-anchor grain (this is
-	 * one row per unique resolved (source, dest) pair instead).
-	 */
-	count: number;
-}
 
 /**
  * Streams every `viewer_anchor_facts` edge for the Referrers Relational

@@ -1,5 +1,9 @@
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { eachSplitted } from '@nitpicker/crawler';
+
+import { SQLITE_IN_CHUNK } from '../sqlite-in-chunk.js';
+
 /**
  * Resolves a batch of page URLs to their `content_items.id` values.
  *
@@ -29,9 +33,15 @@ export async function resolvePageIdsByUrls(
 		return new Map();
 	}
 	const knex = accessor.getKnex();
-	const rows: { id: number; url: string }[] = await knex('content_items as ci')
-		.join('url_refs as ur', 'ur.id', 'ci.url_id')
-		.whereIn('ur.url', [...urls])
-		.select('ci.id as id', 'ur.url as url');
-	return new Map(rows.map((row) => [row.url, row.id]));
+	const result = new Map<string, number>();
+	await eachSplitted(urls, SQLITE_IN_CHUNK, async (chunk) => {
+		const rows: { id: number; url: string }[] = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.whereIn('ur.url', chunk)
+			.select('ci.id as id', 'ur.url as url');
+		for (const row of rows) {
+			result.set(row.url, row.id);
+		}
+	});
+	return result;
 }

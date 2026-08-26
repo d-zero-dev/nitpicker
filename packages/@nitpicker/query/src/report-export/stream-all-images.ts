@@ -1,27 +1,8 @@
+import type { ImageStreamRow } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 /** `image_items` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 5000;
-
-/** One image's display fields for the Images report sheet. */
-export interface ImageStreamRow {
-	/** The URL of the page the image appears on. */
-	pageUrl: string;
-	/** Resolved `src` attribute value, or `null` for a data-URI/blob-routed image (see `create-cell-data.ts`'s docs on blob-routed values). */
-	src: string | null;
-	/** Resolved `currentSrc` value, or `null` for a data-URI/blob-routed image. */
-	currentSrc: string | null;
-	/** `alt` attribute text. */
-	alt: string | null;
-	/** Displayed width in CSS pixels. */
-	width: number;
-	/** Displayed height in CSS pixels. */
-	height: number;
-	/** Whether the image was `loading="lazy"`. */
-	isLazy: boolean;
-	/** Stable structural DOM locator (e.g. `html/body[1]/main[1]/img[1]`). */
-	domPath: string | null;
-}
 
 /**
  * Streams every `image_items` row for the Images report sheet.

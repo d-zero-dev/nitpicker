@@ -16,6 +16,20 @@ const READ_CHUNK_SIZE = 5000;
 const MAX_REFERRER_NOTE_SAMPLES = 200;
 
 /**
+ * Safety cap (characters) for `referrer_note`, mirroring
+ * `report-google-sheets`' `join-urls-for-note.ts` `NOTE_MAX_LENGTH`:
+ * `@d-zero/google-sheets`' `Cell.provide()` hard-slices any note longer
+ * than 5,000 characters and appends its own blunter `"Too Large Text"`
+ * marker, so a note built above ~5,000 characters loses the informative
+ * `"... and N more"` suffix {@link buildReferrerNote} builds regardless of
+ * what this module does. Not imported from `report-google-sheets` — that
+ * package depends on `@nitpicker/query`, not the other way around — so the
+ * value is duplicated here, the same as `cli`/`report-google-sheets`'s own
+ * `format-progress-count.ts`/`dedupe-progress-message.ts` pairs.
+ */
+const REFERRER_NOTE_MAX_LENGTH = 4800;
+
+/**
  * Maximum number of unique values kept per query parameter key. Mirrors
  * `report-google-sheets`' historical `MAX_PARAM_VALUE_SAMPLES`: a tracker
  * that sends a unique-per-request value (session IDs) has unbounded
@@ -143,6 +157,48 @@ function formatQueryPattern(
 		return `${key}=${tracker.values.size}${tracker.overflowedCount > 0 ? '+' : ''}`;
 	});
 	return parts.join(', ');
+}
+
+/**
+ * Formats the `referrer_note` column: `samples` joined by newline, with a
+ * trailing `"... and N more"` line whenever any referrer was left out —
+ * either because {@link MAX_REFERRER_NOTE_SAMPLES} already capped `samples`
+ * below `totalReferrerCount`, or because the joined text itself would
+ * exceed {@link REFERRER_NOTE_MAX_LENGTH}, or both at once. `N` always
+ * counts every hidden referrer from both causes combined, never just
+ * whichever cap happened to bind — a `samples`-only join (the pre-fix
+ * behavior) silently dropped the sample-cap overflow with no marker at
+ * all, understating the true referrer count the cell note implied.
+ * @param samples - Sample referrer URLs, already capped at
+ *   {@link MAX_REFERRER_NOTE_SAMPLES} by the caller.
+ * @param totalReferrerCount - The group's true, uncapped referrer count
+ *   (`referrerPageIds.size`).
+ * @returns `null` when `samples` is empty.
+ */
+function buildReferrerNote(
+	samples: readonly string[],
+	totalReferrerCount: number,
+): string | null {
+	if (samples.length === 0) {
+		return null;
+	}
+	const hiddenBySampleCap = Math.max(0, totalReferrerCount - samples.length);
+	const kept: string[] = [];
+	let used = 0;
+	for (const [i, url] of samples.entries()) {
+		const next = used + url.length + (kept.length > 0 ? 1 : 0);
+		if (next > REFERRER_NOTE_MAX_LENGTH) {
+			const hiddenByLength = samples.length - i;
+			kept.push(`... and ${hiddenByLength + hiddenBySampleCap} more`);
+			return kept.join('\n');
+		}
+		kept.push(url);
+		used = next;
+	}
+	if (hiddenBySampleCap > 0) {
+		kept.push(`... and ${hiddenBySampleCap} more`);
+	}
+	return kept.join('\n');
 }
 
 /**
@@ -310,8 +366,10 @@ export async function computeResourceGroupRows(
 		content_length_max: entry.contentLengthMax,
 		count: entry.count,
 		referrer_count: entry.referrerPageIds.size,
-		referrer_note:
-			entry.referrerUrlSamples.length > 0 ? entry.referrerUrlSamples.join('\n') : null,
+		referrer_note: buildReferrerNote(
+			entry.referrerUrlSamples,
+			entry.referrerPageIds.size,
+		),
 		query_pattern: formatQueryPattern(entry.paramValues),
 	}));
 }
