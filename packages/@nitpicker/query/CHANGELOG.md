@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.20.0](https://github.com/d-zero-dev/nitpicker/compare/v0.19.0...v0.20.0) (2026-08-26)
+
+### Bug Fixes
+
+- **query:** chunk whereIn batches, fix URL decomposition, exclude title-only pages ([4ea205f](https://github.com/d-zero-dev/nitpicker/commit/4ea205fb110b1f21be7fd39b2b08c955a8398ee6))
+
+### Features
+
+- **query:** add report-export streaming API and read-model computed columns ([b0cba5b](https://github.com/d-zero-dev/nitpicker/commit/b0cba5b8c62ded9c084f936c37c96eb20d601e7c))
+- **query:** precompute report-time URL decomposition and resource dedupe ([33695ce](https://github.com/d-zero-dev/nitpicker/commit/33695ce1f730dc5978438857846438de9362c618))
+
 # [0.19.0](https://github.com/d-zero-dev/nitpicker/compare/v0.18.1...v0.19.0) (2026-08-19)
 
 ### Features

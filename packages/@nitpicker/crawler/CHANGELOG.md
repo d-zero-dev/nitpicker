@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.20.0](https://github.com/d-zero-dev/nitpicker/compare/v0.19.0...v0.20.0) (2026-08-26)
+
+### Bug Fixes
+
+- **crawler:** stop cross-host redirect leak; honor fetchExternal in list ([3b3cc12](https://github.com/d-zero-dev/nitpicker/commit/3b3cc128e022d12eac478312691f6067162f1b1a))
+
 # [0.19.0](https://github.com/d-zero-dev/nitpicker/compare/v0.18.1...v0.19.0) (2026-08-19)
 
 ### Bug Fixes

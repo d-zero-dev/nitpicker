@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.20.0](https://github.com/d-zero-dev/nitpicker/compare/v0.19.0...v0.20.0) (2026-08-26)
+
+### Bug Fixes
+
+- **cli:** render report's archive extraction progress through Lanes ([764966a](https://github.com/d-zero-dev/nitpicker/commit/764966a05800016b3bd49d6dc7a781a07b74d087))
+
+### Features
+
+- **cli:** default Resources dedupe mode on, add buildingResourceGroups phase ([5340a2a](https://github.com/d-zero-dev/nitpicker/commit/5340a2a40010e803b19c40eb84a306484aab439e))
+- **cli:** keep elapsed time on completed TaskList rows ([d185e90](https://github.com/d-zero-dev/nitpicker/commit/d185e903aa867c865b574a42f1dbd44c503754df))
+
 # [0.19.0](https://github.com/d-zero-dev/nitpicker/compare/v0.18.1...v0.19.0) (2026-08-19)
 
 ### Bug Fixes

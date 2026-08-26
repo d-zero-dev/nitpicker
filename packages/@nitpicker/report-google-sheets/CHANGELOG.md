@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.20.0](https://github.com/d-zero-dev/nitpicker/compare/v0.19.0...v0.20.0) (2026-08-26)
+
+### Bug Fixes
+
+- **report-google-sheets:** restore accurate Elements count and redirect note in Links ([a4aeba8](https://github.com/d-zero-dev/nitpicker/commit/a4aeba8e236abea14f9e7fc5a41004168129b0b0))
+
+### Features
+
+- **query:** precompute report-time URL decomposition and resource dedupe ([33695ce](https://github.com/d-zero-dev/nitpicker/commit/33695ce1f730dc5978438857846438de9362c618))
+- **report-google-sheets:** keep elapsed time on completed TaskList rows ([b706947](https://github.com/d-zero-dev/nitpicker/commit/b706947787605077b84e30c0c632a05c16150d22))
+- **report-google-sheets:** migrate progress display to TaskList, fix upload gap ([98dcee2](https://github.com/d-zero-dev/nitpicker/commit/98dcee2260d3d37274f326279825552d872b7688))
+- **report-google-sheets:** rewrite for large-archive streaming (fixes OOM) ([e1eb9c7](https://github.com/d-zero-dev/nitpicker/commit/e1eb9c786eb7288bc35ec146f8fb374fcca9406d))
+- **report-google-sheets:** stream precomputed rows, clarify TaskList labels ([840d117](https://github.com/d-zero-dev/nitpicker/commit/840d117072f9f9c7f472d4a401de3c775dfb8882))
+
 # [0.19.0](https://github.com/d-zero-dev/nitpicker/compare/v0.18.1...v0.19.0) (2026-08-19)
 
 ### Bug Fixes
