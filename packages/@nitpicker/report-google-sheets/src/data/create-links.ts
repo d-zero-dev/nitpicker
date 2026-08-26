@@ -1,4 +1,5 @@
 import type { CreateSheet } from '../sheets/types.js';
+import type { InboundReferrerDetail } from '@nitpicker/query';
 
 import { getInboundReferrerUrlsByPageIds, streamAllContentItems } from '@nitpicker/query';
 
@@ -10,6 +11,19 @@ import { joinUrlsForNote } from '../utils/join-urls-for-note.js';
 import { truncateNoteText } from '../utils/truncate-note-text.js';
 
 const log = pLog.extend('Links');
+
+/**
+ * Formats one referrer's cell-note line, restoring the pre-rewrite report's
+ * `text (url => [REDIRECTED FROM] rawUrl)` shape.
+ * @param detail - One referrer's detail from `getInboundReferrerUrlsByPageIds`.
+ */
+function formatReferrerNoteLine(detail: InboundReferrerDetail): string {
+	const text = detail.textContent || '(no text)';
+	const redirectSuffix = detail.redirectedFromUrl
+		? ` => [REDIRECTED FROM] ${detail.redirectedFromUrl}`
+		: '';
+	return `${text} (${detail.url}${redirectSuffix})`;
+}
 
 /**
  * Creates the "Links" sheet configuration.
@@ -24,11 +38,14 @@ const log = pLog.extend('Links');
  *
  * Referrers are fetched from `viewer_anchor_facts`
  * (`getInboundReferrerUrlsByPageIds`, batched per `streamAllContentItems`
- * chunk) — the `[REDIRECTED FROM] ...` per-anchor note the pre-rewrite
- * version showed (from `page.getReferrers()`'s per-anchor `through` field)
- * is no longer available at this grain: `viewer_anchor_facts` aggregates by
- * `(source, resolved dest)` pair, not by raw anchor observation. This sheet
- * therefore requires the viewer read model (`requiresReadModel: true`).
+ * chunk): the "N Elements" count sums every returned detail's
+ * `InboundReferrerDetail.count` (the raw per-anchor occurrence tally
+ * `viewer_anchor_facts` still carries, even though it stores one row per
+ * `(source, resolved dest)` pair rather than one per raw anchor
+ * observation), and each note line reconstructs the pre-rewrite report's
+ * `text (url => [REDIRECTED FROM] rawUrl)` format from
+ * `InboundReferrerDetail.redirectedFromUrl`. This sheet therefore requires
+ * the viewer read model (`requiresReadModel: true`).
  *
  * Applies conditional formatting to highlight:
  * - Status codes >= 400 (client/server errors)
@@ -70,7 +87,7 @@ export const createLinks: CreateSheet = (_reports, accessor) => {
 			// Phase 1.5) is the progress denominator instead.
 			const total = estimatedTotal;
 			for await (const chunk of streamAllContentItems(accessor)) {
-				const referrerUrlsByPageId = await getInboundReferrerUrlsByPageIds(
+				const referrerDetailsByPageId = await getInboundReferrerUrlsByPageIds(
 					accessor,
 					chunk.map((row) => row.pageId),
 				);
@@ -80,7 +97,13 @@ export const createLinks: CreateSheet = (_reports, accessor) => {
 						await sheet.flush();
 						return;
 					}
-					const referrerUrls = referrerUrlsByPageId.get(row.pageId) ?? [];
+					const referrerDetails = referrerDetailsByPageId.get(row.pageId) ?? [];
+					// Sum occurrence counts, not `.length`: `referrerDetails` is
+					// already deduped to one entry per referring page (see
+					// `InboundReferrerDetail.count`'s docs), so counting entries
+					// would undercount a page with more than one anchor to the
+					// same destination.
+					const elementCount = referrerDetails.reduce((sum, d) => sum + d.count, 0);
 
 					await sheet.appendRow([
 						createCellData(
@@ -100,8 +123,8 @@ export const createLinks: CreateSheet = (_reports, accessor) => {
 						),
 						createCellData(
 							{
-								value: `${referrerUrls.length} Elements`,
-								note: joinUrlsForNote(referrerUrls),
+								value: `${elementCount} Elements`,
+								note: joinUrlsForNote(referrerDetails.map(formatReferrerNoteLine)),
 							},
 							defaultCellFormat,
 						),
