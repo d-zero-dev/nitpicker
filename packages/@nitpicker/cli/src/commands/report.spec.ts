@@ -1,3 +1,4 @@
+import { Lanes } from '@d-zero/dealer';
 import { report as runReport } from '@nitpicker/report-google-sheets';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
@@ -5,6 +6,19 @@ import { formatCliError as formatCliErrorFn } from '../format-cli-error.js';
 import { verbosely as verboselyFn } from '../report/debug.js';
 
 import { report } from './report.js';
+
+const mockLanesUpdate = vi.fn();
+const mockLanesClose = vi.fn();
+
+vi.mock('@d-zero/dealer', () => ({
+	Lanes: vi.fn().mockImplementation(function (this: {
+		update: typeof mockLanesUpdate;
+		close: typeof mockLanesClose;
+	}) {
+		this.update = mockLanesUpdate;
+		this.close = mockLanesClose;
+	}),
+}));
 
 vi.mock('@nitpicker/report-google-sheets', () => ({
 	report: vi.fn(),
@@ -36,6 +50,10 @@ describe('report command', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// The real `report()` is `async`, so it always returns a thenable —
+		// the command chains `.finally()` onto it. A bare `vi.fn()` returns
+		// `undefined` and would throw before any assertion ran.
+		vi.mocked(runReport).mockResolvedValue();
 		originalIsTTY = process.stdout.isTTY;
 		exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
 			throw new ExitError(code as number);
@@ -168,14 +186,10 @@ describe('report command', () => {
 				onExtractProgress: undefined,
 			}),
 		);
+		expect(Lanes).not.toHaveBeenCalled();
 	});
 
-	it('renders byte progress to stderr via the passed callback, with no %braille% placeholder leak (issue #294 code review #6)', async () => {
-		// Exact match, not `stringContaining`: this command bypasses `Lanes`
-		// and writes straight to `process.stderr`, so `createByteProgressLogger`
-		// must be called with `{ animated: false }` — a loose check would
-		// pass even if that option were dropped and the literal `%braille%`
-		// placeholder leaked into the output.
+	it('renders byte progress through a stderr Lanes line', async () => {
 		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
 		vi.mocked(runReport).mockImplementationOnce((options) => {
 			options.onExtractProgress?.(50_000_000, 200_000_000);
@@ -191,7 +205,132 @@ describe('report command', () => {
 			silent: undefined,
 		});
 
-		expect(stderrSpy).toHaveBeenCalledWith('Extracting archive: 50/200 MB (25%)\n');
+		expect(Lanes).toHaveBeenCalledWith(
+			expect.objectContaining({ verbose: false, stream: process.stderr }),
+		);
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			'%braille% Extracting archive: 50/200 MB (25%)',
+		);
+		expect(stderrSpy).not.toHaveBeenCalled();
+		// Extraction that stops short of 100% is closed by the `finally`
+		// wrapping the `runReport` call, not by the progress callback.
+		expect(mockLanesClose).toHaveBeenCalled();
+	});
+
+	it('creates no Lanes when the callback never fires (tar-cache hit)', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+
+		await report(['test.nitpicker'], {
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			credentials: './credentials.json',
+			config: undefined,
+			all: true,
+			verbose: undefined,
+			silent: undefined,
+		});
+
+		expect(Lanes).not.toHaveBeenCalled();
+	});
+
+	it('keeps the Lanes open mid-extraction and closes it the moment 100% arrives', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		let closeCallsAtHalf = -1;
+		let closeCallsAtFull = -1;
+		vi.mocked(runReport).mockImplementationOnce((options) => {
+			options.onExtractProgress?.(100_000_000, 200_000_000);
+			closeCallsAtHalf = mockLanesClose.mock.calls.length;
+			options.onExtractProgress?.(200_000_000, 200_000_000);
+			closeCallsAtFull = mockLanesClose.mock.calls.length;
+			return Promise.resolve();
+		});
+
+		await report(['test.nitpicker'], {
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			credentials: './credentials.json',
+			config: undefined,
+			all: true,
+			verbose: undefined,
+			silent: undefined,
+		});
+
+		expect(closeCallsAtHalf).toBe(0);
+		expect(closeCallsAtFull).toBe(1);
+	});
+
+	it('never constructs a second Lanes when a stray callback arrives after 100%', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		vi.mocked(runReport).mockImplementationOnce((options) => {
+			options.onExtractProgress?.(200_000_000, 200_000_000);
+			options.onExtractProgress?.(200_000_000, 200_000_000);
+			return Promise.resolve();
+		});
+
+		await report(['test.nitpicker'], {
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			credentials: './credentials.json',
+			config: undefined,
+			all: true,
+			verbose: undefined,
+			silent: undefined,
+		});
+
+		expect(Lanes).toHaveBeenCalledTimes(1);
+	});
+
+	it('closes the Lanes before formatCliError when extraction throws mid-stream', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		const error = new Error('untar failed');
+		vi.mocked(runReport).mockImplementationOnce((options) => {
+			options.onExtractProgress?.(50_000_000, 200_000_000);
+			return Promise.reject(error);
+		});
+		const callOrder: string[] = [];
+		mockLanesClose.mockImplementationOnce(() => {
+			callOrder.push('close');
+		});
+		vi.mocked(formatCliErrorFn).mockImplementationOnce(() => {
+			callOrder.push('formatCliError');
+		});
+
+		await expect(
+			report(['test.nitpicker'], {
+				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+				credentials: './credentials.json',
+				config: undefined,
+				all: true,
+				verbose: undefined,
+				silent: undefined,
+			}),
+		).rejects.toThrow(ExitError);
+
+		expect(callOrder).toEqual(['close', 'formatCliError']);
+		expect(formatCliErrorFn).toHaveBeenCalledWith(error, false);
+	});
+
+	it('renders timestamped append-mode Lanes lines when --verbose is set', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		vi.mocked(runReport).mockImplementationOnce((options) => {
+			options.onExtractProgress?.(50_000_000, 200_000_000);
+			return Promise.resolve();
+		});
+
+		await report(['test.nitpicker'], {
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			credentials: './credentials.json',
+			config: undefined,
+			all: true,
+			verbose: true,
+			silent: undefined,
+		});
+
+		expect(Lanes).toHaveBeenCalledWith(expect.objectContaining({ verbose: true }));
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			expect.any(Number),
+			expect.stringMatching(
+				/^\d{4}-\d{2}-\d{2}T[\d:.]+Z %braille% Extracting archive: 50\/200 MB \(25%\)$/,
+			),
+		);
 	});
 
 	it('calls verbosely when --verbose is set without --silent', async () => {
