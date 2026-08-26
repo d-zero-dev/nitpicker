@@ -338,13 +338,13 @@ describe('createSheets', () => {
 		expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('skipped entirely'));
 	});
 
-	it('shows an immediate "uploading" message and real per-chunk progress during Upload', async () => {
-		// The Process step never calls the real flush() (it's deferred to
-		// Upload) — Upload must both (a) say something the instant it starts
-		// (flush() can be a single, multi-second network call with no
-		// progress signal until it resolves) and (b) show real numbers
-		// (via Sheet.onProgress) for a multi-chunk flush, not a static
-		// "uploading..." the whole time.
+	it('shows an immediate "inserting" message and real per-chunk progress during a multi-chunk flush', async () => {
+		// `run()`'s own explicit `flush()` (called unconditionally after it
+		// returns, to drain any TRUNCATED marker row) can be a single,
+		// multi-second network call with no progress signal until it
+		// resolves — the step must both (a) say something the instant it
+		// starts and (b) show real numbers (via `Sheet.onProgress`) for a
+		// multi-chunk flush, not a static "inserting..." the whole time.
 		const chunks: string[] = [];
 		const stream = {
 			write: (chunk: string) => {
@@ -389,7 +389,7 @@ describe('createSheets', () => {
 		});
 
 		const output = chunks.join('');
-		expect(output).toContain('uploading to Google Sheets...');
+		expect(output).toContain('inserting...');
 		expect(output).toContain('2,000/2,500 rows (80%)');
 		expect(output).toContain('2,500/2,500 rows (100%)');
 	});
@@ -415,7 +415,7 @@ describe('createSheets', () => {
 					estimateRowCount: () => Promise.resolve(0),
 					run: () => {
 						// Simulate the Sheets client reporting a rate-limit wait
-						// while this sheet's "Process" step is the active row.
+						// while this sheet's "Insert rows" step is the active row.
 						(sheets as { onLog?: (message: unknown) => void }).onLog?.({
 							message: 'TooManyRequestError',
 							waiting: true,
@@ -459,5 +459,64 @@ describe('createSheets', () => {
 		});
 
 		expect(updateA).toHaveBeenCalledTimes(1);
+	});
+
+	it("never substitutes sheet.flush with a no-op — run()'s own flush() calls reach the real implementation", async () => {
+		const { sheets, getMock } = makeFakeSheets();
+
+		await createSheets({
+			sheets,
+			accessor: NO_ACCESSOR,
+			reports: [],
+			createSheetList: [
+				makeCreateSheet({
+					name: 'A',
+					createHeaders: () => ['col1'],
+					estimateRowCount: () => Promise.resolve(1),
+					run: async ({ sheet }) => {
+						await sheet.appendRow(ROW);
+						// Mirrors the truncation early-return branch every real
+						// `run()` implementation has (see e.g. create-page-list.ts)
+						// — its own explicit flush() must reach the real Sheet,
+						// not a step-local no-op stub.
+						await sheet.flush();
+					},
+				}),
+			],
+			options: { silent: true },
+		});
+
+		// One call from `run()` itself, one from the orchestrator's own
+		// unconditional tail flush() after `run()` returns.
+		expect(getMock('A')?.flushCount).toBeGreaterThanOrEqual(2);
+	});
+
+	it("leaves the sheet's flush usable after Insert rows completes (no permanently-stubbed instance)", async () => {
+		const { sheets, getMock } = makeFakeSheets();
+
+		await createSheets({
+			sheets,
+			accessor: NO_ACCESSOR,
+			reports: [],
+			createSheetList: [
+				makeCreateSheet({
+					name: 'A',
+					createHeaders: () => ['col1'],
+					estimateRowCount: () => Promise.resolve(0),
+					run: () => Promise.resolve(),
+				}),
+			],
+			options: { silent: true },
+		});
+
+		// `Sheets.create(name)` caches one Sheet instance per name — a caller
+		// that fetches "A" again later (e.g. a "Format sheet" step, or an
+		// `await using` disposer relying on `Symbol.asyncDispose`) must get a
+		// working flush(), not one a prior step permanently shadowed with a
+		// no-op.
+		const mock = getMock('A');
+		const flushCountAfterReport = mock?.flushCount ?? 0;
+		await mock?.sheet.flush();
+		expect(mock?.flushCount).toBe(flushCountAfterReport + 1);
 	});
 });
