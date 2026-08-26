@@ -257,7 +257,7 @@ describe('handleScrapeEnd', () => {
 			expect(anchor.href.password).toBeNull();
 		});
 
-		it('enqueues every anchor as metadata-only in non-recursive mode regardless of scope', () => {
+		it('enqueues every anchor as metadata-only in non-recursive mode when fetchExternal=true, regardless of scope', () => {
 			const result = createMockResult({
 				anchorList: [
 					makeAnchor('https://example.com/blog/post'),
@@ -276,7 +276,12 @@ describe('handleScrapeEnd', () => {
 				result,
 				linkList as never,
 				scope,
-				{ ...defaultOptions, roots: ['https://example.com/blog/'], recursive: false },
+				{
+					...defaultOptions,
+					roots: ['https://example.com/blog/'],
+					recursive: false,
+					fetchExternal: true,
+				},
 				addUrl,
 			);
 
@@ -284,6 +289,41 @@ describe('handleScrapeEnd', () => {
 			for (const call of addUrl.mock.calls) {
 				expect(call[1]).toEqual({ metadataOnly: true });
 			}
+		});
+
+		it('excludes external anchors in non-recursive mode when fetchExternal=false, keeping in-scope anchors metadata-only', () => {
+			const result = createMockResult({
+				anchorList: [
+					makeAnchor('https://example.com/blog/post'),
+					makeAnchor('https://example.com/about'),
+					makeAnchor('https://other.example.com/foo'),
+				],
+			});
+			const linkList = {
+				done: vi.fn().mockReturnValue(null),
+				isMetadataOnly: vi.fn().mockReturnValue(false),
+			};
+			const scope = buildScope(['https://example.com/blog/']);
+			const addUrl = vi.fn();
+
+			handleScrapeEnd(
+				result,
+				linkList as never,
+				scope,
+				{
+					...defaultOptions,
+					roots: ['https://example.com/blog/'],
+					recursive: false,
+					fetchExternal: false,
+				},
+				addUrl,
+			);
+
+			expect(addUrl).toHaveBeenCalledTimes(1);
+			expect(addUrl).toHaveBeenCalledWith(
+				expect.objectContaining({ pathname: '/blog/post' }),
+				{ metadataOnly: true },
+			);
 		});
 	});
 });

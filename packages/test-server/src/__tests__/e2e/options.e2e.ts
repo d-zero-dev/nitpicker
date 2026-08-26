@@ -68,6 +68,32 @@ describe('Crawler options', () => {
 		});
 	});
 
+	describe('list: true, fetchExternal: false（非 recursive モードでも fetchExternal を尊重する）', () => {
+		let result: CrawlResult;
+
+		beforeAll(async () => {
+			result = await crawl([`${TEST_SERVER_ORIGIN}/options/`], {
+				list: true,
+				fetchExternal: false,
+			});
+		}, 60_000);
+
+		afterAll(async () => {
+			await cleanup(result);
+		});
+
+		it('外部リンクがフェッチされずにDBに記録される（recursive: false でも fetchExternal: false と同じ結果になる）', async () => {
+			const pages = await result.accessor.getPages('external-no-page');
+			const externalPage = pages.find((p) => p.url.hostname === '127.0.0.1');
+			expect(externalPage).toBeDefined();
+			expect(externalPage!.status).toBeNull();
+			expect(externalPage!.title).toBe('');
+
+			const fetched = await result.accessor.getPages('external-page');
+			expect(fetched.some((p) => p.url.hostname === '127.0.0.1')).toBe(false);
+		});
+	});
+
 	describe('disableQueries: true', () => {
 		let result: CrawlResult;
 

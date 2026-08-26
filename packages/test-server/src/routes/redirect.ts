@@ -137,4 +137,40 @@ export function redirectRoutes(app: Hono, portRef: PortRef) {
 	app.on(['GET', 'HEAD'], '/clobber/ext', (c) =>
 		c.redirect(`http://localhost:${portRef.port}/clobber/canonical`, 301),
 	);
+
+	// Cross-host redirect: an in-scope source 301s to a URL on a different
+	// hostname (`127.0.0.1`, simulating an off-scope site — same pattern as
+	// `/clobber/ext` above). Beholder attaches its console/response listeners
+	// BEFORE navigation, under the source's `isExternal: false`, and only
+	// flips to `isExternal: true` after seeing the destination's hostname
+	// differs — so the destination's console output and sub-resources are
+	// captured before the crawler's `isExternal` guard can reject them.
+	// `dest`'s inline `<script>` and `<link>` load before `domcontentloaded`
+	// (beholder's external early-return point), so both are observable if
+	// the guard is missing.
+	app.get('/cross-host/', (c) =>
+		c.html(
+			'<!doctype html><html lang="en"><head><title>Cross-Host Top</title></head><body>' +
+				'<a href="/cross-host/start">Start cross-host redirect</a>' +
+				'</body></html>',
+		),
+	);
+
+	app.get('/cross-host/start', (c) =>
+		c.redirect(`http://127.0.0.1:${portRef.port}/cross-host/dest`, 301),
+	);
+
+	app.get('/cross-host/dest', (c) =>
+		c.html(
+			'<!doctype html><html lang="en"><head><title>Cross-Host Destination</title></head>' +
+				'<body>' +
+				'<script>console.warn("cross-host console warning");</script>' +
+				'<link rel="stylesheet" href="/cross-host/dest.css">' +
+				'</body></html>',
+		),
+	);
+
+	app.get('/cross-host/dest.css', (c) =>
+		c.text('body { color: red; }', 200, { 'Content-Type': 'text/css' }),
+	);
 }

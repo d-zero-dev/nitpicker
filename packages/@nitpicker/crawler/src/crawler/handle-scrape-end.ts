@@ -62,9 +62,12 @@ export function handleScrapeEnd(
  *    deepest matching scope.
  * 2. For internal anchors without credentials, inherits auth from the matched
  *    scope and rebuilds `withoutHash` with the injected auth.
- * 3. In recursive mode: enqueues internal anchors for full scraping, and
- *    external anchors for metadata-only scraping (when `fetchExternal` is on).
- * 4. In non-recursive mode: enqueues every anchor for metadata-only scraping.
+ * 3. External anchors are skipped entirely when `fetchExternal` is off — this
+ *    gate applies in both recursive and non-recursive mode.
+ * 4. In recursive mode: enqueues internal anchors for full scraping, and
+ *    external anchors (when not skipped by 3) for metadata-only scraping.
+ * 5. In non-recursive mode: enqueues every anchor that survives gate 3 for
+ *    metadata-only scraping, internal or not.
  * @param anchors - The list of anchor data extracted from the page.
  * @param scope - Map of hostnames to their scope URLs.
  * @param options - Crawler configuration options.
@@ -102,12 +105,20 @@ function processAnchors(
 			anchor.href.withoutHash = withoutHash;
 		}
 
-		if (options.recursive) {
-			if (matchedScope) {
-				addUrl(anchor.href);
-			} else if (options.fetchExternal) {
-				addUrl(anchor.href, { metadataOnly: true });
-			}
+		// `fetchExternal` gates external anchors the same way in both modes —
+		// checked once, ahead of the recursive/non-recursive split below,
+		// rather than only inside the recursive branch. Non-recursive
+		// discovery has no other point that enforces `fetchExternal`: every
+		// anchor that reaches the split falls straight into the unconditional
+		// metadata-only `addUrl` call, so scoping the check to the recursive
+		// branch alone would make `--list` / `--single` / `--no-recursive`
+		// unable to honour `--no-fetch-external` at all.
+		if (!matchedScope && !options.fetchExternal) {
+			continue;
+		}
+
+		if (options.recursive && matchedScope) {
+			addUrl(anchor.href);
 			continue;
 		}
 

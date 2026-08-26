@@ -44,8 +44,18 @@ export interface RedirectEdgeResult {
  * The outcome of {@link Crawler.#scrapePage}: either a normal scrape result from
  * the browser/HEAD pipeline, or a {@link RedirectEdgeResult} when the URL's
  * redirect destination was already rendered and only the edge needs recording.
+ *
+ * The non-redirect-edge member is {@link BrowserScrapeResult}, not bare
+ * beholder `ScrapeResult` — every `#scrapePage` return site is either a
+ * `_launchBrowserAndScrape` call (which returns `BrowserScrapeResult`) or a
+ * plain `ScrapeResult`-shaped literal (structurally compatible, since
+ * `postNavigationUrl` is optional). Callers that reach a `type: 'error'`
+ * result and need to know whether the browser ended up off-host before
+ * failing (`pageData` is absent on error, so `pageData.isExternal` is not
+ * available) read `postNavigationUrl` for that signal — see
+ * `resolveResultWentOffHost`.
  */
-export type ScrapeOutcome = ScrapeResult | RedirectEdgeResult;
+export type ScrapeOutcome = BrowserScrapeResult | RedirectEdgeResult;
 
 /**
  * Internal envelope returned by {@link Crawler.#launchBrowserAndScrape} that
