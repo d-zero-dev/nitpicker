@@ -1,0 +1,45 @@
+{
+	"name": "@nitpicker/report-html",
+	"version": "0.20.0",
+	"description": "Self-contained static HTML reports for Nitpicker archives",
+	"author": "D-ZERO",
+	"license": "Apache-2.0",
+	"engines": {
+		"node": ">=24.11.0"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/d-zero-dev/nitpicker.git",
+		"directory": "packages/@nitpicker/report-html"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"files": [
+		"lib"
+	],
+	"type": "module",
+	"exports": {
+		".": {
+			"import": "./lib/report-html.js",
+			"types": "./lib/report-html.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "tsc",
+		"clean": "tsc --build --clean"
+	},
+	"dependencies": {
+		"@d-zero/dealer": "1.13.1",
+		"@nitpicker/crawler": "0.20.0",
+		"@nitpicker/query": "0.20.0",
+		"@nitpicker/viewer": "0.20.0",
+		"enquirer": "2.4.1",
+		"react": "19.2.8",
+		"react-dom": "19.2.8"
+	},
+	"devDependencies": {
+		"@d-zero/shared": "0.23.0",
+		"vitest": "4.1.10"
+	}
+}
