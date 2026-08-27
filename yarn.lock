@@ -3427,7 +3427,7 @@ __metadata:
     enquirer: "npm:2.4.1"
     react: "npm:19.2.8"
     react-dom: "npm:19.2.8"
-    vitest: "npm:4.1.10"
+    vitest: "npm:4.1.11"
   languageName: unknown
   linkType: soft
 
@@ -3470,7 +3470,7 @@ __metadata:
     sigma: "npm:3.0.3"
     storybook: "npm:10.5.8"
     vite: "npm:8.2.1"
-    vitest: "npm:4.1.10"
+    vitest: "npm:4.1.11"
   languageName: unknown
   linkType: soft
 
