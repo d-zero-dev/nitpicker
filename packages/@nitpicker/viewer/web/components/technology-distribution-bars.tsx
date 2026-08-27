@@ -37,6 +37,8 @@ export interface TechnologyDistributionBarsProps {
 	technologyDistribution: readonly TechnologyCount[];
 	/** Total internal pages — the ratio denominator for each bar. */
 	internalPages: number;
+	/** Whether to render the viewer-only link to the full technology view. */
+	showViewAllLink?: boolean;
 }
 
 /**
@@ -65,7 +67,9 @@ export function TechnologyDistributionBars(props: TechnologyDistributionBarsProp
 					/>
 				))}
 			</div>
-			<AppLink to="/technologies">{t('views.summary.viewAllTechnologies')}</AppLink>
+			{props.showViewAllLink !== false && (
+				<AppLink to="/technologies">{t('views.summary.viewAllTechnologies')}</AppLink>
+			)}
 		</>
 	);
 }

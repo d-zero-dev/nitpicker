@@ -115,6 +115,21 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				noTechnologies: 'No technologies detected in this archive.',
 				viewAllTechnologies: 'View all technologies',
 			},
+			report: {
+				title: 'Nitpicker HTML Report',
+				generatedAt: 'Generated at',
+				directoryFilter: 'Page list is limited to: {dirs}',
+				pages: 'Pages',
+				columns: {
+					title: 'Title',
+					url: 'URL',
+					status: 'Status',
+					redirectChain: 'Redirect chain',
+					metaDescription: 'Meta description',
+					resourceFiles: 'Resource files (exists / total)',
+					consoleErrorCount: 'Console errors',
+				},
+			},
 			errorKind: {
 				dns: 'DNS',
 				'dns-transient': 'DNS transient (EAI_AGAIN)',
@@ -594,6 +609,21 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				technologyDistribution: '技術スタック',
 				noTechnologies: 'このアーカイブでは技術が検出されていません。',
 				viewAllTechnologies: 'すべての技術スタックを見る',
+			},
+			report: {
+				title: 'Nitpicker HTML レポート',
+				generatedAt: '生成日時',
+				directoryFilter: 'ページ一覧の対象ディレクトリ: {dirs}',
+				pages: 'ページ一覧',
+				columns: {
+					title: 'タイトル',
+					url: 'URL',
+					status: 'ステータス',
+					redirectChain: 'リダイレクトチェーン',
+					metaDescription: 'メタディスクリプション',
+					resourceFiles: 'リソースファイル（存在数 / 総数）',
+					consoleErrorCount: 'コンソールエラー数',
+				},
 			},
 			errorKind: {
 				dns: 'DNS',
