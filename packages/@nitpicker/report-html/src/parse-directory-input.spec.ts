@@ -34,7 +34,39 @@ describe('parseDirectoryInput', () => {
 		expect(() => parseDirectoryInput('docs')).toThrow(/full URL/);
 	});
 
+	it('treats a leading double slash as a pathname, not a protocol-relative URL', () => {
+		expect(parseDirectoryInput('//blog')).toEqual([
+			{ origin: null, pathname: '/blog', display: '/blog' },
+		]);
+	});
+
+	it('drops scheme and port the way parsePageDirectoryPrefix does', () => {
+		expect(parseDirectoryInput('http://Example.COM:8080/help/')).toEqual([
+			{
+				origin: 'https://example.com',
+				pathname: '/help',
+				display: 'https://example.com/help',
+			},
+		]);
+	});
+
+	it('deduplicates http and https spellings of the same host and path', () => {
+		expect(
+			parseDirectoryInput('http://example.com/help,https://example.com/help/'),
+		).toEqual([
+			{
+				origin: 'https://example.com',
+				pathname: '/help',
+				display: 'https://example.com/help',
+			},
+		]);
+	});
+
 	it('rejects empty comma-separated entries', () => {
 		expect(() => parseDirectoryInput('/docs,')).toThrow(/one or more/);
+	});
+
+	it('rejects a non-HTTP URL', () => {
+		expect(() => parseDirectoryInput('file:///blog/')).toThrow(/http or https/);
 	});
 });

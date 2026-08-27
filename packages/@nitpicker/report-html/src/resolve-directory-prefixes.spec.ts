@@ -1,15 +1,27 @@
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import enquirer from 'enquirer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { HtmlReportCancelledError } from './html-report-cancelled-error.js';
 import { resolveDirectoryPrefixes } from './resolve-directory-prefixes.js';
 
 const countPageListRows = vi.fn();
 const countPageListHostnames = vi.fn();
 
-vi.mock('@nitpicker/query', () => ({
-	countPageListRows: (...args: unknown[]) => countPageListRows(...args),
-	countPageListHostnames: (...args: unknown[]) => countPageListHostnames(...args),
+vi.mock('@nitpicker/query', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('@nitpicker/query')>();
+	return {
+		...actual,
+		countPageListRows: (...args: unknown[]) => countPageListRows(...args),
+		countPageListHostnames: (...args: unknown[]) => countPageListHostnames(...args),
+	};
+});
+
+vi.mock('enquirer', () => ({
+	default: {
+		prompt: vi.fn(),
+	},
 }));
 
 const accessor = {} as ArchiveAccessor;
@@ -18,6 +30,7 @@ describe('resolveDirectoryPrefixes', () => {
 	afterEach(() => {
 		countPageListRows.mockReset();
 		countPageListHostnames.mockReset();
+		vi.mocked(enquirer.prompt).mockReset();
 	});
 
 	it('skips filtering when the archive is already within the page limit', async () => {
@@ -114,5 +127,19 @@ describe('resolveDirectoryPrefixes', () => {
 				onWarn: () => {},
 			}),
 		).rejects.toThrow(/10,000 or fewer/);
+	});
+
+	it('throws HtmlReportCancelledError when the directory prompt is dismissed', async () => {
+		countPageListRows.mockResolvedValue(10_001);
+		countPageListHostnames.mockResolvedValue(1);
+		vi.mocked(enquirer.prompt).mockRejectedValueOnce(new Error('cancelled'));
+
+		await expect(
+			resolveDirectoryPrefixes({
+				accessor,
+				interactive: true,
+				onWarn: () => {},
+			}),
+		).rejects.toBeInstanceOf(HtmlReportCancelledError);
 	});
 });

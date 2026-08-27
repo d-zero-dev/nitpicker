@@ -16,9 +16,17 @@ export interface HtmlReportParams {
 
 /** Normalized directory prefix used to constrain inner-page rows. */
 export interface HtmlReportDirectoryPrefix {
-	/** Exact URL origin for full-URL input, or `null` for pathname-only input. */
+	/**
+	 * Reconstructed `https://{hostname}` for a full-URL input (scheme and
+	 * port dropped, matching `parsePageDirectoryPrefix`), or `null` for
+	 * pathname-only input.
+	 */
 	readonly origin: string | null;
-	/** Normalized absolute pathname without a trailing slash, except `/`. */
+	/**
+	 * Normalized absolute pathname without a trailing slash. The site root
+	 * is `/` here so the CLI can show it; query matching treats `/` as no
+	 * path restriction.
+	 */
 	readonly pathname: string;
 	/** User-facing normalized representation passed to query directory filters. */
 	readonly display: string;

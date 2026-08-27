@@ -1,16 +1,47 @@
 import type { HtmlReportDirectoryPrefix } from './types.js';
+import type { PageDirectoryPrefix } from '@nitpicker/query';
+
+import { parsePageDirectoryPrefix } from '@nitpicker/query';
 
 /**
- *
- * @param pathname
+ * Matches a token written as an absolute URL. Pathname-only input is the
+ * remainder: it must start with `/` (including `//blog`, which is a path
+ * with repeated slashes — not a protocol-relative URL).
  */
-function normalizePathname(pathname: string): string {
-	const normalized = new URL(pathname, 'https://example.com').pathname;
-	return normalized === '/' ? normalized : normalized.replace(/\/+$/, '');
+const ABSOLUTE_URL = /^[a-z][a-z\d+.-]*:\/\//iu;
+
+/**
+ * Turns query's host+pathname parse into the CLI prefix shape: pathname-only
+ * root is shown as `/`, and a host filter is rebuilt as `https://{host}{path}`
+ * because `parsePageDirectoryPrefix` ignores scheme and port.
+ * @param parsed - Output of {@link parsePageDirectoryPrefix}.
+ * @returns The corresponding HTML-report prefix.
+ */
+function toHtmlReportDirectoryPrefix(
+	parsed: PageDirectoryPrefix,
+): HtmlReportDirectoryPrefix {
+	if (parsed.hostname == null) {
+		const pathname = parsed.pathname === '' ? '/' : parsed.pathname;
+		return { origin: null, pathname, display: pathname };
+	}
+	const pathname = parsed.pathname === '' ? '/' : parsed.pathname;
+	const display = `https://${parsed.hostname}${parsed.pathname}`;
+	return {
+		origin: `https://${parsed.hostname}`,
+		pathname,
+		display,
+	};
 }
 
 /**
  * Parses comma-separated full URLs or absolute pathnames for report filtering.
+ *
+ * Normalization is {@link parsePageDirectoryPrefix} (full URLs go through
+ * `@d-zero/shared/parse-url`). This wrapper only rejects relative tokens such
+ * as `docs`, which the query parser would treat as `/docs`.
+ *
+ * Pathnames are not fed to `new URL(..., base)`: a leading `//` is a
+ * protocol-relative URL there, so `//blog` would collapse to the site root.
  * @param input - User-provided comma-separated value.
  * @returns Deduplicated normalized directory prefixes.
  * @throws {Error} If any token is empty, relative, or non-HTTP.
@@ -24,23 +55,14 @@ export function parseDirectoryInput(input: string): HtmlReportDirectoryPrefix[] 
 	}
 
 	const prefixes = rawTokens.map((token): HtmlReportDirectoryPrefix => {
-		if (token.startsWith('/')) {
-			const pathname = normalizePathname(token.split(/[?#]/u)[0] ?? token);
-			return { origin: null, pathname, display: pathname };
-		}
-
-		let url: URL;
-		try {
-			url = new URL(token);
-		} catch {
+		if (!token.startsWith('/') && !ABSOLUTE_URL.test(token)) {
 			throw new Error(`Directory prefix must be a full URL or start with "/": ${token}`);
 		}
-		if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-			throw new Error(`Directory URL must use http or https: ${token}`);
+		try {
+			return toHtmlReportDirectoryPrefix(parsePageDirectoryPrefix(token));
+		} catch (error) {
+			throw new Error(`Directory URL must use http or https: ${token}`, { cause: error });
 		}
-		const pathname = normalizePathname(url.pathname);
-		const display = `${url.origin}${pathname}`;
-		return { origin: url.origin, pathname, display };
 	});
 
 	return [

@@ -4,6 +4,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 import { countPageListHostnames, countPageListRows } from '@nitpicker/query';
 import enquirer from 'enquirer';
 
+import { HtmlReportCancelledError } from './html-report-cancelled-error.js';
 import { parseDirectoryInput } from './parse-directory-input.js';
 
 const PAGE_LIMIT = 10_000;
@@ -16,18 +17,26 @@ interface ResolveDirectoryPrefixesOptions {
 }
 
 /**
- *
+ * Asks for comma-separated directory prefixes on a TTY.
+ * @returns The raw input string.
+ * @throws {HtmlReportCancelledError} If the prompt is dismissed.
  */
 async function promptForInput(): Promise<string> {
-	const answer = await enquirer
-		.prompt<{ directories: string }>({
+	try {
+		const answer = await enquirer.prompt<{ directories: string }>({
 			type: 'input',
 			name: 'directories',
 			message:
 				'Filter inner pages by directory (comma-separated full URLs or /pathnames):',
-		})
-		.catch(() => process.exit(0));
-	return answer.directories;
+		});
+		return answer.directories;
+	} catch {
+		// Why not `process.exit(0)` here (the Sheets reporter does that for
+		// enquirer Ctrl+C): this prompt runs under `report()`'s `await using`
+		// archive, and exiting the process would skip dispose. Throw so the
+		// archive closes; the CLI maps the error to exit code 0.
+		throw new HtmlReportCancelledError();
+	}
 }
 
 /**
