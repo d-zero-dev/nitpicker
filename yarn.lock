@@ -1211,13 +1211,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/dealer@npm:1.11.0":
-  version: 1.11.0
-  resolution: "@d-zero/dealer@npm:1.11.0"
+"@d-zero/dealer@npm:1.12.0":
+  version: 1.12.0
+  resolution: "@d-zero/dealer@npm:1.12.0"
   dependencies:
     "@d-zero/shared": "npm:0.23.0"
     ansi-colors: "npm:4.1.3"
-  checksum: 10c0/398f0e03f97dea3b8e6bf24b1cc3e08e3a71b0b62be6f6f8b9e5347229505d85c526a13230106dc69619cc9e344287e66d53f703a8c58c97365b99d7b212a6f2
+  checksum: 10c0/ebd09ed7d9614d17afaf50fd5437a5cd7150d9853bf185956e39776b7e0e0a09c6244633633140541563e0c6a2a5d00606b1ff9d846791cc319ad83fd111bcb0
   languageName: node
   linkType: hard
 
@@ -1303,17 +1303,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/page-cluster@npm:0.6.0":
-  version: 0.6.0
-  resolution: "@d-zero/page-cluster@npm:0.6.0"
+"@d-zero/page-cluster@npm:0.6.1":
+  version: 0.6.1
+  resolution: "@d-zero/page-cluster@npm:0.6.1"
   dependencies:
     "@d-zero/cli-core": "npm:1.4.0"
-    "@d-zero/dealer": "npm:1.11.0"
+    "@d-zero/dealer": "npm:1.12.0"
     "@d-zero/shared": "npm:0.23.0"
     htmlparser2: "npm:12.0.0"
   bin:
     page-cluster: dist/cli.js
-  checksum: 10c0/5db26c88e4b9e28fe63a63999104889db7b6f0b7e6da7c710e43f75e89cd254f16b76f674627fa8643bfed64871f5a1100381d7e2c3e3fc1fdb42d526ce77e9e
+  checksum: 10c0/e7a10ad442ed8256ea524cc40c266fb50a196deadb4a740c1950ec8d26d1610788dfa4cb96edf11f4800ff0fd401fc0c323c723504df66b72fa56c242e20f32d
   languageName: node
   linkType: hard
 
@@ -3340,7 +3340,7 @@ __metadata:
   resolution: "@nitpicker/core@workspace:packages/@nitpicker/core"
   dependencies:
     "@d-zero/dealer": "npm:1.13.1"
-    "@d-zero/page-cluster": "npm:0.6.0"
+    "@d-zero/page-cluster": "npm:0.6.1"
     "@d-zero/shared": "npm:0.23.0"
     "@nitpicker/crawler": "npm:0.20.0"
     "@nitpicker/types": "npm:0.20.0"
