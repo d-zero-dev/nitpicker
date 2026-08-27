@@ -116,6 +116,8 @@ export { listViewerPages } from './list-viewer-pages.js';
 export { listViewerResources } from './list-viewer-resources.js';
 export { listViewerUnusedResources } from './list-viewer-unused-resources.js';
 export { matchesAnyFilterValue } from './matches-any-filter-value.js';
+export { parsePageDirectoryPrefix } from './report-export/parse-page-directory-prefix.js';
+export type { PageDirectoryPrefix } from './report-export/types.js';
 export { prepareUrlSortTempTable } from './url-sort-temp-table.js';
 export { requireViewerReadModel } from './require-viewer-read-model.js';
 export { resolveErrorKindsSort } from './resolve-error-kinds-sort.js';
