@@ -149,7 +149,7 @@ export const createPageList: CreateSheet = (reports, accessor) => {
 
 			return headers;
 		},
-		async estimateRowCount() {
+		estimateRowCount() {
 			return countViewerPagesTotal(accessor.getKnex(), { isExternal: false });
 		},
 		async run({ sheet, maxRows, estimatedTotal, onProgress }) {

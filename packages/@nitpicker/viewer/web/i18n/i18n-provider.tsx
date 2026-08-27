@@ -59,12 +59,21 @@ function resolveKey(
 /**
  * Provides the i18n context to the app, persisting the locale to localStorage
  * and reflecting it on `<html lang>`.
- * @param props - Children to render within the provider.
+ * @param props - Children to render and an optional deterministic initial locale.
  * @param props.children
+ * @param props.initialLocale - Locale to use before consulting browser preferences.
  * @returns The provider element.
+ * @example
+ * ```tsx
+ * <I18nProvider initialLocale="ja">
+ *   <App />
+ * </I18nProvider>
+ * ```
  */
-export function I18nProvider(props: { children: ReactNode }) {
-	const [locale, setLocale] = useState<Locale>(getInitialLocale);
+export function I18nProvider(props: { children: ReactNode; initialLocale?: Locale }) {
+	const [locale, setLocale] = useState<Locale>(
+		() => props.initialLocale ?? getInitialLocale(),
+	);
 
 	useEffect(() => {
 		document.documentElement.lang = locale;

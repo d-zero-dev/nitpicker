@@ -25,6 +25,12 @@ export type { ContentTypeRule, MimeMatcher } from './content-type-rules.js';
 export { countDuplicateGroups } from './count-duplicate-groups.js';
 export { countPagesByJsonLdType } from './count-pages-by-jsonld-type.js';
 export { countPagesByTechnology } from './count-pages-by-technology.js';
+export { countPageListHostnames } from './report-export/count-page-list-hostnames.js';
+export { countPageListRows } from './report-export/count-page-list-rows.js';
+export type {
+	PageListRowFilterOptions,
+	StreamPageListRowsOptions,
+} from './report-export/types.js';
 export { countViewerPagesTotal } from './count-viewer-pages-total.js';
 export { dropViewerReadModel } from './viewer-read-model/drop-viewer-read-model.js';
 export { ensureViewerReadModel } from './viewer-read-model/ensure-viewer-read-model.js';
@@ -43,6 +49,8 @@ export { getInboundReferrerUrlsByPageIds } from './report-export/get-inbound-ref
 export type { InboundReferrerDetail } from './report-export/types.js';
 export { getOutboundLinkFactsByPageIds } from './report-export/get-outbound-link-facts-by-page-ids.js';
 export type { OutboundLinkFacts } from './report-export/types.js';
+export { getResourceFileCountsByPageIds } from './report-export/get-resource-file-counts-by-page-ids.js';
+export type { ResourceFileCounts } from './report-export/types.js';
 export { getResourceReferrerUrlsByResourceIds } from './report-export/get-resource-referrer-urls-by-resource-ids.js';
 export { isImagesFastPathSortBy } from './is-images-fast-path-sort-by.js';
 export { getIsolatedClusterFastPath } from './get-isolated-cluster-fast-path.js';
@@ -108,6 +116,8 @@ export { listViewerPages } from './list-viewer-pages.js';
 export { listViewerResources } from './list-viewer-resources.js';
 export { listViewerUnusedResources } from './list-viewer-unused-resources.js';
 export { matchesAnyFilterValue } from './matches-any-filter-value.js';
+export { parsePageDirectoryPrefix } from './report-export/parse-page-directory-prefix.js';
+export type { PageDirectoryPrefix } from './report-export/types.js';
 export { prepareUrlSortTempTable } from './url-sort-temp-table.js';
 export { requireViewerReadModel } from './require-viewer-read-model.js';
 export { resolveErrorKindsSort } from './resolve-error-kinds-sort.js';

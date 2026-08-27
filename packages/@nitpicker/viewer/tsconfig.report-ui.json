@@ -1,0 +1,16 @@
+{
+	"extends": "../../../tsconfig.json",
+	"compilerOptions": {
+		"declaration": true,
+		"emitDeclarationOnly": true,
+		"jsx": "react-jsx",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"noCheck": true,
+		"outDir": "./lib",
+		"rootDir": "./web",
+		"types": ["vite/client"]
+	},
+	"include": ["./web/report-ui/render-html-report.tsx"],
+	"exclude": ["node_modules", "lib", "./web/**/*.spec.ts", "./web/**/*.stories.tsx"]
+}

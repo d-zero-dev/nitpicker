@@ -2,7 +2,6 @@ import type { commandDef } from './report-def.js';
 import type { InferFlags } from '@d-zero/roar';
 
 import { Lanes } from '@d-zero/dealer';
-import { report as runReport } from '@nitpicker/report-google-sheets';
 
 import { createByteProgressLogger } from '../create-byte-progress-logger.js';
 import { formatCliError } from '../format-cli-error.js';
@@ -15,9 +14,8 @@ type ReportFlags = InferFlags<typeof commandDef.flags>;
 /**
  * Main entry point for the `report` CLI command.
  *
- * Reads a `.nitpicker` archive and generates a Google Sheets report
- * by delegating to `@nitpicker/report-google-sheets`. Requires a Google
- * Sheets URL and a service account credentials file.
+ * Reads a `.nitpicker` archive and generates either a Google Sheets report
+ * or a self-contained static HTML report.
  *
  * When `--all` is specified, all sheets are generated without an interactive
  * prompt. In non-TTY environments (e.g. CI pipelines), `--all` and `--verbose`
@@ -30,7 +28,8 @@ type ReportFlags = InferFlags<typeof commandDef.flags>;
  * @param args - Positional arguments; first argument is the `.nitpicker` file path
  * @param flags - Parsed CLI flags from the `report` command
  * @returns Resolves when the report is complete.
- *   Exits with code 1 if no file path is provided, no sheet URL is given, or an error occurs.
+ *   Exits with code 1 if no file path is provided, the output selection is
+ *   ambiguous, or an error occurs.
  */
 export async function report(args: string[], flags: ReportFlags) {
 	if (flags.verbose && !flags.silent) {
@@ -48,10 +47,9 @@ export async function report(args: string[], flags: ReportFlags) {
 	}
 
 	const sheetUrl = flags.sheet;
-
-	if (!sheetUrl) {
+	if (!!sheetUrl === !!flags.html) {
 		// eslint-disable-next-line no-console
-		console.error('Error: No Google Sheets URL specified. Use --sheet <url>.');
+		console.error('Error: Choose exactly one output: --sheet <url> or --html.');
 		process.exit(1);
 	}
 
@@ -106,17 +104,36 @@ export async function report(args: string[], flags: ReportFlags) {
 		// `console.error` — a `finally` block would run after that `catch`
 		// (or not at all, since `process.exit` never returns), leaving a
 		// still-repainting `Lanes` to corrupt the error output.
-		await runReport({
-			filePath,
-			sheetUrl,
-			credentialFilePath,
-			configPath: configFilePath,
-			all,
-			silent: flags.silent ?? false,
-			dedupeResources: flags.dedupeResources,
-			onExtractProgress,
-		}).finally(closeExtractLanes);
+		const runReport = flags.html
+			? async () => {
+					const { report } = await import('@nitpicker/report-html');
+					await report({
+						filePath,
+						outputPath: flags.output,
+						directoryInput: flags.htmlDirs,
+						interactive: !!isTTY,
+						silent: flags.silent ?? false,
+						onExtractProgress,
+					});
+				}
+			: async () => {
+					const { report } = await import('@nitpicker/report-google-sheets');
+					await report({
+						filePath,
+						sheetUrl: sheetUrl!,
+						credentialFilePath,
+						configPath: configFilePath,
+						all,
+						silent: flags.silent ?? false,
+						dedupeResources: flags.dedupeResources,
+						onExtractProgress,
+					});
+				};
+		await runReport().finally(closeExtractLanes);
 	} catch (error) {
+		if (error instanceof Error && error.name === 'HtmlReportCancelledError') {
+			process.exit(0);
+		}
 		formatCliError(error, verbose);
 		process.exit(1);
 	}

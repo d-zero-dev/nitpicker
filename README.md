@@ -13,6 +13,7 @@ Nitpicker は、Web サイトをクロールしてページ情報・リンク・
 npx @nitpicker/cli crawl https://example.com
 npx @nitpicker/cli analyze ./example.com.nitpicker --all
 npx @nitpicker/cli report ./example.com.nitpicker --sheet <Google Sheets URL> --all
+npx @nitpicker/cli report ./example.com.nitpicker --html
 ```
 
 必要に応じて、保存済みアーカイブを JSON で調べたり、ローカルビューアで確認できます。
@@ -39,6 +40,7 @@ CLI の詳細な使い方と全オプションは [@nitpicker/cli README](./pack
 | [@nitpicker/core](./packages/@nitpicker/core/README.md)                                 | analyzeプラグインを実行する分析エンジン                 |
 | [@nitpicker/query](./packages/@nitpicker/query/README.md)                               | `.nitpicker` アーカイブのクエリ関数                     |
 | [@nitpicker/report-google-sheets](./packages/@nitpicker/report-google-sheets/README.md) | Google Sheets向けレポート出力                           |
+| [@nitpicker/report-html](./packages/@nitpicker/report-html/README.md)                   | 単一ファイルの静的HTMLレポート出力                      |
 | [@nitpicker/mcp-server](./packages/@nitpicker/mcp-server/README.md)                     | MCP経由でアーカイブを問い合わせるサーバー               |
 | [@nitpicker/viewer](./packages/@nitpicker/viewer/README.md)                             | `.nitpicker` アーカイブを閲覧するローカルビューア       |
 | [@nitpicker/types](./packages/@nitpicker/types/README.md)                               | 共有TypeScript型定義                                    |

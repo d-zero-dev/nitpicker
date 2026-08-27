@@ -11,6 +11,7 @@
 		{ "path": "../crawler" },
 		{ "path": "../query" },
 		{ "path": "../report-google-sheets" },
+		{ "path": "../report-html" },
 		{ "path": "../viewer" }
 	],
 	"include": ["./src/**/*"],

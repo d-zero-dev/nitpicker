@@ -64,6 +64,50 @@ body {
 	background: var(--bg);
 }
 
+/* Standalone report document and its intentionally non-interactive table. */
+.report-document {
+	min-block-size: 100dvh;
+}
+
+.report-content {
+	max-inline-size: 1600px;
+	margin-inline: auto;
+}
+
+.report-table-scroll {
+	overflow: auto;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+
+.report-table {
+	inline-size: 100%;
+	border-collapse: collapse;
+}
+
+.report-table th,
+.report-table td {
+	min-inline-size: 110px;
+	max-inline-size: 360px;
+	padding-block: 8px;
+	padding-inline: 10px;
+	vertical-align: top;
+	text-align: start;
+	overflow-wrap: anywhere;
+	border-block-end: 1px solid var(--border);
+}
+
+.report-table th {
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+	background: var(--bg-elev);
+}
+
+.report-table tbody tr:last-child td {
+	border-block-end: 0;
+}
+
 a {
 	color: var(--accent);
 }
