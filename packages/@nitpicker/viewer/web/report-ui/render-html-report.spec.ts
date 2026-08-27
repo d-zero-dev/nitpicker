@@ -115,4 +115,37 @@ describe('renderHtmlReport', () => {
 		expect(html).not.toContain('href="javascript:');
 		expect(html).toContain('javascript:alert(1)');
 	});
+
+	it('marks missing resources, HTTP 400+ statuses, and console errors in danger text', () => {
+		const html = renderHtmlReport({
+			...data,
+			pages: [
+				{
+					title: 'Ok',
+					url: 'https://example.com/ok',
+					status: 200,
+					redirectChain: [],
+					metaDescription: null,
+					resourceFilesExists: 2,
+					resourceFilesTotal: 2,
+					consoleErrorCount: 0,
+				},
+				{
+					title: 'Problems',
+					url: 'https://example.com/bad',
+					status: 404,
+					redirectChain: [],
+					metaDescription: null,
+					resourceFilesExists: 1,
+					resourceFilesTotal: 3,
+					consoleErrorCount: 2,
+				},
+			],
+		});
+		expect(html).toContain('<strong class="report-alert">404</strong>');
+		expect(html).toContain('<strong class="report-alert">1 / 3</strong>');
+		expect(html).toContain('<strong class="report-alert">2</strong>');
+		expect(html).not.toContain('<strong class="report-alert">200</strong>');
+		expect(html).not.toContain('<strong class="report-alert">2 / 2</strong>');
+	});
 });
