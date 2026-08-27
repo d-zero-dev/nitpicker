@@ -94,4 +94,25 @@ describe('renderHtmlReport', () => {
 			'ページ一覧の対象ディレクトリ: /docs, https://example.com/help',
 		);
 	});
+
+	it('emits a lowercase charset meta and does not turn javascript: URLs into hrefs', () => {
+		const html = renderHtmlReport({
+			...data,
+			pages: [
+				{
+					title: 'Unsafe',
+					url: 'javascript:alert(1)',
+					status: 200,
+					redirectChain: ['javascript:alert(1)'],
+					metaDescription: null,
+					resourceFilesExists: 0,
+					resourceFilesTotal: 0,
+					consoleErrorCount: 0,
+				},
+			],
+		});
+		expect(html).toContain('<meta charset="utf-8">');
+		expect(html).not.toContain('href="javascript:');
+		expect(html).toContain('javascript:alert(1)');
+	});
 });

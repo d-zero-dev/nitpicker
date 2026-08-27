@@ -12,6 +12,19 @@ import { StaticTable } from './static-table.js';
 import { StatusDistributionBars } from './status-distribution-bars.js';
 import { SummaryCard } from './summary-card.js';
 import { TechnologyDistributionBars } from './technology-distribution-bars.js';
+import { toHttpHref } from './to-http-href.js';
+
+/**
+ * Renders a crawled URL as an http(s) link, or as plain text when the href
+ * would not be safe to follow from a `file://` report.
+ * @param url - The URL shown to the reader.
+ * @param props
+ * @param props.url
+ */
+function ReportUrl(props: { url: string }) {
+	const href = toHttpHref(props.url);
+	return href ? <a href={href}>{props.url}</a> : props.url;
+}
 
 /**
  * A data-only report document body that reuses the viewer summary components
@@ -36,7 +49,7 @@ export function HtmlReportDocument(props: HtmlReportData) {
 		{
 			key: 'url',
 			label: t('views.report.columns.url'),
-			render: (page) => <a href={page.url}>{page.url}</a>,
+			render: (page) => <ReportUrl url={page.url} />,
 		},
 		{
 			key: 'status',
@@ -51,7 +64,7 @@ export function HtmlReportDocument(props: HtmlReportData) {
 					? page.redirectChain.map((url, index) => (
 							<span key={`${url}-${index}`}>
 								{index > 0 && ' → '}
-								<a href={url}>{url}</a>
+								<ReportUrl url={url} />
 							</span>
 						))
 					: t('common.none'),
