@@ -18,6 +18,6 @@
 		"@nitpicker/types": "0.20.0",
 		"await-event-emitter": "2.0.2",
 		"knex": "3.3.0",
-		"vitest": "4.1.10"
+		"vitest": "4.1.11"
 	}
 }

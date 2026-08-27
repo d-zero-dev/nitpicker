@@ -59,7 +59,7 @@
 		"npm-run-all2": "9.0.3",
 		"parse5": "8.0.1",
 		"typescript": "6.0.3",
-		"vitest": "4.1.10"
+		"vitest": "4.1.11"
 	},
 	"resolutions": {
 		"google-auth-library": "11.0.2"
