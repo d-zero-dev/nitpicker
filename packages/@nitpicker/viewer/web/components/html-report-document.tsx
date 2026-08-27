@@ -3,6 +3,7 @@ import type {
 	HtmlReportPage,
 	StaticTableColumn,
 } from '../report-ui/types.js';
+import type { ReactNode } from 'react';
 
 import { useI18n } from '../i18n/use-i18n.js';
 
@@ -24,6 +25,16 @@ import { toHttpHref } from './to-http-href.js';
 function ReportUrl(props: { url: string }) {
 	const href = toHttpHref(props.url);
 	return href ? <a href={href}>{props.url}</a> : props.url;
+}
+
+/**
+ * Marks a table cell value as a problem (missing resources, HTTP 400+,
+ * console errors) with the shared danger color and bold weight.
+ * @param alert - Whether the value is a problem.
+ * @param value - Cell contents.
+ */
+function reportAlert(alert: boolean, value: ReactNode) {
+	return alert ? <strong className="report-alert">{value}</strong> : value;
 }
 
 /**
@@ -54,7 +65,11 @@ export function HtmlReportDocument(props: HtmlReportData) {
 		{
 			key: 'status',
 			label: t('views.report.columns.status'),
-			render: (page) => page.status ?? t('common.none'),
+			render: (page) =>
+				reportAlert(
+					page.status != null && page.status >= 400,
+					page.status ?? t('common.none'),
+				),
 		},
 		{
 			key: 'redirectChain',
@@ -77,12 +92,20 @@ export function HtmlReportDocument(props: HtmlReportData) {
 		{
 			key: 'resourceFiles',
 			label: t('views.report.columns.resourceFiles'),
-			render: (page) => `${page.resourceFilesExists} / ${page.resourceFilesTotal}`,
+			render: (page) =>
+				reportAlert(
+					page.resourceFilesExists < page.resourceFilesTotal,
+					`${page.resourceFilesExists} / ${page.resourceFilesTotal}`,
+				),
 		},
 		{
 			key: 'consoleErrorCount',
 			label: t('views.report.columns.consoleErrorCount'),
-			render: (page) => page.consoleErrorCount ?? t('common.none'),
+			render: (page) =>
+				reportAlert(
+					page.consoleErrorCount != null && page.consoleErrorCount >= 1,
+					page.consoleErrorCount ?? t('common.none'),
+				),
 		},
 	];
 

@@ -73,6 +73,16 @@ export const Default: Story = {
 				resourceFilesTotal: 0,
 				consoleErrorCount: 1,
 			},
+			{
+				title: 'Missing page',
+				url: 'https://example.com/gone',
+				status: 404,
+				redirectChain: [],
+				metaDescription: null,
+				resourceFilesExists: 0,
+				resourceFilesTotal: 2,
+				consoleErrorCount: 3,
+			},
 		],
 	},
 };
