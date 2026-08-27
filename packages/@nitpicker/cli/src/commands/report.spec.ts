@@ -1,5 +1,6 @@
 import { Lanes } from '@d-zero/dealer';
 import { report as runReport } from '@nitpicker/report-google-sheets';
+import { report as runHtmlReport } from '@nitpicker/report-html';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { formatCliError as formatCliErrorFn } from '../format-cli-error.js';
@@ -21,6 +22,10 @@ vi.mock('@d-zero/dealer', () => ({
 }));
 
 vi.mock('@nitpicker/report-google-sheets', () => ({
+	report: vi.fn(),
+}));
+
+vi.mock('@nitpicker/report-html', () => ({
 	report: vi.fn(),
 }));
 
@@ -54,6 +59,7 @@ describe('report command', () => {
 		// the command chains `.finally()` onto it. A bare `vi.fn()` returns
 		// `undefined` and would throw before any assertion ran.
 		vi.mocked(runReport).mockResolvedValue();
+		vi.mocked(runHtmlReport).mockResolvedValue();
 		originalIsTTY = process.stdout.isTTY;
 		exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
 			throw new ExitError(code as number);
@@ -385,7 +391,7 @@ describe('report command', () => {
 		expect(runReport).not.toHaveBeenCalled();
 	});
 
-	it('exits with error when no sheet URL is provided', async () => {
+	it('exits with error when neither output is selected', async () => {
 		await expect(
 			report(['test.nitpicker'], {
 				sheet: undefined as unknown as string,
@@ -398,10 +404,56 @@ describe('report command', () => {
 		).rejects.toThrow(ExitError);
 
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'Error: No Google Sheets URL specified. Use --sheet <url>.',
+			'Error: Choose exactly one output: --sheet <url> or --html.',
 		);
 		expect(exitSpy).toHaveBeenCalledWith(1);
 		expect(runReport).not.toHaveBeenCalled();
+	});
+
+	it('delegates --html reports without loading Google credentials', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+
+		await report(['test.nitpicker'], {
+			html: true,
+			output: './report.html',
+			htmlDirs: '/docs',
+			sheet: undefined,
+			credentials: './credentials.json',
+			config: undefined,
+			all: undefined,
+			verbose: undefined,
+			silent: undefined,
+		});
+
+		expect(runHtmlReport).toHaveBeenCalledWith(
+			expect.objectContaining({
+				filePath: 'test.nitpicker',
+				outputPath: './report.html',
+				directoryInput: '/docs',
+				interactive: true,
+			}),
+		);
+		expect(runReport).not.toHaveBeenCalled();
+	});
+
+	it('rejects selecting both Sheets and HTML outputs', async () => {
+		await expect(
+			report(['test.nitpicker'], {
+				html: true,
+				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+				credentials: './credentials.json',
+				config: undefined,
+				all: undefined,
+				verbose: undefined,
+				silent: undefined,
+			}),
+		).rejects.toThrow(ExitError);
+
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			'Error: Choose exactly one output: --sheet <url> or --html.',
+		);
+		expect(runReport).not.toHaveBeenCalled();
+		expect(runHtmlReport).not.toHaveBeenCalled();
 	});
 
 	it('catches errors from runReport and exits with error', async () => {

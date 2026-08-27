@@ -47,6 +47,21 @@ function runPipelineParse(argv: string[]) {
 }
 
 describe('report CLI flag parsing (parseCli integration)', () => {
+	it('parses the static HTML output flags without requiring --sheet', () => {
+		const result = runReportParse([
+			'./archive.nitpicker',
+			'-H',
+			'-o',
+			'./report.html',
+			'--html-dirs',
+			'/docs,/help',
+		]);
+		expect(result.command).toBe('report');
+		expect(result.flags.html).toBe(true);
+		expect(result.flags.output).toBe('./report.html');
+		expect(result.flags.htmlDirs).toBe('/docs,/help');
+	});
+
 	it('interprets --dedupe-resources as true', () => {
 		const result = runReportParse([
 			'./archive.nitpicker',
