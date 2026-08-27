@@ -7,11 +7,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildViewerReadModel } from '../viewer-read-model/build-viewer-read-model.js';
 
-import { streamPageListRows } from './stream-page-list-rows.js';
+import { applyPageListRowFilters } from './apply-page-list-row-filters.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
-const workingDir = path.resolve(__dirname, '__test_fixtures_stream_page_list_rows__');
+const workingDir = path.resolve(
+	__dirname,
+	'__test_fixtures_apply_page_list_row_filters__',
+);
 
 const BASE_CONFIG = {
 	baseUrl: 'https://example.com',
@@ -53,28 +56,11 @@ const META = {
 	'twitter:card': null,
 };
 
-/**
- * Drains every {@link streamPageListRows} chunk into a single flat array.
- * @param accessor - The archive accessor to query.
- * @param options - Forwarded to {@link streamPageListRows}.
- * @returns All chunks' rows, concatenated in scan order.
- */
-async function collect(
-	accessor: Parameters<typeof streamPageListRows>[0],
-	options?: Parameters<typeof streamPageListRows>[1],
-) {
-	const rows = [];
-	for await (const chunk of streamPageListRows(accessor, options)) {
-		rows.push(...chunk);
-	}
-	return rows;
-}
-
-describe('streamPageListRows', () => {
+describe('applyPageListRowFilters', () => {
 	let archive: InstanceType<typeof Archive>;
 	const archiveFilePath = path.resolve(
 		workingDir,
-		'stream-page-list-rows-test.nitpicker',
+		'apply-page-list-row-filters-test.nitpicker',
 	);
 
 	beforeAll(async () => {
@@ -83,7 +69,7 @@ describe('streamPageListRows', () => {
 		await archive.setConfig(BASE_CONFIG);
 
 		await archive.setPage({
-			url: parseUrl('https://example.com/b')!,
+			url: parseUrl('https://example.com/blog')!,
 			redirectPaths: [],
 			isExternal: false,
 			isTarget: true,
@@ -93,13 +79,13 @@ describe('streamPageListRows', () => {
 			contentLength: 100,
 			responseHeaders: {},
 			html: '',
-			meta: { ...META, title: 'B' },
+			meta: META,
 			anchorList: [],
 			imageList: [],
 			isSkipped: false,
 		});
 		await archive.setPage({
-			url: parseUrl('https://example.com/a')!,
+			url: parseUrl('https://example.com/blogger')!,
 			redirectPaths: [],
 			isExternal: false,
 			isTarget: true,
@@ -109,7 +95,7 @@ describe('streamPageListRows', () => {
 			contentLength: 100,
 			responseHeaders: {},
 			html: '',
-			meta: { ...META, title: 'A' },
+			meta: META,
 			anchorList: [],
 			imageList: [],
 			isSkipped: false,
@@ -141,43 +127,25 @@ describe('streamPageListRows', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('excludes external pages, listing only the 2 internal ones', async () => {
-		const rows = await collect(archive);
+	it('keeps inner pages and drops externals when no directories are set', async () => {
+		const rows: { hostname: string }[] = await archive
+			.getKnex()('viewer_pages')
+			.modify((qb) => applyPageListRowFilters(qb, {}))
+			.select('hostname');
 		expect(rows).toHaveLength(2);
-		expect(rows.map((r) => r.url)).toEqual([
-			'https://example.com/a',
-			'https://example.com/b',
-		]);
+		expect(rows.every((row) => row.hostname === 'example.com')).toBe(true);
 	});
 
-	it('carries pageId alongside the full PageListItem fields', async () => {
-		const rows = await collect(archive);
-		const row = rows.find((r) => r.url === 'https://example.com/a')!;
-		expect(row.pageId).toEqual(expect.any(Number));
-		expect(row.title).toBe('A');
-		expect(row.protocol).toBe('https:');
-		expect(row.hostname).toBe('example.com');
-		expect(row.path1).toBe('/a');
+	it('matches a directory on the path boundary, not as a string prefix', async () => {
+		const rows: { path_sort_key: string }[] = await archive
+			.getKnex()('viewer_pages')
+			.modify((qb) => applyPageListRowFilters(qb, { directories: ['/blog'] }))
+			.select('path_sort_key');
+		expect(rows.map((row) => row.path_sort_key)).toEqual(['/blog']);
 	});
 
-	it('is independent of chunk size', async () => {
-		const baseline = await collect(archive);
-		const chunked = await collect(archive, { chunkSize: 1 });
-		expect(chunked.map((r) => r.url)).toEqual(baseline.map((r) => r.url));
-		expect(chunked.map((r) => r.pageId)).toEqual(baseline.map((r) => r.pageId));
-	});
-
-	it('throws on a non-positive chunkSize instead of hanging forever', async () => {
-		await expect(collect(archive, { chunkSize: 0 })).rejects.toThrow(RangeError);
-		await expect(collect(archive, { chunkSize: -1 })).rejects.toThrow(RangeError);
-	});
-
-	it('narrows the sweep to the requested directories', async () => {
-		const rows = await collect(archive, { directories: ['/a'] });
-		expect(rows.map((row) => row.url)).toEqual(['https://example.com/a']);
-	});
-
-	it('yields no chunk at all when no page matches the directories', async () => {
-		expect(await collect(archive, { directories: ['/absent'] })).toEqual([]);
+	it('rejects a blank directory filter', () => {
+		const qb = archive.getKnex()('viewer_pages');
+		expect(() => applyPageListRowFilters(qb, { directories: [''] })).toThrow(TypeError);
 	});
 });

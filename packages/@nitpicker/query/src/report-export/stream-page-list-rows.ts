@@ -1,10 +1,11 @@
-import type { PageListStreamRow } from './types.js';
+import type { PageListStreamRow, StreamPageListRowsOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
-import { applyViewerPagesFilters } from '../apply-viewer-pages-filters.js';
 import { hasDedupeCapEventIdColumn } from '../has-dedupe-cap-event-id-column.js';
 import { joinViewerPageIdsToListItems } from '../join-viewer-page-ids-to-list-items.js';
 import { hasPageTemplatesTable } from '../page-templates-join.js';
+
+import { applyPageListRowFilters } from './apply-page-list-row-filters.js';
 
 /** `viewer_pages` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 2000;
@@ -21,14 +22,23 @@ const READ_CHUNK_SIZE = 2000;
  * once per report cursor batch), and it resolves the `page_templates`/
  * `dedupe_cap_event_id` schema-presence checks {@link joinViewerPageIdsToListItems}
  * needs exactly once up front instead of once per batch.
+ *
+ * Which pages are listable is decided by {@link applyPageListRowFilters}:
+ * internal HTML (or not-yet-classified) pages, narrowed by
+ * `options.directories` when the caller wants one subtree instead of the
+ * whole site. `countPageListRows` applies the same predicates, so a report
+ * can size its output before streaming it.
  * @param accessor - The archive accessor to query. Callers are responsible
  *   for confirming the read model is built and current before calling this
  *   — it assumes `viewer_pages` exists and trusts its content.
- * @param chunkSize - `viewer_pages` rows read per chunk. Must be positive.
+ * @param options - Read size and directory-prefix filters. Defaults to the
+ *   whole site read in {@link READ_CHUNK_SIZE}-row chunks.
  * @yields One chunk's rows, in `natural_url_rank` order.
- * @throws {RangeError} If `chunkSize` is not positive.
+ * @throws {RangeError} If `options.chunkSize` is not positive.
+ * @throws {TypeError} If an `options.directories` entry is not a usable
+ *   prefix (see `parsePageDirectoryPrefix`).
  * @example
- * for await (const chunk of streamPageListRows(accessor)) {
+ * for await (const chunk of streamPageListRows(accessor, { directories: ['/blog'] })) {
  *   for (const item of chunk) {
  *     sheet.appendRow(toPageListRow(item));
  *   }
@@ -36,8 +46,10 @@ const READ_CHUNK_SIZE = 2000;
  */
 export async function* streamPageListRows(
 	accessor: ArchiveAccessor,
-	chunkSize = READ_CHUNK_SIZE,
+	options: StreamPageListRowsOptions | number = {},
 ): AsyncGenerator<PageListStreamRow[]> {
+	const resolvedOptions = typeof options === 'number' ? { chunkSize: options } : options;
+	const chunkSize = resolvedOptions.chunkSize ?? READ_CHUNK_SIZE;
 	if (chunkSize <= 0) {
 		throw new RangeError(
 			`streamPageListRows: chunkSize must be positive, got ${chunkSize}`,
@@ -54,7 +66,7 @@ export async function* streamPageListRows(
 		const idRows: { page_id: number; natural_url_rank: number }[] = await knex(
 			'viewer_pages',
 		)
-			.modify((qb) => applyViewerPagesFilters(qb, { isExternal: false }))
+			.modify((qb) => applyPageListRowFilters(qb, resolvedOptions))
 			.where('natural_url_rank', '>', lastRank)
 			.orderBy('natural_url_rank', 'asc')
 			.limit(chunkSize)

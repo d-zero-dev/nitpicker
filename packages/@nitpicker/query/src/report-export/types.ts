@@ -131,6 +131,72 @@ export interface PageListStreamRow extends PageListItem {
 	pageId: number;
 }
 
+/**
+ * One directory-prefix filter, parsed into the two `viewer_pages` columns it
+ * is matched against.
+ *
+ * Produced by `parsePageDirectoryPrefix` from either filter spelling a
+ * caller may supply (full URL or pathname-only) so both end up as the same
+ * pair of column predicates.
+ */
+export interface PageDirectoryPrefix {
+	/**
+	 * The `viewer_pages.hostname` value the filter is scoped to (lowercased
+	 * by WHATWG URL parsing, port excluded — `viewer_pages` has no port
+	 * column), or `null` for a pathname-only filter, which matches the path
+	 * on every host in the archive.
+	 */
+	hostname: string | null;
+	/**
+	 * The pathname prefix, normalised to a leading slash, collapsed repeated
+	 * slashes and no trailing slash (`/blog`), or `''` for a filter that
+	 * names a host (or the site root) without narrowing the path.
+	 */
+	pathname: string;
+}
+
+/** Directory-prefix filtering shared by every Page List row reader. */
+export interface PageListRowFilterOptions {
+	/**
+	 * Directory-prefix filters. Each entry is either a full URL
+	 * (`https://example.com/blog/` — the page's host AND pathname must
+	 * match) or a pathname-only prefix (`/blog` — matches that path on every
+	 * host, which is what a single-root archive wants and what a multi-root
+	 * archive uses to slice the same path across roots).
+	 *
+	 * A prefix matches the directory's own page (`/blog`) and everything
+	 * under it (`/blog/post-1`), but never a sibling that merely shares the
+	 * string prefix (`/blogging`). Multiple entries union: a page listed by
+	 * any one of them is included. Omitted or empty means no directory
+	 * restriction at all.
+	 */
+	directories?: readonly string[];
+}
+
+/** {@link PageListRowFilterOptions} plus the streaming-only read size. */
+export interface StreamPageListRowsOptions extends PageListRowFilterOptions {
+	/** `viewer_pages` rows read per chunk. Must be positive. */
+	chunkSize?: number;
+}
+
+/** One page's sub-resource tallies for a report's "resource files" column. */
+export interface ResourceFileCounts {
+	/**
+	 * Every resource this page references — one `resource_ref_edges` row per
+	 * distinct resource (the table's `(resource_id, page_id)` primary key
+	 * makes this a distinct-resource count, not an occurrence count), no
+	 * matter what the fetch result was.
+	 */
+	total: number;
+	/**
+	 * The subset of {@link total} whose `resource_items.status` is 200..399 —
+	 * i.e. the resource was actually served (2xx) or redirected (3xx). A
+	 * `null` status (never fetched / fetch failed before a response) counts
+	 * as missing, as does any 4xx/5xx.
+	 */
+	exists: number;
+}
+
 /** One (resource, referring page) pair for the Resources Relational Table report sheet. */
 export interface ResourceReferrerEdgeStreamRow {
 	/** The referring page's URL. */
