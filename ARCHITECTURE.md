@@ -10,6 +10,7 @@
       └── crawler ── @nitpicker/cli ← @d-zero/roar（外部）
            ↑    ↑       ↑  ↑    ↑
            │    │       core │  report-google-sheets ← @d-zero/google-sheets（外部）
+           │    │            └─ report-html
            │    │        ↑   │         ↑
            │    │        ├── @d-zero/page-cluster（外部）
            │    │  analyze-* プラグイン │
@@ -30,6 +31,7 @@
 | `@nitpicker/mcp-server`           | query の MCP 露出（stdio、`nitpicker-mcp`）                                                                                                                                                     |
 | `@nitpicker/analyze-*`            | axe / lighthouse / markuplint / textlint / search の各監査                                                                                                                                      |
 | `@nitpicker/report-google-sheets` | Google Sheets レポート出力（`@nitpicker/query` の viewer read model / streaming API に一本化、セル予算の優先順位順に逐次実行する `createSheets`）                                               |
+| `@nitpicker/report-html`          | viewer の表示コンポーネントを再利用した自己完結HTMLレポート（Google認証なし、innerページは10,000件上限）                                                                                        |
 | `@nitpicker/types`                | 監査型定義（Report / ConfigJSON）                                                                                                                                                               |
 | `packages/test-server`            | E2E 用 Hono サーバー（OS割り当ての動的ポート、プロダクション非依存）                                                                                                                            |
 
@@ -49,7 +51,7 @@
 - `crawler → query` は**禁止**（query → crawler の一方向。writer 経路が error.log を読めないのはこの制約による意図的なトレードオフ）
 - **CLI は全 analyze プラグインに直接依存する**（`npx` 実行時の動的 `import()` 解決のため）。新規プラグイン追加時は `@nitpicker/cli/package.json` の `dependencies` にも追加すること
 - viewer / mcp-server は query 経由でのみアーカイブに触れる（read-only）
-- `@d-zero/dealer` は crawler（`deal()`）のほか cli / core / report-google-sheets（`Lanes` 型）も依存。**crawler は dealer 1.9.0 で追加された `deal()` setup 第 6 引数 `unshift` に依存しており、1.9.0 未満へのダウングレード不可。cli は 1.12.0 で追加された `TaskList`（setup 表示・crawl 後処理・`viewer-build` のタスクリスト化）と 1.13.0 で追加された `TaskListRunOptions.keepElapsed`（`done`/`error` 確定行に最終経過時間を残す）に依存しており、1.13.0 未満へのダウングレード不可**
+- `@d-zero/dealer` は crawler（`deal()`）のほか cli / core / report-google-sheets / report-html（`Lanes` / `TaskList`）も依存。**crawler は dealer 1.9.0 で追加された `deal()` setup 第 6 引数 `unshift` に依存しており、1.9.0 未満へのダウングレード不可。cli は 1.12.0 で追加された `TaskList`（setup 表示・crawl 後処理・`viewer-build` のタスクリスト化）と 1.13.0 で追加された `TaskListRunOptions.keepElapsed`（`done`/`error` 確定行に最終経過時間を残す）に依存しており、1.13.0 未満へのダウングレード不可**
 
 ## アーカイブ（DB スキーマ概要）
 
@@ -272,6 +274,14 @@ Astro / Next.js / Vue / Nuxt / Svelte / SvelteKit / Remix / Gatsby / Angular 等
 3. `open-report-archive.ts`（`@nitpicker/query` の `ArchiveManager` 経由で read-only accessor を得る。stub/live crawl ディレクトリは明示的に reject）
 4. `sheets/create-sheets.ts`（Phase 1 作成 → Phase 1.5 セル予算の事前警告 → Phase 2 優先順位順の逐次データ投入 → Phase 3 書式適用）と `sheets/estimate-cell-budget.ts`（10M セル上限に対する配分計算）
 5. 優先順位・シート選択の配線: `report.ts` の `SHEET_PRIORITY_ORDER`（固定順 = セル予算優先度。ユーザーの選択クリック順には依存しない）
+
+### 静的HTMLレポートの変更
+
+1. `report-html/src/report.ts`（アーカイブ展開・10,000件上限・ディレクトリ入力）
+2. `query/src/report-export/`（innerページの件数・ストリーム・resource-files集計）
+3. `viewer/web/components/html-report-document.tsx` / `static-table.tsx`（データ取得を持たない表示面。Storybookで確認）
+4. `viewer/web/report-ui/render-html-report.tsx`（SSRとviewer CSS・テーマ切替スクリプトの自己完結HTML化）
+5. `cli/src/commands/report-def.ts` / `report.ts`（`--sheet` と `--html` の相互排他、レポータの遅延import）
 
 ### DB スキーマ変更
 

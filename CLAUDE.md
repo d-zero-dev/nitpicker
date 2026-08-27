@@ -19,6 +19,7 @@ npx @nitpicker/cli crawl <archive> --retry-failed      # 失敗ページのみ�
 npx @nitpicker/cli crawl <archive> --inventory <urls.txt>  # URL リストとの突合で未発見ページを取り込み
 npx @nitpicker/cli analyze <file>                      # analyze プラグイン実行
 npx @nitpicker/cli report <file>                       # Google Sheets レポート生成
+npx @nitpicker/cli report <file> -H                    # viewer サマリ + inner ページ一覧の静的HTML生成
 npx @nitpicker/cli pipeline <URL>                      # crawl → analyze → report を直列実行
 npx @nitpicker/cli query <file> <sub-command>          # アーカイブへのクエリ（JSON 出力）
 npx @nitpicker/cli viewer <file-or-stub-dir>           # ローカルビューア起動（常駐、Ctrl-C で停止）
