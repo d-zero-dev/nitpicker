@@ -1998,12 +1998,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hono/node-server@npm:2.1.0, @hono/node-server@npm:^1.19.9 || ^2.0.5":
-  version: 2.1.0
-  resolution: "@hono/node-server@npm:2.1.0"
+"@hono/node-server@npm:2.1.1":
+  version: 2.1.1
+  resolution: "@hono/node-server@npm:2.1.1"
   peerDependencies:
     hono: ^4
-  checksum: 10c0/907aa2cabb804cf6f9c6bc329a898803b0794992d1c2d1bea7e4ae803f5d205fd2733d684c9c87b28338964dc437341e3bee1544b4d504a6b19f9e65ba28b198
+  checksum: 10c0/7ef810ca647c56d8d9386fd81609e18443b3a5634aa5ecabdf357e7ca724613c535e863c15ded9b7ae89b935a073040fb11e6d59041f3b1c3e153d8ecb699880
   languageName: node
   linkType: hard
 
@@ -2013,6 +2013,15 @@ __metadata:
   peerDependencies:
     hono: ^4
   checksum: 10c0/de18c06b6b266dc45fe55fb82053bd1da8fe84939c49b6fbab4d2448b679d54ab5affbf8b15de9bead26f29b1755284d770aafb5ad14a8e4b3cfb4f79334554e
+  languageName: node
+  linkType: hard
+
+"@hono/node-server@npm:^1.19.9 || ^2.0.5":
+  version: 2.1.0
+  resolution: "@hono/node-server@npm:2.1.0"
+  peerDependencies:
+    hono: ^4
+  checksum: 10c0/907aa2cabb804cf6f9c6bc329a898803b0794992d1c2d1bea7e4ae803f5d205fd2733d684c9c87b28338964dc437341e3bee1544b4d504a6b19f9e65ba28b198
   languageName: node
   linkType: hard
 
@@ -3443,7 +3452,7 @@ __metadata:
   dependencies:
     "@d-zero/dealer": "npm:1.13.1"
     "@d-zero/shared": "npm:0.23.0"
-    "@hono/node-server": "npm:2.1.0"
+    "@hono/node-server": "npm:2.1.1"
     "@nitpicker/crawler": "npm:0.21.0"
     "@nitpicker/query": "npm:0.21.0"
     "@playwright/test": "npm:1.62.1"
@@ -3462,7 +3471,7 @@ __metadata:
     graphology: "npm:0.26.0"
     graphology-layout-forceatlas2: "npm:0.10.1"
     graphology-types: "npm:0.24.8"
-    hono: "npm:4.13.2"
+    hono: "npm:4.13.3"
     jsdom: "npm:29.1.1"
     react: "npm:19.2.8"
     react-dom: "npm:19.2.8"
@@ -11901,10 +11910,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"hono@npm:4.13.2":
-  version: 4.13.2
-  resolution: "hono@npm:4.13.2"
-  checksum: 10c0/063daaa596bfb1ed3a4dc523a9f47725cf8d56e0918c21a241161f6f1996229f5525bf0f70d6b15cc28912720ddde519584eeb06fb92730a66f01e39faba8131
+"hono@npm:4.13.3":
+  version: 4.13.3
+  resolution: "hono@npm:4.13.3"
+  checksum: 10c0/51ab0e8f2f769e806c7e2d6d0e1577643fa35e442250ffe4cc69cffa4a276aad5d2db4edc15ab2210ae0ef478638e44937d8b3e2eded313a05793bc219239c4b
   languageName: node
   linkType: hard
 
@@ -19381,14 +19390,14 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "test-server@workspace:packages/test-server"
   dependencies:
-    "@hono/node-server": "npm:2.1.0"
+    "@hono/node-server": "npm:2.1.1"
     "@nitpicker/analyze-search": "npm:0.21.0"
     "@nitpicker/core": "npm:0.21.0"
     "@nitpicker/crawler": "npm:0.21.0"
     "@nitpicker/query": "npm:0.21.0"
     "@nitpicker/types": "npm:0.21.0"
     await-event-emitter: "npm:2.0.2"
-    hono: "npm:4.13.2"
+    hono: "npm:4.13.3"
     knex: "npm:3.3.0"
     vitest: "npm:4.1.11"
   languageName: unknown
