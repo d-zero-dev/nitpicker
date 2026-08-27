@@ -1,6 +1,6 @@
 {
 	"name": "test-server",
-	"version": "0.20.0",
+	"version": "0.21.0",
 	"description": "E2E test server for Nitpicker",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
@@ -11,11 +11,11 @@
 		"hono": "4.13.2"
 	},
 	"devDependencies": {
-		"@nitpicker/analyze-search": "0.20.0",
-		"@nitpicker/core": "0.20.0",
-		"@nitpicker/crawler": "0.20.0",
-		"@nitpicker/query": "0.20.0",
-		"@nitpicker/types": "0.20.0",
+		"@nitpicker/analyze-search": "0.21.0",
+		"@nitpicker/core": "0.21.0",
+		"@nitpicker/crawler": "0.21.0",
+		"@nitpicker/query": "0.21.0",
+		"@nitpicker/types": "0.21.0",
 		"await-event-emitter": "2.0.2",
 		"knex": "3.3.0",
 		"vitest": "4.1.11"

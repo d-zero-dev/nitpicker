@@ -3,6 +3,24 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.21.0](https://github.com/d-zero-dev/nitpicker/compare/v0.20.0...v0.21.0) (2026-08-27)
+
+### Bug Fixes
+
+- **cli:** exit 0 on HTML report cancel and drop stale --limit docs ([a8119a5](https://github.com/d-zero-dev/nitpicker/commit/a8119a5b5c16d5b5bddbc1687c6cf2f6f0cb5b1d))
+- **report-google-sheets:** drop unused async on estimateRowCount ([a462325](https://github.com/d-zero-dev/nitpicker/commit/a462325e5ed52c19406aab8cf5bc0afe6e40ea1b))
+- **report-html:** reuse query directory parsing and close archives on cancel ([6f740f1](https://github.com/d-zero-dev/nitpicker/commit/6f740f11efa38f3be51e4fd0c6296cebe472c2f2))
+- **viewer:** keep only http(s) hrefs in static HTML reports ([576563f](https://github.com/d-zero-dev/nitpicker/commit/576563f5a487f7756c3c3b5d09424a626a3b2edd))
+
+### Features
+
+- **cli:** add mutually exclusive --html report output ([c669f66](https://github.com/d-zero-dev/nitpicker/commit/c669f667e28f991d1b59967deeda00e1b4257cbe))
+- **query:** add page-list directory filters and resource counts ([fff95c2](https://github.com/d-zero-dev/nitpicker/commit/fff95c22de4fc537f1d1d1a9263962dfe663d569))
+- **query:** export parsePageDirectoryPrefix for directory filters ([1e50fea](https://github.com/d-zero-dev/nitpicker/commit/1e50feaec9313e204d940c32b0d8215723f8199f))
+- **report-html:** generate self-contained static HTML reports ([81b84d3](https://github.com/d-zero-dev/nitpicker/commit/81b84d3504120d5522f8b6d3939af225faa8777e))
+- **viewer:** add static HTML report document renderer ([cd145c1](https://github.com/d-zero-dev/nitpicker/commit/cd145c1b010238a7b9d04ede7de4304764693d08))
+- **viewer:** highlight missing resources, 400+ statuses, and console errors ([aa9d1b4](https://github.com/d-zero-dev/nitpicker/commit/aa9d1b42c1d45f356a9c559602aff83df81c782b))
+
 # [0.20.0](https://github.com/d-zero-dev/nitpicker/compare/v0.19.0...v0.20.0) (2026-08-26)
 
 ### Bug Fixes

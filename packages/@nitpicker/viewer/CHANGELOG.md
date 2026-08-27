@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.21.0](https://github.com/d-zero-dev/nitpicker/compare/v0.20.0...v0.21.0) (2026-08-27)
+
+### Bug Fixes
+
+- **viewer:** keep only http(s) hrefs in static HTML reports ([576563f](https://github.com/d-zero-dev/nitpicker/commit/576563f5a487f7756c3c3b5d09424a626a3b2edd))
+
+### Features
+
+- **viewer:** add static HTML report document renderer ([cd145c1](https://github.com/d-zero-dev/nitpicker/commit/cd145c1b010238a7b9d04ede7de4304764693d08))
+- **viewer:** highlight missing resources, 400+ statuses, and console errors ([aa9d1b4](https://github.com/d-zero-dev/nitpicker/commit/aa9d1b42c1d45f356a9c559602aff83df81c782b))
+
 # [0.20.0](https://github.com/d-zero-dev/nitpicker/compare/v0.19.0...v0.20.0) (2026-08-26)
 
 **Note:** Version bump only for package @nitpicker/viewer

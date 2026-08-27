@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.21.0](https://github.com/d-zero-dev/nitpicker/compare/v0.20.0...v0.21.0) (2026-08-27)
+
+### Bug Fixes
+
+- **report-google-sheets:** drop unused async on estimateRowCount ([a462325](https://github.com/d-zero-dev/nitpicker/commit/a462325e5ed52c19406aab8cf5bc0afe6e40ea1b))
+
 # [0.20.0](https://github.com/d-zero-dev/nitpicker/compare/v0.19.0...v0.20.0) (2026-08-26)
 
 ### Bug Fixes

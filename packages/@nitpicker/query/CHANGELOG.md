@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.21.0](https://github.com/d-zero-dev/nitpicker/compare/v0.20.0...v0.21.0) (2026-08-27)
+
+### Features
+
+- **query:** add page-list directory filters and resource counts ([fff95c2](https://github.com/d-zero-dev/nitpicker/commit/fff95c22de4fc537f1d1d1a9263962dfe663d569))
+- **query:** export parsePageDirectoryPrefix for directory filters ([1e50fea](https://github.com/d-zero-dev/nitpicker/commit/1e50feaec9313e204d940c32b0d8215723f8199f))
+
 # [0.20.0](https://github.com/d-zero-dev/nitpicker/compare/v0.19.0...v0.20.0) (2026-08-26)
 
 ### Bug Fixes

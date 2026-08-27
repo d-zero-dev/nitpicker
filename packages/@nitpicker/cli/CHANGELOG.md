@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.21.0](https://github.com/d-zero-dev/nitpicker/compare/v0.20.0...v0.21.0) (2026-08-27)
+
+### Bug Fixes
+
+- **cli:** exit 0 on HTML report cancel and drop stale --limit docs ([a8119a5](https://github.com/d-zero-dev/nitpicker/commit/a8119a5b5c16d5b5bddbc1687c6cf2f6f0cb5b1d))
+
+### Features
+
+- **cli:** add mutually exclusive --html report output ([c669f66](https://github.com/d-zero-dev/nitpicker/commit/c669f667e28f991d1b59967deeda00e1b4257cbe))
+
 # [0.20.0](https://github.com/d-zero-dev/nitpicker/compare/v0.19.0...v0.20.0) (2026-08-26)
 
 ### Bug Fixes
