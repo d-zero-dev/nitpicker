@@ -115,6 +115,22 @@ describe('streamPageListRows', () => {
 			isSkipped: false,
 		});
 		await archive.setPage({
+			url: parseUrl('https://example.com/missing')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 404,
+			statusText: 'Not Found',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setPage({
 			url: parseUrl('https://external.example.com/')!,
 			redirectPaths: [],
 			isExternal: true,
@@ -141,13 +157,14 @@ describe('streamPageListRows', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('excludes external pages, listing only the 2 internal ones', async () => {
+	it('lists internal HTML pages, including 404s, and excludes externals', async () => {
 		const rows = await collect(archive);
-		expect(rows).toHaveLength(2);
 		expect(rows.map((r) => r.url)).toEqual([
 			'https://example.com/a',
 			'https://example.com/b',
+			'https://example.com/missing',
 		]);
+		expect(rows.find((r) => r.url === 'https://example.com/missing')?.status).toBe(404);
 	});
 
 	it('carries pageId alongside the full PageListItem fields', async () => {
@@ -170,6 +187,7 @@ describe('streamPageListRows', () => {
 	it('throws on a non-positive chunkSize instead of hanging forever', async () => {
 		await expect(collect(archive, { chunkSize: 0 })).rejects.toThrow(RangeError);
 		await expect(collect(archive, { chunkSize: -1 })).rejects.toThrow(RangeError);
+		await expect(collect(archive, 0)).rejects.toThrow(RangeError);
 	});
 
 	it('narrows the sweep to the requested directories', async () => {

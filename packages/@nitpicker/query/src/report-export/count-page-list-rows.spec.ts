@@ -79,18 +79,25 @@ describe('countPageListRows', () => {
 	 * @param overrides - Fields to change from the internal-HTML default.
 	 * @param overrides.isExternal
 	 * @param overrides.contentType
+	 * @param overrides.status
+	 * @param overrides.statusText
 	 */
 	async function setPage(
 		url: string,
-		overrides: { isExternal?: boolean; contentType?: string } = {},
+		overrides: {
+			isExternal?: boolean;
+			contentType?: string;
+			status?: number;
+			statusText?: string;
+		} = {},
 	): Promise<void> {
 		await archive.setPage({
 			url: parseUrl(url)!,
 			redirectPaths: [],
 			isExternal: overrides.isExternal ?? false,
 			isTarget: !overrides.isExternal,
-			status: 200,
-			statusText: 'OK',
+			status: overrides.status ?? 200,
+			statusText: overrides.statusText ?? 'OK',
 			contentType: overrides.contentType ?? 'text/html',
 			contentLength: 100,
 			responseHeaders: {},
@@ -112,6 +119,10 @@ describe('countPageListRows', () => {
 		await setPage('https://example.com/blogging/x');
 		await setPage('https://example.com/news/a');
 		await setPage('https://other.example/blog/post-2');
+		await setPage('https://example.com/missing', {
+			status: 404,
+			statusText: 'Not Found',
+		});
 		await setPage('https://example.com/blog/report.pdf', {
 			contentType: 'application/pdf',
 		});
@@ -128,7 +139,11 @@ describe('countPageListRows', () => {
 	});
 
 	it('counts every internal HTML page when no directory is given', async () => {
-		expect(await countPageListRows(archive)).toBe(5);
+		expect(await countPageListRows(archive)).toBe(6);
+	});
+
+	it('includes 404 HTML pages in the inner row set', async () => {
+		expect(await countPageListRows(archive, { directories: ['/missing'] })).toBe(1);
 	});
 
 	it('counts a pathname-only prefix across hosts', async () => {

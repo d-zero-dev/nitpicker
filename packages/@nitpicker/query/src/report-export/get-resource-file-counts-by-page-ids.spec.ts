@@ -60,6 +60,8 @@ const PLAIN = 'https://example.com/plain';
 
 const STYLE = 'https://example.com/style.css';
 const MOVED = 'https://example.com/moved.css';
+const EDGE = 'https://example.com/edge.css';
+const TOO_HIGH = 'https://example.com/too-high.css';
 const MISSING = 'https://example.com/missing.png';
 const BROKEN = 'https://example.com/broken.js';
 
@@ -131,6 +133,8 @@ describe('getResourceFileCountsByPageIds', () => {
 
 		await setResource({ url: STYLE, status: 200, contentType: 'text/css' });
 		await setResource({ url: MOVED, status: 301, contentType: 'text/css' });
+		await setResource({ url: EDGE, status: 399, contentType: 'text/css' });
+		await setResource({ url: TOO_HIGH, status: 400, contentType: 'text/css' });
 		await setResource({ url: MISSING, status: 404, contentType: 'image/png' });
 		await setResource({
 			url: BROKEN,
@@ -140,6 +144,8 @@ describe('getResourceFileCountsByPageIds', () => {
 
 		await archive.setResourcesReferrers({ url: HOME, src: STYLE });
 		await archive.setResourcesReferrers({ url: HOME, src: MOVED });
+		await archive.setResourcesReferrers({ url: HOME, src: EDGE });
+		await archive.setResourcesReferrers({ url: HOME, src: TOO_HIGH });
 		await archive.setResourcesReferrers({ url: HOME, src: MISSING });
 		await archive.setResourcesReferrers({ url: HOME, src: BROKEN });
 		await archive.setResourcesReferrers({ url: ABOUT, src: STYLE });
@@ -168,7 +174,7 @@ describe('getResourceFileCountsByPageIds', () => {
 
 	it('counts every referenced resource as total and only 200..399 as exists', async () => {
 		const counts = await getResourceFileCountsByPageIds(archive, [pageIds.get(HOME)!]);
-		expect(counts.get(pageIds.get(HOME)!)).toEqual({ total: 4, exists: 2 });
+		expect(counts.get(pageIds.get(HOME)!)).toEqual({ total: 6, exists: 3 });
 	});
 
 	it('counts each page separately in one batch', async () => {
@@ -176,7 +182,7 @@ describe('getResourceFileCountsByPageIds', () => {
 			pageIds.get(HOME)!,
 			pageIds.get(ABOUT)!,
 		]);
-		expect(counts.get(pageIds.get(HOME)!)).toEqual({ total: 4, exists: 2 });
+		expect(counts.get(pageIds.get(HOME)!)).toEqual({ total: 6, exists: 3 });
 		expect(counts.get(pageIds.get(ABOUT)!)).toEqual({ total: 1, exists: 1 });
 	});
 
