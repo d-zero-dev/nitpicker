@@ -131,6 +131,9 @@ export async function report(args: string[], flags: ReportFlags) {
 				};
 		await runReport().finally(closeExtractLanes);
 	} catch (error) {
+		if (error instanceof Error && error.name === 'HtmlReportCancelledError') {
+			process.exit(0);
+		}
 		formatCliError(error, verbose);
 		process.exit(1);
 	}

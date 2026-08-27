@@ -456,6 +456,28 @@ describe('report command', () => {
 		expect(runHtmlReport).not.toHaveBeenCalled();
 	});
 
+	it('exits 0 when the HTML directory prompt is cancelled', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		const cancelled = new Error('HTML report cancelled');
+		cancelled.name = 'HtmlReportCancelledError';
+		vi.mocked(runHtmlReport).mockRejectedValueOnce(cancelled);
+
+		await expect(
+			report(['test.nitpicker'], {
+				html: true,
+				sheet: undefined,
+				credentials: './credentials.json',
+				config: undefined,
+				all: undefined,
+				verbose: undefined,
+				silent: undefined,
+			}),
+		).rejects.toThrow(ExitError);
+
+		expect(formatCliErrorFn).not.toHaveBeenCalled();
+		expect(exitSpy).toHaveBeenCalledWith(0);
+	});
+
 	it('catches errors from runReport and exits with error', async () => {
 		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
 		const error = new Error('Google API error');

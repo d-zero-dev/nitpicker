@@ -29,6 +29,9 @@ npx @nitpicker/cli report ./site.nitpicker --html --output ./site.html
 複数ホストを含むアーカイブでは完全なURLだけを使用できます。非TTY環境では
 `--html-dirs` で同じ値を指定してください。
 
+`--output` の親ディレクトリは作成しません。ネストしたパスを指定する場合は、
+先にディレクトリを用意してください。既存のファイルは確認なしで上書きします。
+
 ```sh
 npx @nitpicker/cli report ./site.nitpicker --html --html-dirs /docs,/help
 ```
@@ -51,16 +54,15 @@ NODE_OPTIONS=--max-old-space-size=8192 npx @nitpicker/cli report ./site.nitpicke
 
 ## オプション一覧
 
-| オプション            | 型      | 説明                                                  |
-| --------------------- | ------- | ----------------------------------------------------- |
-| `--sheet`, `-S`       | string  | 出力先Google Sheets URL                               |
-| `--html`, `-H`        | boolean | 自己完結した静的HTMLを生成                            |
-| `--output`, `-o`      | string  | HTML出力先                                            |
-| `--html-dirs`         | string  | HTMLの対象ディレクトリ接頭辞（カンマ区切り）          |
-| `--credentials`, `-C` | string  | 認証情報ファイル。既定は `./credentials.json`         |
-| `--config`, `-c`      | string  | 設定ファイルパス                                      |
-| `--limit`, `-l`       | number  | アーカイブから一度に読み込むページ数。既定は `100000` |
-| `--all`               | boolean | 対話選択なしですべてのシートを生成                    |
-| `--dedupe-resources`  | boolean | Resourcesシートをcanonical URL単位で集約              |
-| `--verbose`           | boolean | 詳細ログを出力                                        |
-| `--silent`            | boolean | 標準出力ログを抑制                                    |
+| オプション            | 型      | 説明                                          |
+| --------------------- | ------- | --------------------------------------------- |
+| `--sheet`, `-S`       | string  | 出力先Google Sheets URL                       |
+| `--html`, `-H`        | boolean | 自己完結した静的HTMLを生成                    |
+| `--output`, `-o`      | string  | HTML出力先                                    |
+| `--html-dirs`         | string  | HTMLの対象ディレクトリ接頭辞（カンマ区切り）  |
+| `--credentials`, `-C` | string  | 認証情報ファイル。既定は `./credentials.json` |
+| `--config`, `-c`      | string  | 設定ファイルパス                              |
+| `--all`               | boolean | 対話選択なしですべてのシートを生成            |
+| `--dedupe-resources`  | boolean | Resourcesシートをcanonical URL単位で集約      |
+| `--verbose`           | boolean | 詳細ログを出力                                |
+| `--silent`            | boolean | 標準出力ログを抑制                            |
