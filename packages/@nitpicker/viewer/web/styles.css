@@ -108,6 +108,11 @@ body {
 	border-block-end: 0;
 }
 
+.report-alert {
+	font-weight: bold;
+	color: var(--danger);
+}
+
 a {
 	color: var(--accent);
 }
