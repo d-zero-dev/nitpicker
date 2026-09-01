@@ -394,6 +394,87 @@ describe('createSheets', () => {
 		expect(output).toContain('2,500/2,500 rows (100%)');
 	});
 
+	it('shows a "flushing N rows..." message right before the tail flush() call when rows are still buffered', async () => {
+		// run()'s own onProgress already reports 100% the instant the last
+		// row is buffered (not sent) — the tail flush() below is where the
+		// actual network round trip for those buffered rows happens, and
+		// without this message the display would sit frozen at 100% with no
+		// sign anything is still in flight.
+		const chunks: string[] = [];
+		const stream = {
+			write: (chunk: string) => {
+				chunks.push(String(chunk));
+				return true;
+			},
+		} as never;
+
+		let pending = 0;
+		const fakeSheet = {
+			setHeaders: () => Promise.resolve(),
+			appendRow: () => Promise.resolve(),
+			flush: () => {
+				pending = 0;
+				return Promise.resolve();
+			},
+			get sentCount() {
+				return 2499;
+			},
+			get pendingCount() {
+				return pending;
+			},
+		} as never;
+		const sheets = { create: () => Promise.resolve(fakeSheet) } as never;
+
+		await createSheets({
+			sheets,
+			accessor: NO_ACCESSOR,
+			reports: [],
+			createSheetList: [
+				makeCreateSheet({
+					name: 'A',
+					createHeaders: () => ['col1'],
+					estimateRowCount: () => Promise.resolve(2499),
+					run: (ctx) => {
+						pending = 2499; // below SEND_CHUNK_SIZE, never auto-flushed
+						ctx.onProgress(2499, 2499);
+						return Promise.resolve();
+					},
+				}),
+			],
+			options: { stream, verbose: true },
+		});
+
+		expect(chunks.join('')).toContain('flushing 2,499 rows...');
+	});
+
+	it('does not show a "flushing" message when the tail flush() has nothing buffered', async () => {
+		const { sheets } = makeFakeSheets();
+		const chunks: string[] = [];
+		const stream = {
+			write: (chunk: string) => {
+				chunks.push(String(chunk));
+				return true;
+			},
+		} as never;
+
+		await createSheets({
+			sheets,
+			accessor: NO_ACCESSOR,
+			reports: [],
+			createSheetList: [
+				makeCreateSheet({
+					name: 'A',
+					createHeaders: () => ['col1'],
+					estimateRowCount: () => Promise.resolve(0),
+					run: () => Promise.resolve(),
+				}),
+			],
+			options: { stream, verbose: true },
+		});
+
+		expect(chunks.join('')).not.toContain('flushing');
+	});
+
 	it('routes Google Sheets API rate-limit backoff messages to the currently running step', async () => {
 		const { sheets } = makeFakeSheets();
 		const chunks: string[] = [];

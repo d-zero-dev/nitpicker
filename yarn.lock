@@ -1271,16 +1271,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/google-sheets@npm:0.10.0":
-  version: 0.10.0
-  resolution: "@d-zero/google-sheets@npm:0.10.0"
+"@d-zero/google-sheets@npm:0.11.0":
+  version: 0.11.0
+  resolution: "@d-zero/google-sheets@npm:0.11.0"
   dependencies:
     "@d-zero/google-auth": "npm:0.7.6"
     "@d-zero/shared": "npm:0.23.0"
     debug: "npm:4.4.3"
     gaxios: "npm:7.1.5"
     googleapis: "npm:173.0.0"
-  checksum: 10c0/4706886646517958788ba790e40ee7d7ad71b5600a00455130cb434f5afb019251c5cd9ba2d641c63fc6dba97724800437754734dc7f40a35ab7003f2306a9cd
+  checksum: 10c0/53bea9d93f7b4b5ee1155904ae7ace2b1a1edc7c982c01dcee963b46ca0a78be2b59cf383d039689dc823d2333e294f144f6f4c26cf5477f27405f4de841b958
   languageName: node
   linkType: hard
 
@@ -3410,7 +3410,7 @@ __metadata:
   dependencies:
     "@d-zero/dealer": "npm:1.13.1"
     "@d-zero/google-auth": "npm:0.7.6"
-    "@d-zero/google-sheets": "npm:0.10.0"
+    "@d-zero/google-sheets": "npm:0.11.0"
     "@d-zero/shared": "npm:0.23.0"
     "@nitpicker/crawler": "npm:0.21.0"
     "@nitpicker/query": "npm:0.21.0"

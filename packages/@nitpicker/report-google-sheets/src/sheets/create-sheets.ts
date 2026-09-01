@@ -98,8 +98,17 @@ export interface CreateSheetsParams {
  * 形式に整形し、`dedupeProgressMessage` で同一文字列の連続再描画を間引く
  * （百万行規模のシートで毎行再描画するとターミナルが埋まる）。`sheet.onProgress`
  * （`@d-zero/google-sheets` 側、チャンク単位のコールバック）も同時に配線しており、
- * `appendRow()` の自動 flush や末尾の明示 `flush()` 呼び出し——数秒かかりうる
- * ネットワーク往復——の最中も無音区間にならない。
+ * `appendRow()` の自動 flush が完了するたびに表示を更新する。
+ *
+ * ただし `onProgress` はチャンクの `batchUpdate` 完了**後**にしか発火しない
+ * ため、そのネットワーク往復自体（数秒〜数十秒かかりうる）は無音区間になる。
+ * 総行数が `SEND_CHUNK_SIZE`（2500）の倍数でない限り、`run()` 自身の
+ * `onProgress` は最終行をバッファへ積んだ時点で `100%` を表示してしまい、
+ * 直後のステップ末尾の明示 `flush()` 呼び出し（残りバッファの実送信）が
+ * ちょうどこの無音区間に当たる——`100%` のまま応答が止まって見える原因。
+ * そのため `flush()` 呼び出し直前に `sheet.pendingCount`（未送信バッファ行数）
+ * を使って `"flushing N rows..."` という一時メッセージを出し、無反応に見える
+ * 区間を作らない。
  *
  * Google Sheets API のレート制限（429/403/5xx/ECONNRESET）による待機は
  * `sheets.onLog` 経由で検知し、その時点で実行中のステップの行に一時的に上書き表示
@@ -319,6 +328,14 @@ export async function createSheets(params: CreateSheetsParams) {
 				// the TRUNCATED marker row appended above, if any. `flush()`
 				// is a no-op on an empty buffer, so calling it unconditionally
 				// here is safe either way.
+				//
+				// `run()`'s own onProgress already reported 100% once the last
+				// row was buffered (see this function's JSDoc) — without this,
+				// the display would sit frozen at 100% for the entire network
+				// round trip below, with nothing to show it's still working.
+				if (sheet.pendingCount > 0) {
+					active?.(`flushing ${sheet.pendingCount.toLocaleString()} rows...`);
+				}
 				await sheet.flush();
 				if (truncated) {
 					onWarn?.(
