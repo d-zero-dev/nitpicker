@@ -17,6 +17,7 @@ const mockResume = vi.fn();
 const mockAppend = vi.fn();
 const mockRetryFailed = vi.fn();
 const mockInventory = vi.fn();
+const mockRecrawl = vi.fn();
 const mockComputeFileSha256 = vi.fn(() => 'd'.repeat(64));
 const mockAssertChromeIsInstalled = vi.fn().mockResolvedValue();
 const mockAssertPuppeteerSharedWithBeholder = vi.fn();
@@ -28,6 +29,7 @@ vi.mock('@nitpicker/crawler', () => ({
 		append: mockAppend,
 		retryFailed: mockRetryFailed,
 		inventory: mockInventory,
+		recrawl: mockRecrawl,
 	},
 	computeFileSha256: mockComputeFileSha256,
 	assertChromeIsInstalled: mockAssertChromeIsInstalled,
@@ -39,6 +41,7 @@ vi.mock('@nitpicker/crawler', () => ({
 	APPEND_SETUP_PHASES: ['Extracting archive'],
 	INVENTORY_SETUP_PHASES: ['Extracting archive'],
 	RETRY_FAILED_SETUP_PHASES: ['Extracting archive'],
+	RECRAWL_SETUP_PHASES: ['Extracting archive'],
 }));
 
 /**
@@ -191,6 +194,7 @@ function createFlags(overrides: Partial<CrawlFlags> = {}): CrawlFlags {
 		append: undefined,
 		retryFailed: undefined,
 		inventory: undefined,
+		recrawl: undefined,
 		interval: undefined,
 		image: true,
 		fetchExternal: true,
@@ -252,6 +256,11 @@ function setupFakeOrchestrator() {
 	});
 
 	mockInventory.mockImplementation((_path, _urls, _opts, cb) => {
+		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
+		return Promise.resolve(fakeOrchestrator);
+	});
+
+	mockRecrawl.mockImplementation((_path, _urls, _opts, cb) => {
 		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
 		return Promise.resolve(fakeOrchestrator);
 	});
@@ -1352,6 +1361,217 @@ describe('crawl', () => {
 				createFlags({ inventory: '/tmp/urls.txt', single: true }),
 			),
 		).rejects.toThrow('--inventory cannot be combined with --single');
+	});
+
+	it('--recrawl フラグでアーカイブと URL リストを CrawlerOrchestrator.recrawl に渡す', async () => {
+		const fake = setupFakeOrchestrator();
+		mockReadFile.mockResolvedValueOnce(Buffer.from('https://example.com/hidden\n'));
+		const { crawl } = await import('./crawl.js');
+
+		await crawl(['/tmp/test.nitpicker'], createFlags({ recrawl: '/tmp/urls.txt' }));
+
+		expect(mockRecrawl).toHaveBeenCalledWith(
+			'/tmp/test.nitpicker',
+			['https://example.com/hidden'],
+			expect.any(Object),
+			expect.any(Function),
+			{
+				sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+				bytes: Buffer.from('https://example.com/hidden\n'),
+				invalidLineCount: 0,
+			},
+			mockSetupProgress,
+		);
+		expect(mockComputeFileSha256).toHaveBeenCalledWith(
+			Buffer.from('https://example.com/hidden\n'),
+		);
+		expect(mockReadFile).toHaveBeenCalledTimes(1);
+		expect(mockRunPostCrawlTaskList).toHaveBeenCalledWith(fake, expect.any(Object));
+	});
+
+	it('--recrawl: CrawlerOrchestrator.recrawl が initializedCallback 前に throw したら setupTaskList.fail() が呼ばれる', async () => {
+		mockReadFile.mockResolvedValueOnce(Buffer.from('https://example.com/hidden\n'));
+		mockRecrawl.mockImplementationOnce(() =>
+			Promise.reject(new Error('recrawl setup failed before initializedCallback')),
+		);
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(['/tmp/test.nitpicker'], createFlags({ recrawl: '/tmp/urls.txt' })),
+		).rejects.toThrow('recrawl setup failed before initializedCallback');
+
+		expect(mockSetupTaskListFail).toHaveBeenCalledOnce();
+	});
+
+	it('--recrawl で空ファイルの場合、エラーを投げる', async () => {
+		mockReadFile.mockResolvedValueOnce(Buffer.from(''));
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(['/tmp/test.nitpicker'], createFlags({ recrawl: '/tmp/empty.txt' })),
+		).rejects.toThrow('No URLs found in recrawl file: /tmp/empty.txt');
+	});
+
+	it('--recrawl に無効な URL が含まれる場合、警告して除外し、有効な URL のみで続行する', async () => {
+		mockReadFile.mockResolvedValueOnce(
+			Buffer.from('https://example.com/ok\nnot-a-url\n'),
+		);
+		const { crawl } = await import('./crawl.js');
+
+		await crawl(['/tmp/test.nitpicker'], createFlags({ recrawl: '/tmp/urls.txt' }));
+
+		expect(mockRecrawl).toHaveBeenCalledWith(
+			'/tmp/test.nitpicker',
+			['https://example.com/ok'],
+			expect.any(Object),
+			expect.any(Function),
+			expect.objectContaining({ sha256: expect.any(String), invalidLineCount: 1 }),
+			mockSetupProgress,
+		);
+		expect(consoleWarnSpy).toHaveBeenCalledWith(
+			'[nitpicker] recrawl list: skipping invalid URL at /tmp/urls.txt:2:1 — "not-a-url"',
+		);
+		expect(consoleWarnSpy).toHaveBeenCalledWith(
+			'[nitpicker] recrawl list: 1 of 2 lines skipped as invalid; continuing with 1 URLs',
+		);
+	});
+
+	it('--recrawl で全行が無効な URL の場合、エラーを投げる', async () => {
+		mockReadFile.mockResolvedValueOnce(Buffer.from('not-a-url\nalso-not-a-url\n'));
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(['/tmp/test.nitpicker'], createFlags({ recrawl: '/tmp/urls.txt' })),
+		).rejects.toThrow(
+			'All 2 line(s) in recrawl file failed URL validation: /tmp/urls.txt',
+		);
+		expect(mockRecrawl).not.toHaveBeenCalled();
+	});
+
+	it('--recrawl と位置引数なしの場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(crawl([], createFlags({ recrawl: '/tmp/urls.txt' }))).rejects.toThrow(
+			'--recrawl requires the archive path as the positional argument',
+		);
+	});
+
+	it('--recrawl と複数位置引数の場合、エラーを投げる', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker', '/tmp/b.nitpicker'],
+				createFlags({ recrawl: '/tmp/urls.txt' }),
+			),
+		).rejects.toThrow(
+			'--recrawl takes exactly one positional argument (the archive path).',
+		);
+	});
+
+	it('--recrawl と --inventory の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/test.nitpicker'],
+				createFlags({ recrawl: '/tmp/urls.txt', inventory: '/tmp/other.txt' }),
+			),
+		).rejects.toThrow('--inventory and --recrawl cannot be used together');
+	});
+
+	it('--recrawl と --append の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/test.nitpicker'],
+				createFlags({
+					recrawl: '/tmp/urls.txt',
+					append: ['https://example.com/new'],
+				}),
+			),
+		).rejects.toThrow('--recrawl and --append cannot be used together');
+	});
+
+	it('--recrawl と --retry-failed の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/test.nitpicker'],
+				createFlags({ recrawl: '/tmp/urls.txt', retryFailed: true }),
+			),
+		).rejects.toThrow('--recrawl and --retry-failed cannot be used together');
+	});
+
+	it('--recrawl と --resume の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				[],
+				createFlags({ recrawl: '/tmp/urls.txt', resume: '/tmp/_nitpicker-stub' }),
+			),
+		).rejects.toThrow('--resume and --recrawl cannot be used together');
+	});
+
+	it('--recrawl と --diff の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/a.nitpicker', '/tmp/b.nitpicker'],
+				createFlags({ recrawl: '/tmp/urls.txt', diff: true }),
+			),
+		).rejects.toThrow('--diff cannot be combined with --recrawl');
+	});
+
+	it('--recrawl と --output の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/test.nitpicker'],
+				createFlags({ recrawl: '/tmp/urls.txt', output: '/tmp/out.nitpicker' }),
+			),
+		).rejects.toThrow('--output flag is not supported with --recrawl');
+	});
+
+	it('--recrawl と --list-file の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/test.nitpicker'],
+				createFlags({ recrawl: '/tmp/urls.txt', listFile: '/tmp/list.txt' }),
+			),
+		).rejects.toThrow('--recrawl cannot be combined with --list-file');
+	});
+
+	it('--recrawl と --list の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/test.nitpicker'],
+				createFlags({
+					recrawl: '/tmp/urls.txt',
+					list: ['https://example.com'],
+				}),
+			),
+		).rejects.toThrow('--recrawl cannot be combined with --list');
+	});
+
+	it('--recrawl と --single の同時指定はエラー', async () => {
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(
+				['/tmp/test.nitpicker'],
+				createFlags({ recrawl: '/tmp/urls.txt', single: true }),
+			),
+		).rejects.toThrow('--recrawl cannot be combined with --single');
 	});
 
 	it('クロール開始前に assertChromeIsInstalled を呼び出す', async () => {
