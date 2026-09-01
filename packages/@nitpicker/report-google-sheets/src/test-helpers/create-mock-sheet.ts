@@ -53,6 +53,13 @@ export function createMockSheet(): MockSheet {
 		get sentCount() {
 			return rows.length;
 		},
+		// This mock treats every `appendRow()` call as immediately sent (see
+		// `sentCount` above) rather than simulating the real `Sheet`'s
+		// buffer-until-chunk-threshold behavior, so nothing is ever "pending"
+		// in its model.
+		get pendingCount() {
+			return 0;
+		},
 		frozen() {
 			return Promise.resolve();
 		},

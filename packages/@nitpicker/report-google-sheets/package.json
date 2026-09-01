@@ -32,7 +32,7 @@
 	"dependencies": {
 		"@d-zero/dealer": "1.13.1",
 		"@d-zero/google-auth": "0.7.6",
-		"@d-zero/google-sheets": "0.10.0",
+		"@d-zero/google-sheets": "0.11.0",
 		"@d-zero/shared": "0.23.0",
 		"@nitpicker/crawler": "0.21.0",
 		"@nitpicker/query": "0.21.0",
