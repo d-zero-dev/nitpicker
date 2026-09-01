@@ -3449,6 +3449,76 @@ describe('resetFailedPages', () => {
 	});
 });
 
+describe('resetPagesByUrls', () => {
+	const resetByUrlsDbPath = path.resolve(workingDir, 'reset-by-urls-test.sqlite');
+
+	afterAll(async () => {
+		await remove(resetByUrlsDbPath);
+	});
+
+	it('resets pages matching the given URLs and forwards progress from the op', async () => {
+		const { rmSync } = await import('node:fs');
+		rmSync(resetByUrlsDbPath, { force: true });
+		const db = await Database.connect({ filename: resetByUrlsDbPath });
+
+		await db.updatePage(
+			{
+				url: parseUrl('http://localhost/known')!,
+				redirectPaths: [],
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 1,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'known' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			},
+			true,
+			true,
+		);
+
+		const progressCalls: [number, number][] = [];
+		const result = await db.resetPagesByUrls(
+			['http://localhost/known'],
+			(processed, total) => {
+				progressCalls.push([processed, total]);
+			},
+		);
+
+		expect(result.resetUrls).toEqual(['http://localhost/known']);
+		expect(result.excludedRedirects).toEqual([]);
+		expect(result.excludedSkipped).toEqual([]);
+		expect(result.excludedExternal).toEqual([]);
+		expect(progressCalls).toEqual([[1, 1]]);
+
+		const pages = await db.getPages();
+		const page = pages.find((p) => p.url === 'http://localhost/known')!;
+		expect(page.scraped).toBe(0);
+
+		await db.destroy();
+	});
+
+	it('returns an empty result for a URL not present in the archive', async () => {
+		const { rmSync } = await import('node:fs');
+		rmSync(resetByUrlsDbPath, { force: true });
+		const db = await Database.connect({ filename: resetByUrlsDbPath });
+
+		const result = await db.resetPagesByUrls(['http://localhost/unknown']);
+		expect(result).toEqual({
+			resetUrls: [],
+			excludedRedirects: [],
+			excludedSkipped: [],
+			excludedExternal: [],
+		});
+
+		await db.destroy();
+	});
+});
+
 describe('self-redirect', () => {
 	const selfRedirectDbPath = path.resolve(workingDir, 'self-redirect-test.sqlite');
 

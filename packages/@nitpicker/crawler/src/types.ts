@@ -1,5 +1,6 @@
 import type { APPEND_SETUP_PHASES } from './append-setup-phases.js';
 import type { INVENTORY_SETUP_PHASES } from './inventory-setup-phases.js';
+import type { RECRAWL_SETUP_PHASES } from './recrawl-setup-phases.js';
 import type { RESUME_SETUP_PHASES } from './resume-setup-phases.js';
 import type { RETRY_FAILED_SETUP_PHASES } from './retry-failed-setup-phases.js';
 import type { SETUP_RECOVERY_PHASE_LABELS } from './setup-recovery-phase-labels.js';
@@ -7,16 +8,18 @@ import type { CrawlerError, PageData } from './utils/types/types.js';
 
 /**
  * Every label `SetupProgressCallbacks.onPhase` can be called with, across
- * all four `CrawlerOrchestrator` setup sequences plus the failure-only
+ * all five `CrawlerOrchestrator` setup sequences plus the failure-only
  * recovery phases. See `RESUME_SETUP_PHASES` / `APPEND_SETUP_PHASES` /
  * `RETRY_FAILED_SETUP_PHASES` / `INVENTORY_SETUP_PHASES` /
- * `SETUP_RECOVERY_PHASE_LABELS` for what each label means and when it fires.
+ * `RECRAWL_SETUP_PHASES` / `SETUP_RECOVERY_PHASE_LABELS` for what each label
+ * means and when it fires.
  */
 export type SetupPhaseLabel =
 	| (typeof RESUME_SETUP_PHASES)[number]
 	| (typeof APPEND_SETUP_PHASES)[number]
 	| (typeof RETRY_FAILED_SETUP_PHASES)[number]
 	| (typeof INVENTORY_SETUP_PHASES)[number]
+	| (typeof RECRAWL_SETUP_PHASES)[number]
 	| (typeof SETUP_RECOVERY_PHASE_LABELS)[number];
 
 /**
@@ -79,14 +82,14 @@ export interface SetupProgressCallbacks {
 }
 
 /**
- * Aggregate counts captured during a `--inventory` invocation, forwarded to
- * `#writeInventoryRunRow` so the audit log row is consistent between the
- * HTML-seed branch and the non-HTML-only branch of
- * `CrawlerOrchestrator.inventory`.
+ * Aggregate counts captured during a `--inventory` or `--recrawl`
+ * invocation, forwarded to `#writeInventoryRunRow` so the audit log row is
+ * consistent across every branch of `CrawlerOrchestrator.inventory` and
+ * `CrawlerOrchestrator.recrawl` that reaches ingestion.
  *
  * Spelled out here (not inlined at the call site) so a new field added to
  * the audit row has a single edit point and so each field's semantics are
- * documented per-property rather than scattered across the two emit sites.
+ * documented per-property rather than scattered across the emit sites.
  */
 export interface InventoryRunAggregates {
 	/** `inventoryUrls.length` as received by `CrawlerOrchestrator.inventory` — the CLI (`inventoryCrawl`) has already warned-and-dropped unparseable-URL lines before this point, so this counts valid URLs, not raw source-file lines. Stored verbatim as `inventory_runs.total_lines`. */
@@ -121,6 +124,23 @@ export interface InventoryRunAggregates {
 	 * file, so no line was ever dropped as invalid.
 	 */
 	invalidSkipped: number | null;
+	/**
+	 * Overrides the audit row's `list_label` prefix (before the `-${ranAt}`
+	 * timestamp suffix `#writeInventoryRunRow` always appends). Omit for the
+	 * default `'inventory'`; `CrawlerOrchestrator.recrawl` passes `'recrawl'`
+	 * so the two invocation kinds stay distinguishable in `query
+	 * inventory-runs` output despite sharing one audit table.
+	 */
+	listLabelPrefix?: string;
+	/**
+	 * Free-form text stored verbatim as `inventory_runs.notes`. `recrawl`
+	 * uses this to record how many existing pages it reset back to
+	 * pending — a fact `--inventory` never produces and that therefore has
+	 * no dedicated column (adding one would leave it `NULL` on every
+	 * `--inventory` row forever). `null`/omitted leaves the column `NULL`,
+	 * matching `--inventory`'s existing rows.
+	 */
+	notes?: string | null;
 }
 
 /**

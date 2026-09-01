@@ -6,6 +6,8 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { findScopeEntry } from '../../../../crawler/find-scope-entry.js';
 import { dbLog } from '../../../debug.js';
 
+import { clearPageDerivedRows } from './clear-page-derived-rows.js';
+
 /**
  * Promote previously-external pages whose URL falls under any of the new scope
  * entries back to a "needs scraping" state so that the next crawl picks them up
@@ -28,8 +30,9 @@ import { dbLog } from '../../../debug.js';
  * @param onProgress - Called after each chunk's DELETE/UPDATE statements
  *   complete, with the pages processed so far and the total to promote
  *   (issue #294: a large `--append` can promote thousands of pages across
- *   14 tables, running for seconds to minutes with no other signal it
- *   hasn't hung). Omit for no reporting (the default; e.g. tests).
+ *   `content_items` plus the 17 tables {@link clearPageDerivedRows} clears,
+ *   running for seconds to minutes with no other signal it hasn't hung).
+ *   Omit for no reporting (the default; e.g. tests).
  * @returns The URLs of the pages that were promoted.
  */
 export async function repromoteExternalPages(
@@ -81,41 +84,19 @@ export async function repromoteExternalPages(
 			// left untouched — the last-success timestamp survives the
 			// demotion.
 		});
-		// Clear the prior crawl's data for the repromoted pages. `updatePage`
-		// also replaces anchor_edges/image_items/tags/jsonld/page_main_content_*
-		// when it re-scrapes them, but only when the new scrape is non-empty —
-		// so this pre-clear is still load-bearing for pages that get
-		// repromoted but then re-scrape to nothing (or are never reached
-		// again), and it is the only place `resource_ref_edges` is cleared.
-		// Deleting the `page_meta` row (rather than nulling every column)
-		// clears title / description / og:* / twitter:* / meta_extras /
-		// main_content_* in one statement; a re-scrape re-inserts it via
-		// `ON CONFLICT(page_id) DO UPDATE`. `technology_signals` /
-		// `page_technologies` / `page_jsonld` /
-		// `page_main_content_*` are cleared explicitly even though all of
-		// them also carry ON DELETE CASCADE — we keep the existing pattern
-		// of explicit chunked DELETEs rather than relying on CASCADE
-		// indirectly (and would not cascade anyway: the parent
-		// `content_items` row is updated, not
-		// deleted). Orphan blobs in `page_html_blobs` are left behind; #23
-		// will add GC.
-		await knex('page_meta').whereIn('page_id', chunk).delete();
-		await knex('anchor_edges').whereIn('page_id', chunk).delete();
-		await knex('image_items').whereIn('page_id', chunk).delete();
-		await knex('resource_ref_edges').whereIn('page_id', chunk).delete();
-		await knex('page_html_ref').whereIn('page_id', chunk).delete();
-		await knex('technology_signals').whereIn('pageId', chunk).delete();
-		await knex('page_technologies').whereIn('pageId', chunk).delete();
-		await knex('page_jsonld').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_headings').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_images').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_tables').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_buttons').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_iframes').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_videos').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_audios').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_canvases').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_custom_elements').whereIn('pageId', chunk).delete();
+		// Clear the prior crawl's data for the repromoted pages via the
+		// shared sweep (also used by `resetFailedPages` / `resetPagesByUrls`).
+		// `updatePage` also replaces anchor_edges/image_items/tags/jsonld/
+		// page_main_content_* when it re-scrapes them, but only when the new
+		// scrape is non-empty — so this pre-clear is still load-bearing for
+		// pages that get repromoted but then re-scrape to nothing (or are
+		// never reached again), and it is the only place `resource_ref_edges`
+		// is cleared for this operation. Deleting the `page_meta` row (rather
+		// than nulling every column) clears title / description / og:* /
+		// twitter:* / meta_extras / main_content_* in one statement; a
+		// re-scrape re-inserts it via `ON CONFLICT(page_id) DO UPDATE`.
+		// Orphan blobs in `page_html_blobs` are left behind; #23 will add GC.
+		await clearPageDerivedRows(knex, chunk);
 		onProgress?.(Math.min(i + chunkSize, promotedIds.length), promotedIds.length);
 	}
 	dbLog('Repromoted %d external pages back to pending', promotedUrls.length);

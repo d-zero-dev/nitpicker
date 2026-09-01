@@ -24,6 +24,7 @@ import type {
 	InventoryRunMeta,
 	PageFilter,
 	PageSource,
+	ResetPagesByUrlsResult,
 } from './types.js';
 import type { OutageWindow } from '../is-within-outage-window.js';
 import type { PageData, Resource } from '../utils/types/types.js';
@@ -89,6 +90,7 @@ import { getPages as getPagesOp } from './db-ops/pages/read/get-pages.js';
 import { getScrapedHtmlPageCount as getScrapedHtmlPageCountOp } from './db-ops/pages/read/get-scraped-html-page-count.js';
 import { repromoteExternalPages as repromoteExternalPagesOp } from './db-ops/pages/reset/repromote-external-pages.js';
 import { resetFailedPages as resetFailedPagesOp } from './db-ops/pages/reset/reset-failed-pages.js';
+import { resetPagesByUrls as resetPagesByUrlsOp } from './db-ops/pages/reset/reset-pages-by-urls.js';
 import { insertInventorySeeds as insertInventorySeedsOp } from './db-ops/pages/write/insert-inventory-seeds.js';
 import { insertInventorySkippedPages as insertInventorySkippedPagesOp } from './db-ops/pages/write/insert-inventory-skipped-pages.js';
 import { recordRedirect as recordRedirectOp } from './db-ops/pages/write/record-redirect.js';
@@ -1029,6 +1031,29 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			retrySetting,
 		);
 	}
+
+	/**
+	 * Reset pages matching an operator-supplied URL list back to pending so a
+	 * follow-up crawl re-fetches them from scratch. Delegates to
+	 * {@link resetPagesByUrlsOp} — see the op for the conservative exclusion
+	 * rationale (redirect sources / intentionally-skipped / external pages).
+	 * @param urls - URL strings to match, already in `withoutHashAndAuth` form.
+	 * @param onProgress - Forwarded to {@link resetPagesByUrlsOp} — see that
+	 *   function's docs.
+	 * @returns The reset URLs plus the excluded URLs grouped by reason.
+	 */
+	async resetPagesByUrls(
+		urls: readonly string[],
+		onProgress?: (processed: number, total: number) => void,
+	): Promise<ResetPagesByUrlsResult> {
+		return emitErrorAndRetry(
+			this,
+			'Database.resetPagesByUrls',
+			async () => await resetPagesByUrlsOp(this.#instance, urls, onProgress),
+			retrySetting,
+		);
+	}
+
 	/**
 	 * Stores the crawl configuration in the `info` table.
 	 * Delegates to {@link setConfigOp}.

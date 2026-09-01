@@ -61,6 +61,7 @@ export { RESUME_SETUP_PHASES } from './resume-setup-phases.js';
 export { APPEND_SETUP_PHASES } from './append-setup-phases.js';
 export { RETRY_FAILED_SETUP_PHASES } from './retry-failed-setup-phases.js';
 export { INVENTORY_SETUP_PHASES } from './inventory-setup-phases.js';
+export { RECRAWL_SETUP_PHASES } from './recrawl-setup-phases.js';
 export { SETUP_RECOVERY_PHASE_LABELS } from './setup-recovery-phase-labels.js';
 export * from './types.js';
 export * from './crawler/types.js';
