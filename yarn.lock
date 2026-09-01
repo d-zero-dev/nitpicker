@@ -3319,7 +3319,7 @@ __metadata:
     "@types/turndown": "npm:5.0.6"
     glob: "npm:13.0.6"
     jsdom: "npm:29.1.1"
-    sudachi-synonyms-dictionary: "npm:18.0.0"
+    sudachi-synonyms-dictionary: "npm:19.0.0"
     textlint: "npm:15.8.0"
     textlint-plugin-html: "npm:1.0.1"
     textlint-rule-ja-hiragana-fukushi: "npm:1.3.0"
@@ -18771,10 +18771,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"sudachi-synonyms-dictionary@npm:18.0.0":
-  version: 18.0.0
-  resolution: "sudachi-synonyms-dictionary@npm:18.0.0"
-  checksum: 10c0/5dfcb0352e634ad3658ca35d959b136a0b9fe3fbfcca6363e6b5f5626699b17126e0c6a38c2d5ca64871f53531eb1d9e67395d3845cdcfec0dd467ea52d45746
+"sudachi-synonyms-dictionary@npm:19.0.0":
+  version: 19.0.0
+  resolution: "sudachi-synonyms-dictionary@npm:19.0.0"
+  checksum: 10c0/2ad3dc60738e73a0c1c8250a978c36885622c2747a9537ab6afabc7635af90fa05196065702820b9b772ff2d91a469d22add664a3716dca950a40b27ddbac175
   languageName: node
   linkType: hard
 
