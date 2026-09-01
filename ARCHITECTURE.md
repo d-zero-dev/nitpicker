@@ -162,7 +162,7 @@
 
 ### crawler の挙動変更
 
-1. `cli/src/commands/crawl.ts`（入口・start/resume/append/inventory 分岐）
+1. `cli/src/commands/crawl.ts`（入口・start/resume/append/inventory/retry-failed/recrawl 分岐）
 2. `crawler/src/crawler-orchestrator.ts`（イベント配線・WriteQueue・abort）
 3. `crawler/src/crawler/crawler.ts`（`#runDeal` / `#scrapePage` / `#sendHeadRequest`）
 4. `crawler/src/crawler/link-list.ts`（キュー状態機械）と `fetch-destination.ts`（HEAD/GET）
@@ -215,7 +215,7 @@ DOM構造類似性によるページのテンプレート分類（`--templates` 
 2. `crawler/src/crawler/dedupe/`（opt-in `--dedupe-cap` 本体）: `compute-shape-key.ts`（URL 形状キー、`decompose-url.ts` を再利用。同名の別ファイル `archive/populate-ref-tables/decompose-url.ts` と混同しないこと）/ `compute-meta-signature.ts`（title/description/og:title/og:url の SHA-1）/ `resolve-og-url-mismatch.ts`（og:url 絶対化して自 URL と比較）/ `dedupe-cap-tracker.ts`（Misra-Gries 多数決カウンタ + sticky Set + hard cap LRU）/ `is-shape-capped.ts` / `is-predicted-content-duplicate.ts`（常時有効、予測ページ同士の body_hash 一致で予測を打ち切る軽量機構）
 3. ゲート配線（`crawler.ts`）: addUrl クロージャ先頭（実 anchor 用）と JS-redirect rescue の直接 enqueue（`result.source === 'js-redirect'` 分岐）の 2 箇所。予測 URL 生成自体は起点 anchor と同一 shapeKey のため別ゲート不要（`#predictedShapeStopped` と `#dedupeCapTracker.isCapped` の OR 判定のみ）
 4. `crawler/src/archive/create-adjunct-tables.ts`（`dedupe_cap_events` DDL）と `db-ops/dedupe-cap/`（insert / finalize / list-shape-keys）+ `archive.ts` / `database.ts` のファサード
-5. `crawler-orchestrator.ts`: `dedupeCap` イベントの WriteQueue 配線（`Map<shapeKey, eventId>` — `network_outages` のスカラー方式と違い複数 shape が同時に capped になり得るため）、`crawlEnd` での `rejected_count` 確定（`Crawler#getDedupeCapRejections()` を読む）、`append`/`inventory`/`retryFailed`/`resume` の 4 箇所での sticky Set preload（`Crawler` コンストラクタの `preloadedStickyShapeKeys` オプション経由。fresh crawl は対象外）
+5. `crawler-orchestrator.ts`: `dedupeCap` イベントの WriteQueue 配線（`Map<shapeKey, eventId>` — `network_outages` のスカラー方式と違い複数 shape が同時に capped になり得るため）、`crawlEnd` での `rejected_count` 確定（`Crawler#getDedupeCapRejections()` を読む）、`append`/`inventory`/`recrawl`/`retryFailed`/`resume` の 5 箇所での sticky Set preload（`Crawler` コンストラクタの `preloadedStickyShapeKeys` オプション経由。fresh crawl は対象外）
 6. inventory seed は `Crawler#resume()` → `LinkList#resume()` 経由でゲート 2 箇所を通らないため、cap の影響を受けない（構造的に保証、追加コード不要）
 7. CLI フラグ: `cli/src/commands/crawl.ts`（`--dedupe-cap` / `--dedupe-map-cap`、`dedupeCap` は `default: 10`）→ `cli/src/crawl/map-flags-to-crawl-config.ts`（`flags.dedupeCap || null` で `0` を `null` に変換 — `--no-dedupe-cap` は yargs-parser のboolean-negation数値強制で `dedupeCap: 0` になり `undefined` にはならないため、この変換が無いと `DedupeCapTracker#computeEffectiveThreshold` の `Math.max(threshold, 1)` フロアにより「最初の1件で即capする」という無効化の真逆の挙動になる）。**`cli/src/commands/pipeline.ts` は既知の理由（19行目の TODO「フラグ定義が crawl.ts / analyze.ts / report.ts と重複している」）で `dedupeCap` フラグ定義を手書き複製しているため、`default: 10` は両ファイルで揃えて保守する必要がある** — pipeline は内部で `startCrawl`（`mapFlagsToCrawlConfig` 呼び出し込み）を再利用するため `0→null` 変換自体は共有されるが、フラグ自体の `default` は各 commandDef が個別に持つため同期を怠ると `pipeline` だけ既定 OFF に戻る
 8. 事後クエリ: `query/src/list-duplicate-body-clusters.ts`（`findDuplicateBodies` とは別関数 — 既存 CLI/MCP 利用者の出力契約を壊さないため。`body_hash` をそのまま `signature` として再利用し、issue が提案した「query に signature 定義を置いて crawler から import」は依存方向ルール違反のため採らない）/ `query/src/list-dedupe-cap-events.ts`（`list-network-outages.ts` と同型）
