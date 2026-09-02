@@ -173,7 +173,22 @@ describe('collectHtmlReportPages', () => {
 	});
 
 	it('applies a directory prefix to the table rows only', async () => {
-		const pages = await collectHtmlReportPages(archive, ['/docs']);
+		const pages = await collectHtmlReportPages(archive, { directories: ['/docs'] });
+		expect(pages.map((page) => page.url)).toEqual(['https://example.com/docs']);
+	});
+
+	it('restricts to the given url allowlist', async () => {
+		const pages = await collectHtmlReportPages(archive, {
+			urls: ['https://example.com/about'],
+		});
+		expect(pages.map((page) => page.url)).toEqual(['https://example.com/about']);
+	});
+
+	it('combines urls and directories with AND semantics', async () => {
+		const pages = await collectHtmlReportPages(archive, {
+			urls: ['https://example.com/about', 'https://example.com/docs'],
+			directories: ['/docs'],
+		});
 		expect(pages.map((page) => page.url)).toEqual(['https://example.com/docs']);
 	});
 });

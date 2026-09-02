@@ -206,4 +206,43 @@ describe('applyPageListRowFilters', () => {
 		const qb = archive.getKnex()('viewer_pages');
 		expect(() => applyPageListRowFilters(qb, { directories: [''] })).toThrow(TypeError);
 	});
+
+	it('restricts to the given url allowlist', async () => {
+		const rows: { path_sort_key: string }[] = await archive
+			.getKnex()('viewer_pages')
+			.modify((qb) => applyPageListRowFilters(qb, { urls: ['https://example.com/blog'] }))
+			.select('path_sort_key');
+		expect(rows.map((row) => row.path_sort_key)).toEqual(['/blog']);
+	});
+
+	it('combines urls and directories with AND semantics', async () => {
+		const rows: { path_sort_key: string }[] = await archive
+			.getKnex()('viewer_pages')
+			.modify((qb) =>
+				applyPageListRowFilters(qb, {
+					urls: ['https://example.com/blog', 'https://example.com/missing'],
+					directories: ['/blog'],
+				}),
+			)
+			.select('path_sort_key');
+		expect(rows.map((row) => row.path_sort_key)).toEqual(['/blog']);
+	});
+
+	it('does not silently become "no filter" for an empty urls array', async () => {
+		// `applyEqualityOrInFilter` treats `[]` as "no predicate" by design —
+		// callers passing an empty, already-validated `urls` list must guard
+		// against that before reaching here (see `resolvePageListUrlFilter`'s
+		// callers). This test documents that this function itself applies no
+		// such guard, so an empty array here really does mean "no filter".
+		const rows: { path_sort_key: string }[] = await archive
+			.getKnex()('viewer_pages')
+			.modify((qb) => applyPageListRowFilters(qb, { urls: [] }))
+			.orderBy('path_sort_key', 'asc')
+			.select('path_sort_key');
+		expect(rows.map((row) => row.path_sort_key)).toEqual([
+			'/blog',
+			'/blogger',
+			'/missing',
+		]);
+	});
 });

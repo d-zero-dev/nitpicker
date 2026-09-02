@@ -99,6 +99,7 @@ jobs:
                 viewer-read-model-build.e2e.ts,
                 cache-cli.e2e.ts,
                 recrawl.e2e.ts,
+                report.e2e.ts,
               ]
           - id: inventory-snapshot
             files:
@@ -112,6 +113,7 @@ jobs:
                 special-char-auth.e2e.ts,
                 empty-password-auth.e2e.ts,
                 main-contents.e2e.ts,
+                query.e2e.ts,
               ]
           - id: retry-exclude
             files:

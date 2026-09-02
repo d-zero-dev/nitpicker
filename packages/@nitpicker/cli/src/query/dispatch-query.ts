@@ -48,7 +48,10 @@ import {
 	listPagesByTechnology,
 	listResources,
 	listUnusedResources,
+	matchUrlList,
 } from '@nitpicker/query';
+
+import { readUrlListFile } from '../read-url-list-file.js';
 
 import { mapFlagsToQueryOptions } from './map-flags-to-query-options.js';
 
@@ -275,6 +278,21 @@ export async function dispatchQuery(
 		case 'page-console-logs': {
 			const { url } = options as { url: string };
 			return getPageConsoleLogs(accessor, url);
+		}
+		case 'match-urls': {
+			const { urlListFilePath } = options as { urlListFilePath: string };
+			const { urls, invalid } = await readUrlListFile(urlListFilePath);
+			const results = await matchUrlList(accessor, urls);
+			return {
+				results,
+				invalidLines: invalid,
+				summary: {
+					total: urls.length + invalid.length,
+					invalid: invalid.length,
+					found: results.filter((r) => r.found).length,
+					notFound: results.filter((r) => !r.found).length,
+				},
+			};
 		}
 		default: {
 			const _exhaustive: never = subCommand;

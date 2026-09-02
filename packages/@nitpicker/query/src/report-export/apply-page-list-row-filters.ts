@@ -1,6 +1,7 @@
 import type { PageDirectoryPrefix, PageListRowFilterOptions } from './types.js';
 import type { Knex } from 'knex';
 
+import { applyEqualityOrInFilter } from '../apply-equality-or-in-filter.js';
 import { applyViewerPagesFilters } from '../apply-viewer-pages-filters.js';
 
 import { parsePageDirectoryPrefix } from './parse-page-directory-prefix.js';
@@ -72,15 +73,22 @@ function applyDirectoryPrefix(qb: Knex.QueryBuilder, prefix: PageDirectoryPrefix
  * @param options - The caller's directory filters, if any.
  * @throws {TypeError} If a `directories` entry is not a usable prefix (see
  *   {@link parsePageDirectoryPrefix}).
+ * `options.urls` is applied as a plain `AND url IN (...)` restriction (via
+ * `applyEqualityOrInFilter`, chunked below `SQLITE_LIMIT_VARIABLE_NUMBER`) on
+ * top of the base restriction and any `directories` filter — a page must
+ * satisfy both, not either.
  * @example
  * const qb = knex('viewer_pages');
  * applyPageListRowFilters(qb, { directories: ['/blog', 'https://example.com/news/'] });
+ * @example
+ * applyPageListRowFilters(qb, { urls: ['https://example.com/a', 'https://example.com/b'] });
  */
 export function applyPageListRowFilters(
 	qb: Knex.QueryBuilder,
 	options: PageListRowFilterOptions,
 ): void {
 	applyViewerPagesFilters(qb, { isExternal: false });
+	applyEqualityOrInFilter(qb, 'url', options.urls);
 
 	const prefixes = (options.directories ?? []).map((directory) =>
 		parsePageDirectoryPrefix(directory),

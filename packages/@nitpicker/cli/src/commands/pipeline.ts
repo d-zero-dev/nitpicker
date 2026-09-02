@@ -136,6 +136,9 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			html: undefined,
 			output: undefined,
 			htmlDirs: undefined,
+			// pipeline has no `--urls` flag of its own yet — if that changes,
+			// thread it through the same way `dedupeCap` is threaded above.
+			urls: undefined,
 			sheet: flags.sheet,
 			credentials: flags.credentials,
 			config: flags.config,

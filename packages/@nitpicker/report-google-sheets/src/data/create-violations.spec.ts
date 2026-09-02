@@ -1,4 +1,4 @@
-import { streamAllViolations } from '@nitpicker/query';
+import { applyEqualityOrInFilter, streamAllViolations } from '@nitpicker/query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { assertNoLazyCells } from '../test-helpers/assert-no-lazy-cells.js';
@@ -10,40 +10,52 @@ import { createViolations } from './create-violations.js';
 
 vi.mock('@nitpicker/query', () => ({
 	streamAllViolations: vi.fn(),
+	applyEqualityOrInFilter: vi.fn(),
 }));
 
 /**
- * Builds a fake accessor whose `getKnex()().count()` resolves to a fixed
- * `analysis_violations` row count, for `estimateRowCount()` tests.
+ * Builds a fake accessor whose
+ * `getKnex()('analysis_violations as v').join(...).join(...).modify(...).count()`
+ * chain resolves to a fixed `analysis_violations` row count, for
+ * `estimateRowCount()` tests.
  * @param violationCount - The `COUNT(*)` value to return.
  */
 function makeAccessor(violationCount: number) {
-	return {
-		getKnex: () => () => ({
-			count: () => [{ count: violationCount }],
-		}),
-	} as never;
+	const qb: {
+		join: () => unknown;
+		modify: (fn: (qb: unknown) => void) => unknown;
+		count: () => Promise<{ count: number }[]>;
+	} = {
+		join: () => qb,
+		modify: (fn: (qb: unknown) => void) => {
+			fn(qb);
+			return qb;
+		},
+		count: () => Promise.resolve([{ count: violationCount }]),
+	};
+	return { getKnex: () => () => qb } as never;
 }
 
 describe('createViolations', () => {
 	beforeEach(() => {
 		vi.mocked(streamAllViolations).mockReset();
+		vi.mocked(applyEqualityOrInFilter).mockReset();
 	});
 
 	it('returns sheet config with name "Violations", no read-model dependency', () => {
-		const setting = createViolations([], makeAccessor(0));
+		const setting = createViolations()([], makeAccessor(0));
 		expect(setting.name).toBe('Violations');
 		expect(setting.requiresReadModel).toBeFalsy();
 	});
 
 	it('returns correct headers', () => {
-		const setting = createViolations([], makeAccessor(0));
+		const setting = createViolations()([], makeAccessor(0));
 		const headers = setting.createHeaders();
 		expect(headers).toEqual(['Validator', 'Severity', 'Rule', 'Code', 'Message', 'URL']);
 	});
 
 	it('estimates the row count via an analysis_violations COUNT(*)', async () => {
-		const setting = createViolations([], makeAccessor(42));
+		const setting = createViolations()([], makeAccessor(42));
 		await expect(setting.estimateRowCount()).resolves.toBe(42);
 	});
 
@@ -69,7 +81,7 @@ describe('createViolations', () => {
 			]),
 		);
 
-		const setting = createViolations([], makeAccessor(2));
+		const setting = createViolations()([], makeAccessor(2));
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -98,7 +110,7 @@ describe('createViolations', () => {
 				},
 			]),
 		);
-		const setting = createViolations([], makeAccessor(1));
+		const setting = createViolations()([], makeAccessor(1));
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -118,7 +130,7 @@ describe('createViolations', () => {
 
 	it('returns no rows when there are no violations', async () => {
 		vi.mocked(streamAllViolations).mockReturnValue(oneChunk([]));
-		const setting = createViolations([], makeAccessor(0));
+		const setting = createViolations()([], makeAccessor(0));
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -150,7 +162,7 @@ describe('createViolations', () => {
 				},
 			]),
 		);
-		const setting = createViolations([], makeAccessor(2));
+		const setting = createViolations()([], makeAccessor(2));
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -159,6 +171,29 @@ describe('createViolations', () => {
 			onProgress: () => {},
 		});
 		expect(mock.rows).toHaveLength(1);
+	});
+
+	it('forwards options.urls to applyEqualityOrInFilter on ur.url and to streamAllViolations', async () => {
+		const accessor = makeAccessor(2);
+		vi.mocked(streamAllViolations).mockReturnValueOnce(oneChunk([]));
+		const urls = ['https://example.com/a'];
+		const setting = createViolations({ urls })([], accessor);
+
+		await expect(setting.estimateRowCount()).resolves.toBe(2);
+		expect(applyEqualityOrInFilter).toHaveBeenCalledWith(
+			expect.anything(),
+			'ur.url',
+			urls,
+		);
+
+		const mock = createMockSheet();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 0,
+			onProgress: () => {},
+		});
+		expect(streamAllViolations).toHaveBeenCalledWith(accessor, { urls });
 	});
 
 	it('reports onProgress against ctx.estimatedTotal, not maxRows (issue: misleading progress denominator)', async () => {
@@ -174,7 +209,7 @@ describe('createViolations', () => {
 				},
 			]),
 		);
-		const setting = createViolations([], makeAccessor(1));
+		const setting = createViolations()([], makeAccessor(1));
 		const mock = createMockSheet();
 		const onProgress = vi.fn();
 		await setting.run({

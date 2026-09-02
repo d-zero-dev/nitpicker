@@ -1,12 +1,17 @@
 import type { commandDef } from './report-def.js';
 import type { InferFlags } from '@d-zero/roar';
 
+import path from 'node:path';
+
 import { Lanes } from '@d-zero/dealer';
 
 import { createByteProgressLogger } from '../create-byte-progress-logger.js';
 import { formatCliError } from '../format-cli-error.js';
 import { formatLogLine } from '../format-log-line.js';
+import { readUrlListFile } from '../read-url-list-file.js';
 import { verbosely } from '../report/debug.js';
+import { formatInvalidReportUrlWarning } from '../report/format-invalid-report-url-warning.js';
+import { formatReportUrlSkipSummary } from '../report/format-report-url-skip-summary.js';
 
 /** Parsed flag values for the `report` CLI command. */
 type ReportFlags = InferFlags<typeof commandDef.flags>;
@@ -25,11 +30,19 @@ type ReportFlags = InferFlags<typeof commandDef.flags>;
  * Archive extraction progress is rendered to stderr on a single overwritten
  * `Lanes` line (one appended, timestamped line per update under `--verbose`),
  * and is suppressed entirely by `--silent`.
+ *
+ * `--urls <file>` restricts the report to the URLs listed in that
+ * newline-delimited file, read once here via `readUrlListFile` and passed
+ * raw (un-normalized) to whichever backend runs — each backend normalizes
+ * against its own archive's `disableQueries` setting after opening it. It
+ * combines with `--html-dirs` (AND); for Google Sheets it also restricts
+ * sheet generation to Page List/Links/Violations/Images (see
+ * `@nitpicker/report-google-sheets`'s `report()` docs).
  * @param args - Positional arguments; first argument is the `.nitpicker` file path
  * @param flags - Parsed CLI flags from the `report` command
  * @returns Resolves when the report is complete.
  *   Exits with code 1 if no file path is provided, the output selection is
- *   ambiguous, or an error occurs.
+ *   ambiguous, the `--urls` file has no valid URLs, or an error occurs.
  */
 export async function report(args: string[], flags: ReportFlags) {
 	if (flags.verbose && !flags.silent) {
@@ -51,6 +64,41 @@ export async function report(args: string[], flags: ReportFlags) {
 		// eslint-disable-next-line no-console
 		console.error('Error: Choose exactly one output: --sheet <url> or --html.');
 		process.exit(1);
+	}
+
+	// Read once, shared by both the HTML and Sheets report backends below —
+	// each backend re-normalizes these raw strings against its own archive's
+	// `disableQueries` setting via `resolvePageListUrlFilter` (see
+	// `@nitpicker/query`), since that normalization can't happen before the
+	// archive is open.
+	let urls: string[] | undefined;
+	if (flags.urls) {
+		const urlsFlag = flags.urls;
+		const resolvedListFile = path.resolve(process.cwd(), urlsFlag);
+		const { urls: validUrls, invalid } = await readUrlListFile(resolvedListFile);
+		if (validUrls.length === 0 && invalid.length === 0) {
+			// eslint-disable-next-line no-console
+			console.error(`Error: No URLs found in --urls file: ${urlsFlag}`);
+			process.exit(1);
+		}
+		if (invalid.length > 0) {
+			for (const item of invalid) {
+				// eslint-disable-next-line no-console -- operator-facing warning, must be visible regardless of --silent
+				console.warn(formatInvalidReportUrlWarning(urlsFlag, item));
+			}
+			// eslint-disable-next-line no-console -- see above
+			console.warn(
+				formatReportUrlSkipSummary(invalid.length, validUrls.length + invalid.length),
+			);
+		}
+		if (validUrls.length === 0) {
+			// eslint-disable-next-line no-console
+			console.error(
+				`Error: All ${invalid.length} line(s) in --urls file failed URL validation: ${urlsFlag}`,
+			);
+			process.exit(1);
+		}
+		urls = validUrls;
 	}
 
 	const credentialFilePath = flags.credentials;
@@ -111,6 +159,7 @@ export async function report(args: string[], flags: ReportFlags) {
 						filePath,
 						outputPath: flags.output,
 						directoryInput: flags.htmlDirs,
+						urls,
 						interactive: !!isTTY,
 						silent: flags.silent ?? false,
 						onExtractProgress,
@@ -126,6 +175,7 @@ export async function report(args: string[], flags: ReportFlags) {
 						all,
 						silent: flags.silent ?? false,
 						dedupeResources: flags.dedupeResources,
+						urls,
 						onExtractProgress,
 					});
 				};

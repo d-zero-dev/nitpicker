@@ -36,6 +36,11 @@ export const commandDef = {
 			valueName: 'URL-or-path,...',
 			desc: 'Directory prefixes for HTML reports with over 10,000 inner pages',
 		},
+		urls: {
+			type: 'string',
+			valueName: 'file',
+			desc: 'Restrict the report to pages matching this newline-delimited URL list file (blank lines and # comments ignored). Combines with --html-dirs (AND). For Google Sheets, restricts sheet generation to Page List/Links/Violations/Images.',
+		},
 		credentials: {
 			shortFlag: 'C',
 			type: 'string',

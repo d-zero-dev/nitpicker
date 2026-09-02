@@ -4,6 +4,7 @@ import { report as runHtmlReport } from '@nitpicker/report-html';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { formatCliError as formatCliErrorFn } from '../format-cli-error.js';
+import { readUrlListFile } from '../read-url-list-file.js';
 import { verbosely as verboselyFn } from '../report/debug.js';
 
 import { report } from './report.js';
@@ -37,6 +38,10 @@ vi.mock('../format-cli-error.js', () => ({
 	formatCliError: vi.fn(),
 }));
 
+vi.mock('../read-url-list-file.js', () => ({
+	readUrlListFile: vi.fn(),
+}));
+
 /** Sentinel error thrown by the process.exit mock to halt execution. */
 class ExitError extends Error {
 	/** The exit code passed to process.exit(). */
@@ -51,6 +56,7 @@ describe('report command', () => {
 	let originalIsTTY: boolean | undefined;
 	let exitSpy: ReturnType<typeof vi.spyOn>;
 	let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+	let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
 	let stderrSpy: ReturnType<typeof vi.spyOn>;
 
 	beforeEach(() => {
@@ -65,6 +71,7 @@ describe('report command', () => {
 			throw new ExitError(code as number);
 		});
 		consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 	});
 
@@ -557,5 +564,204 @@ describe('report command', () => {
 		// --silent suppresses debug output but not error stack traces
 		expect(formatCliErrorFn).toHaveBeenCalledWith(error, true);
 		expect(exitSpy).toHaveBeenCalledWith(1);
+	});
+
+	describe('--urls', () => {
+		it('reads the file and passes the valid URLs to the HTML report backend', async () => {
+			Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+			vi.mocked(readUrlListFile).mockResolvedValueOnce({
+				urls: ['https://example.com/a', 'https://example.com/b'],
+				invalid: [],
+				bytes: Buffer.from(''),
+			});
+
+			await report(['test.nitpicker'], {
+				html: true,
+				output: undefined,
+				htmlDirs: undefined,
+				urls: 'urls.txt',
+				sheet: undefined,
+				credentials: './credentials.json',
+				config: undefined,
+				all: undefined,
+				verbose: undefined,
+				silent: undefined,
+			});
+
+			expect(runHtmlReport).toHaveBeenCalledWith(
+				expect.objectContaining({
+					urls: ['https://example.com/a', 'https://example.com/b'],
+				}),
+			);
+			expect(exitSpy).not.toHaveBeenCalled();
+		});
+
+		it('reads the file and passes the valid URLs to the Sheets report backend', async () => {
+			Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+			vi.mocked(readUrlListFile).mockResolvedValueOnce({
+				urls: ['https://example.com/a'],
+				invalid: [],
+				bytes: Buffer.from(''),
+			});
+
+			await report(['test.nitpicker'], {
+				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+				urls: 'urls.txt',
+				credentials: './credentials.json',
+				config: undefined,
+				all: undefined,
+				verbose: undefined,
+				silent: undefined,
+			});
+
+			expect(runReport).toHaveBeenCalledWith(
+				expect.objectContaining({
+					urls: ['https://example.com/a'],
+				}),
+			);
+		});
+
+		it('passes urls: undefined to both backends when --urls is not given', async () => {
+			Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+
+			await report(['test.nitpicker'], {
+				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+				credentials: './credentials.json',
+				config: undefined,
+				all: undefined,
+				verbose: undefined,
+				silent: undefined,
+			});
+
+			expect(runReport).toHaveBeenCalledWith(
+				expect.objectContaining({ urls: undefined }),
+			);
+			expect(readUrlListFile).not.toHaveBeenCalled();
+		});
+
+		it('warns on invalid lines and continues with the valid URLs', async () => {
+			Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+			vi.mocked(readUrlListFile).mockResolvedValueOnce({
+				urls: ['https://example.com/a'],
+				invalid: [{ value: 'not-a-url', line: 2, column: 1 }],
+				bytes: Buffer.from(''),
+			});
+
+			await report(['test.nitpicker'], {
+				html: true,
+				output: undefined,
+				htmlDirs: undefined,
+				urls: 'urls.txt',
+				sheet: undefined,
+				credentials: './credentials.json',
+				config: undefined,
+				all: undefined,
+				verbose: undefined,
+				silent: undefined,
+			});
+
+			expect(consoleWarnSpy).toHaveBeenCalledWith(
+				expect.stringContaining('skipping invalid URL at urls.txt:2:1 — "not-a-url"'),
+			);
+			expect(consoleWarnSpy).toHaveBeenCalledWith(
+				expect.stringContaining(
+					'1 of 2 lines skipped as invalid; continuing with 1 URLs',
+				),
+			);
+			expect(runHtmlReport).toHaveBeenCalledWith(
+				expect.objectContaining({ urls: ['https://example.com/a'] }),
+			);
+			expect(exitSpy).not.toHaveBeenCalled();
+		});
+
+		it('exits with error when the --urls file has no lines at all', async () => {
+			vi.mocked(readUrlListFile).mockResolvedValueOnce({
+				urls: [],
+				invalid: [],
+				bytes: Buffer.from(''),
+			});
+
+			await expect(
+				report(['test.nitpicker'], {
+					html: true,
+					output: undefined,
+					htmlDirs: undefined,
+					urls: 'urls.txt',
+					sheet: undefined,
+					credentials: './credentials.json',
+					config: undefined,
+					all: undefined,
+					verbose: undefined,
+					silent: undefined,
+				}),
+			).rejects.toThrow(ExitError);
+
+			expect(consoleErrorSpy).toHaveBeenCalledWith(
+				'Error: No URLs found in --urls file: urls.txt',
+			);
+			expect(exitSpy).toHaveBeenCalledWith(1);
+			expect(runHtmlReport).not.toHaveBeenCalled();
+		});
+
+		it('exits with error when every line in the --urls file is invalid', async () => {
+			vi.mocked(readUrlListFile).mockResolvedValueOnce({
+				urls: [],
+				invalid: [
+					{ value: 'not-a-url', line: 1, column: 1 },
+					{ value: 'also-not-a-url', line: 2, column: 1 },
+				],
+				bytes: Buffer.from(''),
+			});
+
+			await expect(
+				report(['test.nitpicker'], {
+					html: true,
+					output: undefined,
+					htmlDirs: undefined,
+					urls: 'urls.txt',
+					sheet: undefined,
+					credentials: './credentials.json',
+					config: undefined,
+					all: undefined,
+					verbose: undefined,
+					silent: undefined,
+				}),
+			).rejects.toThrow(ExitError);
+
+			expect(consoleErrorSpy).toHaveBeenCalledWith(
+				'Error: All 2 line(s) in --urls file failed URL validation: urls.txt',
+			);
+			expect(exitSpy).toHaveBeenCalledWith(1);
+			expect(runHtmlReport).not.toHaveBeenCalled();
+		});
+
+		it('combines with --html-dirs by passing both through to the HTML report backend (AND)', async () => {
+			Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+			vi.mocked(readUrlListFile).mockResolvedValueOnce({
+				urls: ['https://example.com/docs/a'],
+				invalid: [],
+				bytes: Buffer.from(''),
+			});
+
+			await report(['test.nitpicker'], {
+				html: true,
+				output: undefined,
+				htmlDirs: '/docs',
+				urls: 'urls.txt',
+				sheet: undefined,
+				credentials: './credentials.json',
+				config: undefined,
+				all: undefined,
+				verbose: undefined,
+				silent: undefined,
+			});
+
+			expect(runHtmlReport).toHaveBeenCalledWith(
+				expect.objectContaining({
+					directoryInput: '/docs',
+					urls: ['https://example.com/docs/a'],
+				}),
+			);
+		});
 	});
 });

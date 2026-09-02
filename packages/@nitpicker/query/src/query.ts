@@ -6,6 +6,7 @@
  * large datasets (10,000+ pages, 500,000+ records).
  */
 
+export { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 export { ArchiveManager } from './archive-manager.js';
 export type { OpenResult } from './archive-manager.js';
 export { backfillAliasOfId } from './viewer-read-model/backfill-alias-of-id.js';
@@ -39,6 +40,7 @@ export { runViewerReadModelBackfillsInWorker } from './viewer-read-model/worker/
 export { findDuplicateBodies } from './find-duplicate-bodies.js';
 export { findDuplicates } from './find-duplicates.js';
 export { findMismatches } from './find-mismatches.js';
+export { findUnmatchedPageListUrls } from './report-export/find-unmatched-page-list-urls.js';
 export { getDirectoryTree } from './get-directory-tree.js';
 export { getErrorKinds } from './get-error-kinds.js';
 export { getDuplicatesFastPath } from './get-duplicates-fast-path.js';
@@ -116,15 +118,22 @@ export { listViewerPages } from './list-viewer-pages.js';
 export { listViewerResources } from './list-viewer-resources.js';
 export { listViewerUnusedResources } from './list-viewer-unused-resources.js';
 export { matchesAnyFilterValue } from './matches-any-filter-value.js';
+export { matchUrlList } from './match-url-list.js';
+export type { UrlMatchResult } from './types.js';
+export { normalizeArchiveUrl } from './normalize-archive-url.js';
 export { parsePageDirectoryPrefix } from './report-export/parse-page-directory-prefix.js';
 export type { PageDirectoryPrefix } from './report-export/types.js';
 export { prepareUrlSortTempTable } from './url-sort-temp-table.js';
 export { requireViewerReadModel } from './require-viewer-read-model.js';
 export { resolveErrorKindsSort } from './resolve-error-kinds-sort.js';
+export { resolveAndValidatePageListUrlFilter } from './report-export/resolve-and-validate-page-list-url-filter.js';
 export { resolvePageIdsByUrls } from './report-export/resolve-page-ids-by-urls.js';
+export { resolvePageListUrlFilter } from './report-export/resolve-page-list-url-filter.js';
+export type { ResolvedPageListUrlFilter } from './report-export/resolve-page-list-url-filter.js';
 export { resolveLiveFilterValue } from './resolve-live-filter-value.js';
 export type { ResolvedErrorKindsSort } from './resolve-error-kinds-sort.js';
 export { sortArrayItems } from './sort-array-items.js';
+export { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
 export { streamAllContentItems } from './report-export/stream-all-content-items.js';
 export type { ContentItemStreamRow } from './report-export/types.js';
 export { streamPageListRows } from './report-export/stream-page-list-rows.js';
@@ -141,4 +150,5 @@ export { streamResourceReferrerEdges } from './report-export/stream-resource-ref
 export type { ResourceReferrerEdgeStreamRow } from './report-export/types.js';
 export { streamAllViolations } from './report-export/stream-all-violations.js';
 export type { ViolationStreamRow } from './report-export/types.js';
+export { warnUnmatchedPageListUrls } from './report-export/warn-unmatched-page-list-urls.js';
 export * from './types.js';
