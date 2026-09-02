@@ -194,6 +194,11 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Pretty-print JSON output',
 		},
+		urls: {
+			type: 'string',
+			valueName: 'file',
+			desc: 'Path to a newline-delimited URL list file (blank lines and # comments ignored)',
+		},
 	},
 	// Keep each entry's `flags` list in sync with the flags that
 	// `mapFlagsToQueryOptions` actually reads for that sub-command —
@@ -396,6 +401,11 @@ export const commandDef = {
 			desc: 'List URL shapes capped by the --dedupe-cap crawl backstop',
 			usage: '<file> dedupe-cap-events [options]',
 			flags: ['limit', 'offset'],
+		},
+		'match-urls': {
+			desc: 'Match a URL list file against the archive, one result per input URL (diagnostic for report --urls)',
+			usage: '<file> match-urls --urls <urls-file>',
+			flags: ['urls'],
 		},
 	},
 } as const satisfies CommandDef;

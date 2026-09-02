@@ -64,7 +64,14 @@ vi.mock('@nitpicker/query', () => ({
 	listUnusedResources: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	listConsoleLogs: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	getPageConsoleLogs: vi.fn().mockResolvedValue([]),
+	matchUrlList: vi.fn().mockResolvedValue([]),
 	ArchiveManager: vi.fn(),
+}));
+
+vi.mock('../read-url-list-file.js', () => ({
+	readUrlListFile: vi
+		.fn()
+		.mockResolvedValue({ urls: [], invalid: [], bytes: Buffer.from('') }),
 }));
 
 /** Mock accessor for testing dispatch calls. */
@@ -534,5 +541,68 @@ describe('dispatchQuery', () => {
 		await expect(
 			dispatchQuery(mockAccessor, 'page-console-logs', {} as never),
 		).rejects.toThrow('--url is required for the page-console-logs sub-command.');
+	});
+
+	it('dispatches match-urls sub-command, combining matchUrlList results with a summary', async () => {
+		const { readUrlListFile } = await import('../read-url-list-file.js');
+		const { matchUrlList } = await import('@nitpicker/query');
+		vi.mocked(readUrlListFile).mockResolvedValueOnce({
+			urls: ['https://example.com/a', 'https://example.com/missing'],
+			invalid: [{ value: 'not-a-url', line: 3, column: 1 }],
+			bytes: Buffer.from(''),
+		});
+		vi.mocked(matchUrlList).mockResolvedValueOnce([
+			{
+				url: 'https://example.com/a',
+				normalizedUrl: 'https://example.com/a',
+				found: true,
+				pageId: 1,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				title: 'A',
+				isExternal: false,
+				isSkipped: false,
+				skipReason: null,
+				firstCrawledAt: 1,
+				lastCrawledAt: 2,
+				redirectDestUrl: null,
+			},
+			{
+				url: 'https://example.com/missing',
+				normalizedUrl: 'https://example.com/missing',
+				found: false,
+				pageId: null,
+				status: null,
+				statusText: null,
+				contentType: null,
+				title: null,
+				isExternal: null,
+				isSkipped: null,
+				skipReason: null,
+				firstCrawledAt: null,
+				lastCrawledAt: null,
+				redirectDestUrl: null,
+			},
+		]);
+
+		const result = await dispatchQuery(mockAccessor, 'match-urls', {
+			urls: '/tmp/urls.txt',
+		} as never);
+
+		expect(readUrlListFile).toHaveBeenCalledWith('/tmp/urls.txt');
+		expect(matchUrlList).toHaveBeenCalledWith(mockAccessor, [
+			'https://example.com/a',
+			'https://example.com/missing',
+		]);
+		expect(result).toMatchObject({
+			summary: { total: 3, invalid: 1, found: 1, notFound: 1 },
+		});
+	});
+
+	it('match-urls sub-command throws when --urls is missing', async () => {
+		await expect(dispatchQuery(mockAccessor, 'match-urls', {} as never)).rejects.toThrow(
+			'--urls <file> is required for the match-urls sub-command.',
+		);
 	});
 });

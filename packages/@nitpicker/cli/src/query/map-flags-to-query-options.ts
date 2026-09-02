@@ -346,6 +346,12 @@ export function mapFlagsToQueryOptions(
 			}
 			return { url: flags.url };
 		}
+		case 'match-urls': {
+			if (!flags.urls) {
+				throw new Error('--urls <file> is required for the match-urls sub-command.');
+			}
+			return { urlListFilePath: flags.urls };
+		}
 		default: {
 			const _exhaustive: never = subCommand;
 			throw new Error(`Unknown sub-command: ${String(_exhaustive)}`);

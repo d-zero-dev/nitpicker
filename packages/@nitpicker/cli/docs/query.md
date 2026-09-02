@@ -61,6 +61,7 @@ npx @nitpicker/cli query ./site.nitpicker page-detail --url https://example.com/
 | `inventory-runs`             | inventory実行履歴                                                      |
 | `console-logs`               | 捕捉したconsoleログ・ページエラー（内容ごとに全ページ横断で集約）      |
 | `page-console-logs`          | 指定URLのconsoleログ・ページエラー明細                                 |
+| `match-urls`                 | URLリストとアーカイブの突合診断（`report --urls` の未マッチ調査用）    |
 
 ## サブコマンド別オプション
 
@@ -406,6 +407,18 @@ npx @nitpicker/cli query ./site.nitpicker page-console-logs --url https://exampl
 
 指定ページで捕捉された console メッセージ・ページエラーを発生順に返します。`args`（引数）・発生箇所・スタックトレース（`pageerror` のみ）を含みます。
 
+### `match-urls`
+
+```sh
+npx @nitpicker/cli query ./site.nitpicker match-urls --urls ./urls.txt --pretty
+```
+
+| オプション | 型               | 説明                                             |
+| ---------- | ---------------- | ------------------------------------------------ |
+| `--urls`   | string, required | 1行1URLのリストファイル（空行・`#`コメント許容） |
+
+リスト内の各URLについて、アーカイブに存在するか（`found`）・redirect先・external/skip判定・ステータス等を入力順のまま返します。`results`（URLごとの詳細）・`invalidLines`（URL形式として無効だった行）・`summary`（`total`/`invalid`/`found`/`notFound`件数）を含みます。`report -H --urls` / `report -S --urls` がレポートに載せなかったURLの理由（未収録・redirect化・PDF等の対象外カテゴリ）を突き止める診断用コマンドです。
+
 ## 全オプション一覧
 
 | オプション                   | 型      | 主な用途                                                                                                                                             |
@@ -444,4 +457,5 @@ npx @nitpicker/cli query ./site.nitpicker page-console-logs --url https://exampl
 | `--full`                     | boolean | `page-jsonld`                                                                                                                                        |
 | `--representative-url`       | string  | `get-isolated-cluster`                                                                                                                               |
 | `--include-redirect-sources` | boolean | `links`                                                                                                                                              |
+| `--urls`                     | string  | `match-urls`                                                                                                                                         |
 | `--pretty`                   | boolean | JSON整形                                                                                                                                             |

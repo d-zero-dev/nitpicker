@@ -430,6 +430,18 @@ describe('mapFlagsToQueryOptions', () => {
 		);
 	});
 
+	it('requires --urls for match-urls', () => {
+		expect(() => mapFlagsToQueryOptions('match-urls', {})).toThrow(
+			'--urls <file> is required for the match-urls sub-command.',
+		);
+	});
+
+	it('maps match-urls flags correctly', () => {
+		expect(mapFlagsToQueryOptions('match-urls', { urls: 'urls.txt' })).toEqual({
+			urlListFilePath: 'urls.txt',
+		});
+	});
+
 	it('reads exactly the flags listed in the query commandDef sub-command metadata', async () => {
 		const { commandDef } = await import('../commands/query-def.js');
 		const { VALID_SUB_COMMANDS } = await import('./types.js');
@@ -451,6 +463,7 @@ describe('mapFlagsToQueryOptions', () => {
 			'page-technologies': { url: 'https://example.com/a' },
 			'get-isolated-cluster': { representativeUrl: 'https://example.com/a' },
 			'page-console-logs': { url: 'https://example.com/a' },
+			'match-urls': { urls: 'urls.txt' },
 		};
 
 		// One valid non-default value per flag, used to probe whether the
@@ -495,6 +508,7 @@ describe('mapFlagsToQueryOptions', () => {
 			representativeUrl: 'https://example.com/other',
 			includeRedirectSources: true,
 			pretty: true,
+			urls: 'other-urls.txt',
 		};
 
 		// Sub-commands that validate enum-shaped flags need probe values from
