@@ -2,6 +2,10 @@ import type { CreateSheet } from './sheets/types.js';
 
 import { authentication } from '@d-zero/google-auth';
 import { Sheets } from '@d-zero/google-sheets';
+import {
+	resolveAndValidatePageListUrlFilter,
+	warnUnmatchedPageListUrls,
+} from '@nitpicker/query';
 import enquirer from 'enquirer';
 
 import { createDiscrepancies } from './data/create-discrepancies.js';
@@ -41,6 +45,32 @@ const SHEET_PRIORITY_ORDER = [
 type SheetName = (typeof SHEET_PRIORITY_ORDER)[number];
 
 /**
+ * Sheets whose row set can be restricted to a `--urls` allowlist: each one's
+ * row is a single page's own data, so "restrict to these pages" has an
+ * unambiguous meaning. The rest are excluded from both `--all` and the
+ * interactive picker when `--urls` is given:
+ *
+ * - `Discrepancies` compares two URLs per row (`leftSourceUrl`/
+ *   `rightSourceUrl`) — which side matching `--urls` should keep is
+ *   undefined.
+ * - `Resources` / `Resources Relational Table` are many-to-many with pages
+ *   (one resource can be referenced by many pages), and the dedupe-mode
+ *   aggregation is precomputed at `viewer-build` time across the whole
+ *   archive — filtering it after the fact would make its `Count`/referrer
+ *   columns disagree with their own documented meaning.
+ * - `Referrers Relational Table` is a source/dest edge — restricting by
+ *   either side alone would silently change which half of the table
+ *   "restrict to these pages" means.
+ * - `Summary` has no generator at all (see the `switch` below).
+ */
+const URL_FILTERABLE_SHEETS: readonly SheetName[] = [
+	'Page List',
+	'Links',
+	'Violations',
+	'Images',
+];
+
+/**
  * Parameters for {@link report}.
  */
 export interface ReportParams {
@@ -69,6 +99,19 @@ export interface ReportParams {
 	 * value here.
 	 */
 	readonly dedupeResources?: boolean;
+	/**
+	 * Restricts generation to pages matching these URLs (raw, pre-normalization —
+	 * normalized internally against the archive's `disableQueries` config via
+	 * `resolveAndValidatePageListUrlFilter`). When set, only the four sheets whose
+	 * rows are one-per-page (`Page List`, `Links`, `Violations`, `Images`) are
+	 * eligible for generation — see {@link URL_FILTERABLE_SHEETS}'s docs for why
+	 * the rest are excluded. An empty array is rejected by
+	 * `resolveAndValidatePageListUrlFilter` rather than silently falling back to
+	 * "no filter" — the underlying `applyEqualityOrInFilter` treats an empty
+	 * array as no filter, which here would turn a mistaken empty `--urls` into an
+	 * unfiltered full run.
+	 */
+	readonly urls?: readonly string[];
 	/**
 	 * Called during the archive-open untar step with bytes read so far and
 	 * the archive's total size (issue #294: a large archive's extraction can
@@ -124,6 +167,8 @@ export async function report(params: ReportParams) {
 	} = params;
 	log('Initialization');
 
+	const warnings: string[] = [];
+
 	const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'] as const;
 	log('Authenticating');
 	const auth = await authentication(credentialFilePath, SCOPES, {
@@ -135,6 +180,12 @@ export async function report(params: ReportParams) {
 	await using archiveHandle = await openReportArchive(filePath, onExtractProgress);
 	const { accessor } = archiveHandle;
 	log('Archive opened');
+
+	const collectWarning = (message: string) => warnings.push(`${message}\n`);
+	const normalizedUrls: readonly string[] | undefined =
+		params.urls === undefined
+			? undefined
+			: await resolveAndValidatePageListUrlFilter(accessor, params.urls, collectWarning);
 
 	log('Loading config');
 	const config = await loadConfig(configPath);
@@ -153,11 +204,22 @@ export async function report(params: ReportParams) {
 
 	log('Reporting starts');
 
+	const availableSheetNames =
+		normalizedUrls === undefined ? SHEET_PRIORITY_ORDER : URL_FILTERABLE_SHEETS;
+	if (normalizedUrls !== undefined) {
+		const excluded = SHEET_PRIORITY_ORDER.filter(
+			(name) => !URL_FILTERABLE_SHEETS.includes(name),
+		);
+		warnings.push(
+			`--urls: restricting to URL-filterable sheets only. Excluded (no unambiguous per-URL restriction): ${excluded.join(', ')}.\n`,
+		);
+	}
+
 	let selectedSheetNames: SheetName[];
 
 	if (all) {
 		log('All sheets selected (--all or non-TTY)');
-		selectedSheetNames = [...SHEET_PRIORITY_ORDER];
+		selectedSheetNames = [...availableSheetNames];
 	} else {
 		log('Choice creating data');
 		const chosenSheets = await enquirer
@@ -166,7 +228,7 @@ export async function report(params: ReportParams) {
 					message: 'What do you report?',
 					name: 'sheetName',
 					type: 'multiselect',
-					choices: [...SHEET_PRIORITY_ORDER],
+					choices: [...availableSheetNames],
 				},
 			])
 			.catch(() => {
@@ -186,8 +248,6 @@ export async function report(params: ReportParams) {
 
 	log('Chosen sheets: %O', selectedSheetNames);
 
-	const warnings: string[] = [];
-
 	// Priority order is the fixed SHEET_PRIORITY_ORDER, not the user's
 	// selection-click order — createSheets's Phase 2 treats array order as
 	// the cell-budget allocation priority (see that file's docs).
@@ -198,15 +258,15 @@ export async function report(params: ReportParams) {
 		}
 		switch (name) {
 			case 'Page List': {
-				createSheetList.push(createPageList);
+				createSheetList.push(createPageList({ urls: normalizedUrls }));
 				break;
 			}
 			case 'Links': {
-				createSheetList.push(createLinks);
+				createSheetList.push(createLinks({ urls: normalizedUrls }));
 				break;
 			}
 			case 'Violations': {
-				createSheetList.push(createViolations);
+				createSheetList.push(createViolations({ urls: normalizedUrls }));
 				break;
 			}
 			case 'Discrepancies': {
@@ -218,7 +278,7 @@ export async function report(params: ReportParams) {
 				break;
 			}
 			case 'Images': {
-				createSheetList.push(createImageList);
+				createSheetList.push(createImageList({ urls: normalizedUrls }));
 				break;
 			}
 			case 'Referrers Relational Table': {
@@ -259,6 +319,9 @@ export async function report(params: ReportParams) {
 		},
 	});
 	log('Reporting done');
+	if (normalizedUrls !== undefined) {
+		await warnUnmatchedPageListUrls(accessor, normalizedUrls, collectWarning);
+	}
 	for (const warning of warnings) {
 		// eslint-disable-next-line no-console
 		console.error(warning);

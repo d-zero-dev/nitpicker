@@ -1,7 +1,7 @@
 import type { CreateSheet } from '../sheets/types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
-import { streamAllViolations } from '@nitpicker/query';
+import { applyEqualityOrInFilter, streamAllViolations } from '@nitpicker/query';
 
 import { createCellData } from '../sheets/create-cell-data.js';
 import { defaultCellFormat } from '../sheets/default-cell-format.js';
@@ -9,12 +9,18 @@ import { defaultCellFormat } from '../sheets/default-cell-format.js';
 /**
  * Counts every `analysis_violations` row, for `estimateRowCount()`.
  * @param accessor - The archive accessor to query.
+ * @param urls - Exact-match URL allowlist, already normalized. Omitted or empty counts every row.
  */
-async function countViolations(accessor: ArchiveAccessor): Promise<number> {
+async function countViolations(
+	accessor: ArchiveAccessor,
+	urls: readonly string[] | undefined,
+): Promise<number> {
 	const knex = accessor.getKnex();
-	const [row] = await knex('analysis_violations').count<{ count: string | number }[]>({
-		count: '*',
-	});
+	const [row] = await knex('analysis_violations as v')
+		.join('content_items as p', 'p.id', 'v.page_id')
+		.join('url_refs as ur', 'ur.id', 'p.url_id')
+		.modify((qb) => applyEqualityOrInFilter(qb, 'ur.url', urls))
+		.count<{ count: string | number }[]>({ count: '*' });
 	return Number(row?.count ?? 0);
 }
 
@@ -26,38 +32,46 @@ async function countViolations(accessor: ArchiveAccessor): Promise<number> {
  * into a `Report.violations` array before generation started (via
  * `getPluginReports`). No read-model dependency: `analysis_violations` is a
  * write-model table.
- * @param _reports - Unused; the Violations sheet has no plugin-report dependency.
- * @param accessor - The archive accessor to query.
+ * `options.urls` (already normalized via `resolvePageListUrlFilter`)
+ * restricts both `estimateRowCount` and `run` to violations reported
+ * against exactly those pages.
+ * @param options - Row-set restriction. Omitted or `urls: undefined` reports every violation.
+ * @param options.urls - See above.
+ * @returns A {@link CreateSheet} factory for the Violations sheet.
  */
-export const createViolations: CreateSheet = (_reports, accessor) => {
-	return {
-		name: 'Violations',
-		createHeaders() {
-			return ['Validator', 'Severity', 'Rule', 'Code', 'Message', 'URL'];
-		},
-		estimateRowCount: () => countViolations(accessor),
-		async run({ sheet, maxRows, estimatedTotal, onProgress }) {
-			let sent = 0;
-			const total = estimatedTotal;
-			for await (const chunk of streamAllViolations(accessor)) {
-				for (const violation of chunk) {
-					if (sent >= maxRows) {
-						await sheet.flush();
-						return;
+export function createViolations(options?: { urls?: readonly string[] }): CreateSheet {
+	const urls = options?.urls;
+
+	return (_reports, accessor) => {
+		return {
+			name: 'Violations',
+			createHeaders() {
+				return ['Validator', 'Severity', 'Rule', 'Code', 'Message', 'URL'];
+			},
+			estimateRowCount: () => countViolations(accessor, urls),
+			async run({ sheet, maxRows, estimatedTotal, onProgress }) {
+				let sent = 0;
+				const total = estimatedTotal;
+				for await (const chunk of streamAllViolations(accessor, { urls })) {
+					for (const violation of chunk) {
+						if (sent >= maxRows) {
+							await sheet.flush();
+							return;
+						}
+						await sheet.appendRow([
+							createCellData({ value: violation.validator }, defaultCellFormat),
+							createCellData({ value: violation.severity }, defaultCellFormat),
+							createCellData({ value: violation.rule }, defaultCellFormat),
+							createCellData({ value: violation.code }, defaultCellFormat),
+							createCellData({ value: violation.message }, defaultCellFormat),
+							createCellData({ value: violation.url }, defaultCellFormat),
+						]);
+						sent++;
+						onProgress(sent, total);
 					}
-					await sheet.appendRow([
-						createCellData({ value: violation.validator }, defaultCellFormat),
-						createCellData({ value: violation.severity }, defaultCellFormat),
-						createCellData({ value: violation.rule }, defaultCellFormat),
-						createCellData({ value: violation.code }, defaultCellFormat),
-						createCellData({ value: violation.message }, defaultCellFormat),
-						createCellData({ value: violation.url }, defaultCellFormat),
-					]);
-					sent++;
-					onProgress(sent, total);
 				}
-			}
-			await sheet.flush();
-		},
+				await sheet.flush();
+			},
+		};
 	};
-};
+}

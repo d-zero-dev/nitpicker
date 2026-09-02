@@ -1,4 +1,8 @@
-import { getInboundReferrerUrlsByPageIds, streamAllContentItems } from '@nitpicker/query';
+import {
+	applyEqualityOrInFilter,
+	getInboundReferrerUrlsByPageIds,
+	streamAllContentItems,
+} from '@nitpicker/query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { assertNoLazyCells } from '../test-helpers/assert-no-lazy-cells.js';
@@ -11,25 +15,48 @@ import { createLinks } from './create-links.js';
 vi.mock('@nitpicker/query', () => ({
 	streamAllContentItems: vi.fn(),
 	getInboundReferrerUrlsByPageIds: vi.fn(),
+	applyEqualityOrInFilter: vi.fn(),
 }));
 
 const NO_ACCESSOR = undefined as never;
+
+/**
+ * Builds a fake accessor whose `getKnex()('content_items as ci').join(...).modify(...).count()`
+ * chain resolves to a fixed row count, for `estimateRowCount()` tests.
+ * @param count - The `COUNT(*)` value to return.
+ */
+function makeAccessor(count: number) {
+	const qb: {
+		join: () => unknown;
+		modify: (fn: (qb: unknown) => void) => unknown;
+		count: () => Promise<{ count: number }[]>;
+	} = {
+		join: () => qb,
+		modify: (fn: (qb: unknown) => void) => {
+			fn(qb);
+			return qb;
+		},
+		count: () => Promise.resolve([{ count }]),
+	};
+	return { getKnex: () => () => qb } as never;
+}
 
 describe('createLinks', () => {
 	beforeEach(() => {
 		vi.mocked(streamAllContentItems).mockReset();
 		vi.mocked(getInboundReferrerUrlsByPageIds).mockReset();
 		vi.mocked(getInboundReferrerUrlsByPageIds).mockResolvedValue(new Map());
+		vi.mocked(applyEqualityOrInFilter).mockReset();
 	});
 
 	it('returns sheet config with name "Links" and requiresReadModel', () => {
-		const setting = createLinks([], NO_ACCESSOR);
+		const setting = createLinks()([], NO_ACCESSOR);
 		expect(setting.name).toBe('Links');
 		expect(setting.requiresReadModel).toBe(true);
 	});
 
 	it('returns correct headers', () => {
-		const setting = createLinks([], NO_ACCESSOR);
+		const setting = createLinks()([], NO_ACCESSOR);
 		expect(setting.createHeaders()).toEqual([
 			'URL',
 			'Page Title',
@@ -73,7 +100,7 @@ describe('createLinks', () => {
 			]),
 		);
 
-		const setting = createLinks([], NO_ACCESSOR);
+		const setting = createLinks()([], NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -105,7 +132,7 @@ describe('createLinks', () => {
 			]),
 		);
 
-		const setting = createLinks([], NO_ACCESSOR);
+		const setting = createLinks()([], NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -158,7 +185,7 @@ describe('createLinks', () => {
 			]),
 		);
 
-		const setting = createLinks([], NO_ACCESSOR);
+		const setting = createLinks()([], NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -209,7 +236,7 @@ describe('createLinks', () => {
 			]),
 		);
 
-		const setting = createLinks([], NO_ACCESSOR);
+		const setting = createLinks()([], NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -254,7 +281,7 @@ describe('createLinks', () => {
 			]),
 		);
 
-		const setting = createLinks([], NO_ACCESSOR);
+		const setting = createLinks()([], NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -286,7 +313,7 @@ describe('createLinks', () => {
 				})),
 			),
 		);
-		const setting = createLinks([], NO_ACCESSOR);
+		const setting = createLinks()([], NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -296,6 +323,29 @@ describe('createLinks', () => {
 		});
 		expect(mock.rows).toHaveLength(2);
 		expect(mock.flushCount).toBe(1);
+	});
+
+	it('forwards options.urls to applyEqualityOrInFilter on ur.url and to streamAllContentItems', async () => {
+		const accessor = makeAccessor(3);
+		vi.mocked(streamAllContentItems).mockReturnValueOnce(oneChunk([]));
+		const urls = ['https://example.com/a'];
+		const setting = createLinks({ urls })([], accessor);
+
+		await expect(setting.estimateRowCount()).resolves.toBe(3);
+		expect(applyEqualityOrInFilter).toHaveBeenCalledWith(
+			expect.anything(),
+			'ur.url',
+			urls,
+		);
+
+		const mock = createMockSheet();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 0,
+			onProgress: () => {},
+		});
+		expect(streamAllContentItems).toHaveBeenCalledWith(accessor, { urls });
 	});
 
 	it('reports onProgress against ctx.estimatedTotal, not maxRows (issue: misleading progress denominator)', async () => {
@@ -315,7 +365,7 @@ describe('createLinks', () => {
 				},
 			]),
 		);
-		const setting = createLinks([], NO_ACCESSOR);
+		const setting = createLinks()([], NO_ACCESSOR);
 		const mock = createMockSheet();
 		const onProgress = vi.fn();
 		await setting.run({

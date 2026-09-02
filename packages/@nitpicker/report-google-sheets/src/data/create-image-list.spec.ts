@@ -1,6 +1,6 @@
 import type { ImageStreamRow } from '@nitpicker/query';
 
-import { streamAllImages } from '@nitpicker/query';
+import { applyEqualityOrInFilter, streamAllImages } from '@nitpicker/query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { assertNoLazyCells } from '../test-helpers/assert-no-lazy-cells.js';
@@ -12,6 +12,7 @@ import { createImageList } from './create-image-list.js';
 
 vi.mock('@nitpicker/query', () => ({
 	streamAllImages: vi.fn(),
+	applyEqualityOrInFilter: vi.fn(),
 }));
 
 const NO_ACCESSOR = undefined as never;
@@ -36,31 +37,41 @@ function makeRow(overrides: Partial<ImageStreamRow> = {}): ImageStreamRow {
 }
 
 /**
- * Builds a fake accessor whose `getKnex()('image_items').count()` resolves
- * to a fixed row count, for `estimateRowCount()` tests.
+ * Builds a fake accessor whose
+ * `getKnex()('image_items as ii').join(...).join(...).modify(...).count()`
+ * chain resolves to a fixed row count, for `estimateRowCount()` tests.
  * @param imageCount - The `COUNT(*)` value to return.
  */
 function makeAccessor(imageCount: number) {
-	return {
-		getKnex: () => () => ({
-			count: () => [{ count: imageCount }],
-		}),
-	} as never;
+	const qb: {
+		join: () => unknown;
+		modify: (fn: (qb: unknown) => void) => unknown;
+		count: () => Promise<{ count: number }[]>;
+	} = {
+		join: () => qb,
+		modify: (fn: (qb: unknown) => void) => {
+			fn(qb);
+			return qb;
+		},
+		count: () => Promise.resolve([{ count: imageCount }]),
+	};
+	return { getKnex: () => () => qb } as never;
 }
 
 describe('createImageList', () => {
 	beforeEach(() => {
 		vi.mocked(streamAllImages).mockReset();
+		vi.mocked(applyEqualityOrInFilter).mockReset();
 	});
 
 	it('returns sheet config with name "Images" and requiresReadModel', () => {
-		const setting = createImageList([], NO_ACCESSOR);
+		const setting = createImageList()([], NO_ACCESSOR);
 		expect(setting.name).toBe('Images');
 		expect(setting.requiresReadModel).toBe(true);
 	});
 
 	it('returns correct headers, with DOM Path replacing Source Code', () => {
-		const setting = createImageList([], NO_ACCESSOR);
+		const setting = createImageList()([], NO_ACCESSOR);
 		expect(setting.createHeaders()).toEqual([
 			'Page URL',
 			'Image path (src)',
@@ -74,7 +85,7 @@ describe('createImageList', () => {
 	});
 
 	it('estimates the row count via a plain image_items COUNT(*)', async () => {
-		const setting = createImageList([], makeAccessor(7));
+		const setting = createImageList()([], makeAccessor(7));
 		await expect(setting.estimateRowCount()).resolves.toBe(7);
 	});
 
@@ -98,7 +109,7 @@ describe('createImageList', () => {
 			]),
 		);
 
-		const setting = createImageList([], NO_ACCESSOR);
+		const setting = createImageList()([], NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -116,6 +127,29 @@ describe('createImageList', () => {
 		expect(cellValue(row[7]!)).toBe('html/body[1]/img[1]');
 	});
 
+	it('forwards options.urls to applyEqualityOrInFilter on page_ur.url (the page URL, not src) and to streamAllImages', async () => {
+		const accessor = makeAccessor(4);
+		vi.mocked(streamAllImages).mockReturnValueOnce(oneChunk([]));
+		const urls = ['https://example.com/a'];
+		const setting = createImageList({ urls })([], accessor);
+
+		await expect(setting.estimateRowCount()).resolves.toBe(4);
+		expect(applyEqualityOrInFilter).toHaveBeenCalledWith(
+			expect.anything(),
+			'page_ur.url',
+			urls,
+		);
+
+		const mock = createMockSheet();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 0,
+			onProgress: () => {},
+		});
+		expect(streamAllImages).toHaveBeenCalledWith(accessor, { urls });
+	});
+
 	it('stops sending rows once maxRows is reached', async () => {
 		vi.mocked(streamAllImages).mockReturnValueOnce(
 			oneChunk([
@@ -124,7 +158,7 @@ describe('createImageList', () => {
 			]),
 		);
 
-		const setting = createImageList([], NO_ACCESSOR);
+		const setting = createImageList()([], NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,

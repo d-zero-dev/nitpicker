@@ -72,7 +72,7 @@ describe('createSheets pipeline', () => {
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
 		const createTestViolations: CreateSheet = (reports, accessor) => {
-			const setting = createViolations(reports, accessor);
+			const setting = createViolations()(reports, accessor);
 			return { ...setting, name: sheetName };
 		};
 
@@ -111,7 +111,7 @@ describe('createSheets pipeline', () => {
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
 		const createTestPageList: CreateSheet = (reports, accessor) => {
-			const setting = createPageList(reports, accessor);
+			const setting = createPageList()(reports, accessor);
 			return { ...setting, name: sheetName };
 		};
 
@@ -166,7 +166,7 @@ describe('createSheets pipeline', () => {
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
 		const createTestLinks: CreateSheet = (reports, accessor) => {
-			const setting = createLinks(reports, accessor);
+			const setting = createLinks()(reports, accessor);
 			return { ...setting, name: sheetName };
 		};
 
@@ -247,7 +247,7 @@ describe('createSheets pipeline', () => {
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
 		const createTestImageList: CreateSheet = (reports, accessor) => {
-			const setting = createImageList(reports, accessor);
+			const setting = createImageList()(reports, accessor);
 			return { ...setting, name: sheetName };
 		};
 
