@@ -4,6 +4,7 @@ import type { CrawlerOptions, InventoryMode } from './crawler/types.js';
 import type {
 	CrawlEvent,
 	InventoryRunAggregates,
+	SetupPhaseLabel,
 	SetupProgressCallbacks,
 } from './types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
@@ -35,6 +36,7 @@ import { shouldSkipUrl } from './crawler/should-skip-url.js';
 import { crawlerLog, log } from './debug.js';
 import { INVENTORY_SETUP_PHASES } from './inventory-setup-phases.js';
 import { normalizeToArray } from './normalize-to-array.js';
+import { RECRAWL_SETUP_PHASES } from './recrawl-setup-phases.js';
 import { resolveOutputPath } from './resolve-output-path.js';
 import { resourceRowToLookupResult } from './resource-row-to-lookup-result.js';
 import { RESUME_SETUP_PHASES } from './resume-setup-phases.js';
@@ -149,10 +151,10 @@ interface CrawlConfig extends Config {
 
 	/**
 	 * See {@link CrawlerOptions.preloadedStickyShapeKeys}. Set internally by
-	 * the four resuming-session static methods
-	 * (`append`/`inventory`/`retryFailed`/`resume`), each independently
-	 * calling `archive.listDedupeCapShapeKeys()`; not part of the public
-	 * options a caller of those methods passes directly.
+	 * the five resuming-session static methods
+	 * (`append`/`inventory`/`recrawl`/`retryFailed`/`resume`), each
+	 * independently calling `archive.listDedupeCapShapeKeys()`; not part of
+	 * the public options a caller of those methods passes directly.
 	 */
 	preloadedStickyShapeKeys: readonly string[];
 }
@@ -1154,95 +1156,23 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				await archive.saveInventorySourceList(source.sha256, source.bytes);
 			}
 
-			// Parse + scope-classify the candidate URLs. sortUrl drops
-			// unparseable strings; findScopeEntry separates in-scope from
-			// out-of-scope.
-			const parsedAll = sortUrl(inventoryUrls, archived);
-			const scopeMap = new Map<string, ExURL[]>();
-			for (const raw of archived.roots) {
-				const parsed = parseUrl(raw, archived);
-				if (!parsed) continue;
-				const existing = scopeMap.get(parsed.hostname) ?? [];
-				scopeMap.set(parsed.hostname, [...existing, parsed]);
-			}
-			const inScope: ExURL[] = [];
-			let outOfScope = 0;
-			for (const url of parsedAll) {
-				if (findScopeEntry(url, scopeMap, archived) === null) {
-					outOfScope++;
-				} else {
-					inScope.push(url);
-				}
-			}
-			if (outOfScope > 0) {
-				log(
-					'[inventory] %d URL(s) skipped (outside archived scope: %O)',
-					outOfScope,
-					archived.roots,
-				);
-			}
-
-			// Drop URLs that are already represented in the archive (either
-			// as pages or resources). Comparison key is `withoutHashAndAuth`
-			// to mirror what `resolveContentItemId` / `insertResource` actually store.
-			// Two independent reads — Promise.all halves the wait on large
-			// archives where each `WHERE url IN (?)` chunk costs real I/O.
+			// Parse, scope-classify, and split the candidate URLs into
+			// already-known vs. novel — shared with `recrawl`, see
+			// `#classifyInventoryCandidateUrls`.
 			setupProgress?.onPhase?.(PHASE_CHECKING_KNOWN_URLS);
-			const candidateUrls = inScope.map((u) => u.withoutHashAndAuth);
-			const [existingPageUrlList, existingResourceUrlList] = await Promise.all([
-				archive.getExistingPageUrls(candidateUrls),
-				archive.getExistingResourceUrls(candidateUrls),
-			]);
-			const existingPageUrls = new Set(existingPageUrlList);
-			const existingResourceUrls = new Set(existingResourceUrlList);
-			const novelUrls = inScope.filter((u) => {
-				const key = u.withoutHashAndAuth;
-				return !existingPageUrls.has(key) && !existingResourceUrls.has(key);
-			});
-			const knownCount = existingPageUrls.size + existingResourceUrls.size;
-			log(
-				'[inventory] %d in-scope, %d already in archive, %d new',
-				inScope.length,
-				knownCount,
-				novelUrls.length,
-			);
-
-			// Split the novel URLs on the exclusion config BEFORE the
-			// HTML/non-HTML classification, so an exclude-matched URL is
-			// recorded as a terminal skipped page instead of being imported
-			// (issue #260). The inputs mirror the scrape phase's fetch-time
-			// gate (`shouldSkipUrl` in `crawler.ts` fed by the constructor's
-			// merge): archived config overlaid with this run's overrides,
-			// and `DEFAULT_EXCLUDED_EXTERNAL_URLS` merged ahead of the
-			// user's prefixes — classification and gate must never disagree
-			// about the same URL. Running this AFTER the known-URL filter is
-			// deliberate: a previously crawled row that newly matches the
-			// exclusion config stays untouched (crawled-wins), matching how
-			// `getExistingPageUrls` shields known rows from re-labelling.
-			// `excludeKeywords` is deliberately absent: it matches rendered
-			// page content, which a URL list does not have — HTML seeds
-			// still get it at render time via the browser verdict.
-			const effectiveConfig = { ...archived, ...cleanObject(options) };
-			const excludes = normalizeToArray(effectiveConfig.excludes);
-			const excludeUrls = [
-				...DEFAULT_EXCLUDED_EXTERNAL_URLS,
-				...normalizeToArray(effectiveConfig.excludeUrls),
-			];
-			const excludedNovelUrls: ExURL[] = [];
-			const importableNovelUrls: ExURL[] = [];
-			for (const url of novelUrls) {
-				if (shouldSkipUrl({ url, excludes, excludeUrls, options: effectiveConfig })) {
-					excludedNovelUrls.push(url);
-				} else {
-					importableNovelUrls.push(url);
-				}
-			}
-			if (excludedNovelUrls.length > 0) {
-				log(
-					'[inventory] %d URL(s) recorded as skipped (matched excludes / excludeUrls)',
-					excludedNovelUrls.length,
+			const { outOfScope, novelUrls } =
+				await CrawlerOrchestrator.#classifyInventoryCandidateUrls(
+					inventoryUrls,
+					archived,
+					archive,
 				);
-			}
+
+			// Split the novel URLs on the exclusion config — shared with
+			// `recrawl`, see `#classifyExcludedNovelUrls`. `effectiveConfig`
+			// is also used below to build `baseConfig`.
+			const effectiveConfig = { ...archived, ...cleanObject(options) };
+			const { excludedNovelUrls, importableNovelUrls } =
+				CrawlerOrchestrator.#classifyExcludedNovelUrls(novelUrls, effectiveConfig);
 
 			if (novelUrls.length === 0) {
 				// Nothing to do — release the archive cleanly without taking a
@@ -1271,93 +1201,17 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			// clause). This flag steers the catch below.
 			let ingestionComplete = false;
 			try {
-				// Classify importable novel URLs by URL-extension heuristic (no I/O).
-				// Source file lists come from `ls` on the doc-root, so the
-				// extension reflects the real file type — a HEAD pre-flight
-				// here would be pure wasted I/O. Edge cases:
-				//
-				// - `.html` returning 404 / 200: the normal crawler HEAD/GET
-				//   path absorbs this because every HTML-classified URL is
-				//   fed through the dealer and gets its real HEAD/GET there.
-				//
-				// - Extensionless API endpoints (e.g. `/api/foo`) that the
-				//   server returns as `text/html`: `isLikelyHtmlUrl` accepts
-				//   them as HTML so the dealer's render path runs — the
-				//   real content-type wins downstream.
-				//
-				// - `.aspx` / `.do` / `.jsp` / other server-handler
-				//   extensions that the heuristic does NOT recognise as
-				//   HTML: these are classified as non-HTML here, recorded
-				//   as `resources` rows with all-null metadata, and never
-				//   get a HEAD/GET probe. The accepted trade-off for
-				//   `--inventory`'s "list of static-looking server files"
-				//   contract; sites that mix server-handlers into the
-				//   inventory list will need a follow-up `--retry-failed`
-				//   pass (or a re-`--inventory` with the corrected list)
-				//   to populate metadata.
-				//
-				// non-HTML rows are recorded with null status/content-type
-				// which is sufficient for `listUnusedResources` (referrer
-				// count = 0) but means downstream consumers must treat
-				// null as "not probed" rather than "failed".
-				const rawHtmlSeeds: ExURL[] = [];
-				const nonHtmlSeeds: ExURL[] = [];
-				for (const url of importableNovelUrls) {
-					if (isLikelyHtmlUrl(url)) {
-						rawHtmlSeeds.push(url);
-					} else {
-						nonHtmlSeeds.push(url);
-					}
-				}
-				// Dedup HTML seeds by `protocolAgnosticKey` so an inventory
-				// list that mixes `http://` and `https://` for the same
-				// origin does not produce two `pages` rows that the dealer
-				// later collapses to one — the loser would otherwise stay
-				// `scraped=0, source='inventory-seed'` forever and look like
-				// a real recovery candidate on `--resume`. `getExistingPageUrls`
-				// keys on the full URL (with protocol), so it cannot catch
-				// the cross-scheme duplicate; this is the dedup boundary.
-				const seenKeys = new Set<string>();
-				const htmlSeeds: ExURL[] = [];
-				for (const url of rawHtmlSeeds) {
-					const key = protocolAgnosticKey(url.withoutHashAndAuth);
-					if (seenKeys.has(key)) {
-						continue;
-					}
-					seenKeys.add(key);
-					htmlSeeds.push(url);
-				}
-				// Bulk-record non-HTML novel URLs in `resources` as
-				// `source='inventory-seed'` placeholders. A
-				// per-URL `await setResources(...)` loop would spend minutes
-				// inside the `.bak`-protected window on large inventory
-				// lists; the chunked bulk path collapses N round-trips
-				// to N/500.
-				setupProgress?.onPhase?.(PHASE_RECORDING_NON_HTML);
-				await archive.insertInventoryResources(nonHtmlSeeds);
-				// Pre-insert HTML seeds as `scraped = 0`,
-				// `source = 'inventory-seed'` placeholders *before* the
-				// scrape phase, so a Ctrl+C between here and `setPage`
-				// cannot lose the URL. The strict-pending set picks
-				// these rows up on the next `--resume` via the
-				// `OR p.source != 'crawled'` clause.
-				setupProgress?.onPhase?.(PHASE_RECORDING_HTML_SEEDS);
-				await archive.insertInventorySeeds(htmlSeeds);
-				// Record exclude-matched novel URLs as terminal skipped pages
-				// (`is_skipped=1`, `skip_reason='excluded'`,
-				// `source='inventory-seed'`) — the same end state the normal
-				// crawl's fetch-time gate produces for link-discovered
-				// excluded URLs, so the archive looks identical no matter
-				// how the URL was discovered. Inside the `.bak` window for
-				// the same all-or-nothing reason as the seed inserts above.
-				setupProgress?.onPhase?.(PHASE_RECORDING_EXCLUDED);
-				await archive.insertInventorySkippedPages(excludedNovelUrls);
-				log(
-					'[inventory] %d HTML seed(s), %d non-HTML resource(s), %d skipped page(s) recorded',
-					htmlSeeds.length,
-					nonHtmlSeeds.length,
-					excludedNovelUrls.length,
-				);
+				// Classify, dedup, and bulk-record the novel URLs — shared
+				// with `recrawl`, see `#ingestNovelSeeds`.
+				const { htmlSeeds, nonHtmlSeeds } = await CrawlerOrchestrator.#ingestNovelSeeds({
+					archive,
+					importableNovelUrls,
+					excludedNovelUrls,
+					setupProgress,
+					phaseRecordingNonHtml: PHASE_RECORDING_NON_HTML,
+					phaseRecordingHtmlSeeds: PHASE_RECORDING_HTML_SEEDS,
+					phaseRecordingExcluded: PHASE_RECORDING_EXCLUDED,
+				});
 				// Audit row is written *inside* the `.bak` window: a libsql
 				// hiccup or transient lock on the INSERT aborts the ingestion
 				// and the `.bak` restore wipes the pre-inserted seeds too,
@@ -1518,6 +1372,563 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			await archive.close().catch(() => {});
 			throw error;
 		}
+	}
+
+	/**
+	 * Re-fetch pages named by an operator-supplied URL list, importing any
+	 * URL the archive does not yet track as a new inventory seed.
+	 *
+	 * `recrawl` is `retryFailed`'s un-scrape combined with `inventory`'s
+	 * novel-URL ingestion, run inside one `.bak`-protected window: URLs in
+	 * `recrawlUrls` that already exist as `content_items` rows are reset back
+	 * to pending via {@link Archive.resetPagesByUrls} (see that method for the
+	 * conservative exclusion rules — redirect sources, intentionally-skipped
+	 * pages, and external pages are matched but never reset), while URLs the
+	 * archive has never seen are ingested exactly as `inventory` does (see
+	 * {@link CrawlerOrchestrator.inventory}'s JSDoc for that half's contract).
+	 * Existing *resources* matched by the list are neither resettable nor
+	 * novel — `resource_items` is first-write-wins (a known deviation, see
+	 * ARCHITECTURE.md), so a resource re-fetch would not update anything; the
+	 * function reports how many list entries fell into this bucket via
+	 * `setupProgress.onLog` without acting on them.
+	 *
+	 * Unlike `inventory`, whose sole early-return condition is "no novel
+	 * URLs", `recrawl` also has existing pages to act on — the `.bak` is
+	 * skipped only when BOTH `existingPageUrls` (reset candidates) AND
+	 * `novelUrls` (ingestion candidates) are empty.
+	 *
+	 * **Strict-pending gap**: `getCrawlingState()`'s pending set only includes
+	 * a `scraped = 0` row that is either anchor-referenced or explicitly
+	 * labelled (see that function's JSDoc). When `recrawlUrls` contains pages
+	 * that link to each other, resetting one page also deletes its outgoing
+	 * `anchor_edges` — so a `source = 'crawled'` sibling that was reset in the
+	 * same pass can lose its only anchor referrer and fall out of the strict
+	 * pending set, silently skipping its re-fetch. `retryFailed` never hits
+	 * this because a failed page's referrers are not themselves reset. The
+	 * fix: every URL `Archive.resetPagesByUrls` actually reset is merged into
+	 * the pending list handed to `Crawler#resume` regardless of what the
+	 * strict scan finds, deduplicated by `LinkList.add`'s `protocolAgnosticKey`
+	 * check. A Ctrl+C between the reset and the scrape phase loses this
+	 * synthetic merge (it lives only in memory) — `crawl --resume` recovers
+	 * whatever the strict-pending scan finds on its own, and re-running
+	 * `--recrawl` with the same list recovers the rest, matching the
+	 * "un-picked seeds" recovery contract `getCrawlingState`'s JSDoc already
+	 * documents for `inventory`.
+	 *
+	 * **Stale analyze findings**: resetting a page deletes its
+	 * `analysis_violations` rows (see {@link resetPagesByUrls}'s JSDoc) so a
+	 * re-fetched page never shows findings from HTML that no longer exists,
+	 * but other `analyze` outputs (e.g. Discrepancies plugin reports) are not
+	 * page-scoped and cannot be selectively invalidated. When at least one
+	 * page was reset, a `crawlSessionNotice` is emitted after the crawl
+	 * completes recommending `analyze` be re-run before the next `report`.
+	 * @param archivePath - Absolute or relative path to the existing `.nitpicker`.
+	 * @param recrawlUrls - URLs to match against the archive (existing pages
+	 *   are reset; unknown URLs are ingested as new inventory seeds).
+	 * @param options - Optional config overrides applied on top of the archived config.
+	 * @param initializedCallback - Optional callback invoked after initialization but before crawling resumes.
+	 * @param source - The CLI's already-read URL list source bytes, archived
+	 *   for audit purposes — see {@link InventorySource}. `null` for
+	 *   programmatic callers with no source file.
+	 * @param setupProgress - Optional progress callbacks for the setup phase
+	 *   (untar, `.bak` copy, URL classification, reset, seed ingestion, state
+	 *   rebuild) that runs before `initializedCallback` — see
+	 *   {@link SetupProgressCallbacks} for why this can't go through the
+	 *   orchestrator's event emitter (issue #294).
+	 * @returns The orchestrator instance after the recrawl completes.
+	 * @throws {Error} When `recrawlUrls` is empty or the archive is in list mode.
+	 */
+	static async recrawl(
+		archivePath: string,
+		recrawlUrls: string[],
+		options?: Partial<CrawlConfig>,
+		initializedCallback?: CrawlInitializedCallback,
+		source: InventorySource | null = null,
+		setupProgress?: SetupProgressCallbacks,
+	) {
+		const [
+			PHASE_EXTRACTING,
+			PHASE_LOADING_CONFIG,
+			PHASE_LOADING_CRAWL_STATE_PRE,
+			PHASE_CHECKING_KNOWN_URLS,
+			PHASE_BACKING_UP,
+			PHASE_RESETTING_MATCHED,
+			PHASE_RECORDING_NON_HTML,
+			PHASE_RECORDING_HTML_SEEDS,
+			PHASE_RECORDING_EXCLUDED,
+			PHASE_LOADING_CRAWL_STATE_POST,
+			PHASE_LOADING_RESOURCES,
+			PHASE_LOADING_SCRAPED_COUNT,
+			PHASE_RESTORING_CRAWL_STATE,
+		] = RECRAWL_SETUP_PHASES;
+		if (recrawlUrls.length === 0) {
+			throw new Error('recrawl: URL list is empty');
+		}
+		const cwd = options?.cwd ?? process.cwd();
+		const absFilePath = path.isAbsolute(archivePath)
+			? archivePath
+			: path.resolve(cwd, archivePath);
+
+		// See `ArchiveOpenOptions.openPluginData` for why this must be `true`
+		// on every writer path that calls `write()`.
+		setupProgress?.onPhase?.(PHASE_EXTRACTING);
+		const archive = await Archive.open({
+			filePath: absFilePath,
+			cwd,
+			openPluginData: true,
+			onExtractProgress: setupProgress?.onExtractProgress,
+			onLog: setupProgress?.onLog,
+		});
+		try {
+			setupProgress?.onPhase?.(PHASE_LOADING_CONFIG);
+			const archived = await archive.getConfig();
+			if (archived.fromList) {
+				throw new Error(
+					'Cannot recrawl a list-mode archive: this archive was created with --list/--list-file and contains metadata-only pages. Create a fresh archive instead.',
+				);
+			}
+
+			setupProgress?.onPhase?.(PHASE_LOADING_CRAWL_STATE_PRE);
+			const { pending } = await archive.getCrawlingState();
+			if (pending.length > 0) {
+				// Same rationale as `inventory`'s identical warning — routed
+				// through `setupProgress.onLog`, not a bare `console.warn`,
+				// since the `'Loading crawl state'` row is active here.
+				const message = `recrawl: archive has ${pending.length} pending URLs from a previous crawl. Proceeding — crawled-wins priority keeps their labels stable. Consider \`--resume\` first if you want the prior work finalized.`;
+				if (setupProgress?.onLog) {
+					setupProgress.onLog(message);
+				} else {
+					// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+					console.warn(message);
+				}
+			}
+
+			// Archive the exact source bytes before scope classification —
+			// same rationale as `inventory`'s identical call.
+			if (source) {
+				await archive.saveInventorySourceList(source.sha256, source.bytes);
+			}
+
+			setupProgress?.onPhase?.(PHASE_CHECKING_KNOWN_URLS);
+			const { outOfScope, existingPageUrls, existingResourceUrls, novelUrls } =
+				await CrawlerOrchestrator.#classifyInventoryCandidateUrls(
+					recrawlUrls,
+					archived,
+					archive,
+				);
+			if (existingResourceUrls.length > 0) {
+				const message = `recrawl: ${existingResourceUrls.length} URL(s) matched existing resources — not re-fetched (resource rows are first-write-wins; re-fetching would not update them).`;
+				if (setupProgress?.onLog) {
+					setupProgress.onLog(message);
+				} else {
+					// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+					console.warn(message);
+				}
+			}
+
+			const effectiveConfig = { ...archived, ...cleanObject(options) };
+			const { excludedNovelUrls, importableNovelUrls } =
+				CrawlerOrchestrator.#classifyExcludedNovelUrls(novelUrls, effectiveConfig);
+
+			if (existingPageUrls.length === 0 && novelUrls.length === 0) {
+				// Nothing to do — release the archive cleanly without taking a
+				// backup, mirroring `inventory`'s zero-novel early return.
+				const orchestrator = new CrawlerOrchestrator(archive, effectiveConfig);
+				if (initializedCallback) {
+					await initializedCallback(orchestrator, effectiveConfig);
+				}
+				return orchestrator;
+			}
+
+			const backupPath = absFilePath + '.bak';
+			setupProgress?.onPhase?.(PHASE_BACKING_UP);
+			await copyFileWithProgress(absFilePath, backupPath, setupProgress?.onCopyProgress);
+
+			let ingestionComplete = false;
+			try {
+				setupProgress?.onPhase?.(PHASE_RESETTING_MATCHED);
+				const resetResult = await archive.resetPagesByUrls(
+					existingPageUrls,
+					setupProgress?.onChunkProgress,
+				);
+				const excludedTotal =
+					resetResult.excludedRedirects.length +
+					resetResult.excludedSkipped.length +
+					resetResult.excludedExternal.length;
+				// `existingPageUrls` (from `getExistingPageUrls`) matches by URL
+				// alone, regardless of `scraped` — it can include rows still
+				// pending from an interrupted previous session. Those rows are
+				// absent from every `resetPagesByUrls` array (see that
+				// function's JSDoc: "already pending, nothing to reset"), so
+				// the three counts below alone would not sum back to
+				// `existingPageUrls.length` and the message would look like
+				// pages vanished unexplained. Naming this remainder keeps the
+				// arithmetic honest for an operator auditing the summary.
+				const alreadyPendingCount =
+					existingPageUrls.length - resetResult.resetUrls.length - excludedTotal;
+				const summaryMessage = `recrawl: matched ${existingPageUrls.length} existing page(s) — reset ${resetResult.resetUrls.length}, excluded ${excludedTotal} (${resetResult.excludedRedirects.length} redirect source(s), ${resetResult.excludedSkipped.length} intentionally-skipped, ${resetResult.excludedExternal.length} external), already pending ${alreadyPendingCount}.`;
+				if (setupProgress?.onLog) {
+					setupProgress.onLog(summaryMessage);
+				} else {
+					// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+					console.warn(summaryMessage);
+				}
+
+				const { htmlSeeds, nonHtmlSeeds } = await CrawlerOrchestrator.#ingestNovelSeeds({
+					archive,
+					importableNovelUrls,
+					excludedNovelUrls,
+					setupProgress,
+					phaseRecordingNonHtml: PHASE_RECORDING_NON_HTML,
+					phaseRecordingHtmlSeeds: PHASE_RECORDING_HTML_SEEDS,
+					phaseRecordingExcluded: PHASE_RECORDING_EXCLUDED,
+				});
+				// Audit row is written *inside* the `.bak` window — same
+				// all-or-nothing rationale as `inventory`'s identical write.
+				await CrawlerOrchestrator.#writeInventoryRunRow(archive, {
+					inventoryUrlsCount: recrawlUrls.length,
+					htmlSeedsCount: htmlSeeds.length,
+					nonHtmlCount: nonHtmlSeeds.length,
+					outOfScope,
+					excludeSkipped: excludedNovelUrls.length,
+					sourceFileSha256: source?.sha256 ?? null,
+					invalidSkipped: source?.invalidLineCount ?? null,
+					listLabelPrefix: 'recrawl',
+					notes: `Reset ${resetResult.resetUrls.length} existing page(s) for re-fetch`,
+				});
+				ingestionComplete = true;
+				await ignoreEnoent(unlinkFile(backupPath));
+
+				const baseConfig: Config = {
+					...effectiveConfig,
+					recursive: true,
+					fromList: false,
+				};
+				const seedSet = new Set(htmlSeeds.map((u) => u.withoutHashAndAuth));
+				const orchestratorOptions: Partial<CrawlConfig> = {
+					...baseConfig,
+					inventoryMode: { seedUrls: seedSet },
+				};
+
+				if (resetResult.resetUrls.length > 0 || htmlSeeds.length > 0) {
+					orchestratorOptions.preloadedStickyShapeKeys =
+						await archive.listDedupeCapShapeKeys();
+					const orchestrator = new CrawlerOrchestrator(archive, orchestratorOptions);
+					setupProgress?.onPhase?.(PHASE_LOADING_CRAWL_STATE_POST);
+					const { scraped: scrapedAfter, pending: pendingAfter } =
+						await archive.getCrawlingState();
+					// Merge the reset URLs into the pending set explicitly —
+					// see this method's "Strict-pending gap" JSDoc section.
+					// Deduped by `LinkList.add`'s own key check, so a URL the
+					// strict scan already found is harmless to repeat here.
+					const pendingWithReset = [
+						...new Set([...pendingAfter, ...resetResult.resetUrls]),
+					];
+					setupProgress?.onPhase?.(PHASE_LOADING_RESOURCES);
+					const resources = await archive.getResourceUrlList(
+						setupProgress?.onChunkProgress,
+					);
+					setupProgress?.onPhase?.(PHASE_LOADING_SCRAPED_COUNT);
+					const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
+					setupProgress?.onPhase?.(PHASE_RESTORING_CRAWL_STATE);
+					orchestrator.#crawler.resume(
+						pendingWithReset,
+						scrapedAfter,
+						resources,
+						pagesScrapedOffset,
+					);
+					if (initializedCallback) {
+						await initializedCallback(orchestrator, baseConfig);
+					}
+					log('Start recrawl');
+					log('Archive %s', absFilePath);
+					log(
+						'Reset %d page(s), %d new HTML seed(s)',
+						resetResult.resetUrls.length,
+						htmlSeeds.length,
+					);
+					await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
+					await orchestrator.crawling([], { recursive: true });
+					CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);
+					if (resetResult.resetUrls.length > 0) {
+						void orchestrator.emit('crawlSessionNotice', {
+							message: `[recrawl] Reset ${resetResult.resetUrls.length} page(s) — run \`analyze\` before \`report\` to refresh their findings.`,
+						});
+					}
+					await orchestrator.#setUrlOrder();
+					return orchestrator;
+				}
+
+				// Only non-HTML URLs were imported and nothing was reset —
+				// nothing left to render, but still update sort order.
+				const orchestrator = new CrawlerOrchestrator(archive, orchestratorOptions);
+				if (initializedCallback) {
+					await initializedCallback(orchestrator, baseConfig);
+				}
+				await orchestrator.#setUrlOrder();
+				return orchestrator;
+			} catch (error) {
+				if (ingestionComplete) {
+					try {
+						setupProgress?.onPhase?.(RECOVERY_PERSIST_INGESTED_STATE);
+						await archive.write();
+						await archive.releaseHandle();
+					} catch (persistError) {
+						throw new AggregateError(
+							[error, persistError],
+							'recrawl scrape phase failed AND persisting the ingested state to disk also failed. The archive may be in an inconsistent state — check tmpDir.',
+						);
+					}
+					throw error;
+				}
+				try {
+					setupProgress?.onPhase?.(RECOVERY_RESTORE_FROM_BACKUP);
+					await copyFileWithProgress(
+						backupPath,
+						absFilePath,
+						setupProgress?.onCopyProgress,
+					);
+					await ignoreEnoent(unlinkFile(backupPath));
+				} catch (restoreError) {
+					throw new AggregateError(
+						[error, restoreError],
+						`recrawl failed AND restore from backup failed. Original archive backup is left at: ${backupPath}`,
+					);
+				}
+				throw error;
+			}
+		} catch (error) {
+			await archive.close().catch(() => {});
+			throw error;
+		}
+	}
+
+	/**
+	 * Shared first-stage classification for `inventory` and `recrawl`: parse
+	 * the candidate URLs, split them by the archived scope map into
+	 * in-scope/out-of-scope, then split the in-scope set into URLs already
+	 * represented in the archive (as a page or a resource) vs. novel URLs the
+	 * archive has never seen. Comparison key is `withoutHashAndAuth` to
+	 * mirror what `resolveContentItemId` / `insertResource` actually store.
+	 *
+	 * The two existing-URL reads run concurrently via `Promise.all` — halves
+	 * the wait on large archives where each `WHERE url IN (?)` chunk costs
+	 * real I/O.
+	 * @param rawUrls - The operator-supplied URL list, unparsed.
+	 * @param archived - The archive's persisted config (`roots` defines scope).
+	 * @param archive - The opened archive to query for existing URLs.
+	 * @returns `outOfScope` (count dropped by the scope filter),
+	 *   `existingPageUrls` / `existingResourceUrls` (URLs already known, by
+	 *   kind), and `novelUrls` (parsed, in-scope URLs matching neither).
+	 */
+	static async #classifyInventoryCandidateUrls(
+		rawUrls: string[],
+		archived: Config,
+		archive: Archive,
+	): Promise<{
+		outOfScope: number;
+		existingPageUrls: string[];
+		existingResourceUrls: string[];
+		novelUrls: ExURL[];
+	}> {
+		const parsedAll = sortUrl(rawUrls, archived);
+		const scopeMap = new Map<string, ExURL[]>();
+		for (const raw of archived.roots) {
+			const parsed = parseUrl(raw, archived);
+			if (!parsed) continue;
+			const existing = scopeMap.get(parsed.hostname) ?? [];
+			scopeMap.set(parsed.hostname, [...existing, parsed]);
+		}
+		const inScope: ExURL[] = [];
+		let outOfScope = 0;
+		for (const url of parsedAll) {
+			if (findScopeEntry(url, scopeMap, archived) === null) {
+				outOfScope++;
+			} else {
+				inScope.push(url);
+			}
+		}
+		if (outOfScope > 0) {
+			log(
+				'[ingest] %d URL(s) skipped (outside archived scope: %O)',
+				outOfScope,
+				archived.roots,
+			);
+		}
+
+		const candidateUrls = inScope.map((u) => u.withoutHashAndAuth);
+		const [existingPageUrls, existingResourceUrls] = await Promise.all([
+			archive.getExistingPageUrls(candidateUrls),
+			archive.getExistingResourceUrls(candidateUrls),
+		]);
+		const existingPageUrlSet = new Set(existingPageUrls);
+		const existingResourceUrlSet = new Set(existingResourceUrls);
+		const novelUrls = inScope.filter((u) => {
+			const key = u.withoutHashAndAuth;
+			return !existingPageUrlSet.has(key) && !existingResourceUrlSet.has(key);
+		});
+		log(
+			'[ingest] %d in-scope, %d already in archive, %d new',
+			inScope.length,
+			existingPageUrlSet.size + existingResourceUrlSet.size,
+			novelUrls.length,
+		);
+
+		return { outOfScope, existingPageUrls, existingResourceUrls, novelUrls };
+	}
+
+	/**
+	 * Shared second-stage classification for `inventory` and `recrawl`:
+	 * splits novel URLs on the exclusion config BEFORE the HTML/non-HTML
+	 * classification, so an exclude-matched URL is recorded as a terminal
+	 * skipped page instead of being imported (issue #260).
+	 *
+	 * The inputs mirror the scrape phase's fetch-time gate (`shouldSkipUrl`
+	 * in `crawler.ts` fed by the constructor's merge): archived config
+	 * overlaid with this run's overrides, and `DEFAULT_EXCLUDED_EXTERNAL_URLS`
+	 * merged ahead of the user's prefixes — classification and gate must
+	 * never disagree about the same URL. Running this AFTER the known-URL
+	 * filter (`#classifyInventoryCandidateUrls`) is deliberate: a previously
+	 * crawled row that newly matches the exclusion config stays untouched
+	 * (crawled-wins), matching how `getExistingPageUrls` shields known rows
+	 * from re-labelling. `excludeKeywords` is deliberately absent: it matches
+	 * rendered page content, which a URL list does not have — HTML seeds
+	 * still get it at render time via the browser verdict.
+	 * @param novelUrls - URLs not yet represented in the archive, from
+	 *   `#classifyInventoryCandidateUrls`.
+	 * @param effectiveConfig - The archived config overlaid with this run's
+	 *   overrides (the same merge the caller uses to build its own config).
+	 * @returns `excludedNovelUrls` (matched `excludes`/`excludeUrls`, to be
+	 *   recorded as terminal skipped pages) and `importableNovelUrls` (the rest).
+	 */
+	static #classifyExcludedNovelUrls(
+		novelUrls: ExURL[],
+		effectiveConfig: Config,
+	): { excludedNovelUrls: ExURL[]; importableNovelUrls: ExURL[] } {
+		const excludes = normalizeToArray(effectiveConfig.excludes);
+		const excludeUrls = [
+			...DEFAULT_EXCLUDED_EXTERNAL_URLS,
+			...normalizeToArray(effectiveConfig.excludeUrls),
+		];
+		const excludedNovelUrls: ExURL[] = [];
+		const importableNovelUrls: ExURL[] = [];
+		for (const url of novelUrls) {
+			if (shouldSkipUrl({ url, excludes, excludeUrls, options: effectiveConfig })) {
+				excludedNovelUrls.push(url);
+			} else {
+				importableNovelUrls.push(url);
+			}
+		}
+		if (excludedNovelUrls.length > 0) {
+			log(
+				'[ingest] %d URL(s) recorded as skipped (matched excludes / excludeUrls)',
+				excludedNovelUrls.length,
+			);
+		}
+		return { excludedNovelUrls, importableNovelUrls };
+	}
+
+	/**
+	 * Shared third-stage ingestion for `inventory` and `recrawl`: classifies
+	 * importable novel URLs by URL-extension heuristic (no I/O), dedups HTML
+	 * seeds, and bulk-records both kinds into the archive.
+	 *
+	 * Source file lists come from `ls` on the doc-root, so the extension
+	 * reflects the real file type — a HEAD pre-flight here would be pure
+	 * wasted I/O. Edge cases:
+	 *
+	 * - `.html` returning 404 / 200: the normal crawler HEAD/GET path absorbs
+	 *   this because every HTML-classified URL is fed through the dealer and
+	 *   gets its real HEAD/GET there.
+	 * - Extensionless API endpoints (e.g. `/api/foo`) that the server returns
+	 *   as `text/html`: `isLikelyHtmlUrl` accepts them as HTML so the
+	 *   dealer's render path runs — the real content-type wins downstream.
+	 * - `.aspx` / `.do` / `.jsp` / other server-handler extensions the
+	 *   heuristic does NOT recognise as HTML: classified as non-HTML,
+	 *   recorded as `resources` rows with all-null metadata, never get a
+	 *   HEAD/GET probe. Sites that mix server-handlers into the list need a
+	 *   follow-up `--retry-failed` pass (or a re-run with the corrected list)
+	 *   to populate metadata.
+	 *
+	 * HTML seeds are deduped by `protocolAgnosticKey` so a list mixing
+	 * `http://` and `https://` for the same origin does not produce two rows
+	 * that the dealer later collapses to one — the loser would otherwise stay
+	 * `scraped=0, source='inventory-seed'` forever and look like a real
+	 * recovery candidate on `--resume`. `getExistingPageUrls` keys on the
+	 * full URL (with protocol), so it cannot catch the cross-scheme
+	 * duplicate; this is the dedup boundary.
+	 *
+	 * Non-HTML URLs are bulk-recorded via `insertInventoryResources` — a
+	 * per-URL loop would spend minutes inside the `.bak`-protected window on
+	 * a large list; the chunked bulk path collapses N round-trips to N/500.
+	 * HTML seeds are pre-inserted as `scraped = 0`, `source =
+	 * 'inventory-seed'` placeholders *before* the scrape phase, so a Ctrl+C
+	 * between here and `setPage` cannot lose the URL — the strict-pending set
+	 * picks these rows up on the next `--resume` via the `OR p.source !=
+	 * 'crawled'` clause. Exclude-matched novel URLs are recorded as terminal
+	 * skipped pages (`is_skipped=1`, `skip_reason='excluded'`,
+	 * `source='inventory-seed'`) — the same end state the normal crawl's
+	 * fetch-time gate produces for link-discovered excluded URLs.
+	 * @param options - Named parameters (4+ values).
+	 * @param options.archive - The opened archive to write into.
+	 * @param options.importableNovelUrls - Novel URLs not matched by excludes.
+	 * @param options.excludedNovelUrls - Novel URLs matched by excludes, from `#classifyExcludedNovelUrls`.
+	 * @param options.setupProgress - Optional setup progress callbacks.
+	 * @param options.phaseRecordingNonHtml - The `onPhase` label to announce before recording non-HTML resources.
+	 * @param options.phaseRecordingHtmlSeeds - The `onPhase` label to announce before recording HTML seed pages.
+	 * @param options.phaseRecordingExcluded - The `onPhase` label to announce before recording excluded pages.
+	 * @returns `htmlSeeds` and `nonHtmlSeeds` — the deduped, classified novel URLs actually recorded.
+	 */
+	static async #ingestNovelSeeds(options: {
+		archive: Archive;
+		importableNovelUrls: ExURL[];
+		excludedNovelUrls: ExURL[];
+		setupProgress?: SetupProgressCallbacks;
+		phaseRecordingNonHtml: SetupPhaseLabel;
+		phaseRecordingHtmlSeeds: SetupPhaseLabel;
+		phaseRecordingExcluded: SetupPhaseLabel;
+	}): Promise<{ htmlSeeds: ExURL[]; nonHtmlSeeds: ExURL[] }> {
+		const {
+			archive,
+			importableNovelUrls,
+			excludedNovelUrls,
+			setupProgress,
+			phaseRecordingNonHtml,
+			phaseRecordingHtmlSeeds,
+			phaseRecordingExcluded,
+		} = options;
+		const rawHtmlSeeds: ExURL[] = [];
+		const nonHtmlSeeds: ExURL[] = [];
+		for (const url of importableNovelUrls) {
+			if (isLikelyHtmlUrl(url)) {
+				rawHtmlSeeds.push(url);
+			} else {
+				nonHtmlSeeds.push(url);
+			}
+		}
+		const seenKeys = new Set<string>();
+		const htmlSeeds: ExURL[] = [];
+		for (const url of rawHtmlSeeds) {
+			const key = protocolAgnosticKey(url.withoutHashAndAuth);
+			if (seenKeys.has(key)) {
+				continue;
+			}
+			seenKeys.add(key);
+			htmlSeeds.push(url);
+		}
+		setupProgress?.onPhase?.(phaseRecordingNonHtml);
+		await archive.insertInventoryResources(nonHtmlSeeds);
+		setupProgress?.onPhase?.(phaseRecordingHtmlSeeds);
+		await archive.insertInventorySeeds(htmlSeeds);
+		setupProgress?.onPhase?.(phaseRecordingExcluded);
+		await archive.insertInventorySkippedPages(excludedNovelUrls);
+		log(
+			'[ingest] %d HTML seed(s), %d non-HTML resource(s), %d skipped page(s) recorded',
+			htmlSeeds.length,
+			nonHtmlSeeds.length,
+			excludedNovelUrls.length,
+		);
+		return { htmlSeeds, nonHtmlSeeds };
 	}
 
 	/**
@@ -1820,7 +2231,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		const ranAt = new Date().toISOString();
 		await archive.recordInventoryRun({
 			ran_at: ranAt,
-			list_label: `inventory-${ranAt}`,
+			list_label: `${aggregates.listLabelPrefix ?? 'inventory'}-${ranAt}`,
 			source_file_sha256: aggregates.sourceFileSha256,
 			total_lines: aggregates.inventoryUrlsCount,
 			new_pages: aggregates.htmlSeedsCount,
@@ -1828,6 +2239,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			scope_skipped: aggregates.outOfScope,
 			exclude_skipped: aggregates.excludeSkipped,
 			invalid_skipped: aggregates.invalidSkipped,
+			notes: aggregates.notes ?? null,
 		});
 	}
 

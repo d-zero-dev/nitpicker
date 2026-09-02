@@ -41,10 +41,13 @@ function parseLegacyCorruptedUrl(
  * version-gated migration script (see `scripts/migrate-to-0.13.mjs`). This
  * function relies on the exception documented in ARCHITECTURE.md's
  * invariants list: a nullable, additive column on a table with a single
- * write path may self-heal here without a version bump, because
- * `replaceAnalysisViolations` is that single write path for
- * `analysis_violations`. Runs before the transaction below so the DDL is
- * not mixed with the DML rewrite.
+ * INSERT path may self-heal here without a version bump, because
+ * `replaceAnalysisViolations` is that single INSERT path for
+ * `analysis_violations` — `resetPagesByUrls` (`db-ops/pages/reset/`) also
+ * writes to this table, but only ever DELETEs by `page_id`, so it never
+ * needs to know about `line`/`col` and cannot violate this self-heal
+ * argument. Runs before the transaction below so the DDL is not mixed with
+ * the DML rewrite.
  * @param knex - Knex query builder connected to the archive DB.
  */
 async function ensureLineColColumns(knex: Knex): Promise<void> {

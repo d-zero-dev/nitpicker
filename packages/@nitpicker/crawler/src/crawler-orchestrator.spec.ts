@@ -1576,6 +1576,567 @@ describe('CrawlerOrchestrator.inventory: dedupeCap sticky preload wiring (issue 
 	});
 });
 
+describe('CrawlerOrchestrator.recrawl', () => {
+	/**
+	 * Builds the mocked Archive shared by the recrawl tests. Every write-side
+	 * method is a spy so the tests can assert exactly what was reset /
+	 * ingested / recorded.
+	 * @param overrides - Per-test overrides layered on top of the defaults
+	 *   (e.g. `getExistingPageUrls`, `resetPagesByUrls`).
+	 * @returns The fake Archive instance.
+	 */
+	function buildFakeRecrawlArchive(overrides: Record<string, unknown> = {}) {
+		return {
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+				}),
+			),
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			saveInventorySourceList: vi.fn(() => Promise.resolve()),
+			getExistingPageUrls: vi.fn(() => Promise.resolve([])),
+			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
+			resetPagesByUrls: vi.fn(() =>
+				Promise.resolve({
+					resetUrls: [],
+					excludedRedirects: [],
+					excludedSkipped: [],
+					excludedExternal: [],
+				}),
+			),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
+			insertInventoryResources: vi.fn(() => Promise.resolve()),
+			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
+			...overrides,
+		} as unknown as Archive;
+	}
+
+	/**
+	 * Creates an empty fixture `.nitpicker` file under a fresh temp cwd —
+	 * `copyFileWithProgress`'s `.bak` copy and `unlinkFile` run against the
+	 * real filesystem even though `Archive.open` itself is mocked.
+	 * @param name
+	 * @returns The temp cwd path; caller must `fs.rm(testCwd, { recursive: true, force: true })` afterward.
+	 */
+	async function makeFixtureCwd(name: string): Promise<string> {
+		const testCwd = path.resolve(`/tmp/${name}`);
+		await fs.mkdir(testCwd, { recursive: true });
+		await fs.writeFile(path.join(testCwd, 'fixture.nitpicker'), '');
+		return testCwd;
+	}
+
+	it('throws synchronously when recrawlUrls is empty (no file I/O attempted)', async () => {
+		const archiveModule = await import('./archive/archive.js');
+		const openSpy = vi.spyOn(archiveModule.default, 'open');
+
+		await expect(
+			CrawlerOrchestrator.recrawl('/does/not/exist.nitpicker', []),
+		).rejects.toThrow('recrawl: URL list is empty');
+		expect(openSpy).not.toHaveBeenCalled();
+	});
+
+	it('rejects list-mode archives and releases the lock', async () => {
+		const closeSpy = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					fromList: true,
+					roots: ['https://example.com/'],
+					baseUrl: 'https://example.com/',
+				}),
+			),
+			close: closeSpy,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		await expect(
+			CrawlerOrchestrator.recrawl('/tmp/anything.nitpicker', ['https://example.com/'], {
+				cwd: '/tmp',
+			}),
+		).rejects.toThrow(
+			'Cannot recrawl a list-mode archive: this archive was created with --list/--list-file and contains metadata-only pages. Create a fresh archive instead.',
+		);
+		expect(closeSpy).toHaveBeenCalledOnce();
+	});
+
+	it('archives the source list bytes when a source is given, before scope classification (mirrors inventory)', async () => {
+		const fakeArchive = buildFakeRecrawlArchive({
+			getExistingPageUrls: vi.fn(() => Promise.resolve(['https://example.com/a'])),
+			resetPagesByUrls: vi.fn(() =>
+				Promise.resolve({
+					resetUrls: ['https://example.com/a'],
+					excludedRedirects: [],
+					excludedSkipped: [],
+					excludedExternal: [],
+				}),
+			),
+		});
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = await makeFixtureCwd('recrawl-source-archiving-test');
+		const bytes = Buffer.from('https://example.com/a\n');
+		try {
+			await CrawlerOrchestrator.recrawl(
+				'fixture.nitpicker',
+				['https://example.com/a'],
+				{ cwd: testCwd },
+				undefined,
+				{ sha256: 'deadbeef', bytes, invalidLineCount: 0 },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(fakeArchive.saveInventorySourceList).toHaveBeenCalledExactlyOnceWith(
+			'deadbeef',
+			bytes,
+		);
+	});
+
+	it('does not call saveInventorySourceList when no source was given', async () => {
+		const fakeArchive = buildFakeRecrawlArchive();
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = await makeFixtureCwd('recrawl-no-source-test');
+		try {
+			await CrawlerOrchestrator.recrawl(
+				'fixture.nitpicker',
+				['https://example.com/new.html'],
+				{ cwd: testCwd },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(fakeArchive.saveInventorySourceList).not.toHaveBeenCalled();
+	});
+
+	it('takes no backup and calls neither resetPagesByUrls nor the ingestion writers when nothing matched and nothing is novel', async () => {
+		// Every recrawl URL resolves to an already-known resource — so
+		// `existingPageUrls` (reset candidates) and `novelUrls` (ingestion
+		// candidates) are both empty. This must mirror `inventory`'s
+		// zero-novel early return: no `.bak`, no writes, no crawl.
+		const fakeArchive = buildFakeRecrawlArchive({
+			getExistingResourceUrls: vi.fn(() =>
+				Promise.resolve(['https://example.com/known.js']),
+			),
+		});
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		const orchestrator = await CrawlerOrchestrator.recrawl(
+			'fixture.nitpicker',
+			['https://example.com/known.js'],
+			{ cwd: '/tmp/recrawl-noop-test' },
+		);
+
+		expect(orchestrator).toBeDefined();
+		expect(fakeArchive.resetPagesByUrls).not.toHaveBeenCalled();
+		expect(fakeArchive.insertInventorySeeds).not.toHaveBeenCalled();
+		expect(fakeArchive.insertInventoryResources).not.toHaveBeenCalled();
+		expect(fakeArchive.recordInventoryRun).not.toHaveBeenCalled();
+		expect(fakeCrawlerResumeCalls).toHaveLength(0);
+	});
+
+	it("merges resetPagesByUrls's resetUrls into the pending set handed to Crawler#resume, even when the strict-pending scan finds none (strict-pending gap)", async () => {
+		// Simulates the scenario this method's JSDoc documents: two listed
+		// pages referenced only each other, so resetting both wiped the only
+		// anchor referrer of each — `getCrawlingState` (the strict scan)
+		// legitimately returns an empty `pending` here. Without the explicit
+		// merge, both reset pages would never be re-fetched.
+		const fakeArchive = buildFakeRecrawlArchive({
+			getExistingPageUrls: vi.fn(() =>
+				Promise.resolve(['https://example.com/a', 'https://example.com/b']),
+			),
+			resetPagesByUrls: vi.fn(() =>
+				Promise.resolve({
+					resetUrls: ['https://example.com/a', 'https://example.com/b'],
+					excludedRedirects: [],
+					excludedSkipped: [],
+					excludedExternal: [],
+				}),
+			),
+		});
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = await makeFixtureCwd('recrawl-pending-merge-test');
+		try {
+			await CrawlerOrchestrator.recrawl(
+				'fixture.nitpicker',
+				['https://example.com/a', 'https://example.com/b'],
+				{ cwd: testCwd },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(fakeArchive.resetPagesByUrls).toHaveBeenCalledOnce();
+		expect(vi.mocked(fakeArchive.resetPagesByUrls).mock.calls[0]![0]).toEqual([
+			'https://example.com/a',
+			'https://example.com/b',
+		]);
+		expect(fakeCrawlerResumeCalls).toHaveLength(1);
+		expect(fakeCrawlerResumeCalls[0]?.pending.toSorted()).toEqual([
+			'https://example.com/a',
+			'https://example.com/b',
+		]);
+	});
+
+	it('deduplicates reset URLs already present in the strict-pending scan instead of listing them twice', async () => {
+		const fakeArchive = buildFakeRecrawlArchive({
+			getExistingPageUrls: vi.fn(() => Promise.resolve(['https://example.com/a'])),
+			getCrawlingState: vi.fn(() =>
+				Promise.resolve({ scraped: [], pending: ['https://example.com/a'] }),
+			),
+			resetPagesByUrls: vi.fn(() =>
+				Promise.resolve({
+					resetUrls: ['https://example.com/a'],
+					excludedRedirects: [],
+					excludedSkipped: [],
+					excludedExternal: [],
+				}),
+			),
+		});
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = await makeFixtureCwd('recrawl-pending-dedup-test');
+		try {
+			await CrawlerOrchestrator.recrawl('fixture.nitpicker', ['https://example.com/a'], {
+				cwd: testCwd,
+			});
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(fakeCrawlerResumeCalls).toHaveLength(1);
+		expect(fakeCrawlerResumeCalls[0]?.pending).toEqual(['https://example.com/a']);
+	});
+
+	it('starts a crawl to re-fetch reset pages even when no novel HTML seed was ingested', async () => {
+		// `htmlSeeds.length === 0` alone must not skip crawling — a
+		// reset-only recrawl (every URL already existed) still needs the
+		// dealer to actually re-fetch the reset pages.
+		const fakeArchive = buildFakeRecrawlArchive({
+			getExistingPageUrls: vi.fn(() => Promise.resolve(['https://example.com/a'])),
+			resetPagesByUrls: vi.fn(() =>
+				Promise.resolve({
+					resetUrls: ['https://example.com/a'],
+					excludedRedirects: [],
+					excludedSkipped: [],
+					excludedExternal: [],
+				}),
+			),
+		});
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = await makeFixtureCwd('recrawl-reset-only-test');
+		try {
+			await CrawlerOrchestrator.recrawl('fixture.nitpicker', ['https://example.com/a'], {
+				cwd: testCwd,
+			});
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(fakeCrawlerResumeCalls).toHaveLength(1);
+		expect(fakeArchive.insertInventorySeeds).toHaveBeenCalledWith([]);
+	});
+
+	it('warns (via setupProgress.onLog) about URLs matched as existing resources without resetting them', async () => {
+		const fakeArchive = buildFakeRecrawlArchive({
+			getExistingResourceUrls: vi.fn(() =>
+				Promise.resolve(['https://example.com/known.js']),
+			),
+		});
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = await makeFixtureCwd('recrawl-resource-warning-test');
+		const onLog = vi.fn();
+		try {
+			await CrawlerOrchestrator.recrawl(
+				'fixture.nitpicker',
+				// One matched resource (not reset) + one genuinely novel HTML
+				// URL, so the run proceeds past the resource-only early return.
+				['https://example.com/known.js', 'https://example.com/new.html'],
+				{ cwd: testCwd },
+				undefined,
+				null,
+				{ onLog },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(onLog).toHaveBeenCalledWith(
+			expect.stringMatching(/1 URL\(s\) matched existing resources/),
+		);
+		expect(vi.mocked(fakeArchive.resetPagesByUrls).mock.calls[0]![0]).toEqual([]);
+	});
+
+	it('reports the reset/excluded breakdown via setupProgress.onLog after resetPagesByUrls resolves', async () => {
+		const fakeArchive = buildFakeRecrawlArchive({
+			getExistingPageUrls: vi.fn(() =>
+				Promise.resolve([
+					'https://example.com/reset-me',
+					'https://example.com/redirect-source',
+					'https://example.com/skipped',
+					'https://external.example/page',
+				]),
+			),
+			resetPagesByUrls: vi.fn(() =>
+				Promise.resolve({
+					resetUrls: ['https://example.com/reset-me'],
+					excludedRedirects: ['https://example.com/redirect-source'],
+					excludedSkipped: ['https://example.com/skipped'],
+					excludedExternal: ['https://external.example/page'],
+				}),
+			),
+		});
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = await makeFixtureCwd('recrawl-summary-log-test');
+		const onLog = vi.fn();
+		try {
+			await CrawlerOrchestrator.recrawl(
+				'fixture.nitpicker',
+				[
+					'https://example.com/reset-me',
+					'https://example.com/redirect-source',
+					'https://example.com/skipped',
+					'https://external.example/page',
+				],
+				{ cwd: testCwd },
+				undefined,
+				null,
+				{ onLog },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(onLog).toHaveBeenCalledWith(
+			expect.stringMatching(
+				/matched 4 existing page\(s\) — reset 1, excluded 3 \(1 redirect source\(s\), 1 intentionally-skipped, 1 external\), already pending 0\./,
+			),
+		);
+	});
+
+	it('names the "already pending" remainder when a matched URL is still scraped=0 from an interrupted previous session', async () => {
+		// `existingPageUrls` matches by URL alone (see
+		// `getExistingPageUrls`), so it can include a row still pending from
+		// an earlier interrupted session — `resetPagesByUrls` correctly
+		// leaves such a row out of every one of its result arrays (nothing to
+		// reset), but the summary log must still account for it by name or
+		// "matched N" and "reset + excluded" silently stop summing to N.
+		const fakeArchive = buildFakeRecrawlArchive({
+			getExistingPageUrls: vi.fn(() =>
+				Promise.resolve(['https://example.com/reset-me', 'https://example.com/pending']),
+			),
+			resetPagesByUrls: vi.fn(() =>
+				Promise.resolve({
+					resetUrls: ['https://example.com/reset-me'],
+					excludedRedirects: [],
+					excludedSkipped: [],
+					excludedExternal: [],
+				}),
+			),
+		});
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = await makeFixtureCwd('recrawl-already-pending-test');
+		const onLog = vi.fn();
+		try {
+			await CrawlerOrchestrator.recrawl(
+				'fixture.nitpicker',
+				['https://example.com/reset-me', 'https://example.com/pending'],
+				{ cwd: testCwd },
+				undefined,
+				null,
+				{ onLog },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(onLog).toHaveBeenCalledWith(
+			expect.stringMatching(
+				/matched 2 existing page\(s\) — reset 1, excluded 0 \(0 redirect source\(s\), 0 intentionally-skipped, 0 external\), already pending 1\./,
+			),
+		);
+	});
+
+	it('writes the audit row with the recrawl list-label prefix and a notes column recording the reset count', async () => {
+		const fakeArchive = buildFakeRecrawlArchive({
+			getExistingPageUrls: vi.fn(() => Promise.resolve(['https://example.com/a'])),
+			resetPagesByUrls: vi.fn(() =>
+				Promise.resolve({
+					resetUrls: ['https://example.com/a'],
+					excludedRedirects: [],
+					excludedSkipped: [],
+					excludedExternal: [],
+				}),
+			),
+		});
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = await makeFixtureCwd('recrawl-audit-row-test');
+		try {
+			await CrawlerOrchestrator.recrawl('fixture.nitpicker', ['https://example.com/a'], {
+				cwd: testCwd,
+			});
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
+		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
+		const [meta] = recordInventoryRunMock.mock.calls[0]!;
+		expect(meta.list_label).toMatch(/^recrawl-/);
+		expect(meta.notes).toBe('Reset 1 existing page(s) for re-fetch');
+	});
+
+	it('emits a crawlSessionNotice recommending an analyze re-run when at least one page was reset', async () => {
+		const fakeArchive = buildFakeRecrawlArchive({
+			getExistingPageUrls: vi.fn(() => Promise.resolve(['https://example.com/a'])),
+			resetPagesByUrls: vi.fn(() =>
+				Promise.resolve({
+					resetUrls: ['https://example.com/a'],
+					excludedRedirects: [],
+					excludedSkipped: [],
+					excludedExternal: [],
+				}),
+			),
+		});
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const notices: string[] = [];
+		const testCwd = await makeFixtureCwd('recrawl-analyze-notice-test');
+		try {
+			await CrawlerOrchestrator.recrawl(
+				'fixture.nitpicker',
+				['https://example.com/a'],
+				{ cwd: testCwd },
+				(orchestrator) => {
+					orchestrator.on('crawlSessionNotice', (payload) => {
+						notices.push((payload as { message: string }).message);
+					});
+				},
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(notices).toEqual([
+			expect.stringMatching(/Reset 1 page\(s\).*run `analyze` before `report`/),
+		]);
+	});
+
+	it('does not emit a crawlSessionNotice when nothing was reset', async () => {
+		const fakeArchive = buildFakeRecrawlArchive();
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const notices: string[] = [];
+		const testCwd = await makeFixtureCwd('recrawl-no-notice-test');
+		try {
+			await CrawlerOrchestrator.recrawl(
+				'fixture.nitpicker',
+				['https://example.com/new.html'],
+				{ cwd: testCwd },
+				(orchestrator) => {
+					orchestrator.on('crawlSessionNotice', (payload) => {
+						notices.push((payload as { message: string }).message);
+					});
+				},
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(notices).toEqual([]);
+	});
+});
+
 describe('CrawlerOrchestrator: openPluginData regression guard (issue #99)', () => {
 	// `Archive.open`'s default extracts only `db.sqlite`; `write()` re-tars
 	// the whole tmpDir, so any writer path that skips `openPluginData: true`
@@ -1621,6 +2182,29 @@ describe('CrawlerOrchestrator: openPluginData regression guard (issue #99)', () 
 
 		await expect(
 			CrawlerOrchestrator.retryFailed('./existing.nitpicker', {
+				cwd: '/tmp/test-cwd',
+			}),
+		).rejects.toThrow('stop-here');
+
+		expect(openSpy).toHaveBeenCalledOnce();
+		const openArg = openSpy.mock.calls[0]![0] as { openPluginData?: boolean };
+		expect(openArg.openPluginData).toBe(true);
+	});
+
+	it('CrawlerOrchestrator.recrawl opens the archive with openPluginData: true', async () => {
+		const closeSpy = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			getConfig: vi.fn(() => Promise.reject(new Error('stop-here'))),
+			close: closeSpy,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		const openSpy = vi
+			.spyOn(archiveModule.default, 'open')
+			.mockResolvedValueOnce(fakeArchive);
+
+		await expect(
+			CrawlerOrchestrator.recrawl('./existing.nitpicker', ['https://example.com/'], {
 				cwd: '/tmp/test-cwd',
 			}),
 		).rejects.toThrow('stop-here');

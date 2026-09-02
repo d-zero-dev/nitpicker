@@ -7,6 +7,8 @@ import { dbLog } from '../../../debug.js';
 import { getFailedPageMessages } from '../../../get-failed-page-messages.js';
 import { listNetworkOutages } from '../../outages/list-network-outages.js';
 
+import { clearPageDerivedRows } from './clear-page-derived-rows.js';
+
 /**
  * Reset previously-attempted pages that ended in a recoverable failure so a
  * follow-up crawl can re-fetch them from scratch.
@@ -149,33 +151,20 @@ export async function resetFailedPages(
 			// untouched so the last-success timestamp records survive the
 			// demotion (the within-archive observation axis for #11/#17/#19).
 		});
-		// Clear the prior crawl's per-page data so the re-scrape starts clean.
-		// `updatePage` only replaces anchor_edges/image_items/tags/jsonld when
-		// the new scrape is non-empty, so this pre-clear is load-bearing for
-		// pages that reset but then fail again (or are never reached), and it
-		// is the only place `resource_ref_edges` and `page_errors` are
-		// cleared. Deleting the `page_meta` row (rather than nulling every
+		// Clear the prior crawl's per-page data so the re-scrape starts clean,
+		// via the shared sweep (also used by `repromoteExternalPages` /
+		// `resetPagesByUrls`) plus `page_errors`, which that sweep
+		// deliberately excludes (see its JSDoc). `updatePage` only replaces
+		// anchor_edges/image_items/tags/jsonld when the new scrape is
+		// non-empty, so this pre-clear is load-bearing for pages that reset
+		// but then fail again (or are never reached), and it is the only
+		// place `resource_ref_edges` and `page_errors` are cleared for this
+		// operation. Deleting the `page_meta` row (rather than nulling every
 		// column) clears title / description / og:* / twitter:* /
 		// meta_extras in one statement; a re-scrape re-inserts it via
 		// `ON CONFLICT(page_id) DO UPDATE`.
-		await knex('page_meta').whereIn('page_id', chunk).delete();
-		await knex('anchor_edges').whereIn('page_id', chunk).delete();
-		await knex('image_items').whereIn('page_id', chunk).delete();
-		await knex('resource_ref_edges').whereIn('page_id', chunk).delete();
 		await knex('page_errors').whereIn('pageId', chunk).delete();
-		await knex('page_html_ref').whereIn('page_id', chunk).delete();
-		await knex('technology_signals').whereIn('pageId', chunk).delete();
-		await knex('page_technologies').whereIn('pageId', chunk).delete();
-		await knex('page_jsonld').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_headings').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_images').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_tables').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_buttons').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_iframes').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_videos').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_audios').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_canvases').whereIn('pageId', chunk).delete();
-		await knex('page_main_content_custom_elements').whereIn('pageId', chunk).delete();
+		await clearPageDerivedRows(knex, chunk);
 		onProgress?.(Math.min(i + chunkSize, ids.length), ids.length);
 	}
 	dbLog('Reset %d failed pages back to pending', urls.length);

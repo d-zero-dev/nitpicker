@@ -4,11 +4,10 @@ import type { SetupTaskListHandle } from '../crawl/create-setup-task-list.js';
 import type { InferFlags } from '@d-zero/roar';
 import type { Config, CrawlerError } from '@nitpicker/crawler';
 
-import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { TaskList, TaskListStepError } from '@d-zero/dealer';
-import { readList, toListWithPosition } from '@d-zero/readtext/list';
+import { readList } from '@d-zero/readtext/list';
 import {
 	APPEND_SETUP_PHASES,
 	assertChromeIsInstalled,
@@ -16,21 +15,24 @@ import {
 	computeFileSha256,
 	CrawlerOrchestrator,
 	INVENTORY_SETUP_PHASES,
+	RECRAWL_SETUP_PHASES,
 	RESUME_SETUP_PHASES,
 	RETRY_FAILED_SETUP_PHASES,
 } from '@nitpicker/crawler';
 
 import { attachCrawlDisplay } from '../crawl/attach-crawl-display.js';
-import { classifyInventoryListItems } from '../crawl/classify-inventory-list-items.js';
 import { createSetupTaskList } from '../crawl/create-setup-task-list.js';
 import { log, verbosely } from '../crawl/debug.js';
 import { diff } from '../crawl/diff.js';
 import { formatInvalidInventoryUrlWarning } from '../crawl/format-invalid-inventory-url-warning.js';
+import { formatInvalidRecrawlUrlWarning } from '../crawl/format-invalid-recrawl-url-warning.js';
 import { formatInventorySkipSummary } from '../crawl/format-inventory-skip-summary.js';
+import { formatRecrawlSkipSummary } from '../crawl/format-recrawl-skip-summary.js';
 import { isValidUrl } from '../crawl/is-valid-url.js';
 import { mapFlagsToCrawlConfig } from '../crawl/map-flags-to-crawl-config.js';
 import { runPostCrawlTaskList } from '../crawl/run-post-crawl-task-list.js';
 import { ExitCode } from '../exit-code.js';
+import { readUrlListFile } from '../read-url-list-file.js';
 
 import { CrawlAggregateError } from './crawl-aggregate-error.js';
 
@@ -96,7 +98,7 @@ function buildCrawlHeader(trigger: string, config: Config): string[] {
 
 /**
  * Invokes a `CrawlerOrchestrator` static factory (`append`/`inventory`/
- * `retryFailed`/`resume`), failing `setupTaskList` if the factory throws
+ * `recrawl`/`retryFailed`/`resume`), failing `setupTaskList` if the factory throws
  * before ever invoking its `initializedCallback` (issue #294 code review,
  * carried over from the pre-`TaskList` `setupLanes.close()`-on-failure
  * behavior: that call was the only place the setup display was ever
@@ -157,7 +159,7 @@ function createCrawlLifecycle(): CrawlLifecycle {
 /**
  * Builds the `initializedCallback` every crawl mode passes to its
  * `CrawlerOrchestrator` factory (`crawling`/`resume`/`append`/`inventory`/
- * `retryFailed`) — shared so the five modes can't drift on ordering.
+ * `recrawl`/`retryFailed`) — shared so the six modes can't drift on ordering.
  *
  * Registers the crawl-body signal handlers *before* touching `setupTaskList`
  * (issue #294: registering them only after `finish()`/`taskListDone`
@@ -422,13 +424,13 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
  * {@link CrawlerOrchestrator.inventory}, and surface the result through
  * the same `attachCrawlDisplay` progress reporter as the other crawl modes.
  *
- * The list file is read exactly once, as raw bytes — the same buffer feeds
- * the content-hash (`computeFileSha256`), the parsed URL list, and the copy
- * archived by the orchestrator, so the hash naming the archived copy always
- * matches what was actually parsed even if the file changes on disk between
- * calls. Lines are split by `toListWithPosition` (`@d-zero/readtext/list`),
- * which strips blank lines and `#` comments — same conventions as
- * `--list-file` — while keeping each surviving line's source position.
+ * The list file is read exactly once, via {@link readUrlListFile} — the same
+ * bytes feed the content-hash (`computeFileSha256`), the parsed URL list, and
+ * the copy archived by the orchestrator, so the hash naming the archived copy
+ * always matches what was actually parsed even if the file changes on disk
+ * between calls. Blank lines and `#` comments are stripped — same
+ * conventions as `--list-file` — while each surviving line's source position
+ * is kept for the invalid-line warnings below.
  *
  * Unlike every other URL-list entry point in this command (positional args,
  * `--list`, `--list-file`), an unparseable line here does not abort the
@@ -445,22 +447,22 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
  */
 async function inventoryCrawl(archivePath: string, listFile: string, flags: CrawlFlags) {
 	const resolvedListFile = path.resolve(process.cwd(), listFile);
-	const bytes = await fs.readFile(resolvedListFile);
-	const items = toListWithPosition(bytes.toString('utf8'));
-	if (items.length === 0) {
+	const { urls, invalid, bytes } = await readUrlListFile(resolvedListFile);
+	if (urls.length === 0 && invalid.length === 0) {
 		throw new Error(`No URLs found in inventory file: ${listFile}`);
 	}
 
-	const { valid, invalid } = classifyInventoryListItems(items);
 	if (invalid.length > 0) {
 		for (const item of invalid) {
 			// eslint-disable-next-line no-console -- operator-facing warning, must be visible regardless of DEBUG filters or --silent
 			console.warn(formatInvalidInventoryUrlWarning(listFile, item));
 		}
 		// eslint-disable-next-line no-console -- see above
-		console.warn(formatInventorySkipSummary(invalid.length, items.length));
+		console.warn(
+			formatInventorySkipSummary(invalid.length, urls.length + invalid.length),
+		);
 	}
-	if (valid.length === 0) {
+	if (urls.length === 0) {
 		throw new Error(
 			`All ${invalid.length} line(s) in inventory file failed URL validation: ${listFile}`,
 		);
@@ -480,7 +482,7 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 		() =>
 			CrawlerOrchestrator.inventory(
 				archivePath,
-				valid,
+				urls,
 				{
 					...mapFlagsToCrawlConfig(flags),
 					list: false,
@@ -491,6 +493,74 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 					logType,
 					errStack,
 					`${archivePath} (inventory: ${listFile})`,
+				),
+				{ sha256, bytes, invalidLineCount: invalid.length },
+				setupTaskList?.setupProgress,
+			),
+	);
+
+	await finishCrawlMode(orchestrator, crawlLifecycle, flags, errStack);
+}
+
+/**
+ * Recrawl-mode dispatch: read the URL list file, hand it to
+ * {@link CrawlerOrchestrator.recrawl}, and surface the result through the
+ * same `attachCrawlDisplay` progress reporter as the other crawl modes.
+ *
+ * Mirrors {@link inventoryCrawl}'s file-reading contract exactly (same
+ * `readUrlListFile` helper, same warn-and-skip handling of invalid lines —
+ * see that function's JSDoc for the rationale), differing only in which
+ * formatter functions and orchestrator method it calls.
+ * @param archivePath - Path to the existing `.nitpicker` archive (positional).
+ * @param listFile - Path to the URL list file passed via `--recrawl`.
+ * @param flags - Parsed CLI flags from the `crawl` command.
+ */
+async function recrawlCrawl(archivePath: string, listFile: string, flags: CrawlFlags) {
+	const resolvedListFile = path.resolve(process.cwd(), listFile);
+	const { urls, invalid, bytes } = await readUrlListFile(resolvedListFile);
+	if (urls.length === 0 && invalid.length === 0) {
+		throw new Error(`No URLs found in recrawl file: ${listFile}`);
+	}
+
+	if (invalid.length > 0) {
+		for (const item of invalid) {
+			// eslint-disable-next-line no-console -- operator-facing warning, must be visible regardless of DEBUG filters or --silent
+			console.warn(formatInvalidRecrawlUrlWarning(listFile, item));
+		}
+		// eslint-disable-next-line no-console -- see above
+		console.warn(formatRecrawlSkipSummary(invalid.length, urls.length + invalid.length));
+	}
+	if (urls.length === 0) {
+		throw new Error(
+			`All ${invalid.length} line(s) in recrawl file failed URL validation: ${listFile}`,
+		);
+	}
+
+	const sha256 = computeFileSha256(bytes);
+	const errStack: (CrawlerError | Error)[] = [];
+	const logType: LogType = deriveLogType(flags);
+	const setupTaskList = flags.silent
+		? null
+		: createSetupTaskList(RECRAWL_SETUP_PHASES, { verbose: !!flags.verbose });
+	const crawlLifecycle = createCrawlLifecycle();
+
+	await using orchestrator = await createOrchestratorFailingSetupOnError(
+		setupTaskList,
+		crawlLifecycle,
+		() =>
+			CrawlerOrchestrator.recrawl(
+				archivePath,
+				urls,
+				{
+					...mapFlagsToCrawlConfig(flags),
+					list: false,
+				},
+				createCrawlInitializedCallback(
+					setupTaskList,
+					crawlLifecycle,
+					logType,
+					errStack,
+					`${archivePath} (recrawl: ${listFile})`,
 				),
 				{ sha256, bytes, invalidLineCount: invalid.length },
 				setupTaskList?.setupProgress,
@@ -568,10 +638,11 @@ function validateUrls(urls: readonly string[]) {
  * 1. `--diff` mode: Compares two archive files and outputs URL lists
  * 2. `--resume` mode: Resumes a previously interrupted crawl
  * 3. `--inventory` mode: Imports URLs from a list file that an existing archive does not yet track
- * 4. `--append` mode: Adds new recursive roots to an existing archive
- * 5. `--retry-failed` mode: Re-fetches failed pages in an existing archive
- * 6. `--list-file` / `--list` mode: Crawls a pre-defined URL list (non-recursive)
- * 7. Default mode: Crawls from one or more root URLs
+ * 4. `--recrawl` mode: Re-fetches URLs from a list file that already exist as pages, plus imports any URL the archive does not yet track
+ * 5. `--append` mode: Adds new recursive roots to an existing archive
+ * 6. `--retry-failed` mode: Re-fetches failed pages in an existing archive
+ * 7. `--list-file` / `--list` mode: Crawls a pre-defined URL list (non-recursive)
+ * 8. Default mode: Crawls from one or more root URLs
  *
  * Every mode except `--diff` launches a browser, so
  * {@link assertChromeIsInstalled} runs once up front and fails fast if
@@ -592,6 +663,7 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 
 	const hasAppendFlag = !!flags.append && flags.append.length > 0;
 	const hasInventoryFlag = !!flags.inventory;
+	const hasRecrawlFlag = !!flags.recrawl;
 
 	if (flags.diff) {
 		if (hasAppendFlag) {
@@ -602,6 +674,9 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 		}
 		if (hasInventoryFlag) {
 			throw new Error('--diff cannot be combined with --inventory.');
+		}
+		if (hasRecrawlFlag) {
+			throw new Error('--diff cannot be combined with --recrawl.');
 		}
 		if (args.length !== 2) {
 			throw new Error('--diff takes exactly two file paths to compare');
@@ -668,6 +743,11 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 					'--resume and --inventory cannot be used together. Pick the existing-archive mode that fits your task.',
 				);
 			}
+			if (hasRecrawlFlag) {
+				throw new Error(
+					'--resume and --recrawl cannot be used together. Pick the existing-archive mode that fits your task.',
+				);
+			}
 			await resumeCrawl(flags.resume, flags);
 			return;
 		}
@@ -681,6 +761,11 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 			if (flags.retryFailed) {
 				throw new Error(
 					'--inventory and --retry-failed cannot be used together. Pick the existing-archive mode that fits your task.',
+				);
+			}
+			if (hasRecrawlFlag) {
+				throw new Error(
+					'--inventory and --recrawl cannot be used together. Pick the mode that fits your task — --recrawl also imports novel URLs.',
 				);
 			}
 			if (flags.output) {
@@ -708,6 +793,45 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 				);
 			}
 			await inventoryCrawl(args[0]!, flags.inventory!, flags);
+			return;
+		}
+
+		if (hasRecrawlFlag) {
+			if (hasAppendFlag) {
+				throw new Error(
+					'--recrawl and --append cannot be used together. Pick the existing-archive mode that fits your task.',
+				);
+			}
+			if (flags.retryFailed) {
+				throw new Error(
+					'--recrawl and --retry-failed cannot be used together. Pick the existing-archive mode that fits your task.',
+				);
+			}
+			if (flags.output) {
+				throw new Error(
+					'--output flag is not supported with --recrawl. The archive path is the positional argument being recrawled.',
+				);
+			}
+			if (flags.listFile) {
+				throw new Error('--recrawl cannot be combined with --list-file.');
+			}
+			if (hasListFlag) {
+				throw new Error('--recrawl cannot be combined with --list.');
+			}
+			if (flags.single) {
+				throw new Error('--recrawl cannot be combined with --single.');
+			}
+			if (args.length === 0) {
+				throw new Error(
+					'--recrawl requires the archive path as the positional argument (usage: crawl <archive> --recrawl <urls.txt>).',
+				);
+			}
+			if (args.length > 1) {
+				throw new Error(
+					'--recrawl takes exactly one positional argument (the archive path).',
+				);
+			}
+			await recrawlCrawl(args[0]!, flags.recrawl!, flags);
 			return;
 		}
 

@@ -85,6 +85,10 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			append: [],
 			retryFailed: false,
 			inventory: undefined,
+			// pipeline has no `--recrawl` flag of its own yet — if that changes,
+			// add it to `pipeline-def.ts`'s "crawl flags" section and forward
+			// `flags.recrawl` here, the same pattern `dedupeCap` follows below.
+			recrawl: undefined,
 			diff: undefined,
 			dedupeCap: flags.dedupeCap,
 			dedupeMapCap: flags.dedupeMapCap,

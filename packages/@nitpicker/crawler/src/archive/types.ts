@@ -164,6 +164,30 @@ export interface InventoryRunMeta {
 }
 
 /**
+ * Result of {@link Database.resetPagesByUrls}: the URLs actually reset back
+ * to pending, plus the URLs excluded from reset grouped by why — a caller
+ * (`CrawlerOrchestrator.recrawl`) reports each exclusion category to the
+ * operator separately rather than lumping them into one opaque count.
+ *
+ * A URL can appear in at most one of these four arrays: `resetUrls` when it
+ * matched the reset candidate criteria, or exactly one exclusion array when
+ * it matched an existing page row but failed one of the conservative guards.
+ * A URL with no matching row in the archive at all (not yet known) appears in
+ * none of them — that case is the caller's "novel URL" handling, not this
+ * function's concern.
+ */
+export interface ResetPagesByUrlsResult {
+	/** URLs whose row was reset to `scraped = 0` and had its derived data cleared. */
+	resetUrls: string[];
+	/** URLs excluded because the matching row is a redirect source (`redirect_dest_id` is set) — resetting it would discard a real 3xx observation. */
+	excludedRedirects: string[];
+	/** URLs excluded because the matching row was intentionally skipped (`is_skipped = 1`, e.g. `excludes`/`excludeUrls`) — the exclusion still applies. */
+	excludedSkipped: string[];
+	/** URLs excluded because the matching row is external (`is_external = 1`) — bringing a scope-external URL back into scope is `--append`'s job, not a URL-list re-fetch. */
+	excludedExternal: string[];
+}
+
+/**
  * A row in `network_outages` — one detected operator-network outage.
  *
  * Append-only except `ended_at`: it is written once, `NULL`, when the

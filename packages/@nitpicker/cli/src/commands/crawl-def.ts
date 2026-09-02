@@ -19,6 +19,7 @@ export const commandDef = {
 		'<archive> --append <URL> [--append <URL>...] [options]',
 		'<archive> --retry-failed [options]',
 		'<archive> --inventory <urls.txt> [options]',
+		'<archive> --recrawl <urls.txt> [options]',
 		'--resume <stub-dir> [options]',
 		'--diff <archiveA> <archiveB>',
 	],
@@ -48,6 +49,12 @@ export const commandDef = {
 			valueName: 'file',
 			group: 'Crawl modes',
 			desc: "Inventory crawl: take a server-side URL list file and import only URLs that the positional archive does not yet track. The archive's --exclude / --exclude-url filters apply — matching URLs are recorded as skipped pages instead of being imported, same as excluded URLs in a normal crawl (--exclude-keyword still applies at render time, since it matches page content, not URLs). HTML URLs are rendered + recursively crawled; non-HTML URLs are stored directly without probing. Use with `query isolated-pages` / `unused-resources` to surface orphan pages / unused files.",
+		},
+		recrawl: {
+			type: 'string',
+			valueName: 'file',
+			group: 'Crawl modes',
+			desc: 'Recrawl: take a URL list file and re-fetch URLs that already exist as pages in the positional archive (reset to pending, then re-crawled — redirect sources, intentionally-skipped pages, and external pages are matched but not reset). URLs the archive does not yet track are imported the same way --inventory does, including its --exclude / --exclude-url handling. Re-run `analyze` afterward — reset pages have their prior findings cleared, but other analyze outputs are not selectively invalidated.',
 		},
 		single: {
 			type: 'boolean',

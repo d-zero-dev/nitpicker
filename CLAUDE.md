@@ -17,6 +17,7 @@ npx @nitpicker/cli crawl <URL> [<URL>...]              # クロールして .nit
 npx @nitpicker/cli crawl <archive> --append <URL>      # 既存アーカイブに起点を追加クロール
 npx @nitpicker/cli crawl <archive> --retry-failed      # 失敗ページのみ再取得（永続失敗は自動除外）
 npx @nitpicker/cli crawl <archive> --inventory <urls.txt>  # URL リストとの突合で未発見ページを取り込み
+npx @nitpicker/cli crawl <archive> --recrawl <urls.txt>    # URL リストの既存ページを再取得＋未発見ページを取り込み
 npx @nitpicker/cli analyze <file>                      # analyze プラグイン実行
 npx @nitpicker/cli report <file>                       # Google Sheets レポート生成
 npx @nitpicker/cli report <file> -H                    # viewer サマリ + inner ページ一覧の静的HTML生成

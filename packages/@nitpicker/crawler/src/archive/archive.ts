@@ -504,6 +504,25 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.resetFailedPages(onProgress);
 	}
 	/**
+	 * Reset pages matching an operator-supplied URL list back to pending so a
+	 * follow-up crawl re-fetches them from scratch.
+	 *
+	 * Delegates to {@link Database.resetPagesByUrls}. See that method for the
+	 * conservative exclusion rules (redirect sources / intentionally-skipped /
+	 * external pages are matched but not reset).
+	 * @param urls - URL strings to match, already in `withoutHashAndAuth` form.
+	 * @param onProgress - Forwarded to {@link Database.resetPagesByUrls} — see
+	 *   that method's docs.
+	 * @returns The reset URLs plus the excluded URLs grouped by reason.
+	 */
+	async resetPagesByUrls(
+		urls: readonly string[],
+		onProgress?: (processed: number, total: number) => void,
+	) {
+		dbLog('Reset %d URL-list-matched page(s) back to pending', urls.length);
+		return this.#db.resetPagesByUrls(urls, onProgress);
+	}
+	/**
 	 * Persists the raw bytes of an `--inventory` source URL list into the
 	 * archive's tar payload, at `inventory/<sha256>.txt`.
 	 *
