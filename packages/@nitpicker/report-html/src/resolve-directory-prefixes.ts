@@ -5,9 +5,8 @@ import { countPageListHostnames, countPageListRows } from '@nitpicker/query';
 import enquirer from 'enquirer';
 
 import { HtmlReportCancelledError } from './html-report-cancelled-error.js';
+import { PAGE_REPORT_LIMIT } from './page-report-limit.js';
 import { parseDirectoryInput } from './parse-directory-input.js';
-
-const PAGE_LIMIT = 10_000;
 
 interface ResolveDirectoryPrefixesOptions {
 	readonly accessor: ArchiveAccessor;
@@ -57,7 +56,7 @@ export async function resolveDirectoryPrefixes(
 	const hostnameCount = await countPageListHostnames(options.accessor);
 	let input = options.initialInput;
 
-	if (unfilteredTotal <= PAGE_LIMIT && input == null) {
+	if (unfilteredTotal <= PAGE_REPORT_LIMIT && input == null) {
 		return [];
 	}
 
@@ -95,7 +94,7 @@ export async function resolveDirectoryPrefixes(
 			const selectedTotal = await countPageListRows(options.accessor, {
 				directories: prefixes.map((prefix) => prefix.display),
 			});
-			if (selectedTotal > PAGE_LIMIT) {
+			if (selectedTotal > PAGE_REPORT_LIMIT) {
 				throw new Error(
 					`The selected directories contain ${selectedTotal.toLocaleString()} inner pages; narrow them to 10,000 or fewer.`,
 				);

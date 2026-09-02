@@ -4,13 +4,18 @@ import type { StepContext, TaskListPipeline } from '@d-zero/dealer';
 import { writeFile } from 'node:fs/promises';
 
 import { TaskList } from '@d-zero/dealer';
-import { getViewerSummary, requireViewerReadModel } from '@nitpicker/query';
+import {
+	getViewerSummary,
+	requireViewerReadModel,
+	resolveAndValidatePageListUrlFilter,
+	warnUnmatchedPageListUrls,
+} from '@nitpicker/query';
 import { renderHtmlReport } from '@nitpicker/viewer/report-ui';
 
 import { collectHtmlReportPages } from './collect-html-report-pages.js';
 import { openReportArchive } from './open-report-archive.js';
-import { resolveDirectoryPrefixes } from './resolve-directory-prefixes.js';
 import { resolveOutputPath } from './resolve-output-path.js';
+import { resolvePageSelection } from './resolve-page-selection.js';
 
 /** A `write()`-only sink that renders nothing, for `params.silent`. */
 const NULL_STREAM: NodeJS.WritableStream = {
@@ -44,18 +49,26 @@ export async function report(params: HtmlReportParams): Promise<void> {
 	);
 	await requireViewerReadModel(archive.accessor);
 
-	const prefixes = await resolveDirectoryPrefixes({
+	const warn = params.silent
+		? () => {}
+		: (message: string) => {
+				// eslint-disable-next-line no-console
+				console.warn(message);
+			};
+
+	const normalizedUrls: readonly string[] | undefined =
+		params.urls === undefined
+			? undefined
+			: await resolveAndValidatePageListUrlFilter(archive.accessor, params.urls, warn);
+
+	const selection = await resolvePageSelection({
 		accessor: archive.accessor,
-		initialInput: params.directoryInput,
+		directoryInput: params.directoryInput,
+		urls: normalizedUrls,
 		interactive: params.interactive === true,
-		onWarn: params.silent
-			? () => {}
-			: (message) => {
-					// eslint-disable-next-line no-console
-					console.warn(message);
-				},
+		onWarn: warn,
 	});
-	const directoryPrefixes = prefixes.map((prefix) => prefix.display);
+	const directoryPrefixes = selection.directories;
 	const outputPath = resolveOutputPath(params.filePath, params.outputPath);
 
 	let html = '';
@@ -64,7 +77,10 @@ export async function report(params: HtmlReportParams): Promise<void> {
 		'Collect pages',
 		async (input: number, ctx: StepContext<number>): Promise<number> => {
 			ctx.progress('reading inner pages...');
-			const pages = await collectHtmlReportPages(archive.accessor, directoryPrefixes);
+			const pages = await collectHtmlReportPages(archive.accessor, {
+				directories: directoryPrefixes,
+				urls: selection.urls,
+			});
 			const summary = await getViewerSummary(archive.accessor);
 			ctx.progress(`${pages.length.toLocaleString()} pages`);
 			html = renderHtmlReport({
@@ -74,6 +90,9 @@ export async function report(params: HtmlReportParams): Promise<void> {
 				generatedAt: new Date().toISOString(),
 				directoryPrefixes,
 			});
+			if (selection.urls) {
+				await warnUnmatchedPageListUrls(archive.accessor, selection.urls, warn);
+			}
 			return input;
 		},
 	);

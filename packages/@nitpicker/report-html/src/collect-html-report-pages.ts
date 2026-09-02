@@ -7,23 +7,35 @@ import {
 	streamPageListRows,
 } from '@nitpicker/query';
 
+/** Row-set restriction for {@link collectHtmlReportPages}. */
+export interface CollectHtmlReportPagesOptions {
+	/** Directory-prefix filters. Empty or omitted lists every inner page. */
+	readonly directories?: readonly string[];
+	/**
+	 * Exact-match URL allowlist, already normalized (see
+	 * `resolvePageListUrlFilter`). ANDed with `directories` when both are
+	 * given — see `PageListRowFilterOptions.urls`'s docs.
+	 */
+	readonly urls?: readonly string[];
+}
+
 /**
  * Collects inner-page rows for a static HTML report in `natural_url_rank`
  * order, attaching redirect sources and per-page resource-file tallies.
  * @param accessor - Archive whose viewer read model is already current.
- * @param directories - Directory-prefix filters. Empty or omitted lists every inner page.
+ * @param options - Row-set restriction. Empty or omitted lists every inner page.
  * @returns Page rows ready for `renderHtmlReport`.
  * @example
- * const pages = await collectHtmlReportPages(accessor, ['/docs']);
+ * const pages = await collectHtmlReportPages(accessor, { directories: ['/docs'] });
  */
 export async function collectHtmlReportPages(
 	accessor: ArchiveAccessor,
-	directories: readonly string[] = [],
+	options: CollectHtmlReportPagesOptions = {},
 ): Promise<HtmlReportPage[]> {
 	const redirectFrom = await buildRedirectFromUrlsByDestId(accessor);
 	const pages: HtmlReportPage[] = [];
 
-	for await (const chunk of streamPageListRows(accessor, { directories })) {
+	for await (const chunk of streamPageListRows(accessor, options)) {
 		const counts = await getResourceFileCountsByPageIds(
 			accessor,
 			chunk.map((row) => row.pageId),
