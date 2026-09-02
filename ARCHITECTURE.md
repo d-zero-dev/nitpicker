@@ -283,6 +283,18 @@ Astro / Next.js / Vue / Nuxt / Svelte / SvelteKit / Remix / Gatsby / Angular 等
 4. `viewer/web/report-ui/render-html-report.tsx`（SSRとviewer CSS・テーマ切替スクリプトの自己完結HTML化）
 5. `cli/src/commands/report-def.ts` / `report.ts`（`--sheet` と `--html` の相互排他、レポータの遅延import）
 
+### URL リスト絞り込みレポート（`report --urls` / `query match-urls`）の変更
+
+顧客から渡される URL リスト（1行1URL）に載っているページだけをレポートする機能。静的 HTML・Google Sheets・診断用 JSON（`query match-urls`）の3出力面が同じ正規化・検証層を共有する。`crawl --recrawl`（同じ URL リストを受け取る再取得機能、`crawler-orchestrator.ts` の該当 Reading path 参照）とは無関係な独立機能 — こちらは既存アーカイブを読むだけで、クロールは一切行わない。
+
+1. 正規化・検証（`query/src/`）: `normalize-archive-url.ts`（`ExURL.withoutHashAndAuth`、アーカイブの `disableQueries` 設定に依存するため呼び出し側は `accessor.getConfig()` を経由する必要がある）→ `report-export/resolve-page-list-url-filter.ts`（重複排除・unparseable 分離）→ `report-export/resolve-and-validate-page-list-url-filter.ts`（HTML/Sheets 両バックエンド共有: 空配列を「フィルタなし」と扱う `applyEqualityOrInFilter` の契約に対するガードとして、有効 URL 0 件なら例外を投げる）
+2. Page List の base restriction への合流: `report-export/apply-page-list-row-filters.ts` の `PageListRowFilterOptions.urls`（`directories` と AND、`streamPageListRows`/`countPageListRows` 両方が同じ関数を通るため件数とストリームの母集合が一致する）
+3. Google Sheets 側の URL フィルタ可能シート: `report-google-sheets/src/report.ts` の `URL_FILTERABLE_SHEETS`（Page List/Links/Violations/Images の4つ、いずれも1行=1ページのシートのみ）。対象4シートの `data/create-*.ts` はいずれも `(options?: { urls? }) => CreateSheet` のファクトリ形状（`createResources({ dedupe })` と同じパターン）で、`estimateRowCount`/`run` の両方が同じ `urls` を通す。Page List 以外の3シートは `content_items`/`url_refs` を直接 JOIN して `applyEqualityOrInFilter` を適用する下位関数（`query/src/report-export/stream-all-content-items.ts` 等の `StreamAll*Options.urls`）を経由し、Images のみ画像自身の `src` ではなくページの URL（`page_ur.url`）で絞る点に注意
+4. 静的 HTML 側の絞り込み分岐: `report-html/src/resolve-page-selection.ts`（`--urls` 指定時は `resolveDirectoryPrefixes` の対話的絞り込みフローを丸ごとスキップし、`--html-dirs` があれば `directories` として重ねるだけ。10,000 件上限は `page-report-limit.ts` の `PAGE_REPORT_LIMIT` を両ファイルで共有 — 独自定数を持たせると上限がドリフトする）→ `collect-html-report-pages.ts` の `CollectHtmlReportPagesOptions.urls`
+5. 未マッチ URL の報告（3面共通の設計判断: 疑似行は挿入せず件数警告のみ）: `report-export/warn-unmatched-page-list-urls.ts`（`find-unmatched-page-list-urls.ts` を呼び、Page List の base restriction 内で「見つからなかった」を判定するため、PDF・external 等 Page List のスコープ外にある URL も正しく「未マッチ」として拾われる）を HTML/Sheets 両 `report()` が生成後に呼ぶ
+6. 診断サブコマンド `query match-urls`: `query/src/match-url-list.ts` は上記と違い `viewer_pages` を経由せず `content_items`/`url_refs` を直接 JOIN する — 外部 URL・非HTML・skip 済みページも含めて「アーカイブに存在するか」に答える必要があるため（viewer read model 未構築のアーカイブでも動く）。`redirect_dest_id` は書き込み時に最終宛先まで pre-flatten 済みなので `LEFT JOIN` 1 回で解決できる。`alias_of_id` は追わない（「この URL 自体の行があるか」を答えるツールであり、代表ページへの解決は別責務）。CLI 配線: `cli/src/commands/query-def.ts`（`match-urls` サブコマンド + `urls` フラグ）→ `map-flags-to-query-options.ts` → `dispatch-query.ts`（`readUrlListFile` + `matchUrlList` を束ねて `{results, invalidLines, summary}` を stdout の JSON に含める）
+7. URL リストファイルの読み込みは `cli/src/read-url-list-file.ts` に一本化（`crawl --recrawl`/`crawl --inventory` と共有。`@d-zero/readtext` 依存を cli パッケージに閉じ込める）。report コマンドの `--urls` は `cli/src/commands/report.ts` が読み込み・不正行の警告・0件ガードを行ってから HTML/Sheets 両バックエンドへ生の（未正規化の）文字列配列として渡す — 正規化はアーカイブを開いた後でないと `disableQueries` 設定が読めないため、CLI 層では行えない
+
 ### DB スキーマ変更
 
 1. `crawler/src/archive/init-schema.ts`（`info` + DDL オーケストレーション。ANALYZE 禁止の不変条件を先に読む）と `create-ref-tables.ts` / `create-entity-tables.ts` / `create-adjunct-tables.ts`（各テーブル群の DDL と設計 WHY）

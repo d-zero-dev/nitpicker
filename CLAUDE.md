@@ -21,8 +21,10 @@ npx @nitpicker/cli crawl <archive> --recrawl <urls.txt>    # URL リストの既
 npx @nitpicker/cli analyze <file>                      # analyze プラグイン実行
 npx @nitpicker/cli report <file>                       # Google Sheets レポート生成
 npx @nitpicker/cli report <file> -H                    # viewer サマリ + inner ページ一覧の静的HTML生成
+npx @nitpicker/cli report <file> -H --urls <urls.txt>  # URL リストに一致するページのみレポート（--html-dirs と AND 併用可）
 npx @nitpicker/cli pipeline <URL>                      # crawl → analyze → report を直列実行
 npx @nitpicker/cli query <file> <sub-command>          # アーカイブへのクエリ（JSON 出力）
+npx @nitpicker/cli query <file> match-urls --urls <urls.txt>  # URL リストとアーカイブの突合結果を診断（未収録/redirect/対象外を判別）
 npx @nitpicker/cli viewer <file-or-stub-dir>           # ローカルビューア起動（常駐、Ctrl-C で停止）
 npx @nitpicker/cli viewer-build <archive> [--force]    # viewer read model を明示的に(再)ビルド
 npx @nitpicker/cli cache list [--json]                 # on-disk キャッシュ一覧（tar展開キャッシュ＋analyze table、サイズ・最終更新日時）
