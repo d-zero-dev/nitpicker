@@ -52,15 +52,15 @@ const META = {
 /**
  * Drains every {@link streamAllContentItems} chunk into a single flat array.
  * @param accessor - The archive accessor to query.
- * @param chunkSize - Forwarded to {@link streamAllContentItems}.
+ * @param options - Forwarded to {@link streamAllContentItems}.
  * @returns All chunks' rows, concatenated in scan order.
  */
 async function collect(
 	accessor: Parameters<typeof streamAllContentItems>[0],
-	chunkSize?: number,
+	options?: Parameters<typeof streamAllContentItems>[1],
 ) {
 	const rows = [];
-	for await (const chunk of streamAllContentItems(accessor, chunkSize)) {
+	for await (const chunk of streamAllContentItems(accessor, options)) {
 		rows.push(...chunk);
 	}
 	return rows;
@@ -177,14 +177,22 @@ describe('streamAllContentItems', () => {
 
 	it('is independent of chunk size', async () => {
 		const baseline = await collect(archive);
-		const chunked = await collect(archive, 1);
+		const chunked = await collect(archive, { chunkSize: 1 });
 		const byUrl = (rows: typeof baseline) =>
 			rows.toSorted((a, b) => a.url.localeCompare(b.url));
 		expect(byUrl(chunked)).toEqual(byUrl(baseline));
 	});
 
 	it('throws on a non-positive chunkSize instead of hanging forever', async () => {
-		await expect(collect(archive, 0)).rejects.toThrow(RangeError);
-		await expect(collect(archive, -1)).rejects.toThrow(RangeError);
+		await expect(collect(archive, { chunkSize: 0 })).rejects.toThrow(RangeError);
+		await expect(collect(archive, { chunkSize: -1 })).rejects.toThrow(RangeError);
+	});
+
+	it('restricts rows to the given url allowlist', async () => {
+		const all = await collect(archive);
+		const [first] = all;
+		expect(first).toBeDefined();
+		const restricted = await collect(archive, { urls: [first!.url] });
+		expect(restricted.map((row) => row.url)).toEqual([first!.url]);
 	});
 });

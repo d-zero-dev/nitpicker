@@ -1,8 +1,23 @@
 import type { ImageStreamRow } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { applyEqualityOrInFilter } from '../apply-equality-or-in-filter.js';
+
 /** `image_items` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 5000;
+
+/** Options for {@link streamAllImages}. */
+export interface StreamAllImagesOptions {
+	/** `image_items` rows read per chunk. Must be positive. Defaults to {@link READ_CHUNK_SIZE}. */
+	chunkSize?: number;
+	/**
+	 * Exact-match page URL allowlist, already normalized (see
+	 * `resolvePageListUrlFilter`) — filters on the *page* the image appears
+	 * on, not the image's own `src`. Omitted or empty streams every image,
+	 * matching the pre-existing behavior.
+	 */
+	urls?: readonly string[];
+}
 
 /**
  * Streams every `image_items` row for the Images report sheet.
@@ -14,9 +29,10 @@ const READ_CHUNK_SIZE = 5000;
  * `COUNT(*)` on every page — appropriate for a small UI page, not a
  * full-archive report pass).
  * @param accessor - The archive accessor to query.
- * @param chunkSize - `image_items` rows read per chunk. Must be positive.
+ * @param options - Read size and page-URL allowlist. Defaults to the whole
+ *   archive read in {@link READ_CHUNK_SIZE}-row chunks.
  * @yields One chunk's rows, in `image_items.id` order.
- * @throws {RangeError} If `chunkSize` is not positive.
+ * @throws {RangeError} If `options.chunkSize` is not positive.
  * @example
  * for await (const chunk of streamAllImages(accessor)) {
  *   for (const image of chunk) {
@@ -26,8 +42,9 @@ const READ_CHUNK_SIZE = 5000;
  */
 export async function* streamAllImages(
 	accessor: ArchiveAccessor,
-	chunkSize = READ_CHUNK_SIZE,
+	options: StreamAllImagesOptions = {},
 ): AsyncGenerator<ImageStreamRow[]> {
+	const chunkSize = options.chunkSize ?? READ_CHUNK_SIZE;
 	if (chunkSize <= 0) {
 		throw new RangeError(`streamAllImages: chunkSize must be positive, got ${chunkSize}`);
 	}
@@ -57,6 +74,7 @@ export async function* streamAllImages(
 			.leftJoin('text_refs as alt_ref', 'alt_ref.id', 'ii.alt_text_id')
 			.leftJoin('text_refs as dom_path_ref', 'dom_path_ref.id', 'ii.dom_path_text_id')
 			.where('ii.id', '>', lastId)
+			.modify((qb) => applyEqualityOrInFilter(qb, 'page_ur.url', options.urls))
 			.orderBy('ii.id', 'asc')
 			.limit(chunkSize)
 			.select(

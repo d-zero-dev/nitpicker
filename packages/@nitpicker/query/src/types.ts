@@ -3834,3 +3834,48 @@ export interface PageConsoleLogEntry {
 	/** Epoch ms this occurrence was captured. */
 	ts: number;
 }
+
+/**
+ * One input URL's match result against the archive, from
+ * {@link import('./match-url-list.js').matchUrlList}.
+ *
+ * Diagnostic shape, not the Page List row shape (`PageListStreamRow`): reads
+ * `content_items`/`url_refs` directly rather than `viewer_pages`, so it
+ * covers external URLs, non-HTML resources, and skipped pages the Page List
+ * row set excludes — the point of `query match-urls` is answering "is this
+ * URL in the archive at all, and in what state", not "is it in the report".
+ */
+export interface UrlMatchResult {
+	/** The input URL exactly as given (not normalized). */
+	url: string;
+	/** The normalized form matched against the archive, or `null` when `url` could not be normalized (unparseable, or a non-HTTP scheme). */
+	normalizedUrl: string | null;
+	/** Whether a `content_items` row matched `normalizedUrl`. */
+	found: boolean;
+	/** `content_items.id`, or `null` when `found` is `false`. */
+	pageId: number | null;
+	/** HTTP status code, or `null` when unknown/not found. */
+	status: number | null;
+	/** HTTP status text, or `null` when unknown/not found. */
+	statusText: string | null;
+	/** Raw `Content-Type` response header value, or `null`. */
+	contentType: string | null;
+	/** The page's `<title>` text, or `null` when absent/never rendered/not found. */
+	title: string | null;
+	/** Whether the matched row is external, or `null` when not found. */
+	isExternal: boolean | null;
+	/** Whether the matched row was intentionally skipped, or `null` when not found. */
+	isSkipped: boolean | null;
+	/** `content_items.skip_reason`, or `null` when not skipped / not found. */
+	skipReason: string | null;
+	/** Epoch ms of the first successful crawl, or `null` when never scraped/not found. */
+	firstCrawledAt: number | null;
+	/** Epoch ms of the most recent crawl, or `null` when never scraped/not found. */
+	lastCrawledAt: number | null;
+	/**
+	 * The final redirect destination's URL, pre-flattened at write time (see
+	 * `content_items.redirect_dest_id`'s docs in ARCHITECTURE.md) — `null`
+	 * when the matched row is not a redirect source, or when not found.
+	 */
+	redirectDestUrl: string | null;
+}

@@ -3,10 +3,24 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { loadResponseHeadersBySetIds } from '@nitpicker/crawler';
 
+import { applyEqualityOrInFilter } from '../apply-equality-or-in-filter.js';
+
 import { buildRedirectFromUrlsByDestId } from './build-redirect-from-urls-by-dest-id.js';
 
 /** `content_items` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 2000;
+
+/** Options for {@link streamAllContentItems}. */
+export interface StreamAllContentItemsOptions {
+	/** `content_items` rows read per chunk. Must be positive. Defaults to {@link READ_CHUNK_SIZE}. */
+	chunkSize?: number;
+	/**
+	 * Exact-match URL allowlist, already normalized (see
+	 * `resolvePageListUrlFilter`). Omitted or empty streams every
+	 * `content_items` row, matching the pre-existing behavior.
+	 */
+	urls?: readonly string[];
+}
 
 /**
  * Streams every `content_items` row — internal, external, skipped, and
@@ -30,9 +44,10 @@ const READ_CHUNK_SIZE = 2000;
  * count, so this stays well clear of the per-page N+1 query pattern the old
  * report used for referrers/anchors.
  * @param accessor - The archive accessor to query.
- * @param chunkSize - `content_items` rows read per chunk. Must be positive.
+ * @param options - Read size and URL allowlist. Defaults to the whole
+ *   archive read in {@link READ_CHUNK_SIZE}-row chunks.
  * @yields One chunk's rows, in `content_items.id` order.
- * @throws {RangeError} If `chunkSize` is not positive.
+ * @throws {RangeError} If `options.chunkSize` is not positive.
  * @example
  * for await (const chunk of streamAllContentItems(accessor)) {
  *   for (const row of chunk) {
@@ -42,8 +57,9 @@ const READ_CHUNK_SIZE = 2000;
  */
 export async function* streamAllContentItems(
 	accessor: ArchiveAccessor,
-	chunkSize = READ_CHUNK_SIZE,
+	options: StreamAllContentItemsOptions = {},
 ): AsyncGenerator<ContentItemStreamRow[]> {
+	const chunkSize = options.chunkSize ?? READ_CHUNK_SIZE;
 	if (chunkSize <= 0) {
 		throw new RangeError(
 			`streamAllContentItems: chunkSize must be positive, got ${chunkSize}`,
@@ -70,6 +86,7 @@ export async function* streamAllContentItems(
 			.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
 			.leftJoin('text_refs as title_ref', 'title_ref.id', 'pm.title_text_id')
 			.where('ci.id', '>', lastId)
+			.modify((qb) => applyEqualityOrInFilter(qb, 'ur.url', options.urls))
 			.orderBy('ci.id', 'asc')
 			.limit(chunkSize)
 			.select(

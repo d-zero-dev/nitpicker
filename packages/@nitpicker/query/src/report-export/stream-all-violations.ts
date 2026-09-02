@@ -1,8 +1,22 @@
 import type { ViolationStreamRow } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { applyEqualityOrInFilter } from '../apply-equality-or-in-filter.js';
+
 /** `analysis_violations` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 5000;
+
+/** Options for {@link streamAllViolations}. */
+export interface StreamAllViolationsOptions {
+	/** `analysis_violations` rows read per chunk. Must be positive. Defaults to {@link READ_CHUNK_SIZE}. */
+	chunkSize?: number;
+	/**
+	 * Exact-match URL allowlist, already normalized (see
+	 * `resolvePageListUrlFilter`). Omitted or empty streams every violation,
+	 * matching the pre-existing behavior.
+	 */
+	urls?: readonly string[];
+}
 
 /**
  * Streams every `analysis_violations` row for the Violations report sheet.
@@ -15,9 +29,10 @@ const READ_CHUNK_SIZE = 5000;
  * linear sweep, so this bypasses that per-page recount/rescan cost the same
  * way `streamAllContentItems`/`streamAllResourcesRaw` do for their tables.
  * @param accessor - The archive accessor to query.
- * @param chunkSize - `analysis_violations` rows read per chunk. Must be positive.
+ * @param options - Read size and URL allowlist. Defaults to the whole
+ *   archive read in {@link READ_CHUNK_SIZE}-row chunks.
  * @yields One chunk's rows, in `analysis_violations.id` order.
- * @throws {RangeError} If `chunkSize` is not positive.
+ * @throws {RangeError} If `options.chunkSize` is not positive.
  * @example
  * for await (const chunk of streamAllViolations(accessor)) {
  *   for (const violation of chunk) {
@@ -27,8 +42,9 @@ const READ_CHUNK_SIZE = 5000;
  */
 export async function* streamAllViolations(
 	accessor: ArchiveAccessor,
-	chunkSize = READ_CHUNK_SIZE,
+	options: StreamAllViolationsOptions = {},
 ): AsyncGenerator<ViolationStreamRow[]> {
+	const chunkSize = options.chunkSize ?? READ_CHUNK_SIZE;
 	if (chunkSize <= 0) {
 		throw new RangeError(
 			`streamAllViolations: chunkSize must be positive, got ${chunkSize}`,
@@ -52,6 +68,7 @@ export async function* streamAllViolations(
 			.join('analysis_text_refs as msg', 'msg.id', 'v.message_text_id')
 			.leftJoin('analysis_text_refs as code', 'code.id', 'v.code_text_id')
 			.where('v.id', '>', lastId)
+			.modify((qb) => applyEqualityOrInFilter(qb, 'ur.url', options.urls))
 			.orderBy('v.id', 'asc')
 			.limit(chunkSize)
 			.select(

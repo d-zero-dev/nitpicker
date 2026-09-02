@@ -54,15 +54,15 @@ const META = {
 /**
  * Drains every {@link streamAllImages} chunk into a single flat array.
  * @param accessor - The archive accessor to query.
- * @param chunkSize - Forwarded to {@link streamAllImages}.
+ * @param options - Forwarded to {@link streamAllImages}.
  * @returns All chunks' rows, concatenated in scan order.
  */
 async function collect(
 	accessor: Parameters<typeof streamAllImages>[0],
-	chunkSize?: number,
+	options?: Parameters<typeof streamAllImages>[1],
 ) {
 	const rows = [];
-	for await (const chunk of streamAllImages(accessor, chunkSize)) {
+	for await (const chunk of streamAllImages(accessor, options)) {
 		rows.push(...chunk);
 	}
 	return rows;
@@ -154,14 +154,21 @@ describe('streamAllImages', () => {
 
 	it('is independent of chunk size', async () => {
 		const baseline = await collect(archive);
-		const chunked = await collect(archive, 1);
+		const chunked = await collect(archive, { chunkSize: 1 });
 		const bySrc = (rows: typeof baseline) =>
 			rows.toSorted((a, b) => (a.src ?? '').localeCompare(b.src ?? ''));
 		expect(bySrc(chunked)).toEqual(bySrc(baseline));
 	});
 
 	it('throws on a non-positive chunkSize instead of hanging forever', async () => {
-		await expect(collect(archive, 0)).rejects.toThrow(RangeError);
-		await expect(collect(archive, -1)).rejects.toThrow(RangeError);
+		await expect(collect(archive, { chunkSize: 0 })).rejects.toThrow(RangeError);
+		await expect(collect(archive, { chunkSize: -1 })).rejects.toThrow(RangeError);
+	});
+
+	it('restricts rows to images on the given page-url allowlist', async () => {
+		const restricted = await collect(archive, { urls: ['https://example.com/page-a'] });
+		expect(restricted).toHaveLength(2);
+		const empty = await collect(archive, { urls: ['https://example.com/page-b'] });
+		expect(empty).toHaveLength(0);
 	});
 });

@@ -155,7 +155,7 @@ export interface PageDirectoryPrefix {
 	pathname: string;
 }
 
-/** Directory-prefix filtering shared by every Page List row reader. */
+/** Directory-prefix and URL-list filtering shared by every Page List row reader. */
 export interface PageListRowFilterOptions {
 	/**
 	 * Directory-prefix filters. Each entry is either a full URL
@@ -171,6 +171,19 @@ export interface PageListRowFilterOptions {
 	 * restriction at all.
 	 */
 	directories?: readonly string[];
+	/**
+	 * Exact-match URL allowlist, restricting the row set to exactly these
+	 * pages. Values must already be normalized to `viewer_pages.url`'s own
+	 * form (`ExURL.withoutHashAndAuth`, computed with the archive's
+	 * `disableQueries` setting) — see `resolvePageListUrlFilter`, which every
+	 * caller of this option is expected to run first. Unlike `directories`,
+	 * this is an AND restriction layered on top of the existing base
+	 * restriction and any `directories` filter, not combined as a union: a page
+	 * must satisfy both. Omitted or empty means no URL restriction at all
+	 * (`applyEqualityOrInFilter`'s empty-array-is-no-filter contract) — never
+	 * pass an empty array when the caller's intent was "match nothing".
+	 */
+	urls?: readonly string[];
 }
 
 /** {@link PageListRowFilterOptions} plus the streaming-only read size. */

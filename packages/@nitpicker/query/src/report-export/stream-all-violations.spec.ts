@@ -14,15 +14,15 @@ const workingDir = path.resolve(__dirname, '__test_fixtures_stream_all_violation
 /**
  * Drains every {@link streamAllViolations} chunk into a single flat array.
  * @param accessor - The archive accessor to query.
- * @param chunkSize - Forwarded to {@link streamAllViolations}.
+ * @param options - Forwarded to {@link streamAllViolations}.
  * @returns All chunks' rows, concatenated in scan order.
  */
 async function collect(
 	accessor: Parameters<typeof streamAllViolations>[0],
-	chunkSize?: number,
+	options?: Parameters<typeof streamAllViolations>[1],
 ) {
 	const rows = [];
-	for await (const chunk of streamAllViolations(accessor, chunkSize)) {
+	for await (const chunk of streamAllViolations(accessor, options)) {
 		rows.push(...chunk);
 	}
 	return rows;
@@ -160,15 +160,22 @@ describe('streamAllViolations', () => {
 
 	it('is independent of chunk size', async () => {
 		const baseline = await collect(archive);
-		const chunked = await collect(archive, 1);
+		const chunked = await collect(archive, { chunkSize: 1 });
 		const byRule = (rows: typeof baseline) =>
 			rows.toSorted((a, b) => a.rule.localeCompare(b.rule));
 		expect(byRule(chunked)).toEqual(byRule(baseline));
 	});
 
 	it('throws on a non-positive chunkSize instead of hanging forever', async () => {
-		await expect(collect(archive, 0)).rejects.toThrow(RangeError);
-		await expect(collect(archive, -1)).rejects.toThrow(RangeError);
+		await expect(collect(archive, { chunkSize: 0 })).rejects.toThrow(RangeError);
+		await expect(collect(archive, { chunkSize: -1 })).rejects.toThrow(RangeError);
+	});
+
+	it('restricts rows to the given url allowlist', async () => {
+		const restricted = await collect(archive, { urls: ['https://example.com'] });
+		expect(restricted).toHaveLength(2);
+		const empty = await collect(archive, { urls: ['https://other.example/'] });
+		expect(empty).toHaveLength(0);
 	});
 });
 
