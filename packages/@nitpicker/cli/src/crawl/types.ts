@@ -30,6 +30,8 @@ export interface CrawlFlagInput {
 	readonly maxExcludedDepth?: number;
 	/** Maximum number of retry attempts per URL on scrape failure. */
 	readonly retry?: number;
+	/** See `crawl-def.ts`'s `maxAutoRetry` flag description (issue #350). */
+	readonly maxAutoRetry?: number;
 	/** Custom User-Agent string for HTTP requests. */
 	readonly userAgent?: string;
 	/** Whether to ignore robots.txt restrictions. */
