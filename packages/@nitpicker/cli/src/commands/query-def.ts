@@ -372,9 +372,9 @@ export const commandDef = {
 			usage: '<file> unused-resources [options]',
 			flags: ['limit', 'offset'],
 		},
-		'inventory-runs': {
-			desc: 'List --inventory import runs recorded in the archive',
-			usage: '<file> inventory-runs [options]',
+		'list-reconcile-runs': {
+			desc: 'List --inventory / --recrawl audit runs recorded in the archive',
+			usage: '<file> list-reconcile-runs [options]',
 			flags: ['limit', 'offset'],
 		},
 		outages: {

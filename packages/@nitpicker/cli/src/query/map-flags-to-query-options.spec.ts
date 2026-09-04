@@ -337,11 +337,13 @@ describe('mapFlagsToQueryOptions', () => {
 		});
 	});
 
-	it('returns limit/offset only for inventory-runs (no required filters)', () => {
+	it('returns limit/offset only for list-reconcile-runs (no required filters)', () => {
 		// Pagination-only sub-command — mirrors the `isolated-pages` /
 		// `unused-resources` convention so the audit-log subcommand
 		// stays cheap to call with no extra flags.
-		expect(mapFlagsToQueryOptions('inventory-runs', { limit: 20, offset: 0 })).toEqual({
+		expect(
+			mapFlagsToQueryOptions('list-reconcile-runs', { limit: 20, offset: 0 }),
+		).toEqual({
 			limit: 20,
 			offset: 0,
 		});

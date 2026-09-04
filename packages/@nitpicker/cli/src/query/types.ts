@@ -29,7 +29,7 @@ export type QuerySubCommand =
 	| 'isolated-clusters'
 	| 'get-isolated-cluster'
 	| 'unused-resources'
-	| 'inventory-runs'
+	| 'list-reconcile-runs'
 	| 'outages'
 	| 'console-logs'
 	| 'page-console-logs'
@@ -68,7 +68,7 @@ export const VALID_SUB_COMMANDS = [
 	'isolated-clusters',
 	'get-isolated-cluster',
 	'unused-resources',
-	'inventory-runs',
+	'list-reconcile-runs',
 	'outages',
 	'console-logs',
 	'page-console-logs',
