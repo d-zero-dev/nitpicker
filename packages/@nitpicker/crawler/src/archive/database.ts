@@ -21,7 +21,7 @@ import type {
 	DatabaseEvent,
 	InsertDedupeCapEventParams,
 	InsertNetworkOutageParams,
-	InventoryRunMeta,
+	ListReconcileRunMeta,
 	PageFilter,
 	PageSource,
 	ResetPagesByUrlsResult,
@@ -62,10 +62,10 @@ import { insertCrawlError as insertCrawlErrorOp } from './db-ops/errors/insert-c
 import { insertPageError as insertPageErrorOp } from './db-ops/errors/insert-page-error.js';
 import { listDnsBurnedHostCandidates as listDnsBurnedHostCandidatesOp } from './db-ops/errors/list-dns-burned-host-candidates.js';
 import { getHtmlOfPageById as getHtmlOfPageByIdOp } from './db-ops/html/get-html-of-page-by-id.js';
-import { recordInventoryRun as recordInventoryRunOp } from './db-ops/inventory/record-inventory-run.js';
 import { checkpoint as checkpointOp } from './db-ops/lifecycle/checkpoint.js';
 import { destroy as destroyOp } from './db-ops/lifecycle/destroy.js';
 import { init as initOp } from './db-ops/lifecycle/init.js';
+import { recordListReconcileRun as recordListReconcileRunOp } from './db-ops/list-reconcile/record-list-reconcile-run.js';
 import { getAudiosOfPage as getAudiosOfPageOp } from './db-ops/meta/get-audios-of-page.js';
 import { getButtonsOfPage as getButtonsOfPageOp } from './db-ops/meta/get-buttons-of-page.js';
 import { getCanvasesOfPage as getCanvasesOfPageOp } from './db-ops/meta/get-canvases-of-page.js';
@@ -898,16 +898,16 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		);
 	}
 	/**
-	 * Appends one row to the `inventory_runs` audit log.
-	 * Delegates to {@link recordInventoryRunOp}.
+	 * Appends one row to the `list_reconcile_runs` audit log.
+	 * Delegates to {@link recordListReconcileRunOp}.
 	 * @param meta - The run metadata to record. Only `ran_at` is required.
 	 * @returns The autoincremented `id` of the newly-inserted row.
 	 */
-	async recordInventoryRun(meta: InventoryRunMeta): Promise<number> {
+	async recordListReconcileRun(meta: ListReconcileRunMeta): Promise<number> {
 		return emitErrorAndRetry(
 			this,
-			'Database.recordInventoryRun',
-			async () => await recordInventoryRunOp(this.#instance, meta),
+			'Database.recordListReconcileRun',
+			async () => await recordListReconcileRunOp(this.#instance, meta),
 			retrySetting,
 		);
 	}

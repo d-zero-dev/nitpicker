@@ -3,7 +3,7 @@ import type {
 	Config,
 	InsertDedupeCapEventParams,
 	InsertNetworkOutageParams,
-	InventoryRunMeta,
+	ListReconcileRunMeta,
 	PageSource,
 } from './types.js';
 import type { OutageWindow } from '../is-within-outage-window.js';
@@ -354,7 +354,7 @@ export default class Archive extends ArchiveAccessor {
 	 * Appends one open row to the `network_outages` journal.
 	 *
 	 * Thin facade over {@link Database.insertNetworkOutage} — see
-	 * {@link recordInventoryRun}'s docstring for why this indirection exists.
+	 * {@link recordListReconcileRun}'s docstring for why this indirection exists.
 	 * @param params - The confirmed-outage fields to record.
 	 * @returns The autoincremented `id` of the inserted row.
 	 */
@@ -405,18 +405,18 @@ export default class Archive extends ArchiveAccessor {
 		return await this.#db.listNetworkOutages();
 	}
 	/**
-	 * Appends one row to the `inventory_runs` audit log.
+	 * Appends one row to the `list_reconcile_runs` audit log.
 	 *
-	 * Thin facade over {@link Database.recordInventoryRun} — keeps the
+	 * Thin facade over {@link Database.recordListReconcileRun} — keeps the
 	 * orchestrator decoupled from the knex layer and gives a single
 	 * write entry point that future Archive-level concerns (locking,
 	 * mirror sync, etc.) can hook into without touching every caller.
 	 * @param meta - The run metadata. Only `ran_at` is required.
 	 * @returns The autoincremented `id` of the inserted row.
 	 */
-	async recordInventoryRun(meta: InventoryRunMeta): Promise<number> {
-		dbLog('Record inventory run: %s', meta.list_label ?? meta.ran_at);
-		return await this.#db.recordInventoryRun(meta);
+	async recordListReconcileRun(meta: ListReconcileRunMeta): Promise<number> {
+		dbLog('Record list reconcile run: %s', meta.list_label ?? meta.ran_at);
+		return await this.#db.recordListReconcileRun(meta);
 	}
 
 	/**

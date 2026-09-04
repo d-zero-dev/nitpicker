@@ -43,7 +43,7 @@ describe('initSchema', () => {
 			'technology_signals',
 			'page_technologies',
 			'page_jsonld',
-			'inventory_runs',
+			'list_reconcile_runs',
 			'analysis_text_refs',
 			'analysis_violations',
 			'page_template_clusters',

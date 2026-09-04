@@ -59,7 +59,7 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  *   writes during a crawl and every reader queries. Must run AFTER
  *   `createRefTables` because most entity tables reference ref-table PKs.
  * - **Adjunct tables** ({@link createAdjunctTables}): `page_errors`,
- *   `crawl_errors`, `technology_signals`, `page_technologies`, `page_jsonld`, `inventory_runs`,
+ *   `crawl_errors`, `technology_signals`, `page_technologies`, `page_jsonld`, `list_reconcile_runs`,
  *   `analysis_text_refs` + `analysis_violations`, `page_html_blobs` +
  *   `page_html_ref`. Must run AFTER `createEntityTables` because the
  *   page-scoped tables FK into `content_items(id)`.
@@ -144,7 +144,7 @@ export async function initSchema(instance: Knex) {
 	// Adjunct tables that FK into `content_items` (page_errors /
 	// technology_signals / page_technologies / page_jsonld / analysis_* /
 	// page_html_*) plus the standalone log tables
-	// (crawl_errors / inventory_runs). MUST run after
+	// (crawl_errors / list_reconcile_runs). MUST run after
 	// {@link createEntityTables} so the FK targets exist. DDL +
 	// column-level rationale lives in {@link createAdjunctTables}, which is
 	// shared with `scripts/migrate-to-0.13.mjs` — a divergence between the

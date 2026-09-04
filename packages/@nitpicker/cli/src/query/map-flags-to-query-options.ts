@@ -292,7 +292,7 @@ export function mapFlagsToQueryOptions(
 		case 'isolated-pages':
 		case 'isolated-clusters':
 		case 'unused-resources':
-		case 'inventory-runs':
+		case 'list-reconcile-runs':
 		case 'duplicate-bodies':
 		case 'dedupe-cap-events':
 		case 'outages': {

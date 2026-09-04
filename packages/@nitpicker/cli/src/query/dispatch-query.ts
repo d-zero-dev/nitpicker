@@ -38,7 +38,6 @@ import {
 	listDedupeCapEvents,
 	listDuplicateBodyClusters,
 	listInboundLinks,
-	listInventoryRuns,
 	listIsolatedClustersFastPath,
 	listIsolatedPagesFastPath,
 	listLinks,
@@ -46,6 +45,7 @@ import {
 	listPages,
 	listPagesByJsonLdType,
 	listPagesByTechnology,
+	listReconcileRuns,
 	listResources,
 	listUnusedResources,
 	matchUrlList,
@@ -260,9 +260,9 @@ export async function dispatchQuery(
 			const { limit, offset } = options as { limit?: number; offset?: number };
 			return listUnusedResources(accessor, { limit, offset });
 		}
-		case 'inventory-runs': {
+		case 'list-reconcile-runs': {
 			const { limit, offset } = options as { limit?: number; offset?: number };
-			return listInventoryRuns(accessor, { limit, offset });
+			return listReconcileRuns(accessor, { limit, offset });
 		}
 		case 'outages': {
 			const { limit, offset } = options as { limit?: number; offset?: number };

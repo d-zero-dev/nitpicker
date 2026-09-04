@@ -25,7 +25,7 @@ const ADJUNCT_TABLES = [
 	'page_main_content_audios',
 	'page_main_content_canvases',
 	'page_main_content_custom_elements',
-	'inventory_runs',
+	'list_reconcile_runs',
 	'network_outages',
 	'dedupe_cap_events',
 	'analysis_text_refs',
@@ -137,7 +137,7 @@ describe('createAdjunctTables', () => {
 
 	it('preserves existing network_outages rows across a second createAdjunctTables run', async () => {
 		// The append-only journal must survive re-provisioning (e.g. a
-		// self-healing partial archive) exactly like `inventory_runs` does.
+		// self-healing partial archive) exactly like `list_reconcile_runs` does.
 		await createAdjunctTables(db);
 		await db('network_outages').insert({
 			started_at: 100,

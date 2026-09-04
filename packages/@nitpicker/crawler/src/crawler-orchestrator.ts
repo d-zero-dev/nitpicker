@@ -7,7 +7,7 @@ import type {
 } from './crawler/types.js';
 import type {
 	CrawlEvent,
-	InventoryRunAggregates,
+	ListReconcileRunAggregates,
 	PendingUrlsRemainReason,
 	SetupPhaseLabel,
 	SetupProgressCallbacks,
@@ -201,7 +201,7 @@ interface InventorySource {
 	sha256: string;
 	/** The exact bytes of the source list file, archived verbatim. */
 	bytes: Buffer;
-	/** Number of source-file lines the CLI warned-and-dropped for failing URL validation, before `inventoryUrls` was ever built. Recorded on the audit row as `inventory_runs.invalid_skipped`. */
+	/** Number of source-file lines the CLI warned-and-dropped for failing URL validation, before `inventoryUrls` was ever built. Recorded on the audit row as `list_reconcile_runs.invalid_skipped`. */
 	invalidLineCount: number;
 }
 
@@ -1517,8 +1517,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				// the ingestion boundary. Audit failures are deliberately
 				// NOT swallowed — inside the `.bak` window a restore is
 				// safe and useful (see
-				// {@link CrawlerOrchestrator.#writeInventoryRunRow}).
-				await CrawlerOrchestrator.#writeInventoryRunRow(archive, {
+				// {@link CrawlerOrchestrator.#writeListReconcileRunRow}).
+				await CrawlerOrchestrator.#writeListReconcileRunRow(archive, {
 					inventoryUrlsCount: inventoryUrls.length,
 					htmlSeedsCount: htmlSeeds.length,
 					nonHtmlCount: nonHtmlSeeds.length,
@@ -1892,7 +1892,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				});
 				// Audit row is written *inside* the `.bak` window — same
 				// all-or-nothing rationale as `inventory`'s identical write.
-				await CrawlerOrchestrator.#writeInventoryRunRow(archive, {
+				await CrawlerOrchestrator.#writeListReconcileRunRow(archive, {
 					inventoryUrlsCount: recrawlUrls.length,
 					htmlSeedsCount: htmlSeeds.length,
 					nonHtmlCount: nonHtmlSeeds.length,
@@ -2542,8 +2542,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	}
 
 	/**
-	 * Persist one `inventory_runs` audit row inside the ingestion phase of a
-	 * `--inventory` invocation, before the `.bak` is released. Lives as a
+	 * Persist one `list_reconcile_runs` audit row inside the ingestion phase
+	 * of a `--inventory` invocation, before the `.bak` is released. Lives as a
 	 * static helper because the audit-row shape (timestamp stamping + label
 	 * auto-gen + the privacy-driven path elision documented below) is a
 	 * cohesive concern that benefits from staying outside the long
@@ -2558,7 +2558,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * `computeFileSha256` against the bytes it read from the input txt,
 	 * before the orchestrator was even invoked). The orchestrator boundary
 	 * deliberately never sees the absolute path — see
-	 * {@link InventoryRunAggregates} for the privacy rationale.
+	 * {@link ListReconcileRunAggregates} for the privacy rationale.
 	 *
 	 * **Audit-write failures abort the ingestion phase.** Swallowing them
 	 * would only be justified if the audit were the last write after the
@@ -2566,21 +2566,21 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * `.bak`-protected ingestion phase the
 	 * trade-off flips. A failed audit row is restorable: the outer catch
 	 * copies `.bak` back over the archive and the operator reruns the
-	 * (short) ingestion from scratch. That keeps `inventory_runs` honest
-	 * (no "ran but unrecorded" rows) at the cost of one rerun.
+	 * (short) ingestion from scratch. That keeps `list_reconcile_runs`
+	 * honest (no "ran but unrecorded" rows) at the cost of one rerun.
 	 *
 	 * Forward-compat: if an explicit `--label` flag is ever added, thread
 	 * `labelOverride` through {@link inventory} into the `aggregates`
 	 * shape so the auto-name can be overridden.
 	 * @param archive - The opened archive to write the audit row into.
-	 * @param aggregates - The counts captured during the inventory pass; see {@link InventoryRunAggregates}.
+	 * @param aggregates - The counts captured during the inventory pass; see {@link ListReconcileRunAggregates}.
 	 */
-	static async #writeInventoryRunRow(
+	static async #writeListReconcileRunRow(
 		archive: Archive,
-		aggregates: InventoryRunAggregates,
+		aggregates: ListReconcileRunAggregates,
 	): Promise<void> {
 		const ranAt = new Date().toISOString();
-		await archive.recordInventoryRun({
+		await archive.recordListReconcileRun({
 			ran_at: ranAt,
 			list_label: `${aggregates.listLabelPrefix ?? 'inventory'}-${ranAt}`,
 			source_file_sha256: aggregates.sourceFileSha256,

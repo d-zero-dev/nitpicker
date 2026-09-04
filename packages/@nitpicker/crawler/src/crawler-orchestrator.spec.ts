@@ -1130,7 +1130,7 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 				return Promise.resolve();
 			}),
 			addError: vi.fn(() => Promise.resolve()),
-			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
+			recordListReconcileRun: vi.fn(() => Promise.resolve(1)),
 		} as unknown as Archive;
 
 		const archiveModule = await import('./archive/archive.js');
@@ -1186,10 +1186,10 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 		expect(addErrorMock).not.toHaveBeenCalled();
 
 		// Audit log: the non-HTML-only success branch MUST still write
-		// one `inventory_runs` row with the correct aggregate counts.
-		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
-		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
-		const [meta] = recordInventoryRunMock.mock.calls[0]!;
+		// one `list_reconcile_runs` row with the correct aggregate counts.
+		const recordListReconcileRunMock = vi.mocked(fakeArchive.recordListReconcileRun);
+		expect(recordListReconcileRunMock).toHaveBeenCalledTimes(1);
+		const [meta] = recordListReconcileRunMock.mock.calls[0]!;
 		expect(meta.total_lines).toBe(4);
 		expect(meta.new_pages).toBe(0);
 		expect(meta.new_resources).toBe(4);
@@ -1254,7 +1254,9 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 			addError: vi.fn(() => Promise.resolve()),
 			// The mock throws — simulating a libsql lock / disk error
 			// during the audit-row INSERT.
-			recordInventoryRun: vi.fn(() => Promise.reject(new Error('simulated libsql lock'))),
+			recordListReconcileRun: vi.fn(() =>
+				Promise.reject(new Error('simulated libsql lock')),
+			),
 		} as unknown as Archive;
 
 		const archiveModule = await import('./archive/archive.js');
@@ -1280,9 +1282,9 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		// recordInventoryRun WAS attempted — confirming the failure
+		// recordListReconcileRun WAS attempted — confirming the failure
 		// path actually ran (not a false positive on some earlier step).
-		expect(vi.mocked(fakeArchive.recordInventoryRun)).toHaveBeenCalledTimes(1);
+		expect(vi.mocked(fakeArchive.recordListReconcileRun)).toHaveBeenCalledTimes(1);
 	});
 });
 
@@ -1335,14 +1337,14 @@ describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => 
 			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn(() => Promise.resolve()),
 			addError: vi.fn(() => Promise.resolve()),
-			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
+			recordListReconcileRun: vi.fn(() => Promise.resolve(1)),
 		} as unknown as Archive;
 
 		const archiveModule = await import('./archive/archive.js');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		// FakeCrawler.start() emits `crawlEnd` (no real network), so the
-		// HTML-seed branch reaches `recordInventoryRun` and resolves.
+		// HTML-seed branch reaches `recordListReconcileRun` and resolves.
 		fakeCrawlerDriver = (crawler) => {
 			crawler.handlers.get('crawlEnd')?.(undefined as never);
 		};
@@ -1417,7 +1419,7 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn(() => Promise.resolve()),
 			addError: vi.fn(() => Promise.resolve()),
-			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
+			recordListReconcileRun: vi.fn(() => Promise.resolve(1)),
 			updateConfig: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 	}
@@ -1487,9 +1489,9 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 		]);
 
 		// The audit row separates the three drop reasons.
-		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
-		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
-		const [meta] = recordInventoryRunMock.mock.calls[0]!;
+		const recordListReconcileRunMock = vi.mocked(fakeArchive.recordListReconcileRun);
+		expect(recordListReconcileRunMock).toHaveBeenCalledTimes(1);
+		const [meta] = recordListReconcileRunMock.mock.calls[0]!;
 		expect(meta.total_lines).toBe(5);
 		expect(meta.new_pages).toBe(1);
 		expect(meta.new_resources).toBe(1);
@@ -1530,9 +1532,9 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 		expect(skippedCalls).toHaveLength(1);
 		expect(skippedCalls[0]![0]).toEqual([]);
 
-		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
-		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
-		const [meta] = recordInventoryRunMock.mock.calls[0]!;
+		const recordListReconcileRunMock = vi.mocked(fakeArchive.recordListReconcileRun);
+		expect(recordListReconcileRunMock).toHaveBeenCalledTimes(1);
+		const [meta] = recordListReconcileRunMock.mock.calls[0]!;
 		expect(meta.scope_skipped).toBe(1);
 		expect(meta.exclude_skipped).toBe(0);
 		expect(meta.new_resources).toBe(1);
@@ -1573,9 +1575,9 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 		expect(skippedCalls).toHaveLength(1);
 		expect(skippedCalls[0]![0]).toEqual([]);
 
-		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
-		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
-		const [meta] = recordInventoryRunMock.mock.calls[0]!;
+		const recordListReconcileRunMock = vi.mocked(fakeArchive.recordListReconcileRun);
+		expect(recordListReconcileRunMock).toHaveBeenCalledTimes(1);
+		const [meta] = recordListReconcileRunMock.mock.calls[0]!;
 		expect(meta.exclude_skipped).toBe(0);
 		expect(meta.new_resources).toBe(1);
 	});
@@ -1616,9 +1618,9 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 			'https://example.com/blocked/a.pdf',
 		]);
 
-		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
-		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
-		const [meta] = recordInventoryRunMock.mock.calls[0]!;
+		const recordListReconcileRunMock = vi.mocked(fakeArchive.recordListReconcileRun);
+		expect(recordListReconcileRunMock).toHaveBeenCalledTimes(1);
+		const [meta] = recordListReconcileRunMock.mock.calls[0]!;
 		expect(meta.new_resources).toBe(1);
 		expect(meta.exclude_skipped).toBe(1);
 		expect(meta.scope_skipped).toBe(0);
@@ -1831,7 +1833,7 @@ describe('CrawlerOrchestrator.inventory: dedupeCap sticky preload wiring (issue 
 			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn(() => Promise.resolve()),
 			addError: vi.fn(() => Promise.resolve()),
-			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
+			recordListReconcileRun: vi.fn(() => Promise.resolve(1)),
 		} as unknown as Archive;
 
 		const archiveModule = await import('./archive/archive.js');
@@ -1923,7 +1925,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 			insertInventorySeeds: vi.fn(() => Promise.resolve()),
 			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn(() => Promise.resolve()),
-			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
+			recordListReconcileRun: vi.fn(() => Promise.resolve(1)),
 			updateConfig: vi.fn(() => Promise.resolve()),
 			...overrides,
 		} as unknown as Archive;
@@ -2070,7 +2072,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 		expect(fakeArchive.resetPagesByUrls).not.toHaveBeenCalled();
 		expect(fakeArchive.insertInventorySeeds).not.toHaveBeenCalled();
 		expect(fakeArchive.insertInventoryResources).not.toHaveBeenCalled();
-		expect(fakeArchive.recordInventoryRun).not.toHaveBeenCalled();
+		expect(fakeArchive.recordListReconcileRun).not.toHaveBeenCalled();
 		expect(fakeCrawlerResumeCalls).toHaveLength(0);
 	});
 
@@ -2366,9 +2368,9 @@ describe('CrawlerOrchestrator.recrawl', () => {
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		const recordInventoryRunMock = vi.mocked(fakeArchive.recordInventoryRun);
-		expect(recordInventoryRunMock).toHaveBeenCalledTimes(1);
-		const [meta] = recordInventoryRunMock.mock.calls[0]!;
+		const recordListReconcileRunMock = vi.mocked(fakeArchive.recordListReconcileRun);
+		expect(recordListReconcileRunMock).toHaveBeenCalledTimes(1);
+		const [meta] = recordListReconcileRunMock.mock.calls[0]!;
 		expect(meta.list_label).toMatch(/^recrawl-/);
 		expect(meta.notes).toBe('Reset 1 existing page(s) for re-fetch');
 	});
@@ -2631,7 +2633,7 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 
 	it("records the audit row's source_file_sha256 as NULL when no source was given", async () => {
 		const saveInventorySourceList = vi.fn(() => Promise.resolve());
-		const recordInventoryRun = vi.fn(() => Promise.resolve(1));
+		const recordListReconcileRun = vi.fn(() => Promise.resolve(1));
 		const fakeArchive = {
 			updateConfig: vi.fn(() => Promise.resolve()),
 			getResourceUrlList: vi.fn(() => Promise.resolve([])),
@@ -2670,7 +2672,7 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn(() => Promise.resolve()),
 			addError: vi.fn(() => Promise.resolve()),
-			recordInventoryRun,
+			recordListReconcileRun,
 			saveInventorySourceList,
 		} as unknown as Archive;
 
@@ -2693,14 +2695,14 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 		}
 
 		expect(saveInventorySourceList).not.toHaveBeenCalled();
-		const [meta] = recordInventoryRun.mock.calls[0]!;
+		const [meta] = recordListReconcileRun.mock.calls[0]!;
 		expect(meta.source_file_sha256).toBeNull();
 		expect(meta.total_lines).toBe(1);
 	});
 
 	it("records the audit row's invalid_skipped from source.invalidLineCount (issue #99)", async () => {
 		const saveInventorySourceList = vi.fn(() => Promise.resolve());
-		const recordInventoryRun = vi.fn(() => Promise.resolve(1));
+		const recordListReconcileRun = vi.fn(() => Promise.resolve(1));
 		const fakeArchive = {
 			updateConfig: vi.fn(() => Promise.resolve()),
 			getResourceUrlList: vi.fn(() => Promise.resolve([])),
@@ -2739,7 +2741,7 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn(() => Promise.resolve()),
 			addError: vi.fn(() => Promise.resolve()),
-			recordInventoryRun,
+			recordListReconcileRun,
 			saveInventorySourceList,
 		} as unknown as Archive;
 
@@ -2763,7 +2765,7 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		const [meta] = recordInventoryRun.mock.calls[0]!;
+		const [meta] = recordListReconcileRun.mock.calls[0]!;
 		expect(meta.invalid_skipped).toBe(12);
 	});
 });

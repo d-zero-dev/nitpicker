@@ -141,17 +141,17 @@ HTMLかどうかはURL拡張子のヒューリスティックで分類します�
 npx @nitpicker/cli query ./site.nitpicker isolated-pages --pretty
 npx @nitpicker/cli query ./site.nitpicker isolated-clusters --pretty
 npx @nitpicker/cli query ./site.nitpicker unused-resources --pretty
-npx @nitpicker/cli query ./site.nitpicker inventory-runs --pretty
+npx @nitpicker/cli query ./site.nitpicker list-reconcile-runs --pretty
 ```
 
-| query               | 用途                                                |
-| ------------------- | --------------------------------------------------- |
-| `isolated-pages`    | 完全に孤立したinventory由来ページを列挙             |
-| `isolated-clusters` | inventory由来ページ同士でつながる孤立クラスタを列挙 |
-| `unused-resources`  | 参照元がないinventory由来リソースを列挙             |
-| `inventory-runs`    | inventory実行履歴を列挙                             |
+| query                 | 用途                                                |
+| --------------------- | --------------------------------------------------- |
+| `isolated-pages`      | 完全に孤立したinventory由来ページを列挙             |
+| `isolated-clusters`   | inventory由来ページ同士でつながる孤立クラスタを列挙 |
+| `unused-resources`    | 参照元がないinventory由来リソースを列挙             |
+| `list-reconcile-runs` | `--inventory` / `--recrawl` の実行履歴を列挙        |
 
-`--inventory` の実行履歴はアーカイブ内に記録されます。記録されるのは実行日時、リストラベル、リスト内容のSHA-256、行数、新規ページ数、新規リソース数、スコープ外件数、除外一致件数などです。元ファイルの絶対パスは保存しません。
+`--inventory` / `--recrawl` の実行履歴はアーカイブ内に記録されます（同じ `list_reconcile_runs` テーブルに集約）。記録されるのは実行日時、リストラベル、リスト内容のSHA-256、行数、新規ページ数、新規リソース数、スコープ外件数、除外一致件数などです。元ファイルの絶対パスは保存しません。
 
 同じリストを再度適用しても、実行履歴の重複は自動抑止されません。すでに登録済みのURLはスキップされますが、監査履歴としては別実行として扱います。
 

@@ -58,7 +58,7 @@ npx @nitpicker/cli query ./site.nitpicker page-detail --url https://example.com/
 | `isolated-clusters`          | inventory由来の孤立クラスタ                                            |
 | `get-isolated-cluster`       | 指定代表URLの孤立クラスタ詳細                                          |
 | `unused-resources`           | 参照元がないinventory由来リソース                                      |
-| `inventory-runs`             | inventory実行履歴                                                      |
+| `list-reconcile-runs`        | `--inventory`/`--recrawl` の取り込み実行履歴                           |
 | `console-logs`               | 捕捉したconsoleログ・ページエラー（内容ごとに全ページ横断で集約）      |
 | `page-console-logs`          | 指定URLのconsoleログ・ページエラー明細                                 |
 | `match-urls`                 | URLリストとアーカイブの突合診断（`report --urls` の未マッチ調査用）    |
@@ -366,10 +366,10 @@ npx @nitpicker/cli query ./site.nitpicker unused-resources --pretty
 
 `crawl --inventory` で登録されたリソースのうち、参照元ページがないものを返します。
 
-### `inventory-runs`
+### `list-reconcile-runs`
 
 ```sh
-npx @nitpicker/cli query ./site.nitpicker inventory-runs --pretty
+npx @nitpicker/cli query ./site.nitpicker list-reconcile-runs --pretty
 ```
 
 | オプション       | 型     | 説明         |
@@ -377,7 +377,7 @@ npx @nitpicker/cli query ./site.nitpicker inventory-runs --pretty
 | `--limit`, `-l`  | number | 最大取得件数 |
 | `--offset`, `-o` | number | スキップ件数 |
 
-`crawl --inventory` の実行履歴を新しい順に返します。
+`crawl --inventory` / `crawl --recrawl` の実行履歴を新しい順に返します。両方とも同じ `list_reconcile_runs` テーブルに記録され、`list_label` の `inventory-`/`recrawl-` prefix で由来を区別できます。
 
 ### `console-logs`
 

@@ -355,16 +355,16 @@ export interface CursorPaginatedUnusedResourceList extends PaginatedUnusedResour
 }
 
 /**
- * One row of {@link import('./list-inventory-runs.js').listInventoryRuns} output — one record per successful
- * `--inventory <list>` invocation against the archive.
+ * One row of {@link import('./list-reconcile-runs.js').listReconcileRuns} output — one record per successful
+ * `--inventory <list>` or `--recrawl <list>` invocation against the archive.
  *
- * Schema-mirror of the `inventory_runs` table. All NULL semantics, the
+ * Schema-mirror of the `list_reconcile_runs` table. All NULL semantics, the
  * "ran_at is the only required field" backfill contract, and the
  * append-only invariant live on
- * {@link import('@nitpicker/crawler').InventoryRunMeta} in the crawler
+ * {@link import('@nitpicker/crawler').ListReconcileRunMeta} in the crawler
  * package — this interface is the read-side shape.
  */
-export interface InventoryRunEntry {
+export interface ListReconcileRunEntry {
 	/** Autoincrement primary key (monotonically increasing per archive). */
 	id: number;
 	/** ISO 8601 timestamp at which the run completed. */
@@ -390,9 +390,9 @@ export interface InventoryRunEntry {
 }
 
 /**
- * Pagination options for {@link import('./list-inventory-runs.js').listInventoryRuns}.
+ * Pagination options for {@link import('./list-reconcile-runs.js').listReconcileRuns}.
  */
-export interface ListInventoryRunsOptions {
+export interface ListReconcileRunsOptions {
 	/** Maximum rows to return. Defaults to 100. */
 	limit?: number;
 	/** Rows to skip from the start. Defaults to 0. */

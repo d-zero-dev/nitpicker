@@ -56,7 +56,7 @@ vi.mock('@nitpicker/query', () => ({
 		pageUrls: [],
 		total: 0,
 	}),
-	listInventoryRuns: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+	listReconcileRuns: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	listNetworkOutages: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	listIsolatedPagesFastPath: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	listIsolatedClustersFastPath: vi.fn().mockResolvedValue({ items: [], total: 0 }),
@@ -483,14 +483,14 @@ describe('dispatchQuery', () => {
 		});
 	});
 
-	it('dispatches inventory-runs sub-command with limit and offset', async () => {
-		const { listInventoryRuns } = await import('@nitpicker/query');
-		const result = await dispatchQuery(mockAccessor, 'inventory-runs', {
+	it('dispatches list-reconcile-runs sub-command with limit and offset', async () => {
+		const { listReconcileRuns } = await import('@nitpicker/query');
+		const result = await dispatchQuery(mockAccessor, 'list-reconcile-runs', {
 			limit: 25,
 			offset: 5,
 		} as never);
 		expect(result).toEqual({ items: [], total: 0 });
-		expect(listInventoryRuns).toHaveBeenCalledWith(mockAccessor, {
+		expect(listReconcileRuns).toHaveBeenCalledWith(mockAccessor, {
 			limit: 25,
 			offset: 5,
 		});

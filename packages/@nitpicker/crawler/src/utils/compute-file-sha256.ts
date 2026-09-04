@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
  * Compute the SHA-256 digest of an in-memory byte buffer.
  *
  * Used by `CrawlerOrchestrator.inventory` to fingerprint the source URL
- * list — the digest is both recorded on the `inventory_runs` audit row
+ * list — the digest is both recorded on the `list_reconcile_runs` audit row
  * (the content-identity key for "was this exact list applied before") and
  * used as the file name under which the raw list is archived
  * (`Archive.saveInventorySourceList`).

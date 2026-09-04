@@ -7,8 +7,9 @@ import { migrateContentItemsDedupeCapEventId } from '../../migrate-content-items
 import { migrateInfoCreatedCwd } from '../../migrate-info-created-cwd.js';
 import { migrateInfoMainContentSelector } from '../../migrate-info-main-content-selector.js';
 import { migrateInfoRoots } from '../../migrate-info-roots.js';
-import { migrateInventoryRunsExcludeSkipped } from '../../migrate-inventory-runs-exclude-skipped.js';
-import { migrateInventoryRunsInvalidSkipped } from '../../migrate-inventory-runs-invalid-skipped.js';
+import { migrateInventoryRunsToListReconcileRuns } from '../../migrate-inventory-runs-to-list-reconcile-runs.js';
+import { migrateListReconcileRunsExcludeSkipped } from '../../migrate-list-reconcile-runs-exclude-skipped.js';
+import { migrateListReconcileRunsInvalidSkipped } from '../../migrate-list-reconcile-runs-invalid-skipped.js';
 import { migrateMainContentsColumns } from '../../migrate-main-contents-columns.js';
 import { migratePageMetaBodyHash } from '../../migrate-page-meta-body-hash.js';
 import { migratePageMetaConsoleErrorCount } from '../../migrate-page-meta-console-error-count.js';
@@ -19,8 +20,8 @@ import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-networ
 /**
  * Initializes the database schema if tables do not exist, then runs the
  * remaining lightweight migrations (`info.roots`, `info.mainContentSelector`,
- * `page_meta.main_content_*`, `inventory_runs.invalid_skipped`,
- * `inventory_runs.exclude_skipped`).
+ * `page_meta.main_content_*`, `list_reconcile_runs.invalid_skipped`,
+ * `list_reconcile_runs.exclude_skipped`).
  *
  * There is deliberately no per-table *table-creation* migration chain here:
  * `assertCompatibleVersion` (called below, before any schema work) rejects
@@ -45,8 +46,14 @@ import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-networ
  * not a column add, but it belongs in this same boot phase for the same
  * reason (self-healing an old archive's schema before any reader runs).
  *
- * `migrateContentItemsDedupeCapEventId`, `migrateInventoryRunsInvalidSkipped`,
- * `migrateInventoryRunsExcludeSkipped`) rather than a DDL-string change alone.
+ * `migrateContentItemsDedupeCapEventId`, `migrateListReconcileRunsInvalidSkipped`,
+ * `migrateListReconcileRunsExcludeSkipped`) rather than a DDL-string change alone.
+ *
+ * `migrateInventoryRunsToListReconcileRuns` runs BEFORE `initSchema`
+ * (unlike every other migration here) — see its own JSDoc for why: a
+ * plain rename must land before `createAdjunctTables`'s
+ * `IF NOT EXISTS` guard would otherwise create an empty `list_reconcile_runs`
+ * and strand the old table's rows.
  *
  * `closeStaleOpenNetworkOutages` is not a schema migration (no columns
  * change) but belongs at this same boot phase for the same reason the
@@ -85,6 +92,10 @@ export async function init(
 	if (readOnly) {
 		return;
 	}
+	// Must run before `initSchema`: see the function's own JSDoc for why a
+	// plain table rename has to land before `createAdjunctTables`'s
+	// `IF NOT EXISTS` guard would otherwise create an empty replacement.
+	await migrateInventoryRunsToListReconcileRuns(knex, onLog);
 	await initSchema(knex);
 	await migrateInfoRoots(knex, onLog);
 	await migrateInfoMainContentSelector(knex, onLog);
@@ -102,7 +113,7 @@ export async function init(
 	// column's `REFERENCES dedupe_cap_events(id)` target always exists by
 	// this point, for both fresh and legacy archives.
 	await migrateContentItemsDedupeCapEventId(knex, onLog);
-	await migrateInventoryRunsInvalidSkipped(knex, onLog);
-	await migrateInventoryRunsExcludeSkipped(knex, onLog);
+	await migrateListReconcileRunsInvalidSkipped(knex, onLog);
+	await migrateListReconcileRunsExcludeSkipped(knex, onLog);
 	await closeStaleOpenNetworkOutages(knex);
 }

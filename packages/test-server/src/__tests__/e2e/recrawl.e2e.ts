@@ -242,11 +242,11 @@ describe('Recrawl scrape-phase failure leaves ingested state in the stub, unpack
 		}
 	});
 
-	it('persists the inventory_runs audit row in the stub tmpDir despite the scrape throw', async () => {
+	it('persists the list_reconcile_runs audit row in the stub tmpDir despite the scrape throw', async () => {
 		const accessor = await Archive.connect(tmpDir);
 		try {
 			const knex = accessor.getKnex();
-			const rows = (await knex('inventory_runs').select('*')) as Array<{
+			const rows = (await knex('list_reconcile_runs').select('*')) as Array<{
 				total_lines: number | null;
 				new_pages: number | null;
 			}>;
