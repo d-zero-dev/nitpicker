@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { Archive, CrawlerOrchestrator, computeFileSha256 } from '@nitpicker/crawler';
-import { listInventoryRuns, listUnusedResources } from '@nitpicker/query';
+import { listReconcileRuns, listUnusedResources } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { TEST_SERVER_ORIGIN, TEST_SERVER_PORT } from './test-server-port.js';
@@ -151,13 +151,13 @@ describe('Inventory crawl', () => {
 	// what those unit tests already cover, at the cost of running a full
 	// browser-render crawl twice in CI.
 
-	it('exposes the run via the public `listInventoryRuns` API (read-side integration)', async () => {
+	it('exposes the run via the public `listReconcileRuns` API (read-side integration)', async () => {
 		// Direct-knex assertions below pin the table schema; this one
 		// pins the public API integration: CLI / MCP / viewer all call
-		// listInventoryRuns rather than reaching for raw SQL, so the
+		// listReconcileRuns rather than reaching for raw SQL, so the
 		// helper's column subset + sort order must match what the
 		// orchestrator writes.
-		const { items, total } = await listInventoryRuns(accessor);
+		const { items, total } = await listReconcileRuns(accessor);
 		expect(total).toBe(1);
 		expect(items).toHaveLength(1);
 		expect(items[0]).toMatchObject({
@@ -171,14 +171,14 @@ describe('Inventory crawl', () => {
 		expect(typeof items[0]?.id).toBe('number');
 	});
 
-	it('records one inventory_runs row per successful --inventory invocation with the expected aggregate counts', async () => {
+	it('records one list_reconcile_runs row per successful --inventory invocation with the expected aggregate counts', async () => {
 		// Audit-log contract. The beforeAll inventory pass above
 		// fed two URLs (1 HTML seed + 1 non-HTML resource) into the same
-		// archive; the orchestrator MUST have written one `inventory_runs`
+		// archive; the orchestrator MUST have written one `list_reconcile_runs`
 		// row with matching aggregates so client conversations of the
 		// form "did we apply this list" have an in-archive answer.
 		const knex = accessor.getKnex();
-		const rows = (await knex('inventory_runs')
+		const rows = (await knex('list_reconcile_runs')
 			.select('*')
 			.orderBy('ran_at', 'desc')) as Array<{
 			id: number;
@@ -274,7 +274,7 @@ describe('Inventory crawl run-audit fingerprint (with source file sha256)', () =
 
 	it('records the sha256 that matches the byte content of the supplied list file (content-equality, not just shape)', async () => {
 		const knex = accessor.getKnex();
-		const [row] = (await knex('inventory_runs')
+		const [row] = (await knex('list_reconcile_runs')
 			.select('source_file_sha256')
 			.orderBy('ran_at', 'desc')) as Array<{
 			source_file_sha256: string | null;
@@ -451,13 +451,13 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 		]);
 	});
 
-	it('writes the inventory_runs audit row inside the ingestion phase (before scrape)', async () => {
+	it('writes the list_reconcile_runs audit row inside the ingestion phase (before scrape)', async () => {
 		// Audit row is written in the `.bak`-protected ingestion phase, so
 		// it survives a Ctrl+C in the scrape phase — operators can still
 		// answer "did we run inventory on this archive" even though no
 		// seed was rendered.
 		const knex = accessor.getKnex();
-		const rows = (await knex('inventory_runs').select('*')) as Array<{
+		const rows = (await knex('list_reconcile_runs').select('*')) as Array<{
 			total_lines: number | null;
 			new_pages: number | null;
 			new_resources: number | null;
@@ -479,7 +479,7 @@ describe('Inventory scrape-phase failure leaves ingested state in the stub, unpa
 	// archive — it instead calls `archive.releaseHandle()` and leaves the
 	// stub (tmpDir) on disk, un-packaged, for the operator to recover via
 	// `crawl --resume`. The pre-inserted `inventory-seed` rows and the
-	// `inventory_runs` audit row are durable in the STUB's `db.sqlite`, not
+	// `list_reconcile_runs` audit row are durable in the STUB's `db.sqlite`, not
 	// in the original `.nitpicker`, which this test asserts is left
 	// byte-for-byte unaffected (`write()` never ran).
 	//
@@ -566,14 +566,14 @@ describe('Inventory scrape-phase failure leaves ingested state in the stub, unpa
 		}
 	});
 
-	it('persists the inventory_runs audit row in the stub tmpDir despite the scrape throw', async () => {
+	it('persists the list_reconcile_runs audit row in the stub tmpDir despite the scrape throw', async () => {
 		// Audit row was written before the throw (inside the ingestion
 		// phase, `.bak`-protected) and survives in the stub for the same
 		// reason as the seed rows above.
 		const accessor = await Archive.connect(tmpDir);
 		try {
 			const knex = accessor.getKnex();
-			const rows = (await knex('inventory_runs').select('*')) as Array<{
+			const rows = (await knex('list_reconcile_runs').select('*')) as Array<{
 				total_lines: number | null;
 				new_pages: number | null;
 			}>;
@@ -709,14 +709,14 @@ describe('Inventory crawl noop run (all URLs already in archive)', () => {
 		await fs.rm(cwd, { recursive: true, force: true });
 	});
 
-	it('does NOT write an inventory_runs row on the noop early-return path (known caveat pin)', async () => {
+	it('does NOT write a list_reconcile_runs row on the noop early-return path (known caveat pin)', async () => {
 		// Deliberate trade-off: the noop branch doesn't take a `.bak`, so a
 		// DB write here would risk tar-rewrite corruption on interrupt.
 		// We skip the audit row entirely instead. Pinned so a future
 		// change that adds `.bak` to the noop path can lift this and
 		// catch the lift in test review.
 		const knex = accessor.getKnex();
-		const rows = await knex('inventory_runs').select('id');
+		const rows = await knex('list_reconcile_runs').select('id');
 		expect(rows).toHaveLength(0);
 	});
 });
@@ -834,7 +834,7 @@ describe('Inventory crawl applies the archived excludes / excludeUrls (issue #26
 	});
 
 	it('separates the drop reasons on the audit row (exclude_skipped vs scope_skipped)', async () => {
-		const { items, total } = await listInventoryRuns(accessor);
+		const { items, total } = await listReconcileRuns(accessor);
 		expect(total).toBe(1);
 		expect(items[0]).toMatchObject({
 			total_lines: 3,
