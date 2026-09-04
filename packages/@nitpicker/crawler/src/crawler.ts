@@ -63,6 +63,8 @@ export { RETRY_FAILED_SETUP_PHASES } from './retry-failed-setup-phases.js';
 export { INVENTORY_SETUP_PHASES } from './inventory-setup-phases.js';
 export { RECRAWL_SETUP_PHASES } from './recrawl-setup-phases.js';
 export { SETUP_RECOVERY_PHASE_LABELS } from './setup-recovery-phase-labels.js';
+export { PendingUrlsRemainError } from './pending-urls-remain-error.js';
+export { computeAutoRetryBackoffDelayMs } from './compute-auto-retry-backoff-delay.js';
 export * from './types.js';
 export * from './crawler/types.js';
 export { classifyErrorKind } from './classify-error-kind.js';

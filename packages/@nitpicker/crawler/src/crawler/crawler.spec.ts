@@ -1995,6 +1995,132 @@ describe('Crawler', () => {
 		});
 	});
 
+	describe('start(): isRetryContinuation preserves per-session state (issue #350)', () => {
+		/**
+		 * Builds a `fetchDestination` mock: `successUrl` resolves as a plain
+		 * 200 image (no puppeteer launch needed), any other URL on the host
+		 * rejects with ENOTFOUND.
+		 * @param successUrl - The URL that should resolve successfully.
+		 * @returns The mocked `fetchDestination` module's spy.
+		 */
+		async function mockOneSuccessOneDnsFailure(successUrl: ExURL) {
+			const fetchDestMod = await import('./fetch-destination.js');
+			return vi
+				.spyOn(fetchDestMod, 'fetchDestination')
+				.mockImplementation(({ url: probeUrl }) => {
+					if (probeUrl.href === successUrl.href) {
+						return Promise.resolve({
+							url: successUrl,
+							redirectPaths: [],
+							isTarget: true,
+							isExternal: false,
+							status: 200,
+							statusText: 'OK',
+							contentType: 'image/png',
+							contentLength: 1234,
+							responseHeaders: {},
+							meta: { title: '' },
+							anchorList: [],
+							imageList: [],
+							html: '',
+							isSkipped: false,
+						});
+					}
+					return Promise.reject(new Error(`getaddrinfo ENOTFOUND ${probeUrl.hostname}`));
+				});
+		}
+
+		it('does not re-burn a host whose earlier attempt already proved it alive when isRetryContinuation is true', async () => {
+			// Auto-retry (issue #350) re-invokes start() on the SAME Crawler
+			// instance after a session ends with pages still pending.
+			// Without `isRetryContinuation`, `#runDeal` clears
+			// `#successfulHosts` at the top of every call, discarding "this
+			// host is known-good" memory the FIRST attempt already earned —
+			// a DNS hiccup on the retry would then burn the host outright
+			// instead of being treated as a transient blip (see "does NOT
+			// burn a host whose earlier URL responded in this session"
+			// above, which pins the same guard within a single call).
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { dnsBurnedHostCache } = await import('./dns-burned-host-cache.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+
+			const host = 'retry-continuation.example';
+			const successUrl = parseUrl(`https://${host}/asset-a.png`)!;
+			const failUrl = parseUrl(`https://${host}/asset-b.png`)!;
+			await mockOneSuccessOneDnsFailure(successUrl);
+
+			const crawler = new Crawler(defaultOptions);
+			const errors: CrawlerEventTypes['error'][] = [];
+			crawler.on('error', (e) => {
+				errors.push(e);
+			});
+			let crawlEnded = false;
+			crawler.on('crawlEnd', () => {
+				crawlEnded = true;
+			});
+
+			// First pass: the host proves alive.
+			crawler.start([successUrl]);
+			await vi.waitFor(() => {
+				expect(crawlEnded).toBe(true);
+			});
+
+			// Retry continuation: a DNS failure on the SAME host must not
+			// burn it, because `#successfulHosts` survived from the first
+			// pass.
+			crawler.start([failUrl], { isRetryContinuation: true });
+			await vi.waitFor(() => {
+				expect(errors).toHaveLength(1);
+			});
+
+			expect(dnsBurnedHostCache.has(host)).toBe(false);
+			clearDnsBurnedHostCache();
+		});
+
+		it('DOES re-burn the host on a plain (non-continuation) second start(), proving the guard above is not vacuous', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { dnsBurnedHostCache } = await import('./dns-burned-host-cache.js');
+			const { clearDnsBurnedHostCache } =
+				await import('./clear-dns-burned-host-cache.js');
+			clearDnsBurnedHostCache();
+
+			const host = 'fresh-session.example';
+			const successUrl = parseUrl(`https://${host}/asset-a.png`)!;
+			const failUrl = parseUrl(`https://${host}/asset-b.png`)!;
+			await mockOneSuccessOneDnsFailure(successUrl);
+
+			const crawler = new Crawler(defaultOptions);
+			const errors: CrawlerEventTypes['error'][] = [];
+			crawler.on('error', (e) => {
+				errors.push(e);
+			});
+			let crawlEnded = false;
+			crawler.on('crawlEnd', () => {
+				crawlEnded = true;
+			});
+
+			crawler.start([successUrl]);
+			await vi.waitFor(() => {
+				expect(crawlEnded).toBe(true);
+			});
+
+			// No `isRetryContinuation` — the pre-#350 "always reset"
+			// behaviour every OTHER caller of `start()` still gets (append,
+			// resume, retryFailed, etc. never pass this flag).
+			crawler.start([failUrl]);
+			await vi.waitFor(() => {
+				expect(errors).toHaveLength(1);
+			});
+
+			expect(dnsBurnedHostCache.get(host)).toBe('dns');
+			clearDnsBurnedHostCache();
+		});
+	});
+
 	describe('pagesScrapedOffset propagation', () => {
 		it('resume() の第 4 引数 pagesScrapedOffset が deal() の header 初期表示に反映される', async () => {
 			const { deal } = await import('@d-zero/dealer');

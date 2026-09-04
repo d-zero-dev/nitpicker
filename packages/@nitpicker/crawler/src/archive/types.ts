@@ -86,6 +86,29 @@ export interface Config extends Required<Pick<ParseURLOptions, 'disableQueries'>
 	 * detection, or `null`/omitted to use the automatic heuristic.
 	 */
 	mainContentSelector?: string | null;
+
+	/**
+	 * The `process.cwd()` recorded when this session's stub (tmpDir) was
+	 * created by `CrawlerOrchestrator.crawling` / `.append` / `.inventory` /
+	 * `.recrawl` / `.retryFailed` — NOT written by `.resume` itself, which
+	 * only reads it. `Archive.resume` uses this (falling back to its own
+	 * `process.cwd()` for a stub that predates this column) to reconstruct
+	 * the completed archive's output path independent of the directory
+	 * `crawl --resume` happens to be invoked from.
+	 *
+	 * `.nitpicker` files are routinely shared between users, and this local
+	 * absolute path (which can embed a username / project layout) has no
+	 * business surviving into a shared archive — `Archive.write` scrubs the
+	 * column back to `null` immediately before packaging, so it only ever
+	 * exists in an unpackaged stub.
+	 *
+	 * WHY (for future stub-limited fields): if you add another column meant
+	 * to live only in the unpackaged stub, pair it with a matching scrub in
+	 * `Archive.write` (`archive.ts`) — nothing enforces this automatically,
+	 * and a forgotten scrub silently leaks the field into every shared
+	 * `.nitpicker` from then on.
+	 */
+	createdCwd?: string | null;
 }
 
 /**

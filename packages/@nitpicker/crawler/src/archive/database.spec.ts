@@ -2217,6 +2217,7 @@ describe('Config', () => {
 			userAgent: 'NitpickerBot/1.0',
 			ignoreRobots: true,
 			mainContentSelector: '#main',
+			createdCwd: '/home/user/project',
 		};
 
 		await db.setConfig(config);
@@ -2261,6 +2262,7 @@ describe('Config', () => {
 			'userAgent',
 			'ignoreRobots',
 			'mainContentSelector',
+			'createdCwd',
 		];
 
 		for (const key of expectedKeys) {
@@ -2369,6 +2371,49 @@ describe('Config', () => {
 		const after = await db.getConfig();
 		expect(after).toEqual(before);
 		expect(after).not.toHaveProperty('cwd');
+	});
+
+	it('getCreatedCwd returns the stamped value', async () => {
+		const db = await Database.connect({
+			filename: configDbPath,
+		});
+
+		await db.updateConfig({ createdCwd: '/home/user/project' });
+		expect(await db.getCreatedCwd()).toBe('/home/user/project');
+	});
+
+	it('getCreatedCwd returns null when never stamped', async () => {
+		const neverStampedPath = path.resolve(workingDir, 'get-created-cwd-null.sqlite');
+		const { rmSync } = await import('node:fs');
+		rmSync(neverStampedPath, { force: true });
+		const db = await Database.connect({
+			filename: neverStampedPath,
+		});
+		await db.setConfig({
+			version: '0.13.0',
+			name: 'no-created-cwd',
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			recursive: true,
+			interval: 0,
+			image: false,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 0,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'x',
+			ignoreRobots: false,
+		});
+
+		expect(await db.getCreatedCwd()).toBeNull();
+
+		await db.destroy();
+		rmSync(neverStampedPath, { force: true });
 	});
 });
 

@@ -49,6 +49,7 @@ import { replacePageTemplates as replacePageTemplatesOp } from './db-ops/analysi
 import { getAnchorsOnPage as getAnchorsOnPageOp } from './db-ops/anchors/get-anchors-on-page.js';
 import { getBaseUrl as getBaseUrlOp } from './db-ops/config/get-base-url.js';
 import { getConfig as getConfigOp } from './db-ops/config/get-config.js';
+import { getCreatedCwd as getCreatedCwdOp } from './db-ops/config/get-created-cwd.js';
 import { getName as getNameOp } from './db-ops/config/get-name.js';
 import { setConfig as setConfigOp } from './db-ops/config/set-config.js';
 import { updateConfig as updateConfigOp } from './db-ops/config/update-config.js';
@@ -324,6 +325,20 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			retrySetting,
 		);
 	}
+	/**
+	 * Retrieves the `info.createdCwd` value stamped at stub-creation time.
+	 * Delegates to {@link getCreatedCwdOp}.
+	 * @returns The recorded cwd, or `null` if never stamped.
+	 */
+	async getCreatedCwd(): Promise<string | null> {
+		return emitErrorAndRetry(
+			this,
+			'Database.getCreatedCwd',
+			async () => await getCreatedCwdOp(this.#instance),
+			retrySetting,
+		);
+	}
+
 	/**
 	 * Retrieves all `page_main_content_custom_elements` rows for the given
 	 * page id. Delegates to {@link getCustomElementsOfPageOp}.

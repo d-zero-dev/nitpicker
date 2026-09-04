@@ -17,7 +17,24 @@ vi.mock('./crawler/crawler.js', () => {
 	class FakeCrawler {
 		/** Registered event handlers keyed by event name. */
 		handlers = new Map<string, (payload: never) => void>();
+		/**
+		 * Backing state for {@link signal} — a REAL `AbortController`, not a
+		 * plain `{ aborted }` object: `delayOrAbort` (issue #350 code review)
+		 * calls `signal.addEventListener`/`removeEventListener`, which only a
+		 * genuine `AbortSignal` supports.
+		 */
+		#abortController = new AbortController();
 
+		/**
+		 * Mirrors real `Crawler#signal` — `#crawlUntilPendingClears` (issue
+		 * #350) reads `.aborted` to bypass the auto-retry loop for an
+		 * explicit `abort()` call, and `delayOrAbort` listens on it directly
+		 * to cut the backoff wait short.
+		 * @returns The backing `AbortController`'s signal.
+		 */
+		get signal(): AbortSignal {
+			return this.#abortController.signal;
+		}
 		/**
 		 * Captures the options object the orchestrator constructed this
 		 * instance with, so tests can assert option-forwarding regressions
@@ -29,8 +46,10 @@ vi.mock('./crawler/crawler.js', () => {
 			fakeCrawlerConstructorCalls.push(options);
 		}
 
-		/** No-op abort to satisfy the orchestrator's interface. */
-		abort() {}
+		/** Aborts {@link signal}, matching real `Crawler#abort()`. */
+		abort() {
+			this.#abortController.abort();
+		}
 
 		/**
 		 * Returns an empty rejection map, matching a crawl where
@@ -131,6 +150,12 @@ afterEach(() => {
 describe('CrawlerOrchestrator.crawling: error イベントの書き込み失敗', () => {
 	it('archive.addError が reject すると crawling() 全体が reject する（unhandledRejection にならない）', async () => {
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -169,6 +194,12 @@ describe('CrawlerOrchestrator.crawling: PreloadShortCircuitError', () => {
 		// 部分なので、これを保証する unit assertion を残す。
 		const addError = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -207,6 +238,12 @@ describe('CrawlerOrchestrator.crawling: PreloadShortCircuitError', () => {
 	it('PreloadShortCircuitError 以外の error は通常通り addError を呼ぶ（regression guard）', async () => {
 		const addError = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -245,6 +282,12 @@ describe('CrawlerOrchestrator.crawling: networkOutageConfirmed / networkOutageRe
 		const insertNetworkOutage = vi.fn(() => Promise.resolve(42));
 		const closeNetworkOutage = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -289,6 +332,12 @@ describe('CrawlerOrchestrator.crawling: networkOutageConfirmed / networkOutageRe
 		const insertNetworkOutage = vi.fn(() => Promise.resolve(42));
 		const closeNetworkOutage = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -318,6 +367,12 @@ describe('CrawlerOrchestrator.crawling: networkOutageConfirmed / networkOutageRe
 
 	it('accumulates the confirmed count and duration into networkOutageSummaryCounter, reset after the session', async () => {
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -362,6 +417,12 @@ describe('CrawlerOrchestrator.crawling: networkOutageConfirmed / networkOutageRe
 describe('CrawlerOrchestrator.crawling: network-outage option forwarding (regression)', () => {
 	it('forwards networkOutage* thresholds and networkProbe from crawling() options to the underlying Crawler — regression test for issue #91 (these were previously silently dropped, so callers had no way to configure them outside unit tests that construct Crawler directly)', async () => {
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -398,6 +459,12 @@ describe('CrawlerOrchestrator.crawling: network-outage option forwarding (regres
 
 	it('omits the network-outage fields (passes undefined) when crawling() options do not set them, letting Crawler apply its own defaults', async () => {
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -430,6 +497,12 @@ describe('CrawlerOrchestrator.crawling: pageError ハンドラ', () => {
 	it('pageError イベントが archive.addPageError 経由で書き込まれる', async () => {
 		const addPageError = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -467,6 +540,12 @@ describe('CrawlerOrchestrator.crawling: pageError ハンドラ', () => {
 
 	it('archive.addPageError が reject すると crawling() 全体が reject する', async () => {
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -518,6 +597,12 @@ describe('CrawlerOrchestrator.append', () => {
 		// the lock instead of leaking it.
 		const closeSpy = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			getConfig: vi.fn(() => Promise.reject(new Error('forced-getConfig-failure'))),
 			close: closeSpy,
 		} as unknown as Archive;
@@ -536,6 +621,12 @@ describe('CrawlerOrchestrator.append', () => {
 	it('rejects list-mode archives and releases the lock', async () => {
 		const closeSpy = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			getConfig: vi.fn(() =>
 				Promise.resolve({
 					fromList: true,
@@ -566,6 +657,12 @@ describe('CrawlerOrchestrator.append', () => {
 		// resolution wrong corrupts both the lock and the .bak naming.
 		const closeSpy = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			getConfig: vi.fn(() => Promise.reject(new Error('stop-here'))),
 			close: closeSpy,
 		} as unknown as Archive;
@@ -598,6 +695,12 @@ describe('CrawlerOrchestrator.append', () => {
 	it('passes an absolute archive path through unchanged', async () => {
 		const closeSpy = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			getConfig: vi.fn(() => Promise.reject(new Error('stop-here'))),
 			close: closeSpy,
 		} as unknown as Archive;
@@ -624,6 +727,142 @@ describe('CrawlerOrchestrator.append', () => {
 		expect(openArg.filePath).toBe('/abs/path/existing.nitpicker');
 		expect(openArg.openPluginData).toBe(true);
 	});
+
+	it('on PendingUrlsRemainError, does not restore .bak over the original archive and still deletes the now-unnecessary .bak (issue #350 QA review)', async () => {
+		// Ghost-code regression guard: `#abandonBackupOnPendingRemains` is
+		// append's ONLY branch that skips the restore-from-backup path —
+		// nothing else in this describe (or `append.e2e.ts`) drives a crawl
+		// far enough to exhaust auto-retry, so this pins the branch that
+		// distinguishes it from a plain crawl failure (which DOES restore
+		// `.bak`, asserted by omission here: `copyFileWithProgress` must be
+		// called exactly once — the initial backup — never a second time
+		// for a restore).
+		const closeSpy = vi.fn(() => Promise.resolve());
+		const releaseHandle = vi.fn(() => Promise.resolve());
+		const getCrawlingState = vi.fn(() =>
+			Promise.resolve({ scraped: [], pending: ['https://example.com/a'] }),
+		);
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle,
+			tmpDir: '/tmp/._nitpicker-fake-stub-append-exhausted',
+			filePath: '/tmp/test-cwd/existing.nitpicker',
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					fromList: false,
+					roots: ['https://example.com/'],
+					baseUrl: 'https://example.com/',
+				}),
+			),
+			repromoteExternalPages: vi.fn(() => Promise.resolve([])),
+			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			close: closeSpy,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+		const copyFileModule =
+			await import('./archive/filesystem/copy-file-with-progress.js');
+		const copySpy = vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await expect(
+			CrawlerOrchestrator.append('./existing.nitpicker', ['https://example.com/'], {
+				cwd: '/tmp/test-cwd',
+				maxAutoRetry: 0,
+			}),
+		).rejects.toMatchObject({
+			name: 'PendingUrlsRemainError',
+			reason: 'exhausted',
+			attemptsMade: 0,
+			stubPath: '/tmp/._nitpicker-fake-stub-append-exhausted',
+		});
+
+		// Exactly one call — the initial backup taken before the crawl.
+		// A restore would be a SECOND call with `backupPath` as the source
+		// and `absFilePath` as the destination; that must never happen here.
+		expect(copySpy).toHaveBeenCalledTimes(1);
+		expect(copySpy.mock.calls[0]?.[0]).toBe('/tmp/test-cwd/existing.nitpicker');
+		expect(copySpy.mock.calls[0]?.[1]).toBe('/tmp/test-cwd/existing.nitpicker.bak');
+		// `#crawlUntilPendingClears` already released the handle before
+		// throwing; the outer catch's `close()` still runs (this fake has
+		// no `#closeOnce` sharing) but must not be asked to restore/remove
+		// anything beyond that.
+		expect(releaseHandle).toHaveBeenCalledTimes(1);
+		expect(closeSpy).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('CrawlerOrchestrator.retryFailed: PendingUrlsRemainError (issue #350 QA review)', () => {
+	it('does not restore .bak over the original archive and still deletes the now-unnecessary .bak', async () => {
+		// Same ghost-code regression this describe's `append` counterpart
+		// pins — `#abandonBackupOnPendingRemains` is `retryFailed`'s ONLY
+		// branch that skips the restore-from-backup path, and nothing else
+		// in this file (or `retry-failed.e2e.ts`) drives a crawl far enough
+		// to exhaust auto-retry.
+		const closeSpy = vi.fn(() => Promise.resolve());
+		const releaseHandle = vi.fn(() => Promise.resolve());
+		const getCrawlingState = vi.fn(() =>
+			Promise.resolve({ scraped: [], pending: ['https://example.com/a'] }),
+		);
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle,
+			tmpDir: '/tmp/._nitpicker-fake-stub-retry-failed-exhausted',
+			filePath: '/tmp/test-cwd/existing.nitpicker',
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					fromList: false,
+					roots: ['https://example.com/'],
+					baseUrl: 'https://example.com/',
+				}),
+			),
+			resetFailedPages: vi.fn(() => Promise.resolve([])),
+			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			close: closeSpy,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+		const copyFileModule =
+			await import('./archive/filesystem/copy-file-with-progress.js');
+		const copySpy = vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await expect(
+			CrawlerOrchestrator.retryFailed('./existing.nitpicker', {
+				cwd: '/tmp/test-cwd',
+				maxAutoRetry: 0,
+			}),
+		).rejects.toMatchObject({
+			name: 'PendingUrlsRemainError',
+			reason: 'exhausted',
+			attemptsMade: 0,
+			stubPath: '/tmp/._nitpicker-fake-stub-retry-failed-exhausted',
+		});
+
+		expect(copySpy).toHaveBeenCalledTimes(1);
+		expect(copySpy.mock.calls[0]?.[0]).toBe('/tmp/test-cwd/existing.nitpicker');
+		expect(copySpy.mock.calls[0]?.[1]).toBe('/tmp/test-cwd/existing.nitpicker.bak');
+		expect(releaseHandle).toHaveBeenCalledTimes(1);
+		expect(closeSpy).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe('CrawlerOrchestrator.inventory: pending guard demote', () => {
@@ -638,6 +877,11 @@ describe('CrawlerOrchestrator.inventory: pending guard demote', () => {
 		// that resolves to zero novel URLs so the no-op early-return path
 		// fires immediately after the guard, isolating the guard's branch.
 		const fakeArchive = {
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			getConfig: vi.fn(() =>
 				Promise.resolve({
@@ -700,6 +944,11 @@ describe('CrawlerOrchestrator.inventory: pending guard demote', () => {
 
 	it('routes the pending-URL warning through setupProgress.onLog instead of console.warn when a setup TaskList row is active (issue #294 code review)', async () => {
 		const fakeArchive = {
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			getConfig: vi.fn(() =>
 				Promise.resolve({
@@ -764,6 +1013,11 @@ describe('CrawlerOrchestrator.inventory: pending guard demote', () => {
 		// actual pending row. A stray warn on every inventory call would
 		// drown the operator in false-positive noise.
 		const fakeArchive = {
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			getConfig: vi.fn(() =>
 				Promise.resolve({
@@ -836,6 +1090,11 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 		//    probe happens.
 		const insertInventoryResourcesCalls: { urls: string[] }[] = [];
 		const fakeArchive = {
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			getConfig: vi.fn(() =>
 				Promise.resolve({
@@ -953,6 +1212,11 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 		// that re-adds a swallow surfaces here as a missing throw.
 		const insertInventoryResourcesCalls: { urls: string[] }[] = [];
 		const fakeArchive = {
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			getConfig: vi.fn(() =>
 				Promise.resolve({
@@ -1032,6 +1296,9 @@ describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => 
 		// counter from `getScrapedHtmlPageCount()` so the header reads
 		// cumulative (matching `append` / `retryFailed` / `resume`).
 		const fakeArchive = {
+			updateConfig: vi.fn(() => Promise.resolve()),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			getConfig: vi.fn(() =>
 				Promise.resolve({
@@ -1143,12 +1410,15 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
 			setUrlOrder: vi.fn(() => Promise.resolve()),
 			close: vi.fn(() => Promise.resolve()),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			setResources: vi.fn(() => Promise.resolve()),
 			insertInventorySeeds: vi.fn(() => Promise.resolve()),
 			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn(() => Promise.resolve()),
 			addError: vi.fn(() => Promise.resolve()),
 			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
+			updateConfig: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 	}
 
@@ -1361,6 +1631,12 @@ describe('CrawlerOrchestrator.crawling: dedupeCap event handling (issue #208)', 
 		const finalizeDedupeCapEvent = vi.fn(() => Promise.resolve());
 		const accumulateDedupeCapRejectedCount = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -1416,6 +1692,12 @@ describe('CrawlerOrchestrator.crawling: dedupeCap event handling (issue #208)', 
 		const finalizeDedupeCapEvent = vi.fn(() => Promise.resolve());
 		const accumulateDedupeCapRejectedCount = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -1462,6 +1744,12 @@ describe('CrawlerOrchestrator.crawling: dedupeCap event handling (issue #208)', 
 		const finalizeDedupeCapEvent = vi.fn(() => Promise.resolve());
 		const accumulateDedupeCapRejectedCount = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -1502,6 +1790,9 @@ describe('CrawlerOrchestrator.crawling: dedupeCap event handling (issue #208)', 
 describe('CrawlerOrchestrator.inventory: dedupeCap sticky preload wiring (issue #208)', () => {
 	it('archive.listDedupeCapShapeKeys() の結果がCrawlerのpreloadedStickyShapeKeysオプションへ渡される', async () => {
 		const fakeArchive = {
+			updateConfig: vi.fn(() => Promise.resolve()),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			getConfig: vi.fn(() =>
 				Promise.resolve({
@@ -1627,10 +1918,13 @@ describe('CrawlerOrchestrator.recrawl', () => {
 			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
 			setUrlOrder: vi.fn(() => Promise.resolve()),
 			close: vi.fn(() => Promise.resolve()),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			insertInventorySeeds: vi.fn(() => Promise.resolve()),
 			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
 			insertInventoryResources: vi.fn(() => Promise.resolve()),
 			recordInventoryRun: vi.fn(() => Promise.resolve(1)),
+			updateConfig: vi.fn(() => Promise.resolve()),
 			...overrides,
 		} as unknown as Archive;
 	}
@@ -1662,6 +1956,12 @@ describe('CrawlerOrchestrator.recrawl', () => {
 	it('rejects list-mode archives and releases the lock', async () => {
 		const closeSpy = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			getConfig: vi.fn(() =>
 				Promise.resolve({
 					fromList: true,
@@ -1826,9 +2126,16 @@ describe('CrawlerOrchestrator.recrawl', () => {
 	it('deduplicates reset URLs already present in the strict-pending scan instead of listing them twice', async () => {
 		const fakeArchive = buildFakeRecrawlArchive({
 			getExistingPageUrls: vi.fn(() => Promise.resolve(['https://example.com/a'])),
-			getCrawlingState: vi.fn(() =>
-				Promise.resolve({ scraped: [], pending: ['https://example.com/a'] }),
-			),
+			// Two calls precede `Crawler#resume` (the pre-check warning, then
+			// the resume-seed read this test asserts on); any call after that
+			// is the auto-retry loop's own post-crawl check (issue #350) —
+			// report converged there so the fixture's `FakeCrawler` (which
+			// never actually clears pending) does not trigger a real retry.
+			getCrawlingState: vi
+				.fn()
+				.mockResolvedValueOnce({ scraped: [], pending: ['https://example.com/a'] })
+				.mockResolvedValueOnce({ scraped: [], pending: ['https://example.com/a'] })
+				.mockResolvedValue({ scraped: [], pending: [] }),
 			resetPagesByUrls: vi.fn(() =>
 				Promise.resolve({
 					resetUrls: ['https://example.com/a'],
@@ -2148,6 +2455,12 @@ describe('CrawlerOrchestrator: openPluginData regression guard (issue #99)', () 
 	it('CrawlerOrchestrator.inventory opens the archive with openPluginData: true', async () => {
 		const closeSpy = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			getConfig: vi.fn(() => Promise.reject(new Error('stop-here'))),
 			close: closeSpy,
 		} as unknown as Archive;
@@ -2171,6 +2484,12 @@ describe('CrawlerOrchestrator: openPluginData regression guard (issue #99)', () 
 	it('CrawlerOrchestrator.retryFailed opens the archive with openPluginData: true', async () => {
 		const closeSpy = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			getConfig: vi.fn(() => Promise.reject(new Error('stop-here'))),
 			close: closeSpy,
 		} as unknown as Archive;
@@ -2194,6 +2513,12 @@ describe('CrawlerOrchestrator: openPluginData regression guard (issue #99)', () 
 	it('CrawlerOrchestrator.recrawl opens the archive with openPluginData: true', async () => {
 		const closeSpy = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			getConfig: vi.fn(() => Promise.reject(new Error('stop-here'))),
 			close: closeSpy,
 		} as unknown as Archive;
@@ -2226,6 +2551,11 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 	function setupNoopFakeArchive() {
 		const saveInventorySourceList = vi.fn(() => Promise.resolve());
 		const fakeArchive = {
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			getConfig: vi.fn(() =>
 				Promise.resolve({
@@ -2303,6 +2633,11 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 		const saveInventorySourceList = vi.fn(() => Promise.resolve());
 		const recordInventoryRun = vi.fn(() => Promise.resolve(1));
 		const fakeArchive = {
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			getConfig: vi.fn(() =>
 				Promise.resolve({
@@ -2367,6 +2702,11 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 		const saveInventorySourceList = vi.fn(() => Promise.resolve());
 		const recordInventoryRun = vi.fn(() => Promise.resolve(1));
 		const fakeArchive = {
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			getConfig: vi.fn(() =>
 				Promise.resolve({
@@ -2442,6 +2782,12 @@ describe('CrawlerOrchestrator.write', () => {
 			},
 		);
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -2497,6 +2843,12 @@ describe('CrawlerOrchestrator[Symbol.asyncDispose]: recovery-write progress (iss
 			},
 		);
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -2542,6 +2894,12 @@ describe('CrawlerOrchestrator[Symbol.asyncDispose]: recovery-write progress (iss
 
 	it('does not emit recovery events when Archive.close() takes the no-op branch (already written)', async () => {
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -2583,6 +2941,12 @@ describe('CrawlerOrchestrator.crawling: setUrlOrder progress', () => {
 			},
 		);
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -2620,6 +2984,12 @@ describe('CrawlerOrchestrator.crawling: setUrlOrder progress', () => {
 describe('CrawlerOrchestrator.crawling: flushingPendingWrites (issue #294)', () => {
 	it('emits flushingPendingWrites with the pending count when crawlEnd fires while a write is still queued', async () => {
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -2655,6 +3025,12 @@ describe('CrawlerOrchestrator.crawling: flushingPendingWrites (issue #294)', () 
 
 	it('does not emit flushingPendingWrites when the queue is already empty at crawlEnd', async () => {
 		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
 			on: vi.fn(),
 			setConfig: vi.fn(() => Promise.resolve()),
 			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
@@ -2687,5 +3063,569 @@ describe('CrawlerOrchestrator.crawling: flushingPendingWrites (issue #294)', () 
 		);
 
 		expect(flushEvents).toEqual([]);
+	});
+});
+
+describe('CrawlerOrchestrator: auto-retry (issue #350)', () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it('an explicit abort() bypasses the retry loop entirely, even with pages still pending', async () => {
+		// `AbortController.signal` cannot be un-aborted, so every subsequent
+		// `crawling()` call on this `#crawler` would deal zero work forever
+		// — retrying after an explicit abort would only waste one full
+		// backoff wait before "no progress" gives up anyway. This also
+		// preserves this method's pre-#350 behaviour for a caller that
+		// deliberately cancels (e.g. a Ctrl+C proxy in tests): the
+		// orchestrator resolves normally with pending possibly `> 0`, and
+		// it is the caller's decision whether to `write()`.
+		const getCrawlingState = vi.fn(() =>
+			Promise.resolve({ scraped: [], pending: ['https://example.com/a'] }),
+		);
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-abort',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-abort-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const orchestrator = await CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{ cwd: '/tmp', filePath: '/tmp/orchestrator-auto-retry-abort-test.nitpicker' },
+			(o) => {
+				o.on('error', () => {});
+				// Simulates a Ctrl+C proxy landing before the dealer
+				// dispatches — the same pattern
+				// `inventory.e2e.ts`'s "pre-insert survives interrupted
+				// scrape" regression test drives.
+				o.abort();
+			},
+		);
+
+		expect(orchestrator).toBeInstanceOf(CrawlerOrchestrator);
+		expect(getCrawlingState).not.toHaveBeenCalled();
+		expect(fakeCrawlerResumeCalls).toHaveLength(0);
+	});
+
+	it('an abort() called mid-backoff-wait cuts the wait short instead of blocking a library caller (issue #350 code review)', async () => {
+		vi.useFakeTimers();
+		const getCrawlingState = vi.fn(() =>
+			Promise.resolve({ scraped: [], pending: ['https://example.com/a'] }),
+		);
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-abort-mid-wait',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-abort-mid-wait-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		let capturedOrchestrator: CrawlerOrchestrator | undefined;
+		const resultPromise = CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-auto-retry-abort-mid-wait-test.nitpicker',
+				maxAutoRetry: 3,
+			},
+			(o) => {
+				o.on('error', () => {});
+				capturedOrchestrator = o;
+			},
+		);
+
+		// Well short of the 30s first backoff wait — proves the abort (not
+		// the timer) is what unblocks the promise below.
+		await vi.advanceTimersByTimeAsync(1000);
+		capturedOrchestrator?.abort();
+
+		await expect(resultPromise).resolves.toBeInstanceOf(CrawlerOrchestrator);
+		// Bailed out on the abort mid-wait — never got to re-queue and
+		// re-run `crawling()` for a retry attempt.
+		expect(fakeCrawlerResumeCalls).toHaveLength(0);
+	});
+
+	it('re-queues pending pages and succeeds once a retry attempt clears them', async () => {
+		vi.useFakeTimers();
+		const getCrawlingState = vi
+			.fn()
+			.mockResolvedValueOnce({ scraped: [], pending: ['https://example.com/a'] })
+			.mockResolvedValueOnce({ scraped: ['https://example.com/a'], pending: [] });
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve(['https://example.com/style.css'])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-success-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const resultPromise = CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{ cwd: '/tmp', filePath: '/tmp/orchestrator-auto-retry-success-test.nitpicker' },
+			(o) => {
+				o.on('error', () => {});
+			},
+		);
+		await vi.advanceTimersByTimeAsync(30_000);
+		await expect(resultPromise).resolves.toBeInstanceOf(CrawlerOrchestrator);
+
+		expect(getCrawlingState).toHaveBeenCalledTimes(2);
+		expect(fakeCrawlerResumeCalls).toHaveLength(1);
+		expect(fakeCrawlerResumeCalls[0]?.pending).toEqual(['https://example.com/a']);
+	});
+
+	it('emits autoRetryWaiting with the attempt/maxAttempts/pendingCount/delayMs payload before each retry wait (issue #350 QA review)', async () => {
+		vi.useFakeTimers();
+		const getCrawlingState = vi
+			.fn()
+			.mockResolvedValueOnce({ scraped: [], pending: ['a', 'b', 'c'] })
+			.mockResolvedValueOnce({ scraped: [], pending: ['a', 'b'] })
+			.mockResolvedValueOnce({ scraped: ['a'], pending: [] });
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-auto-retry-waiting-event',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-waiting-event-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const autoRetryWaitingEvents: {
+			attempt: number;
+			maxAttempts: number;
+			pendingCount: number;
+			delayMs: number;
+		}[] = [];
+		const resultPromise = CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-auto-retry-waiting-event-test.nitpicker',
+				maxAutoRetry: 3,
+			},
+			(o) => {
+				o.on('error', () => {});
+				o.on('autoRetryWaiting', (payload) => {
+					autoRetryWaitingEvents.push(payload);
+				});
+			},
+		);
+		await vi.advanceTimersByTimeAsync(30_000);
+		await vi.advanceTimersByTimeAsync(60_000);
+		await expect(resultPromise).resolves.toBeInstanceOf(CrawlerOrchestrator);
+
+		expect(autoRetryWaitingEvents).toEqual([
+			{ attempt: 1, maxAttempts: 3, pendingCount: 3, delayMs: 30_000 },
+			{ attempt: 2, maxAttempts: 3, pendingCount: 2, delayMs: 60_000 },
+		]);
+	});
+
+	it('throws PendingUrlsRemainError and releases the handle once --max-auto-retry is exhausted', async () => {
+		vi.useFakeTimers();
+		const getCrawlingState = vi
+			.fn()
+			.mockResolvedValueOnce({ scraped: [], pending: ['a', 'b', 'c', 'd'] })
+			.mockResolvedValueOnce({ scraped: [], pending: ['a', 'b', 'c'] })
+			.mockResolvedValueOnce({ scraped: [], pending: ['a', 'b'] })
+			.mockResolvedValueOnce({ scraped: [], pending: ['a'] });
+		const releaseHandle = vi.fn(() => Promise.resolve());
+		const write = vi.fn(() => Promise.resolve());
+		const getResourceUrlList = vi.fn(() => Promise.resolve([]));
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList,
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle,
+			tmpDir: '/tmp/._nitpicker-fake-stub-exhausted',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-exhausted-test.nitpicker',
+			write,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const resultPromise = CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-auto-retry-exhausted-test.nitpicker',
+				maxAutoRetry: 3,
+			},
+			(o) => {
+				o.on('error', () => {});
+			},
+		);
+		// Attach the rejection assertion BEFORE advancing the fake clock —
+		// `resultPromise` can reject mid-advance, and an unattached handler
+		// at that instant trips Node's unhandled-rejection warning even
+		// though it is `await`ed a few lines later.
+		const assertion = expect(resultPromise).rejects.toMatchObject({
+			name: 'PendingUrlsRemainError',
+			reason: 'exhausted',
+			attemptsMade: 3,
+			maxAutoRetry: 3,
+			pendingCount: 1,
+			stubPath: '/tmp/._nitpicker-fake-stub-exhausted',
+		});
+		// Three backoff waits (30s, 60s, 120s) separate the four crawl passes.
+		await vi.advanceTimersByTimeAsync(30_000);
+		await vi.advanceTimersByTimeAsync(60_000);
+		await vi.advanceTimersByTimeAsync(120_000);
+		await assertion;
+		expect(releaseHandle).toHaveBeenCalledTimes(1);
+		expect(write).not.toHaveBeenCalled();
+		// Issue #350 code review: fetched at most once across all 3 retry
+		// attempts, not once per attempt — `Crawler#resume()`'s use of it is
+		// idempotent Set-seeding, so re-scanning the full resource list on
+		// every attempt would be pure waste on a large archive.
+		expect(getResourceUrlList).toHaveBeenCalledTimes(1);
+	});
+
+	it('abandons retrying early when an attempt makes no progress', async () => {
+		vi.useFakeTimers();
+		const getCrawlingState = vi
+			.fn()
+			.mockResolvedValueOnce({ scraped: [], pending: ['a', 'b'] })
+			.mockResolvedValueOnce({ scraped: [], pending: ['a', 'b'] });
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-no-progress',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-no-progress-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const resultPromise = CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-auto-retry-no-progress-test.nitpicker',
+				maxAutoRetry: 3,
+			},
+			(o) => {
+				o.on('error', () => {});
+			},
+		);
+		const assertion = expect(resultPromise).rejects.toMatchObject({
+			name: 'PendingUrlsRemainError',
+			reason: 'no-progress',
+			attemptsMade: 1,
+			pendingCount: 2,
+		});
+		await vi.advanceTimersByTimeAsync(30_000);
+		await assertion;
+		expect(getCrawlingState).toHaveBeenCalledTimes(2);
+	});
+
+	it('reports "exhausted" (not "no-progress") when the final attempt is both exhausted AND made no progress (issue #350 code review — priority pin)', async () => {
+		// The two prior tests each trigger exactly one of the two early-exit
+		// conditions in isolation. This pins the actual ordering fix: when
+		// `--max-auto-retry 1`'s single attempt makes no dent in a
+		// perpetually-stuck pending count, the SAME iteration is both
+		// "exhausted" (attempt 2 > maxAutoRetry 1) and "no-progress"
+		// (pending unchanged) — the exhausted check runs first in the loop
+		// body, so `reason` must read `'exhausted'`, the more actionable of
+		// the two (it tells the operator the retry budget, not just that
+		// one attempt stalled).
+		vi.useFakeTimers();
+		const getCrawlingState = vi.fn(() =>
+			Promise.resolve({ scraped: [], pending: ['a', 'b'] }),
+		);
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-exhausted-and-no-progress',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-exhausted-and-no-progress-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const resultPromise = CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-auto-retry-exhausted-and-no-progress-test.nitpicker',
+				maxAutoRetry: 1,
+			},
+			(o) => {
+				o.on('error', () => {});
+			},
+		);
+		const assertion = expect(resultPromise).rejects.toMatchObject({
+			name: 'PendingUrlsRemainError',
+			reason: 'exhausted',
+			attemptsMade: 1,
+			maxAutoRetry: 1,
+			pendingCount: 2,
+		});
+		await vi.advanceTimersByTimeAsync(30_000);
+		await assertion;
+		expect(getCrawlingState).toHaveBeenCalledTimes(2);
+	});
+
+	it('--max-auto-retry 0 throws immediately without waiting or retrying', async () => {
+		const getCrawlingState = vi.fn(() =>
+			Promise.resolve({ scraped: [], pending: ['https://example.com/a'] }),
+		);
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-disabled',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-disabled-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await expect(
+			CrawlerOrchestrator.crawling(
+				['https://example.com/'],
+				{
+					cwd: '/tmp',
+					filePath: '/tmp/orchestrator-auto-retry-disabled-test.nitpicker',
+					maxAutoRetry: 0,
+				},
+				(o) => {
+					o.on('error', () => {});
+				},
+			),
+		).rejects.toMatchObject({
+			name: 'PendingUrlsRemainError',
+			reason: 'exhausted',
+			attemptsMade: 0,
+			maxAutoRetry: 0,
+		});
+		expect(getCrawlingState).toHaveBeenCalledTimes(1);
+		expect(fakeCrawlerResumeCalls).toHaveLength(0);
+	});
+
+	it('an archive-level error bypasses the retry loop and rethrows immediately', async () => {
+		let archiveErrorHandler: ((error: unknown) => void) | undefined;
+		const getCrawlingState = vi.fn(() => Promise.resolve({ scraped: [], pending: [] }));
+		const releaseHandle = vi.fn(() => Promise.resolve());
+		const write = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle,
+			tmpDir: '/tmp/._nitpicker-fake-stub-archive-error',
+			on: vi.fn((event: string, handler: (error: unknown) => void) => {
+				if (event === 'error') {
+					archiveErrorHandler = handler;
+				}
+			}),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-archive-error-test.nitpicker',
+			write,
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			// The archive's own storage layer fails mid-crawl — the
+			// constructor's listener aborts the crawler and `crawling()`
+			// still resolves normally via the usual `crawlEnd` path (see
+			// `#archiveFailure`'s JSDoc), so this fires `crawlEnd` too.
+			archiveErrorHandler?.(new Error('disk full'));
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await expect(
+			CrawlerOrchestrator.crawling(
+				['https://example.com/'],
+				{
+					cwd: '/tmp',
+					filePath: '/tmp/orchestrator-auto-retry-archive-error-test.nitpicker',
+				},
+				(o) => {
+					o.on('error', () => {});
+				},
+			),
+		).rejects.toThrow('disk full');
+
+		// Pending is never even checked — the archive failure short-circuits
+		// before `#crawlUntilPendingClears` reaches its own pending check.
+		// Neither `write()` nor `releaseHandle()` is this bare static
+		// factory's job to call on any failure path (it has no try/catch at
+		// all) — that cleanup is the caller's responsibility, same as any
+		// other pre-existing exception from this method.
+		expect(getCrawlingState).not.toHaveBeenCalled();
+		expect(write).not.toHaveBeenCalled();
+		expect(releaseHandle).not.toHaveBeenCalled();
+	});
+});
+
+describe('CrawlerOrchestrator: createdCwd is always stamped as an absolute path (issue #350)', () => {
+	it('resolves a relative cwd against process.cwd() before stamping info.createdCwd', async () => {
+		// A relative `cwd` already resolves against `process.cwd()`
+		// implicitly for every OTHER path this file derives from it
+		// (absFilePath, tmpDir) — storing it unresolved as `createdCwd`
+		// would silently reintroduce the cwd-dependent resume bug this
+		// column exists to fix the moment `Archive.resume` runs from a
+		// different directory than the relative path was written against.
+		const setConfig = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-relative-cwd',
+			on: vi.fn(),
+			setConfig,
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-relative-cwd-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		await CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: 'relative/nested/dir',
+				filePath: '/tmp/orchestrator-relative-cwd-test.nitpicker',
+			},
+			(o) => {
+				o.on('error', () => {});
+			},
+		);
+
+		expect(setConfig).toHaveBeenCalledTimes(1);
+		const config = setConfig.mock.calls[0]?.[0] as { createdCwd?: string };
+		expect(path.isAbsolute(config.createdCwd!)).toBe(true);
+		expect(config.createdCwd).toBe(path.resolve(process.cwd(), 'relative/nested/dir'));
 	});
 });
