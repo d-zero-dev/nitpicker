@@ -10,7 +10,13 @@ describe('Speculative pagination (path-based)', () => {
 		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/pagination/`], {
 			parallels: 5,
 		});
-	}, 120_000);
+		// 120_000 だと実測でほぼ張り付く（11実ページの逐次ブラウザ起動だけで約119s）。
+		// issue #350 の auto-retry は正当な pending（実アンカー経由で到達可能な
+		// ページが detached-frame 等の一過性エラーで scraped=0 のまま crawlEnd を
+		// 迎えたケース）を検知すると最低 30s のバックオフ＋再クロール1回を挟むため、
+		// 既存の余裕ゼロの上限では稀に超過する。他の実クロール系 e2e
+		// （append/retry-failed/recrawl の多ページブロック）に合わせて 240_000 とする。
+	}, 240_000);
 
 	afterAll(async () => {
 		await cleanup(result);
