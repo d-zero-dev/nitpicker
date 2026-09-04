@@ -396,12 +396,17 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * previously-external page — does not race on two parallel slots.
 	 * @param urls - The list of root URLs to begin crawling from. May be empty
 	 *   when resumed pending URLs already exist (for example `--retry-failed`).
-	 * @param opts - Optional overrides; currently only `recursive` is honoured.
+	 * @param opts - Optional overrides.
 	 * @param opts.recursive - When `false`, disables recursive discovery and forces list-mode.
 	 *   Defaults to the constructor option's `recursive` value.
+	 * @param opts.isRetryContinuation - Forwarded to `#runDeal` (issue #350):
+	 *   when `true`, this is `CrawlerOrchestrator`'s auto-retry loop
+	 *   re-invoking `start()` on the same `Crawler` instance after a prior
+	 *   pass ended with pages still pending, not an unrelated fresh
+	 *   session — see `#runDeal`'s JSDoc for what that changes.
 	 * @throws {Error} If the URL list is empty.
 	 */
-	start(urls: ExURL[], opts?: { recursive?: boolean }) {
+	start(urls: ExURL[], opts?: { recursive?: boolean; isRetryContinuation?: boolean }) {
 		// Inventory mode pre-loads tens of thousands of seed URLs that all
 		// fall under archived `roots` (already populated into `#scope` by
 		// the constructor). Adding each seed as its own scope entry was
@@ -456,7 +461,12 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		const resumeOffset = this.#resumedScraped.length;
 		const pagesScrapedOffset = this.#resumedPagesScraped;
 
-		void this.#runDeal(initialUrls, resumeOffset, pagesScrapedOffset).catch((error) => {
+		void this.#runDeal(
+			initialUrls,
+			resumeOffset,
+			pagesScrapedOffset,
+			opts?.isRetryContinuation ?? false,
+		).catch((error) => {
 			crawlerLog('runDeal error: %O', error);
 			this.#emitDealErrors(error, root.href);
 			void this.emit('crawlEnd', {});
@@ -1025,8 +1035,23 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @param pagesScrapedOffset - Number of HTML pages already rendered in previous
 	 *   sessions, used to seed the per-session HTML-pages counter so the display
 	 *   remains accurate across resumes
+	 * @param isRetryContinuation - `true` when `CrawlerOrchestrator`'s
+	 *   auto-retry loop (issue #350) is re-invoking `start()` on this same
+	 *   `Crawler` instance after a prior pass ended with pages still
+	 *   pending, rather than an unrelated fresh session (a plain resume,
+	 *   append, etc.). Skips the four per-session resets below: retrying is
+	 *   specifically trying to avoid re-paying network-outage/host-burn
+	 *   detection cost against the same underlying network condition, so
+	 *   discarding what the prior attempt already learned would defeat the
+	 *   point. Defaults to `false` — every other caller of `start()` keeps
+	 *   the pre-#350 "always reset" behaviour.
 	 */
-	async #runDeal(initialUrls: ExURL[], resumeOffset = 0, pagesScrapedOffset = 0) {
+	async #runDeal(
+		initialUrls: ExURL[],
+		resumeOffset = 0,
+		pagesScrapedOffset = 0,
+		isRetryContinuation = false,
+	) {
 		const seen = new Set<string>(
 			initialUrls.map((u) => protocolAgnosticKey(u.withoutHashAndAuth)),
 		);
@@ -1036,18 +1061,20 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			seen.add(protocolAgnosticKey(url));
 		}
 
-		// Redirect-destination dedup is per-crawl; clear any state from a prior run.
-		this.#scrapedDestinations.clear();
-		// Session-liveness signal is per-crawl too; clear so a fresh session
-		// does not inherit "host alive" claims from a prior run that may have
-		// happened on an entirely different network.
-		this.#successfulHosts.clear();
-		// Network-outage state is per-crawl too: a sliding window of errors
-		// (or a gate left closed) from a prior run on this same `Crawler`
-		// instance must not leak into a fresh session. `#networkGate.open()`
-		// is a no-op if already open.
-		this.#networkOutageDetector.reset();
-		this.#networkGate.open();
+		if (!isRetryContinuation) {
+			// Redirect-destination dedup is per-crawl; clear any state from a prior run.
+			this.#scrapedDestinations.clear();
+			// Session-liveness signal is per-crawl too; clear so a fresh session
+			// does not inherit "host alive" claims from a prior run that may have
+			// happened on an entirely different network.
+			this.#successfulHosts.clear();
+			// Network-outage state is per-crawl too: a sliding window of errors
+			// (or a gate left closed) from a prior run on this same `Crawler`
+			// instance must not leak into a fresh session. `#networkGate.open()`
+			// is a no-op if already open.
+			this.#networkOutageDetector.reset();
+			this.#networkGate.open();
+		}
 
 		// external URL の追跡（target は deal の total/done から導出）
 		const externalUrls = new Set<string>();

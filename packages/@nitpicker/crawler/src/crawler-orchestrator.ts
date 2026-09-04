@@ -1,9 +1,14 @@
 import type { Config } from './archive/types.js';
 import type { NetworkProbe } from './crawler/probe-network.js';
-import type { CrawlerOptions, InventoryMode } from './crawler/types.js';
+import type {
+	CrawlerEventTypes,
+	CrawlerOptions,
+	InventoryMode,
+} from './crawler/types.js';
 import type {
 	CrawlEvent,
 	InventoryRunAggregates,
+	PendingUrlsRemainReason,
 	SetupPhaseLabel,
 	SetupProgressCallbacks,
 } from './types.js';
@@ -22,6 +27,7 @@ import { APPEND_SETUP_PHASES } from './append-setup-phases.js';
 import Archive from './archive/archive.js';
 import { copyFileWithProgress } from './archive/filesystem/copy-file-with-progress.js';
 import { REQUIRED_FORMAT_VERSION } from './archive/meta/assert-compatible-version.js';
+import { computeAutoRetryBackoffDelayMs } from './compute-auto-retry-backoff-delay.js';
 import { clearDestinationCache } from './crawler/clear-destination-cache.js';
 import { clearDnsBurnedHostCache } from './crawler/clear-dns-burned-host-cache.js';
 import Crawler from './crawler/crawler.js';
@@ -34,8 +40,10 @@ import { PreloadShortCircuitError } from './crawler/preload-short-circuit-error.
 import { protocolAgnosticKey } from './crawler/protocol-agnostic-key.js';
 import { shouldSkipUrl } from './crawler/should-skip-url.js';
 import { crawlerLog, log } from './debug.js';
+import { delayOrAbort } from './delay-or-abort.js';
 import { INVENTORY_SETUP_PHASES } from './inventory-setup-phases.js';
 import { normalizeToArray } from './normalize-to-array.js';
+import { PendingUrlsRemainError } from './pending-urls-remain-error.js';
 import { RECRAWL_SETUP_PHASES } from './recrawl-setup-phases.js';
 import { resolveOutputPath } from './resolve-output-path.js';
 import { resourceRowToLookupResult } from './resource-row-to-lookup-result.js';
@@ -45,7 +53,7 @@ import { SETUP_RECOVERY_PHASE_LABELS } from './setup-recovery-phase-labels.js';
 import { cleanObject } from './utils/object/clean-object.js';
 import { WriteQueue } from './write-queue.js';
 
-const [RECOVERY_RESTORE_FROM_BACKUP, RECOVERY_PERSIST_INGESTED_STATE] =
+const [RECOVERY_RESTORE_FROM_BACKUP, RECOVERY_LEAVE_STATE_FOR_RESUME] =
 	SETUP_RECOVERY_PHASE_LABELS;
 
 /**
@@ -101,6 +109,18 @@ interface CrawlConfig extends Config {
 
 	/** Maximum number of retry attempts per URL on scrape failure. */
 	retry: number;
+
+	/**
+	 * Maximum number of whole-session auto-retry attempts (issue #350) when
+	 * a crawl session ends with pages still pending — each attempt re-queues
+	 * the current pending set and re-runs the crawl loop, with an
+	 * exponential backoff between attempts (see
+	 * `computeAutoRetryBackoffDelayMs`). `0` disables auto-retry entirely:
+	 * any pending pages after the session's first (and only) crawl pass
+	 * abort the session immediately. See
+	 * `CrawlerOrchestrator`'s `#crawlUntilPendingClears` for the full loop.
+	 */
+	maxAutoRetry: number;
 
 	/** Whether to enable verbose logging output. */
 	verbose: boolean;
@@ -206,8 +226,27 @@ interface InventorySource {
 export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	/** The archive instance for persisting crawl results to SQLite + tar. */
 	readonly #archive: Archive;
+	/**
+	 * Set when the archive's own `'error'` event fires (a DB/storage-level
+	 * failure — see the constructor's listener), so
+	 * `#crawlUntilPendingClears` can tell "the session ended because pages
+	 * are still pending" apart from "the underlying storage broke" (issue
+	 * #350). Retrying scrape work cannot fix the latter, so the auto-retry
+	 * loop re-throws it immediately instead of burning retry attempts
+	 * against it — `crawling()`'s own promise resolves normally either way
+	 * (the constructor's listener only aborts the crawler; it does not
+	 * reject anything), so this flag is the only way to distinguish the
+	 * two after the fact.
+	 */
+	#archiveFailure: Error | null = null;
 	/** The crawler engine that discovers and scrapes pages. */
 	readonly #crawler: Crawler;
+	/**
+	 * Monotonic counter bumped on every `crawling()` call — see that
+	 * method's JSDoc for why its listeners key off this instead of relying
+	 * on listener removal.
+	 */
+	#crawlGeneration = 0;
 	/**
 	 * `dedupe_cap_events.id` for each shape confirmed capped this session, so
 	 * `crawlEnd` can look up the right row to finalize with
@@ -217,8 +256,11 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * crawl.
 	 */
 	readonly #dedupeCapEventIds = new Map<string, number>();
+
 	/** Whether the crawl was started from a pre-defined URL list (non-recursive mode). */
 	readonly #fromList: boolean;
+	/** See `CrawlConfig.maxAutoRetry`'s JSDoc. */
+	readonly #maxAutoRetry: number;
 	/**
 	 * The `network_outages` row id for the currently-open outage, or `null`
 	 * when none is open. Set by the `networkOutageConfirmed` handler (once
@@ -245,15 +287,17 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		super();
 
 		this.#fromList = !!options?.list;
+		this.#maxAutoRetry = options?.maxAutoRetry ?? 3;
 		this.#archive = archive;
 		this.#archive.on('error', (e) => {
+			this.#archiveFailure = e instanceof Error ? e : new Error(String(e));
 			this.#crawler.abort();
 			void this.emit('error', {
 				pid: process.pid,
 				isMainProcess: true,
 				url: null,
 				isExternal: false,
-				error: e instanceof Error ? e : new Error(String(e)),
+				error: this.#archiveFailure,
 			});
 		});
 
@@ -375,24 +419,80 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * Sets up event listeners on the crawler, starts crawling, and resolves
 	 * when the crawl completes. Discovered pages, external pages, skipped pages,
 	 * and resources are forwarded to the archive for storage.
+	 *
+	 * Safe to call more than once on the same instance —
+	 * `#crawlUntilPendingClears` (issue #350) re-invokes this for each
+	 * auto-retry attempt against the same long-lived `#crawler`. `Crawler`
+	 * (`TypedAwaitEventEmitter`) has no listener-removal API, so a second
+	 * call cannot replace the first call's listeners — it can only stack
+	 * another set alongside them. Every listener this method attaches is
+	 * instead guarded by a monotonic generation counter (`isCurrent()`,
+	 * defined below): once a later call bumps it, every earlier call's
+	 * listeners permanently fail the check and become inert no-ops, leaving
+	 * exactly the latest call's listeners actually writing anything.
 	 * @param list - The list of parsed URLs to crawl. May be empty when a resumed
 	 *   session already has pending pages queued (for example `--retry-failed`).
 	 * @param opts - Optional crawl overrides.
 	 * @param opts.recursive - Whether discovered URLs are followed. Defaults to
 	 *   `!fromList` (recursive unless the archive was created from a URL list), so
 	 *   existing callers keep their behaviour; the retry flow passes it explicitly.
+	 * @param opts.suppressFlushNotice - Skip emitting `flushingPendingWrites`
+	 *   (issue #350). Set by `#crawlUntilPendingClears` for every auto-retry
+	 *   attempt after the first: that event starts the CLI's crawl-tail
+	 *   `TaskList` (`attach-crawl-display.ts`), which must stay closed until
+	 *   the whole retry loop is done — a second `deal()`/`Lanes` cycle
+	 *   starting while that `TaskList` is still open would corrupt the
+	 *   display (see ARCHITECTURE.md's `Lanes`/`Display` single-instance
+	 *   invariant). The write-queue drain itself is unaffected; only the
+	 *   CLI-facing progress event is skipped.
+	 * @param opts.isRetryContinuation - Forwarded to `Crawler#start()`
+	 *   (issue #350). Set by `#crawlUntilPendingClears` for every auto-retry
+	 *   attempt after the first, so `#runDeal` preserves cross-attempt
+	 *   learned state (known-good hosts, outage-detector window) instead of
+	 *   discarding it as if this were an unrelated fresh session.
 	 * @returns A promise that resolves when crawling is complete.
 	 */
-	async crawling(list: ExURL[], opts?: { recursive?: boolean }) {
+	async crawling(
+		list: ExURL[],
+		opts?: {
+			recursive?: boolean;
+			suppressFlushNotice?: boolean;
+			isRetryContinuation?: boolean;
+		},
+	) {
 		const writeQueue = this.#writeQueue;
 		// Per-session state, like `Crawler`'s own `#successfulHosts.clear()` /
 		// `#networkGate.open()` reset at the start of `#runDeal` — a fresh
 		// session must not inherit a dangling outage id from a prior one.
 		this.#openNetworkOutageId = null;
 		this.#openNetworkOutageStartedAt = null;
+		// `Crawler` (`TypedAwaitEventEmitter`) has no listener-removal API, so
+		// a second call on the same instance (an auto-retry attempt, issue
+		// #350) cannot replace the first call's listeners — it can only add
+		// another set alongside them. Every listener below is instead guarded
+		// by `isCurrent()`, keyed off a monotonic generation counter bumped
+		// here: once a later call starts, every earlier call's listeners
+		// permanently fail this check and become inert no-ops (their
+		// `writeQueue`/`#archive` side effects never run), leaving exactly
+		// one "live" set — this call's — actually writing anything.
+		const generation = ++this.#crawlGeneration;
+		const isCurrent = () => generation === this.#crawlGeneration;
+		// The ONLY way any listener below reaches `this.#crawler.on()` — a
+		// structural guarantee (not a per-listener discipline a future edit
+		// could forget) that no handler can run without the `isCurrent()`
+		// check, however many are added here in the future.
+		const registerGuarded = <T extends keyof CrawlerEventTypes>(
+			event: T,
+			handler: (payload: CrawlerEventTypes[T]) => void,
+		): void => {
+			this.#crawler.on(event, (payload) => {
+				if (!isCurrent()) return;
+				handler(payload);
+			});
+		};
 
 		return new Promise<void>((resolve, reject) => {
-			this.#crawler.on('error', (error) => {
+			registerGuarded('error', (error) => {
 				if (error.error instanceof PreloadShortCircuitError) {
 					// DNS-burned host short-circuit: the underlying cause already
 					// lives in `crawl_errors` from the original DNS failure.
@@ -412,38 +512,38 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				void this.emit('error', error);
 			});
 
-			this.#crawler.on('page', ({ result, source, bodyHash }) => {
+			registerGuarded('page', ({ result, source, bodyHash }) => {
 				writeQueue
 					.enqueue(() => this.#archive.setPage(result, source, bodyHash))
 					.catch((error) => reject(error));
 			});
 
-			this.#crawler.on('externalPage', ({ result, source }) => {
+			registerGuarded('externalPage', ({ result, source }) => {
 				writeQueue
 					.enqueue(() => this.#archive.setExternalPage(result, source))
 					.catch((error) => reject(error));
 			});
 
-			this.#crawler.on('skip', ({ url, reason, isExternal }) => {
+			registerGuarded('skip', ({ url, reason, isExternal }) => {
 				writeQueue
 					.enqueue(() => this.#archive.setSkippedPage(url, reason, isExternal))
 					.catch((error) => reject(error));
 			});
 
-			this.#crawler.on('pageError', ({ url, phase, message, isExternal }) => {
+			registerGuarded('pageError', ({ url, phase, message, isExternal }) => {
 				writeQueue
 					.enqueue(() => this.#archive.addPageError(url, phase, message, isExternal))
 					.catch((error) => reject(error));
 			});
 
-			this.#crawler.on('redirect', ({ result, source }) => {
+			registerGuarded('redirect', ({ result, source }) => {
 				writeQueue
 					.enqueue(() => this.#archive.setRedirect(result, source))
 					.catch((error) => reject(error));
 				void this.emit('redirect', { result });
 			});
 
-			this.#crawler.on(
+			registerGuarded(
 				'networkOutageConfirmed',
 				({ startedAt, detectedAt, probeHost, triggerErrorCount, triggerHostCount }) => {
 					crawlerLog(
@@ -485,7 +585,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				},
 			);
 
-			this.#crawler.on('networkOutageRecovered', ({ endedAt }) => {
+			registerGuarded('networkOutageRecovered', ({ endedAt }) => {
 				// The `id` read is deferred to INSIDE the queued closure, not
 				// read synchronously here, because `networkOutageConfirmed`'s
 				// INSERT is itself only queued (not awaited) when that event
@@ -522,7 +622,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					.catch((error) => reject(error));
 			});
 
-			this.#crawler.on(
+			registerGuarded(
 				'dedupeCap',
 				({ shapeKey, sampleUrl, bodyHash, effectiveThreshold, observedCount }) => {
 					crawlerLog(
@@ -550,30 +650,30 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				},
 			);
 
-			this.#crawler.on('response', ({ resource, source }) => {
+			registerGuarded('response', ({ resource, source }) => {
 				writeQueue
 					.enqueue(() => this.#archive.setResources(resource, source))
 					.catch((error) => reject(error));
 			});
 
-			this.#crawler.on('responseReferrers', (resource) => {
+			registerGuarded('responseReferrers', (resource) => {
 				writeQueue
 					.enqueue(() => this.#archive.setResourcesReferrers(resource))
 					.catch((error) => reject(error));
 			});
 
-			this.#crawler.on('consoleLogs', ({ pageUrl, redirectPaths, entries }) => {
+			registerGuarded('consoleLogs', ({ pageUrl, redirectPaths, entries }) => {
 				writeQueue
 					.enqueue(() => this.#archive.setConsoleLogs(pageUrl, redirectPaths, entries))
 					.catch((error) => reject(error));
 			});
 
-			this.#crawler.on('crawlEnd', () => {
+			registerGuarded('crawlEnd', () => {
 				// Read BEFORE enqueuing the dedupeCap-finalize closure below
 				// (issue #294) so this reflects genuine backlog from the
 				// crawl's own page/resource writes, not the finalize
 				// closure's own, always-present entry.
-				if (writeQueue.pending > 0) {
+				if (writeQueue.pending > 0 && !opts?.suppressFlushNotice) {
 					void this.emit('flushingPendingWrites', { pending: writeQueue.pending });
 				}
 				// Deferred to INSIDE a queued closure, not read synchronously
@@ -633,7 +733,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					.catch((error) => reject(error));
 			});
 
-			this.#crawler.start(list, { recursive: opts?.recursive ?? !this.#fromList });
+			this.#crawler.start(list, {
+				recursive: opts?.recursive ?? !this.#fromList,
+				isRetryContinuation: opts?.isRetryContinuation,
+			});
 		});
 	}
 
@@ -657,7 +760,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			}
 		}
 	}
-
 	/**
 	 * Retrieve the list of process IDs for Chromium instances that are
 	 * still running after crawling has ended.
@@ -666,7 +768,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	getUndeadPid() {
 		return this.#crawler.getUndeadPid();
 	}
-
 	/**
 	 * Write the archive to its configured file path.
 	 *
@@ -693,6 +794,178 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			},
 		});
 		void this.emit('writeFileEnd', { filePath: this.#archive.filePath });
+	}
+	/**
+	 * Releases the archive handle (lock dropped, tmpDir left intact — see
+	 * {@link Archive.releaseHandle}) and throws a {@link PendingUrlsRemainError}
+	 * (issue #350) describing why `#crawlUntilPendingClears` gave up. Typed
+	 * to return `never` so callers can `return this.#abandonPendingRetryLoop(...)`
+	 * and satisfy control-flow analysis without an unreachable trailing
+	 * `throw`.
+	 * @param params - See the matching {@link PendingUrlsRemainError} field for each property's meaning.
+	 * @param params.pendingCount - Pending URL count at the moment of giving up.
+	 * @param params.attemptsMade - Auto-retry attempts actually run before giving up.
+	 * @param params.reason - See {@link PendingUrlsRemainError}'s `reason` field.
+	 */
+	async #abandonPendingRetryLoop(params: {
+		pendingCount: number;
+		attemptsMade: number;
+		reason: PendingUrlsRemainReason;
+	}): Promise<never> {
+		const { pendingCount, attemptsMade, reason } = params;
+		await this.#archive.releaseHandle();
+		throw new PendingUrlsRemainError({
+			pendingCount,
+			attemptsMade,
+			maxAutoRetry: this.#maxAutoRetry,
+			reason,
+			stubPath: this.#archive.tmpDir,
+		});
+	}
+
+	/**
+	 * Runs `crawling()` and, if the session ends with pages still pending
+	 * (issue #350), automatically re-queues them and re-runs the crawl loop
+	 * up to `#maxAutoRetry` times with an exponential backoff between
+	 * attempts ({@link computeAutoRetryBackoffDelayMs}) before giving up.
+	 *
+	 * Every one of the six session-starting static factories
+	 * (`crawling`/`append`/`inventory`/`recrawl`/`retryFailed`/`resume`)
+	 * routes its first `crawling()` call through here instead of calling it
+	 * directly, so that **a `.nitpicker` file existing on disk always
+	 * implies `pending === 0`**: this method never lets a factory reach
+	 * `orchestrator.write()` (called later by the CLI's post-crawl step)
+	 * while pages remain unscraped. When retrying cannot (or should not)
+	 * continue, it releases the archive handle — leaving the stub (tmpDir)
+	 * on disk, un-packaged, lock released — and throws
+	 * {@link PendingUrlsRemainError} so the operator can recover via
+	 * `crawl --resume` or `--retry-failed`.
+	 *
+	 * Three conditions end the loop early, before `#maxAutoRetry` is reached:
+	 * - The archive itself failed (`#archiveFailure` set by the constructor's
+	 *   `Archive` `'error'` listener — a DB/storage-level failure). Retrying
+	 *   scrape work cannot fix a broken database, so this re-throws the
+	 *   original failure immediately without releasing-and-wrapping it in a
+	 *   `PendingUrlsRemainError` — there is nothing "pending-remains"-shaped
+	 *   about a storage failure.
+	 * - The crawl was explicitly aborted (`#crawler.signal.aborted` — the
+	 *   public `abort()` method, e.g. a caller-driven cancellation or a
+	 *   Ctrl+C proxy in tests). `AbortController.signal` cannot be
+	 *   un-aborted, so every subsequent `crawling()` call on this same
+	 *   `#crawler` would deal zero work forever — retrying would just waste
+	 *   one full backoff wait before "no progress" gives up anyway. This
+	 *   returns immediately instead, matching this method's pre-#350
+	 *   behaviour for an explicit abort: the caller gets the orchestrator
+	 *   back with pending possibly `> 0` and decides for itself (the CLI's
+	 *   own SIGINT handler never reaches this far — see `crawl.ts` — so the
+	 *   `.nitpicker` ⟹ pending = 0 invariant still holds for that path). The
+	 *   backoff wait itself is also abort-interruptible ({@link delayOrAbort}
+	 *   rather than a bare `delay()`, issue #350 code review): a library
+	 *   consumer calling `abort()` mid-wait (unlike the CLI's SIGINT path)
+	 *   must not be stuck waiting up to 5 minutes for nothing.
+	 * - An attempt makes no dent in the pending count (unchanged or grown):
+	 *   burning the remaining budget against a cause retrying will not fix
+	 *   (e.g. a wholesale host outage) just delays the operator finding out.
+	 *   Checked AFTER the exhaustion check below it in the loop body so
+	 *   that a final attempt which is both exhausted AND made no progress
+	 *   reports as `'exhausted'` — the more actionable of the two (it tells
+	 *   the operator the budget, not just that this one attempt stalled).
+	 *
+	 * Each retry attempt re-reads `getCrawlingState()` and
+	 * `getResourceUrlList()` in full — the same cost `retryFailed`/`resume`/
+	 * `append`/`inventory` already pay once per invocation, now paid up to
+	 * `#maxAutoRetry` additional times (bounded, default 3). Retry attempts
+	 * pass `isRetryContinuation: true` through to `Crawler#start()` so
+	 * `#runDeal` preserves cross-attempt learned state (known-good hosts,
+	 * network-outage detector window) instead of discarding it as if this
+	 * were an unrelated fresh session (issue #350 code review) — the whole
+	 * point of retrying is to avoid re-paying that detection cost.
+	 * @param list - Forwarded to the first `crawling()` call.
+	 * @param opts - Forwarded to the first `crawling()` call.
+	 * @param opts.recursive
+	 */
+	async #crawlUntilPendingClears(
+		list: ExURL[],
+		opts?: { recursive?: boolean },
+	): Promise<void> {
+		await this.crawling(list, opts);
+		if (this.#archiveFailure) {
+			throw this.#archiveFailure;
+		}
+		if (this.#crawler.signal.aborted) {
+			return;
+		}
+
+		// Fetched at most once across the whole retry loop (issue #350 code
+		// review), not per attempt: `getResourceUrlList()` is a full scan of
+		// every known resource URL, but `Crawler#resume()`'s use of it is
+		// just seeding the in-memory `#resources` Set — idempotent, and
+		// already kept current independently as the live crawl writes new
+		// resources during each attempt. Re-fetching the full list on every
+		// attempt would re-pay that scan cost for no benefit on a large
+		// archive. `undefined` until the first retry actually needs it, so
+		// the common case (pending clears without ever retrying) never
+		// fetches it at all.
+		let cachedResources: string[] | undefined;
+
+		let previousPendingCount: number | null = null;
+		for (let attempt = 1; ; attempt++) {
+			const { scraped, pending } = await this.#archive.getCrawlingState();
+			if (pending.length === 0) {
+				return;
+			}
+			if (attempt > this.#maxAutoRetry) {
+				return this.#abandonPendingRetryLoop({
+					pendingCount: pending.length,
+					attemptsMade: attempt - 1,
+					reason: 'exhausted',
+				});
+			}
+			if (previousPendingCount !== null && pending.length >= previousPendingCount) {
+				return this.#abandonPendingRetryLoop({
+					pendingCount: pending.length,
+					attemptsMade: attempt - 1,
+					reason: 'no-progress',
+				});
+			}
+			previousPendingCount = pending.length;
+
+			const delayMs = computeAutoRetryBackoffDelayMs(attempt);
+			void this.emit('autoRetryWaiting', {
+				attempt,
+				maxAttempts: this.#maxAutoRetry,
+				pendingCount: pending.length,
+				delayMs,
+			});
+			// Printed unconditionally, mirroring `networkOutageConfirmed`'s
+			// rationale above: this always fires in the gap after `deal()`'s
+			// Lanes has closed and before the next one starts (the retry's
+			// own `crawling()` call hasn't run yet), so there is no active
+			// display to corrupt.
+			// eslint-disable-next-line no-console -- see comment above
+			console.error(
+				`[auto-retry] ${pending.length} pending page(s) remain — waiting ${Math.round(delayMs / 1000)}s before retry ${attempt}/${this.#maxAutoRetry}`,
+			);
+			await delayOrAbort(delayMs, this.#crawler.signal);
+			if (this.#crawler.signal.aborted) {
+				return;
+			}
+
+			cachedResources ??= await this.#archive.getResourceUrlList();
+			const pagesScrapedOffset = await this.#archive.getScrapedHtmlPageCount();
+			this.#crawler.resume(pending, scraped, cachedResources, pagesScrapedOffset);
+			await this.crawling([], {
+				recursive: false,
+				suppressFlushNotice: true,
+				isRetryContinuation: true,
+			});
+			if (this.#archiveFailure) {
+				throw this.#archiveFailure;
+			}
+			if (this.#crawler.signal.aborted) {
+				return;
+			}
+		}
 	}
 
 	/**
@@ -725,6 +998,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * @param initializedCallback - Optional callback invoked after initialization but before crawling starts.
 	 * @returns A promise that resolves to the CrawlerOrchestrator instance after crawling completes.
 	 * @throws {Error} If the URL list is empty or contains no valid URLs.
+	 * @throws {PendingUrlsRemainError} When the crawl session ends with pages still pending after exhausting auto-retry.
 	 */
 	static async crawling(
 		url: string[],
@@ -784,6 +1058,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			userAgent: options?.userAgent || defaultUserAgent,
 			ignoreRobots: options?.ignoreRobots ?? false,
 			mainContentSelector: options?.mainContentSelector ?? null,
+			...buildCreatedCwdPatch(cwd),
 		});
 		const orchestrator = new CrawlerOrchestrator(archive, {
 			...options,
@@ -799,7 +1074,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			list.map((url) => url.href),
 		);
 		log('Config %O', config);
-		await orchestrator.crawling(list);
+		await orchestrator.#crawlUntilPendingClears(list);
 		log('Crawling completed');
 		CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);
 		log('Set order natural URL sort');
@@ -817,7 +1092,11 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * the expanded scope are demoted back to "needs scraping" so the next pass
 	 * re-fetches them as full internal pages. A `<archive>.bak` is created
 	 * before the crawl and removed on success; if the crawl throws, the backup
-	 * is restored to keep the original archive intact.
+	 * is restored to keep the original archive intact — except when the crawl
+	 * ends with {@link PendingUrlsRemainError} (issue #350), where the
+	 * un-packaged stub itself is the recovery path and the backup is instead
+	 * left untouched (deleted, not restored — see
+	 * {@link CrawlerOrchestrator.#abandonBackupOnPendingRemains}).
 	 *
 	 * List-mode archives (`info.fromList === true`) are rejected because their
 	 * pages are all metadata-only and cannot host a recursive append.
@@ -831,6 +1110,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 *   this can't go through the orchestrator's event emitter (issue #294).
 	 * @returns The orchestrator instance after the append crawl completes.
 	 * @throws {Error} When `newUrls` is empty, the archive is in list mode, or it cannot be parsed.
+	 * @throws {PendingUrlsRemainError} When the crawl session ends with pages still pending after exhausting auto-retry.
 	 */
 	static async append(
 		archivePath: string,
@@ -894,6 +1174,12 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				fromList: false,
 				recursive: true,
 				baseUrl: mergedRoots[0]!,
+				// Stamped for `Archive.resume` (issue #350) — this session's
+				// cwd, not `options.cwd` (already spread above and dropped by
+				// `updateConfig`'s allowlist): a stub left behind by THIS
+				// append should resume back to where THIS command ran, not
+				// wherever the original crawl happened to run from.
+				...buildCreatedCwdPatch(cwd),
 			};
 
 			const backupPath = absFilePath + '.bak';
@@ -945,12 +1231,19 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				log('New roots %O', newRoots);
 				log('Merged roots %O', mergedRoots);
 				await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
-				await orchestrator.crawling(newParsed);
+				await orchestrator.#crawlUntilPendingClears(newParsed);
 				CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);
 				await orchestrator.#setUrlOrder();
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
 			} catch (error) {
+				if (error instanceof PendingUrlsRemainError) {
+					await CrawlerOrchestrator.#abandonBackupOnPendingRemains(
+						setupProgress,
+						backupPath,
+					);
+					throw error;
+				}
 				try {
 					setupProgress?.onPhase?.(RECOVERY_RESTORE_FROM_BACKUP);
 					await copyFileWithProgress(
@@ -1060,6 +1353,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 *   #294).
 	 * @returns The orchestrator instance after a successful inventory pass.
 	 * @throws {Error} When `inventoryUrls` is empty or the archive is in list mode. Unresolved pending URLs from a previous crawl do NOT throw — see step 3.
+	 * @throws {PendingUrlsRemainError} When the crawl session ends with pages still pending after exhausting auto-retry.
 	 */
 	static async inventory(
 		archivePath: string,
@@ -1109,6 +1403,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					'Cannot run inventory on a list-mode archive: this archive was created with --list/--list-file and contains metadata-only pages. Create a fresh archive instead.',
 				);
 			}
+			// Stamped for `Archive.resume` (issue #350) — a stub left behind
+			// by THIS inventory run should resume back to where THIS command
+			// ran, independent of `--resume`'s own invocation directory.
+			await archive.updateConfig(buildCreatedCwdPatch(cwd));
 
 			setupProgress?.onPhase?.(PHASE_LOADING_CRAWL_STATE_PRE);
 			const { pending } = await archive.getCrawlingState();
@@ -1309,7 +1607,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 						htmlSeeds.map((u) => u.href),
 					);
 					await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
-					await orchestrator.crawling([], { recursive: true });
+					await orchestrator.#crawlUntilPendingClears([], { recursive: true });
 					CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);
 					await orchestrator.#setUrlOrder();
 					return orchestrator;
@@ -1325,29 +1623,34 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				return orchestrator;
 			} catch (error) {
 				if (ingestionComplete) {
-					// Scrape phase failed; the pre-inserted seeds + audit
-					// row are durable inside `tmpDir/db.sqlite` but not yet
-					// on disk as a `.nitpicker` tar. The outer catch below
-					// runs `archive.close()`, which sees the original
+					// Scrape phase failed — either the auto-retry loop
+					// (`#crawlUntilPendingClears`, issue #350) gave up with
+					// pages still pending, or some other exception. Either
+					// way the pre-inserted seeds + audit row are durable
+					// inside `tmpDir/db.sqlite` but must NOT be packaged: a
+					// `.nitpicker` on disk must imply `pending === 0` (see
+					// that method's JSDoc). The outer catch below runs
+					// `archive.close()`, which sees the original
 					// (pre-inventory) `.nitpicker` already on disk and
 					// would just `remove(tmpDir)` — silently wiping every
 					// `inventory-seed` row and the audit row.
 					//
-					// Persist the ingested state ourselves before letting
-					// the outer catch unwind, then re-throw so the operator
-					// learns about the scrape failure (and can recover via
-					// `crawl --resume <archive>`). `releaseHandle` shares
-					// the orchestrator's `#closeOnce` guard, so the outer
-					// catch's `close()` becomes a no-op for the destructive
-					// step and only runs `releaseLock` cleanup.
+					// Release the handle ourselves (leaving tmpDir intact)
+					// before letting the outer catch unwind, then re-throw
+					// so the operator learns about the scrape failure and
+					// can recover via `crawl --resume <stub>`. `releaseHandle`
+					// shares the orchestrator's `#closeOnce` guard, so the
+					// outer catch's `close()` becomes a no-op for the
+					// destructive step and only runs `releaseLock` cleanup
+					// — a no-op too when `#crawlUntilPendingClears` already
+					// released it itself before throwing.
 					try {
-						setupProgress?.onPhase?.(RECOVERY_PERSIST_INGESTED_STATE);
-						await archive.write();
+						setupProgress?.onPhase?.(RECOVERY_LEAVE_STATE_FOR_RESUME);
 						await archive.releaseHandle();
 					} catch (persistError) {
 						throw new AggregateError(
 							[error, persistError],
-							'inventory scrape phase failed AND persisting the ingested state to disk also failed. The archive may be in an inconsistent state — check tmpDir.',
+							'inventory scrape phase failed AND releasing the archive handle also failed. The archive may be in an inconsistent state — check tmpDir.',
 						);
 					}
 					throw error;
@@ -1437,6 +1740,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 *   orchestrator's event emitter (issue #294).
 	 * @returns The orchestrator instance after the recrawl completes.
 	 * @throws {Error} When `recrawlUrls` is empty or the archive is in list mode.
+	 * @throws {PendingUrlsRemainError} When the crawl session ends with pages still pending after exhausting auto-retry.
 	 */
 	static async recrawl(
 		archivePath: string,
@@ -1487,6 +1791,9 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					'Cannot recrawl a list-mode archive: this archive was created with --list/--list-file and contains metadata-only pages. Create a fresh archive instead.',
 				);
 			}
+			// Stamped for `Archive.resume` (issue #350) — same rationale as
+			// `inventory`'s identical call.
+			await archive.updateConfig(buildCreatedCwdPatch(cwd));
 
 			setupProgress?.onPhase?.(PHASE_LOADING_CRAWL_STATE_PRE);
 			const { pending } = await archive.getCrawlingState();
@@ -1648,7 +1955,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 						htmlSeeds.length,
 					);
 					await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
-					await orchestrator.crawling([], { recursive: true });
+					await orchestrator.#crawlUntilPendingClears([], { recursive: true });
 					CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);
 					if (resetResult.resetUrls.length > 0) {
 						void orchestrator.emit('crawlSessionNotice', {
@@ -1669,14 +1976,16 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				return orchestrator;
 			} catch (error) {
 				if (ingestionComplete) {
+					// Same rationale as `inventory`'s identical catch — see
+					// that method's comment. Scrape failure here can equally
+					// be the auto-retry loop (issue #350) giving up.
 					try {
-						setupProgress?.onPhase?.(RECOVERY_PERSIST_INGESTED_STATE);
-						await archive.write();
+						setupProgress?.onPhase?.(RECOVERY_LEAVE_STATE_FOR_RESUME);
 						await archive.releaseHandle();
 					} catch (persistError) {
 						throw new AggregateError(
 							[error, persistError],
-							'recrawl scrape phase failed AND persisting the ingested state to disk also failed. The archive may be in an inconsistent state — check tmpDir.',
+							'recrawl scrape phase failed AND releasing the archive handle also failed. The archive may be in an inconsistent state — check tmpDir.',
 						);
 					}
 					throw error;
@@ -1954,7 +2263,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 *
 	 * A `<archive>.bak` is created before any DB mutation and removed on success;
 	 * if the crawl throws, the backup is restored to keep the original archive
-	 * intact.
+	 * intact — except when the crawl ends with {@link PendingUrlsRemainError}
+	 * (issue #350), where the un-packaged stub itself is the recovery path and
+	 * the backup is instead left untouched (deleted, not restored — see
+	 * {@link CrawlerOrchestrator.#abandonBackupOnPendingRemains}).
 	 *
 	 * List-mode archives (`info.fromList === true`) are rejected for the same
 	 * reason as {@link CrawlerOrchestrator.append}: their pages are metadata-only.
@@ -1967,6 +2279,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 *   this can't go through the orchestrator's event emitter (issue #294).
 	 * @returns The orchestrator instance after the retry crawl completes.
 	 * @throws {Error} When the archive is in list mode or has no parseable roots.
+	 * @throws {PendingUrlsRemainError} When the crawl session ends with pages still pending after exhausting auto-retry.
 	 */
 	static async retryFailed(
 		archivePath: string,
@@ -2011,6 +2324,9 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					'Cannot retry a list-mode archive: this archive was created with --list/--list-file and contains metadata-only pages. Create a fresh archive instead.',
 				);
 			}
+			// Stamped for `Archive.resume` (issue #350) — same rationale as
+			// `inventory`'s identical call.
+			await archive.updateConfig(buildCreatedCwdPatch(cwd));
 
 			const rootsParsed = sortUrl(archived.roots, archived);
 			if (rootsParsed.length === 0) {
@@ -2059,12 +2375,19 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await initializedCallback(orchestrator, config);
 				}
 				await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
-				await orchestrator.crawling([], { recursive: config.recursive });
+				await orchestrator.#crawlUntilPendingClears([], { recursive: config.recursive });
 				CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);
 				await orchestrator.#setUrlOrder();
 				await ignoreEnoent(unlinkFile(backupPath));
 				return orchestrator;
 			} catch (error) {
+				if (error instanceof PendingUrlsRemainError) {
+					await CrawlerOrchestrator.#abandonBackupOnPendingRemains(
+						setupProgress,
+						backupPath,
+					);
+					throw error;
+				}
 				try {
 					setupProgress?.onPhase?.(RECOVERY_RESTORE_FROM_BACKUP);
 					await copyFileWithProgress(
@@ -2109,6 +2432,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 *   tmpDir IS the source of truth).
 	 * @returns A promise that resolves to the CrawlerOrchestrator instance after crawling completes.
 	 * @throws {Error} If the archived URL is invalid.
+	 * @throws {PendingUrlsRemainError} When the crawl session ends with pages still pending after exhausting auto-retry.
 	 */
 	static async resume(
 		stubPath: string,
@@ -2161,9 +2485,36 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		log('URL %s', url.href);
 		log('Config %O', config);
 		await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
-		await orchestrator.crawling([url]);
+		await orchestrator.#crawlUntilPendingClears([url]);
 		CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);
 		return orchestrator;
+	}
+
+	/**
+	 * Shared `PendingUrlsRemainError` recovery step for `append` and
+	 * `retryFailed`'s catch blocks (issue #350 code review — `inventory` /
+	 * `recrawl` reach the same outcome through their own `ingestionComplete`
+	 * branch instead, which has no `.bak` left to clean up by the time it
+	 * runs, so this helper is specific to the two `.bak`-restore-by-default
+	 * catch shapes).
+	 *
+	 * `#crawlUntilPendingClears` has already released the archive handle
+	 * and left the stub intact for `--resume`/`--retry-failed` by the time
+	 * this runs; `write()` never ran, so the original archive file was
+	 * never touched. Restoring `.bak` over it would be a wasted
+	 * full-archive copy (and show a misleading "Restoring from backup"
+	 * phase label) — only the now-unnecessary `.bak` needs cleaning up.
+	 * @param setupProgress - Forwarded so the recovery phase label still
+	 *   reaches the caller's setup `TaskList`.
+	 * @param backupPath - The `.bak` path to delete (`unlinkFile`, ENOENT
+	 *   ignored).
+	 */
+	static async #abandonBackupOnPendingRemains(
+		setupProgress: SetupProgressCallbacks | undefined,
+		backupPath: string,
+	): Promise<void> {
+		setupProgress?.onPhase?.(RECOVERY_LEAVE_STATE_FOR_RESUME);
+		await ignoreEnoent(unlinkFile(backupPath));
 	}
 
 	/**
@@ -2274,6 +2625,39 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		clearDestinationCache();
 		clearDnsBurnedHostCache();
 	}
+}
+
+/**
+ * Resolves a `CrawlConfig.cwd` value to an absolute path before it is
+ * stamped as `Config.createdCwd` (issue #350). `cwd` is trusted as an
+ * absolute base everywhere else in this file (`path.resolve(cwd, ...)` for
+ * `absFilePath`/tmpDir), so a caller-supplied relative `cwd` already
+ * resolves against `process.cwd()` implicitly for archive placement — this
+ * makes that same resolution explicit for the value `Archive.resume` will
+ * later read back, so a relative `createdCwd` can never silently
+ * reintroduce the cwd-dependent resume path this column exists to fix.
+ * `path.resolve` is a no-op when `cwd` is already absolute.
+ * @param cwd - The `CrawlConfig.cwd` value (defaults to `process.cwd()` at each call site).
+ * @returns An absolute path.
+ */
+function resolveAbsoluteCwd(cwd: string): string {
+	return path.resolve(process.cwd(), cwd);
+}
+
+/**
+ * Builds the `Config` patch that stamps `createdCwd` (issue #350) — the one
+ * field every stub-creating static factory (`crawling`/`append`/`inventory`/
+ * `recrawl`/`retryFailed`; `resume` deliberately excluded, it only reads
+ * this value) must set. Centralised so a future stub-creating mode spreads
+ * this into its `setConfig`/`updateConfig` call instead of hand-rolling
+ * `{ createdCwd: resolveAbsoluteCwd(cwd) }` and risking a forgotten
+ * `resolveAbsoluteCwd` wrap (see that function's JSDoc for why the
+ * resolution itself matters).
+ * @param cwd - The `CrawlConfig.cwd` value for this session.
+ * @returns A one-field `Partial<Config>` patch.
+ */
+function buildCreatedCwdPatch(cwd: string): Pick<Config, 'createdCwd'> {
+	return { createdCwd: resolveAbsoluteCwd(cwd) };
 }
 
 /**

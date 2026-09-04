@@ -196,6 +196,9 @@
 		"ptech",
 
 		// viewer_technology_directory_stats index name abbreviation
-		"vtds"
+		"vtds",
+
+		// crawl auto-retry (issue #350)
+		"unscraped"
 	]
 }

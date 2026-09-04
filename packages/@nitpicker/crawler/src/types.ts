@@ -209,6 +209,19 @@ export type ErrorKind =
 	| 'unknown';
 
 /**
+ * Why an auto-retry loop stopped without reaching `pending === 0` (issue
+ * #350):
+ *
+ * - `'exhausted'` — every configured `--max-auto-retry` attempt ran and
+ *   pending URLs still remain.
+ * - `'no-progress'` — a single attempt made no dent in the pending count
+ *   (it stayed the same or grew), so the remaining budget is abandoned
+ *   early instead of burning every attempt against a cause retrying will
+ *   not fix (e.g. a wholesale host outage).
+ */
+export type PendingUrlsRemainReason = 'exhausted' | 'no-progress';
+
+/**
  * Event map for the `CrawlerOrchestrator` class.
  *
  * Each key represents an event name and its value is the payload type
@@ -309,6 +322,26 @@ export interface CrawlEvent {
 	crawlSessionNotice: {
 		/** The formatted, ready-to-display notice text. */
 		message: string;
+	};
+
+	/**
+	 * Emitted once before each auto-retry attempt's backoff wait begins
+	 * (issue #350's `#crawlUntilPendingClears`) — see that method's JSDoc for
+	 * the loop it belongs to. Purely observational: the CLI does not
+	 * subscribe to this for display (the orchestrator prints its own
+	 * `console.error` line for the same reason `networkOutageConfirmed`
+	 * does), but tests and other programmatic consumers can use it to
+	 * observe retry progress without capturing stdout.
+	 */
+	autoRetryWaiting: {
+		/** The 1-indexed attempt about to run after this wait. */
+		attempt: number;
+		/** The configured `--max-auto-retry` ceiling. */
+		maxAttempts: number;
+		/** Pending URL count that triggered this retry. */
+		pendingCount: number;
+		/** Backoff delay before the attempt starts, in milliseconds. */
+		delayMs: number;
 	};
 
 	/**

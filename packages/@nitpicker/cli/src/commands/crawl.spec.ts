@@ -22,27 +22,37 @@ const mockComputeFileSha256 = vi.fn(() => 'd'.repeat(64));
 const mockAssertChromeIsInstalled = vi.fn().mockResolvedValue();
 const mockAssertPuppeteerSharedWithBeholder = vi.fn();
 
-vi.mock('@nitpicker/crawler', () => ({
-	CrawlerOrchestrator: {
-		crawling: mockCrawling,
-		resume: mockResume,
-		append: mockAppend,
-		retryFailed: mockRetryFailed,
-		inventory: mockInventory,
-		recrawl: mockRecrawl,
-	},
-	computeFileSha256: mockComputeFileSha256,
-	assertChromeIsInstalled: mockAssertChromeIsInstalled,
-	assertPuppeteerSharedWithBeholder: mockAssertPuppeteerSharedWithBeholder,
-	// Real content doesn't matter to this suite — `createSetupTaskList` is
-	// mocked wholesale below, so these are only ever forwarded as opaque
-	// values, never iterated for their actual phase labels.
-	RESUME_SETUP_PHASES: ['Reconnecting to archive'],
-	APPEND_SETUP_PHASES: ['Extracting archive'],
-	INVENTORY_SETUP_PHASES: ['Extracting archive'],
-	RETRY_FAILED_SETUP_PHASES: ['Extracting archive'],
-	RECRAWL_SETUP_PHASES: ['Extracting archive'],
-}));
+vi.mock('@nitpicker/crawler', async () => {
+	// `PendingUrlsRemainError` is used with `instanceof` in `crawl.ts`'s
+	// catch block (issue #350) — a plain `class extends Error` with no
+	// crawler-internal dependencies, so pulling the REAL class through
+	// `importActual` (rather than re-declaring a look-alike here) keeps
+	// that check meaningful without dragging in anything heavy.
+	const actual =
+		await vi.importActual<typeof import('@nitpicker/crawler')>('@nitpicker/crawler');
+	return {
+		CrawlerOrchestrator: {
+			crawling: mockCrawling,
+			resume: mockResume,
+			append: mockAppend,
+			retryFailed: mockRetryFailed,
+			inventory: mockInventory,
+			recrawl: mockRecrawl,
+		},
+		computeFileSha256: mockComputeFileSha256,
+		assertChromeIsInstalled: mockAssertChromeIsInstalled,
+		assertPuppeteerSharedWithBeholder: mockAssertPuppeteerSharedWithBeholder,
+		PendingUrlsRemainError: actual.PendingUrlsRemainError,
+		// Real content doesn't matter to this suite — `createSetupTaskList` is
+		// mocked wholesale below, so these are only ever forwarded as opaque
+		// values, never iterated for their actual phase labels.
+		RESUME_SETUP_PHASES: ['Reconnecting to archive'],
+		APPEND_SETUP_PHASES: ['Extracting archive'],
+		INVENTORY_SETUP_PHASES: ['Extracting archive'],
+		RETRY_FAILED_SETUP_PHASES: ['Extracting archive'],
+		RECRAWL_SETUP_PHASES: ['Extracting archive'],
+	};
+});
 
 /**
  * Mocks `attachCrawlDisplay` to push `error` into the `errStack` array it's
@@ -391,6 +401,33 @@ describe('startCrawl', () => {
 		await expect(startCrawl(['https://example.com'], createFlags())).rejects.toThrow(
 			CrawlAggregateError,
 		);
+	});
+
+	it('auto-retry が力尽きて PendingUrlsRemainError が throw されたら ExitCode.Incomplete で終了する（issue #350、crash と区別する）', async () => {
+		const { PendingUrlsRemainError } = await import('@nitpicker/crawler');
+		mockCrawling.mockRejectedValueOnce(
+			new PendingUrlsRemainError({
+				pendingCount: 3,
+				attemptsMade: 3,
+				maxAutoRetry: 3,
+				reason: 'exhausted',
+				stubPath: '/tmp/._nitpicker-fake-stub',
+			}),
+		);
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+			throw new ExitError(code as number);
+		});
+		const { crawl } = await import('./crawl.js');
+
+		try {
+			await expect(crawl(['https://example.com'], createFlags())).rejects.toThrow(
+				ExitError,
+			);
+			expect(exitSpy).toHaveBeenCalledWith(ExitCode.Incomplete);
+		} finally {
+			exitSpy.mockRestore();
+		}
 	});
 
 	it('完了後に archive.close() を呼ぶ', async () => {

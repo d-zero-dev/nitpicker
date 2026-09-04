@@ -201,6 +201,140 @@ describe('write: archive layout', () => {
 		expect(totalBytes).toBeGreaterThan(0);
 		expect(calls.at(-1)!).toEqual([totalBytes, totalBytes]);
 	});
+
+	it('write() scrubs info.createdCwd before packaging (issue #350)', async () => {
+		const scrubFilePath = path.resolve(
+			workingDir,
+			'write-scrub-created-cwd-test.nitpicker',
+		);
+		const archive = await Archive.create({ filePath: scrubFilePath, cwd: workingDir });
+		await archive.setConfig({
+			version: '0.13.0',
+			name: 'scrub-test',
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			recursive: true,
+			interval: 0,
+			image: false,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 0,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'x',
+			ignoreRobots: false,
+			createdCwd: '/home/someone/private-project',
+		});
+
+		try {
+			await archive.close();
+			const reopened = await Archive.open({ filePath: scrubFilePath, cwd: workingDir });
+			try {
+				const reopenedConfig = await reopened.getConfig();
+				expect(reopenedConfig.createdCwd).toBeNull();
+			} finally {
+				await reopened.close();
+			}
+		} finally {
+			await remove(scrubFilePath).catch(() => {});
+		}
+	});
+});
+
+describe('Archive.resume: output path (issue #350)', () => {
+	const dir = path.resolve(workingDir, 'resume-output-path-suite');
+
+	beforeAll(() => {
+		mkdirSync(dir, { recursive: true });
+	});
+
+	afterAll(() => {
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('reconstructs the output path from info.createdCwd, not this invocation’s cwd', async () => {
+		const elsewhere = path.resolve(dir, 'elsewhere');
+		mkdirSync(elsewhere, { recursive: true });
+		const archiveFilePath = path.resolve(elsewhere, 'created-cwd-test.nitpicker');
+		const archive = await Archive.create({ filePath: archiveFilePath, cwd: elsewhere });
+		await archive.setConfig({
+			version: '0.13.0',
+			name: 'created-cwd-test',
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			recursive: true,
+			interval: 0,
+			image: false,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 0,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'x',
+			ignoreRobots: false,
+			createdCwd: elsewhere,
+		});
+		const tmpDir = archive.tmpDir;
+		await archive.releaseHandle();
+
+		// Resume from a DIFFERENT cwd than `elsewhere` — the output path must
+		// still land in `elsewhere`, not here.
+		const resumed = await Archive.resume(tmpDir);
+		try {
+			expect(resumed.filePath).toBe(archiveFilePath);
+		} finally {
+			await resumed.releaseHandle();
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it('falls back to process.cwd() when the stub predates info.createdCwd', async () => {
+		const archiveFilePath = path.resolve(dir, 'no-created-cwd-test.nitpicker');
+		const archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		// A stub whose `info` row predates this column (`createdCwd` omitted
+		// entirely, not just `null`) — the DEFAULT-less column reads back as
+		// `null`, same as an explicit `null`.
+		await archive.setConfig({
+			version: '0.13.0',
+			name: path.basename(archiveFilePath, '.nitpicker'),
+			baseUrl: 'https://example.com',
+			roots: ['https://example.com'],
+			recursive: true,
+			interval: 0,
+			image: false,
+			fetchExternal: false,
+			parallels: 1,
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 0,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'x',
+			ignoreRobots: false,
+		});
+		const tmpDir = archive.tmpDir;
+		await archive.releaseHandle();
+
+		const resumed = await Archive.resume(tmpDir);
+		try {
+			expect(resumed.filePath).toBe(
+				path.resolve(process.cwd(), path.basename(archiveFilePath)),
+			);
+		} finally {
+			await resumed.releaseHandle();
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
 });
 
 describe('close: recovery-write progress (issue #294)', () => {

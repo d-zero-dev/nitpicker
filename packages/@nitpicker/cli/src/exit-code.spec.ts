@@ -14,4 +14,8 @@ describe('ExitCode', () => {
 	it('Warning is 2', () => {
 		expect(ExitCode.Warning).toBe(2);
 	});
+
+	it('Incomplete is 3', () => {
+		expect(ExitCode.Incomplete).toBe(3);
+	});
 });

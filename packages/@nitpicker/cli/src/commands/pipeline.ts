@@ -4,6 +4,7 @@ import type { InferFlags } from '@d-zero/roar';
 import {
 	assertChromeIsInstalled,
 	assertPuppeteerSharedWithBeholder,
+	PendingUrlsRemainError,
 } from '@nitpicker/crawler';
 
 import { ExitCode } from '../exit-code.js';
@@ -72,6 +73,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			single: flags.single,
 			maxExcludedDepth: flags.maxExcludedDepth,
 			retry: flags.retry,
+			maxAutoRetry: flags.maxAutoRetry,
 			list: flags.list,
 			listFile: flags.listFile,
 			userAgent: flags.userAgent,
@@ -95,6 +97,15 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			skipTechnologyJsScan: flags.skipTechnologyJsScan,
 		});
 	} catch (error) {
+		if (error instanceof PendingUrlsRemainError) {
+			// Same rationale as `crawl.ts`'s identical branch (issue #350):
+			// an expected, recoverable outcome (`--resume`/`--retry-failed`),
+			// not a crash — must not fall through to the generic `throw
+			// error` below, which the pipeline's own top-level handler
+			// treats as `ExitCode.Fatal`.
+			formatCliError(error, verbose);
+			process.exit(ExitCode.Incomplete);
+		}
 		if (
 			error instanceof CrawlAggregateError &&
 			error.hasOnlyExternalErrors &&

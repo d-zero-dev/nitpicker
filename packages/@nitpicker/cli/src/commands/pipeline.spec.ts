@@ -20,10 +20,19 @@ vi.mock('./crawl.js', () => {
 	};
 });
 
-vi.mock('@nitpicker/crawler', () => ({
-	assertChromeIsInstalled: vi.fn(),
-	assertPuppeteerSharedWithBeholder: vi.fn(),
-}));
+vi.mock('@nitpicker/crawler', async () => {
+	// `PendingUrlsRemainError` is used with `instanceof` in `pipeline.ts`'s
+	// catch block (issue #350) — pull the REAL class through `importActual`
+	// (see `crawl.spec.ts`'s identical mock for the same rationale) rather
+	// than re-declaring a look-alike.
+	const actual =
+		await vi.importActual<typeof import('@nitpicker/crawler')>('@nitpicker/crawler');
+	return {
+		assertChromeIsInstalled: vi.fn(),
+		assertPuppeteerSharedWithBeholder: vi.fn(),
+		PendingUrlsRemainError: actual.PendingUrlsRemainError,
+	};
+});
 
 vi.mock('./analyze.js', () => ({
 	analyze: vi.fn(),
@@ -376,6 +385,24 @@ describe('pipeline command', () => {
 			ExitError,
 		);
 		expect(exitSpy).toHaveBeenCalledWith(ExitCode.Warning);
+	});
+
+	it('auto-retry が力尽きて PendingUrlsRemainError が throw されたら ExitCode.Incomplete で終了する（issue #350、crash と区別する）', async () => {
+		const { PendingUrlsRemainError } = await import('@nitpicker/crawler');
+		vi.mocked(startCrawlFn).mockRejectedValue(
+			new PendingUrlsRemainError({
+				pendingCount: 3,
+				attemptsMade: 3,
+				maxAutoRetry: 3,
+				reason: 'exhausted',
+				stubPath: '/tmp/._nitpicker-fake-stub',
+			}),
+		);
+
+		await expect(pipeline(['https://example.com'], defaultFlags)).rejects.toThrow(
+			ExitError,
+		);
+		expect(exitSpy).toHaveBeenCalledWith(ExitCode.Incomplete);
 	});
 
 	it('propagates CrawlAggregateError with internal errors', async () => {

@@ -360,12 +360,18 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 	// the post-condition is "ingestion happened, scrape didn't". Then we
 	// re-open the archive and assert the strict-pending set recovers the seed.
 	//
-	// NOTE: this test pins the *pre-insert durability* property. It does
-	// NOT exercise the post-ingestion `archive.write()` recovery branch
-	// that fires when the scrape phase throws a *non-abort* error
-	// (puppeteer crash, DB lock, init callback throw). That recovery
-	// path is exercised by the separate "Inventory scrape-phase failure
-	// persists ingested state" describe below.
+	// NOTE: this test pins the *pre-insert durability* property, and
+	// (issue #350) also exercises `CrawlerOrchestrator#crawlUntilPendingClears`'s
+	// explicit-abort bypass: `orch.abort()` sets `Crawler#signal.aborted`
+	// permanently, so the auto-retry loop returns immediately instead of
+	// retrying against a crawler that can only ever deal zero work from
+	// here on — the orchestrator still resolves normally with the seeds
+	// pending, exactly like before that loop existed. It does NOT exercise
+	// the post-ingestion recovery branch that fires when the scrape phase
+	// throws a *non-abort* error (puppeteer crash, DB lock, init callback
+	// throw) — that path is exercised by the separate "Inventory
+	// scrape-phase failure leaves ingested state in the stub, unpackaged"
+	// describe below.
 	let filePath: string;
 	let cwd: string;
 	let accessor: Archive;
@@ -463,24 +469,31 @@ describe('Inventory pre-insert survives interrupted scrape (#121)', () => {
 	});
 });
 
-describe('Inventory scrape-phase failure persists ingested state (#121 recovery path)', () => {
-	// Regression test for the post-ingestion recovery branch:
-	// when scrape phase throws *after* ingestion
-	// completes (`.bak` is gone), the orchestrator must persist `tmpDir`
-	// to the `.nitpicker` tar via `archive.write()` before unwinding —
-	// otherwise the outer catch's `archive.close()` would see the original
-	// archive file still on disk, hit the `remove(tmpDir)` branch of
-	// `Archive.#runFullClose`, and silently wipe every pre-inserted
-	// `inventory-seed` row + the `inventory_runs` audit row.
+describe('Inventory scrape-phase failure leaves ingested state in the stub, unpackaged (#121 / #350 recovery path)', () => {
+	// Regression test for the post-ingestion recovery branch, updated for
+	// issue #350: the auto-retry loop (`CrawlerOrchestrator#crawlUntilPendingClears`)
+	// enforces that a `.nitpicker` file on disk always implies
+	// `pending === 0`. When scrape phase throws *after* ingestion completes
+	// (`.bak` already gone), the orchestrator's catch no longer calls
+	// `archive.write()` to salvage the ingested rows into the original
+	// archive — it instead calls `archive.releaseHandle()` and leaves the
+	// stub (tmpDir) on disk, un-packaged, for the operator to recover via
+	// `crawl --resume`. The pre-inserted `inventory-seed` rows and the
+	// `inventory_runs` audit row are durable in the STUB's `db.sqlite`, not
+	// in the original `.nitpicker`, which this test asserts is left
+	// byte-for-byte unaffected (`write()` never ran).
 	//
 	// We drive the scrape-phase failure by throwing inside
 	// `initializedCallback`, which fires *after* the ingestion-complete
 	// flag is set and the `.bak` is unlinked but *before* the dealer
-	// dispatches. That lands the throw squarely in the scrape-phase
-	// catch and exercises the `archive.write()` + `releaseHandle()`
-	// recovery path that this test pins.
+	// dispatches (and before `#crawlUntilPendingClears` ever runs, so this
+	// scenario never touches the auto-retry loop itself — it exercises the
+	// `ingestionComplete=true` branch of `inventory()`'s own catch). We
+	// capture the orchestrator via `initializedCallback` (before it throws)
+	// so the test can inspect the stub afterward.
 	let filePath: string;
 	let cwd: string;
+	let tmpDir: string;
 
 	beforeAll(async () => {
 		const baseline = await crawlAndPersist([`${TEST_SERVER_ORIGIN}/`]);
@@ -496,7 +509,8 @@ describe('Inventory scrape-phase failure persists ingested state (#121 recovery 
 					`${TEST_SERVER_ORIGIN}/inventory/inner-link`,
 				],
 				{ cwd },
-				() => {
+				(orch) => {
+					tmpDir = orch.archive.tmpDir;
 					// Throws *after* ingestion completes — exercises the
 					// `ingestionComplete=true` branch of the orchestrator's
 					// outer catch.
@@ -510,15 +524,21 @@ describe('Inventory scrape-phase failure persists ingested state (#121 recovery 
 		await fs.rm(cwd, { recursive: true, force: true });
 	});
 
-	it('persists pre-inserted inventory-seed rows to the .nitpicker tar despite the scrape throw', async () => {
-		// The load-bearing assertion: after the scrape-phase throw, the
-		// orchestrator's catch must call `archive.write()` to tar `tmpDir`
-		// into the `.nitpicker` file. If that call were missing (or if the
-		// `ingestionComplete=true` guard fell through to the `.bak` restore
-		// branch), re-opening the archive would show zero `inventory-seed`
-		// rows. The pre-insert durability E2E above only exercises the abort
-		// path, which short-circuits before reaching this branch.
-		const accessor = await Archive.open({ filePath, cwd });
+	// NOTE on ordering: the two stub-reading tests below run BEFORE "leaves
+	// the original .nitpicker untouched". `Archive.open({ filePath, cwd })`
+	// computes its tmpDir deterministically from `TMP_DIR_PREFIX +
+	// basename(filePath)` under `cwd` — the SAME path the failed
+	// `inventory()` call's stub already occupies (same `filePath`/`cwd`).
+	// Opening it re-extracts the baseline into that path (clobbering the
+	// stub's ingested rows) and closing that `Archive` (unlike an
+	// `ArchiveAccessor` from `Archive.connect`) removes tmpDir entirely on
+	// `close()`. Reading the stub first avoids racing that destructive
+	// reuse of the same on-disk path.
+	it('persists pre-inserted inventory-seed rows in the stub tmpDir despite the scrape throw', async () => {
+		// The ingested state is not lost — it survives in the STUB
+		// (tmpDir), which `releaseHandle()` leaves on disk with its lock
+		// released, ready for `crawl <tmpDir> --resume`.
+		const accessor = await Archive.connect(tmpDir);
 		try {
 			const knex = accessor.getKnex();
 			const rows = (await knex('content_items as ci')
@@ -546,12 +566,11 @@ describe('Inventory scrape-phase failure persists ingested state (#121 recovery 
 		}
 	});
 
-	it('persists the inventory_runs audit row despite the scrape throw', async () => {
+	it('persists the inventory_runs audit row in the stub tmpDir despite the scrape throw', async () => {
 		// Audit row was written before the throw (inside the ingestion
-		// phase). The `archive.write()` recovery flush must carry it
-		// through to the on-disk archive, otherwise the operator has no
-		// record that the inventory pass ever started.
-		const accessor = await Archive.open({ filePath, cwd });
+		// phase, `.bak`-protected) and survives in the stub for the same
+		// reason as the seed rows above.
+		const accessor = await Archive.connect(tmpDir);
 		try {
 			const knex = accessor.getKnex();
 			const rows = (await knex('inventory_runs').select('*')) as Array<{
@@ -561,6 +580,31 @@ describe('Inventory scrape-phase failure persists ingested state (#121 recovery 
 			expect(rows).toHaveLength(1);
 			expect(rows[0]?.total_lines).toBe(2);
 			expect(rows[0]?.new_pages).toBe(2);
+		} finally {
+			await accessor.close();
+		}
+	});
+
+	it('leaves the original .nitpicker untouched — write() never ran, so it still has zero inventory-seed rows', async () => {
+		// The load-bearing assertion for the new invariant: the original
+		// archive (a pre-inventory baseline with no `/inventory/*` routes)
+		// must NOT show the seed rows this inventory pass ingested. If
+		// `write()` were still called here (the pre-#350 salvage path),
+		// this archive would gain them and the invariant would not hold.
+		// Runs LAST in this describe (see the ordering note above the stub
+		// tests) — `Archive.open` here reuses the stub's tmpDir path and
+		// destroys it on close.
+		const accessor = await Archive.open({ filePath, cwd });
+		try {
+			const knex = accessor.getKnex();
+			const rows = (await knex('content_items as ci')
+				.join('url_refs as ur', 'ci.url_id', 'ur.id')
+				.select('ur.url as url')
+				.whereIn('ur.url', [
+					`${TEST_SERVER_ORIGIN}/inventory/hidden-lp`,
+					`${TEST_SERVER_ORIGIN}/inventory/inner-link`,
+				])) as Array<{ url: string }>;
+			expect(rows).toHaveLength(0);
 		} finally {
 			await accessor.close();
 		}

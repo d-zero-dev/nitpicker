@@ -4,6 +4,7 @@ import { applyConnectionPragmas, initSchema } from '../../init-schema.js';
 import { assertCompatibleVersion } from '../../meta/assert-compatible-version.js';
 import { migrateContentItemsAliasOfId } from '../../migrate-content-items-alias-of-id.js';
 import { migrateContentItemsDedupeCapEventId } from '../../migrate-content-items-dedupe-cap-event-id.js';
+import { migrateInfoCreatedCwd } from '../../migrate-info-created-cwd.js';
 import { migrateInfoMainContentSelector } from '../../migrate-info-main-content-selector.js';
 import { migrateInfoRoots } from '../../migrate-info-roots.js';
 import { migrateInventoryRunsExcludeSkipped } from '../../migrate-inventory-runs-exclude-skipped.js';
@@ -34,7 +35,7 @@ import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-networ
  * `CREATE TABLE IF NOT EXISTS` is a no-op once the table is present. Column
  * additions to an existing 0.13 table are therefore the one case that still
  * needs an explicit `hasColumn`-guarded `ALTER TABLE` here (`migrateInfoRoots`,
- * `migrateMainContentsColumns`, `migratePageMetaBodyHash`,
+ * `migrateInfoCreatedCwd`, `migrateMainContentsColumns`, `migratePageMetaBodyHash`,
  * `migratePageMetaConsoleErrorCount`, `migratePageMetaCustomElementCount`,
  * `migrateContentItemsAliasOfId`,
  *
@@ -87,6 +88,7 @@ export async function init(
 	await initSchema(knex);
 	await migrateInfoRoots(knex, onLog);
 	await migrateInfoMainContentSelector(knex, onLog);
+	await migrateInfoCreatedCwd(knex, onLog);
 	await migrateMainContentsColumns(knex, onLog);
 	await migratePageMetaBodyHash(knex, onLog);
 	await migratePageMetaConsoleErrorCount(knex, onLog);

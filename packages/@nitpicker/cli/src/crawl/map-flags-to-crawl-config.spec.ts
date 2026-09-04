@@ -35,6 +35,7 @@ describe('mapFlagsToCrawlConfig', () => {
 			imageFileSizeThreshold: 1024,
 			maxExcludedDepth: 5,
 			retry: 2,
+			maxAutoRetry: 5,
 			userAgent: 'TestBot/1.0',
 			ignoreRobots: true,
 			verbose: true,
@@ -50,6 +51,7 @@ describe('mapFlagsToCrawlConfig', () => {
 		expect(result.imageFileSizeThreshold).toBe(1024);
 		expect(result.maxExcludedDepth).toBe(5);
 		expect(result.retry).toBe(2);
+		expect(result.maxAutoRetry).toBe(5);
 		expect(result.userAgent).toBe('TestBot/1.0');
 		expect(result.ignoreRobots).toBe(true);
 		expect(result.verbose).toBe(true);
@@ -111,5 +113,13 @@ describe('mapFlagsToCrawlConfig', () => {
 	it('dedupeMapCap を指定した値のままマッピングする', () => {
 		const result = mapFlagsToCrawlConfig({ dedupeMapCap: 50_000 });
 		expect(result.dedupeMapCap).toBe(50_000);
+	});
+
+	it('maxAutoRetry: 0 はそのまま 0 として渡す（dedupeCap と異なり null 変換は不要）', () => {
+		// Unlike `dedupeCap`, `0` here is a genuine, directly-usable value
+		// (issue #350) — `CrawlerOrchestrator`'s constructor only falls back
+		// to its default via `?? 3`, which does not trigger on `0`.
+		const result = mapFlagsToCrawlConfig({ maxAutoRetry: 0 });
+		expect(result.maxAutoRetry).toBe(0);
 	});
 });

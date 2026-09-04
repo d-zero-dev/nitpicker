@@ -209,6 +209,15 @@ export default class Archive extends ArchiveAccessor {
 		return this.#db.getCrawlingState();
 	}
 	/**
+	 * Retrieves the `info.createdCwd` value stamped when this stub was
+	 * created — see {@link Archive.resume} for how it is used.
+	 * @returns The recorded cwd, or `null` if never stamped.
+	 */
+	async getCreatedCwd(): Promise<string | null> {
+		return this.#db.getCreatedCwd();
+	}
+
+	/**
 	 * Return the subset of `urls` that already exist as `pages.url`. Used by
 	 * `CrawlerOrchestrator.inventory` to filter the user-supplied URL list
 	 * down to "URLs that are NOT yet in the archive" — only those reach the
@@ -710,6 +719,15 @@ export default class Archive extends ArchiveAccessor {
 		onStep?: (step: 'checkpoint' | 'rename' | 'tar' | 'remove') => void;
 	}) {
 		saveLog('Starts: %s', this.#filePath);
+		// `.nitpicker` files are routinely shared between users — scrub the
+		// stub-local `createdCwd` (see `Config.createdCwd`'s JSDoc) before it
+		// gets folded into `db.sqlite` and tarred, so a packaged archive never
+		// carries another user's local absolute path. Bundled into the
+		// `checkpoint` step below (a single UPDATE ahead of the WAL fold-back)
+		// rather than its own `onStep` phase — both are near-instant and
+		// reporting them separately would add a phase label for no visible
+		// wait.
+		await this.#db.updateConfig({ createdCwd: null });
 		options?.onStep?.('checkpoint');
 		await this.#db.checkpoint();
 		const filePathWithoutExt = path.resolve(
@@ -994,7 +1012,17 @@ export default class Archive extends ArchiveAccessor {
 				const name =
 					(await db.getName()) ||
 					path.basename(targetPath).replace(Archive.TMP_DIR_PREFIX, '');
-				const filePath = path.resolve(process.cwd(), name + '.' + Archive.FILE_EXTENSION);
+				// Reconstruct the output path from the cwd the interrupted
+				// session was originally started from (see `Config.createdCwd`),
+				// not this invocation's own `process.cwd()` — `crawl --resume
+				// <stub>` is routinely run from a different directory than the
+				// original `crawl`/`--append`/etc. call. Falls back to this
+				// invocation's cwd for a stub that predates this column.
+				const createdCwd = await db.getCreatedCwd();
+				const filePath = path.resolve(
+					createdCwd ?? process.cwd(),
+					name + '.' + Archive.FILE_EXTENSION,
+				);
 				return new Archive(filePath, tmpDir, db, releaseLock);
 			} catch (error) {
 				await releaseLock();

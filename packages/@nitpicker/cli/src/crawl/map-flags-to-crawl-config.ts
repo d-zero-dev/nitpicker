@@ -22,6 +22,10 @@ export function mapFlagsToCrawlConfig(flags: CrawlFlagInput) {
 		imageFileSizeThreshold: flags.imageFileSizeThreshold,
 		maxExcludedDepth: flags.maxExcludedDepth,
 		retry: flags.retry,
+		// Unlike `dedupeCap`, `0` here is a genuine, directly-usable value
+		// (issue #350) — `CrawlerOrchestrator`'s constructor only falls back
+		// to its default via `?? 3`, which does not trigger on `0`.
+		maxAutoRetry: flags.maxAutoRetry,
 		userAgent: flags.userAgent,
 		ignoreRobots: flags.ignoreRobots,
 		mainContentSelector: flags.mainContentSelector,

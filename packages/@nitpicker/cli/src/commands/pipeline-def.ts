@@ -101,6 +101,12 @@ export const commandDef = {
 			group: 'Crawl options',
 			desc: 'Number of retry attempts per URL on scrape failure',
 		},
+		maxAutoRetry: {
+			type: 'number',
+			default: 3,
+			group: 'Crawl options',
+			desc: 'Maximum whole-session auto-retry attempts (exponential backoff, 30s-5min) when a crawl session ends with pages still pending. 0 disables auto-retry: any pages still pending after the session abort it immediately, leaving the un-packaged stub for --resume/--retry-failed.',
+		},
 		list: {
 			type: 'string',
 			isMultiple: true,

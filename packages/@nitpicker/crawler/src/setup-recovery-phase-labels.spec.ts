@@ -10,7 +10,7 @@ describe('SETUP_RECOVERY_PHASE_LABELS', () => {
 		// back to being treated as a normal, planned-sequence label instead.
 		expect(SETUP_RECOVERY_PHASE_LABELS).toEqual([
 			'Restoring archive from backup',
-			'Persisting ingested inventory state',
+			'Leaving crawl state for --resume',
 		]);
 	});
 });

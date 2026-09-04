@@ -15,6 +15,7 @@ import {
 	computeFileSha256,
 	CrawlerOrchestrator,
 	INVENTORY_SETUP_PHASES,
+	PendingUrlsRemainError,
 	RECRAWL_SETUP_PHASES,
 	RESUME_SETUP_PHASES,
 	RETRY_FAILED_SETUP_PHASES,
@@ -32,6 +33,7 @@ import { isValidUrl } from '../crawl/is-valid-url.js';
 import { mapFlagsToCrawlConfig } from '../crawl/map-flags-to-crawl-config.js';
 import { runPostCrawlTaskList } from '../crawl/run-post-crawl-task-list.js';
 import { ExitCode } from '../exit-code.js';
+import { formatCliError } from '../format-cli-error.js';
 import { readUrlListFile } from '../read-url-list-file.js';
 
 import { CrawlAggregateError } from './crawl-aggregate-error.js';
@@ -922,6 +924,18 @@ export async function crawl(args: string[], flags: CrawlFlags) {
 			return;
 		}
 	} catch (error) {
+		if (error instanceof PendingUrlsRemainError) {
+			// Auto-retry (issue #350) exhausted its budget — an expected,
+			// recoverable outcome (the operator reruns with `--resume` /
+			// `--retry-failed`), not a crash. Printed here because, unlike
+			// `CrawlAggregateError` below, nothing prints this error's
+			// message before it reaches this catch (it throws straight out
+			// of the `CrawlerOrchestrator.*` factory call, before
+			// `finishCrawlMode` — the only other place that prints a
+			// crawl-mode error — ever runs).
+			formatCliError(error, !!flags.verbose);
+			process.exit(ExitCode.Incomplete);
+		}
 		if (error instanceof CrawlAggregateError) {
 			const exitCode =
 				error.hasOnlyExternalErrors && !flags.strict ? ExitCode.Warning : ExitCode.Fatal;
