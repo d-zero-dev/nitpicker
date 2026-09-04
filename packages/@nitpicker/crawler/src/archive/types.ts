@@ -138,13 +138,13 @@ export interface Config extends Required<Pick<ParseURLOptions, 'disableQueries'>
 export type PageSource = 'crawled' | 'inventory-seed' | 'inventory-discovered';
 
 /**
- * One row written to the `inventory_runs` audit table on each successful
- * `--inventory <list>` invocation.
+ * One row written to the `list_reconcile_runs` audit table on each
+ * successful `--inventory <list>` or `--recrawl <list>` invocation.
  *
- * Schema-mirror interface: every column on `inventory_runs` is represented
- * here. Only `ran_at` is required — every other field is nullable so a
- * raw-SQL backfill (a one-off `sqlite3 INSERT` recording an inventory
- * pass that predates this table) can omit summary
+ * Schema-mirror interface: every column on `list_reconcile_runs` is
+ * represented here. Only `ran_at` is required — every other field is
+ * nullable so a raw-SQL backfill (a one-off `sqlite3 INSERT` recording a
+ * reconcile pass that predates this table) can omit summary
  * stats it cannot reconstruct.
  *
  * The audit log is append-only: there is intentionally no UPDATE path,
@@ -153,7 +153,7 @@ export type PageSource = 'crawled' | 'inventory-seed' | 'inventory-discovered';
  * detection is a read-side concern; `source_file_sha256` is recorded as
  * the content-identity key it would use.
  * @example
- * await archive.recordInventoryRun({
+ * await archive.recordListReconcileRun({
  *   ran_at: new Date().toISOString(),
  *   list_label: 'prod-2026-06',
  *   total_lines: 113_268,
@@ -163,7 +163,7 @@ export type PageSource = 'crawled' | 'inventory-seed' | 'inventory-discovered';
  *   exclude_skipped: 3,
  * });
  */
-export interface InventoryRunMeta {
+export interface ListReconcileRunMeta {
 	/** ISO 8601 timestamp at which the run completed (e.g. `'2026-06-21T11:30:00+09:00'`). */
 	ran_at: string;
 	/** Human-readable identifier (e.g. `'prod-2026-06-21'`). `null` when the caller did not supply one. */
@@ -178,7 +178,7 @@ export interface InventoryRunMeta {
 	new_resources?: number | null;
 	/** Number of input URLs dropped because they fell outside the archived scope. */
 	scope_skipped?: number | null;
-	/** Number of novel in-scope input URLs recorded as terminal skipped pages (`is_skipped=1`, `skip_reason='excluded'`) instead of being imported, because they matched the effective `excludes` / `excludeUrls` config. Pure audit output like every other count on this row — written once per run, read back only by `listInventoryRuns` display surfaces, never consumed by any runtime decision. `null` on rows written before the column existed (those runs predate ingestion-side exclusion — their excluded URLs were imported as real pages/resources, not counted). */
+	/** Number of novel in-scope input URLs recorded as terminal skipped pages (`is_skipped=1`, `skip_reason='excluded'`) instead of being imported, because they matched the effective `excludes` / `excludeUrls` config. Pure audit output like every other count on this row — written once per run, read back only by `listReconcileRuns` display surfaces, never consumed by any runtime decision. `null` on rows written before the column existed (those runs predate ingestion-side exclusion — their excluded URLs were imported as real pages/resources, not counted). */
 	exclude_skipped?: number | null;
 	/** Number of source-file lines dropped by the CLI for failing URL validation, before this row's `total_lines` was counted. `null` for programmatic callers that built the URL list in-memory (no source file to have invalid lines). */
 	invalid_skipped?: number | null;
@@ -240,7 +240,7 @@ export interface NetworkOutageRow {
 /**
  * Fields required to record a newly-detected outage via
  * `Database.insertNetworkOutage`. camelCase (unlike {@link NetworkOutageRow}
- * / {@link InventoryRunMeta}) because callers build this directly from
+ * / {@link ListReconcileRunMeta}) because callers build this directly from
  * `NetworkOutageDetector`'s camelCase `OutageSuspect` plus a probe host —
  * the db-op does the camelCase → snake_case column mapping on write.
  */

@@ -24,7 +24,8 @@ import type { Knex } from 'knex';
  *   found in the main-content region, one row per DOM element, FK →
  *   `content_items(id)`. Unlike its eight siblings above, captured by
  *   nitpicker itself (`crawler/capture-custom-elements.ts`), not beholder
- * - `inventory_runs` — `--inventory` audit log (no FK; append-only)
+ * - `list_reconcile_runs` — `--inventory` / `--recrawl` audit log (no FK;
+ *   append-only)
  * - `network_outages` — operator-network-outage journal (no FK; append-only
  *   except `ended_at`, which is written once on recovery)
  * - `dedupe_cap_events` — `--dedupe-cap` same-cluster soft-cap audit log (no
@@ -61,7 +62,7 @@ import type { Knex } from 'knex';
  * Unlike `createRefTables` / `createEntityTables` (whose callers guard with
  * a single sentinel table), each table here is guarded individually because
  * the migration-script caller sees archives where any subset may already
- * exist (e.g. `page_jsonld` from the 0.10 migration but no `inventory_runs`).
+ * exist (e.g. `page_jsonld` from the 0.10 migration but no `list_reconcile_runs`).
  * Index creation stays inside each guard: an existing table keeps whatever
  * indexes its creation path declared.
  * @param instance - The Knex query builder instance connected to the database.
@@ -374,13 +375,15 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 		});
 	}
 
-	if (!(await instance.schema.hasTable('inventory_runs'))) {
-		await instance.schema.createTable('inventory_runs', (t) => {
-			// One row per successful `--inventory <list>` invocation. The
-			// archive's audit log of "when did we apply which deploy list
-			// at what scale". `.bak` is removed on success so this table
-			// is the only durable provenance record. Column semantics live
-			// on the `InventoryRunMeta` interface in `archive/types.ts`.
+	if (!(await instance.schema.hasTable('list_reconcile_runs'))) {
+		await instance.schema.createTable('list_reconcile_runs', (t) => {
+			// One row per successful `--inventory <list>` or `--recrawl
+			// <list>` invocation — both reconcile a URL list against the
+			// archive via the same ingestion path. The archive's audit log
+			// of "when did we apply which list at what scale". `.bak` is
+			// removed on success so this table is the only durable
+			// provenance record. Column semantics live on the
+			// `ListReconcileRunMeta` interface in `archive/types.ts`.
 			t.increments('id');
 			t.string('ran_at').notNullable();
 			t.string('list_label').nullable();

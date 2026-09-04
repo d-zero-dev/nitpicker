@@ -83,16 +83,16 @@ export interface SetupProgressCallbacks {
 
 /**
  * Aggregate counts captured during a `--inventory` or `--recrawl`
- * invocation, forwarded to `#writeInventoryRunRow` so the audit log row is
- * consistent across every branch of `CrawlerOrchestrator.inventory` and
+ * invocation, forwarded to `#writeListReconcileRunRow` so the audit log row
+ * is consistent across every branch of `CrawlerOrchestrator.inventory` and
  * `CrawlerOrchestrator.recrawl` that reaches ingestion.
  *
  * Spelled out here (not inlined at the call site) so a new field added to
  * the audit row has a single edit point and so each field's semantics are
  * documented per-property rather than scattered across the emit sites.
  */
-export interface InventoryRunAggregates {
-	/** `inventoryUrls.length` as received by `CrawlerOrchestrator.inventory` — the CLI (`inventoryCrawl`) has already warned-and-dropped unparseable-URL lines before this point, so this counts valid URLs, not raw source-file lines. Stored verbatim as `inventory_runs.total_lines`. */
+export interface ListReconcileRunAggregates {
+	/** `inventoryUrls.length` as received by `CrawlerOrchestrator.inventory` — the CLI (`inventoryCrawl`) has already warned-and-dropped unparseable-URL lines before this point, so this counts valid URLs, not raw source-file lines. Stored verbatim as `list_reconcile_runs.total_lines`. */
 	inventoryUrlsCount: number;
 	/** Number of novel URLs classified as HTML and queued for render. Stored as `new_pages` (excludes anchor-discovered descendants — those add later via the crawler graph and are NOT counted here). */
 	htmlSeedsCount: number;
@@ -105,7 +105,7 @@ export interface InventoryRunAggregates {
 	/**
 	 * SHA-256 hex digest of the source `.txt`, **pre-computed by the caller**
 	 * (typically the CLI's `inventoryCrawl`). Stored verbatim as
-	 * `inventory_runs.source_file_sha256`.
+	 * `list_reconcile_runs.source_file_sha256`.
 	 *
 	 * Pre-computation lifts the absolute path off the orchestrator
 	 * boundary entirely — the path is privacy-sensitive (leaks
@@ -119,21 +119,21 @@ export interface InventoryRunAggregates {
 	/**
 	 * Number of source-file lines the CLI warned-and-dropped for failing
 	 * URL validation, before `inventoryUrlsCount` was ever counted. Stored
-	 * verbatim as `inventory_runs.invalid_skipped`. `null` for programmatic
+	 * verbatim as `list_reconcile_runs.invalid_skipped`. `null` for programmatic
 	 * callers that built `inventoryUrls` in-memory — there is no source
 	 * file, so no line was ever dropped as invalid.
 	 */
 	invalidSkipped: number | null;
 	/**
 	 * Overrides the audit row's `list_label` prefix (before the `-${ranAt}`
-	 * timestamp suffix `#writeInventoryRunRow` always appends). Omit for the
-	 * default `'inventory'`; `CrawlerOrchestrator.recrawl` passes `'recrawl'`
-	 * so the two invocation kinds stay distinguishable in `query
-	 * inventory-runs` output despite sharing one audit table.
+	 * timestamp suffix `#writeListReconcileRunRow` always appends). Omit for
+	 * the default `'inventory'`; `CrawlerOrchestrator.recrawl` passes
+	 * `'recrawl'` so the two invocation kinds stay distinguishable in
+	 * `query list-reconcile-runs` output despite sharing one audit table.
 	 */
 	listLabelPrefix?: string;
 	/**
-	 * Free-form text stored verbatim as `inventory_runs.notes`. `recrawl`
+	 * Free-form text stored verbatim as `list_reconcile_runs.notes`. `recrawl`
 	 * uses this to record how many existing pages it reset back to
 	 * pending — a fact `--inventory` never produces and that therefore has
 	 * no dedicated column (adding one would leave it `NULL` on every

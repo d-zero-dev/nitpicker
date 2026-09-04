@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
+import knex from 'knex';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { Database } from './database.js';
@@ -5983,22 +5984,22 @@ describe('redirect chain intermediate lineage propagation', () => {
 	});
 });
 
-describe('inventory run audit log', () => {
+describe('list reconcile run audit log', () => {
 	it('initSchema does NOT create a `source_file_path` column (privacy regression guard)', async () => {
 		// `source_file_path` is deliberately not persisted because absolute
 		// paths leak user-home / OS structure when archives are shared.
 		// Without this guard, accidentally re-adding
-		// `t.string('source_file_path', ...)` to the `inventory_runs` DDL
+		// `t.string('source_file_path', ...)` to the `list_reconcile_runs` DDL
 		// (`create-adjunct-tables.ts`) would pass the existing tests in
 		// this describe — they use either explicit `select(name, ...)`
 		// lists or `toMatchObject` (which silently ignores extra columns)
 		// and would not surface the regression.
-		const dbPath = path.resolve(workingDir, 'inventory-runs-no-source-path.sqlite');
+		const dbPath = path.resolve(workingDir, 'list-reconcile-runs-no-source-path.sqlite');
 		await removeIfExists(dbPath);
 		const db = await Database.connect({ filename: dbPath });
 		try {
 			expect(
-				await db.getKnex().schema.hasColumn('inventory_runs', 'source_file_path'),
+				await db.getKnex().schema.hasColumn('list_reconcile_runs', 'source_file_path'),
 			).toBe(false);
 		} finally {
 			await db.destroy();
@@ -6007,11 +6008,11 @@ describe('inventory run audit log', () => {
 	});
 
 	it('records every field on INSERT and reads them back via SELECT', async () => {
-		const dbPath = path.resolve(workingDir, 'inventory-runs-full-fields.sqlite');
+		const dbPath = path.resolve(workingDir, 'list-reconcile-runs-full-fields.sqlite');
 		await removeIfExists(dbPath);
 		const db = await Database.connect({ filename: dbPath });
 		try {
-			const id = await db.recordInventoryRun({
+			const id = await db.recordListReconcileRun({
 				ran_at: '2026-06-21T11:30:00+09:00',
 				list_label: 'prod-2026-06',
 				source_file_sha256: 'a'.repeat(64),
@@ -6028,7 +6029,7 @@ describe('inventory run audit log', () => {
 
 			const [row] = await db
 				.getKnex()
-				.from('inventory_runs')
+				.from('list_reconcile_runs')
 				.select(
 					'id',
 					'ran_at',
@@ -6067,14 +6068,18 @@ describe('inventory run audit log', () => {
 		// with just `ran_at` (the only non-nullable column) must succeed
 		// so a one-off `sqlite3` INSERT with absent summary stats is
 		// retroactively expressible.
-		const dbPath = path.resolve(workingDir, 'inventory-runs-minimal.sqlite');
+		const dbPath = path.resolve(workingDir, 'list-reconcile-runs-minimal.sqlite');
 		await removeIfExists(dbPath);
 		const db = await Database.connect({ filename: dbPath });
 		try {
-			const id = await db.recordInventoryRun({
+			const id = await db.recordListReconcileRun({
 				ran_at: '2026-06-19T22:09:00+09:00',
 			});
-			const [row] = await db.getKnex().from('inventory_runs').select('*').where('id', id);
+			const [row] = await db
+				.getKnex()
+				.from('list_reconcile_runs')
+				.select('*')
+				.where('id', id);
 			expect(row.ran_at).toBe('2026-06-19T22:09:00+09:00');
 			expect(row.list_label).toBeNull();
 			expect(row.source_file_sha256).toBeNull();
@@ -6092,13 +6097,13 @@ describe('inventory run audit log', () => {
 	});
 
 	it('returns the autoincremented run id from each INSERT (monotonically increasing)', async () => {
-		const dbPath = path.resolve(workingDir, 'inventory-runs-ids.sqlite');
+		const dbPath = path.resolve(workingDir, 'list-reconcile-runs-ids.sqlite');
 		await removeIfExists(dbPath);
 		const db = await Database.connect({ filename: dbPath });
 		try {
-			const id1 = await db.recordInventoryRun({ ran_at: '2026-06-19T00:00:00Z' });
-			const id2 = await db.recordInventoryRun({ ran_at: '2026-06-20T00:00:00Z' });
-			const id3 = await db.recordInventoryRun({ ran_at: '2026-06-21T00:00:00Z' });
+			const id1 = await db.recordListReconcileRun({ ran_at: '2026-06-19T00:00:00Z' });
+			const id2 = await db.recordListReconcileRun({ ran_at: '2026-06-20T00:00:00Z' });
+			const id3 = await db.recordListReconcileRun({ ran_at: '2026-06-21T00:00:00Z' });
 			expect(id2).toBeGreaterThan(id1);
 			expect(id3).toBeGreaterThan(id2);
 		} finally {
@@ -6108,27 +6113,27 @@ describe('inventory run audit log', () => {
 	});
 
 	it('orders rows by `ran_at` DESC when read with the ran_at index (newest first)', async () => {
-		const dbPath = path.resolve(workingDir, 'inventory-runs-order.sqlite');
+		const dbPath = path.resolve(workingDir, 'list-reconcile-runs-order.sqlite');
 		await removeIfExists(dbPath);
 		const db = await Database.connect({ filename: dbPath });
 		try {
 			// Insert out of chronological order so the assertion proves
 			// the ORDER BY is meaningful (not just INSERT order luck).
-			await db.recordInventoryRun({
+			await db.recordListReconcileRun({
 				ran_at: '2026-06-20T00:00:00Z',
 				list_label: 'mid',
 			});
-			await db.recordInventoryRun({
+			await db.recordListReconcileRun({
 				ran_at: '2026-06-19T00:00:00Z',
 				list_label: 'oldest',
 			});
-			await db.recordInventoryRun({
+			await db.recordListReconcileRun({
 				ran_at: '2026-06-21T00:00:00Z',
 				list_label: 'newest',
 			});
 			const rows = await db
 				.getKnex()
-				.from('inventory_runs')
+				.from('list_reconcile_runs')
 				.select('list_label')
 				.orderBy('ran_at', 'desc');
 			expect(rows.map((r) => r.list_label)).toEqual(['newest', 'mid', 'oldest']);
@@ -6144,26 +6149,87 @@ describe('inventory run audit log', () => {
 		// of the SAME list each produce a new row; duplicate detection is
 		// a read-side concern keyed on this column. Pin the current shape
 		// so accidentally adding a UNIQUE index here is caught.
-		const dbPath = path.resolve(workingDir, 'inventory-runs-same-sha.sqlite');
+		const dbPath = path.resolve(workingDir, 'list-reconcile-runs-same-sha.sqlite');
 		await removeIfExists(dbPath);
 		const db = await Database.connect({ filename: dbPath });
 		try {
 			const sha = 'b'.repeat(64);
-			const id1 = await db.recordInventoryRun({
+			const id1 = await db.recordListReconcileRun({
 				ran_at: '2026-06-19T00:00:00Z',
 				source_file_sha256: sha,
 			});
-			const id2 = await db.recordInventoryRun({
+			const id2 = await db.recordListReconcileRun({
 				ran_at: '2026-06-21T00:00:00Z',
 				source_file_sha256: sha,
 			});
 			expect(id1).not.toBe(id2);
 			const rows = await db
 				.getKnex()
-				.from('inventory_runs')
+				.from('list_reconcile_runs')
 				.select('id')
 				.where('source_file_sha256', sha);
 			expect(rows).toHaveLength(2);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('renames a legacy inventory_runs table to list_reconcile_runs on Database.connect, preserving rows (issue #354)', async () => {
+		// Unlike the other cases in this describe (which all go through
+		// `Database.connect` from a fresh or already-renamed DB), this pins
+		// the FULL `init()` boot sequence — rename migration BEFORE
+		// `initSchema`, then the column-add migrations — against a DB file
+		// carrying the OLD table name, built directly via knex (bypassing
+		// `Database.connect`, which would only ever produce the new name).
+		// A unit test of `migrateInventoryRunsToListReconcileRuns` in
+		// isolation would not catch a regression where the rename
+		// migration's call site moves to AFTER `initSchema` in `init.ts` —
+		// that ordering bug silently strands the legacy rows under an
+		// empty freshly-created `list_reconcile_runs` table instead of
+		// throwing.
+		const dbPath = path.resolve(workingDir, 'legacy-inventory-runs-rename.sqlite');
+		await removeIfExists(dbPath);
+
+		const legacy = knex({
+			client: LibsqlDialect as never,
+			connection: { filename: dbPath },
+			useNullAsDefault: true,
+		});
+		await legacy.schema.createTable('inventory_runs', (t) => {
+			t.increments('id');
+			t.string('ran_at').notNullable();
+			t.string('list_label').nullable();
+		});
+		await legacy('inventory_runs').insert({
+			ran_at: '2026-01-01T00:00:00Z',
+			list_label: 'legacy-row',
+		});
+		await legacy.destroy();
+
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			expect(await db.getKnex().schema.hasTable('inventory_runs')).toBe(false);
+			expect(await db.getKnex().schema.hasTable('list_reconcile_runs')).toBe(true);
+
+			const [row] = await db
+				.getKnex()
+				.from('list_reconcile_runs')
+				.select('ran_at', 'list_label');
+			expect(row).toMatchObject({
+				ran_at: '2026-01-01T00:00:00Z',
+				list_label: 'legacy-row',
+			});
+
+			// The column-add migrations (`migrateListReconcileRunsInvalidSkipped`
+			// / `...ExcludeSkipped`) must still run against the RENAMED
+			// table on the same boot.
+			expect(
+				await db.getKnex().schema.hasColumn('list_reconcile_runs', 'invalid_skipped'),
+			).toBe(true);
+			expect(
+				await db.getKnex().schema.hasColumn('list_reconcile_runs', 'exclude_skipped'),
+			).toBe(true);
 		} finally {
 			await db.destroy();
 			await removeIfExists(dbPath);
