@@ -3449,7 +3449,7 @@ __metadata:
     "@storybook/addon-a11y": "npm:10.5.10"
     "@storybook/react-vite": "npm:10.5.10"
     "@tanstack/react-query": "npm:5.102.8"
-    "@tanstack/react-table": "npm:9.2.3"
+    "@tanstack/react-table": "npm:9.2.4"
     "@tanstack/react-virtual": "npm:3.14.10"
     "@testing-library/dom": "npm:10.4.1"
     "@testing-library/jest-dom": "npm:7.0.1"
@@ -5055,15 +5055,15 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@tanstack/react-table@npm:9.2.3":
-  version: 9.2.3
-  resolution: "@tanstack/react-table@npm:9.2.3"
+"@tanstack/react-table@npm:9.2.4":
+  version: 9.2.4
+  resolution: "@tanstack/react-table@npm:9.2.4"
   dependencies:
     "@tanstack/react-store": "npm:^0.11.1"
-    "@tanstack/table-core": "npm:9.2.3"
+    "@tanstack/table-core": "npm:9.2.4"
   peerDependencies:
     react: ">=18"
-  checksum: 10c0/4815fc2b142773c6fa5cef26b0a706d45568b57aca4fa2addf404dea222228b385ea3d6782544a8a0e9275001026fc3385e62ca221e537ef492cc9c37936efdd
+  checksum: 10c0/f68d6da9850e7783773a035186e11744dacaf5ca61075766ecc7d4b5266af2e4afec005f19ac664c1deba6bf5b7586fed90a67372c82127afd8fdaf0473e73b4
   languageName: node
   linkType: hard
 
@@ -5086,12 +5086,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@tanstack/table-core@npm:9.2.3":
-  version: 9.2.3
-  resolution: "@tanstack/table-core@npm:9.2.3"
+"@tanstack/table-core@npm:9.2.4":
+  version: 9.2.4
+  resolution: "@tanstack/table-core@npm:9.2.4"
   dependencies:
     "@tanstack/store": "npm:^0.11.1"
-  checksum: 10c0/a0c2fdbe976358138dd81e54c5c6ebfd08cf2840b608807d642fca1706ddf277fe9c234147cf047bd8aa7b1097100dd61564efac8df91679287c4a06de22af72
+  checksum: 10c0/fae9e7f3028f45eb2cd3e831365e398a92030d685acdd0458c3c2245eb8456176abd0d5ca208ea58eb9e7a4ccc666c26986269c93bc4ce25603866805bb837b9
   languageName: node
   linkType: hard
 
