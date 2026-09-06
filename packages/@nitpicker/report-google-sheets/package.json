@@ -43,7 +43,7 @@
 	},
 	"devDependencies": {
 		"@types/debug": "4.1.13",
-		"googleapis": "173.0.0",
+		"googleapis": "176.0.0",
 		"vitest": "4.1.11"
 	},
 	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
