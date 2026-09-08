@@ -3,6 +3,8 @@ import type { NetworkProbe } from './crawler/probe-network.js';
 import type {
 	CrawlerEventTypes,
 	CrawlerOptions,
+	CrawlRuntimeOptions,
+	CrawlRuntimeOptionsPatch,
 	InventoryMode,
 } from './crawler/types.js';
 import type {
@@ -12,6 +14,7 @@ import type {
 	SetupPhaseLabel,
 	SetupProgressCallbacks,
 } from './types.js';
+import type { Lanes } from '@d-zero/dealer';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
 import { unlink as unlinkFile } from 'node:fs/promises';
@@ -177,6 +180,15 @@ interface CrawlConfig extends Config {
 	 * the public options a caller of those methods passes directly.
 	 */
 	preloadedStickyShapeKeys: readonly string[];
+
+	/**
+	 * A `Lanes` instance owned by the caller (typically the CLI), forwarded
+	 * to {@link Crawler} so `deal()` reuses it instead of creating its own —
+	 * see {@link CrawlerOptions.lanes}. Not part of {@link Config}: it is a
+	 * live object, never persisted to (or read back from) the archive's
+	 * `info` row.
+	 */
+	lanes?: Lanes;
 }
 
 /**
@@ -259,6 +271,16 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 	/** Whether the crawl was started from a pre-defined URL list (non-recursive mode). */
 	readonly #fromList: boolean;
+	/**
+	 * The caller-owned `Lanes` instance, if any — see `CrawlConfig.lanes`'s
+	 * JSDoc. Used by `#crawlUntilPendingClears`'s auto-retry wait to render
+	 * through `Lanes#header` instead of `console.error` when present (and
+	 * {@link #verbose} is `false` — see that field's JSDoc for why verbose
+	 * excludes this path), since an injected `Lanes` stays alive across
+	 * auto-retry rounds (unlike `deal()`'s own `Lanes`, which closes each
+	 * round) and a bare `console.error` would corrupt its live frame.
+	 */
+	readonly #lanes: Lanes | undefined;
 	/** See `CrawlConfig.maxAutoRetry`'s JSDoc. */
 	readonly #maxAutoRetry: number;
 	/**
@@ -272,6 +294,22 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	#openNetworkOutageId: number | null = null;
 	/** `startedAt` of the currently-open outage, tracked alongside {@link #openNetworkOutageId} so `networkOutageRecovered` can compute a duration for {@link networkOutageSummaryCounter}. */
 	#openNetworkOutageStartedAt: number | null = null;
+	/**
+	 * Mirrors `CrawlerOptions.verbose` (forwarded to `Crawler` at
+	 * construction). `#crawlUntilPendingClears`'s auto-retry wait reads this
+	 * alongside {@link #lanes}: `Lanes#header()` only queues its text in
+	 * verbose mode (prefixed onto the *next* `update()` call) rather than
+	 * writing immediately, so routing the auto-retry wait message through it
+	 * while verbose would leave that message effectively invisible for the
+	 * whole backoff wait — a regression from the unconditional
+	 * `console.error` this replaced, which always printed immediately. Verbose
+	 * mode falls back to `console.error` instead, matching its pre-`#lanes`
+	 * behavior exactly (verbose output is append-only lines anyway, so an
+	 * interleaved `console.error` line is harmless there, unlike in
+	 * non-verbose mode where it would corrupt the live frame).
+	 */
+	readonly #verbose: boolean;
+
 	/** Serializes archive writes from crawler event handlers (FIFO). */
 	readonly #writeQueue = new WriteQueue();
 
@@ -368,7 +406,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			// fresh `crawling()` has no archive history to seed from (see
 			// `CrawlConfig.preloadedStickyShapeKeys`'s JSDoc).
 			preloadedStickyShapeKeys: options?.preloadedStickyShapeKeys ?? [],
+			lanes: options?.lanes,
 		});
+		this.#lanes = options?.lanes;
+		this.#verbose = options?.verbose ?? false;
 	}
 
 	/**
@@ -739,7 +780,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			});
 		});
 	}
-
 	/**
 	 * Kill any zombie Chromium processes that were not properly cleaned up.
 	 *
@@ -768,6 +808,52 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	getUndeadPid() {
 		return this.#crawler.getUndeadPid();
 	}
+	/**
+	 * Applies a runtime change to the in-progress crawl's tunable options
+	 * (`parallels`/`interval`/the three exclude arrays — see
+	 * {@link Crawler.updateRuntimeOptions}) and persists the resulting
+	 * values to the archive's `info` row so a later `--resume` / `--append`
+	 * / `--retry-failed` reuses them (`Archive#updateConfig`).
+	 *
+	 * The in-memory change takes effect immediately, before this method
+	 * returns. The archive write is enqueued on {@link #writeQueue} — so it
+	 * is ordered relative to the crawl's own page/resource writes — but not
+	 * awaited: this method is synchronous so a caller (e.g. the CLI reading
+	 * a console command) can report the new value back without waiting on
+	 * disk I/O. A failure in that write is not swallowed silently: it
+	 * surfaces through the same path every other write-queue failure does —
+	 * `Database`'s `emitErrorAndRetry` re-emits `'error'` on `Archive`,
+	 * which the constructor already forwards into `#archiveFailure` +
+	 * `this.emit('error', ...)` + `this.#crawler.abort()`.
+	 * @param patch - The runtime change to apply.
+	 * @returns A snapshot of the tunable options after applying `patch`.
+	 * @throws {RangeError} If `parallels` is present and not an integer `>= 1`, or `interval` is present and not an integer `>= 0`.
+	 * @throws {TypeError} If any exclude entry is present and not a non-empty string.
+	 * @example
+	 * ```ts
+	 * const snapshot = orchestrator.updateRuntimeOptions({ parallels: 4 });
+	 * console.log(snapshot.parallels); // 4
+	 * ```
+	 */
+	updateRuntimeOptions(patch: CrawlRuntimeOptionsPatch): CrawlRuntimeOptions {
+		const snapshot = this.#crawler.updateRuntimeOptions(patch);
+		// See this method's JSDoc for why an empty catch is safe here: the
+		// underlying failure still reaches the caller via the Archive
+		// `'error'` event this class already listens for.
+		this.#writeQueue
+			.enqueue(() =>
+				this.#archive.updateConfig({
+					parallels: snapshot.parallels,
+					interval: snapshot.interval,
+					excludes: [...snapshot.excludes],
+					excludeUrls: [...snapshot.excludeUrls],
+					excludeKeywords: [...snapshot.excludeKeywords],
+				}),
+			)
+			.catch(() => {});
+		return snapshot;
+	}
+
 	/**
 	 * Write the archive to its configured file path.
 	 *
@@ -937,15 +1023,31 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				pendingCount: pending.length,
 				delayMs,
 			});
-			// Printed unconditionally, mirroring `networkOutageConfirmed`'s
-			// rationale above: this always fires in the gap after `deal()`'s
-			// Lanes has closed and before the next one starts (the retry's
-			// own `crawling()` call hasn't run yet), so there is no active
-			// display to corrupt.
-			// eslint-disable-next-line no-console -- see comment above
-			console.error(
-				`[auto-retry] ${pending.length} pending page(s) remain — waiting ${Math.round(delayMs / 1000)}s before retry ${attempt}/${this.#maxAutoRetry}`,
-			);
+			// A caller-injected `#lanes` (see `CrawlConfig.lanes`'s JSDoc)
+			// stays alive across auto-retry rounds — unlike `deal()`'s own
+			// Lanes, which closes each round — so a bare `console.error`
+			// here would corrupt its still-live frame. Route through
+			// `header()` instead; its `%countdown(...)%` placeholder
+			// animates via the Lanes' own redraw loop, same as the
+			// per-URL interval wait in `crawler.ts`. `#verbose` excludes
+			// this path (see that field's JSDoc: `header()` only queues its
+			// text for the next `update()` call in verbose mode, so it would
+			// go effectively unseen for the whole wait). Without an injected
+			// `#lanes` (or while verbose), this always fires in the gap
+			// after `deal()`'s own Lanes has closed and before the next
+			// round's opens (the retry's own `crawling()` call hasn't run
+			// yet), so there is no active display to corrupt and
+			// `console.error` is safe.
+			if (this.#lanes && !this.#verbose) {
+				this.#lanes.header(
+					`[auto-retry] ${pending.length} pending page(s) remain — retry ${attempt}/${this.#maxAutoRetry} in %countdown(${delayMs},autoRetry,s)%s`,
+				);
+			} else {
+				// eslint-disable-next-line no-console -- see comment above
+				console.error(
+					`[auto-retry] ${pending.length} pending page(s) remain — waiting ${Math.round(delayMs / 1000)}s before retry ${attempt}/${this.#maxAutoRetry}`,
+				);
+			}
 			await delayOrAbort(delayMs, this.#crawler.signal);
 			if (this.#crawler.signal.aborted) {
 				return;

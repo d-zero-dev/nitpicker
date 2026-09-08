@@ -1,4 +1,5 @@
 import type { CrawlerEventTypes } from './types.js';
+import type { Lanes } from '@d-zero/dealer';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -373,6 +374,90 @@ describe('Crawler', () => {
 			const crawler = new Crawler(defaultOptions);
 			expect(crawler.signal).toBeInstanceOf(AbortSignal);
 			expect(crawler.signal.aborted).toBe(false);
+		});
+	});
+
+	describe('updateRuntimeOptions()', () => {
+		it('deal() 実行中であれば onStart で受け取った DealController.setLimit を呼ぶ', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+
+			const setLimit = vi.fn();
+			let resolveDeal: () => void = () => {};
+			const dealPromise = new Promise<void>((resolve) => {
+				resolveDeal = resolve;
+			});
+			vi.mocked(deal).mockImplementation((_items, _factory, options) => {
+				options?.onStart?.({ limit: 1, setLimit });
+				return dealPromise;
+			});
+
+			const crawler = new Crawler(defaultOptions);
+			crawler.start([parseUrl('https://example.com/')!]);
+			await vi.waitFor(() => {
+				expect(setLimit).not.toHaveBeenCalled();
+			});
+
+			const snapshot = crawler.updateRuntimeOptions({ parallels: 4 });
+
+			expect(setLimit).toHaveBeenCalledWith(4);
+			expect(snapshot.parallels).toBe(4);
+			resolveDeal();
+		});
+
+		it('deal() 実行中でなければ setLimit は呼ばれないが、#options 自体は更新される', async () => {
+			const { default: Crawler } = await import('./crawler.js');
+			const crawler = new Crawler(defaultOptions);
+
+			const snapshot = crawler.updateRuntimeOptions({ parallels: 4 });
+
+			expect(snapshot.parallels).toBe(4);
+		});
+
+		it('deal() 完了後は dealController が解除され、以降の updateRuntimeOptions は setLimit を呼ばない', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+
+			const setLimit = vi.fn();
+			vi.mocked(deal).mockImplementation((_items, _factory, options) => {
+				options?.onStart?.({ limit: 1, setLimit });
+				return Promise.resolve();
+			});
+
+			const crawler = new Crawler(defaultOptions);
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+			crawler.start([parseUrl('https://example.com/')!]);
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			const snapshot = crawler.updateRuntimeOptions({ parallels: 4 });
+
+			expect(setLimit).not.toHaveBeenCalled();
+			expect(snapshot.parallels).toBe(4);
+		});
+
+		it('コンストラクタに渡した lanes をそのまま deal() の options に転送する', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+
+			vi.mocked(deal).mockResolvedValue();
+			// `@d-zero/dealer` is module-mocked (top of file) down to `{ deal: vi.fn() }`,
+			// so `Lanes` itself is unavailable here — a plain object stand-in is enough
+			// to prove referential identity survives the `Crawler` → `deal()` handoff.
+			const lanes = {} as Lanes;
+
+			const crawler = new Crawler({ ...defaultOptions, lanes });
+			crawler.start([parseUrl('https://example.com/')!]);
+
+			await vi.waitFor(() => {
+				expect(vi.mocked(deal)).toHaveBeenCalled();
+			});
+			const options = vi.mocked(deal).mock.calls[0]?.[2];
+			expect(options?.lanes).toBe(lanes);
 		});
 	});
 

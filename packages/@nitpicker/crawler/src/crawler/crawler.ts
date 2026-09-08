@@ -2,6 +2,8 @@ import type {
 	BrowserScrapeResult,
 	CrawlerEventTypes,
 	CrawlerOptions,
+	CrawlRuntimeOptions,
+	CrawlRuntimeOptionsPatch,
 	OutageSuspect,
 	ResourceLookupResult,
 	ScrapeOutcome,
@@ -14,6 +16,7 @@ import type {
 	ResourceEntry,
 	ScrapeResult,
 } from '@d-zero/beholder';
+import type { DealController } from '@d-zero/dealer';
 import type { ExURL } from '@d-zero/shared/parse-url';
 import type { Page as PuppeteerPage } from 'puppeteer';
 
@@ -33,6 +36,7 @@ import { computeBodyHash } from '../archive/body-hash/compute-body-hash.js';
 import { classifyErrorKind } from '../classify-error-kind.js';
 import { crawlerLog } from '../debug.js';
 
+import { applyCrawlRuntimeOptionsPatch } from './apply-crawl-runtime-options-patch.js';
 import { buildJsRedirectEdge } from './build-js-redirect-edge.js';
 import { buildRedirectEvent } from './build-redirect-event.js';
 import { captureCustomElements } from './capture-custom-elements.js';
@@ -123,6 +127,17 @@ const DEFAULT_DEDUPE_MAP_CAP = 100_000;
 export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	/** Controller used to cancel the deal-based crawl via its AbortSignal. */
 	readonly #abortController = new AbortController();
+	/**
+	 * Handle into the currently-running `deal()` call's `Dealer`, letting
+	 * {@link updateRuntimeOptions} apply a `parallels` change immediately via
+	 * `setLimit()`. `null` outside of an active `deal()` call — auto-retry
+	 * (`CrawlerOrchestrator#crawlUntilPendingClears`) runs `deal()` in
+	 * separate rounds, and this is only valid for the round currently in
+	 * flight (`#runDeal`'s `onStart`/after-`deal()` reset it each round).
+	 * When `null`, a `parallels` patch still updates `#options.parallels` so
+	 * the *next* round picks it up.
+	 */
+	#dealController: DealController | null = null;
 	/**
 	 * Per-shape count of anchors rejected by the dedupe-cap enqueue gates
 	 * after that shape capped. Read by {@link getDedupeCapRejections} at
@@ -291,6 +306,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			dedupeCap: options?.dedupeCap ?? null,
 			dedupeMapCap: options?.dedupeMapCap ?? DEFAULT_DEDUPE_MAP_CAP,
 			preloadedStickyShapeKeys: options?.preloadedStickyShapeKeys ?? [],
+			lanes: options?.lanes,
 		};
 
 		this.#networkOutageDetector = new NetworkOutageDetector({
@@ -380,7 +396,6 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			this.#resources.add(resource);
 		}
 	}
-
 	/**
 	 * Start crawling from one or more root URLs.
 	 *
@@ -471,6 +486,35 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			this.#emitDealErrors(error, root.href);
 			void this.emit('crawlEnd', {});
 		});
+	}
+	/**
+	 * Applies a runtime change to this crawl's tunable options
+	 * (`parallels`/`interval`/the three exclude arrays) while it is in
+	 * progress. See {@link applyCrawlRuntimeOptionsPatch} for merge
+	 * semantics and validation.
+	 *
+	 * A `parallels` change takes effect immediately (via the live
+	 * `Dealer`'s `setLimit()`) when this is called while a `deal()` round
+	 * is actually in flight ({@link #dealController} non-`null`). Between
+	 * auto-retry rounds ({@link #dealController} `null`), only
+	 * `#options.parallels` is updated — the next round's `#runDeal` reads it
+	 * when computing that round's `concurrency`.
+	 * @param patch - The runtime change to apply.
+	 * @returns A snapshot of the tunable options after applying `patch`.
+	 * @throws {RangeError} If `parallels` is present and not an integer `>= 1`, or `interval` is present and not an integer `>= 0`.
+	 * @throws {TypeError} If any exclude entry is present and not a non-empty string.
+	 * @example
+	 * ```ts
+	 * const snapshot = crawler.updateRuntimeOptions({ parallels: 4 });
+	 * console.log(snapshot.parallels); // 4
+	 * ```
+	 */
+	updateRuntimeOptions(patch: CrawlRuntimeOptionsPatch): CrawlRuntimeOptions {
+		const snapshot = applyCrawlRuntimeOptionsPatch(this.#options, patch);
+		if (patch.parallels !== undefined) {
+			this.#dealController?.setLimit(patch.parallels);
+		}
+		return snapshot;
 	}
 
 	/**
@@ -1479,6 +1523,13 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				interval: 0,
 				verbose: this.#options.verbose || !process.stdout.isTTY,
 				signal: this.#abortController.signal,
+				// `undefined` falls back to deal() building its own Lanes off
+				// `verbose` above; a caller-supplied Lanes (e.g. the CLI's,
+				// carrying its runtime-input footer) is reused as-is instead.
+				lanes: this.#options.lanes,
+				onStart: (controller) => {
+					this.#dealController = controller;
+				},
 				header: (_progress, done, total, limit) => {
 					return formatCrawlProgress({
 						done,
@@ -1501,6 +1552,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				},
 			},
 		);
+		this.#dealController = null;
 
 		crawlerLog('Crawl End');
 		void this.emit('crawlEnd', {});
