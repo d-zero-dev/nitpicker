@@ -51,6 +51,17 @@ export interface AttachCrawlDisplayOptions {
 	logType: 'verbose' | 'normal' | 'silent';
 	/** Crawl-time errors are pushed here as they arrive. */
 	errStack: (CrawlerError | Error)[];
+	/**
+	 * Called once, synchronously, right before this function's own
+	 * `TaskList` starts rendering (`startIfNeeded`, see that function's
+	 * JSDoc). `commands/crawl.ts` uses this to dispose the crawl body's
+	 * injected `Lanes` (and the crawl console reading stdin, if any) — both
+	 * must be fully closed before this `TaskList` opens its own `Lanes` on
+	 * the same stream (the single-Lanes-instance-per-stream invariant, see
+	 * `ARCHITECTURE.md`). Omit when the crawl body never had an injected
+	 * `Lanes` to dispose (e.g. `--silent`).
+	 */
+	onBeforeStart?: () => void;
 }
 
 /** The task-list row currently accepting `ctx.progress()` updates. */
@@ -142,6 +153,7 @@ interface ActiveRow {
  * @param options.initialLog
  * @param options.logType
  * @param options.errStack
+ * @param options.onBeforeStart
  * @returns A {@link CrawlDisplayHandle}.
  * @example
  * ```ts
@@ -161,6 +173,7 @@ export function attachCrawlDisplay({
 	initialLog,
 	logType,
 	errStack,
+	onBeforeStart,
 }: AttachCrawlDisplayOptions): CrawlDisplayHandle {
 	if (logType === 'silent') {
 		return {
@@ -244,6 +257,7 @@ export function attachCrawlDisplay({
 			return;
 		}
 		bridge.started = true;
+		onBeforeStart?.();
 		pipeline.run({ stream, verbose, keepElapsed: true }).then(
 			() => bridge.resolveTaskListDone?.(),
 			(error: unknown) => bridge.rejectTaskListDone?.(error),

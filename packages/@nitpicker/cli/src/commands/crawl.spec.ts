@@ -7,7 +7,7 @@ import type {
 
 import path from 'node:path';
 
-import { TaskListStepError } from '@d-zero/dealer';
+import { Lanes, TaskListStepError } from '@d-zero/dealer';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { ExitCode } from '../exit-code.js';
@@ -64,27 +64,54 @@ vi.mock('@nitpicker/crawler', async () => {
  * @param error - The crawl-time error to simulate.
  */
 function simulateCrawlTimeError(error: CrawlerError | Error) {
-	mockAttachCrawlDisplay.mockImplementationOnce(({ errStack }) => {
+	mockAttachCrawlDisplay.mockImplementationOnce(({ errStack, onBeforeStart }) => {
 		errStack.push(error);
 		return {
 			taskListDone: Promise.resolve(),
-			finish: mockAttachCrawlDisplayFinish,
-			fail: mockAttachCrawlDisplayFail,
+			finish: () => {
+				onBeforeStart?.();
+				mockAttachCrawlDisplayFinish();
+			},
+			fail: (failError: unknown) => {
+				onBeforeStart?.();
+				mockAttachCrawlDisplayFail(failError);
+			},
 		};
 	});
 }
 
 const mockAttachCrawlDisplayFinish = vi.fn();
 const mockAttachCrawlDisplayFail = vi.fn();
-const mockAttachCrawlDisplay = vi.fn<AttachCrawlDisplayFn>(() => ({
+/**
+ * Calls the real `onBeforeStart` from `finish`/`fail`, matching the real
+ * `attachCrawlDisplay`'s contract (`startIfNeeded` always runs before the
+ * flush/sort `TaskList` starts) — without this, tests that go through the
+ * happy path never dispose the `Lanes` `prepareCrawlDisplay` constructs,
+ * leaking a `resize` listener on `process.stderr` per test
+ * (`MaxListenersExceededWarning` across this suite's ~130 tests).
+ */
+const mockAttachCrawlDisplay = vi.fn<AttachCrawlDisplayFn>(({ onBeforeStart }) => ({
 	taskListDone: Promise.resolve(),
-	finish: mockAttachCrawlDisplayFinish,
-	fail: mockAttachCrawlDisplayFail,
+	finish: () => {
+		onBeforeStart?.();
+		mockAttachCrawlDisplayFinish();
+	},
+	fail: (error: unknown) => {
+		onBeforeStart?.();
+		mockAttachCrawlDisplayFail(error);
+	},
 }));
 
 vi.mock('../crawl/attach-crawl-display.js', () => ({
 	attachCrawlDisplay: (...args: Parameters<AttachCrawlDisplayFn>) =>
 		mockAttachCrawlDisplay(...args),
+}));
+
+const mockCreateCrawlConsoleDispose = vi.fn();
+const mockCreateCrawlConsole = vi.fn(() => ({ dispose: mockCreateCrawlConsoleDispose }));
+
+vi.mock('../crawl/create-crawl-console.js', () => ({
+	createCrawlConsole: (...args: unknown[]) => mockCreateCrawlConsole(...args),
 }));
 
 const mockVerbosely = vi.fn();
@@ -143,6 +170,15 @@ vi.mock('@d-zero/dealer', async (importOriginal) => {
 		// does an `instanceof` check against it, which needs the actual class
 		// (not a mock stand-in) to behave correctly.
 		TaskListStepError: actual.TaskListStepError,
+		// Real `Lanes` — `prepareCrawlDisplay` constructs one per crawl mode
+		// (unless `--silent`) to pass through as the factory's `lanes`
+		// option. It's cheap (no browser/archive dependency) and every test
+		// path that constructs one also disposes it (`disposeCrawlDisplay`),
+		// so using the real class here — rather than a mock stand-in —
+		// keeps the SIGINT-listener-count assertions below meaningful
+		// (Display's own non-verbose SIGINT handler is exactly what those
+		// assertions need to see come and go).
+		Lanes: actual.Lanes,
 		TaskList: {
 			pipe: (name: string, fn: () => unknown) => {
 				mockTaskListPipeName(name);
@@ -1879,5 +1915,171 @@ describe('crawl exit codes', () => {
 			crawl(['https://example.com'], createFlags({ strict: true })),
 		).rejects.toThrow(ExitError);
 		expect(exitSpy).toHaveBeenCalledWith(ExitCode.Fatal);
+	});
+});
+
+describe('startCrawl: crawl console (TTY gating)', () => {
+	const originalStdinIsTTY = process.stdin.isTTY;
+	const originalStderrIsTTY = process.stderr.isTTY;
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		setupFakeOrchestrator();
+	});
+
+	afterEach(() => {
+		Object.defineProperty(process.stdin, 'isTTY', {
+			value: originalStdinIsTTY,
+			configurable: true,
+		});
+		Object.defineProperty(process.stderr, 'isTTY', {
+			value: originalStderrIsTTY,
+			configurable: true,
+		});
+	});
+
+	it('does not start the crawl console when stdin/stderr are not a TTY (the vitest default)', async () => {
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(['https://example.com'], createFlags());
+
+		expect(mockCreateCrawlConsole).not.toHaveBeenCalled();
+	});
+
+	it('does not start the crawl console under --silent, even on a TTY', async () => {
+		Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+		Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true });
+
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(['https://example.com'], createFlags({ silent: true }));
+
+		expect(mockCreateCrawlConsole).not.toHaveBeenCalled();
+	});
+
+	it('does not start the crawl console under --verbose, even on a TTY', async () => {
+		Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+		Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true });
+
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(['https://example.com'], createFlags({ verbose: true }));
+
+		expect(mockCreateCrawlConsole).not.toHaveBeenCalled();
+	});
+
+	it('starts the crawl console on a TTY in normal (non-verbose, non-silent) mode, passing the injected Lanes', async () => {
+		Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+		Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true });
+
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(['https://example.com'], createFlags());
+
+		expect(mockCreateCrawlConsole).toHaveBeenCalledTimes(1);
+		const call = mockCreateCrawlConsole.mock.calls[0]?.[0] as {
+			stdin: unknown;
+			lanes: unknown;
+			onCommand: (line: string) => Promise<string>;
+			onInterrupt: () => void;
+		};
+		expect(call.stdin).toBe(process.stdin);
+		expect(call.lanes).toBeInstanceOf(Lanes);
+		expect(call.onCommand).toBeInstanceOf(Function);
+		expect(call.onInterrupt).toBeInstanceOf(Function);
+	});
+
+	it("the console's onCommand applies a parsed patch via orchestrator.updateRuntimeOptions and formats the result", async () => {
+		Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+		Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true });
+		const fakeOrchestrator = setupFakeOrchestrator();
+		Object.assign(fakeOrchestrator, {
+			updateRuntimeOptions: vi.fn(() => ({
+				parallels: 4,
+				interval: 0,
+				excludes: [],
+				excludeUrls: [],
+				excludeKeywords: [],
+			})),
+		});
+
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(['https://example.com'], createFlags());
+
+		const onCommand = mockCreateCrawlConsole.mock.calls[0]?.[0].onCommand as (
+			line: string,
+		) => Promise<string>;
+		const result = await onCommand('parallels 4');
+
+		expect(fakeOrchestrator.updateRuntimeOptions).toHaveBeenCalledWith({ parallels: 4 });
+		expect(result).toBe('parallels: 4');
+	});
+
+	it("the console's onCommand reports a validation failure from updateRuntimeOptions instead of throwing", async () => {
+		Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+		Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true });
+		const fakeOrchestrator = setupFakeOrchestrator();
+		Object.assign(fakeOrchestrator, {
+			updateRuntimeOptions: vi.fn(() => {
+				throw new RangeError('parallels must be an integer >= 1, got 0');
+			}),
+		});
+
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(['https://example.com'], createFlags());
+
+		const onCommand = mockCreateCrawlConsole.mock.calls[0]?.[0].onCommand as (
+			line: string,
+		) => Promise<string>;
+		const result = await onCommand('parallels 0');
+
+		expect(result).toBe('✖ parallels must be an integer >= 1, got 0');
+	});
+
+	it("the console's onCommand reports a parse error without touching the orchestrator", async () => {
+		Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+		Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true });
+		const fakeOrchestrator = setupFakeOrchestrator();
+		Object.assign(fakeOrchestrator, { updateRuntimeOptions: vi.fn() });
+
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(['https://example.com'], createFlags());
+
+		const onCommand = mockCreateCrawlConsole.mock.calls[0]?.[0].onCommand as (
+			line: string,
+		) => Promise<string>;
+		const result = await onCommand('bogus');
+
+		expect(result).toBe('✖ unknown command: bogus (type "help" for a list)');
+		expect(fakeOrchestrator.updateRuntimeOptions).not.toHaveBeenCalled();
+	});
+
+	it("the console's onInterrupt disposes the console and aborts the orchestrator", async () => {
+		Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+		Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true });
+		const fakeOrchestrator = setupFakeOrchestrator();
+		Object.assign(fakeOrchestrator, { abort: vi.fn() });
+		const exitSpy = vi
+			.spyOn(process, 'exit')
+			.mockImplementation(() => undefined as never);
+
+		try {
+			const { startCrawl } = await import('./crawl.js');
+			await startCrawl(['https://example.com'], createFlags());
+
+			// `startCrawl` has already completed by this point, which — via
+			// the normal `onBeforeStart` path — already disposed the console
+			// once; calling `onInterrupt()` here disposes it again (its real
+			// implementation is idempotent, but this test's bare spy isn't,
+			// so it only proves "at least once", not an exact count).
+			const onInterrupt = mockCreateCrawlConsole.mock.calls[0]?.[0]
+				.onInterrupt as () => void;
+			onInterrupt();
+
+			expect(mockCreateCrawlConsoleDispose).toHaveBeenCalled();
+			expect(fakeOrchestrator.abort).toHaveBeenCalledTimes(1);
+			// `[Symbol.asyncDispose]` (via `await using`) already called this
+			// once on normal completion, before this manual `onInterrupt()`.
+			expect(fakeOrchestrator.garbageCollect).toHaveBeenCalled();
+			expect(exitSpy).toHaveBeenCalledTimes(1);
+		} finally {
+			exitSpy.mockRestore();
+		}
 	});
 });

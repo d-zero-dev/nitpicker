@@ -1,3 +1,46 @@
+import type { CrawlRuntimeOptionsPatch } from '@nitpicker/crawler';
+
+/**
+ * Parsed result of one line typed into the crawl console (`create-crawl-console.ts`).
+ * `'patch'` carries the `CrawlRuntimeOptionsPatch` to apply plus a `label`
+ * describing the command for `format-crawl-console-result.ts`; `'help'` and
+ * `'empty'` need no further action; `'error'` carries a user-facing message
+ * for an unrecognized command or bad argument.
+ */
+export type CrawlConsoleCommandResult =
+	| {
+			readonly kind: 'patch';
+			readonly patch: CrawlRuntimeOptionsPatch;
+			readonly label: string;
+	  }
+	| { readonly kind: 'help' }
+	| { readonly kind: 'empty' }
+	| { readonly kind: 'error'; readonly message: string };
+
+/**
+ * The subset of `process.stdin`'s interface `create-crawl-console.ts` needs.
+ * Narrowed so tests can pass a fake `EventEmitter`-backed double instead of
+ * mutating the real `process.stdin` (raw mode, encoding) during a test run.
+ */
+export interface CrawlConsoleInput {
+	readonly isTTY?: boolean;
+	setRawMode(mode: boolean): unknown;
+	setEncoding(encoding: BufferEncoding): unknown;
+	on(event: 'data', listener: (chunk: string) => void): unknown;
+	off(event: 'data', listener: (chunk: string) => void): unknown;
+	resume(): unknown;
+	pause(): unknown;
+}
+
+/** Return value of `createCrawlConsole` — the only way to release stdin/the Lanes footer. */
+export interface CrawlConsoleHandle {
+	/**
+	 * Restores stdin (raw mode off, listener removed, paused) and clears the
+	 * footer line. Idempotent.
+	 */
+	dispose(): void;
+}
+
 /**
  * CLI crawl flag names that need to be mapped to CrawlConfig properties.
  *

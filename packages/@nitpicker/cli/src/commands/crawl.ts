@@ -1,12 +1,13 @@
 import type { commandDef } from './crawl-def.js';
 import type { CrawlDisplayHandle } from '../crawl/attach-crawl-display.js';
 import type { SetupTaskListHandle } from '../crawl/create-setup-task-list.js';
+import type { CrawlConsoleHandle } from '../crawl/types.js';
 import type { InferFlags } from '@d-zero/roar';
 import type { Config, CrawlerError } from '@nitpicker/crawler';
 
 import path from 'node:path';
 
-import { TaskList, TaskListStepError } from '@d-zero/dealer';
+import { Lanes, TaskList, TaskListStepError } from '@d-zero/dealer';
 import { readList } from '@d-zero/readtext/list';
 import {
 	APPEND_SETUP_PHASES,
@@ -22,15 +23,19 @@ import {
 } from '@nitpicker/crawler';
 
 import { attachCrawlDisplay } from '../crawl/attach-crawl-display.js';
+import { createCrawlConsole } from '../crawl/create-crawl-console.js';
 import { createSetupTaskList } from '../crawl/create-setup-task-list.js';
 import { log, verbosely } from '../crawl/debug.js';
 import { diff } from '../crawl/diff.js';
+import { formatCrawlConsoleHelp } from '../crawl/format-crawl-console-help.js';
+import { formatCrawlConsoleResult } from '../crawl/format-crawl-console-result.js';
 import { formatInvalidInventoryUrlWarning } from '../crawl/format-invalid-inventory-url-warning.js';
 import { formatInvalidRecrawlUrlWarning } from '../crawl/format-invalid-recrawl-url-warning.js';
 import { formatInventorySkipSummary } from '../crawl/format-inventory-skip-summary.js';
 import { formatRecrawlSkipSummary } from '../crawl/format-recrawl-skip-summary.js';
 import { isValidUrl } from '../crawl/is-valid-url.js';
 import { mapFlagsToCrawlConfig } from '../crawl/map-flags-to-crawl-config.js';
+import { parseCrawlConsoleCommand } from '../crawl/parse-crawl-console-command.js';
 import { runPostCrawlTaskList } from '../crawl/run-post-crawl-task-list.js';
 import { ExitCode } from '../exit-code.js';
 import { formatCliError } from '../format-cli-error.js';
@@ -56,33 +61,117 @@ function deriveLogType(flags: CrawlFlags): LogType {
 }
 
 /**
- * Registers SIGINT/SIGBREAK/SIGHUP/SIGABRT handlers that abort the crawl via
- * {@link CrawlerOrchestrator.abort}, then kill zombie Chromium processes and
- * exit. Call from `initializedCallback` — the earliest point the CLI has
- * both the orchestrator instance and control before crawling actually
- * starts — and call the returned cleanup once the post-crawl task list
- * finishes. The span must cover the crawl body and the post-crawl task list
- * alike (issue #294): both can run for minutes, and `orchestrator` already
- * holds browser resources by the time this registers, so Ctrl-C anywhere in
- * that window needs `orchestrator.abort()`, not Node's default handling.
- * @param orchestrator - The initialized CrawlerOrchestrator instance.
- * @returns A cleanup function that removes the handlers. Safe to call at most once.
+ * Builds the action taken on Ctrl-C (or the equivalent OS signals): dispose
+ * the crawl body's display (console + injected `Lanes`, via
+ * {@link disposeCrawlDisplay} — restores stdin out of raw mode and releases
+ * `Lanes`' own resize/SIGINT listeners) first — so a hung `abort()`/
+ * `garbageCollect()` can't leave the terminal unusable or the last frame
+ * frozen on screen — then abort the crawl via
+ * {@link CrawlerOrchestrator.abort}, kill zombie Chromium processes, and
+ * exit. Reads `crawlLifecycle`'s fields at call time (not at build time), so
+ * the same action built once up front stays correct as those fields are
+ * filled in later — `.orchestrator` is `null` until
+ * `createCrawlInitializedCallback` fires, in which case there is nothing to
+ * abort yet and this only disposes/exits.
+ *
+ * Used two ways: registered on the OS signals by
+ * {@link registerCrawlSignalHandlers}, and passed as `createCrawlConsole`'s
+ * `onInterrupt` — raw mode intercepts the terminal's own Ctrl-C before the
+ * terminal driver can turn it into `SIGINT`, so the console needs to trigger
+ * the same action directly instead of relying on the OS signal firing.
+ * @param crawlLifecycle - The handles this crawl mode's lifecycle threads through.
+ * @returns The interrupt action.
  */
-function registerCrawlSignalHandlers(orchestrator: CrawlerOrchestrator): () => void {
-	const killed = () => {
-		orchestrator.abort();
-		orchestrator.garbageCollect();
+function createCrawlInterruptAction(crawlLifecycle: CrawlLifecycle): () => void {
+	return () => {
+		disposeCrawlDisplay(crawlLifecycle);
+		crawlLifecycle.orchestrator?.abort();
+		crawlLifecycle.orchestrator?.garbageCollect();
 		process.exit();
 	};
+}
+
+/**
+ * Registers `interruptAction` on SIGINT/SIGBREAK/SIGHUP/SIGABRT. Call this
+ * — via {@link prepareCrawlDisplay} — before constructing anything else that
+ * might register its own SIGINT handler (a `Lanes`'s `Display` does, in
+ * non-verbose mode: `process.exit(130)`) — Node fires SIGINT listeners in
+ * registration order, so registering first guarantees `interruptAction`'s
+ * `abort()`/`garbageCollect()`/console cleanup runs before any other
+ * handler's bare `process.exit()` could cut it short (issue #294 had the
+ * same ordering concern for the orchestrator-only version of this).
+ * @param interruptAction - The action to run on any of the four signals.
+ * @returns A cleanup function that removes the handlers. Safe to call at most once.
+ */
+function registerCrawlSignalHandlers(interruptAction: () => void): () => void {
 	const signals: NodeJS.Signals[] = ['SIGINT', 'SIGBREAK', 'SIGHUP', 'SIGABRT'];
 	for (const signal of signals) {
-		process.on(signal, killed);
+		process.on(signal, interruptAction);
 	}
 	return () => {
 		for (const signal of signals) {
-			process.removeListener(signal, killed);
+			process.removeListener(signal, interruptAction);
 		}
 	};
+}
+
+/**
+ * Disposes the crawl body's injected `Lanes` and crawl console (if either
+ * was created — both are `null` under `--silent`, which never creates
+ * either). Idempotent: `CrawlConsoleHandle#dispose` and `Lanes`'
+ * `Symbol.dispose` both guard against a second call themselves, so this
+ * needs no guard of its own and is safe to call from every exit path
+ * (`createOrchestratorFailingSetupOnError`'s catch, and
+ * `attachCrawlDisplay`'s `onBeforeStart`) without tracking which one already
+ * ran.
+ * @param crawlLifecycle - The handles this crawl mode's lifecycle threads through.
+ */
+function disposeCrawlDisplay(crawlLifecycle: CrawlLifecycle): void {
+	crawlLifecycle.console?.dispose();
+	crawlLifecycle.lanes?.[Symbol.dispose]();
+}
+
+/**
+ * Registers the crawl-body signal handlers and, unless `--silent`,
+ * constructs the `Lanes` instance the crawl body's `deal()` call will reuse
+ * (via `Crawler`'s `lanes` option) instead of creating its own — this is
+ * what lets `commands/crawl.ts` draw the crawl console's input line as a
+ * `Lanes` footer alongside the parallel worker lanes.
+ *
+ * Called at the very top of every crawl mode function, before
+ * `createSetupTaskList` — registering the signal handlers *before*
+ * constructing anything else that might register its own (see
+ * {@link registerCrawlSignalHandlers}) is the whole point: the setup
+ * `TaskList`'s own `Lanes` and this `Lanes` are both constructed after this
+ * call returns.
+ *
+ * `--silent` returns `undefined` without registering anything to dispose:
+ * `attachCrawlDisplay` is a no-op for `'silent'`, and `Crawler` falls back
+ * to its own non-injected `Lanes` when `options.lanes` is `undefined`
+ * (`verbose` there also gates on `!process.stdout.isTTY`, so a silent run
+ * piped to a file behaves exactly as before this feature existed) — signal
+ * handling is still needed under `--silent` (Ctrl-C must still abort
+ * cleanly), so that part always runs.
+ * @param crawlLifecycle - The handles this crawl mode's lifecycle threads through.
+ * @param logType - Verbosity level; `'silent'` skips `Lanes` creation.
+ * @returns The `Lanes` instance to pass as the factory's `lanes` option, or `undefined` under `--silent`.
+ */
+function prepareCrawlDisplay(
+	crawlLifecycle: CrawlLifecycle,
+	logType: LogType,
+): Lanes | undefined {
+	const interruptAction = createCrawlInterruptAction(crawlLifecycle);
+	crawlLifecycle.interruptAction = interruptAction;
+	crawlLifecycle.unregisterSignalHandlers = registerCrawlSignalHandlers(interruptAction);
+	if (logType === 'silent') {
+		return undefined;
+	}
+	const lanes = new Lanes({
+		stream: process.stderr,
+		verbose: logType === 'verbose' || !process.stderr.isTTY,
+	});
+	crawlLifecycle.lanes = lanes;
+	return lanes;
 }
 
 /**
@@ -136,6 +225,12 @@ async function createOrchestratorFailingSetupOnError<T>(
 		await setupTaskList?.taskListDone.catch(() => {});
 		crawlLifecycle.display?.fail(error);
 		await crawlLifecycle.display?.taskListDone.catch(() => {});
+		// Covers both a factory throw before `initializedCallback` ever ran
+		// (nothing for `crawlLifecycle.display?.fail` above to have disposed
+		// through `onBeforeStart`, since `attachCrawlDisplay` was never
+		// called at all) and after it ran (already disposed via that path —
+		// safe to call again, see `disposeCrawlDisplay`'s own JSDoc).
+		disposeCrawlDisplay(crawlLifecycle);
 		crawlLifecycle.unregisterSignalHandlers?.();
 		throw error;
 	}
@@ -144,18 +239,78 @@ async function createOrchestratorFailingSetupOnError<T>(
 /** Mutable handles threaded through one crawl mode's `initializedCallback` and cleanup. */
 interface CrawlLifecycle {
 	display: CrawlDisplayHandle | null;
+	/** The crawl console reading stdin, or `null` before it starts / under `--silent` / non-TTY. */
+	console: CrawlConsoleHandle | null;
+	/**
+	 * Built once by `prepareCrawlDisplay` and reused for both the OS signal
+	 * handlers and the crawl console's `onInterrupt` — a single definition
+	 * instead of two independently-constructed (if behaviorally identical)
+	 * closures. `null` only before `prepareCrawlDisplay` runs.
+	 */
+	interruptAction: (() => void) | null;
+	/** The `Lanes` instance passed as the factory's `lanes` option, or `null` under `--silent`. */
+	lanes: Lanes | null;
+	/** Set once `createCrawlInitializedCallback`'s callback fires — `null` until then. */
+	orchestrator: CrawlerOrchestrator | null;
 	unregisterSignalHandlers: (() => void) | null;
 }
 
 /**
- * Creates a fresh {@link CrawlLifecycle}. A plain object, not two `let`s:
- * TypeScript's narrowing otherwise treats each field as permanently `null`
- * past this point, since the only reassignment is inside
+ * Creates a fresh {@link CrawlLifecycle}. A plain object, not several
+ * `let`s: TypeScript's narrowing otherwise treats each field as permanently
+ * `null` past this point, since the only reassignment is inside
  * `initializedCallback`'s nested closure.
  * @returns An empty {@link CrawlLifecycle}.
  */
 function createCrawlLifecycle(): CrawlLifecycle {
-	return { display: null, unregisterSignalHandlers: null };
+	return {
+		display: null,
+		console: null,
+		interruptAction: null,
+		lanes: null,
+		orchestrator: null,
+		unregisterSignalHandlers: null,
+	};
+}
+
+/**
+ * Builds the crawl console's `onCommand` handler: parses one line via
+ * `parseCrawlConsoleCommand`, applies the resulting patch through
+ * `orchestrator.updateRuntimeOptions`, and formats the outcome as the
+ * status line `createCrawlConsole` shows above the input line. Every path —
+ * parse error, `updateRuntimeOptions` throwing (e.g. `parallels 0`, valid
+ * syntax but rejected range), or success — resolves to a string; none of
+ * them reject, since `createCrawlConsole` has nothing to do with a rejection
+ * (see `create-crawl-console.ts`'s `onCommand` contract).
+ * @param orchestrator - The live orchestrator to apply patches to.
+ * @returns The `onCommand` callback.
+ */
+function createCrawlConsoleCommandHandler(
+	orchestrator: CrawlerOrchestrator,
+): (line: string) => Promise<string> {
+	return (line) => {
+		const parsed = parseCrawlConsoleCommand(line);
+		switch (parsed.kind) {
+			case 'help': {
+				return Promise.resolve(formatCrawlConsoleHelp());
+			}
+			case 'empty': {
+				return Promise.resolve('');
+			}
+			case 'error': {
+				return Promise.resolve(`✖ ${parsed.message}`);
+			}
+			case 'patch': {
+				try {
+					const snapshot = orchestrator.updateRuntimeOptions(parsed.patch);
+					return Promise.resolve(formatCrawlConsoleResult(parsed.patch, snapshot));
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					return Promise.resolve(`✖ ${message}`);
+				}
+			}
+		}
+	};
 }
 
 /**
@@ -163,14 +318,16 @@ function createCrawlLifecycle(): CrawlLifecycle {
  * `CrawlerOrchestrator` factory (`crawling`/`resume`/`append`/`inventory`/
  * `recrawl`/`retryFailed`) — shared so the six modes can't drift on ordering.
  *
- * Registers the crawl-body signal handlers *before* touching `setupTaskList`
- * (issue #294: registering them only after `finish()`/`taskListDone`
- * resolved left a window — at least one microtask turn while dealer tears
- * down the setup `Lanes` — where Ctrl-C fell through to Node's default
- * handling instead of `orchestrator.abort()`, since `orchestrator` already
- * exists and may already hold browser resources). `setupTaskList` is `null`
- * for `startCrawl` (no setup phase), so `finish()`/`taskListDone` are no-ops
- * there.
+ * Signal handlers are registered earlier now, by `prepareCrawlDisplay`
+ * before the factory call (issue #294's original concern — a window where
+ * Ctrl-C fell through to Node's default handling — is what that ordering
+ * fixes; see that function's JSDoc). This callback's job is narrower: record
+ * `orchestrator` on `crawlLifecycle` (so the signal handler's interrupt
+ * action, built before `orchestrator` existed, can find it), finish the
+ * setup task list, attach the crawl-body display, and — TTY and
+ * `logType === 'normal'` only — start the crawl console reading stdin.
+ * `setupTaskList` is `null` for `startCrawl` (no setup phase), so
+ * `finish()`/`taskListDone` are no-ops there.
  * @param setupTaskList - The setup-phase task list handle, or `null` for modes with no setup phase (`startCrawl`).
  * @param crawlLifecycle - Mutable handles this callback fills in.
  * @param logType - Verbosity level passed through to `attachCrawlDisplay`.
@@ -188,7 +345,7 @@ function createCrawlInitializedCallback(
 	trigger: string | ((config: Config) => string),
 ): (orchestrator: CrawlerOrchestrator, config: Config) => Promise<void> {
 	return async (orchestrator, config) => {
-		crawlLifecycle.unregisterSignalHandlers = registerCrawlSignalHandlers(orchestrator);
+		crawlLifecycle.orchestrator = orchestrator;
 		setupTaskList?.finish();
 		await setupTaskList?.taskListDone;
 		const triggerLabel = typeof trigger === 'function' ? trigger(config) : trigger;
@@ -197,7 +354,25 @@ function createCrawlInitializedCallback(
 			initialLog: buildCrawlHeader(triggerLabel, config),
 			logType,
 			errStack,
+			onBeforeStart: () => disposeCrawlDisplay(crawlLifecycle),
 		});
+
+		if (
+			crawlLifecycle.lanes &&
+			logType === 'normal' &&
+			process.stdin.isTTY &&
+			process.stderr.isTTY
+		) {
+			crawlLifecycle.console = createCrawlConsole({
+				stdin: process.stdin,
+				lanes: crawlLifecycle.lanes,
+				onCommand: createCrawlConsoleCommandHandler(orchestrator),
+				// Set unconditionally by `prepareCrawlDisplay`, which every
+				// crawl mode calls before its factory call — and this
+				// callback only runs once that factory call is underway.
+				onInterrupt: crawlLifecycle.interruptAction!,
+			});
+		}
 	};
 }
 
@@ -300,6 +475,7 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 	const errStack: (CrawlerError | Error)[] = [];
 	const logType: LogType = deriveLogType(flags);
 	const crawlLifecycle = createCrawlLifecycle();
+	const lanes = prepareCrawlDisplay(crawlLifecycle, logType);
 
 	const isList = !!flags.list?.length;
 	await using orchestrator = await createOrchestratorFailingSetupOnError(
@@ -314,6 +490,7 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 					list: isList,
 					// --single（単一ページモード）および --list モードでは再帰クロールを無効化
 					recursive: isList || flags.single ? false : flags.recursive,
+					lanes,
 				},
 				createCrawlInitializedCallback(
 					null,
@@ -345,10 +522,14 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 	const absFilePath = path.isAbsolute(stubFilePath)
 		? stubFilePath
 		: path.resolve(process.cwd(), stubFilePath);
+	const crawlLifecycle = createCrawlLifecycle();
+	// Before `createSetupTaskList` — see `prepareCrawlDisplay`'s JSDoc for
+	// why the signal handlers must register before any `Lanes`/`Display`,
+	// including the setup task list's own.
+	const lanes = prepareCrawlDisplay(crawlLifecycle, logType);
 	const setupTaskList = flags.silent
 		? null
 		: createSetupTaskList(RESUME_SETUP_PHASES, { verbose: !!flags.verbose });
-	const crawlLifecycle = createCrawlLifecycle();
 
 	await using orchestrator = await createOrchestratorFailingSetupOnError(
 		setupTaskList,
@@ -359,6 +540,7 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 				{
 					...mapFlagsToCrawlConfig(flags),
 					list: false,
+					lanes,
 				},
 				createCrawlInitializedCallback(
 					setupTaskList,
@@ -391,10 +573,12 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
 	validateUrls(newUrls);
 	const errStack: (CrawlerError | Error)[] = [];
 	const logType: LogType = deriveLogType(flags);
+	const crawlLifecycle = createCrawlLifecycle();
+	// Before `createSetupTaskList` — see `prepareCrawlDisplay`'s JSDoc.
+	const lanes = prepareCrawlDisplay(crawlLifecycle, logType);
 	const setupTaskList = flags.silent
 		? null
 		: createSetupTaskList(APPEND_SETUP_PHASES, { verbose: !!flags.verbose });
-	const crawlLifecycle = createCrawlLifecycle();
 
 	await using orchestrator = await createOrchestratorFailingSetupOnError(
 		setupTaskList,
@@ -406,6 +590,7 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
 				{
 					...mapFlagsToCrawlConfig(flags),
 					list: false,
+					lanes,
 				},
 				createCrawlInitializedCallback(
 					setupTaskList,
@@ -473,10 +658,12 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 	const sha256 = computeFileSha256(bytes);
 	const errStack: (CrawlerError | Error)[] = [];
 	const logType: LogType = deriveLogType(flags);
+	const crawlLifecycle = createCrawlLifecycle();
+	// Before `createSetupTaskList` — see `prepareCrawlDisplay`'s JSDoc.
+	const lanes = prepareCrawlDisplay(crawlLifecycle, logType);
 	const setupTaskList = flags.silent
 		? null
 		: createSetupTaskList(INVENTORY_SETUP_PHASES, { verbose: !!flags.verbose });
-	const crawlLifecycle = createCrawlLifecycle();
 
 	await using orchestrator = await createOrchestratorFailingSetupOnError(
 		setupTaskList,
@@ -488,6 +675,7 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 				{
 					...mapFlagsToCrawlConfig(flags),
 					list: false,
+					lanes,
 				},
 				createCrawlInitializedCallback(
 					setupTaskList,
@@ -541,10 +729,12 @@ async function recrawlCrawl(archivePath: string, listFile: string, flags: CrawlF
 	const sha256 = computeFileSha256(bytes);
 	const errStack: (CrawlerError | Error)[] = [];
 	const logType: LogType = deriveLogType(flags);
+	const crawlLifecycle = createCrawlLifecycle();
+	// Before `createSetupTaskList` — see `prepareCrawlDisplay`'s JSDoc.
+	const lanes = prepareCrawlDisplay(crawlLifecycle, logType);
 	const setupTaskList = flags.silent
 		? null
 		: createSetupTaskList(RECRAWL_SETUP_PHASES, { verbose: !!flags.verbose });
-	const crawlLifecycle = createCrawlLifecycle();
 
 	await using orchestrator = await createOrchestratorFailingSetupOnError(
 		setupTaskList,
@@ -556,6 +746,7 @@ async function recrawlCrawl(archivePath: string, listFile: string, flags: CrawlF
 				{
 					...mapFlagsToCrawlConfig(flags),
 					list: false,
+					lanes,
 				},
 				createCrawlInitializedCallback(
 					setupTaskList,
@@ -588,10 +779,12 @@ async function recrawlCrawl(archivePath: string, listFile: string, flags: CrawlF
 async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
 	const errStack: (CrawlerError | Error)[] = [];
 	const logType: LogType = deriveLogType(flags);
+	const crawlLifecycle = createCrawlLifecycle();
+	// Before `createSetupTaskList` — see `prepareCrawlDisplay`'s JSDoc.
+	const lanes = prepareCrawlDisplay(crawlLifecycle, logType);
 	const setupTaskList = flags.silent
 		? null
 		: createSetupTaskList(RETRY_FAILED_SETUP_PHASES, { verbose: !!flags.verbose });
-	const crawlLifecycle = createCrawlLifecycle();
 
 	await using orchestrator = await createOrchestratorFailingSetupOnError(
 		setupTaskList,
@@ -602,6 +795,7 @@ async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
 				{
 					...mapFlagsToCrawlConfig(flags),
 					list: false,
+					lanes,
 				},
 				createCrawlInitializedCallback(
 					setupTaskList,
