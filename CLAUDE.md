@@ -13,7 +13,7 @@ Nitpicker は Web サイト全体をヘッドレスブラウザでクロール�
 ## CLI コマンド
 
 ```sh
-npx @nitpicker/cli crawl <URL> [<URL>...]              # クロールして .nitpicker 生成（複数 URL で multi-root）
+npx @nitpicker/cli crawl <URL> [<URL>...]              # クロールして .nitpicker 生成（複数 URL で multi-root、TTY実行中は parallels/exclude 等を対話入力可）
 npx @nitpicker/cli crawl <archive> --append <URL>      # 既存アーカイブに起点を追加クロール
 npx @nitpicker/cli crawl <archive> --retry-failed      # 失敗ページのみ再取得（永続失敗は自動除外）
 npx @nitpicker/cli crawl <archive> --inventory <urls.txt>  # URL リストとの突合で未発見ページを取り込み
