@@ -32,6 +32,18 @@ export interface CreateCrawlConsoleOptions {
 	 */
 	readonly lanes: Lanes;
 	/**
+	 * The stream `lanes` itself renders to (`process.stderr` in
+	 * `commands/crawl.ts`). Used only to hide/show the terminal's own
+	 * cursor — see this function's JSDoc for why.
+	 */
+	readonly stream: Pick<NodeJS.WritableStream, 'write'>;
+	/**
+	 * Status line shown above the input line before any command has been
+	 * submitted (e.g. the command list) — otherwise the console starts with
+	 * no indication of what it accepts.
+	 */
+	readonly initialStatus?: string;
+	/**
 	 * Called with the trimmed, non-empty line once Enter is pressed. The
 	 * resolved string becomes the status line shown above the input line
 	 * until the next command is submitted.
@@ -40,6 +52,11 @@ export interface CreateCrawlConsoleOptions {
 	/** Called on Ctrl-C — the caller decides what "interrupt" means (abort the crawl, same as the terminal's own SIGINT would have). */
 	readonly onInterrupt: () => void;
 }
+
+/** Hides the terminal's own text cursor (ANSI show/hide cursor sequence). */
+const HIDE_CURSOR = `${ESC}[?25l`;
+/** Restores the terminal's own text cursor (ANSI show/hide cursor sequence). */
+const SHOW_CURSOR = `${ESC}[?25h`;
 
 /**
  * Draws an always-visible input line as the crawl `Lanes`' footer and turns
@@ -61,16 +78,26 @@ export interface CreateCrawlConsoleOptions {
  * (or a fragmented stdin read — SSH/tmux — splits a sequence across `data`
  * events); `escapeTimer`/`ESCAPE_TIMEOUT_MS` resolve the ambiguity after a
  * short wait instead of guessing wrong in either direction.
+ *
+ * The drawn `▌`/`…` glyph at the end of the input line is a synthetic
+ * cursor, not the terminal's own — `Display#write()` always ends its frame
+ * with a trailing `\n`, which leaves the real cursor sitting on the blank
+ * line below whatever this function draws. Left alone, that reads as two
+ * cursors at once, so this hides the real one (`HIDE_CURSOR`) for as long as
+ * the console is active and restores it (`SHOW_CURSOR`) on `dispose()` —
+ * the synthetic glyph is the only one ever visible.
  * @param options - See {@link CreateCrawlConsoleOptions}.
  * @returns A handle to restore stdin and clear the footer. Caller must call
  *   `dispose()` on every exit path (crawl finishes, fails, or is aborted) —
- *   `stdin` is left in raw mode and paused (`resume()`d here) otherwise,
- *   which would leave the terminal in a broken state after the process exits.
+ *   `stdin` is left in raw mode and paused, and the terminal's cursor stays
+ *   hidden, otherwise.
  * @example
  * ```ts
  * const console = createCrawlConsole({
  *   stdin: process.stdin,
  *   lanes,
+ *   stream: process.stderr,
+ *   initialStatus: formatCrawlConsoleHelp(),
  *   onCommand: async (line) => {
  *     const parsed = parseCrawlConsoleCommand(line);
  *     if (parsed.kind !== 'patch') return formatCrawlConsoleHelp();
@@ -86,10 +113,10 @@ export interface CreateCrawlConsoleOptions {
 export function createCrawlConsole(
 	options: CreateCrawlConsoleOptions,
 ): CrawlConsoleHandle {
-	const { stdin, lanes, onCommand, onInterrupt } = options;
+	const { stdin, lanes, stream, onCommand, onInterrupt } = options;
 
 	let buffer = '';
-	let status = '';
+	let status = options.initialStatus ?? '';
 	let running = false;
 	let disposed = false;
 	/**
@@ -237,6 +264,12 @@ export function createCrawlConsole(
 	stdin.setRawMode(true);
 	stdin.on('data', handleData);
 	stdin.resume();
+	// Hides the terminal's own cursor so the drawn `▌`/`…` at the end of the
+	// input line is the only cursor-like glyph on screen — without this, the
+	// real cursor sits on the blank line `Display#write()` always leaves
+	// below the last rendered line (every frame ends with a trailing `\n`),
+	// which reads as a second, misplaced cursor.
+	stream.write(HIDE_CURSOR);
 	render();
 
 	return {
@@ -247,6 +280,7 @@ export function createCrawlConsole(
 			stdin.off('data', handleData);
 			stdin.setRawMode(false);
 			stdin.pause();
+			stream.write(SHOW_CURSOR);
 			lanes.clear({ footer: true });
 		},
 	};

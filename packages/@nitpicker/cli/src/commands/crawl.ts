@@ -366,6 +366,11 @@ function createCrawlInitializedCallback(
 			crawlLifecycle.console = createCrawlConsole({
 				stdin: process.stdin,
 				lanes: crawlLifecycle.lanes,
+				// Same stream `prepareCrawlDisplay` built `crawlLifecycle.lanes`
+				// against — see `createCrawlConsole`'s JSDoc for why this needs
+				// direct write access (hiding/showing the terminal's own cursor).
+				stream: process.stderr,
+				initialStatus: formatCrawlConsoleHelp(),
 				onCommand: createCrawlConsoleCommandHandler(orchestrator),
 				// Set unconditionally by `prepareCrawlDisplay`, which every
 				// crawl mode calls before its factory call — and this

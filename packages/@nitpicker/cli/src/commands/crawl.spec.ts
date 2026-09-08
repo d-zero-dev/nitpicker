@@ -1976,11 +1976,16 @@ describe('startCrawl: crawl console (TTY gating)', () => {
 		const call = mockCreateCrawlConsole.mock.calls[0]?.[0] as {
 			stdin: unknown;
 			lanes: unknown;
+			stream: unknown;
+			initialStatus: unknown;
 			onCommand: (line: string) => Promise<string>;
 			onInterrupt: () => void;
 		};
 		expect(call.stdin).toBe(process.stdin);
 		expect(call.lanes).toBeInstanceOf(Lanes);
+		expect(call.stream).toBe(process.stderr);
+		expect(typeof call.initialStatus).toBe('string');
+		expect(call.initialStatus).toContain('parallels');
 		expect(call.onCommand).toBeInstanceOf(Function);
 		expect(call.onInterrupt).toBeInstanceOf(Function);
 	});

@@ -55,23 +55,90 @@ function createFakeLanes() {
 	return { lanes, footer, clear };
 }
 
+/**
+ * Builds a minimal writable-stream double exposing only `write` as a spy —
+ * enough to assert the cursor-hide/show escapes `createCrawlConsole` sends
+ * without touching a real stream.
+ * @returns The fake stream and its `write` spy.
+ */
+function createFakeStream() {
+	const write = vi.fn();
+	const stream = { write };
+	return { stream, write };
+}
+
 describe('createCrawlConsole', () => {
 	it('puts stdin into raw mode, sets utf8 encoding, and resumes it on creation', () => {
 		const stdin = new FakeStdin();
 		const { lanes } = createFakeLanes();
+		const { stream } = createFakeStream();
 
-		createCrawlConsole({ stdin, lanes, onCommand: vi.fn(), onInterrupt: vi.fn() });
+		createCrawlConsole({
+			stdin,
+			lanes,
+			stream,
+			onCommand: vi.fn(),
+			onInterrupt: vi.fn(),
+		});
 
 		expect(stdin.rawMode).toBe(true);
 		expect(stdin.encoding).toBe('utf8');
 		expect(stdin.paused).toBe(false);
 	});
 
+	it('hides the terminal cursor on creation and restores it on dispose()', () => {
+		const stdin = new FakeStdin();
+		const { lanes } = createFakeLanes();
+		const { stream, write } = createFakeStream();
+
+		const handle = createCrawlConsole({
+			stdin,
+			lanes,
+			stream,
+			onCommand: vi.fn(),
+			onInterrupt: vi.fn(),
+		});
+
+		// `Display#write()` always ends its frame with a trailing `\n`,
+		// leaving the terminal's own cursor on the blank line below the
+		// input line — hiding it is what prevents that from reading as a
+		// second cursor next to the drawn `▌`.
+		expect(write).toHaveBeenLastCalledWith('\u001B[?25l');
+
+		handle.dispose();
+
+		expect(write).toHaveBeenLastCalledWith('\u001B[?25h');
+	});
+
+	it('shows the initialStatus option as the status line before any command runs', () => {
+		const stdin = new FakeStdin();
+		const { lanes, footer } = createFakeLanes();
+		const { stream } = createFakeStream();
+
+		createCrawlConsole({
+			stdin,
+			lanes,
+			stream,
+			initialStatus: 'commands: help | parallels <n>',
+			onCommand: vi.fn(),
+			onInterrupt: vi.fn(),
+		});
+
+		expect(footer).toHaveBeenCalledWith('commands: help | parallels <n>\n> ▌');
+	});
+
 	it('draws an empty input line immediately', () => {
 		const stdin = new FakeStdin();
 		const { lanes, footer } = createFakeLanes();
+		const { stream } = createFakeStream();
 
-		createCrawlConsole({ stdin, lanes, onCommand: vi.fn(), onInterrupt: vi.fn() });
+		createCrawlConsole({
+			stdin,
+			lanes,
+			stream,
+			onCommand: vi.fn(),
+			onInterrupt: vi.fn(),
+		});
 
 		expect(footer).toHaveBeenCalledWith('> ▌');
 	});
@@ -79,8 +146,15 @@ describe('createCrawlConsole', () => {
 	it('appends typed characters to the input line', () => {
 		const stdin = new FakeStdin();
 		const { lanes, footer } = createFakeLanes();
+		const { stream } = createFakeStream();
 
-		createCrawlConsole({ stdin, lanes, onCommand: vi.fn(), onInterrupt: vi.fn() });
+		createCrawlConsole({
+			stdin,
+			lanes,
+			stream,
+			onCommand: vi.fn(),
+			onInterrupt: vi.fn(),
+		});
 		stdin.type('parallels 4');
 
 		expect(footer).toHaveBeenLastCalledWith('> parallels 4▌');
@@ -89,10 +163,11 @@ describe('createCrawlConsole', () => {
 	it('Enter on a non-empty buffer shows a running indicator, then the resolved status once onCommand resolves', async () => {
 		const stdin = new FakeStdin();
 		const { lanes, footer } = createFakeLanes();
+		const { stream } = createFakeStream();
 		const { promise: canResolve, resolve } = Promise.withResolvers<string>();
 		const onCommand = vi.fn(() => canResolve);
 
-		createCrawlConsole({ stdin, lanes, onCommand, onInterrupt: vi.fn() });
+		createCrawlConsole({ stdin, lanes, stream, onCommand, onInterrupt: vi.fn() });
 		stdin.type('parallels 4');
 		stdin.type('\r');
 
@@ -109,9 +184,10 @@ describe('createCrawlConsole', () => {
 	it('Enter on an empty or whitespace-only buffer does not call onCommand', () => {
 		const stdin = new FakeStdin();
 		const { lanes } = createFakeLanes();
+		const { stream } = createFakeStream();
 		const onCommand = vi.fn();
 
-		createCrawlConsole({ stdin, lanes, onCommand, onInterrupt: vi.fn() });
+		createCrawlConsole({ stdin, lanes, stream, onCommand, onInterrupt: vi.fn() });
 		stdin.type('   ');
 		stdin.type('\r');
 
@@ -121,8 +197,15 @@ describe('createCrawlConsole', () => {
 	it('Backspace removes the last character', () => {
 		const stdin = new FakeStdin();
 		const { lanes, footer } = createFakeLanes();
+		const { stream } = createFakeStream();
 
-		createCrawlConsole({ stdin, lanes, onCommand: vi.fn(), onInterrupt: vi.fn() });
+		createCrawlConsole({
+			stdin,
+			lanes,
+			stream,
+			onCommand: vi.fn(),
+			onInterrupt: vi.fn(),
+		});
 		stdin.type('help');
 		stdin.type('\u007F');
 
@@ -132,8 +215,15 @@ describe('createCrawlConsole', () => {
 	it('Ctrl-U clears the buffer', () => {
 		const stdin = new FakeStdin();
 		const { lanes, footer } = createFakeLanes();
+		const { stream } = createFakeStream();
 
-		createCrawlConsole({ stdin, lanes, onCommand: vi.fn(), onInterrupt: vi.fn() });
+		createCrawlConsole({
+			stdin,
+			lanes,
+			stream,
+			onCommand: vi.fn(),
+			onInterrupt: vi.fn(),
+		});
 		stdin.type('help');
 		stdin.type('\u0015');
 
@@ -145,8 +235,15 @@ describe('createCrawlConsole', () => {
 		try {
 			const stdin = new FakeStdin();
 			const { lanes, footer } = createFakeLanes();
+			const { stream } = createFakeStream();
 
-			createCrawlConsole({ stdin, lanes, onCommand: vi.fn(), onInterrupt: vi.fn() });
+			createCrawlConsole({
+				stdin,
+				lanes,
+				stream,
+				onCommand: vi.fn(),
+				onInterrupt: vi.fn(),
+			});
 			stdin.type('help');
 			stdin.type('\u001B');
 			// Nothing distinguishes a lone Escape from the first byte of a CSI
@@ -165,8 +262,15 @@ describe('createCrawlConsole', () => {
 	it('discards an ANSI CSI sequence (arrow key) instead of injecting it into the buffer', () => {
 		const stdin = new FakeStdin();
 		const { lanes, footer } = createFakeLanes();
+		const { stream } = createFakeStream();
 
-		createCrawlConsole({ stdin, lanes, onCommand: vi.fn(), onInterrupt: vi.fn() });
+		createCrawlConsole({
+			stdin,
+			lanes,
+			stream,
+			onCommand: vi.fn(),
+			onInterrupt: vi.fn(),
+		});
 		stdin.type('ab');
 		stdin.type('\u001B[A'); // up-arrow
 		stdin.type('c');
@@ -177,8 +281,15 @@ describe('createCrawlConsole', () => {
 	it('discards an ANSI CSI sequence split across multiple data chunks (fragmented stdin read)', () => {
 		const stdin = new FakeStdin();
 		const { lanes, footer } = createFakeLanes();
+		const { stream } = createFakeStream();
 
-		createCrawlConsole({ stdin, lanes, onCommand: vi.fn(), onInterrupt: vi.fn() });
+		createCrawlConsole({
+			stdin,
+			lanes,
+			stream,
+			onCommand: vi.fn(),
+			onInterrupt: vi.fn(),
+		});
 		stdin.type('ab');
 		stdin.type('\u001B'); // ESC alone — ambiguous, must wait for more input
 		stdin.type('['); // now a CSI sequence, still no final byte
@@ -191,8 +302,15 @@ describe('createCrawlConsole', () => {
 	it('treats a buffered Escape as a real Escape once the next chunk is a plain character, not "["', () => {
 		const stdin = new FakeStdin();
 		const { lanes, footer } = createFakeLanes();
+		const { stream } = createFakeStream();
 
-		createCrawlConsole({ stdin, lanes, onCommand: vi.fn(), onInterrupt: vi.fn() });
+		createCrawlConsole({
+			stdin,
+			lanes,
+			stream,
+			onCommand: vi.fn(),
+			onInterrupt: vi.fn(),
+		});
 		stdin.type('help');
 		stdin.type('\u001B'); // ESC alone, chunk ends — ambiguous, buffered
 		stdin.type('x'); // next chunk starts with a plain character, not "["
@@ -207,8 +325,15 @@ describe('createCrawlConsole', () => {
 		try {
 			const stdin = new FakeStdin();
 			const { lanes, footer } = createFakeLanes();
+			const { stream } = createFakeStream();
 
-			createCrawlConsole({ stdin, lanes, onCommand: vi.fn(), onInterrupt: vi.fn() });
+			createCrawlConsole({
+				stdin,
+				lanes,
+				stream,
+				onCommand: vi.fn(),
+				onInterrupt: vi.fn(),
+			});
 			stdin.type('ab');
 			stdin.type('\u001B['); // start of a CSI sequence, final byte never arrives
 
@@ -225,10 +350,11 @@ describe('createCrawlConsole', () => {
 	it('Ctrl-C calls onInterrupt and does not submit the buffer', () => {
 		const stdin = new FakeStdin();
 		const { lanes } = createFakeLanes();
+		const { stream } = createFakeStream();
 		const onCommand = vi.fn();
 		const onInterrupt = vi.fn();
 
-		createCrawlConsole({ stdin, lanes, onCommand, onInterrupt });
+		createCrawlConsole({ stdin, lanes, stream, onCommand, onInterrupt });
 		stdin.type('parallels 4');
 		stdin.type('\u0003');
 
@@ -239,10 +365,12 @@ describe('createCrawlConsole', () => {
 	it('dispose() restores stdin and clears the footer', () => {
 		const stdin = new FakeStdin();
 		const { lanes, clear } = createFakeLanes();
+		const { stream } = createFakeStream();
 
 		const handle = createCrawlConsole({
 			stdin,
 			lanes,
+			stream,
 			onCommand: vi.fn(),
 			onInterrupt: vi.fn(),
 		});
@@ -256,11 +384,13 @@ describe('createCrawlConsole', () => {
 	it('dispose() detaches the data listener, so further keystrokes have no effect', () => {
 		const stdin = new FakeStdin();
 		const { lanes, footer } = createFakeLanes();
+		const { stream } = createFakeStream();
 		const onInterrupt = vi.fn();
 
 		const handle = createCrawlConsole({
 			stdin,
 			lanes,
+			stream,
 			onCommand: vi.fn(),
 			onInterrupt,
 		});
@@ -276,10 +406,12 @@ describe('createCrawlConsole', () => {
 	it('dispose() is idempotent', () => {
 		const stdin = new FakeStdin();
 		const { lanes, clear } = createFakeLanes();
+		const { stream } = createFakeStream();
 
 		const handle = createCrawlConsole({
 			stdin,
 			lanes,
+			stream,
 			onCommand: vi.fn(),
 			onInterrupt: vi.fn(),
 		});
@@ -294,10 +426,12 @@ describe('createCrawlConsole', () => {
 		try {
 			const stdin = new FakeStdin();
 			const { lanes, footer } = createFakeLanes();
+			const { stream } = createFakeStream();
 
 			const handle = createCrawlConsole({
 				stdin,
 				lanes,
+				stream,
 				onCommand: vi.fn(),
 				onInterrupt: vi.fn(),
 			});
@@ -319,10 +453,17 @@ describe('createCrawlConsole', () => {
 	it('a command resolving after dispose() does not re-render the footer', async () => {
 		const stdin = new FakeStdin();
 		const { lanes, footer, clear } = createFakeLanes();
+		const { stream } = createFakeStream();
 		const { promise: canResolve, resolve } = Promise.withResolvers<string>();
 		const onCommand = vi.fn(() => canResolve);
 
-		const handle = createCrawlConsole({ stdin, lanes, onCommand, onInterrupt: vi.fn() });
+		const handle = createCrawlConsole({
+			stdin,
+			lanes,
+			stream,
+			onCommand,
+			onInterrupt: vi.fn(),
+		});
 		stdin.type('parallels 4');
 		stdin.type('\r');
 		handle.dispose();
