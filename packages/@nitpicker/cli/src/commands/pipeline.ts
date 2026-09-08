@@ -151,6 +151,9 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			// thread it through the same way `dedupeCap` is threaded above.
 			urls: undefined,
 			sheet: flags.sheet,
+			// pipeline has no `--sheets` flag of its own yet — same rationale
+			// as `urls` above.
+			sheets: undefined,
 			credentials: flags.credentials,
 			config: flags.config,
 			all: flags.all,
