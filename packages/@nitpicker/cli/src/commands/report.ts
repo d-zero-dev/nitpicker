@@ -1,5 +1,6 @@
 import type { commandDef } from './report-def.js';
 import type { InferFlags } from '@d-zero/roar';
+import type { SheetName } from '@nitpicker/report-google-sheets';
 
 import path from 'node:path';
 
@@ -12,6 +13,7 @@ import { readUrlListFile } from '../read-url-list-file.js';
 import { verbosely } from '../report/debug.js';
 import { formatInvalidReportUrlWarning } from '../report/format-invalid-report-url-warning.js';
 import { formatReportUrlSkipSummary } from '../report/format-report-url-skip-summary.js';
+import { parseSheetNames } from '../report/parse-sheet-names.js';
 
 /** Parsed flag values for the `report` CLI command. */
 type ReportFlags = InferFlags<typeof commandDef.flags>;
@@ -38,6 +40,10 @@ type ReportFlags = InferFlags<typeof commandDef.flags>;
  * combines with `--html-dirs` (AND); for Google Sheets it also restricts
  * sheet generation to Page List/Links/Violations/Images (see
  * `@nitpicker/report-google-sheets`'s `report()` docs).
+ *
+ * `--sheets <name,...>` (Google Sheets only) generates exactly the named
+ * sheets without `--all`'s full set or the interactive picker — see
+ * `parseSheetNames` for the accepted aliases. Takes precedence over `--all`.
  * @param args - Positional arguments; first argument is the `.nitpicker` file path
  * @param flags - Parsed CLI flags from the `report` command
  * @returns Resolves when the report is complete.
@@ -99,6 +105,21 @@ export async function report(args: string[], flags: ReportFlags) {
 			process.exit(1);
 		}
 		urls = validUrls;
+	}
+
+	// Matches the --urls validation above: an operator-input error (an
+	// unrecognized sheet name/alias) reports via console.error + exit(1)
+	// rather than an uncaught rejection, same as every other CLI-input
+	// validation error in this command.
+	let sheets: SheetName[] | undefined;
+	if (flags.sheets) {
+		try {
+			sheets = parseSheetNames(flags.sheets);
+		} catch (error) {
+			// eslint-disable-next-line no-console
+			console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+			process.exit(1);
+		}
 	}
 
 	const credentialFilePath = flags.credentials;
@@ -173,6 +194,7 @@ export async function report(args: string[], flags: ReportFlags) {
 						credentialFilePath,
 						configPath: configFilePath,
 						all,
+						sheets,
 						silent: flags.silent ?? false,
 						dedupeResources: flags.dedupeResources,
 						urls,

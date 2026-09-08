@@ -22,9 +22,13 @@ vi.mock('@d-zero/dealer', () => ({
 	}),
 }));
 
-vi.mock('@nitpicker/report-google-sheets', () => ({
-	report: vi.fn(),
-}));
+vi.mock('@nitpicker/report-google-sheets', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('@nitpicker/report-google-sheets')>();
+	return {
+		...actual,
+		report: vi.fn(),
+	};
+});
 
 vi.mock('@nitpicker/report-html', () => ({
 	report: vi.fn(),
@@ -762,6 +766,62 @@ describe('report command', () => {
 					urls: ['https://example.com/docs/a'],
 				}),
 			);
+		});
+	});
+
+	describe('--sheets', () => {
+		it('resolves the comma-separated aliases and forwards them to the Sheets backend', async () => {
+			await report(['test.nitpicker'], {
+				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+				sheets: 'pages,links,resources,referrers-rel-table',
+				credentials: './credentials.json',
+				config: undefined,
+				all: undefined,
+				verbose: undefined,
+				silent: undefined,
+			});
+
+			expect(runReport).toHaveBeenCalledWith(
+				expect.objectContaining({
+					sheets: ['Page List', 'Links', 'Resources', 'Referrers Relational Table'],
+				}),
+			);
+			expect(exitSpy).not.toHaveBeenCalled();
+		});
+
+		it('passes sheets: undefined to the Sheets backend when --sheets is not given', async () => {
+			await report(['test.nitpicker'], {
+				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+				credentials: './credentials.json',
+				config: undefined,
+				all: undefined,
+				verbose: undefined,
+				silent: undefined,
+			});
+
+			expect(runReport).toHaveBeenCalledWith(
+				expect.objectContaining({ sheets: undefined }),
+			);
+		});
+
+		it('exits with error when --sheets contains an unrecognized name', async () => {
+			await expect(
+				report(['test.nitpicker'], {
+					sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+					sheets: 'pages,not-a-sheet',
+					credentials: './credentials.json',
+					config: undefined,
+					all: undefined,
+					verbose: undefined,
+					silent: undefined,
+				}),
+			).rejects.toThrow(ExitError);
+
+			expect(consoleErrorSpy).toHaveBeenCalledWith(
+				expect.stringContaining('Unknown sheet name: "not-a-sheet"'),
+			);
+			expect(exitSpy).toHaveBeenCalledWith(1);
+			expect(runReport).not.toHaveBeenCalled();
 		});
 	});
 });

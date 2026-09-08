@@ -58,6 +58,11 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Generate all sheets without interactive prompt',
 		},
+		sheets: {
+			type: 'string',
+			valueName: 'name,...',
+			desc: 'Comma-separated sheet names to generate without interactive prompt (aliases: pages/page-list, links, violations, discrepancies, resources, images, referrers-rel-table, resources-rel-table, summary). Overrides --all and the interactive picker. For Google Sheets only.',
+		},
 		dedupeResources: {
 			type: 'boolean',
 			default: true,
