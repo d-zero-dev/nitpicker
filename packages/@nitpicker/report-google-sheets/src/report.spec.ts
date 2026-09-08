@@ -1,7 +1,27 @@
+import type { CreateSheet } from './sheets/types.js';
+
 import enquirer from 'enquirer';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { report } from './report.js';
+
+/**
+ * Resolves each `CreateSheet` factory result's `name` field, in array
+ * order — lets `--sheets` tests assert exactly which sheets were selected
+ * and in what order, instead of only the array length (which can't catch a
+ * wrong sheet or a broken `SHEET_PRIORITY_ORDER` sort). Each factory's
+ * top-level object construction is synchronous and side-effect-free (real
+ * archive reads happen inside `createHeaders`/`estimateRowCount`/etc.,
+ * never called here), so a bare `{}` accessor stand-in is safe.
+ * @param createSheetList - The `createSheetList` array `report()` passed to `createSheets`.
+ * @returns The resolved sheets' `name` values, in the same order.
+ */
+async function sheetNamesOf(createSheetList: readonly CreateSheet[]): Promise<string[]> {
+	const settings = await Promise.all(
+		createSheetList.map((createSheet) => createSheet([], {} as never)),
+	);
+	return settings.map((setting) => setting.name);
+}
 
 vi.mock('@d-zero/google-auth', () => ({
 	authentication: vi.fn().mockResolvedValue({}),
@@ -243,6 +263,79 @@ describe('report', () => {
 			expect(warnUnmatchedPageListUrls).not.toHaveBeenCalled();
 			const call = vi.mocked(createSheets).mock.calls[0]?.[0];
 			expect(call?.createSheetList).toHaveLength(8);
+		});
+	});
+
+	describe('sheets', () => {
+		it('takes precedence over all=true: only the named sheets are generated', async () => {
+			const { createSheets } = await import('./sheets/create-sheets.js');
+
+			await report({
+				...baseParams,
+				all: true,
+				sheets: ['Page List', 'Links'],
+			});
+
+			const call = vi.mocked(createSheets).mock.calls[0]?.[0];
+			await expect(sheetNamesOf(call?.createSheetList ?? [])).resolves.toStrictEqual([
+				'Page List',
+				'Links',
+			]);
+		});
+
+		it('takes precedence over all=false and skips the interactive prompt entirely', async () => {
+			const promptSpy = vi.spyOn(enquirer, 'prompt');
+			const { createSheets } = await import('./sheets/create-sheets.js');
+
+			await report({
+				...baseParams,
+				all: false,
+				sheets: ['Page List'],
+			});
+
+			expect(promptSpy).not.toHaveBeenCalled();
+			const call = vi.mocked(createSheets).mock.calls[0]?.[0];
+			await expect(sheetNamesOf(call?.createSheetList ?? [])).resolves.toStrictEqual([
+				'Page List',
+			]);
+		});
+
+		it('generates Resources/Referrers Relational Table even when --urls is also given', async () => {
+			resolveAndValidatePageListUrlFilter.mockResolvedValue(['https://example.com/a']);
+			const { createSheets } = await import('./sheets/create-sheets.js');
+
+			await report({
+				...baseParams,
+				all: true,
+				urls: ['https://example.com/a'],
+				sheets: ['Page List', 'Resources', 'Referrers Relational Table'],
+			});
+
+			const call = vi.mocked(createSheets).mock.calls[0]?.[0];
+			await expect(sheetNamesOf(call?.createSheetList ?? [])).resolves.toStrictEqual([
+				'Page List',
+				'Resources',
+				'Referrers Relational Table',
+			]);
+		});
+
+		it('builds createSheetList in fixed SHEET_PRIORITY_ORDER regardless of the sheets array order', async () => {
+			const { createSheets } = await import('./sheets/create-sheets.js');
+
+			await report({
+				...baseParams,
+				all: true,
+				sheets: ['Resources', 'Page List', 'Links'],
+			});
+
+			const call = vi.mocked(createSheets).mock.calls[0]?.[0];
+			// Input order was Resources, Page List, Links — SHEET_PRIORITY_ORDER
+			// puts Page List and Links ahead of Resources regardless.
+			await expect(sheetNamesOf(call?.createSheetList ?? [])).resolves.toStrictEqual([
+				'Page List',
+				'Links',
+				'Resources',
+			]);
 		});
 	});
 });

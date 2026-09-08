@@ -30,7 +30,7 @@ import { createSheets } from './sheets/create-sheets.js';
  * tables last since their row counts (one row per edge, not per page) are
  * the most likely to explode past the Google Sheets 10M-cell limit.
  */
-const SHEET_PRIORITY_ORDER = [
+export const SHEET_PRIORITY_ORDER = [
 	'Page List',
 	'Links',
 	'Violations',
@@ -42,7 +42,7 @@ const SHEET_PRIORITY_ORDER = [
 	'Summary',
 ] as const;
 
-type SheetName = (typeof SHEET_PRIORITY_ORDER)[number];
+export type SheetName = (typeof SHEET_PRIORITY_ORDER)[number];
 
 /**
  * Sheets whose row set can be restricted to a `--urls` allowlist: each one's
@@ -113,6 +113,17 @@ export interface ReportParams {
 	 */
 	readonly urls?: readonly string[];
 	/**
+	 * Explicit sheet names to generate, bypassing both `--all` and the
+	 * interactive multiselect prompt (`--all`/interactive are the only two
+	 * selection modes exposed by the CLI otherwise, and a non-interactive
+	 * caller that wants a specific subset of sheets has no way to express
+	 * that). Takes precedence over `all` when both are set. Not validated
+	 * against `--urls`'s `URL_FILTERABLE_SHEETS` restriction — the caller is
+	 * responsible for only requesting sheets that make sense with whatever
+	 * `urls` filter it also passed.
+	 */
+	readonly sheets?: readonly SheetName[];
+	/**
 	 * Called during the archive-open untar step with bytes read so far and
 	 * the archive's total size (issue #294: a large archive's extraction can
 	 * take tens of seconds with no other signal it isn't hung). This
@@ -151,6 +162,17 @@ export interface ReportParams {
  *   sheetUrl: 'https://docs.google.com/spreadsheets/d/xxx/edit',
  *   credentialFilePath: './credentials.json',
  *   configPath: './nitpicker.config.json',
+ * });
+ * ```
+ * @example
+ * ```ts
+ * // Skip the interactive prompt and generate exactly these sheets.
+ * await report({
+ *   filePath: './output.nitpicker',
+ *   sheetUrl: 'https://docs.google.com/spreadsheets/d/xxx/edit',
+ *   credentialFilePath: './credentials.json',
+ *   configPath: null,
+ *   sheets: ['Page List', 'Links'],
  * });
  * ```
  */
@@ -217,7 +239,10 @@ export async function report(params: ReportParams) {
 
 	let selectedSheetNames: SheetName[];
 
-	if (all) {
+	if (params.sheets) {
+		log('Explicit sheets selected: %O', params.sheets);
+		selectedSheetNames = [...params.sheets];
+	} else if (all) {
 		log('All sheets selected (--all or non-TTY)');
 		selectedSheetNames = [...availableSheetNames];
 	} else {
