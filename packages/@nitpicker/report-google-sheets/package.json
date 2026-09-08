@@ -30,7 +30,7 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@d-zero/dealer": "1.13.1",
+		"@d-zero/dealer": "1.14.0",
 		"@d-zero/google-auth": "0.7.6",
 		"@d-zero/google-sheets": "0.11.0",
 		"@d-zero/shared": "0.23.0",
