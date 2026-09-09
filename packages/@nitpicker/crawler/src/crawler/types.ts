@@ -304,6 +304,22 @@ export interface CrawlRuntimeOptions {
 	readonly excludes: readonly string[];
 	readonly excludeUrls: readonly string[];
 	readonly excludeKeywords: readonly string[];
+	/**
+	 * The subset of `patch.excludes` that was actually new — i.e. not already
+	 * present in {@link excludes} before this patch, and not a duplicate of
+	 * an earlier entry in the same patch. Empty when `patch.excludes` was
+	 * omitted or every entry it carried was already present. A caller
+	 * reporting "what changed" (`format-crawl-console-result.ts`) needs this
+	 * distinct from {@link excludes} itself — the additive-only merge already
+	 * silently drops duplicates, so echoing back `patch.excludes` verbatim as
+	 * "added" would claim a no-op resubmission (e.g. the operator typing the
+	 * same `exclude` pattern twice) actually added something.
+	 */
+	readonly addedExcludes: readonly string[];
+	/** Same as {@link addedExcludes}, for `patch.excludeUrls`/{@link excludeUrls}. */
+	readonly addedExcludeUrls: readonly string[];
+	/** Same as {@link addedExcludes}, for `patch.excludeKeywords`/{@link excludeKeywords}. */
+	readonly addedExcludeKeywords: readonly string[];
 }
 
 /**

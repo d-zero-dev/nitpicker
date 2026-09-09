@@ -24,6 +24,35 @@ function mergeUnique(
 }
 
 /**
+ * The subset of `additions` not already present in `existing` — order
+ * preserved, and a duplicate within `additions` itself counted only once.
+ * Distinct from {@link mergeUnique}'s result (which is `existing` plus these
+ * entries): a caller reporting "what was newly added" needs just this part,
+ * not the merged array — see {@link CrawlRuntimeOptions.addedExcludes}'s
+ * JSDoc for why echoing `additions` itself back as "added" is wrong when
+ * every entry in it was already present.
+ * @param existing - The current array.
+ * @param additions - Entries the patch requested adding, or `undefined`.
+ * @returns The entries from `additions` that are genuinely new.
+ */
+function pickNewEntries(
+	existing: readonly string[],
+	additions: readonly string[] | undefined,
+): readonly string[] {
+	if (!additions || additions.length === 0) {
+		return [];
+	}
+	const existingSet = new Set(existing);
+	const added: string[] = [];
+	for (const entry of additions) {
+		if (!existingSet.has(entry) && !added.includes(entry)) {
+			added.push(entry);
+		}
+	}
+	return added;
+}
+
+/**
  * Validates every field of `patch` before any mutation, so a single invalid
  * field (e.g. `parallels: 0`) cannot leave `options` half-updated.
  * @param patch - The patch to validate.
@@ -33,13 +62,13 @@ function mergeUnique(
 function assertValidPatch(patch: CrawlRuntimeOptionsPatch): void {
 	if (
 		patch.parallels !== undefined &&
-		(!Number.isInteger(patch.parallels) || patch.parallels < 1)
+		(!Number.isSafeInteger(patch.parallels) || patch.parallels < 1)
 	) {
 		throw new RangeError(`parallels must be an integer >= 1, got ${patch.parallels}`);
 	}
 	if (
 		patch.interval !== undefined &&
-		(!Number.isInteger(patch.interval) || patch.interval < 0)
+		(!Number.isSafeInteger(patch.interval) || patch.interval < 0)
 	) {
 		throw new RangeError(`interval must be an integer >= 0, got ${patch.interval}`);
 	}
@@ -75,7 +104,9 @@ function assertValidPatch(patch: CrawlRuntimeOptionsPatch): void {
  * to invalidate.
  * @param options - The live options object to mutate.
  * @param patch - The runtime change to apply.
- * @returns A snapshot of `parallels`/`interval`/the three exclude arrays after applying `patch`.
+ * @returns A snapshot of `parallels`/`interval`/the three exclude arrays after
+ *   applying `patch`, plus which of `patch`'s exclude entries (if any) were
+ *   genuinely new (see {@link CrawlRuntimeOptions.addedExcludes}).
  * @throws {RangeError} If `parallels` is present and not an integer `>= 1`, or `interval` is present and not an integer `>= 0`.
  * @throws {TypeError} If any exclude entry is present and not a non-empty string.
  * @example
@@ -93,6 +124,15 @@ export function applyCrawlRuntimeOptionsPatch(
 ): CrawlRuntimeOptions {
 	assertValidPatch(patch);
 
+	// Computed before `options` is mutated below — `pickNewEntries` needs the
+	// pre-patch arrays to tell "new" from "already present".
+	const addedExcludes = pickNewEntries(options.excludes, patch.excludes);
+	const addedExcludeUrls = pickNewEntries(options.excludeUrls, patch.excludeUrls);
+	const addedExcludeKeywords = pickNewEntries(
+		options.excludeKeywords,
+		patch.excludeKeywords,
+	);
+
 	if (patch.parallels !== undefined) {
 		options.parallels = patch.parallels;
 	}
@@ -100,7 +140,7 @@ export function applyCrawlRuntimeOptionsPatch(
 		options.interval = patch.interval;
 	}
 	options.excludes = [...mergeUnique(options.excludes, patch.excludes)];
-	options.excludeUrls = mergeUnique(options.excludeUrls, patch.excludeUrls);
+	options.excludeUrls = [...mergeUnique(options.excludeUrls, patch.excludeUrls)];
 	options.excludeKeywords = [
 		...mergeUnique(options.excludeKeywords, patch.excludeKeywords),
 	];
@@ -111,5 +151,8 @@ export function applyCrawlRuntimeOptionsPatch(
 		excludes: options.excludes,
 		excludeUrls: options.excludeUrls,
 		excludeKeywords: options.excludeKeywords,
+		addedExcludes,
+		addedExcludeUrls,
+		addedExcludeKeywords,
 	};
 }

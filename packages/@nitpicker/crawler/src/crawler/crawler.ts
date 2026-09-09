@@ -518,6 +518,22 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	}
 
 	/**
+	 * The current effective concurrency: `this.#options.parallels` (at least
+	 * 1) if set, else the historical default {@link Crawler.MAX_PROCESS_LENGTH}.
+	 * A method, not a value `#runDeal` captures once per round, so a
+	 * mid-round `updateRuntimeOptions({ parallels })` is reflected
+	 * immediately wherever this is read afterwards (`#handleResult`'s
+	 * `concurrency` param, which sizes predicted-pagination batches) —
+	 * unlike the live `Dealer`'s own worker slot count, this has no reactive
+	 * setter to piggyback on.
+	 * @returns The current concurrency value.
+	 */
+	#currentConcurrency(): number {
+		return this.#options.parallels
+			? Math.max(this.#options.parallels, 1)
+			: Crawler.MAX_PROCESS_LENGTH;
+	}
+	/**
 	 * Thin instance-bound adapter over {@link drainPhaseErrors}. Flushes
 	 * `#pendingPhaseErrors` for `url` as `pageError` events. Idempotent.
 	 *
@@ -1090,6 +1106,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 *   point. Defaults to `false` — every other caller of `start()` keeps
 	 *   the pre-#350 "always reset" behaviour.
 	 */
+
 	async #runDeal(
 		initialUrls: ExURL[],
 		resumeOffset = 0,
@@ -1136,423 +1153,441 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			}
 		}
 
-		const concurrency = this.#options.parallels
-			? Math.max(this.#options.parallels, 1)
-			: Crawler.MAX_PROCESS_LENGTH;
+		const concurrency = this.#currentConcurrency();
 
-		await deal(
-			initialUrls,
-			(url, update, _index, setLineHeader, push, unshift) => {
-				const matchedScope = findScopeEntry(url, this.#scope, this.#options);
-				const isExternal = matchedScope === null;
-				const urlText = isExternal ? c.dim(url.href) : c.cyan(url.href);
-				setLineHeader(`%braille% ${urlText}: `);
-				if (matchedScope) {
-					injectScopeAuth(url, matchedScope);
-				}
-				this.#linkList.add(url);
-				this.#linkList.progress(url);
-
-				// Likely-HTML URLs jump to the front of the queue (unshift) so page
-				// crawling advances ahead of asset/document fetches; everything else
-				// is appended (push). partitionUrlsByHtml splits the batch by the
-				// URL-only heuristic. Variadic so a batch (e.g. predicted pagination)
-				// keeps its order: a single unshift(...html) preserves ascending order
-				// at the front, whereas unshifting one-by-one would reverse it.
-				const enqueue = (...newUrls: ExURL[]): Promise<void> => {
-					const [html, other] = partitionUrlsByHtml(newUrls);
-					const ops: Promise<void>[] = [];
-					if (html.length > 0) ops.push(unshift(...html));
-					if (other.length > 0) ops.push(push(...other));
-					return Promise.all(ops).then(() => {});
-				};
-
-				return async () => {
-					// Pause here, not inside `fetchDestination` or deeper, so a
-					// paused worker shows as a long-running dealer task instead
-					// of requiring any change to `@d-zero/dealer` itself — a
-					// closed gate resolves the instant `#handleOutageSuspect`'s
-					// recovery probe succeeds (see `network-gate.ts`).
-					await this.#networkGate.wait();
-
-					// Interval delay is handled here instead of by dealer because
-					// DNS-burned hosts must skip the wait entirely. Spending the
-					// per-URL interval on a host the cache already knows is dead
-					// just slows the crawl down for zero benefit — the HEAD won't
-					// be fired and `Crawler.#sendHeadRequest` will throw the
-					// preload short-circuit immediately. For all other URLs, run
-					// the same `delay()` + `%countdown(...)` log that dealer would
-					// have emitted, so the dealer display reads identically.
-					const burned = dnsBurnedHostCache.has(url.hostname.toLowerCase());
-					if (!burned && this.#options.interval && this.#options.interval > 0) {
-						await delay(this.#options.interval, (determinedInterval) => {
-							update(
-								`Waiting interval: %countdown(${determinedInterval},${_index}_interval)%ms`,
-							);
-						});
+		try {
+			await deal(
+				initialUrls,
+				(url, update, _index, setLineHeader, push, unshift) => {
+					const matchedScope = findScopeEntry(url, this.#scope, this.#options);
+					const isExternal = matchedScope === null;
+					const urlText = isExternal ? c.dim(url.href) : c.cyan(url.href);
+					setLineHeader(`%braille% ${urlText}: `);
+					if (matchedScope) {
+						injectScopeAuth(url, matchedScope);
 					}
+					this.#linkList.add(url);
+					this.#linkList.progress(url);
 
-					const log = createTimedUpdate(update, this.#options.verbose);
-
-					// `#scrapePage` 内のブラウザ HTML レンダーが成功したかをマークするフラグ。
-					// 成功時のみ #scrapePage 側で true に設定される。
-					// discard 判定後にこのフラグを見てカウントするので、launch 失敗や predicted-discard は除外される。
-					let renderedInBrowser = false;
-					const markBrowserScrape = () => {
-						renderedInBrowser = true;
+					// Likely-HTML URLs jump to the front of the queue (unshift) so page
+					// crawling advances ahead of asset/document fetches; everything else
+					// is appended (push). partitionUrlsByHtml splits the batch by the
+					// URL-only heuristic. Variadic so a batch (e.g. predicted pagination)
+					// keeps its order: a single unshift(...html) preserves ascending order
+					// at the front, whereas unshifting one-by-one would reverse it.
+					const enqueue = (...newUrls: ExURL[]): Promise<void> => {
+						const [html, other] = partitionUrlsByHtml(newUrls);
+						const ops: Promise<void>[] = [];
+						if (html.length > 0) ops.push(unshift(...html));
+						if (other.length > 0) ops.push(push(...other));
+						return Promise.all(ops).then(() => {});
 					};
-					// Set below for every internal page with a rendered HTML body
-					// (not just predicted ones — see the computation site's comment),
-					// so both `#handleResult`'s dedupe-cap observation and the `page`
-					// event's `bodyHash` payload (ultimately consumed by
-					// `update-page.ts`'s `page_meta.body_hash` write) reuse this one
-					// value instead of each hashing the same html again.
-					let precomputedBodyHash: Buffer | null = null;
 
-					try {
-						const robotsAllowed = await this.#robotsChecker.isAllowed(url);
-						if (!robotsAllowed) {
-							handleIgnoreAndSkip(url, this.#linkList, this.#scope, this.#options);
-							void this.emit('skip', {
-								url: url.href,
-								reason: 'blocked by robots.txt',
-								isExternal,
+					return async () => {
+						// Pause here, not inside `fetchDestination` or deeper, so a
+						// paused worker shows as a long-running dealer task instead
+						// of requiring any change to `@d-zero/dealer` itself — a
+						// closed gate resolves the instant `#handleOutageSuspect`'s
+						// recovery probe succeeds (see `network-gate.ts`).
+						await this.#networkGate.wait();
+
+						// Interval delay is handled here instead of by dealer because
+						// DNS-burned hosts must skip the wait entirely. Spending the
+						// per-URL interval on a host the cache already knows is dead
+						// just slows the crawl down for zero benefit — the HEAD won't
+						// be fired and `Crawler.#sendHeadRequest` will throw the
+						// preload short-circuit immediately. For all other URLs, run
+						// the same `delay()` + `%countdown(...)` log that dealer would
+						// have emitted, so the dealer display reads identically.
+						const burned = dnsBurnedHostCache.has(url.hostname.toLowerCase());
+						if (!burned && this.#options.interval && this.#options.interval > 0) {
+							await delay(this.#options.interval, (determinedInterval) => {
+								update(
+									`Waiting interval: %countdown(${determinedInterval},${_index}_interval)%ms`,
+								);
 							});
-							log(c.gray('Blocked by robots.txt'));
-							return;
 						}
 
-						const isSkip = shouldSkipUrl({
-							url,
-							excludes: this.#options.excludes,
-							excludeUrls: this.#options.excludeUrls,
-							options: this.#options,
-						});
+						const log = createTimedUpdate(update, this.#options.verbose);
 
-						if (isSkip) {
-							handleIgnoreAndSkip(url, this.#linkList, this.#scope, this.#options);
-							void this.emit('skip', { url: url.href, reason: 'excluded', isExternal });
-							log(c.gray('Skipped'));
-							return;
-						}
+						// `#scrapePage` 内のブラウザ HTML レンダーが成功したかをマークするフラグ。
+						// 成功時のみ #scrapePage 側で true に設定される。
+						// discard 判定後にこのフラグを見てカウントするので、launch 失敗や predicted-discard は除外される。
+						let renderedInBrowser = false;
+						const markBrowserScrape = () => {
+							renderedInBrowser = true;
+						};
+						// Set below for every internal page with a rendered HTML body
+						// (not just predicted ones — see the computation site's comment),
+						// so both `#handleResult`'s dedupe-cap observation and the `page`
+						// event's `bodyHash` payload (ultimately consumed by
+						// `update-page.ts`'s `page_meta.body_hash` write) reuse this one
+						// value instead of each hashing the same html again.
+						let precomputedBodyHash: Buffer | null = null;
 
-						if (!this.#options.fetchExternal && isExternal) {
-							const pageData = linkToPageData({
+						try {
+							const robotsAllowed = await this.#robotsChecker.isAllowed(url);
+							if (!robotsAllowed) {
+								handleIgnoreAndSkip(url, this.#linkList, this.#scope, this.#options);
+								void this.emit('skip', {
+									url: url.href,
+									reason: 'blocked by robots.txt',
+									isExternal,
+								});
+								log(c.gray('Blocked by robots.txt'));
+								return;
+							}
+
+							const isSkip = shouldSkipUrl({
 								url,
-								isExternal,
-								isLowerLayer: false,
+								excludes: this.#options.excludes,
+								excludeUrls: this.#options.excludeUrls,
+								options: this.#options,
 							});
-							this.#linkList.done(url, this.#scope, { page: pageData }, this.#options);
-							void this.emit('externalPage', {
-								result: pageData,
-								source: derivePageSource(
-									this.#options.inventoryMode,
-									url.withoutHashAndAuth,
-								),
-							});
-							log(c.dim('External (skip fetch)'));
-							return;
-						}
 
-						const metadataOnly = this.#linkList.isMetadataOnly(url.withoutHash);
-						const isPredicted = this.#linkList.isPredicted(url.withoutHashAndAuth);
+							if (isSkip) {
+								handleIgnoreAndSkip(url, this.#linkList, this.#scope, this.#options);
+								void this.emit('skip', { url: url.href, reason: 'excluded', isExternal });
+								log(c.gray('Skipped'));
+								return;
+							}
 
-						log('Scraping%dots%');
-						const result = await this.#scrapePage(
-							url,
-							log,
-							metadataOnly,
-							_index,
-							markBrowserScrape,
-						);
+							if (!this.#options.fetchExternal && isExternal) {
+								const pageData = linkToPageData({
+									url,
+									isExternal,
+									isLowerLayer: false,
+								});
+								this.#linkList.done(url, this.#scope, { page: pageData }, this.#options);
+								void this.emit('externalPage', {
+									result: pageData,
+									source: derivePageSource(
+										this.#options.inventoryMode,
+										url.withoutHashAndAuth,
+									),
+								});
+								log(c.dim('External (skip fetch)'));
+								return;
+							}
 
-						// Redirect convergence (#73): the destination was already
-						// rendered during this crawl, so only the redirect edge is
-						// recorded and the browser was never launched. Mark the URL
-						// done and emit `redirect` (routed to `Archive.setRedirect`,
-						// which writes the edge without touching the destination's
-						// content). This URL does not count toward pagesScraped.
-						if (result.type === 'redirect-edge') {
-							// Note: a predicted (speculative) URL that reaches here genuinely
-							// redirects (the server returned 3xx), so it is a real URL — we
-							// record its edge rather than discard it. This matches the render
-							// path, where the first predicted source to a destination renders
-							// it and is recorded as a redirect source the same way; only 404 /
-							// error predicted URLs are dropped (by `shouldDiscardPredicted`).
-							//
-							// The `source` discriminator divides this branch in two:
-							//
-							// - `'http-chain'` — the HEAD pre-flight resolved a real 3xx chain
-							//   and the destination is already rendered (`#scrapedDestinations`
-							//   claim). Every URL in `redirectPaths` is intermediate / known,
-							//   so the existing behaviour applies: `linkList.done` folds the
-							//   whole chain into the done-set so later references skip cleanly.
-							//
-							// - `'js-redirect'` — `scraper.scrapeStart` threw because
-							//   `page.goto()` returned null (`window.location.replace()` /
-							//   meta-refresh fired mid-navigation), and `redirectPaths`
-							//   carries the single JS target Chromium ended up on. That target
-							//   has NOT been rendered yet — it must enter the crawl queue, and
-							//   `linkList.done` MUST NOT fold it into the done-set (otherwise
-							//   the dealer's `seen` rejects the push and the destination is
-							//   silently lost from the archive).
-							if (result.source === 'js-redirect') {
-								const destination = result.pageData.redirectPaths.at(-1);
-								if (destination) {
-									const destinationUrl = parseUrl(destination, this.#options);
-									if (destinationUrl) {
-										// Gate 2: this direct enqueue does not go through
-										// `#handleResult`'s addUrl closure (gate 1), so it needs
-										// its own same-cluster-cap check — a JS-redirect trap
-										// that advances a parameter via `location.replace()`
-										// would otherwise keep re-entering the queue here.
-										const gateShapeKey = computeShapeKey(
-											destinationUrl.withoutHashAndAuth,
-										);
-										const isCapped =
-											this.#options.dedupeCap !== null &&
-											gateShapeKey !== null &&
-											findScopeEntry(destinationUrl, this.#scope, this.#options) !==
-												null &&
-											this.#dedupeCapTracker.isCapped(gateShapeKey);
-										if (isCapped) {
-											if (gateShapeKey) this.#recordDedupeCapRejection(gateShapeKey);
+							const metadataOnly = this.#linkList.isMetadataOnly(url.withoutHash);
+							const isPredicted = this.#linkList.isPredicted(url.withoutHashAndAuth);
+
+							log('Scraping%dots%');
+							const result = await this.#scrapePage(
+								url,
+								log,
+								metadataOnly,
+								_index,
+								markBrowserScrape,
+							);
+
+							// Redirect convergence (#73): the destination was already
+							// rendered during this crawl, so only the redirect edge is
+							// recorded and the browser was never launched. Mark the URL
+							// done and emit `redirect` (routed to `Archive.setRedirect`,
+							// which writes the edge without touching the destination's
+							// content). This URL does not count toward pagesScraped.
+							if (result.type === 'redirect-edge') {
+								// Note: a predicted (speculative) URL that reaches here genuinely
+								// redirects (the server returned 3xx), so it is a real URL — we
+								// record its edge rather than discard it. This matches the render
+								// path, where the first predicted source to a destination renders
+								// it and is recorded as a redirect source the same way; only 404 /
+								// error predicted URLs are dropped (by `shouldDiscardPredicted`).
+								//
+								// The `source` discriminator divides this branch in two:
+								//
+								// - `'http-chain'` — the HEAD pre-flight resolved a real 3xx chain
+								//   and the destination is already rendered (`#scrapedDestinations`
+								//   claim). Every URL in `redirectPaths` is intermediate / known,
+								//   so the existing behaviour applies: `linkList.done` folds the
+								//   whole chain into the done-set so later references skip cleanly.
+								//
+								// - `'js-redirect'` — `scraper.scrapeStart` threw because
+								//   `page.goto()` returned null (`window.location.replace()` /
+								//   meta-refresh fired mid-navigation), and `redirectPaths`
+								//   carries the single JS target Chromium ended up on. That target
+								//   has NOT been rendered yet — it must enter the crawl queue, and
+								//   `linkList.done` MUST NOT fold it into the done-set (otherwise
+								//   the dealer's `seen` rejects the push and the destination is
+								//   silently lost from the archive).
+								if (result.source === 'js-redirect') {
+									const destination = result.pageData.redirectPaths.at(-1);
+									if (destination) {
+										const destinationUrl = parseUrl(destination, this.#options);
+										if (destinationUrl) {
+											// Gate 2: this direct enqueue does not go through
+											// `#handleResult`'s addUrl closure (gate 1), so it needs
+											// its own same-cluster-cap check — a JS-redirect trap
+											// that advances a parameter via `location.replace()`
+											// would otherwise keep re-entering the queue here.
+											const gateShapeKey = computeShapeKey(
+												destinationUrl.withoutHashAndAuth,
+											);
+											const isCapped =
+												this.#options.dedupeCap !== null &&
+												gateShapeKey !== null &&
+												findScopeEntry(destinationUrl, this.#scope, this.#options) !==
+													null &&
+												this.#dedupeCapTracker.isCapped(gateShapeKey);
+											if (isCapped) {
+												if (gateShapeKey) this.#recordDedupeCapRejection(gateShapeKey);
+											} else {
+												this.#linkList.add(destinationUrl);
+												void enqueue(destinationUrl);
+											}
 										} else {
-											this.#linkList.add(destinationUrl);
-											void enqueue(destinationUrl);
+											// `deriveJsRedirectTarget` already canonicalises
+											// via WHATWG URL parsing, so reaching the
+											// `parseUrl === null` branch here would mean
+											// `@d-zero/shared/parse-url` rejected what
+											// WHATWG accepted — unexpected, and silently
+											// dropping the destination would be a silent
+											// archive loss. Log it so DEBUG=Nitpicker:Crawler
+											// catches the case.
+											crawlerLog(
+												'JS-redirect destination %s failed to parse — dropping enqueue',
+												destination,
+											);
 										}
 									} else {
-										// `deriveJsRedirectTarget` already canonicalises
-										// via WHATWG URL parsing, so reaching the
-										// `parseUrl === null` branch here would mean
-										// `@d-zero/shared/parse-url` rejected what
-										// WHATWG accepted — unexpected, and silently
-										// dropping the destination would be a silent
-										// archive loss. Log it so DEBUG=Nitpicker:Crawler
-										// catches the case.
 										crawlerLog(
-											'JS-redirect destination %s failed to parse — dropping enqueue',
-											destination,
+											'JS-redirect result for %s had no redirectPaths destination — dropping enqueue',
+											url.href,
 										);
 									}
+									this.#linkList.done(
+										url,
+										this.#scope,
+										{ page: result.pageData },
+										this.#options,
+										{ includeRedirectPaths: false },
+									);
 								} else {
-									crawlerLog(
-										'JS-redirect result for %s had no redirectPaths destination — dropping enqueue',
-										url.href,
+									this.#linkList.done(
+										url,
+										this.#scope,
+										{ page: result.pageData },
+										this.#options,
 									);
 								}
-								this.#linkList.done(
-									url,
-									this.#scope,
-									{ page: result.pageData },
-									this.#options,
-									{ includeRedirectPaths: false },
+								// The redirect-edge call path may INSERT a brand-new
+								// destination row (js-redirect rescue, #73
+								// convergence on first sight). Forward the
+								// originating page's inventory provenance so the
+								// destination + intermediate hops inherit the
+								// chain's lineage instead of laundering to DB
+								// DEFAULT `'crawled'`. `inventoryMode === null`
+								// (resume / retry-failed) yields `undefined`,
+								// which is correct: the DB-side lookup in
+								// `#linkRedirectSources` reads the destination's
+								// stored source for those sessions.
+								void this.emit(
+									'redirect',
+									buildRedirectEvent(
+										result.pageData,
+										this.#options.inventoryMode,
+										url.withoutHashAndAuth,
+									),
 								);
-							} else {
-								this.#linkList.done(
-									url,
-									this.#scope,
-									{ page: result.pageData },
-									this.#options,
-								);
+								log(c.dim('Redirect (dest already scraped)'));
+								return;
 							}
-							// The redirect-edge call path may INSERT a brand-new
-							// destination row (js-redirect rescue, #73
-							// convergence on first sight). Forward the
-							// originating page's inventory provenance so the
-							// destination + intermediate hops inherit the
-							// chain's lineage instead of laundering to DB
-							// DEFAULT `'crawled'`. `inventoryMode === null`
-							// (resume / retry-failed) yields `undefined`,
-							// which is correct: the DB-side lookup in
-							// `#linkRedirectSources` reads the destination's
-							// stored source for those sessions.
-							void this.emit(
-								'redirect',
-								buildRedirectEvent(
-									result.pageData,
-									this.#options.inventoryMode,
-									url.withoutHashAndAuth,
-								),
-							);
-							log(c.dim('Redirect (dest already scraped)'));
-							return;
-						}
 
-						// Discard predicted URLs that failed (404, error, etc.)
-						if (isPredicted && shouldDiscardPredicted(result)) {
-							handleIgnoreAndSkip(url, this.#linkList, this.#scope, this.#options);
-							log(c.dim('Predicted (discarded)'));
-							return;
-						}
+							// Discard predicted URLs that failed (404, error, etc.)
+							if (isPredicted && shouldDiscardPredicted(result)) {
+								handleIgnoreAndSkip(url, this.#linkList, this.#scope, this.#options);
+								log(c.dim('Predicted (discarded)'));
+								return;
+							}
 
-						// Compute this page's body hash once, up front, for every
-						// internal page with a rendered HTML body — not just predicted
-						// ones. This condition intentionally mirrors `update-page.ts`'s
-						// `writeHtml && page.html.length > 0` write gate (internal pages
-						// are exactly the ones `setPage` — as opposed to
-						// `setExternalPage` — writes a body through), so the value
-						// computed here can be forwarded through the `page` event all
-						// the way to that write and reused there instead of hashing the
-						// same html a second time.
-						if (
-							result.type === 'success' &&
-							result.pageData &&
-							!result.pageData.isExternal &&
-							result.pageData.html.length > 0
-						) {
-							precomputedBodyHash = computeBodyHash(result.pageData.html);
+							// Compute this page's body hash once, up front, for every
+							// internal page with a rendered HTML body — not just predicted
+							// ones. This condition intentionally mirrors `update-page.ts`'s
+							// `writeHtml && page.html.length > 0` write gate (internal pages
+							// are exactly the ones `setPage` — as opposed to
+							// `setExternalPage` — writes a body through), so the value
+							// computed here can be forwarded through the `page` event all
+							// the way to that write and reused there instead of hashing the
+							// same html a second time.
+							if (
+								result.type === 'success' &&
+								result.pageData &&
+								!result.pageData.isExternal &&
+								result.pageData.html.length > 0
+							) {
+								precomputedBodyHash = computeBodyHash(result.pageData.html);
 
-							// Discard a predicted URL whose rendered body is a
-							// byte-for-byte duplicate of the previous predicted page of
-							// the same shape, and stop generating further predictions for
-							// that shape (checked above, in the pagination-pattern
-							// branch). This is the always-on backstop against a site
-							// that returns 2xx for any extrapolated token but ignores it
-							// entirely (e.g. always serving the same "no results"
-							// template) — `shouldDiscardPredicted` alone cannot see
-							// this, since it only inspects HTTP status.
-							if (isPredicted) {
-								const shapeKey = computeShapeKey(url.withoutHashAndAuth);
-								if (shapeKey) {
-									const lastBodyHash =
-										this.#predictedShapeBodyHashes.get(shapeKey) ?? null;
-									if (isPredictedContentDuplicate(precomputedBodyHash, lastBodyHash)) {
-										this.#predictedShapeStopped.add(shapeKey);
-										handleIgnoreAndSkip(url, this.#linkList, this.#scope, this.#options);
-										log(c.dim('Predicted (content duplicate, discarded)'));
-										return;
+								// Discard a predicted URL whose rendered body is a
+								// byte-for-byte duplicate of the previous predicted page of
+								// the same shape, and stop generating further predictions for
+								// that shape (checked above, in the pagination-pattern
+								// branch). This is the always-on backstop against a site
+								// that returns 2xx for any extrapolated token but ignores it
+								// entirely (e.g. always serving the same "no results"
+								// template) — `shouldDiscardPredicted` alone cannot see
+								// this, since it only inspects HTTP status.
+								if (isPredicted) {
+									const shapeKey = computeShapeKey(url.withoutHashAndAuth);
+									if (shapeKey) {
+										const lastBodyHash =
+											this.#predictedShapeBodyHashes.get(shapeKey) ?? null;
+										if (isPredictedContentDuplicate(precomputedBodyHash, lastBodyHash)) {
+											this.#predictedShapeStopped.add(shapeKey);
+											handleIgnoreAndSkip(
+												url,
+												this.#linkList,
+												this.#scope,
+												this.#options,
+											);
+											log(c.dim('Predicted (content duplicate, discarded)'));
+											return;
+										}
+										this.#predictedShapeBodyHashes.set(shapeKey, precomputedBodyHash);
 									}
-									this.#predictedShapeBodyHashes.set(shapeKey, precomputedBodyHash);
 								}
 							}
-						}
 
-						// Count only after discard check: rendered HTML pages that
-						// will be persisted to the archive. Launch failures bypass
-						// this point via the catch block; discarded predicted URLs
-						// return above without reaching here.
-						if (renderedInBrowser) {
-							pagesScraped++;
-						}
+							// Count only after discard check: rendered HTML pages that
+							// will be persisted to the archive. Launch failures bypass
+							// this point via the catch block; discarded predicted URLs
+							// return above without reaching here.
+							if (renderedInBrowser) {
+								pagesScraped++;
+							}
 
-						log('Saving results%dots%');
-						this.#handleResult(result, url, enqueue, concurrency, precomputedBodyHash);
-						// Skip sub-resources / console logs for a result that turned out
-						// external — NOT the same as this worker's own `isExternal`
-						// (computed from `url` before navigation). Beholder decides
-						// `isExternal: false` before navigating and only flips it to
-						// `true` after seeing the destination's hostname, so a
-						// same-host source that redirects cross-host still has its
-						// request/response/console listeners attached under the
-						// pre-navigation `isExternal: false` for the whole trip. Those
-						// listeners keep capturing the destination's sub-resources and
-						// console output even after the flip, so without this guard a
-						// cross-host redirect leaks the OFF-SCOPE destination's data
-						// into this archive: its console output would be recorded as
-						// this page's quality signal, and its resources would leave a
-						// `resource_ref_edges` row on the (now content-less) redirect
-						// SOURCE — `linkRedirectSources` deletes that source's
-						// `anchor_edges` / `image_items` but not `resource_ref_edges`.
-						// A genuinely external URL never reaches this branch with
-						// non-empty `resources` / `consoleLogs` in the first place —
-						// beholder never attaches these listeners for one, per the
-						// `isExternal` gate in `#fetchData` — so this guard is a no-op
-						// outside the cross-host-redirect case. See
-						// `resolveResultWentOffHost`'s JSDoc for how it answers this for
-						// a `type: 'error'` result, which has no `pageData` to read.
-						if (!resolveResultWentOffHost(result, url)) {
-							const parentSource = await this.#resolveParentSource(url);
-							this.#handleResources(result.resources, parentSource);
-							this.#handleConsoleLogs(
-								result.consoleLogs,
+							log('Saving results%dots%');
+							this.#handleResult(
+								result,
 								url,
-								result.pageData?.redirectPaths ?? [],
+								enqueue,
+								this.#currentConcurrency(),
+								precomputedBodyHash,
 							);
-						}
-						log(formatResultSummary(result));
+							// Skip sub-resources / console logs for a result that turned out
+							// external — NOT the same as this worker's own `isExternal`
+							// (computed from `url` before navigation). Beholder decides
+							// `isExternal: false` before navigating and only flips it to
+							// `true` after seeing the destination's hostname, so a
+							// same-host source that redirects cross-host still has its
+							// request/response/console listeners attached under the
+							// pre-navigation `isExternal: false` for the whole trip. Those
+							// listeners keep capturing the destination's sub-resources and
+							// console output even after the flip, so without this guard a
+							// cross-host redirect leaks the OFF-SCOPE destination's data
+							// into this archive: its console output would be recorded as
+							// this page's quality signal, and its resources would leave a
+							// `resource_ref_edges` row on the (now content-less) redirect
+							// SOURCE — `linkRedirectSources` deletes that source's
+							// `anchor_edges` / `image_items` but not `resource_ref_edges`.
+							// A genuinely external URL never reaches this branch with
+							// non-empty `resources` / `consoleLogs` in the first place —
+							// beholder never attaches these listeners for one, per the
+							// `isExternal` gate in `#fetchData` — so this guard is a no-op
+							// outside the cross-host-redirect case. See
+							// `resolveResultWentOffHost`'s JSDoc for how it answers this for
+							// a `type: 'error'` result, which has no `pageData` to read.
+							if (!resolveResultWentOffHost(result, url)) {
+								const parentSource = await this.#resolveParentSource(url);
+								this.#handleResources(result.resources, parentSource);
+								this.#handleConsoleLogs(
+									result.consoleLogs,
+									url,
+									result.pageData?.redirectPaths ?? [],
+								);
+							}
+							log(formatResultSummary(result));
 
-						// Phase errors must be emitted AFTER 'page' / 'externalPage'
-						// so the orchestrator's WriteQueue sees `setPage` before
-						// `insertPageError` and the URL→pageId resolution succeeds.
-						this.#drainPhaseErrors(url, isExternal);
-					} catch (error) {
-						crawlerLog('Worker error for %s: %O', url.href, error);
-						log(c.red('Error'));
-						const workerError = error instanceof Error ? error : new Error(String(error));
-						handleScrapeError(
-							{
-								url,
-								error: workerError,
-								shutdown: false,
+							// Phase errors must be emitted AFTER 'page' / 'externalPage'
+							// so the orchestrator's WriteQueue sees `setPage` before
+							// `insertPageError` and the URL→pageId resolution succeeds.
+							this.#drainPhaseErrors(url, isExternal);
+						} catch (error) {
+							crawlerLog('Worker error for %s: %O', url.href, error);
+							log(c.red('Error'));
+							const workerError =
+								error instanceof Error ? error : new Error(String(error));
+							handleScrapeError(
+								{
+									url,
+									error: workerError,
+									shutdown: false,
+									pid: process.pid,
+								},
+								this.#linkList,
+								this.#scope,
+								this.#options,
+							);
+							void this.emit('error', {
 								pid: process.pid,
-							},
-							this.#linkList,
-							this.#scope,
-							this.#options,
-						);
-						void this.emit('error', {
-							pid: process.pid,
-							isMainProcess: true,
-							url: url.href,
-							isExternal,
-							error: workerError,
-						});
-						// Hard-error path: persist whatever phase errors we have
-						// already buffered so they are not lost.
-						this.#drainPhaseErrors(url, isExternal);
-					} finally {
-						if (isExternal) {
-							externalDoneUrls.add(protocolAgnosticKey(url.withoutHashAndAuth));
+								isMainProcess: true,
+								url: url.href,
+								isExternal,
+								error: workerError,
+							});
+							// Hard-error path: persist whatever phase errors we have
+							// already buffered so they are not lost.
+							this.#drainPhaseErrors(url, isExternal);
+						} finally {
+							if (isExternal) {
+								externalDoneUrls.add(protocolAgnosticKey(url.withoutHashAndAuth));
+							}
+							// Phase errors still in the buffer here were not drained
+							// by the success or catch paths — typically because a
+							// predicted URL was discarded before reaching the drain
+							// point. The helper logs the drop (observable via
+							// DEBUG=Nitpicker:Crawler) and removes the entry so the
+							// Map cannot leak across crawls.
+							logUndrainedPhaseErrors(this.#pendingPhaseErrors, url.href, crawlerLog);
 						}
-						// Phase errors still in the buffer here were not drained
-						// by the success or catch paths — typically because a
-						// predicted URL was discarded before reaching the drain
-						// point. The helper logs the drop (observable via
-						// DEBUG=Nitpicker:Crawler) and removes the entry so the
-						// Map cannot leak across crawls.
-						logUndrainedPhaseErrors(this.#pendingPhaseErrors, url.href, crawlerLog);
-					}
-				};
-			},
-			{
-				limit: concurrency,
-				// Interval is applied per-URL inside the worker callback above so
-				// DNS-burned hosts can skip it. Letting dealer handle interval
-				// would run the wait before our short-circuit check fires.
-				interval: 0,
-				verbose: this.#options.verbose || !process.stdout.isTTY,
-				signal: this.#abortController.signal,
-				// `undefined` falls back to deal() building its own Lanes off
-				// `verbose` above; a caller-supplied Lanes (e.g. the CLI's,
-				// carrying its runtime-input footer) is reused as-is instead.
-				lanes: this.#options.lanes,
-				onStart: (controller) => {
-					this.#dealController = controller;
+					};
 				},
-				header: (_progress, done, total, limit) => {
-					return formatCrawlProgress({
-						done,
-						total,
-						resumeOffset,
-						externalTotal: externalUrls.size,
-						externalDone: externalDoneUrls.size,
-						pagesScraped,
-						limit,
-					});
+				{
+					limit: concurrency,
+					// Interval is applied per-URL inside the worker callback above so
+					// DNS-burned hosts can skip it. Letting dealer handle interval
+					// would run the wait before our short-circuit check fires.
+					interval: 0,
+					verbose: this.#options.verbose || !process.stdout.isTTY,
+					signal: this.#abortController.signal,
+					// `undefined` falls back to deal() building its own Lanes off
+					// `verbose` above; a caller-supplied Lanes (e.g. the CLI's,
+					// carrying its runtime-input footer) is reused as-is instead.
+					lanes: this.#options.lanes,
+					onStart: (controller) => {
+						this.#dealController = controller;
+					},
+					header: (_progress, done, total, limit) => {
+						return formatCrawlProgress({
+							done,
+							total,
+							resumeOffset,
+							externalTotal: externalUrls.size,
+							externalDone: externalDoneUrls.size,
+							pagesScraped,
+							limit,
+						});
+					},
+					onPush: (url) => {
+						const key = protocolAgnosticKey(url.withoutHashAndAuth);
+						if (seen.has(key)) return false;
+						seen.add(key);
+						if (findScopeEntry(url, this.#scope, this.#options) === null) {
+							externalUrls.add(key);
+						}
+						return true;
+					},
 				},
-				onPush: (url) => {
-					const key = protocolAgnosticKey(url.withoutHashAndAuth);
-					if (seen.has(key)) return false;
-					seen.add(key);
-					if (findScopeEntry(url, this.#scope, this.#options) === null) {
-						externalUrls.add(key);
-					}
-					return true;
-				},
-			},
-		);
-		this.#dealController = null;
+			);
+		} finally {
+			// Reset even when `deal()` rejects (propagating out of this method
+			// to `start()`/`resume()`'s `.catch()`) — leaving a stale
+			// controller pointed at a dead round would let a later
+			// `updateRuntimeOptions({ parallels })` call `setLimit()` on a
+			// `Dealer` instance that has already finished.
+			this.#dealController = null;
+		}
 
 		crawlerLog('Crawl End');
 		void this.emit('crawlEnd', {});

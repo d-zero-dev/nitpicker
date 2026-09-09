@@ -3738,6 +3738,61 @@ describe('CrawlerOrchestrator.updateRuntimeOptions', () => {
 		});
 	});
 
+	it('rejects an invalid patch synchronously, before touching the write queue', async () => {
+		// The real validation (`assertValidPatch` inside
+		// `applyCrawlRuntimeOptionsPatch`) lives in `Crawler`, which this
+		// file's `FakeCrawler` deliberately bypasses (see its
+		// `updateRuntimeOptions`'s own JSDoc) — so this test overrides just
+		// this one call to throw, the same shape a real invalid patch would,
+		// to prove `CrawlerOrchestrator#updateRuntimeOptions` propagates it
+		// without ever reaching the write queue.
+		const updateConfig = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig,
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-update-runtime-options-invalid',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-update-runtime-options-invalid-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			vi.spyOn(crawler, 'updateRuntimeOptions').mockImplementation(() => {
+				throw new RangeError('parallels must be an integer >= 1, got 0');
+			});
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const orchestrator = await CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-update-runtime-options-invalid-test.nitpicker',
+			},
+			(o) => {
+				o.on('error', () => {});
+			},
+		);
+
+		expect(() => orchestrator.updateRuntimeOptions({ parallels: 0 })).toThrow(RangeError);
+
+		// Give any wrongly-enqueued write a chance to run before asserting
+		// it never did.
+		await Promise.resolve();
+		expect(updateConfig).not.toHaveBeenCalled();
+	});
+
 	it('orders the persisted write behind an in-flight page write on the same write queue', async () => {
 		// `Archive#updateConfig` itself bypasses `WriteQueue` (it talks to
 		// knex directly), but `CrawlerOrchestrator#updateRuntimeOptions`
@@ -3807,6 +3862,70 @@ describe('CrawlerOrchestrator.updateRuntimeOptions', () => {
 		});
 
 		expect(callOrder).toEqual(['setPage', 'updateConfig']);
+	});
+
+	it('does not abort the crawl or emit a fatal error when the persisted write itself fails', async () => {
+		// A real `Database`/`Archive` calls back into the constructor's
+		// `'error'` listener synchronously as part of the same rejection
+		// (`emitErrorAndRetry`) — this fake reproduces that by invoking the
+		// captured handler itself before rejecting.
+		let errorHandler: ((e: unknown) => void) | undefined;
+		const updateConfig = vi.fn(() => {
+			const error = new Error('SQLITE_BUSY');
+			errorHandler?.(error);
+			return Promise.reject(error);
+		});
+		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig,
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-update-runtime-options-nonfatal',
+			on: vi.fn((event: string, handler: (e: unknown) => void) => {
+				if (event === 'error') errorHandler = handler;
+			}),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-update-runtime-options-nonfatal-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		let capturedSignal: AbortSignal | undefined;
+		fakeCrawlerDriver = (crawler) => {
+			capturedSignal = (crawler as unknown as { signal: AbortSignal }).signal;
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const orchestratorErrors: unknown[] = [];
+		const orchestrator = await CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-update-runtime-options-nonfatal-test.nitpicker',
+			},
+			(o) => {
+				o.on('error', (e) => orchestratorErrors.push(e));
+			},
+		);
+
+		orchestrator.updateRuntimeOptions({ parallels: 4 });
+
+		await vi.waitFor(() => {
+			expect(updateConfig).toHaveBeenCalled();
+		});
+
+		// A real page/resource write failure aborts the crawler and emits
+		// `'error'` (see the sibling describe block's other tests) — this
+		// one, from an optional persistence write, must do neither.
+		expect(capturedSignal?.aborted).toBe(false);
+		expect(orchestratorErrors).toEqual([]);
 	});
 });
 

@@ -268,7 +268,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * crawl.
 	 */
 	readonly #dedupeCapEventIds = new Map<string, number>();
-
 	/** Whether the crawl was started from a pre-defined URL list (non-recursive mode). */
 	readonly #fromList: boolean;
 	/**
@@ -294,6 +293,27 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	#openNetworkOutageId: number | null = null;
 	/** `startedAt` of the currently-open outage, tracked alongside {@link #openNetworkOutageId} so `networkOutageRecovered` can compute a duration for {@link networkOutageSummaryCounter}. */
 	#openNetworkOutageStartedAt: number | null = null;
+	/**
+	 * Set for the duration of {@link updateRuntimeOptions}'s enqueued
+	 * `archive.updateConfig()` call — the constructor's `Archive` `'error'`
+	 * listener checks this to skip its normal fatal handling (setting
+	 * {@link #archiveFailure}, aborting the crawler, emitting `'error'`) for
+	 * that one write. A failure there means only that the new
+	 * `parallels`/`interval`/exclude values won't survive a later
+	 * `--resume`/`--append`/`--retry-failed` — the in-memory change already
+	 * took effect (`Crawler#updateRuntimeOptions` runs synchronously, before
+	 * this write is even enqueued) and the crawl itself is otherwise
+	 * unaffected, so treating it as crawl-fatal (like a real page/resource
+	 * write failure, which DOES indicate DB corruption) would let a
+	 * transient DB conflict on an optional persistence write cut short a
+	 * multi-hour crawl over nothing worse than "an exclude pattern won't be
+	 * remembered on resume." Safe without additional locking: every write
+	 * this class issues — this one included — is serialized through the same
+	 * {@link #writeQueue}, so at most one write (and therefore at most one
+	 * meaning for this flag) is ever in flight at a time.
+	 */
+	#persistingRuntimeOptionsPatch = false;
+
 	/**
 	 * Mirrors `CrawlerOptions.verbose` (forwarded to `Crawler` at
 	 * construction). `#crawlUntilPendingClears`'s auto-retry wait reads this
@@ -328,7 +348,16 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		this.#maxAutoRetry = options?.maxAutoRetry ?? 3;
 		this.#archive = archive;
 		this.#archive.on('error', (e) => {
-			this.#archiveFailure = e instanceof Error ? e : new Error(String(e));
+			const error = e instanceof Error ? e : new Error(String(e));
+			if (this.#persistingRuntimeOptionsPatch) {
+				// See `#persistingRuntimeOptionsPatch`'s JSDoc for why this one
+				// write's failure does not escalate to `#archiveFailure`/abort/
+				// `'error'` — only debug-logged (`DEBUG=Nitpicker:*`), matching
+				// this class's other best-effort-write logging.
+				log('updateRuntimeOptions: archive.updateConfig failed (non-fatal): %O', error);
+				return;
+			}
+			this.#archiveFailure = error;
 			this.#crawler.abort();
 			void this.emit('error', {
 				pid: process.pid,
@@ -820,11 +849,11 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * is ordered relative to the crawl's own page/resource writes — but not
 	 * awaited: this method is synchronous so a caller (e.g. the CLI reading
 	 * a console command) can report the new value back without waiting on
-	 * disk I/O. A failure in that write is not swallowed silently: it
-	 * surfaces through the same path every other write-queue failure does —
-	 * `Database`'s `emitErrorAndRetry` re-emits `'error'` on `Archive`,
-	 * which the constructor already forwards into `#archiveFailure` +
-	 * `this.emit('error', ...)` + `this.#crawler.abort()`.
+	 * disk I/O. A failure in that write does NOT abort the crawl or set
+	 * {@link #archiveFailure} — see {@link #persistingRuntimeOptionsPatch}'s
+	 * JSDoc for why this one write is deliberately exempted from the fatal
+	 * handling every other archive write gets; it is only debug-logged
+	 * (`DEBUG=Nitpicker:*`).
 	 * @param patch - The runtime change to apply.
 	 * @returns A snapshot of the tunable options after applying `patch`.
 	 * @throws {RangeError} If `parallels` is present and not an integer `>= 1`, or `interval` is present and not an integer `>= 0`.
@@ -837,19 +866,25 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 */
 	updateRuntimeOptions(patch: CrawlRuntimeOptionsPatch): CrawlRuntimeOptions {
 		const snapshot = this.#crawler.updateRuntimeOptions(patch);
-		// See this method's JSDoc for why an empty catch is safe here: the
-		// underlying failure still reaches the caller via the Archive
-		// `'error'` event this class already listens for.
 		this.#writeQueue
-			.enqueue(() =>
-				this.#archive.updateConfig({
-					parallels: snapshot.parallels,
-					interval: snapshot.interval,
-					excludes: [...snapshot.excludes],
-					excludeUrls: [...snapshot.excludeUrls],
-					excludeKeywords: [...snapshot.excludeKeywords],
-				}),
-			)
+			.enqueue(async () => {
+				this.#persistingRuntimeOptionsPatch = true;
+				try {
+					await this.#archive.updateConfig({
+						parallels: snapshot.parallels,
+						interval: snapshot.interval,
+						excludes: [...snapshot.excludes],
+						excludeUrls: [...snapshot.excludeUrls],
+						excludeKeywords: [...snapshot.excludeKeywords],
+					});
+				} finally {
+					this.#persistingRuntimeOptionsPatch = false;
+				}
+			})
+			// The `Archive` `'error'` listener above already logs a failure
+			// here (non-fatal, see `#persistingRuntimeOptionsPatch`) — this
+			// catch exists only to prevent an unhandled rejection from this
+			// fire-and-forget enqueue.
 			.catch(() => {});
 		return snapshot;
 	}
