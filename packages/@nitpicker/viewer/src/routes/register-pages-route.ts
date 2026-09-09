@@ -81,6 +81,7 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 				hasHSTS: toMultiValue(c.req.queries('hasHSTS'), toBoolean),
 				isDedupeCapped: toMultiValue(c.req.queries('isDedupeCapped'), toBoolean),
 				dedupeCapEventId: toNumber(q.dedupeCapEventId),
+				isRedirectSource: toMultiValue(c.req.queries('isRedirectSource'), toBoolean),
 				source: toPageSource(q.source),
 				templateKey: c.req.queries('templateKey'),
 				directory: q.directory || undefined,
