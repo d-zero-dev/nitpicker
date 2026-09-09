@@ -4,16 +4,11 @@ import { formatCrawlConsoleHelp } from './format-crawl-console-help.js';
 
 describe('formatCrawlConsoleHelp', () => {
 	it('lists every crawl-console command', () => {
-		const help = formatCrawlConsoleHelp();
-		for (const command of [
-			'parallels',
-			'interval',
-			'exclude',
-			'exclude-url',
-			'exclude-keyword',
-			'help',
-		]) {
-			expect(help).toContain(command);
-		}
+		// A pure, fully deterministic single-line string — a hardcoded exact
+		// match catches a broken separator, dropped/duplicated command, or
+		// reordering that a per-command `toContain` loop would miss.
+		expect(formatCrawlConsoleHelp()).toBe(
+			'commands: parallels <n> | interval <ms> | exclude <glob...> | exclude-url <prefix...> | exclude-keyword <text> | help',
+		);
 	});
 });

@@ -45,9 +45,16 @@ describe('parseCrawlConsoleCommand', () => {
 		expect(result.kind).toBe('error');
 	});
 
-	it('rejects "parallels" with a negative argument', () => {
-		const result = parseCrawlConsoleCommand('parallels -1');
-		expect(result.kind).toBe('error');
+	it('parses "parallels -1" syntactically — range validation is CrawlerOrchestrator#updateRuntimeOptions\'s job', () => {
+		// A negative value must reach `assertValidPatch`'s specific
+		// `RangeError` ("parallels must be an integer >= 1, got -1") rather
+		// than being rejected here with this file's generic
+		// `usage: parallels <integer>` message.
+		expect(parseCrawlConsoleCommand('parallels -1')).toEqual({
+			kind: 'patch',
+			patch: { parallels: -1 },
+			label: 'parallels -1',
+		});
 	});
 
 	it('rejects "parallels" with extra arguments', () => {
@@ -73,6 +80,18 @@ describe('parseCrawlConsoleCommand', () => {
 
 	it('rejects "interval" with no argument', () => {
 		expect(parseCrawlConsoleCommand('interval').kind).toBe('error');
+	});
+
+	it('parses "interval -5" syntactically — range validation is CrawlerOrchestrator#updateRuntimeOptions\'s job', () => {
+		expect(parseCrawlConsoleCommand('interval -5')).toEqual({
+			kind: 'patch',
+			patch: { interval: -5 },
+			label: 'interval -5',
+		});
+	});
+
+	it('still rejects a bare "-" as a non-integer argument', () => {
+		expect(parseCrawlConsoleCommand('interval -').kind).toBe('error');
 	});
 
 	it('parses "exclude <glob>" with one pattern', () => {

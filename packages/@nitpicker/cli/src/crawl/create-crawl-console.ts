@@ -1,5 +1,4 @@
-import type { CrawlConsoleHandle, CrawlConsoleInput } from './types.js';
-import type { Lanes } from '@d-zero/dealer';
+import type { CrawlConsoleHandle, CreateCrawlConsoleOptions } from './types.js';
 
 /** Ctrl-C (`\x03`) — routed to `onInterrupt` instead of the terminal's own SIGINT, since raw mode disables the terminal's own Ctrl-C handling. */
 const CTRL_C = '\u0003';
@@ -21,38 +20,6 @@ const BS = '\u0008';
  */
 const ESCAPE_TIMEOUT_MS = 50;
 
-/** Options for {@link createCrawlConsole}. */
-export interface CreateCrawlConsoleOptions {
-	/** The stdin-like stream to read keystrokes from. */
-	readonly stdin: CrawlConsoleInput;
-	/**
-	 * The `Lanes` instance the crawl body's `deal()` call is also using
-	 * (injected via `Crawler`'s `lanes` option) — the console renders its
-	 * input line as this `Lanes`' footer, below the crawl progress lanes.
-	 */
-	readonly lanes: Lanes;
-	/**
-	 * The stream `lanes` itself renders to (`process.stderr` in
-	 * `commands/crawl.ts`). Used only to hide/show the terminal's own
-	 * cursor — see this function's JSDoc for why.
-	 */
-	readonly stream: Pick<NodeJS.WritableStream, 'write'>;
-	/**
-	 * Status line shown above the input line before any command has been
-	 * submitted (e.g. the command list) — otherwise the console starts with
-	 * no indication of what it accepts.
-	 */
-	readonly initialStatus?: string;
-	/**
-	 * Called with the trimmed, non-empty line once Enter is pressed. The
-	 * resolved string becomes the status line shown above the input line
-	 * until the next command is submitted.
-	 */
-	readonly onCommand: (line: string) => Promise<string>;
-	/** Called on Ctrl-C — the caller decides what "interrupt" means (abort the crawl, same as the terminal's own SIGINT would have). */
-	readonly onInterrupt: () => void;
-}
-
 /** Hides the terminal's own text cursor (ANSI show/hide cursor sequence). */
 const HIDE_CURSOR = `${ESC}[?25l`;
 /** Restores the terminal's own text cursor (ANSI show/hide cursor sequence). */
@@ -66,7 +33,11 @@ const SHOW_CURSOR = `${ESC}[?25h`;
  * for the terminal, see `ARCHITECTURE.md`'s single-Lanes-instance invariant).
  *
  * Enter submits the current buffer as one command (see
- * `parseCrawlConsoleCommand`); Backspace/Delete removes the last character;
+ * `parseCrawlConsoleCommand`) — commands run strictly one at a time; a line
+ * submitted while a previous one's `onCommand` call is still pending queues
+ * behind it ({@link pendingLines}) rather than starting a second, overlapping
+ * call (possible from a single multi-line paste, which arrives as one `data`
+ * chunk with more than one `\r`/`\n`). Backspace/Delete removes the last character;
  * Ctrl-U or a bare Escape clears the buffer; Ctrl-C calls `onInterrupt`
  * instead of being handled by the terminal (raw mode disables that). ANSI
  * CSI sequences (arrow keys, Delete-forward, Home/End, ...) are recognized
@@ -120,6 +91,16 @@ export function createCrawlConsole(
 	let running = false;
 	let disposed = false;
 	/**
+	 * Lines submitted (Enter) while {@link running} is already `true` — a
+	 * single `data` chunk can carry more than one `\r`/`\n` (a multi-line
+	 * paste), and `handleData`'s loop processes all of them synchronously
+	 * without waiting on `onCommand`. Queued here instead of starting a
+	 * second, overlapping `onCommand(...)` call — {@link runCommand} drains
+	 * this FIFO once the in-flight call resolves, so submitted commands
+	 * always run one at a time, in submission order.
+	 */
+	const pendingLines: string[] = [];
+	/**
 	 * An `ESC`, or an `ESC '['` CSI sequence, that `handleData` couldn't yet
 	 * classify because the chunk ended before the ambiguity resolved (a bare
 	 * Escape keypress vs. the start of a CSI sequence, or a CSI sequence
@@ -141,6 +122,41 @@ export function createCrawlConsole(
 		lanes.footer(status ? `${status}\n${inputLine}` : inputLine);
 	};
 
+	/**
+	 * Runs one command through `onCommand`, then either starts the next
+	 * queued line ({@link pendingLines}) or clears {@link running} — never
+	 * both concurrently, keeping submitted commands strictly serialized.
+	 * @param line - The command line to run.
+	 */
+	const runCommand = (line: string) => {
+		running = true;
+		render();
+		void onCommand(line)
+			// `onCommand`'s contract (see `CreateCrawlConsoleOptions.onCommand`)
+			// is to always resolve, never reject — every current caller
+			// (`createCrawlConsoleCommandHandler` in `commands/crawl.ts`)
+			// upholds that. This catch exists only so a future violation of
+			// that contract degrades to a visible status line instead of an
+			// unhandled rejection, which — with nothing else in the CLI
+			// listening for one — would crash the whole (possibly hours-long)
+			// crawl process outright.
+			.catch(
+				(error: unknown) =>
+					`✖ internal error: ${error instanceof Error ? error.message : String(error)}`,
+			)
+			.then((result) => {
+				if (disposed) return;
+				status = result;
+				const next = pendingLines.shift();
+				if (next !== undefined) {
+					runCommand(next);
+					return;
+				}
+				running = false;
+				render();
+			});
+	};
+
 	const submit = () => {
 		const line = buffer;
 		buffer = '';
@@ -148,14 +164,12 @@ export function createCrawlConsole(
 			render();
 			return;
 		}
-		running = true;
-		render();
-		void onCommand(line).then((result) => {
-			if (disposed) return;
-			running = false;
-			status = result;
+		if (running) {
+			pendingLines.push(line);
 			render();
-		});
+			return;
+		}
+		runCommand(line);
 	};
 
 	const clearEscapeTimer = () => {

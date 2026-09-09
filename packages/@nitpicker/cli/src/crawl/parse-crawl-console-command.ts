@@ -1,7 +1,16 @@
 import type { CrawlConsoleCommandResult } from './types.js';
 import type { CrawlRuntimeOptionsPatch } from '@nitpicker/crawler';
 
-const INTEGER_PATTERN = /^\d+$/;
+/**
+ * Matches a decimal integer literal, negative sign optional — syntax only.
+ * Range checking (`parallels >= 1`, `interval >= 0`) is `assertValidPatch`'s
+ * job (`@nitpicker/crawler`'s `apply-crawl-runtime-options-patch.ts`), not
+ * this parser's: accepting a negative value here and letting it fail there
+ * instead of here is what surfaces that function's specific
+ * `RangeError` message (`interval must be an integer >= 0, got -5`) through
+ * the console rather than this file's generic `usage: ...` one.
+ */
+const INTEGER_PATTERN = /^-?\d+$/;
 
 /**
  * Parses one line typed into the crawl console into a runtime-options patch

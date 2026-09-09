@@ -181,6 +181,65 @@ describe('createCrawlConsole', () => {
 		});
 	});
 
+	it('shows an error status and keeps accepting commands if onCommand rejects, violating its own contract', async () => {
+		const stdin = new FakeStdin();
+		const { lanes, footer } = createFakeLanes();
+		const { stream } = createFakeStream();
+		const onCommand = vi
+			.fn()
+			.mockRejectedValueOnce(new Error('boom'))
+			.mockResolvedValueOnce('parallels: 4');
+
+		createCrawlConsole({ stdin, lanes, stream, onCommand, onInterrupt: vi.fn() });
+		stdin.type('parallels four');
+		stdin.type('\r');
+
+		await vi.waitFor(() => {
+			expect(footer).toHaveBeenLastCalledWith('✖ internal error: boom\n> ▌');
+		});
+
+		// The console itself is still usable afterwards — a rejection did not
+		// leave it stuck in the "running" state.
+		stdin.type('parallels 4');
+		stdin.type('\r');
+		await vi.waitFor(() => {
+			expect(footer).toHaveBeenLastCalledWith('parallels: 4\n> ▌');
+		});
+	});
+
+	it('queues a second submission received before the first onCommand resolves, running them one at a time (multi-line paste)', async () => {
+		const stdin = new FakeStdin();
+		const { lanes, footer } = createFakeLanes();
+		const { stream } = createFakeStream();
+		const resolvers: ((value: string) => void)[] = [];
+		const onCommand = vi.fn(
+			() =>
+				new Promise<string>((resolve) => {
+					resolvers.push(resolve);
+				}),
+		);
+
+		createCrawlConsole({ stdin, lanes, stream, onCommand, onInterrupt: vi.fn() });
+		// One `data` chunk carrying two full lines, as a terminal paste would.
+		stdin.type('parallels 4\rexclude /admin/**\r');
+
+		// Only the first command has actually started — the second is
+		// queued, not running concurrently alongside it.
+		expect(onCommand).toHaveBeenCalledTimes(1);
+		expect(onCommand).toHaveBeenCalledWith('parallels 4');
+
+		resolvers[0]!('parallels: 4');
+		await vi.waitFor(() => {
+			expect(onCommand).toHaveBeenCalledTimes(2);
+		});
+		expect(onCommand).toHaveBeenNthCalledWith(2, 'exclude /admin/**');
+
+		resolvers[1]!('exclude added: /admin/** (1 total)');
+		await vi.waitFor(() => {
+			expect(footer).toHaveBeenLastCalledWith('exclude added: /admin/** (1 total)\n> ▌');
+		});
+	});
+
 	it('Enter on an empty or whitespace-only buffer does not call onCommand', () => {
 		const stdin = new FakeStdin();
 		const { lanes } = createFakeLanes();

@@ -1945,6 +1945,36 @@ describe('startCrawl: crawl console (TTY gating)', () => {
 		expect(mockCreateCrawlConsole).not.toHaveBeenCalled();
 	});
 
+	it("forwards verbose: true to CrawlerOrchestrator.crawling on a non-TTY stderr even without --verbose (isLanesVerbose's non-TTY fallback)", async () => {
+		// stderr is non-TTY here (the vitest default, per the test above) —
+		// the injected Lanes falls back to verbose/queued rendering, and
+		// `Config.verbose` must match it (see `isLanesVerbose`'s JSDoc) so
+		// `CrawlerOrchestrator`'s own `#verbose` doesn't disagree.
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(['https://example.com'], createFlags());
+
+		expect(mockCrawling).toHaveBeenCalledWith(
+			['https://example.com'],
+			expect.objectContaining({ verbose: true }),
+			expect.any(Function),
+		);
+	});
+
+	it('forwards verbose: false to CrawlerOrchestrator.crawling under --silent even on a non-TTY stderr', async () => {
+		// `isLanesVerbose('silent')` must short-circuit to `false` —
+		// `--silent` builds no Lanes at all (nothing to keep in sync with),
+		// and is itself a stronger, explicit operator choice that a non-TTY
+		// stderr must not override.
+		const { startCrawl } = await import('./crawl.js');
+		await startCrawl(['https://example.com'], createFlags({ silent: true }));
+
+		expect(mockCrawling).toHaveBeenCalledWith(
+			['https://example.com'],
+			expect.objectContaining({ verbose: false }),
+			expect.any(Function),
+		);
+	});
+
 	it('does not start the crawl console under --silent, even on a TTY', async () => {
 		Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
 		Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true });
