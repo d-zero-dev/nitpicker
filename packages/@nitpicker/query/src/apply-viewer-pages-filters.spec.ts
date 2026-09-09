@@ -346,6 +346,95 @@ describe('applyViewerPagesFilters — isDedupeCapped', () => {
 	});
 });
 
+describe('applyViewerPagesFilters — isRedirectSource', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_apply_viewer_pages_filters_redirect_source__',
+	);
+	const archiveFilePath = path.resolve(
+		workingDir,
+		'apply-filters-redirect-source-test.nitpicker',
+	);
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/canonical')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setRedirect({
+			url: parseUrl('https://example.com/old')!,
+			redirectPaths: ['https://example.com/canonical'],
+			isExternal: false,
+			isTarget: true,
+			status: 301,
+			statusText: 'Moved Permanently',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		await buildViewerReadModel(archive);
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('filters to only the redirect-source row when isRedirectSource is true', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { isRedirectSource: true });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual(['https://example.com/old']);
+	});
+
+	it('filters to only the non-redirect-source row when isRedirectSource is false', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { isRedirectSource: false });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual(['https://example.com/canonical']);
+	});
+
+	it('applies no restriction when isRedirectSource is an array of both values — OR-equivalent to no filter', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { isRedirectSource: [true, false] });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url).toSorted()).toEqual([
+			'https://example.com/canonical',
+			'https://example.com/old',
+		]);
+	});
+});
+
 describe('applyViewerPagesFilters — lang and header presence', () => {
 	const workingDir = path.resolve(
 		__dirname,
@@ -645,12 +734,19 @@ describe('applyViewerPagesFilters — urlPattern', () => {
 		expect(rows.map((r) => r.url)).toEqual(['https://example.com/about-us']);
 	});
 
-	it('surfaces the canonical row when the pattern matches only a redirect-source URL — parity with listPages', async () => {
+	it('surfaces both the redirect-source row itself (direct LIKE) and its canonical destination (the redirect arm) as two distinct rows', async () => {
 		const knex = archive.getKnex();
 		const qb = knex('viewer_pages');
 		applyViewerPagesFilters(qb, { urlPattern: '%old-location%' });
-		const rows = await qb.select('url');
-		expect(rows.map((r) => r.url)).toEqual(['https://example.com/target']);
+		const rows = await qb.select('url', 'page_id');
+		expect(rows.map((r) => r.url).toSorted()).toEqual([
+			'https://example.com/old-location',
+			'https://example.com/target',
+		]);
+		// Distinct page_ids, not the same row surfacing twice — the
+		// redirect-source row is schema-v33's own listable row, separate
+		// from the destination the redirect arm resolves to.
+		expect(new Set(rows.map((r) => r.page_id)).size).toBe(2);
 	});
 
 	it('matches nothing for a pattern that hits neither canonical nor equivalent URLs', async () => {

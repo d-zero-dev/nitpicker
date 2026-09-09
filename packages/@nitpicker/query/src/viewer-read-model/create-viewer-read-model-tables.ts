@@ -136,6 +136,35 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			-- only in dedupe_cap_events. Same no-index rationale as
 			-- is_dedupe_capped.
 			dedupe_cap_event_id integer,
+			-- content_items.redirect_dest_id IS NOT NULL, coalesced to 0 — same
+			-- "filter-only boolean, no dedicated index" shape as
+			-- is_dedupe_capped above (redirect-source rows are a small
+			-- fraction of the table). A redirect-source row is admitted into
+			-- this table (unlike pre-this-column behaviour, which excluded
+			-- every row with a non-null redirect_dest_id) so operators can see
+			-- "this URL exists and redirects" as its own Page List row rather
+			-- than only as a note on the destination row's Redirect From
+			-- display. See build-viewer-read-model.ts's toViewerPageInsertRow
+			-- docs for why every audit-signal column above (title, has_*,
+			-- main_content_*, etc.) is zeroed/nulled out on these rows instead
+			-- of carrying whatever the row happened to hold before it became a
+			-- redirect source.
+			is_redirect_source integer not null default 0,
+			-- content_items.redirect_dest_id verbatim (nullable) — the
+			-- destination's own content_items.id, with no FK declared (same
+			-- "plain integer, no FK" convention as
+			-- viewer_anchor_facts.dest_page_id). Not itself resolved further:
+			-- redirect_dest_id is already pre-flattened to the final
+			-- destination at write time (see ARCHITECTURE.md), so this always
+			-- points at a real row when set.
+			redirect_dest_page_id integer,
+			-- The destination's URL, resolved once at build time through
+			-- viewer_url_refs — same "URL text lives in viewer_url_refs,
+			-- referenced by id" convention as
+			-- viewer_anchor_facts.dest_url_ref_id (as opposed to
+			-- viewer_pages.url itself, which is this table's one "the row's
+			-- own identity" exception to that convention).
+			redirect_dest_url_ref_id integer references viewer_url_refs(id),
 			-- The three columns below are report/read-model-only computed
 			-- values with no write-model source column to re-fetch from -- the
 			-- one narrow exception to "display re-fetches from page_meta"

@@ -16,8 +16,12 @@ import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates
  * for full-metadata display, PLUS an unconditional `viewer_pages` join for
  * its read-model-only computed columns
  * (`displayTitle`/`inboundLinkCount`/`dirIndexInboundLinkCount`/
- * `protocol`/`hostname`/`path1`..`path10` — see those fields' docs on
- * `PageListItem`).
+ * `protocol`/`hostname`/`path1`..`path10`/`isRedirectSource`/
+ * `redirectDestUrl` — see those fields' docs on `PageListItem`).
+ * `mapPageRowToListItem` sanitizes every other field on a redirect-source
+ * row (the full-metadata display columns this JOIN fetches are NOT
+ * cleared here — a redirect-source row's `page_meta` can still hold
+ * whatever it looked like before it became one).
  *
  * The `viewer_pages` join is deliberately unconditional (no `hasTable`/
  * `hasColumn` existence guard the way `templateKeySelectColumn`/
@@ -62,6 +66,11 @@ export async function joinViewerPageIdsToListItems(
 		.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
 		.leftJoin('header_flags as hf', 'hf.header_set_id', 'ci.header_set_id')
 		.leftJoin('viewer_pages as vp', 'vp.page_id', 'ci.id')
+		.leftJoin(
+			'viewer_url_refs as redirect_dest_vur',
+			'redirect_dest_vur.id',
+			'vp.redirect_dest_url_ref_id',
+		)
 		.leftJoin('text_refs as title_ref', 'title_ref.id', 'pm.title_text_id')
 		.leftJoin(
 			'text_refs as description_ref',
@@ -111,6 +120,8 @@ export async function joinViewerPageIdsToListItems(
 			'vp.path8 as path8',
 			'vp.path9 as path9',
 			'vp.path10 as path10',
+			'vp.is_redirect_source as isRedirectSource',
+			'redirect_dest_vur.url as redirectDestUrl',
 		);
 	const rowsById = new Map(rows.map((row) => [row.id, row]));
 	return pageIds

@@ -63,6 +63,11 @@ export function applyViewerPagesFilters(
 	}
 	applyEqualityOrInFilter(qb, 'is_dedupe_capped', toFlagValues(options.isDedupeCapped));
 	applyEqualityOrInFilter(qb, 'dedupe_cap_event_id', options.dedupeCapEventId);
+	applyEqualityOrInFilter(
+		qb,
+		'is_redirect_source',
+		toFlagValues(options.isRedirectSource),
+	);
 	applyEqualityOrInFilter(qb, 'lang', options.lang);
 	// `viewer_pages` copies header_flags' snake column names verbatim, so
 	// the shared HEADER_FLAG_COLUMN mapping resolves them here too.
@@ -101,13 +106,19 @@ export function applyViewerPagesFilters(
 	}
 	if (options.urlPattern) {
 		const urlPattern = options.urlPattern;
-		// Canonical-URL LIKE against the narrow `viewer_pages.url` column, OR
-		// the redirect-source / alias-member equivalence arms — `viewer_pages`
-		// holds only canonical rows, so without the arms a search for a
-		// redirect-source URL (e.g. `https://example.com` redirecting to
-		// `/index.html`) or an alias-member URL would silently miss the one
-		// surviving row, breaking `listPages`'s urlPattern contract (see
-		// `ListViewerPagesOptions.urlPattern`'s docs). Each arm mirrors
+		// Direct LIKE against the narrow `viewer_pages.url` column, OR the
+		// redirect-destination / alias-representative equivalence arms.
+		// `viewer_pages` excludes `alias_of_id IS NOT NULL` rows
+		// unconditionally, so without the alias arm a search for an
+		// alias-member URL would silently miss the representative row it was
+		// folded into, breaking `listPages`'s urlPattern contract (see
+		// `ListViewerPagesOptions.urlPattern`'s docs). The redirect arm is no
+		// longer needed to avoid a miss (a redirect-source row is now a
+		// `viewer_pages` row in its own right, since schema v33 — the direct
+		// LIKE already matches it), but is kept so a search for a
+		// redirect-source URL also surfaces the destination row it points at,
+		// not just the source row itself — the two are now genuinely
+		// different rows (`page_id`s), not a duplicate. Each arm mirrors
 		// `list-pages.ts`'s own implementation verbatim: `IN` subqueries (not
 		// correlated `EXISTS` — computed once as a LIST SUBQUERY) combined by
 		// `UNION ALL` (a row is never both a redirect source and an alias

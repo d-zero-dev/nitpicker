@@ -202,4 +202,100 @@ describe('joinViewerPageIdsToListItems', () => {
 			isDedupeCapped: false,
 		});
 	});
+
+	describe('isRedirectSource / redirectDestUrl', () => {
+		const redirectWorkingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_join_viewer_page_ids_to_list_items_redirect__',
+		);
+		const redirectArchiveFilePath = path.resolve(
+			redirectWorkingDir,
+			'redirect-test.nitpicker',
+		);
+		let redirectArchive: InstanceType<typeof Archive>;
+		let canonicalId: number;
+		let oldId: number;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(redirectWorkingDir, { recursive: true });
+			redirectArchive = await Archive.create({
+				filePath: redirectArchiveFilePath,
+				cwd: redirectWorkingDir,
+			});
+			await redirectArchive.setConfig(BASE_CONFIG);
+
+			await redirectArchive.setPage({
+				url: parseUrl('https://example.com/canonical')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: { ...META, title: 'Canonical' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+			await redirectArchive.setRedirect({
+				url: parseUrl('https://example.com/old')!,
+				redirectPaths: ['https://example.com/canonical'],
+				isExternal: false,
+				isTarget: true,
+				status: 301,
+				statusText: 'Moved Permanently',
+				contentType: 'text/html',
+				contentLength: 0,
+				responseHeaders: {},
+				html: '',
+				meta: { ...META, title: 'Stale Title' },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+
+			const knex = redirectArchive.getKnex();
+			const rows: { id: number; url: string }[] = await knex('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.id as id', 'url_refs.url as url');
+			canonicalId = rows.find((r) => r.url === 'https://example.com/canonical')!.id;
+			oldId = rows.find((r) => r.url === 'https://example.com/old')!.id;
+
+			await buildViewerReadModel(redirectArchive);
+		});
+
+		afterAll(async () => {
+			if (redirectArchive) {
+				await redirectArchive.releaseHandle();
+			}
+			const { rmSync } = await import('node:fs');
+			rmSync(redirectWorkingDir, { recursive: true, force: true });
+		});
+
+		it('resolves isRedirectSource/redirectDestUrl for a redirect-source row, and sanitizes its other audit-signal fields', async () => {
+			const knex = redirectArchive.getKnex();
+			const items = await joinViewerPageIdsToListItems(knex, [oldId]);
+			expect(items[0]).toMatchObject({
+				url: 'https://example.com/old',
+				isRedirectSource: true,
+				redirectDestUrl: 'https://example.com/canonical',
+				title: null,
+			});
+		});
+
+		it('leaves isRedirectSource false and redirectDestUrl null for the non-redirect-source destination', async () => {
+			const knex = redirectArchive.getKnex();
+			const items = await joinViewerPageIdsToListItems(knex, [canonicalId]);
+			expect(items[0]).toMatchObject({
+				url: 'https://example.com/canonical',
+				isRedirectSource: false,
+				redirectDestUrl: null,
+				title: 'Canonical',
+			});
+		});
+	});
 });
