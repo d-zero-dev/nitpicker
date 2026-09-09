@@ -117,6 +117,23 @@ describe('findUnmatchedPageListUrls', () => {
 			isSkipped: false,
 		});
 
+		await archive.setRedirect({
+			url: parseUrl('https://example.com/old-blog')!,
+			redirectPaths: ['https://example.com/blog'],
+			isExternal: false,
+			isTarget: true,
+			status: 301,
+			statusText: 'Moved Permanently',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
 		await buildViewerReadModel(archive);
 	});
 
@@ -165,5 +182,12 @@ describe('findUnmatchedPageListUrls', () => {
 
 	it('returns an empty array for an empty input list without querying the database', async () => {
 		await expect(findUnmatchedPageListUrls(archive, [])).resolves.toEqual([]);
+	});
+
+	it('matches a redirect-source URL — it is its own Page List row since schema v33, not a reason to be unmatched', async () => {
+		const missing = await findUnmatchedPageListUrls(archive, [
+			'https://example.com/old-blog',
+		]);
+		expect(missing).toEqual([]);
 	});
 });

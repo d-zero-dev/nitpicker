@@ -114,6 +114,8 @@ function makeItem(overrides: Partial<PageListItem> = {}): PageListItem {
 		path8: null,
 		path9: null,
 		path10: null,
+		isRedirectSource: false,
+		redirectDestUrl: null,
 		...overrides,
 	};
 }
@@ -152,6 +154,8 @@ describe('createPageList', () => {
 		expect(headers[0]).toBe('Title');
 		expect(headers[1]).toBe('Full Title');
 		expect(headers[2]).toBe('URL');
+		expect(headers).toContain('Redirect From');
+		expect(headers).toContain('Redirect To');
 		expect(headers).toContain('Internal Referrers');
 		expect(headers).toContain('scroll_height_mobile');
 	});
@@ -298,12 +302,12 @@ describe('createPageList', () => {
 		});
 
 		const row = mock.rows[0]!;
-		expect(cellValue(row[19]!)).toBe(3); // Internal Links
-		expect(cellValue(row[20]!)).toBe(1); // Internal Bad Links
-		expect(cellNote(row[20]!)).toBeUndefined();
-		expect(cellValue(row[21]!)).toBe(2); // External Links
-		expect(cellValue(row[22]!)).toBe(0); // External Bad Links
-		expect(cellNote(row[22]!)).toBeUndefined();
+		expect(cellValue(row[20]!)).toBe(3); // Internal Links
+		expect(cellValue(row[21]!)).toBe(1); // Internal Bad Links
+		expect(cellNote(row[21]!)).toBeUndefined();
+		expect(cellValue(row[22]!)).toBe(2); // External Links
+		expect(cellValue(row[23]!)).toBe(0); // External Bad Links
+		expect(cellNote(row[23]!)).toBeUndefined();
 	});
 
 	it('falls back to EMPTY_FACTS-shaped zeros when a page has no outbound-link entry', async () => {
@@ -318,8 +322,8 @@ describe('createPageList', () => {
 		});
 
 		const row = mock.rows[0]!;
-		expect(cellValue(row[19]!)).toBe(EMPTY_FACTS.internalLinks);
-		expect(cellValue(row[20]!)).toBe(EMPTY_FACTS.internalBadLinks);
+		expect(cellValue(row[20]!)).toBe(EMPTY_FACTS.internalLinks);
+		expect(cellValue(row[21]!)).toBe(EMPTY_FACTS.internalBadLinks);
 	});
 
 	it('shows dirIndexInboundLinkCount when set, falling back to inboundLinkCount otherwise', async () => {
@@ -340,7 +344,7 @@ describe('createPageList', () => {
 			estimatedTotal: 1,
 			onProgress: () => {},
 		});
-		expect(cellValue(mock.rows[0]![23]!)).toBe(10);
+		expect(cellValue(mock.rows[0]![24]!)).toBe(10);
 	});
 
 	it('shows the redirect-from count and URL note from buildRedirectFromUrlsByDestId', async () => {
@@ -365,6 +369,86 @@ describe('createPageList', () => {
 		expect(cellNote(row[16]!)).toBe('https://example.com/old');
 	});
 
+	it('leaves the Redirect To cell empty for a non-redirect-source row', async () => {
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([makeStreamRow({ redirectDestUrl: null })]),
+		);
+		const setting = createPageList()([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
+		expect(cellValue(mock.rows[0]![17]!)).toBeFalsy();
+	});
+
+	it('shows the destination URL in the Redirect To cell for a redirect-source row', async () => {
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([
+				makeStreamRow({
+					isRedirectSource: true,
+					redirectDestUrl: 'https://example.com/canonical',
+				}),
+			]),
+		);
+		const setting = createPageList()([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
+		// Linked URL cells render as a =HYPERLINK(...) formula (same as the
+		// URL/og:url columns), not the bare string.
+		expect(cellValue(mock.rows[0]![17]!)).toContain('https://example.com/canonical');
+	});
+
+	it('renders every audit-signal column as "-" for a redirect-source row, while URL/Status/Redirect To keep their real values', async () => {
+		vi.mocked(streamPageListRows).mockReturnValueOnce(
+			oneChunk([
+				makeStreamRow({
+					url: 'https://example.com/old',
+					title: null,
+					displayTitle: null,
+					status: 301,
+					isRedirectSource: true,
+					redirectDestUrl: 'https://example.com/canonical',
+					lang: null,
+					protocol: null,
+					hostname: null,
+					path1: null,
+				}),
+			]),
+		);
+		const setting = createPageList()([], NO_ACCESSOR);
+		const mock = createMockSheet();
+		await setting.run({
+			sheet: mock.sheet,
+			maxRows: Infinity,
+			estimatedTotal: 1,
+			onProgress: () => {},
+		});
+
+		const row = mock.rows[0]!;
+		// Real signal, unaffected by the redirect-source dash: URL, Status
+		// Code, Redirect To. URL/Redirect To render as =HYPERLINK(...)
+		// formulas (linked cells), not bare strings.
+		expect(cellValue(row[2]!)).toContain('https://example.com/old');
+		expect(cellValue(row[15]!)).toBe(301);
+		expect(cellValue(row[17]!)).toContain('https://example.com/canonical');
+		// Audit signal: dashed instead of the sanitized null/0/false.
+		expect(cellValue(row[0]!)).toBe('-'); // Title
+		expect(cellValue(row[1]!)).toBe('-'); // Full Title
+		expect(cellValue(row[3]!)).toBe('-'); // Protocol
+		expect(cellValue(row[18]!)).toBe('-'); // Language
+		// The Title cell's note must not leak the sanitized null title as a
+		// literal "Full-title:\nnull" string.
+		expect(cellNote(row[0]!)).toBeUndefined();
+	});
+
 	it('uses "N/A" when lang is null', async () => {
 		vi.mocked(streamPageListRows).mockReturnValueOnce(
 			oneChunk([makeStreamRow({ lang: null })]),
@@ -377,7 +461,7 @@ describe('createPageList', () => {
 			estimatedTotal: 1,
 			onProgress: () => {},
 		});
-		expect(cellValue(mock.rows[0]![17]!)).toBe('N/A');
+		expect(cellValue(mock.rows[0]![18]!)).toBe('N/A');
 	});
 
 	it('uses -1 fallback when status is null', async () => {

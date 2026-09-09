@@ -137,4 +137,59 @@ describe('mapPageRowToListItem', () => {
 		expect(out.hasXContentTypeOptions).toBe(false);
 		expect(out.hasHSTS).toBe(true);
 	});
+
+	it('defaults isRedirectSource to false and redirectDestUrl to null when absent', () => {
+		const out = mapPageRowToListItem(makeRow());
+		expect(out.isRedirectSource).toBe(false);
+		expect(out.redirectDestUrl).toBeNull();
+	});
+
+	it('flows isRedirectSource/redirectDestUrl through for a non-redirect-source row', () => {
+		const out = mapPageRowToListItem(
+			makeRow({ isRedirectSource: 0, redirectDestUrl: null }),
+		);
+		expect(out.isRedirectSource).toBe(false);
+		expect(out.redirectDestUrl).toBeNull();
+	});
+
+	it('sanitizes every audit-signal field to null/false/0 for a redirect-source row, while keeping redirectDestUrl', () => {
+		const out = mapPageRowToListItem(
+			makeRow({
+				isRedirectSource: 1,
+				redirectDestUrl: 'https://example.com/canonical',
+				title: 'Stale Title',
+				description: 'Stale description',
+				og_title: 'Stale OG',
+				lang: 'en',
+				tag_count: 5,
+				main_content_word_count: 100,
+				hasCSP: 1,
+			}),
+		);
+		expect(out.isRedirectSource).toBe(true);
+		expect(out.redirectDestUrl).toBe('https://example.com/canonical');
+		expect(out.title).toBeNull();
+		expect(out.description).toBeNull();
+		expect(out.hasDescription).toBe(false);
+		expect(out.ogTitle).toBeNull();
+		expect(out.hasOgTitle).toBe(false);
+		expect(out.lang).toBeNull();
+		expect(out.tagCount).toBeNull();
+		expect(out.mainContentWordCount).toBeNull();
+		expect(out.hasCSP).toBe(false);
+	});
+
+	it('does not sanitize provenance/classification fields (firstCrawledAt/lastCrawledAt/templateKey/isDedupeCapped) on a redirect-source row', () => {
+		const out = mapPageRowToListItem(
+			makeRow({
+				isRedirectSource: 1,
+				firstCrawledAt: 1_700_000_000_000,
+				lastCrawledAt: 1_700_000_100_000,
+				templateKey: 'kept',
+			}),
+		);
+		expect(out.firstCrawledAt).toBe(1_700_000_000_000);
+		expect(out.lastCrawledAt).toBe(1_700_000_100_000);
+		expect(out.templateKey).toBe('kept');
+	});
 });

@@ -18,9 +18,8 @@ import { toHttpHref } from './to-http-href.js';
 /**
  * Renders a crawled URL as an http(s) link, or as plain text when the href
  * would not be safe to follow from a `file://` report.
- * @param url - The URL shown to the reader.
  * @param props
- * @param props.url
+ * @param props.url - The URL shown to the reader.
  */
 function ReportUrl(props: { url: string }) {
 	const href = toHttpHref(props.url);
@@ -83,6 +82,12 @@ export function HtmlReportDocument(props: HtmlReportData) {
 							</span>
 						))
 					: t('common.none'),
+		},
+		{
+			key: 'redirectTo',
+			label: t('views.report.columns.redirectTo'),
+			render: (page) =>
+				page.redirectTo ? <ReportUrl url={page.redirectTo} /> : t('common.none'),
 		},
 		{
 			key: 'metaDescription',

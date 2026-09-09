@@ -58,7 +58,14 @@ function applyDirectoryPrefix(qb: Knex.QueryBuilder, prefix: PageDirectoryPrefix
  * {@link applyViewerPagesFilters}, which additionally applies its default
  * `content_category IN ('html', 'unknown')` — i.e. crawled internal pages
  * that are HTML or not-yet-classified, excluding PDFs/images and every
- * link-only external URL.
+ * link-only external URL. This includes redirect-source rows
+ * (`is_redirect_source: 1`, `content_category: 'unknown'` — see
+ * `build-viewer-read-model.ts`'s `sanitizeRedirectSourceRow`): a redirect
+ * source is a row in its own right in the Page List, not folded away, with
+ * its destination reachable via `redirect_dest_page_id`/
+ * `redirect_dest_url_ref_id`. On a `fromList` archive, internal rows are
+ * further restricted to the operator's list plus its redirect/alias
+ * destinations — see `computeFromListAllowedPageIds`.
  *
  * The directory filters are `OR`-ed together and evaluated as residual
  * predicates on top of that scan: every reader of this row set sweeps the

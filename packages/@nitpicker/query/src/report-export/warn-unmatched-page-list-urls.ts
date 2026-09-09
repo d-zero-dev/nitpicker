@@ -10,8 +10,10 @@ import { findUnmatchedPageListUrls } from './find-unmatched-page-list-urls.js';
  * Not-found entries are never rendered as pseudo-rows in the report itself
  * (a nonexistent page has no data for the report's columns); this is the
  * summary-count half of that design, pointing the operator at `query
- * match-urls` for the per-URL breakdown (redirected / never crawled /
- * outside the report's row-set scope).
+ * match-urls` for the per-URL breakdown (never crawled / outside the
+ * report's row-set scope). A redirect-source URL is no longer a reason to
+ * be unmatched — since schema v33 it is its own Page List row (see
+ * `build-viewer-read-model.ts`'s `is_redirect_source`).
  * @param accessor - The archive accessor to query.
  * @param normalizedUrls - URLs already normalized via
  *   `resolveAndValidatePageListUrlFilter`/`resolvePageListUrlFilter`.

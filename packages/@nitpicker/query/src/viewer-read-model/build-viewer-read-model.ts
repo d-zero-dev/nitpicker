@@ -29,6 +29,7 @@ import { computeDisplayTitleByPageId } from './compute-display-title-by-page-id.
 import { computeDuplicateGroupPageRows } from './compute-duplicate-group-page-rows.js';
 import { computeDuplicateGroupRows } from './compute-duplicate-group-rows.js';
 import { computeErrorKindInsertRows } from './compute-error-kind-insert-rows.js';
+import { computeFromListAllowedPageIds } from './compute-from-list-allowed-page-ids.js';
 import { computeGraphReadModelRows } from './compute-graph-read-model-rows.js';
 import { computeHeaderCheckInsertRows } from './compute-header-check-insert-rows.js';
 import { computeImageInsertRows } from './compute-image-insert-rows.js';
@@ -206,6 +207,19 @@ interface PagesSourceRow {
 	 * the event detail itself is resolved live by `getPageDetail`.
 	 */
 	dedupeCapEventId: number | null;
+	/**
+	 * `content_items.redirect_dest_id`, or `null` for a non-redirect-source
+	 * row. Already pre-flattened to the final destination at write time (see
+	 * ARCHITECTURE.md).
+	 */
+	redirectDestId: number | null;
+	/**
+	 * `viewer_url_refs.id` for the redirect destination's URL, or `null`
+	 * when {@link redirectDestId} is `null`. Resolved once here (not by a
+	 * later JOIN) since `viewer_url_refs` is already fully populated by the
+	 * time this scan runs.
+	 */
+	redirectDestUrlRefId: number | null;
 }
 
 /** One row to insert into `viewer_pages`, derived from a {@link PagesSourceRow}. */
@@ -293,6 +307,12 @@ interface ViewerPageInsertRow {
 	is_dedupe_capped: number;
 	/** Copied from `PagesSourceRow.dedupeCapEventId` verbatim — see the DDL comment. */
 	dedupe_cap_event_id: number | null;
+	/** `1` iff `PagesSourceRow.redirectDestId` is non-null — see the DDL comment. */
+	is_redirect_source: number;
+	/** Copied from `PagesSourceRow.redirectDestId` verbatim — see the DDL comment. */
+	redirect_dest_page_id: number | null;
+	/** Copied from `PagesSourceRow.redirectDestUrlRefId` verbatim — see the DDL comment. */
+	redirect_dest_url_ref_id: number | null;
 	/** From `computeDisplayTitleByPageId` — see the DDL comment for why this has no write-model source. */
 	display_title: string | null;
 	/** From the `viewer_anchor_facts` build's in-memory tally, defaulted to `0` when the page received no internal links — see the DDL comment. */
@@ -456,6 +476,58 @@ function deriveUrlDecomposition(parsed: ExURL | null): UrlDecomposition {
 }
 
 /**
+ * Returns `row` with every audit-signal field zeroed/nulled out — title,
+ * description, og:title, robots, tag/jsonld counts, main-content/scroll
+ * metrics, console error count, lang, and the four header-presence flags.
+ * Applied once, before a redirect-source row (`row.redirectDestId != null`)
+ * reaches `sourceRows`, so every downstream consumer (display title,
+ * directory tree, natural URL rank, `toViewerPageInsertRow` itself) sees the
+ * same sanitized shape instead of each having to special-case
+ * `redirectDestId` independently.
+ *
+ * Why not leave the row's existing values in place: a page that becomes a
+ * redirect source keeps whatever `page_meta` it had from when it was last a
+ * real page — `linkRedirectSources` clears `anchor_edges`/`image_items` on
+ * redirect, not `page_meta` (see that function's docs) — and a brand-new
+ * redirect-source placeholder row has no `page_meta` at all. Either way, the
+ * row's own audit signals are stale or meaningless: what happened at the
+ * `redirectDestId` destination is what an operator should audit, and this
+ * row already links there via `redirect_dest_page_id`.
+ * @param row - A source row already known to be a redirect source (non-null `redirectDestId`).
+ */
+function sanitizeRedirectSourceRow(row: PagesSourceRow): PagesSourceRow {
+	return {
+		...row,
+		title: null,
+		contentType: null,
+		description: null,
+		og_title: null,
+		robots_noindex: null,
+		tag_count: null,
+		jsonld_count: null,
+		main_content_word_count: null,
+		main_content_body_word_count: null,
+		main_content_heading_count: null,
+		main_content_image_count: null,
+		main_content_table_count: null,
+		main_content_button_count: null,
+		main_content_iframe_count: null,
+		main_content_video_count: null,
+		main_content_audio_count: null,
+		main_content_canvas_count: null,
+		main_content_custom_element_count: null,
+		scroll_height_desktop: null,
+		scroll_height_mobile: null,
+		console_error_count: null,
+		lang: null,
+		hasCSP: 0,
+		hasXFrameOptions: 0,
+		hasXContentTypeOptions: 0,
+		hasHSTS: 0,
+	};
+}
+
+/**
  * Maps one `pages` row to its `viewer_pages` insert row.
  * @param row - The source row read from `pages`.
  * @param naturalUrlRankByPageId - Rank map from {@link buildPageNaturalUrlRankMap},
@@ -513,6 +585,9 @@ function toViewerPageInsertRow(
 		has_hsts: row.hasHSTS,
 		is_dedupe_capped: row.dedupeCapEventId == null ? 0 : 1,
 		dedupe_cap_event_id: row.dedupeCapEventId,
+		is_redirect_source: row.redirectDestId == null ? 0 : 1,
+		redirect_dest_page_id: row.redirectDestId,
+		redirect_dest_url_ref_id: row.redirectDestUrlRefId,
 		display_title: displayTitleByPageId.get(row.id) ?? null,
 		inbound_link_count: inboundLinkCountByPageId.get(row.id) ?? 0,
 		dir_index_inbound_link_count: dirIndexInboundLinkCountByPageId.get(row.id) ?? null,
@@ -627,16 +702,39 @@ function toViewerPageInsertRow(
  * practice.
  *
  * `viewer_pages` includes every listable page regardless of content-type
- * category (`scraped = 1 AND redirectDestId IS NULL`, plus excluding
- * `isSkipped` discovery-only placeholder rows — the same predicate
- * `Database.resetFailedPages` and `excludeSkippedPages` guard against, see
- * that helper's docs for the production incident that motivated it).
- * `content_category` is stored as a column precisely so a future
- * `/api/pages` consumer can filter by it; unlike `listPages`'s *default*
- * view (which only shows HTML + not-yet-classified rows), this table is
- * intentionally NOT pre-filtered to that subset — unfiltered totals here
- * can legitimately exceed `listPages(accessor, {}).total` on an archive
- * that also has known non-HTML pages (PDFs, images, etc.).
+ * category (`scraped = 1`, plus excluding `isSkipped` discovery-only
+ * placeholder rows — the same predicate `Database.resetFailedPages` and
+ * `excludeSkippedPages` guard against, see that helper's docs for the
+ * production incident that motivated it). `content_category` is stored as a
+ * column precisely so a future `/api/pages` consumer can filter by it;
+ * unlike `listPages`'s *default* view (which only shows HTML + not-yet-
+ * classified rows), this table is intentionally NOT pre-filtered to that
+ * subset — unfiltered totals here can legitimately exceed
+ * `listPages(accessor, {}).total` on an archive that also has known
+ * non-HTML pages (PDFs, images, etc.).
+ *
+ * Unlike `listPages` (which excludes every `redirectDestId IS NOT NULL`
+ * row), a redirect-source row IS included here as its own listable row
+ * (`is_redirect_source: 1`, `redirect_dest_page_id`/
+ * `redirect_dest_url_ref_id` pointing at the destination) — every
+ * audit-signal column is zeroed/nulled out on it (see
+ * `sanitizeRedirectSourceRow`'s docs). `alias_of_id IS NOT NULL` rows are
+ * still excluded, unconditionally.
+ *
+ * On a `fromList` archive (`config.fromList === true`, i.e. crawled via
+ * `--list`/`--list-file`), internal rows (`is_external != 1`) are further
+ * restricted to pages reachable from `config.roots` — the root URL itself,
+ * or the page its redirect/alias resolves to (see
+ * `computeFromListAllowedPageIds`). This guards against internal pages the
+ * crawl reached only incidentally (a crawler bug scraping a
+ * metadata-only-discovered page in full despite `recursive: false`) still
+ * surfacing as if they were list entries. External rows are never
+ * restricted by this rule, and neither are the derived tables that
+ * independently re-scan `content_items` rather than reusing `sourceRows`
+ * (`viewer_header_checks`/`viewer_duplicate_groups`/
+ * `viewer_duplicate_group_pages`/`viewer_mismatches`/`viewer_summary`) —
+ * Pages is the one view an operator expects to match their list; every
+ * other view keeps showing everything the crawl actually collected.
  *
  * `viewer_page_anchors` is created but left with zero rows: populating it
  * requires real pagination-cursor math tied to a specific page size/page
@@ -675,6 +773,12 @@ export async function buildViewerReadModel(
 
 	const { onProgress, onPhase } = options;
 	const knex = accessor.getKnex();
+	// `fromList` archives need `config.roots` below to compute the internal
+	// page-scope restriction (see `computeFromListAllowedPageIds`); every
+	// other archive ignores this. `getSummary` already requires
+	// `accessor.getConfig()` to resolve (see this function's own docs), so
+	// this adds no new precondition.
+	const config = await accessor.getConfig();
 	// Adapts the backfills' own `(processed, total)` callback shape to this
 	// build's phase-generic `onProgress` (issue #294) — the current phase
 	// (tracked by the caller via `onPhase`) tells the display which backfill
@@ -746,6 +850,23 @@ export async function buildViewerReadModel(
 			ORDER BY url
 		`);
 
+		// `fromList` archives only: internal rows (`isExternal !== 1`) are
+		// restricted below to pages reachable from `config.roots` — see
+		// `computeFromListAllowedPageIds`'s docs. `null` means "no
+		// restriction" (every other archive, where every scraped internal
+		// page is legitimate). Computed here, after `viewer_url_refs` exists
+		// but before the `sourceRows` scan, rather than as its own phase:
+		// this query set costs at most a few `roots.length`-proportional
+		// chunked lookups, the same "numberless stretch" order of magnitude
+		// as the `viewer_url_refs` INSERT just above.
+		const allowedInternalPageIds = config.fromList
+			? await computeFromListAllowedPageIds({
+					trx,
+					roots: config.roots,
+					disableQueries: config.disableQueries,
+				})
+			: null;
+
 		// Progress axis for the two keyset scans below (source rows and
 		// technology rows) — both cursor over `content_items.id`. MAX() over
 		// the keyset column is an O(1) index-tail read.
@@ -765,23 +886,36 @@ export async function buildViewerReadModel(
 		// `content_type_id` — the 0.13 format routes missing content types
 		// through the "unknown" ref.
 		//
-		// `ci.is_target = 1 OR ci.is_external = 1` excludes title-only
-		// internal scrapes (the crawler's `metadataOnly` mode — see
-		// `crawler.ts`'s `isMetadataOnly`/`isTarget: false` writes) while
-		// still keeping external pages, which are always written with
-		// `is_target = 0` regardless of mode (`link-to-page-data.ts`/
-		// `resource-to-page-data.ts`/`fetch-destination.ts` all set
-		// `isTarget: !isExternal`) — `is_target` alone cannot distinguish
-		// "external" from "internal but title-only", so both columns are
-		// needed together. A title-only internal row is `scraped = 1` and
-		// not `is_skipped`/redirect/alias, so without this predicate it
-		// would otherwise pass every other filter here and surface as a
-		// full page row even though only a title was ever fetched for it.
-		// The legacy pre-rewrite report applied the equivalent
-		// `!page.isInternalPage() || !page.isTarget` exclusion per row
-		// (kept iff internal-and-target, or external); this reinstates
-		// that once, at the shared source, so every `sourceRows`-derived
-		// table (not just Page List) is consistent.
+		// `ci.is_target = 1 OR ci.is_external = 1 OR ci.redirect_dest_id IS NOT
+		// NULL` excludes title-only internal scrapes (the crawler's
+		// `metadataOnly` mode — see `crawler.ts`'s `isMetadataOnly`/
+		// `isTarget: false` writes) while still keeping external pages
+		// (always written with `is_target = 0` regardless of mode —
+		// `link-to-page-data.ts`/`resource-to-page-data.ts`/
+		// `fetch-destination.ts` all set `isTarget: !isExternal`) and
+		// redirect-source pages (also written with `is_target = 0` —
+		// `linkRedirectSources` never touches `is_target`, and a brand-new
+		// redirect-source placeholder row's `resolveContentItemId` default is
+		// `0` — see that function's docs). `is_target` alone cannot
+		// distinguish "external"/"redirect source" from "internal but
+		// title-only", so all three conditions are needed together. A
+		// title-only internal row is `scraped = 1` and not
+		// `is_skipped`/alias, so without this predicate it would otherwise
+		// pass every other filter here and surface as a full page row even
+		// though only a title was ever fetched for it. The legacy
+		// pre-rewrite report applied the equivalent
+		// `!page.isInternalPage() || !page.isTarget` exclusion per row (kept
+		// iff internal-and-target, external, or a redirect source); this
+		// reinstates that once, at the shared source, so every
+		// `sourceRows`-derived table (not just Page List) is consistent.
+		//
+		// `redirect_dest_id IS NOT NULL` rows ARE admitted here (unlike
+		// `alias_of_id`, still excluded below) — see
+		// `sanitizeRedirectSourceRow`'s docs for why they are a listable row
+		// in their own right rather than folded into their destination's
+		// display, and the `fromList` scope filter further down for why
+		// admitting them here (rather than only their destination) is what
+		// lets a `--list` archive's Page List match the operator's list 1:1.
 		//
 		// Read in id-keyset chunks (issue #294): the previous single SELECT
 		// held the build silent for minutes on a large archive with no way to
@@ -807,9 +941,33 @@ export async function buildViewerReadModel(
 				// computeHeaderCheckInsertRows — buildHeaderPresenceSelects'
 				// coalesce(..., 0) turns the null-fill into flag 0.
 				.leftJoin('header_flags as hf', 'hf.header_set_id', 'ci.header_set_id')
+				// Resolves `redirectDestUrlRefId` for a redirect-source row —
+				// `viewer_url_refs` is already fully populated (built just
+				// above), so this is a plain id lookup, not a chain-walk
+				// (`redirect_dest_id` is pre-flattened to the final
+				// destination at write time — see ARCHITECTURE.md).
+				.leftJoin(
+					'content_items as redirect_dest',
+					'redirect_dest.id',
+					'ci.redirect_dest_id',
+				)
+				.leftJoin(
+					'url_refs as redirect_dest_ur',
+					'redirect_dest_ur.id',
+					'redirect_dest.url_id',
+				)
+				.leftJoin(
+					'viewer_url_refs as redirect_dest_vur',
+					'redirect_dest_vur.url',
+					'redirect_dest_ur.url',
+				)
 				.where('ci.scraped', 1)
-				.where((qb) => qb.where('ci.is_target', 1).orWhere('ci.is_external', 1))
-				.whereNull('ci.redirect_dest_id')
+				.where((qb) =>
+					qb
+						.where('ci.is_target', 1)
+						.orWhere('ci.is_external', 1)
+						.orWhereNotNull('ci.redirect_dest_id'),
+				)
 				.whereNull('ci.alias_of_id')
 				.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
 				.andWhere('ci.id', '>', lastSourceId)
@@ -827,6 +985,8 @@ export async function buildViewerReadModel(
 					'pm.robots_noindex as robots_noindex',
 					'ci.source as source',
 					'ci.dedupe_cap_event_id as dedupeCapEventId',
+					'ci.redirect_dest_id as redirectDestId',
+					'redirect_dest_vur.id as redirectDestUrlRefId',
 					'pm.tag_count as tag_count',
 					'pm.jsonld_count as jsonld_count',
 					'pm.main_content_word_count as main_content_word_count',
@@ -855,7 +1015,25 @@ export async function buildViewerReadModel(
 			// compute-isolated-clusters.ts — a habit kept even at this chunk
 			// size so the pattern stays copy-safe.
 			for (const row of chunk) {
-				sourceRows.push(row);
+				// `fromList` archives only: an internal row not reachable from
+				// any root (or a root's redirect/alias-resolved destination)
+				// is excluded here, in JS, rather than as a SQL predicate —
+				// the allow-list is itself derived from a query against this
+				// same archive (computed once, above this loop), and folding
+				// it into a `whereIn` would need one bound parameter per
+				// allowed id, which a large `--list` archive can push past
+				// SQLite's variable-count ceiling. External rows are never
+				// restricted by this rule.
+				if (
+					allowedInternalPageIds &&
+					row.isExternal !== 1 &&
+					!allowedInternalPageIds.has(row.id)
+				) {
+					continue;
+				}
+				sourceRows.push(
+					row.redirectDestId == null ? row : sanitizeRedirectSourceRow(row),
+				);
 			}
 			onProgress?.({
 				insertedRows: Math.min(lastSourceId, maxContentItemId),

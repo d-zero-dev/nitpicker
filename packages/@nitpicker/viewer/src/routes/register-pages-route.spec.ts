@@ -923,4 +923,89 @@ describe('registerPagesRoute (integration)', () => {
 			});
 		});
 	});
+
+	describe('isRedirectSource filter (fast path only — the option is not wired on the live path)', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_register_pages_route_redirect_source__',
+		);
+		let app: ReturnType<typeof createApp>;
+		let manager: ArchiveManager;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			const archive = await Archive.create({
+				filePath: path.resolve(workingDir, 'fixture.nitpicker'),
+				cwd: workingDir,
+			});
+			await archive.setConfig(BASE_CONFIG);
+			await archive.setPage({
+				url: parseUrl('https://example.com/canonical')!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+			await archive.setRedirect({
+				url: parseUrl('https://example.com/old')!,
+				redirectPaths: ['https://example.com/canonical'],
+				isExternal: false,
+				isTarget: true,
+				status: 301,
+				statusText: 'Moved Permanently',
+				contentType: 'text/html',
+				contentLength: 0,
+				responseHeaders: {},
+				html: '',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+			await buildViewerReadModel(archive);
+
+			manager = new ArchiveManager();
+			const { archiveId, mode } = await manager.open(archive.tmpDir);
+			app = createApp({
+				context: {
+					manager,
+					archiveId,
+					filePath: archive.tmpDir,
+					mode,
+					crawlerLockHolder: null,
+				},
+				publicDir: '/tmp/no-such-dir-register-pages-route-redirect-source-spec',
+			});
+		});
+
+		afterAll(async () => {
+			await manager.closeAll();
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('filters to only the redirect-source row when isRedirectSource=true', async () => {
+			const res = await app.request('/api/pages?isRedirectSource=true');
+			const body = (await res.json()) as { items: { url: string }[]; total: number };
+			expect(body.total).toBe(1);
+			expect(body.items[0]?.url).toBe('https://example.com/old');
+		});
+
+		it('filters to only the non-redirect-source row when isRedirectSource=false', async () => {
+			const res = await app.request('/api/pages?isRedirectSource=false');
+			const body = (await res.json()) as { items: { url: string }[]; total: number };
+			expect(body.total).toBe(1);
+			expect(body.items[0]?.url).toBe('https://example.com/canonical');
+		});
+	});
 });

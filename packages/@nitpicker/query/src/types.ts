@@ -1010,6 +1010,22 @@ export interface PageListRow {
 	path9?: string | null;
 	/** `viewer_pages.path10` — same live-path caveat as {@link displayTitle}. */
 	path10?: string | null;
+	/**
+	 * `viewer_pages.is_redirect_source` — same live-path caveat as
+	 * {@link displayTitle}: `listPages`/`listPagesByTechnology`/
+	 * `listPagesByJsonLdType` never join `viewer_pages`, and separately
+	 * always exclude `redirect_dest_id IS NOT NULL` rows outright anyway
+	 * (unaffected by the schema-v33 `viewer_pages` change), so they would
+	 * report `0`/`undefined` even if this were selected there.
+	 */
+	isRedirectSource?: 0 | 1;
+	/**
+	 * The redirect destination's URL, resolved once via `viewer_pages`'s
+	 * `redirect_dest_url_ref_id` -> `viewer_url_refs` — same live-path
+	 * caveat as {@link displayTitle}. `null`/`undefined` when
+	 * {@link isRedirectSource} is falsy.
+	 */
+	redirectDestUrl?: string | null;
 }
 
 /**
@@ -1209,6 +1225,22 @@ export interface PageListItem {
 	path9: string | null;
 	/** See {@link path1}. */
 	path10: string | null;
+	/**
+	 * Whether this row is a redirect source pointing at
+	 * {@link redirectDestUrl} instead of hosting its own content — see
+	 * `viewer_pages.is_redirect_source`'s DDL comment. Every other field on
+	 * such a row (title, description, main-content/scroll metrics, header
+	 * presence, etc.) is `null`/`false`/`0` rather than whatever the page
+	 * happened to look like before it became a redirect source. Always
+	 * `false` on `listPages`/`listPagesByTechnology`/`listPagesByJsonLdType`,
+	 * which exclude redirect-source rows outright.
+	 */
+	isRedirectSource: boolean;
+	/**
+	 * The redirect destination's URL when {@link isRedirectSource} is
+	 * `true`, otherwise `null`.
+	 */
+	redirectDestUrl: string | null;
 }
 
 /**
@@ -1309,6 +1341,14 @@ export interface ListViewerPagesOptions {
 	 * as a link destination, not a facet.
 	 */
 	dedupeCapEventId?: number;
+	/**
+	 * Filter to redirect-source rows (true), non-redirect-source rows
+	 * (false), or both (OR — equivalent to no filter). Backed by
+	 * `viewer_pages.is_redirect_source` — see that column's DDL comment for
+	 * what a redirect-source row is and why every audit-signal column on it
+	 * is zeroed/nulled out.
+	 */
+	isRedirectSource?: boolean | boolean[];
 	/** Filter by provenance — see {@link PageSource}. */
 	source?: import('@nitpicker/crawler').PageSource;
 	/**
@@ -1333,17 +1373,23 @@ export interface ListViewerPagesOptions {
 	/**
 	 * SQL LIKE pattern to match page URLs against (e.g. `%blog%`).
 	 *
-	 * Matches the canonical page's own URL (`viewer_pages.url`, a plain LIKE
-	 * scan of the narrow read-model table — a substring LIKE can't seek an
-	 * index anyway, so no index is even attempted), OR any URL that resolves
-	 * to it via an HTTP redirect (`content_items.redirect_dest_id`) or a
-	 * URL-normalization alias (`content_items.alias_of_id`). The equivalence
-	 * arms replicate `listPages`'s own `urlPattern` contract (searching a
-	 * redirect-source or alias-member URL must surface the one canonical row
-	 * that survives — `viewer_pages` holds only canonical rows, so the LIKE
-	 * against it alone would miss those): two `UNION ALL`'d `IN` subqueries
-	 * against `content_items`+`url_refs`, the same narrow-adjunct-table
-	 * reach-through precedent `templateKey`'s `page_templates` subquery set.
+	 * Matches any page's own URL (`viewer_pages.url`, a plain LIKE scan of
+	 * the narrow read-model table — a substring LIKE can't seek an index
+	 * anyway, so no index is even attempted), OR any URL that resolves to a
+	 * different* row via an HTTP redirect (`content_items.redirect_dest_id`)
+	 * or a URL-normalization alias (`content_items.alias_of_id`). The
+	 * equivalence arms replicate `listPages`'s own `urlPattern` contract:
+	 * searching an alias-member URL must still surface the representative
+	 * row it was folded into (`viewer_pages` excludes `alias_of_id IS NOT
+	 * NULL` rows unconditionally, so the LIKE against it alone would miss
+	 * those). A redirect-source URL now matches twice on purpose — its own
+	 * row (direct LIKE, `is_redirect_source: 1`) AND its destination's row
+	 * (the redirect arm) — both are real listable rows since the
+	 * `viewer_pages` schema-v33 change admits redirect sources; they carry
+	 * distinct `page_id`s, so this is two results, not a duplicate. Two
+	 * `UNION ALL`'d `IN` subqueries against `content_items`+`url_refs`, the
+	 * same narrow-adjunct-table reach-through precedent `templateKey`'s
+	 * `page_templates` subquery set.
 	 */
 	urlPattern?: string;
 	/** Field to sort results by. Defaults to `'url'`. */
@@ -3411,9 +3457,11 @@ export interface ViewerReadModelBuildProgress {
  * each, no countable unit, but long enough on a large archive to need their
  * own labels; the libsql binding does not expose SQLite's progress-handler
  * hook, so intra-statement progress is not implementable). `loadingPageRows`
- * additionally begins with a short numberless stretch (table drop/create and
- * the `viewer_url_refs` INSERT — single statements again) before its
- * id-scan numbers start.
+ * additionally begins with a short numberless stretch (table drop/create,
+ * the `viewer_url_refs` INSERT, and — on a `fromList` archive only —
+ * `computeFromListAllowedPageIds`'s chunked root lookups; all single
+ * statements or `roots.length`-proportional, the same order of magnitude)
+ * before its id-scan numbers start.
  */
 export type ViewerReadModelBuildPhase =
 	| 'backfillingAnalysisViolations'

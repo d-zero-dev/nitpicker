@@ -167,6 +167,27 @@ export function PagesView() {
 				cell: textCell,
 			},
 			{
+				accessorKey: 'redirectDestUrl',
+				header: t('views.pages.colRedirectTo'),
+				size: 240,
+				cell: (info) => {
+					const destUrl = info.getValue<string | null>();
+					if (!destUrl) {
+						return '—';
+					}
+					return (
+						<button
+							type="button"
+							className="link-button"
+							onClick={() => {
+								void navigate(`/pages/detail?url=${encodeURIComponent(destUrl)}`);
+							}}>
+							{destUrl}
+						</button>
+					);
+				},
+			},
+			{
 				id: 'isExternal',
 				header: 'Scope',
 				size: 90,

@@ -30,5 +30,19 @@
  * (previously re-run in full on every `report` run) into
  * `buildViewerReadModel`'s new `buildingResourceGroups` phase — see
  * `compute-resource-group-rows.ts`.
+ *
+ * 32 -> 33 (Page List redirect-source rows + `--list` page scope): a
+ * redirect-source `content_items` row (`redirect_dest_id IS NOT NULL`) is
+ * now admitted into `viewer_pages` as its own row instead of being excluded
+ * — three new columns (`is_redirect_source`, `redirect_dest_page_id`,
+ * `redirect_dest_url_ref_id`) carry the destination link, and every
+ * audit-signal column on such a row is zeroed/nulled out (see
+ * `sanitizeRedirectSourceRow` in `build-viewer-read-model.ts`). Separately,
+ * a `fromList` archive's internal `viewer_pages` rows are now restricted to
+ * pages reachable from `config.roots` (see `compute-from-list-allowed-page-ids.ts`)
+ * — excludes an internal page a crawler bug scraped in full despite
+ * `--list`'s non-recursive mode, while still admitting a listed root's
+ * redirect destination even when that destination URL was never itself on
+ * the list.
  */
-export const VIEWER_READ_MODEL_SCHEMA_VERSION = 32;
+export const VIEWER_READ_MODEL_SCHEMA_VERSION = 33;

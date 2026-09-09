@@ -155,19 +155,28 @@ describe('collectHtmlReportPages', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('joins redirect sources and resource tallies onto inner pages in URL order', async () => {
+	it('joins redirect sources and resource tallies onto inner pages in URL order, including the redirect source as its own row', async () => {
 		const pages = await collectHtmlReportPages(archive);
 		expect(pages.map((page) => page.url)).toEqual([
 			'https://example.com/about',
 			'https://example.com/docs',
+			'https://example.com/old-docs',
 		]);
-		expect(pages[1]).toMatchObject({
+		const docsPage = pages.find((page) => page.url === 'https://example.com/docs');
+		expect(docsPage).toMatchObject({
 			title: 'Docs',
 			status: 200,
 			redirectChain: ['https://example.com/old-docs'],
+			redirectTo: null,
 			metaDescription: 'Docs page',
 			resourceFilesExists: 1,
 			resourceFilesTotal: 2,
+		});
+		const oldDocsPage = pages.find((page) => page.url === 'https://example.com/old-docs');
+		expect(oldDocsPage).toMatchObject({
+			title: null,
+			status: 301,
+			redirectTo: 'https://example.com/docs',
 		});
 		expect(pages[0]?.resourceFilesTotal).toBe(0);
 	});

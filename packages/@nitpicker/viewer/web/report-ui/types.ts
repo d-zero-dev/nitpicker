@@ -27,6 +27,13 @@ export interface HtmlReportPage {
 	resourceFilesExists: number;
 	resourceFilesTotal: number;
 	consoleErrorCount: number | null;
+	/**
+	 * The URL this row redirects to, or `null` for a page hosting its own
+	 * content. `title`/`metaDescription`/etc. are `null` on a redirect-source
+	 * row (see `PageListItem.isRedirectSource`'s docs) — the row carries no
+	 * audit signal of its own.
+	 */
+	redirectTo: string | null;
 }
 
 /**

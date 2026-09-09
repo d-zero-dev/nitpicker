@@ -25,8 +25,10 @@ type FacetDimension = 'is_external' | 'lang' | 'status';
  * `buildViewerReadModel` already holds before chunked-inserting
  * `viewer_pages`, so this adds no extra database round-trip.
  * @param rows - Every row that will become a `viewer_pages` entry (i.e. the
- *   `pages` rows already filtered to `scraped = 1 AND redirectDestId IS
- *   NULL` and non-skipped).
+ *   `pages` rows already filtered to `scraped = 1` and non-skipped —
+ *   including redirect-source rows, whose `status` is a real 3xx and whose
+ *   `is_external`/`lang` reflect the sanitized shape
+ *   `sanitizeRedirectSourceRow` produces).
  * @returns One `viewer_count_buckets` row per distinct
  *   `(category, dimension, value)` combination observed.
  */

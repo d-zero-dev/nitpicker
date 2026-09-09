@@ -210,8 +210,9 @@ describe('buildViewerReadModel', () => {
 				isSkipped: false,
 			});
 
-			// Redirect destination (listable) + redirect source (must be
-			// EXCLUDED from viewer_pages: it has redirectDestId set).
+			// Redirect destination (listable) + redirect source (its own
+			// listable row too, as of schema v33 — see build-viewer-read-model.spec.ts's
+			// "redirect-source rows" describe block below).
 			await archive.setPage({
 				url: parseUrl('https://example.com/new-canonical')!,
 				redirectPaths: [],
@@ -254,38 +255,45 @@ describe('buildViewerReadModel', () => {
 			rmSync(workingDir, { recursive: true, force: true });
 		});
 
-		it('populates viewer_pages with exactly the 5 listable fixture pages (redirect source excluded)', async () => {
+		it('populates viewer_pages with exactly the 6 listable fixture pages (redirect source included as its own row)', async () => {
 			await buildViewerReadModel(archive);
 			const knex = archive.getKnex();
 
 			// Hardcoded literal, not re-derived from another query: home,
-			// empty-meta, external, errored, and the redirect destination.
-			// The redirect *source* (/old) has redirectDestId set and must
-			// not count.
+			// empty-meta, external, errored, the redirect destination, and the
+			// redirect *source* (/old) — admitted as its own row since schema
+			// v33 (see the "redirect-source rows" describe block below for its
+			// column-level assertions).
 			const viewerPagesCount = await knex('viewer_pages').count<{ count: string }[]>({
 				count: '*',
 			});
-			expect(Number(viewerPagesCount[0]?.count)).toBe(5);
+			expect(Number(viewerPagesCount[0]?.count)).toBe(6);
 
 			const oldRow = await knex('viewer_pages')
 				.where('url', 'https://example.com/old')
 				.first();
-			expect(oldRow).toBeUndefined();
+			expect(oldRow).toMatchObject({ is_redirect_source: 1 });
 		});
 
-		it("matches listPages()'s listable-page total (independent cross-check)", async () => {
+		it("viewer_pages count exceeds listPages()'s listable-page total by exactly the redirect-source row count", async () => {
 			const knex = archive.getKnex();
 			const { total } = await listPages(archive, {});
 			const viewerPagesCount = await knex('viewer_pages').count<{ count: string }[]>({
 				count: '*',
 			});
-			// Every fixture page here is 'text/html' or null-contentType, so
-			// listPages()'s default (html + null) view covers the exact same
-			// set as viewer_pages' unfiltered listable projection. This is a
-			// cross-check against a separately-implemented, already-tested
-			// query function — not a re-derivation of the same arithmetic
-			// buildViewerReadModel itself does.
-			expect(Number(viewerPagesCount[0]?.count)).toBe(total);
+			const redirectSourceCount = await knex('viewer_pages')
+				.where('is_redirect_source', 1)
+				.count<{ count: string }[]>({ count: '*' });
+			// listPages() still excludes every redirectDestId IS NOT NULL row
+			// outright — unaffected by this table's schema change. viewer_pages
+			// now additionally includes those rows as their own listable
+			// entries, so the two counts diverge by exactly that many. This
+			// stays a cross-check against a separately-implemented,
+			// already-tested query function, not a re-derivation of the same
+			// arithmetic buildViewerReadModel itself does.
+			expect(Number(viewerPagesCount[0]?.count)).toBe(
+				total + Number(redirectSourceCount[0]?.count),
+			);
 		});
 
 		it('derives has_title/has_description/has_og_title using the same "non-null and non-empty" idiom as list-pages.ts', async () => {
@@ -357,20 +365,20 @@ describe('buildViewerReadModel', () => {
 			expect(external).toMatchObject({ is_external: 1 });
 		});
 
-		it('seeds one matching viewer_query_profiles row and a total viewer_count_buckets row, both equal to the hardcoded 5-page total', async () => {
+		it('seeds one matching viewer_query_profiles row and a total viewer_count_buckets row, both equal to the hardcoded 6-page total', async () => {
 			const knex = archive.getKnex();
 
 			const profiles = await knex('viewer_query_profiles').select('*');
 			expect(profiles).toHaveLength(1);
-			expect(profiles[0]).toMatchObject({ scope: 'pages', total: 5 });
+			expect(profiles[0]).toMatchObject({ scope: 'pages', total: 6 });
 
 			const totalBucket = await knex('viewer_count_buckets')
 				.where({ scope: 'pages', key: 'total', value: 'all' })
 				.first();
-			expect(totalBucket).toMatchObject({ count: 5 });
+			expect(totalBucket).toMatchObject({ count: 6 });
 
 			const meta = await knex('viewer_read_model_meta').where('id', 1).first();
-			expect(meta).toMatchObject({ source_row_count: 5 });
+			expect(meta).toMatchObject({ source_row_count: 6 });
 		});
 
 		it('populates viewer_count_buckets with per-category and default-scoped facet rows', async () => {
@@ -391,14 +399,25 @@ describe('buildViewerReadModel', () => {
 			expect(byKeyValue.get('facet:is_external:content_category=html=1')).toBe(1);
 			expect(buckets.some((b) => b.key.startsWith('facet:lang:'))).toBe(false);
 
-			// unknown category: only the null-contentType errored page (null
-			// status is excluded from the status facet entirely).
-			expect(byKeyValue.get('facet:is_external:content_category=unknown=0')).toBe(1);
-			expect(byKeyValue.has('facet:status:content_category=unknown=200')).toBe(false);
+			// unknown category: the null-contentType errored page (null status
+			// is excluded from the status facet entirely) PLUS the redirect
+			// source /old — sanitized to a null contentType
+			// (classifyContentType(null) === 'unknown'). Its status is 301,
+			// not the fixture's requested 200: recordRedirect resolves a
+			// brand-new redirect-source placeholder with a null status, and
+			// linkRedirectSources only stamps a definitive "301 Moved
+			// Permanently" onto a null/-1 status — it never adopts the
+			// caller's requested status (see that function's docs).
+			expect(byKeyValue.get('facet:is_external:content_category=unknown=0')).toBe(2);
+			expect(byKeyValue.get('facet:status:content_category=unknown=301')).toBe(1);
 
-			// default (html ∪ unknown) mirrors the combined html+unknown population.
+			// default (html ∪ unknown) mirrors the combined html+unknown
+			// population — status:200 is unaffected (the redirect source's
+			// status is 301, its own separate bucket), only is_external
+			// gains the redirect source.
 			expect(byKeyValue.get('facet:status:content_category=default=200')).toBe(4);
-			expect(byKeyValue.get('facet:is_external:content_category=default=0')).toBe(4);
+			expect(byKeyValue.get('facet:status:content_category=default=301')).toBe(1);
+			expect(byKeyValue.get('facet:is_external:content_category=default=0')).toBe(5);
 			expect(byKeyValue.get('facet:is_external:content_category=default=1')).toBe(1);
 		});
 
@@ -2817,5 +2836,288 @@ describe('buildViewerReadModel: dedupe_cap_events end-to-end', () => {
 			{ url: 'https://example.com/search/?ssp=1', dedupe_cap_event_id: eventId },
 			{ url: 'https://example.com/search/?ssp=2', dedupe_cap_event_id: eventId },
 		]);
+	});
+});
+
+describe('buildViewerReadModel: redirect-source rows', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_build_read_model_redirect_source__',
+	);
+	const archiveFilePath = path.resolve(
+		workingDir,
+		'build-redirect-source-test.nitpicker',
+	);
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		await archive.setPage({
+			url: parseUrl('https://example.com/canonical')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: 'Canonical' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// Stale audit signals attached on purpose (title/description set) —
+		// proves sanitizeRedirectSourceRow strips them rather than a fixture
+		// that happens to have none. `linkRedirectSources` never clears
+		// `page_meta` on redirect, so a real archive can carry exactly this
+		// shape (see that function's docs).
+		await archive.setRedirect({
+			url: parseUrl('https://example.com/old')!,
+			redirectPaths: ['https://example.com/canonical'],
+			isExternal: false,
+			isTarget: true,
+			status: 301,
+			statusText: 'Moved Permanently',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: { ...META, title: 'Stale Title', description: 'Stale description' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('admits the redirect-source row with every audit-signal column zeroed/nulled, pointing at the destination', async () => {
+		await buildViewerReadModel(archive);
+		const knex = archive.getKnex();
+
+		const canonical = await knex('viewer_pages')
+			.where('url', 'https://example.com/canonical')
+			.first();
+		const old = await knex('viewer_pages')
+			.where('url', 'https://example.com/old')
+			.first();
+
+		expect(old).toMatchObject({
+			is_redirect_source: 1,
+			status: 301,
+			content_category: 'unknown',
+			title: null,
+			has_title: 0,
+			has_description: 0,
+			has_og_title: 0,
+			robots_noindex: 0,
+			tag_count: 0,
+			main_content_word_count: 0,
+			lang: null,
+			has_csp: 0,
+			redirect_dest_page_id: canonical.page_id,
+		});
+
+		const destUrlRef = await knex('viewer_url_refs')
+			.where('id', old.redirect_dest_url_ref_id)
+			.first();
+		expect(destUrlRef?.url).toBe('https://example.com/canonical');
+	});
+
+	it('does not let the redirect source contribute its stale title to display_title', async () => {
+		const knex = archive.getKnex();
+		const old = await knex('viewer_pages')
+			.where('url', 'https://example.com/old')
+			.first();
+		expect(old.display_title).toBeNull();
+	});
+});
+
+describe('buildViewerReadModel: fromList page scope', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_build_read_model_from_list__',
+	);
+	const archiveFilePath = path.resolve(workingDir, 'build-from-list-test.nitpicker');
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig({
+			...BASE_CONFIG,
+			fromList: true,
+			roots: [
+				'https://example.com/a',
+				'https://example.com/redirect-root',
+				'https://example.com/multi-hop-root',
+			],
+		});
+
+		// In the list — must be admitted.
+		await archive.setPage({
+			url: parseUrl('https://example.com/a')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: 'A' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// NOT in the list, scraped in full anyway (e.g. a crawler bug) — must
+		// be excluded on a fromList archive despite `isTarget: true`.
+		await archive.setPage({
+			url: parseUrl('https://example.com/b')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: 'B' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// External page — fromList never restricts external rows.
+		await archive.setPage({
+			url: parseUrl('https://example.net/')!,
+			redirectPaths: [],
+			isExternal: true,
+			isTarget: false,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// A root that redirects to an off-list destination — the destination
+		// must be admitted even though it was never itself on the list.
+		await archive.setPage({
+			url: parseUrl('https://example.com/off-list-destination')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: 'Off list destination' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setRedirect({
+			url: parseUrl('https://example.com/redirect-root')!,
+			redirectPaths: ['https://example.com/off-list-destination'],
+			isExternal: false,
+			isTarget: true,
+			status: 301,
+			statusText: 'Moved Permanently',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+
+		// A multi-hop root (root -> hop1 -> final): redirect_dest_id is
+		// pre-flattened, so BOTH the root and hop1 end up pointing directly
+		// at final. hop1 is not itself a root, so it must be excluded even
+		// though it is a redirect source with a resolvable destination.
+		await archive.setPage({
+			url: parseUrl('https://example.com/final')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: 'Final' },
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await archive.setRedirect({
+			url: parseUrl('https://example.com/multi-hop-root')!,
+			redirectPaths: ['https://example.com/hop1', 'https://example.com/final'],
+			isExternal: false,
+			isTarget: true,
+			status: 301,
+			statusText: 'Moved Permanently',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('admits rows reachable from roots (directly or via redirect), excludes every other internal row, and never restricts external rows', async () => {
+		await buildViewerReadModel(archive);
+		const knex = archive.getKnex();
+
+		const rows = await knex('viewer_pages').select('url').orderBy('url');
+		const urls = rows.map((r: { url: string }) => r.url);
+
+		expect(urls).toContain('https://example.com/a');
+		expect(urls).not.toContain('https://example.com/b');
+		expect(urls).toContain('https://example.net');
+		expect(urls).toContain('https://example.com/redirect-root');
+		expect(urls).toContain('https://example.com/off-list-destination');
+		expect(urls).toContain('https://example.com/multi-hop-root');
+		expect(urls).toContain('https://example.com/final');
+		expect(urls).not.toContain('https://example.com/hop1');
 	});
 });

@@ -109,6 +109,7 @@ export function createPageList(options?: { urls?: readonly string[] }): CreateSh
 					'path10',
 					'Status Code',
 					'Redirect From',
+					'Redirect To',
 					'Language',
 					'charset',
 					'Internal Links',
@@ -201,97 +202,179 @@ export function createPageList(options?: { urls?: readonly string[] }): CreateSh
 						const internalReferrers =
 							item.dirIndexInboundLinkCount ?? item.inboundLinkCount ?? 0;
 
+						// A redirect-source row (see PageListItem.isRedirectSource's docs)
+						// carries no audit signal of its own — every column below reads
+						// from a sanitized null/0/false rather than real page data.
+						// Rendering the raw sanitized value would read as "an empty page";
+						// `dash` renders it as `-` instead, so the row reads as explicitly
+						// not-applicable. URL / Status Code / Redirect From / Redirect To
+						// are excluded — they carry real signal even on a redirect source.
+						const dash = <T extends string | number | boolean | null>(
+							value: T,
+						): T | '-' => (item.isRedirectSource ? '-' : value);
+
 						const data = [
 							createCellData(
 								{
-									value: item.displayTitle ?? item.title,
+									value: dash(item.displayTitle ?? item.title),
 									cellFormat: { padding: { left: Math.max(depth, 0) * 20 + 3 } },
-									note: truncateNoteText(`Full-title:\n${item.title}`),
+									// `item.title` is sanitized to null on a redirect-source row
+									// (see `dash`'s comment above) — omit the note entirely
+									// there instead of leaking a literal "Full-title:\nnull"
+									// string into it.
+									note: item.isRedirectSource
+										? undefined
+										: truncateNoteText(`Full-title:\n${item.title}`),
 								},
 								defaultCellFormat,
 							),
-							createCellData({ value: item.title }, defaultCellFormat),
+							createCellData({ value: dash(item.title) }, defaultCellFormat),
 							createCellData(
 								{ value: item.url, textFormat: { link: { uri: item.url } } },
 								defaultCellFormat,
 							),
-							createCellData({ value: item.protocol }, defaultCellFormat),
-							createCellData({ value: item.hostname }, defaultCellFormat),
-							createCellData({ value: item.path1 }, defaultCellFormat),
-							createCellData({ value: item.path2 }, defaultCellFormat),
-							createCellData({ value: item.path3 }, defaultCellFormat),
-							createCellData({ value: item.path4 }, defaultCellFormat),
-							createCellData({ value: item.path5 }, defaultCellFormat),
-							createCellData({ value: item.path6 }, defaultCellFormat),
-							createCellData({ value: item.path7 }, defaultCellFormat),
-							createCellData({ value: item.path8 }, defaultCellFormat),
-							createCellData({ value: item.path9 }, defaultCellFormat),
-							createCellData({ value: item.path10 }, defaultCellFormat),
+							createCellData({ value: dash(item.protocol) }, defaultCellFormat),
+							createCellData({ value: dash(item.hostname) }, defaultCellFormat),
+							createCellData({ value: dash(item.path1) }, defaultCellFormat),
+							createCellData({ value: dash(item.path2) }, defaultCellFormat),
+							createCellData({ value: dash(item.path3) }, defaultCellFormat),
+							createCellData({ value: dash(item.path4) }, defaultCellFormat),
+							createCellData({ value: dash(item.path5) }, defaultCellFormat),
+							createCellData({ value: dash(item.path6) }, defaultCellFormat),
+							createCellData({ value: dash(item.path7) }, defaultCellFormat),
+							createCellData({ value: dash(item.path8) }, defaultCellFormat),
+							createCellData({ value: dash(item.path9) }, defaultCellFormat),
+							createCellData({ value: dash(item.path10) }, defaultCellFormat),
 							createCellData({ value: item.status ?? -1 }, defaultCellFormat),
 							createCellData(
 								{
-									value: redirectFromUrls.length,
+									value: dash(redirectFromUrls.length),
 									note: joinUrlsForNote(redirectFromUrls),
 								},
 								defaultCellFormat,
 							),
-							createCellData({ value: item.lang || 'N/A' }, defaultCellFormat),
-							createCellData({ value: item.charset }, defaultCellFormat),
-							createCellData({ value: facts?.internalLinks ?? 0 }, defaultCellFormat),
-							createCellData({ value: facts?.internalBadLinks ?? 0 }, defaultCellFormat),
-							createCellData({ value: facts?.externalLinks ?? 0 }, defaultCellFormat),
-							createCellData({ value: facts?.externalBadLinks ?? 0 }, defaultCellFormat),
-							createCellData({ value: internalReferrers }, defaultCellFormat),
-							createCellData({ value: item.description }, defaultCellFormat),
-							createCellData({ value: item.keywords }, defaultCellFormat),
-							createCellData({ value: item.noindex }, defaultCellFormat),
-							createCellData({ value: item.nofollow }, defaultCellFormat),
-							createCellData({ value: item.noarchive }, defaultCellFormat),
-							createCellData({ value: item.robotsRaw }, defaultCellFormat),
-							createCellData({ value: item.canonical }, defaultCellFormat),
-							createCellData({ value: item.manifest }, defaultCellFormat),
-							createCellData({ value: item.themeColor }, defaultCellFormat),
-							createCellData({ value: item.twitterCard }, defaultCellFormat),
-							createCellData({ value: item.twitterSite }, defaultCellFormat),
-							createCellData({ value: item.twitterCreator }, defaultCellFormat),
-							createCellData({ value: item.ogSiteName }, defaultCellFormat),
 							createCellData(
-								{ value: item.ogUrl, textFormat: { link: { uri: item.ogUrl ?? '' } } },
+								{
+									value: item.redirectDestUrl,
+									textFormat: item.redirectDestUrl
+										? { link: { uri: item.redirectDestUrl } }
+										: undefined,
+								},
 								defaultCellFormat,
 							),
-							createCellData({ value: item.ogTitle }, defaultCellFormat),
-							createCellData({ value: item.ogDescription }, defaultCellFormat),
-							createCellData({ value: item.ogType }, defaultCellFormat),
-							createCellData({ value: item.ogImage }, defaultCellFormat),
-							createCellData({ value: item.ogImageAlt }, defaultCellFormat),
-							createCellData({ value: item.ogLocale }, defaultCellFormat),
-							createCellData({ value: item.ogArticlePublishedTime }, defaultCellFormat),
+							createCellData({ value: dash(item.lang || 'N/A') }, defaultCellFormat),
+							createCellData({ value: dash(item.charset) }, defaultCellFormat),
+							createCellData(
+								{ value: dash(facts?.internalLinks ?? 0) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(facts?.internalBadLinks ?? 0) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(facts?.externalLinks ?? 0) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(facts?.externalBadLinks ?? 0) },
+								defaultCellFormat,
+							),
+							createCellData({ value: dash(internalReferrers) }, defaultCellFormat),
+							createCellData({ value: dash(item.description) }, defaultCellFormat),
+							createCellData({ value: dash(item.keywords) }, defaultCellFormat),
+							createCellData({ value: dash(item.noindex) }, defaultCellFormat),
+							createCellData({ value: dash(item.nofollow) }, defaultCellFormat),
+							createCellData({ value: dash(item.noarchive) }, defaultCellFormat),
+							createCellData({ value: dash(item.robotsRaw) }, defaultCellFormat),
+							createCellData({ value: dash(item.canonical) }, defaultCellFormat),
+							createCellData({ value: dash(item.manifest) }, defaultCellFormat),
+							createCellData({ value: dash(item.themeColor) }, defaultCellFormat),
+							createCellData({ value: dash(item.twitterCard) }, defaultCellFormat),
+							createCellData({ value: dash(item.twitterSite) }, defaultCellFormat),
+							createCellData({ value: dash(item.twitterCreator) }, defaultCellFormat),
+							createCellData({ value: dash(item.ogSiteName) }, defaultCellFormat),
+							createCellData(
+								{
+									value: dash(item.ogUrl),
+									textFormat: item.isRedirectSource
+										? undefined
+										: { link: { uri: item.ogUrl ?? '' } },
+								},
+								defaultCellFormat,
+							),
+							createCellData({ value: dash(item.ogTitle) }, defaultCellFormat),
+							createCellData({ value: dash(item.ogDescription) }, defaultCellFormat),
+							createCellData({ value: dash(item.ogType) }, defaultCellFormat),
+							createCellData({ value: dash(item.ogImage) }, defaultCellFormat),
+							createCellData({ value: dash(item.ogImageAlt) }, defaultCellFormat),
+							createCellData({ value: dash(item.ogLocale) }, defaultCellFormat),
+							createCellData(
+								{ value: dash(item.ogArticlePublishedTime) },
+								defaultCellFormat,
+							),
 							// Denormalised aggregates: written at scrape time so no per-page
 							// GROUP BY is needed here. `tagsProvidersCsv` is comma-separated
 							// for native Google Sheets list rendering.
-							createCellData({ value: item.jsonldCount }, defaultCellFormat),
-							createCellData({ value: item.tagsProvidersCsv }, defaultCellFormat),
+							createCellData({ value: dash(item.jsonldCount) }, defaultCellFormat),
+							createCellData({ value: dash(item.tagsProvidersCsv) }, defaultCellFormat),
 							// beholder MainContentsData / ScrollHeightData denormalised
 							// aggregates. `null` (page never fully rendered) or `0` (rendered,
 							// no main region / no elements of that kind found) render as
 							// blank / 0 respectively — no special-casing needed here.
-							createCellData({ value: item.mainContentSelector }, defaultCellFormat),
-							createCellData({ value: item.mainContentWordCount }, defaultCellFormat),
-							createCellData({ value: item.mainContentBodyWordCount }, defaultCellFormat),
-							createCellData({ value: item.mainContentHeadingCount }, defaultCellFormat),
-							createCellData({ value: item.mainContentImageCount }, defaultCellFormat),
-							createCellData({ value: item.mainContentTableCount }, defaultCellFormat),
-							createCellData({ value: item.mainContentButtonCount }, defaultCellFormat),
-							createCellData({ value: item.mainContentIframeCount }, defaultCellFormat),
-							createCellData({ value: item.mainContentVideoCount }, defaultCellFormat),
-							createCellData({ value: item.mainContentAudioCount }, defaultCellFormat),
-							createCellData({ value: item.mainContentCanvasCount }, defaultCellFormat),
 							createCellData(
-								{ value: item.mainContentCustomElementCount },
+								{ value: dash(item.mainContentSelector) },
 								defaultCellFormat,
 							),
-							createCellData({ value: item.scrollHeightDesktop }, defaultCellFormat),
-							createCellData({ value: item.scrollHeightMobile }, defaultCellFormat),
+							createCellData(
+								{ value: dash(item.mainContentWordCount) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(item.mainContentBodyWordCount) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(item.mainContentHeadingCount) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(item.mainContentImageCount) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(item.mainContentTableCount) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(item.mainContentButtonCount) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(item.mainContentIframeCount) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(item.mainContentVideoCount) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(item.mainContentAudioCount) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(item.mainContentCanvasCount) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(item.mainContentCustomElementCount) },
+								defaultCellFormat,
+							),
+							createCellData(
+								{ value: dash(item.scrollHeightDesktop) },
+								defaultCellFormat,
+							),
+							createCellData({ value: dash(item.scrollHeightMobile) }, defaultCellFormat),
 						];
 
 						for (const report of reportPageData) {

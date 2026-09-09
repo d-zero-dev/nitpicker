@@ -29,13 +29,16 @@ export async function dropViewerReadModelTables(trx: Knex): Promise<void> {
 	await trx.schema.dropTableIfExists('viewer_error_kind_entries');
 	await trx.schema.dropTableIfExists('viewer_anchor_facts');
 	await trx.schema.dropTableIfExists('viewer_external_links');
-	await trx.schema.dropTableIfExists('viewer_url_refs');
 	await trx.schema.dropTableIfExists('viewer_directory_pages');
 	await trx.schema.dropTableIfExists('viewer_directory_nodes');
 	await trx.schema.dropTableIfExists('viewer_page_anchors');
 	await trx.schema.dropTableIfExists('viewer_count_buckets');
 	await trx.schema.dropTableIfExists('viewer_query_profiles');
+	// `viewer_pages.redirect_dest_url_ref_id` references `viewer_url_refs`
+	// (schema v33) — must drop before `viewer_url_refs` itself, unlike every
+	// table above this line that has no FK pointing at it.
 	await trx.schema.dropTableIfExists('viewer_pages');
+	await trx.schema.dropTableIfExists('viewer_url_refs');
 	await trx.schema.dropTableIfExists('viewer_summary');
 	await trx.schema.dropTableIfExists('viewer_read_model_meta');
 }
