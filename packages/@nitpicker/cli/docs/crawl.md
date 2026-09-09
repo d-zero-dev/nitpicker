@@ -51,6 +51,28 @@ npx @nitpicker/cli crawl 'https://user:pass@staging.example.com/'
 
 認証情報はクロール対象への認証にのみ使用され、スコープ外ホストへのリクエストには送信されません。ページの保存URLにも含まれません。ただし、アーカイブ内のクロール設定（起点URL）には再クロール（`--append` / `--retry-failed`）のために元のURLがそのまま保存されるため、Basic認証つきでクロールした `.nitpicker` ファイルを第三者へ共有する場合は認証情報が含まれる点に注意してください。
 
+## 実行中の対話コマンド
+
+TTY で実行し、`--verbose` / `--silent` のどちらも指定していない場合、進捗表示の最下行に常時入力行（`> `）が表示され、クロール実行中に以下のコマンドを打てます。
+
+```
+parallels <n>              # 並列数を変更
+interval <ms>               # URLごとの待機時間を変更
+exclude <glob> [<glob>...]  # 除外パターンを追加
+exclude-url <prefix> [<prefix>...]  # 除外URLプレフィックスを追加
+exclude-keyword <text>      # 除外キーワードを追加
+help                        # コマンド一覧を表示
+```
+
+`exclude` / `exclude-url` / `exclude-keyword` は追加のみで削除はできません。いずれも、まだ取得していないURLにのみ適用されます — 追加した時点ですでにクロール済みのページは遡って除外されません。変更内容は `.nitpicker` アーカイブにも保存され、`--resume` / `--append` / `--retry-failed` で再開したクロールにも引き継がれます。Ctrl+C は通常どおりクロールを中断します。
+
+```sh
+npx @nitpicker/cli crawl https://example.com
+# 実行中に:
+# > parallels 4
+# > exclude /admin/**
+```
+
 ## `--resume`: 中断したクロールの再開
 
 長時間クロールは Ctrl+C で停止できます。停止時には、完成済みの `.nitpicker` とは別に、未完了クロールの作業状態を保持するstubディレクトリが残ります。

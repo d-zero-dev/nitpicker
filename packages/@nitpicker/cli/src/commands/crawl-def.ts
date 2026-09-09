@@ -13,7 +13,7 @@ import type { CommandDef } from '@d-zero/roar';
  * point.
  */
 export const commandDef = {
-	desc: 'Crawl a website',
+	desc: 'Crawl a website. While it runs (TTY, non-verbose, non-silent), type "help" at the input line for interactive commands (parallels/interval/exclude/...)',
 	usage: [
 		'<URL> [<URL>...] [options]',
 		'<archive> --append <URL> [--append <URL>...] [options]',

@@ -1,4 +1,5 @@
 import type { CrawlerEventTypes } from './types.js';
+import type { Lanes } from '@d-zero/dealer';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -373,6 +374,247 @@ describe('Crawler', () => {
 			const crawler = new Crawler(defaultOptions);
 			expect(crawler.signal).toBeInstanceOf(AbortSignal);
 			expect(crawler.signal.aborted).toBe(false);
+		});
+	});
+
+	describe('updateRuntimeOptions()', () => {
+		it('deal() 実行中であれば onStart で受け取った DealController.setLimit を呼ぶ', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+
+			const setLimit = vi.fn();
+			let resolveDeal: () => void = () => {};
+			const dealPromise = new Promise<void>((resolve) => {
+				resolveDeal = resolve;
+			});
+			vi.mocked(deal).mockImplementation((_items, _factory, options) => {
+				options?.onStart?.({ limit: 1, setLimit });
+				return dealPromise;
+			});
+
+			const crawler = new Crawler(defaultOptions);
+			crawler.start([parseUrl('https://example.com/')!]);
+			await vi.waitFor(() => {
+				expect(setLimit).not.toHaveBeenCalled();
+			});
+
+			const snapshot = crawler.updateRuntimeOptions({ parallels: 4 });
+
+			expect(setLimit).toHaveBeenCalledWith(4);
+			expect(snapshot.parallels).toBe(4);
+			resolveDeal();
+		});
+
+		it('deal() 実行中でなければ setLimit は呼ばれないが、#options 自体は更新される', async () => {
+			const { default: Crawler } = await import('./crawler.js');
+			const crawler = new Crawler(defaultOptions);
+
+			const snapshot = crawler.updateRuntimeOptions({ parallels: 4 });
+
+			expect(snapshot.parallels).toBe(4);
+		});
+
+		it('deal() 完了後は dealController が解除され、以降の updateRuntimeOptions は setLimit を呼ばない', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+
+			const setLimit = vi.fn();
+			vi.mocked(deal).mockImplementation((_items, _factory, options) => {
+				options?.onStart?.({ limit: 1, setLimit });
+				return Promise.resolve();
+			});
+
+			const crawler = new Crawler(defaultOptions);
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+			crawler.start([parseUrl('https://example.com/')!]);
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			const snapshot = crawler.updateRuntimeOptions({ parallels: 4 });
+
+			expect(setLimit).not.toHaveBeenCalled();
+			expect(snapshot.parallels).toBe(4);
+		});
+
+		it('コンストラクタに渡した lanes をそのまま deal() の options に転送する', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+
+			vi.mocked(deal).mockResolvedValue();
+			// `@d-zero/dealer` is module-mocked (top of file) down to `{ deal: vi.fn() }`,
+			// so `Lanes` itself is unavailable here — a plain object stand-in is enough
+			// to prove referential identity survives the `Crawler` → `deal()` handoff.
+			const lanes = {} as Lanes;
+
+			const crawler = new Crawler({ ...defaultOptions, lanes });
+			crawler.start([parseUrl('https://example.com/')!]);
+
+			await vi.waitFor(() => {
+				expect(vi.mocked(deal)).toHaveBeenCalled();
+			});
+			const options = vi.mocked(deal).mock.calls[0]?.[2];
+			expect(options?.lanes).toBe(lanes);
+		});
+
+		it('mid-crawl の updateRuntimeOptions({ excludes }) は、その後 dispatch される新規URLを実際に fetch せず skip する', async () => {
+			await driveDealRecursive();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const root = parseUrl('https://example.com/')!;
+			const excludedChild = parseUrl('https://example.com/excluded/child')!;
+
+			const crawler = new Crawler(defaultOptions);
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			const fetchSpy = vi
+				.spyOn(fetchDestMod, 'fetchDestination')
+				.mockImplementation((args) => {
+					const href = (args as { url: ExURL }).url.withoutHashAndAuth;
+					if (href !== root.withoutHashAndAuth) {
+						return Promise.reject(new Error(`unexpected fetch for ${href}`));
+					}
+					// Simulates the operator submitting `exclude /excluded/**` while
+					// the root page is still being fetched — excludedChild is only
+					// discovered once this response's anchorList is processed, so it
+					// has not been dispatched yet and must observe the new exclude.
+					crawler.updateRuntimeOptions({ excludes: ['/excluded/**'] });
+					return Promise.resolve({
+						url: root,
+						redirectPaths: [],
+						isTarget: false,
+						isExternal: false,
+						status: 200,
+						statusText: 'OK',
+						contentType: 'application/xml',
+						contentLength: 0,
+						responseHeaders: {},
+						meta: { title: '' },
+						anchorList: [{ href: excludedChild, textContent: 'excluded child' }],
+						imageList: [],
+						html: '',
+						isSkipped: false,
+					} as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>);
+				});
+
+			const skips: { url: string; reason: string }[] = [];
+			crawler.on('skip', (s) => {
+				skips.push(s as unknown as { url: string; reason: string });
+			});
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			crawler.start([root]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			expect(skips).toContainEqual(
+				expect.objectContaining({ url: excludedChild.href, reason: 'excluded' }),
+			);
+			// fetchDestination must never be called for excludedChild — the mock
+			// above rejects for any URL other than root, so a second call would
+			// have already thrown before reaching this assertion.
+			expect(fetchSpy).toHaveBeenCalledTimes(1);
+		});
+
+		it('deal() が reject して終了した場合でも dealController は解除され、以降の updateRuntimeOptions は setLimit を呼ばない', async () => {
+			const { deal } = await import('@d-zero/dealer');
+			const { default: Crawler } = await import('./crawler.js');
+
+			const setLimit = vi.fn();
+			vi.mocked(deal).mockImplementation((_items, _factory, options) => {
+				options?.onStart?.({ limit: 1, setLimit });
+				return Promise.reject(new Error('deal() failed'));
+			});
+
+			const crawler = new Crawler(defaultOptions);
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+			crawler.start([parseUrl('https://example.com/')!]);
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			const snapshot = crawler.updateRuntimeOptions({ parallels: 4 });
+
+			expect(setLimit).not.toHaveBeenCalled();
+			expect(snapshot.parallels).toBe(4);
+		});
+
+		it('mid-crawl の updateRuntimeOptions({ parallels }) は同ラウンド内の予測ページネーション件数に反映される', async () => {
+			const { unshift } = await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const origin = parseUrl('https://example.com/feed.xml')!;
+			const page2 = parseUrl('https://example.com/page/2')!;
+			const page3 = parseUrl('https://example.com/page/3')!;
+
+			const crawler = new Crawler({ ...defaultOptions, parallels: 1 });
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockImplementation(() => {
+				// Simulates the operator raising parallels while the origin page
+				// is still being fetched — the pagination-pattern detection this
+				// response triggers (synchronously, once resolved) must read the
+				// new value, not whatever concurrency this round started with.
+				crawler.updateRuntimeOptions({ parallels: 3 });
+				return Promise.resolve({
+					url: origin,
+					redirectPaths: [],
+					isTarget: false,
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'application/xml',
+					contentLength: 0,
+					responseHeaders: {},
+					meta: { title: '' },
+					anchorList: [
+						{ href: page2, textContent: 'Page 2' },
+						{ href: page3, textContent: 'Page 3' },
+					],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				} as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>);
+			});
+
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			crawler.start([origin]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			// Raised to 3 mid-round: the predicted batch must carry 3 URLs
+			// (page/4-6), not 1 (page/4 only, this round's starting value).
+			// Matched by content (the batch's first URL), not `args.length`
+			// alone — a length-only match could mis-identify an unrelated
+			// 3-argument `unshift` call as this batch.
+			const batchCall = unshift.mock.calls.find(
+				(args) =>
+					(args[0] as ExURL | undefined)?.withoutHashAndAuth ===
+					'https://example.com/page/4',
+			);
+			expect(batchCall).toBeDefined();
+			expect((batchCall as unknown as ExURL[]).map((u) => u.withoutHashAndAuth)).toEqual([
+				'https://example.com/page/4',
+				'https://example.com/page/5',
+				'https://example.com/page/6',
+			]);
 		});
 	});
 

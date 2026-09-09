@@ -25,6 +25,13 @@ vi.mock('./crawler/crawler.js', () => {
 		 */
 		#abortController = new AbortController();
 
+		#runtimeOptions = {
+			parallels: 0,
+			interval: 0,
+			excludes: [] as string[],
+			excludeUrls: [] as string[],
+			excludeKeywords: [] as string[],
+		};
 		/**
 		 * Mirrors real `Crawler#signal` — `#crawlUntilPendingClears` (issue
 		 * #350) reads `.aborted` to bypass the auto-retry loop for an
@@ -109,6 +116,50 @@ vi.mock('./crawler/crawler.js', () => {
 			};
 			this.handlers.get('error')?.(error as never);
 			this.handlers.get('crawlEnd')?.(undefined as never);
+		}
+		/**
+		 * Minimal stand-in for the real `Crawler#updateRuntimeOptions`:
+		 * overwrites `parallels`/`interval`, appends the exclude arrays. The
+		 * real merge/validation logic is covered by
+		 * `apply-crawl-runtime-options-patch.spec.ts` — this only needs to
+		 * return a plausible snapshot so orchestrator-level tests can assert
+		 * what gets persisted to the archive.
+		 * @param patch - The runtime change to apply.
+		 * @param patch.parallels
+		 * @param patch.interval
+		 * @param patch.excludes
+		 * @param patch.excludeUrls
+		 * @param patch.excludeKeywords
+		 * @returns A snapshot of the tunable options after applying `patch`.
+		 */
+		updateRuntimeOptions(patch: {
+			parallels?: number;
+			interval?: number;
+			excludes?: readonly string[];
+			excludeUrls?: readonly string[];
+			excludeKeywords?: readonly string[];
+		}) {
+			if (patch.parallels !== undefined) this.#runtimeOptions.parallels = patch.parallels;
+			if (patch.interval !== undefined) this.#runtimeOptions.interval = patch.interval;
+			if (patch.excludes) {
+				this.#runtimeOptions.excludes = [
+					...this.#runtimeOptions.excludes,
+					...patch.excludes,
+				];
+			}
+			if (patch.excludeUrls) {
+				this.#runtimeOptions.excludeUrls = [
+					...this.#runtimeOptions.excludeUrls,
+					...patch.excludeUrls,
+				];
+			}
+			if (patch.excludeKeywords) {
+				this.#runtimeOptions.excludeKeywords = [
+					...this.#runtimeOptions.excludeKeywords,
+					...patch.excludeKeywords,
+				];
+			}
+			return { ...this.#runtimeOptions };
 		}
 	}
 	return { default: FakeCrawler };
@@ -3629,5 +3680,414 @@ describe('CrawlerOrchestrator: createdCwd is always stamped as an absolute path 
 		const config = setConfig.mock.calls[0]?.[0] as { createdCwd?: string };
 		expect(path.isAbsolute(config.createdCwd!)).toBe(true);
 		expect(config.createdCwd).toBe(path.resolve(process.cwd(), 'relative/nested/dir'));
+	});
+});
+
+describe('CrawlerOrchestrator.updateRuntimeOptions', () => {
+	it('delegates to Crawler#updateRuntimeOptions and persists the snapshot via the write queue', async () => {
+		const updateConfig = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig,
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-update-runtime-options',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-update-runtime-options-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const orchestrator = await CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-update-runtime-options-test.nitpicker',
+			},
+			(o) => {
+				o.on('error', () => {});
+			},
+		);
+
+		const snapshot = orchestrator.updateRuntimeOptions({
+			parallels: 4,
+			excludes: ['/admin/**'],
+		});
+
+		// Synchronous: the in-memory change is visible before this method
+		// returns, without waiting on the archive write.
+		expect(snapshot.parallels).toBe(4);
+		expect(snapshot.excludes).toEqual(['/admin/**']);
+
+		await vi.waitFor(() => {
+			expect(updateConfig).toHaveBeenCalledWith(
+				expect.objectContaining({ parallels: 4, excludes: ['/admin/**'] }),
+			);
+		});
+	});
+
+	it('rejects an invalid patch synchronously, before touching the write queue', async () => {
+		// The real validation (`assertValidPatch` inside
+		// `applyCrawlRuntimeOptionsPatch`) lives in `Crawler`, which this
+		// file's `FakeCrawler` deliberately bypasses (see its
+		// `updateRuntimeOptions`'s own JSDoc) — so this test overrides just
+		// this one call to throw, the same shape a real invalid patch would,
+		// to prove `CrawlerOrchestrator#updateRuntimeOptions` propagates it
+		// without ever reaching the write queue.
+		const updateConfig = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig,
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-update-runtime-options-invalid',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-update-runtime-options-invalid-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			vi.spyOn(crawler, 'updateRuntimeOptions').mockImplementation(() => {
+				throw new RangeError('parallels must be an integer >= 1, got 0');
+			});
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const orchestrator = await CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-update-runtime-options-invalid-test.nitpicker',
+			},
+			(o) => {
+				o.on('error', () => {});
+			},
+		);
+
+		expect(() => orchestrator.updateRuntimeOptions({ parallels: 0 })).toThrow(RangeError);
+
+		// Give any wrongly-enqueued write a chance to run before asserting
+		// it never did.
+		await Promise.resolve();
+		expect(updateConfig).not.toHaveBeenCalled();
+	});
+
+	it('orders the persisted write behind an in-flight page write on the same write queue', async () => {
+		// `Archive#updateConfig` itself bypasses `WriteQueue` (it talks to
+		// knex directly), but `CrawlerOrchestrator#updateRuntimeOptions`
+		// enqueues its call on `#writeQueue` — the same queue every
+		// `page`/`error`/etc. handler uses — precisely so it cannot race
+		// ahead of writes already queued from crawl events. This asserts
+		// that ordering: a `setPage` enqueued first must resolve before the
+		// `updateConfig` enqueued second.
+		const callOrder: string[] = [];
+		const setPage = vi.fn(async () => {
+			await new Promise((resolve) => setTimeout(resolve, 5));
+			callOrder.push('setPage');
+		});
+		const updateConfig = vi.fn(() => {
+			callOrder.push('updateConfig');
+			return Promise.resolve();
+		});
+		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig,
+			setPage,
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-update-runtime-options-order',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-update-runtime-options-order-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		let capturedOrchestrator: CrawlerOrchestrator | undefined;
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('page')?.({
+				result: { url: 'https://example.com/' },
+				source: 'crawled',
+				bodyHash: Buffer.from(''),
+			} as never);
+			// Enqueued while the `page` write above is still in flight
+			// (its 5ms timeout hasn't resolved yet).
+			capturedOrchestrator!.updateRuntimeOptions({ parallels: 2 });
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const resultPromise = CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-update-runtime-options-order-test.nitpicker',
+			},
+			(o) => {
+				o.on('error', () => {});
+				capturedOrchestrator = o;
+			},
+		);
+
+		await resultPromise;
+		await vi.waitFor(() => {
+			expect(updateConfig).toHaveBeenCalled();
+		});
+
+		expect(callOrder).toEqual(['setPage', 'updateConfig']);
+	});
+
+	it('does not abort the crawl or emit a fatal error when the persisted write itself fails', async () => {
+		// A real `Database`/`Archive` calls back into the constructor's
+		// `'error'` listener synchronously as part of the same rejection
+		// (`emitErrorAndRetry`) — this fake reproduces that by invoking the
+		// captured handler itself before rejecting.
+		let errorHandler: ((e: unknown) => void) | undefined;
+		const updateConfig = vi.fn(() => {
+			const error = new Error('SQLITE_BUSY');
+			errorHandler?.(error);
+			return Promise.reject(error);
+		});
+		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig,
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-update-runtime-options-nonfatal',
+			on: vi.fn((event: string, handler: (e: unknown) => void) => {
+				if (event === 'error') errorHandler = handler;
+			}),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-update-runtime-options-nonfatal-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		let capturedSignal: AbortSignal | undefined;
+		fakeCrawlerDriver = (crawler) => {
+			capturedSignal = (crawler as unknown as { signal: AbortSignal }).signal;
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const orchestratorErrors: unknown[] = [];
+		const orchestrator = await CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-update-runtime-options-nonfatal-test.nitpicker',
+			},
+			(o) => {
+				o.on('error', (e) => orchestratorErrors.push(e));
+			},
+		);
+
+		orchestrator.updateRuntimeOptions({ parallels: 4 });
+
+		await vi.waitFor(() => {
+			expect(updateConfig).toHaveBeenCalled();
+		});
+
+		// A real page/resource write failure aborts the crawler and emits
+		// `'error'` (see the sibling describe block's other tests) — this
+		// one, from an optional persistence write, must do neither.
+		expect(capturedSignal?.aborted).toBe(false);
+		expect(orchestratorErrors).toEqual([]);
+	});
+});
+
+describe('CrawlerOrchestrator: auto-retry lanes footer routing (issue #350 follow-up)', () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it('routes the auto-retry wait through an injected Lanes header instead of console.error', async () => {
+		vi.useFakeTimers();
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const getCrawlingState = vi
+			.fn()
+			.mockResolvedValueOnce({ scraped: [], pending: ['https://example.com/a'] })
+			.mockResolvedValueOnce({ scraped: ['https://example.com/a'], pending: [] });
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-auto-retry-lanes',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-lanes-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const fakeLanes = { header: vi.fn() };
+
+		const resultPromise = CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-auto-retry-lanes-test.nitpicker',
+				lanes: fakeLanes as never,
+			},
+			(o) => {
+				o.on('error', () => {});
+			},
+		);
+		await vi.advanceTimersByTimeAsync(30_000);
+		await expect(resultPromise).resolves.toBeInstanceOf(CrawlerOrchestrator);
+
+		expect(fakeLanes.header).toHaveBeenCalledWith(
+			expect.stringContaining('[auto-retry]'),
+		);
+		expect(fakeLanes.header).toHaveBeenCalledWith(expect.stringContaining('%countdown('));
+		expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+			expect.stringContaining('[auto-retry]'),
+		);
+	});
+
+	it('falls back to console.error when no Lanes was injected (existing behavior)', async () => {
+		vi.useFakeTimers();
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const getCrawlingState = vi
+			.fn()
+			.mockResolvedValueOnce({ scraped: [], pending: ['https://example.com/a'] })
+			.mockResolvedValueOnce({ scraped: ['https://example.com/a'], pending: [] });
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-auto-retry-console',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-console-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const resultPromise = CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-auto-retry-console-test.nitpicker',
+			},
+			(o) => {
+				o.on('error', () => {});
+			},
+		);
+		await vi.advanceTimersByTimeAsync(30_000);
+		await expect(resultPromise).resolves.toBeInstanceOf(CrawlerOrchestrator);
+
+		expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('[auto-retry]'));
+	});
+
+	it('falls back to console.error when Lanes is injected but verbose is true (header() would queue silently instead of writing immediately)', async () => {
+		vi.useFakeTimers();
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const getCrawlingState = vi
+			.fn()
+			.mockResolvedValueOnce({ scraped: [], pending: ['https://example.com/a'] })
+			.mockResolvedValueOnce({ scraped: ['https://example.com/a'], pending: [] });
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-auto-retry-lanes-verbose',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-lanes-verbose-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const fakeLanes = { header: vi.fn() };
+
+		const resultPromise = CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-auto-retry-lanes-verbose-test.nitpicker',
+				lanes: fakeLanes as never,
+				verbose: true,
+			},
+			(o) => {
+				o.on('error', () => {});
+			},
+		);
+		await vi.advanceTimersByTimeAsync(30_000);
+		await expect(resultPromise).resolves.toBeInstanceOf(CrawlerOrchestrator);
+
+		expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('[auto-retry]'));
+		expect(fakeLanes.header).not.toHaveBeenCalledWith(
+			expect.stringContaining('[auto-retry]'),
+		);
 	});
 });

@@ -1,3 +1,85 @@
+import type { Lanes } from '@d-zero/dealer';
+import type { CrawlRuntimeOptionsPatch } from '@nitpicker/crawler';
+
+/**
+ * Parsed result of one line typed into the crawl console (`create-crawl-console.ts`).
+ * `'patch'` carries the `CrawlRuntimeOptionsPatch` to apply plus a `label`
+ * describing the command for `format-crawl-console-result.ts`; `'help'` and
+ * `'empty'` need no further action; `'error'` carries a user-facing message
+ * for an unrecognized command or bad argument.
+ */
+export type CrawlConsoleCommandResult =
+	| {
+			readonly kind: 'patch';
+			readonly patch: CrawlRuntimeOptionsPatch;
+			readonly label: string;
+	  }
+	| { readonly kind: 'help' }
+	| { readonly kind: 'empty' }
+	| { readonly kind: 'error'; readonly message: string };
+
+/**
+ * The subset of `process.stdin`'s interface `create-crawl-console.ts` needs.
+ * Narrowed so tests can pass a fake `EventEmitter`-backed double instead of
+ * mutating the real `process.stdin` (raw mode, encoding) during a test run.
+ */
+export interface CrawlConsoleInput {
+	readonly isTTY?: boolean;
+	setRawMode(mode: boolean): unknown;
+	setEncoding(encoding: BufferEncoding): unknown;
+	on(event: 'data', listener: (chunk: string) => void): unknown;
+	off(event: 'data', listener: (chunk: string) => void): unknown;
+	resume(): unknown;
+	pause(): unknown;
+}
+
+/** Return value of `createCrawlConsole` — the only way to release stdin/the Lanes footer. */
+export interface CrawlConsoleHandle {
+	/**
+	 * Restores stdin (raw mode off, listener removed, paused) and clears the
+	 * footer line. Idempotent.
+	 */
+	dispose(): void;
+}
+
+/** Options for `createCrawlConsole` (`create-crawl-console.ts`). */
+export interface CreateCrawlConsoleOptions {
+	/** The stdin-like stream to read keystrokes from. */
+	readonly stdin: CrawlConsoleInput;
+	/**
+	 * The `Lanes` instance the crawl body's `deal()` call is also using
+	 * (injected via `Crawler`'s `lanes` option) — the console renders its
+	 * input line as this `Lanes`' footer, below the crawl progress lanes.
+	 */
+	readonly lanes: Lanes;
+	/**
+	 * The stream `lanes` itself renders to (`process.stderr` in
+	 * `commands/crawl.ts`). Used only to hide/show the terminal's own
+	 * cursor — see `createCrawlConsole`'s JSDoc for why.
+	 */
+	readonly stream: Pick<NodeJS.WritableStream, 'write'>;
+	/**
+	 * Status line shown above the input line before any command has been
+	 * submitted (e.g. the command list) — otherwise the console starts with
+	 * no indication of what it accepts.
+	 */
+	readonly initialStatus?: string;
+	/**
+	 * Called with the trimmed, non-empty line once Enter is pressed. The
+	 * resolved string becomes the status line shown above the input line
+	 * until the next command is submitted. Must always resolve, never
+	 * reject — report a failure as an error-shaped status string instead
+	 * (`createCrawlConsoleCommandHandler` in `commands/crawl.ts` does this
+	 * for every branch, including `updateRuntimeOptions` throwing). A
+	 * rejection is still handled defensively (see `create-crawl-console.ts`'s
+	 * `runCommand`), but only as a last resort — an unhandled rejection here
+	 * would otherwise crash the whole crawl process outright.
+	 */
+	readonly onCommand: (line: string) => Promise<string>;
+	/** Called on Ctrl-C — the caller decides what "interrupt" means (abort the crawl, same as the terminal's own SIGINT would have). */
+	readonly onInterrupt: () => void;
+}
+
 /**
  * CLI crawl flag names that need to be mapped to CrawlConfig properties.
  *

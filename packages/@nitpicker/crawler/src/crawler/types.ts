@@ -3,6 +3,7 @@ import type { PageSource } from '../archive/types.js';
 import type { ErrorKind } from '../types.js';
 import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
 import type { ChangePhaseEvent, ConsoleLogEntry, ScrapeResult } from '@d-zero/beholder';
+import type { Lanes } from '@d-zero/dealer';
 import type { ParseURLOptions } from '@d-zero/shared/parse-url';
 
 /**
@@ -256,6 +257,69 @@ export interface CrawlerOptions extends Required<
 	 * of discovering once. Ignored when {@link dedupeCap} is `null`.
 	 */
 	preloadedStickyShapeKeys: readonly string[];
+
+	/**
+	 * A `Lanes` instance owned by the caller (typically the CLI), reused as
+	 * `deal()`'s display instead of letting `deal()` create its own. `null`/
+	 * `undefined` falls back to `deal()`'s own `Lanes` (keyed off `verbose`).
+	 *
+	 * Passing this is what lets a caller running crawl-body `deal()`
+	 * alongside its own runtime input UI (e.g. a CLI reading stdin) draw
+	 * that UI as a `Lanes` footer without a second `Lanes`/`Display`
+	 * instance fighting over the same terminal stream (`@d-zero/dealer`'s
+	 * single-instance-per-stream constraint).
+	 */
+	lanes?: Lanes;
+}
+
+/**
+ * A runtime change to apply to an in-progress crawl's tunable options via
+ * {@link Crawler.updateRuntimeOptions}. `parallels`/`interval` replace the
+ * current value; the exclude arrays are additive (new entries merge into the
+ * existing list, duplicates dropped) — there is no way to remove an
+ * already-set exclude pattern.
+ */
+export interface CrawlRuntimeOptionsPatch {
+	/** New concurrency limit (integer, `>= 1`). */
+	parallels?: number;
+	/** New per-URL delay in milliseconds (integer, `>= 0`). */
+	interval?: number;
+	/** Glob patterns to add to {@link CrawlerOptions.excludes}. */
+	excludes?: readonly string[];
+	/** URL prefixes to add to {@link CrawlerOptions.excludeUrls}. */
+	excludeUrls?: readonly string[];
+	/** Keywords to add to {@link CrawlerOptions.excludeKeywords}. */
+	excludeKeywords?: readonly string[];
+}
+
+/**
+ * Snapshot of the tunable crawl options after applying a
+ * {@link CrawlRuntimeOptionsPatch}, returned by
+ * {@link Crawler.updateRuntimeOptions} so the caller can report what changed
+ * without re-reading `Crawler`'s private state.
+ */
+export interface CrawlRuntimeOptions {
+	readonly parallels: number;
+	readonly interval: number;
+	readonly excludes: readonly string[];
+	readonly excludeUrls: readonly string[];
+	readonly excludeKeywords: readonly string[];
+	/**
+	 * The subset of `patch.excludes` that was actually new — i.e. not already
+	 * present in {@link excludes} before this patch, and not a duplicate of
+	 * an earlier entry in the same patch. Empty when `patch.excludes` was
+	 * omitted or every entry it carried was already present. A caller
+	 * reporting "what changed" (`format-crawl-console-result.ts`) needs this
+	 * distinct from {@link excludes} itself — the additive-only merge already
+	 * silently drops duplicates, so echoing back `patch.excludes` verbatim as
+	 * "added" would claim a no-op resubmission (e.g. the operator typing the
+	 * same `exclude` pattern twice) actually added something.
+	 */
+	readonly addedExcludes: readonly string[];
+	/** Same as {@link addedExcludes}, for `patch.excludeUrls`/{@link excludeUrls}. */
+	readonly addedExcludeUrls: readonly string[];
+	/** Same as {@link addedExcludes}, for `patch.excludeKeywords`/{@link excludeKeywords}. */
+	readonly addedExcludeKeywords: readonly string[];
 }
 
 /**
