@@ -53,6 +53,7 @@ export async function collectHtmlReportPages(
 				resourceFilesExists: resources.exists,
 				resourceFilesTotal: resources.total,
 				consoleErrorCount: row.consoleErrorCount,
+				redirectTo: row.redirectDestUrl,
 			});
 		}
 	}
