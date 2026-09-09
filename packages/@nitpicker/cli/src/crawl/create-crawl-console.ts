@@ -224,6 +224,11 @@ export function createCrawlConsole(
 					let end = i + 2;
 					while (end < chunk.length) {
 						const code = chunk.codePointAt(end) ?? 0;
+						// This repo's lint pipeline runs eslint --fix before prettier,
+						// and prettier always lowercases hex digits back down, so the
+						// two perpetually fight over 0x7e/0x7E; only `lint:eslint:check`
+						// (no --fix, matching CI) ever surfaces the resulting mismatch.
+						// eslint-disable-next-line unicorn/number-literal-case
 						if (code >= 0x40 && code <= 0x7e) {
 							break;
 						}
