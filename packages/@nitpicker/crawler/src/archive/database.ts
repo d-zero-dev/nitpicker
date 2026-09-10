@@ -19,6 +19,7 @@ import type {
 	DB_Redirect,
 	DB_Resource,
 	DatabaseEvent,
+	DedupeCapObservationRow,
 	InsertDedupeCapEventParams,
 	InsertNetworkOutageParams,
 	ListReconcileRunMeta,
@@ -57,6 +58,7 @@ import { replaceConsoleLogs as replaceConsoleLogsOp } from './db-ops/console-log
 import { accumulateDedupeCapRejectedCount as accumulateDedupeCapRejectedCountOp } from './db-ops/dedupe-cap/accumulate-dedupe-cap-rejected-count.js';
 import { finalizeDedupeCapEvent as finalizeDedupeCapEventOp } from './db-ops/dedupe-cap/finalize-dedupe-cap-event.js';
 import { insertDedupeCapEvent as insertDedupeCapEventOp } from './db-ops/dedupe-cap/insert-dedupe-cap-event.js';
+import { listDedupeCapObservations as listDedupeCapObservationsOp } from './db-ops/dedupe-cap/list-dedupe-cap-observations.js';
 import { listDedupeCapShapeKeys as listDedupeCapShapeKeysOp } from './db-ops/dedupe-cap/list-dedupe-cap-shape-keys.js';
 import { insertCrawlError as insertCrawlErrorOp } from './db-ops/errors/insert-crawl-error.js';
 import { insertPageError as insertPageErrorOp } from './db-ops/errors/insert-page-error.js';
@@ -855,6 +857,26 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
+	 * Every previously-scraped internal page's raw fields, in the shape
+	 * `buildDedupeCapObservation` needs to replay this archive's prior
+	 * `DedupeCapTracker` observations into a fresh tracker instance.
+	 * Delegates to {@link listDedupeCapObservationsOp} — see that function
+	 * for the row selection criteria.
+	 * @param onProgress - Forwarded to {@link listDedupeCapObservationsOp} —
+	 *   see that function's docs.
+	 * @returns Every qualifying page's raw fields, in `content_items.id` order.
+	 */
+	async listDedupeCapObservations(
+		onProgress?: (scannedUpToId: number, maxId: number) => void,
+	): Promise<DedupeCapObservationRow[]> {
+		return emitErrorAndRetry(
+			this,
+			'Database.listDedupeCapObservations',
+			async () => await listDedupeCapObservationsOp(this.#instance, onProgress),
+			retrySetting,
+		);
+	}
+	/**
 	 * Every distinct `dedupe_cap_events.shape_key` recorded in this archive.
 	 * Delegates to {@link listDedupeCapShapeKeysOp}.
 	 * @returns Distinct shape keys already confirmed capped, or `[]` on an
@@ -868,6 +890,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			retrySetting,
 		);
 	}
+
 	/**
 	 * Hostnames whose `crawl_errors` history is consistently DNS failures and
 	 * for which no recent 2xx-3xx page or resource is recorded.

@@ -1,3 +1,4 @@
+import type { DedupeCapObservation } from './dedupe/types.js';
 import type { CrawlerEventTypes } from './types.js';
 import type { Lanes } from '@d-zero/dealer';
 import type { ExURL } from '@d-zero/shared/parse-url';
@@ -1227,6 +1228,212 @@ describe('Crawler', () => {
 			});
 
 			expect(unshift).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('preloadedDedupeObservations: prior-session counter replay (retry-failed burst fix)', () => {
+		/**
+		 * Two identical-content observations of the same shape — mirrors the
+		 * halving arithmetic `dedupe-cap.e2e.ts`'s own JSDoc documents: with
+		 * `dedupeCap: 3` and `ogUrlMismatch: true` throughout, the 1st
+		 * observation's threshold is `ceil(3/2) = 2` (count 1 < 2, not yet
+		 * capped); the 2nd observation's matching `bodyHash` halves it again
+		 * to `ceil(2/2) = 1` (count 2 >= 1 → CAPPED). Replaying exactly these
+		 * two — with no third, live observation — is enough to cap the shape
+		 * purely from prior-session state.
+		 * @param shapeKey - The shape key both observations share.
+		 * @returns Two observations that cap `shapeKey` when replayed in order.
+		 */
+		function twoCappingObservations(shapeKey: string): DedupeCapObservation[] {
+			const bodyHash = Buffer.from('same-body');
+			return [
+				{
+					shapeKey,
+					metaSig: 'sig-a',
+					bodyHash,
+					ogUrlMismatch: true,
+					url: 'https://example.com/prior-1',
+				},
+				{
+					shapeKey,
+					metaSig: 'sig-a',
+					bodyHash,
+					ogUrlMismatch: true,
+					url: 'https://example.com/prior-2',
+				},
+			];
+		}
+
+		it('replay だけで閾値を超えたshapeは、preloadedStickyShapeKeysなしでもGate 1で遮断される', async () => {
+			const { push, unshift } = await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { computeShapeKey } = await import('./dedupe/compute-shape-key.js');
+
+			const htmlAnchor = parseUrl('https://example.com/about')!;
+			const assetAnchor = parseUrl('https://example.com/doc.pdf')!;
+			const shapeKey = computeShapeKey(htmlAnchor.withoutHashAndAuth)!;
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url: parseUrl('https://example.com/feed.xml')!,
+				redirectPaths: [],
+				isTarget: false,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'application/xml',
+				contentLength: 0,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [
+					{ href: htmlAnchor, textContent: 'About' },
+					{ href: assetAnchor, textContent: 'PDF' },
+				],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			} as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>);
+
+			const crawler = new Crawler({
+				...defaultOptions,
+				dedupeCap: 3,
+				preloadedDedupeObservations: twoCappingObservations(shapeKey),
+			});
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+
+			crawler.start([parseUrl('https://example.com/feed.xml')!]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			// htmlAnchor's shape was capped by the REPLAY alone (no
+			// preloadedStickyShapeKeys, no live observation of this shape yet)
+			// → gate 1 blocks it exactly like an explicitly-preloaded sticky
+			// shape would.
+			expect(unshift).not.toHaveBeenCalled();
+			expect(push).toHaveBeenCalledWith(assetAnchor);
+		});
+
+		it('replayで発火したdedupeCapイベントは、start()呼び出し後にコンストラクタ後付けリスナーへ届く', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { computeShapeKey } = await import('./dedupe/compute-shape-key.js');
+
+			const rootUrl = parseUrl('https://example.com/asset.png')!;
+			const shapeKey = computeShapeKey(rootUrl.withoutHashAndAuth)!;
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url: rootUrl,
+				redirectPaths: [],
+				isTarget: false,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'image/png',
+				contentLength: 0,
+				responseHeaders: {},
+				meta: { title: '' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			} as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>);
+
+			const crawler = new Crawler({
+				...defaultOptions,
+				dedupeCap: 3,
+				preloadedDedupeObservations: twoCappingObservations(shapeKey),
+			});
+
+			// Listener attached AFTER construction — mirrors
+			// `CrawlerOrchestrator.crawling()`'s real ordering (registers
+			// listeners, then calls `start()`). If the constructor emitted
+			// eagerly instead of buffering, this listener would never see it.
+			const dedupeCapEvents: { shapeKey: string }[] = [];
+			crawler.on('dedupeCap', (event) => {
+				dedupeCapEvents.push(event);
+			});
+
+			expect(dedupeCapEvents).toEqual([]);
+
+			let crawlEndEmitted = false;
+			crawler.on('crawlEnd', () => {
+				crawlEndEmitted = true;
+			});
+			crawler.start([rootUrl]);
+
+			await vi.waitFor(() => {
+				expect(crawlEndEmitted).toBe(true);
+			});
+
+			expect(dedupeCapEvents).toHaveLength(1);
+			expect(dedupeCapEvents[0]?.shapeKey).toBe(shapeKey);
+		});
+
+		it('2回目のstart()呼び出し（auto-retry継続）ではreplayイベントを再emitしない', async () => {
+			// Two distinct URLs, one per `start()` call — matches
+			// `start(): isRetryContinuation preserves per-session state`'s own
+			// pattern below: a second call with the SAME URL would be
+			// deduped as already-seen rather than actually re-running
+			// `#runDeal`.
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+			const { computeShapeKey } = await import('./dedupe/compute-shape-key.js');
+
+			const firstUrl = parseUrl('https://example.com/asset-a.png')!;
+			const secondUrl = parseUrl('https://example.com/asset-b.png')!;
+			const shapeKey = computeShapeKey(firstUrl.withoutHashAndAuth)!;
+
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockImplementation(({ url }) =>
+				Promise.resolve({
+					url,
+					redirectPaths: [],
+					isTarget: false,
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'image/png',
+					contentLength: 0,
+					responseHeaders: {},
+					meta: { title: '' },
+					anchorList: [],
+					imageList: [],
+					html: '',
+					isSkipped: false,
+				}),
+			);
+
+			const crawler = new Crawler({
+				...defaultOptions,
+				dedupeCap: 3,
+				preloadedDedupeObservations: twoCappingObservations(shapeKey),
+			});
+			const dedupeCapEvents: unknown[] = [];
+			crawler.on('dedupeCap', (event) => {
+				dedupeCapEvents.push(event);
+			});
+			let crawlEndCount = 0;
+			crawler.on('crawlEnd', () => {
+				crawlEndCount++;
+			});
+
+			crawler.start([firstUrl]);
+			await vi.waitFor(() => {
+				expect(crawlEndCount).toBe(1);
+			});
+
+			crawler.start([secondUrl], { isRetryContinuation: true });
+			await vi.waitFor(() => {
+				expect(crawlEndCount).toBe(2);
+			});
+
+			expect(dedupeCapEvents).toHaveLength(1);
 		});
 	});
 

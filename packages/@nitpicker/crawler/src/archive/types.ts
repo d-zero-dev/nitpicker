@@ -270,6 +270,45 @@ export interface InsertDedupeCapEventParams {
 }
 
 /**
+ * One previously-scraped internal page's raw fields, read back from
+ * `content_items` / `page_meta` / `url_refs` / `text_refs`, in the exact
+ * shape `buildDedupeCapObservation` needs to reconstruct the
+ * `DedupeCapObservation` that page would have produced during a live crawl.
+ * Produced by `listDedupeCapObservations` — see that function for the row
+ * selection criteria (which pages qualify, and why).
+ *
+ * Nullable fields mirror the LEFT JOINed `text_refs` / `url_refs` columns
+ * they come from (a page with no `<title>`, no meta description, or no
+ * `og:title`/`og:url` leaves the corresponding ref column NULL).
+ */
+export interface DedupeCapObservationRow {
+	/**
+	 * `url_refs.url`, in `withoutHashAndAuth` form — matches how
+	 * `computeShapeKey`'s live callers key their gate lookups. No hash
+	 * fragment survives here even if the original page URL had one (the
+	 * archive never stores it) — see `buildDedupeCapObservation`'s JSDoc
+	 * for why this makes its `ogUrlMismatch` reconstruction an
+	 * approximation for hash-carrying URLs.
+	 */
+	url: string;
+	/** `page_meta.title_text_id` → `text_refs.text`. Never NULL in practice (beholder always returns at least `''`), but read as nullable since the join can't guarantee it. */
+	title: string | null;
+	/** `page_meta.description_text_id` → `text_refs.text`. */
+	description: string | null;
+	/** `page_meta.og_title_text_id` → `text_refs.text`. */
+	ogTitle: string | null;
+	/**
+	 * `page_meta.og_url_id` → `url_refs.url` — already absolutised at write
+	 * time (`derive-flat-from-meta.ts`), not the raw `og:url` attribute
+	 * value. See `buildDedupeCapObservation`'s JSDoc for why this makes its
+	 * `metaSig` component an approximation for relative-`og:url` templates.
+	 */
+	ogUrl: string | null;
+	/** `page_meta.body_hash`. Rows with a NULL body hash are excluded by `listDedupeCapObservations` itself, so this is always present by the time a row reaches this type — kept non-nullable here for that reason. */
+	bodyHash: Buffer;
+}
+
+/**
  * Filter type for querying pages from the database.
  *
  * - `'page'` - HTML pages that are crawl targets

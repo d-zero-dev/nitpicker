@@ -811,6 +811,7 @@ describe('CrawlerOrchestrator.append', () => {
 			),
 			repromoteExternalPages: vi.fn(() => Promise.resolve([])),
 			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			listDedupeCapObservations: vi.fn(() => Promise.resolve([])),
 			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
 			close: closeSpy,
 		} as unknown as Archive;
@@ -850,6 +851,69 @@ describe('CrawlerOrchestrator.append', () => {
 		expect(releaseHandle).toHaveBeenCalledTimes(1);
 		expect(closeSpy).toHaveBeenCalledTimes(1);
 	});
+
+	it('archive.listDedupeCapObservations()の結果がbuildDedupeCapObservationを経てCrawlerのpreloadedDedupeObservationsオプションへ渡される', async () => {
+		const observationRow = {
+			url: 'https://example.com/trap/date/2024/',
+			title: 'お知らせ',
+			description: null,
+			ogTitle: null,
+			ogUrl: null,
+			bodyHash: Buffer.from('trap-body'),
+		};
+		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-append-dedupe-observations',
+			filePath: '/tmp/test-cwd/existing.nitpicker',
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					fromList: false,
+					roots: ['https://example.com/'],
+					baseUrl: 'https://example.com/',
+				}),
+			),
+			repromoteExternalPages: vi.fn(() => Promise.resolve([])),
+			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			listDedupeCapObservations: vi.fn(() => Promise.resolve([observationRow])),
+			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+		const copyFileModule =
+			await import('./archive/filesystem/copy-file-with-progress.js');
+		vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.append('./existing.nitpicker', ['https://example.com/'], {
+			cwd: '/tmp/test-cwd',
+			dedupeCap: 5,
+		});
+
+		expect(fakeArchive.listDedupeCapObservations).toHaveBeenCalledTimes(1);
+		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
+		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
+			preloadedDedupeObservations: [
+				{
+					shapeKey: 'example.com/trap/date/{n}/',
+					metaSig: expect.any(String),
+					bodyHash: observationRow.bodyHash,
+					ogUrlMismatch: false,
+					url: observationRow.url,
+				},
+			],
+		});
+	});
 });
 
 describe('CrawlerOrchestrator.retryFailed: PendingUrlsRemainError (issue #350 QA review)', () => {
@@ -882,6 +946,7 @@ describe('CrawlerOrchestrator.retryFailed: PendingUrlsRemainError (issue #350 QA
 			),
 			resetFailedPages: vi.fn(() => Promise.resolve([])),
 			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			listDedupeCapObservations: vi.fn(() => Promise.resolve([])),
 			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
 			close: closeSpy,
 		} as unknown as Archive;
@@ -913,6 +978,69 @@ describe('CrawlerOrchestrator.retryFailed: PendingUrlsRemainError (issue #350 QA
 		expect(copySpy.mock.calls[0]?.[1]).toBe('/tmp/test-cwd/existing.nitpicker.bak');
 		expect(releaseHandle).toHaveBeenCalledTimes(1);
 		expect(closeSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it('archive.listDedupeCapObservations()の結果がbuildDedupeCapObservationを経てCrawlerのpreloadedDedupeObservationsオプションへ渡される', async () => {
+		const observationRow = {
+			url: 'https://example.com/trap/date/2024/',
+			title: 'お知らせ',
+			description: null,
+			ogTitle: null,
+			ogUrl: null,
+			bodyHash: Buffer.from('trap-body'),
+		};
+		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-retry-failed-dedupe-observations',
+			filePath: '/tmp/test-cwd/existing.nitpicker',
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					fromList: false,
+					roots: ['https://example.com/'],
+					baseUrl: 'https://example.com/',
+				}),
+			),
+			resetFailedPages: vi.fn(() => Promise.resolve([])),
+			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			listDedupeCapObservations: vi.fn(() => Promise.resolve([observationRow])),
+			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+		const copyFileModule =
+			await import('./archive/filesystem/copy-file-with-progress.js');
+		vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.retryFailed('./existing.nitpicker', {
+			cwd: '/tmp/test-cwd',
+			dedupeCap: 5,
+		});
+
+		expect(fakeArchive.listDedupeCapObservations).toHaveBeenCalledTimes(1);
+		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
+		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
+			preloadedDedupeObservations: [
+				{
+					shapeKey: 'example.com/trap/date/{n}/',
+					metaSig: expect.any(String),
+					bodyHash: observationRow.bodyHash,
+					ogUrlMismatch: false,
+					url: observationRow.url,
+				},
+			],
+		});
 	});
 });
 
@@ -1381,6 +1509,7 @@ describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => 
 			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(140_000)),
 			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
 			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			listDedupeCapObservations: vi.fn(() => Promise.resolve([])),
 			setUrlOrder: vi.fn(() => Promise.resolve()),
 			close: vi.fn(() => Promise.resolve()),
 			setResources: vi.fn(() => Promise.resolve()),
@@ -1461,6 +1590,7 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
 			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
 			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			listDedupeCapObservations: vi.fn(() => Promise.resolve([])),
 			setUrlOrder: vi.fn(() => Promise.resolve()),
 			close: vi.fn(() => Promise.resolve()),
 			releaseHandle: vi.fn(() => Promise.resolve()),
@@ -1877,6 +2007,7 @@ describe('CrawlerOrchestrator.inventory: dedupeCap sticky preload wiring (issue 
 			listDedupeCapShapeKeys: vi.fn(() =>
 				Promise.resolve(['example.com/old-trap/{n}/', 'example.com/other-trap/{v}']),
 			),
+			listDedupeCapObservations: vi.fn(() => Promise.resolve([])),
 			setUrlOrder: vi.fn(() => Promise.resolve()),
 			close: vi.fn(() => Promise.resolve()),
 			setResources: vi.fn(() => Promise.resolve()),
@@ -1915,6 +2046,101 @@ describe('CrawlerOrchestrator.inventory: dedupeCap sticky preload wiring (issue 
 			preloadedStickyShapeKeys: [
 				'example.com/old-trap/{n}/',
 				'example.com/other-trap/{v}',
+			],
+		});
+		// No `dedupeCap` was passed in options → `orchestratorOptions.dedupeCap`
+		// resolves to `null` → the (comparatively expensive) full-table
+		// observation read must not run at all, unlike the cheap `DISTINCT`
+		// shape-key read above which always runs.
+		expect(fakeArchive.listDedupeCapObservations).not.toHaveBeenCalled();
+	});
+
+	it('archive.listDedupeCapObservations()の結果がbuildDedupeCapObservationを経てCrawlerのpreloadedDedupeObservationsオプションへ渡される', async () => {
+		const observationRow = {
+			url: 'https://example.com/trap/date/2024/',
+			title: 'お知らせ',
+			description: null,
+			ogTitle: null,
+			ogUrl: null,
+			bodyHash: Buffer.from('trap-body'),
+		};
+		const fakeArchive = {
+			updateConfig: vi.fn(() => Promise.resolve()),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+				}),
+			),
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			getExistingPageUrls: vi.fn(() => Promise.resolve([])),
+			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			listDedupeCapObservations: vi.fn(() => Promise.resolve([observationRow])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+			setResources: vi.fn(() => Promise.resolve()),
+			insertInventorySeeds: vi.fn(() => Promise.resolve()),
+			insertInventorySkippedPages: vi.fn(() => Promise.resolve()),
+			insertInventoryResources: vi.fn(() => Promise.resolve()),
+			addError: vi.fn(() => Promise.resolve()),
+			recordListReconcileRun: vi.fn(() => Promise.resolve(1)),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = path.resolve('/tmp/inventory-dedupe-cap-observations-test');
+		await fs.mkdir(testCwd, { recursive: true });
+		const fixturePath = path.join(testCwd, 'fixture.nitpicker');
+		await fs.writeFile(fixturePath, '');
+
+		try {
+			await CrawlerOrchestrator.inventory(
+				'fixture.nitpicker',
+				['https://example.com/new-page.html'],
+				{ cwd: testCwd, dedupeCap: 5 },
+			);
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(fakeArchive.listDedupeCapObservations).toHaveBeenCalledTimes(1);
+		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
+		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
+			preloadedDedupeObservations: [
+				{
+					shapeKey: 'example.com/trap/date/{n}/',
+					metaSig: expect.any(String),
+					bodyHash: observationRow.bodyHash,
+					ogUrlMismatch: false,
+					url: observationRow.url,
+				},
 			],
 		});
 	});
@@ -1969,6 +2195,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
 			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
 			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			listDedupeCapObservations: vi.fn(() => Promise.resolve([])),
 			setUrlOrder: vi.fn(() => Promise.resolve()),
 			close: vi.fn(() => Promise.resolve()),
 			releaseHandle: vi.fn(() => Promise.resolve()),
@@ -2251,6 +2478,59 @@ describe('CrawlerOrchestrator.recrawl', () => {
 
 		expect(fakeCrawlerResumeCalls).toHaveLength(1);
 		expect(fakeArchive.insertInventorySeeds).toHaveBeenCalledWith([]);
+	});
+
+	it('archive.listDedupeCapObservations()の結果がbuildDedupeCapObservationを経てCrawlerのpreloadedDedupeObservationsオプションへ渡される', async () => {
+		const observationRow = {
+			url: 'https://example.com/trap/date/2024/',
+			title: 'お知らせ',
+			description: null,
+			ogTitle: null,
+			ogUrl: null,
+			bodyHash: Buffer.from('trap-body'),
+		};
+		const fakeArchive = buildFakeRecrawlArchive({
+			getExistingPageUrls: vi.fn(() => Promise.resolve(['https://example.com/a'])),
+			resetPagesByUrls: vi.fn(() =>
+				Promise.resolve({
+					resetUrls: ['https://example.com/a'],
+					excludedRedirects: [],
+					excludedSkipped: [],
+					excludedExternal: [],
+				}),
+			),
+			listDedupeCapObservations: vi.fn(() => Promise.resolve([observationRow])),
+		});
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = await makeFixtureCwd('recrawl-dedupe-cap-observations-test');
+		try {
+			await CrawlerOrchestrator.recrawl('fixture.nitpicker', ['https://example.com/a'], {
+				cwd: testCwd,
+				dedupeCap: 5,
+			});
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(fakeArchive.listDedupeCapObservations).toHaveBeenCalledTimes(1);
+		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
+		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
+			preloadedDedupeObservations: [
+				{
+					shapeKey: 'example.com/trap/date/{n}/',
+					metaSig: expect.any(String),
+					bodyHash: observationRow.bodyHash,
+					ogUrlMismatch: false,
+					url: observationRow.url,
+				},
+			],
+		});
 	});
 
 	it('warns (via setupProgress.onLog) about URLs matched as existing resources without resetting them', async () => {
@@ -4089,5 +4369,114 @@ describe('CrawlerOrchestrator: auto-retry lanes footer routing (issue #350 follo
 		expect(fakeLanes.header).not.toHaveBeenCalledWith(
 			expect.stringContaining('[auto-retry]'),
 		);
+	});
+});
+
+describe('CrawlerOrchestrator.resume: dedupeCap preload wiring', () => {
+	/**
+	 * Builds a fake `Archive` covering exactly the methods
+	 * `CrawlerOrchestrator.resume` touches (`Archive.resume` static factory
+	 * + config/dedupe-cap/crawl-state reads), so this describe block can
+	 * assert the wiring without a real archive file. No prior unit test in
+	 * this file exercised `resume()` at all before this addition.
+	 * @param overrides - Per-test overrides, notably `listDedupeCapShapeKeys`
+	 *   / `listDedupeCapObservations`.
+	 * @param overrides.listDedupeCapShapeKeys
+	 * @param overrides.listDedupeCapObservations
+	 * @returns A fake archive castable to `Archive`.
+	 */
+	function buildFakeArchive(overrides: {
+		listDedupeCapShapeKeys?: () => Promise<string[]>;
+		listDedupeCapObservations?: () => Promise<unknown[]>;
+	}) {
+		return {
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					name: 'fixture',
+					baseUrl: 'https://example.com',
+					roots: ['https://example.com/'],
+					recursive: true,
+					interval: 0,
+					image: false,
+					fetchExternal: false,
+					parallels: 1,
+					excludes: [],
+					excludeKeywords: [],
+					excludeUrls: [],
+					maxExcludedDepth: 10,
+					retry: 0,
+					fromList: false,
+					disableQueries: false,
+					userAgent: 'test',
+					ignoreRobots: true,
+				}),
+			),
+			getUrl: vi.fn(() => Promise.resolve('https://example.com/')),
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			listDedupeCapShapeKeys:
+				overrides.listDedupeCapShapeKeys ?? vi.fn(() => Promise.resolve([])),
+			listDedupeCapObservations:
+				overrides.listDedupeCapObservations ?? vi.fn(() => Promise.resolve([])),
+		} as unknown as Archive;
+	}
+
+	it('dedupeCapがnullのとき、listDedupeCapObservationsは呼ばれず、preloadedDedupeObservationsは空配列になる', async () => {
+		const listDedupeCapObservations = vi.fn(() => Promise.resolve([]));
+		const fakeArchive = buildFakeArchive({ listDedupeCapObservations });
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'resume').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.resume('fixture.nitpicker');
+
+		expect(listDedupeCapObservations).not.toHaveBeenCalled();
+		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
+		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
+			preloadedDedupeObservations: [],
+		});
+	});
+
+	it('dedupeCapが指定されると、listDedupeCapObservations()の結果がbuildDedupeCapObservationを経てpreloadedDedupeObservationsへ渡される', async () => {
+		const observationRow = {
+			url: 'https://example.com/trap/date/2024/',
+			title: 'お知らせ',
+			description: null,
+			ogTitle: null,
+			ogUrl: null,
+			bodyHash: Buffer.from('trap-body'),
+		};
+		const listDedupeCapObservations = vi.fn(() => Promise.resolve([observationRow]));
+		const fakeArchive = buildFakeArchive({ listDedupeCapObservations });
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'resume').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.resume('fixture.nitpicker', { dedupeCap: 5 });
+
+		expect(listDedupeCapObservations).toHaveBeenCalledTimes(1);
+		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
+		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
+			preloadedDedupeObservations: [
+				{
+					shapeKey: 'example.com/trap/date/{n}/',
+					metaSig: expect.any(String),
+					bodyHash: observationRow.bodyHash,
+					ogUrlMismatch: false,
+					url: observationRow.url,
+				},
+			],
+		});
 	});
 });

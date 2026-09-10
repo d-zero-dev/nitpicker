@@ -2,6 +2,15 @@ import type { PortRef } from '../server.js';
 import type { Hono } from 'hono';
 
 /**
+ * Whether `/trap/replay/203/` is currently healed (serves 200, same trap
+ * signature as its siblings) or failing (500). Module-level, like
+ * `flaky.ts`'s `healed` flag, so an E2E test can flip it over HTTP between
+ * sessions independent of process boundaries — see
+ * `dedupeCapTrapRoutes`'s `/trap/replay/` doc for why this member exists.
+ */
+let replayMemberHealed = false;
+
+/**
  * Registers routes reproducing the two dedupe-cap trap shapes exercised by
  * `crawler`'s e2e suite (issue #208).
  *
@@ -33,6 +42,18 @@ import type { Hono } from 'hono';
  *   itself is only the index page (linking to the query-bearing anchors);
  *   see the query-links comment below for why the trap page itself must
  *   live one path segment deeper.
+ * - `/trap/replay/:value/` — a THREE-member trap (907, 501, 203, listed in
+ *   DESCENDING order so no adjacent pair is a positive numeric step and
+ *   `detectPaginationPattern` never fires, keeping this fixture free of the
+ *   "Page-count nuance" this file's other trap shapes have to work around).
+ *   No `og:url` tag at all (`ogUrlMismatch` is always `false` for this
+ *   shape) so only the `body_hash` confidence signal halves the threshold —
+ *   simpler arithmetic for the counter-replay E2E scenario this shape
+ *   exists for (see `dedupe-cap.e2e.ts`'s "prior-session counter replay"
+ *   describe block). `203` alone is gated by {@link replayMemberHealed}
+ *   (500 until healed, the same heal/reset-over-HTTP technique `flaky.ts`
+ *   uses) so a test can crawl with `203` failing (only 907/501 observed),
+ *   heal it, then run a second session that observes `203` too.
  * @param app - The Hono application instance to register routes on.
  * @param portRef - Holder for the server's actual listening port, used to
  *   build the absolute `og:url` pointing at the parent listing.
@@ -126,6 +147,54 @@ export function dedupeCapTrapRoutes(app: Hono, portRef: PortRef) {
 				'</head><body>' +
 				'<p>query trap body (identical across every value)</p>' +
 				queryLinks +
+				'</body></html>',
+		);
+	});
+
+	app.get('/trap/replay/control/heal', (c) => {
+		replayMemberHealed = true;
+		return c.text('healed');
+	});
+
+	app.get('/trap/replay/control/reset', (c) => {
+		replayMemberHealed = false;
+		return c.text('reset');
+	});
+
+	// Descending order — see this function's JSDoc "why descending" note.
+	const REPLAY_ANCHOR_VALUES = [907, 501, 203];
+	const replayLinks = REPLAY_ANCHOR_VALUES.map(
+		(value) => `<a href="/trap/replay/${value}/">${value}</a>`,
+	).join('');
+
+	app.get('/trap/replay/', (c) =>
+		c.html(
+			'<!doctype html><html lang="en"><head><title>Replay Trap Index</title></head><body>' +
+				replayLinks +
+				'</body></html>',
+		),
+	);
+
+	app.get('/trap/replay/:value/', (c) => {
+		const value = c.req.param('value');
+		if (value === '203' && !replayMemberHealed) {
+			return c.html(
+				'<!doctype html><html lang="en"><head><title>Server Error</title></head><body>' +
+					'<p>temporary failure</p>' +
+					'</body></html>',
+				500,
+			);
+		}
+		// No `og:url` tag — see this function's JSDoc: `ogUrlMismatch` stays
+		// `false` for every member of this shape, unlike the other three trap
+		// variants above.
+		return c.html(
+			'<!doctype html><html lang="en"><head>' +
+				'<title>リプレイお知らせ</title>' +
+				'<meta name="description" content="一覧です">' +
+				'</head><body>' +
+				'<p>trap body (identical across every value)</p>' +
+				replayLinks +
 				'</body></html>',
 		);
 	});

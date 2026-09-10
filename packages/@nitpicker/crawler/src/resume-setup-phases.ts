@@ -16,7 +16,11 @@
 export const RESUME_SETUP_PHASES = [
 	'Reconnecting to archive',
 	'Loading archive config',
-	'Loading dedupe-cap shape keys',
+	// Renamed from 'Loading dedupe-cap shape keys' — this phase now covers
+	// both the confirmed-capped shape-key read AND the not-yet-capped shape
+	// observation replay (`archive.listDedupeCapObservations` /
+	// `#preloadDedupeCapObservations`), not just the former.
+	'Loading dedupe-cap state',
 	'Loading crawl state',
 	'Loading resource list',
 	'Loading scraped page count',

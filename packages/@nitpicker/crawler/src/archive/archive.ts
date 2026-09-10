@@ -1,6 +1,7 @@
 import type { TemplateClusterReason } from './db-ops/analysis/types.js';
 import type {
 	Config,
+	DedupeCapObservationRow,
 	InsertDedupeCapEventParams,
 	InsertNetworkOutageParams,
 	ListReconcileRunMeta,
@@ -368,6 +369,25 @@ export default class Archive extends ArchiveAccessor {
 	}
 
 	/**
+	 * Every previously-scraped internal page's raw fields, in the shape
+	 * `buildDedupeCapObservation` needs to replay this archive's prior
+	 * `DedupeCapTracker` observations (not just its confirmed-capped
+	 * shapes — see {@link listDedupeCapShapeKeys}) into a fresh tracker
+	 * instance on `--resume` / `--append` / `--retry-failed` /
+	 * `--inventory` / `--recrawl`. Without this, every not-yet-capped
+	 * shape's Misra-Gries counter restarts at 0 each session, even one
+	 * that was one observation away from confirming a trap.
+	 * @param onProgress - Called after each internal chunk read, with the
+	 *   highest `content_items.id` scanned so far and the max id in the
+	 *   table. Omit for no reporting.
+	 * @returns Every qualifying page's raw fields, in discovery order.
+	 */
+	async listDedupeCapObservations(
+		onProgress?: (scannedUpToId: number, maxId: number) => void,
+	): Promise<DedupeCapObservationRow[]> {
+		return this.#db.listDedupeCapObservations(onProgress);
+	}
+	/**
 	 * Every distinct `dedupe_cap_events.shape_key` recorded in this archive.
 	 * Consumed by `CrawlerOrchestrator` to preload `DedupeCapTracker`'s
 	 * sticky set on `--resume` / `--append` / `--retry-failed` /
@@ -378,6 +398,7 @@ export default class Archive extends ArchiveAccessor {
 	async listDedupeCapShapeKeys(): Promise<string[]> {
 		return this.#db.listDedupeCapShapeKeys();
 	}
+
 	/**
 	 * Hostnames whose `crawl_errors` history is consistently DNS failures and
 	 * for which no recent 2xx/3xx page or resource is recorded. Consumed by

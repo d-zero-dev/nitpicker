@@ -12,7 +12,11 @@
 export const APPEND_RETRY_FAILED_COMMON_SETUP_PHASES = {
 	prefix: ['Extracting archive', 'Loading archive config', 'Backing up archive'],
 	suffix: [
-		'Loading dedupe-cap shape keys',
+		// Renamed from 'Loading dedupe-cap shape keys' — this phase now
+		// covers both the confirmed-capped shape-key read AND the
+		// not-yet-capped shape observation replay (`archive.listDedupeCapObservations`
+		// / `#preloadDedupeCapObservations`), not just the former.
+		'Loading dedupe-cap state',
 		'Loading crawl state',
 		'Loading resource list',
 		'Loading scraped page count',
