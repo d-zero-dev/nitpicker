@@ -9,7 +9,7 @@ describe('RESUME_SETUP_PHASES', () => {
 		expect(RESUME_SETUP_PHASES).toEqual([
 			'Reconnecting to archive',
 			'Loading archive config',
-			'Loading dedupe-cap shape keys',
+			'Loading dedupe-cap state',
 			'Loading crawl state',
 			'Loading resource list',
 			'Loading scraped page count',

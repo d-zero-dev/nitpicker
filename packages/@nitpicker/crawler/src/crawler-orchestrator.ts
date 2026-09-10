@@ -1,4 +1,5 @@
 import type { Config } from './archive/types.js';
+import type { DedupeCapObservation } from './crawler/dedupe/types.js';
 import type { NetworkProbe } from './crawler/probe-network.js';
 import type {
 	CrawlerEventTypes,
@@ -34,6 +35,7 @@ import { computeAutoRetryBackoffDelayMs } from './compute-auto-retry-backoff-del
 import { clearDestinationCache } from './crawler/clear-destination-cache.js';
 import { clearDnsBurnedHostCache } from './crawler/clear-dns-burned-host-cache.js';
 import Crawler from './crawler/crawler.js';
+import { buildDedupeCapObservation } from './crawler/dedupe/build-dedupe-cap-observation.js';
 import { dnsBurnedHostCache } from './crawler/dns-burned-host-cache.js';
 import { dnsBurnedHostShortCircuitCounter } from './crawler/dns-burned-host-short-circuit-counter.js';
 import { findScopeEntry } from './crawler/find-scope-entry.js';
@@ -180,6 +182,16 @@ interface CrawlConfig extends Config {
 	 * the public options a caller of those methods passes directly.
 	 */
 	preloadedStickyShapeKeys: readonly string[];
+
+	/**
+	 * See {@link CrawlerOptions.preloadedDedupeObservations}. Set internally
+	 * by the same five resuming-session static methods as
+	 * {@link preloadedStickyShapeKeys}, each calling
+	 * `archive.listDedupeCapObservations()` and mapping the rows through
+	 * `buildDedupeCapObservation`; not part of the public options a caller
+	 * of those methods passes directly.
+	 */
+	preloadedDedupeObservations: readonly DedupeCapObservation[];
 
 	/**
 	 * A `Lanes` instance owned by the caller (typically the CLI), forwarded
@@ -430,11 +442,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			networkProbe: options?.networkProbe ?? null,
 			dedupeCap: options?.dedupeCap ?? null,
 			dedupeMapCap: options?.dedupeMapCap,
-			// Only the four resuming-session static methods
-			// (`append`/`inventory`/`retryFailed`/`resume`) pass this — a
-			// fresh `crawling()` has no archive history to seed from (see
-			// `CrawlConfig.preloadedStickyShapeKeys`'s JSDoc).
+			// Only the five resuming-session static methods
+			// (`append`/`inventory`/`recrawl`/`retryFailed`/`resume`) pass
+			// this — a fresh `crawling()` has no archive history to seed from
+			// (see `CrawlConfig.preloadedStickyShapeKeys`'s JSDoc).
 			preloadedStickyShapeKeys: options?.preloadedStickyShapeKeys ?? [],
+			// Same five methods, same rationale (see
+			// `CrawlConfig.preloadedDedupeObservations`'s JSDoc).
+			preloadedDedupeObservations: options?.preloadedDedupeObservations ?? [],
 			lanes: options?.lanes,
 		});
 		this.#lanes = options?.lanes;
@@ -1342,13 +1357,29 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 				// Seed the sticky set from prior sessions' confirmed traps so
 				// `--append` does not pay the cost of re-discovering them (see
-				// `DedupeCapTracker`'s constructor JSDoc).
+				// `DedupeCapTracker`'s constructor JSDoc), and replay every
+				// not-yet-capped shape's prior observations so its counter
+				// does not restart at 0 (see `#preloadDedupeCapObservations`).
 				setupProgress?.onPhase?.(PHASE_LOADING_DEDUPE_KEYS);
-				const preloadedStickyShapeKeys = await archive.listDedupeCapShapeKeys();
+				// Independent reads (no data dependency) — run concurrently
+				// rather than paying two sequential round-trips, the same
+				// reasoning `resetFailedPages` already applies to its own
+				// unrelated reads.
+				const [preloadedStickyShapeKeys, preloadedDedupeObservations] = await Promise.all(
+					[
+						archive.listDedupeCapShapeKeys(),
+						CrawlerOrchestrator.#preloadDedupeCapObservations(
+							archive,
+							options?.dedupeCap ?? null,
+							setupProgress?.onChunkProgress,
+						),
+					],
+				);
 				const orchestrator = new CrawlerOrchestrator(archive, {
 					...mergedConfig,
 					roots: mergedRoots,
 					preloadedStickyShapeKeys,
+					preloadedDedupeObservations,
 				});
 				setupProgress?.onPhase?.(PHASE_LOADING_CRAWL_STATE);
 				const { scraped, pending } = await archive.getCrawlingState();
@@ -1697,13 +1728,28 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					// Seed the sticky set from prior sessions' confirmed traps
 					// so `--inventory` does not pay the cost of
 					// re-discovering them (see `DedupeCapTracker`'s
-					// constructor JSDoc). Scoped to this branch only,
-					// matching `#preloadDnsBurnedHostCache`'s scoping below —
-					// the fallback (non-HTML-only) branch never calls
+					// constructor JSDoc), and replay every not-yet-capped
+					// shape's prior observations so its counter does not
+					// restart at 0 (see `#preloadDedupeCapObservations`).
+					// Scoped to this branch only, matching
+					// `#preloadDnsBurnedHostCache`'s scoping below — the
+					// fallback (non-HTML-only) branch never calls
 					// `orchestrator.crawling(...)`, so the tracker is never
-					// consulted there.
-					orchestratorOptions.preloadedStickyShapeKeys =
-						await archive.listDedupeCapShapeKeys();
+					// consulted there. Silent (no `onPhase`/`onProgress`) —
+					// matching the shape-key read's existing silent
+					// behaviour here, unlike `append`/`retryFailed`/`resume`,
+					// which already dedicate a phase to it. Independent reads
+					// — run concurrently (see `append`'s identical pair).
+					[
+						orchestratorOptions.preloadedStickyShapeKeys,
+						orchestratorOptions.preloadedDedupeObservations,
+					] = await Promise.all([
+						archive.listDedupeCapShapeKeys(),
+						CrawlerOrchestrator.#preloadDedupeCapObservations(
+							archive,
+							orchestratorOptions.dedupeCap ?? null,
+						),
+					]);
 					const orchestrator = new CrawlerOrchestrator(archive, orchestratorOptions);
 					// Re-read pending *after* the pre-insert so the strict-
 					// pending set includes the freshly inserted
@@ -2055,8 +2101,20 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				};
 
 				if (resetResult.resetUrls.length > 0 || htmlSeeds.length > 0) {
-					orchestratorOptions.preloadedStickyShapeKeys =
-						await archive.listDedupeCapShapeKeys();
+					// Same rationale as `inventory`'s identical pair of
+					// preload calls (sticky shapes + prior observation
+					// replay, run concurrently), silent for the same reason
+					// — see that method's comment.
+					[
+						orchestratorOptions.preloadedStickyShapeKeys,
+						orchestratorOptions.preloadedDedupeObservations,
+					] = await Promise.all([
+						archive.listDedupeCapShapeKeys(),
+						CrawlerOrchestrator.#preloadDedupeCapObservations(
+							archive,
+							orchestratorOptions.dedupeCap ?? null,
+						),
+					]);
 					const orchestrator = new CrawlerOrchestrator(archive, orchestratorOptions);
 					setupProgress?.onPhase?.(PHASE_LOADING_CRAWL_STATE_POST);
 					const { scraped: scrapedAfter, pending: pendingAfter } =
@@ -2491,12 +2549,34 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 				// Seed the sticky set from prior sessions' confirmed traps so
 				// `--retry-failed` does not pay the cost of re-discovering
-				// them (see `DedupeCapTracker`'s constructor JSDoc).
+				// them (see `DedupeCapTracker`'s constructor JSDoc), and
+				// replay every not-yet-capped shape's prior observations so
+				// its counter does not restart at 0 (see
+				// `#preloadDedupeCapObservations`). Runs *after*
+				// `resetFailedPages` above, which already excludes
+				// confirmed-capped-shape failures from the reset — so the
+				// still-`scraped=1` rows this reads back never include a page
+				// this same call is about to re-queue, and a page this call
+				// does reset is correctly absent from the replay (its
+				// `page_meta` row — and therefore its `body_hash` — was just
+				// deleted).
 				setupProgress?.onPhase?.(PHASE_LOADING_DEDUPE_KEYS);
-				const preloadedStickyShapeKeys = await archive.listDedupeCapShapeKeys();
+				// Independent reads — run concurrently (see `append`'s
+				// identical pair).
+				const [preloadedStickyShapeKeys, preloadedDedupeObservations] = await Promise.all(
+					[
+						archive.listDedupeCapShapeKeys(),
+						CrawlerOrchestrator.#preloadDedupeCapObservations(
+							archive,
+							options?.dedupeCap ?? null,
+							setupProgress?.onChunkProgress,
+						),
+					],
+				);
 				const orchestrator = new CrawlerOrchestrator(archive, {
 					...config,
 					preloadedStickyShapeKeys,
+					preloadedDedupeObservations,
 				});
 				setupProgress?.onPhase?.(PHASE_LOADING_CRAWL_STATE);
 				const { scraped, pending } = await archive.getCrawlingState();
@@ -2592,13 +2672,25 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		const archivedConfig = await archive.getConfig();
 		// Seed the sticky set from prior sessions' confirmed traps so
 		// `--resume` does not pay the cost of re-discovering them (see
-		// `DedupeCapTracker`'s constructor JSDoc).
+		// `DedupeCapTracker`'s constructor JSDoc), and replay every
+		// not-yet-capped shape's prior observations so its counter does not
+		// restart at 0 (see `#preloadDedupeCapObservations`).
 		setupProgress?.onPhase?.(PHASE_LOADING_DEDUPE_KEYS);
-		const preloadedStickyShapeKeys = await archive.listDedupeCapShapeKeys();
+		// Independent reads — run concurrently (see `append`'s identical
+		// pair).
+		const [preloadedStickyShapeKeys, preloadedDedupeObservations] = await Promise.all([
+			archive.listDedupeCapShapeKeys(),
+			CrawlerOrchestrator.#preloadDedupeCapObservations(
+				archive,
+				options?.dedupeCap ?? null,
+				setupProgress?.onChunkProgress,
+			),
+		]);
 		const config = {
 			...archivedConfig,
 			...cleanObject(options),
 			preloadedStickyShapeKeys,
+			preloadedDedupeObservations,
 		};
 		const orchestrator = new CrawlerOrchestrator(archive, config);
 		const _url = await archive.getUrl();
@@ -2676,6 +2768,42 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				`[preload] DNS-burned hosts: ${hosts.length} (will short-circuit subsequent URLs)`,
 			);
 		}
+	}
+
+	/**
+	 * Reads back this archive's prior `DedupeCapTracker` observations (see
+	 * `Archive.listDedupeCapObservations`) and reconstructs them via
+	 * `buildDedupeCapObservation`, for the same five resuming-session static
+	 * methods that already call `archive.listDedupeCapShapeKeys()` to seed
+	 * `CrawlConfig.preloadedStickyShapeKeys`. Unlike that sticky-shape
+	 * preload, this read is skipped entirely when `dedupeCap` is `null` — a
+	 * full per-page table scan is not worth paying on every resuming session
+	 * that has `--dedupe-cap` disabled, whereas the shape-key `DISTINCT`
+	 * query stays cheap enough to always run.
+	 * @param archive - The opened archive whose scraped pages are read.
+	 * @param dedupeCap - The resolved `CrawlConfig.dedupeCap` for this
+	 *   session. `null` short-circuits to `[]` without touching the archive.
+	 * @param onProgress - Forwarded to `archive.listDedupeCapObservations` —
+	 *   see that method's docs.
+	 * @returns Every qualifying page's reconstructed observation (rows with
+	 *   no usable shape/meta signal are silently dropped — see
+	 *   `buildDedupeCapObservation`).
+	 */
+	static async #preloadDedupeCapObservations(
+		archive: Archive,
+		dedupeCap: number | null,
+		onProgress?: (scannedUpToId: number, maxId: number) => void,
+	): Promise<DedupeCapObservation[]> {
+		if (dedupeCap === null) return [];
+		const rows = await archive.listDedupeCapObservations(onProgress);
+		const observations: DedupeCapObservation[] = [];
+		for (const row of rows) {
+			const observation = buildDedupeCapObservation(row);
+			if (observation) {
+				observations.push(observation);
+			}
+		}
+		return observations;
 	}
 
 	/**

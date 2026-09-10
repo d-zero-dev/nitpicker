@@ -1,3 +1,22 @@
+/**
+ * The structural subset of beholder's `Meta` that `computeMetaSignature` and
+ * `resolveOgUrlMismatch` actually read — narrowed so both functions can
+ * accept a row reconstructed from archived `page_meta` columns (see
+ * `buildDedupeCapObservation`) without a cast. `Meta` itself remains
+ * assignable to this type, so no live crawl-time call site needs to change.
+ */
+export interface MetaSignatureSource {
+	/** See `Meta.title`. */
+	title: string;
+	/** See `Meta.description`. */
+	description?: string;
+	/** See `Meta.og`. Only `title` and `url` are read. */
+	og?: {
+		title?: string;
+		url?: string;
+	};
+}
+
 /** Options controlling the opt-in same-cluster soft cap (`--dedupe-cap` / `--dedupe-map-cap`). */
 export interface DedupeCapOptions {
 	/** Base Misra-Gries majority-vote threshold, before confidence-signal halving. */

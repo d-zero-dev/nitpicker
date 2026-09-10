@@ -1,4 +1,4 @@
-import type { Meta } from '@d-zero/beholder';
+import type { MetaSignatureSource } from './types.js';
 
 /**
  * Determines whether a page's (absolutised) `og:url` points somewhere other
@@ -16,20 +16,25 @@ import type { Meta } from '@d-zero/beholder';
  * the page's own absolute URL without resolving it first would treat every
  * relative self-reference (e.g. `content="./"`) as a mismatch, inflating
  * this signal on ordinary pages.
- * @param meta - Beholder-derived metadata for the page.
+ * @param meta - Beholder-derived metadata for the page, or the equivalent
+ *   `MetaSignatureSource` fields reconstructed from archived `page_meta`
+ *   columns (see `buildDedupeCapObservation`).
  * @param pageUrl - The page's own absolute URL.
  * @returns `true` if `og:url` is present and resolves to a URL different
  *   from `pageUrl`; `false` if absent (no signal) or if it resolves to the
  *   same URL.
  * @example
  * ```ts
- * resolveOgUrlMismatch({ title: '', og: { url: '/news' } } as Meta, 'https://example.com/news/date/2024/');
+ * resolveOgUrlMismatch({ title: '', og: { url: '/news' } }, 'https://example.com/news/date/2024/');
  * // => true — og:url points at the parent listing, not this page
- * resolveOgUrlMismatch({ title: '', og: { url: './' } } as Meta, 'https://example.com/');
+ * resolveOgUrlMismatch({ title: '', og: { url: './' } }, 'https://example.com/');
  * // => false — relative self-reference resolves to the same URL
  * ```
  */
-export function resolveOgUrlMismatch(meta: Meta, pageUrl: string): boolean {
+export function resolveOgUrlMismatch(
+	meta: MetaSignatureSource,
+	pageUrl: string,
+): boolean {
 	const raw = meta.og?.url;
 	if (!raw) return false;
 	try {

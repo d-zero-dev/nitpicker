@@ -46,6 +46,19 @@ interface CandidateRow {
  *   into scope is `--append`'s job (`repromoteExternalPages`), which also
  *   updates the scope map. `--recrawl` only re-fetches in-scope pages.
  *
+ * Deliberately does NOT exclude candidates whose URL shape already has a
+ * confirmed same-cluster trap recorded (`dedupe_cap_events.shape_key`) — the
+ * exclusion {@link resetFailedPages} applies for exactly that reason (see its
+ * own JSDoc). The two functions differ on what "the operator asked for this"
+ * means: `resetFailedPages` widens an automatic, unattended SQL scan
+ * (`--retry-failed`), so a known trap is safe to silently skip re-admitting.
+ * `resetPagesByUrls` resets URLs the operator named one-by-one in a file —
+ * the same reasoning that already exempts explicit URLs from the
+ * failure-kind filter above applies here too: an operator who names a
+ * specific trap-shaped URL is not "re-discovering" it by accident, and
+ * silently refusing to reset a row they explicitly listed would be a more
+ * surprising failure mode than honouring the request.
+ *
  * A URL that matches no `content_items` row at all (not yet known to the
  * archive) is silently absent from every array on the result — the caller
  * treats it as a novel URL, the same "not yet known" path `--inventory`

@@ -1,3 +1,4 @@
+import type { DedupeCapEvent } from './dedupe/types.js';
 import type {
 	BrowserScrapeResult,
 	CrawlerEventTypes,
@@ -148,6 +149,13 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 */
 	readonly #dedupeCapRejectionCounts = new Map<string, number>();
 	/**
+	 * Guards {@link #pendingReplayCapEvents}' drain so a second {@link start}
+	 * call on the same instance — the auto-retry continuation path
+	 * (`opts.isRetryContinuation`, issue #350) — does not re-emit the first
+	 * call's already-drained events.
+	 */
+	#dedupeCapReplayDrained = false;
+	/**
 	 * Opt-in (`--dedupe-cap`) same-cluster soft cap. Always constructed
 	 * (Misra-Gries state stays empty when {@link CrawlerOptions.dedupeCap} is
 	 * `null`), gated on by `#options.dedupeCap !== null` at each call site
@@ -156,7 +164,6 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * null-check a class field.
 	 */
 	readonly #dedupeCapTracker: DedupeCapTracker;
-
 	/** Tracks discovered URLs, their scrape status, and deduplication. */
 	readonly #linkList = new LinkList();
 	/**
@@ -203,6 +210,18 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 		string /* url.href */,
 		{ phase: string; message: string }[]
 	>();
+	/**
+	 * `DedupeCapEvent`s produced by replaying
+	 * {@link CrawlerOptions.preloadedDedupeObservations} into
+	 * {@link #dedupeCapTracker} in the constructor. Buffered here (rather
+	 * than emitted immediately) because the constructor runs before
+	 * `CrawlerOrchestrator.crawling()` registers its `dedupeCap` listener —
+	 * emitting eagerly would be silently dropped. Drained once, at the top
+	 * of {@link start}, by which point the caller has always finished
+	 * registering listeners (see `start`'s own JSDoc on this point).
+	 */
+	readonly #pendingReplayCapEvents: DedupeCapEvent[] = [];
+
 	/**
 	 * Predicted-pagination body-hash tracking (always-on — independent of
 	 * the opt-in `--dedupe-cap` tracker). Maps a URL shape key
@@ -306,6 +325,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			dedupeCap: options?.dedupeCap ?? null,
 			dedupeMapCap: options?.dedupeMapCap ?? DEFAULT_DEDUPE_MAP_CAP,
 			preloadedStickyShapeKeys: options?.preloadedStickyShapeKeys ?? [],
+			preloadedDedupeObservations: options?.preloadedDedupeObservations ?? [],
 			lanes: options?.lanes,
 		};
 
@@ -319,6 +339,27 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			{ cap: this.#options.dedupeCap ?? 0, mapCap: this.#options.dedupeMapCap },
 			this.#options.preloadedStickyShapeKeys,
 		);
+		// Replay a prior session's observations synchronously, right here —
+		// this is the entire burst-prevention fix for a `--retry-failed`
+		// remaining-count spike: by the time the first real anchor reaches
+		// gate 1 in `#handleResult`, `#dedupeCapTracker`'s Misra-Gries
+		// counters already reflect every qualifying page this archive has
+		// ever scraped, not just the shapes that were already confirmed
+		// capped (`preloadedStickyShapeKeys`). A shape one observation short
+		// of its threshold when the previous session ended resumes from
+		// that count instead of 0. Any event this replay newly crosses the
+		// threshold for is buffered, not emitted — see
+		// `#pendingReplayCapEvents`'s JSDoc — the drain in `start()` is only
+		// about the `dedupe_cap_events` audit row / post-hoc marking /
+		// `rejected_count`, not this gating effect. `preloadedDedupeObservations`
+		// is empty for a fresh (non-resuming) crawl, so this loop is a no-op
+		// there.
+		for (const observation of this.#options.preloadedDedupeObservations) {
+			const event = this.#dedupeCapTracker.observe(observation);
+			if (event) {
+				this.#pendingReplayCapEvents.push(event);
+			}
+		}
 
 		this.#robotsChecker = new RobotsChecker(
 			this.#options.userAgent,
@@ -422,6 +463,22 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @throws {Error} If the URL list is empty.
 	 */
 	start(urls: ExURL[], opts?: { recursive?: boolean; isRetryContinuation?: boolean }) {
+		// Drain constructor-time replay cap events (see
+		// `#pendingReplayCapEvents`'s JSDoc) exactly once, on this instance's
+		// first `start()` call. `CrawlerOrchestrator.crawling()` always
+		// registers its `dedupeCap` listener before calling `start()`, so by
+		// this point the emit is guaranteed to reach it — emitting from the
+		// constructor instead would be silently dropped (no listener exists
+		// yet at that point). The auto-retry continuation path re-invokes
+		// `start()` on the same instance; `#dedupeCapReplayDrained` stops
+		// this from re-emitting the same events on that second call.
+		if (!this.#dedupeCapReplayDrained) {
+			this.#dedupeCapReplayDrained = true;
+			for (const event of this.#pendingReplayCapEvents) {
+				void this.emit('dedupeCap', event);
+			}
+		}
+
 		// Inventory mode pre-loads tens of thousands of seed URLs that all
 		// fall under archived `roots` (already populated into `#scope` by
 		// the constructor). Adding each seed as its own scope entry was

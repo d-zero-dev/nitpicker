@@ -1,10 +1,12 @@
 import type { Knex } from 'knex';
 
 import { classifyErrorKind } from '../../../../classify-error-kind.js';
+import { computeShapeKey } from '../../../../crawler/dedupe/compute-shape-key.js';
 import { isWithinOutageWindow } from '../../../../is-within-outage-window.js';
 import { PERMANENT_ERROR_KINDS } from '../../../../permanent-error-kinds.js';
 import { dbLog } from '../../../debug.js';
 import { getFailedPageMessages } from '../../../get-failed-page-messages.js';
+import { listDedupeCapShapeKeys } from '../../dedupe-cap/list-dedupe-cap-shape-keys.js';
 import { listNetworkOutages } from '../../outages/list-network-outages.js';
 
 import { clearPageDerivedRows } from './clear-page-derived-rows.js';
@@ -58,6 +60,21 @@ import { RETRYABLE_IMAGE_SCAN_CODES } from './retryable-image-scan-codes.js';
  * false permanent failure for the rest of the archive's life. An archive
  * with no recorded outages (`listNetworkOutages` returns `[]`) behaves
  * exactly as before this override existed.
+ *
+ * **Confirmed same-cluster trap exclusion**: a third pass drops any
+ * remaining candidate whose URL shape (`computeShapeKey`) matches a
+ * `dedupe_cap_events.shape_key` already recorded in this archive (see
+ * `DedupeCapTracker`). A trap page frequently fails outright (timeout / 5xx)
+ * rather than rendering a comparable body, so it never reaches
+ * `DedupeCapTracker#observe` during the crawl that hit it — without this
+ * exclusion, `--retry-failed` would keep re-queueing the very pages the cap
+ * already exists to suppress, re-inflating the pending count on every pass
+ * for a shape this archive has already confirmed is not worth the cost of
+ * re-discovering. Left as a failed row rather than rewritten to a skip —
+ * post-hoc marking (`content_items.dedupe_cap_event_id`, computed at
+ * `viewer-build`) is what surfaces these pages as capped, not this reset
+ * path. An archive with no recorded cap events (`listDedupeCapShapeKeys`
+ * returns `[]`) behaves exactly as before this exclusion existed.
  *
  * Matching rows — internal and external alike — are demoted back to pending
  * (`scraped = 0`) and have their stale scrape metadata cleared (the
@@ -134,12 +151,14 @@ export async function resetFailedPages(
 
 	const candidateIds = candidates.map((row) => row.id);
 	const candidateUrls = candidates.map((row) => row.url);
-	// Unrelated tables (page_errors/crawl_errors vs network_outages), no data
-	// dependency between them — run concurrently instead of paying two
-	// sequential round-trips on every `--retry-failed` pass.
-	const [messages, outageWindows] = await Promise.all([
+	// Three unrelated reads (page_errors/crawl_errors, network_outages,
+	// dedupe_cap_events) with no data dependency between them — run
+	// concurrently instead of paying three sequential round-trips on every
+	// `--retry-failed` pass.
+	const [messages, outageWindows, cappedShapeKeys] = await Promise.all([
 		getFailedPageMessages(knex, candidateIds, candidateUrls),
 		listNetworkOutages(knex),
+		listDedupeCapShapeKeys(knex).then((shapeKeys) => new Set(shapeKeys)),
 	]);
 	// Drop candidates whose latest recorded message classifies as permanent —
 	// UNLESS that message's timestamp falls inside a recorded network outage,
@@ -165,12 +184,32 @@ export async function resetFailedPages(
 			excludedCount,
 		);
 	}
-	if (retryable.length === 0) {
+
+	// Drop candidates whose URL shape already has a confirmed same-cluster
+	// trap recorded (see the "Confirmed same-cluster trap exclusion" section
+	// of this function's docstring). A row whose shape cannot be computed
+	// (`computeShapeKey` returns `null`) stays in the retry pool — no signal
+	// either way, so err on the side of retrying it.
+	const notCapped =
+		cappedShapeKeys.size === 0
+			? retryable
+			: retryable.filter((row) => {
+					const shapeKey = computeShapeKey(row.url);
+					return shapeKey === null || !cappedShapeKeys.has(shapeKey);
+				});
+	const excludedCappedCount = retryable.length - notCapped.length;
+	if (excludedCappedCount > 0) {
+		dbLog(
+			'Excluded %d page(s) from retry — confirmed same-cluster trap shape',
+			excludedCappedCount,
+		);
+	}
+	if (notCapped.length === 0) {
 		return [];
 	}
 
-	const ids = retryable.map((row) => row.id);
-	const urls = retryable.map((row) => row.url);
+	const ids = notCapped.map((row) => row.id);
+	const urls = notCapped.map((row) => row.url);
 
 	const chunkSize = 500;
 	for (let i = 0; i < ids.length; i += chunkSize) {

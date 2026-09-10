@@ -9,7 +9,7 @@ describe('APPEND_RETRY_FAILED_COMMON_SETUP_PHASES', () => {
 		expect(APPEND_RETRY_FAILED_COMMON_SETUP_PHASES).toEqual({
 			prefix: ['Extracting archive', 'Loading archive config', 'Backing up archive'],
 			suffix: [
-				'Loading dedupe-cap shape keys',
+				'Loading dedupe-cap state',
 				'Loading crawl state',
 				'Loading resource list',
 				'Loading scraped page count',

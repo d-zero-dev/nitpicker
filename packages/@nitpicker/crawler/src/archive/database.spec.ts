@@ -3403,6 +3403,51 @@ describe('resetFailedPages', () => {
 		await db.destroy();
 	});
 
+	it('excludes failed pages whose URL shape already has a confirmed dedupe-cap trap', async () => {
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ filename: resetDbPath });
+
+		// Two members of the confirmed trap shape (`example.com/trap/date/{n}/`)
+		// that hard-failed instead of rendering — the exact scenario that
+		// motivates the exclusion: a trap page fails outright rather than
+		// producing a comparable body, so it never reaches
+		// `DedupeCapTracker#observe` and the cap alone cannot suppress it here.
+		await insertPage(db, { url: 'https://example.com/trap/date/2024/', status: -1 });
+		await insertPage(db, { url: 'https://example.com/trap/date/2025/', status: -1 });
+		// A failed page of an unrelated shape must still be reset normally.
+		await insertPage(db, { url: 'https://example.com/other/page/', status: -1 });
+
+		await db.insertDedupeCapEvent({
+			shapeKey: 'example.com/trap/date/{n}/',
+			sampleUrl: 'https://example.com/trap/date/2020/',
+			bodyHash: Buffer.from('trap-body'),
+			effectiveThreshold: 2,
+			observedCount: 2,
+			detectedAt: 1_700_000_000_000,
+		});
+
+		const reset = await db.resetFailedPages();
+		expect(reset).toEqual(['https://example.com/other/page/']);
+
+		// The excluded trap pages stay untouched on disk (still scraped=1,
+		// status=-1), same assertion style as the permanent-failure-kind test.
+		const knex = db.getKnex();
+		for (const url of [
+			'https://example.com/trap/date/2024/',
+			'https://example.com/trap/date/2025/',
+		]) {
+			const row = await knex('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.where('url_refs.url', url)
+				.first();
+			expect(row.scraped).toBe(1);
+			expect(row.status).toBe(-1);
+		}
+
+		await db.destroy();
+	});
+
 	it('resets a dns-classified page whose failure falls inside a recorded network outage window', async () => {
 		// The outage override: a `dns` message is normally permanent-excluded,
 		// but if its timestamp falls inside a `network_outages` window, the

@@ -76,7 +76,12 @@ export default class DedupeCapTracker {
 	 * @param preloadedSticky - Shape keys already confirmed capped in a prior
 	 *   session (from `dedupe_cap_events.shape_key`), seeded so `--resume` /
 	 *   `--append` / `--retry-failed` / `--inventory` do not re-admit a trap
-	 *   this crawl already paid the cost of discovering once.
+	 *   this crawl already paid the cost of discovering once. Only covers
+	 *   shapes that already crossed their threshold — a shape that fell
+	 *   short still starts this instance's `#state` at nothing; callers
+	 *   restore that half via `#observe` (see `Crawler`'s constructor,
+	 *   which replays `CrawlerOptions.preloadedDedupeObservations` right
+	 *   after constructing this tracker).
 	 */
 	constructor(options: DedupeCapOptions, preloadedSticky: Iterable<string> = []) {
 		this.#options = options;
