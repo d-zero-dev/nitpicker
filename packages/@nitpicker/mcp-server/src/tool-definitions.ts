@@ -54,7 +54,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'list_pages',
 		description:
-			'List pages with rich filtering: by status code (exact or range), missing metadata (title, description), noindex flag, security header presence (CSP / X-Frame-Options / X-Content-Type-Options / HSTS), dedupe-cap trap membership, URL patterns, directory paths. Supports sorting and pagination. Use for questions like "show me all 404 pages", "pages without descriptions", "internal pages missing CSP", or "which pages got swept up in a --dedupe-cap trap". For large sites, set `limit` to keep the response bounded — to dump the whole list use the CLI (`nitpicker query pages`) and pipe through `jq` instead of pulling everything through MCP.',
+			'List pages with rich filtering: by status code (exact or range), missing metadata (title, description), noindex flag, security header presence (CSP / X-Frame-Options / X-Content-Type-Options / HSTS), dedupe-cap trap membership, image-scan outcome, URL patterns, directory paths. Supports sorting and pagination. Use for questions like "show me all 404 pages", "pages without descriptions", "internal pages missing CSP", "which pages got swept up in a --dedupe-cap trap", or "which pages had their mobile image scan abandoned". For large sites, set `limit` to keep the response bounded — to dump the whole list use the CLI (`nitpicker query pages`) and pipe through `jq` instead of pulling everything through MCP.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -132,6 +132,19 @@ export const toolDefinitions: Tool[] = [
 					description:
 						'Restrict to one Content-Type category. When set, the default HTML-or-null base filter is relaxed so non-HTML categories (PDF, image, archive…) become reachable through this listing — useful for audits like "show every PDF in scope". csv groups .csv + .tsv; word groups .doc + .docx; excel groups .xls + .xlsx; powerpoint groups .ppt + .pptx; json groups JSON + YAML; text groups .txt + .md.',
 				},
+				imageScan: {
+					type: 'string',
+					enum: [
+						'ok',
+						'degraded',
+						'nav-unsettled',
+						'frame-lost',
+						'scroll-height-exceeded',
+						'unknown',
+					],
+					description:
+						'Filter to pages where the desktop OR mobile <img> element scan matched this outcome (a page\'s two viewports can differ, so this is OR across both, not per-viewport). "ok"/"degraded" mean the scan produced data (degraded = network never settled but the frame was still usable); "nav-unsettled"/"frame-lost"/"unknown" mean the scan was abandoned for a transient reason and the page is a --retry-failed candidate; "scroll-height-exceeded" is a deterministic, page-shape-driven skip that a retry cannot change.',
+				},
 				urlPattern: {
 					type: 'string',
 					description: 'URL pattern to search (SQL LIKE: use % as wildcard)',
@@ -156,7 +169,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'get_page_detail',
 		description:
-			"Get full details for a specific page URL: ~47 flat meta fields (title, description, OG, Twitter, robots, link, charset, manifest, themeColor, fb_app_id, verification_google, format_detection, og:image:alt/width/height, og:locale, og:article timestamps, twitter:site/creator, etc.), `metaExtras` JSON (referrer, viewport parsed, httpEquiv, apple, msapplication, verification.{bing|yandex|...}, geo, citation, hreflang alternates, others.*, originTrial), JSON-LD/SpeculationRules **summary** (count + unique @types + parseErrorCount), confidence-combined **technology roll-up** (technology/category/version/confidence/signalCount per detected technology, confidence descending — no per-signal evidence), main-content **aggregate counts only** (mainContentSelector, mainContentWordCount/BodyWordCount, mainContentHeadingCount/ImageCount/TableCount/ButtonCount/IframeCount/VideoCount/AudioCount/CanvasCount/CustomElementCount, scrollHeightDesktop/Mobile — null when the page was never rendered), outbound links, redirect sources, response headers, `isDedupeCapped`/`dedupeCapShapeKey` (whether --dedupe-cap captured this page's URL shape as a same-cluster crawl trap, and which shape), and within-archive timestamps (firstCrawledAt / lastCrawledAt). Inbound links are NOT included here — a page's referrer count can reach the hundreds of thousands on a large site; use `list_inbound_links` instead. Raw JSON-LD entries, per-signal technology evidence, and the main-content child-entity arrays are also NOT included — fetch them via `get_page_jsonld` / `get_page_technologies` / `get_page_main_contents`. Use when drilling down into a specific page.",
+			"Get full details for a specific page URL: ~47 flat meta fields (title, description, OG, Twitter, robots, link, charset, manifest, themeColor, fb_app_id, verification_google, format_detection, og:image:alt/width/height, og:locale, og:article timestamps, twitter:site/creator, etc.), `metaExtras` JSON (referrer, viewport parsed, httpEquiv, apple, msapplication, verification.{bing|yandex|...}, geo, citation, hreflang alternates, others.*, originTrial), JSON-LD/SpeculationRules **summary** (count + unique @types + parseErrorCount), confidence-combined **technology roll-up** (technology/category/version/confidence/signalCount per detected technology, confidence descending — no per-signal evidence), main-content **aggregate counts only** (mainContentSelector, mainContentWordCount/BodyWordCount, mainContentHeadingCount/ImageCount/TableCount/ButtonCount/IframeCount/VideoCount/AudioCount/CanvasCount/CustomElementCount, scrollHeightDesktop/Mobile, imageScanDesktop/Mobile — the desktop/mobile <img> element scan outcome ('ok'/'degraded'/'nav-unsettled'/'frame-lost'/'scroll-height-exceeded'/'unknown'), null when the page was never rendered or the scan was never attempted), outbound links, redirect sources, response headers, `isDedupeCapped`/`dedupeCapShapeKey` (whether --dedupe-cap captured this page's URL shape as a same-cluster crawl trap, and which shape), and within-archive timestamps (firstCrawledAt / lastCrawledAt). Inbound links are NOT included here — a page's referrer count can reach the hundreds of thousands on a large site; use `list_inbound_links` instead. Raw JSON-LD entries, per-signal technology evidence, and the main-content child-entity arrays are also NOT included — fetch them via `get_page_jsonld` / `get_page_technologies` / `get_page_main_contents`. Use when drilling down into a specific page.",
 		inputSchema: {
 			type: 'object' as const,
 			properties: {

@@ -183,6 +183,7 @@ describe('createServer', () => {
 				canvases: [],
 			},
 			scrollHeight: { desktop: 3200, mobile: 5400 },
+			imageScan: { desktop: 0, mobile: 2 },
 		});
 
 		await archive.setPage({
@@ -406,6 +407,19 @@ describe('createServer', () => {
 		expect(data.items[0].hasCSP).toBe(true);
 	});
 
+	it('list_pages は imageScan でフィルタする', async () => {
+		const result = await callTool(server, 'list_pages', {
+			archiveId,
+			imageScan: 'nav-unsettled',
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.items).toHaveLength(1);
+		expect(data.items[0].url).toBe('https://example.com');
+		expect(data.items[0].imageScanDesktop).toBe('ok');
+		expect(data.items[0].imageScanMobile).toBe('nav-unsettled');
+	});
+
 	it('get_page_detail でページ詳細を取得する', async () => {
 		const result = await callTool(server, 'get_page_detail', {
 			archiveId,
@@ -417,6 +431,8 @@ describe('createServer', () => {
 		expect(data.title).toBe('Home');
 		expect(data.outboundLinks).toBeDefined();
 		expect(data.outboundLinks.length).toBe(1);
+		expect(data.imageScanDesktop).toBe('ok');
+		expect(data.imageScanMobile).toBe('nav-unsettled');
 	});
 
 	it('get_page_detail で存在しないページは "Page not found." を返す', async () => {
