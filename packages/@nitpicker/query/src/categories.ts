@@ -13,3 +13,5 @@
 
 export { CONTENT_TYPE_CATEGORIES, classifyContentType } from './classify-content-type.js';
 export type { ContentTypeCategory, ContentTypeCount } from './types.js';
+export { IMAGE_SCAN_OUTCOMES, imageScanCodeToOutcome } from './image-scan-outcome.js';
+export type { ImageScanOutcome } from './types.js';

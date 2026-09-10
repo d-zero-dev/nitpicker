@@ -23,6 +23,7 @@ export { computeStylesheetFileNames } from './compute-stylesheet-file-names.js';
 export { classifyContentType, CONTENT_TYPE_CATEGORIES } from './classify-content-type.js';
 export { CONTENT_TYPE_RULES } from './content-type-rules.js';
 export type { ContentTypeRule, MimeMatcher } from './content-type-rules.js';
+export { IMAGE_SCAN_OUTCOMES, imageScanCodeToOutcome } from './image-scan-outcome.js';
 export { countDuplicateGroups } from './count-duplicate-groups.js';
 export { countPagesByJsonLdType } from './count-pages-by-jsonld-type.js';
 export { countPagesByTechnology } from './count-pages-by-technology.js';
