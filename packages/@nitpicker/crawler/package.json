@@ -30,7 +30,7 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@d-zero/beholder": "4.2.3",
+		"@d-zero/beholder": "5.0.0",
 		"@d-zero/dealer": "1.14.0",
 		"@d-zero/fs": "0.2.7",
 		"@d-zero/shared": "0.23.0",

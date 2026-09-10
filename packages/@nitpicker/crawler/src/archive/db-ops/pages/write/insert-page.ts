@@ -95,6 +95,7 @@ export async function insertPage(
 		page.mainContents,
 		page.scrollHeight,
 		page.mainContentCustomElements?.length,
+		page.imageScan,
 	);
 	const extras = deriveMetaExtras(page.meta);
 	const now = Date.now();
