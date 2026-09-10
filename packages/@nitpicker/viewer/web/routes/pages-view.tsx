@@ -1,9 +1,12 @@
 import type { CellContext, ColumnDef, PagesFilter } from '../types.js';
 import type { PageListFacets, PageListItem } from '@nitpicker/query';
-import type { ContentTypeCategory } from '@nitpicker/query/categories';
+import type { ContentTypeCategory, ImageScanOutcome } from '@nitpicker/query/categories';
 import type { HeaderPresence } from '@nitpicker/query/header-presence';
 
-import { CONTENT_TYPE_CATEGORIES } from '@nitpicker/query/categories';
+import {
+	CONTENT_TYPE_CATEGORIES,
+	IMAGE_SCAN_OUTCOMES,
+} from '@nitpicker/query/categories';
 import { HEADER_PRESENCE_KEYS } from '@nitpicker/query/header-presence';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
@@ -79,6 +82,11 @@ export function PagesView() {
 	const hasXFrameOptions = params.getAll('hasXFrameOptions');
 	const hasXContentTypeOptions = params.getAll('hasXContentTypeOptions');
 	const hasHSTS = params.getAll('hasHSTS');
+	const imageScan = params
+		.getAll('imageScan')
+		.filter((value): value is ImageScanOutcome =>
+			(IMAGE_SCAN_OUTCOMES as readonly string[]).includes(value),
+		);
 	const isDedupeCapped = params.getAll('isDedupeCapped');
 	const dedupeCapEventIdParam = params.get('dedupeCapEventId');
 	const parsedDedupeCapEventId = dedupeCapEventIdParam
@@ -109,6 +117,7 @@ export function PagesView() {
 		hasXFrameOptions,
 		hasXContentTypeOptions,
 		hasHSTS,
+		imageScan,
 		isDedupeCapped,
 		dedupeCapEventId,
 		templateKey,
@@ -325,6 +334,18 @@ export function PagesView() {
 				size: 130,
 				cell: textCell,
 			},
+			{
+				accessorKey: 'imageScanDesktop',
+				header: 'image scan (desktop)',
+				size: 130,
+				cell: textCell,
+			},
+			{
+				accessorKey: 'imageScanMobile',
+				header: 'image scan (mobile)',
+				size: 130,
+				cell: textCell,
+			},
 			{ accessorKey: 'hasCSP', header: 'CSP', size: 70, cell: boolCell },
 			{
 				accessorKey: 'hasXFrameOptions',
@@ -451,6 +472,18 @@ export function PagesView() {
 		addChecklistFilter(
 			controls,
 			{ params, updateMany },
+			'imageScan',
+			'imageScan',
+			t('views.pages.filterImageScan'),
+			IMAGE_SCAN_OUTCOMES.map((outcome) => ({
+				value: outcome,
+				label: t(`views.imageScan.${outcome}` as const),
+				checked: imageScan.includes(outcome),
+			})),
+		);
+		addChecklistFilter(
+			controls,
+			{ params, updateMany },
 			'title',
 			'missingTitle',
 			t('views.pages.filterMissingTitle'),
@@ -537,6 +570,7 @@ export function PagesView() {
 		hasHSTS,
 		hasXContentTypeOptions,
 		hasXFrameOptions,
+		imageScan,
 		isDedupeCapped,
 		isExternal,
 		lang,

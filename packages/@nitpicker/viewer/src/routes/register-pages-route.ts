@@ -12,6 +12,7 @@ import { buildLivePagesCursors } from '../query-params/build-live-pages-cursors.
 import { parseLivePagesCursor } from '../query-params/parse-live-pages-cursor.js';
 import { toBoolean } from '../query-params/to-boolean.js';
 import { toContentTypeCategory } from '../query-params/to-content-type-category.js';
+import { toImageScanOutcome } from '../query-params/to-image-scan-outcome.js';
 import { toMultiValue } from '../query-params/to-multi-value.js';
 import { toNumber } from '../query-params/to-number.js';
 import { toPageSortBy } from '../query-params/to-page-sort-by.js';
@@ -79,6 +80,7 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 					toBoolean,
 				),
 				hasHSTS: toMultiValue(c.req.queries('hasHSTS'), toBoolean),
+				imageScan: toMultiValue(c.req.queries('imageScan'), toImageScanOutcome),
 				isDedupeCapped: toMultiValue(c.req.queries('isDedupeCapped'), toBoolean),
 				dedupeCapEventId: toNumber(q.dedupeCapEventId),
 				isRedirectSource: toMultiValue(c.req.queries('isRedirectSource'), toBoolean),
@@ -120,6 +122,7 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 			hasXFrameOptions: toBoolean(q.hasXFrameOptions),
 			hasXContentTypeOptions: toBoolean(q.hasXContentTypeOptions),
 			hasHSTS: toBoolean(q.hasHSTS),
+			imageScan: toImageScanOutcome(q.imageScan),
 			isDedupeCapped: toBoolean(q.isDedupeCapped),
 			dedupeCapEventId: toNumber(q.dedupeCapEventId),
 			urlPattern: q.urlPattern,

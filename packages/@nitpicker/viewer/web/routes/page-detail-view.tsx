@@ -112,6 +112,7 @@ export function PageDetailView() {
 								wordCount={mainContents.data.wordCount}
 								bodyWordCount={mainContents.data.bodyWordCount}
 								scrollHeight={mainContents.data.scrollHeight}
+								imageScan={mainContents.data.imageScan}
 							/>
 							<HeadingList headings={mainContents.data.headings} />
 							<ImageList images={mainContents.data.images} />
