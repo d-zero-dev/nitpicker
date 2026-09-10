@@ -55,6 +55,8 @@ describe('computeMainContentsDenormalized', () => {
 			main_content_custom_element_count: null,
 			scroll_height_desktop: null,
 			scroll_height_mobile: null,
+			image_scan_desktop: null,
+			image_scan_mobile: null,
 		});
 	});
 
@@ -89,6 +91,46 @@ describe('computeMainContentsDenormalized', () => {
 		const result = computeMainContentsDenormalized(makeMainContents(), null);
 		expect(result.scroll_height_desktop).toBeNull();
 		expect(result.scroll_height_mobile).toBeNull();
+	});
+
+	it('returns null image scan codes when imageScan is omitted', () => {
+		const result = computeMainContentsDenormalized(makeMainContents(), scrollHeight);
+		expect(result.image_scan_desktop).toBeNull();
+		expect(result.image_scan_mobile).toBeNull();
+	});
+
+	it('returns null image scan codes when imageScan is explicitly null', () => {
+		const result = computeMainContentsDenormalized(
+			makeMainContents(),
+			scrollHeight,
+			null,
+			null,
+		);
+		expect(result.image_scan_desktop).toBeNull();
+		expect(result.image_scan_mobile).toBeNull();
+	});
+
+	it('reflects the passed image scan codes, including 0 (ok)', () => {
+		const result = computeMainContentsDenormalized(
+			makeMainContents(),
+			scrollHeight,
+			null,
+			{
+				desktop: 0,
+				mobile: 1,
+			},
+		);
+		expect(result.image_scan_desktop).toBe(0);
+		expect(result.image_scan_mobile).toBe(1);
+	});
+
+	it('returns null image scan codes when mainContents is null, even if imageScan is passed', () => {
+		const result = computeMainContentsDenormalized(null, scrollHeight, null, {
+			desktop: 0,
+			mobile: 0,
+		});
+		expect(result.image_scan_desktop).toBeNull();
+		expect(result.image_scan_mobile).toBeNull();
 	});
 
 	it('projects the detected main element and JSON-encodes classList', () => {

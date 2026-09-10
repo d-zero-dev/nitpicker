@@ -550,6 +550,24 @@ export type ContentTypeCategory =
 	| 'unknown';
 
 /**
+ * Named outcome of a single device-preset `<img>` element scan performed by
+ * `@d-zero/beholder`'s `Scraper#fetchImages`, mirroring its numeric
+ * `IMAGE_SCAN_CODE` (0=ok, 1=degraded, 2=nav-unsettled, 3=frame-lost,
+ * 4=scroll-height-exceeded, 255=unknown) as a name for the viewer/CLI/MCP
+ * surfaces. `imageScanCodeToOutcome` (in `image-scan-outcome.ts`) converts
+ * the stored integer to this name; a `page_meta.image_scan_*` column of
+ * `null` (scan never attempted) has no corresponding outcome name — callers
+ * represent that case as `null`, not as a member of this union.
+ */
+export type ImageScanOutcome =
+	| 'ok'
+	| 'degraded'
+	| 'nav-unsettled'
+	| 'frame-lost'
+	| 'scroll-height-exceeded'
+	| 'unknown';
+
+/**
  * A count of in-scope rows (HTML pages + KNOWN non-HTML targets like PDF /
  * image / zip) grouped by their canonical {@link ContentTypeCategory} and
  * by `isExternal`. Errored / not-yet-classified rows are bucketed under

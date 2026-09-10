@@ -486,6 +486,24 @@ export default class Page {
 	}
 
 	/**
+	 * `@d-zero/beholder`'s `IMAGE_SCAN_CODE` outcome for the desktop-compact
+	 * `<img>` element scan (denormalised aggregate written at scrape time), or
+	 * null when not attempted.
+	 */
+	get imageScanDesktop() {
+		return this.#raw.image_scan_desktop;
+	}
+
+	/**
+	 * `@d-zero/beholder`'s `IMAGE_SCAN_CODE` outcome for the mobile-small
+	 * `<img>` element scan (denormalised aggregate written at scrape time), or
+	 * null when not attempted.
+	 */
+	get imageScanMobile() {
+		return this.#raw.image_scan_mobile;
+	}
+
+	/**
 	 * The reason this page was skipped during crawling, or null if it was not skipped.
 	 */
 	get skipReason() {

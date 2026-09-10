@@ -320,6 +320,8 @@ export async function createEntityTables(instance: Knex): Promise<void> {
 			main_content_custom_element_count INTEGER,
 			scroll_height_desktop       INTEGER,
 			scroll_height_mobile        INTEGER,
+			image_scan_desktop          INTEGER,
+			image_scan_mobile           INTEGER,
 			body_hash                   BLOB,
 			console_error_count         INTEGER
 		)

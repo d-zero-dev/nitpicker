@@ -10,6 +10,7 @@ import { listDedupeCapShapeKeys } from '../../dedupe-cap/list-dedupe-cap-shape-k
 import { listNetworkOutages } from '../../outages/list-network-outages.js';
 
 import { clearPageDerivedRows } from './clear-page-derived-rows.js';
+import { RETRYABLE_IMAGE_SCAN_CODES } from './retryable-image-scan-codes.js';
 
 /**
  * Reset previously-attempted pages that ended in a recoverable failure so a
@@ -25,7 +26,13 @@ import { clearPageDerivedRows } from './clear-page-derived-rows.js';
  * - `status IS NULL` — no status was ever stored for the row;
  * - the row has no `content_type_refs` link — the content type could not be
  *   determined;
- * - `status` is in the `5xx` range — a (frequently transient) server error.
+ * - `status` is in the `5xx` range — a (frequently transient) server error;
+ * - `page_meta.image_scan_desktop` or `image_scan_mobile` is one of
+ *   {@link RETRYABLE_IMAGE_SCAN_CODES} — `@d-zero/beholder` abandoned that
+ *   viewport's `<img>` scan for a transient reason (navigation never
+ *   settled, or the frame/session was lost mid-scan), independent of the
+ *   page's own HTTP `status` (a page can score `status = 200` and still
+ *   have failed its mobile image scan).
  *
  * Definitive `4xx` responses are intentionally excluded: re-fetching a 404
  * almost always yields the same answer.
@@ -97,7 +104,13 @@ export async function resetFailedPages(
 ): Promise<string[]> {
 	const candidates = await knex('content_items')
 		.join('url_refs', 'content_items.url_id', 'url_refs.id')
-		.select('content_items.id as id', 'url_refs.url as url')
+		.leftJoin('page_meta', 'content_items.id', 'page_meta.page_id')
+		.select(
+			'content_items.id as id',
+			'url_refs.url as url',
+			'content_items.status as status',
+			'content_items.content_type_id as contentTypeId',
+		)
 		.where('content_items.scraped', 1)
 		.whereNull('content_items.redirect_dest_id')
 		.where((qb) => {
@@ -107,11 +120,33 @@ export async function resetFailedPages(
 			qb.whereNull('content_items.status')
 				.orWhere('content_items.status', -1)
 				.orWhereNull('content_items.content_type_id')
-				.orWhereBetween('content_items.status', [500, 599]);
+				.orWhereBetween('content_items.status', [500, 599])
+				.orWhereIn('page_meta.image_scan_desktop', RETRYABLE_IMAGE_SCAN_CODES)
+				.orWhereIn('page_meta.image_scan_mobile', RETRYABLE_IMAGE_SCAN_CODES);
 		});
 
 	if (candidates.length === 0) {
 		return [];
+	}
+
+	// Diagnostic only: how many candidates matched solely because of an
+	// image-scan outcome, not the pre-existing status-based conditions —
+	// i.e. a page whose HTTP status looks fine but whose mobile/desktop
+	// `<img>` scan was abandoned for a transient reason.
+	const imageScanOnlyCount = candidates.filter((row) => {
+		const statusQualifies =
+			row.status === null ||
+			row.status === -1 ||
+			row.contentTypeId === null ||
+			(row.status >= 500 && row.status <= 599);
+		return !statusQualifies;
+	}).length;
+	if (imageScanOnlyCount > 0) {
+		dbLog(
+			'%d of %d retry candidate(s) matched via image-scan degradation only',
+			imageScanOnlyCount,
+			candidates.length,
+		);
 	}
 
 	const candidateIds = candidates.map((row) => row.id);

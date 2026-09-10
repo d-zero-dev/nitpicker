@@ -113,6 +113,8 @@ function createRawPage(overrides: Partial<DB_Page> = {}): DB_Page {
 		main_content_custom_element_count: null,
 		scroll_height_desktop: null,
 		scroll_height_mobile: null,
+		image_scan_desktop: null,
+		image_scan_mobile: null,
 		meta_extras: null,
 		networkLogs: null,
 		isSkipped: 0,
@@ -308,6 +310,21 @@ describe('Page', () => {
 			);
 			expect(page.scrollHeightDesktop).toBe(3200);
 			expect(page.scrollHeightMobile).toBe(5400);
+		});
+
+		it('returns imageScanDesktop/Mobile from raw data', () => {
+			const page = new Page(
+				createMockArchive() as never,
+				createRawPage({ image_scan_desktop: 0, image_scan_mobile: 2 }),
+			);
+			expect(page.imageScanDesktop).toBe(0);
+			expect(page.imageScanMobile).toBe(2);
+		});
+
+		it('returns null imageScanDesktop/Mobile when not attempted', () => {
+			const page = new Page(createMockArchive() as never, createRawPage());
+			expect(page.imageScanDesktop).toBeNull();
+			expect(page.imageScanMobile).toBeNull();
 		});
 
 		it('includes main-content columns in metaFlat', () => {

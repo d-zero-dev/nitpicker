@@ -14,6 +14,7 @@ import { migrateMainContentsColumns } from '../../migrate-main-contents-columns.
 import { migratePageMetaBodyHash } from '../../migrate-page-meta-body-hash.js';
 import { migratePageMetaConsoleErrorCount } from '../../migrate-page-meta-console-error-count.js';
 import { migratePageMetaCustomElementCount } from '../../migrate-page-meta-custom-element-count.js';
+import { migratePageMetaImageScan } from '../../migrate-page-meta-image-scan.js';
 import { migratePageTagsToPageTechnologies } from '../../migrate-page-tags-to-page-technologies.js';
 import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-network-outages.js';
 
@@ -38,7 +39,7 @@ import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-networ
  * needs an explicit `hasColumn`-guarded `ALTER TABLE` here (`migrateInfoRoots`,
  * `migrateInfoCreatedCwd`, `migrateMainContentsColumns`, `migratePageMetaBodyHash`,
  * `migratePageMetaConsoleErrorCount`, `migratePageMetaCustomElementCount`,
- * `migrateContentItemsAliasOfId`,
+ * `migratePageMetaImageScan`, `migrateContentItemsAliasOfId`,
  *
  * `migratePageTagsToPageTechnologies` is the one exception to "column adds
  * only": it converts `page_tags` (removed) rows into `technology_signals`/
@@ -104,6 +105,7 @@ export async function init(
 	await migratePageMetaBodyHash(knex, onLog);
 	await migratePageMetaConsoleErrorCount(knex, onLog);
 	await migratePageMetaCustomElementCount(knex, onLog);
+	await migratePageMetaImageScan(knex, onLog);
 	// Table-level migration (converts + drops page_tags), not a column
 	// add — see its own JSDoc for why it still belongs in this boot phase.
 	await migratePageTagsToPageTechnologies(knex, onLog);

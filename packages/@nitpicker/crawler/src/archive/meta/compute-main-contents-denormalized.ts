@@ -1,4 +1,4 @@
-import type { MainContentsDenormalizedColumns } from './types.js';
+import type { ImageScanColumns, MainContentsDenormalizedColumns } from './types.js';
 import type { MainContentsData, ScrollHeightData } from '@d-zero/beholder';
 
 /**
@@ -24,17 +24,26 @@ import type { MainContentsData, ScrollHeightData } from '@d-zero/beholder';
  * `undefined`/capture-not-attempted and capture-failure both collapse to
  * `null` (unknown — NOT the same as "captured, zero found"), while any
  * number (including `0`) means capture succeeded.
+ * `imageScan` follows the same independent-of-`mainContents` shape as
+ * `scrollHeight` (both are per-viewport beholder scan outcomes, not derived
+ * from the main-content region) — it is typed as a plain `number | null`
+ * pair here rather than beholder's `ImageScanCode` so this function does not
+ * require a `@d-zero/beholder` version that exports it; the caller narrows.
  * @param mainContents - Beholder's per-page main-content metrics, or `null`/`undefined`.
  * @param scrollHeight - Beholder's per-page scroll-height measurements, or `null`/`undefined`.
  * @param customElementCount - Count of Web Components nitpicker captured in
  *   the main-content region, or `null`/`undefined` when capture was not
  *   attempted or failed.
- * @returns The eighteen denormalised columns.
+ * @param imageScan - Beholder's per-viewport `<img>` scan outcome codes, or
+ *   `null`/`undefined` when not attempted (page not fully rendered, or the
+ *   scraper version does not report it yet).
+ * @returns The twenty denormalised columns.
  */
 export function computeMainContentsDenormalized(
 	mainContents: MainContentsData | null | undefined,
 	scrollHeight: ScrollHeightData | null | undefined,
 	customElementCount?: number | null,
+	imageScan?: ImageScanColumns | null,
 ): MainContentsDenormalizedColumns {
 	if (mainContents == null) {
 		return {
@@ -56,6 +65,8 @@ export function computeMainContentsDenormalized(
 			main_content_custom_element_count: null,
 			scroll_height_desktop: null,
 			scroll_height_mobile: null,
+			image_scan_desktop: null,
+			image_scan_mobile: null,
 		};
 	}
 	return {
@@ -79,5 +90,7 @@ export function computeMainContentsDenormalized(
 		main_content_custom_element_count: customElementCount ?? null,
 		scroll_height_desktop: scrollHeight?.desktop ?? null,
 		scroll_height_mobile: scrollHeight?.mobile ?? null,
+		image_scan_desktop: imageScan?.desktop ?? null,
+		image_scan_mobile: imageScan?.mobile ?? null,
 	};
 }
