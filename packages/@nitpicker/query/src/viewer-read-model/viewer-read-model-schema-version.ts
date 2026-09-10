@@ -44,5 +44,11 @@
  * `--list`'s non-recursive mode, while still admitting a listed root's
  * redirect destination even when that destination URL was never itself on
  * the list.
+ *
+ * 33 -> 34 (per-viewport image-scan outcome): added `viewer_pages.image_scan_desktop`
+ * / `image_scan_mobile` (nullable `INTEGER`, `@d-zero/beholder`'s
+ * `IMAGE_SCAN_CODE` copied verbatim from `page_meta`, unlike the `?? 0`
+ * count columns — `null` distinguishes "scan never attempted" from `0`
+ * ("ok"), the same reasoning as the source `page_meta` columns).
  */
-export const VIEWER_READ_MODEL_SCHEMA_VERSION = 33;
+export const VIEWER_READ_MODEL_SCHEMA_VERSION = 34;

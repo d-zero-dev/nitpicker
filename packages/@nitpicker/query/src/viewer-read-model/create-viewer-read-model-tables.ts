@@ -98,6 +98,14 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 			main_content_custom_element_count integer not null default 0,
 			scroll_height_desktop integer not null default 0,
 			scroll_height_mobile integer not null default 0,
+			-- page_meta.image_scan_desktop/mobile verbatim (nullable), unlike the
+			-- 0-defaulted counters above: 0 ("ok") is a real, distinct outcome
+			-- here, not a placeholder for "unmeasured" — collapsing NULL to 0
+			-- would make an unattempted scan indistinguishable from a
+			-- successful one in both sort and filter. Same nullable-verbatim
+			-- treatment as the lang column below.
+			image_scan_desktop integer,
+			image_scan_mobile integer,
 			-- page_meta.console_error_count (pageerror+error occurrences,
 			-- issue #228), same NULL-to-0 defaulting rationale as the
 			-- main_content_*/scroll_height_* columns above: sort/filter only,

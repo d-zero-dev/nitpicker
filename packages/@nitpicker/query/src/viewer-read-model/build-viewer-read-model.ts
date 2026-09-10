@@ -178,6 +178,10 @@ interface PagesSourceRow {
 	scroll_height_desktop: number | null;
 	/** Denormalised mobile-small scroll height, or `null` when unrendered. */
 	scroll_height_mobile: number | null;
+	/** Denormalised desktop-compact image-scan outcome code, or `null` when not attempted. */
+	image_scan_desktop: number | null;
+	/** Denormalised mobile-small image-scan outcome code, or `null` when not attempted. */
+	image_scan_mobile: number | null;
 	/**
 	 * Denormalised `pageerror`+`error` console log occurrence count (issue
 	 * #228), or `null` on a page that predates the feature / has never been
@@ -291,6 +295,10 @@ interface ViewerPageInsertRow {
 	scroll_height_desktop: number;
 	/** `PagesSourceRow.scroll_height_mobile`, defaulted to `0` when `null`. */
 	scroll_height_mobile: number;
+	/** Copied from `PagesSourceRow.image_scan_desktop` verbatim (nullable) — filter-only, see the DDL comment. */
+	image_scan_desktop: number | null;
+	/** Copied from `PagesSourceRow.image_scan_mobile` verbatim (nullable). */
+	image_scan_mobile: number | null;
 	/** `PagesSourceRow.console_error_count`, defaulted to `0` when `null`. */
 	console_error_count: number;
 	/** Copied from `PagesSourceRow.lang` verbatim (nullable) — filter-only, see the DDL comment. */
@@ -518,6 +526,8 @@ function sanitizeRedirectSourceRow(row: PagesSourceRow): PagesSourceRow {
 		main_content_custom_element_count: null,
 		scroll_height_desktop: null,
 		scroll_height_mobile: null,
+		image_scan_desktop: null,
+		image_scan_mobile: null,
 		console_error_count: null,
 		lang: null,
 		hasCSP: 0,
@@ -577,6 +587,8 @@ function toViewerPageInsertRow(
 		main_content_custom_element_count: row.main_content_custom_element_count ?? 0,
 		scroll_height_desktop: row.scroll_height_desktop ?? 0,
 		scroll_height_mobile: row.scroll_height_mobile ?? 0,
+		image_scan_desktop: row.image_scan_desktop,
+		image_scan_mobile: row.image_scan_mobile,
 		console_error_count: row.console_error_count ?? 0,
 		lang: row.lang,
 		has_csp: row.hasCSP,
@@ -1002,6 +1014,8 @@ export async function buildViewerReadModel(
 					'pm.main_content_custom_element_count as main_content_custom_element_count',
 					'pm.scroll_height_desktop as scroll_height_desktop',
 					'pm.scroll_height_mobile as scroll_height_mobile',
+					'pm.image_scan_desktop as image_scan_desktop',
+					'pm.image_scan_mobile as image_scan_mobile',
 					'pm.console_error_count as console_error_count',
 					'pm.lang as lang',
 					...buildHeaderPresenceSelects(trx),

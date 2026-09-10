@@ -7,6 +7,7 @@ import { dedupeCapEventIdSelectColumn } from './dedupe-cap-event-id-select-colum
 import { dedupeCapShapeKeySelectColumn } from './dedupe-cap-shape-key-select-column.js';
 import { getPageConsoleLogs } from './get-page-console-logs.js';
 import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
+import { imageScanCodeToOutcome } from './image-scan-outcome.js';
 import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 import { resolveAliasAndRedirectChain } from './resolve-alias-and-redirect-chain.js';
@@ -238,6 +239,8 @@ export async function getPageDetail(
 			'pm.main_content_custom_element_count as main_content_custom_element_count',
 			'pm.scroll_height_desktop as scroll_height_desktop',
 			'pm.scroll_height_mobile as scroll_height_mobile',
+			'pm.image_scan_desktop as image_scan_desktop',
+			'pm.image_scan_mobile as image_scan_mobile',
 			templateKeySelectColumn(knex, hasPageTemplates),
 			dedupeCapShapeKeySelectColumn(knex, hasDedupeCapColumn),
 			dedupeCapEventIdSelectColumn(knex, hasDedupeCapColumn),
@@ -411,6 +414,8 @@ export async function getPageDetail(
 		mainContentCustomElementCount: page.main_content_custom_element_count,
 		scrollHeightDesktop: page.scroll_height_desktop,
 		scrollHeightMobile: page.scroll_height_mobile,
+		imageScanDesktop: imageScanCodeToOutcome(page.image_scan_desktop),
+		imageScanMobile: imageScanCodeToOutcome(page.image_scan_mobile),
 		templateKey: page.templateKey,
 		metaExtras,
 		jsonLd: summarizeJsonLdRows(jsonLdRows),

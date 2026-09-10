@@ -1,5 +1,7 @@
 import type { PageListItem, PageListRow } from './types.js';
 
+import { imageScanCodeToOutcome } from './image-scan-outcome.js';
+
 /**
  * Legacy column-name list retained for pre-0.13 fallback callers (kept as
  * a stringified `pages.*` list). 0.13 readers should prefer
@@ -57,6 +59,8 @@ export const PAGE_LIST_COLUMNS: readonly string[] = [
 	'main_content_custom_element_count',
 	'scroll_height_desktop',
 	'scroll_height_mobile',
+	'image_scan_desktop',
+	'image_scan_mobile',
 	'console_error_count',
 	'firstCrawledAt',
 	'lastCrawledAt',
@@ -142,6 +146,8 @@ export const PAGE_LIST_SELECT_COLUMNS: readonly string[] = [
 	'pm.main_content_custom_element_count as main_content_custom_element_count',
 	'pm.scroll_height_desktop as scroll_height_desktop',
 	'pm.scroll_height_mobile as scroll_height_mobile',
+	'pm.image_scan_desktop as image_scan_desktop',
+	'pm.image_scan_mobile as image_scan_mobile',
 	'pm.console_error_count as console_error_count',
 	'ci.first_crawled_at as firstCrawledAt',
 	'ci.last_crawled_at as lastCrawledAt',
@@ -213,6 +219,8 @@ function sanitizeRedirectSourcePageListRow(row: PageListRow): PageListRow {
 		main_content_custom_element_count: null,
 		scroll_height_desktop: null,
 		scroll_height_mobile: null,
+		image_scan_desktop: null,
+		image_scan_mobile: null,
 		console_error_count: null,
 		hasCSP: 0,
 		hasXFrameOptions: 0,
@@ -289,6 +297,8 @@ export function mapPageRowToListItem(row: PageListRow): PageListItem {
 		mainContentCustomElementCount: source.main_content_custom_element_count,
 		scrollHeightDesktop: source.scroll_height_desktop,
 		scrollHeightMobile: source.scroll_height_mobile,
+		imageScanDesktop: imageScanCodeToOutcome(source.image_scan_desktop),
+		imageScanMobile: imageScanCodeToOutcome(source.image_scan_mobile),
 		consoleErrorCount: source.console_error_count,
 		firstCrawledAt: source.firstCrawledAt,
 		lastCrawledAt: source.lastCrawledAt,
