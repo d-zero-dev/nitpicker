@@ -1,3 +1,4 @@
+import type { DedupeCapObservation } from './dedupe/types.js';
 import type { NetworkProbe } from './probe-network.js';
 import type { PageSource } from '../archive/types.js';
 import type { ErrorKind } from '../types.js';
@@ -257,6 +258,20 @@ export interface CrawlerOptions extends Required<
 	 * of discovering once. Ignored when {@link dedupeCap} is `null`.
 	 */
 	preloadedStickyShapeKeys: readonly string[];
+
+	/**
+	 * A prior session's per-shape Misra-Gries observations, replayed into
+	 * the tracker synchronously in the constructor (see `Crawler`'s own
+	 * constructor JSDoc) so a shape that was close to — but short of — its
+	 * threshold when the previous session ended does not restart its
+	 * counter at 0. Unlike {@link preloadedStickyShapeKeys} (which only
+	 * carries shapes already confirmed capped), this carries every
+	 * qualifying page's observation regardless of whether it ever
+	 * contributed to a cap. Seeded from `archive.listDedupeCapObservations()`
+	 * by the same five resuming-session methods, via
+	 * `buildDedupeCapObservation`. Ignored when {@link dedupeCap} is `null`.
+	 */
+	preloadedDedupeObservations: readonly DedupeCapObservation[];
 
 	/**
 	 * A `Lanes` instance owned by the caller (typically the CLI), reused as

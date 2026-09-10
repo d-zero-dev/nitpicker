@@ -11,7 +11,7 @@ describe('APPEND_SETUP_PHASES', () => {
 			'Loading archive config',
 			'Backing up archive',
 			'Repromoting external pages',
-			'Loading dedupe-cap shape keys',
+			'Loading dedupe-cap state',
 			'Loading crawl state',
 			'Loading resource list',
 			'Loading scraped page count',
