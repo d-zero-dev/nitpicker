@@ -108,6 +108,47 @@ describe('Pages', () => {
 		expect(pages.length).toBe(1);
 	});
 
+	it('round-trips page_meta.image_scan_desktop/mobile through getPages (build-page-query SELECT)', async () => {
+		// Crawler wiring that passes a scraped `PageData.imageScan` through to
+		// `computeMainContentsDenormalized` lands separately (it needs a
+		// `@d-zero/beholder` version that reports `imageScan`); this test
+		// isolates the read path by writing the `page_meta` columns directly,
+		// the same way that wiring will end up populating them.
+		const db = await Database.connect({
+			filename: path.resolve(workingDir, 'tmp-image-scan.sqlite'),
+		});
+
+		await db.updatePage(
+			{
+				url: parseUrl('http://localhost/image-scan-roundtrip')!,
+				redirectPaths: [],
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentLength: 1000,
+				contentType: 'text/html',
+				responseHeaders: {},
+				meta: { title: 'IMAGE_SCAN_ROUNDTRIP' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			} as never,
+			true,
+			true,
+		);
+		await db
+			.getKnex()('page_meta')
+			.update({ image_scan_desktop: 0, image_scan_mobile: 2 });
+
+		const pages = await db.getPages();
+		expect(pages.length).toBe(1);
+		expect(pages[0]!.image_scan_desktop).toBe(0);
+		expect(pages[0]!.image_scan_mobile).toBe(2);
+
+		await remove(path.resolve(workingDir, 'tmp-image-scan.sqlite'));
+	});
+
 	// TODO(v2): mock.sqlite is a checked-in v1-schema fixture; it must be
 	// regenerated against the v2 schema (or replaced with `setPage`-based
 	// in-test population) before these tests can be re-enabled. Skipped here
@@ -2843,6 +2884,8 @@ describe('resetFailedPages', () => {
 	 * @param row.contentType
 	 * @param row.isSkipped
 	 * @param row.redirectDestId
+	 * @param row.imageScanDesktop
+	 * @param row.imageScanMobile
 	 * @returns The inserted row id.
 	 */
 	async function insertPage(
@@ -2856,6 +2899,8 @@ describe('resetFailedPages', () => {
 			contentType?: string | null;
 			isSkipped?: number | null;
 			redirectDestId?: number | null;
+			imageScanDesktop?: number | null;
+			imageScanMobile?: number | null;
 		},
 	): Promise<number> {
 		const knex = db.getKnex();
@@ -2912,6 +2957,16 @@ describe('resetFailedPages', () => {
 			.insert({ page_id: pageId, hash: fakeHash })
 			.onConflict('page_id')
 			.ignore();
+		if (row.imageScanDesktop !== undefined || row.imageScanMobile !== undefined) {
+			await knex('page_meta')
+				.insert({
+					page_id: pageId,
+					image_scan_desktop: row.imageScanDesktop ?? null,
+					image_scan_mobile: row.imageScanMobile ?? null,
+				})
+				.onConflict('page_id')
+				.merge();
+		}
 		return pageId;
 	}
 
@@ -2965,6 +3020,56 @@ describe('resetFailedPages', () => {
 			const ref = await knex('page_html_ref').where('page_id', page.id).first();
 			expect(ref).toBeUndefined();
 		}
+
+		await db.destroy();
+	});
+
+	it('resets a page with a normal status but a transient image-scan failure (nav-unsettled/frame-lost/unknown), and leaves ok/degraded/scroll-height-exceeded pages alone', async () => {
+		const { rmSync } = await import('node:fs');
+		rmSync(resetDbPath, { force: true });
+		const db = await Database.connect({ filename: resetDbPath });
+
+		// status=200 throughout — only page_meta.image_scan_* distinguishes them.
+		await insertPage(db, {
+			url: 'https://example.com/image-scan-ok',
+			imageScanDesktop: 0,
+			imageScanMobile: 0,
+		});
+		await insertPage(db, {
+			url: 'https://example.com/image-scan-degraded',
+			imageScanDesktop: 1,
+			imageScanMobile: 1,
+		});
+		await insertPage(db, {
+			url: 'https://example.com/image-scan-nav-unsettled',
+			imageScanDesktop: 0,
+			imageScanMobile: 2,
+		});
+		await insertPage(db, {
+			url: 'https://example.com/image-scan-frame-lost',
+			imageScanDesktop: 3,
+			imageScanMobile: 0,
+		});
+		await insertPage(db, {
+			url: 'https://example.com/image-scan-height-exceeded',
+			imageScanDesktop: 0,
+			imageScanMobile: 4,
+		});
+		await insertPage(db, {
+			url: 'https://example.com/image-scan-unknown',
+			imageScanDesktop: 255,
+			imageScanMobile: 0,
+		});
+		// No page_meta row at all — must not be treated as a match.
+		await insertPage(db, { url: 'https://example.com/image-scan-none' });
+
+		const reset = await db.resetFailedPages();
+
+		expect(reset.toSorted()).toEqual([
+			'https://example.com/image-scan-frame-lost',
+			'https://example.com/image-scan-nav-unsettled',
+			'https://example.com/image-scan-unknown',
+		]);
 
 		await db.destroy();
 	});

@@ -145,6 +145,8 @@ export interface PageDenormalizedColumns {
  *   main_content_custom_element_count: 0,
  *   scroll_height_desktop: 3200,
  *   scroll_height_mobile: 5400,
+ *   image_scan_desktop: 0,
+ *   image_scan_mobile: 1,
  * };
  */
 export interface MainContentsDenormalizedColumns {
@@ -192,6 +194,29 @@ export interface MainContentsDenormalizedColumns {
 	scroll_height_desktop: number | null;
 	/** `document.body.scrollHeight` at the mobile-small preset, or `null`. */
 	scroll_height_mobile: number | null;
+	/**
+	 * `@d-zero/beholder`'s `IMAGE_SCAN_CODE` outcome for the desktop-compact
+	 * `<img>` element scan (0=ok, 1=degraded, 2=nav-unsettled, 3=frame-lost,
+	 * 4=scroll-height-exceeded, 255=unknown), or `null` when not attempted
+	 * (page not fully rendered, or the archive predates this column).
+	 */
+	image_scan_desktop: number | null;
+	/** Same as {@link MainContentsDenormalizedColumns.image_scan_desktop}, for the mobile-small preset. */
+	image_scan_mobile: number | null;
+}
+
+/**
+ * Per-viewport `@d-zero/beholder` `IMAGE_SCAN_CODE` outcome, as passed into
+ * `computeMainContentsDenormalized`. Deliberately plain `number | null`
+ * rather than beholder's `ImageScanCode` type — this shape is written by
+ * `@nitpicker/crawler` independently of which `@d-zero/beholder` version is
+ * currently installed (see `compute-main-contents-denormalized.ts`).
+ */
+export interface ImageScanColumns {
+	/** Outcome for the desktop-compact viewport, or `null` when not attempted. */
+	desktop: number | null;
+	/** Outcome for the mobile-small viewport, or `null` when not attempted. */
+	mobile: number | null;
 }
 
 /**

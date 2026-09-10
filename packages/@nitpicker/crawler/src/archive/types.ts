@@ -492,6 +492,10 @@ export interface DB_Page {
 	scroll_height_desktop: number | null;
 	/** `document.body.scrollHeight` at the mobile-small preset, or null. */
 	scroll_height_mobile: number | null;
+	/** `@d-zero/beholder`'s `IMAGE_SCAN_CODE` outcome for the desktop-compact `<img>` scan, or null when not attempted. */
+	image_scan_desktop: number | null;
+	/** `@d-zero/beholder`'s `IMAGE_SCAN_CODE` outcome for the mobile-small `<img>` scan, or null when not attempted. */
+	image_scan_mobile: number | null;
 
 	/** JSON-serialised nested Meta sub-objects not flattened above. */
 	meta_extras: string | null;
