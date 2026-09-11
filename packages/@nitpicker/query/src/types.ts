@@ -844,6 +844,14 @@ export interface ListPagesOptions {
 	 * archive predating this feature deterministically matches zero rows.
 	 */
 	dedupeCapEventId?: number;
+	/**
+	 * Filter to pages where the desktop OR mobile `<img>` element scan (see
+	 * `@d-zero/beholder`'s `IMAGE_SCAN_CODE`) matched one of these outcomes —
+	 * a page's two viewports can differ, so this is an OR across both
+	 * `page_meta.image_scan_desktop` / `image_scan_mobile` columns, not a
+	 * per-viewport filter. Omit for no filter.
+	 */
+	imageScan?: ImageScanOutcome | readonly ImageScanOutcome[];
 	/** URL pattern to search (SQL LIKE pattern). */
 	urlPattern?: string;
 	/** Directory path prefix to filter by. */
@@ -984,6 +992,8 @@ export interface PageListRow {
 	main_content_custom_element_count: number | null;
 	scroll_height_desktop: number | null;
 	scroll_height_mobile: number | null;
+	image_scan_desktop: number | null;
+	image_scan_mobile: number | null;
 	console_error_count: number | null;
 	firstCrawledAt: number | null;
 	lastCrawledAt: number | null;
@@ -1158,6 +1168,10 @@ export interface PageListItem {
 	scrollHeightDesktop: number | null;
 	/** `document.body.scrollHeight` at the mobile-small preset (denormalised). */
 	scrollHeightMobile: number | null;
+	/** `<img>` element scan outcome at the desktop-compact preset (denormalised), or `null` when not attempted. */
+	imageScanDesktop: ImageScanOutcome | null;
+	/** `<img>` element scan outcome at the mobile-small preset (denormalised), or `null` when not attempted. */
+	imageScanMobile: ImageScanOutcome | null;
 	/**
 	 * Count of `pageerror`+`error` console log occurrences on this page
 	 * (denormalised, issue #228), or `null` on a page that predates the
@@ -1359,6 +1373,14 @@ export interface ListViewerPagesOptions {
 	 * as a link destination, not a facet.
 	 */
 	dedupeCapEventId?: number;
+	/**
+	 * Filter to pages where the desktop OR mobile `<img>` element scan
+	 * matched one of these outcomes, or any of several (OR). Backed by
+	 * `viewer_pages.image_scan_desktop` / `image_scan_mobile` (nullable —
+	 * `null` on an archive predating this feature, or a page whose scan was
+	 * never attempted).
+	 */
+	imageScan?: ImageScanOutcome | ImageScanOutcome[];
 	/**
 	 * Filter to redirect-source rows (true), non-redirect-source rows
 	 * (false), or both (OR — equivalent to no filter). Backed by
@@ -1670,6 +1692,10 @@ export interface PageDetail {
 	scrollHeightDesktop: number | null;
 	/** `document.body.scrollHeight` at the mobile-small preset (denormalised). */
 	scrollHeightMobile: number | null;
+	/** `<img>` element scan outcome at the desktop-compact preset (denormalised; full detail via `getPageMainContents`), or `null` when not attempted. */
+	imageScanDesktop: ImageScanOutcome | null;
+	/** `<img>` element scan outcome at the mobile-small preset (denormalised; full detail via `getPageMainContents`), or `null` when not attempted. */
+	imageScanMobile: ImageScanOutcome | null;
 	/** DOM-structure template group key from `--templates` classification, or null if never classified. */
 	templateKey: string | null;
 
@@ -1937,6 +1963,13 @@ export interface PageMainContents {
 		desktop: number | null;
 		/** Height at the mobile-small preset, or `null` if unmeasured. */
 		mobile: number | null;
+	};
+	/** `<img>` element scan outcome at desktop-compact and mobile-small presets. */
+	imageScan: {
+		/** Outcome at the desktop-compact preset, or `null` when not attempted. */
+		desktop: ImageScanOutcome | null;
+		/** Outcome at the mobile-small preset, or `null` when not attempted. */
+		mobile: ImageScanOutcome | null;
 	};
 	/** Headings within the main region, in DOM order. */
 	headings: MainContentHeadingEntry[];

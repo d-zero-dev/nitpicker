@@ -410,6 +410,113 @@ describe('registerPagesRoute (integration)', () => {
 		});
 	});
 
+	describe('imageScan filter (fast path, dedicated viewer_pages columns)', () => {
+		const workingDir = path.resolve(
+			__dirname,
+			'__test_fixtures_register_pages_route_image_scan__',
+		);
+		let archive: Awaited<ReturnType<typeof Archive.create>>;
+		let manager: InstanceType<typeof ArchiveManager>;
+		let app: ReturnType<typeof createApp>;
+
+		beforeAll(async () => {
+			const { mkdirSync } = await import('node:fs');
+			mkdirSync(workingDir, { recursive: true });
+			archive = await Archive.create({
+				filePath: path.resolve(workingDir, 'fixture.nitpicker'),
+				cwd: workingDir,
+			});
+			await archive.setConfig(BASE_CONFIG);
+			for (const letter of ['a', 'b', 'c']) {
+				await archive.setPage({
+					url: parseUrl(`https://example.com/${letter}`)!,
+					redirectPaths: [],
+					isExternal: false,
+					isTarget: true,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					html: '<html></html>',
+					meta: { ...META, title: letter.toUpperCase() },
+					anchorList: [],
+					imageList: [],
+					isSkipped: false,
+				});
+			}
+			// `setPage` has no imageScan parameter yet — write page_meta directly
+			// (mirrors the same approach in the query package's own specs), then
+			// build the read model on this writable connection BEFORE opening the
+			// separate read-only manager connection `buildFixture` normally uses,
+			// so the fast path picks up these values from the start.
+			const knex = archive.getKnex();
+			const setImageScan = async (
+				letter: string,
+				desktop: number | null,
+				mobile: number | null,
+			) => {
+				await knex('page_meta')
+					.whereIn(
+						'page_id',
+						knex('content_items')
+							.select('id')
+							.whereIn(
+								'url_id',
+								knex('url_refs')
+									.select('id')
+									.where('url', `https://example.com/${letter}`),
+							),
+					)
+					.update({ image_scan_desktop: desktop, image_scan_mobile: mobile });
+			};
+			await setImageScan('a', 0, 0);
+			await setImageScan('b', 0, 3);
+			await buildViewerReadModel(archive);
+
+			manager = new ArchiveManager();
+			const { archiveId, mode } = await manager.open(archive.tmpDir);
+			app = createApp({
+				context: {
+					manager,
+					archiveId,
+					filePath: archive.tmpDir,
+					mode,
+					crawlerLockHolder: null,
+				},
+				publicDir: '/tmp/no-such-dir-register-pages-route-spec',
+			});
+		});
+
+		afterAll(async () => {
+			await manager.closeAll();
+			const { rmSync } = await import('node:fs');
+			rmSync(workingDir, { recursive: true, force: true });
+		});
+
+		it('returns only the page whose desktop or mobile scan matches the outcome', async () => {
+			const res = await app.request('/api/pages?imageScan=frame-lost');
+			const body = (await res.json()) as { items: { url: string }[] };
+			expect(body.items.map((i) => i.url)).toEqual(['https://example.com/b']);
+		});
+
+		it('OR-filters across a repeated imageScan query param', async () => {
+			const res = await app.request('/api/pages?imageScan=ok&imageScan=frame-lost');
+			const body = (await res.json()) as { items: { url: string }[] };
+			expect(body.items.map((i) => i.url).toSorted()).toEqual([
+				'https://example.com/a',
+				'https://example.com/b',
+			]);
+		});
+
+		it('drops an invalid imageScan value from a repeated query param instead of erroring', async () => {
+			const res = await app.request('/api/pages?imageScan=bogus&imageScan=frame-lost');
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as { items: { url: string }[] };
+			expect(body.items.map((i) => i.url)).toEqual(['https://example.com/b']);
+		});
+	});
+
 	describe('isExternal/missingTitle filters OR-combine across a repeated query param', () => {
 		const workingDir = path.resolve(
 			__dirname,

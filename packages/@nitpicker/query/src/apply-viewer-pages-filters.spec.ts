@@ -839,3 +839,114 @@ describe('applyViewerPagesFilters — directory', () => {
 		);
 	});
 });
+
+describe('applyViewerPagesFilters — imageScan', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_apply_viewer_pages_filters_image_scan__',
+	);
+	const archiveFilePath = path.resolve(
+		workingDir,
+		'apply-filters-image-scan-test.nitpicker',
+	);
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		for (const url of [
+			'https://example.com/ok',
+			'https://example.com/frame-lost',
+			'https://example.com/none',
+		]) {
+			await archive.setPage({
+				url: parseUrl(url)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '<html></html>',
+				meta: META,
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+
+		const knex = archive.getKnex();
+		const setImageScan = async (
+			url: string,
+			desktop: number | null,
+			mobile: number | null,
+		) => {
+			await knex('page_meta')
+				.whereIn(
+					'page_id',
+					knex('content_items')
+						.select('id')
+						.whereIn('url_id', knex('url_refs').select('id').where('url', url)),
+				)
+				.update({ image_scan_desktop: desktop, image_scan_mobile: mobile });
+		};
+		await setImageScan('https://example.com/ok', 0, 0);
+		await setImageScan('https://example.com/frame-lost', 0, 3);
+
+		await buildViewerReadModel(archive);
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('filters to only the page whose desktop or mobile scan matches the outcome', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { imageScan: 'frame-lost' });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url)).toEqual(['https://example.com/frame-lost']);
+	});
+
+	it('accepts an array of outcomes (OR)', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, { imageScan: ['ok', 'frame-lost'] });
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url).toSorted()).toEqual([
+			'https://example.com/frame-lost',
+			'https://example.com/ok',
+		]);
+	});
+
+	it('applies no restriction when imageScan is omitted', async () => {
+		const knex = archive.getKnex();
+		const qb = knex('viewer_pages');
+		applyViewerPagesFilters(qb, {});
+		const rows = await qb.select('url');
+		expect(rows.map((r) => r.url).toSorted()).toEqual([
+			'https://example.com/frame-lost',
+			'https://example.com/none',
+			'https://example.com/ok',
+		]);
+	});
+
+	it('a page whose scan was never attempted has null image_scan_desktop/image_scan_mobile in the read model', async () => {
+		const knex = archive.getKnex();
+		const row = await knex('viewer_pages')
+			.select('image_scan_desktop', 'image_scan_mobile')
+			.where('url', 'https://example.com/none')
+			.first();
+		expect(row.image_scan_desktop).toBeNull();
+		expect(row.image_scan_mobile).toBeNull();
+	});
+});

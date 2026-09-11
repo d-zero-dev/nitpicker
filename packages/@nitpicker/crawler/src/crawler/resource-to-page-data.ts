@@ -77,6 +77,7 @@ export function resourceToPageData(params: ResourceToPageDataParams): PageData |
 		html: '',
 		mainContents: null,
 		scrollHeight: null,
+		imageScan: { desktop: null, mobile: null },
 		isSkipped: false,
 	};
 }

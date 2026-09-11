@@ -47,6 +47,7 @@ export type PagesFilter = Omit<
 	| 'hasXFrameOptions'
 	| 'hasXContentTypeOptions'
 	| 'hasHSTS'
+	| 'imageScan'
 	| 'isDedupeCapped'
 > & {
 	status?: string | readonly string[];
@@ -59,6 +60,7 @@ export type PagesFilter = Omit<
 	hasXFrameOptions?: string | readonly string[];
 	hasXContentTypeOptions?: string | readonly string[];
 	hasHSTS?: string | readonly string[];
+	imageScan?: string | readonly string[];
 	isDedupeCapped?: string | readonly string[];
 };
 

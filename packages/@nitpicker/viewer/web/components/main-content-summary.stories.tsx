@@ -16,6 +16,7 @@ export const Default: Story = {
 		wordCount: 1240,
 		bodyWordCount: 1580,
 		scrollHeight: { desktop: 3200, mobile: 5400 },
+		imageScan: { desktop: 'ok', mobile: 'ok' },
 	},
 };
 
@@ -26,5 +27,28 @@ export const NoMainContent: Story = {
 		wordCount: 0,
 		bodyWordCount: 0,
 		scrollHeight: { desktop: null, mobile: null },
+		imageScan: { desktop: null, mobile: null },
+	},
+};
+
+/** The mobile viewport's image scan degraded — network never settled, but the frame was still usable. */
+export const MobileImageScanDegraded: Story = {
+	args: {
+		selector: 'main#content',
+		wordCount: 1240,
+		bodyWordCount: 1580,
+		scrollHeight: { desktop: 3200, mobile: 5400 },
+		imageScan: { desktop: 'ok', mobile: 'degraded' },
+	},
+};
+
+/** The mobile viewport's image scan was abandoned outright (frame/session lost). */
+export const MobileImageScanFrameLost: Story = {
+	args: {
+		selector: 'main#content',
+		wordCount: 1240,
+		bodyWordCount: 1580,
+		scrollHeight: { desktop: 3200, mobile: null },
+		imageScan: { desktop: 'ok', mobile: 'frame-lost' },
 	},
 };

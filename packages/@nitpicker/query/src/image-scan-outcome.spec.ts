@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { IMAGE_SCAN_OUTCOMES, imageScanCodeToOutcome } from './image-scan-outcome.js';
+import {
+	IMAGE_SCAN_OUTCOMES,
+	imageScanCodeToOutcome,
+	imageScanOutcomeToCode,
+} from './image-scan-outcome.js';
 
 describe('imageScanCodeToOutcome', () => {
 	it('maps each known IMAGE_SCAN_CODE integer to its outcome name', () => {
@@ -19,6 +23,18 @@ describe('imageScanCodeToOutcome', () => {
 		expect(imageScanCodeToOutcome(255)).toBe('unknown');
 		expect(imageScanCodeToOutcome(6)).toBe('unknown');
 		expect(imageScanCodeToOutcome(-1)).toBe('unknown');
+	});
+});
+
+describe('imageScanOutcomeToCode', () => {
+	it('is the exact inverse of imageScanCodeToOutcome for every known outcome', () => {
+		for (const outcome of IMAGE_SCAN_OUTCOMES) {
+			expect(imageScanCodeToOutcome(imageScanOutcomeToCode(outcome))).toBe(outcome);
+		}
+	});
+
+	it('maps "unknown" to the reserved 255 code', () => {
+		expect(imageScanOutcomeToCode('unknown')).toBe(255);
 	});
 });
 

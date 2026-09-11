@@ -1451,6 +1451,40 @@ h2 {
 	background: color-mix(in srgb, var(--badge-warn-fg) 10%, transparent);
 }
 
+/*
+ * Per-viewport image-scan outcome badge (`ImageScanBadge`). Three severity
+ * tiers: `ok`/`scroll-height-exceeded` neutral (nothing to investigate),
+ * `degraded`/`nav-unsettled` warn (network never settled), `frame-lost`/
+ * `unknown` danger (scan abandoned outright).
+ */
+.image-scan-badge {
+	display: inline flow-root;
+	padding-block: 1px;
+	padding-inline: 6px;
+	font-family: monospace;
+	font-size: var(--font-size-xs);
+	white-space: nowrap;
+	border-radius: 3px;
+}
+
+.image-scan-badge--ok,
+.image-scan-badge--scroll-height-exceeded {
+	color: var(--text-dim);
+	background: color-mix(in srgb, var(--text-dim) 14%, transparent);
+}
+
+.image-scan-badge--degraded,
+.image-scan-badge--nav-unsettled {
+	color: var(--badge-warn-fg);
+	background: var(--badge-warn-bg);
+}
+
+.image-scan-badge--frame-lost,
+.image-scan-badge--unknown {
+	color: var(--danger);
+	background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
 /* Directory tree view — selecting a node navigates to the Pages view
    (filtered to that subtree) rather than showing a page list in place, so
    this is a single-pane layout that scrolls with the page (`.content`),

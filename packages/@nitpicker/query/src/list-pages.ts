@@ -12,6 +12,7 @@ import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
 import { applyCategoryFilter } from './content-type-rules.js';
 import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
 import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presence-sql.js';
+import { imageScanOutcomeToCode } from './image-scan-outcome.js';
 import { isDedupeCappedSelectColumn } from './is-dedupe-capped-select-column.js';
 import {
 	PAGE_LIST_SELECT_COLUMNS,
@@ -170,6 +171,22 @@ export async function listPages(
 	}
 	if (options.noindex) {
 		baseQuery.where('pm.robots_noindex', 1);
+	}
+	if (options.imageScan != null) {
+		const outcomes = Array.isArray(options.imageScan)
+			? options.imageScan
+			: [options.imageScan];
+		const codes = [
+			...new Set(outcomes.map((outcome) => imageScanOutcomeToCode(outcome))),
+		];
+		if (codes.length > 0) {
+			baseQuery.where((qb) => {
+				qb.whereIn('pm.image_scan_desktop', codes).orWhereIn(
+					'pm.image_scan_mobile',
+					codes,
+				);
+			});
+		}
 	}
 	if (options.isDedupeCapped != null) {
 		if (hasDedupeCapColumn) {

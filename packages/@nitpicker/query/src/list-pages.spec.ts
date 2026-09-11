@@ -1096,3 +1096,119 @@ describe('listPages: onSortProgress (issue #294)', () => {
 		expect(messages).toEqual([]);
 	});
 });
+
+describe('listPages: imageScan filter', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(__dirname, '__test_fixtures_list_pages_image_scan__');
+	const archiveFilePath = path.resolve(dir, 'list-pages-image-scan-test.nitpicker');
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		for (const url of [
+			'https://example.com/ok',
+			'https://example.com/nav-unsettled',
+			'https://example.com/none',
+		]) {
+			await archive.setPage({
+				url: parseUrl(url)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: { title: null },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+
+		const knex = archive.getKnex();
+		// `setPage` has no imageScan parameter yet — this test only exercises
+		// the read/filter path, writing the page_meta columns directly (see
+		// the same approach in database.spec.ts's image-scan round-trip test).
+		const setImageScan = async (
+			url: string,
+			desktop: number | null,
+			mobile: number | null,
+		) => {
+			await knex('page_meta')
+				.whereIn(
+					'page_id',
+					knex('content_items')
+						.select('id')
+						.whereIn('url_id', knex('url_refs').select('id').where('url', url)),
+				)
+				.update({ image_scan_desktop: desktop, image_scan_mobile: mobile });
+		};
+		await setImageScan('https://example.com/ok', 0, 0);
+		await setImageScan('https://example.com/nav-unsettled', 0, 2);
+	});
+
+	afterAll(async () => {
+		await archive.close();
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('returns only pages whose desktop or mobile scan matches the requested outcome', async () => {
+		const result = await listPages(archive, { imageScan: 'nav-unsettled' });
+		expect(result.items.map((p) => p.url)).toEqual(['https://example.com/nav-unsettled']);
+	});
+
+	it('accepts an array of outcomes (OR)', async () => {
+		const result = await listPages(archive, { imageScan: ['ok', 'nav-unsettled'] });
+		expect(result.items.map((p) => p.url).toSorted()).toEqual([
+			'https://example.com/nav-unsettled',
+			'https://example.com/ok',
+		]);
+	});
+
+	it('omitting imageScan returns every page regardless of scan outcome', async () => {
+		const result = await listPages(archive);
+		expect(result.items.map((p) => p.url).toSorted()).toEqual([
+			'https://example.com/nav-unsettled',
+			'https://example.com/none',
+			'https://example.com/ok',
+		]);
+	});
+
+	it('exposes the mapped outcome names on imageScanDesktop/imageScanMobile', async () => {
+		const result = await listPages(archive, { urlPattern: '%/ok' });
+		expect(result.items[0]!.imageScanDesktop).toBe('ok');
+		expect(result.items[0]!.imageScanMobile).toBe('ok');
+	});
+
+	it('a page whose scan was never attempted has null imageScanDesktop/imageScanMobile', async () => {
+		const result = await listPages(archive, { urlPattern: '%/none' });
+		expect(result.items[0]!.imageScanDesktop).toBeNull();
+		expect(result.items[0]!.imageScanMobile).toBeNull();
+	});
+});

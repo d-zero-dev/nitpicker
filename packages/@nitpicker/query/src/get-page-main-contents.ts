@@ -1,6 +1,8 @@
 import type { PageMainContents } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
+import { imageScanCodeToOutcome } from './image-scan-outcome.js';
+
 /**
  * Retrieves the full main-content drill-down for the page at the given URL:
  * the detected main element's identity, scalar word/scroll-height metrics,
@@ -41,6 +43,8 @@ export async function getPageMainContents(
 			'pm.main_content_body_word_count as bodyWordCount',
 			'pm.scroll_height_desktop as scrollHeightDesktop',
 			'pm.scroll_height_mobile as scrollHeightMobile',
+			'pm.image_scan_desktop as imageScanDesktop',
+			'pm.image_scan_mobile as imageScanMobile',
 		)
 		.where('ur.url', url)
 		.limit(1);
@@ -87,6 +91,10 @@ export async function getPageMainContents(
 		scrollHeight: {
 			desktop: page.scrollHeightDesktop as number | null,
 			mobile: page.scrollHeightMobile as number | null,
+		},
+		imageScan: {
+			desktop: imageScanCodeToOutcome(page.imageScanDesktop as number | null),
+			mobile: imageScanCodeToOutcome(page.imageScanMobile as number | null),
 		},
 		headings: headings.map((h) => ({ text: h.text, level: h.level })),
 		images: images.map((i) => ({ src: i.src, alt: i.alt })),

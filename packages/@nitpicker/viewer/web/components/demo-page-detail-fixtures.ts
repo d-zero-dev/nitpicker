@@ -90,6 +90,8 @@ export function buildDemoPageDetail(overrides?: Partial<PageDetail>): PageDetail
 		mainContentCanvasCount: 0,
 		scrollHeightDesktop: 1200,
 		scrollHeightMobile: 2400,
+		imageScanDesktop: 'ok',
+		imageScanMobile: 'ok',
 		templateKey: null,
 		metaExtras: {},
 		jsonLd: { count: 0, types: [], parseErrorCount: 0 },

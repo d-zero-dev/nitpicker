@@ -109,11 +109,10 @@ describe('Pages', () => {
 	});
 
 	it('round-trips page_meta.image_scan_desktop/mobile through getPages (build-page-query SELECT)', async () => {
-		// Crawler wiring that passes a scraped `PageData.imageScan` through to
-		// `computeMainContentsDenormalized` lands separately (it needs a
-		// `@d-zero/beholder` version that reports `imageScan`); this test
-		// isolates the read path by writing the `page_meta` columns directly,
-		// the same way that wiring will end up populating them.
+		// Exercises the real write path end-to-end: a scraped `PageData.imageScan`
+		// (as `@d-zero/beholder` reports it) flows through `insertPage` →
+		// `computeMainContentsDenormalized` → `page_meta`, and back out through
+		// `build-page-query.ts`'s SELECT.
 		const db = await Database.connect({
 			filename: path.resolve(workingDir, 'tmp-image-scan.sqlite'),
 		});
@@ -133,13 +132,26 @@ describe('Pages', () => {
 				imageList: [],
 				html: '',
 				isSkipped: false,
+				mainContents: {
+					title: 'IMAGE_SCAN_ROUNDTRIP',
+					main: null,
+					wordCount: 0,
+					bodyWordCount: 0,
+					headings: [],
+					images: [],
+					tables: [],
+					buttons: [],
+					iframes: [],
+					videos: [],
+					audios: [],
+					canvases: [],
+				},
+				scrollHeight: { desktop: 1000, mobile: 2000 },
+				imageScan: { desktop: 0, mobile: 2 },
 			} as never,
 			true,
 			true,
 		);
-		await db
-			.getKnex()('page_meta')
-			.update({ image_scan_desktop: 0, image_scan_mobile: 2 });
 
 		const pages = await db.getPages();
 		expect(pages.length).toBe(1);

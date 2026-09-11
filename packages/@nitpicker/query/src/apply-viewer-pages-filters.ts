@@ -4,6 +4,7 @@ import type { Knex } from 'knex';
 import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 import { hasFilterValue } from './has-filter-value.js';
 import { HEADER_FLAG_COLUMN } from './header-presence-sql.js';
+import { imageScanOutcomeToCode } from './image-scan-outcome.js';
 import { toFlagValues } from './to-flag-values.js';
 
 /**
@@ -60,6 +61,22 @@ export function applyViewerPagesFilters(
 	}
 	if (options.noindex) {
 		qb.where('robots_noindex', 1);
+	}
+	if (hasFilterValue(options.imageScan)) {
+		// Unlike every other filter here, this is OR-across-columns (desktop OR
+		// mobile), not OR-across-values-on-one-column — `applyEqualityOrInFilter`
+		// only does the latter, so the two `image_scan_*` columns need their own
+		// `whereIn`/`orWhereIn` pair.
+		const codes = [
+			...new Set(
+				(Array.isArray(options.imageScan) ? options.imageScan : [options.imageScan]).map(
+					(outcome) => imageScanOutcomeToCode(outcome),
+				),
+			),
+		];
+		qb.where((builder) => {
+			builder.whereIn('image_scan_desktop', codes).orWhereIn('image_scan_mobile', codes);
+		});
 	}
 	applyEqualityOrInFilter(qb, 'is_dedupe_capped', toFlagValues(options.isDedupeCapped));
 	applyEqualityOrInFilter(qb, 'dedupe_cap_event_id', options.dedupeCapEventId);

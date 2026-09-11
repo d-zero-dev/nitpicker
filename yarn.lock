@@ -1170,16 +1170,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/beholder@npm:4.2.3":
-  version: 4.2.3
-  resolution: "@d-zero/beholder@npm:4.2.3"
+"@d-zero/beholder@npm:5.0.0":
+  version: 5.0.0
+  resolution: "@d-zero/beholder@npm:5.0.0"
   dependencies:
-    "@d-zero/puppeteer-page-scan": "npm:4.6.9"
+    "@d-zero/puppeteer-page-scan": "npm:4.7.0"
+    "@d-zero/puppeteer-scroll": "npm:4.0.12"
     "@d-zero/shared": "npm:0.23.0"
     debug: "npm:4.4.3"
     puppeteer: "npm:25.5.0"
     simple-wappalyzer: "npm:1.1.100"
-  checksum: 10c0/83fb2c087d75f11056519228e8bee9bd4a3dda4b96c162d0f1989babb44fe85a917cc6d27590b70cbdb3dbe1912d66fc40170911878fd3d68cbb118c77890165
+  checksum: 10c0/6a10f66abf0d9da02c84f1d556dda33c283928b66f088ad5bae3157d5c9049abdaae517c4d322de473aa348bc9d66aac0388c63584cead9c5e28023e3b03fc6a
   languageName: node
   linkType: hard
 
@@ -1339,16 +1340,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-page-scan@npm:4.6.9":
-  version: 4.6.9
-  resolution: "@d-zero/puppeteer-page-scan@npm:4.6.9"
+"@d-zero/puppeteer-page-scan@npm:4.7.0":
+  version: 4.7.0
+  resolution: "@d-zero/puppeteer-page-scan@npm:4.7.0"
   dependencies:
     "@d-zero/puppeteer-general-actions": "npm:1.2.7"
     "@d-zero/puppeteer-scroll": "npm:4.0.12"
     "@d-zero/shared": "npm:0.23.0"
   peerDependencies:
     puppeteer: 25.5.0
-  checksum: 10c0/b335cb6633dd8b75e5baa0e533f795d890fbefeb05480b0339cc786312c1d0d96c3f1554cf3c5b109b1693e9613276aff3ef4a498b9292a853fc0d712093f8a3
+  checksum: 10c0/70580cc953d9820dcd5e457c3259f1969d125801eb3ba1ec781312e15cde02282a3a4a9c22cf3bb8bd8b05134ab93e22322eadfd8df4a95e1ec64222ef3d3054
   languageName: node
   linkType: hard
 
@@ -3363,7 +3364,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/crawler@workspace:packages/@nitpicker/crawler"
   dependencies:
-    "@d-zero/beholder": "npm:4.2.3"
+    "@d-zero/beholder": "npm:5.0.0"
     "@d-zero/dealer": "npm:1.14.0"
     "@d-zero/fs": "npm:0.2.7"
     "@d-zero/shared": "npm:0.23.0"

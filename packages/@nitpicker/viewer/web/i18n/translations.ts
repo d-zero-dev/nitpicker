@@ -183,6 +183,14 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				other: 'Other',
 				unknown: 'Unknown / Errored',
 			},
+			imageScan: {
+				ok: 'OK',
+				degraded: 'Degraded (network never settled)',
+				'nav-unsettled': 'Navigation unsettled',
+				'frame-lost': 'Frame/session lost',
+				'scroll-height-exceeded': 'Scroll height exceeded',
+				unknown: 'Unknown error',
+			},
 			pages: {
 				title: 'Pages',
 				description:
@@ -198,6 +206,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				filterMissingTitle: 'Missing title',
 				filterExternal: 'External pages',
 				filterContentType: 'Content-Type',
+				filterImageScan: 'Image scan outcome',
 				filterDedupeCapped: 'Dedupe-cap trap',
 				directoryFilterNotice: 'Showing pages under {directory}',
 				dedupeCapEventFilterNotice:
@@ -249,6 +258,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				mainContentWordCount: 'Main content words',
 				mainContentBodyWordCount: 'Body words',
 				mainContentScrollHeight: 'Scroll height (desktop / mobile)',
+				mainContentImageScan: 'Image scan (desktop / mobile)',
 				mainContentHeadings: 'Headings',
 				mainContentImages: 'Images',
 				mainContentTables: 'Tables',
@@ -680,6 +690,14 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				other: 'その他',
 				unknown: '不明 / エラー',
 			},
+			imageScan: {
+				ok: 'OK',
+				degraded: '劣化（ネットワーク未収束）',
+				'nav-unsettled': 'ナビゲーション未収束',
+				'frame-lost': 'フレーム/セッション消失',
+				'scroll-height-exceeded': 'スクロール高さ超過',
+				unknown: '不明なエラー',
+			},
 			pages: {
 				title: 'ページ',
 				description:
@@ -695,6 +713,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				filterMissingTitle: 'タイトル欠損',
 				filterExternal: '外部ページ',
 				filterContentType: 'Content-Type',
+				filterImageScan: '画像スキャン結果',
 				filterDedupeCapped: 'Dedupe-capトラップ',
 				directoryFilterNotice: '「{directory}」配下のページを表示中',
 				dedupeCapEventFilterNotice:
@@ -746,6 +765,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				mainContentWordCount: 'メインコンテンツ文字数',
 				mainContentBodyWordCount: 'body 全体文字数',
 				mainContentScrollHeight: 'スクロール高さ（デスクトップ / モバイル）',
+				mainContentImageScan: '画像スキャン（デスクトップ / モバイル）',
 				mainContentHeadings: '見出し',
 				mainContentImages: '画像',
 				mainContentTables: 'テーブル',

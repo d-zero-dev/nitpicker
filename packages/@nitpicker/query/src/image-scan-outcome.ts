@@ -60,3 +60,40 @@ export function imageScanCodeToOutcome(code: number | null): ImageScanOutcome | 
 		}
 	}
 }
+
+/**
+ * Reverse of {@link imageScanCodeToOutcome}, for building a SQL `WHERE ...
+ * IN (...)` filter from a user-facing outcome name. `'unknown'` maps to
+ * `255` (`@d-zero/beholder`'s only currently-defined fallback code) rather
+ * than "every code not in the known set" — a filter that excludes a
+ * not-yet-invented future code is an acceptable gap; scanning the whole
+ * table for "not one of these five values" is not, for a facet this cheap.
+ * @param outcome - The outcome name to convert.
+ * @returns The `page_meta.image_scan_*` integer that produces this outcome.
+ * @example
+ * ```ts
+ * imageScanOutcomeToCode('nav-unsettled'); // 2
+ * ```
+ */
+export function imageScanOutcomeToCode(outcome: ImageScanOutcome): number {
+	switch (outcome) {
+		case 'ok': {
+			return 0;
+		}
+		case 'degraded': {
+			return 1;
+		}
+		case 'nav-unsettled': {
+			return 2;
+		}
+		case 'frame-lost': {
+			return 3;
+		}
+		case 'scroll-height-exceeded': {
+			return 4;
+		}
+		case 'unknown': {
+			return 255;
+		}
+	}
+}

@@ -7,7 +7,9 @@
  * an array-typed field: `[]` is truthy in JavaScript even though it means
  * the same "no filter" as `undefined`.
  * @param value - A scalar, an array of scalars, or `undefined`/`null`.
- * @returns Whether the value should be treated as an active filter.
+ * @returns Whether the value should be treated as an active filter. Narrows
+ * away `null`/`undefined` so callers can use the value without an
+ * additional cast or non-null assertion.
  * @example
  * if (hasFilterValue(options.contentTypeCategory)) {
  *   applyEqualityOrInFilter(qb, 'content_category', options.contentTypeCategory);
@@ -15,7 +17,9 @@
  *   qb.whereIn('content_category', ['html', 'unknown']);
  * }
  */
-export function hasFilterValue<T>(value: T | readonly T[] | null | undefined): boolean {
+export function hasFilterValue<T>(
+	value: T | readonly T[] | null | undefined,
+): value is T | readonly T[] {
 	if (value == null) return false;
 	return Array.isArray(value) ? value.length > 0 : true;
 }
