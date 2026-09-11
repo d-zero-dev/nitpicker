@@ -1,4 +1,8 @@
-import type { ContentItemCacheEntry, WriteRefCaches } from './types.js';
+import type {
+	ContentItemCacheEntry,
+	ResolveContentItemIdOptions,
+	WriteRefCaches,
+} from './types.js';
 import type { PageSource } from '../../types.js';
 import type { Knex } from 'knex';
 
@@ -26,6 +30,11 @@ import { upsertUrlRef } from './upsert-url-ref.js';
  * inventory label. The cached `source` is updated in the same step so a
  * later hit does not re-issue the UPDATE.
  *
+ * **`is_metadata_only` promotion** (issue #369) is evaluated in the same
+ * pass as the crawled-wins downgrade, and both diffs are folded into a
+ * single `UPDATE` statement (not two) when either column actually
+ * changes — see {@link applyExistingRowUpdates}.
+ *
  * **Cache poisoning on rollback.** Entries cached inside a transaction
  * that later rolls back would point at ids that no longer exist. Every
  * write op that opens a multi-statement transaction around this function
@@ -47,52 +56,60 @@ import { upsertUrlRef } from './upsert-url-ref.js';
  * @param caches - The connection's write-side id caches; mutated in place.
  * @param url - The URL to look up or insert (normalised
  *   `withoutHashAndAuth` form, matching the legacy identity contract).
- * @param isExternal - Optional; recorded on new inserts only. `1` marks
- *   the row as an external URL that will never be scraped as a target.
- *   Defaults to `0` (in-scope) on insert, mirroring the legacy column
- *   default.
- * @param source - Optional provenance label put on a newly-inserted row.
- *   Omit to let the `content_items.source` DEFAULT (`'crawled'`) apply.
- *   Pass `'crawled'` to arm the crawled-wins downgrade on existing
- *   inventory-labelled rows.
+ * @param options - See {@link ResolveContentItemIdOptions}.
  * @returns The `content_items.id` of the existing or newly inserted row.
  * @throws {Error} When the upsert's `RETURNING` yields no row — should
  *   not happen, so it surfaces as a hard error.
  * @example
- * const pageId = await resolveContentItemId(trx, caches, anchor.href, 1, 'crawled');
+ * const pageId = await resolveContentItemId(trx, caches, anchor.href, {
+ *   isExternal: 1,
+ *   source: 'crawled',
+ *   isMetadataOnly: 1,
+ * });
  */
 export async function resolveContentItemId(
 	qb: Knex | Knex.Transaction,
 	caches: WriteRefCaches,
 	url: string,
-	isExternal?: 0 | 1,
-	source?: PageSource,
+	options?: ResolveContentItemIdOptions,
 ): Promise<number> {
+	const { isExternal, source, isMetadataOnly } = options ?? {};
 	const cached = caches.contentItems.get(url);
 	if (cached !== undefined) {
-		await applyCrawledWinsDowngrade(qb, cached, source);
+		await applyExistingRowUpdates(qb, cached, source, isMetadataOnly);
 		return cached.id;
 	}
 
 	const urlId = await upsertUrlRef(qb, caches, url);
 	const [record] = (await qb
-		.select('id', 'source')
+		.select('id', 'source', 'is_metadata_only')
 		.from('content_items')
-		.where('url_id', urlId)) as { id: number; source: PageSource }[];
+		.where('url_id', urlId)) as {
+		id: number;
+		source: PageSource;
+		is_metadata_only: 0 | 1;
+	}[];
 	if (record !== undefined) {
-		const entry: ContentItemCacheEntry = { id: record.id, source: record.source };
-		await applyCrawledWinsDowngrade(qb, entry, source);
+		const entry: ContentItemCacheEntry = {
+			id: record.id,
+			source: record.source,
+			isMetadataOnly: record.is_metadata_only,
+		};
+		await applyExistingRowUpdates(qb, entry, source, isMetadataOnly);
 		caches.contentItems.set(url, entry);
 		return entry.id;
 	}
 
-	const insertedRows: { id: number; source: PageSource }[] = await qb.raw(
-		`INSERT INTO content_items (url_id, scraped, is_target, is_external${source === undefined ? '' : ', source'})
-		 VALUES (?, 0, 0, ?${source === undefined ? '' : ', ?'})
-		 ON CONFLICT(url_id) DO UPDATE SET url_id = url_id
-		 RETURNING id, source`,
-		source === undefined ? [urlId, isExternal ?? 0] : [urlId, isExternal ?? 0, source],
-	);
+	const insertedRows: { id: number; source: PageSource; is_metadata_only: 0 | 1 }[] =
+		await qb.raw(
+			`INSERT INTO content_items (url_id, scraped, is_target, is_external, is_metadata_only${source === undefined ? '' : ', source'})
+			 VALUES (?, 0, 0, ?, ?${source === undefined ? '' : ', ?'})
+			 ON CONFLICT(url_id) DO UPDATE SET url_id = url_id
+			 RETURNING id, source, is_metadata_only`,
+			source === undefined
+				? [urlId, isExternal ?? 0, isMetadataOnly ?? 0]
+				: [urlId, isExternal ?? 0, isMetadataOnly ?? 0, source],
+		);
 	const inserted = insertedRows[0];
 	if (inserted === undefined) {
 		throw new Error(`Failed to insert a new content item: ${url}`);
@@ -100,33 +117,57 @@ export async function resolveContentItemId(
 	const insertedEntry: ContentItemCacheEntry = {
 		id: inserted.id,
 		source: inserted.source,
+		isMetadataOnly: inserted.is_metadata_only,
 	};
 	// A conflict means a concurrent writer created the row between this
-	// function's SELECT miss and the INSERT — the returned `source` is that
-	// row's value, so the downgrade must be evaluated exactly as on the
-	// SELECT-hit path.
-	await applyCrawledWinsDowngrade(qb, insertedEntry, source);
+	// function's SELECT miss and the INSERT — the returned `source` /
+	// `is_metadata_only` are that row's values, so both follow-ups must be
+	// evaluated exactly as on the SELECT-hit path.
+	await applyExistingRowUpdates(qb, insertedEntry, source, isMetadataOnly);
 	caches.contentItems.set(url, insertedEntry);
 	return insertedEntry.id;
 }
 
 /**
- * Fires the crawled-wins downgrade when a `'crawled'`-lineage resolution
- * lands on a row whose last-known `source` is an inventory label, and
- * keeps the cache entry in sync so the UPDATE runs at most once per
- * (connection, row).
+ * Applies both the crawled-wins `source` downgrade and the `is_metadata_only`
+ * promotion (issue #369) to an already-resolved row in a single `UPDATE`,
+ * and keeps the cache entry in sync so a repeat call with the same values
+ * does not re-issue any write.
+ *
+ * Folded into one function (and one statement) rather than two independent
+ * ones: `resolveContentItemId` runs once per anchor on every scraped page
+ * across a whole crawl, so a page whose anchors trip both conditions would
+ * otherwise pay two round trips instead of one.
  * @param qb - Knex instance or transaction.
  * @param entry - The cached identity to check and mutate.
- * @param source - The resolution's lineage label.
+ * @param source - The resolution's lineage label, if any — see
+ *   {@link ResolveContentItemIdOptions.source}.
+ * @param isMetadataOnly - The resolution's explicit scrape-depth opinion, if
+ *   any — see {@link ResolveContentItemIdOptions.isMetadataOnly}. Omitted by
+ *   every caller except `replaceAnchorEdges`, which always has an opinion,
+ *   so this is a no-op for the rest.
  */
-async function applyCrawledWinsDowngrade(
+async function applyExistingRowUpdates(
 	qb: Knex | Knex.Transaction,
 	entry: ContentItemCacheEntry,
 	source: PageSource | undefined,
+	isMetadataOnly: 0 | 1 | undefined,
 ): Promise<void> {
-	if (source !== 'crawled' || entry.source === 'crawled') {
+	const updates: { source?: 'crawled'; is_metadata_only?: 0 | 1 } = {};
+	if (source === 'crawled' && entry.source !== 'crawled') {
+		updates.source = 'crawled';
+	}
+	if (isMetadataOnly !== undefined && entry.isMetadataOnly !== isMetadataOnly) {
+		updates.is_metadata_only = isMetadataOnly;
+	}
+	if (Object.keys(updates).length === 0) {
 		return;
 	}
-	await qb('content_items').where('id', entry.id).update({ source: 'crawled' });
-	entry.source = 'crawled';
+	await qb('content_items').where('id', entry.id).update(updates);
+	if (updates.source !== undefined) {
+		entry.source = updates.source;
+	}
+	if (updates.is_metadata_only !== undefined) {
+		entry.isMetadataOnly = updates.is_metadata_only;
+	}
 }

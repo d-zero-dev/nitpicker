@@ -29,7 +29,9 @@ export async function insertPageError(
 	message: string,
 	isExternal = false,
 ): Promise<void> {
-	const pageId = await resolveContentItemId(knex, caches, url, isExternal ? 1 : 0);
+	const pageId = await resolveContentItemId(knex, caches, url, {
+		isExternal: isExternal ? 1 : 0,
+	});
 	await knex('page_errors').insert({
 		pageId,
 		phase,

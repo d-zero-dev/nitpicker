@@ -67,18 +67,20 @@ export async function insertInventoryContentItems(
 		});
 		await knex('content_items').insert(rows).onConflict('url_id').ignore();
 		const inserted = (await knex
-			.select('ci.id', 'ci.source', 'ur.url')
+			.select('ci.id', 'ci.source', 'ci.is_metadata_only', 'ur.url')
 			.from('content_items as ci')
 			.join('url_refs as ur', 'ur.id', 'ci.url_id')
 			.whereIn('ur.url', chunk)) as {
 			id: number;
 			source: 'inventory-seed';
+			is_metadata_only: 0 | 1;
 			url: string;
 		}[];
 		for (const insertedRow of inserted) {
 			caches.contentItems.set(insertedRow.url, {
 				id: insertedRow.id,
 				source: insertedRow.source,
+				isMetadataOnly: insertedRow.is_metadata_only,
 			});
 		}
 	});

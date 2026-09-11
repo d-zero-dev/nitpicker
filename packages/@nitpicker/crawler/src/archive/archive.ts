@@ -204,7 +204,7 @@ export default class Archive extends ArchiveAccessor {
 
 	/**
 	 * Retrieves the current crawling state, including lists of scraped and pending URLs.
-	 * @returns An object with `scraped` and `pending` URL arrays.
+	 * @returns An object with `scraped`, `pending`, and `pendingMetadataOnly` URL arrays.
 	 */
 	async getCrawlingState() {
 		return this.#db.getCrawlingState();
@@ -611,10 +611,17 @@ export default class Archive extends ArchiveAccessor {
 	 * content-type), never a rendered body.
 	 * @param pageInfo - The page data to store.
 	 * @param source - Provenance label for new rows. `undefined` leaves the DB DEFAULT (`'crawled'`).
+	 * @param recursive - The crawl session's `recursive` option, forwarded so
+	 *   `is_metadata_only` on any newly-discovered anchor is computed
+	 *   correctly (#369). Defaults to `true` (never persist an anchor as
+	 *   metadata-only) since an external page's `anchorList` is always
+	 *   empty — this only matters for callers that pass one anyway.
+	 * @example
+	 * await archive.setExternalPage(externalPageData, undefined, options.recursive);
 	 */
-	async setExternalPage(pageInfo: PageData, source?: PageSource) {
+	async setExternalPage(pageInfo: PageData, source?: PageSource, recursive?: boolean) {
 		dbLog('Set external page: %s', pageInfo.url.href);
-		await this.#db.updatePage(pageInfo, false, false, source);
+		await this.#db.updatePage(pageInfo, false, false, source, undefined, recursive);
 	}
 	/**
 	 * Stores a crawled page's data in the archive database, persisting the
@@ -626,15 +633,30 @@ export default class Archive extends ArchiveAccessor {
 	 * @param bodyHash - Precomputed body hash for the page's HTML (see
 	 *   `CrawlerEventTypes.page.bodyHash`). `undefined`/`null` falls back to
 	 *   computing it from the HTML instead.
+	 * @param recursive - The crawl session's `recursive` option, forwarded so
+	 *   any anchor discovered on this page gets the correct
+	 *   `is_metadata_only` value (#369). Defaults to `true` (never persist
+	 *   an anchor as metadata-only) for callers that do not track the
+	 *   option.
 	 * @returns The database ID of the stored page.
+	 * @example
+	 * const pageId = await archive.setPage(pageData, undefined, undefined, options.recursive);
 	 */
 	async setPage(
 		pageInfo: PageData,
 		source?: PageSource,
 		bodyHash?: Buffer | null,
+		recursive?: boolean,
 	): Promise<number> {
 		dbLog('Set page: %s', pageInfo.url.href);
-		return await this.#db.updatePage(pageInfo, true, pageInfo.isTarget, source, bodyHash);
+		return await this.#db.updatePage(
+			pageInfo,
+			true,
+			pageInfo.isTarget,
+			source,
+			bodyHash,
+			recursive,
+		);
 	}
 	/**
 	 * Records a redirect edge without re-storing the destination's content.

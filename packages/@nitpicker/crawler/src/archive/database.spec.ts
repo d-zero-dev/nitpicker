@@ -5556,6 +5556,131 @@ describe('getCrawlingState: strict pending filter', () => {
 			await removeIfExists(dbPath);
 		}
 	});
+
+	describe('pendingMetadataOnly (#369)', () => {
+		it('includes a non-recursive internal anchor discovery', async () => {
+			// The exact #369 scenario: a `--list`/non-recursive crawl discovers
+			// an internal anchor, which `processAnchors` queues as
+			// metadata-only (`!recursive || isExternal` → `true` since
+			// `recursive` is `false`).
+			const dbPath = path.resolve(
+				workingDir,
+				'pending-metadata-only-non-recursive.sqlite',
+			);
+			await removeIfExists(dbPath);
+			const db = await Database.connect({ filename: dbPath });
+			try {
+				await db.updatePage(
+					{
+						...makePage('http://localhost/parent'),
+						anchorList: [
+							{
+								href: parseUrl('http://localhost/child')!,
+								textContent: '',
+								isExternal: false,
+							},
+						],
+					},
+					true,
+					true,
+					undefined,
+					undefined,
+					false,
+				);
+
+				const { pendingMetadataOnly } = await db.getCrawlingState();
+				expect(pendingMetadataOnly).toContain('http://localhost/child');
+			} finally {
+				await db.destroy();
+				await removeIfExists(dbPath);
+			}
+		});
+
+		it('excludes a recursive internal anchor discovery', async () => {
+			const dbPath = path.resolve(workingDir, 'pending-metadata-only-recursive.sqlite');
+			await removeIfExists(dbPath);
+			const db = await Database.connect({ filename: dbPath });
+			try {
+				await db.updatePage(
+					{
+						...makePage('http://localhost/parent'),
+						anchorList: [
+							{
+								href: parseUrl('http://localhost/child')!,
+								textContent: '',
+								isExternal: false,
+							},
+						],
+					},
+					true,
+					true,
+					undefined,
+					undefined,
+					true,
+				);
+
+				const { pending, pendingMetadataOnly } = await db.getCrawlingState();
+				expect(pending).toContain('http://localhost/child');
+				expect(pendingMetadataOnly).not.toContain('http://localhost/child');
+			} finally {
+				await db.destroy();
+				await removeIfExists(dbPath);
+			}
+		});
+
+		it('defaults to excluded when a caller omits recursive (pre-#369 behaviour preserved)', async () => {
+			const dbPath = path.resolve(workingDir, 'pending-metadata-only-default.sqlite');
+			await removeIfExists(dbPath);
+			const db = await Database.connect({ filename: dbPath });
+			try {
+				await db.updatePage(
+					{
+						...makePage('http://localhost/parent'),
+						anchorList: [
+							{
+								href: parseUrl('http://localhost/child')!,
+								textContent: '',
+								isExternal: false,
+							},
+						],
+					},
+					true,
+					true,
+				);
+
+				const { pendingMetadataOnly } = await db.getCrawlingState();
+				expect(pendingMetadataOnly).not.toContain('http://localhost/child');
+			} finally {
+				await db.destroy();
+				await removeIfExists(dbPath);
+			}
+		});
+
+		it('excludes an inventory-seed row from pendingMetadataOnly (defaults to 0, unset by the seed insert)', async () => {
+			const dbPath = path.resolve(
+				workingDir,
+				'pending-metadata-only-inventory-seed.sqlite',
+			);
+			await removeIfExists(dbPath);
+			const db = await Database.connect({ filename: dbPath });
+			try {
+				await insertRawPage(db, {
+					url: 'http://localhost/inventory-seed-page',
+					scraped: 0,
+					isTarget: 1,
+					isExternal: 0,
+					source: 'inventory-seed',
+				});
+
+				const { pending, pendingMetadataOnly } = await db.getCrawlingState();
+				expect(pending).toContain('http://localhost/inventory-seed-page');
+				expect(pendingMetadataOnly).not.toContain('http://localhost/inventory-seed-page');
+			} finally {
+				await db.destroy();
+				await removeIfExists(dbPath);
+			}
+		});
+	});
 });
 
 describe('redirect chain intermediate lineage propagation', () => {

@@ -74,6 +74,11 @@ describe('insertInventoryContentItems', () => {
 		expect(caches.urlIds.get('http://localhost/a')).toBeTypeOf('number');
 		expect(caches.contentItems.get('http://localhost/a')).toMatchObject({
 			source: 'inventory-seed',
+			// #369: the write-cache population reads `is_metadata_only` back
+			// from the DB alongside `id`/`source` — pin the value so a
+			// regression that drops the field from the SELECT (silent at
+			// compile time if the type were ever loosened) is caught here.
+			isMetadataOnly: 0,
 		});
 	});
 

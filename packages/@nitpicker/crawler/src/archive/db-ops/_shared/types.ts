@@ -13,6 +13,12 @@ export interface ContentItemCacheEntry {
 	id: number;
 	/** `content_items.source` as last observed / written by this process. */
 	source: PageSource;
+	/**
+	 * `content_items.is_metadata_only` as last observed / written by this
+	 * process. Lets {@link ../_shared/resolve-content-item-id.ts} skip a
+	 * redundant `UPDATE` when a later resolution recomputes the same value.
+	 */
+	isMetadataOnly: 0 | 1;
 }
 
 /**
@@ -54,4 +60,38 @@ export interface WriteRefCaches {
 	 * should not pay for.
 	 */
 	headers: HeaderTableCaches | null;
+}
+
+/**
+ * Optional per-call flags for {@link ../_shared/resolve-content-item-id.ts}.
+ */
+export interface ResolveContentItemIdOptions {
+	/**
+	 * `1` marks the row as an external URL that will never be scraped as a
+	 * target. Recorded on new inserts only. Defaults to `0` (in-scope) on
+	 * insert, mirroring the legacy column default.
+	 */
+	isExternal?: 0 | 1;
+	/**
+	 * Provenance label put on a newly-inserted row. Omit to let the
+	 * `content_items.source` DEFAULT (`'crawled'`) apply. Pass `'crawled'`
+	 * to arm the crawled-wins downgrade on existing inventory-labelled rows.
+	 */
+	source?: PageSource;
+	/**
+	 * `1` marks the row as fated for a metadata-only (title-only) scrape
+	 * rather than a full one, `0` explicitly marks it as a full-scrape
+	 * target. Omit (the default for every caller except
+	 * `replaceAnchorEdges`) to leave the column untouched — those callers
+	 * (redirects, resources, errors, skipped pages, console logs) have no
+	 * opinion on scrape depth and must not clobber a value an
+	 * anchor-discovery call already established.
+	 * `!options.recursive || anchor.isExternal` is a pure function of the
+	 * URL within one crawl session (`recursive` is session-constant,
+	 * `isExternal` depends only on scope matching), so every anchor-path
+	 * call for the same URL always recomputes the same value — there is no
+	 * real conflict to arbitrate between two *opinionated* calls, only
+	 * between an opinionated call and the unopinionated majority.
+	 */
+	isMetadataOnly?: 0 | 1;
 }

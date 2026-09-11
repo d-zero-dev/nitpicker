@@ -420,5 +420,34 @@ describe('LinkList', () => {
 			const { pending: afterAdd } = list.getLinks();
 			expect(afterAdd).not.toContain(protocolAgnosticKey(doneUrl.withoutHashAndAuth));
 		});
+
+		it('restores the metadataOnly flag for URLs in metadataOnlyUrls (#369)', () => {
+			const list = new LinkList();
+			list.resume(
+				['https://example.com/lightweight', 'https://example.com/full'],
+				[],
+				defaultOptions,
+				['https://example.com/lightweight'],
+			);
+
+			expect(list.isMetadataOnly('https://example.com/lightweight')).toBe(true);
+			expect(list.isMetadataOnly('https://example.com/full')).toBe(false);
+		});
+
+		it('defaults every restored URL to a full-scrape target when metadataOnlyUrls is omitted', () => {
+			const list = new LinkList();
+			list.resume(['https://example.com/pending1'], [], defaultOptions);
+
+			expect(list.isMetadataOnly('https://example.com/pending1')).toBe(false);
+		});
+
+		it('matches metadataOnlyUrls regardless of http/https scheme (protocol-agnostic key)', () => {
+			const list = new LinkList();
+			list.resume(['http://example.com/page'], [], defaultOptions, [
+				'https://example.com/page',
+			]);
+
+			expect(list.isMetadataOnly('http://example.com/page')).toBe(true);
+		});
 	});
 });

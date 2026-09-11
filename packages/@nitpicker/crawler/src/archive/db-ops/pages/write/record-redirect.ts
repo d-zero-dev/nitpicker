@@ -86,8 +86,7 @@ export async function recordRedirect(
 				trx,
 				caches,
 				destUrlObject.withoutHashAndAuth,
-				undefined,
-				source,
+				{ source },
 			);
 			// Chain lineage propagates FROM the originating URL (`page.url`),
 			// NOT from the destination. The originating URL is what initiated

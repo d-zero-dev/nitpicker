@@ -20,7 +20,9 @@ export async function setSkippedPage(
 	reason: string,
 	isExternal = false,
 ): Promise<void> {
-	const pageId = await resolveContentItemId(knex, caches, url, isExternal ? 1 : 0);
+	const pageId = await resolveContentItemId(knex, caches, url, {
+		isExternal: isExternal ? 1 : 0,
+	});
 	await knex('content_items')
 		.where('id', pageId)
 		.update({

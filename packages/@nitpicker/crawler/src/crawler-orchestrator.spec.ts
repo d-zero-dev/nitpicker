@@ -85,19 +85,28 @@ vi.mock('./crawler/crawler.js', () => {
 
 		/**
 		 * Captures `resume()` invocations so tests can assert the orchestrator
-		 * threaded the right `pagesScrapedOffset` through.
+		 * threaded the right `pagesScrapedOffset` / `metadataOnlyUrls` through.
 		 * @param pending - Pending URLs from the previous session.
 		 * @param scraped - Already-scraped URLs from the previous session.
 		 * @param resources - Resource URLs from the previous session.
 		 * @param pagesScrapedOffset - Cumulative pagesScraped counter seed.
+		 * @param metadataOnlyUrls - The subset of `pending` fated for a
+		 *   metadata-only scrape (#369).
 		 */
 		resume(
 			pending: string[],
 			scraped: string[],
 			resources: string[],
 			pagesScrapedOffset?: number,
+			metadataOnlyUrls?: string[],
 		) {
-			fakeCrawlerResumeCalls.push({ pending, scraped, resources, pagesScrapedOffset });
+			fakeCrawlerResumeCalls.push({
+				pending,
+				scraped,
+				resources,
+				pagesScrapedOffset,
+				metadataOnlyUrls,
+			});
 		}
 
 		/** Emits `error` and then `crawlEnd`, simulating a crawl with one error. */
@@ -179,6 +188,7 @@ const fakeCrawlerResumeCalls: {
 	scraped: string[];
 	resources: string[];
 	pagesScrapedOffset: number | undefined;
+	metadataOnlyUrls: string[] | undefined;
 }[] = [];
 
 /**
@@ -914,6 +924,65 @@ describe('CrawlerOrchestrator.append', () => {
 			],
 		});
 	});
+
+	it('forwards pendingMetadataOnly through to Crawler#resume (#369)', async () => {
+		// `append` forces `recursive: true` on the merged config, so
+		// `replaceAnchorEdges` can only mark an EXTERNAL anchor as
+		// metadata-only — no root-exclusion applies here, unlike the
+		// list-mode `resume`/auto-retry paths. `pending` is deliberately
+		// left empty here (unlike `pendingMetadataOnly`) so `crawler.resume`
+		// is still exercised with a non-empty `metadataOnlyUrls` value while
+		// the auto-retry loop's own `getCrawlingState` re-check sees nothing
+		// pending and returns immediately instead of retrying.
+		const fakeArchive = {
+			getCrawlingState: vi.fn(() =>
+				Promise.resolve({
+					scraped: [],
+					pending: [],
+					pendingMetadataOnly: ['https://external.example/asset'],
+				}),
+			),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-append-metadata-only',
+			filePath: '/tmp/test-cwd/existing.nitpicker',
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					fromList: false,
+					roots: ['https://example.com/'],
+					baseUrl: 'https://example.com/',
+				}),
+			),
+			repromoteExternalPages: vi.fn(() => Promise.resolve([])),
+			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			listDedupeCapObservations: vi.fn(() => Promise.resolve([])),
+			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+		const copyFileModule =
+			await import('./archive/filesystem/copy-file-with-progress.js');
+		vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.append('./existing.nitpicker', ['https://example.com/'], {
+			cwd: '/tmp/test-cwd',
+		});
+
+		expect(fakeCrawlerResumeCalls).toHaveLength(1);
+		expect(fakeCrawlerResumeCalls[0]?.metadataOnlyUrls).toEqual([
+			'https://external.example/asset',
+		]);
+	});
 });
 
 describe('CrawlerOrchestrator.retryFailed: PendingUrlsRemainError (issue #350 QA review)', () => {
@@ -1041,6 +1110,62 @@ describe('CrawlerOrchestrator.retryFailed: PendingUrlsRemainError (issue #350 QA
 				},
 			],
 		});
+	});
+
+	it('forwards pendingMetadataOnly through to Crawler#resume (#369)', async () => {
+		// `archived.fromList` is rejected by `retryFailed`, so no
+		// root-exclusion applies here — the value should pass through as-is.
+		// `pending` is deliberately left empty (unlike `pendingMetadataOnly`)
+		// so the auto-retry loop's own `getCrawlingState` re-check sees
+		// nothing pending and returns immediately instead of retrying.
+		const fakeArchive = {
+			getCrawlingState: vi.fn(() =>
+				Promise.resolve({
+					scraped: [],
+					pending: [],
+					pendingMetadataOnly: ['https://example.com/a'],
+				}),
+			),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-retry-failed-metadata-only',
+			filePath: '/tmp/test-cwd/existing.nitpicker',
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					fromList: false,
+					roots: ['https://example.com/'],
+					baseUrl: 'https://example.com/',
+				}),
+			),
+			resetFailedPages: vi.fn(() => Promise.resolve([])),
+			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			listDedupeCapObservations: vi.fn(() => Promise.resolve([])),
+			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+		const copyFileModule =
+			await import('./archive/filesystem/copy-file-with-progress.js');
+		vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.retryFailed('./existing.nitpicker', {
+			cwd: '/tmp/test-cwd',
+		});
+
+		expect(fakeCrawlerResumeCalls).toHaveLength(1);
+		expect(fakeCrawlerResumeCalls[0]?.metadataOnlyUrls).toEqual([
+			'https://example.com/a',
+		]);
 	});
 });
 
@@ -1502,7 +1627,16 @@ describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => 
 					ignoreRobots: true,
 				}),
 			),
-			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			// `pending` is deliberately left empty (unlike `pendingMetadataOnly`,
+			// #369) so the auto-retry loop's own `getCrawlingState` re-check
+			// sees nothing pending and returns immediately instead of retrying.
+			getCrawlingState: vi.fn(() =>
+				Promise.resolve({
+					scraped: [],
+					pending: [],
+					pendingMetadataOnly: ['https://example.com/new-page.html'],
+				}),
+			),
 			getExistingPageUrls: vi.fn(() => Promise.resolve([])),
 			getExistingResourceUrls: vi.fn(() => Promise.resolve([])),
 			getResourceUrlList: vi.fn(() => Promise.resolve([])),
@@ -1547,6 +1681,11 @@ describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => 
 		expect(fakeArchive.getScrapedHtmlPageCount).toHaveBeenCalledTimes(1);
 		expect(fakeCrawlerResumeCalls).toHaveLength(1);
 		expect(fakeCrawlerResumeCalls[0]?.pagesScrapedOffset).toBe(140_000);
+		// #369: pendingMetadataOnly must reach Crawler#resume unfiltered here
+		// (this archive is not list-mode, so no root-exclusion applies).
+		expect(fakeCrawlerResumeCalls[0]?.metadataOnlyUrls).toEqual([
+			'https://example.com/new-page.html',
+		]);
 	});
 });
 
@@ -2400,6 +2539,54 @@ describe('CrawlerOrchestrator.recrawl', () => {
 		expect(fakeCrawlerResumeCalls[0]?.pending.toSorted()).toEqual([
 			'https://example.com/a',
 			'https://example.com/b',
+		]);
+	});
+
+	it('forwards pendingMetadataOnly through to Crawler#resume (#369)', async () => {
+		// `archived.fromList` is rejected earlier in `recrawl`, so no
+		// root-exclusion applies here — the value should pass through as-is,
+		// same as `inventory`'s equivalent test. `pending` is deliberately
+		// left empty (unlike `pendingMetadataOnly`) so the auto-retry loop's
+		// own `getCrawlingState` re-check sees nothing pending and returns
+		// immediately instead of retrying; `pendingWithReset` below still
+		// ends up non-empty via `resetUrls` alone.
+		const fakeArchive = buildFakeRecrawlArchive({
+			getExistingPageUrls: vi.fn(() => Promise.resolve(['https://example.com/a'])),
+			getCrawlingState: vi.fn(() =>
+				Promise.resolve({
+					scraped: [],
+					pending: [],
+					pendingMetadataOnly: ['https://example.com/a'],
+				}),
+			),
+			resetPagesByUrls: vi.fn(() =>
+				Promise.resolve({
+					resetUrls: ['https://example.com/a'],
+					excludedRedirects: [],
+					excludedSkipped: [],
+					excludedExternal: [],
+				}),
+			),
+		});
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const testCwd = await makeFixtureCwd('recrawl-metadata-only-test');
+		try {
+			await CrawlerOrchestrator.recrawl('fixture.nitpicker', ['https://example.com/a'], {
+				cwd: testCwd,
+			});
+		} finally {
+			await fs.rm(testCwd, { recursive: true, force: true });
+		}
+
+		expect(fakeCrawlerResumeCalls).toHaveLength(1);
+		expect(fakeCrawlerResumeCalls[0]?.metadataOnlyUrls).toEqual([
+			'https://example.com/a',
 		]);
 	});
 
@@ -3555,6 +3742,118 @@ describe('CrawlerOrchestrator: auto-retry (issue #350)', () => {
 		expect(getCrawlingState).toHaveBeenCalledTimes(2);
 		expect(fakeCrawlerResumeCalls).toHaveLength(1);
 		expect(fakeCrawlerResumeCalls[0]?.pending).toEqual(['https://example.com/a']);
+	});
+
+	it('forwards pendingMetadataOnly through to Crawler#resume (#369)', async () => {
+		vi.useFakeTimers();
+		const getCrawlingState = vi
+			.fn()
+			.mockResolvedValueOnce({
+				scraped: [],
+				pending: ['https://example.com/a'],
+				pendingMetadataOnly: ['https://example.com/a'],
+			})
+			.mockResolvedValueOnce({ scraped: ['https://example.com/a'], pending: [] });
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve(['https://example.com/style.css'])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-metadata-only-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const resultPromise = CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-auto-retry-metadata-only-test.nitpicker',
+			},
+			(o) => {
+				o.on('error', () => {});
+			},
+		);
+		await vi.advanceTimersByTimeAsync(30_000);
+		await expect(resultPromise).resolves.toBeInstanceOf(CrawlerOrchestrator);
+
+		expect(fakeCrawlerResumeCalls).toHaveLength(1);
+		expect(fakeCrawlerResumeCalls[0]?.metadataOnlyUrls).toEqual([
+			'https://example.com/a',
+		]);
+	});
+
+	it("excludes this call's own root URLs from metadataOnlyUrls even if flagged is_metadata_only (#369)", async () => {
+		vi.useFakeTimers();
+		// A root/list URL can end up with `is_metadata_only = 1` when another
+		// page in the same crawl links to it before it is scraped itself —
+		// see `#crawlUntilPendingClears`'s root-exclusion comment. The root
+		// must never be resumed as metadata-only regardless of that flag.
+		// `ExURL#withoutHashAndAuth` strips the trailing slash from a bare
+		// root (`https://example.com/` → `https://example.com`) — the mock's
+		// `pending`/`pendingMetadataOnly` values must match that normalized
+		// form since that is what `url_refs.url` actually stores.
+		const getCrawlingState = vi
+			.fn()
+			.mockResolvedValueOnce({
+				scraped: [],
+				pending: ['https://example.com'],
+				pendingMetadataOnly: ['https://example.com'],
+			})
+			.mockResolvedValueOnce({ scraped: ['https://example.com'], pending: [] });
+		const fakeArchive = {
+			getCrawlingState,
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub',
+			on: vi.fn(),
+			setConfig: vi.fn(() => Promise.resolve()),
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			addError: vi.fn(() => Promise.resolve()),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			filePath: '/tmp/orchestrator-auto-retry-root-exclusion-test.nitpicker',
+			write: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		const resultPromise = CrawlerOrchestrator.crawling(
+			['https://example.com/'],
+			{
+				cwd: '/tmp',
+				filePath: '/tmp/orchestrator-auto-retry-root-exclusion-test.nitpicker',
+			},
+			(o) => {
+				o.on('error', () => {});
+			},
+		);
+		await vi.advanceTimersByTimeAsync(30_000);
+		await expect(resultPromise).resolves.toBeInstanceOf(CrawlerOrchestrator);
+
+		expect(fakeCrawlerResumeCalls).toHaveLength(1);
+		expect(fakeCrawlerResumeCalls[0]?.metadataOnlyUrls).toEqual([]);
 	});
 
 	it('emits autoRetryWaiting with the attempt/maxAttempts/pendingCount/delayMs payload before each retry wait (issue #350 QA review)', async () => {

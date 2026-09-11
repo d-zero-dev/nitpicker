@@ -546,6 +546,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		},
 	) {
 		const writeQueue = this.#writeQueue;
+		// Same value passed to `Crawler#start()` below (line ~822) — computed
+		// once here so the `setPage`/`setExternalPage` listeners can forward
+		// it for `is_metadata_only` (#369) without recomputing the default.
+		const recursive = opts?.recursive ?? !this.#fromList;
 		// Per-session state, like `Crawler`'s own `#successfulHosts.clear()` /
 		// `#networkGate.open()` reset at the start of `#runDeal` — a fresh
 		// session must not inherit a dangling outage id from a prior one.
@@ -599,13 +603,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 			registerGuarded('page', ({ result, source, bodyHash }) => {
 				writeQueue
-					.enqueue(() => this.#archive.setPage(result, source, bodyHash))
+					.enqueue(() => this.#archive.setPage(result, source, bodyHash, recursive))
 					.catch((error) => reject(error));
 			});
 
 			registerGuarded('externalPage', ({ result, source }) => {
 				writeQueue
-					.enqueue(() => this.#archive.setExternalPage(result, source))
+					.enqueue(() => this.#archive.setExternalPage(result, source, recursive))
 					.catch((error) => reject(error));
 			});
 
@@ -819,7 +823,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			});
 
 			this.#crawler.start(list, {
-				recursive: opts?.recursive ?? !this.#fromList,
+				recursive,
 				isRetryContinuation: opts?.isRetryContinuation,
 			});
 		});
@@ -1032,6 +1036,18 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			return;
 		}
 
+		// `list` is this call's own root/seed URLs — always a full-scrape
+		// target regardless of `is_metadata_only` (a root added via
+		// `crawler.ts`'s direct seeding path never goes through
+		// `processAnchors`, so the anchor-derived flag on its row, if any,
+		// reflects some OTHER page's anchor to the same URL, not this URL's
+		// own root status). Excluded here rather than never written in the
+		// first place — see `replaceAnchorEdges`'s `recursive` doc for why a
+		// root's `is_metadata_only` can be wrongly set to `1` by a
+		// same-crawl page that happens to link to it before it is scraped
+		// itself (#369).
+		const rootKeys = new Set(list.map((u) => u.withoutHashAndAuth));
+
 		// Fetched at most once across the whole retry loop (issue #350 code
 		// review), not per attempt: `getResourceUrlList()` is a full scan of
 		// every known resource URL, but `Crawler#resume()`'s use of it is
@@ -1046,7 +1062,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 		let previousPendingCount: number | null = null;
 		for (let attempt = 1; ; attempt++) {
-			const { scraped, pending } = await this.#archive.getCrawlingState();
+			// `pendingMetadataOnly` defaults to `[]`: `.filter()` runs on it a
+			// few lines below, and a test-mocked `Archive` may return
+			// `{ scraped, pending }` without the field (production's real
+			// `getCrawlingState()` always includes it).
+			const {
+				scraped,
+				pending,
+				pendingMetadataOnly = [],
+			} = await this.#archive.getCrawlingState();
 			if (pending.length === 0) {
 				return;
 			}
@@ -1105,7 +1129,14 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 
 			cachedResources ??= await this.#archive.getResourceUrlList();
 			const pagesScrapedOffset = await this.#archive.getScrapedHtmlPageCount();
-			this.#crawler.resume(pending, scraped, cachedResources, pagesScrapedOffset);
+			const metadataOnlyUrls = pendingMetadataOnly.filter((url) => !rootKeys.has(url));
+			this.#crawler.resume(
+				pending,
+				scraped,
+				cachedResources,
+				pagesScrapedOffset,
+				metadataOnlyUrls,
+			);
 			await this.crawling([], {
 				recursive: false,
 				suppressFlushNotice: true,
@@ -1382,7 +1413,17 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					preloadedDedupeObservations,
 				});
 				setupProgress?.onPhase?.(PHASE_LOADING_CRAWL_STATE);
-				const { scraped, pending } = await archive.getCrawlingState();
+				// `mergedConfig.recursive` is forced `true` above, so
+				// `replaceAnchorEdges`'s `!recursive || isExternal` can only
+				// mark an EXTERNAL anchor as metadata-only here — `mergedRoots`
+				// are always internal, so no root-exclusion is needed (unlike
+				// the list-mode `resume`/auto-retry paths — see their
+				// comments). No `= []` default needed here: `pendingMetadataOnly`
+				// is only ever passed straight through to `Crawler#resume()`,
+				// whose own `metadataOnlyUrls` parameter already defaults
+				// `undefined` to `[]`.
+				const { scraped, pending, pendingMetadataOnly } =
+					await archive.getCrawlingState();
 				setupProgress?.onPhase?.(PHASE_LOADING_RESOURCES);
 				const resources = await archive.getResourceUrlList(
 					setupProgress?.onChunkProgress,
@@ -1390,7 +1431,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				setupProgress?.onPhase?.(PHASE_LOADING_SCRAPED_COUNT);
 				const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
 				setupProgress?.onPhase?.(PHASE_RESTORING_CRAWL_STATE);
-				orchestrator.#crawler.resume(pending, scraped, resources, pagesScrapedOffset);
+				orchestrator.#crawler.resume(
+					pending,
+					scraped,
+					resources,
+					pagesScrapedOffset,
+					pendingMetadataOnly,
+				);
 				if (initializedCallback) {
 					await initializedCallback(orchestrator, mergedConfig);
 				}
@@ -1759,8 +1806,18 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					// pending set alone (see retryFailed's
 					// `crawling([], { recursive })` invocation).
 					setupProgress?.onPhase?.(PHASE_LOADING_CRAWL_STATE_POST);
-					const { scraped: scrapedAfter, pending: pendingAfter } =
-						await archive.getCrawlingState();
+					// `archived.fromList` is rejected above, so no
+					// root-exclusion is needed here (see the list-mode
+					// `resume`/auto-retry paths' comments for why it matters
+					// there). No `= []` default needed: `pendingMetadataOnlyAfter`
+					// is only ever passed straight through to `Crawler#resume()`,
+					// whose own `metadataOnlyUrls` parameter already defaults
+					// `undefined` to `[]`.
+					const {
+						scraped: scrapedAfter,
+						pending: pendingAfter,
+						pendingMetadataOnly: pendingMetadataOnlyAfter,
+					} = await archive.getCrawlingState();
 					setupProgress?.onPhase?.(PHASE_LOADING_RESOURCES);
 					const resources = await archive.getResourceUrlList(
 						setupProgress?.onChunkProgress,
@@ -1779,6 +1836,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 						scrapedAfter,
 						resources,
 						pagesScrapedOffset,
+						pendingMetadataOnlyAfter,
 					);
 					if (initializedCallback) {
 						await initializedCallback(orchestrator, baseConfig);
@@ -2117,8 +2175,22 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					]);
 					const orchestrator = new CrawlerOrchestrator(archive, orchestratorOptions);
 					setupProgress?.onPhase?.(PHASE_LOADING_CRAWL_STATE_POST);
-					const { scraped: scrapedAfter, pending: pendingAfter } =
-						await archive.getCrawlingState();
+					// `archived.fromList` is rejected above, so no
+					// root-exclusion is needed here (see the list-mode
+					// `resume`/auto-retry paths' comments for why it matters
+					// there). `pendingMetadataOnlyAfter` is not merged with
+					// `resetResult.resetUrls` the way `pending` is below — a
+					// reset row absent from the strict-pending set defaults
+					// to a full re-scrape, the safe direction for a
+					// user-requested recrawl. No `= []` default needed: it is
+					// only ever passed straight through to `Crawler#resume()`,
+					// whose own `metadataOnlyUrls` parameter already defaults
+					// `undefined` to `[]`.
+					const {
+						scraped: scrapedAfter,
+						pending: pendingAfter,
+						pendingMetadataOnly: pendingMetadataOnlyAfter,
+					} = await archive.getCrawlingState();
 					// Merge the reset URLs into the pending set explicitly —
 					// see this method's "Strict-pending gap" JSDoc section.
 					// Deduped by `LinkList.add`'s own key check, so a URL the
@@ -2138,6 +2210,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 						scrapedAfter,
 						resources,
 						pagesScrapedOffset,
+						pendingMetadataOnlyAfter,
 					);
 					if (initializedCallback) {
 						await initializedCallback(orchestrator, baseConfig);
@@ -2579,7 +2652,16 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					preloadedDedupeObservations,
 				});
 				setupProgress?.onPhase?.(PHASE_LOADING_CRAWL_STATE);
-				const { scraped, pending } = await archive.getCrawlingState();
+				// `archived.fromList` is rejected above, so this archive's
+				// `recursive` was never `false` for a list-mode reason — no
+				// root-exclusion needed (see the list-mode `resume`/
+				// auto-retry paths' comments for why it matters there). No
+				// `= []` default needed: `pendingMetadataOnly` is only ever
+				// passed straight through to `Crawler#resume()`, whose own
+				// `metadataOnlyUrls` parameter already defaults `undefined`
+				// to `[]`.
+				const { scraped, pending, pendingMetadataOnly } =
+					await archive.getCrawlingState();
 				setupProgress?.onPhase?.(PHASE_LOADING_RESOURCES);
 				const resources = await archive.getResourceUrlList(
 					setupProgress?.onChunkProgress,
@@ -2587,7 +2669,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				setupProgress?.onPhase?.(PHASE_LOADING_SCRAPED_COUNT);
 				const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
 				setupProgress?.onPhase?.(PHASE_RESTORING_CRAWL_STATE);
-				orchestrator.#crawler.resume(pending, scraped, resources, pagesScrapedOffset);
+				orchestrator.#crawler.resume(
+					pending,
+					scraped,
+					resources,
+					pagesScrapedOffset,
+					pendingMetadataOnly,
+				);
 				if (initializedCallback) {
 					await initializedCallback(orchestrator, config);
 				}
@@ -2699,13 +2787,43 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			throw new Error(`URL (${_url}) is invalid`);
 		}
 		setupProgress?.onPhase?.(PHASE_LOADING_CRAWL_STATE);
-		const { scraped, pending } = await archive.getCrawlingState();
+		const {
+			scraped,
+			pending,
+			pendingMetadataOnly = [],
+		} = await archive.getCrawlingState();
+		// Unlike `append`/`inventory`/`recrawl`/`retryFailed`, this path
+		// resumes ANY archive including list-mode ones (`fromList: true`,
+		// `recursive: false`) — exactly the #369 scenario. `config.roots`
+		// are always full-scrape targets regardless of `is_metadata_only`
+		// (see `#crawlUntilPendingClears`'s identical root-exclusion
+		// comment for why a root's row can be wrongly flagged by another
+		// page's anchor). `config.roots` is `ExURL#withoutHash` form (may
+		// keep basic-auth userinfo), but `pendingMetadataOnly` entries are
+		// always `url_refs.url` (`withoutHashAndAuth`, auth stripped —
+		// see `insert-page.ts`/`resolve-content-item-id.ts`) — re-parse
+		// each root through the same normalization before comparing, or a
+		// root URL carrying credentials would never match `rootKeys` and
+		// would wrongly stay in `metadataOnlyUrls` below (issue #369 code
+		// review).
+		const rootKeys = new Set(
+			config.roots
+				.map((root) => parseUrl(root, config)?.withoutHashAndAuth)
+				.filter((root) => root !== undefined),
+		);
+		const metadataOnlyUrls = pendingMetadataOnly.filter((u) => !rootKeys.has(u));
 		setupProgress?.onPhase?.(PHASE_LOADING_RESOURCES);
 		const resources = await archive.getResourceUrlList(setupProgress?.onChunkProgress);
 		setupProgress?.onPhase?.(PHASE_LOADING_SCRAPED_COUNT);
 		const pagesScrapedOffset = await archive.getScrapedHtmlPageCount();
 		setupProgress?.onPhase?.(PHASE_RESTORING_CRAWL_STATE);
-		orchestrator.#crawler.resume(pending, scraped, resources, pagesScrapedOffset);
+		orchestrator.#crawler.resume(
+			pending,
+			scraped,
+			resources,
+			pagesScrapedOffset,
+			metadataOnlyUrls,
+		);
 		if (initializedCallback) {
 			await initializedCallback(orchestrator, config);
 		}

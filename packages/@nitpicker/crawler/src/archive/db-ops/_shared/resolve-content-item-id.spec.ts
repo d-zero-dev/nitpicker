@@ -43,13 +43,10 @@ describe('resolveContentItemId', () => {
 
 	it('records isExternal and source on the insert path', async () => {
 		const caches = createWriteRefCaches();
-		const id = await resolveContentItemId(
-			db,
-			caches,
-			'https://example.com/seed',
-			1,
-			'inventory-seed',
-		);
+		const id = await resolveContentItemId(db, caches, 'https://example.com/seed', {
+			isExternal: 1,
+			source: 'inventory-seed',
+		});
 		const row = await db('content_items').where('id', id).first();
 		expect(row).toMatchObject({ is_external: 1, source: 'inventory-seed' });
 	});
@@ -119,37 +116,123 @@ describe('resolveContentItemId', () => {
 
 	it('downgrades an inventory-labelled row to crawled when resolved with crawled lineage', async () => {
 		const cachesA = createWriteRefCaches();
-		const id = await resolveContentItemId(
-			db,
-			cachesA,
-			'https://example.com/orphan',
-			0,
-			'inventory-discovered',
-		);
+		const id = await resolveContentItemId(db, cachesA, 'https://example.com/orphan', {
+			isExternal: 0,
+			source: 'inventory-discovered',
+		});
 		const cachesB = createWriteRefCaches();
-		await resolveContentItemId(db, cachesB, 'https://example.com/orphan', 0, 'crawled');
+		await resolveContentItemId(db, cachesB, 'https://example.com/orphan', {
+			isExternal: 0,
+			source: 'crawled',
+		});
 		const row = await db('content_items').where('id', id).first();
 		expect(row?.source).toBe('crawled');
 	});
 
 	it('never downgrades in the other direction (crawled stays crawled)', async () => {
 		const cachesA = createWriteRefCaches();
-		const id = await resolveContentItemId(
-			db,
-			cachesA,
-			'https://example.com/page',
-			0,
-			'crawled',
-		);
+		const id = await resolveContentItemId(db, cachesA, 'https://example.com/page', {
+			isExternal: 0,
+			source: 'crawled',
+		});
 		const cachesB = createWriteRefCaches();
-		await resolveContentItemId(
-			db,
-			cachesB,
-			'https://example.com/page',
-			0,
-			'inventory-seed',
-		);
+		await resolveContentItemId(db, cachesB, 'https://example.com/page', {
+			isExternal: 0,
+			source: 'inventory-seed',
+		});
 		const row = await db('content_items').where('id', id).first();
 		expect(row?.source).toBe('crawled');
+	});
+
+	describe('isMetadataOnly (#369)', () => {
+		it('defaults to 0 on insert when omitted', async () => {
+			const caches = createWriteRefCaches();
+			const id = await resolveContentItemId(db, caches, 'https://example.com/a');
+			const row = await db('content_items').where('id', id).first();
+			expect(row?.is_metadata_only).toBe(0);
+		});
+
+		it('writes the given value on insert', async () => {
+			const caches = createWriteRefCaches();
+			const id = await resolveContentItemId(
+				db,
+				caches,
+				'https://example.com/anchor-target',
+				{
+					isExternal: 0,
+					isMetadataOnly: 1,
+				},
+			);
+			const row = await db('content_items').where('id', id).first();
+			expect(row?.is_metadata_only).toBe(1);
+		});
+
+		it('promotes an existing row (unopinionated insert, then an opinionated anchor call)', async () => {
+			const cachesA = createWriteRefCaches();
+			const id = await resolveContentItemId(db, cachesA, 'https://example.com/shared');
+			// A fresh cache bundle forces the DB lookup path, same as the
+			// existing "returns the existing id" test above.
+			const cachesB = createWriteRefCaches();
+			await resolveContentItemId(db, cachesB, 'https://example.com/shared', {
+				isExternal: 0,
+				isMetadataOnly: 1,
+			});
+			const row = await db('content_items').where('id', id).first();
+			expect(row?.is_metadata_only).toBe(1);
+		});
+
+		it('leaves is_metadata_only untouched when a later caller has no opinion', async () => {
+			const cachesA = createWriteRefCaches();
+			const id = await resolveContentItemId(db, cachesA, 'https://example.com/anchored', {
+				isExternal: 0,
+				isMetadataOnly: 1,
+			});
+			const cachesB = createWriteRefCaches();
+			// No isMetadataOnly argument — e.g. a resource-referrer or redirect
+			// call resolving the same URL — must not clobber the flag an
+			// anchor-discovery call already established.
+			await resolveContentItemId(db, cachesB, 'https://example.com/anchored');
+			const row = await db('content_items').where('id', id).first();
+			expect(row?.is_metadata_only).toBe(1);
+		});
+
+		it('skips the UPDATE when the cached value already matches (no redundant write)', async () => {
+			const caches = createWriteRefCaches();
+			const id = await resolveContentItemId(db, caches, 'https://example.com/repeat', {
+				isExternal: 0,
+				isMetadataOnly: 1,
+			});
+			// Same warm cache, same opinionated value again — a second anchor
+			// referencing the same URL from a different page.
+			const again = await resolveContentItemId(db, caches, 'https://example.com/repeat', {
+				isExternal: 0,
+				isMetadataOnly: 1,
+			});
+			expect(again).toBe(id);
+			const row = await db('content_items').where('id', id).first();
+			expect(row?.is_metadata_only).toBe(1);
+		});
+
+		it('folds a simultaneous crawled-wins downgrade and metadataOnly promotion into one UPDATE', async () => {
+			// Both `applyExistingRowUpdates` diffs fire in the same call —
+			// regression guard for the single-statement merge (issue #369 code
+			// review): an inventory-labelled row, re-encountered via a
+			// crawled-lineage anchor that also carries an opinionated
+			// isMetadataOnly value, must end up with both columns updated.
+			const cachesA = createWriteRefCaches();
+			const id = await resolveContentItemId(db, cachesA, 'https://example.com/both', {
+				isExternal: 0,
+				source: 'inventory-discovered',
+			});
+			const cachesB = createWriteRefCaches();
+			await resolveContentItemId(db, cachesB, 'https://example.com/both', {
+				isExternal: 0,
+				source: 'crawled',
+				isMetadataOnly: 1,
+			});
+			const row = await db('content_items').where('id', id).first();
+			expect(row?.source).toBe('crawled');
+			expect(row?.is_metadata_only).toBe(1);
+		});
 	});
 });
