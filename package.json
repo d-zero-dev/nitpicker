@@ -54,7 +54,7 @@
 		"eslint-plugin-react": "7.37.5",
 		"eslint-plugin-react-hooks": "7.1.1",
 		"husky": "9.1.7",
-		"jsdom": "29.1.1",
+		"jsdom": "30.0.1",
 		"lerna": "9.0.7",
 		"npm-run-all2": "9.0.3",
 		"parse5": "8.0.1",
