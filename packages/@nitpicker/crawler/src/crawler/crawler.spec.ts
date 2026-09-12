@@ -683,6 +683,123 @@ describe('Crawler', () => {
 		});
 	});
 
+	describe('resume(): metadataOnly restoration (#369)', () => {
+		// Regression guard for issue #369: `LinkList#resume` used to re-add every
+		// restored pending URL with no options, silently promoting a URL that
+		// was queued as metadata-only (title-only) before an interruption into
+		// a full-scrape target once the crawl resumed. `resume()`'s 5th
+		// argument (`metadataOnlyUrls`, threaded from `getCrawlingState`'s
+		// `pendingMetadataOnly`) is what restores the original flag.
+		it('scrapes a resumed URL as metadata-only (title-only, no browser launch) when passed in metadataOnlyUrls', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const url = parseUrl('https://example.com/child')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url,
+				redirectPaths: [],
+				isTarget: false,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				meta: { title: 'Child' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			} as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>);
+			const launchSpy = vi.spyOn(
+				Crawler.prototype as unknown as {
+					_launchBrowserAndScrape: (...args: unknown[]) => Promise<unknown>;
+				},
+				'_launchBrowserAndScrape',
+			);
+
+			const crawler = new Crawler(defaultOptions);
+			const emitted: { isTarget: boolean }[] = [];
+			crawler.on('page', ({ result }) => {
+				emitted.push({ isTarget: result.isTarget });
+			});
+			crawler.resume(['https://example.com/child'], [], [], 0, [
+				'https://example.com/child',
+			]);
+			crawler.start([], { recursive: true });
+
+			await vi.waitFor(() => expect(emitted.length).toBeGreaterThan(0));
+
+			expect(emitted[0]?.isTarget).toBe(false);
+			expect(launchSpy).not.toHaveBeenCalled();
+		});
+
+		it('scrapes a resumed URL as a full target when metadataOnlyUrls is omitted (control case)', async () => {
+			await driveDeal();
+			const { default: Crawler } = await import('./crawler.js');
+
+			const url = parseUrl('https://example.com/child')!;
+			const fetchDestMod = await import('./fetch-destination.js');
+			vi.spyOn(fetchDestMod, 'fetchDestination').mockResolvedValue({
+				url,
+				redirectPaths: [],
+				isTarget: true,
+				isExternal: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				meta: { title: 'Child' },
+				anchorList: [],
+				imageList: [],
+				html: '',
+				isSkipped: false,
+			} as Awaited<ReturnType<typeof fetchDestMod.fetchDestination>>);
+			vi.spyOn(
+				Crawler.prototype as unknown as {
+					_launchBrowserAndScrape: (...args: unknown[]) => Promise<unknown>;
+				},
+				'_launchBrowserAndScrape',
+			).mockResolvedValue({
+				type: 'success',
+				pageData: {
+					url,
+					redirectPaths: [],
+					isTarget: true,
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					meta: { title: 'Child' },
+					anchorList: [],
+					imageList: [],
+					html: '<html></html>',
+					isSkipped: false,
+				},
+				resources: [],
+				consoleLogs: [],
+			});
+
+			const crawler = new Crawler(defaultOptions);
+			const emitted: { isTarget: boolean }[] = [];
+			crawler.on('page', ({ result }) => {
+				emitted.push({ isTarget: result.isTarget });
+			});
+			// No 5th argument — every restored URL defaults to a full-scrape
+			// target, same as before #369's fix.
+			crawler.resume(['https://example.com/child'], [], []);
+			crawler.start([], { recursive: true });
+
+			await vi.waitFor(() => expect(emitted.length).toBeGreaterThan(0));
+
+			expect(emitted[0]?.isTarget).toBe(true);
+		});
+	});
+
 	describe('worker-level error handling', () => {
 		it('ワーカー内の例外が error イベントとして emit され処理が継続する', async () => {
 			const { default: Crawler } = await import('./crawler.js');

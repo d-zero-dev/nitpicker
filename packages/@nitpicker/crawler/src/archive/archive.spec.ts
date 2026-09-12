@@ -96,6 +96,49 @@ describe('setPage', () => {
 		}
 	});
 
+	it('forwards recursive through to is_metadata_only on a discovered anchor (#369)', async () => {
+		// Integration boundary for the `recursive` parameter added to
+		// `Archive.setPage` (issue #369): the actual anchor → `is_metadata_only`
+		// computation lives in `replaceAnchorEdges`, but the production caller
+		// is `Archive.setPage`. This proves the wrapper's new parameter
+		// actually reaches it, not just `Database.updatePage` directly
+		// (already covered in `database.spec.ts`).
+		const filePath = path.resolve(workingDir, 'setpage-recursive-wiring-test.nitpicker');
+		const archive = await Archive.create({ filePath, cwd: workingDir });
+		const pageData = {
+			url: parseUrl('http://localhost/parent')!,
+			redirectPaths: [] as string[],
+			isExternal: false,
+			status: 200,
+			statusText: 'OK',
+			contentLength: 100,
+			contentType: 'text/html',
+			responseHeaders: {},
+			meta: { title: 'Non-recursive parent' },
+			anchorList: [
+				{ href: parseUrl('http://localhost/child')!, textContent: '', isExternal: false },
+			],
+			imageList: [] as never[],
+			html: '<html></html>',
+			isSkipped: false,
+			isTarget: true,
+		};
+
+		try {
+			await archive.setPage(pageData, undefined, undefined, false);
+
+			const knex = archive.getKnex();
+			const [child] = await knex('content_items')
+				.join('url_refs', 'content_items.url_id', 'url_refs.id')
+				.select('content_items.is_metadata_only as isMetadataOnly')
+				.where('url_refs.url', 'http://localhost/child');
+			expect(child?.isMetadataOnly).toBe(1);
+		} finally {
+			await archive.close();
+			await remove(filePath).catch(() => {});
+		}
+	});
+
 	it('Non-HTML (PDF) setPage does not insert a page_html_ref row (#72)', async () => {
 		// Issue #72: a PDF with isTarget=1 must not leave an empty body
 		// record. With BLOB storage that means "no page_html_ref row for

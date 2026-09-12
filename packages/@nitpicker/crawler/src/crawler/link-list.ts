@@ -237,9 +237,25 @@ export default class LinkList {
 	 * @param pending - URLs that were pending in the previous session.
 	 * @param done - URLs that were already completed in the previous session.
 	 * @param options - URL parsing options for re-parsing the pending URLs.
+	 * @param metadataOnlyUrls - The subset of `pending` that was persisted as
+	 *   `content_items.is_metadata_only = 1` (see `getCrawlingState`'s
+	 *   `pendingMetadataOnly`). Without this, every restored URL re-enters
+	 *   the queue as a full-scrape target, silently promoting a URL that was
+	 *   only ever meant for a metadata-only scrape (#369) — the in-memory
+	 *   `add()` call below restores the same `metadataOnly` flag the
+	 *   original discovery set, instead of losing it across the
+	 *   resume boundary.
 	 * @returns The parsed pending URLs that were successfully added to the queue.
 	 */
-	resume(pending: string[], done: string[], options: ParseURLOptions): ExURL[] {
+	resume(
+		pending: string[],
+		done: string[],
+		options: ParseURLOptions,
+		metadataOnlyUrls: readonly string[] = [],
+	): ExURL[] {
+		const metadataOnlyKeys = new Set(
+			metadataOnlyUrls.map((url) => protocolAgnosticKey(url)),
+		);
 		const parsedPending: ExURL[] = [];
 		for (const url of done) {
 			this.#done.add(protocolAgnosticKey(url));
@@ -249,7 +265,10 @@ export default class LinkList {
 			if (!parsedUrl) {
 				continue;
 			}
-			this.add(parsedUrl);
+			const isMetadataOnly = metadataOnlyKeys.has(
+				protocolAgnosticKey(parsedUrl.withoutHashAndAuth),
+			);
+			this.add(parsedUrl, isMetadataOnly ? { metadataOnly: true } : undefined);
 			parsedPending.push(parsedUrl);
 		}
 		return parsedPending;

@@ -316,8 +316,10 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * Retrieves the current crawling state by listing scraped and pending URLs.
 	 * Delegates to {@link getCrawlingStateOp} — see the op for the strict
 	 * pending-set rationale.
-	 * @returns An object with `scraped` (completed URLs) and `pending` (the
-	 *   strict set of in-scope, anchor-referenced, unfinished URLs).
+	 * @returns An object with `scraped` (completed URLs), `pending` (the
+	 *   strict set of in-scope, anchor-referenced, unfinished URLs), and
+	 *   `pendingMetadataOnly` (the subset of `pending` fated for a
+	 *   metadata-only scrape — see the op's doc).
 	 */
 	async getCrawlingState() {
 		return emitErrorAndRetry(
@@ -1167,6 +1169,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	 * @param bodyHash - Precomputed body hash for the page's HTML (see
 	 *   `CrawlerEventTypes.page.bodyHash`). `undefined`/`null` falls back to
 	 *   computing it from the HTML instead.
+	 * @param recursive - See {@link updatePageOp}'s `recursive` doc.
 	 * @returns The database `pageId` of the inserted/updated row.
 	 */
 	async updatePage(
@@ -1175,6 +1178,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		isTarget: boolean,
 		source?: PageSource,
 		bodyHash?: Buffer | null,
+		recursive?: boolean,
 	): Promise<number> {
 		return emitErrorAndRetry(
 			this,
@@ -1188,6 +1192,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 					isTarget,
 					source,
 					bodyHash,
+					recursive,
 				),
 			retrySetting,
 		);

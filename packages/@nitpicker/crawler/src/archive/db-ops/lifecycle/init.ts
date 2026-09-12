@@ -4,6 +4,7 @@ import { applyConnectionPragmas, initSchema } from '../../init-schema.js';
 import { assertCompatibleVersion } from '../../meta/assert-compatible-version.js';
 import { migrateContentItemsAliasOfId } from '../../migrate-content-items-alias-of-id.js';
 import { migrateContentItemsDedupeCapEventId } from '../../migrate-content-items-dedupe-cap-event-id.js';
+import { migrateContentItemsIsMetadataOnly } from '../../migrate-content-items-is-metadata-only.js';
 import { migrateInfoCreatedCwd } from '../../migrate-info-created-cwd.js';
 import { migrateInfoMainContentSelector } from '../../migrate-info-main-content-selector.js';
 import { migrateInfoRoots } from '../../migrate-info-roots.js';
@@ -40,6 +41,7 @@ import { closeStaleOpenNetworkOutages } from '../outages/close-stale-open-networ
  * `migrateInfoCreatedCwd`, `migrateMainContentsColumns`, `migratePageMetaBodyHash`,
  * `migratePageMetaConsoleErrorCount`, `migratePageMetaCustomElementCount`,
  * `migratePageMetaImageScan`, `migrateContentItemsAliasOfId`,
+ * `migrateContentItemsIsMetadataOnly`,
  *
  * `migratePageTagsToPageTechnologies` is the one exception to "column adds
  * only": it converts `page_tags` (removed) rows into `technology_signals`/
@@ -115,6 +117,9 @@ export async function init(
 	// column's `REFERENCES dedupe_cap_events(id)` target always exists by
 	// this point, for both fresh and legacy archives.
 	await migrateContentItemsDedupeCapEventId(knex, onLog);
+	// A plain `hasColumn`-guarded ADD COLUMN, same as `migrateContentItemsAliasOfId`
+	// above — no adjunct-table dependency, so ordering relative to it doesn't matter.
+	await migrateContentItemsIsMetadataOnly(knex, onLog);
 	await migrateListReconcileRunsInvalidSkipped(knex, onLog);
 	await migrateListReconcileRunsExcludeSkipped(knex, onLog);
 	await closeStaleOpenNetworkOutages(knex);

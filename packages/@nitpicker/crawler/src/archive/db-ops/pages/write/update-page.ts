@@ -58,6 +58,14 @@ import { writePageHtmlBlob } from './write-page-html-blob.js';
  * @param bodyHash - Precomputed body hash for the page's HTML (see
  *   `CrawlerEventTypes.page.bodyHash`). `undefined`/`null` falls back to
  *   computing it from the HTML instead.
+ * @param recursive - The crawl session's `recursive` option, forwarded to
+ *   `replaceAnchorEdges` so it can compute each discovered anchor's
+ *   `is_metadata_only` value the same way `processAnchors`
+ *   (`handle-scrape-end.ts`) decides whether to queue it for a full or
+ *   metadata-only scrape (#369). Defaults to `true` (the historical,
+ *   pre-#369 behaviour: never persist an anchor as metadata-only) for
+ *   callers that do not track the option, such as `setExternalPage`, whose
+ *   anchor list is always empty anyway.
  * @returns The database `pageId` (`content_items.id`) of the inserted or updated row.
  */
 export async function updatePage(
@@ -68,6 +76,7 @@ export async function updatePage(
 	isTarget: boolean,
 	source?: PageSource,
 	bodyHash?: Buffer | null,
+	recursive = true,
 ): Promise<number> {
 	const { destUrl, sources } = resolveRedirectChain(
 		page.url.withoutHashAndAuth,
@@ -93,6 +102,7 @@ export async function updatePage(
 				isTarget,
 				source,
 				bodyHash,
+				recursive,
 			);
 		});
 	} catch (error) {
@@ -121,6 +131,7 @@ export async function updatePage(
  * @param isTarget - See {@link updatePage}.
  * @param source - See {@link updatePage}.
  * @param bodyHash - See {@link updatePage}.
+ * @param recursive - See {@link updatePage}.
  * @returns The `content_items.id` of the inserted or updated row.
  */
 async function updatePageInTransaction(
@@ -134,6 +145,7 @@ async function updatePageInTransaction(
 	isTarget: boolean,
 	source: PageSource | undefined,
 	bodyHash: Buffer | null | undefined,
+	recursive: boolean,
 ): Promise<number> {
 	const pageId = await insertPage(
 		knex,
@@ -280,7 +292,7 @@ async function updatePageInTransaction(
 		.from('content_items')
 		.where('id', pageId)) as { source: PageSource }[];
 	const anchorLineageSource = deriveLineageFromParent(parentRow?.source, 'crawled');
-	await replaceAnchorEdges(trx, caches, pageId, page, anchorLineageSource);
+	await replaceAnchorEdges(trx, caches, pageId, page, anchorLineageSource, recursive);
 	await replaceImageItems(trx, caches, pageId, page);
 	// Clear this page's resource_ref_edges unconditionally (no non-empty
 	// guard, unlike anchors/images above): the crawler always emits this
@@ -347,6 +359,14 @@ async function readSourceByUrl(
  * @param page - The scraped page payload.
  * @param anchorLineageSource - Lineage label for anchor-target
  *   placeholder rows (see the caller's lineage comment).
+ * @param recursive - The crawl session's `recursive` option. Combined with
+ *   each anchor's `isExternal` (already resolved by `processAnchors` before
+ *   this ever runs) to compute `is_metadata_only` the same way
+ *   `processAnchors` (`handle-scrape-end.ts`) decides whether to queue the
+ *   anchor for a full or metadata-only scrape: `!recursive || isExternal`.
+ *   Both `recursive` and a given URL's `isExternal` are constant for the
+ *   whole crawl session, so this is a pure recomputation, not a second
+ *   source of truth (#369).
  */
 async function replaceAnchorEdges(
 	trx: Knex.Transaction,
@@ -354,6 +374,7 @@ async function replaceAnchorEdges(
 	pageId: number,
 	page: PageDataWithDomPaths,
 	anchorLineageSource: PageSource | undefined,
+	recursive: boolean,
 ): Promise<void> {
 	if (page.anchorList.length === 0) {
 		return;
@@ -365,12 +386,16 @@ async function replaceAnchorEdges(
 	}
 	const edges = new Map<number, EdgeInProgress>();
 	for (const anchor of page.anchorList) {
+		const isExternal = anchor.isExternal ?? false;
 		const hrefId = await resolveContentItemId(
 			trx,
 			caches,
 			anchor.href.withoutHashAndAuth,
-			anchor.isExternal ? 1 : 0,
-			anchorLineageSource,
+			{
+				isExternal: isExternal ? 1 : 0,
+				source: anchorLineageSource,
+				isMetadataOnly: !recursive || isExternal ? 1 : 0,
+			},
 		);
 		const existing = edges.get(hrefId);
 		if (existing !== undefined) {

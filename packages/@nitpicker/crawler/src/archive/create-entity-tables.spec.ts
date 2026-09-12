@@ -104,6 +104,7 @@ describe('createEntityTables', () => {
 			'is_external',
 			'scraped',
 			'is_target',
+			'is_metadata_only',
 			'status',
 			'status_text',
 			'content_type_id',
@@ -195,6 +196,22 @@ describe('createEntityTables', () => {
 		);
 		const [ri] = await db.raw('SELECT source FROM resource_items WHERE id = 1');
 		expect(ri.source).toBe('crawled');
+
+		await db.destroy();
+	});
+
+	it('defaults content_items.is_metadata_only to 0 (#369)', async () => {
+		const db = await openDbWithEntityTables({ foreignKeys: true });
+
+		const urlId = await insertUrl(db, 'https://example.com/');
+		await db.raw(
+			`INSERT INTO content_items
+				(id, url_id, is_external, scraped, is_target)
+				VALUES (1, ?, 0, 0, 0)`,
+			[urlId],
+		);
+		const [row] = await db.raw('SELECT is_metadata_only FROM content_items WHERE id = 1');
+		expect(row.is_metadata_only).toBe(0);
 
 		await db.destroy();
 	});

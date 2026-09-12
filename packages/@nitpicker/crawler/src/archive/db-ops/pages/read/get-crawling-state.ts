@@ -62,12 +62,18 @@ import type { Knex } from 'knex';
  * shape is safe to use without the `migrate*` guards that other writer
  * methods carry.
  * @param knex - Knex query builder connected to the archive DB.
- * @returns An object with `scraped` (completed URLs) and `pending` (the
- *   strict set of in-scope, anchor-referenced, unfinished URLs).
+ * @returns An object with `scraped` (completed URLs), `pending` (the
+ *   strict set of in-scope, anchor-referenced, unfinished URLs), and
+ *   `pendingMetadataOnly` (the subset of `pending` whose
+ *   `content_items.is_metadata_only` was persisted as `1` — see
+ *   `replaceAnchorEdges`/`resolveContentItemId`). Callers that resume a
+ *   crawl (`Crawler#resume` → `LinkList#resume`) pass this subset through
+ *   so a metadata-only anchor discovered before an interruption is not
+ *   silently promoted to a full-scrape target on resume (#369).
  */
 export async function getCrawlingState(
 	knex: Knex,
-): Promise<{ scraped: string[]; pending: string[] }> {
+): Promise<{ scraped: string[]; pending: string[]; pendingMetadataOnly: string[] }> {
 	const ex = (r: { url: string }) => r.url;
 	const $scraped = await knex('content_items')
 		.join('url_refs', 'url_refs.id', 'content_items.url_id')
@@ -75,7 +81,7 @@ export async function getCrawlingState(
 		.where('content_items.scraped', 1);
 	const scraped = $scraped.map(ex);
 	const $pending = await knex
-		.select('ur.url as url')
+		.select('ur.url as url', 'ci.is_metadata_only as isMetadataOnly')
 		.from({ ci: 'content_items' })
 		.join({ ur: 'url_refs' }, 'ur.id', 'ci.url_id')
 		.where('ci.scraped', 0)
@@ -95,8 +101,10 @@ export async function getCrawlingState(
 			}).orWhereNot('ci.source', 'crawled');
 		});
 	const pending = $pending.map(ex);
+	const pendingMetadataOnly = $pending.filter((r) => r.isMetadataOnly === 1).map(ex);
 	return {
 		scraped,
 		pending,
+		pendingMetadataOnly,
 	};
 }

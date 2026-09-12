@@ -197,6 +197,7 @@ export async function createEntityTables(instance: Knex): Promise<void> {
 			is_external      INTEGER NOT NULL,
 			scraped          INTEGER NOT NULL,
 			is_target        INTEGER NOT NULL,
+			is_metadata_only INTEGER NOT NULL DEFAULT 0,
 			status           INTEGER,
 			status_text      TEXT,
 			content_type_id  INTEGER REFERENCES content_type_refs(id),

@@ -423,14 +423,23 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @param pagesScrapedOffset - Number of HTML pages already rendered in previous
 	 *   sessions, used to seed the session-spanning progress counter. Defaults to 0
 	 *   for callers that don't need cross-session accuracy in the progress display.
+	 * @param metadataOnlyUrls - The subset of `pending` fated for a
+	 *   metadata-only scrape — see `LinkList#resume`'s `metadataOnlyUrls`
+	 *   doc (#369).
 	 */
 	resume(
 		pending: string[],
 		scraped: string[],
 		resources: string[],
 		pagesScrapedOffset = 0,
+		metadataOnlyUrls: readonly string[] = [],
 	) {
-		this.#resumedPending = this.#linkList.resume(pending, scraped, this.#options);
+		this.#resumedPending = this.#linkList.resume(
+			pending,
+			scraped,
+			this.#options,
+			metadataOnlyUrls,
+		);
 		this.#resumedScraped = scraped;
 		this.#resumedPagesScraped = pagesScrapedOffset;
 		for (const resource of resources) {

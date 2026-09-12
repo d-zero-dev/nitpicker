@@ -66,13 +66,9 @@ export async function linkRedirectSources(
 		// argument is `'crawled'`, matching the anchor-lineage propagation
 		// contract — an existing inventory-* intermediate that is later
 		// traversed by a `'crawled'` chain gets downgraded.
-		const redirectId = await resolveContentItemId(
-			trx,
-			caches,
-			redirect,
-			undefined,
-			chainLineageSource,
-		);
+		const redirectId = await resolveContentItemId(trx, caches, redirect, {
+			source: chainLineageSource,
+		});
 		await trx('content_items')
 			.where('id', redirectId)
 			.update({

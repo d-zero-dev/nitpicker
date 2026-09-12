@@ -82,13 +82,9 @@ export async function insertPage(
 	source?: PageSource,
 ): Promise<number> {
 	const qb = trx ?? knex;
-	const pageId = await resolveContentItemId(
-		qb,
-		caches,
-		page.url.withoutHashAndAuth,
-		undefined,
+	const pageId = await resolveContentItemId(qb, caches, page.url.withoutHashAndAuth, {
 		source,
-	);
+	});
 	const flat = deriveFlatFromMeta(page.meta, page.url.href);
 	const denorm = computePageDenormalized(page.meta);
 	const mainContentsDenorm = computeMainContentsDenormalized(
