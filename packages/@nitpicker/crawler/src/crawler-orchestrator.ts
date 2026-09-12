@@ -1413,17 +1413,35 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					preloadedDedupeObservations,
 				});
 				setupProgress?.onPhase?.(PHASE_LOADING_CRAWL_STATE);
-				// `mergedConfig.recursive` is forced `true` above, so
-				// `replaceAnchorEdges`'s `!recursive || isExternal` can only
-				// mark an EXTERNAL anchor as metadata-only here — `mergedRoots`
-				// are always internal, so no root-exclusion is needed (unlike
-				// the list-mode `resume`/auto-retry paths — see their
-				// comments). No `= []` default needed here: `pendingMetadataOnly`
-				// is only ever passed straight through to `Crawler#resume()`,
-				// whose own `metadataOnlyUrls` parameter already defaults
-				// `undefined` to `[]`.
-				const { scraped, pending, pendingMetadataOnly } =
-					await archive.getCrawlingState();
+				// `mergedConfig.recursive` is forced `true` above, so THIS
+				// session's own anchor discovery can only mark an EXTERNAL
+				// anchor as metadata-only. But `pendingMetadataOnly` can also
+				// carry a STALE flag from a PRIOR session — e.g. a URL that
+				// was external (or discovered under a then-non-recursive
+				// config) before this `--append` call promotes it into
+				// `mergedRoots`. `crawler.resume()` below runs BEFORE the new
+				// roots are added via `#crawlUntilPendingClears(newParsed)`
+				// (→ `LinkList#add()`), so `LinkList#add()`'s dedup would
+				// silently let the stale metadataOnly flag win over the
+				// root's full-scrape intent without this exclusion (issue
+				// #369 code review — same class of bug the fix itself
+				// targets). Re-parse `mergedRoots` (`ExURL#withoutHash` form)
+				// to `withoutHashAndAuth` before comparing, matching how
+				// `pendingMetadataOnly` entries are normalised (see the
+				// list-mode `resume`'s identical comment).
+				const {
+					scraped,
+					pending,
+					pendingMetadataOnly = [],
+				} = await archive.getCrawlingState();
+				const mergedRootKeys = new Set(
+					mergedRoots
+						.map((root) => parseUrl(root, mergedConfig)?.withoutHashAndAuth)
+						.filter((root) => root !== undefined),
+				);
+				const metadataOnlyUrls = pendingMetadataOnly.filter(
+					(url) => !mergedRootKeys.has(url),
+				);
 				setupProgress?.onPhase?.(PHASE_LOADING_RESOURCES);
 				const resources = await archive.getResourceUrlList(
 					setupProgress?.onChunkProgress,
@@ -1436,7 +1454,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					scraped,
 					resources,
 					pagesScrapedOffset,
-					pendingMetadataOnly,
+					metadataOnlyUrls,
 				);
 				if (initializedCallback) {
 					await initializedCallback(orchestrator, mergedConfig);
