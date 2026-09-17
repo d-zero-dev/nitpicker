@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.22.0](https://github.com/d-zero-dev/nitpicker/compare/v0.21.0...v0.22.0) (2026-09-17)
+
+### Bug Fixes
+
+- **cli,test-server:** resolve CI-only lint error and stale e2e fixture ([07d13dc](https://github.com/d-zero-dev/nitpicker/commit/07d13dc3d6793bcd766bf891208b2f6cedd7ce35))
+- **test-server:** regenerate the report/query e2e fixture for viewer read model v34 ([1d37501](https://github.com/d-zero-dev/nitpicker/commit/1d37501a2be1529af0eaa039d2f057d3da24f668))
+
 # [0.21.0](https://github.com/d-zero-dev/nitpicker/compare/v0.20.0...v0.21.0) (2026-08-27)
 
 **Note:** Version bump only for package test-server

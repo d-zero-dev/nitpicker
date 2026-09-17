@@ -3,6 +3,55 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.22.0](https://github.com/d-zero-dev/nitpicker/compare/v0.21.0...v0.22.0) (2026-09-17)
+
+### Bug Fixes
+
+- **cli,test-server:** resolve CI-only lint error and stale e2e fixture ([07d13dc](https://github.com/d-zero-dev/nitpicker/commit/07d13dc3d6793bcd766bf891208b2f6cedd7ce35))
+- **cli:** harden the crawl runtime console against edge cases ([03a5012](https://github.com/d-zero-dev/nitpicker/commit/03a5012f91677f1f6690c0c271500c404d832044)), closes [#294](https://github.com/d-zero-dev/nitpicker/issues/294)
+- **cli:** hide the terminal's own cursor and show the command list on start ([2e85567](https://github.com/d-zero-dev/nitpicker/commit/2e855679c43bf936fca3e6f4e8498a94bf5b5007))
+- **crawler:** exclude appended roots from metadataOnly restoration ([71d76d0](https://github.com/d-zero-dev/nitpicker/commit/71d76d0674e6d2150af85baddeb33b7f181f1fb8)), closes [#378](https://github.com/d-zero-dev/nitpicker/issues/378) [#369](https://github.com/d-zero-dev/nitpicker/issues/369)
+- **crawler:** flatten percent-encoded query keys before shape hashing ([0b4c650](https://github.com/d-zero-dev/nitpicker/commit/0b4c650e2ca73fae34d82082265e042fa2df58d6)), closes [#351](https://github.com/d-zero-dev/nitpicker/issues/351)
+- **crawler:** harden mid-crawl runtime option changes against edge cases ([9ab96bb](https://github.com/d-zero-dev/nitpicker/commit/9ab96bb62be6808da00fc1d903576d5b8fb66305))
+- **crawler:** persist metadataOnly flag so resume restores it correctly ([ae153dd](https://github.com/d-zero-dev/nitpicker/commit/ae153ddef11e395df5e8005ab5231eae80efd6b8)), closes [#369](https://github.com/d-zero-dev/nitpicker/issues/369) [#350](https://github.com/d-zero-dev/nitpicker/issues/350)
+- **crawler:** replay prior dedupe-cap observations on resuming sessions ([f867d9e](https://github.com/d-zero-dev/nitpicker/commit/f867d9ed4d0ebad4e584f765fa5f34cde85eca9e))
+- **query:** exclude beholder image-scan noise from error-kind classification ([f364496](https://github.com/d-zero-dev/nitpicker/commit/f364496d28d01367e55696fb68be4ce367fcc86c))
+- **report-google-sheets:** show progress while flushing the tail chunk ([6381d4d](https://github.com/d-zero-dev/nitpicker/commit/6381d4d0e2ea2685f80fe9740e4d97ae2097461e))
+- **test-server:** regenerate the report/query e2e fixture for viewer read model v34 ([1d37501](https://github.com/d-zero-dev/nitpicker/commit/1d37501a2be1529af0eaa039d2f057d3da24f668))
+
+- refactor(cli)!: rename inventory-runs query sub-command to list-reconcile-runs ([95135dc](https://github.com/d-zero-dev/nitpicker/commit/95135dc4c95d603c4ad2d298d34c23e257d0f1f8)), closes [#354](https://github.com/d-zero-dev/nitpicker/issues/354)
+
+### Features
+
+- **cli:** add --max-auto-retry flag and a distinct exit code ([a7d5b18](https://github.com/d-zero-dev/nitpicker/commit/a7d5b18c19079e4c1af33916f62809a90a57858a))
+- **cli:** add --recrawl flag to crawl command ([a7a5332](https://github.com/d-zero-dev/nitpicker/commit/a7a5332432f60cc414839d69115cc2d95b6514c4))
+- **cli:** add --sheets flag for explicit sheet selection ([52cc457](https://github.com/d-zero-dev/nitpicker/commit/52cc457780e70ff011e09433554031a7c90c3d9b))
+- **cli:** add an interactive console to crawl for changing parallels/exclude/etc mid-run ([81d5ac1](https://github.com/d-zero-dev/nitpicker/commit/81d5ac1e225f92f860b878883bdaff2790f398d4))
+- **cli:** add report --urls flag and query match-urls subcommand ([e1a52e9](https://github.com/d-zero-dev/nitpicker/commit/e1a52e9d5856ebd79623d048bfa44860cd3aad8c))
+- **crawler:** add CrawlerOrchestrator.recrawl for URL-list-driven re-fetch ([1f440e2](https://github.com/d-zero-dev/nitpicker/commit/1f440e2352ff4d8301907fd7756958f83a16abd9))
+- **crawler:** allow runtime changes to parallels/interval/excludes mid-crawl ([6bf41c0](https://github.com/d-zero-dev/nitpicker/commit/6bf41c0b61a73408a1172a34c01c5e8c3e1a1cc5)), closes [#350](https://github.com/d-zero-dev/nitpicker/issues/350)
+- **crawler:** auto-retry pending pages before packaging an archive ([4418c06](https://github.com/d-zero-dev/nitpicker/commit/4418c0629af9fef4e0d5fdac360cea1d5de714b8))
+- **crawler:** bump @d-zero/beholder to 5.0.0 and wire imageScan through ([ba30f23](https://github.com/d-zero-dev/nitpicker/commit/ba30f23978f755ddeb913299cca960d1a842abb9))
+- **crawler:** store per-viewport image-scan outcome and use it for retry-failed ([e41c44f](https://github.com/d-zero-dev/nitpicker/commit/e41c44ffe262644ae1f998191c3dcd740138abeb))
+- **mcp-server:** expose imageScan filter on list_pages/get_page_detail ([bfa00f6](https://github.com/d-zero-dev/nitpicker/commit/bfa00f651e6c461eb34f150518c48245c250ea6f))
+- **query:** add independent ImageScanOutcome enum for image-scan codes ([f09b7a1](https://github.com/d-zero-dev/nitpicker/commit/f09b7a144d4f4b41c7689880396b9c279ca27902))
+- **query:** add URL-list matching and report page-list URL filtering ([d9e2f33](https://github.com/d-zero-dev/nitpicker/commit/d9e2f33367026515d0bfdbe7c7bad6fb5afcd9cb))
+- **query:** admit redirect-source rows into viewer_pages, scope fromList archives to roots ([3407943](https://github.com/d-zero-dev/nitpicker/commit/3407943a86495eae66644d50a0c610b9634bde13))
+- **query:** expose imageScan on PageDetail/PageListItem/list filters ([af47250](https://github.com/d-zero-dev/nitpicker/commit/af47250bf1724044041740d90ee2a409365b87b9))
+- **report-google-sheets:** add explicit --sheets selection to report() ([9a6e685](https://github.com/d-zero-dev/nitpicker/commit/9a6e685b269d2cfd2803ef8551771dd111c9f47d))
+- **report-google-sheets:** add Redirect To column to Page List sheet ([2d50913](https://github.com/d-zero-dev/nitpicker/commit/2d509136982f64c65ad7e962188f6d9510392459))
+- **report-google-sheets:** restrict report to a --urls allowlist ([29af296](https://github.com/d-zero-dev/nitpicker/commit/29af29676bf35ae78bb5f52e3a622262e1bba8bb))
+- **report-html:** add Redirect To column to inner page report ([22af1ab](https://github.com/d-zero-dev/nitpicker/commit/22af1ab5ce44da3f1f46dbdb7f201294403de05c))
+- **report-html:** restrict static HTML report to a --urls allowlist ([e989fbb](https://github.com/d-zero-dev/nitpicker/commit/e989fbbc26dd2eb632bcabb079b0136e0512196b))
+- **viewer:** add Redirect To column and isRedirectSource filter, adopt viewer_pages schema v33 ([6249824](https://github.com/d-zero-dev/nitpicker/commit/62498249b64fd106cb98caa4b94516e6146b1dca))
+- **viewer:** surface imageScan filter, badges, and page-detail display ([cd8ec3b](https://github.com/d-zero-dev/nitpicker/commit/cd8ec3b57c14588a33682e6004dd9428227d99f2))
+
+### BREAKING CHANGES
+
+- `query <archive> inventory-runs` no longer exists; use
+  `query <archive> list-reconcile-runs` instead. No compatibility alias is
+  provided (v0.x, breaking changes accepted). Follows the crawler/query-side
+
 # [0.21.0](https://github.com/d-zero-dev/nitpicker/compare/v0.20.0...v0.21.0) (2026-08-27)
 
 ### Bug Fixes

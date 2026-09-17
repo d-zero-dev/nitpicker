@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.22.0](https://github.com/d-zero-dev/nitpicker/compare/v0.21.0...v0.22.0) (2026-09-17)
+
+### Features
+
+- **mcp-server:** expose imageScan filter on list_pages/get_page_detail ([bfa00f6](https://github.com/d-zero-dev/nitpicker/commit/bfa00f651e6c461eb34f150518c48245c250ea6f))
+
 # [0.21.0](https://github.com/d-zero-dev/nitpicker/compare/v0.20.0...v0.21.0) (2026-08-27)
 
 **Note:** Version bump only for package @nitpicker/mcp-server
