@@ -390,6 +390,74 @@ describe('getErrorKinds', () => {
 		expect(result.items[0]!.kind).toBe('dns');
 	});
 
+	it('excludes beholder image-scan skip messages from page_errors but keeps genuine fetch failures', async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		await using archive = await Archive.create({
+			filePath: path.resolve(workingDir, 'image-scan-noise.nitpicker'),
+			cwd: workingDir,
+		});
+		await archive.setConfig(baseConfig());
+
+		// The page itself loaded fine — only its post-load image scan choked.
+		// This must never count as a connection failure for the page's host.
+		await archive.addPageError(
+			'https://example.com/gallery/',
+			'retryExhausted',
+			'📷 mobile-small: skipped — Navigation timeout of 15000 ms exceeded',
+			false,
+		);
+		await archive.addPageError(
+			'https://example.com/gallery/',
+			'retryExhausted',
+			'📷 desktop-compact: skipped — Protocol error (Page.reload): Not attached to an active page',
+			false,
+		);
+		// A real page-fetch failure on a different host must still be counted.
+		await archive.addPageError(
+			'https://example.com/slow/',
+			'retryExhausted',
+			'Scraper.#fetchData: gave up after 3 retries — Navigation timeout of 60000 ms exceeded',
+			false,
+		);
+
+		const result = await getErrorKinds(archive);
+
+		expect(result.facets.totalRecords).toBe(1);
+		expect(result.total).toBe(1);
+		expect(result.items[0]!.host).toBe('example.com');
+		expect(result.items[0]!.kind).toBe('timeout');
+		expect(result.items[0]!.sampleUrls).toEqual(['https://example.com/slow/']);
+	});
+
+	it('does not apply the image-scan exclusion to crawl_errors — only page_errors carries that message shape', async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		await using archive = await Archive.create({
+			filePath: path.resolve(workingDir, 'channel-not-excluded.nitpicker'),
+			cwd: workingDir,
+		});
+		await archive.setConfig(baseConfig());
+
+		// `isImageScanPhaseError` is only ever applied to `page_errors` rows
+		// (see `getErrorKinds`'s JSDoc): beholder's image-scan retry never
+		// writes to the crawler-level `error` channel, so a crawl_errors
+		// record is never filtered even if its text happened to start with
+		// the same prefix — this pins that asymmetry as intentional.
+		await archive.addError(
+			crawlerError(
+				'https://channel.example.com/',
+				'📷 mobile-small: skipped — Navigation timeout of 15000 ms exceeded',
+			),
+		);
+
+		const result = await getErrorKinds(archive);
+
+		expect(result.facets.totalRecords).toBe(1);
+		expect(result.items[0]!.host).toBe('channel.example.com');
+		expect(result.items[0]!.kind).toBe('timeout');
+	});
+
 	it('reports channelSource none and no items for a clean archive', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
