@@ -98,7 +98,7 @@
 		"tari",
 
 		// libraries / authors
-		"medv",
+		"webdriverjs", // axe-webdriverjs (Selenium WebDriver.js binding for axe-core)
 
 		// @d-zero/page-cluster (Jaccard similarity coefficient)
 		"Jaccard",
