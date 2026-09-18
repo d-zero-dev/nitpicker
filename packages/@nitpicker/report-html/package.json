@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/report-html",
-	"version": "0.22.0",
+	"version": "0.22.1",
 	"description": "Self-contained static HTML reports for Nitpicker archives",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
@@ -33,7 +33,7 @@
 		"@d-zero/dealer": "1.14.0",
 		"@nitpicker/crawler": "0.22.0",
 		"@nitpicker/query": "0.22.0",
-		"@nitpicker/viewer": "0.22.0",
+		"@nitpicker/viewer": "0.22.1",
 		"enquirer": "2.4.1",
 		"react": "19.2.8",
 		"react-dom": "19.2.8"

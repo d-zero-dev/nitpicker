@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/viewer",
-	"version": "0.22.0",
+	"version": "0.22.1",
 	"description": "Local browser viewer for .nitpicker archive files",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",

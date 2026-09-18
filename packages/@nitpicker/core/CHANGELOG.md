@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.22.1](https://github.com/d-zero-dev/nitpicker/compare/v0.22.0...v0.22.1) (2026-09-18)
+
+### Bug Fixes
+
+- **core:** stop exposing the page JSDOM window on globalThis ([d3f76a4](https://github.com/d-zero-dev/nitpicker/commit/d3f76a4f6b1378fc7ae8628df7184f68499b33a4))
+
 # [0.22.0](https://github.com/d-zero-dev/nitpicker/compare/v0.21.0...v0.22.0) (2026-09-17)
 
 **Note:** Version bump only for package @nitpicker/core

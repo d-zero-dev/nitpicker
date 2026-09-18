@@ -3201,11 +3201,11 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@nitpicker/analyze-axe@npm:0.22.0, @nitpicker/analyze-axe@workspace:packages/@nitpicker/analyze-axe":
+"@nitpicker/analyze-axe@npm:0.22.1, @nitpicker/analyze-axe@workspace:packages/@nitpicker/analyze-axe":
   version: 0.0.0-use.local
   resolution: "@nitpicker/analyze-axe@workspace:packages/@nitpicker/analyze-axe"
   dependencies:
-    "@nitpicker/core": "npm:0.22.0"
+    "@nitpicker/core": "npm:0.22.1"
     "@nitpicker/types": "npm:0.22.0"
     "@types/jsdom": "npm:30.0.0"
     axe-core: "npm:4.13.0"
@@ -3213,44 +3213,44 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nitpicker/analyze-lighthouse@npm:0.22.0, @nitpicker/analyze-lighthouse@workspace:packages/@nitpicker/analyze-lighthouse":
+"@nitpicker/analyze-lighthouse@npm:0.22.1, @nitpicker/analyze-lighthouse@workspace:packages/@nitpicker/analyze-lighthouse":
   version: 0.0.0-use.local
   resolution: "@nitpicker/analyze-lighthouse@workspace:packages/@nitpicker/analyze-lighthouse"
   dependencies:
-    "@nitpicker/core": "npm:0.22.0"
+    "@nitpicker/core": "npm:0.22.1"
     "@nitpicker/types": "npm:0.22.0"
     chrome-launcher: "npm:1.2.1"
     lighthouse: "npm:13.4.1"
   languageName: unknown
   linkType: soft
 
-"@nitpicker/analyze-markuplint@npm:0.22.0, @nitpicker/analyze-markuplint@workspace:packages/@nitpicker/analyze-markuplint":
+"@nitpicker/analyze-markuplint@npm:0.22.1, @nitpicker/analyze-markuplint@workspace:packages/@nitpicker/analyze-markuplint":
   version: 0.0.0-use.local
   resolution: "@nitpicker/analyze-markuplint@workspace:packages/@nitpicker/analyze-markuplint"
   dependencies:
-    "@nitpicker/core": "npm:0.22.0"
+    "@nitpicker/core": "npm:0.22.1"
     "@nitpicker/types": "npm:0.22.0"
     markuplint: "npm:4.18.3"
   languageName: unknown
   linkType: soft
 
-"@nitpicker/analyze-search@npm:0.22.0, @nitpicker/analyze-search@workspace:packages/@nitpicker/analyze-search":
+"@nitpicker/analyze-search@npm:0.22.1, @nitpicker/analyze-search@workspace:packages/@nitpicker/analyze-search":
   version: 0.0.0-use.local
   resolution: "@nitpicker/analyze-search@workspace:packages/@nitpicker/analyze-search"
   dependencies:
     "@d-zero/shared": "npm:0.23.0"
-    "@nitpicker/core": "npm:0.22.0"
+    "@nitpicker/core": "npm:0.22.1"
     "@nitpicker/crawler": "npm:0.22.0"
     "@nitpicker/types": "npm:0.22.0"
     jsdom: "npm:30.0.1"
   languageName: unknown
   linkType: soft
 
-"@nitpicker/analyze-textlint@npm:0.22.0, @nitpicker/analyze-textlint@workspace:packages/@nitpicker/analyze-textlint":
+"@nitpicker/analyze-textlint@npm:0.22.1, @nitpicker/analyze-textlint@workspace:packages/@nitpicker/analyze-textlint":
   version: 0.0.0-use.local
   resolution: "@nitpicker/analyze-textlint@workspace:packages/@nitpicker/analyze-textlint"
   dependencies:
-    "@nitpicker/core": "npm:0.22.0"
+    "@nitpicker/core": "npm:0.22.1"
     "@nitpicker/types": "npm:0.22.0"
     "@textlint-ja/textlint-rule-no-insert-dropping-sa": "npm:2.0.1"
     "@textlint-ja/textlint-rule-no-synonyms": "npm:1.3.0"
@@ -3295,17 +3295,17 @@ __metadata:
     "@d-zero/readtext": "npm:1.2.1"
     "@d-zero/roar": "npm:2.2.1"
     "@d-zero/shared": "npm:0.23.0"
-    "@nitpicker/analyze-axe": "npm:0.22.0"
-    "@nitpicker/analyze-lighthouse": "npm:0.22.0"
-    "@nitpicker/analyze-markuplint": "npm:0.22.0"
-    "@nitpicker/analyze-search": "npm:0.22.0"
-    "@nitpicker/analyze-textlint": "npm:0.22.0"
-    "@nitpicker/core": "npm:0.22.0"
+    "@nitpicker/analyze-axe": "npm:0.22.1"
+    "@nitpicker/analyze-lighthouse": "npm:0.22.1"
+    "@nitpicker/analyze-markuplint": "npm:0.22.1"
+    "@nitpicker/analyze-search": "npm:0.22.1"
+    "@nitpicker/analyze-textlint": "npm:0.22.1"
+    "@nitpicker/core": "npm:0.22.1"
     "@nitpicker/crawler": "npm:0.22.0"
     "@nitpicker/query": "npm:0.22.0"
-    "@nitpicker/report-google-sheets": "npm:0.22.0"
-    "@nitpicker/report-html": "npm:0.22.0"
-    "@nitpicker/viewer": "npm:0.22.0"
+    "@nitpicker/report-google-sheets": "npm:0.22.1"
+    "@nitpicker/report-html": "npm:0.22.1"
+    "@nitpicker/viewer": "npm:0.22.1"
     "@types/debug": "npm:4.1.13"
     ansi-colors: "npm:4.1.3"
     debug: "npm:4.4.3"
@@ -3315,7 +3315,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nitpicker/core@npm:0.22.0, @nitpicker/core@workspace:packages/@nitpicker/core":
+"@nitpicker/core@npm:0.22.1, @nitpicker/core@workspace:packages/@nitpicker/core":
   version: 0.0.0-use.local
   resolution: "@nitpicker/core@workspace:packages/@nitpicker/core"
   dependencies:
@@ -3375,7 +3375,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nitpicker/report-google-sheets@npm:0.22.0, @nitpicker/report-google-sheets@workspace:packages/@nitpicker/report-google-sheets":
+"@nitpicker/report-google-sheets@npm:0.22.1, @nitpicker/report-google-sheets@workspace:packages/@nitpicker/report-google-sheets":
   version: 0.0.0-use.local
   resolution: "@nitpicker/report-google-sheets@workspace:packages/@nitpicker/report-google-sheets"
   dependencies:
@@ -3395,7 +3395,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nitpicker/report-html@npm:0.22.0, @nitpicker/report-html@workspace:packages/@nitpicker/report-html":
+"@nitpicker/report-html@npm:0.22.1, @nitpicker/report-html@workspace:packages/@nitpicker/report-html":
   version: 0.0.0-use.local
   resolution: "@nitpicker/report-html@workspace:packages/@nitpicker/report-html"
   dependencies:
@@ -3403,7 +3403,7 @@ __metadata:
     "@d-zero/shared": "npm:0.23.0"
     "@nitpicker/crawler": "npm:0.22.0"
     "@nitpicker/query": "npm:0.22.0"
-    "@nitpicker/viewer": "npm:0.22.0"
+    "@nitpicker/viewer": "npm:0.22.1"
     enquirer: "npm:2.4.1"
     react: "npm:19.2.8"
     react-dom: "npm:19.2.8"
@@ -3417,7 +3417,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nitpicker/viewer@npm:0.22.0, @nitpicker/viewer@workspace:packages/@nitpicker/viewer":
+"@nitpicker/viewer@npm:0.22.1, @nitpicker/viewer@workspace:packages/@nitpicker/viewer":
   version: 0.0.0-use.local
   resolution: "@nitpicker/viewer@workspace:packages/@nitpicker/viewer"
   dependencies:
@@ -18971,8 +18971,8 @@ __metadata:
   resolution: "test-server@workspace:packages/test-server"
   dependencies:
     "@hono/node-server": "npm:2.1.1"
-    "@nitpicker/analyze-search": "npm:0.22.0"
-    "@nitpicker/core": "npm:0.22.0"
+    "@nitpicker/analyze-search": "npm:0.22.1"
+    "@nitpicker/core": "npm:0.22.1"
     "@nitpicker/crawler": "npm:0.22.0"
     "@nitpicker/query": "npm:0.22.0"
     "@nitpicker/types": "npm:0.22.0"

@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.22.1](https://github.com/d-zero-dev/nitpicker/compare/v0.22.0...v0.22.1) (2026-09-18)
+
+### Bug Fixes
+
+- **analyze-axe:** re-inject axe-core into each page's own window ([376f1b9](https://github.com/d-zero-dev/nitpicker/commit/376f1b9396a4c685fed84326b970723c3c82c93e))
+
 # [0.22.0](https://github.com/d-zero-dev/nitpicker/compare/v0.21.0...v0.22.0) (2026-09-17)
 
 **Note:** Version bump only for package @nitpicker/analyze-axe

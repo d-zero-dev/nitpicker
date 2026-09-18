@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.22.1](https://github.com/d-zero-dev/nitpicker/compare/v0.22.0...v0.22.1) (2026-09-18)
+
+### Bug Fixes
+
+- **analyze-search:** stop relying on a bare global Node constructor ([b180d71](https://github.com/d-zero-dev/nitpicker/commit/b180d71ab396636e2faf614a4032f036af3f8593))
+
 # [0.22.0](https://github.com/d-zero-dev/nitpicker/compare/v0.21.0...v0.22.0) (2026-09-17)
 
 **Note:** Version bump only for package @nitpicker/analyze-search
