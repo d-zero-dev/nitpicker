@@ -4,9 +4,11 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 const axeRunMock = vi.fn();
 const axeConfigureMock = vi.fn();
+const axeSourceStub = 'AXE_SOURCE_STUB';
 
 vi.mock('axe-core', () => ({
 	default: {
+		source: axeSourceStub,
 		run: axeRunMock,
 		configure: axeConfigureMock,
 	},
@@ -24,11 +26,30 @@ beforeEach(() => {
 	vi.clearAllMocks();
 });
 
+/**
+ * Builds a minimal fake JSDOM-like window whose `eval` mimics axe-core's
+ * real behavior of attaching itself as `window.axe` once evaluated with its
+ * own source string (`axe.source`). Used in place of a real JSDOM window so
+ * these tests stay focused on the plugin's own logic; the real injection
+ * mechanism against a genuine JSDOM window is covered by
+ * `axe-plugin.jsdom.spec.ts`.
+ */
+function createFakeWindow() {
+	const win: { axe?: unknown; eval: ReturnType<typeof vi.fn> } = {
+		eval: vi.fn((code: string) => {
+			if (code === axeSourceStub) {
+				win.axe = { run: axeRunMock, configure: axeConfigureMock };
+			}
+		}),
+	};
+	return win;
+}
+
 describe('analyze-axe plugin', () => {
 	it('returns label', async () => {
 		axeRunMock.mockResolvedValue({ violations: [], incomplete: [] });
 
-		const plugin = await pluginFactory({ config: {} }, '');
+		const plugin = await pluginFactory({}, '');
 
 		expect(plugin.label).toBe('axe: アクセシビリティチェック');
 	});
@@ -36,17 +57,79 @@ describe('analyze-axe plugin', () => {
 	it('returns empty violations when axe finds no issues', async () => {
 		axeRunMock.mockResolvedValue({ violations: [], incomplete: [] });
 
-		const plugin = await pluginFactory({ config: {} }, '');
+		const plugin = await pluginFactory({}, '');
 		const url = new URL('https://example.com');
 		const result = await plugin.eachPage!({
 			url,
 			html: '',
-			window: {} as never,
+			window: createFakeWindow() as never,
 			num: 0,
 			total: 1,
 		});
 
 		expect(result).toEqual({ violations: [] });
+	});
+
+	it('injects axe-core into the page window via window.eval(axe.source)', async () => {
+		axeRunMock.mockResolvedValue({ violations: [], incomplete: [] });
+
+		const plugin = await pluginFactory({}, '');
+		const window = createFakeWindow();
+		await plugin.eachPage!({
+			url: new URL('https://example.com'),
+			html: '',
+			window: window as never,
+			num: 0,
+			total: 1,
+		});
+
+		expect(window.eval).toHaveBeenCalledWith(axeSourceStub);
+		expect(axeRunMock).toHaveBeenCalledOnce();
+	});
+
+	it('re-injects axe-core into every page, even across successive calls', async () => {
+		axeRunMock.mockResolvedValue({ violations: [], incomplete: [] });
+
+		const plugin = await pluginFactory({}, '');
+		const firstWindow = createFakeWindow();
+		const secondWindow = createFakeWindow();
+
+		await plugin.eachPage!({
+			url: new URL('https://example.com/1'),
+			html: '',
+			window: firstWindow as never,
+			num: 0,
+			total: 2,
+		});
+		await plugin.eachPage!({
+			url: new URL('https://example.com/2'),
+			html: '',
+			window: secondWindow as never,
+			num: 1,
+			total: 2,
+		});
+
+		// Regression guard for the closed-window bug: each page's own window
+		// must receive its own `window.eval(axe.source)` call rather than
+		// reusing one axe-core instance bound to a previous page's window.
+		expect(firstWindow.eval).toHaveBeenCalledTimes(1);
+		expect(secondWindow.eval).toHaveBeenCalledTimes(1);
+	});
+
+	it('throws a descriptive error when axe-core does not attach itself to the window', async () => {
+		const window = { eval: vi.fn() };
+
+		await expect(
+			pluginFactory({}, '').then((plugin) =>
+				plugin.eachPage!({
+					url: new URL('https://example.com'),
+					html: '',
+					window: window as never,
+					num: 0,
+					total: 1,
+				}),
+			),
+		).rejects.toThrow('runScripts: "outside-only"');
 	});
 
 	it('maps violations to the expected format', async () => {
@@ -64,12 +147,12 @@ describe('analyze-axe plugin', () => {
 			incomplete: [],
 		});
 
-		const plugin = await pluginFactory({ config: {} }, '');
+		const plugin = await pluginFactory({}, '');
 		const url = new URL('https://example.com/page');
 		const result = await plugin.eachPage!({
 			url,
 			html: '',
-			window: {} as never,
+			window: createFakeWindow() as never,
 			num: 0,
 			total: 1,
 		});
@@ -111,12 +194,12 @@ describe('analyze-axe plugin', () => {
 			],
 		});
 
-		const plugin = await pluginFactory({ config: {} }, '');
+		const plugin = await pluginFactory({}, '');
 		const url = new URL('https://example.com');
 		const result = await plugin.eachPage!({
 			url,
 			html: '',
-			window: {} as never,
+			window: createFakeWindow() as never,
 			num: 0,
 			total: 1,
 		});
@@ -152,12 +235,12 @@ describe('analyze-axe plugin', () => {
 			],
 		});
 
-		const plugin = await pluginFactory({ config: {} }, '');
+		const plugin = await pluginFactory({}, '');
 		const url = new URL('https://example.com');
 		const result = await plugin.eachPage!({
 			url,
 			html: '',
-			window: {} as never,
+			window: createFakeWindow() as never,
 			num: 0,
 			total: 1,
 		});
@@ -169,12 +252,12 @@ describe('analyze-axe plugin', () => {
 	it('handles axe.run() throwing an error', async () => {
 		axeRunMock.mockRejectedValue(new Error('axe crashed'));
 
-		const plugin = await pluginFactory({ config: {} }, '');
+		const plugin = await pluginFactory({}, '');
 		const url = new URL('https://example.com');
 		const result = await plugin.eachPage!({
 			url,
 			html: '',
-			window: {} as never,
+			window: createFakeWindow() as never,
 			num: 0,
 			total: 1,
 		});
@@ -188,13 +271,13 @@ describe('analyze-axe plugin', () => {
 		axeRunMock.mockResolvedValue({ violations: [], incomplete: [] });
 
 		// Use a nonexistent locale that will trigger the catch fallback
-		const plugin = await pluginFactory({ lang: 'xx-nonexistent', config: {} }, '');
+		const plugin = await pluginFactory({ lang: 'xx-nonexistent' }, '');
 
 		const url = new URL('https://example.com');
 		const result = await plugin.eachPage!({
 			url,
 			html: '',
-			window: {} as never,
+			window: createFakeWindow() as never,
 			num: 0,
 			total: 1,
 		});
@@ -208,12 +291,12 @@ describe('analyze-axe plugin', () => {
 		axeRunMock.mockResolvedValue({ violations: [], incomplete: [] });
 
 		// 'ja' locale exists in axe-core/locales/
-		const plugin = await pluginFactory({ lang: 'ja', config: {} }, '');
+		const plugin = await pluginFactory({ lang: 'ja' }, '');
 
 		await plugin.eachPage!({
 			url: new URL('https://example.com'),
 			html: '',
-			window: {} as never,
+			window: createFakeWindow() as never,
 			num: 0,
 			total: 1,
 		});
@@ -227,11 +310,11 @@ describe('analyze-axe plugin', () => {
 	it('does not call axe.configure when lang option is omitted', async () => {
 		axeRunMock.mockResolvedValue({ violations: [], incomplete: [] });
 
-		const plugin = await pluginFactory({ config: {} }, '');
+		const plugin = await pluginFactory({}, '');
 		await plugin.eachPage!({
 			url: new URL('https://example.com'),
 			html: '',
-			window: {} as never,
+			window: createFakeWindow() as never,
 			num: 0,
 			total: 1,
 		});
@@ -242,11 +325,11 @@ describe('analyze-axe plugin', () => {
 	it('disables the color-contrast rule in axe.run()', async () => {
 		axeRunMock.mockResolvedValue({ violations: [], incomplete: [] });
 
-		const plugin = await pluginFactory({ config: {} }, '');
+		const plugin = await pluginFactory({}, '');
 		await plugin.eachPage!({
 			url: new URL('https://example.com'),
 			html: '',
-			window: {} as never,
+			window: createFakeWindow() as never,
 			num: 0,
 			total: 1,
 		});
@@ -271,12 +354,12 @@ describe('analyze-axe plugin', () => {
 			incomplete: [],
 		});
 
-		const plugin = await pluginFactory({ config: {} }, '');
+		const plugin = await pluginFactory({}, '');
 		const url = new URL('https://example.com');
 		const result = await plugin.eachPage!({
 			url,
 			html: '',
-			window: {} as never,
+			window: createFakeWindow() as never,
 			num: 0,
 			total: 1,
 		});
@@ -296,12 +379,12 @@ describe('analyze-axe plugin', () => {
 			incomplete: [],
 		});
 
-		const plugin = await pluginFactory({ config: {} }, '');
+		const plugin = await pluginFactory({}, '');
 		const url = new URL('https://example.com');
 		const result = await plugin.eachPage!({
 			url,
 			html: '',
-			window: {} as never,
+			window: createFakeWindow() as never,
 			num: 0,
 			total: 1,
 		});
@@ -324,12 +407,12 @@ describe('analyze-axe plugin', () => {
 			incomplete: [],
 		});
 
-		const plugin = await pluginFactory({ config: {} }, '');
+		const plugin = await pluginFactory({}, '');
 		const url = new URL('https://example.com');
 		const result = await plugin.eachPage!({
 			url,
 			html: '',
-			window: {} as never,
+			window: createFakeWindow() as never,
 			num: 0,
 			total: 1,
 		});
