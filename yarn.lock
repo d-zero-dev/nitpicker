@@ -3236,7 +3236,9 @@ __metadata:
   dependencies:
     "@nitpicker/core": "npm:0.22.0"
     "@nitpicker/types": "npm:0.22.0"
+    "@types/jsdom": "npm:30.0.0"
     axe-core: "npm:4.13.0"
+    jsdom: "npm:30.0.1"
   languageName: unknown
   linkType: soft
 

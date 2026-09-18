@@ -1,3 +1,18 @@
+import type axe from 'axe-core';
+import type { DOMWindow } from 'jsdom';
+
+/**
+ * A JSDOM window after `injectAxe` (see `axe-plugin.ts`) has attached
+ * axe-core to it.
+ *
+ * Uses `typeof axe` rather than referencing the imported `axe` binding
+ * directly as a type: axe-core's `.d.ts` declares `export =` over a
+ * namespace (`declare namespace axe { ... } export = axe;`), and such a
+ * namespace cannot be used as a type by itself (`Cannot use namespace 'axe'
+ * as a type`, TS2709) — only `typeof` on it produces a usable object type.
+ */
+export type WindowWithAxe = DOMWindow & { axe?: typeof axe };
+
 /**
  * Normalized representation of a single axe-core finding.
  *

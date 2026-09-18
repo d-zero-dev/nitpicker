@@ -121,3 +121,79 @@ describe('Analyze pipeline (crawl → write → analyze)', () => {
 		}
 	});
 });
+
+/**
+ * Regression coverage for `@nitpicker/analyze-search`'s `recursiveSearch()`
+ * running against a page's DOM through the *real* `WorkerPool` (real Worker
+ * thread, real dynamic `import()`), rather than a directly-invoked `eachPage`
+ * in the test process.
+ *
+ * This matters because `recursiveSearch` used to depend on a bare global
+ * `Node` constructor that `page-analysis-worker.ts` copied onto `globalThis`
+ * before every `eachPage` call. That exposure was removed (axe-core no
+ * longer needs it — see `@nitpicker/analyze-axe`'s `injectAxe`), and the
+ * describe block above never configures `keywords`/`selectors`, so it never
+ * exercises `recursiveSearch` at all and would not have caught a
+ * `ReferenceError: Node is not defined` regression here.
+ */
+describe('Analyze pipeline (keyword search through the real WorkerPool)', () => {
+	let cwd: string;
+	let nitpicker: Nitpicker;
+
+	beforeAll(async () => {
+		cwd = path.join(os.tmpdir(), `nitpicker-search-e2e-${crypto.randomUUID()}`);
+		await fs.mkdir(cwd, { recursive: true });
+
+		const orchestrator = await CrawlerOrchestrator.crawling(
+			[`http://localhost:${TEST_SERVER_PORT}/meta/full`],
+			{
+				cwd,
+				interval: 0,
+				parallels: 1,
+				image: false,
+			},
+		);
+		const filePath = orchestrator.archive.filePath;
+		await orchestrator.write();
+		await orchestrator.archive.close();
+		orchestrator.garbageCollect();
+
+		const archive = await Archive.open({ filePath, cwd, openPluginData: true });
+		nitpicker = new Nitpicker(archive);
+	}, 240_000);
+
+	afterAll(async () => {
+		await nitpicker?.archive.close();
+		await fs.rm(cwd, { recursive: true, force: true });
+	});
+
+	it('finds a keyword in page text without throwing, via a real Worker thread', async () => {
+		// Matches the `<title>Full Meta Page</title>` text node — exercises
+		// the `TEXT_NODE` branch of `recursiveSearch`.
+		nitpicker.setPluginOverrides({
+			'@nitpicker/analyze-search': { keywords: ['Full Meta Page'] },
+		});
+		await nitpicker.analyze(['@nitpicker/analyze-search']);
+
+		const report = await nitpicker.archive.getData<Report>('analysis/report');
+		const pageData =
+			report.pageData!.data[`http://localhost:${TEST_SERVER_PORT}/meta/full`];
+
+		expect(pageData?.['keyword:Full Meta Page']).toEqual({ value: 1 });
+	});
+
+	it('finds a keyword in an element attribute without throwing, via a real Worker thread', async () => {
+		// Matches `<meta name="author" content="Yusuke Hirao">` — exercises
+		// the `ELEMENT_NODE` (attribute) branch of `recursiveSearch`.
+		nitpicker.setPluginOverrides({
+			'@nitpicker/analyze-search': { keywords: ['Hirao'] },
+		});
+		await nitpicker.analyze(['@nitpicker/analyze-search']);
+
+		const report = await nitpicker.archive.getData<Report>('analysis/report');
+		const pageData =
+			report.pageData!.data[`http://localhost:${TEST_SERVER_PORT}/meta/full`];
+
+		expect(pageData?.['keyword:Hirao']).toEqual({ value: 1 });
+	});
+});

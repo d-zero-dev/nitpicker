@@ -160,6 +160,11 @@ function toHeader(type: 'keyword' | 'selector', search?: (string | Content)[]) {
 	return header;
 }
 
+/** WHATWG DOM spec `Node.ELEMENT_NODE` ordinal (invariant across realms). */
+const ELEMENT_NODE = 1;
+/** WHATWG DOM spec `Node.TEXT_NODE` ordinal (invariant across realms). */
+const TEXT_NODE = 3;
+
 /**
  * Recursively searches a DOM subtree for regex matches in text nodes
  * and element attributes.
@@ -184,6 +189,14 @@ function toHeader(type: 'keyword' | 'selector', search?: (string | Content)[]) {
  *    `id`, `class`, `style`, `d`, `data-*`). These are excluded because
  *    they contain URLs, identifiers, or CSS that would produce false
  *    positives for content-oriented keyword searches.
+ * `nodeType` is compared against the WHATWG DOM spec's fixed numeric
+ * constants (`1` = `ELEMENT_NODE`, `3` = `TEXT_NODE`) rather than the
+ * `Node.ELEMENT_NODE` / `Node.TEXT_NODE` properties, because this function
+ * runs inside a Worker thread against a JSDOM `window` (see
+ * `page-analysis-worker.ts`) with no global `Node` constructor reachable
+ * from module scope — only the `window` argument's own `Node` would work,
+ * and threading it through every recursive call adds no value since these
+ * ordinals are invariant across realms.
  * @param el - The root node to search from.
  * @param search - The regex pattern to match against.
  * @returns Array of matches with the element context and matched text.
@@ -203,7 +216,7 @@ function recursiveSearch(el: Node, search: RegExp) {
 		return [];
 	}
 
-	if (el.nodeType === Node.TEXT_NODE) {
+	if (el.nodeType === TEXT_NODE) {
 		const textMatched = search.exec(el.textContent || '');
 
 		if (textMatched) {
@@ -216,7 +229,7 @@ function recursiveSearch(el: Node, search: RegExp) {
 		}
 	}
 
-	if (el.nodeType === Node.ELEMENT_NODE) {
+	if (el.nodeType === ELEMENT_NODE) {
 		const _el: Element = el as Element;
 		for (const attr of _el.attributes) {
 			if (

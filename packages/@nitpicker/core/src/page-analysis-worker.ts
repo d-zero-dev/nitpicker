@@ -7,13 +7,21 @@
  * 1. Dynamically imports the configured plugin via {@link importModules}
  *    (cached after the first task on the same worker)
  * 2. If the plugin implements `eachPage`:
- *    - Creates a JSDOM instance from the raw HTML
+ *    - Creates a JSDOM instance from the raw HTML, with `runScripts:
+ *      'outside-only'` so that plugins can use `window.eval` to run
+ *      DOM-scoped scripts (e.g. injecting a browser-oriented library that
+ *      needs to bind to that specific window — see
+ *      `@nitpicker/analyze-axe`'s `injectAxe`)
  *    - Calls the plugin's `eachPage` hook with the DOM window
  *    - Closes the JSDOM window to free memory
  * 3. Returns the plugin result as {@link ReportPage} or `null`
  *
  * One invocation processes exactly one plugin × one page, even though
  * the worker hosting this module handles many tasks over its lifetime.
+ * `eachPage` plugins must not rely on `dom.window` being reachable from
+ * `globalThis` — nothing exposes it there — and must not cache state that
+ * outlives a single call, since the window backing it is closed once the
+ * call returns.
  * @module
  */
 
@@ -24,25 +32,6 @@ import type { ExURL as URL } from '@d-zero/shared/parse-url';
 import { JSDOM } from 'jsdom';
 
 import { importModules } from './import-modules.js';
-
-/**
- * Set of critical Node.js global properties that must never be overwritten
- * by JSDOM window properties.
- */
-const PROTECTED_GLOBALS = new Set([
-	'process',
-	'global',
-	'globalThis',
-	'console',
-	'Buffer',
-	'setTimeout',
-	'setInterval',
-	'clearTimeout',
-	'clearInterval',
-	'setImmediate',
-	'clearImmediate',
-	'queueMicrotask',
-]);
 
 /**
  * Initial data payload for the page analysis worker.
@@ -93,23 +82,6 @@ export default async function <T extends string>(
 		runScripts: 'outside-only',
 	});
 
-	// Expose JSDOM globals so that browser-oriented libraries
-	// (axe-core, @medv/finder, etc.) that inspect the global scope
-	// can find `window`, `document`, `Node`, and other DOM APIs.
-	const g = globalThis as Record<string, unknown>;
-	const domGlobalKeys: string[] = [];
-	for (const key of Object.getOwnPropertyNames(dom.window)) {
-		if (key in g || PROTECTED_GLOBALS.has(key)) {
-			continue;
-		}
-		try {
-			g[key] = dom.window[key as keyof typeof dom.window];
-			domGlobalKeys.push(key);
-		} catch {
-			// Some window properties throw on access — skip them
-		}
-	}
-
 	try {
 		const report = await analyzeMod.eachPage({
 			url,
@@ -124,9 +96,6 @@ export default async function <T extends string>(
 		const message = error instanceof Error ? error.message : String(error);
 		throw new Error(`[${plugin.name}] ${message}`);
 	} finally {
-		for (const key of domGlobalKeys) {
-			delete g[key];
-		}
 		dom.window.close();
 	}
 }
