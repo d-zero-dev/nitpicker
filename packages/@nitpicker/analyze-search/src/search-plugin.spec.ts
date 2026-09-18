@@ -1,7 +1,7 @@
 import type createSearchPlugin from './search-plugin.js';
 
 import { JSDOM } from 'jsdom';
-import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 let pluginFactory: typeof createSearchPlugin;
 const pluginModulePromise = import('./search-plugin.js');
@@ -16,25 +16,42 @@ beforeEach(() => {
 });
 
 /**
- * Creates a JSDOM window from an HTML string and installs global `Node`
- * so that `recursiveSearch` can reference `Node.TEXT_NODE` / `Node.ELEMENT_NODE`.
+ * Creates a JSDOM window from an HTML string.
+ *
+ * Deliberately does not touch `globalThis`: `eachPage` runs inside a Worker
+ * thread (see `page-analysis-worker.ts`) with no DOM globals exposed there,
+ * so `recursiveSearch` must work using only the `window` argument it
+ * receives, not a global `Node` constructor.
  * @param html - HTML to parse.
  * @returns The JSDOM window.
  */
 function createWindow(html: string) {
 	const dom = new JSDOM(html, { url: 'https://example.com' });
-	// recursiveSearch references the global `Node` constant
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	(globalThis as any).Node = dom.window.Node;
 	return dom.window;
 }
 
-afterEach(() => {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	delete (globalThis as any).Node;
-});
-
 describe('analyze-search plugin', () => {
+	it('does not depend on globalThis exposing a Node constructor', () => {
+		const g = globalThis as Record<string, unknown>;
+		expect('Node' in g).toBe(false);
+
+		const window = createWindow('<html><body><p>Hello World</p></body></html>');
+		const plugin = pluginFactory({ keywords: ['Hello'] }, '');
+		const result = plugin.eachPage!({
+			url: new URL('https://example.com'),
+			html: '',
+			window: window as never,
+			num: 0,
+			total: 1,
+		});
+
+		expect(result).toMatchObject({
+			page: {
+				'keyword:Hello': { value: 1 },
+			},
+		});
+	});
+
 	it('returns label', () => {
 		const plugin = pluginFactory({}, '');
 
