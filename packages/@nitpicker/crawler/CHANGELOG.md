@@ -3,6 +3,24 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.22.0](https://github.com/d-zero-dev/nitpicker/compare/v0.21.0...v0.22.0) (2026-09-17)
+
+### Bug Fixes
+
+- **crawler:** exclude appended roots from metadataOnly restoration ([71d76d0](https://github.com/d-zero-dev/nitpicker/commit/71d76d0674e6d2150af85baddeb33b7f181f1fb8)), closes [#378](https://github.com/d-zero-dev/nitpicker/issues/378) [#369](https://github.com/d-zero-dev/nitpicker/issues/369)
+- **crawler:** flatten percent-encoded query keys before shape hashing ([0b4c650](https://github.com/d-zero-dev/nitpicker/commit/0b4c650e2ca73fae34d82082265e042fa2df58d6)), closes [#351](https://github.com/d-zero-dev/nitpicker/issues/351)
+- **crawler:** harden mid-crawl runtime option changes against edge cases ([9ab96bb](https://github.com/d-zero-dev/nitpicker/commit/9ab96bb62be6808da00fc1d903576d5b8fb66305))
+- **crawler:** persist metadataOnly flag so resume restores it correctly ([ae153dd](https://github.com/d-zero-dev/nitpicker/commit/ae153ddef11e395df5e8005ab5231eae80efd6b8)), closes [#369](https://github.com/d-zero-dev/nitpicker/issues/369) [#350](https://github.com/d-zero-dev/nitpicker/issues/350)
+- **crawler:** replay prior dedupe-cap observations on resuming sessions ([f867d9e](https://github.com/d-zero-dev/nitpicker/commit/f867d9ed4d0ebad4e584f765fa5f34cde85eca9e))
+
+### Features
+
+- **crawler:** add CrawlerOrchestrator.recrawl for URL-list-driven re-fetch ([1f440e2](https://github.com/d-zero-dev/nitpicker/commit/1f440e2352ff4d8301907fd7756958f83a16abd9))
+- **crawler:** allow runtime changes to parallels/interval/excludes mid-crawl ([6bf41c0](https://github.com/d-zero-dev/nitpicker/commit/6bf41c0b61a73408a1172a34c01c5e8c3e1a1cc5)), closes [#350](https://github.com/d-zero-dev/nitpicker/issues/350)
+- **crawler:** auto-retry pending pages before packaging an archive ([4418c06](https://github.com/d-zero-dev/nitpicker/commit/4418c0629af9fef4e0d5fdac360cea1d5de714b8))
+- **crawler:** bump @d-zero/beholder to 5.0.0 and wire imageScan through ([ba30f23](https://github.com/d-zero-dev/nitpicker/commit/ba30f23978f755ddeb913299cca960d1a842abb9))
+- **crawler:** store per-viewport image-scan outcome and use it for retry-failed ([e41c44f](https://github.com/d-zero-dev/nitpicker/commit/e41c44ffe262644ae1f998191c3dcd740138abeb))
+
 # [0.21.0](https://github.com/d-zero-dev/nitpicker/compare/v0.20.0...v0.21.0) (2026-08-27)
 
 **Note:** Version bump only for package @nitpicker/crawler

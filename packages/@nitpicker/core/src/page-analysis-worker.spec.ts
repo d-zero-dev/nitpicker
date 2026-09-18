@@ -181,15 +181,15 @@ describe('page-analysis-worker', () => {
 		).rejects.toThrow('[broken-plugin] plugin crash');
 	});
 
-	it('cleans up JSDOM globals after eachPage completes', async () => {
-		let capturedKeys: string[] = [];
+	it('never exposes the JSDOM window on globalThis while eachPage runs', async () => {
+		let sawGlobalWindow = false;
+		let sawGlobalHtmlElement = false;
 		mockedImportModules.mockResolvedValue([
 			{
 				eachPage: vi.fn().mockImplementation(() => {
-					// Capture some JSDOM-injected globals during execution
-					capturedKeys = Object.getOwnPropertyNames(globalThis).filter(
-						(k) => k === 'HTMLElement' || k === 'NodeList',
-					);
+					const g = globalThis as Record<string, unknown>;
+					sawGlobalWindow = 'window' in g;
+					sawGlobalHtmlElement = 'HTMLElement' in g;
 					return null;
 				}),
 			},
@@ -212,16 +212,14 @@ describe('page-analysis-worker', () => {
 			1,
 		);
 
-		// JSDOM globals should be available during eachPage
-		expect(capturedKeys.length).toBeGreaterThan(0);
-
-		// But cleaned up after
-		const g = globalThis as Record<string, unknown>;
-		expect(g['HTMLElement']).toBeUndefined();
-		expect(g['NodeList']).toBeUndefined();
+		// Regression guard: plugins must receive DOM access solely through
+		// the `window` argument passed to `eachPage`, never via globalThis
+		// (see analyze-axe's `injectAxe`, which depends on this isolation).
+		expect(sawGlobalWindow).toBe(false);
+		expect(sawGlobalHtmlElement).toBe(false);
 	});
 
-	it('cleans up JSDOM globals even when eachPage throws', async () => {
+	it('does not leak globalThis state when eachPage throws', async () => {
 		mockedImportModules.mockResolvedValue([
 			{
 				eachPage: vi.fn().mockRejectedValue(new Error('crash')),
@@ -248,7 +246,8 @@ describe('page-analysis-worker', () => {
 		});
 
 		const g = globalThis as Record<string, unknown>;
-		expect(g['HTMLElement']).toBeUndefined();
+		expect('window' in g).toBe(false);
+		expect('HTMLElement' in g).toBe(false);
 	});
 
 	it('provides a JSDOM window with the correct URL', async () => {

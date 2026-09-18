@@ -8,6 +8,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { classifyErrorKind, isWithinOutageWindow } from '@nitpicker/crawler';
 
+import { isImageScanPhaseError } from './is-image-scan-phase-error.js';
 import { listAllOutageWindows } from './list-all-outage-windows.js';
 import { readCrawlErrors } from './read-crawl-errors.js';
 import { readErrorLog } from './read-error-log.js';
@@ -47,6 +48,14 @@ function hostOf(url: string | null): string {
  * {@link classifyErrorKind} — nothing is read from a stored `kind`, so the same
  * archive always classifies the same way regardless of when it was crawled.
  *
+ * `page_errors` rows reporting a beholder image-scan outcome
+ * ({@link isImageScanPhaseError}) are excluded before classification: that
+ * scan only runs after the page's own HTTP response already loaded, so the
+ * page is never a connection failure — its outcome belongs to
+ * `page_meta.image_scan_desktop` / `image_scan_mobile`, not this host-level
+ * failure view. Without this exclusion, a slow-but-successful page inflates
+ * the same `timeout`/`protocol` rows a genuinely unreachable host would.
+ *
  * Known limitation: re-crawling a pre-capture archive (resume / append) writes
  * the new run's errors into `crawl_errors`, which then shadows `error.log`; the
  * original run's `error`-channel entries (still only in `error.log`) are not
@@ -85,10 +94,15 @@ export async function getErrorKinds(
 	const knex = accessor.getKnex();
 	const hasCrawlErrors = await knex.schema.hasTable('crawl_errors');
 
-	const [pageRecords, outageWindows] = await Promise.all([
+	const [rawPageRecords, outageWindows] = await Promise.all([
 		readPageErrors(accessor),
 		listAllOutageWindows(accessor),
 	]);
+	// See this function's JSDoc: an image-scan outcome is not a connection
+	// failure — the page it's about already has a real HTTP response.
+	const pageRecords = rawPageRecords.filter(
+		(record) => !isImageScanPhaseError(record.message),
+	);
 
 	// Prefer the structured table, but fall back to error.log whenever it yields
 	// nothing — not just when the table is absent. A legacy (pre-capture) archive

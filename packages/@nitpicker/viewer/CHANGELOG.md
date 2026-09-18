@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.22.0](https://github.com/d-zero-dev/nitpicker/compare/v0.21.0...v0.22.0) (2026-09-17)
+
+### Features
+
+- **viewer:** add Redirect To column and isRedirectSource filter, adopt viewer_pages schema v33 ([6249824](https://github.com/d-zero-dev/nitpicker/commit/62498249b64fd106cb98caa4b94516e6146b1dca))
+- **viewer:** surface imageScan filter, badges, and page-detail display ([cd8ec3b](https://github.com/d-zero-dev/nitpicker/commit/cd8ec3b57c14588a33682e6004dd9428227d99f2))
+
 # [0.21.0](https://github.com/d-zero-dev/nitpicker/compare/v0.20.0...v0.21.0) (2026-08-27)
 
 ### Bug Fixes

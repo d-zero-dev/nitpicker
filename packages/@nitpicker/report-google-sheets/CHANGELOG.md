@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.22.0](https://github.com/d-zero-dev/nitpicker/compare/v0.21.0...v0.22.0) (2026-09-17)
+
+### Bug Fixes
+
+- **report-google-sheets:** show progress while flushing the tail chunk ([6381d4d](https://github.com/d-zero-dev/nitpicker/commit/6381d4d0e2ea2685f80fe9740e4d97ae2097461e))
+
+### Features
+
+- **report-google-sheets:** add explicit --sheets selection to report() ([9a6e685](https://github.com/d-zero-dev/nitpicker/commit/9a6e685b269d2cfd2803ef8551771dd111c9f47d))
+- **report-google-sheets:** add Redirect To column to Page List sheet ([2d50913](https://github.com/d-zero-dev/nitpicker/commit/2d509136982f64c65ad7e962188f6d9510392459))
+- **report-google-sheets:** restrict report to a --urls allowlist ([29af296](https://github.com/d-zero-dev/nitpicker/commit/29af29676bf35ae78bb5f52e3a622262e1bba8bb))
+
 # [0.21.0](https://github.com/d-zero-dev/nitpicker/compare/v0.20.0...v0.21.0) (2026-08-27)
 
 ### Bug Fixes
