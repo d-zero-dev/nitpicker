@@ -3,6 +3,30 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.22.0](https://github.com/d-zero-dev/nitpicker/compare/v0.21.0...v0.22.0) (2026-09-17)
+
+### Bug Fixes
+
+- **cli,test-server:** resolve CI-only lint error and stale e2e fixture ([07d13dc](https://github.com/d-zero-dev/nitpicker/commit/07d13dc3d6793bcd766bf891208b2f6cedd7ce35))
+- **cli:** harden the crawl runtime console against edge cases ([03a5012](https://github.com/d-zero-dev/nitpicker/commit/03a5012f91677f1f6690c0c271500c404d832044)), closes [#294](https://github.com/d-zero-dev/nitpicker/issues/294)
+- **cli:** hide the terminal's own cursor and show the command list on start ([2e85567](https://github.com/d-zero-dev/nitpicker/commit/2e855679c43bf936fca3e6f4e8498a94bf5b5007))
+
+- refactor(cli)!: rename inventory-runs query sub-command to list-reconcile-runs ([95135dc](https://github.com/d-zero-dev/nitpicker/commit/95135dc4c95d603c4ad2d298d34c23e257d0f1f8)), closes [#354](https://github.com/d-zero-dev/nitpicker/issues/354)
+
+### Features
+
+- **cli:** add --max-auto-retry flag and a distinct exit code ([a7d5b18](https://github.com/d-zero-dev/nitpicker/commit/a7d5b18c19079e4c1af33916f62809a90a57858a))
+- **cli:** add --recrawl flag to crawl command ([a7a5332](https://github.com/d-zero-dev/nitpicker/commit/a7a5332432f60cc414839d69115cc2d95b6514c4))
+- **cli:** add --sheets flag for explicit sheet selection ([52cc457](https://github.com/d-zero-dev/nitpicker/commit/52cc457780e70ff011e09433554031a7c90c3d9b))
+- **cli:** add an interactive console to crawl for changing parallels/exclude/etc mid-run ([81d5ac1](https://github.com/d-zero-dev/nitpicker/commit/81d5ac1e225f92f860b878883bdaff2790f398d4))
+- **cli:** add report --urls flag and query match-urls subcommand ([e1a52e9](https://github.com/d-zero-dev/nitpicker/commit/e1a52e9d5856ebd79623d048bfa44860cd3aad8c))
+
+### BREAKING CHANGES
+
+- `query <archive> inventory-runs` no longer exists; use
+  `query <archive> list-reconcile-runs` instead. No compatibility alias is
+  provided (v0.x, breaking changes accepted). Follows the crawler/query-side
+
 # [0.21.0](https://github.com/d-zero-dev/nitpicker/compare/v0.20.0...v0.21.0) (2026-08-27)
 
 ### Bug Fixes

@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.22.0](https://github.com/d-zero-dev/nitpicker/compare/v0.21.0...v0.22.0) (2026-09-17)
+
+### Bug Fixes
+
+- **query:** exclude beholder image-scan noise from error-kind classification ([f364496](https://github.com/d-zero-dev/nitpicker/commit/f364496d28d01367e55696fb68be4ce367fcc86c))
+
+### Features
+
+- **query:** add independent ImageScanOutcome enum for image-scan codes ([f09b7a1](https://github.com/d-zero-dev/nitpicker/commit/f09b7a144d4f4b41c7689880396b9c279ca27902))
+- **query:** add URL-list matching and report page-list URL filtering ([d9e2f33](https://github.com/d-zero-dev/nitpicker/commit/d9e2f33367026515d0bfdbe7c7bad6fb5afcd9cb))
+- **query:** admit redirect-source rows into viewer_pages, scope fromList archives to roots ([3407943](https://github.com/d-zero-dev/nitpicker/commit/3407943a86495eae66644d50a0c610b9634bde13))
+- **query:** expose imageScan on PageDetail/PageListItem/list filters ([af47250](https://github.com/d-zero-dev/nitpicker/commit/af47250bf1724044041740d90ee2a409365b87b9))
+
 # [0.21.0](https://github.com/d-zero-dev/nitpicker/compare/v0.20.0...v0.21.0) (2026-08-27)
 
 ### Features
