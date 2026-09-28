@@ -42,6 +42,36 @@ let replayMemberHealed = false;
  *   itself is only the index page (linking to the query-bearing anchors);
  *   see the query-links comment below for why the trap page itself must
  *   live one path segment deeper.
+ * - `/trap/chain/:value/` — a LINEAR self-generating trap: unlike every
+ *   other shape above (fixed anchors, bounded), each page here links to
+ *   exactly ONE never-before-seen page of the same shape (`n` → `n+1`,
+ *   bounded at `CHAIN_DEPTH_LIMIT` (below) purely as a runaway backstop —
+ *   see below for why the cap test never actually reaches it). Reproduces
+ *   issue #350: `--dedupe-cap`'s enqueue gate (`crawler.ts`'s `addUrl`
+ *   closure, "Gate 1") stops a capped shape's anchor from being pushed to
+ *   the in-memory dealer queue, but does NOT stop `replaceAnchorEdges`
+ *   (`update-page.ts`) from persisting a `scraped=0` row for that same
+ *   anchor — the `page` event carries the scraped page's raw, unfiltered
+ *   `anchorList`. With this fixture's single-anchor-per-page chain, the
+ *   very page whose observation trips the cap (chain/2, the 2nd real
+ *   observation — like `/trap/date/`, but `body_hash` never matches here
+ *   since each page's `nextLink` embeds a different next value, so only
+ *   the `og:url`-mismatch signal halves the threshold, same arithmetic as
+ *   `/trap/echo/`) has its own one anchor (chain/3) blocked from the
+ *   queue by Gate 1 right after — chain/3 is therefore never scraped and
+ *   never will be, yet is written to
+ *   `content_items` as a `scraped=0` row referenced by chain/2's
+ *   `anchor_edges`. Before `get-crawling-state.ts` learned to exclude
+ *   confirmed-capped shapes (issue #350), that row satisfied
+ *   `getCrawlingState`'s "has an anchor referrer" filter and stayed in
+ *   `pending` forever, since nothing will ever scrape it to clear it —
+ *   `CrawlerOrchestrator`'s auto-retry loop kept re-queueing a shape that
+ *   can never converge. Exactly ONE anchor per page (never two, unlike
+ *   `/trap/date/` etc.) is deliberate: `paginationState` in `crawler.ts`'s
+ *   `#handleResult` only compares anchors discovered on the SAME page, so
+ *   a single-anchor page never has a second anchor to compare against and
+ *   `detectPaginationPattern` can never fire — this fixture needs none of
+ *   the "Page-count nuance" workaround the other trap shapes above require.
  * - `/trap/replay/:value/` — a THREE-member trap (907, 501, 203, listed in
  *   DESCENDING order so no adjacent pair is a positive numeric step and
  *   `detectPaginationPattern` never fires, keeping this fixture free of the
@@ -147,6 +177,47 @@ export function dedupeCapTrapRoutes(app: Hono, portRef: PortRef) {
 				'</head><body>' +
 				'<p>query trap body (identical across every value)</p>' +
 				queryLinks +
+				'</body></html>',
+		);
+	});
+
+	// Purely a runaway backstop, not load-bearing for the cap test itself:
+	// the 2nd observation trips the cap (same arithmetic as `/trap/date/`),
+	// so a `--dedupe-cap` crawl of this fixture never gets past chain/2 —
+	// this bound only guards a hypothetical crawl of this fixture with
+	// dedupe-cap disabled.
+	const CHAIN_DEPTH_LIMIT = 6;
+
+	app.get('/trap/chain/', (c) =>
+		c.html(
+			'<!doctype html><html lang="en"><head><title>Chain Index</title></head><body>' +
+				'<a href="/trap/chain/1/">1</a>' +
+				'</body></html>',
+		),
+	);
+
+	app.get('/trap/chain/:value/', (c) => {
+		const value = Number(c.req.param('value'));
+		const ogUrl = `http://localhost:${portRef.port}/trap/chain/`;
+		const nextLink =
+			value < CHAIN_DEPTH_LIMIT
+				? `<a href="/trap/chain/${value + 1}/">${value + 1}</a>`
+				: '';
+		return c.html(
+			'<!doctype html><html lang="en"><head>' +
+				'<title>お知らせ</title>' +
+				'<meta name="description" content="一覧です">' +
+				'<meta property="og:title" content="お知らせ">' +
+				`<meta property="og:url" content="${ogUrl}">` +
+				'</head><body>' +
+				// Unlike `/trap/date/`'s and `/trap/query/list/`'s identical
+				// paragraph text: this one is fixed, but `nextLink` embeds the
+				// NEXT value, so the rendered body as a whole differs page to
+				// page — the `body_hash` confidence signal in `DedupeCapTracker`
+				// therefore never fires for this shape, same as `/trap/echo/`
+				// (see this function's JSDoc `/trap/chain/:value/` entry above).
+				'<p>trap body (fixed text, but the link below differs per value)</p>' +
+				nextLink +
 				'</body></html>',
 		);
 	});
