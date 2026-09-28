@@ -402,3 +402,74 @@ describe('dedupe-cap trap fixture — resetFailedPages excludes a confirmed-capp
 		expect(unrelated!.status).toBeNull();
 	});
 });
+
+describe('dedupe-cap trap fixture — getCrawlingState excludes a confirmed-capped shape (auto-retry burst fix, issue #350)', () => {
+	let result: CrawlResult;
+
+	afterAll(async () => {
+		if (result) await cleanup(result);
+	});
+
+	it('capが発火したページ自身の未取得アンカーはpendingに残らず、crawlは正常完了する', async () => {
+		// `maxAutoRetry: 0`: before the fix, the very first pending check
+		// inside `CrawlerOrchestrator`'s auto-retry loop would already see
+		// `attempt(1) > maxAutoRetry(0)` and throw `PendingUrlsRemainError`
+		// — reaching any assertion below is already proof the crawl
+		// completed instead.
+		result = await crawl([`${TEST_SERVER_ORIGIN}/trap/chain/`], {
+			parallels: 1,
+			dedupeCap: 3,
+			maxAutoRetry: 0,
+		});
+
+		const { items, total } = await listDedupeCapEvents(result.accessor);
+		expect(total).toBe(1);
+		expect(items[0]?.shape_key).toContain('/trap/chain/{n}/');
+		// Cap trips on the 2nd real observation (chain/1 → chain/2), same
+		// as `/trap/date/`, but the body_hash confidence signal does NOT
+		// apply here (unlike `/trap/date/`): each page's `nextLink` embeds
+		// the NEXT value, so the body differs page to page — same
+		// og:url-mismatch-only halving as `/trap/echo/`
+		// (`ceil(dedupeCap/2) = 2`, count 2 >= 2 → CAPPED). Either way,
+		// chain/2's own one anchor (chain/3) is Gate-1-blocked from the
+		// queue right after, but `replaceAnchorEdges` still persists it.
+		expect(items[0]?.observed_count).toBe(2);
+		expect(items[0]?.effective_threshold).toBe(2);
+
+		const { pending, pendingMetadataOnly } = await result.archive.getCrawlingState();
+		expect(pending).toEqual([]);
+		expect(pendingMetadataOnly).toEqual([]);
+
+		// The phantom row itself must still exist at `scraped=0` — excluded
+		// from `pending`, not skipped or deleted — and post-hoc marking
+		// (`backfillDedupeCapEventId`) must still be able to mark it as
+		// capped despite never having been fetched (ARCHITECTURE.md's
+		// `content_items.dedupe_cap_event_id` entry: cap 発火までに同一
+		// shape の内部ページ全件をマーク — `scraped=0` の未取得ページも対象).
+		const phantomUrl = `${TEST_SERVER_ORIGIN}/trap/chain/3/`;
+		const knex = result.accessor.getKnex();
+		const phantomRow = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.scraped as scraped')
+			.where('ur.url', phantomUrl)
+			.first();
+		expect(phantomRow).toBeDefined();
+		expect(Number(phantomRow.scraped)).toBe(0);
+
+		// NOT via `listPages({isDedupeCapped:true})`: that API always
+		// requires `ci.scraped = 1` (it lists "pages", not raw
+		// `content_items` rows) and would therefore never surface a
+		// never-fetched phantom row regardless of marking — asserting via
+		// its output would test the wrong layer. Read the raw
+		// `content_items.dedupe_cap_event_id` column instead, the same way
+		// `backfillDedupeCapEventId`'s own JSDoc describes its candidate
+		// set ("every `is_external = 0` row regardless of `scraped`").
+		await buildViewerReadModel(result.archive);
+		const phantomAfterBackfill = await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.dedupe_cap_event_id as dedupeCapEventId')
+			.where('ur.url', phantomUrl)
+			.first();
+		expect(phantomAfterBackfill?.dedupeCapEventId).toBe(items[0]!.id);
+	}, 120_000);
+});

@@ -365,8 +365,16 @@ async function readSourceByUrl(
  *   `processAnchors` (`handle-scrape-end.ts`) decides whether to queue the
  *   anchor for a full or metadata-only scrape: `!recursive || isExternal`.
  *   Both `recursive` and a given URL's `isExternal` are constant for the
- *   whole crawl session, so this is a pure recomputation, not a second
- *   source of truth (#369).
+ *   duration of one `CrawlerOrchestrator#crawling()` invocation (this is a
+ *   pure recomputation of that call's own decision, not a second source of
+ *   truth, #369) — NOT necessarily across the whole session:
+ *   `#crawlUntilPendingClears`'s auto-retry loop (issue #350) always
+ *   re-invokes `crawling([], { recursive: false, isRetryContinuation: true })`
+ *   for a retry round regardless of the session's original `recursive`
+ *   value, so the SAME URL anchored again during a retry round can compute
+ *   a different `is_metadata_only` verdict than it did on the original
+ *   pass. `resolveContentItemId`'s ratchet lets the later call's opinion
+ *   win, same as it does for any other repeat discovery.
  */
 async function replaceAnchorEdges(
 	trx: Knex.Transaction,
