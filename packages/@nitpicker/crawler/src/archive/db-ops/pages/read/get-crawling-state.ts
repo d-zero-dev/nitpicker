@@ -1,5 +1,8 @@
 import type { Knex } from 'knex';
 
+import { computeShapeKey } from '../../../../crawler/dedupe/compute-shape-key.js';
+import { listDedupeCapShapeKeys } from '../../dedupe-cap/list-dedupe-cap-shape-keys.js';
+
 /**
  * Retrieves the current crawling state by listing scraped and pending URLs.
  *
@@ -8,7 +11,7 @@ import type { Knex } from 'knex';
  * setSkippedPage / setExternalPage / outright setPage success or failure.
  *
  * `pending` is intentionally STRICT — not "every `scraped = 0` row".
- * Three filters apply:
+ * Four filters apply:
  *
  * 1. `scraped = 0` — work still incomplete.
  * 2. `is_external = 0` — only in-scope work. External URLs go through a
@@ -37,6 +40,46 @@ import type { Knex } from 'knex';
  *    URL came from the operator's URL list (no anchor referrer) and
  *    `resetFailedPages` puts it back at `scraped = 0`. Without this
  *    clause those legitimate retries would be dropped on resume.
+ * 4. **Confirmed same-cluster trap exclusion** (issue #350): a row whose
+ *    URL shape (`computeShapeKey`) matches a `dedupe_cap_events.shape_key`
+ *    already recorded in this archive is dropped, UNLESS its `source` is
+ *    `'inventory-seed'` (an operator-listed URL, not an anchor-discovered
+ *    one — the same "explicit URL survives cap" carve-out `resetPagesByUrls`
+ *    gives `--recrawl`). NOT the same as `resetFailedPages`'s own
+ *    same-shape exclusion, which drops a matching candidate regardless of
+ *    `source` — a `scraped=1, status=-1` inventory-seed row of a
+ *    confirmed-capped shape is therefore excluded there too and never
+ *    resets to `scraped=0` for `--retry-failed` to pick back up. That
+ *    asymmetry pre-dates this filter and is unrelated to it (out of scope
+ *    here): this filter only decides what `getCrawlingState` reports as
+ *    `pending`, never whether a `scraped=1` row gets reset in the first
+ *    place.
+ *
+ *    Why this is needed: `--dedupe-cap`'s enqueue gate (`crawler.ts`'s
+ *    `addUrl` closure) only stops a capped shape's anchor from being
+ *    ADDED TO THE QUEUE in memory — it does not stop `replaceAnchorEdges`
+ *    (`update-page.ts`) from writing a `scraped = 0` row for that same
+ *    anchor (post-hoc marking, `content_items.dedupe_cap_event_id`,
+ *    deliberately needs that row to exist). Before this filter, such a
+ *    row still satisfied filter 3 (it has an anchor referrer) and entered
+ *    `pending`, so `CrawlerOrchestrator#crawlUntilPendingClears`'s
+ *    auto-retry loop (and any `--resume`/`--retry-failed`/`--append`) would
+ *    requeue it — `Crawler#resume`'s `LinkList#resume` has no cap gate of
+ *    its own — actually fetch the trap page, and its anchors would create
+ *    a fresh batch of same-shape `scraped = 0` rows. Pending never shrank,
+ *    so the loop ended in `PendingUrlsRemainError('no-progress')` even
+ *    though nothing was actually wrong with the target site.
+ *
+ *    Why not skip the row instead of merely omitting it from `pending`:
+ *    this function is read-only — leaving `is_skipped`/`skip_reason`
+ *    unset keeps `dedupe_cap_event_id` backfill (`viewer-build`) as the
+ *    single place that judges a row "capped", matching the archive's
+ *    existing dedupe-cap post-hoc-marking pattern rather than adding a
+ *    second one here.
+ *
+ *    A row whose shape cannot be computed (`computeShapeKey` returns
+ *    `null`) stays in `pending` — no signal either way, same
+ *    err-on-the-side-of-retrying choice `resetFailedPages` makes.
  *
  * The defensive shape is on purpose: the data source can drift into
  * anomalous states under interruption, but the reader must never throw
@@ -63,8 +106,8 @@ import type { Knex } from 'knex';
  * methods carry.
  * @param knex - Knex query builder connected to the archive DB.
  * @returns An object with `scraped` (completed URLs), `pending` (the
- *   strict set of in-scope, anchor-referenced, unfinished URLs), and
- *   `pendingMetadataOnly` (the subset of `pending` whose
+ *   strict set of in-scope, anchor-referenced, unfinished, non-capped
+ *   URLs), and `pendingMetadataOnly` (the subset of `pending` whose
  *   `content_items.is_metadata_only` was persisted as `1` — see
  *   `replaceAnchorEdges`/`resolveContentItemId`). Callers that resume a
  *   crawl (`Crawler#resume` → `LinkList#resume`) pass this subset through
@@ -81,7 +124,11 @@ export async function getCrawlingState(
 		.where('content_items.scraped', 1);
 	const scraped = $scraped.map(ex);
 	const $pending = await knex
-		.select('ur.url as url', 'ci.is_metadata_only as isMetadataOnly')
+		.select(
+			'ur.url as url',
+			'ci.is_metadata_only as isMetadataOnly',
+			'ci.source as source',
+		)
 		.from({ ci: 'content_items' })
 		.join({ ur: 'url_refs' }, 'ur.id', 'ci.url_id')
 		.where('ci.scraped', 0)
@@ -100,8 +147,21 @@ export async function getCrawlingState(
 					.whereRaw('anchor_edges.href_page_id = ci.id');
 			}).orWhereNot('ci.source', 'crawled');
 		});
-	const pending = $pending.map(ex);
-	const pendingMetadataOnly = $pending.filter((r) => r.isMetadataOnly === 1).map(ex);
+	// Confirmed same-cluster trap exclusion (filter 4, see this function's
+	// JSDoc) — an archive with no recorded cap events behaves exactly as
+	// before this filter existed (`cappedShapeKeys.size === 0` short-circuits
+	// to a no-op, same guard `resetFailedPages` uses).
+	const cappedShapeKeys = new Set(await listDedupeCapShapeKeys(knex));
+	const $notCapped =
+		cappedShapeKeys.size === 0
+			? $pending
+			: $pending.filter((row) => {
+					if (row.source === 'inventory-seed') return true;
+					const shapeKey = computeShapeKey(row.url);
+					return shapeKey === null || !cappedShapeKeys.has(shapeKey);
+				});
+	const pending = $notCapped.map(ex);
+	const pendingMetadataOnly = $notCapped.filter((r) => r.isMetadataOnly === 1).map(ex);
 	return {
 		scraped,
 		pending,

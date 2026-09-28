@@ -5557,6 +5557,182 @@ describe('getCrawlingState: strict pending filter', () => {
 		}
 	});
 
+	describe('confirmed same-cluster trap exclusion (issue #350)', () => {
+		// Same motivating scenario as `resetFailedPages`'s "Confirmed
+		// same-cluster trap exclusion" test (database.spec.ts, resetFailedPages
+		// describe block): `--dedupe-cap`'s in-memory enqueue gate stops a
+		// capped shape's anchor from being pushed to the dealer, but
+		// `replaceAnchorEdges` still writes a `scraped=0` row for it (the
+		// post-hoc-marking column needs that row to exist). Without this
+		// filter, such a row satisfies "has an anchor referrer" and re-enters
+		// `pending` forever — see `get-crawling-state.ts`'s JSDoc.
+
+		it('excludes an anchor-referenced pending row whose URL shape has a confirmed dedupe-cap trap', async () => {
+			const dbPath = path.resolve(
+				workingDir,
+				'pending-strict-excludes-capped-shape.sqlite',
+			);
+			await removeIfExists(dbPath);
+			const db = await Database.connect({ filename: dbPath });
+			try {
+				await db.updatePage(
+					{
+						...makePage('http://localhost/parent'),
+						anchorList: [
+							{
+								href: parseUrl('http://localhost/news/date/2024/')!,
+								textContent: '',
+								isExternal: false,
+							},
+							{
+								href: parseUrl('http://localhost/other/page/')!,
+								textContent: '',
+								isExternal: false,
+							},
+						],
+					},
+					true,
+					true,
+				);
+				await db.insertDedupeCapEvent({
+					shapeKey: 'localhost/news/date/{n}/',
+					sampleUrl: 'http://localhost/news/date/2020/',
+					bodyHash: Buffer.from('trap-body'),
+					effectiveThreshold: 2,
+					observedCount: 2,
+					detectedAt: 1_700_000_000_000,
+				});
+
+				const { pending } = await db.getCrawlingState();
+				expect(pending).not.toContain('http://localhost/news/date/2024/');
+				expect(pending).toContain('http://localhost/other/page/');
+			} finally {
+				await db.destroy();
+				await removeIfExists(dbPath);
+			}
+		});
+
+		it('excludes a capped-shape row from pendingMetadataOnly too (non-recursive discovery)', async () => {
+			// Pins that the exclusion filter runs BEFORE both `pending` and
+			// `pendingMetadataOnly` are derived — a version that filtered only
+			// `pending` while still deriving `pendingMetadataOnly` from the
+			// unfiltered row set would pass every other test in this describe
+			// block yet leak the capped-shape row back in here.
+			const dbPath = path.resolve(
+				workingDir,
+				'pending-metadata-only-excludes-capped-shape.sqlite',
+			);
+			await removeIfExists(dbPath);
+			const db = await Database.connect({ filename: dbPath });
+			try {
+				await db.updatePage(
+					{
+						...makePage('http://localhost/parent'),
+						anchorList: [
+							{
+								href: parseUrl('http://localhost/news/date/2024/')!,
+								textContent: '',
+								isExternal: false,
+							},
+						],
+					},
+					true,
+					true,
+					undefined,
+					undefined,
+					false,
+				);
+				await db.insertDedupeCapEvent({
+					shapeKey: 'localhost/news/date/{n}/',
+					sampleUrl: 'http://localhost/news/date/2020/',
+					bodyHash: Buffer.from('trap-body'),
+					effectiveThreshold: 2,
+					observedCount: 2,
+					detectedAt: 1_700_000_000_000,
+				});
+
+				const { pending, pendingMetadataOnly } = await db.getCrawlingState();
+				expect(pending).not.toContain('http://localhost/news/date/2024/');
+				expect(pendingMetadataOnly).not.toContain('http://localhost/news/date/2024/');
+			} finally {
+				await db.destroy();
+				await removeIfExists(dbPath);
+			}
+		});
+
+		it('keeps an inventory-seed row even when its URL shape has a confirmed dedupe-cap trap', async () => {
+			// An operator-listed URL (`--inventory ./list.txt`) is an
+			// explicit request, not an anchor-discovered one — the same
+			// "explicit URL survives cap" carve-out `resetPagesByUrls` gives
+			// `--recrawl`. NOT `resetFailedPages`, which excludes a matching
+			// candidate regardless of `source` (see `get-crawling-state.ts`'s
+			// JSDoc for that asymmetry).
+			const dbPath = path.resolve(
+				workingDir,
+				'pending-strict-inventory-seed-survives-cap.sqlite',
+			);
+			await removeIfExists(dbPath);
+			const db = await Database.connect({ filename: dbPath });
+			try {
+				await insertRawPage(db, {
+					url: 'http://localhost/news/date/2024/',
+					scraped: 0,
+					isTarget: 1,
+					isExternal: 0,
+					source: 'inventory-seed',
+				});
+				await db.insertDedupeCapEvent({
+					shapeKey: 'localhost/news/date/{n}/',
+					sampleUrl: 'http://localhost/news/date/2020/',
+					bodyHash: Buffer.from('trap-body'),
+					effectiveThreshold: 2,
+					observedCount: 2,
+					detectedAt: 1_700_000_000_000,
+				});
+
+				const { pending } = await db.getCrawlingState();
+				expect(pending).toContain('http://localhost/news/date/2024/');
+			} finally {
+				await db.destroy();
+				await removeIfExists(dbPath);
+			}
+		});
+
+		it('keeps an anchor-referenced pending row of that same shape when no dedupe-cap event is recorded (regression guard)', async () => {
+			// An archive with no recorded cap events must behave exactly as
+			// before this filter existed — pins the `cappedShapeKeys.size
+			// === 0` short-circuit.
+			const dbPath = path.resolve(
+				workingDir,
+				'pending-strict-no-cap-events-unaffected.sqlite',
+			);
+			await removeIfExists(dbPath);
+			const db = await Database.connect({ filename: dbPath });
+			try {
+				await db.updatePage(
+					{
+						...makePage('http://localhost/parent'),
+						anchorList: [
+							{
+								href: parseUrl('http://localhost/news/date/2024/')!,
+								textContent: '',
+								isExternal: false,
+							},
+						],
+					},
+					true,
+					true,
+				);
+
+				const { pending } = await db.getCrawlingState();
+				expect(pending).toContain('http://localhost/news/date/2024/');
+			} finally {
+				await db.destroy();
+				await removeIfExists(dbPath);
+			}
+		});
+	});
+
 	describe('pendingMetadataOnly (#369)', () => {
 		it('includes a non-recursive internal anchor discovery', async () => {
 			// The exact #369 scenario: a `--list`/non-recursive crawl discovers

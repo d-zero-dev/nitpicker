@@ -1010,6 +1010,13 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 *   that a final attempt which is both exhausted AND made no progress
 	 *   reports as `'exhausted'` — the more actionable of the two (it tells
 	 *   the operator the budget, not just that this one attempt stalled).
+	 *   `getCrawlingState()`'s "Confirmed same-cluster trap exclusion"
+	 *   filter (issue #350) keeps a `--dedupe-cap`-confirmed shape's own
+	 *   never-scraped descendants out of `pending` in the first place, so
+	 *   `pending` genuinely converging to 0 is no longer blocked by that
+	 *   shape — a `'no-progress'` or `'exhausted'` result here now points
+	 *   at a real, currently-unresolvable fetch failure (network/host),
+	 *   not at a same-cluster trap the cap already confirmed.
 	 *
 	 * Each retry attempt re-reads `getCrawlingState()` and
 	 * `getResourceUrlList()` in full — the same cost `retryFailed`/`resume`/
