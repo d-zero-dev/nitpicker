@@ -4,10 +4,12 @@ import pkg from '../package.json' with { type: 'json' };
 
 import { commandDef as analyzeDef } from './commands/analyze-def.js';
 import { commandDef as cacheDef } from './commands/cache-def.js';
+import { commandDef as concatDef } from './commands/concat-def.js';
 import { commandDef as crawlDef } from './commands/crawl-def.js';
 import { commandDef as pipelineDef } from './commands/pipeline-def.js';
 import { commandDef as queryDef } from './commands/query-def.js';
 import { commandDef as reportDef } from './commands/report-def.js';
+import { commandDef as splitDef } from './commands/split-def.js';
 import { commandDef as viewerBuildDef } from './commands/viewer-build-def.js';
 import { commandDef as viewerDef } from './commands/viewer-def.js';
 import { ExitCode } from './exit-code.js';
@@ -30,6 +32,8 @@ const cli = parseCli({
 		viewer: viewerDef,
 		'viewer-build': viewerBuildDef,
 		cache: cacheDef,
+		concat: concatDef,
+		split: splitDef,
 	},
 	onError: () => true,
 });
@@ -41,7 +45,7 @@ try {
 	// command's `--help`), but the implementations pull in the bulk of this
 	// CLI's dependency tree (puppeteer, every `@nitpicker/analyze-*` plugin,
 	// the Google Sheets auth stack, the React/jsdom-backed viewer server) —
-	// loading all eight unconditionally on every invocation added several
+	// loading all ten unconditionally on every invocation added several
 	// seconds before the first byte of output, regardless of which single
 	// command was actually run.
 	switch (cli.command) {
@@ -83,6 +87,16 @@ try {
 		case 'cache': {
 			const { cache } = await import('./commands/cache.js');
 			await cache(cli.args, cli.flags);
+			break;
+		}
+		case 'concat': {
+			const { concat } = await import('./commands/concat.js');
+			await concat(cli.args, cli.flags);
+			break;
+		}
+		case 'split': {
+			const { split } = await import('./commands/split.js');
+			await split(cli.args, cli.flags);
 			break;
 		}
 	}

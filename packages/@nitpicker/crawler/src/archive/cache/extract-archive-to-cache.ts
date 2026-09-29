@@ -102,6 +102,11 @@ const inFlightByCacheDir = new Map<string, Promise<void>>();
  *   first call actually arrives. Only the first concurrent caller for a
  *   given `cacheDir` sees callbacks; same-`cacheDir` callers deduped
  *   through {@link inFlightByCacheDir} just await the shared promise.
+ * @param onLog - Forwarded to the cache-miss writer connection
+ *   (`runMigrationsOnCacheDir`'s `Database.connect`) so a legacy archive's
+ *   self-healing schema migrations do not fall back to a bare
+ *   `console.error` mid-redraw of a caller's display (issue #294). Omit for
+ *   that fallback — see `Archive.openCached`'s own `onLog` doc.
  * @returns Resolves once `cacheDir` is ready to be opened read-only.
  */
 export async function extractArchiveToCache(
@@ -110,6 +115,7 @@ export async function extractArchiveToCache(
 	cacheDir: string,
 	cacheKey: string,
 	onExtractProgress?: (readBytes: number, totalBytes: number) => void,
+	onLog?: (message: string) => void,
 ): Promise<void> {
 	if (await isCacheDirReady(cacheDir)) {
 		return;
@@ -126,6 +132,7 @@ export async function extractArchiveToCache(
 		cacheDir,
 		cacheKey,
 		onExtractProgress,
+		onLog,
 	).finally(() => {
 		inFlightByCacheDir.delete(cacheDir);
 	});
@@ -142,6 +149,7 @@ export async function extractArchiveToCache(
  * @param cacheDir - Absolute path the extracted contents should end up at.
  * @param cacheKey - Pre-extraction cache key, re-verified post-extraction.
  * @param onExtractProgress - See {@link extractArchiveToCache}.
+ * @param onLog - See {@link extractArchiveToCache}.
  */
 async function runExtraction(
 	archivePath: string,
@@ -149,6 +157,7 @@ async function runExtraction(
 	cacheDir: string,
 	cacheKey: string,
 	onExtractProgress?: (readBytes: number, totalBytes: number) => void,
+	onLog?: (message: string) => void,
 ): Promise<void> {
 	await fs.mkdir(cacheRoot, { recursive: true });
 
@@ -204,7 +213,7 @@ async function runExtraction(
 		// cache entry so the next caller does not get stuck on a
 		// "ready"-marked but broken cache.
 		try {
-			await runMigrationsOnCacheDir(cacheDir);
+			await runMigrationsOnCacheDir(cacheDir, onLog);
 		} catch (error) {
 			await fs.rm(cacheDir, { recursive: true, force: true });
 			throw error;
@@ -251,13 +260,17 @@ async function acquireLockWithPeerWait(cacheDir: string): Promise<() => Promise<
  * `Archive.connect` read-only open never needs to mutate the cache dir
  * (and never silently misses a newly-added column).
  * @param cacheDir - Absolute path to the freshly-extracted cache dir.
+ * @param onLog - See {@link extractArchiveToCache}.
  */
-async function runMigrationsOnCacheDir(cacheDir: string): Promise<void> {
+async function runMigrationsOnCacheDir(
+	cacheDir: string,
+	onLog?: (message: string) => void,
+): Promise<void> {
 	const dbPath = path.join(cacheDir, 'db.sqlite');
 	if (!(await fileExists(dbPath))) {
 		throw new Error(`Cache directory does not contain db.sqlite: ${cacheDir}`);
 	}
-	const db = await Database.connect({ filename: dbPath, readOnly: false });
+	const db = await Database.connect({ filename: dbPath, readOnly: false, onLog });
 	try {
 		// `Database.connect` ran migrations during init. Closing here
 		// flushes WAL + drops the handle so the read-only re-open in

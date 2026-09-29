@@ -116,3 +116,34 @@ export type {
 	TemplateClusterLandmarkType,
 	TemplateClusterReason,
 } from './archive/db-ops/analysis/types.js';
+
+// Output-path resolution and scope-map construction, needed by CLI commands
+// that produce a NEW `.nitpicker` archive from existing ones (`concat` /
+// `split`) rather than crawling — same normalization `crawl --output` and
+// `pipeline` already apply, and the same hostname-indexed scope shape
+// `findScopeEntry` consumes.
+export { resolveOutputPath } from './resolve-output-path.js';
+export { buildScopeMap } from './crawler/build-scope-map.js';
+
+// Archive concat / split: merges two or more `.nitpicker` archives into one
+// (roots union, richest-observation-wins per URL), or extracts the subset
+// of one archive within a given scope into a new archive (out-of-scope
+// pages referenced from kept pages become external stubs). Both are
+// offline (no network I/O) and re-derive `is_external`/`is_target` against
+// the output's scope — see `archive/transfer/` for the shared primitives.
+export type {
+	ConcatArchivesResult,
+	SplitArchiveResult,
+	TransferCallbacks,
+	TransferPhase,
+	TransferSourceResult,
+} from './archive/transfer/types.js';
+export {
+	ArchiveConfigConflictError,
+	TransferIntegrityError,
+} from './archive/transfer/types.js';
+export { concatArchives } from './archive/transfer/concat-archives.js';
+export { splitArchive } from './archive/transfer/split-archive.js';
+export { CONCAT_SOURCE_TRANSFER_PHASES } from './concat-source-transfer-phases.js';
+export { SPLIT_SOURCE_TRANSFER_PHASES } from './split-source-transfer-phases.js';
+export { TRANSFER_POST_PHASES } from './transfer-post-phases.js';
