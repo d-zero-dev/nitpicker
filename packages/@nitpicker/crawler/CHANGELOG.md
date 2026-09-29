@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.22.2](https://github.com/d-zero-dev/nitpicker/compare/v0.22.1...v0.22.2) (2026-09-29)
+
+### Bug Fixes
+
+- **crawler:** exclude confirmed dedupe-cap shapes from pending state ([26bcf45](https://github.com/d-zero-dev/nitpicker/commit/26bcf457d998ccdec9ab3a1102a526bad494067c))
+
 # [0.22.0](https://github.com/d-zero-dev/nitpicker/compare/v0.21.0...v0.22.0) (2026-09-17)
 
 ### Bug Fixes
