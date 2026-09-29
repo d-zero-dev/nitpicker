@@ -199,6 +199,10 @@
 		"vtds",
 
 		// crawl auto-retry (issue #350)
-		"unscraped"
+		"unscraped",
+
+		// archive concat/split transfer engine (temp table/alias naming: xfer_*, XFER_*)
+		"xfer",
+		"unioned"
 	]
 }

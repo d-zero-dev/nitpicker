@@ -29,6 +29,8 @@ npx @nitpicker/cli viewer <file-or-stub-dir>           # ローカルビュー�
 npx @nitpicker/cli viewer-build <archive> [--force]    # viewer read model を明示的に(再)ビルド
 npx @nitpicker/cli cache list [--json]                 # on-disk キャッシュ一覧（tar展開キャッシュ＋analyze table、サイズ・最終更新日時）
 npx @nitpicker/cli cache clear [archive]               # on-disk キャッシュ全削除、または指定アーカイブのみ削除
+npx @nitpicker/cli concat <a> <b> [...] -o <out>       # 複数アーカイブを結合（roots 和集合、同一 URL は最も情報量の多い観測を採用。再クロール・再昇格はしない）
+npx @nitpicker/cli split <archive> <URL> [...] -o <out> # 指定スコープ配下だけを新アーカイブに抽出（範囲外の被参照ページは external stub 化）
 ```
 
 フラグの相互排他・挙動の詳細は `--help` と各コマンド実装（`packages/@nitpicker/cli/src/commands/`）の JSDoc を参照。

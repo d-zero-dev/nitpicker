@@ -127,6 +127,7 @@ jobs:
                 crawl-write-entity-tables.e2e.ts,
                 network-outage-gate.e2e.ts,
                 crawl-write-console-logs.e2e.ts,
+                concat.e2e.ts,
               ]
           - id: append-pipeline
             files:
@@ -140,6 +141,7 @@ jobs:
                 cli-version.e2e.ts,
                 viewer-migrated-archive.e2e.ts,
                 dedupe-cap.e2e.ts,
+                split.e2e.ts,
               ]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
