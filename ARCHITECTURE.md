@@ -322,7 +322,7 @@ Astro / Next.js / Vue / Nuxt / Svelte / SvelteKit / Remix / Gatsby / Angular 等
 3. スコープ判定は `crawler/build-scope-map.ts`（`findScopeEntry` の入力を作る共有ヘルパー、`--append` と共用）。設定合成は `merge-archive-configs.ts`（`disableQueries`/`fromList` 不一致は `ArchiveConfigConflictError`）/ `build-split-config.ts`
 4. 列挙的な SQL 生成は `list-transfer-columns.ts`（`pragma_table_info` 由来、`SELECT *` 禁止 — 列順がアーカイブ間で異なりうるため）+ `quote-transfer-identifier.ts`（`order` 等の予約語衝突対策）を土台にする。辞書テーブルの id remap は `temp.xfer_map_<table>`、`content_items`/`resource_items` の行アクションは `temp.xfer_ci_plan`/`xfer_ri_plan`（`transfer-action.ts` の `full`/`stub`/`replace`/`skip`）
 5. 出力側の read model 再構築は `query/src/viewer-read-model/worker/build-viewer-read-model-in-worker.ts` を **無条件**呼び出し（`ensureViewerReadModel` は使わない — コピー元と同じ schema version を持つ read model を誤って現在有効と判定しかねないため）
-6. テスト: `crawler/src/archive/transfer/*.spec.ts`（各ステップの単体・`transfer-archive-rows.spec.ts`/`concat-archives.spec.ts`/`split-archive.spec.ts` が end-to-end 相当）、`cli/src/transfer/*.spec.ts`、E2E は `test-server/src/__tests__/e2e/concat.e2e.ts` / `split.e2e.ts`（既存 `/scope/blog|admin/` フィクスチャを再利用、CI shard は `retry-exclude` / `append-pipeline`）
+6. テスト: `crawler/src/archive/transfer/*.spec.ts`（各ステップの単体・`transfer-archive-rows.spec.ts`/`concat-archives.spec.ts`/`split-archive.spec.ts` が end-to-end 相当）、`cli/src/transfer/*.spec.ts`、E2E は `test-server/src/__tests__/e2e/concat.e2e.ts` / `split.e2e.ts`（既存 `/scope/blog|admin/` フィクスチャを再利用、CI shard は両方とも `retry-exclude`）
 
 ## テストと CLI 契約
 

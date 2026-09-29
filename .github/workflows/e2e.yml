@@ -116,6 +116,12 @@ jobs:
                 query.e2e.ts,
               ]
           - id: retry-exclude
+            # concat.e2e.ts and split.e2e.ts both landed here (not split
+            # across retry-exclude/append-pipeline) after a real CI run
+            # showed append-pipeline — already the heavier of the two
+            # baseline shards via dedupe-cap.e2e.ts — blew past the
+            # 15-minute timeout with split.e2e.ts added, while retry-exclude
+            # finished concat.e2e.ts with ~5 min to spare (9m47s/15m).
             files:
               [
                 retry-failed.e2e.ts,
@@ -128,6 +134,7 @@ jobs:
                 network-outage-gate.e2e.ts,
                 crawl-write-console-logs.e2e.ts,
                 concat.e2e.ts,
+                split.e2e.ts,
               ]
           - id: append-pipeline
             files:
@@ -141,7 +148,6 @@ jobs:
                 cli-version.e2e.ts,
                 viewer-migrated-archive.e2e.ts,
                 dedupe-cap.e2e.ts,
-                split.e2e.ts,
               ]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
