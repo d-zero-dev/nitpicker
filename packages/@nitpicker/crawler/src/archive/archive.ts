@@ -931,6 +931,13 @@ export default class Archive extends ArchiveAccessor {
 	 * @param namespace - Optional namespace forwarded to {@link ArchiveAccessor}.
 	 * @param onExtractProgress - Forwarded to {@link extractArchiveToCache} —
 	 *   see that function's docs for the cache-hit/miss contract.
+	 * @param onLog - Forwarded to the cache-miss migration pass (issue #294)
+	 *   — a legacy archive's self-healing schema migrations otherwise fall
+	 *   back to a bare `console.error`, which can print mid-redraw of a
+	 *   caller's `Lanes`/`TaskList` display. Omit for that fallback
+	 *   (existing callers — the viewer, MCP, query CLI — do not pass this;
+	 *   only callers driving a `TaskList` row for the extraction, like
+	 *   `concat`/`split`, need to).
 	 * @returns A read-only {@link ArchiveAccessor} backed by the cache directory.
 	 * @example
 	 * ```ts
@@ -943,6 +950,7 @@ export default class Archive extends ArchiveAccessor {
 		filePath: string,
 		namespace: string | null = null,
 		onExtractProgress?: (readBytes: number, totalBytes: number) => void,
+		onLog?: (message: string) => void,
 	): Promise<ArchiveAccessor> {
 		const cacheRoot = getArchiveCacheRoot();
 		const cacheKey = await computeArchiveCacheKey(filePath);
@@ -954,6 +962,7 @@ export default class Archive extends ArchiveAccessor {
 			cacheDir,
 			cacheKey,
 			onExtractProgress,
+			onLog,
 		);
 		return await Archive.connect(cacheDir, namespace);
 	}

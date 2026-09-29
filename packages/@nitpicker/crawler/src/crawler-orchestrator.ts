@@ -32,6 +32,7 @@ import Archive from './archive/archive.js';
 import { copyFileWithProgress } from './archive/filesystem/copy-file-with-progress.js';
 import { REQUIRED_FORMAT_VERSION } from './archive/meta/assert-compatible-version.js';
 import { computeAutoRetryBackoffDelayMs } from './compute-auto-retry-backoff-delay.js';
+import { buildScopeMap } from './crawler/build-scope-map.js';
 import { clearDestinationCache } from './crawler/clear-destination-cache.js';
 import { clearDnsBurnedHostCache } from './crawler/clear-dns-burned-host-cache.js';
 import Crawler from './crawler/crawler.js';
@@ -1379,13 +1380,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			try {
 				await archive.updateConfig(mergedConfig);
 
-				const scopeMap = new Map<string, ExURL[]>();
-				for (const raw of mergedRoots) {
-					const parsed = parseUrl(raw, archived);
-					if (!parsed) continue;
-					const existing = scopeMap.get(parsed.hostname) ?? [];
-					scopeMap.set(parsed.hostname, [...existing, parsed]);
-				}
+				const scopeMap = buildScopeMap(mergedRoots, archived);
 				setupProgress?.onPhase?.(PHASE_REPROMOTING);
 				await archive.repromoteExternalPages(
 					scopeMap,
@@ -2334,13 +2329,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		novelUrls: ExURL[];
 	}> {
 		const parsedAll = sortUrl(rawUrls, archived);
-		const scopeMap = new Map<string, ExURL[]>();
-		for (const raw of archived.roots) {
-			const parsed = parseUrl(raw, archived);
-			if (!parsed) continue;
-			const existing = scopeMap.get(parsed.hostname) ?? [];
-			scopeMap.set(parsed.hostname, [...existing, parsed]);
-		}
+		const scopeMap = buildScopeMap(archived.roots, archived);
 		const inScope: ExURL[] = [];
 		let outOfScope = 0;
 		for (const url of parsedAll) {

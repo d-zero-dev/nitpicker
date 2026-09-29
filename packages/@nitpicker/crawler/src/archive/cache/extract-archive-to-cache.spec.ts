@@ -158,6 +158,28 @@ describe('extractArchiveToCache', () => {
 		expect(calls).toEqual([]);
 	});
 
+	it('accepts an onLog callback on a cold miss without throwing, even when no migration fires it (issue #294)', async () => {
+		// A fresh archive never needs a self-healing schema migration, so
+		// `onLog` genuinely is never called here — this test only proves
+		// the parameter threads through `runMigrationsOnCacheDir` ->
+		// `Database.connect` without breaking the extraction, matching the
+		// existing legacy-migration fixtures' inability to easily produce a
+		// pre-0.13 archive through this same real-crawl-write path.
+		const archivePath = path.join(baseDir, 'on-log.nitpicker');
+		await buildFakeArchive(archivePath, 'on-log');
+		const cacheRoot = path.join(baseDir, 'cache');
+		const cacheKey = await computeArchiveCacheKey(archivePath);
+		const cacheDir = path.join(cacheRoot, `${cacheKey}-on-log`);
+		const onLog = (): void => {
+			throw new Error('onLog must not be called for an archive with nothing to migrate');
+		};
+
+		await expect(
+			extractArchiveToCache(archivePath, cacheRoot, cacheDir, cacheKey, undefined, onLog),
+		).resolves.toBeUndefined();
+		await expect(fs.access(path.join(cacheDir, 'db.sqlite'))).resolves.toBeUndefined();
+	});
+
 	it('short-circuits when the cache is already populated (cache hit skips untar entirely)', async () => {
 		const archivePath = path.join(baseDir, 'b.nitpicker');
 		await buildFakeArchive(archivePath, 'original');
