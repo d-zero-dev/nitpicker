@@ -41,6 +41,10 @@ type ReportFlags = InferFlags<typeof commandDef.flags>;
  * sheet generation to Page List/Links/Violations/Images (see
  * `@nitpicker/report-google-sheets`'s `report()` docs).
  *
+ * `--sheet <url>` accepts a Spreadsheet URL, or a Drive folder URL — the
+ * latter creates a new Spreadsheet in that folder titled with the archive's
+ * file name (see `@nitpicker/report-google-sheets`'s `report()` docs).
+ *
  * `--sheets <name,...>` (Google Sheets only) generates exactly the named
  * sheets without `--all`'s full set or the interactive picker — see
  * `parseSheetNames` for the accepted aliases. Takes precedence over `--all`.

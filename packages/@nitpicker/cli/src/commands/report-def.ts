@@ -18,7 +18,7 @@ export const commandDef = {
 			shortFlag: 'S',
 			type: 'string',
 			valueName: 'URL',
-			desc: 'Google Sheets URL',
+			desc: 'Google Sheets URL, or a Drive folder URL to create a new Spreadsheet titled with the archive file name',
 		},
 		html: {
 			shortFlag: 'H',

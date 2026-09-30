@@ -203,7 +203,7 @@ export const commandDef = {
 			type: 'string',
 			valueName: 'URL',
 			group: 'Report options',
-			desc: 'Google Sheets URL (enables the report step)',
+			desc: 'Google Sheets URL, or a Drive folder URL to create a new Spreadsheet (enables the report step)',
 		},
 		credentials: {
 			shortFlag: 'C',
