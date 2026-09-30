@@ -278,3 +278,134 @@ describe('createPageClusterFactory — 途中で打ち切ったイテレーシ�
 		expect(getYieldedUrls()).toEqual(['https://example.com/a', 'https://example.com/b']);
 	});
 });
+
+describe('createPageClusterFactory — 本文要素（contentRoot）のヒント', () => {
+	let archive: InstanceType<typeof Archive>;
+	const workingDir3 = path.resolve(
+		__dirname,
+		'__test_fixtures_create_page_cluster_factory_content_root__',
+	);
+	const archiveFilePath = path.resolve(workingDir3, 'content-root-test.nitpicker');
+
+	/**
+	 * Adds one internal HTML page, optionally with a detected main-content
+	 * element (`main`), the way the crawler records it.
+	 * @param pagePath
+	 * @param main
+	 */
+	async function addPage(
+		pagePath: string,
+		main: {
+			nodeName: string;
+			id: string | null;
+			classList: string[];
+			role: string | null;
+		} | null,
+	) {
+		await archive.setPage({
+			url: parseUrl(`https://example.com${pagePath}`)!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html><body><div id="main"><p>x</p></div></body></html>',
+			meta: baseMeta,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+			mainContents: {
+				title: null,
+				main: main && { ...main, selector: 'div#main' },
+				wordCount: 0,
+				bodyWordCount: 0,
+				headings: [],
+				images: [],
+				tables: [],
+				buttons: [],
+				iframes: [],
+				videos: [],
+				audios: [],
+				canvases: [],
+			},
+		} as never);
+	}
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir3, { recursive: true });
+
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir3 });
+
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		await addPage('/with-root', {
+			nodeName: 'DIV',
+			id: 'main',
+			classList: ['spc'],
+			role: null,
+		});
+		await addPage('/without-root', null);
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir3, { recursive: true, force: true });
+	});
+
+	it('クローラが検出した本文要素を contentRoot として渡す（nodeName は小文字、classList はそのまま）', async () => {
+		const pages = await archive.getPages();
+		const { factory } = createPageClusterFactory(pages, new Map());
+
+		const signals = [];
+		for await (const signal of factory()) {
+			signals.push(signal);
+		}
+
+		const withRoot = signals.find((s) => s.paths[0] === 'with-root');
+		expect(withRoot!.contentRoot).toStrictEqual({
+			tagName: 'div',
+			id: 'main',
+			classList: ['spc'],
+		});
+	});
+
+	it('本文要素が検出されていないページには contentRoot キー自体を付けない', async () => {
+		const pages = await archive.getPages();
+		const { factory } = createPageClusterFactory(pages, new Map());
+
+		const signals = [];
+		for await (const signal of factory()) {
+			signals.push(signal);
+		}
+
+		const withoutRoot = signals.find((s) => s.paths[0] === 'without-root');
+		expect(withoutRoot).toBeDefined();
+		expect(withoutRoot).not.toHaveProperty('contentRoot');
+	});
+});
