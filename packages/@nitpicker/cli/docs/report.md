@@ -18,6 +18,22 @@ npx @nitpicker/cli report ./site.nitpicker --html --output ./site.html
 
 非TTY環境では対話選択で停止しないように、すべてのシート生成と詳細ログが有効になります。
 
+## Driveフォルダへの新規作成
+
+`--sheet` にDriveフォルダURL（`https://drive.google.com/drive/folders/<id>`）を渡すと、
+そのフォルダ内に新しいスプレッドシートを作成し、そこへレポートを書き込みます。
+ファイル名はアーカイブのファイル名から `.nitpicker` を除いたものです
+（`./example.com.nitpicker` → `example.com`）。作成したURLは実行ログに表示されます。
+
+```sh
+npx @nitpicker/cli report ./example.com.nitpicker --sheet https://drive.google.com/drive/folders/<id> --all
+```
+
+- 実行のたびに新規作成します。同名ファイルの検索・再利用はしません
+- Drive scope（`drive.file`）を追加で要求します。以前にスプレッドシートURLだけで実行して
+  `token.json` が残っている場合は、削除して再認証してください
+- 作成はシート選択の後に行うため、対話選択のキャンセルでは空のファイルが残りません
+
 ## 静的HTMLレポート
 
 `--html` はGoogle認証を行わず、viewerと同じサマリ表示と内部ページ一覧を
@@ -69,7 +85,7 @@ NODE_OPTIONS=--max-old-space-size=8192 npx @nitpicker/cli report ./site.nitpicke
 
 | オプション            | 型      | 説明                                                 |
 | --------------------- | ------- | ---------------------------------------------------- |
-| `--sheet`, `-S`       | string  | 出力先Google Sheets URL                              |
+| `--sheet`, `-S`       | string  | 出力先Google Sheets URL、またはDriveフォルダURL      |
 | `--html`, `-H`        | boolean | 自己完結した静的HTMLを生成                           |
 | `--output`, `-o`      | string  | HTML出力先                                           |
 | `--html-dirs`         | string  | HTMLの対象ディレクトリ接頭辞（カンマ区切り）         |

@@ -279,6 +279,7 @@ Astro / Next.js / Vue / Nuxt / Svelte / SvelteKit / Remix / Gatsby / Angular 等
 3. `open-report-archive.ts`（`@nitpicker/query` の `ArchiveManager` 経由で read-only accessor を得る。stub/live crawl ディレクトリは明示的に reject）
 4. `sheets/create-sheets.ts`（Phase 1 作成 → Phase 1.5 セル予算の事前警告 → Phase 2 優先順位順の逐次データ投入 → Phase 3 書式適用）と `sheets/estimate-cell-budget.ts`（10M セル上限に対する配分計算）
 5. 優先順位・シート選択の配線: `report.ts` の `SHEET_PRIORITY_ORDER`（固定順 = セル予算優先度。ユーザーの選択クリック順には依存しない）
+6. 出力先スプレッドシートの解決: `--sheet` が Drive フォルダ URL なら `resolve-spreadsheet-url.ts` が `@d-zero/google-sheets` の `createSpreadsheet` で新規作成する（タイトルはアーカイブのファイル名から `.nitpicker` を除いたもの）。Drive scope（`drive.file`）はフォルダ URL のときだけ `report.ts` が要求し（判定は `is-drive-folder-url.ts`）、既存スプレッドシート URL の利用者にキャッシュ済み `token.json` の再認可を強いない。作成はシート選択の後・`createSheets` の直前に行い、キャンセルや archive/config エラーで空ファイルを残さない。`createSpreadsheet` はリトライも同名検索もしないため、再実行は毎回新規ファイルになる
 
 ### 静的HTMLレポートの変更
 
