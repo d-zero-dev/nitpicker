@@ -42,9 +42,22 @@ vi.mock('@nitpicker/query', async (importOriginal) => {
 
 // `Sheets.onLog` (rate-limit backoff routing) is wired inside `createSheets`
 // now, not here — mocked away below, so a plain stub class is enough.
-vi.mock('@d-zero/google-sheets', () => ({
-	Sheets: class {},
+const { mockCreateSpreadsheet } = vi.hoisted(() => ({
+	mockCreateSpreadsheet: vi.fn(),
 }));
+
+// `parseGoogleUrl` stays real so the folder-vs-Spreadsheet branching under test
+// is the library's own; only the Drive API call (`createSpreadsheet`) is stubbed.
+vi.mock('@d-zero/google-sheets', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('@d-zero/google-sheets')>();
+	return {
+		parseGoogleUrl: actual.parseGoogleUrl,
+		createSpreadsheet: mockCreateSpreadsheet,
+		Sheets: class {
+			constructor(readonly url: string) {}
+		},
+	};
+});
 
 const { mockAsyncDispose } = vi.hoisted(() => ({
 	mockAsyncDispose: vi.fn(),
@@ -336,6 +349,101 @@ describe('report', () => {
 				'Links',
 				'Resources',
 			]);
+		});
+	});
+
+	describe('Drive folder URL', () => {
+		const folderParams = {
+			...baseParams,
+			filePath: './out/example.com.nitpicker',
+			sheetUrl: 'https://drive.google.com/drive/folders/folder123',
+			all: true,
+		};
+
+		beforeEach(() => {
+			mockCreateSpreadsheet.mockReset();
+			mockCreateSpreadsheet.mockResolvedValue({
+				id: 'new-id',
+				url: 'https://docs.google.com/spreadsheets/d/new-id/edit',
+			});
+		});
+
+		it('requests the Drive scope only for a folder URL', async () => {
+			const { authentication } = await import('@d-zero/google-auth');
+
+			await report(folderParams);
+
+			expect(vi.mocked(authentication).mock.calls[0]?.[1]).toStrictEqual([
+				'https://www.googleapis.com/auth/spreadsheets',
+				'https://www.googleapis.com/auth/drive.file',
+			]);
+		});
+
+		it('keeps the Spreadsheets-only scope for a Spreadsheet URL', async () => {
+			const { authentication } = await import('@d-zero/google-auth');
+
+			await report({ ...baseParams, all: true });
+
+			expect(vi.mocked(authentication).mock.calls[0]?.[1]).toStrictEqual([
+				'https://www.googleapis.com/auth/spreadsheets',
+			]);
+			expect(mockCreateSpreadsheet).not.toHaveBeenCalled();
+		});
+
+		it('creates a Spreadsheet titled with the archive file name (no extension) and reports into it', async () => {
+			const { createSheets } = await import('./sheets/create-sheets.js');
+
+			await report(folderParams);
+
+			expect(mockCreateSpreadsheet).toHaveBeenCalledWith(
+				folderParams.sheetUrl,
+				'example.com',
+				expect.anything(),
+			);
+			const call = vi.mocked(createSheets).mock.calls[0]?.[0];
+			expect(call?.sheets).toHaveProperty(
+				'url',
+				'https://docs.google.com/spreadsheets/d/new-id/edit',
+			);
+		});
+
+		it('writes into the given Spreadsheet URL as is when it is not a folder URL', async () => {
+			const { createSheets } = await import('./sheets/create-sheets.js');
+
+			await report({ ...baseParams, all: true });
+
+			const call = vi.mocked(createSheets).mock.calls[0]?.[0];
+			expect(call?.sheets).toHaveProperty('url', baseParams.sheetUrl);
+		});
+
+		it('rejects without generating any sheet when the Spreadsheet cannot be created', async () => {
+			const { createSheets } = await import('./sheets/create-sheets.js');
+			mockCreateSpreadsheet.mockRejectedValue(new Error('403'));
+
+			await expect(report(folderParams)).rejects.toThrow(
+				/Failed to create a Spreadsheet/,
+			);
+			expect(createSheets).not.toHaveBeenCalled();
+		});
+
+		it('returns the created Spreadsheet URL even when silent', async () => {
+			const url = await report({ ...folderParams, silent: true });
+
+			expect(url).toBe('https://docs.google.com/spreadsheets/d/new-id/edit');
+		});
+
+		it('returns the given Spreadsheet URL unchanged for a Spreadsheet URL', async () => {
+			const url = await report({ ...baseParams, all: true });
+
+			expect(url).toBe(baseParams.sheetUrl);
+		});
+
+		it('does not create a Spreadsheet when the sheet prompt is cancelled', async () => {
+			vi.spyOn(enquirer, 'prompt').mockResolvedValue(undefined as never);
+
+			await report({ ...folderParams, all: false });
+
+			expect(mockCreateSpreadsheet).not.toHaveBeenCalled();
 		});
 	});
 });

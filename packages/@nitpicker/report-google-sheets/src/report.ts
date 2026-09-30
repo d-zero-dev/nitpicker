@@ -17,9 +17,11 @@ import { createResourcesRelationalTable } from './data/create-resources-relation
 import { createResources } from './data/create-resources.js';
 import { createViolations } from './data/create-violations.js';
 import { log } from './debug.js';
+import { isDriveFolderUrl } from './is-drive-folder-url.js';
 import { loadConfig } from './load-config.js';
 import { openReportArchive } from './open-report-archive.js';
 import { getPluginReports } from './reports/get-plugin-reports.js';
+import { resolveSpreadsheetUrl } from './resolve-spreadsheet-url.js';
 import { createSheets } from './sheets/create-sheets.js';
 
 /**
@@ -76,7 +78,13 @@ const URL_FILTERABLE_SHEETS: readonly SheetName[] = [
 export interface ReportParams {
 	/** Path to the `.nitpicker` archive file. */
 	readonly filePath: string;
-	/** URL of the target Google Spreadsheet. */
+	/**
+	 * URL of the target Google Spreadsheet, or of a Drive folder
+	 * (`https://drive.google.com/drive/folders/<id>`). A folder URL creates a new
+	 * Spreadsheet in it, titled with the archive's file name minus `.nitpicker`, and
+	 * reports into that; this additionally requests the Drive OAuth scope, so a token
+	 * cached from an earlier Spreadsheet-only run must be deleted to re-authorize.
+	 */
 	readonly sheetUrl: string;
 	/** Path to the OAuth2 credentials JSON file. */
 	readonly credentialFilePath: string;
@@ -155,6 +163,7 @@ export interface ReportParams {
  * `TaskList` display) has finished, mirroring this file's `console.log`
  * calls, which likewise only ever run outside that active display window.
  * @param params - レポート生成に必要なパラメータ
+ * @returns レポートを書き込んだスプレッドシートの URL。`sheetUrl` が Drive フォルダ URL のときは新規作成したものの URL（`silent` でも呼び出し側が知れるようにするため）、それ以外は `sheetUrl` そのまま。対話選択がキャンセルされたときは `undefined`
  * @example
  * ```ts
  * await report({
@@ -191,12 +200,25 @@ export async function report(params: ReportParams) {
 
 	const warnings: string[] = [];
 
-	const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'] as const;
+	// The Drive scope is requested only when a Spreadsheet has to be created, so
+	// users writing into an existing Spreadsheet keep their cached token as is.
+	const createsSpreadsheet = isDriveFolderUrl(sheetUrl);
+	const SCOPES = createsSpreadsheet
+		? ([
+				'https://www.googleapis.com/auth/spreadsheets',
+				'https://www.googleapis.com/auth/drive.file',
+			] as const)
+		: (['https://www.googleapis.com/auth/spreadsheets'] as const);
 	log('Authenticating');
 	const auth = await authentication(credentialFilePath, SCOPES, {
 		tokenFilePath: 'token.json',
 	});
 	log('Authentication succeeded');
+
+	// An existing Spreadsheet URL is validated by the `Sheets` constructor, so it
+	// is built up front to keep a malformed `--sheet` failing before the archive
+	// extraction and the interactive prompt. A folder URL has no Spreadsheet yet.
+	const existingSheets = createsSpreadsheet ? undefined : new Sheets(sheetUrl, auth);
 
 	log('Opening archive: %s', filePath);
 	await using archiveHandle = await openReportArchive(filePath, onExtractProgress);
@@ -221,10 +243,6 @@ export async function report(params: ReportParams) {
 	log('Loading plugin reports');
 	const reports = await getPluginReports(accessor);
 	log('Plugin reports loaded: %d', reports.length);
-
-	const sheets = new Sheets(sheetUrl, auth);
-
-	log('Reporting starts');
 
 	const availableSheetNames =
 		normalizedUrls === undefined ? SHEET_PRIORITY_ORDER : URL_FILTERABLE_SHEETS;
@@ -327,7 +345,24 @@ export async function report(params: ReportParams) {
 		}
 	}
 
+	// Created only now — after archive/config/selection errors and prompt
+	// cancellation can no longer happen — so a failed or aborted run does not
+	// leave an empty Spreadsheet behind in the Drive folder.
+	const targetUrl = await resolveSpreadsheetUrl({
+		sheetUrl,
+		archiveFilePath: filePath,
+		auth,
+	});
+	const sheets = existingSheets ?? new Sheets(targetUrl, auth);
+	if (createsSpreadsheet) {
+		log('Created Spreadsheet: %s', targetUrl);
+	}
+
 	if (!silent) {
+		if (createsSpreadsheet) {
+			// eslint-disable-next-line no-console
+			console.log(`\nCreated Spreadsheet: ${targetUrl}`);
+		}
 		// eslint-disable-next-line no-console
 		console.log(`\nGenerating ${createSheetList.length} sheet(s)...\n`);
 	}
@@ -355,4 +390,5 @@ export async function report(params: ReportParams) {
 		// eslint-disable-next-line no-console
 		console.log('\nReport complete.');
 	}
+	return targetUrl;
 }
