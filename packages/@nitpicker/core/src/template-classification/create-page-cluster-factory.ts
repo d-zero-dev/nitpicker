@@ -4,6 +4,8 @@ import type {
 } from '@d-zero/page-cluster/resolve-page-cluster-keys';
 import type { Page } from '@nitpicker/crawler';
 
+import { createContentRootHint } from './create-content-root-hint.js';
+
 /**
  * Builds the `PageFactory` that `@d-zero/page-cluster`'s
  * `resolvePageClusterKeys` reads the corpus through, plus a way to read back
@@ -26,6 +28,11 @@ import type { Page } from '@nitpicker/crawler';
  * deterministic per page). Excluding by empty `getHtml()` is also safe,
  * but only because the archive is immutable for the duration of one
  * `analyze()` run — the same page's HTML never changes between calls.
+ *
+ * Each yielded signal carries the page's `paths`, `stylesheetHrefs`, `html`,
+ * `host`, and — when the crawler detected a main-content element for it —
+ * a `contentRoot` hint (see {@link createContentRootHint}) that
+ * `@d-zero/page-cluster` anchors its content-depth cap on.
  *
  * `getYieldedUrls()` reflects the URLs yielded by the **most recently
  * completed** full iteration of the factory's generator, deliberately not a
@@ -95,11 +102,15 @@ async function* yieldPageClusterSignals(
 
 		const url = page.url;
 		yieldedUrls.push(url.href);
+		const contentRoot = createContentRootHint(page);
 		yield {
 			paths: url.paths,
 			stylesheetHrefs: stylesheetsByUrl.get(url.href) ?? [],
 			html,
 			host: url.port ? `${url.hostname}:${url.port}` : url.hostname,
+			// Left off entirely (not `undefined`) for pages with no detected
+			// main content, so the yielded shape carries no undefined-valued key.
+			...(contentRoot ? { contentRoot } : {}),
 		};
 	}
 	onDrained(yieldedUrls);
