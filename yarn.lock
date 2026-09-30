@@ -1259,16 +1259,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/google-sheets@npm:0.11.0":
-  version: 0.11.0
-  resolution: "@d-zero/google-sheets@npm:0.11.0"
+"@d-zero/google-sheets@npm:0.12.0":
+  version: 0.12.0
+  resolution: "@d-zero/google-sheets@npm:0.12.0"
   dependencies:
     "@d-zero/google-auth": "npm:0.7.6"
     "@d-zero/shared": "npm:0.23.0"
     debug: "npm:4.4.3"
     gaxios: "npm:7.1.5"
     googleapis: "npm:173.0.0"
-  checksum: 10c0/53bea9d93f7b4b5ee1155904ae7ace2b1a1edc7c982c01dcee963b46ca0a78be2b59cf383d039689dc823d2333e294f144f6f4c26cf5477f27405f4de841b958
+  checksum: 10c0/4c0b32d4a7e28112e298d58843c3d7cac42728a4a8293cc1f5ddcc8fc21460ec5e99ffc3e9adcb585d0968d3f7f206b190a3a7cc4a7f9be91ee671ba338c3035
   languageName: node
   linkType: hard
 
@@ -3381,7 +3381,7 @@ __metadata:
   dependencies:
     "@d-zero/dealer": "npm:1.14.0"
     "@d-zero/google-auth": "npm:0.7.6"
-    "@d-zero/google-sheets": "npm:0.11.0"
+    "@d-zero/google-sheets": "npm:0.12.0"
     "@d-zero/shared": "npm:0.23.0"
     "@nitpicker/crawler": "npm:0.22.2"
     "@nitpicker/query": "npm:0.22.2"
