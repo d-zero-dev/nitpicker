@@ -440,6 +440,26 @@ h2 {
 	font-size: var(--font-size-lg);
 }
 
+/* An `h2` with a trailing link to the section's full view. The link sits
+   on the heading's baseline rather than below the content, where it reads
+   as one more row of the section instead of a way out of it. The wrapper
+   takes over the `h2`'s block margins. */
+.section-heading {
+	display: block flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+	align-items: baseline;
+	margin-block: 18px 8px;
+}
+
+.section-heading h2 {
+	margin: 0;
+}
+
+.section-heading a {
+	font-size: var(--font-size-sm);
+}
+
 /* View header + description */
 .view-header {
 	margin-block-end: 12px;

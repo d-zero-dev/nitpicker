@@ -57,7 +57,12 @@ export function TechnologyDistributionBars(props: TechnologyDistributionBarsProp
 	}
 	return (
 		<>
-			<h2>{t('views.summary.technologyDistribution')}</h2>
+			<div className="section-heading">
+				<h2>{t('views.summary.technologyDistribution')}</h2>
+				{props.showViewAllLink !== false && (
+					<AppLink to="/technologies">{t('views.summary.viewAllTechnologies')}</AppLink>
+				)}
+			</div>
 			<div className="bars">
 				{technologyDistribution.slice(0, MAX_TECHNOLOGIES_DISPLAYED).map((entry) => (
 					<TechnologyRow
@@ -67,9 +72,6 @@ export function TechnologyDistributionBars(props: TechnologyDistributionBarsProp
 					/>
 				))}
 			</div>
-			{props.showViewAllLink !== false && (
-				<AppLink to="/technologies">{t('views.summary.viewAllTechnologies')}</AppLink>
-			)}
 		</>
 	);
 }
