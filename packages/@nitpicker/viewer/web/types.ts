@@ -1,5 +1,9 @@
 import type { viewerTableFeatures } from './table-features.js';
-import type { ListPagesOptions } from '@nitpicker/query';
+import type {
+	ListPagesOptions,
+	TemplateClusterLandmarkSummary,
+	TemplateClusterSummary,
+} from '@nitpicker/query';
 import type {
 	CellContext as TanstackCellContext,
 	ColumnDef as TanstackColumnDef,
@@ -186,3 +190,65 @@ export type DirectoryTreeSortOrder = 'path' | 'pagesDesc' | 'pagesAsc';
 
 /** Which source `buildClusterHeading` drew a template cluster's heading from. */
 export type ClusterHeadingSource = 'distinctive' | 'common' | 'directory' | 'raw';
+
+/** A landmark type (`header`/`footer`/`nav`/`aside`/`form`/`search`). */
+export type ClusterLandmarkType = TemplateClusterLandmarkSummary['type'];
+
+/** Page-count bucket label used by the template cluster size distribution. */
+export type ClusterSizeBucketKey = 'single' | 'small' | 'medium' | 'large';
+
+/** One bucket of the template cluster size distribution. */
+export interface ClusterSizeBucket {
+	/** Which page-count range this bucket covers (`1` / `2–5` / `6–20` / `21+`). */
+	key: ClusterSizeBucketKey;
+	/** Number of clusters whose `pageCount` falls in the range. */
+	clusterCount: number;
+	/** Sum of `pageCount` over those clusters. */
+	pageCount: number;
+}
+
+/** One landmark type's aggregate across every cluster that carries it. */
+export interface ClusterLandmarkOverview {
+	/** The landmark type this row aggregates. */
+	type: ClusterLandmarkType;
+	/** Number of clusters whose `reason.landmarks` includes this type. */
+	clusterCount: number;
+	/**
+	 * Page-count-weighted mean of `presenceRate` over clusters that carry a
+	 * `reason` (clusters without one have unknown presence and are excluded
+	 * from the denominator), 0–1.
+	 */
+	averagePresenceRate: number;
+}
+
+/** Aggregates shown in the summary panel at the top of the template clusters view. */
+export interface TemplateClusterOverview {
+	/** Total number of clusters. */
+	clusterCount: number;
+	/** Sum of every cluster's `pageCount`. */
+	totalPageCount: number;
+	/** Number of clusters with exactly one page. */
+	singletonClusterCount: number;
+	/** The largest clusters by `pageCount`, descending. */
+	topClusters: TemplateClusterSummary[];
+	/** Size distribution, always four buckets in ascending range order. */
+	sizeBuckets: ClusterSizeBucket[];
+	/** One row per landmark type that at least one cluster carries, in stable type order. */
+	landmarks: ClusterLandmarkOverview[];
+}
+
+/** One cluster's membership in a landmark group. */
+export interface LandmarkClusterGroupEntry {
+	/** The cluster carrying the landmark. */
+	cluster: TemplateClusterSummary;
+	/** This cluster's commonality summary for the group's landmark type. */
+	landmark: TemplateClusterLandmarkSummary;
+}
+
+/** Every cluster carrying one landmark type. */
+export interface LandmarkClusterGroup {
+	/** The landmark type shared by `entries`. */
+	type: ClusterLandmarkType;
+	/** Clusters carrying `type`, sorted by `pageCount` descending. */
+	entries: LandmarkClusterGroupEntry[];
+}

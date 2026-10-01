@@ -109,6 +109,65 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 		await expect(siblingLink).toHaveAttribute('href', /templateKey=/);
 	});
 
+	test('冒頭サマリに総クラスタ数・分類済みページ数・1ページのみのクラスタ数を表示する', async ({
+		page,
+	}) => {
+		await page.goto('/template-clusters');
+
+		const cards = page.locator('.card');
+		await expect(cards).toHaveCount(3);
+		await expect(cards.nth(0)).toContainText('Clusters');
+		await expect(cards.nth(0).locator('.card-value')).toHaveText('5');
+		await expect(cards.nth(1)).toContainText('Classified pages');
+		await expect(cards.nth(1).locator('.card-value')).toHaveText('14');
+		await expect(cards.nth(2)).toContainText('Single-page clusters');
+		await expect(cards.nth(2).locator('.card-value')).toHaveText('1');
+	});
+
+	test('冒頭サマリの最大クラスタ一覧は最大のクラスタから順にPagesへのリンクを表示する', async ({
+		page,
+	}) => {
+		await page.goto('/template-clusters');
+
+		const topClusters = page.getByRole('heading', { name: 'Largest clusters' });
+		await expect(topClusters).toBeVisible();
+		const firstItem = page.locator('ol > li').first();
+		await expect(firstItem).toContainText('section-a');
+		await expect(firstItem).toContainText('7 pages');
+		await expect(firstItem.getByRole('link')).toHaveAttribute('href', /templateKey=/);
+	});
+
+	test('冒頭サマリのサイズ分布とランドマーク別集計を表示する', async ({ page }) => {
+		await page.goto('/template-clusters');
+
+		const sizeRow = (label: string) =>
+			page.getByRole('row').filter({ has: page.getByRole('cell', { name: label }) });
+		await expect(sizeRow('1 page')).toContainText('1');
+		await expect(sizeRow('2–5 pages')).toContainText('3');
+		await expect(sizeRow('6–20 pages')).toContainText('1');
+		await expect(sizeRow('21+ pages')).toContainText('0');
+
+		const headerRow = page
+			.getByRole('row')
+			.filter({ has: page.getByRole('cell', { name: 'Header', exact: true }) });
+		await expect(headerRow.first()).toContainText('28.6%');
+	});
+
+	test('ランドマーク別セクションはそのパーツを持つクラスタだけを列挙する', async ({
+		page,
+	}) => {
+		await page.goto('/template-clusters');
+
+		await expect(
+			page.getByRole('heading', { name: 'Clusters by page part', level: 2 }),
+		).toBeVisible();
+		const headerGroup = page.getByRole('region', { name: /^Header \(1 clusters\)$/ });
+		await expect(headerGroup).toContainText('blog.css');
+		await expect(headerGroup).not.toContainText('/news/');
+		await expect(headerGroup).toContainText('100.0%');
+		await expect(page.getByRole('region', { name: /^Footer/ })).toHaveCount(0);
+	});
+
 	test('クラスタ選定理由が保存されていないクラスタは未保存の旨と実行コマンドを表示する', async ({
 		page,
 	}) => {
