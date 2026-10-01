@@ -6,7 +6,7 @@ import { useI18n } from '../i18n/use-i18n.js';
 
 import { AppLink } from './app-link.js';
 import { buildBlockHeading } from './build-block-heading.js';
-import { buildClusterHeading } from './build-cluster-heading.js';
+import { formatClusterName } from './format-cluster-name.js';
 import { listClusterBlocks } from './list-cluster-blocks.js';
 
 /** Props for {@link TemplateClusterBlockGroups}. */
@@ -75,7 +75,7 @@ export function TemplateClusterBlockGroups(props: TemplateClusterBlockGroupsProp
 									<td>
 										<AppLink
 											to={`/pages?templateKey=${encodeURIComponent(cluster.templateKey)}`}>
-											{buildClusterHeading(cluster).heading}
+											{formatClusterName(cluster, t)}
 										</AppLink>
 									</td>
 									<td>{cluster.pageCount}</td>

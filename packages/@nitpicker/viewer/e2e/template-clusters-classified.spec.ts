@@ -8,15 +8,19 @@ import { expect, test } from '@playwright/test';
  * in `template-clusters.spec.ts` against the shared fixture.
  */
 test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
-	test('CSS由来クラスタは共通CSSファイル名を見出しに表示する', async ({ page }) => {
+	test('クラスタの見出しは保存されたテンプレートラベルで、CSSファイル名は本文に移る', async ({
+		page,
+	}) => {
 		await page.goto('/template-clusters');
 		await expect(
 			page.getByRole('heading', { name: 'Template Clusters', level: 1 }),
 		).toBeVisible();
 
 		const cssCluster = page.locator('details', { hasText: 'blog.css' });
-		await expect(cssCluster.locator('summary')).toContainText('blog.css');
+		await expect(cssCluster.locator('summary')).toContainText('blog template A');
 		await expect(cssCluster.locator('summary')).toContainText('2 pages');
+		// The stylesheet-derived heading moves into the body once a label names the cluster.
+		await expect(cssCluster).toContainText('blog.css');
 	});
 
 	test('クラスタを展開してPagesへのリンクをクリックするとtemplateKeyフィルタ付きでPagesビューに遷移する', async ({
@@ -82,17 +86,17 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 		await expect(pathCluster).not.toContainText('Distinctive stylesheets');
 	});
 
-	test('同一ブロッキンググループから分岐した兄弟クラスタは見出しに共通ディレクトリを併記して区別する', async ({
+	test('同一ブロッキンググループから分岐した兄弟クラスタはセクション別のラベルで区別され、共通ディレクトリ併記のヒントは本文に残る', async ({
 		page,
 	}) => {
 		await page.goto('/template-clusters');
 
 		const docsCluster = page.locator('details', { hasText: '/docs/' });
 		const helpCluster = page.locator('details', { hasText: '/help/' });
-		await expect(docsCluster.locator('summary')).toContainText('docs.css');
-		await expect(docsCluster.locator('summary')).toContainText('/docs/');
-		await expect(helpCluster.locator('summary')).toContainText('docs.css');
-		await expect(helpCluster.locator('summary')).toContainText('/help/');
+		await expect(docsCluster.locator('summary')).toContainText('docs template A');
+		await expect(helpCluster.locator('summary')).toContainText('help template A');
+		await docsCluster.locator('summary').click();
+		await expect(docsCluster).toContainText('docs.css — https://example.com/docs/');
 	});
 
 	test('兄弟クラスタのSiblingsセクションに相手のtemplateKeyへのリンクが表示される', async ({
@@ -133,9 +137,9 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 
 		const topClusters = page.getByRole('heading', { name: 'Largest clusters' });
 		await expect(topClusters).toBeVisible();
+		// The 7-page cluster spans seven top-level directories, so its label is site-wide.
 		const firstItem = page.locator('ol > li').first();
-		await expect(firstItem).toContainText('section-a');
-		await expect(firstItem).toContainText('7 pages');
+		await expect(firstItem).toHaveText('template A (7 pages)');
 		await expect(firstItem.getByRole('link')).toHaveAttribute('href', /templateKey=/);
 	});
 
@@ -175,8 +179,8 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 			name: 'Common stylesheets: docs.css (Clusters: 2, Pages: 3)',
 		});
 		await expect(docsBlock.locator('tbody tr')).toHaveCount(2);
-		await expect(docsBlock.locator('tbody tr').nth(0)).toContainText('/docs/');
-		await expect(docsBlock.locator('tbody tr').nth(1)).toContainText('/help/');
+		await expect(docsBlock.locator('tbody tr').nth(0)).toContainText('docs template A');
+		await expect(docsBlock.locator('tbody tr').nth(1)).toContainText('help template A');
 		await expect(docsBlock.getByRole('link').first()).toHaveAttribute(
 			'href',
 			/templateKey=/,

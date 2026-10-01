@@ -13,6 +13,7 @@ import { computeTemplateClusterOverview } from './compute-template-cluster-overv
 function cluster(key: string, pageCount: number): TemplateClusterSummary {
 	return {
 		templateKey: key,
+		label: null,
 		pageCount,
 		commonDirectories: [],
 		commonStylesheetUrls: [],

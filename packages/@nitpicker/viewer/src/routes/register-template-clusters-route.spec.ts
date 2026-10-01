@@ -141,6 +141,10 @@ describe('registerTemplateClustersRoute (integration)', () => {
 			expect(body.clusters).toHaveLength(1);
 			expect(body.clusters[0]).toMatchObject({
 				templateKey: '["path:top","cluster:0"]',
+				// Written by replacePageTemplates on this archive's first (only)
+				// classification: the members' top-level directories differ, so
+				// the label is site-wide.
+				label: { section: null, ordinal: 1, provisional: false },
 				pageCount: 2,
 			});
 		});

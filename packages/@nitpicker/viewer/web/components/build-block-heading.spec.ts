@@ -13,6 +13,7 @@ import { buildBlockHeading } from './build-block-heading.js';
 function cluster(overrides: Partial<TemplateClusterSummary>): TemplateClusterSummary {
 	return {
 		templateKey: '["css:abc","cluster:0"]',
+		label: null,
 		pageCount: 1,
 		commonDirectories: [],
 		commonStylesheetUrls: [],

@@ -25,6 +25,7 @@ import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
 import { useI18n } from '../i18n/use-i18n.js';
+import { formatTemplateLabel } from '../utils/format-template-label.js';
 
 /**
  * Renders a string/number cell value, or an em dash when null/undefined.
@@ -370,7 +371,14 @@ export function PagesView() {
 				accessorKey: 'templateKey',
 				header: t('views.pages.colTemplateKey'),
 				size: 150,
-				cell: textCell,
+				// The stored label is the name people use for a template; the raw
+				// key is the opaque fallback for an archive classified before labels.
+				cell: (info) => {
+					const item = info.row.original;
+					return item.templateLabel
+						? formatTemplateLabel(item.templateLabel, t)
+						: (item.templateKey ?? '');
+				},
 			},
 			{
 				accessorKey: 'isDedupeCapped',
@@ -534,11 +542,14 @@ export function PagesView() {
 			'templateKey',
 			'templateKey',
 			t('views.pages.colTemplateKey'),
-			(facets?.templateKeys ?? []).map((value) => ({
-				value,
-				label: value,
-				checked: templateKey.includes(value),
-			})),
+			(facets?.templateKeys ?? []).map((value) => {
+				const storedLabel = facets?.templateLabelsByKey[value];
+				return {
+					value,
+					label: storedLabel ? formatTemplateLabel(storedLabel, t) : value,
+					checked: templateKey.includes(value),
+				};
+			}),
 		);
 		addChecklistFilter(
 			controls,
@@ -565,6 +576,7 @@ export function PagesView() {
 		facets?.langs,
 		facets?.statuses,
 		facets?.templateKeys,
+		facets?.templateLabelsByKey,
 		facets?.types,
 		hasCSP,
 		hasHSTS,

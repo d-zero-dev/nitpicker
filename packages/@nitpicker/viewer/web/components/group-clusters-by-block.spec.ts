@@ -21,6 +21,7 @@ function cluster(
 ): TemplateClusterSummary {
 	return {
 		templateKey: key,
+		label: null,
 		pageCount,
 		commonDirectories: [],
 		commonStylesheetUrls: [],

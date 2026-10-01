@@ -4,7 +4,7 @@ import { getBlockingKindLabel } from '../i18n/get-blocking-kind-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 import { AppLink } from './app-link.js';
-import { buildClusterHeading } from './build-cluster-heading.js';
+import { formatClusterName } from './format-cluster-name.js';
 import { SummaryCard } from './summary-card.js';
 
 /** Props for {@link TemplateClusterSummaryPanel}. */
@@ -57,7 +57,7 @@ export function TemplateClusterSummaryPanel(props: TemplateClusterSummaryPanelPr
 				{overview.topClusters.map((cluster) => (
 					<li key={cluster.templateKey}>
 						<AppLink to={`/pages?templateKey=${encodeURIComponent(cluster.templateKey)}`}>
-							{buildClusterHeading(cluster).heading}
+							{formatClusterName(cluster, t)}
 						</AppLink>{' '}
 						({t('views.templateClusters.pageCount', { count: cluster.pageCount })})
 					</li>

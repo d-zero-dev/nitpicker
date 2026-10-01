@@ -50,6 +50,11 @@ export function TemplateClustersView() {
 			)}
 			{data && overview && data.hasClassification && data.clusters.length > 0 && (
 				<>
+					{data.clusters.some((cluster) => cluster.label?.provisional) && (
+						<p className="view-description">
+							{t('views.templateClusters.provisionalLabels')}
+						</p>
+					)}
 					<TemplateClusterSummaryPanel overview={overview} />
 					<TemplateClusterBlockGroups groups={overview.blockGroups} />
 					<h2>{t('views.templateClusters.allClusters')}</h2>

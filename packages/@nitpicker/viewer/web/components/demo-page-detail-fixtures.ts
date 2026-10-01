@@ -93,6 +93,7 @@ export function buildDemoPageDetail(overrides?: Partial<PageDetail>): PageDetail
 		imageScanDesktop: 'ok',
 		imageScanMobile: 'ok',
 		templateKey: null,
+		templateLabel: null,
 		metaExtras: {},
 		jsonLd: { count: 0, types: [], parseErrorCount: 0 },
 		tags: { count: 0, providerIds: {} },

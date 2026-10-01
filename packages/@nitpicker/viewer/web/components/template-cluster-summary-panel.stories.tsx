@@ -28,6 +28,7 @@ export const Default: Story = {
 			topClusters: [
 				{
 					templateKey: '["css:166e4235afcb8b15","cluster:0"]',
+					label: { section: 'products', ordinal: 1, provisional: false },
 					pageCount: 210,
 					commonDirectories: [{ directory: '/products/', pageCount: 210 }],
 					commonStylesheetUrls: [],
@@ -36,6 +37,7 @@ export const Default: Story = {
 				},
 				{
 					templateKey: '["path:0"]',
+					label: { section: 'blog', ordinal: 1, provisional: true },
 					pageCount: 80,
 					commonDirectories: [{ directory: '/blog/', pageCount: 80 }],
 					commonStylesheetUrls: [],

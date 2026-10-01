@@ -20,6 +20,7 @@ const baseReason: TemplateClusterReasonSummary = {
 
 const baseCluster: TemplateClusterSummary = {
 	templateKey: '["css:166e4235afcb8b15","cluster:0"]',
+	label: null,
 	pageCount: 10,
 	commonDirectories: [],
 	commonStylesheetUrls: [],

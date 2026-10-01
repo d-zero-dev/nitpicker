@@ -1,6 +1,7 @@
 import type { PageDetail } from '@nitpicker/query';
 
 import { useI18n } from '../i18n/use-i18n.js';
+import { formatTemplateLabel } from '../utils/format-template-label.js';
 
 import { AppLink } from './app-link.js';
 
@@ -11,7 +12,9 @@ export interface PageMetadataGridProps {
 }
 
 /**
- * Primary metadata grid for the page-detail view: URL, HTTP status,
+ * Primary metadata grid for the page-detail view: URL, the page's template
+ * (its stored label, or the raw key for an archive classified before labels;
+ * linked to the Pages list filtered to that template), HTTP status,
  * meta/OpenGraph/Twitter tags, robots directives, and dedupe-cap/skip
  * status. Unlike the other page-detail sections (which each project one
  * narrow slice), this one renders the bulk of `PageDetail`'s ~25 fields, so
@@ -43,6 +46,18 @@ export function PageMetadataGrid(props: PageMetadataGridProps) {
 								{data.dedupeCapShapeKey ?? '—'}
 							</AppLink>
 						)}
+					</dd>
+				</>
+			)}
+			{data.templateKey != null && (
+				<>
+					<dt>{t('views.pageDetail.template')}</dt>
+					<dd>
+						<AppLink to={`/pages?templateKey=${encodeURIComponent(data.templateKey)}`}>
+							{data.templateLabel
+								? formatTemplateLabel(data.templateLabel, t)
+								: data.templateKey}
+						</AppLink>
 					</dd>
 				</>
 			)}

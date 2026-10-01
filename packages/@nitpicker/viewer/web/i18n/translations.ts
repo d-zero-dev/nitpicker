@@ -150,6 +150,10 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				site: 'Target site',
 				network: 'Your network (outage)',
 			},
+			templateLabel: {
+				sectioned: '{section} template {letter}',
+				siteWide: 'template {letter}',
+			},
 			templateClusterBlockingKind: {
 				css: 'Common stylesheets',
 				path: 'URL path',
@@ -236,6 +240,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 					'Full metadata, outbound links, redirects, and the stored HTML snapshot for one page. Inbound links are shown by count, with a link to the full list.',
 				skipReason: 'Skipped (reason)',
 				dedupeCapShapeKey: 'Dedupe-cap trap shape',
+				template: 'Template',
 				status: 'Status',
 				contentType: 'Content-Type',
 				title2: 'Title',
@@ -507,6 +512,9 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				byBlockCaveat:
 					'Every cluster listed under the block(s) it drew pages from. Clusters in the same block are each other’s sibling clusters. A cluster merged across blocks appears under each of them, with the others named in “Also from”, so a block’s page total can count such a cluster more than once.',
 				allClusters: 'All clusters',
+				provisionalLabels:
+					'Template names on this archive are provisional: the classification predates stored labels, so they are numbered on the fly and may change on the next `analyze --templates`, which stores them for good.',
+				memberHint: 'Members',
 			},
 			consoleLogs: {
 				title: 'Console Logs',
@@ -683,6 +691,10 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				site: '対象サイト',
 				network: 'お使いのネットワーク（断）',
 			},
+			templateLabel: {
+				sectioned: '{section} テンプレート {letter}',
+				siteWide: 'テンプレート {letter}',
+			},
 			templateClusterBlockingKind: {
 				css: '共通CSSファイル',
 				path: 'URLパス',
@@ -769,6 +781,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 					'1 ページの全メタデータ、発リンク、リダイレクト、保存された HTML スナップショットを表示します。被リンクは件数のみ表示し、一覧は別画面へのリンクから確認できます。',
 				skipReason: '除外理由',
 				dedupeCapShapeKey: 'Dedupe-capトラップ形状',
+				template: 'テンプレート',
 				status: 'ステータス',
 				contentType: 'Content-Type',
 				title2: 'タイトル',
@@ -1039,6 +1052,9 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				byBlockCaveat:
 					'各クラスタを、ページの取り込み元ブロックの下に並べた一覧。同じブロック内のクラスタは互いに兄弟クラスタです。複数ブロックをまたいで統合されたクラスタは各ブロックの下に現れ、「統合元」に他方のブロックを示します。そのためブロックのページ数は、こうしたクラスタを重複して数えることがあります。',
 				allClusters: 'すべてのクラスタ',
+				provisionalLabels:
+					'このアーカイブのテンプレート名は暫定です。ラベル保存より前の分類なので表示時に採番しており、次の `analyze --templates` で変わることがあります（実行するとラベルが保存されて確定します）。',
+				memberHint: 'メンバー',
 			},
 			consoleLogs: {
 				title: 'コンソールログ',

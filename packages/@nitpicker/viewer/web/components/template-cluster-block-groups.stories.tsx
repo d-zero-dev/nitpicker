@@ -35,6 +35,7 @@ function cssCluster(
 ): TemplateClusterSummary {
 	return {
 		templateKey: `["css:166e4235afcb8b15","cluster:${index}"]`,
+		label: { section: 'products', ordinal: index + 1, provisional: false },
 		pageCount,
 		commonDirectories: [{ directory, pageCount }],
 		commonStylesheetUrls: [],
@@ -58,6 +59,7 @@ function cssCluster(
  */
 const mergedListingCluster: TemplateClusterSummary = {
 	templateKey: '["orphan-merge:blogs","cluster:1"]',
+	label: { section: null, ordinal: 1, provisional: false },
 	pageCount: 13,
 	commonDirectories: [
 		{ directory: 'https://example.com/blogs/', pageCount: 7 },
@@ -102,6 +104,7 @@ export const Default: Story = {
 				clusters: [
 					{
 						templateKey: '["orphan-merge:blogs","cluster:0"]',
+						label: { section: 'blogs', ordinal: 1, provisional: false },
 						pageCount: 80,
 						commonDirectories: [
 							{ directory: 'https://example.com/blogs/', pageCount: 80 },
@@ -124,6 +127,7 @@ export const Default: Story = {
 				clusters: [
 					{
 						templateKey: '["path:","cluster:0"]',
+						label: null,
 						pageCount: 1,
 						commonDirectories: [],
 						commonStylesheetUrls: [],

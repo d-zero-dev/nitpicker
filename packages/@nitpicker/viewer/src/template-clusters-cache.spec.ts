@@ -49,6 +49,7 @@ describe('getCachedTemplateClusters', () => {
 			clusters: [
 				{
 					templateKey: 'k',
+					label: null,
 					pageCount: 1,
 					commonDirectories: [],
 					commonStylesheetUrls: [],
@@ -95,6 +96,7 @@ describe('getCachedTemplateClusters', () => {
 				clusters: [
 					{
 						templateKey: 'A',
+						label: null,
 						pageCount: 1,
 						commonDirectories: [],
 						commonStylesheetUrls: [],
@@ -108,6 +110,7 @@ describe('getCachedTemplateClusters', () => {
 				clusters: [
 					{
 						templateKey: 'B',
+						label: null,
 						pageCount: 1,
 						commonDirectories: [],
 						commonStylesheetUrls: [],
@@ -134,6 +137,7 @@ describe('getCachedTemplateClusters', () => {
 				clusters: [
 					{
 						templateKey: id,
+						label: null,
 						pageCount: 1,
 						commonDirectories: [],
 						commonStylesheetUrls: [],
@@ -154,6 +158,7 @@ describe('getCachedTemplateClusters', () => {
 			clusters: [
 				{
 					templateKey: '1-recomputed',
+					label: null,
 					pageCount: 1,
 					commonDirectories: [],
 					commonStylesheetUrls: [],
@@ -176,6 +181,7 @@ describe('getCachedTemplateClusters', () => {
 				clusters: [
 					{
 						templateKey: 'first',
+						label: null,
 						pageCount: 1,
 						commonDirectories: [],
 						commonStylesheetUrls: [],
@@ -189,6 +195,7 @@ describe('getCachedTemplateClusters', () => {
 				clusters: [
 					{
 						templateKey: 'second',
+						label: null,
 						pageCount: 1,
 						commonDirectories: [],
 						commonStylesheetUrls: [],
@@ -216,6 +223,7 @@ describe('getCachedTemplateClusters', () => {
 				clusters: [
 					{
 						templateKey: 'recovered',
+						label: null,
 						pageCount: 1,
 						commonDirectories: [],
 						commonStylesheetUrls: [],
