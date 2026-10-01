@@ -24,8 +24,8 @@ export function StaticTable<Row>(props: {
 	columns: readonly StaticTableColumn<Row>[];
 }) {
 	return (
-		<div className="report-table-scroll">
-			<table className="report-table">
+		<div className="plain-table-scroll">
+			<table className="plain-table report-table">
 				<thead>
 					<tr>
 						{props.columns.map((column) => (

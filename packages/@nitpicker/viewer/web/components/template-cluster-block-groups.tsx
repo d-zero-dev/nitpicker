@@ -60,31 +60,33 @@ export function TemplateClusterBlockGroups(props: TemplateClusterBlockGroupsProp
 						{t('views.templateClusters.colClusters')}: {group.clusters.length},{' '}
 						{t('views.templateClusters.colPages')}: {group.pageCount})
 					</h3>
-					<table>
-						<thead>
-							<tr>
-								<th>{t('views.templateClusters.colCluster')}</th>
-								<th>{t('views.templateClusters.colPages')}</th>
-								<th>{t('views.templateClusters.colTopDirectory')}</th>
-								<th>{t('views.templateClusters.colMergedBlocks')}</th>
-							</tr>
-						</thead>
-						<tbody>
-							{group.clusters.map((cluster) => (
-								<tr key={cluster.templateKey}>
-									<td>
-										<AppLink
-											to={`/pages?templateKey=${encodeURIComponent(cluster.templateKey)}`}>
-											{formatClusterName(cluster, t)}
-										</AppLink>
-									</td>
-									<td>{cluster.pageCount}</td>
-									<td>{cluster.commonDirectories[0]?.directory ?? '—'}</td>
-									<td>{otherBlocksOf(group, cluster).join(', ') || '—'}</td>
+					<div className="plain-table-scroll">
+						<table className="plain-table">
+							<thead>
+								<tr>
+									<th>{t('views.templateClusters.colCluster')}</th>
+									<th>{t('views.templateClusters.colPages')}</th>
+									<th>{t('views.templateClusters.colTopDirectory')}</th>
+									<th>{t('views.templateClusters.colMergedBlocks')}</th>
 								</tr>
-							))}
-						</tbody>
-					</table>
+							</thead>
+							<tbody>
+								{group.clusters.map((cluster) => (
+									<tr key={cluster.templateKey}>
+										<td>
+											<AppLink
+												to={`/pages?templateKey=${encodeURIComponent(cluster.templateKey)}`}>
+												{formatClusterName(cluster, t)}
+											</AppLink>
+										</td>
+										<td>{cluster.pageCount}</td>
+										<td>{cluster.commonDirectories[0]?.directory ?? '—'}</td>
+										<td>{otherBlocksOf(group, cluster).join(', ') || '—'}</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
 				</section>
 			))}
 		</section>

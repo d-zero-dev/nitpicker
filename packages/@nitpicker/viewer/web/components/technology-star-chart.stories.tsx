@@ -1,4 +1,7 @@
+import type { TechnologyStarChartProps } from './technology-star-chart.js';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+
+import { expect, userEvent, within } from 'storybook/test';
 
 import { TechnologyStarChart } from './technology-star-chart.js';
 
@@ -9,37 +12,48 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** Two detected technologies, confidence descending. */
+const populated: TechnologyStarChartProps = {
+	data: {
+		technologies: [
+			{
+				technology: 'Next.js',
+				category: 'JavaScript frameworks',
+				version: null,
+				confidence: 80,
+				signalCount: 2,
+				signals: [
+					{ signalType: 'html-marker', evidence: '__NEXT_DATA__', weight: 70 },
+					{ signalType: 'url-pattern', evidence: '/_next/', weight: 50 },
+				],
+			},
+			{
+				technology: 'Google Tag Manager',
+				category: 'Analytics',
+				version: null,
+				confidence: 60,
+				signalCount: 1,
+				signals: [{ signalType: 'wappalyzer', evidence: 'GTM-XXXX', weight: 60 }],
+			},
+		],
+	},
+	isLoading: false,
+	error: null,
+};
+
+/** Every row collapsed. Click a row to expand its contributing signals. */
+export const Default: Story = { args: populated };
+
 /**
- * Two detected technologies, confidence descending. Click a row to expand
- * its contributing signals.
+ * The first row expanded by a click, so the nested signals table and the
+ * tinted detail cell beneath it are visible without interaction.
  */
-export const Default: Story = {
-	args: {
-		data: {
-			technologies: [
-				{
-					technology: 'Next.js',
-					category: 'JavaScript frameworks',
-					version: null,
-					confidence: 80,
-					signalCount: 2,
-					signals: [
-						{ signalType: 'html-marker', evidence: '__NEXT_DATA__', weight: 70 },
-						{ signalType: 'url-pattern', evidence: '/_next/', weight: 50 },
-					],
-				},
-				{
-					technology: 'Google Tag Manager',
-					category: 'Analytics',
-					version: null,
-					confidence: 60,
-					signalCount: 1,
-					signals: [{ signalType: 'wappalyzer', evidence: 'GTM-XXXX', weight: 60 }],
-				},
-			],
-		},
-		isLoading: false,
-		error: null,
+export const Expanded: Story = {
+	args: populated,
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByText('Next.js'));
+		await expect(canvas.getByText('html-marker')).toBeVisible();
 	},
 };
 

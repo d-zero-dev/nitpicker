@@ -14,6 +14,11 @@
 	--badge-warn-bg: color-mix(in srgb, #f59e0b 20%, transparent);
 	--badge-interrupted-bg: color-mix(in srgb, var(--text-dim) 18%, transparent);
 
+	/* Row-state tints shared by every hoverable / selectable strip (nav links,
+	   tree rows, expandable table rows) so hover and selected stay in step. */
+	--row-hover-bg: color-mix(in srgb, var(--accent) 8%, transparent);
+	--row-selected-bg: color-mix(in srgb, var(--accent) 14%, transparent);
+
 	/* Font-size scale. The `@d-zero/stylelint-config` allowed-list rejects raw
 	   px values for `font-size`, so all sizes flow through these tokens. */
 	--font-size-xs: 11px;
@@ -64,7 +69,7 @@ body {
 	background: var(--bg);
 }
 
-/* Standalone report document and its intentionally non-interactive table. */
+/* Standalone report document. */
 .report-document {
 	min-block-size: 100dvh;
 }
@@ -74,38 +79,90 @@ body {
 	margin-inline: auto;
 }
 
-.report-table-scroll {
+/* Plain table: the one surface for every table that is neither virtualized
+   (.vt-*) nor paged (.pt-*). Those two keep a flexbox row layout for column
+   resizing; this one stays a native table so `colSpan` detail rows and
+   nested tables lay out without re-emitting ARIA grid metadata.
+   `.plain-table-scroll` owns the card frame and horizontal overflow. */
+.plain-table-scroll {
 	overflow: auto;
 	background: var(--bg-elev);
 	border: 1px solid var(--border);
 	border-radius: 6px;
 }
 
-.report-table {
+.plain-table {
 	inline-size: 100%;
 	border-collapse: collapse;
 }
 
-.report-table th,
-.report-table td {
-	min-inline-size: 110px;
-	max-inline-size: 360px;
+.plain-table th,
+.plain-table td {
 	padding-block: 8px;
 	padding-inline: 10px;
 	vertical-align: top;
 	text-align: start;
+
+	/* `.detail-grid dd` sets `word-break: break-all` for long URLs; a table
+	   inside it should still wrap at word boundaries. */
+	word-break: normal;
 	overflow-wrap: anywhere;
 	border-block-end: 1px solid var(--border);
 }
 
-.report-table th {
+.plain-table th {
 	font-size: var(--font-size-sm);
+	font-weight: 600;
 	color: var(--text-dim);
+	white-space: nowrap;
 	background: var(--bg-elev);
 }
 
-.report-table tbody tr:last-child td {
+.plain-table td {
+	font-size: var(--font-size-base);
+}
+
+/* Child combinator so a nested table's cells keep their own row separators
+   when the outer table's last row is the one holding it. */
+.plain-table > tbody > tr:last-child > td {
 	border-block-end: 0;
+}
+
+/* A row that toggles a detail row beneath it. The row itself is the click
+   target, so it needs a hover affordance and a resting highlight while
+   expanded. Hover is excluded from the expanded row: `:hover` would
+   otherwise out-specify `.is-expanded` and dim the row on mouse-over. */
+.plain-table .is-expandable {
+	cursor: pointer;
+}
+
+.plain-table .is-expandable:not(.is-expanded):hover {
+	background: var(--row-hover-bg);
+}
+
+.plain-table .is-expanded {
+	background: var(--row-selected-bg);
+}
+
+/* The colSpan cell carrying an expanded row's detail — a nested table or a
+   drilldown block — inset and tinted so it reads as the row's child. */
+.plain-table .plain-table-detail {
+	padding-block: 10px 14px;
+	padding-inline: 24px 10px;
+	background: color-mix(in srgb, var(--border) 35%, transparent);
+}
+
+/* Width hints for the static HTML report's wide page-list table only. Its
+   column labels wrap rather than inherit `nowrap`, since a long label
+   would otherwise override `max-inline-size` and widen the column. */
+.report-table th,
+.report-table td {
+	min-inline-size: 110px;
+	max-inline-size: 360px;
+}
+
+.report-table th {
+	white-space: normal;
 }
 
 .report-alert {
@@ -288,12 +345,12 @@ a {
 
 .nav-link:hover {
 	color: var(--text);
-	background: color-mix(in srgb, var(--accent) 8%, transparent);
+	background: var(--row-hover-bg);
 }
 
 .nav-link-active {
 	color: var(--text);
-	background: color-mix(in srgb, var(--accent) 14%, transparent);
+	background: var(--row-selected-bg);
 	border-inline-start: 2px solid var(--accent);
 }
 
@@ -1250,6 +1307,23 @@ h2 {
 	word-break: break-all;
 }
 
+/* Technology inventory drilldown (directory distribution + page list)
+   inside an expanded inventory row: a stacked block, not a dt/dd grid. */
+.technology-drilldown {
+	display: block grid;
+	gap: 8px;
+}
+
+.technology-drilldown h3 {
+	margin: 0;
+	font-size: var(--font-size-md);
+}
+
+.technology-drilldown ul {
+	padding-inline-start: 18px;
+	margin: 0;
+}
+
 /* HTML preview */
 .html-preview {
 	overflow: hidden;
@@ -1562,7 +1636,7 @@ h2 {
 }
 
 .tree-row:hover {
-	background: color-mix(in srgb, var(--accent) 8%, transparent);
+	background: var(--row-hover-bg);
 }
 
 .tree-toggle,
