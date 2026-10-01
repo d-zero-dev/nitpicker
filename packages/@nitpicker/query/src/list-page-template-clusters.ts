@@ -1,12 +1,13 @@
 import type { TemplateClusterListResult, TemplateClusterSummary } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
-import { eachSplitted } from '@nitpicker/crawler';
+import { assignTemplateLabels, eachSplitted } from '@nitpicker/crawler';
 
 import { collectPageStylesheetUrlsByPageId } from './collect-page-stylesheet-urls-by-page-id.js';
 import { computeCssIntersection } from './compute-css-intersection.js';
 import { computeDirectoryDistribution } from './compute-directory-distribution.js';
 import { computeStylesheetFileNames } from './compute-stylesheet-file-names.js';
+import { loadTemplateClusterLabels } from './load-template-cluster-labels.js';
 import { loadTemplateClusterReasons } from './load-template-cluster-reasons.js';
 import { hasPageTemplatesTable } from './page-templates-join.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
@@ -92,11 +93,11 @@ export async function listPageTemplateClusters(
 	}
 
 	const urlByPageId = new Map<number, string>();
-	// The three queries below touch disjoint table sets (content_items/url_refs,
-	// resource_items/resource_ref_edges, page_template_clusters) and none
-	// depends on another's result, so they run concurrently rather than
-	// back-to-back.
-	const [, stylesheetsByPageId, reasonsByTemplateKey] = await Promise.all([
+	// The four queries below touch disjoint table sets (content_items/url_refs,
+	// resource_items/resource_ref_edges, page_template_clusters,
+	// page_template_labels) and none depends on another's result, so they run
+	// concurrently rather than back-to-back.
+	const [, stylesheetsByPageId, reasonsByTemplateKey, storedLabels] = await Promise.all([
 		eachSplitted(
 			rows.map((r) => r.pageId),
 			SQLITE_IN_CHUNK,
@@ -112,18 +113,48 @@ export async function listPageTemplateClusters(
 		),
 		collectPageStylesheetUrlsByPageId(accessor),
 		loadTemplateClusterReasons(knex, [...pageIdsByTemplateKey.keys()]),
+		loadTemplateClusterLabels(knex, [...pageIdsByTemplateKey.keys()]),
 	]);
+
+	const urlsByTemplateKey = new Map<string, string[]>();
+	for (const [templateKey, pageIds] of pageIdsByTemplateKey) {
+		urlsByTemplateKey.set(
+			templateKey,
+			pageIds
+				.map((id) => urlByPageId.get(id))
+				.filter((url): url is string => url != null),
+		);
+	}
+
+	// An archive classified before labels were stored has no rows at all;
+	// number its clusters on read with the same rules a first `--templates`
+	// run would apply, flagged provisional. Any stored row means the
+	// classification wrote labels, and a cluster missing one then stays
+	// unlabeled rather than being mixed with provisional numbering.
+	const provisional = storedLabels.size === 0;
+	const labelsByTemplateKey = provisional
+		? assignTemplateLabels({
+				clusters: new Map(
+					[...pageIdsByTemplateKey].map(([templateKey, pageIds]) => [
+						templateKey,
+						{ pageIds, urls: urlsByTemplateKey.get(templateKey) ?? [] },
+					]),
+				),
+				previousMembership: new Map(),
+				previousLabels: new Map(),
+			})
+		: storedLabels;
 
 	const clusters: TemplateClusterSummary[] = [];
 	for (const [templateKey, pageIds] of pageIdsByTemplateKey) {
-		const urls = pageIds
-			.map((id) => urlByPageId.get(id))
-			.filter((url): url is string => url != null);
+		const urls = urlsByTemplateKey.get(templateKey) ?? [];
 		const cssUrlsByPage = pageIds.map((id) => stylesheetsByPageId.get(id) ?? []);
 		const commonStylesheetUrls = computeCssIntersection(cssUrlsByPage);
 		const reason = reasonsByTemplateKey.get(templateKey);
+		const label = labelsByTemplateKey.get(templateKey);
 		clusters.push({
 			templateKey,
+			label: label ? { ...label, provisional } : null,
 			pageCount: pageIds.length,
 			commonDirectories: computeDirectoryDistribution(urls),
 			commonStylesheetUrls,

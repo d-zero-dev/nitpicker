@@ -3,12 +3,14 @@ import type { Knex } from 'knex';
 
 import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
 import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
+import { hasPageTemplateLabelsTable } from './has-page-template-labels-table.js';
 import { isDedupeCappedSelectColumn } from './is-dedupe-capped-select-column.js';
 import {
 	PAGE_LIST_SELECT_COLUMNS,
 	mapPageRowToListItem,
 } from './map-page-row-to-list-item.js';
 import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
+import { templateLabelSelectColumns } from './template-label-select-columns.js';
 
 /**
  * Joins an already ID-limited, already-ordered `page_id` list back to the
@@ -46,18 +48,28 @@ import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates
  *   (this function's original, single-call-site behavior).
  * @param schemaFlags.hasPageTemplates
  * @param schemaFlags.hasDedupeCapColumn
+ * @param schemaFlags.hasPageTemplateLabels - Pre-resolved
+ *   {@link hasPageTemplateLabelsTable}; optional so a caller resolving only
+ *   the two older flags keeps working (it is then self-resolved per call).
  * @returns The corresponding {@link PageListItem} rows, in `pageIds` order.
  */
 export async function joinViewerPageIdsToListItems(
 	knex: Knex,
 	pageIds: number[],
-	schemaFlags?: { hasPageTemplates: boolean; hasDedupeCapColumn: boolean },
+	schemaFlags?: {
+		hasPageTemplates: boolean;
+		hasDedupeCapColumn: boolean;
+		hasPageTemplateLabels?: boolean;
+	},
 ): Promise<PageListItem[]> {
 	if (pageIds.length === 0) {
 		return [];
 	}
 	const hasPageTemplates =
 		schemaFlags?.hasPageTemplates ?? (await hasPageTemplatesTable(knex));
+	const hasLabelsJoin =
+		hasPageTemplates &&
+		(schemaFlags?.hasPageTemplateLabels ?? (await hasPageTemplateLabelsTable(knex)));
 	const hasDedupeCapColumn =
 		schemaFlags?.hasDedupeCapColumn ?? (await hasDedupeCapEventIdColumn(knex));
 	let query = knex('content_items as ci')
@@ -97,12 +109,20 @@ export async function joinViewerPageIdsToListItems(
 	if (hasPageTemplates) {
 		query = query.leftJoin('page_templates as pt', 'pt.page_id', 'ci.id');
 	}
+	if (hasLabelsJoin) {
+		query = query.leftJoin(
+			'page_template_labels as ptl',
+			'ptl.template_key',
+			'pt.template_key',
+		);
+	}
 	const rows: (PageListRow & { id: number })[] = await query
 		.whereIn('ci.id', pageIds)
 		.select(
 			'ci.id as id',
 			...PAGE_LIST_SELECT_COLUMNS,
 			templateKeySelectColumn(knex, hasPageTemplates),
+			...templateLabelSelectColumns(knex, hasLabelsJoin),
 			isDedupeCappedSelectColumn(knex, hasDedupeCapColumn),
 			...buildHeaderPresenceSelects(knex, 'hf'),
 			'vp.display_title as displayTitle',

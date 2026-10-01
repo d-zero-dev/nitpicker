@@ -20,7 +20,13 @@ import type {
 	PageSource,
 	TemplateClusterBlockingEvidence,
 	TemplateClusterLandmarkType,
+	TemplateLabel,
 } from '@nitpicker/crawler';
+
+// The stored label shape is owned by the crawler (it writes
+// `page_template_labels`); re-exported so viewer / MCP consumers of
+// `PageListItem.templateLabel` don't reach across packages for it.
+export type { TemplateLabel } from '@nitpicker/crawler';
 
 /**
  * One row of {@link import('./list-isolated-pages.js').listIsolatedPages} output — a **完全孤立** (singleton)
@@ -1002,6 +1008,10 @@ export interface PageListRow {
 	hasXContentTypeOptions: 0 | 1;
 	hasHSTS: 0 | 1;
 	templateKey: string | null;
+	/** `page_template_labels.section` via the `ptl` join, or `null` (no label stored / site-wide label / no join). */
+	templateLabelSection: string | null;
+	/** `page_template_labels.ordinal` via the `ptl` join, or `null` when no label is stored or the join is absent. */
+	templateLabelOrdinal: number | null;
 	isDedupeCapped: 0 | 1;
 	/**
 	 * `viewer_pages.display_title` — `undefined` on the three live-only
@@ -1192,6 +1202,12 @@ export interface PageListItem {
 	hasHSTS: boolean;
 	/** DOM-structure template group key from `--templates` classification, or null if never classified. */
 	templateKey: string | null;
+	/**
+	 * The human-facing label of `templateKey`'s cluster (`events template A`),
+	 * or `null` when the page is unclassified or the archive was classified
+	 * before labels were stored — re-running `analyze --templates` assigns them.
+	 */
+	templateLabel: TemplateLabel | null;
 	/** Whether this page's URL shape matches a `--dedupe-cap` trap captured by any `dedupe_cap_events` row. */
 	isDedupeCapped: boolean;
 	/**
@@ -1305,6 +1321,12 @@ export interface PageListFacets {
 	 * (or `page_templates` doesn't exist yet — see `hasPageTemplatesTable`).
 	 */
 	templateKeys: string[];
+	/**
+	 * The stored label of each key in `templateKeys` that has one, so a
+	 * filter UI can show "events template A" instead of the opaque key. A key
+	 * missing here has no stored label (see {@link PageListItem.templateLabel}).
+	 */
+	templateLabelsByKey: Record<string, TemplateLabel>;
 }
 
 /**
@@ -1698,6 +1720,8 @@ export interface PageDetail {
 	imageScanMobile: ImageScanOutcome | null;
 	/** DOM-structure template group key from `--templates` classification, or null if never classified. */
 	templateKey: string | null;
+	/** The human-facing label of `templateKey`'s cluster — see {@link PageListItem.templateLabel}. */
+	templateLabel: TemplateLabel | null;
 
 	/** Parsed `meta_extras` JSON catch-all (nested sub-objects not flattened). */
 	metaExtras: Record<string, unknown>;
@@ -3758,6 +3782,16 @@ export interface DirectoryDistributionEntry {
 export interface TemplateClusterSummary {
 	/** The raw `page_templates.template_key` value for this cluster. */
 	templateKey: string;
+	/**
+	 * The cluster's human-facing label. Stored (`provisional: false`) when
+	 * the classification wrote `page_template_labels`; otherwise computed on
+	 * read with the same numbering rules but no previous run to inherit from
+	 * (`provisional: true`) — such a label is not guaranteed to survive the
+	 * next `analyze --templates`, which is what stores one. `null` only when
+	 * the archive is classified but this cluster has no stored label while
+	 * others do (a partially written table; not expected in practice).
+	 */
+	label: TemplateClusterLabel | null;
 	/** Number of pages classified under `templateKey`. */
 	pageCount: number;
 	/**
@@ -3797,6 +3831,12 @@ export interface TemplateClusterSummary {
 	 * JSDoc in `@nitpicker/core`).
 	 */
 	reason: TemplateClusterReasonSummary | null;
+}
+
+/** A {@link TemplateLabel} as served to the template clusters view — see {@link TemplateClusterSummary.label}. */
+export interface TemplateClusterLabel extends TemplateLabel {
+	/** `true` when computed on read for an archive classified before labels were stored. */
+	provisional: boolean;
 }
 
 /**

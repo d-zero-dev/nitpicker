@@ -307,6 +307,10 @@ export function mapPageRowToListItem(row: PageListRow): PageListItem {
 		hasXContentTypeOptions: !!source.hasXContentTypeOptions,
 		hasHSTS: !!source.hasHSTS,
 		templateKey: source.templateKey,
+		templateLabel:
+			source.templateLabelOrdinal == null
+				? null
+				: { section: source.templateLabelSection, ordinal: source.templateLabelOrdinal },
 		isDedupeCapped: !!source.isDedupeCapped,
 		// `undefined` on the three live-only paths (PAGE_LIST_SELECT_COLUMNS
 		// never selects these) — defaulted to `null` here so every caller

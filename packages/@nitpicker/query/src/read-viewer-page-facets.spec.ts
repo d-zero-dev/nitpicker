@@ -128,6 +128,7 @@ describe('readViewerPageFacets', () => {
 			langs: ['en', 'ja'],
 			types: [false, true],
 			templateKeys: [],
+			templateLabelsByKey: {},
 		});
 	});
 
@@ -138,6 +139,7 @@ describe('readViewerPageFacets', () => {
 			langs: ['fr'],
 			types: [false],
 			templateKeys: [],
+			templateLabelsByKey: {},
 		});
 	});
 
@@ -148,6 +150,7 @@ describe('readViewerPageFacets', () => {
 			langs: [],
 			types: [],
 			templateKeys: [],
+			templateLabelsByKey: {},
 		});
 	});
 
@@ -162,5 +165,9 @@ describe('readViewerPageFacets', () => {
 		);
 		const facets = await readViewerPageFacets(knex);
 		expect(facets.templateKeys).toEqual(['template-a', 'template-b']);
+		expect(facets.templateLabelsByKey).toEqual({
+			'template-a': { section: 'a', ordinal: 1 },
+			'template-b': { section: 'doc.pdf', ordinal: 1 },
+		});
 	});
 });

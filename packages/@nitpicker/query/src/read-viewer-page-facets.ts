@@ -1,6 +1,7 @@
 import type { ContentTypeCategory, PageListFacets } from './types.js';
 import type { Knex } from 'knex';
 
+import { loadTemplateClusterLabels } from './load-template-cluster-labels.js';
 import { hasPageTemplatesTable } from './page-templates-join.js';
 
 /** Row shape read back from `viewer_count_buckets` for a facet lookup. */
@@ -41,7 +42,7 @@ function resolveFacetCategoryKey(
  * `viewer_count_buckets`'s `(scope, key, value)` primary key, so this stays
  * inside the 100ms contract regardless of archive size.
  *
- * `templateKeys` is the one exception: `page_templates` is populated at
+ * `templateKeys` (and `templateLabelsByKey`) is the one exception: `page_templates` is populated at
  * `analyze --templates` time, entirely independent of the crawl-end/
  * viewer-build read-model pipeline that produces `viewer_count_buckets` (see
  * `hasPageTemplatesTable`'s doc), so there is no precomputed bucket to look
@@ -98,11 +99,18 @@ export async function readViewerPageFacets(
 				}[]
 			).map((row) => row.template_key)
 		: [];
+	// Same live-read rationale as `templateKeys`: labels are written by
+	// `analyze --templates`, never by the read-model build, and
+	// `page_template_labels` is one narrow row per key.
+	const templateLabelsByKey = Object.fromEntries(
+		await loadTemplateClusterLabels(knex, templateKeys),
+	);
 
 	return {
 		statuses: statuses.toSorted((a, b) => a - b),
 		langs: langs.toSorted((a, b) => a.localeCompare(b)),
 		types: types.toSorted((a, b) => Number(a) - Number(b)),
 		templateKeys: templateKeys.toSorted((a, b) => a.localeCompare(b)),
+		templateLabelsByKey,
 	};
 }

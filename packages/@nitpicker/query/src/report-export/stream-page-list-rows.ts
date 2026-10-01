@@ -2,6 +2,7 @@ import type { PageListStreamRow, StreamPageListRowsOptions } from './types.js';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { hasDedupeCapEventIdColumn } from '../has-dedupe-cap-event-id-column.js';
+import { hasPageTemplateLabelsTable } from '../has-page-template-labels-table.js';
 import { joinViewerPageIdsToListItems } from '../join-viewer-page-ids-to-list-items.js';
 import { hasPageTemplatesTable } from '../page-templates-join.js';
 
@@ -59,6 +60,7 @@ export async function* streamPageListRows(
 	const schemaFlags = {
 		hasPageTemplates: await hasPageTemplatesTable(knex),
 		hasDedupeCapColumn: await hasDedupeCapEventIdColumn(knex),
+		hasPageTemplateLabels: await hasPageTemplateLabelsTable(knex),
 	};
 
 	let lastRank = -1;
