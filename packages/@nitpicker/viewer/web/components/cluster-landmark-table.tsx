@@ -35,26 +35,38 @@ export function ClusterLandmarkTable(props: ClusterLandmarkTableProps) {
 		<>
 			<dt>{t('views.templateClusters.landmarks')}</dt>
 			<dd>
-				<table>
-					<thead>
-						<tr>
-							<th>{t('views.templateClusters.landmarkColType')}</th>
-							<th>{t('views.templateClusters.landmarkColPresence')}</th>
-							<th>{t('views.templateClusters.landmarkColChrome')}</th>
-							<th>{t('views.templateClusters.landmarkColPages')}</th>
-						</tr>
-					</thead>
-					<tbody>
-						{landmarks.map((landmark) => (
-							<tr key={landmark.type}>
-								<td>{getLandmarkTypeLabel(landmark.type, t)}</td>
-								<td>{formatPercent(landmark.presenceRate)}</td>
-								<td>{formatPercent(landmark.chromeRate)}</td>
-								<td>{landmark.memberCountWithInstance}</td>
+				<div className="plain-table-scroll">
+					<table className="plain-table">
+						<thead>
+							<tr>
+								<th>{t('views.templateClusters.landmarkColType')}</th>
+								<th className="plain-table-num">
+									{t('views.templateClusters.landmarkColPresence')}
+								</th>
+								<th className="plain-table-num">
+									{t('views.templateClusters.landmarkColChrome')}
+								</th>
+								<th className="plain-table-num">
+									{t('views.templateClusters.landmarkColPages')}
+								</th>
 							</tr>
-						))}
-					</tbody>
-				</table>
+						</thead>
+						<tbody>
+							{landmarks.map((landmark) => (
+								<tr key={landmark.type}>
+									<td>{getLandmarkTypeLabel(landmark.type, t)}</td>
+									<td className="plain-table-num">
+										{formatPercent(landmark.presenceRate)}
+									</td>
+									<td className="plain-table-num">
+										{formatPercent(landmark.chromeRate)}
+									</td>
+									<td className="plain-table-num">{landmark.memberCountWithInstance}</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
 			</dd>
 		</>
 	);

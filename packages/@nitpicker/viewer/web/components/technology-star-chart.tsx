@@ -1,6 +1,6 @@
 import type { PageTechnologiesResult } from '../api/use-page-technologies.js';
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
 import { useI18n } from '../i18n/use-i18n.js';
 
@@ -34,61 +34,70 @@ export function TechnologyStarChart(props: TechnologyStarChartProps) {
 				<div className="state">{t('views.pageDetail.noTechnologies')}</div>
 			)}
 			{data && data.technologies.length > 0 && (
-				<table>
-					<thead>
-						<tr>
-							<th>{t('views.technologies.colTechnology')}</th>
-							<th>{t('views.technologies.colCategory')}</th>
-							<th>{t('views.pageDetail.colVersion')}</th>
-							<th>{t('views.pageDetail.colConfidence')}</th>
-							<th>{t('views.pageDetail.colSignalCount')}</th>
-						</tr>
-					</thead>
-					<tbody>
-						{data.technologies.map((tech) => (
-							<>
-								<tr
-									key={tech.technology}
-									onClick={() =>
-										setExpandedTechnology(
-											expandedTechnology === tech.technology ? null : tech.technology,
-										)
-									}
-									style={{ cursor: 'pointer' }}>
-									<td>{tech.technology}</td>
-									<td>{tech.category ?? '—'}</td>
-									<td>{tech.version ?? '—'}</td>
-									<td>{tech.confidence}</td>
-									<td>{tech.signalCount}</td>
-								</tr>
-								{expandedTechnology === tech.technology && (
-									<tr key={`${tech.technology}-signals`}>
-										<td colSpan={5}>
-											<table>
-												<thead>
-													<tr>
-														<th>{t('views.pageDetail.colSignalType')}</th>
-														<th>{t('views.pageDetail.colEvidence')}</th>
-														<th>{t('views.pageDetail.colWeight')}</th>
-													</tr>
-												</thead>
-												<tbody>
-													{tech.signals.map((signal, index) => (
-														<tr key={`${signal.signalType}-${index}`}>
-															<td>{signal.signalType}</td>
-															<td>{signal.evidence ?? '—'}</td>
-															<td>{signal.weight}</td>
-														</tr>
-													))}
-												</tbody>
-											</table>
-										</td>
+				<div className="plain-table-scroll">
+					<table className="plain-table">
+						<thead>
+							<tr>
+								<th>{t('views.technologies.colTechnology')}</th>
+								<th>{t('views.technologies.colCategory')}</th>
+								<th>{t('views.pageDetail.colVersion')}</th>
+								<th className="plain-table-num">{t('views.pageDetail.colConfidence')}</th>
+								<th className="plain-table-num">
+									{t('views.pageDetail.colSignalCount')}
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+							{data.technologies.map((tech) => (
+								<Fragment key={tech.technology}>
+									<tr
+										className={`is-expandable${
+											expandedTechnology === tech.technology ? ' is-expanded' : ''
+										}`}
+										onClick={() =>
+											setExpandedTechnology(
+												expandedTechnology === tech.technology ? null : tech.technology,
+											)
+										}>
+										<td>{tech.technology}</td>
+										<td>{tech.category ?? '—'}</td>
+										<td>{tech.version ?? '—'}</td>
+										<td className="plain-table-num">{tech.confidence}</td>
+										<td className="plain-table-num">{tech.signalCount}</td>
 									</tr>
-								)}
-							</>
-						))}
-					</tbody>
-				</table>
+									{expandedTechnology === tech.technology && (
+										<tr>
+											<td colSpan={5} className="plain-table-detail">
+												<div className="plain-table-scroll">
+													<table className="plain-table">
+														<thead>
+															<tr>
+																<th>{t('views.pageDetail.colSignalType')}</th>
+																<th>{t('views.pageDetail.colEvidence')}</th>
+																<th className="plain-table-num">
+																	{t('views.pageDetail.colWeight')}
+																</th>
+															</tr>
+														</thead>
+														<tbody>
+															{tech.signals.map((signal, index) => (
+																<tr key={`${signal.signalType}-${index}`}>
+																	<td>{signal.signalType}</td>
+																	<td>{signal.evidence ?? '—'}</td>
+																	<td className="plain-table-num">{signal.weight}</td>
+																</tr>
+															))}
+														</tbody>
+													</table>
+												</div>
+											</td>
+										</tr>
+									)}
+								</Fragment>
+							))}
+						</tbody>
+					</table>
+				</div>
 			)}
 		</>
 	);

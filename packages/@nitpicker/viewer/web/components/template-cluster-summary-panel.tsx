@@ -65,49 +65,57 @@ export function TemplateClusterSummaryPanel(props: TemplateClusterSummaryPanelPr
 			</ol>
 
 			<h2>{t('views.templateClusters.sizeDistribution')}</h2>
-			<table>
-				<thead>
-					<tr>
-						<th>{t('views.templateClusters.sizeColRange')}</th>
-						<th>{t('views.templateClusters.colClusters')}</th>
-						<th>{t('views.templateClusters.colPages')}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{overview.sizeBuckets.map((bucket) => (
-						<tr key={bucket.key}>
-							<td>{t(SIZE_BUCKET_LABEL_KEYS[bucket.key])}</td>
-							<td>{bucket.clusterCount}</td>
-							<td>{bucket.pageCount}</td>
+			<div className="plain-table-scroll">
+				<table className="plain-table">
+					<thead>
+						<tr>
+							<th>{t('views.templateClusters.sizeColRange')}</th>
+							<th className="plain-table-num">
+								{t('views.templateClusters.colClusters')}
+							</th>
+							<th className="plain-table-num">{t('views.templateClusters.colPages')}</th>
 						</tr>
-					))}
-				</tbody>
-			</table>
+					</thead>
+					<tbody>
+						{overview.sizeBuckets.map((bucket) => (
+							<tr key={bucket.key}>
+								<td>{t(SIZE_BUCKET_LABEL_KEYS[bucket.key])}</td>
+								<td className="plain-table-num">{bucket.clusterCount}</td>
+								<td className="plain-table-num">{bucket.pageCount}</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
 
 			<h2>{t('views.templateClusters.blockOverview')}</h2>
 			<p className="view-description">
 				{t('views.templateClusters.blockOverviewCaveat')}
 			</p>
-			<table>
-				<thead>
-					<tr>
-						<th>{t('views.templateClusters.colBlockKind')}</th>
-						<th>{t('views.templateClusters.colBlocks')}</th>
-						<th>{t('views.templateClusters.colClusters')}</th>
-						<th>{t('views.templateClusters.colPages')}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{overview.blockKinds.map((row) => (
-						<tr key={row.kind}>
-							<td>{getBlockingKindLabel(row.kind, t)}</td>
-							<td>{row.blockCount}</td>
-							<td>{row.clusterCount}</td>
-							<td>{row.pageCount}</td>
+			<div className="plain-table-scroll">
+				<table className="plain-table">
+					<thead>
+						<tr>
+							<th>{t('views.templateClusters.colBlockKind')}</th>
+							<th className="plain-table-num">{t('views.templateClusters.colBlocks')}</th>
+							<th className="plain-table-num">
+								{t('views.templateClusters.colClusters')}
+							</th>
+							<th className="plain-table-num">{t('views.templateClusters.colPages')}</th>
 						</tr>
-					))}
-				</tbody>
-			</table>
+					</thead>
+					<tbody>
+						{overview.blockKinds.map((row) => (
+							<tr key={row.kind}>
+								<td>{getBlockingKindLabel(row.kind, t)}</td>
+								<td className="plain-table-num">{row.blockCount}</td>
+								<td className="plain-table-num">{row.clusterCount}</td>
+								<td className="plain-table-num">{row.pageCount}</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
 		</section>
 	);
 }

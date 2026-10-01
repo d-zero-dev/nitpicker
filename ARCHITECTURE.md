@@ -257,7 +257,7 @@ Astro / Next.js / Vue / Nuxt / Svelte / SvelteKit / Remix / Gatsby / Angular 等
 
 1. `viewer/src/create-app.ts`（ルート登録）と `viewer/src/routes/register-*-route.ts`（query 1:1）
 2. query 関数本体（`query/src/*.ts`）— backend は基本無改修で query に足す
-3. frontend: `viewer/web/routes/*.tsx`（ビュー）、`viewer/web/components/data-table.tsx`（PagedTable / VirtualTable dispatch）、`viewer/web/i18n/translations.ts`（en/ja 必須）
+3. frontend: `viewer/web/routes/*.tsx`（ビュー）、`viewer/web/components/data-table.tsx`（PagedTable / VirtualTable dispatch。件数が有界でページング・仮想化が不要な表は `viewer/web/styles.css` の Plain table 節（`.plain-table-scroll` で包んだ `table.plain-table`）を使う。素の `<table>` は無スタイル）、`viewer/web/i18n/translations.ts`（en/ja 必須）
 4. キャッシュが要るなら `viewer/src/*-cache.ts` + `promise-lru.ts`（stub mode は bypass — live crawl 中は snapshot が永久 stale になるため）
 5. **frontend の consumer 探索は `src/` だけでなく `web/` も grep すること**
 

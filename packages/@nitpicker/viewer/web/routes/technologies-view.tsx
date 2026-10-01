@@ -1,6 +1,6 @@
 import type { TechnologyDirectoryStatsEntry } from '@nitpicker/query';
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
 import { useTechnologies } from '../api/use-technologies.js';
 import { useTechnologyPages } from '../api/use-technology-pages.js';
@@ -24,31 +24,35 @@ function TechnologyDrilldown(props: {
 	const { data, isLoading, error } = useTechnologyPages(technology);
 
 	return (
-		<div className="detail-grid">
+		<div className="technology-drilldown">
 			<h3>{t('views.technologies.directoryDistribution')}</h3>
 			{directoryRows.length === 0 ? (
 				<p className="view-description">
 					{t('views.technologies.directoryDistributionUnavailable')}
 				</p>
 			) : (
-				<table>
-					<thead>
-						<tr>
-							<th>{t('views.technologies.colDirectory')}</th>
-							<th>{t('views.technologies.colPageCount')}</th>
-						</tr>
-					</thead>
-					<tbody>
-						{directoryRows
-							.toSorted((a, b) => b.pageCount - a.pageCount)
-							.map((row) => (
-								<tr key={row.directory}>
-									<td>{row.directory}</td>
-									<td>{row.pageCount}</td>
-								</tr>
-							))}
-					</tbody>
-				</table>
+				<div className="plain-table-scroll">
+					<table className="plain-table">
+						<thead>
+							<tr>
+								<th>{t('views.technologies.colDirectory')}</th>
+								<th className="plain-table-num">
+									{t('views.technologies.colPageCount')}
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+							{directoryRows
+								.toSorted((a, b) => b.pageCount - a.pageCount)
+								.map((row) => (
+									<tr key={row.directory}>
+										<td>{row.directory}</td>
+										<td className="plain-table-num">{row.pageCount}</td>
+									</tr>
+								))}
+						</tbody>
+					</table>
+				</div>
 			)}
 
 			<h3>{t('views.technologies.pagesForTechnology', { technology })}</h3>
@@ -95,45 +99,52 @@ export function TechnologiesView() {
 				<div className="state">{t('views.technologies.empty')}</div>
 			)}
 			{data && data.inventory.length > 0 && (
-				<table>
-					<thead>
-						<tr>
-							<th>{t('views.technologies.colTechnology')}</th>
-							<th>{t('views.technologies.colCategory')}</th>
-							<th>{t('views.technologies.colPageCount')}</th>
-							<th>{t('views.technologies.colAvgConfidence')}</th>
-						</tr>
-					</thead>
-					<tbody>
-						{data.inventory.map((entry) => (
-							<>
-								<tr
-									key={entry.technology}
-									onClick={() =>
-										setSelected(selected === entry.technology ? null : entry.technology)
-									}
-									style={{ cursor: 'pointer' }}>
-									<td>{entry.technology}</td>
-									<td>{entry.category ?? '—'}</td>
-									<td>{entry.pageCount}</td>
-									<td>{entry.avgConfidence}</td>
-								</tr>
-								{selected === entry.technology && (
-									<tr key={`${entry.technology}-detail`}>
-										<td colSpan={4}>
-											<TechnologyDrilldown
-												technology={entry.technology}
-												directoryRows={data.directoryDistribution.filter(
-													(row) => row.technology === entry.technology,
-												)}
-											/>
-										</td>
+				<div className="plain-table-scroll">
+					<table className="plain-table">
+						<thead>
+							<tr>
+								<th>{t('views.technologies.colTechnology')}</th>
+								<th>{t('views.technologies.colCategory')}</th>
+								<th className="plain-table-num">
+									{t('views.technologies.colPageCount')}
+								</th>
+								<th className="plain-table-num">
+									{t('views.technologies.colAvgConfidence')}
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+							{data.inventory.map((entry) => (
+								<Fragment key={entry.technology}>
+									<tr
+										className={`is-expandable${
+											selected === entry.technology ? ' is-expanded' : ''
+										}`}
+										onClick={() =>
+											setSelected(selected === entry.technology ? null : entry.technology)
+										}>
+										<td>{entry.technology}</td>
+										<td>{entry.category ?? '—'}</td>
+										<td className="plain-table-num">{entry.pageCount}</td>
+										<td className="plain-table-num">{entry.avgConfidence}</td>
 									</tr>
-								)}
-							</>
-						))}
-					</tbody>
-				</table>
+									{selected === entry.technology && (
+										<tr>
+											<td colSpan={4} className="plain-table-detail">
+												<TechnologyDrilldown
+													technology={entry.technology}
+													directoryRows={data.directoryDistribution.filter(
+														(row) => row.technology === entry.technology,
+													)}
+												/>
+											</td>
+										</tr>
+									)}
+								</Fragment>
+							))}
+						</tbody>
+					</table>
+				</div>
 			)}
 		</div>
 	);
