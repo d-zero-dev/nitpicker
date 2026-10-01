@@ -22,7 +22,7 @@ function TechnologyRow(props: { label: string; ratio: number }) {
 	const clamped = clampRatio(props.ratio);
 	return (
 		<div className="bar-row">
-			<span style={{ width: 110 }}>{props.label}</span>
+			<span>{props.label}</span>
 			<span className="bar-track">
 				<span className="bar-fill" style={{ width: `${clamped * 100}%` }} />
 			</span>

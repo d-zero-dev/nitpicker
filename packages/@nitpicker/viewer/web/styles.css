@@ -1009,11 +1009,33 @@ h2 {
 	font-weight: bold;
 }
 
+/* label | track | value columns shared by every row, so the tracks line up
+   without a fixed label width: a fixed width either wraps a longer label
+   ("Google Tag Manager") or wastes space on short ones. `fit-content(50%)`
+   sizes the label column to its longest label and only wraps a label that
+   would take more than half the group. */
 .bars {
-	display: block flex;
-	flex-direction: column;
-	gap: 6px;
+	display: block grid;
+	grid-template-columns: fit-content(50%) minmax(0, 1fr) max-content;
+	gap: 6px 8px;
 	max-inline-size: 460px;
+}
+
+/* Rows and their wrappers (a status row's group, its breakdown list) all
+   span the group and adopt its columns, however deeply they nest. */
+.bars .bar-row,
+.bars > :not(.bar-row),
+.bars > :not(.bar-row) > :not(.bar-row) {
+	display: block grid;
+	grid-template-columns: subgrid;
+	grid-column: 1 / -1;
+	row-gap: 6px;
+	align-items: center;
+}
+
+.bars .bar-row > :last-child {
+	font-variant-numeric: tabular-nums;
+	text-align: end;
 }
 
 .bar-row {
