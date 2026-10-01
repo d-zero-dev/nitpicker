@@ -153,7 +153,8 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			templateClusterBlockingKind: {
 				css: 'Common stylesheets',
 				path: 'URL path',
-				orphanMerge: 'Merged orphan block',
+				orphanMerge: 'URL path (stylesheet-less pages folded in)',
+				unknown: 'Other',
 			},
 			landmarkType: {
 				header: 'Header',
@@ -491,16 +492,20 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				sizeBucketSmall: '2–5 pages',
 				sizeBucketMedium: '6–20 pages',
 				sizeBucketLarge: '21+ pages',
+				overviewBlocks: 'Blocks',
 				colClusters: 'Clusters',
 				colCluster: 'Cluster',
-				colAveragePresence: 'Avg. present on',
-				landmarkOverview: 'Page parts across clusters',
-				landmarkOverviewCaveat:
-					'How many clusters carry each page part, and the share of pages that have it (weighted by cluster size; clusters without captured evidence are excluded).',
-				byLandmark: 'Clusters by page part',
-				byLandmarkCaveat:
-					'Clusters grouped by the page parts they carry. A cluster with several parts is listed under each of them.',
-				clusterCount: '{count} clusters',
+				colBlocks: 'Blocks',
+				colPages: 'Pages',
+				colBlockKind: 'Block kind',
+				colTopDirectory: 'Top directory',
+				colMergedBlocks: 'Also from',
+				blockOverview: 'Blocks by kind',
+				blockOverviewCaveat:
+					'A block is the coarse group `--templates` forms first — by distinctive stylesheet set, or by first URL path segment (with pages that recorded no stylesheet folded into their section’s stylesheet block) — before splitting it into clusters by DOM structure. Clusters and pages are counted under their first block only.',
+				byBlock: 'Clusters by block',
+				byBlockCaveat:
+					'Every cluster listed under the block(s) it drew pages from. Clusters in the same block are each other’s sibling clusters. A cluster merged across blocks appears under each of them, with the others named in “Also from”, so a block’s page total can count such a cluster more than once.',
 				allClusters: 'All clusters',
 			},
 			consoleLogs: {
@@ -681,7 +686,8 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			templateClusterBlockingKind: {
 				css: '共通CSSファイル',
 				path: 'URLパス',
-				orphanMerge: '孤立ブロックの統合',
+				orphanMerge: 'URLパス（CSS未記録ページを合流）',
+				unknown: 'その他',
 			},
 			landmarkType: {
 				header: 'ヘッダー',
@@ -1018,16 +1024,20 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				sizeBucketSmall: '2〜5ページ',
 				sizeBucketMedium: '6〜20ページ',
 				sizeBucketLarge: '21ページ以上',
+				overviewBlocks: 'ブロック数',
 				colClusters: 'クラスタ数',
 				colCluster: 'クラスタ',
-				colAveragePresence: '平均保有率',
-				landmarkOverview: 'クラスタ横断のページパーツ',
-				landmarkOverviewCaveat:
-					'各ページパーツを持つクラスタ数と、それを持つページの割合（クラスタの大きさで重み付け。根拠が保存されていないクラスタは除外）。',
-				byLandmark: 'ページパーツ別のクラスタ',
-				byLandmarkCaveat:
-					'クラスタを、持っているページパーツごとにまとめた一覧。複数のパーツを持つクラスタはそれぞれの下に重複して表示されます。',
-				clusterCount: '{count} クラスタ',
+				colBlocks: 'ブロック数',
+				colPages: 'ページ数',
+				colBlockKind: 'ブロック種別',
+				colTopDirectory: '主ディレクトリ',
+				colMergedBlocks: '統合元',
+				blockOverview: '種別ごとのブロック',
+				blockOverviewCaveat:
+					'ブロックは `--templates` が最初に作る粗いグループです。特徴的なCSSファイルの組み合わせ、またはURLの先頭パス（CSS参照が記録されていないページは、同じセクションのCSSブロックに合流）で分け、そのあとDOM構造でクラスタに分割します。クラスタ数とページ数は先頭のブロックにだけ数えます。',
+				byBlock: 'ブロック別のクラスタ',
+				byBlockCaveat:
+					'各クラスタを、ページの取り込み元ブロックの下に並べた一覧。同じブロック内のクラスタは互いに兄弟クラスタです。複数ブロックをまたいで統合されたクラスタは各ブロックの下に現れ、「統合元」に他方のブロックを示します。そのためブロックのページ数は、こうしたクラスタを重複して数えることがあります。',
 				allClusters: 'すべてのクラスタ',
 			},
 			consoleLogs: {

@@ -18,7 +18,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** A typical overview with several clusters and landmark aggregates. */
+/** A typical overview with several clusters spread over css / path / orphan-merge blocks. */
 export const Default: Story = {
 	args: {
 		overview: {
@@ -49,10 +49,12 @@ export const Default: Story = {
 				{ key: 'medium', clusterCount: 2, pageCount: 32 },
 				{ key: 'large', clusterCount: 2, pageCount: 290 },
 			],
-			landmarks: [
-				{ type: 'header', clusterCount: 12, averagePresenceRate: 0.99 },
-				{ type: 'footer', clusterCount: 11, averagePresenceRate: 0.95 },
-				{ type: 'nav', clusterCount: 9, averagePresenceRate: 0.7 },
+			blockGroups: [],
+			blockCount: 7,
+			blockKinds: [
+				{ kind: 'css', blockCount: 3, clusterCount: 6, pageCount: 290 },
+				{ kind: 'path', blockCount: 2, clusterCount: 2, pageCount: 10 },
+				{ kind: 'orphanMerge', blockCount: 2, clusterCount: 4, pageCount: 40 },
 			],
 		},
 	},

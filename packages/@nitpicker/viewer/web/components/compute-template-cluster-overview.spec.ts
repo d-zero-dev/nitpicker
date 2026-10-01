@@ -1,62 +1,23 @@
-import type {
-	TemplateClusterLandmarkSummary,
-	TemplateClusterSummary,
-} from '@nitpicker/query';
+import type { TemplateClusterSummary } from '@nitpicker/query';
 
 import { describe, expect, it } from 'vitest';
 
 import { computeTemplateClusterOverview } from './compute-template-cluster-overview.js';
 
 /**
- * Builds a landmark summary with only the fields the aggregation reads.
- * @param type - The landmark type.
- * @param presenceRate - Share of member pages carrying it, 0–1.
- * @returns The landmark summary.
- */
-function landmark(
-	type: TemplateClusterLandmarkSummary['type'],
-	presenceRate: number,
-): TemplateClusterLandmarkSummary {
-	return {
-		type,
-		presenceRate,
-		chromeRate: 0,
-		memberCountWithInstance: 0,
-		shellTokens: [],
-		shellTokenCount: 0,
-	};
-}
-
-/**
- * Builds a cluster summary; `reason` is `null` unless `landmarks` is given.
+ * Builds a cluster summary with only the fields the aggregation reads.
  * @param key - The template key.
  * @param pageCount - The cluster's page count.
- * @param landmarks - Landmark summaries to attach as the cluster's reason.
  * @returns The cluster summary.
  */
-function cluster(
-	key: string,
-	pageCount: number,
-	landmarks?: TemplateClusterLandmarkSummary[],
-): TemplateClusterSummary {
+function cluster(key: string, pageCount: number): TemplateClusterSummary {
 	return {
 		templateKey: key,
 		pageCount,
 		commonDirectories: [],
 		commonStylesheetUrls: [],
 		commonStylesheetFileNames: [],
-		reason: landmarks
-			? {
-					clusteredMemberCount: pageCount,
-					blocking: [],
-					distinctiveStylesheetUrls: [],
-					distinctiveStylesheetFileNames: [],
-					structuralCoreTokens: [],
-					structuralCoreTokenCount: 0,
-					landmarks,
-					siblingClusterKeys: [],
-				}
-			: null,
+		reason: null,
 	};
 }
 
@@ -74,7 +35,9 @@ describe('computeTemplateClusterOverview', () => {
 				{ key: 'medium', clusterCount: 0, pageCount: 0 },
 				{ key: 'large', clusterCount: 0, pageCount: 0 },
 			],
-			landmarks: [],
+			blockGroups: [],
+			blockCount: 0,
+			blockKinds: [],
 		});
 	});
 
@@ -110,16 +73,67 @@ describe('computeTemplateClusterOverview', () => {
 		expect(computeTemplateClusterOverview(input).topClusters).toHaveLength(5);
 	});
 
-	it('weights landmark presence by page count over clusters that have a reason', () => {
+	it('counts blocks and breaks them down by kind in css / path / orphanMerge / unknown order', () => {
 		const overview = computeTemplateClusterOverview([
-			cluster('a', 30, [landmark('header', 1), landmark('footer', 0.5)]),
-			cluster('b', 10, [landmark('header', 0.5)]),
-			// No reason: excluded from the denominator and from clusterCount.
-			cluster('c', 100),
+			cluster('["path:news","cluster:0"]', 2),
+			cluster('["css:abc","cluster:0"]', 30),
+			cluster('["css:abc","cluster:1"]', 10),
+			cluster('["orphan-merge:blogs","cluster:0"]', 5),
+			cluster('["css:def","cluster:0"]', 1),
 		]);
-		expect(overview.landmarks).toEqual([
-			{ type: 'header', clusterCount: 2, averagePresenceRate: 0.875 },
-			{ type: 'footer', clusterCount: 1, averagePresenceRate: 0.375 },
+		expect(overview.blockCount).toBe(4);
+		expect(overview.blockGroups.map((g) => g.block.blockKey)).toEqual([
+			'css:abc',
+			'orphan-merge:blogs',
+			'path:news',
+			'css:def',
+		]);
+		expect(overview.blockKinds).toEqual([
+			{ kind: 'css', blockCount: 2, clusterCount: 3, pageCount: 41 },
+			{ kind: 'path', blockCount: 1, clusterCount: 1, pageCount: 2 },
+			{ kind: 'orphanMerge', blockCount: 1, clusterCount: 1, pageCount: 5 },
+		]);
+	});
+
+	it('counts a cluster merged across blocks once (first block) in the kind breakdown but in every block for blockCount', () => {
+		const merged: TemplateClusterSummary = {
+			...cluster('["css:abc","cluster:0"]', 10),
+			reason: {
+				clusteredMemberCount: 10,
+				blocking: [
+					{
+						blockKey: 'css:abc',
+						reason: { kind: 'css', distinctiveStylesheetHrefs: [] },
+					},
+					{ blockKey: 'path:news', reason: { kind: 'path', pathKey: 'news' } },
+				],
+				distinctiveStylesheetUrls: [],
+				distinctiveStylesheetFileNames: [],
+				structuralCoreTokens: [],
+				structuralCoreTokenCount: 0,
+				landmarks: [],
+				siblingClusterKeys: [],
+			},
+		};
+		const overview = computeTemplateClusterOverview([
+			merged,
+			cluster('["path:news","cluster:1"]', 2),
+		]);
+		expect(overview.clusterCount).toBe(2);
+		expect(overview.totalPageCount).toBe(12);
+		expect(overview.blockCount).toBe(2);
+		expect(overview.blockKinds).toEqual([
+			{ kind: 'css', blockCount: 1, clusterCount: 1, pageCount: 10 },
+			{ kind: 'path', blockCount: 1, clusterCount: 1, pageCount: 2 },
+		]);
+	});
+
+	it('omits block kinds no cluster has', () => {
+		const overview = computeTemplateClusterOverview([
+			cluster('["path:a","cluster:0"]', 1),
+		]);
+		expect(overview.blockKinds).toEqual([
+			{ kind: 'path', blockCount: 1, clusterCount: 1, pageCount: 1 },
 		]);
 	});
 });

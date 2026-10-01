@@ -174,7 +174,7 @@ await archive.replacePageTemplates(
 				memberCount: 2,
 				blocking: [
 					{
-						blockKey: '["css:1a2b3c4d5e6f7890"]',
+						blockKey: 'css:1a2b3c4d5e6f7890',
 						reason: {
 							kind: 'css',
 							distinctiveStylesheetHrefs: ['https://example.com/blog.css'],
@@ -197,8 +197,13 @@ await archive.replacePageTemplates(
 			'["path:news","cluster:0"]',
 			{
 				memberCount: 2,
+				// Two blocking entries model a Stage B cross-block merge: this
+				// cluster drew pages from the `path:news` block it was seeded
+				// from *and* from the `path:sections` block — the viewer must
+				// list it under both (the template key names only the seed).
 				blocking: [
-					{ blockKey: '["path:news"]', reason: { kind: 'path', pathKey: 'news' } },
+					{ blockKey: 'path:news', reason: { kind: 'path', pathKey: 'news' } },
+					{ blockKey: 'path:sections', reason: { kind: 'path', pathKey: 'sections' } },
 				],
 				structuralCoreTokens: ['body>h1'],
 				landmarks: {},
@@ -211,7 +216,7 @@ await archive.replacePageTemplates(
 				memberCount: 2,
 				blocking: [
 					{
-						blockKey: '["css:9f8e7d6c5b4a3210"]',
+						blockKey: 'css:9f8e7d6c5b4a3210',
 						reason: {
 							kind: 'css',
 							distinctiveStylesheetHrefs: ['https://example.com/docs.css'],
@@ -229,7 +234,7 @@ await archive.replacePageTemplates(
 				memberCount: 1,
 				blocking: [
 					{
-						blockKey: '["css:9f8e7d6c5b4a3210"]',
+						blockKey: 'css:9f8e7d6c5b4a3210',
 						reason: {
 							kind: 'css',
 							distinctiveStylesheetHrefs: ['https://example.com/docs.css'],

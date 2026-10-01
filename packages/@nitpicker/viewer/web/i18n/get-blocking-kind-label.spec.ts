@@ -29,4 +29,9 @@ describe('getBlockingKindLabel', () => {
 			expect(getBlockingKindLabel(kind, t)).toBe(kind);
 		}
 	});
+
+	it('labels the `unknown` kind a template key with an unrecognized prefix parses to', () => {
+		const t = tStub({ 'views.templateClusterBlockingKind.unknown': 'Other' });
+		expect(getBlockingKindLabel('unknown', t)).toBe('Other');
+	});
 });

@@ -1,7 +1,7 @@
 import type { viewerTableFeatures } from './table-features.js';
 import type {
 	ListPagesOptions,
-	TemplateClusterLandmarkSummary,
+	TemplateClusterBlockingEvidence,
 	TemplateClusterSummary,
 } from '@nitpicker/query';
 import type {
@@ -191,8 +191,22 @@ export type DirectoryTreeSortOrder = 'path' | 'pagesDesc' | 'pagesAsc';
 /** Which source `buildClusterHeading` drew a template cluster's heading from. */
 export type ClusterHeadingSource = 'distinctive' | 'common' | 'directory' | 'raw';
 
-/** A landmark type (`header`/`footer`/`nav`/`aside`/`form`/`search`). */
-export type ClusterLandmarkType = TemplateClusterLandmarkSummary['type'];
+/**
+ * Which `@d-zero/page-cluster` Pass-0 blocking stage a block key came from —
+ * the `reason.kind` values plus `unknown` for a template key whose block
+ * key prefix this viewer build does not recognize.
+ */
+export type ClusterBlockKind =
+	| TemplateClusterBlockingEvidence['reason']['kind']
+	| 'unknown';
+
+/** The block key parsed out of a `templateKey`, with its kind. */
+export interface ClusterBlockRef {
+	/** The raw block key (`css:<hash>` / `path:<segment>` / `orphan-merge:<segment>`). */
+	blockKey: string;
+	/** The kind derived from `blockKey`'s prefix. */
+	kind: ClusterBlockKind;
+}
 
 /** Page-count bucket label used by the template cluster size distribution. */
 export type ClusterSizeBucketKey = 'single' | 'small' | 'medium' | 'large';
@@ -207,18 +221,16 @@ export interface ClusterSizeBucket {
 	pageCount: number;
 }
 
-/** One landmark type's aggregate across every cluster that carries it. */
-export interface ClusterLandmarkOverview {
-	/** The landmark type this row aggregates. */
-	type: ClusterLandmarkType;
-	/** Number of clusters whose `reason.landmarks` includes this type. */
+/** One block kind's aggregate across every block of that kind. */
+export interface ClusterBlockKindOverview {
+	/** The block kind this row aggregates. */
+	kind: ClusterBlockKind;
+	/** Number of distinct block keys of this kind. */
+	blockCount: number;
+	/** Number of clusters whose block key is of this kind. */
 	clusterCount: number;
-	/**
-	 * Page-count-weighted mean of `presenceRate` over clusters that carry a
-	 * `reason` (clusters without one have unknown presence and are excluded
-	 * from the denominator), 0–1.
-	 */
-	averagePresenceRate: number;
+	/** Sum of `pageCount` over those clusters. */
+	pageCount: number;
 }
 
 /** Aggregates shown in the summary panel at the top of the template clusters view. */
@@ -233,22 +245,28 @@ export interface TemplateClusterOverview {
 	topClusters: TemplateClusterSummary[];
 	/** Size distribution, always four buckets in ascending range order. */
 	sizeBuckets: ClusterSizeBucket[];
-	/** One row per landmark type that at least one cluster carries, in stable type order. */
-	landmarks: ClusterLandmarkOverview[];
+	/**
+	 * Every cluster grouped by its Pass-0 block (`groupClustersByBlock`), in
+	 * that function's order. Computed once here so `blockCount` /
+	 * `blockKinds` and the block-groups section share one pass over the
+	 * template keys.
+	 */
+	blockGroups: ClusterBlockGroup[];
+	/** `blockGroups.length`. */
+	blockCount: number;
+	/** One row per block kind that at least one cluster has, in `css` / `path` / `orphanMerge` / `unknown` order. */
+	blockKinds: ClusterBlockKindOverview[];
 }
 
-/** One cluster's membership in a landmark group. */
-export interface LandmarkClusterGroupEntry {
-	/** The cluster carrying the landmark. */
-	cluster: TemplateClusterSummary;
-	/** This cluster's commonality summary for the group's landmark type. */
-	landmark: TemplateClusterLandmarkSummary;
-}
-
-/** Every cluster carrying one landmark type. */
-export interface LandmarkClusterGroup {
-	/** The landmark type shared by `entries`. */
-	type: ClusterLandmarkType;
-	/** Clusters carrying `type`, sorted by `pageCount` descending. */
-	entries: LandmarkClusterGroupEntry[];
+/** Every cluster that drew pages from one `@d-zero/page-cluster` Pass-0 block. */
+export interface ClusterBlockGroup {
+	/** The block the clusters share. */
+	block: ClusterBlockRef;
+	/**
+	 * Clusters that drew pages from `block`, sorted by `pageCount` descending.
+	 * A cluster merged across blocks is a member of each of its blocks' groups.
+	 */
+	clusters: TemplateClusterSummary[];
+	/** Sum of `pageCount` over `clusters` (a merged cluster counts in full in each of its groups). */
+	pageCount: number;
 }

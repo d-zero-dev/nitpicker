@@ -1,8 +1,7 @@
 import type { ClusterSizeBucketKey, TemplateClusterOverview } from '../types.js';
 
-import { getLandmarkTypeLabel } from '../i18n/get-landmark-type-label.js';
+import { getBlockingKindLabel } from '../i18n/get-blocking-kind-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
-import { formatPercent } from '../utils/format-percent.js';
 
 import { AppLink } from './app-link.js';
 import { buildClusterHeading } from './build-cluster-heading.js';
@@ -23,8 +22,8 @@ const SIZE_BUCKET_LABEL_KEYS: Record<ClusterSizeBucketKey, string> = {
 
 /**
  * Summary at the top of the template clusters view: headline counts, the
- * largest clusters, the cluster size distribution, and how common each page
- * part (`header`/`footer`/`nav`/`aside`/`form`/`search`) is across clusters.
+ * largest clusters, the cluster size distribution, and how the clusters
+ * divide into `@d-zero/page-cluster` Pass-0 blocks by kind.
  * @param props - The precomputed overview.
  * @returns The summary section element.
  */
@@ -47,6 +46,10 @@ export function TemplateClusterSummaryPanel(props: TemplateClusterSummaryPanelPr
 					label={t('views.templateClusters.overviewSingletons')}
 					value={overview.singletonClusterCount}
 				/>
+				<SummaryCard
+					label={t('views.templateClusters.overviewBlocks')}
+					value={overview.blockCount}
+				/>
 			</div>
 
 			<h2>{t('views.templateClusters.topClusters')}</h2>
@@ -67,7 +70,7 @@ export function TemplateClusterSummaryPanel(props: TemplateClusterSummaryPanelPr
 					<tr>
 						<th>{t('views.templateClusters.sizeColRange')}</th>
 						<th>{t('views.templateClusters.colClusters')}</th>
-						<th>{t('views.templateClusters.landmarkColPages')}</th>
+						<th>{t('views.templateClusters.colPages')}</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -81,30 +84,30 @@ export function TemplateClusterSummaryPanel(props: TemplateClusterSummaryPanelPr
 				</tbody>
 			</table>
 
-			{overview.landmarks.length > 0 && (
-				<>
-					<h2>{t('views.templateClusters.landmarkOverview')}</h2>
-					<p>{t('views.templateClusters.landmarkOverviewCaveat')}</p>
-					<table>
-						<thead>
-							<tr>
-								<th>{t('views.templateClusters.landmarkColType')}</th>
-								<th>{t('views.templateClusters.colClusters')}</th>
-								<th>{t('views.templateClusters.colAveragePresence')}</th>
-							</tr>
-						</thead>
-						<tbody>
-							{overview.landmarks.map((landmark) => (
-								<tr key={landmark.type}>
-									<td>{getLandmarkTypeLabel(landmark.type, t)}</td>
-									<td>{landmark.clusterCount}</td>
-									<td>{formatPercent(landmark.averagePresenceRate)}</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</>
-			)}
+			<h2>{t('views.templateClusters.blockOverview')}</h2>
+			<p className="view-description">
+				{t('views.templateClusters.blockOverviewCaveat')}
+			</p>
+			<table>
+				<thead>
+					<tr>
+						<th>{t('views.templateClusters.colBlockKind')}</th>
+						<th>{t('views.templateClusters.colBlocks')}</th>
+						<th>{t('views.templateClusters.colClusters')}</th>
+						<th>{t('views.templateClusters.colPages')}</th>
+					</tr>
+				</thead>
+				<tbody>
+					{overview.blockKinds.map((row) => (
+						<tr key={row.kind}>
+							<td>{getBlockingKindLabel(row.kind, t)}</td>
+							<td>{row.blockCount}</td>
+							<td>{row.clusterCount}</td>
+							<td>{row.pageCount}</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
 		</section>
 	);
 }

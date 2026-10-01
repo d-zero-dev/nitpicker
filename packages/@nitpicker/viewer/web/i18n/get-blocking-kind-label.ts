@@ -1,9 +1,9 @@
-import type { I18nValue } from '../types.js';
-import type { TemplateClusterBlockingEvidence } from '@nitpicker/query';
+import type { ClusterBlockKind, I18nValue } from '../types.js';
 
 /**
- * Lookup the localised label for a {@link TemplateClusterBlockingEvidence}'s
- * `reason.kind`.
+ * Lookup the localised label for a `TemplateClusterBlockingEvidence`'s
+ * `reason.kind`, or for the {@link ClusterBlockKind} parsed out of a template
+ * key (the same values plus `unknown`).
  *
  * Same `views.<enum>.<value>` + raw-value-fallback pattern as
  * `getErrorKindLabel`/`getAttributionLabel` — a new blocking kind introduced
@@ -13,10 +13,7 @@ import type { TemplateClusterBlockingEvidence } from '@nitpicker/query';
  * @param t - The active translate function (from `useI18n()`).
  * @returns The localised, human-readable label.
  */
-export function getBlockingKindLabel(
-	kind: TemplateClusterBlockingEvidence['reason']['kind'],
-	t: I18nValue['t'],
-): string {
+export function getBlockingKindLabel(kind: ClusterBlockKind, t: I18nValue['t']): string {
 	const key = `views.templateClusterBlockingKind.${kind}`;
 	const label = t(key);
 	return label === key ? kind : label;

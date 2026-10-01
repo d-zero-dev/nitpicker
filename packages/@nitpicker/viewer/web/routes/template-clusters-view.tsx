@@ -2,17 +2,17 @@ import { useMemo } from 'react';
 
 import { useTemplateClusters } from '../api/use-template-clusters.js';
 import { computeTemplateClusterOverview } from '../components/compute-template-cluster-overview.js';
-import { groupClustersByLandmark } from '../components/group-clusters-by-landmark.js';
+import { TemplateClusterBlockGroups } from '../components/template-cluster-block-groups.js';
 import { TemplateClusterItem } from '../components/template-cluster-item.js';
-import { TemplateClusterLandmarkGroups } from '../components/template-cluster-landmark-groups.js';
 import { TemplateClusterSummaryPanel } from '../components/template-cluster-summary-panel.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 /**
  * Template cluster analysis: a summary panel (totals, largest clusters, size
- * distribution, per-landmark aggregates), clusters grouped by the landmark
- * types (`header`/`footer`/...) they carry, then one collapsible section per
+ * distribution, block-kind breakdown), clusters grouped by the
+ * `@d-zero/page-cluster` Pass-0 block they were split out of, then one
+ * collapsible section per
  * `page_templates.template_key` cluster, each showing page count, top
  * directories by page count, common stylesheet set computed from the
  * cluster's actual member pages, and (when captured) `@d-zero/page-cluster`'s
@@ -26,10 +26,6 @@ export function TemplateClustersView() {
 	const { data, isLoading, error } = useTemplateClusters();
 	const overview = useMemo(
 		() => (data ? computeTemplateClusterOverview(data.clusters) : undefined),
-		[data],
-	);
-	const landmarkGroups = useMemo(
-		() => (data ? groupClustersByLandmark(data.clusters) : []),
 		[data],
 	);
 
@@ -55,7 +51,7 @@ export function TemplateClustersView() {
 			{data && overview && data.hasClassification && data.clusters.length > 0 && (
 				<>
 					<TemplateClusterSummaryPanel overview={overview} />
-					<TemplateClusterLandmarkGroups groups={landmarkGroups} />
+					<TemplateClusterBlockGroups groups={overview.blockGroups} />
 					<h2>{t('views.templateClusters.allClusters')}</h2>
 					{data.clusters.map((cluster) => (
 						<TemplateClusterItem key={cluster.templateKey} cluster={cluster} />

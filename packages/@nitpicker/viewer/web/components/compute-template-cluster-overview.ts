@@ -1,12 +1,21 @@
 import type {
-	ClusterLandmarkOverview,
+	ClusterBlockKind,
+	ClusterBlockKindOverview,
 	ClusterSizeBucket,
 	ClusterSizeBucketKey,
 	TemplateClusterOverview,
 } from '../types.js';
 import type { TemplateClusterSummary } from '@nitpicker/query';
 
-import { LANDMARK_TYPE_ORDER } from './landmark-type-order.js';
+import { groupClustersByBlock } from './group-clusters-by-block.js';
+import { listClusterBlocks } from './list-cluster-blocks.js';
+
+const BLOCK_KIND_ORDER: readonly ClusterBlockKind[] = [
+	'css',
+	'path',
+	'orphanMerge',
+	'unknown',
+];
 
 const SIZE_BUCKET_KEYS: readonly ClusterSizeBucketKey[] = [
 	'single',
@@ -36,8 +45,9 @@ function toSizeBucketKey(pageCount: number): ClusterSizeBucketKey {
 /**
  * Aggregates the cluster list into the figures shown in the summary panel at
  * the top of the template clusters view: totals, the largest clusters, the
- * size distribution (`1` / `2–5` / `6–20` / `21+` pages), and per-landmark
- * aggregates.
+ * size distribution (`1` / `2–5` / `6–20` / `21+` pages), and how the
+ * clusters divide into `@d-zero/page-cluster` Pass-0 blocks (block count
+ * and a per-kind breakdown — see `groupClustersByBlock`).
  *
  * Derived entirely from the `GET /api/template-clusters` payload — no extra
  * API field. Notably there is no "unclassified page count": `--templates`
@@ -71,29 +81,23 @@ export function computeTemplateClusterOverview(
 		bucket.pageCount += cluster.pageCount;
 	}
 
-	const landmarks: ClusterLandmarkOverview[] = [];
-	for (const type of LANDMARK_TYPE_ORDER) {
-		let clusterCount = 0;
-		let weightedPresence = 0;
-		let weightedPages = 0;
-		for (const cluster of clusters) {
-			if (!cluster.reason) {
-				continue;
-			}
-			weightedPages += cluster.pageCount;
-			const landmark = cluster.reason.landmarks.find((l) => l.type === type);
-			if (landmark) {
-				clusterCount += 1;
-				weightedPresence += landmark.presenceRate * cluster.pageCount;
-			}
-		}
-		if (clusterCount > 0) {
-			landmarks.push({
-				type,
-				clusterCount,
-				averagePresenceRate: weightedPages === 0 ? 0 : weightedPresence / weightedPages,
-			});
-		}
+	const blockGroups = groupClustersByBlock(clusters);
+	const kinds = new Map<ClusterBlockKind, ClusterBlockKindOverview>(
+		BLOCK_KIND_ORDER.map((kind) => [
+			kind,
+			{ kind, blockCount: 0, clusterCount: 0, pageCount: 0 },
+		]),
+	);
+	for (const group of blockGroups) {
+		kinds.get(group.block.kind)!.blockCount += 1;
+	}
+	// Clusters and pages are attributed to the first block only, so these
+	// columns sum to `clusterCount` / `totalPageCount` even though a cluster
+	// merged across blocks is listed under each of them in `blockGroups`.
+	for (const cluster of clusters) {
+		const row = kinds.get(listClusterBlocks(cluster)[0]!.kind)!;
+		row.clusterCount += 1;
+		row.pageCount += cluster.pageCount;
 	}
 
 	return {
@@ -102,6 +106,8 @@ export function computeTemplateClusterOverview(
 		singletonClusterCount,
 		topClusters: clusters.toSorted((a, b) => b.pageCount - a.pageCount).slice(0, topN),
 		sizeBuckets: [...buckets.values()],
-		landmarks,
+		blockGroups,
+		blockCount: blockGroups.length,
+		blockKinds: [...kinds.values()].filter((row) => row.blockCount > 0),
 	};
 }

@@ -115,13 +115,15 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 		await page.goto('/template-clusters');
 
 		const cards = page.locator('.card');
-		await expect(cards).toHaveCount(3);
+		await expect(cards).toHaveCount(4);
 		await expect(cards.nth(0)).toContainText('Clusters');
 		await expect(cards.nth(0).locator('.card-value')).toHaveText('5');
 		await expect(cards.nth(1)).toContainText('Classified pages');
 		await expect(cards.nth(1).locator('.card-value')).toHaveText('14');
 		await expect(cards.nth(2)).toContainText('Single-page clusters');
 		await expect(cards.nth(2).locator('.card-value')).toHaveText('1');
+		await expect(cards.nth(3)).toContainText('Blocks');
+		await expect(cards.nth(3).locator('.card-value')).toHaveText('4');
 	});
 
 	test('冒頭サマリの最大クラスタ一覧は最大のクラスタから順にPagesへのリンクを表示する', async ({
@@ -137,35 +139,94 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 		await expect(firstItem.getByRole('link')).toHaveAttribute('href', /templateKey=/);
 	});
 
-	test('冒頭サマリのサイズ分布とランドマーク別集計を表示する', async ({ page }) => {
+	test('冒頭サマリのサイズ分布とブロック種別ごとの内訳を表示する', async ({ page }) => {
 		await page.goto('/template-clusters');
 
-		const sizeRow = (label: string) =>
-			page.getByRole('row').filter({ has: page.getByRole('cell', { name: label }) });
-		await expect(sizeRow('1 page')).toContainText('1');
-		await expect(sizeRow('2–5 pages')).toContainText('3');
-		await expect(sizeRow('6–20 pages')).toContainText('1');
-		await expect(sizeRow('21+ pages')).toContainText('0');
+		const row = (label: string) =>
+			page
+				.getByRole('row')
+				.filter({ has: page.getByRole('cell', { name: label, exact: true }) });
+		await expect(row('1 page')).toContainText('1');
+		await expect(row('2–5 pages')).toContainText('3');
+		await expect(row('6–20 pages')).toContainText('1');
+		await expect(row('21+ pages')).toContainText('0');
 
-		const headerRow = page
-			.getByRole('row')
-			.filter({ has: page.getByRole('cell', { name: 'Header', exact: true }) });
-		await expect(headerRow.first()).toContainText('28.6%');
+		// css: blog + docs/help blocks → 2 blocks, 3 clusters, 5 pages.
+		await expect(row('Common stylesheets').locator('td')).toHaveText([
+			'Common stylesheets',
+			'2',
+			'3',
+			'5',
+		]);
+		// path: news + sections blocks → 2 blocks, 2 clusters, 9 pages.
+		await expect(row('URL path').locator('td')).toHaveText(['URL path', '2', '2', '9']);
 	});
 
-	test('ランドマーク別セクションはそのパーツを持つクラスタだけを列挙する', async ({
+	test('ブロック別セクションは同じブロックから分かれた兄弟クラスタをひとつの見出しの下に並べる', async ({
 		page,
 	}) => {
 		await page.goto('/template-clusters');
 
 		await expect(
-			page.getByRole('heading', { name: 'Clusters by page part', level: 2 }),
+			page.getByRole('heading', { name: 'Clusters by block', level: 2 }),
 		).toBeVisible();
-		const headerGroup = page.getByRole('region', { name: /^Header \(1 clusters\)$/ });
-		await expect(headerGroup).toContainText('blog.css');
-		await expect(headerGroup).not.toContainText('/news/');
-		await expect(headerGroup).toContainText('100.0%');
-		await expect(page.getByRole('region', { name: /^Footer/ })).toHaveCount(0);
+
+		const docsBlock = page.getByRole('region', {
+			name: 'Common stylesheets: docs.css (Clusters: 2, Pages: 3)',
+		});
+		await expect(docsBlock.locator('tbody tr')).toHaveCount(2);
+		await expect(docsBlock.locator('tbody tr').nth(0)).toContainText('/docs/');
+		await expect(docsBlock.locator('tbody tr').nth(1)).toContainText('/help/');
+		await expect(docsBlock.getByRole('link').first()).toHaveAttribute(
+			'href',
+			/templateKey=/,
+		);
+
+		const newsBlock = page.getByRole('region', {
+			name: 'URL path: /news/ (Clusters: 1, Pages: 2)',
+		});
+		await expect(newsBlock.locator('tbody tr')).toHaveCount(1);
+	});
+
+	test('複数ブロックをまたいで統合されたクラスタは各ブロックの下に現れ、統合元に他方のブロックを示す', async ({
+		page,
+	}) => {
+		await page.goto('/template-clusters');
+
+		// The `/news/` cluster's reason names `path:news` and `path:sections`,
+		// so it is listed under both; the `sections` block's own cluster has no
+		// reason and is placed by its template key alone.
+		const sectionsBlock = page.getByRole('region', {
+			name: 'URL path: /sections/ (Clusters: 2, Pages: 9)',
+		});
+		await expect(sectionsBlock.locator('tbody tr')).toHaveCount(2);
+		const mergedRow = sectionsBlock.locator('tbody tr', { hasText: '/news/' });
+		await expect(mergedRow.locator('td').nth(3)).toHaveText('URL path: /news/');
+		await expect(
+			sectionsBlock.locator('tbody tr', { hasText: 'section-a' }).locator('td').nth(3),
+		).toHaveText('—');
+
+		const newsBlock = page.getByRole('region', {
+			name: 'URL path: /news/ (Clusters: 1, Pages: 2)',
+		});
+		await expect(newsBlock.locator('tbody tr').first().locator('td').nth(3)).toHaveText(
+			'URL path: /sections/',
+		);
+
+		// Summary totals attribute the merged cluster to its first block only.
+		await expect(
+			page.locator('.card', { hasText: 'Blocks' }).locator('.card-value'),
+		).toHaveText('4');
+	});
+
+	test('ブロック別セクションはページ数の多いブロックから順に並ぶ', async ({ page }) => {
+		await page.goto('/template-clusters');
+
+		const headings = page.locator('section section h3');
+		await expect(headings).toHaveCount(4);
+		// sections: 7 own + 2 merged-in = 9; docs: 3; blog: 2; news: 2.
+		await expect(headings.nth(0)).toContainText('/sections/');
+		await expect(headings.nth(1)).toContainText('docs.css');
 	});
 
 	test('クラスタ選定理由が保存されていないクラスタは未保存の旨と実行コマンドを表示する', async ({
