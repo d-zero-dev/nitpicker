@@ -64,24 +64,36 @@ export function TemplateClusterBlockGroups(props: TemplateClusterBlockGroupsProp
 						<table className="plain-table">
 							<thead>
 								<tr>
-									<th>{t('views.templateClusters.colCluster')}</th>
-									<th>{t('views.templateClusters.colPages')}</th>
-									<th>{t('views.templateClusters.colTopDirectory')}</th>
+									<th className="plain-table-nowrap">
+										{t('views.templateClusters.colCluster')}
+									</th>
+									<th className="plain-table-num">
+										{t('views.templateClusters.colPages')}
+									</th>
+									<th className="plain-table-nowrap">
+										{t('views.templateClusters.colTopDirectory')}
+									</th>
 									<th>{t('views.templateClusters.colMergedBlocks')}</th>
 								</tr>
 							</thead>
 							<tbody>
 								{group.clusters.map((cluster) => (
 									<tr key={cluster.templateKey}>
-										<td>
+										<td className="plain-table-nowrap">
 											<AppLink
 												to={`/pages?templateKey=${encodeURIComponent(cluster.templateKey)}`}>
 												{formatClusterName(cluster, t)}
 											</AppLink>
 										</td>
-										<td>{cluster.pageCount}</td>
-										<td>{cluster.commonDirectories[0]?.directory ?? '—'}</td>
-										<td>{otherBlocksOf(group, cluster).join(', ') || '—'}</td>
+										<td className="plain-table-num">{cluster.pageCount}</td>
+										<td className="plain-table-nowrap">
+											{cluster.commonDirectories[0]?.directory ?? '—'}
+										</td>
+										<td>
+											<div className="plain-table-prose">
+												{otherBlocksOf(group, cluster).join(', ') || '—'}
+											</div>
+										</td>
 									</tr>
 								))}
 							</tbody>

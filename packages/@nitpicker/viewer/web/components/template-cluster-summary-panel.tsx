@@ -70,16 +70,18 @@ export function TemplateClusterSummaryPanel(props: TemplateClusterSummaryPanelPr
 					<thead>
 						<tr>
 							<th>{t('views.templateClusters.sizeColRange')}</th>
-							<th>{t('views.templateClusters.colClusters')}</th>
-							<th>{t('views.templateClusters.colPages')}</th>
+							<th className="plain-table-num">
+								{t('views.templateClusters.colClusters')}
+							</th>
+							<th className="plain-table-num">{t('views.templateClusters.colPages')}</th>
 						</tr>
 					</thead>
 					<tbody>
 						{overview.sizeBuckets.map((bucket) => (
 							<tr key={bucket.key}>
 								<td>{t(SIZE_BUCKET_LABEL_KEYS[bucket.key])}</td>
-								<td>{bucket.clusterCount}</td>
-								<td>{bucket.pageCount}</td>
+								<td className="plain-table-num">{bucket.clusterCount}</td>
+								<td className="plain-table-num">{bucket.pageCount}</td>
 							</tr>
 						))}
 					</tbody>
@@ -95,18 +97,20 @@ export function TemplateClusterSummaryPanel(props: TemplateClusterSummaryPanelPr
 					<thead>
 						<tr>
 							<th>{t('views.templateClusters.colBlockKind')}</th>
-							<th>{t('views.templateClusters.colBlocks')}</th>
-							<th>{t('views.templateClusters.colClusters')}</th>
-							<th>{t('views.templateClusters.colPages')}</th>
+							<th className="plain-table-num">{t('views.templateClusters.colBlocks')}</th>
+							<th className="plain-table-num">
+								{t('views.templateClusters.colClusters')}
+							</th>
+							<th className="plain-table-num">{t('views.templateClusters.colPages')}</th>
 						</tr>
 					</thead>
 					<tbody>
 						{overview.blockKinds.map((row) => (
 							<tr key={row.kind}>
 								<td>{getBlockingKindLabel(row.kind, t)}</td>
-								<td>{row.blockCount}</td>
-								<td>{row.clusterCount}</td>
-								<td>{row.pageCount}</td>
+								<td className="plain-table-num">{row.blockCount}</td>
+								<td className="plain-table-num">{row.clusterCount}</td>
+								<td className="plain-table-num">{row.pageCount}</td>
 							</tr>
 						))}
 					</tbody>

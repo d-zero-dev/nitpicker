@@ -41,8 +41,10 @@ export function TechnologyStarChart(props: TechnologyStarChartProps) {
 								<th>{t('views.technologies.colTechnology')}</th>
 								<th>{t('views.technologies.colCategory')}</th>
 								<th>{t('views.pageDetail.colVersion')}</th>
-								<th>{t('views.pageDetail.colConfidence')}</th>
-								<th>{t('views.pageDetail.colSignalCount')}</th>
+								<th className="plain-table-num">{t('views.pageDetail.colConfidence')}</th>
+								<th className="plain-table-num">
+									{t('views.pageDetail.colSignalCount')}
+								</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -60,8 +62,8 @@ export function TechnologyStarChart(props: TechnologyStarChartProps) {
 										<td>{tech.technology}</td>
 										<td>{tech.category ?? '—'}</td>
 										<td>{tech.version ?? '—'}</td>
-										<td>{tech.confidence}</td>
-										<td>{tech.signalCount}</td>
+										<td className="plain-table-num">{tech.confidence}</td>
+										<td className="plain-table-num">{tech.signalCount}</td>
 									</tr>
 									{expandedTechnology === tech.technology && (
 										<tr>
@@ -72,7 +74,9 @@ export function TechnologyStarChart(props: TechnologyStarChartProps) {
 															<tr>
 																<th>{t('views.pageDetail.colSignalType')}</th>
 																<th>{t('views.pageDetail.colEvidence')}</th>
-																<th>{t('views.pageDetail.colWeight')}</th>
+																<th className="plain-table-num">
+																	{t('views.pageDetail.colWeight')}
+																</th>
 															</tr>
 														</thead>
 														<tbody>
@@ -80,7 +84,7 @@ export function TechnologyStarChart(props: TechnologyStarChartProps) {
 																<tr key={`${signal.signalType}-${index}`}>
 																	<td>{signal.signalType}</td>
 																	<td>{signal.evidence ?? '—'}</td>
-																	<td>{signal.weight}</td>
+																	<td className="plain-table-num">{signal.weight}</td>
 																</tr>
 															))}
 														</tbody>

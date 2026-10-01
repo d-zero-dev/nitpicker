@@ -106,7 +106,13 @@ body {
 	/* `.detail-grid dd` sets `word-break: break-all` for long URLs; a table
 	   inside it should still wrap at word boundaries. */
 	word-break: normal;
-	overflow-wrap: anywhere;
+
+	/* `break-word`, not `anywhere`: `anywhere` counts its arbitrary break
+	   points toward min-content, so every column's minimum collapses to one
+	   character and the auto table layout squeezes the short columns into
+	   mid-word wraps while one long column takes the rest. `break-word`
+	   wraps the same way but leaves min-content at the longest word. */
+	overflow-wrap: break-word;
 	border-block-end: 1px solid var(--border);
 }
 
@@ -120,6 +126,36 @@ body {
 
 .plain-table td {
 	font-size: var(--font-size-base);
+}
+
+/* Column roles. The auto layout hands spare width to columns in proportion
+   to their content, so a free-text column starves its neighbours unless each
+   column states what it is:
+   - `-num`: counts and scores. Right-aligned tabular digits, as narrow as the
+     content (`inline-size: 1%` plus `nowrap` is the shrink-to-fit idiom for
+     table columns).
+   - `-nowrap`: short identifiers (names, URLs) that read worse split.
+   - `-prose`: long free text. The cell's content sits in a block capped at a
+     readable measure, which caps the column's max-content contribution —
+     `max-inline-size` on the cell itself is not honoured by the auto layout. */
+.plain-table .plain-table-num {
+	/* stylelint-disable-next-line @d-zero/declaration-value-type-disallowed-list -- intentional 1%: the shrink-to-fit idiom for a table column; with `nowrap` the column stays at its content width. */
+	inline-size: 1%;
+	font-variant-numeric: tabular-nums;
+	text-align: end;
+	white-space: nowrap;
+}
+
+.plain-table .plain-table-nowrap {
+	white-space: nowrap;
+}
+
+.plain-table .plain-table-prose {
+	/* stylelint-disable-next-line unit-disallowed-list -- `ch` is intentional: the cap is a readable line measure, in characters. */
+	min-inline-size: 24ch;
+
+	/* stylelint-disable-next-line unit-disallowed-list -- same measure as above. */
+	max-inline-size: 64ch;
 }
 
 /* Child combinator so a nested table's cells keep their own row separators

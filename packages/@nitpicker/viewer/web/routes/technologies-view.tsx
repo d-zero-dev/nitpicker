@@ -36,7 +36,9 @@ function TechnologyDrilldown(props: {
 						<thead>
 							<tr>
 								<th>{t('views.technologies.colDirectory')}</th>
-								<th>{t('views.technologies.colPageCount')}</th>
+								<th className="plain-table-num">
+									{t('views.technologies.colPageCount')}
+								</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -45,7 +47,7 @@ function TechnologyDrilldown(props: {
 								.map((row) => (
 									<tr key={row.directory}>
 										<td>{row.directory}</td>
-										<td>{row.pageCount}</td>
+										<td className="plain-table-num">{row.pageCount}</td>
 									</tr>
 								))}
 						</tbody>
@@ -103,8 +105,12 @@ export function TechnologiesView() {
 							<tr>
 								<th>{t('views.technologies.colTechnology')}</th>
 								<th>{t('views.technologies.colCategory')}</th>
-								<th>{t('views.technologies.colPageCount')}</th>
-								<th>{t('views.technologies.colAvgConfidence')}</th>
+								<th className="plain-table-num">
+									{t('views.technologies.colPageCount')}
+								</th>
+								<th className="plain-table-num">
+									{t('views.technologies.colAvgConfidence')}
+								</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -119,8 +125,8 @@ export function TechnologiesView() {
 										}>
 										<td>{entry.technology}</td>
 										<td>{entry.category ?? '—'}</td>
-										<td>{entry.pageCount}</td>
-										<td>{entry.avgConfidence}</td>
+										<td className="plain-table-num">{entry.pageCount}</td>
+										<td className="plain-table-num">{entry.avgConfidence}</td>
 									</tr>
 									{selected === entry.technology && (
 										<tr>
