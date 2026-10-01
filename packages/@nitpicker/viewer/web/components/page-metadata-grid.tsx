@@ -4,6 +4,7 @@ import { useI18n } from '../i18n/use-i18n.js';
 import { formatTemplateLabel } from '../utils/format-template-label.js';
 
 import { AppLink } from './app-link.js';
+import { ExternalUrl } from './external-url.js';
 
 /** Props for {@link PageMetadataGrid}. */
 export interface PageMetadataGridProps {
@@ -28,7 +29,9 @@ export function PageMetadataGrid(props: PageMetadataGridProps) {
 	return (
 		<dl className="detail-grid">
 			<dt>URL</dt>
-			<dd>{data.url}</dd>
+			<dd>
+				<ExternalUrl url={data.url} />
+			</dd>
 			{data.isSkipped && (
 				<>
 					<dt>{t('views.pageDetail.skipReason')}</dt>
@@ -74,7 +77,7 @@ export function PageMetadataGrid(props: PageMetadataGridProps) {
 			<dt>{t('views.pageDetail.descriptionField')}</dt>
 			<dd>{data.description ?? '—'}</dd>
 			<dt>{t('views.pageDetail.canonical')}</dt>
-			<dd>{data.canonical ?? '—'}</dd>
+			<dd>{data.canonical == null ? '—' : <ExternalUrl url={data.canonical} />}</dd>
 			<dt>{t('views.pageDetail.robots')}</dt>
 			<dd>
 				{[

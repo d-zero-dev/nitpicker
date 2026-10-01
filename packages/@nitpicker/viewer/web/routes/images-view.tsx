@@ -12,6 +12,7 @@ import {
 	createTableControls,
 } from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
+import { ExternalUrl } from '../components/external-url.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
@@ -71,7 +72,10 @@ export function ImagesView() {
 				accessorKey: 'src',
 				header: t('views.images.colSrc'),
 				size: 360,
-				cell: (i) => i.getValue<string | null>() ?? '—',
+				cell: (i) => {
+					const src = i.getValue<string | null>();
+					return src == null ? '—' : <ExternalUrl url={src} />;
+				},
 			},
 			{
 				accessorKey: 'alt',
@@ -89,7 +93,7 @@ export function ImagesView() {
 				accessorKey: 'pageUrl',
 				header: t('views.images.colPage'),
 				size: 320,
-				cell: (i) => i.getValue<string>(),
+				cell: (i) => <ExternalUrl url={i.getValue<string>()} />,
 			},
 		],
 		[t],

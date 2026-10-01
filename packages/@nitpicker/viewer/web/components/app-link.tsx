@@ -14,7 +14,9 @@ export type AppLinkProps = LinkProps;
 /**
  * Thin passthrough wrapper around react-router's `Link`, giving every
  * internal navigation link a single point of change for future look/behavior
- * tweaks (e.g. an external-link icon) without touching every call site.
+ * tweaks without touching every call site. In-viewer destinations only: a URL
+ * that has no viewer screen is rendered with `ExternalUrl` instead (opens the
+ * real URL in a new window).
  * @param props - Forwarded verbatim to `Link`.
  * @returns The link element.
  */

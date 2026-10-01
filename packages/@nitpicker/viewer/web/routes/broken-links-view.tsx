@@ -13,6 +13,7 @@ import {
 	createTableControls,
 } from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
+import { ExternalUrl } from '../components/external-url.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
@@ -68,12 +69,14 @@ export function BrokenLinksView() {
 				header: t('views.brokenLinks.colSource'),
 				size: 380,
 				accessorFn: (r) => field(r, 'sourceUrl'),
+				cell: (i) => <ExternalUrl url={i.getValue<string>()} />,
 			},
 			{
 				id: 'destUrl',
 				header: t('views.brokenLinks.colDest'),
 				size: 380,
 				accessorFn: (r) => field(r, 'destUrl'),
+				cell: (i) => <ExternalUrl url={i.getValue<string>()} />,
 			},
 			{
 				id: 'status',

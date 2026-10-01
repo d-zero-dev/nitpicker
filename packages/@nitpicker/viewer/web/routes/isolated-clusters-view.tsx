@@ -17,6 +17,7 @@ import {
 	addTextFilter,
 	createTableControls,
 } from '../components/create-table-controls.js';
+import { ExternalUrl } from '../components/external-url.js';
 import { IsolatedClusterDetailPane } from '../components/isolated-cluster-detail-pane.js';
 import { IsolatedClusterListPane } from '../components/isolated-cluster-list-pane.js';
 import { SourceBadge } from '../components/source-badge.js';
@@ -246,7 +247,11 @@ function ClusterDetailPane({
 				header: t('views.isolatedClusters.memberUrl'),
 				size: 440,
 				accessorFn: (r) => r.url,
-				cell: (info) => <code>{info.getValue<string>()}</code>,
+				cell: (info) => (
+					<code>
+						<ExternalUrl url={info.getValue<string>()} />
+					</code>
+				),
 			},
 			{
 				id: 'title',

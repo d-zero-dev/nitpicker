@@ -21,6 +21,7 @@ import {
 	createTableControls,
 } from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
+import { ExternalUrl } from '../components/external-url.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
@@ -34,6 +35,17 @@ import { formatTemplateLabel } from '../utils/format-template-label.js';
  */
 function textCell(info: CellContext<PageListItem, unknown>) {
 	return info.getValue<string | number | null>() ?? '—';
+}
+
+/**
+ * Renders a URL-valued cell as an external link, or an em dash when
+ * null/empty.
+ * @param info - The TanStack cell context.
+ * @returns The link, or the em dash.
+ */
+function externalUrlCell(info: CellContext<PageListItem, unknown>) {
+	const value = info.getValue<string | null>();
+	return value ? <ExternalUrl url={value} /> : '—';
 }
 
 /**
@@ -210,10 +222,10 @@ export function PagesView() {
 			{ accessorKey: 'noindex', header: 'noindex', size: 80, cell: boolCell },
 			{ accessorKey: 'nofollow', header: 'nofollow', size: 80, cell: boolCell },
 			{ accessorKey: 'noarchive', header: 'noarchive', size: 90, cell: boolCell },
-			{ accessorKey: 'canonical', header: 'canonical', size: 280, cell: textCell },
+			{ accessorKey: 'canonical', header: 'canonical', size: 280, cell: externalUrlCell },
 			{ accessorKey: 'twitterCard', header: 'twitter:card', size: 120, cell: textCell },
 			{ accessorKey: 'ogSiteName', header: 'og:site_name', size: 160, cell: textCell },
-			{ accessorKey: 'ogUrl', header: 'og:url', size: 240, cell: textCell },
+			{ accessorKey: 'ogUrl', header: 'og:url', size: 240, cell: externalUrlCell },
 			{ accessorKey: 'ogTitle', header: 'og:title', size: 200, cell: textCell },
 			{
 				accessorKey: 'ogDescription',
@@ -222,7 +234,7 @@ export function PagesView() {
 				cell: textCell,
 			},
 			{ accessorKey: 'ogType', header: 'og:type', size: 100, cell: textCell },
-			{ accessorKey: 'ogImage', header: 'og:image', size: 240, cell: textCell },
+			{ accessorKey: 'ogImage', header: 'og:image', size: 240, cell: externalUrlCell },
 			{ accessorKey: 'ogImageAlt', header: 'og:image:alt', size: 200, cell: textCell },
 			{ accessorKey: 'ogLocale', header: 'og:locale', size: 100, cell: textCell },
 			{

@@ -1,3 +1,5 @@
+import { ExternalUrl } from './external-url.js';
+
 /** Props for {@link DuplicateUrlList}. */
 export interface DuplicateUrlListProps {
 	/** Sample of page URLs sharing the same duplicated field value. */
@@ -17,7 +19,9 @@ export function DuplicateUrlList(props: DuplicateUrlListProps) {
 	return (
 		<ul className="url-list">
 			{props.urls.map((url) => (
-				<li key={url}>{url}</li>
+				<li key={url}>
+					<ExternalUrl url={url} />
+				</li>
 			))}
 		</ul>
 	);

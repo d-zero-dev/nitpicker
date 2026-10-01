@@ -12,6 +12,7 @@ import {
 	createTableControls,
 } from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
+import { ExternalUrl } from '../components/external-url.js';
 import { SourceBadge } from '../components/source-badge.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
@@ -55,7 +56,11 @@ export function UnusedResourcesView() {
 				accessorKey: 'url',
 				header: t('views.unusedResources.url'),
 				size: 420,
-				cell: (i) => <code>{i.getValue<string>()}</code>,
+				cell: (i) => (
+					<code>
+						<ExternalUrl url={i.getValue<string>()} />
+					</code>
+				),
 			},
 			{
 				accessorKey: 'status',

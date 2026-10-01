@@ -2,6 +2,8 @@ import type { MainContentImageEntry } from '@nitpicker/query';
 
 import { useI18n } from '../i18n/use-i18n.js';
 
+import { ExternalUrl } from './external-url.js';
+
 /** Props for {@link ImageList}. */
 export interface ImageListProps {
 	/** Images within the main region, in DOM order. */
@@ -27,7 +29,7 @@ export function ImageList(props: ImageListProps) {
 			<ul className="detail-list">
 				{images.map((image, index) => (
 					<li key={index}>
-						{image.src}
+						<ExternalUrl url={image.src} />
 						{image.alt ? ` (alt: ${image.alt})` : ''}
 					</li>
 				))}

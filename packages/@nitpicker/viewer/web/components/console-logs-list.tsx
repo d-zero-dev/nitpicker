@@ -2,6 +2,8 @@ import type { PageConsoleLogEntry } from '@nitpicker/query';
 
 import { useI18n } from '../i18n/use-i18n.js';
 
+import { ExternalUrl } from './external-url.js';
+
 /** Props for {@link ConsoleLogsList}. */
 export interface ConsoleLogsListProps {
 	/** Console messages / page errors captured on this page, in capture order. */
@@ -33,7 +35,7 @@ export function ConsoleLogsList(props: ConsoleLogsListProps) {
 						{entry.locationUrl && (
 							<span className="state">
 								{' '}
-								({entry.locationUrl}
+								(<ExternalUrl url={entry.locationUrl} />
 								{entry.locationLine == null ? '' : `:${entry.locationLine}`})
 							</span>
 						)}

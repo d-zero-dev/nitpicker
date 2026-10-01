@@ -1,5 +1,7 @@
 import { useI18n } from '../i18n/use-i18n.js';
 
+import { ExternalUrl } from './external-url.js';
+
 /** Props for {@link RedirectFromList}. */
 export interface RedirectFromListProps {
 	/** URLs that redirect to this page. */
@@ -24,7 +26,9 @@ export function RedirectFromList(props: RedirectFromListProps) {
 			</h2>
 			<ul className="detail-list">
 				{urls.map((from) => (
-					<li key={from}>{from}</li>
+					<li key={from}>
+						<ExternalUrl url={from} />
+					</li>
 				))}
 			</ul>
 		</>

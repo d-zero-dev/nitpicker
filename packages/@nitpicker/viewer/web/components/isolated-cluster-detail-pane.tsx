@@ -4,6 +4,7 @@ import type { IsolatedClusterMember } from '@nitpicker/query';
 import { useI18n } from '../i18n/use-i18n.js';
 
 import { DataTable } from './data-table.js';
+import { ExternalUrl } from './external-url.js';
 import { ViewHeader } from './view-header.js';
 
 /** Props for {@link IsolatedClusterDetailPane}. */
@@ -37,7 +38,9 @@ export function IsolatedClusterDetailPane(props: IsolatedClusterDetailPaneProps)
 				descriptionKey="views.isolatedClusters.description"
 			/>
 			<p>
-				<code>{props.representativeUrl}</code>
+				<code>
+					<ExternalUrl url={props.representativeUrl} />
+				</code>
 			</p>
 			{/* Error rendering is delegated to <DataTable> (one banner per failed query).
 			    `props` itself satisfies `DataTableProps<IsolatedClusterMember>` (it's an
