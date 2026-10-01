@@ -24,7 +24,7 @@ export function HeadingList(props: HeadingListProps) {
 			<h3>
 				{t('views.pageDetail.mainContentHeadings')} ({headings.length})
 			</h3>
-			<ul>
+			<ul className="detail-list">
 				{headings.map((heading, index) => (
 					<li key={index}>
 						H{heading.level}: {heading.text ?? '—'}

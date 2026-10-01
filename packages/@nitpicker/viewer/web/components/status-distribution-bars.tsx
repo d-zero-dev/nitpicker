@@ -35,10 +35,7 @@ function StatusDistributionRow(props: {
 					: undefined
 			}>
 			<div className="bar-row">
-				{/* Fixed width 60 for every row keeps the bar tracks aligned; the
-				    long inventory-seed label wraps inside it instead of pushing
-				    its bar out of column. */}
-				<span style={{ width: 60 }}>{props.label}</span>
+				<span>{props.label}</span>
 				<span className="bar-track">
 					<span className="bar-fill" style={{ width: `${props.ratio * 100}%` }} />
 				</span>

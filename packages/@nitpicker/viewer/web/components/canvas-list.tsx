@@ -24,7 +24,7 @@ export function CanvasList(props: CanvasListProps) {
 			<h3>
 				{t('views.pageDetail.mainContentCanvases')} ({canvases.length})
 			</h3>
-			<ul>
+			<ul className="detail-list">
 				{canvases.map((canvas, index) => (
 					<li key={index}>
 						{canvas.width}×{canvas.height}

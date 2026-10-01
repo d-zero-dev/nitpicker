@@ -24,7 +24,7 @@ export function ImageList(props: ImageListProps) {
 			<h3>
 				{t('views.pageDetail.mainContentImages')} ({images.length})
 			</h3>
-			<ul>
+			<ul className="detail-list">
 				{images.map((image, index) => (
 					<li key={index}>
 						{image.src}

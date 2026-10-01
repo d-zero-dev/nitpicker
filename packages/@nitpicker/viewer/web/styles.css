@@ -103,15 +103,12 @@ body {
 	vertical-align: top;
 	text-align: start;
 
-	/* `.detail-grid dd` sets `word-break: break-all` for long URLs; a table
-	   inside it should still wrap at word boundaries. */
-	word-break: normal;
-
 	/* `break-word`, not `anywhere`: `anywhere` counts its arbitrary break
 	   points toward min-content, so every column's minimum collapses to one
 	   character and the auto table layout squeezes the short columns into
 	   mid-word wraps while one long column takes the rest. `break-word`
-	   wraps the same way but leaves min-content at the longest word. */
+	   wraps the same way but leaves min-content at the longest word. This
+	   also overrides the `anywhere` a table inherits inside `.detail-grid dd`. */
 	overflow-wrap: break-word;
 	border-block-end: 1px solid var(--border);
 }
@@ -178,6 +175,27 @@ body {
 
 .plain-table .is-expanded {
 	background: var(--row-selected-bg);
+}
+
+/* Disclosure chevron in the first cell: hover and the expanded tint only
+   show up after interaction, so without it nothing at rest says the row
+   opens. Drawn from two borders rotated -45deg (pointing inline-end) and
+   turned to point down once expanded. */
+.plain-table .is-expandable > td:first-child::before {
+	display: inline flow-root;
+	inline-size: 6px;
+	block-size: 6px;
+	margin-inline: 2px 10px;
+	vertical-align: 0.15em;
+	content: '';
+	border-block-end: 1.5px solid var(--text-dim);
+	border-inline-end: 1.5px solid var(--text-dim);
+	rotate: -45deg;
+}
+
+.plain-table .is-expanded > td:first-child::before {
+	vertical-align: 0.3em;
+	rotate: 45deg;
 }
 
 /* The colSpan cell carrying an expanded row's detail — a nested table or a
@@ -420,6 +438,26 @@ h2 {
 	margin-block: 18px 8px;
 	margin-inline: 0;
 	font-size: var(--font-size-lg);
+}
+
+/* An `h2` with a trailing link to the section's full view. The link sits
+   on the heading's baseline rather than below the content, where it reads
+   as one more row of the section instead of a way out of it. The wrapper
+   takes over the `h2`'s block margins. */
+.section-heading {
+	display: block flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+	align-items: baseline;
+	margin-block: 18px 8px;
+}
+
+.section-heading h2 {
+	margin: 0;
+}
+
+.section-heading a {
+	font-size: var(--font-size-sm);
 }
 
 /* View header + description */
@@ -991,11 +1029,33 @@ h2 {
 	font-weight: bold;
 }
 
+/* label | track | value columns shared by every row, so the tracks line up
+   without a fixed label width: a fixed width either wraps a longer label
+   ("Google Tag Manager") or wastes space on short ones. `fit-content(50%)`
+   sizes the label column to its longest label and only wraps a label that
+   would take more than half the group. */
 .bars {
-	display: block flex;
-	flex-direction: column;
-	gap: 6px;
+	display: block grid;
+	grid-template-columns: fit-content(50%) minmax(0, 1fr) max-content;
+	gap: 6px 8px;
 	max-inline-size: 460px;
+}
+
+/* Rows and their wrappers (a status row's group, its breakdown list) all
+   span the group and adopt its columns, however deeply they nest. */
+.bars .bar-row,
+.bars > :not(.bar-row),
+.bars > :not(.bar-row) > :not(.bar-row) {
+	display: block grid;
+	grid-template-columns: subgrid;
+	grid-column: 1 / -1;
+	row-gap: 6px;
+	align-items: center;
+}
+
+.bars .bar-row > :last-child {
+	font-variant-numeric: tabular-nums;
+	text-align: end;
 }
 
 .bar-row {
@@ -1013,14 +1073,34 @@ h2 {
 	border-radius: 4px;
 }
 
+/* `.bar-fill` is a `<span>`: left inline, it ignores both `block-size`
+   and its inline `width`, and the bar renders empty. */
 .bar-fill {
+	display: block flow;
 	block-size: 100%;
 	background: var(--accent);
 }
 
+/* Inside `.bars` the breakdown rows reuse the parent columns (subgrid
+   above); standalone, the list lays out the same three columns itself.
+   The indent goes on the label, not the list: list padding would push the
+   standalone list's tracks in along with its labels. */
 .error-kind-breakdown-list {
-	padding-inline-start: 24px;
-	font-size: var(--font-size-xs);
+	display: block grid;
+	grid-template-columns: fit-content(50%) minmax(0, 1fr) max-content;
+	gap: 6px 8px;
+}
+
+.error-kind-breakdown-list .bar-row {
+	display: block grid;
+	grid-template-columns: subgrid;
+	grid-column: 1 / -1;
+	align-items: center;
+}
+
+.error-kind-breakdown-list .bar-row > :first-child {
+	padding-inline-start: 16px;
+	color: var(--text-dim);
 }
 
 .url-list {
@@ -1030,8 +1110,23 @@ h2 {
 	word-break: break-all;
 }
 
-.url-list li {
-	margin-block: 2px;
+.url-list li + li {
+	margin-block-start: 6px;
+}
+
+/* Bulleted entry lists under a page-detail section heading (headings,
+   images, outbound links, console logs, …). Entries are often long single
+   lines such as URLs, so they need air between items to stay countable
+   at a glance. */
+.detail-list {
+	padding-inline-start: 18px;
+	margin-block: 0 16px;
+	font-size: var(--font-size-base);
+	overflow-wrap: anywhere;
+}
+
+.detail-list li + li {
+	margin-block-start: 6px;
 }
 
 /*
@@ -1328,19 +1423,68 @@ h2 {
 /* Detail */
 .detail-grid {
 	display: block grid;
-	grid-template-columns: max-content 1fr;
-	gap: 4px 16px;
+	grid-template-columns: max-content minmax(0, 1fr);
 	margin-block-end: 20px;
 	font-size: var(--font-size-base);
 }
 
+/* Spacing lives in padding, not `gap`: a gap would break each row's divider
+   at the column boundary and leave a sliver between rows. */
+.detail-grid dt,
+.detail-grid dd {
+	padding-block: 6px;
+}
+
 .detail-grid dt {
+	padding-inline-end: 16px;
 	color: var(--text-dim);
 }
 
 .detail-grid dd {
 	margin: 0;
-	word-break: break-all;
+
+	/* `anywhere`, not `word-break: break-all`: prose and caveats wrap at word
+	   boundaries, and only an unbreakable run such as a long URL breaks
+	   mid-string. Unlike in `.plain-table`, collapsing min-content is wanted
+	   here — it lets the `1fr` column shrink instead of overflowing. */
+	overflow-wrap: anywhere;
+}
+
+/* Dividers go on top of every row but the first, so the grid needs no
+   last-row exception and the stacked layout below keeps one line per pair. */
+.detail-grid dt:not(:first-of-type),
+.detail-grid dt:not(:first-of-type) + dd {
+	border-block-start: 1px solid var(--border);
+}
+
+.detail-grid dd ul {
+	padding-inline-start: 18px;
+	margin: 0;
+}
+
+/* Only block siblings: inline siblings such as side-by-side badges share a
+   line, and a block margin on them would just pad that row. */
+.detail-grid dd > * + :is(p, ul) {
+	margin-block-start: 4px;
+}
+
+/* Narrow viewports stack each label above its value: the `max-content`
+   label column would otherwise squeeze long values into a sliver. */
+@media (width <= 600px) {
+	.detail-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.detail-grid dt {
+		padding-block-end: 0;
+		padding-inline-end: 0;
+	}
+
+	.detail-grid dd,
+	.detail-grid dt:not(:first-of-type) + dd {
+		padding-block-start: 2px;
+		border-block-start: none;
+	}
 }
 
 /* Technology inventory drilldown (directory distribution + page list)

@@ -25,7 +25,7 @@ export function ConsoleLogsList(props: ConsoleLogsListProps) {
 			<h2>
 				{t('views.pageDetail.consoleLogs')} ({entries.length})
 			</h2>
-			<ul>
+			<ul className="detail-list">
 				{entries.map((entry, index) => (
 					<li key={index}>
 						<span className="state">[{entry.type}]</span>{' '}

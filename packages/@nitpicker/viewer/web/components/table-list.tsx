@@ -24,7 +24,7 @@ export function TableList(props: TableListProps) {
 			<h3>
 				{t('views.pageDetail.mainContentTables')} ({tables.length})
 			</h3>
-			<ul>
+			<ul className="detail-list">
 				{tables.map((table, index) => (
 					<li key={index}>
 						{table.rows}×{table.cols}

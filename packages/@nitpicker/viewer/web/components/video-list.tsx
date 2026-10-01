@@ -24,7 +24,7 @@ export function VideoList(props: VideoListProps) {
 			<h3>
 				{t('views.pageDetail.mainContentVideos')} ({videos.length})
 			</h3>
-			<ul>
+			<ul className="detail-list">
 				{videos.map((video, index) => (
 					<li key={index}>
 						{video.src} ({video.width}×{video.height})

@@ -24,7 +24,7 @@ export function ButtonList(props: ButtonListProps) {
 			<h3>
 				{t('views.pageDetail.mainContentButtons')} ({buttons.length})
 			</h3>
-			<ul>
+			<ul className="detail-list">
 				{buttons.map((button, index) => (
 					<li key={index}>
 						{button.nodeName}

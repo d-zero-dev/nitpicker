@@ -38,7 +38,7 @@ export function ErrorKindBreakdownList(props: ErrorKindBreakdownListProps) {
 					// (outage-attributed) — and both rows must render, not
 					// collide/overwrite in React's reconciliation.
 					<li key={`${sub.kind}-${sub.attribution}`} className="bar-row">
-						<span style={{ width: 110 }}>
+						<span>
 							{getErrorKindLabel(sub.kind, t)}
 							{/* Only the network-caused rows get an extra label — the
 							    site-caused case is the pre-existing, unsurprising default
