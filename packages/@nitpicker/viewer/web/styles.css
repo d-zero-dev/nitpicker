@@ -1089,7 +1089,6 @@ h2 {
 	display: block grid;
 	grid-template-columns: fit-content(50%) minmax(0, 1fr) max-content;
 	gap: 6px 8px;
-	font-size: var(--font-size-xs);
 }
 
 .error-kind-breakdown-list .bar-row {
