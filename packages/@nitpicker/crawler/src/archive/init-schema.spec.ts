@@ -47,6 +47,7 @@ describe('initSchema', () => {
 			'analysis_text_refs',
 			'analysis_violations',
 			'page_template_clusters',
+			'page_template_labels',
 		];
 		for (const table of tables) {
 			const exists = await db.schema.hasTable(table);

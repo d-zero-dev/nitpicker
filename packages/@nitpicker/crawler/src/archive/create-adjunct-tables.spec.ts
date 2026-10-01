@@ -32,6 +32,7 @@ const ADJUNCT_TABLES = [
 	'analysis_violations',
 	'page_templates',
 	'page_template_clusters',
+	'page_template_labels',
 	'page_html_blobs',
 	'page_html_ref',
 	'console_log_items',

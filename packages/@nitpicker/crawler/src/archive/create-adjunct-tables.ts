@@ -567,6 +567,30 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 		`);
 	}
 
+	// One row per distinct `page_templates.template_key`: the human-facing
+	// label (`<section> template <letter>`) assigned to that cluster by
+	// `assignTemplateLabels` when `replacePageTemplates` wrote it. Stored
+	// rather than derived at read time because a label's whole point is to
+	// stay attached to the same template across `--templates` re-runs, and
+	// nothing derivable from the key alone survives one — `cluster:<n>` is
+	// the library's per-run index and `css:<hash>` changes with the
+	// stylesheet set. `replacePageTemplates` carries labels forward by member
+	// overlap against the previous run's `page_templates` before replacing
+	// it. Kept apart from `page_template_clusters` because that table's rows
+	// are best-effort (a cluster may have no captured reason) while every
+	// cluster gets a label. `section` is NULL for a site-wide label (members
+	// span several top-level directories). No FK, same reasoning as
+	// `page_template_clusters`.
+	if (!(await instance.schema.hasTable('page_template_labels'))) {
+		await instance.raw(`
+			CREATE TABLE page_template_labels (
+				template_key TEXT PRIMARY KEY,
+				section      TEXT,
+				ordinal      INTEGER NOT NULL
+			) WITHOUT ROWID
+		`);
+	}
+
 	// Content-addressable HTML blob storage. Knex's schema builder doesn't
 	// expose a WITHOUT ROWID toggle, so the BLOB tables are created via raw
 	// SQL. WITHOUT ROWID keeps the rows packed inside the b-tree leaves

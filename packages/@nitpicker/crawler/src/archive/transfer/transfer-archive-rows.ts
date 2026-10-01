@@ -15,6 +15,7 @@ import { copyPageConsoleLogs } from './copy-page-console-logs.js';
 import { copyPageHtmlBlobs } from './copy-page-html-blobs.js';
 import { copyPageMeta } from './copy-page-meta.js';
 import { copyPageTemplateClusters } from './copy-page-template-clusters.js';
+import { copyPageTemplateLabels } from './copy-page-template-labels.js';
 import { copyResourceItems } from './copy-resource-items.js';
 import { copyResourceRefEdges } from './copy-resource-ref-edges.js';
 import { copySimplePageScopedTables } from './copy-simple-page-scoped-tables.js';
@@ -166,6 +167,7 @@ export async function transferArchiveRows(options: {
 			await copyAnchorEdges(trx);
 			await copySimplePageScopedTables(trx);
 			await copyPageTemplateClusters(trx);
+			await copyPageTemplateLabels(trx);
 			await copyPageConsoleLogs(trx);
 			await copyAnalysisViolations(trx);
 
