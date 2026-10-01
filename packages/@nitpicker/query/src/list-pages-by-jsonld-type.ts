@@ -3,6 +3,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
 import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
+import { hasPageTemplateLabelsTable } from './has-page-template-labels-table.js';
 import { isDedupeCappedSelectColumn } from './is-dedupe-capped-select-column.js';
 import {
 	PAGE_LIST_SELECT_COLUMNS,
@@ -10,6 +11,7 @@ import {
 } from './map-page-row-to-list-item.js';
 import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
 import { requireConsoleErrorCountColumn } from './require-console-error-count-column.js';
+import { templateLabelSelectColumns } from './template-label-select-columns.js';
 
 /**
  * Lists pages that have at least one JSON-LD (or SpeculationRules) entry with
@@ -67,10 +69,19 @@ export async function listPagesByJsonLdType(
 	if (hasPageTemplates) {
 		query = query.leftJoin('page_templates as pt', 'pt.page_id', 'ci.id');
 	}
+	const hasLabelsJoin = hasPageTemplates && (await hasPageTemplateLabelsTable(knex));
+	if (hasLabelsJoin) {
+		query = query.leftJoin(
+			'page_template_labels as ptl',
+			'ptl.template_key',
+			'pt.template_key',
+		);
+	}
 	const rows = (await query
 		.distinct(
 			...PAGE_LIST_SELECT_COLUMNS,
 			templateKeySelectColumn(knex, hasPageTemplates),
+			...templateLabelSelectColumns(knex, hasLabelsJoin),
 			isDedupeCappedSelectColumn(knex, hasDedupeCapColumn),
 			'ci.id',
 			...buildHeaderPresenceSelects(knex, 'hf'),

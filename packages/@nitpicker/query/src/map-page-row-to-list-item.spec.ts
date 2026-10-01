@@ -70,6 +70,8 @@ function makeRow(overrides: Partial<PageListRow> = {}): PageListRow {
 		hasXContentTypeOptions: 0,
 		hasHSTS: 0,
 		templateKey: null,
+		templateLabelSection: null,
+		templateLabelOrdinal: null,
 		...overrides,
 	};
 }
@@ -117,7 +119,9 @@ describe('mapPageRowToListItem', () => {
 		// `pages` columns — they're computed via `buildHeaderPresenceSelects`
 		// (SQL CASE WHEN expressions aliased to these names). templateKey comes
 		// from a `page_templates` LEFT JOIN present only in the 0.13 query
-		// paths. All are absent from PAGE_LIST_COLUMNS (the legacy pre-0.13
+		// paths, and the two templateLabel* columns from the
+		// `page_template_labels` join hanging off it. All are absent from
+		// PAGE_LIST_COLUMNS (the legacy pre-0.13
 		// column list) but still present on the row shape.
 		const row = makeRow();
 		const rowKeys = Object.keys(row).toSorted();
@@ -128,6 +132,8 @@ describe('mapPageRowToListItem', () => {
 			'hasXContentTypeOptions',
 			'hasHSTS',
 			'templateKey',
+			'templateLabelSection',
+			'templateLabelOrdinal',
 		].toSorted();
 		expect(cols).toEqual(rowKeys);
 	});
@@ -193,5 +199,27 @@ describe('mapPageRowToListItem', () => {
 		expect(out.firstCrawledAt).toBe(1_700_000_000_000);
 		expect(out.lastCrawledAt).toBe(1_700_000_100_000);
 		expect(out.templateKey).toBe('kept');
+	});
+
+	it('folds the two label columns into templateLabel, keyed on the ordinal being present', () => {
+		expect(
+			mapPageRowToListItem(
+				makeRow({
+					templateKey: 'k',
+					templateLabelSection: 'events',
+					templateLabelOrdinal: 2,
+				}),
+			).templateLabel,
+		).toEqual({ section: 'events', ordinal: 2 });
+		expect(
+			mapPageRowToListItem(
+				makeRow({
+					templateKey: 'k',
+					templateLabelSection: null,
+					templateLabelOrdinal: 1,
+				}),
+			).templateLabel,
+		).toEqual({ section: null, ordinal: 1 });
+		expect(mapPageRowToListItem(makeRow({ templateKey: 'k' })).templateLabel).toBeNull();
 	});
 });

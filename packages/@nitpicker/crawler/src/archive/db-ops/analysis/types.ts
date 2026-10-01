@@ -54,6 +54,47 @@ export interface TemplateClusterReason {
 }
 
 /**
+ * The human-facing name of one template cluster, as stored in
+ * `page_template_labels`: rendered as `<section> template <letter>` (or
+ * `template <letter>` when `section` is `null`), where the letter is
+ * `ordinal` in A, B, …, Z, AA, AB, … form. Assigned by
+ * {@link import('./assign-template-labels.js').assignTemplateLabels}.
+ */
+export interface TemplateLabel {
+	/**
+	 * The top-level URL directory every member page sits under (`events` for
+	 * `/events/...`), or `null` when members span several directories or all
+	 * sit at the site root — the label is then numbered site-wide.
+	 */
+	readonly section: string | null;
+	/** 1-based position within `section`'s label sequence. */
+	readonly ordinal: number;
+}
+
+/** One cluster's membership as {@link import('./assign-template-labels.js').assignTemplateLabels} sees it. */
+export interface TemplateLabelClusterInput {
+	/** Resolved `content_items.id` of every member page. */
+	readonly pageIds: readonly number[];
+	/** URL of every member page, for deriving {@link TemplateLabel.section}. */
+	readonly urls: readonly string[];
+}
+
+/**
+ * Params for {@link import('./assign-template-labels.js').assignTemplateLabels}.
+ */
+export interface AssignTemplateLabelsParams {
+	/** The new classification: template key → members. */
+	readonly clusters: ReadonlyMap<string, TemplateLabelClusterInput>;
+	/**
+	 * The previous classification's `page_templates` rows: template key →
+	 * member page ids. Empty on a first run.
+	 */
+	readonly previousMembership: ReadonlyMap<string, readonly number[]>;
+	/** The previous classification's `page_template_labels` rows. Empty on a first run. */
+	readonly previousLabels: ReadonlyMap<string, TemplateLabel>;
+}
+
+/**
  * Params for {@link import('./replace-page-templates.js').replacePageTemplates}.
  */
 export interface ReplacePageTemplatesParams {

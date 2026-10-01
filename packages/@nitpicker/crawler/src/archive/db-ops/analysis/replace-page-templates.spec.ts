@@ -142,6 +142,125 @@ describe('replacePageTemplates', () => {
 		expect(await db('page_template_clusters').select('*')).toEqual([]);
 	});
 
+	it('labels every cluster on a first run, numbered per section by page count', async () => {
+		await seedContentItem(db, 'https://example.com/events/1');
+		await seedContentItem(db, 'https://example.com/events/2');
+		await seedContentItem(db, 'https://example.com/events/3');
+		await seedContentItem(db, 'https://example.com/news/1');
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([
+				['https://example.com/events/1', 'events-list'],
+				['https://example.com/events/2', 'events-detail'],
+				['https://example.com/events/3', 'events-detail'],
+				['https://example.com/news/1', 'news'],
+			]),
+		});
+
+		const labels = await db('page_template_labels').select('*').orderBy('template_key');
+		expect(labels).toEqual([
+			{ template_key: 'events-detail', section: 'events', ordinal: 1 },
+			{ template_key: 'events-list', section: 'events', ordinal: 2 },
+			{ template_key: 'news', section: 'news', ordinal: 1 },
+		]);
+	});
+
+	it('carries a label forward to the renamed cluster that kept most of its pages', async () => {
+		await seedContentItem(db, 'https://example.com/events/1');
+		await seedContentItem(db, 'https://example.com/events/2');
+		await seedContentItem(db, 'https://example.com/events/3');
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([
+				['https://example.com/events/1', 'run1-key'],
+				['https://example.com/events/2', 'run1-key'],
+				['https://example.com/events/3', 'run1-key'],
+			]),
+		});
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([
+				['https://example.com/events/1', 'run2-key'],
+				['https://example.com/events/2', 'run2-key'],
+				['https://example.com/events/3', 'run2-other'],
+			]),
+		});
+
+		const labels = await db('page_template_labels').select('*').orderBy('template_key');
+		expect(labels).toEqual([
+			{ template_key: 'run2-key', section: 'events', ordinal: 1 },
+			{ template_key: 'run2-other', section: 'events', ordinal: 2 },
+		]);
+	});
+
+	it('keeps the label rows of clusters that disappeared, so their letters are retired rather than re-issued two runs later', async () => {
+		await seedContentItem(db, 'https://example.com/events/1');
+		await seedContentItem(db, 'https://example.com/events/2');
+		await seedContentItem(db, 'https://example.com/events/3');
+		// Run 1: A (page 1), B (page 2).
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([
+				['https://example.com/events/1', 'run1-a'],
+				['https://example.com/events/2', 'run1-b'],
+			]),
+		});
+		// Run 2: B's cluster vanishes.
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([['https://example.com/events/1', 'run1-a']]),
+		});
+		expect(await db('page_template_labels').select('*').orderBy('template_key')).toEqual([
+			{ template_key: 'run1-a', section: 'events', ordinal: 1 },
+			{ template_key: 'run1-b', section: 'events', ordinal: 2 },
+		]);
+		// Run 3: a brand-new cluster must not become B.
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([
+				['https://example.com/events/1', 'run1-a'],
+				['https://example.com/events/3', 'run3-new'],
+			]),
+		});
+
+		expect(await db('page_template_labels').select('*').orderBy('template_key')).toEqual([
+			{ template_key: 'run1-a', section: 'events', ordinal: 1 },
+			{ template_key: 'run1-b', section: 'events', ordinal: 2 },
+			{ template_key: 'run3-new', section: 'events', ordinal: 3 },
+		]);
+	});
+
+	it('overwrites the label row of a key that reappears with different pages instead of keeping the stale one', async () => {
+		await seedContentItem(db, 'https://example.com/events/1');
+		await seedContentItem(db, 'https://example.com/news/1');
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([['https://example.com/events/1', 'reused-key']]),
+		});
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([['https://example.com/news/1', 'reused-key']]),
+		});
+
+		expect(await db('page_template_labels').select('*')).toEqual([
+			{ template_key: 'reused-key', section: 'news', ordinal: 1 },
+		]);
+	});
+
+	it('leaves every label row in place when given an empty map', async () => {
+		await seedContentItem(db, 'https://example.com/');
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([['https://example.com/', 'template-a']]),
+		});
+		await replacePageTemplates(db, { templateKeysByUrl: new Map() });
+
+		expect(await db('page_templates').select('*')).toEqual([]);
+		expect(await db('page_template_labels').select('*')).toEqual([
+			{ template_key: 'template-a', section: null, ordinal: 1 },
+		]);
+	});
+
+	it('does not label a page whose URL has no content_items row', async () => {
+		await seedContentItem(db, 'https://example.com/');
+		await replacePageTemplates(db, {
+			templateKeysByUrl: new Map([['https://example.com/missing', 'template-b']]),
+		});
+
+		expect(await db('page_template_labels').select('*')).toEqual([]);
+	});
+
 	it('persists a reason row even when its template key has no surviving member page', async () => {
 		await replacePageTemplates(db, {
 			templateKeysByUrl: new Map(),

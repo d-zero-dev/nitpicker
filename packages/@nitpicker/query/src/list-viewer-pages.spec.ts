@@ -365,6 +365,7 @@ describe('listViewerPages', () => {
 				langs: ['en', 'ja'],
 				types: [false, true],
 				templateKeys: [],
+				templateLabelsByKey: {},
 			});
 		});
 
@@ -378,6 +379,7 @@ describe('listViewerPages', () => {
 				langs: ['fr'],
 				types: [false],
 				templateKeys: [],
+				templateLabelsByKey: {},
 			});
 		});
 	});

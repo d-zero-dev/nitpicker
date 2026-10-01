@@ -257,6 +257,30 @@ describe('listPageTemplateClusters', () => {
 			expect(result.hasClassification).toBe(true);
 		});
 
+		it('replacePageTemplatesが保存したラベルをprovisional: falseで返す', async () => {
+			const result = await listPageTemplateClusters(archive);
+			const labelByKey = new Map(result.clusters.map((c) => [c.templateKey, c.label]));
+
+			// /a, /b と /c, /d は先頭セグメントが揃わない（a≠b, c≠d）のでサイト
+			// 全体の採番。2ページ同士の同点は templateKey 順で css が先。/e は
+			// 単独なので 'e' セクション。
+			expect(labelByKey.get('["css:abc123","cluster:0"]')).toEqual({
+				section: null,
+				ordinal: 1,
+				provisional: false,
+			});
+			expect(labelByKey.get('["path:news","cluster:0"]')).toEqual({
+				section: null,
+				ordinal: 2,
+				provisional: false,
+			});
+			expect(labelByKey.get('["path:sponsored","cluster:0"]')).toEqual({
+				section: 'e',
+				ordinal: 1,
+				provisional: false,
+			});
+		});
+
 		it('クラスタごとのページ数を正しく返す', async () => {
 			const result = await listPageTemplateClusters(archive);
 
@@ -334,6 +358,15 @@ describe('listPageTemplateClusters', () => {
 
 		afterAll(async () => {
 			await destroyArchive(archive, workingDir);
+		});
+
+		it('ラベル行が1つも無いアーカイブでは同じ採番規則で暫定ラベルを付け、provisional: trueで返す', async () => {
+			await archive.getKnex()('page_template_labels').delete();
+			const result = await listPageTemplateClusters(archive);
+
+			expect(result.clusters.map((c) => c.label)).toEqual([
+				{ section: 'a', ordinal: 1, provisional: true },
+			]);
 		});
 
 		it('reason: nullを返しつつpageCount/commonDirectoriesは通常通り返す', async () => {

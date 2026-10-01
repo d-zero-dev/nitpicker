@@ -540,6 +540,17 @@ describe('listPages: templateKey（page_templates の LEFT JOIN）', () => {
 		const unclassified = result.items.find((p) => p.url.endsWith('/unclassified'));
 		expect(unclassified?.templateKey).toBeNull();
 	});
+
+	it('保存されたラベルを各行の templateLabel とファセットの templateLabelsByKey に載せる', async () => {
+		const result = await listPages(archive);
+		const classified = result.items.find((p) => p.url.endsWith('/classified'));
+		const unclassified = result.items.find((p) => p.url.endsWith('/unclassified'));
+		expect(classified?.templateLabel).toEqual({ section: 'classified', ordinal: 1 });
+		expect(unclassified?.templateLabel).toBeNull();
+		expect(result.facets.templateLabelsByKey).toEqual({
+			'template-a': { section: 'classified', ordinal: 1 },
+		});
+	});
 });
 
 describe('listPages: page_templates テーブル自体が存在しないアーカイブ（--templates 未実行の旧アーカイブ、read-only オープンで自己修復が走らないケースの再現）', () => {

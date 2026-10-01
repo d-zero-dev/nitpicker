@@ -1,10 +1,18 @@
+import { useMemo } from 'react';
+
 import { useTemplateClusters } from '../api/use-template-clusters.js';
+import { computeTemplateClusterOverview } from '../components/compute-template-cluster-overview.js';
+import { TemplateClusterBlockGroups } from '../components/template-cluster-block-groups.js';
 import { TemplateClusterItem } from '../components/template-cluster-item.js';
+import { TemplateClusterSummaryPanel } from '../components/template-cluster-summary-panel.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 /**
- * Template cluster analysis: one collapsible section per
+ * Template cluster analysis: a summary panel (totals, largest clusters, size
+ * distribution, block-kind breakdown), clusters grouped by the
+ * `@d-zero/page-cluster` Pass-0 block they were split out of, then one
+ * collapsible section per
  * `page_templates.template_key` cluster, each showing page count, top
  * directories by page count, common stylesheet set computed from the
  * cluster's actual member pages, and (when captured) `@d-zero/page-cluster`'s
@@ -16,6 +24,10 @@ import { useI18n } from '../i18n/use-i18n.js';
 export function TemplateClustersView() {
 	const { t } = useI18n();
 	const { data, isLoading, error } = useTemplateClusters();
+	const overview = useMemo(
+		() => (data ? computeTemplateClusterOverview(data.clusters) : undefined),
+		[data],
+	);
 
 	return (
 		<div>
@@ -36,11 +48,21 @@ export function TemplateClustersView() {
 			{data && data.hasClassification && data.clusters.length === 0 && (
 				<div className="state">{t('views.templateClusters.noClusters')}</div>
 			)}
-			{data &&
-				data.hasClassification &&
-				data.clusters.map((cluster) => (
-					<TemplateClusterItem key={cluster.templateKey} cluster={cluster} />
-				))}
+			{data && overview && data.hasClassification && data.clusters.length > 0 && (
+				<>
+					{data.clusters.some((cluster) => cluster.label?.provisional) && (
+						<p className="view-description">
+							{t('views.templateClusters.provisionalLabels')}
+						</p>
+					)}
+					<TemplateClusterSummaryPanel overview={overview} />
+					<TemplateClusterBlockGroups groups={overview.blockGroups} />
+					<h2>{t('views.templateClusters.allClusters')}</h2>
+					{data.clusters.map((cluster) => (
+						<TemplateClusterItem key={cluster.templateKey} cluster={cluster} />
+					))}
+				</>
+			)}
 		</div>
 	);
 }

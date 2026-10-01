@@ -173,6 +173,19 @@ describe('joinViewerPageIdsToListItems', () => {
 		expect(items[1]).toMatchObject({ hasCSP: false });
 	});
 
+	it('joins the stored template label off the page_templates key', async () => {
+		const knex = archive.getKnex();
+		await archive.replacePageTemplates(
+			new Map([['https://example.com/a', 'template-a']]),
+		);
+		const items = await joinViewerPageIdsToListItems(knex, [idA, idB]);
+		expect(items[0]).toMatchObject({
+			templateKey: 'template-a',
+			templateLabel: { section: 'a', ordinal: 1 },
+		});
+		expect(items[1]).toMatchObject({ templateKey: null, templateLabel: null });
+	});
+
 	it('does not throw and returns templateKey: null when page_templates does not exist (archive predating --templates, or a read-only connection that skipped self-heal)', async () => {
 		const knex = archive.getKnex();
 		await knex.schema.dropTable('page_templates');

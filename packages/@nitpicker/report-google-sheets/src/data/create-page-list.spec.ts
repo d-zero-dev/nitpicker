@@ -98,6 +98,7 @@ function makeItem(overrides: Partial<PageListItem> = {}): PageListItem {
 		hasXContentTypeOptions: false,
 		hasHSTS: false,
 		templateKey: null,
+		templateLabel: null,
 		isDedupeCapped: false,
 		displayTitle: overrides.title === undefined ? 'Page' : overrides.title,
 		inboundLinkCount: 0,

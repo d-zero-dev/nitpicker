@@ -8,6 +8,7 @@ import { ClusterDirectoryDistributionList } from './cluster-directory-distributi
 import { ClusterReasonSection } from './cluster-reason-section.js';
 import { ClusterStylesheetUrlList } from './cluster-stylesheet-url-list.js';
 import { computeClusterOtherPageCount } from './compute-cluster-other-page-count.js';
+import { formatClusterName } from './format-cluster-name.js';
 
 /** Props for {@link TemplateClusterItem}. */
 export interface TemplateClusterItemProps {
@@ -16,10 +17,13 @@ export interface TemplateClusterItemProps {
 }
 
 /**
- * One `page_templates.template_key` cluster's collapsible section: page
- * count, top directories by page count, common stylesheet set computed
- * from the cluster's actual member pages, and (when captured)
- * `@d-zero/page-cluster`'s cluster-selection evidence.
+ * One `page_templates.template_key` cluster's collapsible section, headed
+ * by the cluster's name (`formatClusterName`): page count, the
+ * member-derived stylesheet/directory hint (shown as its own row only when
+ * the name is a label, since it is the heading otherwise), top directories
+ * by page count, common stylesheet set computed from the cluster's actual
+ * member pages, and (when captured) `@d-zero/page-cluster`'s
+ * cluster-selection evidence.
  * @param props - The cluster to render.
  * @returns The `<details>` element for this cluster.
  */
@@ -36,10 +40,17 @@ export function TemplateClusterItem(props: TemplateClusterItemProps) {
 
 	return (
 		<details>
-			<summary title={title}>
-				{heading} ({t('views.templateClusters.pageCount', { count: cluster.pageCount })})
+			<summary title={cluster.label ? undefined : title}>
+				{formatClusterName(cluster, t)} (
+				{t('views.templateClusters.pageCount', { count: cluster.pageCount })})
 			</summary>
 			<dl className="detail-grid">
+				{cluster.label && (
+					<>
+						<dt>{t('views.templateClusters.memberHint')}</dt>
+						<dd title={title}>{heading}</dd>
+					</>
+				)}
 				<dt>{t('views.templateClusters.commonDirectories')}</dt>
 				<dd>
 					<ClusterDirectoryDistributionList

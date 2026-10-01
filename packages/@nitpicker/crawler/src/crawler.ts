@@ -110,12 +110,19 @@ export { populateHeaderTables } from './archive/populate-ref-tables/populate-hea
 export { loadResponseHeadersBySetIds } from './archive/db-ops/_shared/load-response-headers-by-set-ids.js';
 export { decodeJsonRef } from './archive/db-ops/_shared/decode-json-ref.js';
 export type {
+	AssignTemplateLabelsParams,
 	TemplateClusterBlockingEvidence,
 	TemplateClusterBlockingReason,
 	TemplateClusterLandmarkProfile,
 	TemplateClusterLandmarkType,
 	TemplateClusterReason,
+	TemplateLabel,
+	TemplateLabelClusterInput,
 } from './archive/db-ops/analysis/types.js';
+// The label assigner is exported so `@nitpicker/query` can number clusters
+// provisionally, with the exact same rules, for an archive classified before
+// labels were stored — one implementation, no cross-package drift.
+export { assignTemplateLabels } from './archive/db-ops/analysis/assign-template-labels.js';
 
 // Output-path resolution and scope-map construction, needed by CLI commands
 // that produce a NEW `.nitpicker` archive from existing ones (`concat` /

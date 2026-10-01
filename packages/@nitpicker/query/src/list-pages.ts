@@ -11,6 +11,7 @@ import { applyListOrder } from './apply-list-order.js';
 import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
 import { applyCategoryFilter } from './content-type-rules.js';
 import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
+import { hasPageTemplateLabelsTable } from './has-page-template-labels-table.js';
 import { HEADER_PRESENCE_KEYS, headerPresenceExpression } from './header-presence-sql.js';
 import { imageScanOutcomeToCode } from './image-scan-outcome.js';
 import { isDedupeCappedSelectColumn } from './is-dedupe-capped-select-column.js';
@@ -22,6 +23,7 @@ import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates
 import { paginateQuery } from './paginate-query.js';
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 import { requireConsoleErrorCountColumn } from './require-console-error-count-column.js';
+import { templateLabelSelectColumns } from './template-label-select-columns.js';
 import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
 
 /** One DISTINCT row read for facet computation — see {@link getPageListFacets}. */
@@ -34,6 +36,10 @@ type PageFacetRow = {
 	isExternal: 0 | 1;
 	/** `--templates` classification group key, or `null` when absent/unclassified. */
 	templateKey: string | null;
+	/** Stored label section for `templateKey`, or `null` (site-wide label / no label / no join). */
+	templateLabelSection: string | null;
+	/** Stored label ordinal for `templateKey`, or `null` when no label is stored or the join is absent. */
+	templateLabelOrdinal: number | null;
 };
 
 /**
@@ -57,12 +63,16 @@ function isPresent<T>(value: T | null | undefined): value is T {
  * @param contentTypeCategory - Optional category override.
  * @param hasPageTemplates - Result of {@link hasPageTemplatesTable} for this
  *   connection; gates the `page_templates` join (see that function's doc).
+ * @param hasLabelsJoin - Whether to also join `page_template_labels` off
+ *   that `pt` alias (`hasPageTemplates` and
+ *   {@link hasPageTemplateLabelsTable} both true).
  * @returns Query builder scoped to page-list rows.
  */
 function createPageListBaseQuery(
 	knex: ReturnType<ArchiveAccessor['getKnex']>,
 	contentTypeCategory: ListPagesOptions['contentTypeCategory'] | undefined,
 	hasPageTemplates: boolean,
+	hasLabelsJoin: boolean,
 ) {
 	const baseQuery = knex('content_items as ci')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
@@ -97,6 +107,13 @@ function createPageListBaseQuery(
 		.whereNull('ci.alias_of_id');
 	if (hasPageTemplates) {
 		baseQuery.leftJoin('page_templates as pt', 'pt.page_id', 'ci.id');
+	}
+	if (hasLabelsJoin) {
+		baseQuery.leftJoin(
+			'page_template_labels as ptl',
+			'ptl.template_key',
+			'pt.template_key',
+		);
 	}
 	if (contentTypeCategory) {
 		applyCategoryFilter(baseQuery, contentTypeCategory);
@@ -136,12 +153,14 @@ export async function listPages(
 	const limit = options.limit ?? 100;
 	const offset = options.offset ?? 0;
 	const hasPageTemplates = await hasPageTemplatesTable(knex);
+	const hasLabelsJoin = hasPageTemplates && (await hasPageTemplateLabelsTable(knex));
 	const hasDedupeCapColumn = await hasDedupeCapEventIdColumn(knex);
 
 	const baseQuery = createPageListBaseQuery(
 		knex,
 		options.contentTypeCategory,
 		hasPageTemplates,
+		hasLabelsJoin,
 	);
 
 	if (options.status != null) {
@@ -299,6 +318,7 @@ export async function listPages(
 					q.select(
 						...PAGE_LIST_SELECT_COLUMNS,
 						templateKeySelectColumn(knex, hasPageTemplates),
+						...templateLabelSelectColumns(knex, hasLabelsJoin),
 						isDedupeCappedSelectColumn(knex, hasDedupeCapColumn),
 						...buildHeaderPresenceSelects(knex, 'hf'),
 					),
@@ -371,7 +391,7 @@ export async function listPages(
 			offset,
 			mapRow: mapPageRowToListItem,
 		}),
-		getPageListFacets(knex, options.contentTypeCategory, hasPageTemplates),
+		getPageListFacets(knex, options.contentTypeCategory, hasPageTemplates, hasLabelsJoin),
 	]);
 	return { ...result, facets };
 }
@@ -381,22 +401,40 @@ export async function listPages(
  * @param knex - Knex instance.
  * @param contentTypeCategory - Optional category override.
  * @param hasPageTemplates - Result of {@link hasPageTemplatesTable} for this connection.
+ * @param hasLabelsJoin - Whether the `page_template_labels` join is in place (see `createPageListBaseQuery`).
  * @returns Facet candidates.
  */
 async function getPageListFacets(
 	knex: ReturnType<ArchiveAccessor['getKnex']>,
 	contentTypeCategory: ListPagesOptions['contentTypeCategory'] | undefined,
 	hasPageTemplates: boolean,
+	hasLabelsJoin: boolean,
 ): Promise<PageListFacets> {
-	const rows = (await createPageListBaseQuery(knex, contentTypeCategory, hasPageTemplates)
+	const rows = (await createPageListBaseQuery(
+		knex,
+		contentTypeCategory,
+		hasPageTemplates,
+		hasLabelsJoin,
+	)
 		.clone()
 		.distinct(
 			'ci.status as status',
 			'pm.lang as lang',
 			'ci.is_external as isExternal',
 			templateKeySelectColumn(knex, hasPageTemplates),
+			...templateLabelSelectColumns(knex, hasLabelsJoin),
 		)) as PageFacetRow[];
+	const templateLabelsByKey: PageListFacets['templateLabelsByKey'] = {};
+	for (const row of rows) {
+		if (row.templateKey != null && row.templateLabelOrdinal != null) {
+			templateLabelsByKey[row.templateKey] = {
+				section: row.templateLabelSection,
+				ordinal: row.templateLabelOrdinal,
+			};
+		}
+	}
 	return {
+		templateLabelsByKey,
 		statuses: [...new Set(rows.map((row) => row.status).filter(isPresent))].toSorted(
 			(a, b) => a - b,
 		),

@@ -259,6 +259,11 @@ describe('getPageDetail: templateKey（page_templates の LEFT JOIN）', () => {
 		const result = await getPageDetail(archive, 'https://example.com');
 		expect(result!.templateKey).toBe('template-a');
 	});
+
+	it('replacePageTemplates が保存したラベルを templateLabel として返す（ルートページなのでサイト全体採番）', async () => {
+		const result = await getPageDetail(archive, 'https://example.com');
+		expect(result!.templateLabel).toEqual({ section: null, ordinal: 1 });
+	});
 });
 
 describe('getPageDetail: page_templates テーブル自体が存在しないアーカイブ（--templates 未実行の旧アーカイブ、read-only オープンで自己修復が走らないケースの再現）', () => {

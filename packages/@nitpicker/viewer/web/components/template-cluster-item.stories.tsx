@@ -21,6 +21,7 @@ type Story = StoryObj<typeof meta>;
 
 const clusterWithReason: TemplateClusterSummary = {
 	templateKey: '["css:166e4235afcb8b15","cluster:0"]',
+	label: { section: 'products', ordinal: 1, provisional: false },
 	pageCount: 42,
 	commonDirectories: [{ directory: '/products/', pageCount: 42 }],
 	commonStylesheetUrls: ['https://example.test/assets/site.css'],
@@ -59,6 +60,7 @@ export const Minimal: Story = {
 	args: {
 		cluster: {
 			templateKey: '["path:0"]',
+			label: null,
 			pageCount: 3,
 			commonDirectories: [],
 			commonStylesheetUrls: [],

@@ -1,5 +1,9 @@
 import type { viewerTableFeatures } from './table-features.js';
-import type { ListPagesOptions } from '@nitpicker/query';
+import type {
+	ListPagesOptions,
+	TemplateClusterBlockingEvidence,
+	TemplateClusterSummary,
+} from '@nitpicker/query';
 import type {
 	CellContext as TanstackCellContext,
 	ColumnDef as TanstackColumnDef,
@@ -186,3 +190,83 @@ export type DirectoryTreeSortOrder = 'path' | 'pagesDesc' | 'pagesAsc';
 
 /** Which source `buildClusterHeading` drew a template cluster's heading from. */
 export type ClusterHeadingSource = 'distinctive' | 'common' | 'directory' | 'raw';
+
+/**
+ * Which `@d-zero/page-cluster` Pass-0 blocking stage a block key came from —
+ * the `reason.kind` values plus `unknown` for a template key whose block
+ * key prefix this viewer build does not recognize.
+ */
+export type ClusterBlockKind =
+	| TemplateClusterBlockingEvidence['reason']['kind']
+	| 'unknown';
+
+/** The block key parsed out of a `templateKey`, with its kind. */
+export interface ClusterBlockRef {
+	/** The raw block key (`css:<hash>` / `path:<segment>` / `orphan-merge:<segment>`). */
+	blockKey: string;
+	/** The kind derived from `blockKey`'s prefix. */
+	kind: ClusterBlockKind;
+}
+
+/** Page-count bucket label used by the template cluster size distribution. */
+export type ClusterSizeBucketKey = 'single' | 'small' | 'medium' | 'large';
+
+/** One bucket of the template cluster size distribution. */
+export interface ClusterSizeBucket {
+	/** Which page-count range this bucket covers (`1` / `2–5` / `6–20` / `21+`). */
+	key: ClusterSizeBucketKey;
+	/** Number of clusters whose `pageCount` falls in the range. */
+	clusterCount: number;
+	/** Sum of `pageCount` over those clusters. */
+	pageCount: number;
+}
+
+/** One block kind's aggregate across every block of that kind. */
+export interface ClusterBlockKindOverview {
+	/** The block kind this row aggregates. */
+	kind: ClusterBlockKind;
+	/** Number of distinct block keys of this kind. */
+	blockCount: number;
+	/** Number of clusters whose block key is of this kind. */
+	clusterCount: number;
+	/** Sum of `pageCount` over those clusters. */
+	pageCount: number;
+}
+
+/** Aggregates shown in the summary panel at the top of the template clusters view. */
+export interface TemplateClusterOverview {
+	/** Total number of clusters. */
+	clusterCount: number;
+	/** Sum of every cluster's `pageCount`. */
+	totalPageCount: number;
+	/** Number of clusters with exactly one page. */
+	singletonClusterCount: number;
+	/** The largest clusters by `pageCount`, descending. */
+	topClusters: TemplateClusterSummary[];
+	/** Size distribution, always four buckets in ascending range order. */
+	sizeBuckets: ClusterSizeBucket[];
+	/**
+	 * Every cluster grouped by its Pass-0 block (`groupClustersByBlock`), in
+	 * that function's order. Computed once here so `blockCount` /
+	 * `blockKinds` and the block-groups section share one pass over the
+	 * template keys.
+	 */
+	blockGroups: ClusterBlockGroup[];
+	/** `blockGroups.length`. */
+	blockCount: number;
+	/** One row per block kind that at least one cluster has, in `css` / `path` / `orphanMerge` / `unknown` order. */
+	blockKinds: ClusterBlockKindOverview[];
+}
+
+/** Every cluster that drew pages from one `@d-zero/page-cluster` Pass-0 block. */
+export interface ClusterBlockGroup {
+	/** The block the clusters share. */
+	block: ClusterBlockRef;
+	/**
+	 * Clusters that drew pages from `block`, sorted by `pageCount` descending.
+	 * A cluster merged across blocks is a member of each of its blocks' groups.
+	 */
+	clusters: TemplateClusterSummary[];
+	/** Sum of `pageCount` over `clusters` (a merged cluster counts in full in each of its groups). */
+	pageCount: number;
+}

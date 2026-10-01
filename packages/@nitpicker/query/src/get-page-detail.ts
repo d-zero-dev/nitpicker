@@ -7,10 +7,12 @@ import { dedupeCapEventIdSelectColumn } from './dedupe-cap-event-id-select-colum
 import { dedupeCapShapeKeySelectColumn } from './dedupe-cap-shape-key-select-column.js';
 import { getPageConsoleLogs } from './get-page-console-logs.js';
 import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
+import { hasPageTemplateLabelsTable } from './has-page-template-labels-table.js';
 import { imageScanCodeToOutcome } from './image-scan-outcome.js';
 import { hasPageTemplatesTable, templateKeySelectColumn } from './page-templates-join.js';
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 import { resolveAliasAndRedirectChain } from './resolve-alias-and-redirect-chain.js';
+import { templateLabelSelectColumns } from './template-label-select-columns.js';
 
 /**
  * Summarises JSON-LD rows for the page-detail response.
@@ -94,6 +96,7 @@ export async function getPageDetail(
 	const knex = accessor.getKnex();
 	await requireAliasOfIdColumn(knex);
 	const hasPageTemplates = await hasPageTemplatesTable(knex);
+	const hasLabelsJoin = hasPageTemplates && (await hasPageTemplateLabelsTable(knex));
 	const hasDedupeCapColumn = await hasDedupeCapEventIdColumn(knex);
 
 	const candidate = await knex('content_items as ci')
@@ -149,6 +152,13 @@ export async function getPageDetail(
 		.leftJoin('json_refs as extras_ref', 'extras_ref.id', 'pm.meta_extras_json_id');
 	if (hasPageTemplates) {
 		query = query.leftJoin('page_templates as pt', 'pt.page_id', 'ci.id');
+	}
+	if (hasLabelsJoin) {
+		query = query.leftJoin(
+			'page_template_labels as ptl',
+			'ptl.template_key',
+			'pt.template_key',
+		);
 	}
 	if (hasDedupeCapColumn) {
 		query = query.leftJoin(
@@ -242,6 +252,7 @@ export async function getPageDetail(
 			'pm.image_scan_desktop as image_scan_desktop',
 			'pm.image_scan_mobile as image_scan_mobile',
 			templateKeySelectColumn(knex, hasPageTemplates),
+			...templateLabelSelectColumns(knex, hasLabelsJoin),
 			dedupeCapShapeKeySelectColumn(knex, hasDedupeCapColumn),
 			dedupeCapEventIdSelectColumn(knex, hasDedupeCapColumn),
 		)
@@ -417,6 +428,10 @@ export async function getPageDetail(
 		imageScanDesktop: imageScanCodeToOutcome(page.image_scan_desktop),
 		imageScanMobile: imageScanCodeToOutcome(page.image_scan_mobile),
 		templateKey: page.templateKey,
+		templateLabel:
+			page.templateLabelOrdinal == null
+				? null
+				: { section: page.templateLabelSection, ordinal: page.templateLabelOrdinal },
 		metaExtras,
 		jsonLd: summarizeJsonLdRows(jsonLdRows),
 		technologies: summarizeTechnologyRows(technologyRows),
