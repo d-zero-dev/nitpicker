@@ -22,7 +22,7 @@ export function RedirectFromList(props: RedirectFromListProps) {
 			<h2>
 				{t('views.pageDetail.redirectedFrom')} ({urls.length})
 			</h2>
-			<ul>
+			<ul className="detail-list">
 				{urls.map((from) => (
 					<li key={from}>{from}</li>
 				))}

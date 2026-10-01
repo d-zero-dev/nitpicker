@@ -25,7 +25,7 @@ export function CustomElementList(props: CustomElementListProps) {
 			<h3>
 				{t('views.pageDetail.mainContentCustomElements')} ({customElements.length})
 			</h3>
-			<ul>
+			<ul className="detail-list">
 				{customElements.map((element, index) => (
 					<li key={index}>
 						{element.nodeName.toLowerCase()}

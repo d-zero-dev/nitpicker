@@ -1048,8 +1048,23 @@ h2 {
 	word-break: break-all;
 }
 
-.url-list li {
-	margin-block: 2px;
+.url-list li + li {
+	margin-block-start: 6px;
+}
+
+/* Bulleted entry lists under a page-detail section heading (headings,
+   images, outbound links, console logs, …). Entries are often long single
+   lines such as URLs, so they need air between items to stay countable
+   at a glance. */
+.detail-list {
+	padding-inline-start: 18px;
+	margin-block: 0 16px;
+	font-size: var(--font-size-base);
+	overflow-wrap: anywhere;
+}
+
+.detail-list li + li {
+	margin-block-start: 6px;
 }
 
 /*

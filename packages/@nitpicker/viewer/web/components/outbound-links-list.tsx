@@ -32,7 +32,7 @@ export function OutboundLinksList(props: OutboundLinksListProps) {
 			<h2>
 				{t('views.pageDetail.outbound')} ({links.length})
 			</h2>
-			<ul>
+			<ul className="detail-list">
 				{links.slice(0, MAX_LINKS_DISPLAYED).map((link, index) => (
 					<li key={`${link.url}-${index}`}>
 						<AppLink to={`/pages/detail?url=${encodeURIComponent(link.url)}`}>

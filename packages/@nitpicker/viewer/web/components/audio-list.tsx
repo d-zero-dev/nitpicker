@@ -24,7 +24,7 @@ export function AudioList(props: AudioListProps) {
 			<h3>
 				{t('views.pageDetail.mainContentAudios')} ({audios.length})
 			</h3>
-			<ul>
+			<ul className="detail-list">
 				{audios.map((audio, index) => (
 					<li key={index}>{audio.src}</li>
 				))}

@@ -24,7 +24,7 @@ export function IframeList(props: IframeListProps) {
 			<h3>
 				{t('views.pageDetail.mainContentIframes')} ({iframes.length})
 			</h3>
-			<ul>
+			<ul className="detail-list">
 				{iframes.map((iframe, index) => (
 					<li key={index}>
 						{iframe.src}
