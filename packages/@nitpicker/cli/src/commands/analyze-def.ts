@@ -46,7 +46,7 @@ export const commandDef = {
 		},
 		templates: {
 			type: 'boolean',
-			desc: 'Classify pages into templates by DOM structure similarity (uses @d-zero/page-cluster)',
+			desc: 'Classify pages into templates by DOM structure similarity (uses @d-zero/page-cluster) and store a stable name per template ("events template A"), carried forward across re-runs',
 		},
 		silent: {
 			type: 'boolean',
