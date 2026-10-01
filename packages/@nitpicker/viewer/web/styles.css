@@ -1031,7 +1031,10 @@ h2 {
 	border-radius: 4px;
 }
 
+/* `.bar-fill` is a `<span>`: left inline, it ignores both `block-size`
+   and its inline `width`, and the bar renders empty. */
 .bar-fill {
+	display: block flow;
 	block-size: 100%;
 	background: var(--accent);
 }
