@@ -2,6 +2,8 @@ import type { MainContentVideoEntry } from '@nitpicker/query';
 
 import { useI18n } from '../i18n/use-i18n.js';
 
+import { ExternalUrl } from './external-url.js';
+
 /** Props for {@link VideoList}. */
 export interface VideoListProps {
 	/** Videos within the main region, in DOM order. */
@@ -27,7 +29,7 @@ export function VideoList(props: VideoListProps) {
 			<ul className="detail-list">
 				{videos.map((video, index) => (
 					<li key={index}>
-						{video.src} ({video.width}×{video.height})
+						<ExternalUrl url={video.src} /> ({video.width}×{video.height})
 					</li>
 				))}
 			</ul>

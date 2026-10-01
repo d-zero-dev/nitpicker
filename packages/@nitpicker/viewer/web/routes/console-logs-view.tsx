@@ -11,6 +11,7 @@ import {
 	createTableControls,
 } from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
+import { ExternalUrl } from '../components/external-url.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
@@ -65,7 +66,13 @@ export function ConsoleLogsView() {
 				accessorKey: 'locationUrl',
 				header: t('views.consoleLogs.colLocation'),
 				size: 260,
-				cell: (i) => i.getValue<string | null>() ?? t('common.none'),
+				cell: (i) => {
+					const locationUrl = i.getValue<string | null>();
+					if (locationUrl == null) {
+						return t('common.none');
+					}
+					return <ExternalUrl url={locationUrl} />;
+				},
 			},
 			{
 				accessorKey: 'pageCount',

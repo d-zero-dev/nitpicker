@@ -1587,6 +1587,16 @@ h2 {
 	color: var(--danger);
 }
 
+.external-url {
+	color: var(--accent);
+	word-break: break-all;
+}
+
+.external-url-icon {
+	margin-inline-start: 0.25em;
+	vertical-align: -0.125em;
+}
+
 .link-button {
 	padding: 0;
 	font: inherit;

@@ -11,6 +11,7 @@ import {
 	createTableControls,
 } from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
+import { ExternalUrl } from '../components/external-url.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
@@ -79,7 +80,7 @@ export function ViolationsView() {
 				accessorKey: 'url',
 				header: t('views.violations.colUrl'),
 				size: 320,
-				cell: (i) => i.getValue<string>(),
+				cell: (i) => <ExternalUrl url={i.getValue<string>()} />,
 			},
 		],
 		[t],

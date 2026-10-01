@@ -2,6 +2,8 @@ import type { MainContentIframeEntry } from '@nitpicker/query';
 
 import { useI18n } from '../i18n/use-i18n.js';
 
+import { ExternalUrl } from './external-url.js';
+
 /** Props for {@link IframeList}. */
 export interface IframeListProps {
 	/** Iframes within the main region, in DOM order. */
@@ -27,7 +29,7 @@ export function IframeList(props: IframeListProps) {
 			<ul className="detail-list">
 				{iframes.map((iframe, index) => (
 					<li key={index}>
-						{iframe.src}
+						<ExternalUrl url={iframe.src} />
 						{iframe.title ? ` (${iframe.title})` : ''}
 					</li>
 				))}

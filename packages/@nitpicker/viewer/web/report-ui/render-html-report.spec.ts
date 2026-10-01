@@ -85,6 +85,14 @@ describe('renderHtmlReport', () => {
 		expect(script).not.toContain('.sort(');
 	});
 
+	it('links http(s) page URLs to the real URL in a new window', () => {
+		const html = renderHtmlReport(data);
+
+		expect(html).toContain(
+			'<a class="external-url" href="https://example.com/z" target="_blank" rel="noopener noreferrer"',
+		);
+	});
+
 	it('notes directory prefixes that limited the page table', () => {
 		const html = renderHtmlReport({
 			...data,

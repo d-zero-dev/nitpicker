@@ -13,6 +13,7 @@ import {
 	createTableControls,
 } from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
+import { ExternalUrl } from '../components/external-url.js';
 import { SourceBadge } from '../components/source-badge.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
@@ -61,7 +62,11 @@ export function IsolatedPagesView() {
 				header: t('views.isolatedPages.url'),
 				size: 440,
 				accessorFn: (r) => r.url,
-				cell: (info) => <code>{info.getValue<string>()}</code>,
+				cell: (info) => (
+					<code>
+						<ExternalUrl url={info.getValue<string>()} />
+					</code>
+				),
 			},
 			{
 				id: 'title',

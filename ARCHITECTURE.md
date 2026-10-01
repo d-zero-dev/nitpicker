@@ -260,6 +260,7 @@ Astro / Next.js / Vue / Nuxt / Svelte / SvelteKit / Remix / Gatsby / Angular 等
 3. frontend: `viewer/web/routes/*.tsx`（ビュー）、`viewer/web/components/data-table.tsx`（PagedTable / VirtualTable dispatch。件数が有界でページング・仮想化が不要な表は `viewer/web/styles.css` の Plain table 節（`.plain-table-scroll` で包んだ `table.plain-table`）を使う。素の `<table>` は無スタイル）、`viewer/web/i18n/translations.ts`（en/ja 必須）
 4. キャッシュが要るなら `viewer/src/*-cache.ts` + `promise-lru.ts`（stub mode は bypass — live crawl 中は snapshot が永久 stale になるため）
 5. **frontend の consumer 探索は `src/` だけでなく `web/` も grep すること**
+6. URL の表示: viewer 内に遷移先がある URL は `AppLink` / navigate ボタン、遷移先のない URL（resources・images・canonical・referrer 等）は `viewer/web/components/external-url.tsx` の `ExternalUrl`（http(s) のみ `target="_blank"` + 別窓アイコン、それ以外はプレーンテキスト）。静的 HTML レポート（`html-report-document.tsx`）も同じコンポーネントを使う。新しい URL 列・一覧を足すときは素の `{url}` を置かない
 
 ### viewer UI コンポーネント改善（データ取得非依存）
 

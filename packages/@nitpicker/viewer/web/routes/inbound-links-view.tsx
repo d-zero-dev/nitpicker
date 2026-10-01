@@ -9,6 +9,7 @@ import { useInboundLinksInfinite } from '../api/use-inbound-links-infinite.js';
 import { useInboundLinks } from '../api/use-inbound-links.js';
 import { AppLink } from '../components/app-link.js';
 import { DataTable } from '../components/data-table.js';
+import { ExternalUrl } from '../components/external-url.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useI18n } from '../i18n/use-i18n.js';
@@ -67,6 +68,7 @@ export function InboundLinksView() {
 				header: t('views.inboundLinks.colReferrer'),
 				size: 420,
 				accessorFn: (r) => r.url,
+				cell: (info) => <ExternalUrl url={info.getValue<string>()} />,
 			},
 			{
 				id: 'textContent',
@@ -102,7 +104,9 @@ export function InboundLinksView() {
 			</AppLink>
 			<dl className="detail-grid">
 				<dt>URL</dt>
-				<dd>{url}</dd>
+				<dd>
+					<ExternalUrl url={url} />
+				</dd>
 			</dl>
 			{isUnavailable ? (
 				<p className="state">{t('views.inboundLinks.unavailable')}</p>

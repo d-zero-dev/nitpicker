@@ -2,6 +2,8 @@ import type { MainContentAudioEntry } from '@nitpicker/query';
 
 import { useI18n } from '../i18n/use-i18n.js';
 
+import { ExternalUrl } from './external-url.js';
+
 /** Props for {@link AudioList}. */
 export interface AudioListProps {
 	/** Audios within the main region, in DOM order. */
@@ -26,7 +28,9 @@ export function AudioList(props: AudioListProps) {
 			</h3>
 			<ul className="detail-list">
 				{audios.map((audio, index) => (
-					<li key={index}>{audio.src}</li>
+					<li key={index}>
+						<ExternalUrl url={audio.src} />
+					</li>
 				))}
 			</ul>
 		</>
