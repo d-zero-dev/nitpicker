@@ -177,6 +177,27 @@ body {
 	background: var(--row-selected-bg);
 }
 
+/* Disclosure chevron in the first cell: hover and the expanded tint only
+   show up after interaction, so without it nothing at rest says the row
+   opens. Drawn from two borders rotated -45deg (pointing inline-end) and
+   turned to point down once expanded. */
+.plain-table .is-expandable > td:first-child::before {
+	display: inline flow-root;
+	inline-size: 6px;
+	block-size: 6px;
+	margin-inline: 2px 10px;
+	vertical-align: 0.15em;
+	content: '';
+	border-block-end: 1.5px solid var(--text-dim);
+	border-inline-end: 1.5px solid var(--text-dim);
+	rotate: -45deg;
+}
+
+.plain-table .is-expanded > td:first-child::before {
+	vertical-align: 0.3em;
+	rotate: 45deg;
+}
+
 /* The colSpan cell carrying an expanded row's detail — a nested table or a
    drilldown block — inset and tinted so it reads as the row's child. */
 .plain-table .plain-table-detail {
