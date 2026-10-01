@@ -1061,9 +1061,27 @@ h2 {
 	background: var(--accent);
 }
 
+/* Inside `.bars` the breakdown rows reuse the parent columns (subgrid
+   above); standalone, the list lays out the same three columns itself.
+   The indent goes on the label, not the list: list padding would push the
+   standalone list's tracks in along with its labels. */
 .error-kind-breakdown-list {
-	padding-inline-start: 24px;
+	display: block grid;
+	grid-template-columns: fit-content(50%) minmax(0, 1fr) max-content;
+	gap: 6px 8px;
 	font-size: var(--font-size-xs);
+}
+
+.error-kind-breakdown-list .bar-row {
+	display: block grid;
+	grid-template-columns: subgrid;
+	grid-column: 1 / -1;
+	align-items: center;
+}
+
+.error-kind-breakdown-list .bar-row > :first-child {
+	padding-inline-start: 16px;
+	color: var(--text-dim);
 }
 
 .url-list {
