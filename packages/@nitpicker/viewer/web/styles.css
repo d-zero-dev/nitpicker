@@ -2017,12 +2017,6 @@ pre code {
 	outline-offset: 1px;
 }
 
-.directory-tree-host {
-	font-family: monospace;
-	font-size: var(--font-size-sm);
-	color: var(--text-dim);
-}
-
 .tree-children {
 	/* A thin guide line down each nesting level (the classic file-tree
 	   affordance) reads the hierarchy at a glance without relying on
