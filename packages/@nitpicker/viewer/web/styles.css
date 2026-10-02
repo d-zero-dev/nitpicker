@@ -15,6 +15,10 @@
 	--warn: #fc6;
 	--skeleton: #2a3441;
 
+	/* Canvas behind a previewed third-party page: always white, in both themes,
+	   since that page was authored against a white default background. */
+	--preview-canvas: #fff;
+
 	/* "Ink" colors: the text color for a badge or highlight drawn on a tint of
 	   its own hue. Each is the hue mixed toward --text just far enough to reach
 	   4.8:1 on the strongest tint it sits on (AA needs 4.5:1), over both
@@ -1972,7 +1976,7 @@ pre code {
 .hp-frame {
 	inline-size: 100%;
 	block-size: 480px;
-	background: #fff;
+	background: var(--preview-canvas);
 	border: 0;
 }
 
