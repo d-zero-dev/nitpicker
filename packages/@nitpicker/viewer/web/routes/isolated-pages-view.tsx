@@ -18,6 +18,7 @@ import { SourceBadge } from '../components/source-badge.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
+import { getStatusLabel } from '../i18n/get-status-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 /**
@@ -78,7 +79,7 @@ export function IsolatedPagesView() {
 				id: 'status',
 				header: t('views.isolatedPages.status'),
 				size: 90,
-				accessorFn: (r) => r.status ?? '—',
+				accessorFn: (r) => getStatusLabel(r.status, t) ?? '—',
 			},
 			{
 				id: 'source',
@@ -114,6 +115,7 @@ export function IsolatedPagesView() {
 			buildStatusFilterOptions({
 				items: paged.data?.items,
 				getStatus: (item) => item.status,
+				t,
 				currentStatuses: status,
 			}),
 		);

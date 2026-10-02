@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
-import { ArchiveManager } from '@nitpicker/query';
+import { ArchiveManager, buildViewerReadModel } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createApp } from '../create-app.js';
@@ -63,6 +63,25 @@ describe('registerTechnologiesRoute (integration)', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+		// A page with no detectable technology, so the `/api/pages?technology=`
+		// tests below can tell "filtered" from "everything".
+		await archive.setPage({
+			url: parseUrl('https://example.com/plain')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html><body></body></html>',
+			meta: { tags: { detected: {}, entries: [] } } as never,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		await buildViewerReadModel(archive);
 
 		manager = new ArchiveManager();
 		const { archiveId, mode } = await manager.open(archive.tmpDir);
@@ -89,23 +108,32 @@ describe('registerTechnologiesRoute (integration)', () => {
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as {
 			inventory: { technology: string; pageCount: number }[];
-			directoryDistribution: unknown[];
 		};
 		expect(body.inventory).toEqual([
 			expect.objectContaining({ technology: 'Next.js', pageCount: 1 }),
 		]);
-		expect(Array.isArray(body.directoryDistribution)).toBe(true);
+		expect(body).not.toHaveProperty('directoryDistribution');
 	});
 
-	it('GET /api/technologies/pages?technology= returns pages using that technology', async () => {
-		const res = await app.request('/api/technologies/pages?technology=Next.js');
+	it('GET /api/pages?technology= lists only the pages using that technology', async () => {
+		const res = await app.request('/api/pages?technology=Next.js');
 		expect(res.status).toBe(200);
-		const body = (await res.json()) as { url: string }[];
-		expect(body).toEqual([expect.objectContaining({ url: 'https://example.com' })]);
+		const body = (await res.json()) as { items: { url: string }[]; total: number };
+		expect(body.items.map((item) => item.url)).toEqual(['https://example.com']);
+		expect(body.total).toBe(1);
 	});
 
-	it('GET /api/technologies/pages without a technology param returns 400', async () => {
-		const res = await app.request('/api/technologies/pages');
-		expect(res.status).toBe(400);
+	it('GET /api/pages?technology= with an unknown technology lists nothing', async () => {
+		const res = await app.request('/api/pages?technology=NoSuchTechnology');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { items: unknown[]; total: number };
+		expect(body.items).toEqual([]);
+		expect(body.total).toBe(0);
+	});
+
+	it('GET /api/pages without a technology filter lists every page', async () => {
+		const res = await app.request('/api/pages');
+		const body = (await res.json()) as { total: number };
+		expect(body.total).toBe(2);
 	});
 });

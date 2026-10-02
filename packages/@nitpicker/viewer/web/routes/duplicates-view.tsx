@@ -43,19 +43,14 @@ export function DuplicatesView() {
 				<div className="state">{t('views.duplicates.empty')}</div>
 			)}
 			{items.map((group) => (
-				<div
-					key={group.groupId}
-					className="card"
-					style={{ marginBottom: 12, minWidth: 0 }}>
+				<div key={group.groupId} className="card duplicate-group" style={{ minWidth: 0 }}>
 					<div className="card-label">
 						{t('views.duplicates.share', {
 							count: group.count,
 							field: t(`fields.${group.field}`),
 						})}
 					</div>
-					<div style={{ fontWeight: 600, margin: '4px 0' }}>
-						{group.value || '(empty)'}
-					</div>
+					<div style={{ fontWeight: 600 }}>{group.value || '(empty)'}</div>
 					<DuplicateUrlList urls={group.pages} />
 					{group.count > group.pages.length && (
 						<div className="card-label">

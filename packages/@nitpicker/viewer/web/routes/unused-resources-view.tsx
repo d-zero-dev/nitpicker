@@ -17,6 +17,7 @@ import { SourceBadge } from '../components/source-badge.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
+import { getStatusLabel } from '../i18n/get-status-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 /** Selectable provenance values for the `source` filter. */
@@ -66,7 +67,7 @@ export function UnusedResourcesView() {
 				accessorKey: 'status',
 				header: t('views.unusedResources.status'),
 				size: 130,
-				cell: (i) => i.getValue<number | null>() ?? '—',
+				cell: (i) => getStatusLabel(i.getValue<number | null>(), t) ?? '—',
 			},
 			{
 				accessorKey: 'contentType',
@@ -78,7 +79,7 @@ export function UnusedResourcesView() {
 				accessorKey: 'contentLength',
 				header: t('views.unusedResources.contentLength'),
 				size: 120,
-				cell: (i) => i.getValue<number | null>() ?? '—',
+				cell: (i) => getStatusLabel(i.getValue<number | null>(), t) ?? '—',
 			},
 			{
 				accessorKey: 'source',
@@ -111,6 +112,7 @@ export function UnusedResourcesView() {
 			buildStatusFilterOptions({
 				items: paged.data?.items,
 				getStatus: (item) => item.status,
+				t,
 				currentStatuses: status,
 			}),
 		);

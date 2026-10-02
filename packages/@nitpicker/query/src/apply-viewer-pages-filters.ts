@@ -13,8 +13,8 @@ import { toFlagValues } from './to-flag-values.js';
  * the total-count query so both see exactly the same row set.
  *
  * Every predicate targets an indexed `viewer_pages` column, or (for
- * `templateKey`) a `WHERE page_id IN (subquery)` against a narrow
- * `page_id`-PK'd auxiliary table — never the wide write-model `pages` table.
+ * `templateKey` / `technology`) a `WHERE page_id IN (subquery)` against a
+ * narrow auxiliary table keyed by page id — never the wide write-model `pages` table.
  * The wide table itself is joined in only after LIMIT, once the row set is
  * small, so the wide read stays bounded.
  * @param qb - A Knex query builder scoped to `viewer_pages` (or a subquery
@@ -107,6 +107,17 @@ export function applyViewerPagesFilters(
 		qb.whereIn('page_id', (builder) => {
 			builder.select('page_id').from('page_templates');
 			applyEqualityOrInFilter(builder, 'template_key', options.templateKey);
+		});
+	}
+	if (hasFilterValue(options.technology)) {
+		// Same reach-through as `templateKey` above: `page_technologies` is a
+		// narrow adjunct table (one row per page × technology, `pageId` leads its
+		// UNIQUE index), so a `whereIn` subquery keeps the wide `pages` table out
+		// of the id-resolution query. A page using several of the requested
+		// technologies appears once (`IN` is a set test, not a join).
+		qb.whereIn('page_id', (builder) => {
+			builder.select('pageId').from('page_technologies');
+			applyEqualityOrInFilter(builder, 'technology', options.technology);
 		});
 	}
 	if (options.directory) {

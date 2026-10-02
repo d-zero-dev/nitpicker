@@ -1,13 +1,19 @@
 import type { ClusterBlockGroup } from '../types.js';
 import type { TemplateClusterSummary } from '@nitpicker/query';
 
-import { getBlockingKindLabel } from '../i18n/get-blocking-kind-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 import { AppLink } from './app-link.js';
-import { buildBlockHeading } from './build-block-heading.js';
-import { formatClusterName } from './format-cluster-name.js';
+import { BlockHeadingLabel } from './block-heading-label.js';
+import { ClusterName } from './cluster-name.js';
 import { listClusterBlocks } from './list-cluster-blocks.js';
+import { PropertyList } from './property-list.js';
+
+/**
+ * How many stylesheet file names a merged-from block names in a table cell
+ * before collapsing to "+N more" — the block's own section lists them all.
+ */
+const MAX_MERGED_BLOCK_ITEMS = 2;
 
 /** Props for {@link TemplateClusterBlockGroups}. */
 export interface TemplateClusterBlockGroupsProps {
@@ -22,9 +28,10 @@ export interface TemplateClusterBlockGroupsProps {
  * blocks is listed under each of them (see `groupClustersByBlock`), and its
  * row names the other blocks it came from so the repeat reads as intended.
  *
- * Deliberately not `<details>`: the per-cluster sections below are the only
- * `<details>` on the view, which the viewer E2E specs rely on to locate a
- * cluster by its heading text.
+ * Each block's heading names the block; its cluster and page counts are
+ * header properties rather than a parenthesised tail of the heading, so the
+ * heading stays the block's name alone. Deliberately not `<details>`: the
+ * block sections stay open so every cluster is scannable without clicking.
  * @param props - The block groups to render.
  * @returns The grouped sections, or `null` when there are no groups.
  */
@@ -36,30 +43,46 @@ export function TemplateClusterBlockGroups(props: TemplateClusterBlockGroupsProp
 		return null;
 	}
 
-	// The other-blocks cell reuses each block's own section heading text, so a
-	// reader can find the section it points at by scanning for the same words.
-	const headingByBlockKey = new Map(
-		groups.map((group) => [
-			group.block.blockKey,
-			`${getBlockingKindLabel(group.block.kind, t)}: ${buildBlockHeading(group)}`,
-		]),
-	);
+	// The other-blocks cell reuses each block's own section label, so a reader
+	// can find the section it points at by scanning for the same words.
+	const groupByBlockKey = new Map(groups.map((group) => [group.block.blockKey, group]));
 	const otherBlocksOf = (group: ClusterBlockGroup, cluster: TemplateClusterSummary) =>
 		listClusterBlocks(cluster)
 			.filter((block) => block.blockKey !== group.block.blockKey)
-			.map((block) => headingByBlockKey.get(block.blockKey) ?? block.blockKey);
+			.map((block) => {
+				const target = groupByBlockKey.get(block.blockKey);
+				return (
+					<li key={block.blockKey}>
+						{target ? (
+							<BlockHeadingLabel group={target} maxItems={MAX_MERGED_BLOCK_ITEMS} />
+						) : (
+							<code>{block.blockKey}</code>
+						)}
+					</li>
+				);
+			});
 
 	return (
 		<section>
 			<h2>{t('views.templateClusters.byBlock')}</h2>
 			<p className="view-description">{t('views.templateClusters.byBlockCaveat')}</p>
 			{groups.map((group) => (
-				<section key={group.block.blockKey} aria-labelledby={headingId(group)}>
+				<section
+					key={group.block.blockKey}
+					className="block-card"
+					aria-labelledby={headingId(group)}>
 					<h3 id={headingId(group)}>
-						{getBlockingKindLabel(group.block.kind, t)}: {buildBlockHeading(group)} (
-						{t('views.templateClusters.colClusters')}: {group.clusters.length},{' '}
-						{t('views.templateClusters.colPages')}: {group.pageCount})
+						<BlockHeadingLabel group={group} />
 					</h3>
+					<PropertyList
+						items={[
+							{
+								label: t('views.templateClusters.colClusters'),
+								value: group.clusters.length,
+							},
+							{ label: t('views.templateClusters.colPages'), value: group.pageCount },
+						]}
+					/>
 					<div className="plain-table-scroll">
 						<table className="plain-table">
 							<thead>
@@ -82,17 +105,25 @@ export function TemplateClusterBlockGroups(props: TemplateClusterBlockGroupsProp
 										<td className="plain-table-nowrap">
 											<AppLink
 												to={`/pages?templateKey=${encodeURIComponent(cluster.templateKey)}`}>
-												{formatClusterName(cluster, t)}
+												<ClusterName cluster={cluster} />
 											</AppLink>
 										</td>
 										<td className="plain-table-num">{cluster.pageCount}</td>
 										<td className="plain-table-nowrap">
-											{cluster.commonDirectories[0]?.directory ?? '—'}
+											{cluster.commonDirectories[0] ? (
+												<code>{cluster.commonDirectories[0].directory}</code>
+											) : (
+												'—'
+											)}
 										</td>
 										<td>
-											<div className="plain-table-prose">
-												{otherBlocksOf(group, cluster).join(', ') || '—'}
-											</div>
+											{otherBlocksOf(group, cluster).length === 0 ? (
+												'—'
+											) : (
+												<ul className="plain-list merged-blocks">
+													{otherBlocksOf(group, cluster)}
+												</ul>
+											)}
 										</td>
 									</tr>
 								))}

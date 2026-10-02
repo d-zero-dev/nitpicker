@@ -869,6 +869,13 @@ export interface ListPagesOptions {
 	 * `applyViewerPagesFilters`.
 	 */
 	templateKey?: string;
+	/**
+	 * Restrict to pages where this technology was detected
+	 * (`page_technologies.technology`). Also supported by
+	 * {@link ListViewerPagesOptions}'s read-model fast path via a
+	 * `page_id IN (subquery)` — see `applyViewerPagesFilters`.
+	 */
+	technology?: string;
 	/** Field to sort results by. */
 	sortBy?:
 		| 'url'
@@ -1420,6 +1427,14 @@ export interface ListViewerPagesOptions {
 	 * `pages` table — see `applyViewerPagesFilters`.
 	 */
 	templateKey?: string | string[];
+	/**
+	 * Filter to pages where this technology was detected, or any of several
+	 * (OR). Supported by the fast path the same way `templateKey` is:
+	 * `page_technologies` is a narrow adjunct table keyed by `pageId`, reached
+	 * through a `page_id IN (subquery)` rather than a wide-table scan, so it
+	 * needs no `viewer_pages` column and no schema bump.
+	 */
+	technology?: string | string[];
 	/**
 	 * Directory path prefix to filter by (e.g. `/blog/2024/`) — matches this
 	 * directory and its entire subtree, not just direct children. A trailing
@@ -2043,23 +2058,6 @@ export interface TechnologyInventoryEntry {
 	pageCount: number;
 	/** Mean `confidence` across the technology's `page_technologies` rows, 0-100. */
 	avgConfidence: number;
-}
-
-/**
- * One (directory, technology) bucket returned by
- * `getTechnologyDirectoryDistribution()` — the viewer's `/technologies`
- * directory × technology matrix, read from the precomputed
- * `viewer_technology_directory_stats` table (no live equivalent; returns
- * `[]` when the read model is absent or stale — see that function's docs).
- */
-export interface TechnologyDirectoryStatsEntry {
-	/** The page URL's origin (`<scheme>//<host>`). */
-	rootKey: string;
-	/** First-path-segment directory bucket, e.g. `https://example.com/blog/`. */
-	directory: string;
-	technology: string;
-	/** Distinct-page count for this (directory, technology) pair. */
-	pageCount: number;
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { OutboundLink } from '@nitpicker/query';
 
+import { getStatusLabel } from '../i18n/get-status-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 import { AppLink } from './app-link.js';
@@ -38,7 +39,9 @@ export function OutboundLinksList(props: OutboundLinksListProps) {
 						<AppLink to={`/pages/detail?url=${encodeURIComponent(link.url)}`}>
 							{link.url}
 						</AppLink>{' '}
-						{link.status != null && <span className="state">[{link.status}]</span>}
+						{link.status != null && (
+							<span className="state">[{getStatusLabel(link.status, t)}]</span>
+						)}
 					</li>
 				))}
 			</ul>

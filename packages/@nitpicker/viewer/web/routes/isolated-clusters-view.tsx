@@ -23,6 +23,7 @@ import { IsolatedClusterListPane } from '../components/isolated-cluster-list-pan
 import { SourceBadge } from '../components/source-badge.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
+import { getStatusLabel } from '../i18n/get-status-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 /**
@@ -131,7 +132,7 @@ function ClusterListPane({
 				id: 'representativeStatus',
 				header: t('views.isolatedClusters.status'),
 				size: 130,
-				accessorFn: (r) => r.representativeStatus ?? '—',
+				accessorFn: (r) => getStatusLabel(r.representativeStatus, t) ?? '—',
 			},
 		],
 		[t, onSelectCluster],
@@ -163,6 +164,7 @@ function ClusterListPane({
 			buildStatusFilterOptions({
 				items: paged.data?.items,
 				getStatus: (item) => item.representativeStatus,
+				t,
 				currentStatuses: status,
 			}),
 		);
@@ -263,7 +265,7 @@ function ClusterDetailPane({
 				id: 'status',
 				header: t('views.isolatedClusters.status'),
 				size: 130,
-				accessorFn: (r) => r.status ?? '—',
+				accessorFn: (r) => getStatusLabel(r.status, t) ?? '—',
 			},
 			{
 				id: 'source',
@@ -299,6 +301,7 @@ function ClusterDetailPane({
 			buildStatusFilterOptions({
 				items: data?.members,
 				getStatus: (item) => item.status,
+				t,
 				currentStatuses: status,
 			}),
 		);

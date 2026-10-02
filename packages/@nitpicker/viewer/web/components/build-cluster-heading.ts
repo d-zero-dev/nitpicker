@@ -1,6 +1,8 @@
 import type { ClusterHeadingSource } from '../types.js';
 import type { TemplateClusterSummary } from '@nitpicker/query';
 
+import { buildClusterHeadingParts } from './build-cluster-heading-parts.js';
+
 /**
  * Builds the human-readable heading for one cluster's section, plus which
  * source it came from (the caller uses this to pick the matching `<summary>`
@@ -40,27 +42,7 @@ export function buildClusterHeading(cluster: TemplateClusterSummary): {
 	heading: string;
 	source: ClusterHeadingSource;
 } {
-	const hasSiblings = (cluster.reason?.siblingClusterKeys.length ?? 0) > 0;
-	const disambiguated = (base: string) =>
-		hasSiblings && cluster.commonDirectories.length > 0
-			? `${base} — ${cluster.commonDirectories[0]!.directory}`
-			: base;
-
-	const distinctiveNames = cluster.reason?.distinctiveStylesheetFileNames ?? [];
-	if (distinctiveNames.length > 0) {
-		return { heading: disambiguated(distinctiveNames.join(', ')), source: 'distinctive' };
-	}
-	if (cluster.commonStylesheetFileNames.length > 0) {
-		return {
-			heading: disambiguated(cluster.commonStylesheetFileNames.join(', ')),
-			source: 'common',
-		};
-	}
-	if (cluster.commonDirectories.length > 0) {
-		return {
-			heading: cluster.commonDirectories.map((entry) => entry.directory).join(', '),
-			source: 'directory',
-		};
-	}
-	return { heading: cluster.templateKey, source: 'raw' };
+	const { identifiers, qualifier, source } = buildClusterHeadingParts(cluster);
+	const base = identifiers.join(', ');
+	return { heading: qualifier ? `${base} — ${qualifier}` : base, source };
 }

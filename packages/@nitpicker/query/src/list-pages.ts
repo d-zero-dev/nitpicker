@@ -293,6 +293,14 @@ export async function listPages(
 			baseQuery.whereRaw('0 = 1');
 		}
 	}
+	if (options.technology) {
+		// `page_technologies` is one-page-to-many technologies, so a `whereIn`
+		// subquery (not a join) keeps each page to one row in the list.
+		baseQuery.whereIn(
+			'ci.id',
+			knex('page_technologies').select('pageId').where('technology', options.technology),
+		);
+	}
 	for (const key of HEADER_PRESENCE_KEYS) {
 		const expected = options[key];
 		if (expected != null) {

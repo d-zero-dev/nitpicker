@@ -1,4 +1,7 @@
+import type { I18nValue } from '../types.js';
 import type { TableFilterOption } from './paged-table.js';
+
+import { getStatusLabel } from '../i18n/get-status-label.js';
 
 /**
  * Builds checkbox options for a numeric status filter from the visible
@@ -11,18 +14,22 @@ import type { TableFilterOption } from './paged-table.js';
  * @param options
  * @param options.items - Rows from which to collect status values.
  * @param options.getStatus - Extracts the numeric status from a row.
+ * @param options.t - The active translate function; labels the internal `-1`
+ *   fetch-failure sentinel (the option `value` stays numeric for the query string).
  * @param options.currentStatuses - Raw `?status=` query values (repeated param).
  * @returns Checkbox options sorted numerically ascending.
  * @example
  * buildStatusFilterOptions({
  *   items: paged.data?.items,
  *   getStatus: (item) => item.status,
+ *   t,
  *   currentStatuses: params.getAll('status'),
  * });
  */
 export function buildStatusFilterOptions<T>(options: {
 	items: readonly T[] | undefined;
 	getStatus: (item: T) => number | null | undefined;
+	t: I18nValue['t'];
 	currentStatuses: readonly string[];
 }): TableFilterOption[] {
 	const selected = new Set(options.currentStatuses.filter((value) => value.length > 0));
@@ -43,7 +50,7 @@ export function buildStatusFilterOptions<T>(options: {
 		.toSorted((a, b) => a - b)
 		.map((status) => ({
 			value: String(status),
-			label: String(status),
+			label: getStatusLabel(status, options.t) ?? String(status),
 			checked: selected.has(String(status)),
 		}));
 }

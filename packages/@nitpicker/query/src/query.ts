@@ -75,7 +75,6 @@ export { getPageTechnologies } from './get-page-technologies.js';
 export { getResourceReferrers } from './get-resource-referrers.js';
 export { getSummary } from './get-summary.js';
 export { getSummaryFastPath } from './get-summary-fast-path.js';
-export { getTechnologyDirectoryDistribution } from './get-technology-directory-distribution.js';
 export { getTechnologyInventory } from './get-technology-inventory.js';
 export { getTechnologyInventoryFastPath } from './get-technology-inventory-fast-path.js';
 export { getViewerTechnologyInventory } from './get-viewer-technology-inventory.js';

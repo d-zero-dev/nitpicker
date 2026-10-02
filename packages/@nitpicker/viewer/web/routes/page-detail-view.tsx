@@ -80,9 +80,11 @@ export function PageDetailView() {
 				titleKey="views.pageDetail.title"
 				descriptionKey="views.pageDetail.description"
 			/>
-			<AppLink to="/pages">
-				{t('common.back')} {t('nav.pages')}
-			</AppLink>
+			<p>
+				<AppLink to="/pages">
+					{t('common.back')} {t('nav.pages')}
+				</AppLink>
+			</p>
 			<PageMetadataGrid data={data} />
 
 			<InboundLinksSummary

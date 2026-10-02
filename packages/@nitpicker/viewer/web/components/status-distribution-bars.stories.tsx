@@ -1,9 +1,18 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
+import { MemoryRouter } from 'react-router';
+
 import { StatusDistributionBars } from './status-distribution-bars.js';
 
 const meta = {
 	component: StatusDistributionBars,
+	decorators: [
+		(Story) => (
+			<MemoryRouter>
+				<Story />
+			</MemoryRouter>
+		),
+	],
 } satisfies Meta<typeof StatusDistributionBars>;
 
 export default meta;
@@ -43,5 +52,26 @@ export const WithErrorBreakdown: Story = {
 				],
 			},
 		],
+	},
+};
+
+/**
+ * The static HTML report has no connection errors screen, so the error
+ * group's link is suppressed.
+ */
+export const WithoutErrorsLink: Story = {
+	args: {
+		showErrorsLink: false,
+		entries: [
+			{ status: 200, count: 500 },
+			{ status: -1, count: 15 },
+		],
+	},
+};
+
+/** Only fetch errors: the HTTP responses group is omitted. */
+export const OnlyErrors: Story = {
+	args: {
+		entries: [{ status: -1, count: 15 }],
 	},
 };

@@ -16,9 +16,14 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 			page.getByRole('heading', { name: 'Template Clusters', level: 1 }),
 		).toBeVisible();
 
-		const cssCluster = page.locator('details', { hasText: 'blog.css' });
-		await expect(cssCluster.locator('summary')).toContainText('blog template A');
-		await expect(cssCluster.locator('summary')).toContainText('2 pages');
+		const cssCluster = page.locator('section.cluster-card', { hasText: 'blog.css' });
+		await expect(cssCluster.getByRole('heading', { level: 3 })).toHaveText(
+			'blog template A',
+		);
+		// The page count is a header property of the card, not part of the heading.
+		await expect(
+			cssCluster.locator('.property-list-item', { hasText: 'Pages' }),
+		).toContainText('2');
 		// The stylesheet-derived heading moves into the body once a label names the cluster.
 		await expect(cssCluster).toContainText('blog.css');
 	});
@@ -28,7 +33,7 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 	}) => {
 		await page.goto('/template-clusters');
 
-		const cssCluster = page.locator('details', { hasText: 'blog.css' });
+		const cssCluster = page.locator('section.cluster-card', { hasText: 'blog.css' });
 		await cssCluster.locator('summary').click();
 		await cssCluster.getByRole('link', { name: 'View pages in this cluster' }).click();
 
@@ -40,7 +45,7 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 	test('生のtemplateKeyを補足情報として表示する', async ({ page }) => {
 		await page.goto('/template-clusters');
 
-		const cssCluster = page.locator('details', { hasText: 'blog.css' });
+		const cssCluster = page.locator('section.cluster-card', { hasText: 'blog.css' });
 		await cssCluster.locator('summary').click();
 		await expect(cssCluster).toContainText('["css:1a2b3c4d5e6f7890","cluster:0"]');
 	});
@@ -50,7 +55,9 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 	}) => {
 		await page.goto('/template-clusters');
 
-		const sectionsCluster = page.locator('details', { hasText: 'section-a' });
+		const sectionsCluster = page.locator('section.cluster-card', {
+			hasText: 'section-a',
+		});
 		await sectionsCluster.locator('summary').click();
 		for (const section of ['a', 'b', 'c', 'd', 'e']) {
 			await expect(sectionsCluster).toContainText(`section-${section}`);
@@ -66,7 +73,7 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 	}) => {
 		await page.goto('/template-clusters');
 
-		const cssCluster = page.locator('details', { hasText: 'blog.css' });
+		const cssCluster = page.locator('section.cluster-card', { hasText: 'blog.css' });
 		await cssCluster.locator('summary').click();
 		await expect(cssCluster).toContainText('Common stylesheets');
 		await expect(cssCluster).toContainText('https://example.com/blog.css');
@@ -79,7 +86,7 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 	}) => {
 		await page.goto('/template-clusters');
 
-		const pathCluster = page.locator('details', { hasText: '/news/' });
+		const pathCluster = page.locator('section.cluster-card', { hasText: '/news/' });
 		await pathCluster.locator('summary').click();
 		await expect(pathCluster).toContainText('URL path');
 		await expect(pathCluster).toContainText('news');
@@ -91,10 +98,14 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 	}) => {
 		await page.goto('/template-clusters');
 
-		const docsCluster = page.locator('details', { hasText: '/docs/' });
-		const helpCluster = page.locator('details', { hasText: '/help/' });
-		await expect(docsCluster.locator('summary')).toContainText('docs template A');
-		await expect(helpCluster.locator('summary')).toContainText('help template A');
+		const docsCluster = page.locator('section.cluster-card', { hasText: '/docs/' });
+		const helpCluster = page.locator('section.cluster-card', { hasText: '/help/' });
+		await expect(docsCluster.getByRole('heading', { level: 3 })).toHaveText(
+			'docs template A',
+		);
+		await expect(helpCluster.getByRole('heading', { level: 3 })).toHaveText(
+			'help template A',
+		);
 		await docsCluster.locator('summary').click();
 		await expect(docsCluster).toContainText('docs.css — https://example.com/docs/');
 	});
@@ -104,7 +115,7 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 	}) => {
 		await page.goto('/template-clusters');
 
-		const docsCluster = page.locator('details', { hasText: '/docs/' });
+		const docsCluster = page.locator('section.cluster-card', { hasText: '/docs/' });
 		await docsCluster.locator('summary').click();
 		await expect(docsCluster).toContainText('Sibling clusters');
 		const siblingLink = docsCluster.getByRole('link', {
@@ -176,7 +187,7 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 		).toBeVisible();
 
 		const docsBlock = page.getByRole('region', {
-			name: 'Common stylesheets: docs.css (Clusters: 2, Pages: 3)',
+			name: 'Common stylesheets: docs.css',
 		});
 		await expect(docsBlock.locator('tbody tr')).toHaveCount(2);
 		await expect(docsBlock.locator('tbody tr').nth(0)).toContainText('docs template A');
@@ -187,7 +198,7 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 		);
 
 		const newsBlock = page.getByRole('region', {
-			name: 'URL path: /news/ (Clusters: 1, Pages: 2)',
+			name: 'URL path: /news/',
 		});
 		await expect(newsBlock.locator('tbody tr')).toHaveCount(1);
 	});
@@ -201,7 +212,7 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 		// so it is listed under both; the `sections` block's own cluster has no
 		// reason and is placed by its template key alone.
 		const sectionsBlock = page.getByRole('region', {
-			name: 'URL path: /sections/ (Clusters: 2, Pages: 9)',
+			name: 'URL path: /sections/',
 		});
 		await expect(sectionsBlock.locator('tbody tr')).toHaveCount(2);
 		const mergedRow = sectionsBlock.locator('tbody tr', { hasText: '/news/' });
@@ -211,7 +222,7 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 		).toHaveText('—');
 
 		const newsBlock = page.getByRole('region', {
-			name: 'URL path: /news/ (Clusters: 1, Pages: 2)',
+			name: 'URL path: /news/',
 		});
 		await expect(newsBlock.locator('tbody tr').first().locator('td').nth(3)).toHaveText(
 			'URL path: /sections/',
@@ -238,7 +249,9 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 	}) => {
 		await page.goto('/template-clusters');
 
-		const sectionsCluster = page.locator('details', { hasText: 'section-a' });
+		const sectionsCluster = page.locator('section.cluster-card', {
+			hasText: 'section-a',
+		});
 		await sectionsCluster.locator('summary').click();
 		await expect(sectionsCluster).toContainText(
 			'No cluster-selection evidence was captured for this cluster.',

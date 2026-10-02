@@ -192,6 +192,21 @@ export type DirectoryTreeSortOrder = 'path' | 'pagesDesc' | 'pagesAsc';
 export type ClusterHeadingSource = 'distinctive' | 'common' | 'directory' | 'raw';
 
 /**
+ * A template cluster's derived heading, split into the machine identifiers
+ * it is made of (stylesheet file names, directories, or the raw template
+ * key) and an optional disambiguating qualifier, so the view can render the
+ * identifiers as `<code>` instead of running them into prose.
+ */
+export interface ClusterHeadingParts {
+	/** Stylesheet file names, directories, or `[templateKey]` — each a literal to show verbatim. */
+	identifiers: string[];
+	/** The top directory appended to tell sibling clusters apart, when there are siblings. */
+	qualifier?: string;
+	/** Which source the identifiers were drawn from. */
+	source: ClusterHeadingSource;
+}
+
+/**
  * Which `@d-zero/page-cluster` Pass-0 blocking stage a block key came from —
  * the `reason.kind` values plus `unknown` for a template key whose block
  * key prefix this viewer build does not recognize.

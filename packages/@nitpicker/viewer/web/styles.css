@@ -3,16 +3,31 @@
 	--bg-elev: #1a212b;
 	--border: #2a3441;
 	--text: #d6dde6;
-	--text-dim: #8b97a6;
-	--text-on-accent: #fff;
+	--text-dim: #97a3b2;
+
+	/* Text on a solid accent / danger fill. Dark text: white fails AA on these
+	   light-ish fills (2.6:1) in the dark theme. */
+	--text-on-accent: var(--bg);
+	--text-on-danger: var(--bg);
 	--accent: #4aa3ff;
 	--danger: #ff6b6b;
 	--success: #4ade80;
 	--warn: #fc6;
 	--skeleton: #2a3441;
-	--badge-warn-fg: #f59e0b;
-	--badge-warn-bg: color-mix(in srgb, #f59e0b 20%, transparent);
-	--badge-interrupted-bg: color-mix(in srgb, var(--text-dim) 18%, transparent);
+
+	/* Canvas behind a previewed third-party page: always white, in both themes,
+	   since that page was authored against a white default background. */
+	--preview-canvas: #fff;
+
+	/* "Ink" colors: the text color for a badge or highlight drawn on a tint of
+	   its own hue. Each is the hue mixed toward --text just far enough to reach
+	   4.8:1 on the strongest tint it sits on (AA needs 4.5:1), over both
+	   --bg and --bg-elev. Re-derive the percentages if a hue or tint changes. */
+	--danger-ink: color-mix(in srgb, var(--danger) 64%, var(--text));
+	--success-ink: var(--success);
+	--warn-ink: var(--warn);
+	--accent-ink: color-mix(in srgb, var(--accent) 96%, var(--text));
+	--dim-ink: color-mix(in srgb, var(--text-dim) 81%, var(--text));
 
 	/* Row-state tints shared by every hoverable / selectable strip (nav links,
 	   tree rows, expandable table rows) so hover and selected stay in step. */
@@ -29,6 +44,15 @@
 	--font-size-xl: 16px;
 	--font-size-2xl: 20px;
 	--font-size-3xl: 24px;
+
+	/* Heading scale (h1–h4). Every heading level is strictly larger than the
+	   14px body — h5/h6 reuse `--font-size-xl` / `--font-size-lg` (16 / 15) —
+	   and each step is about ×1.2 or more so the levels read as distinct
+	   tiers (32 / 26 / 22 / 18 / 16 / 15). */
+	--font-size-heading-1: 32px;
+	--font-size-heading-2: 26px;
+	--font-size-heading-3: 22px;
+	--font-size-heading-4: 18px;
 
 	/* z-index scale. Raw integer z-index values are linted against; reach for
 	   one of these slots when stacking. */
@@ -49,7 +73,7 @@
 	--bg-elev: #fff;
 	--border: #d6dce2;
 	--text: #1a212b;
-	--text-dim: #5a6573;
+	--text-dim: #556070;
 
 	/* #0969da clears WCAG AA (4.5:1) as link text on --bg; #1f6feb was ~4.2:1. */
 	--accent: #0969da;
@@ -57,6 +81,13 @@
 	--success: #1a7f37;
 	--warn: #9a6700;
 	--skeleton: #e6eaef;
+	--text-on-accent: #fff;
+	--text-on-danger: #fff;
+	--danger-ink: color-mix(in srgb, var(--danger) 71%, var(--text));
+	--success-ink: color-mix(in srgb, var(--success) 70%, var(--text));
+	--warn-ink: color-mix(in srgb, var(--warn) 75%, var(--text));
+	--accent-ink: color-mix(in srgb, var(--accent) 82%, var(--text));
+	--dim-ink: color-mix(in srgb, var(--text-dim) 90%, var(--text));
 }
 
 * {
@@ -224,8 +255,10 @@ body {
 	color: var(--danger);
 }
 
+/* Link text uses the accent "ink": plain `--accent` falls under 4.5:1 once the
+   link sits on a hovered or selected (accent-tinted) row in the light theme. */
 a {
-	color: var(--accent);
+	color: var(--accent-ink);
 }
 
 /* Shared list reset: bare <ul>/<ol> displayed as a flex/column strip
@@ -233,7 +266,6 @@ a {
    its own layout (direction/gap/etc.) on top of this. */
 .plain-list {
 	padding: 0;
-	margin: 0;
 	list-style: none;
 }
 
@@ -314,13 +346,13 @@ a {
 }
 
 .footer-stub-badge--live {
-	color: var(--badge-warn-fg);
-	background: var(--badge-warn-bg);
+	color: var(--warn-ink);
+	background: color-mix(in srgb, var(--warn) 20%, transparent);
 }
 
 .footer-stub-badge--interrupted {
-	color: var(--text-dim);
-	background: var(--badge-interrupted-bg);
+	color: var(--dim-ink);
+	background: color-mix(in srgb, var(--text-dim) 18%, transparent);
 }
 
 @keyframes progress-slide {
@@ -428,32 +460,264 @@ a {
 	min-block-size: 0;
 }
 
+/* Vertical rhythm: each element decides the gap that follows it.
+
+   Exactly like the heading rules below (`h2 + *`), the gap between two
+   siblings is written on the PRECEDING element's selector — `p + *`,
+   `ul + *`, `table + *`, ... — and is sized for that kind of element: a
+   paragraph opens a modest gap, a table or a card row a larger one. The gap
+   lives on the following element's `margin-block-start`, so no element
+   carries a bottom margin that could stack with its container's padding or
+   leave a stray gap at the end.
+
+   The `:is(*, [class])` tail is deliberate: the argument list takes the
+   specificity of its most specific member, so these rules outrank a class
+   selector. Without it, any class on the following element that sets its own
+   margin would win and silently drop the gap. A rule that must still beat
+   these (a component's own tighter gap) needs two classes or more.
+
+   Headings (and the heading-plus-link row) are excluded from these rules'
+   targets: a heading owns its own, larger top margin, which a `p + *` rule
+   must never shrink.
+
+   Bare block elements are reset to zero block margin first, so the browser's
+   default `1em` can never add to a gap. */
+:where(p, ul, ol, dl, pre, blockquote, figure, hr) {
+	margin-block: 0;
+}
+
+/* After text and lists: 12px. Only bare lists (`ul:not([class])`) and the
+   two classed text lists take part; other classed lists (`.tree-children`,
+   `.chip-list`, ...) are layout and own their spacing. */
+p + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+:is(ul, ol, dl):not([class])
+	+ :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.detail-list + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.url-list + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+pre + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+blockquote + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+details + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.view-header + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.filter-notice + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.filter-bar + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.state + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.property-list + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.cluster-card + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.block-card + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.tree-collapse-control + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.tree-sort-control + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.status-region + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.duplicate-group + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+section:not([class]) + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 12px;
+}
+
+/* After a table or a block of cards: 20px. */
+table:not([class]) + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.plain-table-scroll + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.cards + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.detail-grid + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.stacked-bar-wrap + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 20px;
+}
+
+/* After the summary's lead blocks: 16px. */
+.summary-roots + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.summary-excludes + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 16px;
+}
+
+/* After a one-line caption that belongs to what follows: 6px. */
+.vt-meta + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.pt-meta + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.graph-meta + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.graph-legend + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 6px;
+}
+
+/* A thematic break separates with more room on both sides. */
+hr + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 24px;
+}
+
+/* Inside a `<details>`: the body opens close to its `<summary>`, and
+   consecutive disclosure widgets stack tighter than ordinary blocks. */
+summary + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 8px;
+}
+
+details + details:is(*, [class]) {
+	margin-block-start: 8px;
+}
+
+/* A statistic card's parts: the label sits tight over its value. */
+.card-label + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 4px;
+}
+
+/* Inside an item of a bare list, a nested list (or a block that follows
+   another) sits closer, at the same 4px as the items themselves. */
+:is(ul, ol):not([class]) > li > :is(ul, ol),
+:is(ul, ol):not([class])
+	> li
+	> :is(p, ul, ol, dl)
+	+ :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 4px;
+}
+
+/* Heading scale: strictly decreasing h1 > h2 > h3 > h4 > h5 > h6, with a
+   clear step between tiers (32 / 26 / 22 / 18 / 16 / 15, all above the 14px body). `h3` and below
+   once had no rule, so they fell back to the browser's 1.17em and rendered
+   larger than the pinned `h2`. Always set a heading's size here — never per
+   component. */
 h1 {
-	margin-block: 0 4px;
+	margin-block: 0;
 	margin-inline: 0;
-	font-size: var(--font-size-2xl);
+	font-size: var(--font-size-heading-1);
+	line-height: 1.25;
 }
 
 h2 {
-	margin-block: 18px 8px;
+	margin-block: 40px 0;
+	margin-inline: 0;
+	font-size: var(--font-size-heading-2);
+	line-height: 1.3;
+}
+
+h3 {
+	margin-block: 32px 0;
+	margin-inline: 0;
+	font-size: var(--font-size-heading-3);
+	line-height: 1.35;
+}
+
+h4 {
+	margin-block: 26px 0;
+	margin-inline: 0;
+	font-size: var(--font-size-heading-4);
+	line-height: 1.4;
+}
+
+h5 {
+	margin-block: 22px 0;
+	margin-inline: 0;
+	font-size: var(--font-size-xl);
+}
+
+h6 {
+	margin-block: 18px 0;
 	margin-inline: 0;
 	font-size: var(--font-size-lg);
+}
+
+/* The gap under a heading belongs to the element that follows it, not to the
+   heading: a heading carries no bottom margin, and `hx + *` opens a gap that
+   grows with the heading's size (the heading's own top margin grows the same
+   way). Anything that can directly follow a heading must therefore leave its
+   own `margin-block-start` unset, or it overrides this.
+
+   `:is(*, [class])` is deliberate: the argument list takes the specificity of
+   its most specific member, so these rules outrank a class selector. Without
+   it, any class on the following element (`.view-description`,
+   `.property-list`, `.plain-list`, ...) that sets its own margin would win
+   and silently drop the gap. */
+h1 + :is(*, [class]) {
+	margin-block-start: 20px;
+}
+
+h2 + :is(*, [class]) {
+	margin-block-start: 16px;
+}
+
+h3 + :is(*, [class]) {
+	margin-block-start: 14px;
+}
+
+h4 + :is(*, [class]) {
+	margin-block-start: 12px;
+}
+
+h5 + :is(*, [class]) {
+	margin-block-start: 10px;
+}
+
+h6 + :is(*, [class]) {
+	margin-block-start: 8px;
+}
+
+/* A heading's top margin separates it from the content above; with nothing
+   above it (the first child of its container) that margin is just a stray
+   gap at the container's edge. */
+:is(h1, h2, h3, h4, h5, h6):first-child {
+	margin-block-start: 0;
+}
+
+/* Bare lists (no class): the same rich treatment `.url-list` / `.detail-list`
+   give, so an `<ol>` reads as richly as a `<ul>`. Classed lists keep their own
+   layout. */
+:is(ul, ol):not([class]) {
+	padding-inline-start: 22px;
+}
+
+:is(ul, ol):not([class]) > li + li {
+	margin-block-start: 4px;
+}
+
+:is(ul, ol):not([class]) > li::marker {
+	color: var(--text-dim);
+}
+
+ol:not([class]) > li::marker {
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+/* Disclosure widgets (`<details>` / `<summary>`). */
+details {
+	padding-block: 8px;
+	padding-inline: 12px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+}
+
+summary {
+	font-weight: 600;
+	cursor: pointer;
 }
 
 /* An `h2` with a trailing link to the section's full view. The link sits
    on the heading's baseline rather than below the content, where it reads
    as one more row of the section instead of a way out of it. The wrapper
-   takes over the `h2`'s block margins. */
+   takes over the `h2`'s margins: the same top margin, and the same `+ *`
+   gap below. */
 .section-heading {
 	display: block flex;
 	flex-wrap: wrap;
 	gap: 4px 12px;
 	align-items: baseline;
-	margin-block: 18px 8px;
+	margin-block: 40px 0;
 }
 
-.section-heading h2 {
+.section-heading :is(h2, h3) {
 	margin: 0;
+}
+
+.section-heading + :is(*, [class]) {
+	margin-block-start: 16px;
+}
+
+/* The same heading-plus-link row one level down (an `h3`). */
+.section-heading-sub {
+	margin-block: 32px 0;
+}
+
+.section-heading-sub + :is(*, [class]) {
+	margin-block-start: 14px;
+}
+
+/* Same first-child exception as a bare heading above. */
+.section-heading:first-child {
+	margin-block-start: 0;
 }
 
 .section-heading a {
@@ -461,14 +725,10 @@ h2 {
 }
 
 /* View header + description */
-.view-header {
-	margin-block-end: 12px;
-}
 
 .view-description {
 	/* stylelint-disable-next-line unit-disallowed-list -- `ch` is intentional: this caps the description at ~70 characters, the recommended readable measure (WCAG 1.4.8). */
 	max-inline-size: 70ch;
-	margin: 0;
 	font-size: var(--font-size-base);
 	color: var(--text-dim);
 }
@@ -478,7 +738,6 @@ h2 {
    view (the directory tree), so it has no control of its own here to show
    its current value. */
 .filter-notice {
-	margin-block: 0 12px;
 	font-size: var(--font-size-base);
 	color: var(--text-dim);
 }
@@ -489,7 +748,6 @@ h2 {
 	flex-wrap: wrap;
 	gap: 8px;
 	align-items: center;
-	margin-block-end: 12px;
 }
 
 .filter-bar input,
@@ -520,7 +778,6 @@ h2 {
 }
 
 .vt-meta {
-	margin-block-end: 6px;
 	font-size: var(--font-size-sm);
 	color: var(--text-dim);
 }
@@ -656,7 +913,6 @@ h2 {
 }
 
 .pt-meta {
-	margin-block-end: 6px;
 	font-size: var(--font-size-sm);
 	color: var(--text-dim);
 }
@@ -1001,12 +1257,210 @@ h2 {
 	border-radius: 4px;
 }
 
+/* Property list: each property is its own small card (label over value),
+   the heading-level counterpart of `.cards` / `.detail-grid`. A card's value
+   may be a number or a row of chips. */
+.property-list {
+	display: block flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.property-list-item {
+	min-inline-size: 96px;
+	padding-block: 8px;
+	padding-inline: 14px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+}
+
+.property-list-item dt {
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+}
+
+.property-list-item dd {
+	margin-block: 2px 0;
+	margin-inline: 0;
+	font-size: var(--font-size-xl);
+	font-weight: 600;
+}
+
+/* Inline wrapping chips (e.g. a card's leading related paths). */
+.chip-list {
+	display: block flex;
+	flex-wrap: wrap;
+	gap: 4px 8px;
+	padding: 0;
+	list-style: none;
+}
+
+.chip-list code {
+	font-size: var(--font-size-base);
+	font-weight: normal;
+}
+
+/* Literal identifiers (file names, paths, keys) inside a heading stay
+   heading-weight but monospace, and never push the heading wider than its
+   card. */
+:is(h1, h2, h3, h4) code {
+	font-size: inherit;
+	font-weight: inherit;
+	overflow-wrap: anywhere;
+}
+
+/* Inline code reads as data: a faint chip, not bare monospace. */
+code {
+	padding-block: 1px;
+	padding-inline: 5px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
+pre code {
+	padding: 0;
+	background: none;
+	border: none;
+}
+
+/* Base layer for bare elements. Every selector is wrapped in `:where()` so it
+   has zero specificity: any class or contextual rule (`.filter-bar input`,
+   `.pager-button`, ...) still wins outright and only the properties it leaves
+   unset fall back to these. */
+:where(button, input, select, textarea) {
+	font: inherit;
+	color: var(--text);
+}
+
+:where(input, select, textarea) {
+	padding-block: 4px;
+	padding-inline: 8px;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 5px;
+}
+
+:where(input[type='checkbox'], input[type='radio']) {
+	padding: 0;
+	accent-color: var(--accent);
+}
+
+:where(button) {
+	padding-block: 4px;
+	padding-inline: 12px;
+	cursor: pointer;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 5px;
+}
+
+:where(
+	button:hover:not(:disabled),
+	input:hover:not(:disabled),
+	select:hover:not(:disabled)
+) {
+	border-color: var(--accent);
+}
+
+:where(button, input, select, textarea, summary):focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+:where(button:disabled, input:disabled, select:disabled, textarea:disabled) {
+	cursor: not-allowed;
+	opacity: 0.5;
+}
+
+:where(hr) {
+	margin-block-start: 24px;
+	margin-inline: 0;
+	border: 0;
+	border-block-start: 1px solid var(--border);
+}
+
+:where(blockquote) {
+	padding-inline: 16px;
+	margin-inline: 0;
+	color: var(--text-dim);
+	border-inline-start: 3px solid var(--border);
+}
+
+:where(pre) {
+	padding-block: 10px;
+	padding-inline: 14px;
+	margin-inline: 0;
+	overflow-x: auto;
+	font-size: var(--font-size-base);
+	line-height: 1.5;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+
+/* One template cluster / one block group as a card: name heading, property
+   cards, then (clusters) a collapsed details block. */
+:is(.cluster-card, .block-card) {
+	padding-block: 10px 12px;
+	padding-inline: 16px;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+}
+
+:is(.cluster-card, .block-card) > h3 {
+	margin-block: 0;
+	overflow-wrap: anywhere;
+}
+
+/* Merged-from blocks in a table cell: one block per line. */
+.merged-blocks li + li {
+	margin-block-start: 4px;
+}
+
+/* Summary target URL(s): the first thing the page answers ("what is this
+   archive of?"), so it gets an accent edge and a heading-sized URL. */
+.summary-roots {
+	padding-block: 14px;
+	padding-inline: 18px;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-inline-start: 4px solid var(--accent);
+	border-radius: 8px;
+}
+
+.summary-roots-label {
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+}
+
+.summary-roots-url {
+	margin-block-start: 4px;
+	font-size: var(--font-size-2xl);
+	font-weight: bold;
+	overflow-wrap: anywhere;
+}
+
+.summary-roots-list {
+	padding: 0;
+	margin-block-start: 6px;
+	font-size: var(--font-size-xl);
+	font-weight: bold;
+	overflow-wrap: anywhere;
+	list-style: none;
+}
+
+.summary-roots-list li + li {
+	margin-block-start: 4px;
+}
+
 /* Summary cards */
 .cards {
 	display: block flex;
 	flex-wrap: wrap;
 	gap: 12px;
-	margin-block-end: 20px;
 }
 
 .card {
@@ -1105,7 +1559,6 @@ h2 {
 
 .url-list {
 	padding-inline-start: 18px;
-	margin: 0;
 	font-size: var(--font-size-base);
 	word-break: break-all;
 }
@@ -1120,7 +1573,6 @@ h2 {
    at a glance. */
 .detail-list {
 	padding-inline-start: 18px;
-	margin-block: 0 16px;
 	font-size: var(--font-size-base);
 	overflow-wrap: anywhere;
 }
@@ -1144,7 +1596,6 @@ h2 {
 	flex-direction: column;
 	gap: 12px;
 	max-inline-size: 720px;
-	margin-block-end: 20px;
 }
 
 .stacked-bar {
@@ -1424,7 +1875,6 @@ h2 {
 .detail-grid {
 	display: block grid;
 	grid-template-columns: max-content minmax(0, 1fr);
-	margin-block-end: 20px;
 	font-size: var(--font-size-base);
 }
 
@@ -1459,7 +1909,6 @@ h2 {
 
 .detail-grid dd ul {
 	padding-inline-start: 18px;
-	margin: 0;
 }
 
 /* Only block siblings: inline siblings such as side-by-side badges share a
@@ -1485,23 +1934,6 @@ h2 {
 		padding-block-start: 2px;
 		border-block-start: none;
 	}
-}
-
-/* Technology inventory drilldown (directory distribution + page list)
-   inside an expanded inventory row: a stacked block, not a dt/dd grid. */
-.technology-drilldown {
-	display: block grid;
-	gap: 8px;
-}
-
-.technology-drilldown h3 {
-	margin: 0;
-	font-size: var(--font-size-md);
-}
-
-.technology-drilldown ul {
-	padding-inline-start: 18px;
-	margin: 0;
 }
 
 /* HTML preview */
@@ -1544,7 +1976,7 @@ h2 {
 .hp-frame {
 	inline-size: 100%;
 	block-size: 480px;
-	background: var(--text-on-accent);
+	background: var(--preview-canvas);
 	border: 0;
 }
 
@@ -1565,13 +1997,13 @@ h2 {
 }
 
 .diff-removed {
-	color: var(--danger);
+	color: var(--danger-ink);
 	background: color-mix(in srgb, var(--danger) 26%, transparent);
 	border-radius: 2px;
 }
 
 .diff-added {
-	color: var(--success);
+	color: var(--success-ink);
 	background: color-mix(in srgb, var(--success) 26%, transparent);
 	border-radius: 2px;
 }
@@ -1587,8 +2019,43 @@ h2 {
 	color: var(--danger);
 }
 
+/* Console message type badge: severity by color, always with the type's
+   name as text. `pageerror` (an uncaught exception) is the only solid fill. */
+.console-type {
+	display: inline flow-root;
+	padding-block: 1px;
+	padding-inline: 8px;
+	font-family: monospace;
+	font-size: var(--font-size-sm);
+	font-weight: 600;
+	line-height: 1.5;
+	color: var(--dim-ink);
+	background: color-mix(in srgb, var(--text-dim) 18%, transparent);
+	border-radius: 999px;
+}
+
+.console-type-pageerror {
+	color: var(--text-on-danger);
+	background: var(--danger);
+}
+
+.console-type-error {
+	color: var(--danger-ink);
+	background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+.console-type-warn {
+	color: var(--warn-ink);
+	background: color-mix(in srgb, var(--warn) 20%, transparent);
+}
+
+.console-type-info {
+	color: var(--accent-ink);
+	background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
 .external-url {
-	color: var(--accent);
+	color: var(--accent-ink);
 	word-break: break-all;
 }
 
@@ -1600,7 +2067,7 @@ h2 {
 .link-button {
 	padding: 0;
 	font: inherit;
-	color: var(--accent);
+	color: var(--accent-ink);
 	text-align: start;
 	cursor: pointer;
 	background: none;
@@ -1609,7 +2076,6 @@ h2 {
 
 /* Network graph */
 .graph-meta {
-	margin-block-end: 6px;
 	font-size: var(--font-size-sm);
 	color: var(--text-dim);
 }
@@ -1626,8 +2092,6 @@ h2 {
 	display: block flex;
 	flex-wrap: wrap;
 	gap: 12px 16px;
-	margin-block: 0 6px;
-	margin-inline: 0;
 	font-size: var(--font-size-sm);
 	color: var(--text-dim);
 }
@@ -1701,18 +2165,18 @@ h2 {
 }
 
 .source-badge--crawled {
-	color: var(--text-dim);
+	color: var(--dim-ink);
 	background: color-mix(in srgb, var(--text-dim) 14%, transparent);
 }
 
 .source-badge--inventory-seed {
-	color: var(--badge-warn-fg);
-	background: var(--badge-warn-bg);
+	color: var(--warn-ink);
+	background: color-mix(in srgb, var(--warn) 20%, transparent);
 }
 
 .source-badge--inventory-discovered {
-	color: var(--badge-warn-fg);
-	background: color-mix(in srgb, var(--badge-warn-fg) 10%, transparent);
+	color: var(--warn-ink);
+	background: color-mix(in srgb, var(--warn) 10%, transparent);
 }
 
 /*
@@ -1733,19 +2197,19 @@ h2 {
 
 .image-scan-badge--ok,
 .image-scan-badge--scroll-height-exceeded {
-	color: var(--text-dim);
+	color: var(--dim-ink);
 	background: color-mix(in srgb, var(--text-dim) 14%, transparent);
 }
 
 .image-scan-badge--degraded,
 .image-scan-badge--nav-unsettled {
-	color: var(--badge-warn-fg);
-	background: var(--badge-warn-bg);
+	color: var(--warn-ink);
+	background: color-mix(in srgb, var(--warn) 20%, transparent);
 }
 
 .image-scan-badge--frame-lost,
 .image-scan-badge--unknown {
-	color: var(--danger);
+	color: var(--danger-ink);
 	background: color-mix(in srgb, var(--danger) 16%, transparent);
 }
 
@@ -1758,7 +2222,6 @@ h2 {
 	display: block flex;
 	gap: 8px;
 	align-items: center;
-	margin-block-end: 12px;
 	font-size: var(--font-size-base);
 	color: var(--text-dim);
 }
@@ -1799,12 +2262,6 @@ h2 {
 .tree-sort-button:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 1px;
-}
-
-.directory-tree-host {
-	font-family: monospace;
-	font-size: var(--font-size-sm);
-	color: var(--text-dim);
 }
 
 .tree-children {
