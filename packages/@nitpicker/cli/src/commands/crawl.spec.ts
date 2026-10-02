@@ -505,7 +505,20 @@ describe('startCrawl', () => {
 				verbose: true,
 				silent: false,
 				skipTechnologyJsScan: false,
+				skipTemplates: false,
 			}),
+		);
+	});
+
+	it('--skip-templates を runPostCrawlTaskList に skipTemplates として渡す', async () => {
+		const fake = setupFakeOrchestrator();
+		const { startCrawl } = await import('./crawl.js');
+
+		await startCrawl(['https://example.com'], createFlags({ skipTemplates: true }));
+
+		expect(mockRunPostCrawlTaskList).toHaveBeenCalledWith(
+			fake,
+			expect.objectContaining({ skipTemplates: true }),
 		);
 	});
 

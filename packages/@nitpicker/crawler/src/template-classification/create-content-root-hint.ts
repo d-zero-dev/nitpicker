@@ -1,5 +1,5 @@
+import type Page from '../archive/page.js';
 import type { PageClusterSignals } from '@d-zero/page-cluster/resolve-page-cluster-keys';
-import type { Page } from '@nitpicker/crawler';
 
 /**
  * Builds the `contentRoot` hint `@d-zero/page-cluster` anchors its

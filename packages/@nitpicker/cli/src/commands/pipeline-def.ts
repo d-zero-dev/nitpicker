@@ -165,6 +165,11 @@ export const commandDef = {
 			group: 'Crawl options',
 			desc: 'Skip the post-crawl JS resource scan for technology license comments (avoids the extra network requests it makes against already-discovered JS resources)',
 		},
+		skipTemplates: {
+			type: 'boolean',
+			group: 'Crawl options',
+			desc: 'Skip the page template classification (DOM-structure clustering into per-site templates) that otherwise runs at the end of the crawl; run it later with `viewer-build`',
+		},
 		// analyze flags
 		all: {
 			type: 'boolean',

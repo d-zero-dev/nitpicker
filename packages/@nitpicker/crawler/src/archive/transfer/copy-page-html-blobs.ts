@@ -9,7 +9,7 @@ import { TRANSFER_SOURCE_ALIAS } from './transfer-source-alias.js';
  * `page_html_blobs.hash` is itself the content-addressed identity (the
  * table's PK, computed the same way in every archive) — unlike every
  * other dictionary in `archive/transfer/`, there is no separate integer id
- * to remap: {@link import('./copy-page-meta.js').copyPageMeta}'s
+ * to remap: {@link import('./copy-simple-page-scoped-tables.js').copySimplePageScopedTables}'s
  * `page_html_ref` copy carries the source's `hash` value straight through
  * unchanged, and it already resolves in the destination once this
  * function has run. No `temp.xfer_map_*` table exists for this dictionary.
@@ -22,14 +22,14 @@ import { TRANSFER_SOURCE_ALIAS } from './transfer-source-alias.js';
  * copied either way).
  * @param trx - Transaction with the source ATTACHed as
  *   {@link TRANSFER_SOURCE_ALIAS}. Must run after `temp.xfer_ci_plan` is
- *   fully populated, before `copy-page-meta.ts`'s `page_html_ref` copy
+ *   fully populated, before `copy-simple-page-scoped-tables.ts`'s `page_html_ref` copy
  *   (which assumes the blob it points at already exists — `page_html_ref`
  *   has an FK on `hash`).
  * @example
  * ```ts
  * await planContentItemsForSplit(trx);
  * await copyPageHtmlBlobs(trx);
- * await copyPageMeta(trx); // copies page_html_ref among other tables
+ * await copySimplePageScopedTables(trx); // copies page_html_ref among other tables
  * ```
  */
 export async function copyPageHtmlBlobs(trx: Knex): Promise<void> {

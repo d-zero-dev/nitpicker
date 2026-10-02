@@ -34,7 +34,7 @@ type PageFacetRow = {
 	lang: string | null;
 	/** SQLite boolean: `1` for external pages, `0` for internal. */
 	isExternal: 0 | 1;
-	/** `--templates` classification group key, or `null` when absent/unclassified. */
+	/** Template classification group key, or `null` when absent/unclassified. */
 	templateKey: string | null;
 	/** Stored label section for `templateKey`, or `null` (site-wide label / no label / no join). */
 	templateLabelSection: string | null;

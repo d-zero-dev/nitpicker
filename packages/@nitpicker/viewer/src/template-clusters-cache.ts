@@ -32,9 +32,8 @@ const lru = createPromiseLru<string, TemplateClusterListResult>({
  *
  * **Stub-mode bypass.** When the viewer is attached to an in-progress crawl
  * (`mode === 'stub'`), `page_templates` cannot change mid-crawl (classification
- * only runs as part of `analyze --templates`, a separate, already-finished
- * step from crawling) — but the archive's `content_items`/`resource_ref_edges`
- * rows a cached result was computed from can still shift as the crawl
+ * runs once at the end of the crawl, after every page has been written) —
+ * but the archive's `content_items`/`resource_ref_edges` rows a cached result was computed from can still shift as the crawl
  * continues to write. Recomputing on every request in stub mode keeps this
  * endpoint consistent with the same bypass every other stub-mode viewer
  * cache applies (see `isolated-clusters-cache.ts`, `summary-cache.ts`).

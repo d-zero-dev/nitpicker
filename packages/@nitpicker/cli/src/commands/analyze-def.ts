@@ -44,10 +44,6 @@ export const commandDef = {
 			valueName: 'lang',
 			desc: 'BCP 47 language tag for analyze-axe plugin (overrides config file)',
 		},
-		templates: {
-			type: 'boolean',
-			desc: 'Classify pages into templates by DOM structure similarity (uses @d-zero/page-cluster) and store a stable name per template ("events template A"), carried forward across re-runs',
-		},
 		silent: {
 			type: 'boolean',
 			desc: 'No output log to standard out',

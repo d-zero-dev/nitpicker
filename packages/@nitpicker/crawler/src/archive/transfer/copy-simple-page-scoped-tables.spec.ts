@@ -76,4 +76,48 @@ describe('copySimplePageScopedTables', () => {
 		}
 		await dest.destroy();
 	});
+
+	it('copies page_html_ref (hash passes through unchanged) for full pages so the HTML snapshot stays readable in the output', async () => {
+		const blob = {
+			hash: Buffer.from('a'.repeat(32)),
+			body: Buffer.from('<html></html>'),
+			codec: 'none',
+			size_raw: 13,
+			size_stored: 13,
+		};
+		const source = await buildFullSchemaTestDb(sourceFile, null);
+		const fullPage = await seedContentItem(source, 'https://example.com/full/');
+		await source('page_html_blobs').insert(blob);
+		await source('page_html_ref').insert({ page_id: fullPage, hash: blob.hash });
+		await source.destroy();
+
+		const dest = await buildFullSchemaTestDb(destFile, null);
+		const destFullPage = await seedContentItem(dest, 'https://example.com/full/');
+		// `copy-page-html-blobs.ts` runs before this step in the real pipeline.
+		await dest('page_html_blobs').insert(blob);
+
+		const detach = await attachSourceDatabase(dest, sourceFile);
+		await createTransferTempTables(dest);
+		try {
+			await dest('xfer_ci_plan').insert({
+				src_id: fullPage,
+				action: TRANSFER_ACTION.full,
+				dest_id: destFullPage,
+			});
+
+			await copySimplePageScopedTables(dest);
+
+			const refs = await dest('page_html_ref').select('page_id', 'hash');
+			expect(
+				refs.map((r) => ({
+					pageId: r.page_id,
+					hash: Buffer.from(r.hash).toString('hex'),
+				})),
+			).toEqual([{ pageId: destFullPage, hash: '61'.repeat(32) }]);
+		} finally {
+			await dropTransferTempTables(dest);
+			await detach();
+		}
+		await dest.destroy();
+	});
 });

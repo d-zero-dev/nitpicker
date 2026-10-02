@@ -512,6 +512,7 @@ async function finishCrawlMode(
 			verbose: !!flags.verbose,
 			silent: !!flags.silent,
 			skipTechnologyJsScan: !!flags.skipTechnologyJsScan,
+			skipTemplates: !!flags.skipTemplates,
 		});
 	} catch (error) {
 		errStack.push(toError(unwrapTaskListStepError(error)));
