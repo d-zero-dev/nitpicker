@@ -1060,6 +1060,57 @@ details[open] > summary {
 	border-radius: 4px;
 }
 
+/* Summary target URL(s): the first thing the page answers ("what is this
+   archive of?"), so it gets an accent edge and a heading-sized URL. */
+.summary-roots {
+	padding-block: 14px;
+	padding-inline: 18px;
+	margin-block: 4px 16px;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-inline-start: 4px solid var(--accent);
+	border-radius: 8px;
+}
+
+.summary-roots-label {
+	margin: 0;
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+}
+
+.summary-roots-url {
+	margin-block: 4px 0;
+	margin-inline: 0;
+	font-size: var(--font-size-2xl);
+	font-weight: bold;
+	overflow-wrap: anywhere;
+}
+
+.summary-roots-list {
+	padding: 0;
+	margin-block: 6px 0;
+	margin-inline: 0;
+	font-size: var(--font-size-xl);
+	font-weight: bold;
+	overflow-wrap: anywhere;
+	list-style: none;
+}
+
+.summary-roots-list li + li {
+	margin-block-start: 4px;
+}
+
+/* Summary exclusions: collapsed by default; long pattern lists scroll
+   instead of pushing the cards below off-screen. */
+.summary-excludes {
+	margin-block: 0 16px;
+}
+
+.summary-excludes ul {
+	max-block-size: 240px;
+	overflow-y: auto;
+}
+
 /* Summary cards */
 .cards {
 	display: block flex;

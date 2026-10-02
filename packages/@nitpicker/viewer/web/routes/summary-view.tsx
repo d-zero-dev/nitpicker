@@ -3,6 +3,8 @@ import { ContentTypeStackedBar } from '../components/content-type-stacked-bar.js
 import { MetadataFulfillmentBars } from '../components/metadata-fulfillment-bars.js';
 import { StatusDistributionBars } from '../components/status-distribution-bars.js';
 import { SummaryCard } from '../components/summary-card.js';
+import { SummaryExcludes } from '../components/summary-excludes.js';
+import { SummaryRoots } from '../components/summary-roots.js';
 import { TechnologyDistributionBars } from '../components/technology-distribution-bars.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useI18n } from '../i18n/use-i18n.js';
@@ -54,33 +56,18 @@ export function SummaryView() {
 					})}
 				</p>
 			)}
-			{data.roots.map((root) => (
-				<p key={root} className="state">
-					{root}
-				</p>
-			))}
-			{/* Exclude settings, same <p> row style as roots above. Each row is
-			    suppressed when its value is empty/zero — most archives crawl
-			    without exclusions, so an always-shown block would be noise the
+			<SummaryRoots roots={data.roots} />
+			{/* Collapsed and absent when nothing is excluded — most archives crawl
+			    without exclusions, so an always-open block would be noise the
 			    same way the console-log cards below are gated on non-zero. */}
-			{[
-				{ key: 'excludes', text: data.excludes.join(', ') || null },
-				{ key: 'excludeKeywords', text: data.excludeKeywords.join(', ') || null },
-				{ key: 'excludeUrls', text: data.excludeUrls.join(', ') || null },
-				{
-					key: 'maxExcludedDepth',
-					text: data.maxExcludedDepth > 0 ? String(data.maxExcludedDepth) : null,
-				},
-			].map(
-				(row) =>
-					row.text !== null && (
-						<p key={row.key} className="state">
-							{t(`views.summary.${row.key}`)}: {row.text}
-						</p>
-					),
-			)}
+			<SummaryExcludes
+				excludes={data.excludes}
+				excludeKeywords={data.excludeKeywords}
+				excludeUrls={data.excludeUrls}
+				maxExcludedDepth={data.maxExcludedDepth}
+			/>
 			{/* Three cards (was four). "Roots" is dropped because the root URL
-			    list is already rendered above as `<p>` rows — a count card is
+			    list is already rendered above by `SummaryRoots` — a count card is
 			    redundant. The remaining three give the user the three numbers
 			    they actually need at a glance:
 			    - Internal contents: every in-scope URL the crawl reached
