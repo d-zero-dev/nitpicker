@@ -30,6 +30,13 @@
 	--font-size-2xl: 20px;
 	--font-size-3xl: 24px;
 
+	/* Heading scale (h1–h3). Steps of about ×1.2–1.3 so each level reads as a
+	   distinct tier against the 14px body; h4–h6 reuse the body-range tokens
+	   above and tell apart by size alone, since they sit at body size. */
+	--font-size-heading-1: 28px;
+	--font-size-heading-2: 22px;
+	--font-size-heading-3: 18px;
+
 	/* z-index scale. Raw integer z-index values are linted against; reach for
 	   one of these slots when stacking. */
 	--z-table-header: 1;
@@ -428,31 +435,48 @@ a {
 	min-block-size: 0;
 }
 
+/* Heading scale: strictly decreasing h1 > h2 > h3 > h4 > h5 > h6, with a
+   clear step between tiers (28 / 22 / 18 / 15 / 14 / 13). `h3` and below
+   once had no rule, so they fell back to the browser's 1.17em and rendered
+   larger than the pinned `h2`. Always set a heading's size here — never per
+   component. */
 h1 {
-	margin-block: 0 4px;
+	margin-block: 0 6px;
 	margin-inline: 0;
-	font-size: var(--font-size-2xl);
+	font-size: var(--font-size-heading-1);
+	line-height: 1.25;
 }
 
-/* Heading scale: strictly decreasing h1 > h2 > h3 > h4–h6. `h3` and below had
-   no rule, so they fell back to the browser's 1.17em and rendered larger than
-   the pinned `h2`. Always set a heading's size here — never per component. */
 h2 {
-	margin-block: 18px 8px;
+	margin-block: 24px 10px;
 	margin-inline: 0;
-	font-size: var(--font-size-xl);
+	font-size: var(--font-size-heading-2);
+	line-height: 1.3;
 }
 
 h3 {
+	margin-block: 18px 8px;
+	margin-inline: 0;
+	font-size: var(--font-size-heading-3);
+	line-height: 1.35;
+}
+
+h4 {
 	margin-block: 14px 6px;
 	margin-inline: 0;
 	font-size: var(--font-size-lg);
 }
 
-:is(h4, h5, h6) {
+h5 {
 	margin-block: 12px 4px;
 	margin-inline: 0;
 	font-size: var(--font-size-md);
+}
+
+h6 {
+	margin-block: 12px 4px;
+	margin-inline: 0;
+	font-size: var(--font-size-base);
 }
 
 /* Bare lists (no class): the same rich treatment `.url-list` / `.detail-list`
@@ -503,7 +527,7 @@ details[open] > summary {
 	flex-wrap: wrap;
 	gap: 4px 12px;
 	align-items: baseline;
-	margin-block: 18px 8px;
+	margin-block: 24px 10px;
 }
 
 .section-heading :is(h2, h3) {
@@ -512,7 +536,7 @@ details[open] > summary {
 
 /* The same heading-plus-link row one level down (an `h3`). */
 .section-heading-sub {
-	margin-block: 14px 6px;
+	margin-block: 18px 8px;
 }
 
 .section-heading a {
@@ -1111,7 +1135,7 @@ details[open] > summary {
    heading-weight but monospace, and never push the heading wider than its
    card. */
 :is(h1, h2, h3, h4) code {
-	font-size: var(--font-size-md);
+	font-size: inherit;
 	font-weight: inherit;
 	overflow-wrap: anywhere;
 }
