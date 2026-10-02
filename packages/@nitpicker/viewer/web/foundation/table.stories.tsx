@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
+import { StaticTable } from '../components/static-table.js';
+
 /** `table`: the shared plain table for static data, its cell variants, expandable rows, and the report table. */
 const meta = {
 	title: 'Foundation/Table',
@@ -7,6 +9,12 @@ const meta = {
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+const REPORT_ROWS = [
+	{ url: 'https://example.com/', status: 200 },
+	{ url: 'https://example.com/missing', status: 404 },
+	{ url: 'https://example.com/old', status: 301 },
+];
 
 /** Header, numeric column and a nowrap column. */
 export const PlainTable: Story = {
@@ -100,30 +108,28 @@ export const ExpandableRows: Story = {
 	),
 };
 
-/** The report table: used by the static HTML report, with an alert cell. */
+/**
+ * The report table the static HTML report renders, through the real
+ * `StaticTable` component (`plain-table report-table`), with an alert cell.
+ */
 export const ReportTable: Story = {
 	render: () => (
-		<div className="plain-table-scroll">
-			<table className="report-table">
-				<thead>
-					<tr>
-						<th>URL</th>
-						<th>Status</th>
-					</tr>
-				</thead>
-				<tbody>
-					<tr>
-						<td>https://example.com/</td>
-						<td>200</td>
-					</tr>
-					<tr>
-						<td>https://example.com/missing</td>
-						<td>
-							<strong className="report-alert">404</strong>
-						</td>
-					</tr>
-				</tbody>
-			</table>
-		</div>
+		<StaticTable
+			rows={REPORT_ROWS}
+			rowKey={(row) => row.url}
+			columns={[
+				{ key: 'url', label: 'URL', render: (row) => row.url },
+				{
+					key: 'status',
+					label: 'Status',
+					render: (row) =>
+						row.status >= 400 ? (
+							<strong className="report-alert">{row.status}</strong>
+						) : (
+							row.status
+						),
+				},
+			]}
+		/>
 	),
 };
