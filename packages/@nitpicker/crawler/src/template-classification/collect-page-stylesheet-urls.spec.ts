@@ -1,8 +1,9 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import Archive from '../archive/archive.js';
 
 import { collectPageStylesheetUrls } from './collect-page-stylesheet-urls.js';
 

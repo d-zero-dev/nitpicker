@@ -1,7 +1,8 @@
-import type { Archive } from '@nitpicker/crawler';
+import type Archive from '../archive/archive.js';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { eachSplitted } from '@nitpicker/crawler';
+
+import { eachSplitted } from '../utils/array/each-splitted.js';
 
 /**
  * SQLite has a hard cap of 999 bound variables per statement. A real archive

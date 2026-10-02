@@ -187,6 +187,11 @@ export const commandDef = {
 			group: 'Fetch behavior',
 			desc: 'Skip the post-crawl JS resource scan for technology license comments (avoids the extra network requests it makes against already-discovered JS resources)',
 		},
+		skipTemplates: {
+			type: 'boolean',
+			group: 'Fetch behavior',
+			desc: 'Skip the page template classification (DOM-structure clustering into per-site templates) that otherwise runs at the end of the crawl; run it later with `viewer-build`',
+		},
 		mainContentSelector: {
 			type: 'string',
 			valueName: 'selector',

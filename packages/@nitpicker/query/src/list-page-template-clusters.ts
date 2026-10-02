@@ -32,28 +32,25 @@ import { summarizeTemplateClusterReason } from './summarize-template-cluster-rea
  * archive-wide (see ARCHITECTURE.md), so this is not something a statistics
  * hint can fix — the query shape itself has to avoid the pitfall.
  * **`hasClassification: true` does not guarantee the data is current.**
- * `@nitpicker/core`'s classify step (`nitpicker.ts`) only calls
- * `Archive.replacePageTemplates` when the freshly computed classification is
- * non-empty (`if (templateKeys.size > 0)`) — a re-run of `analyze --templates`
- * that legitimately classifies to zero pages (e.g. every previously-internal
- * HTML page was removed by a subsequent crawl) leaves the prior run's
- * `page_templates` rows in place untouched. This function has no way to
- * detect that staleness from `page_templates` alone; it reports whatever
- * rows currently exist as this archive's classification.
+ * Every crawl-end run replaces the classification, but a later crawl
+ * (`--append` / `--retry-failed` / ...) with `--skip-templates` leaves the
+ * previous classification in place while the pages change under it. This
+ * function has no way to detect that staleness from `page_templates` alone;
+ * it reports whatever rows currently exist as this archive's classification.
  * @param accessor - The archive accessor to query.
  * @returns `{ hasClassification: false, clusters: [] }` when the archive
- *   has never had `--templates` classification run — either because
- *   `page_templates` doesn't exist yet (pre-`--templates` archive) or
- *   because it exists but has zero rows (a fresh archive always provisions
- *   the table via `createAdjunctTables`, independent of whether
- *   `--templates` was ever passed to `analyze`) — see
+ *   has never been classified — either because
+ *   `page_templates` doesn't exist yet (an archive created before
+ *   classification existed) or because it exists but has zero rows (a fresh
+ *   archive always provisions the table via `createTemplateTables`, whether
+ *   or not it was ever classified) — see
  *   {@link TemplateClusterListResult} for why callers must not collapse this
  *   into an empty `clusters` array.
  * @example
  * ```ts
  * const { hasClassification, clusters } = await listPageTemplateClusters(accessor);
  * if (!hasClassification) {
- *   console.log('run `nitpicker analyze <archive> --templates` first');
+ *   console.log('run `nitpicker viewer-build <archive>` first');
  * }
  * ```
  */
@@ -71,13 +68,12 @@ export async function listPageTemplateClusters(
 		'template_key as templateKey',
 	)) as { pageId: number; templateKey: string }[];
 
-	// `page_templates` is provisioned by `createAdjunctTables` on every fresh
-	// archive regardless of whether `--templates` was ever run — table
-	// presence alone cannot distinguish "classification ran, zero pages
-	// qualified" (impossible: `classifyPageTemplates` either yields a key for
-	// every internal HTML page or is never called) from "classification
-	// never ran". Zero rows means the latter in practice, so it gets the same
-	// `hasClassification: false` treatment as a missing table.
+	// `page_templates` is provisioned by `createTemplateTables` on every fresh
+	// archive regardless of whether it was ever classified — table presence
+	// alone cannot distinguish "classified" from "never classified". Zero
+	// rows means nothing is classified (never classified, or an archive with
+	// no internal HTML pages), so it gets the same `hasClassification: false`
+	// treatment as a missing table.
 	if (rows.length === 0) {
 		return { hasClassification: false, clusters: [] };
 	}
@@ -127,8 +123,8 @@ export async function listPageTemplateClusters(
 	}
 
 	// An archive classified before labels were stored has no rows at all;
-	// number its clusters on read with the same rules a first `--templates`
-	// run would apply, flagged provisional. Any stored row means the
+	// number its clusters on read with the same rules a first
+	// classification run would apply, flagged provisional. Any stored row means the
 	// classification wrote labels, and a cluster missing one then stays
 	// unlabeled rather than being mixed with provisional numbering.
 	const provisional = storedLabels.size === 0;

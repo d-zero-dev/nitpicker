@@ -23,6 +23,10 @@ export const commandDef = {
 			group: 'Output',
 			desc: 'Output .nitpicker path. Must not already exist — ".nitpicker" is appended if missing',
 		},
+		skipTemplates: {
+			type: 'boolean',
+			desc: 'Skip re-classifying page templates in the output archive (by default they are re-derived, since per-source template keys collide when merged)',
+		},
 		verbose: {
 			type: 'boolean',
 			desc: 'Append each progress/phase line with an ISO 8601 timestamp instead of overwriting a single line',

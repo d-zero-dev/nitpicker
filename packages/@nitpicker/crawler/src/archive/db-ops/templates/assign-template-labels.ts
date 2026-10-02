@@ -1,7 +1,7 @@
 import type { AssignTemplateLabelsParams, TemplateLabel } from './types.js';
 
 /**
- * Assigns every cluster of a fresh `--templates` classification its
+ * Assigns every cluster of a fresh template classification its
  * {@link TemplateLabel}, carrying labels forward from the previous
  * classification wherever the same template survived the re-run.
  *

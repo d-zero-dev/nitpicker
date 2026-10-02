@@ -1,8 +1,8 @@
+import type Page from '../archive/page.js';
 import type {
 	PageClusterSignals,
 	PageFactory,
 } from '@d-zero/page-cluster/resolve-page-cluster-keys';
-import type { Page } from '@nitpicker/crawler';
 
 import { createContentRootHint } from './create-content-root-hint.js';
 
@@ -27,7 +27,7 @@ import { createContentRootHint } from './create-content-root-hint.js';
  * breaks. Excluding by `isInternalPage()` is safe (synchronous,
  * deterministic per page). Excluding by empty `getHtml()` is also safe,
  * but only because the archive is immutable for the duration of one
- * `analyze()` run — the same page's HTML never changes between calls.
+ * classification run — the same page's HTML never changes between calls.
  *
  * Each yielded signal carries the page's `paths`, `stylesheetHrefs`, `html`,
  * `host`, and — when the crawler detected a main-content element for it —
@@ -45,8 +45,8 @@ import { createContentRootHint } from './create-content-root-hint.js';
  * 1-2, for no benefit. `classifyPageTemplates` still defends against a
  * violated assumption here with a hard length check against
  * `resolvePageClusterKeys`'s result array.
- * @param pages - Candidate pages (as already loaded by `Nitpicker.analyze()`
- *   — this function does not re-query the archive).
+ * @param pages - Candidate pages (as already loaded by
+ *   `classifyArchivePageTemplates` — this function does not re-query the archive).
  * @param stylesheetsByUrl - Output of `collectPageStylesheetUrls`, keyed by
  *   `page.url.href`.
  * @returns `factory` to pass to `resolvePageClusterKeys`, and

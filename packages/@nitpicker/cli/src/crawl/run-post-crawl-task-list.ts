@@ -9,6 +9,7 @@ import { createByteProgressLogger } from '../create-byte-progress-logger.js';
 import { VIEWER_READ_MODEL_FULL_BUILD_PHASES } from '../viewer-read-model-full-build-phases.js';
 import { WRITE_STEP_LABELS } from '../write-step-labels.js';
 
+import { classifyTemplatesQuietly } from './classify-templates-quietly.js';
 import { createVerboseTimestampStream } from './create-verbose-timestamp-stream.js';
 import { ensureViewerReadModelQuietly } from './ensure-viewer-read-model-quietly.js';
 import { scanJsResourcesQuietly } from './scan-js-resources-quietly.js';
@@ -17,18 +18,20 @@ import { scanJsResourcesQuietly } from './scan-js-resources-quietly.js';
 export interface RunPostCrawlTaskListOptions {
 	/** Passed straight to `TaskList.run()`; also timestamps the render stream. */
 	readonly verbose: boolean;
-	/** When `true`, none of the three steps render — mirrors the crawl command's own `--silent`. */
+	/** When `true`, none of the steps render — mirrors the crawl command's own `--silent`. */
 	readonly silent: boolean;
 	/** When `true`, the `'Scan JS resources'` row is never built — mirrors `--skip-technology-js-scan`. */
 	readonly skipTechnologyJsScan: boolean;
+	/** When `true`, the `'Classify page templates'` row is never built — mirrors `--skip-templates`. */
+	readonly skipTemplates: boolean;
 	/** Render target. Defaults to `process.stderr`; overridable for tests. */
 	readonly stream?: NodeJS.WritableStream;
 }
 
 /**
  * Runs the sequential post-crawl pipeline every `crawl` mode function
- * shares — `scanJsResourcesQuietly` → the viewer read-model build →
- * `orchestrator.write()` — as a `TaskList`: one row per step, `[ ]` →
+ * shares — `scanJsResourcesQuietly` → `classifyTemplatesQuietly` → the viewer
+ * read-model build → `orchestrator.write()` — as a `TaskList`: one row per step, `[ ]` →
  * `[%taskSpin%]` → `done`/`error` in order. The read-model build is fully
  * expanded into one row per internal phase via
  * `appendViewerReadModelPhaseRows` (issue #294) rather than collapsed into a
@@ -41,6 +44,13 @@ export interface RunPostCrawlTaskListOptions {
  * the never-throws contract: a read-model failure reports a message on
  * whichever row was active and lets the pipeline continue into
  * `'Write archive'`, rather than aborting the whole task list.
+ *
+ * The `'Classify page templates'` row sits between the JS scan and the
+ * read-model build: classification only depends on the crawled pages, and
+ * running it before the build keeps every derived table a build might read
+ * in place. Like the scan it is best-effort — `classifyTemplatesQuietly`
+ * never throws, so a clustering failure is reported on its own row and the
+ * pipeline continues into the build and the write.
  *
  * Deliberately separate from the crawl's own display (`attach-crawl-display.ts`):
  * the crawl body is driven by `@nitpicker/crawler`'s internal `deal()` call,
@@ -69,6 +79,7 @@ export interface RunPostCrawlTaskListOptions {
  *   verbose: flags.verbose,
  *   silent: flags.silent,
  *   skipTechnologyJsScan: flags.skipTechnologyJsScan,
+ *   skipTemplates: flags.skipTemplates,
  * });
  * ```
  */
@@ -79,6 +90,9 @@ export async function runPostCrawlTaskList(
 	if (options.silent) {
 		if (!options.skipTechnologyJsScan) {
 			await scanJsResourcesQuietly(orchestrator.archive);
+		}
+		if (!options.skipTemplates) {
+			await classifyTemplatesQuietly(orchestrator.archive);
 		}
 		await ensureViewerReadModelQuietly(orchestrator.archive);
 		await orchestrator.write();
@@ -91,6 +105,17 @@ export async function runPostCrawlTaskList(
 			'Scan JS resources',
 			async (orch: CrawlerOrchestrator, ctx: StepContext<CrawlerOrchestrator>) => {
 				await scanJsResourcesQuietly(orch.archive, (message) => {
+					ctx.progress(message);
+				});
+				return orch;
+			},
+		);
+	}
+	if (!options.skipTemplates) {
+		pipeline = pipeline.pipe(
+			'Classify page templates',
+			async (orch: CrawlerOrchestrator, ctx: StepContext<CrawlerOrchestrator>) => {
+				await classifyTemplatesQuietly(orch.archive, (message) => {
 					ctx.progress(message);
 				});
 				return orch;

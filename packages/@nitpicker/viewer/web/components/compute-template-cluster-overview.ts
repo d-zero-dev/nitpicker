@@ -50,7 +50,7 @@ function toSizeBucketKey(pageCount: number): ClusterSizeBucketKey {
  * and a per-kind breakdown — see `groupClustersByBlock`).
  *
  * Derived entirely from the `GET /api/template-clusters` payload — no extra
- * API field. Notably there is no "unclassified page count": `--templates`
+ * API field. Notably there is no "unclassified page count": the classification
  * assigns a key to every internal HTML page, and the payload carries no
  * archive-wide page total to compare against.
  * @param clusters - Every cluster from `useTemplateClusters`.

@@ -43,6 +43,7 @@ crawlステップの前提条件（Puppeteer用Chromeが必要）は [crawl の�
 | `--user-agent`                             | string             | HTTPリクエストのUser-Agent                                                             |
 | `--ignore-robots`                          | boolean            | robots.txt制限を無視                                                                   |
 | `--skip-technology-js-scan`                | boolean            | クロール完了後のJSリソース再取得（技術スタックのライセンスコメントスキャン）をスキップ |
+| `--skip-templates`                         | boolean            | クロール完了時のページのテンプレート分類をスキップ                                     |
 | `--main-content-selector`                  | string             | メインコンテンツ領域の自動検出を上書きするCSSセレクタ                                  |
 | `--output`, `-o`                           | string             | 出力 `.nitpicker` ファイルパス                                                         |
 | `--strict`                                 | boolean            | 外部リンクエラーを致命的エラーとして扱う                                               |

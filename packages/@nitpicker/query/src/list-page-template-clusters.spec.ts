@@ -101,7 +101,7 @@ async function destroyArchive(archive: InstanceType<typeof Archive>, workingDir:
 }
 
 describe('listPageTemplateClusters', () => {
-	describe('--templatesが未実行のアーカイブ', () => {
+	describe('分類されていないアーカイブ', () => {
 		const workingDir = path.resolve(
 			__dirname,
 			'__test_fixtures_template_clusters_unclassified__',
@@ -124,7 +124,7 @@ describe('listPageTemplateClusters', () => {
 		});
 	});
 
-	describe('page_templatesテーブル自体が存在しないアーカイブ（pre-`--templates`機能の古いアーカイブ）', () => {
+	describe('page_templatesテーブル自体が存在しないアーカイブ（分類機能導入前の古いアーカイブ）', () => {
 		const workingDir = path.resolve(
 			__dirname,
 			'__test_fixtures_template_clusters_no_table__',

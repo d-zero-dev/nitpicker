@@ -8,8 +8,7 @@ import { TRANSFER_ACTION } from './transfer-action.js';
  * (which this file also clears — see below) — each of these has its own
  * dedicated FK-remapping copy function (`copy-page-meta.ts`,
  * `copy-anchor-edges.ts`, `copy-image-items.ts`,
- * `copy-resource-ref-edges.ts`, `copy-page-html-blobs.ts`'s
- * `page_html_ref` write, `copy-page-console-logs.ts`,
+ * `copy-resource-ref-edges.ts`, `copy-page-console-logs.ts`,
  * `copy-analysis-violations.ts`), so they are listed explicitly rather
  * than folded into the shared "plain passthrough" table. Together the two
  * lists are a superset of `clearPageDerivedRows`' 17 tables (reused by
@@ -27,7 +26,6 @@ const REMAPPED_PAGE_ROW_TABLES: readonly { table: string; pageColumn: string }[]
 	{ table: 'anchor_edges', pageColumn: 'page_id' },
 	{ table: 'image_items', pageColumn: 'page_id' },
 	{ table: 'resource_ref_edges', pageColumn: 'page_id' },
-	{ table: 'page_html_ref', pageColumn: 'page_id' },
 	{ table: 'page_console_logs', pageColumn: 'pageId' },
 	{ table: 'analysis_violations', pageColumn: 'page_id' },
 ];

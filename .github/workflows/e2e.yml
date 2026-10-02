@@ -114,6 +114,7 @@ jobs:
                 empty-password-auth.e2e.ts,
                 main-contents.e2e.ts,
                 query.e2e.ts,
+                template-classification.e2e.ts,
               ]
           - id: retry-exclude
             # concat.e2e.ts and split.e2e.ts both landed here (not split
