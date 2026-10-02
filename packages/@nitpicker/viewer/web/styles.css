@@ -3,16 +3,27 @@
 	--bg-elev: #1a212b;
 	--border: #2a3441;
 	--text: #d6dde6;
-	--text-dim: #8b97a6;
-	--text-on-accent: #fff;
+	--text-dim: #97a3b2;
+
+	/* Text on a solid accent / danger fill. Dark text: white fails AA on these
+	   light-ish fills (2.6:1) in the dark theme. */
+	--text-on-accent: var(--bg);
+	--text-on-danger: var(--bg);
 	--accent: #4aa3ff;
 	--danger: #ff6b6b;
 	--success: #4ade80;
 	--warn: #fc6;
 	--skeleton: #2a3441;
-	--badge-warn-fg: #f59e0b;
-	--badge-warn-bg: color-mix(in srgb, #f59e0b 20%, transparent);
-	--badge-interrupted-bg: color-mix(in srgb, var(--text-dim) 18%, transparent);
+
+	/* "Ink" colors: the text color for a badge or highlight drawn on a tint of
+	   its own hue. Each is the hue mixed toward --text just far enough to reach
+	   4.8:1 on the strongest tint it sits on (AA needs 4.5:1), over both
+	   --bg and --bg-elev. Re-derive the percentages if a hue or tint changes. */
+	--danger-ink: color-mix(in srgb, var(--danger) 64%, var(--text));
+	--success-ink: var(--success);
+	--warn-ink: var(--warn);
+	--accent-ink: color-mix(in srgb, var(--accent) 96%, var(--text));
+	--dim-ink: color-mix(in srgb, var(--text-dim) 81%, var(--text));
 
 	/* Row-state tints shared by every hoverable / selectable strip (nav links,
 	   tree rows, expandable table rows) so hover and selected stay in step. */
@@ -58,7 +69,7 @@
 	--bg-elev: #fff;
 	--border: #d6dce2;
 	--text: #1a212b;
-	--text-dim: #5a6573;
+	--text-dim: #556070;
 
 	/* #0969da clears WCAG AA (4.5:1) as link text on --bg; #1f6feb was ~4.2:1. */
 	--accent: #0969da;
@@ -66,6 +77,13 @@
 	--success: #1a7f37;
 	--warn: #9a6700;
 	--skeleton: #e6eaef;
+	--text-on-accent: #fff;
+	--text-on-danger: #fff;
+	--danger-ink: color-mix(in srgb, var(--danger) 71%, var(--text));
+	--success-ink: color-mix(in srgb, var(--success) 70%, var(--text));
+	--warn-ink: color-mix(in srgb, var(--warn) 75%, var(--text));
+	--accent-ink: color-mix(in srgb, var(--accent) 82%, var(--text));
+	--dim-ink: color-mix(in srgb, var(--text-dim) 90%, var(--text));
 }
 
 * {
@@ -233,8 +251,10 @@ body {
 	color: var(--danger);
 }
 
+/* Link text uses the accent "ink": plain `--accent` falls under 4.5:1 once the
+   link sits on a hovered or selected (accent-tinted) row in the light theme. */
 a {
-	color: var(--accent);
+	color: var(--accent-ink);
 }
 
 /* Shared list reset: bare <ul>/<ol> displayed as a flex/column strip
@@ -322,13 +342,13 @@ a {
 }
 
 .footer-stub-badge--live {
-	color: var(--badge-warn-fg);
-	background: var(--badge-warn-bg);
+	color: var(--warn-ink);
+	background: color-mix(in srgb, var(--warn) 20%, transparent);
 }
 
 .footer-stub-badge--interrupted {
-	color: var(--text-dim);
-	background: var(--badge-interrupted-bg);
+	color: var(--dim-ink);
+	background: color-mix(in srgb, var(--text-dim) 18%, transparent);
 }
 
 @keyframes progress-slide {
@@ -1952,7 +1972,7 @@ pre code {
 .hp-frame {
 	inline-size: 100%;
 	block-size: 480px;
-	background: var(--text-on-accent);
+	background: #fff;
 	border: 0;
 }
 
@@ -1973,13 +1993,13 @@ pre code {
 }
 
 .diff-removed {
-	color: var(--danger);
+	color: var(--danger-ink);
 	background: color-mix(in srgb, var(--danger) 26%, transparent);
 	border-radius: 2px;
 }
 
 .diff-added {
-	color: var(--success);
+	color: var(--success-ink);
 	background: color-mix(in srgb, var(--success) 26%, transparent);
 	border-radius: 2px;
 }
@@ -2005,33 +2025,33 @@ pre code {
 	font-size: var(--font-size-sm);
 	font-weight: 600;
 	line-height: 1.5;
-	color: var(--text-dim);
+	color: var(--dim-ink);
 	background: color-mix(in srgb, var(--text-dim) 18%, transparent);
 	border-radius: 999px;
 }
 
 .console-type-pageerror {
-	color: var(--text-on-accent);
+	color: var(--text-on-danger);
 	background: var(--danger);
 }
 
 .console-type-error {
-	color: var(--danger);
+	color: var(--danger-ink);
 	background: color-mix(in srgb, var(--danger) 18%, transparent);
 }
 
 .console-type-warn {
-	color: var(--warn);
+	color: var(--warn-ink);
 	background: color-mix(in srgb, var(--warn) 20%, transparent);
 }
 
 .console-type-info {
-	color: var(--accent);
+	color: var(--accent-ink);
 	background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .external-url {
-	color: var(--accent);
+	color: var(--accent-ink);
 	word-break: break-all;
 }
 
@@ -2043,7 +2063,7 @@ pre code {
 .link-button {
 	padding: 0;
 	font: inherit;
-	color: var(--accent);
+	color: var(--accent-ink);
 	text-align: start;
 	cursor: pointer;
 	background: none;
@@ -2141,18 +2161,18 @@ pre code {
 }
 
 .source-badge--crawled {
-	color: var(--text-dim);
+	color: var(--dim-ink);
 	background: color-mix(in srgb, var(--text-dim) 14%, transparent);
 }
 
 .source-badge--inventory-seed {
-	color: var(--badge-warn-fg);
-	background: var(--badge-warn-bg);
+	color: var(--warn-ink);
+	background: color-mix(in srgb, var(--warn) 20%, transparent);
 }
 
 .source-badge--inventory-discovered {
-	color: var(--badge-warn-fg);
-	background: color-mix(in srgb, var(--badge-warn-fg) 10%, transparent);
+	color: var(--warn-ink);
+	background: color-mix(in srgb, var(--warn) 10%, transparent);
 }
 
 /*
@@ -2173,19 +2193,19 @@ pre code {
 
 .image-scan-badge--ok,
 .image-scan-badge--scroll-height-exceeded {
-	color: var(--text-dim);
+	color: var(--dim-ink);
 	background: color-mix(in srgb, var(--text-dim) 14%, transparent);
 }
 
 .image-scan-badge--degraded,
 .image-scan-badge--nav-unsettled {
-	color: var(--badge-warn-fg);
-	background: var(--badge-warn-bg);
+	color: var(--warn-ink);
+	background: color-mix(in srgb, var(--warn) 20%, transparent);
 }
 
 .image-scan-badge--frame-lost,
 .image-scan-badge--unknown {
-	color: var(--danger);
+	color: var(--danger-ink);
 	background: color-mix(in srgb, var(--danger) 16%, transparent);
 }
 
