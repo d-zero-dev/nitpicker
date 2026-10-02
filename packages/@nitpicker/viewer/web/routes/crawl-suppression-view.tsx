@@ -72,7 +72,11 @@ export function CrawlSuppressionView() {
 				titleKey="views.crawlSuppression.title"
 				descriptionKey="views.crawlSuppression.description"
 			/>
-			<div role="status" aria-live="polite" aria-busy={isLoading || isFetching}>
+			<div
+				className="status-region"
+				role="status"
+				aria-live="polite"
+				aria-busy={isLoading || isFetching}>
 				{isLoading && <div className="state">{t('common.loading')}</div>}
 				{error && <div className="state state-error">{error.message}</div>}
 				{data && data.total === 0 && (

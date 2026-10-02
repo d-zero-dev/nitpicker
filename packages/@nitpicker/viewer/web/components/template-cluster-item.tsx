@@ -108,9 +108,11 @@ export function TemplateClusterItem(props: TemplateClusterItemProps) {
 				</dl>
 				<ClusterReasonSection cluster={cluster} />
 			</details>
-			<AppLink to={`/pages?templateKey=${encodeURIComponent(cluster.templateKey)}`}>
-				{t('views.templateClusters.viewPages')}
-			</AppLink>
+			<p>
+				<AppLink to={`/pages?templateKey=${encodeURIComponent(cluster.templateKey)}`}>
+					{t('views.templateClusters.viewPages')}
+				</AppLink>
+			</p>
 		</section>
 	);
 }

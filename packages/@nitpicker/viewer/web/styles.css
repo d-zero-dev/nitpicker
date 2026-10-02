@@ -242,7 +242,6 @@ a {
    its own layout (direction/gap/etc.) on top of this. */
 .plain-list {
 	padding: 0;
-	margin: 0;
 	list-style: none;
 }
 
@@ -437,6 +436,111 @@ a {
 	min-block-size: 0;
 }
 
+/* Vertical rhythm: each element decides the gap that follows it.
+
+   Exactly like the heading rules below (`h2 + *`), the gap between two
+   siblings is written on the PRECEDING element's selector — `p + *`,
+   `ul + *`, `table + *`, ... — and is sized for that kind of element: a
+   paragraph opens a modest gap, a table or a card row a larger one. The gap
+   lives on the following element's `margin-block-start`, so no element
+   carries a bottom margin that could stack with its container's padding or
+   leave a stray gap at the end.
+
+   The `:is(*, [class])` tail is deliberate: the argument list takes the
+   specificity of its most specific member, so these rules outrank a class
+   selector. Without it, any class on the following element that sets its own
+   margin would win and silently drop the gap. A rule that must still beat
+   these (a component's own tighter gap) needs two classes or more.
+
+   Headings (and the heading-plus-link row) are excluded from these rules'
+   targets: a heading owns its own, larger top margin, which a `p + *` rule
+   must never shrink.
+
+   Bare block elements are reset to zero block margin first, so the browser's
+   default `1em` can never add to a gap. */
+:where(p, ul, ol, dl, pre, blockquote, figure, hr) {
+	margin-block: 0;
+}
+
+/* After text and lists: 12px. Only bare lists (`ul:not([class])`) and the
+   two classed text lists take part; other classed lists (`.tree-children`,
+   `.chip-list`, ...) are layout and own their spacing. */
+p + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+:is(ul, ol, dl):not([class])
+	+ :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.detail-list + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.url-list + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+pre + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+blockquote + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+details + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.view-header + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.filter-notice + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.filter-bar + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.state + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.property-list + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.cluster-card + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.block-card + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.tree-collapse-control + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.tree-sort-control + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.status-region + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.duplicate-group + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+section:not([class]) + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 12px;
+}
+
+/* After a table or a block of cards: 20px. */
+table:not([class]) + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.plain-table-scroll + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.cards + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.detail-grid + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.stacked-bar-wrap + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 20px;
+}
+
+/* After the summary's lead blocks: 16px. */
+.summary-roots + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.summary-excludes + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 16px;
+}
+
+/* After a one-line caption that belongs to what follows: 6px. */
+.vt-meta + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.pt-meta + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.graph-meta + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading),
+.graph-legend + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 6px;
+}
+
+/* A thematic break separates with more room on both sides. */
+hr + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 24px;
+}
+
+/* Inside a `<details>`: the body opens close to its `<summary>`, and
+   consecutive disclosure widgets stack tighter than ordinary blocks. */
+summary + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 8px;
+}
+
+details + details:is(*, [class]) {
+	margin-block-start: 8px;
+}
+
+/* A statistic card's parts: the label sits tight over its value. */
+.card-label + :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 4px;
+}
+
+/* Inside an item of a bare list, a nested list (or a block that follows
+   another) sits closer, at the same 4px as the items themselves. */
+:is(ul, ol):not([class]) > li > :is(ul, ol),
+:is(ul, ol):not([class])
+	> li
+	> :is(p, ul, ol, dl)
+	+ :is(*, [class]):not(h1, h2, h3, h4, h5, h6, .section-heading) {
+	margin-block-start: 4px;
+}
+
 /* Heading scale: strictly decreasing h1 > h2 > h3 > h4 > h5 > h6, with a
    clear step between tiers (32 / 26 / 22 / 18 / 16 / 15, all above the 14px body). `h3` and below
    once had no rule, so they fell back to the browser's 1.17em and rendered
@@ -529,7 +633,6 @@ h6 + :is(*, [class]) {
    layout. */
 :is(ul, ol):not([class]) {
 	padding-inline-start: 22px;
-	margin-block-end: 12px;
 }
 
 :is(ul, ol):not([class]) > li + li {
@@ -549,7 +652,6 @@ ol:not([class]) > li::marker {
 details {
 	padding-block: 8px;
 	padding-inline: 12px;
-	margin-block-end: 8px;
 	border: 1px solid var(--border);
 	border-radius: 8px;
 }
@@ -557,10 +659,6 @@ details {
 summary {
 	font-weight: 600;
 	cursor: pointer;
-}
-
-details[open] > summary {
-	margin-block-end: 8px;
 }
 
 /* An `h2` with a trailing link to the section's full view. The link sits
@@ -603,14 +701,10 @@ details[open] > summary {
 }
 
 /* View header + description */
-.view-header {
-	margin-block-end: 12px;
-}
 
 .view-description {
 	/* stylelint-disable-next-line unit-disallowed-list -- `ch` is intentional: this caps the description at ~70 characters, the recommended readable measure (WCAG 1.4.8). */
 	max-inline-size: 70ch;
-	margin: 0;
 	font-size: var(--font-size-base);
 	color: var(--text-dim);
 }
@@ -620,7 +714,6 @@ details[open] > summary {
    view (the directory tree), so it has no control of its own here to show
    its current value. */
 .filter-notice {
-	margin-block: 0 12px;
 	font-size: var(--font-size-base);
 	color: var(--text-dim);
 }
@@ -631,7 +724,6 @@ details[open] > summary {
 	flex-wrap: wrap;
 	gap: 8px;
 	align-items: center;
-	margin-block-end: 12px;
 }
 
 .filter-bar input,
@@ -662,7 +754,6 @@ details[open] > summary {
 }
 
 .vt-meta {
-	margin-block-end: 6px;
 	font-size: var(--font-size-sm);
 	color: var(--text-dim);
 }
@@ -798,7 +889,6 @@ details[open] > summary {
 }
 
 .pt-meta {
-	margin-block-end: 6px;
 	font-size: var(--font-size-sm);
 	color: var(--text-dim);
 }
@@ -1150,8 +1240,6 @@ details[open] > summary {
 	display: block flex;
 	flex-wrap: wrap;
 	gap: 8px;
-	margin-block: 8px 10px;
-	margin-inline: 0;
 }
 
 .property-list-item {
@@ -1181,7 +1269,6 @@ details[open] > summary {
 	flex-wrap: wrap;
 	gap: 4px 8px;
 	padding: 0;
-	margin: 0;
 	list-style: none;
 }
 
@@ -1264,7 +1351,7 @@ pre code {
 }
 
 :where(hr) {
-	margin-block: 24px;
+	margin-block-start: 24px;
 	margin-inline: 0;
 	border: 0;
 	border-block-start: 1px solid var(--border);
@@ -1272,7 +1359,6 @@ pre code {
 
 :where(blockquote) {
 	padding-inline: 16px;
-	margin-block: 16px;
 	margin-inline: 0;
 	color: var(--text-dim);
 	border-inline-start: 3px solid var(--border);
@@ -1281,7 +1367,6 @@ pre code {
 :where(pre) {
 	padding-block: 10px;
 	padding-inline: 14px;
-	margin-block: 16px;
 	margin-inline: 0;
 	overflow-x: auto;
 	font-size: var(--font-size-base);
@@ -1296,7 +1381,6 @@ pre code {
 :is(.cluster-card, .block-card) {
 	padding-block: 10px 12px;
 	padding-inline: 16px;
-	margin-block: 12px;
 	background: var(--bg-elev);
 	border: 1px solid var(--border);
 	border-radius: 8px;
@@ -1312,16 +1396,11 @@ pre code {
 	margin-block-start: 4px;
 }
 
-.cluster-card details {
-	margin-block: 4px 10px;
-}
-
 /* Summary target URL(s): the first thing the page answers ("what is this
    archive of?"), so it gets an accent edge and a heading-sized URL. */
 .summary-roots {
 	padding-block: 14px;
 	padding-inline: 18px;
-	margin-block: 4px 16px;
 	background: var(--bg-elev);
 	border: 1px solid var(--border);
 	border-inline-start: 4px solid var(--accent);
@@ -1329,14 +1408,12 @@ pre code {
 }
 
 .summary-roots-label {
-	margin: 0;
 	font-size: var(--font-size-sm);
 	color: var(--text-dim);
 }
 
 .summary-roots-url {
-	margin-block: 4px 0;
-	margin-inline: 0;
+	margin-block-start: 4px;
 	font-size: var(--font-size-2xl);
 	font-weight: bold;
 	overflow-wrap: anywhere;
@@ -1344,8 +1421,7 @@ pre code {
 
 .summary-roots-list {
 	padding: 0;
-	margin-block: 6px 0;
-	margin-inline: 0;
+	margin-block-start: 6px;
 	font-size: var(--font-size-xl);
 	font-weight: bold;
 	overflow-wrap: anywhere;
@@ -1356,23 +1432,11 @@ pre code {
 	margin-block-start: 4px;
 }
 
-/* Summary exclusions: collapsed by default; long pattern lists scroll
-   instead of pushing the cards below off-screen. */
-.summary-excludes {
-	margin-block: 0 16px;
-}
-
-.summary-excludes ul {
-	max-block-size: 240px;
-	overflow-y: auto;
-}
-
 /* Summary cards */
 .cards {
 	display: block flex;
 	flex-wrap: wrap;
 	gap: 12px;
-	margin-block-end: 20px;
 }
 
 .card {
@@ -1471,7 +1535,6 @@ pre code {
 
 .url-list {
 	padding-inline-start: 18px;
-	margin: 0;
 	font-size: var(--font-size-base);
 	word-break: break-all;
 }
@@ -1486,7 +1549,6 @@ pre code {
    at a glance. */
 .detail-list {
 	padding-inline-start: 18px;
-	margin-block: 0 16px;
 	font-size: var(--font-size-base);
 	overflow-wrap: anywhere;
 }
@@ -1510,7 +1572,6 @@ pre code {
 	flex-direction: column;
 	gap: 12px;
 	max-inline-size: 720px;
-	margin-block-end: 20px;
 }
 
 .stacked-bar {
@@ -1790,7 +1851,6 @@ pre code {
 .detail-grid {
 	display: block grid;
 	grid-template-columns: max-content minmax(0, 1fr);
-	margin-block-end: 20px;
 	font-size: var(--font-size-base);
 }
 
@@ -1825,7 +1885,6 @@ pre code {
 
 .detail-grid dd ul {
 	padding-inline-start: 18px;
-	margin: 0;
 }
 
 /* Only block siblings: inline siblings such as side-by-side badges share a
@@ -1939,7 +1998,7 @@ pre code {
 /* Console message type badge: severity by color, always with the type's
    name as text. `pageerror` (an uncaught exception) is the only solid fill. */
 .console-type {
-	display: inline-block;
+	display: inline flow-root;
 	padding-block: 1px;
 	padding-inline: 8px;
 	font-family: monospace;
@@ -1993,7 +2052,6 @@ pre code {
 
 /* Network graph */
 .graph-meta {
-	margin-block-end: 6px;
 	font-size: var(--font-size-sm);
 	color: var(--text-dim);
 }
@@ -2010,8 +2068,6 @@ pre code {
 	display: block flex;
 	flex-wrap: wrap;
 	gap: 12px 16px;
-	margin-block: 0 6px;
-	margin-inline: 0;
 	font-size: var(--font-size-sm);
 	color: var(--text-dim);
 }
@@ -2142,7 +2198,6 @@ pre code {
 	display: block flex;
 	gap: 8px;
 	align-items: center;
-	margin-block-end: 12px;
 	font-size: var(--font-size-base);
 	color: var(--text-dim);
 }

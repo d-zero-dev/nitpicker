@@ -19,7 +19,7 @@ export const Default: Story = {
 	},
 };
 
-/** Hundreds of patterns stay compact: the list scrolls inside the disclosure. */
+/** Hundreds of patterns: collapsed they cost one line; opened they simply list. */
 export const ManyPatterns: Story = {
 	args: {
 		excludes: Array.from({ length: 300 }, (_, index) => `/section-${index}/`),

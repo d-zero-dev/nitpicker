@@ -41,9 +41,11 @@ export function InboundLinksSummary(props: InboundLinksSummaryProps) {
 				) : (
 					total != null &&
 					total > 0 && (
-						<AppLink to={`/pages/inbound-links?url=${encodeURIComponent(url)}`}>
-							{t('views.pageDetail.viewInboundLinks')}
-						</AppLink>
+						<p>
+							<AppLink to={`/pages/inbound-links?url=${encodeURIComponent(url)}`}>
+								{t('views.pageDetail.viewInboundLinks')}
+							</AppLink>
+						</p>
 					)
 				)
 			) : (
