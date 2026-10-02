@@ -69,3 +69,22 @@ export const Minimal: Story = {
 		},
 	},
 };
+
+/**
+ * No stored label: the heading is the derived identifiers (stylesheet file
+ * names, then the sibling-disambiguating directory), each in `<code>`.
+ */
+export const UnlabelledWithStylesheets: Story = {
+	args: {
+		cluster: {
+			...clusterWithReason,
+			label: null,
+			commonDirectories: [
+				{ directory: 'https://example.test/products/', pageCount: 30 },
+				{ directory: 'https://example.test/sale/', pageCount: 12 },
+				{ directory: 'https://example.test/news/', pageCount: 6 },
+				{ directory: 'https://example.test/docs/', pageCount: 4 },
+			],
+		},
+	},
+};

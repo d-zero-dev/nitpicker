@@ -3,12 +3,13 @@ import type { TemplateClusterSummary } from '@nitpicker/query';
 import { useI18n } from '../i18n/use-i18n.js';
 
 import { AppLink } from './app-link.js';
-import { buildClusterHeading } from './build-cluster-heading.js';
+import { buildClusterHeadingParts } from './build-cluster-heading-parts.js';
 import { ClusterDirectoryDistributionList } from './cluster-directory-distribution-list.js';
+import { ClusterHeadingCode } from './cluster-heading-code.js';
+import { ClusterName } from './cluster-name.js';
 import { ClusterReasonSection } from './cluster-reason-section.js';
 import { ClusterStylesheetUrlList } from './cluster-stylesheet-url-list.js';
 import { computeClusterOtherPageCount } from './compute-cluster-other-page-count.js';
-import { formatClusterName } from './format-cluster-name.js';
 import { PropertyList } from './property-list.js';
 
 /**
@@ -26,8 +27,8 @@ export interface TemplateClusterItemProps {
 
 /**
  * One `page_templates.template_key` cluster as a card: the cluster's name
- * (`formatClusterName`) as an `<h3>`, its page count and leading related
- * paths as header properties, and a link to its pages. Everything longer —
+ * (`ClusterName`) as an `<h3>`, its page count and leading related paths
+ * as header property cards, and a link to its pages. Everything longer —
  * the member-derived stylesheet/directory hint (its own row only when the
  * name is a label, since it is the heading otherwise), top directories by
  * page count, the common stylesheet set computed from the cluster's actual
@@ -40,7 +41,7 @@ export interface TemplateClusterItemProps {
 export function TemplateClusterItem(props: TemplateClusterItemProps) {
 	const { t } = useI18n();
 	const { cluster } = props;
-	const { heading, source } = buildClusterHeading(cluster);
+	const { source } = buildClusterHeadingParts(cluster);
 	const title =
 		source === 'distinctive'
 			? t('views.templateClusters.distinctiveCssCaveat')
@@ -52,7 +53,7 @@ export function TemplateClusterItem(props: TemplateClusterItemProps) {
 	return (
 		<section className="cluster-card" aria-labelledby={headingId}>
 			<h3 id={headingId} title={cluster.label ? undefined : title}>
-				{formatClusterName(cluster, t)}
+				<ClusterName cluster={cluster} />
 			</h3>
 			<PropertyList
 				items={[
@@ -82,7 +83,9 @@ export function TemplateClusterItem(props: TemplateClusterItemProps) {
 					{cluster.label && (
 						<>
 							<dt>{t('views.templateClusters.memberHint')}</dt>
-							<dd title={title}>{heading}</dd>
+							<dd title={title}>
+								<ClusterHeadingCode cluster={cluster} />
+							</dd>
 						</>
 					)}
 					<dt>{t('views.templateClusters.commonDirectories')}</dt>

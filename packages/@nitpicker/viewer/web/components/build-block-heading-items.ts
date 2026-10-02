@@ -17,32 +17,32 @@ import type { ClusterBlockGroup } from '../types.js';
  * Filenames are deduplicated and sorted so two blocks keyed on the same set
  * in a different order read identically.
  * @param group - The block group to build a heading for.
- * @returns The heading detail text.
+ * @returns The heading detail items — each a literal (file name or path) to show verbatim.
  * @example
  * ```ts
- * buildBlockHeading(group); // 'product.css, slick.css'
+ * buildBlockHeadingItems(group); // ['product.css', 'slick.css']
  * ```
  */
-export function buildBlockHeading(group: ClusterBlockGroup): string {
+export function buildBlockHeadingItems(group: ClusterBlockGroup): string[] {
 	const { block, clusters } = group;
 	if (block.kind === 'path' || block.kind === 'orphanMerge') {
 		const segment = block.blockKey.slice(block.blockKey.indexOf(':') + 1);
-		return segment === '' ? '/' : `/${segment}/`;
+		return [segment === '' ? '/' : `/${segment}/`];
 	}
 	if (block.kind === 'css') {
 		const distinctive = collectNames(
 			clusters.map((c) => c.reason?.distinctiveStylesheetFileNames),
 		);
 		if (distinctive.length > 0) {
-			return distinctive.join(', ');
+			return distinctive;
 		}
 		const common = collectNames(clusters.map((c) => c.commonStylesheetFileNames));
 		if (common.length > 0) {
-			return common.join(', ');
+			return common;
 		}
 	}
 	const topDirectory = clusters[0]?.commonDirectories[0]?.directory;
-	return topDirectory ?? block.blockKey;
+	return [topDirectory ?? block.blockKey];
 }
 
 /**

@@ -1060,14 +1060,24 @@ details[open] > summary {
 	border-radius: 4px;
 }
 
-/* Property list: a row of small-label-over-prominent-value pairs, the
-   card-header counterpart of `.detail-grid`. */
+/* Property list: each property is its own small card (label over value),
+   the heading-level counterpart of `.cards` / `.detail-grid`. A card's value
+   may be a number or a row of chips. */
 .property-list {
 	display: block flex;
 	flex-wrap: wrap;
-	gap: 8px 24px;
-	margin-block: 6px 10px;
+	gap: 8px;
+	margin-block: 8px 10px;
 	margin-inline: 0;
+}
+
+.property-list-item {
+	min-inline-size: 96px;
+	padding-block: 8px;
+	padding-inline: 14px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
 }
 
 .property-list-item dt {
@@ -1076,7 +1086,8 @@ details[open] > summary {
 }
 
 .property-list-item dd {
-	margin: 0;
+	margin-block: 2px 0;
+	margin-inline: 0;
 	font-size: var(--font-size-xl);
 	font-weight: 600;
 }
@@ -1092,18 +1103,37 @@ details[open] > summary {
 }
 
 .chip-list code {
-	padding-block: 1px;
-	padding-inline: 6px;
 	font-size: var(--font-size-base);
 	font-weight: normal;
+}
+
+/* Literal identifiers (file names, paths, keys) inside a heading stay
+   heading-weight but monospace, and never push the heading wider than its
+   card. */
+:is(h1, h2, h3, h4) code {
+	font-size: var(--font-size-md);
+	font-weight: inherit;
+	overflow-wrap: anywhere;
+}
+
+/* Inline code reads as data: a faint chip, not bare monospace. */
+code {
+	padding-block: 1px;
+	padding-inline: 5px;
 	background: var(--bg);
 	border: 1px solid var(--border);
 	border-radius: 4px;
 }
 
-/* One template cluster as a card: name heading, header properties, then a
-   collapsed details block. */
-.cluster-card {
+pre code {
+	padding: 0;
+	background: none;
+	border: none;
+}
+
+/* One template cluster / one block group as a card: name heading, property
+   cards, then (clusters) a collapsed details block. */
+:is(.cluster-card, .block-card) {
 	padding-block: 10px 12px;
 	padding-inline: 16px;
 	margin-block: 12px;
@@ -1112,9 +1142,14 @@ details[open] > summary {
 	border-radius: 8px;
 }
 
-.cluster-card > h3 {
+:is(.cluster-card, .block-card) > h3 {
 	margin-block: 0;
 	overflow-wrap: anywhere;
+}
+
+/* Merged-from blocks in a table cell: one block per line. */
+.merged-blocks li + li {
+	margin-block-start: 4px;
 }
 
 .cluster-card details {
