@@ -443,43 +443,78 @@ a {
    larger than the pinned `h2`. Always set a heading's size here — never per
    component. */
 h1 {
-	margin-block: 0 6px;
+	margin-block: 0;
 	margin-inline: 0;
 	font-size: var(--font-size-heading-1);
 	line-height: 1.25;
 }
 
 h2 {
-	margin-block: 24px 10px;
+	margin-block: 40px 0;
 	margin-inline: 0;
 	font-size: var(--font-size-heading-2);
 	line-height: 1.3;
 }
 
 h3 {
-	margin-block: 18px 8px;
+	margin-block: 32px 0;
 	margin-inline: 0;
 	font-size: var(--font-size-heading-3);
 	line-height: 1.35;
 }
 
 h4 {
-	margin-block: 16px 6px;
+	margin-block: 26px 0;
 	margin-inline: 0;
 	font-size: var(--font-size-heading-4);
 	line-height: 1.4;
 }
 
 h5 {
-	margin-block: 14px 4px;
+	margin-block: 22px 0;
 	margin-inline: 0;
 	font-size: var(--font-size-xl);
 }
 
 h6 {
-	margin-block: 12px 4px;
+	margin-block: 18px 0;
 	margin-inline: 0;
 	font-size: var(--font-size-lg);
+}
+
+/* The gap under a heading belongs to the element that follows it, not to the
+   heading: a heading carries no bottom margin, and `hx + *` opens a gap that
+   grows with the heading's size (the heading's own top margin grows the same
+   way). Anything that can directly follow a heading must therefore leave its
+   own `margin-block-start` unset, or it overrides this.
+
+   `:is(*, [class])` is deliberate: the argument list takes the specificity of
+   its most specific member, so these rules outrank a class selector. Without
+   it, any class on the following element (`.view-description`,
+   `.property-list`, `.plain-list`, ...) that sets its own margin would win
+   and silently drop the gap. */
+h1 + :is(*, [class]) {
+	margin-block-start: 20px;
+}
+
+h2 + :is(*, [class]) {
+	margin-block-start: 16px;
+}
+
+h3 + :is(*, [class]) {
+	margin-block-start: 14px;
+}
+
+h4 + :is(*, [class]) {
+	margin-block-start: 12px;
+}
+
+h5 + :is(*, [class]) {
+	margin-block-start: 10px;
+}
+
+h6 + :is(*, [class]) {
+	margin-block-start: 8px;
 }
 
 /* Bare lists (no class): the same rich treatment `.url-list` / `.detail-list`
@@ -487,7 +522,7 @@ h6 {
    layout. */
 :is(ul, ol):not([class]) {
 	padding-inline-start: 22px;
-	margin-block: 0 12px;
+	margin-block-end: 12px;
 }
 
 :is(ul, ol):not([class]) > li + li {
@@ -507,7 +542,7 @@ ol:not([class]) > li::marker {
 details {
 	padding-block: 8px;
 	padding-inline: 12px;
-	margin-block: 8px;
+	margin-block-end: 8px;
 	border: 1px solid var(--border);
 	border-radius: 8px;
 }
@@ -524,22 +559,31 @@ details[open] > summary {
 /* An `h2` with a trailing link to the section's full view. The link sits
    on the heading's baseline rather than below the content, where it reads
    as one more row of the section instead of a way out of it. The wrapper
-   takes over the `h2`'s block margins. */
+   takes over the `h2`'s margins: the same top margin, and the same `+ *`
+   gap below. */
 .section-heading {
 	display: block flex;
 	flex-wrap: wrap;
 	gap: 4px 12px;
 	align-items: baseline;
-	margin-block: 24px 10px;
+	margin-block: 40px 0;
 }
 
 .section-heading :is(h2, h3) {
 	margin: 0;
 }
 
+.section-heading + :is(*, [class]) {
+	margin-block-start: 16px;
+}
+
 /* The same heading-plus-link row one level down (an `h3`). */
 .section-heading-sub {
-	margin-block: 18px 8px;
+	margin-block: 32px 0;
+}
+
+.section-heading-sub + :is(*, [class]) {
+	margin-block-start: 14px;
 }
 
 .section-heading a {
