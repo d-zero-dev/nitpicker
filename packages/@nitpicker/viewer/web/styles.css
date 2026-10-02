@@ -517,6 +517,13 @@ h6 + :is(*, [class]) {
 	margin-block-start: 8px;
 }
 
+/* A heading's top margin separates it from the content above; with nothing
+   above it (the first child of its container) that margin is just a stray
+   gap at the container's edge. */
+:is(h1, h2, h3, h4, h5, h6):first-child {
+	margin-block-start: 0;
+}
+
 /* Bare lists (no class): the same rich treatment `.url-list` / `.detail-list`
    give, so an `<ol>` reads as richly as a `<ul>`. Classed lists keep their own
    layout. */
@@ -584,6 +591,11 @@ details[open] > summary {
 
 .section-heading-sub + :is(*, [class]) {
 	margin-block-start: 14px;
+}
+
+/* Same first-child exception as a bare heading above. */
+.section-heading:first-child {
+	margin-block-start: 0;
 }
 
 .section-heading a {
