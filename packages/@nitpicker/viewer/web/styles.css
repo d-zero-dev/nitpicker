@@ -30,12 +30,14 @@
 	--font-size-2xl: 20px;
 	--font-size-3xl: 24px;
 
-	/* Heading scale (h1–h3). Steps of about ×1.2–1.3 so each level reads as a
-	   distinct tier against the 14px body; h4–h6 reuse the body-range tokens
-	   above and tell apart by size alone, since they sit at body size. */
-	--font-size-heading-1: 28px;
-	--font-size-heading-2: 22px;
-	--font-size-heading-3: 18px;
+	/* Heading scale (h1–h4). Every heading level is strictly larger than the
+	   14px body — h5/h6 reuse `--font-size-xl` / `--font-size-lg` (16 / 15) —
+	   and each step is about ×1.2 or more so the levels read as distinct
+	   tiers (32 / 26 / 22 / 18 / 16 / 15). */
+	--font-size-heading-1: 32px;
+	--font-size-heading-2: 26px;
+	--font-size-heading-3: 22px;
+	--font-size-heading-4: 18px;
 
 	/* z-index scale. Raw integer z-index values are linted against; reach for
 	   one of these slots when stacking. */
@@ -436,7 +438,7 @@ a {
 }
 
 /* Heading scale: strictly decreasing h1 > h2 > h3 > h4 > h5 > h6, with a
-   clear step between tiers (28 / 22 / 18 / 15 / 14 / 13). `h3` and below
+   clear step between tiers (32 / 26 / 22 / 18 / 16 / 15, all above the 14px body). `h3` and below
    once had no rule, so they fell back to the browser's 1.17em and rendered
    larger than the pinned `h2`. Always set a heading's size here — never per
    component. */
@@ -462,21 +464,22 @@ h3 {
 }
 
 h4 {
-	margin-block: 14px 6px;
+	margin-block: 16px 6px;
 	margin-inline: 0;
-	font-size: var(--font-size-lg);
+	font-size: var(--font-size-heading-4);
+	line-height: 1.4;
 }
 
 h5 {
-	margin-block: 12px 4px;
+	margin-block: 14px 4px;
 	margin-inline: 0;
-	font-size: var(--font-size-md);
+	font-size: var(--font-size-xl);
 }
 
 h6 {
 	margin-block: 12px 4px;
 	margin-inline: 0;
-	font-size: var(--font-size-base);
+	font-size: var(--font-size-lg);
 }
 
 /* Bare lists (no class): the same rich treatment `.url-list` / `.detail-list`
