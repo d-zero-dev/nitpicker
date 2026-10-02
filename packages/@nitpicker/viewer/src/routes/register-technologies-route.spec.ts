@@ -119,7 +119,7 @@ describe('registerTechnologiesRoute (integration)', () => {
 		const res = await app.request('/api/pages?technology=Next.js');
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { items: { url: string }[]; total: number };
-		expect(body.items.map((item) => item.url)).toEqual(['https://example.com/']);
+		expect(body.items.map((item) => item.url)).toEqual(['https://example.com']);
 		expect(body.total).toBe(1);
 	});
 
